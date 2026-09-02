@@ -24,6 +24,16 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.TextZoom(); got != 100 {
 		t.Errorf("TextZoom = %d, want 100", got)
 	}
+	if s.LaunchAtLogin() || s.RunInBackground() || !s.ConfirmDelete() || !s.DesktopNotifications() || s.NotificationSound() {
+		t.Error("general bool defaults wrong")
+	}
+	if got := s.MarkReadDelay(); got != 2 {
+		t.Errorf("MarkReadDelay = %d, want 2", got)
+	}
+	s.SetMarkReadDelay(999)
+	if got := s.MarkReadDelay(); got != MarkReadDelayMax {
+		t.Errorf("MarkReadDelay not clamped: %d", got)
+	}
 }
 
 func TestMemorySetAndNotify(t *testing.T) {

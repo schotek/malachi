@@ -188,7 +188,18 @@ monochrome avatars are a display-wide CSS provider (`internal/style`) so
 every open window follows.
 When the schema is not installed the store falls back to memory and logs a
 warning; `make build` compiles the schema into `build/` and the run targets
-export `GSETTINGS_SCHEMA_DIR`. The *General* rows are still placeholders.
+export `GSETTINGS_SCHEMA_DIR`.
+
+The *General* page: *Run in Background* makes the main window hide instead
+of close (a hidden window keeps the application alive; `app.show` and
+activation bring it back); *Launch at Login* asks the Background portal
+(`internal/background`, plain D-Bus, never `~/.config/autostart`) to start
+`malachi --gapplication-service`, which holds the application until the
+first activation; the mark-as-read delay is a timer around `message.flag`;
+deleting confirms with an `Adw.AlertDialog` before `message.delete`; new
+mail arrives as `notify.newMessage` and becomes a `GNotification` whose
+default action is `app.show`. The *Mail* group is daemon-owned
+(`config.get`/`config.set`).
 
 ## 6. Platform
 

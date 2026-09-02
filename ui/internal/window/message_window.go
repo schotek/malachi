@@ -18,33 +18,39 @@ type MessageWindow struct {
 	subject *gtk.Label
 	from    *gtk.Label
 	body    *gtk.Label
+	trash   *gtk.Button
+	toasts  *adw.ToastOverlay
 }
 
-// newMessageWindow creates the window and fills it with m. The window is
-// owned by app (so the application stays alive while it is open) but is not
-// transient for the main window: the user asked for independent windows.
-func newMessageWindow(app *adw.Application, m dummyMessage) *MessageWindow {
+// newMessageWindow creates the window for message idx of the main window
+// w. The window is owned by the application (so it stays alive while the
+// window is open) but is not transient for the main window: the user asked
+// for independent windows.
+func newMessageWindow(w *Window, idx int) *MessageWindow {
 	b := gtk.NewBuilderFromString(data.MustUI("message_window.ui"))
 
-	w := &MessageWindow{
+	mw := &MessageWindow{
 		Window:  b.GetObject("message_window").Cast().(*adw.Window),
 		title:   b.GetObject("window_title").Cast().(*adw.WindowTitle),
 		subject: b.GetObject("message_subject").Cast().(*gtk.Label),
 		from:    b.GetObject("message_from").Cast().(*gtk.Label),
 		body:    b.GetObject("message_body").Cast().(*gtk.Label),
+		trash:   b.GetObject("trash_button").Cast().(*gtk.Button),
+		toasts:  b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 	}
-	w.SetApplication(&app.Application)
-	w.show(m)
-	return w
+	mw.SetApplication(&w.app.Application)
+	mw.trash.ConnectClicked(func() { w.trashMessage(idx, mw, mw.toasts) })
+	mw.show(dummyMessages[idx])
+	return mw
 }
 
-func (w *MessageWindow) show(m dummyMessage) {
+func (mw *MessageWindow) show(m dummyMessage) {
 	// Subject and sender are untrusted data: plain labels, no markup.
 	// Body zoom and font are applied globally by internal/style.
 	from := widget.FormatAddress(m.From)
-	w.title.SetTitle(m.Subject)
-	w.title.SetSubtitle(from)
-	w.subject.SetLabel(m.Subject)
-	w.from.SetLabel(from)
-	w.body.SetLabel(m.Body)
+	mw.title.SetTitle(m.Subject)
+	mw.title.SetSubtitle(from)
+	mw.subject.SetLabel(m.Subject)
+	mw.from.SetLabel(from)
+	mw.body.SetLabel(m.Body)
 }

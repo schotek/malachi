@@ -20,6 +20,20 @@ import (
 // SchemaID must match the gschema, desktop file and application ID.
 const SchemaID = "io.github.schotek.Malachi"
 
+// Keys of the general settings. They must match the gschema.
+const (
+	KeyLaunchAtLogin        = "launch-at-login"
+	KeyRunInBackground      = "run-in-background"
+	KeyMarkReadDelay        = "mark-read-delay"
+	KeyConfirmDelete        = "confirm-delete"
+	KeyDesktopNotifications = "desktop-notifications"
+	KeyNotificationSound    = "notification-sound"
+)
+
+// MarkReadDelayMax is the largest accepted mark-read delay in seconds; must
+// match the <range> in the gschema.
+const MarkReadDelayMax = 60
+
 // Keys of the appearance settings. They must match the gschema.
 const (
 	KeyColorScheme        = "color-scheme"
@@ -53,6 +67,13 @@ const (
 
 // defaults mirror the gschema defaults for the in-memory fallback.
 var defaults = map[string]any{
+	KeyLaunchAtLogin:        false,
+	KeyRunInBackground:      false,
+	KeyMarkReadDelay:        2,
+	KeyConfirmDelete:        true,
+	KeyDesktopNotifications: true,
+	KeyNotificationSound:    false,
+
 	KeyColorScheme:        string(ColorSchemeSystem),
 	KeyDensity:            string(DensityComfortable),
 	KeyShowPreviewLine:    true,
@@ -115,6 +136,29 @@ func NewMemory() *Store {
 
 // Persistent reports whether values survive a restart.
 func (s *Store) Persistent() bool { return s.gs != nil }
+
+// LaunchAtLogin mirrors the last autostart decision granted by the
+// Background portal; the portal, not this key, is authoritative.
+func (s *Store) LaunchAtLogin() bool     { return s.boolean(KeyLaunchAtLogin) }
+func (s *Store) SetLaunchAtLogin(v bool) { s.set(KeyLaunchAtLogin, v) }
+
+func (s *Store) RunInBackground() bool     { return s.boolean(KeyRunInBackground) }
+func (s *Store) SetRunInBackground(v bool) { s.set(KeyRunInBackground, v) }
+
+// MarkReadDelay is in seconds; 0 marks a message read as soon as it is shown.
+func (s *Store) MarkReadDelay() int { return s.integer(KeyMarkReadDelay) }
+func (s *Store) SetMarkReadDelay(v int) {
+	s.set(KeyMarkReadDelay, min(max(v, 0), MarkReadDelayMax))
+}
+
+func (s *Store) ConfirmDelete() bool     { return s.boolean(KeyConfirmDelete) }
+func (s *Store) SetConfirmDelete(v bool) { s.set(KeyConfirmDelete, v) }
+
+func (s *Store) DesktopNotifications() bool     { return s.boolean(KeyDesktopNotifications) }
+func (s *Store) SetDesktopNotifications(v bool) { s.set(KeyDesktopNotifications, v) }
+
+func (s *Store) NotificationSound() bool     { return s.boolean(KeyNotificationSound) }
+func (s *Store) SetNotificationSound(v bool) { s.set(KeyNotificationSound, v) }
 
 func (s *Store) ColorScheme() ColorScheme { return ColorScheme(s.str(KeyColorScheme)) }
 

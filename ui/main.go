@@ -33,27 +33,52 @@ func main() {
 
 	// Preferences are opened on startup (GTK and libadwaita are initialised
 	// by then), before any window or action can use them.
-	var prefs *settings.Store
+	var (
+		prefs   *settings.Store
+		mainWin *window.Window
+		// serviceHold is set when started with --gapplication-service (the
+		// autostart entry): there is no window yet, so hold the application
+		// until the first activation shows one.
+		serviceHold bool
+	)
 	app.ConnectStartup(func() {
 		prefs = settings.Open(log)
 		style.Apply(prefs)
-	})
-	app.ConnectActivate(func() {
-		if win := app.ActiveWindow(); win != nil {
-			win.Present()
-			return
+		if app.Flags()&gio.ApplicationIsService != 0 {
+			app.Hold()
+			serviceHold = true
+			log.Info("started as a service; running in the background until activated")
 		}
-		window.New(app, rpc, log, prefs).Present()
 	})
+	// show presents the main window, creating it on first use. The window
+	// hides instead of closing when "Run in Background" is on, so it is
+	// reused; when it really closes the application exits with it.
+	show := func() {
+		if mainWin == nil {
+			mainWin = window.New(app, rpc, log, prefs)
+		}
+		mainWin.Present()
+		if serviceHold {
+			app.Release()
+			serviceHold = false
+		}
+	}
+	app.ConnectActivate(show)
 	app.ConnectShutdown(func() { rpc.Close() })
 
-	addActions(app, func() *settings.Store { return prefs })
+	addActions(app, func() *settings.Store { return prefs }, show)
 	os.Exit(app.Run(os.Args))
 }
 
 // addActions registers application actions. store yields the settings store,
-// which exists only after startup has run.
-func addActions(app *adw.Application, store func() *settings.Store) {
+// which exists only after startup has run; show presents the main window.
+func addActions(app *adw.Application, store func() *settings.Store, show func()) {
+	// app.show is the default action of desktop notifications and the way
+	// a hidden (background) window comes back.
+	showAction := gio.NewSimpleAction("show", nil)
+	showAction.ConnectActivate(func(*glib.Variant) { show() })
+	app.AddAction(showAction)
+
 	about := gio.NewSimpleAction("about", nil)
 	about.ConnectActivate(func(*glib.Variant) {
 		d := adw.NewAboutDialog()

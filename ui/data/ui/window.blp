@@ -150,85 +150,88 @@ Adw.ApplicationWindow main_window {
               }
 
               [end]
-              Button {
+              Button trash_button {
                 icon-name: "user-trash-symbolic";
                 tooltip-text: _("Move to Trash");
+                // Enabled from Go while a message is selected.
                 sensitive: false;
               }
             }
 
-            content: Stack message_stack {
-              transition-type: crossfade;
+            content: Adw.ToastOverlay toast_overlay {
+              child: Stack message_stack {
+                transition-type: crossfade;
 
-              StackPage {
-                name: "empty";
+                StackPage {
+                  name: "empty";
 
-                child: Adw.StatusPage {
-                  icon-name: "mail-unread-symbolic";
-                  title: _("No Message Selected");
-                  description: _("Select a message to read it here.");
-                };
-              }
+                  child: Adw.StatusPage {
+                    icon-name: "mail-unread-symbolic";
+                    title: _("No Message Selected");
+                    description: _("Select a message to read it here.");
+                  };
+                }
 
-              StackPage {
-                name: "message";
+                StackPage {
+                  name: "message";
 
-                child: ScrolledWindow {
-                  hscrollbar-policy: never;
+                  child: ScrolledWindow {
+                    hscrollbar-policy: never;
 
-                  child: Adw.Clamp {
-                    maximum-size: 900;
-                    tightening-threshold: 700;
+                    child: Adw.Clamp {
+                      maximum-size: 900;
+                      tightening-threshold: 700;
 
-                    child: Box {
-                      orientation: vertical;
-                      spacing: 12;
-                      margin-start: 24;
-                      margin-end: 24;
-                      margin-top: 24;
-                      margin-bottom: 24;
+                      child: Box {
+                        orientation: vertical;
+                        spacing: 12;
+                        margin-start: 24;
+                        margin-end: 24;
+                        margin-top: 24;
+                        margin-bottom: 24;
 
-                      Label message_subject {
-                        xalign: 0;
-                        wrap: true;
-                        selectable: true;
+                        Label message_subject {
+                          xalign: 0;
+                          wrap: true;
+                          selectable: true;
 
-                        styles [
-                          "title-2",
-                        ]
-                      }
+                          styles [
+                            "title-2",
+                          ]
+                        }
 
-                      Label message_from {
-                        xalign: 0;
-                        wrap: true;
-                        selectable: true;
+                        Label message_from {
+                          xalign: 0;
+                          wrap: true;
+                          selectable: true;
 
-                        styles [
-                          "dim-label",
-                        ]
-                      }
+                          styles [
+                            "dim-label",
+                          ]
+                        }
 
-                      Separator {}
+                        Separator {}
 
-                      // Plain-text placeholder. HTML rendering (sanitised
-                      // in the backend, shown in a JS-disabled WebKitGTK
-                      // 6.0 view) is a separate, later task.
-                      Label message_body {
-                        xalign: 0;
-                        yalign: 0;
-                        wrap: true;
-                        wrap-mode: word_char;
-                        selectable: true;
-                        vexpand: true;
-                        // Zoom and font come from ui/internal/style.
-                        styles [
-                          "message-body",
-                        ]
-                      }
+                        // Plain-text placeholder. HTML rendering (sanitised
+                        // in the backend, shown in a JS-disabled WebKitGTK
+                        // 6.0 view) is a separate, later task.
+                        Label message_body {
+                          xalign: 0;
+                          yalign: 0;
+                          wrap: true;
+                          wrap-mode: word_char;
+                          selectable: true;
+                          vexpand: true;
+                          // Zoom and font come from ui/internal/style.
+                          styles [
+                            "message-body",
+                          ]
+                        }
+                      };
                     };
                   };
-                };
-              }
+                }
+              };
             };
           };
         };

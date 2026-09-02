@@ -32,66 +32,67 @@ Adw.Window message_window {
       }
 
       [end]
-      Button {
+      Button trash_button {
         icon-name: "user-trash-symbolic";
         tooltip-text: _("Move to Trash");
-        sensitive: false;
       }
     }
 
-    content: ScrolledWindow message_scroller {
-      hscrollbar-policy: never;
-      // Receives the initial focus (see focus-widget on the window) so the
-      // selectable subject label is not focused and select-all'd on open.
-      focusable: true;
+    content: Adw.ToastOverlay toast_overlay {
+      child: ScrolledWindow message_scroller {
+        hscrollbar-policy: never;
+        // Receives the initial focus (see focus-widget on the window) so the
+        // selectable subject label is not focused and select-all'd on open.
+        focusable: true;
 
-      child: Adw.Clamp {
-        maximum-size: 900;
-        tightening-threshold: 700;
+        child: Adw.Clamp {
+          maximum-size: 900;
+          tightening-threshold: 700;
 
-        child: Box {
-          orientation: vertical;
-          spacing: 12;
-          margin-start: 24;
-          margin-end: 24;
-          margin-top: 24;
-          margin-bottom: 24;
+          child: Box {
+            orientation: vertical;
+            spacing: 12;
+            margin-start: 24;
+            margin-end: 24;
+            margin-top: 24;
+            margin-bottom: 24;
 
-          Label message_subject {
-            xalign: 0;
-            wrap: true;
-            selectable: true;
+            Label message_subject {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
 
-            styles [
-              "title-2",
-            ]
-          }
+              styles [
+                "title-2",
+              ]
+            }
 
-          Label message_from {
-            xalign: 0;
-            wrap: true;
-            selectable: true;
+            Label message_from {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
 
-            styles [
-              "dim-label",
-            ]
-          }
+              styles [
+                "dim-label",
+              ]
+            }
 
-          Separator {}
+            Separator {}
 
-          // Plain-text placeholder; see window.blp for the rendering note.
-          Label message_body {
-            xalign: 0;
-            yalign: 0;
-            wrap: true;
-            wrap-mode: word_char;
-            selectable: true;
-            vexpand: true;
-            // Zoom and font come from ui/internal/style.
-            styles [
-              "message-body",
-            ]
-          }
+            // Plain-text placeholder; see window.blp for the rendering note.
+            Label message_body {
+              xalign: 0;
+              yalign: 0;
+              wrap: true;
+              wrap-mode: word_char;
+              selectable: true;
+              vexpand: true;
+              // Zoom and font come from ui/internal/style.
+              styles [
+                "message-body",
+              ]
+            }
+          };
         };
       };
     };

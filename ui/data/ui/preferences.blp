@@ -3,10 +3,10 @@ using Adw 1;
 // Preferences dialog, opened by the app.preferences action (Ctrl+,). Object
 // IDs are looked up from ui/internal/window/preferences.go; keep them in sync.
 //
-// The Appearance page is bound to GSettings (ui/internal/settings). The
-// General page rows are still placeholders: they can be toggled but nothing
-// is stored or applied yet. Anything that affects mail handling (the "Mail"
-// group) is owned by the daemon and will be set through the RPC API.
+// Both pages are bound to GSettings (ui/internal/settings), except the
+// "Mail" group, which is owned by the daemon and goes through config.get /
+// config.set, and "Launch at Login", whose state is decided by the
+// Background portal (ui/internal/background).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
@@ -19,23 +19,23 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup {
       title: _("Startup");
 
-      Adw.SwitchRow {
-        title: _("Start Minimized");
-        subtitle: _("Open in the background on login");
+      Adw.SwitchRow launch_at_login {
+        title: _("Launch at Login");
+        subtitle: _("Start hidden in the background when you log in");
       }
 
-      Adw.SwitchRow {
-        title: _("Keep Running When Closed");
-        subtitle: _("Closing the window keeps Malachi Mail in the background");
+      Adw.SwitchRow run_in_background {
+        title: _("Run in Background");
+        subtitle: _("Closing the window keeps Malachi Mail running for notifications");
       }
     }
 
     Adw.PreferencesGroup {
       title: _("Reading");
 
-      Adw.SpinRow {
+      Adw.SpinRow mark_read_delay {
         title: _("Mark as Read After");
-        subtitle: _("Seconds a message must be shown before it is marked as read");
+        subtitle: _("Seconds a message must be shown before it is marked as read; 0 marks it immediately");
 
         adjustment: Adjustment {
           lower: 0;
@@ -45,7 +45,7 @@ Adw.PreferencesDialog preferences_dialog {
         };
       }
 
-      Adw.SwitchRow {
+      Adw.SwitchRow confirm_delete {
         title: _("Confirm Before Deleting");
         active: true;
       }
@@ -54,23 +54,24 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup {
       title: _("Notifications");
 
-      Adw.SwitchRow {
+      Adw.SwitchRow desktop_notifications {
         title: _("Show Desktop Notifications");
         active: true;
       }
 
-      Adw.SwitchRow {
+      Adw.SwitchRow notification_sound {
         title: _("Play Sound");
+        subtitle: _("Play the system new-mail sound");
       }
     }
 
-    Adw.PreferencesGroup {
+    Adw.PreferencesGroup mail_group {
       title: _("Mail");
-      description: _("Applied by the mail daemon; not yet configurable.");
+      description: _("Stored by the mail daemon.");
 
-      Adw.ComboRow {
+      Adw.ComboRow check_interval {
         title: _("Check for New Mail");
-        selected: 2;
+        selected: 1;
 
         model: StringList {
           strings [
@@ -82,7 +83,7 @@ Adw.PreferencesDialog preferences_dialog {
         };
       }
 
-      Adw.ComboRow {
+      Adw.ComboRow remote_images {
         title: _("Load Remote Images");
 
         model: StringList {

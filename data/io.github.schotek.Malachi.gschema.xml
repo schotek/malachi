@@ -44,6 +44,34 @@
       <summary>Width of the message list pane</summary>
     </key>
 
+    <!-- General (UI behaviour). Mail options such as the sync interval and
+         the remote-content policy are daemon-owned: config.get/config.set. -->
+    <key name="launch-at-login" type="b">
+      <default>false</default>
+      <summary>Start hidden in the background at login (mirrors the Background portal's autostart decision)</summary>
+    </key>
+    <key name="run-in-background" type="b">
+      <default>false</default>
+      <summary>Closing the main window keeps the application running</summary>
+    </key>
+    <key name="mark-read-delay" type="i">
+      <default>2</default>
+      <range min="0" max="60"/>
+      <summary>Seconds a message must be shown before it is marked as read; 0 = immediately</summary>
+    </key>
+    <key name="confirm-delete" type="b">
+      <default>true</default>
+      <summary>Ask before moving a message to Trash</summary>
+    </key>
+    <key name="desktop-notifications" type="b">
+      <default>true</default>
+      <summary>Show a desktop notification for new mail</summary>
+    </key>
+    <key name="notification-sound" type="b">
+      <default>false</default>
+      <summary>Play the system new-mail sound</summary>
+    </key>
+
     <!-- Appearance -->
     <key name="color-scheme" enum="io.github.schotek.Malachi.ColorScheme">
       <default>'system'</default>

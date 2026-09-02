@@ -109,6 +109,11 @@ export `GSETTINGS_SCHEMA_DIR` so the uninstalled binary finds it. Running
 `build/malachi` directly without that variable still works, but preferences
 then live in memory and are lost on exit (a warning is logged).
 
+"Launch at Login" asks the Background portal for autostart. Inside the
+Toolbx container the portal cannot identify the application ("no AppId
+detected") and refuses; test that setting on the host from the installed
+desktop file or in the Flatpak.
+
 ### Where things go
 
 | What | Path |

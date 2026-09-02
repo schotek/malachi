@@ -45,6 +45,9 @@ type Window struct {
 	// re-applied to them when they change.
 	rows []*widget.MessageRow
 
+	// markReadSource is the pending mark-as-read timer, 0 when none.
+	markReadSource glib.SourceHandle
+
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
 	listPage   *adw.NavigationPage
@@ -52,19 +55,20 @@ type Window struct {
 	folderList  *gtk.ListBox
 	messageList *gtk.ListBox
 	banner      *adw.Banner
+	toasts      *adw.ToastOverlay
 
 	messageStack   *gtk.Stack
 	messageSubject *gtk.Label
 	messageFrom    *gtk.Label
 	messageBody    *gtk.Label
+	trashButton    *gtk.Button
 
 	connIcon   *gtk.Image
 	connStatus *gtk.Label
 }
 
 // New builds the window, populates placeholder data and starts connecting
-// to the backend. Appearance settings from s are applied now and whenever
-// they change.
+// to the backend. Settings from s are applied now and whenever they change.
 func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store) *Window {
 	b := gtk.NewBuilderFromString(data.MustUI("window.ui"))
 
@@ -81,10 +85,12 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		folderList:        b.GetObject("folder_list").Cast().(*gtk.ListBox),
 		messageList:       b.GetObject("message_list").Cast().(*gtk.ListBox),
 		banner:            b.GetObject("backend_banner").Cast().(*adw.Banner),
+		toasts:            b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 		messageStack:      b.GetObject("message_stack").Cast().(*gtk.Stack),
 		messageSubject:    b.GetObject("message_subject").Cast().(*gtk.Label),
 		messageFrom:       b.GetObject("message_from").Cast().(*gtk.Label),
 		messageBody:       b.GetObject("message_body").Cast().(*gtk.Label),
+		trashButton:       b.GetObject("trash_button").Cast().(*gtk.Button),
 		connIcon:          b.GetObject("connection_icon").Cast().(*gtk.Image),
 		connStatus:        b.GetObject("connection_status").Cast().(*gtk.Label),
 	}
@@ -101,6 +107,17 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		s.OnChanged(key, w.applyListAppearance)
 	}
 
+	// "Run in Background": closing hides the window instead of destroying
+	// it. A hidden window still keeps the GtkApplication alive, so no
+	// explicit hold is needed; app.show / activation presents it again.
+	w.ConnectCloseRequest(func() bool {
+		if !w.settings.RunInBackground() {
+			return false // destroy; the application exits with its last window
+		}
+		w.SetVisible(false)
+		return true
+	})
+
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil {
 			return
@@ -111,15 +128,24 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil {
 			w.messageStack.SetVisibleChildName("empty")
+			w.trashButton.SetSensitive(false)
+			w.scheduleMarkRead(-1)
 			return
 		}
 		w.showMessage(dummyMessages[row.Index()])
+		w.trashButton.SetSensitive(true)
 		w.innerSplit.SetShowContent(true)
+		w.scheduleMarkRead(row.Index())
 	})
 	// Fires on double-click or Enter (activate-on-single-click is off).
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
 		w.log.Debug("message row activated", "index", row.Index())
 		w.openMessageWindow(row.Index())
+	})
+	w.trashButton.ConnectClicked(func() {
+		if row := w.messageList.SelectedRow(); row != nil {
+			w.trashMessage(row.Index(), w, w.toasts)
+		}
 	})
 	w.banner.ConnectButtonClicked(w.reconnect)
 
@@ -128,11 +154,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		glib.IdleAdd(func() { w.showConnectionState(s, err) })
 	}
 	c.OnNotification = func(method string, params json.RawMessage) {
-		glib.IdleAdd(func() {
-			// TODO(phase-1): dispatch notify.newMessage / notify.syncState /
-			// notify.authRequired to the relevant views.
-			w.log.Info("notification", "method", method)
-		})
+		glib.IdleAdd(func() { w.handleNotification(method, params) })
 	}
 
 	w.reconnect()
@@ -165,16 +187,21 @@ func (w *Window) populateFolders() {
 	}
 }
 
+// messageOf projects a placeholder message onto what a list row shows.
+func messageOf(m dummyMessage) widget.Message {
+	return widget.Message{
+		From:    m.From,
+		Subject: m.Subject,
+		Snippet: m.Snippet,
+		Date:    m.Date,
+		Unread:  m.Unread,
+	}
+}
+
 func (w *Window) populateMessages() {
 	for _, m := range dummyMessages {
 		row := widget.NewMessageRow()
-		row.SetMessage(widget.Message{
-			From:    m.From,
-			Subject: m.Subject,
-			Snippet: m.Snippet,
-			Date:    m.Date,
-			Unread:  m.Unread,
-		})
+		row.SetMessage(messageOf(m))
 		w.rows = append(w.rows, row)
 		w.messageList.Append(row)
 	}
@@ -203,7 +230,7 @@ func (w *Window) openMessageWindow(idx int) {
 		mw.Present()
 		return
 	}
-	mw := newMessageWindow(w.app, dummyMessages[idx])
+	mw := newMessageWindow(w, idx)
 	w.openMessages[idx] = mw
 	mw.ConnectCloseRequest(func() bool {
 		delete(w.openMessages, idx)
@@ -217,6 +244,12 @@ func (w *Window) showMessage(m dummyMessage) {
 	w.messageFrom.SetLabel(widget.FormatAddress(m.From))
 	w.messageBody.SetLabel(m.Body)
 	w.messageStack.SetVisibleChildName("message")
+}
+
+// playNewMailSound is wired to the system sound theme in internal/sound.
+// TODO(part C): replace with sound.Play.
+func (w *Window) playNewMailSound() {
+	w.log.Debug("notification sound not available yet")
 }
 
 // reconnect starts a connection attempt off the main loop.
