@@ -29,8 +29,14 @@ const reconnectInterval = 5 // seconds
 type Window struct {
 	*adw.ApplicationWindow
 
+	app    *adw.Application
 	client *client.Client
 	log    *slog.Logger
+
+	// openMessages tracks stand-alone message windows by message index so a
+	// second double-click raises the existing window instead of opening
+	// another one. TODO(phase-1): key by api.MessageID.
+	openMessages map[int]*MessageWindow
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
@@ -56,8 +62,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger) *Window {
 
 	w := &Window{
 		ApplicationWindow: b.GetObject("main_window").Cast().(*adw.ApplicationWindow),
+		app:               app,
 		client:            c,
 		log:               log.With("component", "window"),
+		openMessages:      make(map[int]*MessageWindow),
 		outerSplit:        b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit:        b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
 		listPage:          b.GetObject("list_page").Cast().(*adw.NavigationPage),
@@ -91,6 +99,11 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger) *Window {
 		}
 		w.showMessage(dummyMessages[row.Index()])
 		w.innerSplit.SetShowContent(true)
+	})
+	// Fires on double-click or Enter (activate-on-single-click is off).
+	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
+		w.log.Debug("message row activated", "index", row.Index())
+		w.openMessageWindow(row.Index())
 	})
 	w.banner.ConnectButtonClicked(w.reconnect)
 
@@ -140,6 +153,9 @@ func (w *Window) populateMessages() {
 	for _, m := range dummyMessages {
 		row := adw.NewActionRow()
 		row.SetUseMarkup(false) // subjects and senders are hostile input
+		// AdwActionRow defaults to activatable=false (unlike GtkListBoxRow);
+		// without this, row-activated never fires and double-click does nothing.
+		row.SetActivatable(true)
 		row.SetTitle(m.Subject)
 		row.SetSubtitle(m.From)
 		row.SetSubtitleLines(1)
@@ -150,6 +166,25 @@ func (w *Window) populateMessages() {
 		}
 		w.messageList.Append(row)
 	}
+}
+
+// openMessageWindow opens message idx in its own window, or raises the
+// window that already shows it.
+func (w *Window) openMessageWindow(idx int) {
+	if idx < 0 || idx >= len(dummyMessages) {
+		return
+	}
+	if mw, ok := w.openMessages[idx]; ok {
+		mw.Present()
+		return
+	}
+	mw := newMessageWindow(w.app, dummyMessages[idx])
+	w.openMessages[idx] = mw
+	mw.ConnectCloseRequest(func() bool {
+		delete(w.openMessages, idx)
+		return false // let the window close
+	})
+	mw.Present()
 }
 
 func (w *Window) showMessage(m dummyMessage) {

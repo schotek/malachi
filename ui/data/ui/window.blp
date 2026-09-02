@@ -122,6 +122,10 @@ Adw.ApplicationWindow main_window {
                 vexpand: true;
 
                 child: ListBox message_list {
+                  // Single click selects (preview in the right pane);
+                  // double-click or Enter activates (opens a window).
+                  activate-on-single-click: false;
+
                   styles [
                     "navigation-sidebar",
                   ]
