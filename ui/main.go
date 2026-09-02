@@ -66,13 +66,13 @@ func main() {
 	app.ConnectActivate(show)
 	app.ConnectShutdown(func() { rpc.Close() })
 
-	addActions(app, func() *settings.Store { return prefs }, show)
+	addActions(app, rpc, func() *settings.Store { return prefs }, show)
 	os.Exit(app.Run(os.Args))
 }
 
 // addActions registers application actions. store yields the settings store,
 // which exists only after startup has run; show presents the main window.
-func addActions(app *adw.Application, store func() *settings.Store, show func()) {
+func addActions(app *adw.Application, rpc *client.Client, store func() *settings.Store, show func()) {
 	// app.show is the default action of desktop notifications and the way
 	// a hidden (background) window comes back.
 	showAction := gio.NewSimpleAction("show", nil)
@@ -96,7 +96,7 @@ func addActions(app *adw.Application, store func() *settings.Store, show func())
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {
-		window.NewPreferences(store()).Present(app.ActiveWindow())
+		window.NewPreferences(store(), rpc).Present(app.ActiveWindow())
 	})
 	app.AddAction(prefs)
 	app.SetAccelsForAction("app.preferences", []string{"<Control>comma"})

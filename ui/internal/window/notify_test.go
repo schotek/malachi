@@ -33,3 +33,15 @@ func TestNotificationText(t *testing.T) {
 		t.Error("cap left an invalid UTF-8 sequence")
 	}
 }
+
+func TestNearestInterval(t *testing.T) {
+	cases := map[int]uint{0: 0, -5: 0, 60: 1, 300: 1, 500: 1, 700: 2, 900: 2, 1300: 2, 1400: 3, 1800: 3, 99999: 3}
+	for in, want := range cases {
+		if got := nearestInterval(in); got != want {
+			t.Errorf("nearestInterval(%d) = %d, want %d", in, got, want)
+		}
+	}
+	if indexOfPolicy(api.RemoteAllow) != 2 || indexOfPolicy("bogus") != 0 {
+		t.Error("indexOfPolicy mapping wrong")
+	}
+}

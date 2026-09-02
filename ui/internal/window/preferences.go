@@ -1,13 +1,17 @@
 package window
 
 import (
+	"context"
 	"errors"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/background"
+	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/settings"
 )
 
@@ -48,8 +52,15 @@ var (
 	densityChoices = []settings.Density{settings.DensityComfortable, settings.DensityCompact}
 )
 
-// NewPreferences builds the dialog bound to s. Present it with Present(parent).
-func NewPreferences(s *settings.Store) *PreferencesDialog {
+// Mail group choices, in the order of the StringLists in preferences.blp.
+var (
+	intervalChoices = []int{0, 300, 900, 1800} // Manually, 5, 15, 30 minutes
+	remoteChoices   = []api.RemoteContentPolicy{api.RemoteBlock, api.RemoteKnownSenders, api.RemoteAllow}
+)
+
+// NewPreferences builds the dialog bound to s and, for the Mail group, to
+// the daemon through c. Present it with Present(parent).
+func NewPreferences(s *settings.Store, c *client.Client) *PreferencesDialog {
 	b := gtk.NewBuilderFromString(data.MustUI("preferences.ui"))
 
 	d := &PreferencesDialog{
@@ -88,6 +99,7 @@ func NewPreferences(s *settings.Store) *PreferencesDialog {
 		bindChoice(s, settings.KeyColorScheme, d.colorScheme, colorSchemeChoices, s.ColorScheme, s.SetColorScheme),
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
 		d.bindLaunchAtLogin(s),
+		d.bindMail(c),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true
@@ -96,10 +108,111 @@ func NewPreferences(s *settings.Store) *PreferencesDialog {
 		}
 	})
 
-	// TODO(part D): bind the Mail group to config.get / config.set.
+	return d
+}
+
+// bindMail loads the daemon preferences with config.get and writes every
+// change back with config.set. The group stays insensitive until the load
+// succeeds; a failed save shows a toast and reverts the combos.
+func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
+	var (
+		current api.Preferences
+		syncing bool // set while combos are updated programmatically
+	)
 	d.mailGroup.SetSensitive(false)
 
-	return d
+	apply := func(p api.Preferences) {
+		syncing = true
+		d.checkInterval.SetSelected(nearestInterval(p.SyncIntervalSeconds))
+		d.remoteImages.SetSelected(indexOfPolicy(p.RemoteContent))
+		syncing = false
+	}
+	save := func() {
+		if syncing {
+			return
+		}
+		want := current
+		if i := d.checkInterval.Selected(); i < uint(len(intervalChoices)) {
+			want.SyncIntervalSeconds = intervalChoices[i]
+		}
+		if i := d.remoteImages.Selected(); i < uint(len(remoteChoices)) {
+			want.RemoteContent = remoteChoices[i]
+		}
+		d.mailGroup.SetSensitive(false)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+			defer cancel()
+			var res api.ConfigSetResult
+			err := c.Call(ctx, api.MethodConfigSet, api.ConfigSetParams{Preferences: want}, &res)
+			glib.IdleAdd(func() {
+				if d.closed {
+					return
+				}
+				d.mailGroup.SetSensitive(true)
+				if err != nil {
+					d.AddToast(adw.NewToast(rpcErrorText("Saving mail settings", err)))
+					apply(current)
+					return
+				}
+				current = res.Preferences
+				apply(current)
+			})
+		}()
+	}
+	h1 := d.checkInterval.NotifyProperty("selected", save)
+	h2 := d.remoteImages.NotifyProperty("selected", save)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+		defer cancel()
+		var res api.ConfigGetResult
+		err := c.Call(ctx, api.MethodConfigGet, api.ConfigGetParams{}, &res)
+		glib.IdleAdd(func() {
+			if d.closed {
+				return
+			}
+			if err != nil {
+				d.mailGroup.SetDescription(rpcErrorText("Loading mail settings", err))
+				return
+			}
+			current = res.Preferences
+			apply(current)
+			d.mailGroup.SetSensitive(true)
+		})
+	}()
+
+	return func() {
+		d.checkInterval.HandlerDisconnect(h1)
+		d.remoteImages.HandlerDisconnect(h2)
+	}
+}
+
+// nearestInterval maps a sync interval in seconds to the closest combo
+// position (0 stays "Manually").
+func nearestInterval(seconds int) uint {
+	if seconds <= 0 {
+		return 0
+	}
+	best, bestDiff := uint(1), -1
+	for i, v := range intervalChoices[1:] {
+		diff := v - seconds
+		if diff < 0 {
+			diff = -diff
+		}
+		if bestDiff < 0 || diff < bestDiff {
+			best, bestDiff = uint(i+1), diff
+		}
+	}
+	return best
+}
+
+func indexOfPolicy(p api.RemoteContentPolicy) uint {
+	for i, c := range remoteChoices {
+		if c == p {
+			return uint(i)
+		}
+	}
+	return 0
 }
 
 // bindLaunchAtLogin drives the autostart switch through the Background
