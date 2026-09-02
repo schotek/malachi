@@ -38,6 +38,15 @@ const (
 	// Sync.
 	MethodSyncStatus  = "sync.status"
 	MethodSyncTrigger = "sync.trigger"
+
+	// Config (daemon-owned preferences).
+	MethodConfigGet = "config.get"
+	MethodConfigSet = "config.set"
+
+	// Known senders (remote-content allow-list).
+	MethodSenderList   = "sender.list"
+	MethodSenderAdd    = "sender.add"
+	MethodSenderRemove = "sender.remove"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -59,6 +68,8 @@ var AllMethods = []string{
 	MethodDraftSave, MethodDraftList,
 	MethodSearchQuery,
 	MethodSyncStatus, MethodSyncTrigger,
+	MethodConfigGet, MethodConfigSet,
+	MethodSenderList, MethodSenderAdd, MethodSenderRemove,
 }
 
 // AllNotifications lists every server-initiated notification.

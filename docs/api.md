@@ -240,7 +240,7 @@ by an in-progress pagination. Clients refresh from the start on
 **The only method that returns message content, and it returns only
 sanitised content.**
 
-- params: `{ "accountId", "messageId", "remoteContent": "block" (default) | "allow" }`
+- params: `{ "accountId", "messageId", "remoteContent": "block" | "allow" (opt, per-call override) }`
 - result:
 
 ```jsonc
@@ -271,10 +271,18 @@ Guarantees of `html` (enforced in `backend/internal/sanitize`, see
 - output size- and depth-capped.
 
 There is **no** parameter, flag, environment variable or debug method that
-returns the original HTML. `remoteContent: "allow"` is a per-call user
-decision; the backend does not remember it (the UI may, per sender, later).
+returns the original HTML.
 
-- errors: messageNotFound, sanitizeFailed (body withheld), malformedMessage
+Which policy applies: when `remoteContent` is omitted the stored preference
+from `config.get` is used (`block` by default; `knownSenders` resolves to
+`allow` only when every sender address of the message is on the `sender.list`
+allow-list, otherwise `block`). Passing `remoteContent: "allow"` or `"block"`
+overrides the preference for this one call and is not remembered;
+`"knownSenders"` is not accepted per call (invalidArgument). Decrypted
+content is always `block`, whatever the policy (see `docs/security.md` §5).
+
+- errors: messageNotFound, sanitizeFailed (body withheld), malformedMessage,
+  invalidArgument (bad `remoteContent`)
 
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
@@ -374,6 +382,56 @@ plain words. Snippets are plain text with byte ranges; never HTML.
 - params: `{ "accountId" (opt), "folderId" (opt), "full": bool (opt) }`
 - result: `{}` (returns immediately; progress via `notify.syncState`)
 
+### 4.8 config
+
+Daemon-owned preferences: options that affect mail handling and therefore
+belong to the backend, not to the UI's own settings store. Precedence of
+values: set through `config.set` (persisted in the store), else
+`config.toml` (`[sync] interval_seconds`), else the built-in default.
+
+```jsonc
+Preferences {
+  "syncIntervalSeconds": 300,   // 0 = manual sync only; otherwise >= 60
+  "remoteContent": "block" | "knownSenders" | "allow"
+}
+```
+
+#### `config.get`
+- params: `{}`
+- result: `{ "preferences": Preferences }`
+
+#### `config.set`
+- params: `{ "preferences": Preferences }` (the whole set; read-modify-write)
+- result: `{ "preferences": Preferences }` (effective values)
+- errors: invalidArgument (interval below 60 and not 0, unknown policy),
+  storageError
+
+### 4.9 sender
+
+The known-senders allow-list behind the `knownSenders` remote-content
+policy. Entries are added automatically for recipients of mail the user
+sends (`"source": "sent"`) and explicitly by the user (`"source": "user"`).
+The list is **never** populated from incoming `From` headers, which are
+attacker-controlled; matching is on the bare address, case-insensitively,
+and a display name never counts.
+
+```jsonc
+KnownSender { "address": "alice@example.org", "source": "sent" | "user", "addedAt": "2026-09-02T…Z" }
+```
+
+#### `sender.list`
+- params: `{}`
+- result: `{ "senders": [KnownSender] }`
+
+#### `sender.add`
+- params: `{ "address": "alice@example.org" }` (a `Name <addr>` mailbox is accepted; only the address is stored)
+- result: `{}`
+- errors: invalidArgument (unparsable address), storageError
+
+#### `sender.remove`
+- params: `{ "address" }`
+- result: `{}` (removing an unknown address is not an error)
+
 ## 5. Notifications
 
 | Method | params |
@@ -403,3 +461,7 @@ some. Clients must be able to resynchronise their view via `sync.status`,
 
 - **1** (2026-09-02): initial contract. All methods except `system.info` are
   stubs returning `notImplemented`.
+- **1** (2026-09-02, compatible addition): `config.get`, `config.set`,
+  `sender.list`, `sender.add`, `sender.remove`; new stored remote-content
+  policy value `knownSenders`; `message.body` `remoteContent` is now an
+  optional per-call override of the stored preference.

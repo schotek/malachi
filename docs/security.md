@@ -38,6 +38,7 @@ physical access to an unlocked session, and endpoint malware.
 | Frame / navigation | `<iframe>`, `<meta http-equiv=refresh>`, `<base href>` | loading arbitrary origins, rewriting relative links |
 | Resource exhaustion | deeply nested tags, huge documents, billion-laughs-style entity tricks, giant images | UI hang, memory exhaustion |
 | Mixed-content reference | `cid:` pointing to non-existent or foreign parts | confusion, occasional parser bugs |
+| Allow-list spoofing | forged `From` matching a trusted address or display name | remote images load under the `knownSenders` policy for a message the trusted party never sent |
 
 ### 3.2 Defences
 
@@ -53,7 +54,16 @@ defence. Requirements are listed in that package's documentation; summary:
   parsed and restricted (`http`, `https`, `mailto`, `cid`); anything else
   removed and counted;
 - remote references removed under the default `block` policy, `https:`
-  images kept only under an explicit per-call `allow`;
+  images kept only under `allow`. `allow` comes either from an explicit
+  per-call override or from the stored preference; the `knownSenders`
+  preference is resolved to `allow`/`block` *before* the sanitiser runs
+  (`internal/core`), so the sanitiser only ever sees the two-state decision
+  and fails closed on anything else. The allow-list holds bare addresses the
+  user sent mail to or approved explicitly, matched case-insensitively on
+  the address only (never the display name), and every sender of a message
+  must be on it. This does not defend against a forged `From` with a
+  trusted *address*; DKIM/SPF-aware trust is future work, and the policy is
+  off by default;
 - CSS (both `<style>` and `style=""`) parsed and re-emitted through a
   property allow-list; `url()`, `expression()`, `@import`, `@font-face`,
   `position: fixed|absolute` (outside the message's own box), negative

@@ -330,12 +330,21 @@ const (
 	// consented for this message. Scripts, forms, CSS and fonts are still
 	// removed. There is no policy that disables sanitisation.
 	RemoteAllow RemoteContentPolicy = "allow"
+	// RemoteKnownSenders is valid only as the stored preference
+	// (Preferences.RemoteContent): the backend resolves it per message to
+	// RemoteAllow when every sender address is on the known-senders list
+	// (sender.*), and to RemoteBlock otherwise. Decrypted content is always
+	// RemoteBlock regardless of policy (docs/security.md §5).
+	RemoteKnownSenders RemoteContentPolicy = "knownSenders"
 )
 
 type MessageBodyParams struct {
-	AccountID     AccountID           `json:"accountId"`
-	MessageID     MessageID           `json:"messageId"`
-	RemoteContent RemoteContentPolicy `json:"remoteContent,omitempty"` // default "block"
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+	// RemoteContent overrides the stored preference for this call only.
+	// Empty = use the stored policy (config.get); "block" and "allow" are the
+	// only accepted overrides, "knownSenders" here is invalidArgument.
+	RemoteContent RemoteContentPolicy `json:"remoteContent,omitempty"`
 }
 
 // BlockedContent summarises what the sanitiser removed or neutralised so the
@@ -590,6 +599,76 @@ type SyncTriggerParams struct {
 }
 
 type SyncTriggerResult struct{}
+
+// ---------------------------------------------------------------------------
+// Config (daemon-owned preferences)
+// ---------------------------------------------------------------------------
+
+// SyncIntervalMin is the smallest non-zero Preferences.SyncIntervalSeconds
+// the backend accepts; 0 disables periodic sync (manual sync.trigger only).
+const SyncIntervalMin = 60
+
+// Preferences are the user-settable daemon options. They affect mail
+// handling and therefore live in the backend, not in the UI's own settings.
+// Precedence: value set through config.set, then config.toml, then the
+// built-in default.
+type Preferences struct {
+	// SyncIntervalSeconds is the periodic sync interval; 0 = manual only.
+	SyncIntervalSeconds int `json:"syncIntervalSeconds"`
+	// RemoteContent is the default policy for message.body when the call
+	// does not override it: block (default), knownSenders or allow.
+	RemoteContent RemoteContentPolicy `json:"remoteContent"`
+}
+
+type ConfigGetParams struct{}
+
+type ConfigGetResult struct {
+	Preferences Preferences `json:"preferences"`
+}
+
+// ConfigSetParams replaces the whole preference set (read-modify-write).
+type ConfigSetParams struct {
+	Preferences Preferences `json:"preferences"`
+}
+
+// ConfigSetResult echoes the effective values after validation.
+type ConfigSetResult struct {
+	Preferences Preferences `json:"preferences"`
+}
+
+// KnownSender is an address the user trusts enough to load remote images
+// from. Entries come from mail the user sent ("sent") or from an explicit
+// decision ("user"). The list is keyed on the recipient addresses of
+// outgoing mail and on explicit user actions, never on incoming From
+// headers, which are attacker-controlled.
+type KnownSender struct {
+	Address string    `json:"address"`
+	Source  string    `json:"source"` // "sent" | "user"
+	AddedAt time.Time `json:"addedAt"`
+}
+
+const (
+	KnownSenderSourceSent = "sent"
+	KnownSenderSourceUser = "user"
+)
+
+type SenderListParams struct{}
+
+type SenderListResult struct {
+	Senders []KnownSender `json:"senders"`
+}
+
+type SenderAddParams struct {
+	Address string `json:"address"` // bare address or "Name <address>"
+}
+
+type SenderAddResult struct{}
+
+type SenderRemoveParams struct {
+	Address string `json:"address"`
+}
+
+type SenderRemoveResult struct{}
 
 // ---------------------------------------------------------------------------
 // Notifications (backend → client)

@@ -15,6 +15,7 @@ import (
 	"syscall"
 
 	"github.com/schotek/malachi/backend/internal/config"
+	"github.com/schotek/malachi/backend/internal/core"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/store"
 )
@@ -75,7 +76,7 @@ func run() error {
 	}()
 	log.Info("store ready", "path", st.Path())
 
-	backend := &rpc.StubBackend{Version: version, StorePath: st.Path()}
+	backend := core.New(version, st, cfg)
 	srv := rpc.NewServer(backend, log)
 	if err := srv.Listen(*flagSocket); err != nil {
 		return err

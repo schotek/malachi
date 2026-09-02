@@ -6,6 +6,10 @@
 // delivers queued messages with retry/backoff, then appends the sent copy to
 // the account's Sent folder via IMAP. Failures surface through
 // notify.syncState for the outbox and never lose the message.
+//
+// After a successful delivery the worker records every recipient address in
+// the known-senders allow-list (store.AddKnownSender with source "sent"),
+// which feeds the "knownSenders" remote-content policy (internal/core).
 package smtp
 
 import (

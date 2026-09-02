@@ -19,3 +19,16 @@ func TestStubFailsClosed(t *testing.T) {
 		t.Fatalf("sanitiser returned its input unchanged")
 	}
 }
+
+// The sanitiser only understands the two-state block/allow decision. A
+// policy it does not know (knownSenders is resolved by internal/core before
+// the call, anything else is a bug) must never keep remote references.
+func TestUnknownPolicyFailsClosed(t *testing.T) {
+	for _, pol := range []api.RemoteContentPolicy{api.RemoteKnownSenders, "", "whatever"} {
+		in := Input{HTML: `<img src="https://x/1.png">`, Policy: pol}
+		out, _ := Sanitize(in)
+		if strings.Contains(out.HTML, "https://x/1.png") {
+			t.Errorf("policy %q kept a remote reference: %q", pol, out.HTML)
+		}
+	}
+}

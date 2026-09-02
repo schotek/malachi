@@ -206,6 +206,13 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   decision pending evaluation against `docs/security.md`.
 - Account definitions: `config.toml` (user-editable) vs. store (managed via
   `account.add`). Both are loadable today; pick one before phase 1 ends.
+  Decided for *daemon options* (`config.get`/`config.set`): the store is
+  authoritative, `config.toml` supplies bootstrap defaults, the daemon never
+  writes `config.toml`.
+- Daemon lifecycle at login: the UI's autostart entry launches only
+  `malachi --gapplication-service`; nothing starts `malachid`. Options: the UI
+  spawns it when the socket is unreachable, or a systemd user unit / second
+  autostart entry.
 - Whether message bodies live inside SQLite or as files under
   `$XDG_DATA_HOME/malachi/parts/` (SQLite is simpler; files are cheaper for
   large attachments).

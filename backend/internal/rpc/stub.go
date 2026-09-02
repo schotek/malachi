@@ -8,12 +8,12 @@ import (
 )
 
 // StubBackend implements api.Backend with every data method returning
-// api.ErrNotImplemented. Only system.info works. It is the backend malachid
-// serves during the bootstrap phase.
+// api.ErrNotImplemented. Only system.info works. internal/core embeds it and
+// overrides the services it has implemented so far; malachid serves that.
 //
-// TODO(phase-1): replace with a real composition of internal/account,
-// internal/imap, internal/store, … in a dedicated package (e.g. internal/core).
-// The RPC package should then depend on that package only through api.Backend.
+// TODO(phase-1): as internal/core grows (account, imap, …) the stub shrinks
+// and eventually disappears. The RPC package depends on core only through
+// api.Backend.
 type StubBackend struct {
 	Version   string
 	StorePath string
@@ -29,6 +29,8 @@ func (b *StubBackend) Threads() api.ThreadService   { return stubThreads{} }
 func (b *StubBackend) Drafts() api.DraftService     { return stubDrafts{} }
 func (b *StubBackend) Search() api.SearchService    { return stubSearch{} }
 func (b *StubBackend) Sync() api.SyncService        { return stubSync{} }
+func (b *StubBackend) Config() api.ConfigService    { return stubConfig{} }
+func (b *StubBackend) Senders() api.SenderService   { return stubSenders{} }
 
 type stubSystem struct{ b *StubBackend }
 
@@ -121,5 +123,26 @@ func (stubSync) Status(context.Context, api.SyncStatusParams) (*api.SyncStatusRe
 	return nil, api.ErrNotImplemented
 }
 func (stubSync) Trigger(context.Context, api.SyncTriggerParams) (*api.SyncTriggerResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubConfig struct{}
+
+func (stubConfig) Get(context.Context, api.ConfigGetParams) (*api.ConfigGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubConfig) Set(context.Context, api.ConfigSetParams) (*api.ConfigSetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubSenders struct{}
+
+func (stubSenders) List(context.Context, api.SenderListParams) (*api.SenderListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSenders) Add(context.Context, api.SenderAddParams) (*api.SenderAddResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubSenders) Remove(context.Context, api.SenderRemoveParams) (*api.SenderRemoveResult, error) {
 	return nil, api.ErrNotImplemented
 }

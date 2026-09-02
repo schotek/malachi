@@ -55,6 +55,17 @@ type SyncService interface {
 	Trigger(ctx context.Context, p SyncTriggerParams) (*SyncTriggerResult, error)
 }
 
+type ConfigService interface {
+	Get(ctx context.Context, p ConfigGetParams) (*ConfigGetResult, error)
+	Set(ctx context.Context, p ConfigSetParams) (*ConfigSetResult, error)
+}
+
+type SenderService interface {
+	List(ctx context.Context, p SenderListParams) (*SenderListResult, error)
+	Add(ctx context.Context, p SenderAddParams) (*SenderAddResult, error)
+	Remove(ctx context.Context, p SenderRemoveParams) (*SenderRemoveResult, error)
+}
+
 // Backend is the complete server-side surface.
 type Backend interface {
 	System() SystemService
@@ -65,6 +76,8 @@ type Backend interface {
 	Drafts() DraftService
 	Search() SearchService
 	Sync() SyncService
+	Config() ConfigService
+	Senders() SenderService
 }
 
 // Notifier is how backend components push events to connected clients.
