@@ -14,6 +14,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/style"
 	"github.com/schotek/malachi/ui/internal/window"
 )
 
@@ -29,20 +31,29 @@ func main() {
 	app := adw.NewApplication(AppID, gio.ApplicationFlagsNone)
 	rpc := client.New(client.DefaultSocketPath())
 
+	// Preferences are opened on startup (GTK and libadwaita are initialised
+	// by then), before any window or action can use them.
+	var prefs *settings.Store
+	app.ConnectStartup(func() {
+		prefs = settings.Open(log)
+		style.Apply(prefs)
+	})
 	app.ConnectActivate(func() {
 		if win := app.ActiveWindow(); win != nil {
 			win.Present()
 			return
 		}
-		window.New(app, rpc, log).Present()
+		window.New(app, rpc, log, prefs).Present()
 	})
 	app.ConnectShutdown(func() { rpc.Close() })
 
-	addActions(app, log)
+	addActions(app, func() *settings.Store { return prefs })
 	os.Exit(app.Run(os.Args))
 }
 
-func addActions(app *adw.Application, log *slog.Logger) {
+// addActions registers application actions. store yields the settings store,
+// which exists only after startup has run.
+func addActions(app *adw.Application, store func() *settings.Store) {
 	about := gio.NewSimpleAction("about", nil)
 	about.ConnectActivate(func(*glib.Variant) {
 		d := adw.NewAboutDialog()
@@ -60,9 +71,10 @@ func addActions(app *adw.Application, log *slog.Logger) {
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {
-		log.Info("preferences: not implemented")
+		window.NewPreferences(store()).Present(app.ActiveWindow())
 	})
 	app.AddAction(prefs)
+	app.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
 
 	quit := gio.NewSimpleAction("quit", nil)
 	quit.ConnectActivate(func(*glib.Variant) { app.Quit() })

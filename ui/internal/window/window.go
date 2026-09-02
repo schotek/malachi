@@ -20,6 +20,8 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // reconnectInterval is how often the UI retries a dead backend socket.
@@ -29,14 +31,19 @@ const reconnectInterval = 5 // seconds
 type Window struct {
 	*adw.ApplicationWindow
 
-	app    *adw.Application
-	client *client.Client
-	log    *slog.Logger
+	app      *adw.Application
+	client   *client.Client
+	log      *slog.Logger
+	settings *settings.Store
 
 	// openMessages tracks stand-alone message windows by message index so a
 	// second double-click raises the existing window instead of opening
 	// another one. TODO(phase-1): key by api.MessageID.
 	openMessages map[int]*MessageWindow
+
+	// rows are the message list rows, kept so appearance settings can be
+	// re-applied to them when they change.
+	rows []*widget.MessageRow
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
@@ -56,8 +63,9 @@ type Window struct {
 }
 
 // New builds the window, populates placeholder data and starts connecting
-// to the backend.
-func New(app *adw.Application, c *client.Client, log *slog.Logger) *Window {
+// to the backend. Appearance settings from s are applied now and whenever
+// they change.
+func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store) *Window {
 	b := gtk.NewBuilderFromString(data.MustUI("window.ui"))
 
 	w := &Window{
@@ -65,6 +73,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger) *Window {
 		app:               app,
 		client:            c,
 		log:               log.With("component", "window"),
+		settings:          s,
 		openMessages:      make(map[int]*MessageWindow),
 		outerSplit:        b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit:        b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -84,6 +93,13 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger) *Window {
 	w.populateFolders()
 	w.populateMessages()
 	w.messageStack.SetVisibleChildName("empty")
+
+	// Settings callbacks arrive on the main loop; no IdleAdd needed. The main
+	// window lives as long as the application, so the handlers are never
+	// removed. Body zoom and font are handled globally by internal/style.
+	for _, key := range []string{settings.KeyDensity, settings.KeyShowPreviewLine, settings.KeyShowAvatars} {
+		s.OnChanged(key, w.applyListAppearance)
+	}
 
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil {
@@ -151,20 +167,29 @@ func (w *Window) populateFolders() {
 
 func (w *Window) populateMessages() {
 	for _, m := range dummyMessages {
-		row := adw.NewActionRow()
-		row.SetUseMarkup(false) // subjects and senders are hostile input
-		// AdwActionRow defaults to activatable=false (unlike GtkListBoxRow);
-		// without this, row-activated never fires and double-click does nothing.
-		row.SetActivatable(true)
-		row.SetTitle(m.Subject)
-		row.SetSubtitle(m.From)
-		row.SetSubtitleLines(1)
-		if m.Unread {
-			row.AddPrefix(gtk.NewImageFromIconName("mail-unread-symbolic"))
-		} else {
-			row.AddPrefix(gtk.NewImageFromIconName("mail-read-symbolic"))
-		}
+		row := widget.NewMessageRow()
+		row.SetMessage(widget.Message{
+			From:    m.From,
+			Subject: m.Subject,
+			Snippet: m.Snippet,
+			Date:    m.Date,
+			Unread:  m.Unread,
+		})
+		w.rows = append(w.rows, row)
 		w.messageList.Append(row)
+	}
+	w.applyListAppearance()
+}
+
+// applyListAppearance pushes the current list settings to every row.
+func (w *Window) applyListAppearance() {
+	compact := w.settings.Density() == settings.DensityCompact
+	preview := w.settings.ShowPreviewLine()
+	avatars := w.settings.ShowAvatars()
+	for _, r := range w.rows {
+		r.SetCompact(compact)
+		r.SetShowPreview(preview)
+		r.SetShowAvatar(avatars)
 	}
 }
 
@@ -189,7 +214,7 @@ func (w *Window) openMessageWindow(idx int) {
 
 func (w *Window) showMessage(m dummyMessage) {
 	w.messageSubject.SetLabel(m.Subject)
-	w.messageFrom.SetLabel(m.From)
+	w.messageFrom.SetLabel(widget.FormatAddress(m.From))
 	w.messageBody.SetLabel(m.Body)
 	w.messageStack.SetVisibleChildName("message")
 }

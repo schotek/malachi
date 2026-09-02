@@ -19,6 +19,15 @@ for bin in "$BACKEND" "$UI"; do
     fi
 done
 
+# Uninstalled GSettings schema (compiled by `make schemas`). GLib reads the
+# variable once at startup; prepend so an existing value keeps working.
+SCHEMAS="$BUILD/glib-2.0/schemas"
+if [[ -f "$SCHEMAS/gschemas.compiled" ]]; then
+    export GSETTINGS_SCHEMA_DIR="$SCHEMAS${GSETTINGS_SCHEMA_DIR:+:$GSETTINGS_SCHEMA_DIR}"
+else
+    echo "dev-run: $SCHEMAS/gschemas.compiled missing (run 'make build'); settings will not persist" >&2
+fi
+
 # Resolve the socket the same way the daemon does.
 if [[ -n "${MALACHI_SOCKET:-}" ]]; then
     SOCK="$MALACHI_SOCKET"

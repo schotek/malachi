@@ -165,14 +165,30 @@ ui/
   data/ui/*.blp       Blueprint UI definitions (compiled to .ui at build time, embedded)
   data/icons/
   internal/client     JSON-RPC client (transport only)
-  internal/window     main window: folders | list | message
-  internal/widget     reusable widgets
+  internal/window     main window: folders | list | message; message and
+                      preferences dialogs
+  internal/widget     reusable widgets (message list row) and pure formatters
+  internal/settings   UI-only preferences (GSettings, in-memory fallback)
+  internal/style      colour scheme and the application CSS provider
 ```
 
 Three panes built from nested `Adw.NavigationSplitView`s with breakpoints
 for narrow windows. All UI structure lives in Blueprint; Go code binds
 objects by ID and populates them. Callbacks from the client run on a
 background goroutine and hop to the GTK main loop with `glib.IdleAdd`.
+
+Preferences are an `Adw.PreferencesDialog` (`app.preferences`, Ctrl+,)
+with *General* and *Appearance* pages. UI-only options live in GSettings
+(`data/*.gschema.xml`, read through `internal/settings`); anything that
+affects mail handling (check interval, remote content) is owned by the
+daemon and set through the RPC API. The *Appearance* page is functional:
+colour scheme goes through `adw.StyleManager`, list density, preview line
+and avatars are pushed to the message rows, and body zoom, font and
+monochrome avatars are a display-wide CSS provider (`internal/style`) so
+every open window follows.
+When the schema is not installed the store falls back to memory and logs a
+warning; `make build` compiles the schema into `build/` and the run targets
+export `GSETTINGS_SCHEMA_DIR`. The *General* rows are still placeholders.
 
 ## 6. Platform
 

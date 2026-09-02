@@ -1,0 +1,120 @@
+package settings
+
+import (
+	"io"
+	"log/slog"
+	"testing"
+)
+
+func TestMemoryDefaults(t *testing.T) {
+	s := NewMemory()
+	if s.Persistent() {
+		t.Fatal("memory store must not report persistent")
+	}
+	if got := s.ColorScheme(); got != ColorSchemeSystem {
+		t.Errorf("ColorScheme = %q, want %q", got, ColorSchemeSystem)
+	}
+	if got := s.Density(); got != DensityComfortable {
+		t.Errorf("Density = %q, want %q", got, DensityComfortable)
+	}
+	if !s.ShowPreviewLine() || !s.ShowAvatars() || s.MonochromeAvatars() || s.MonospacePlainText() {
+		t.Errorf("bool defaults wrong: preview=%v avatars=%v monochrome=%v mono=%v",
+			s.ShowPreviewLine(), s.ShowAvatars(), s.MonochromeAvatars(), s.MonospacePlainText())
+	}
+	if got := s.TextZoom(); got != 100 {
+		t.Errorf("TextZoom = %d, want 100", got)
+	}
+}
+
+func TestMemorySetAndNotify(t *testing.T) {
+	s := NewMemory()
+	calls := 0
+	remove := s.OnChanged(KeyTextZoom, func() { calls++ })
+
+	s.SetTextZoom(120)
+	if s.TextZoom() != 120 || calls != 1 {
+		t.Fatalf("after set: zoom=%d calls=%d", s.TextZoom(), calls)
+	}
+	s.SetTextZoom(120) // unchanged: no notification
+	if calls != 1 {
+		t.Fatalf("unchanged set fired handler: calls=%d", calls)
+	}
+	remove()
+	s.SetTextZoom(130)
+	if calls != 1 {
+		t.Fatalf("removed handler still fired: calls=%d", calls)
+	}
+}
+
+func TestMemoryValidation(t *testing.T) {
+	s := NewMemory()
+
+	s.SetTextZoom(10)
+	if got := s.TextZoom(); got != TextZoomMin {
+		t.Errorf("zoom below min: got %d, want %d", got, TextZoomMin)
+	}
+	s.SetTextZoom(1000)
+	if got := s.TextZoom(); got != TextZoomMax {
+		t.Errorf("zoom above max: got %d, want %d", got, TextZoomMax)
+	}
+
+	s.SetColorScheme("neon")
+	if got := s.ColorScheme(); got != ColorSchemeSystem {
+		t.Errorf("invalid scheme accepted: %q", got)
+	}
+	s.SetColorScheme(ColorSchemeDark)
+	if got := s.ColorScheme(); got != ColorSchemeDark {
+		t.Errorf("ColorScheme = %q, want dark", got)
+	}
+
+	s.SetDensity("sardine")
+	if got := s.Density(); got != DensityComfortable {
+		t.Errorf("invalid density accepted: %q", got)
+	}
+}
+
+func TestHandlerMayRemoveItself(t *testing.T) {
+	s := NewMemory()
+	var remove func()
+	calls := 0
+	remove = s.OnChanged(KeyShowAvatars, func() {
+		calls++
+		remove()
+	})
+	s.SetShowAvatars(false)
+	s.SetShowAvatars(true)
+	if calls != 1 {
+		t.Fatalf("self-removing handler called %d times, want 1", calls)
+	}
+}
+
+// TestOpenFallsBack checks that an unknown schema yields a memory store
+// instead of aborting the process (gio.NewSettings would g_error).
+func TestOpenFallsBack(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	s := open(SchemaID+".DoesNotExist", log)
+	if s == nil || s.Persistent() {
+		t.Fatal("expected in-memory fallback for unknown schema")
+	}
+	if s.TextZoom() != 100 {
+		t.Errorf("fallback defaults not applied: zoom=%d", s.TextZoom())
+	}
+}
+
+func TestCoerce(t *testing.T) {
+	cases := []struct {
+		v, like, want any
+	}{
+		{120, 0.0, 120.0},
+		{120.4, 0, 120},
+		{119.6, 0, 120},
+		{true, false, true},
+		{"x", "", "x"},
+		{7, uint(0), uint(7)},
+	}
+	for _, c := range cases {
+		if got := coerce(c.v, c.like); got != c.want {
+			t.Errorf("coerce(%v, %T) = %v (%T), want %v (%T)", c.v, c.like, got, got, c.want, c.want)
+		}
+	}
+}

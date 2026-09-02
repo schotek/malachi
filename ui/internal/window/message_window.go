@@ -5,6 +5,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // MessageWindow shows one message in its own top-level window. It is built
@@ -39,9 +40,11 @@ func newMessageWindow(app *adw.Application, m dummyMessage) *MessageWindow {
 
 func (w *MessageWindow) show(m dummyMessage) {
 	// Subject and sender are untrusted data: plain labels, no markup.
+	// Body zoom and font are applied globally by internal/style.
+	from := widget.FormatAddress(m.From)
 	w.title.SetTitle(m.Subject)
-	w.title.SetSubtitle(m.From)
+	w.title.SetSubtitle(from)
 	w.subject.SetLabel(m.Subject)
-	w.from.SetLabel(m.From)
+	w.from.SetLabel(from)
 	w.body.SetLabel(m.Body)
 }

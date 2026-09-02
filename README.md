@@ -103,6 +103,12 @@ Other targets: `make test`, `make lint`, `make clean`, `make flatpak`
 
 Set `MALACHI_LOG_LEVEL=debug` to see every RPC call.
 
+UI preferences are stored in GSettings. `make build` compiles the schema
+into `build/glib-2.0/schemas`, and `make run-dev` / `make run-frontend`
+export `GSETTINGS_SCHEMA_DIR` so the uninstalled binary finds it. Running
+`build/malachi` directly without that variable still works, but preferences
+then live in memory and are lost on exit (a warning is logged).
+
 ### Where things go
 
 | What | Path |

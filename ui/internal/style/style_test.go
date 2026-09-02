@@ -1,0 +1,25 @@
+package style
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestCSS(t *testing.T) {
+	css := CSS(120, false, false)
+	if !strings.Contains(css, ".message-body { font-size: 120%; }") {
+		t.Errorf("zoom rule missing:\n%s", css)
+	}
+	if strings.Contains(css, "monospace") {
+		t.Errorf("monospace rule present when disabled:\n%s", css)
+	}
+	if strings.Contains(css, "avatar") {
+		t.Errorf("avatar rule present when monochrome disabled:\n%s", css)
+	}
+	if !strings.Contains(CSS(100, true, false), "font-family: monospace") {
+		t.Error("monospace rule missing when enabled")
+	}
+	if !strings.Contains(CSS(100, false, true), "avatar { background-image: none;") {
+		t.Error("monochrome avatar rule missing when enabled")
+	}
+}

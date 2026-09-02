@@ -1,11 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist gettext-domain="malachi">
   <!--
-    UI-only preferences. Anything that affects mail handling (accounts,
-    sync intervals, remote-content policy) belongs to the backend's
-    config.toml and is set through the RPC API, not through GSettings.
+    UI-only preferences, read by ui/internal/settings. Anything that affects
+    mail handling (accounts, sync intervals, remote-content policy) belongs to
+    the backend's config.toml and is set through the RPC API, not through
+    GSettings.
+
+    Development builds compile this schema into build/glib-2.0/schemas and
+    export GSETTINGS_SCHEMA_DIR (see Makefile and scripts/dev-run.sh). When
+    the schema cannot be found at runtime the UI falls back to an in-memory
+    store and logs a warning; it never aborts.
   -->
+  <enum id="io.github.schotek.Malachi.ColorScheme">
+    <value nick="system" value="0"/>
+    <value nick="light" value="1"/>
+    <value nick="dark" value="2"/>
+  </enum>
+  <enum id="io.github.schotek.Malachi.Density">
+    <value nick="comfortable" value="0"/>
+    <value nick="compact" value="1"/>
+  </enum>
+
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
+    <!-- Window geometry -->
     <key name="window-width" type="i">
       <default>1200</default>
       <summary>Window width</summary>
@@ -25,6 +42,38 @@
     <key name="message-list-width" type="i">
       <default>380</default>
       <summary>Width of the message list pane</summary>
+    </key>
+
+    <!-- Appearance -->
+    <key name="color-scheme" enum="io.github.schotek.Malachi.ColorScheme">
+      <default>'system'</default>
+      <summary>Color scheme</summary>
+      <description>Follow the system preference, or force a light or dark appearance.</description>
+    </key>
+    <key name="message-list-density" enum="io.github.schotek.Malachi.Density">
+      <default>'comfortable'</default>
+      <summary>Message list density</summary>
+    </key>
+    <key name="show-preview-line" type="b">
+      <default>true</default>
+      <summary>Show a one-line preview under each message in the list</summary>
+    </key>
+    <key name="show-avatars" type="b">
+      <default>true</default>
+      <summary>Show sender avatars in the message list</summary>
+    </key>
+    <key name="monochrome-avatars" type="b">
+      <default>false</default>
+      <summary>Draw avatars in neutral grey instead of per-sender colours</summary>
+    </key>
+    <key name="monospace-plain-text" type="b">
+      <default>false</default>
+      <summary>Use a monospace font for plain-text message bodies</summary>
+    </key>
+    <key name="text-zoom" type="i">
+      <default>100</default>
+      <range min="50" max="200"/>
+      <summary>Message body text zoom in percent</summary>
     </key>
   </schema>
 </schemalist>

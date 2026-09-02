@@ -1,0 +1,170 @@
+using Gtk 4.0;
+using Adw 1;
+// Preferences dialog, opened by the app.preferences action (Ctrl+,). Object
+// IDs are looked up from ui/internal/window/preferences.go; keep them in sync.
+//
+// The Appearance page is bound to GSettings (ui/internal/settings). The
+// General page rows are still placeholders: they can be toggled but nothing
+// is stored or applied yet. Anything that affects mail handling (the "Mail"
+// group) is owned by the daemon and will be set through the RPC API.
+Adw.PreferencesDialog preferences_dialog {
+  title: _("Preferences");
+  search-enabled: true;
+
+  Adw.PreferencesPage general_page {
+    name: "general";
+    title: _("General");
+    icon-name: "preferences-system-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Startup");
+
+      Adw.SwitchRow {
+        title: _("Start Minimized");
+        subtitle: _("Open in the background on login");
+      }
+
+      Adw.SwitchRow {
+        title: _("Keep Running When Closed");
+        subtitle: _("Closing the window keeps Malachi Mail in the background");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Reading");
+
+      Adw.SpinRow {
+        title: _("Mark as Read After");
+        subtitle: _("Seconds a message must be shown before it is marked as read");
+
+        adjustment: Adjustment {
+          lower: 0;
+          upper: 60;
+          step-increment: 1;
+          value: 2;
+        };
+      }
+
+      Adw.SwitchRow {
+        title: _("Confirm Before Deleting");
+        active: true;
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Notifications");
+
+      Adw.SwitchRow {
+        title: _("Show Desktop Notifications");
+        active: true;
+      }
+
+      Adw.SwitchRow {
+        title: _("Play Sound");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Mail");
+      description: _("Applied by the mail daemon; not yet configurable.");
+
+      Adw.ComboRow {
+        title: _("Check for New Mail");
+        selected: 2;
+
+        model: StringList {
+          strings [
+            _("Manually"),
+            _("Every 5 minutes"),
+            _("Every 15 minutes"),
+            _("Every 30 minutes"),
+          ]
+        };
+      }
+
+      Adw.ComboRow {
+        title: _("Load Remote Images");
+
+        model: StringList {
+          strings [
+            _("Never"),
+            _("From Known Senders"),
+            _("Always"),
+          ]
+        };
+      }
+    }
+  }
+
+  Adw.PreferencesPage appearance_page {
+    name: "appearance";
+    title: _("Appearance");
+    icon-name: "applications-graphics-symbolic";
+
+    Adw.PreferencesGroup {
+      title: _("Theme");
+
+      Adw.ComboRow color_scheme {
+        title: _("Color Scheme");
+
+        model: StringList {
+          strings [
+            _("Follow System"),
+            _("Light"),
+            _("Dark"),
+          ]
+        };
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Message List");
+
+      Adw.ComboRow list_density {
+        title: _("Density");
+
+        model: StringList {
+          strings [
+            _("Comfortable"),
+            _("Compact"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow show_preview_line {
+        title: _("Show Preview Line");
+        active: true;
+      }
+
+      Adw.SwitchRow show_avatars {
+        title: _("Show Avatars");
+        active: true;
+      }
+
+      Adw.SwitchRow monochrome_avatars {
+        title: _("Monochrome Avatars");
+        subtitle: _("Neutral grey instead of a colour per sender");
+      }
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Message View");
+
+      Adw.SwitchRow monospace_plain_text {
+        title: _("Use Monospace Font for Plain Text");
+      }
+
+      Adw.SpinRow text_zoom {
+        title: _("Text Zoom");
+        subtitle: _("Percent");
+
+        adjustment: Adjustment {
+          lower: 50;
+          upper: 200;
+          step-increment: 10;
+          value: 100;
+        };
+      }
+    }
+  }
+}

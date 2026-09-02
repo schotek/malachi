@@ -1,0 +1,77 @@
+using Gtk 4.0;
+using Adw 1;
+// One row of the message list, instantiated per message by
+// ui/internal/widget/message_row.go. Object IDs are looked up there; keep
+// them in sync.
+//
+// All labels are plain Gtk.Label (use-markup is off by default): sender,
+// subject and preview are hostile input and must never be interpreted as
+// markup. The avatar shows initials derived from the display name; nothing
+// is fetched from the network.
+ListBoxRow message_row {
+  child: Box content_box {
+    orientation: horizontal;
+    spacing: 12;
+    margin-start: 6;
+    margin-end: 6;
+    margin-top: 8;
+    margin-bottom: 8;
+
+    Adw.Avatar avatar {
+      size: 40;
+      show-initials: true;
+      valign: start;
+    }
+
+    Box {
+      orientation: vertical;
+      spacing: 2;
+      hexpand: true;
+
+      Box {
+        orientation: horizontal;
+        spacing: 6;
+
+        Label from_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+        }
+
+        Label date_label {
+          xalign: 1;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
+        // Styled by the application CSS provider (see ui/internal/style).
+        Box unread_dot {
+          valign: center;
+          visible: false;
+
+          styles [
+            "unread-dot",
+          ]
+        }
+      }
+
+      Label subject_label {
+        xalign: 0;
+        ellipsize: end;
+      }
+
+      Label preview_label {
+        xalign: 0;
+        ellipsize: end;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    }
+  };
+}
