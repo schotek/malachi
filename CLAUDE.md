@@ -105,3 +105,4 @@ knihovna, umístění definic účtů, uložení těl zpráv).
 - `XDG_RUNTIME_DIR` nemusí být v kontejneru nastavený; backend i UI pak
   používají `~/.cache/malachi/run/rpc.sock`. `MALACHI_SOCKET` přebíjí obojí.
 - `make build` musí proběhnout před `scripts/dev-run.sh`; skript binárky nestaví.
+  `make run-dev` / `run-backend` / `run-frontend` build zajistí samy.

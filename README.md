@@ -89,7 +89,9 @@ sudo apt install golang-go gcc pkg-config git \
 git clone https://github.com/schotek/malachi.git
 cd malachi
 make build          # backend → build/malachid, UI → build/malachi
-make run            # starts the daemon, waits for its socket, starts the UI
+make run-dev        # starts the daemon, waits for its socket, starts the UI
+make run-backend    # only the daemon, in the foreground (Ctrl+C stops it)
+make run-frontend   # only the UI; shows a banner until a daemon is reachable
 ```
 
 The first build compiles the gotk4 bindings, which takes a long time (tens

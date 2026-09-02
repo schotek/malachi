@@ -1,6 +1,7 @@
 # Malachi Mail — build entry points.
 #
-# Targets: build, run, test, lint, clean, flatpak (plus helpers).
+# Targets: build, run-dev (run), run-backend, run-frontend, test, lint, clean,
+# flatpak (plus helpers). `make help` lists them.
 # Everything Go-related is built inside the Toolbx container; `make flatpak`
 # is meant to be run on the host where flatpak-builder lives.
 
@@ -17,7 +18,7 @@ BLP_OUT     := $(BLP_SRC:.blp=.ui)
 DATA_IN     := $(wildcard data/*.in)
 DATA_OUT    := $(DATA_IN:.in=)
 
-.PHONY: all build backend ui blueprint data run test lint fmt vet clean flatpak flatpak-run help
+.PHONY: all build backend ui blueprint data run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help
 
 all: build
 
@@ -48,9 +49,19 @@ data: $(DATA_OUT)
 data/%: data/%.in
 	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $@
 
-## run: build everything and start backend + UI together
-run: build
+## run-dev: build everything and start backend + UI together (alias: run)
+run-dev: build
 	./scripts/dev-run.sh
+
+run: run-dev
+
+## run-backend: build and start only the daemon in the foreground (Ctrl+C to stop)
+run-backend: backend
+	./$(BUILD_DIR)/malachid $(ARGS)
+
+## run-frontend: build and start only the UI (connects to a running malachid, or shows a banner)
+run-frontend: ui
+	./$(BUILD_DIR)/malachi $(ARGS)
 
 ## test: run Go tests for both modules
 test: blueprint
