@@ -21,6 +21,7 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/sound"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -246,10 +247,12 @@ func (w *Window) showMessage(m dummyMessage) {
 	w.messageStack.SetVisibleChildName("message")
 }
 
-// playNewMailSound is wired to the system sound theme in internal/sound.
-// TODO(part C): replace with sound.Play.
+// playNewMailSound plays the theme's new-mail event; failures are logged
+// once at debug level (no sound theme or server is a normal desktop state).
 func (w *Window) playNewMailSound() {
-	w.log.Debug("notification sound not available yet")
+	if err := sound.Play("message-new-email", "New mail"); err != nil {
+		w.log.Debug("notification sound", "err", err)
+	}
 }
 
 // reconnect starts a connection attempt off the main loop.

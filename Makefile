@@ -26,6 +26,15 @@ SCHEMA_DIR  := $(BUILD_DIR)/glib-2.0/schemas
 SCHEMA_OUT  := $(SCHEMA_DIR)/gschemas.compiled
 SCHEMA_ENV  := GSETTINGS_SCHEMA_DIR=$(CURDIR)/$(SCHEMA_DIR)$(if $(GSETTINGS_SCHEMA_DIR),:$(GSETTINGS_SCHEMA_DIR))
 
+# Notification sound needs gsound (gsound-devel). Without it the UI is built
+# with -tags nosound and "Play Sound" does nothing.
+ifeq ($(shell pkg-config --exists gsound 2>/dev/null && echo yes),yes)
+UI_TAGS     :=
+else
+UI_TAGS     := -tags nosound
+$(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
+endif
+
 .PHONY: all build backend ui blueprint data schemas run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help
 
 all: build
@@ -43,7 +52,7 @@ ui: blueprint $(BUILD_DIR)/malachi
 
 $(BUILD_DIR)/malachi: $(BLP_OUT) $(shell find ui -name '*.go' -o -name go.mod) backend/pkg/api/*.go
 	@mkdir -p $(BUILD_DIR)
-	cd ui && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ .
+	cd ui && $(GO) build $(GOFLAGS) $(UI_TAGS) -ldflags '$(LDFLAGS)' -o ../$@ .
 
 ## blueprint: compile Blueprint (.blp) files to GtkBuilder XML
 blueprint: $(BLP_OUT)
@@ -82,13 +91,13 @@ run-frontend: ui schemas
 ## test: run Go tests for both modules
 test: blueprint schemas
 	cd backend && $(GO) test ./...
-	cd ui && $(SCHEMA_ENV) GSETTINGS_BACKEND=memory $(GO) test ./...
+	cd ui && $(SCHEMA_ENV) GSETTINGS_BACKEND=memory $(GO) test $(UI_TAGS) ./...
 
 ## lint: golangci-lint if installed, otherwise go vet; validate Blueprint, schema and desktop/metainfo files
 lint: blueprint data schemas vet
 	@if command -v golangci-lint >/dev/null 2>&1; then \
 		(cd backend && golangci-lint run ./...); \
-		(cd ui && golangci-lint run ./...); \
+		(cd ui && golangci-lint run $(UI_TAGS) ./...); \
 	else \
 		echo "golangci-lint not installed; ran go vet only"; \
 	fi
@@ -99,7 +108,7 @@ lint: blueprint data schemas vet
 
 vet:
 	cd backend && $(GO) vet ./...
-	cd ui && $(GO) vet ./...
+	cd ui && $(GO) vet $(UI_TAGS) ./...
 
 fmt:
 	cd backend && gofmt -w .

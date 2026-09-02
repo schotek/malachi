@@ -67,7 +67,8 @@ Kompilace a testy uvnitř, `flatpak-builder` a testování výsledného balíčk
 na hostiteli.
 
 Ověřené verze (2026-09-02): Go 1.25, GTK 4.18, libadwaita 1.7, GLib 2.84,
-WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47.
+WebKitGTK 2.52 (API 6.0), Blueprint 0.16, SQLite 3.47, gsound 1.0.3
+(`gsound-devel`; bez něj Makefile staví UI s `-tags nosound`).
 
 WebKitGTK pro GTK4 je API verze 6.0 (`webkitgtk6.0-devel`), ne 4.x.
 
