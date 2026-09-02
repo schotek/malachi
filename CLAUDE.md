@@ -11,11 +11,10 @@ Dva samostatné procesy komunikující přes JSON-RPC na unix socketu.
 
 - V textech pro uživatele (README, metainfo, UI) piš `Malachi Mail`
 - V kódu, cestách, balíčcích a identifikátorech `malachi`, daemon `malachid`
-- App ID `io.github.GITHUB_USER.Malachi` — nikdy nezkracuj ani neměň velikost písmen
+- App ID `io.github.schotek.Malachi` — nikdy nezkracuj ani neměň velikost písmen
 - Nepřejmenovávej nic z toho bez explicitního zadání
-- **`GITHUB_USER` je zatím doslovný placeholder** (v Go module path, App ID,
-  D-Bus jménu, manifestu, URL). Nahrazuje se jedním `sed` přes celý repozitář,
-  viz README/poznámka v bootstrapu. Nehádej jméno; zeptej se.
+- GitHub uživatel je `schotek`: Go module path `github.com/schotek/malachi/…`,
+  repozitář `https://github.com/schotek/malachi`
 
 ## Nepřekročitelná pravidla
 

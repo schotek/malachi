@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // The stub must never echo its input. This test stays valid for the real

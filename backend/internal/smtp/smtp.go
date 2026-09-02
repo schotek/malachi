@@ -14,7 +14,7 @@ import (
 	// Pinned dependency for this package.
 	_ "github.com/emersion/go-smtp"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // Sender delivers one already-serialised RFC 5322 message.

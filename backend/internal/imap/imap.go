@@ -24,7 +24,7 @@ import (
 	_ "github.com/emersion/go-imap/v2"
 	_ "github.com/emersion/go-message"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // Syncer drives synchronisation for one account.

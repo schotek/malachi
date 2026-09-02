@@ -45,7 +45,7 @@
 // backend/testdata/mime and with generated pathological HTML.
 package sanitize
 
-import "github.com/GITHUB_USER/malachi/backend/pkg/api"
+import "github.com/schotek/malachi/backend/pkg/api"
 
 // Version identifies the current ruleset. Bump on any behavioural change so
 // cached bodies can be invalidated.

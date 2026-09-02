@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // handler is the erased form of a typed service method.

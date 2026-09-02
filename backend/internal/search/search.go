@@ -12,7 +12,7 @@ package search
 import (
 	"context"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // Index is the search backend. TODO(phase-5): implement.

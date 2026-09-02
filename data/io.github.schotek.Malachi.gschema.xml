@@ -5,7 +5,7 @@
     sync intervals, remote-content policy) belongs to the backend's
     config.toml and is set through the RPC API, not through GSettings.
   -->
-  <schema id="io.github.GITHUB_USER.Malachi" path="/io/github/GITHUB_USER/Malachi/">
+  <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <key name="window-width" type="i">
       <default>1200</default>
       <summary>Window width</summary>

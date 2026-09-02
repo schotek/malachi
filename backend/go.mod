@@ -1,4 +1,4 @@
-module github.com/GITHUB_USER/malachi/backend
+module github.com/schotek/malachi/backend
 
 go 1.25.0
 

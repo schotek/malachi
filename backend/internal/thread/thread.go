@@ -11,7 +11,7 @@ package thread
 import (
 	"context"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // Threader maintains thread membership incrementally as messages arrive.

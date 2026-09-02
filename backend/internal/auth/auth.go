@@ -19,7 +19,7 @@ import (
 	// Pinned for the SASL mechanisms this package will implement.
 	_ "github.com/emersion/go-sasl"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // Keyring abstracts the secret store. The production implementation talks to

@@ -17,9 +17,9 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
-	"github.com/GITHUB_USER/malachi/ui/data"
-	"github.com/GITHUB_USER/malachi/ui/internal/client"
+	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/client"
 )
 
 // reconnectInterval is how often the UI retries a dead backend socket.

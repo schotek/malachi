@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-APP_ID="io.github.GITHUB_USER.Malachi"
+APP_ID="io.github.schotek.Malachi"
 PREFIX="${PREFIX:-/app}"
 
 make build data

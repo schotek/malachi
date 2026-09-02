@@ -4,7 +4,7 @@
 # Everything Go-related is built inside the Toolbx container; `make flatpak`
 # is meant to be run on the host where flatpak-builder lives.
 
-APP_ID      := io.github.GITHUB_USER.Malachi
+APP_ID      := io.github.schotek.Malachi
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BUILD_DIR   := build
 GO          ?= go

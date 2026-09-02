@@ -11,7 +11,7 @@
 # the current stable runtime (51 due 2026-09-16); bump together with the
 # gotk4 bindings, not independently.
 
-app-id: io.github.GITHUB_USER.Malachi
+app-id: io.github.schotek.Malachi
 runtime: org.gnome.Platform
 runtime-version: '48'
 sdk: org.gnome.Sdk

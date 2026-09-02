@@ -1,14 +1,14 @@
-module github.com/GITHUB_USER/malachi/ui
+module github.com/schotek/malachi/ui
 
 go 1.25.0
 
 // The UI depends on the backend module only for pkg/api (the contract).
 // Local path replace keeps both modules in one repository without a go.work
 // requirement for offline (Flatpak) builds.
-replace github.com/GITHUB_USER/malachi/backend => ../backend
+replace github.com/schotek/malachi/backend => ../backend
 
 require (
-	github.com/GITHUB_USER/malachi/backend v0.0.0
+	github.com/schotek/malachi/backend v0.0.0
 	github.com/diamondburned/gotk4-adwaita/pkg v0.0.0-20250703085337-e94555b846b6
 	github.com/diamondburned/gotk4/pkg v0.3.2-0.20250703063411-16654385f59a
 )

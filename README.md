@@ -86,7 +86,7 @@ sudo apt install golang-go gcc pkg-config git \
 ### Build and run
 
 ```sh
-git clone https://github.com/GITHUB_USER/malachi.git
+git clone https://github.com/schotek/malachi.git
 cd malachi
 make build          # backend → build/malachid, UI → build/malachi
 make run            # starts the daemon, waits for its socket, starts the UI

@@ -13,12 +13,12 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
-	"github.com/GITHUB_USER/malachi/ui/internal/client"
-	"github.com/GITHUB_USER/malachi/ui/internal/window"
+	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/window"
 )
 
 // AppID must match the desktop file, metainfo, gschema and Flatpak manifest.
-const AppID = "io.github.GITHUB_USER.Malachi"
+const AppID = "io.github.schotek.Malachi"
 
 // version is injected at build time: -ldflags "-X main.version=…".
 var version = "dev"
@@ -51,8 +51,8 @@ func addActions(app *adw.Application, log *slog.Logger) {
 		d.SetDeveloperName("Malachi Mail contributors")
 		d.SetVersion(version)
 		d.SetLicenseType(gtk.LicenseGPL30)
-		d.SetWebsite("https://github.com/GITHUB_USER/malachi")
-		d.SetIssueURL("https://github.com/GITHUB_USER/malachi/issues")
+		d.SetWebsite("https://github.com/schotek/malachi")
+		d.SetIssueURL("https://github.com/schotek/malachi/issues")
 		d.SetComments("A native mail client for the GNOME desktop.")
 		d.Present(app.ActiveWindow())
 	})

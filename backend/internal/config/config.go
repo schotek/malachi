@@ -14,7 +14,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/GITHUB_USER/malachi/backend/internal/account"
+	"github.com/schotek/malachi/backend/internal/account"
 )
 
 const appDir = "malachi"

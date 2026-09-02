@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // maxLineBytes bounds a single JSON-RPC message. Bodies are the largest

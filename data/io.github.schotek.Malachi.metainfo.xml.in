@@ -22,11 +22,11 @@
 
   <launchable type="desktop-id">@APP_ID@.desktop</launchable>
 
-  <url type="homepage">https://github.com/GITHUB_USER/malachi</url>
-  <url type="bugtracker">https://github.com/GITHUB_USER/malachi/issues</url>
-  <url type="vcs-browser">https://github.com/GITHUB_USER/malachi</url>
+  <url type="homepage">https://github.com/schotek/malachi</url>
+  <url type="bugtracker">https://github.com/schotek/malachi/issues</url>
+  <url type="vcs-browser">https://github.com/schotek/malachi</url>
 
-  <developer id="io.github.GITHUB_USER">
+  <developer id="io.github.schotek">
     <name>Malachi Mail contributors</name>
   </developer>
 

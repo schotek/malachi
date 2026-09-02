@@ -14,9 +14,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/GITHUB_USER/malachi/backend/internal/config"
-	"github.com/GITHUB_USER/malachi/backend/internal/rpc"
-	"github.com/GITHUB_USER/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/internal/config"
+	"github.com/schotek/malachi/backend/internal/rpc"
+	"github.com/schotek/malachi/backend/internal/store"
 )
 
 // version is injected at build time: -ldflags "-X main.version=…".

@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/GITHUB_USER/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // StubBackend implements api.Backend with every data method returning

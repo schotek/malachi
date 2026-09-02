@@ -2,7 +2,7 @@
 // and lookup by ID. It never touches secrets; those belong to internal/auth.
 package account
 
-import "github.com/GITHUB_USER/malachi/backend/pkg/api"
+import "github.com/schotek/malachi/backend/pkg/api"
 
 // Config is one account as stored on disk. It is the api.AccountConfig plus
 // a stable local identifier.
