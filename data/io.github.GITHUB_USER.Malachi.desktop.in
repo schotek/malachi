@@ -1,0 +1,17 @@
+[Desktop Entry]
+Name=Malachi Mail
+GenericName=Email Client
+Comment=Read and send email
+Exec=malachi %u
+Icon=@APP_ID@
+Terminal=false
+Type=Application
+Categories=Network;Email;GTK;GNOME;
+Keywords=mail;email;imap;
+StartupNotify=true
+DBusActivatable=true
+# mailto: handler. The UI receives the URI via GApplication's open signal and
+# forwards a draft.save to the backend; it never parses mailto itself beyond
+# splitting the query string.
+MimeType=x-scheme-handler/mailto;
+X-GNOME-UsesNotifications=true

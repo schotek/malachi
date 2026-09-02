@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="malachi">
+  <!--
+    UI-only preferences. Anything that affects mail handling (accounts,
+    sync intervals, remote-content policy) belongs to the backend's
+    config.toml and is set through the RPC API, not through GSettings.
+  -->
+  <schema id="io.github.GITHUB_USER.Malachi" path="/io/github/GITHUB_USER/Malachi/">
+    <key name="window-width" type="i">
+      <default>1200</default>
+      <summary>Window width</summary>
+    </key>
+    <key name="window-height" type="i">
+      <default>760</default>
+      <summary>Window height</summary>
+    </key>
+    <key name="window-maximized" type="b">
+      <default>false</default>
+      <summary>Window maximized state</summary>
+    </key>
+    <key name="folder-pane-width" type="i">
+      <default>240</default>
+      <summary>Width of the folder sidebar</summary>
+    </key>
+    <key name="message-list-width" type="i">
+      <default>380</default>
+      <summary>Width of the message list pane</summary>
+    </key>
+  </schema>
+</schemalist>

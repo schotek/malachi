@@ -1,0 +1,50 @@
+# Build artefacts
+/build/
+/dist/
+*.exe
+*.test
+*.out
+*.o
+*.so
+
+# Go binaries built in-place
+/backend/malachid
+/ui/malachi
+/ui/ui
+
+# Generated Blueprint output (compiled from .blp at build time)
+/ui/data/ui/*.ui
+
+# Generated desktop/metainfo files (from .in templates)
+/data/*.desktop
+/data/*.metainfo.xml
+
+# Databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Flatpak / AppImage
+.flatpak-builder/
+repo/
+*.flatpak
+*.AppImage
+/packaging/appimage/AppDir/
+
+# Logs
+*.log
+
+# Local configuration and secrets
+config.local.toml
+*.local.toml
+.env
+.env.*
+
+# Editors / tooling
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+.claude/settings.local.json

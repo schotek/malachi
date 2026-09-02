@@ -1,0 +1,67 @@
+package api
+
+// Method names (client → backend). Grouped by service, matching docs/api.md.
+const (
+	// System.
+	MethodSystemInfo = "system.info"
+
+	// Accounts.
+	MethodAccountList   = "account.list"
+	MethodAccountAdd    = "account.add"
+	MethodAccountRemove = "account.remove"
+	MethodAccountTest   = "account.test"
+
+	// Folders.
+	MethodFolderList      = "folder.list"
+	MethodFolderSubscribe = "folder.subscribe"
+
+	// Messages.
+	MethodMessageList   = "message.list"
+	MethodMessageGet    = "message.get"
+	MethodMessageBody   = "message.body"
+	MethodMessageFlag   = "message.flag"
+	MethodMessageMove   = "message.move"
+	MethodMessageDelete = "message.delete"
+	MethodMessageSend   = "message.send"
+
+	// Threads.
+	MethodThreadList = "thread.list"
+	MethodThreadGet  = "thread.get"
+
+	// Drafts.
+	MethodDraftSave = "draft.save"
+	MethodDraftList = "draft.list"
+
+	// Search.
+	MethodSearchQuery = "search.query"
+
+	// Sync.
+	MethodSyncStatus  = "sync.status"
+	MethodSyncTrigger = "sync.trigger"
+)
+
+// Notification names (backend → client, no reply expected).
+const (
+	NotifyNewMessage   = "notify.newMessage"
+	NotifySyncState    = "notify.syncState"
+	NotifyAuthRequired = "notify.authRequired"
+)
+
+// AllMethods lists every callable method. The RPC server uses it to register
+// stubs and tests use it to check docs/api.md coverage.
+var AllMethods = []string{
+	MethodSystemInfo,
+	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountTest,
+	MethodFolderList, MethodFolderSubscribe,
+	MethodMessageList, MethodMessageGet, MethodMessageBody,
+	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
+	MethodThreadList, MethodThreadGet,
+	MethodDraftSave, MethodDraftList,
+	MethodSearchQuery,
+	MethodSyncStatus, MethodSyncTrigger,
+}
+
+// AllNotifications lists every server-initiated notification.
+var AllNotifications = []string{
+	NotifyNewMessage, NotifySyncState, NotifyAuthRequired,
+}

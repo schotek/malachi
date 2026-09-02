@@ -1,0 +1,249 @@
+using Gtk 4.0;
+using Adw 1;
+// Main window: folders | message list | message view.
+// Object IDs are looked up from ui/internal/window; keep them in sync.
+Adw.ApplicationWindow main_window {
+  title: "Malachi Mail";
+  default-width: 1200;
+  default-height: 760;
+  width-request: 360;
+  height-request: 294;
+
+  Adw.Breakpoint {
+    condition ("max-width: 900sp")
+
+    setters {
+      outer_split.collapsed: true;
+    }
+  }
+
+  Adw.Breakpoint {
+    condition ("max-width: 600sp")
+
+    setters {
+      outer_split.collapsed: true;
+      inner_split.collapsed: true;
+    }
+  }
+
+  content: Adw.NavigationSplitView outer_split {
+    min-sidebar-width: 200;
+    max-sidebar-width: 320;
+    sidebar-width-fraction: 0.2;
+
+    sidebar: Adw.NavigationPage {
+      title: _("Folders");
+      tag: "folders";
+
+      child: Adw.ToolbarView {
+        [top]
+        Adw.HeaderBar {
+          [end]
+          MenuButton {
+            icon-name: "open-menu-symbolic";
+            tooltip-text: _("Main Menu");
+            menu-model: primary_menu;
+            primary: true;
+          }
+        }
+
+        content: ScrolledWindow {
+          hscrollbar-policy: never;
+
+          child: ListBox folder_list {
+            styles [
+              "navigation-sidebar",
+            ]
+          };
+        };
+
+        [bottom]
+        Box {
+          orientation: horizontal;
+          spacing: 8;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 6;
+          margin-bottom: 6;
+
+          Image connection_icon {
+            icon-name: "network-offline-symbolic";
+          }
+
+          Label connection_status {
+            label: _("Connecting…");
+            ellipsize: end;
+            xalign: 0;
+            hexpand: true;
+
+            styles [
+              "dim-label",
+              "caption",
+            ]
+          }
+        }
+      };
+    };
+
+    content: Adw.NavigationPage {
+      title: _("Messages");
+      tag: "messages";
+
+      child: Adw.NavigationSplitView inner_split {
+        min-sidebar-width: 280;
+        max-sidebar-width: 460;
+        sidebar-width-fraction: 0.38;
+
+        sidebar: Adw.NavigationPage list_page {
+          title: _("Inbox");
+          tag: "list";
+
+          child: Adw.ToolbarView {
+            [top]
+            Adw.HeaderBar {
+              [end]
+              ToggleButton search_button {
+                icon-name: "edit-find-symbolic";
+                tooltip-text: _("Search");
+              }
+            }
+
+            content: Box {
+              orientation: vertical;
+
+              Adw.Banner backend_banner {
+                title: _("The mail backend (malachid) is not running.");
+                button-label: _("Retry");
+                revealed: false;
+              }
+
+              ScrolledWindow {
+                hscrollbar-policy: never;
+                vexpand: true;
+
+                child: ListBox message_list {
+                  styles [
+                    "navigation-sidebar",
+                  ]
+                };
+              }
+            };
+          };
+        };
+
+        content: Adw.NavigationPage message_page {
+          title: _("Message");
+          tag: "message";
+
+          child: Adw.ToolbarView {
+            [top]
+            Adw.HeaderBar {
+              [end]
+              Button {
+                icon-name: "mail-reply-sender-symbolic";
+                tooltip-text: _("Reply");
+                sensitive: false;
+              }
+
+              [end]
+              Button {
+                icon-name: "user-trash-symbolic";
+                tooltip-text: _("Move to Trash");
+                sensitive: false;
+              }
+            }
+
+            content: Stack message_stack {
+              transition-type: crossfade;
+
+              StackPage {
+                name: "empty";
+
+                child: Adw.StatusPage {
+                  icon-name: "mail-unread-symbolic";
+                  title: _("No Message Selected");
+                  description: _("Select a message to read it here.");
+                };
+              }
+
+              StackPage {
+                name: "message";
+
+                child: ScrolledWindow {
+                  hscrollbar-policy: never;
+
+                  child: Adw.Clamp {
+                    maximum-size: 900;
+                    tightening-threshold: 700;
+
+                    child: Box {
+                      orientation: vertical;
+                      spacing: 12;
+                      margin-start: 24;
+                      margin-end: 24;
+                      margin-top: 24;
+                      margin-bottom: 24;
+
+                      Label message_subject {
+                        xalign: 0;
+                        wrap: true;
+                        selectable: true;
+
+                        styles [
+                          "title-2",
+                        ]
+                      }
+
+                      Label message_from {
+                        xalign: 0;
+                        wrap: true;
+                        selectable: true;
+
+                        styles [
+                          "dim-label",
+                        ]
+                      }
+
+                      Separator {}
+
+                      // Plain-text placeholder. HTML rendering (sanitised
+                      // in the backend, shown in a JS-disabled WebKitGTK
+                      // 6.0 view) is a separate, later task.
+                      Label message_body {
+                        xalign: 0;
+                        yalign: 0;
+                        wrap: true;
+                        wrap-mode: word_char;
+                        selectable: true;
+                        vexpand: true;
+                      }
+                    };
+                  };
+                };
+              }
+            };
+          };
+        };
+      };
+    };
+  };
+}
+
+menu primary_menu {
+  section {
+    item {
+      label: _("_Preferences");
+      action: "app.preferences";
+    }
+
+    item {
+      label: _("_Keyboard Shortcuts");
+      action: "win.show-help-overlay";
+    }
+
+    item {
+      label: _("_About Malachi Mail");
+      action: "app.about";
+    }
+  }
+}

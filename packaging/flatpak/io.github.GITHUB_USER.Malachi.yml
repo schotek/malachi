@@ -1,0 +1,90 @@
+# Flatpak manifest for Malachi Mail (skeleton).
+#
+# Status: structurally complete, NOT yet buildable — the Go module sources
+# for an offline build still have to be generated (see "Offline builds").
+# Build on the host, not inside Toolbx:
+#   make flatpak      (flatpak-builder --user --install-deps-from=flathub …)
+#
+# Runtime version: GNOME 48 matches the GTK 4.18 / libadwaita 1.7 / GLib 2.84
+# stack the project is developed against in the Fedora 42 Toolbx, and the
+# gotk4 snapshot pinned in ui/go.mod is generated for that stack. GNOME 50 is
+# the current stable runtime (51 due 2026-09-16); bump together with the
+# gotk4 bindings, not independently.
+
+app-id: io.github.GITHUB_USER.Malachi
+runtime: org.gnome.Platform
+runtime-version: '48'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.golang
+command: malachi
+
+finish-args:
+  # IMAP/SMTP/OAuth2 need the network.
+  - --share=network
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # libsecret: passwords and OAuth2 refresh tokens live in the keyring.
+  # Without this the daemon cannot store or read credentials at all.
+  - --talk-name=org.freedesktop.secrets
+  # New-mail notifications.
+  - --talk-name=org.freedesktop.Notifications
+  # Both processes run inside the same sandbox instance and share
+  # $XDG_RUNTIME_DIR/app/<app-id>/, so the unix socket needs no extra hole.
+
+  # Deliberately NOT granted:
+  #   --filesystem=home       attachments are opened/saved through the
+  #                           FileChooser portal, which needs no static access.
+  #   --talk-name=org.freedesktop.Flatpak
+  #                           never; that is a full sandbox escape.
+  #
+  # Portals used instead of direct access (all go through xdg-desktop-portal
+  # automatically when the app uses the GTK/Gio APIs):
+  #   - Autostart of the daemon: org.freedesktop.portal.Background
+  #     (request via Gio/libportal), never by writing ~/.config/autostart.
+  #   - Opening links from mail: org.freedesktop.portal.OpenURI
+  #     (gtk_uri_launcher / Gtk.UriLauncher), never xdg-open directly.
+  #     The UI shows the real destination before launching.
+  #   - mailto: handling is declared with MimeType=x-scheme-handler/mailto
+  #     in the .desktop file; the portal routes mailto: URIs to us.
+
+build-options:
+  append-path: /usr/lib/sdk/golang/bin
+  env:
+    # Flathub builds run WITHOUT network access. `go mod download` inside
+    # the build will fail. Two workable options:
+    #   1. vendor:  run `go mod vendor` in backend/ and ui/ and commit or
+    #      ship the vendor/ trees; build with -mod=vendor.
+    #   2. generate sources: use flatpak-go-mod / flatpak-builder-tools
+    #      (https://github.com/flatpak/flatpak-builder-tools, tree "go")
+    #      to turn go.sum into a `go-modules.json` sources list included
+    #      below, and set GOFLAGS=-mod=mod GOPROXY=off.
+    # Option 2 keeps the repository small and is what Flathub reviewers
+    # expect. Until that is set up, this manifest is only a skeleton.
+    GOFLAGS: -mod=mod
+    GOPROXY: 'off'
+    GOMODCACHE: /run/build/malachi/go-mod-cache
+    CGO_ENABLED: '1'
+
+modules:
+  # blueprint-compiler is not part of the GNOME SDK; build it from source.
+  - name: blueprint-compiler
+    buildsystem: meson
+    cleanup:
+      - '*'
+    sources:
+      - type: git
+        url: https://gitlab.gnome.org/GNOME/blueprint-compiler.git
+        tag: v0.16.0
+
+  - name: malachi
+    buildsystem: simple
+    build-commands:
+      - PREFIX=/app ./scripts/build.sh install
+    sources:
+      - type: dir
+        path: ../..
+      # TODO: generated Go module sources (see build-options.env above), e.g.
+      # - go-modules.json

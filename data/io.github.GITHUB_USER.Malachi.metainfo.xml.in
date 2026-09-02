@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>@APP_ID@</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <name>Malachi Mail</name>
+  <summary>Native email client for the GNOME desktop</summary>
+
+  <description>
+    <p>
+      Malachi Mail is a desktop email client for Linux, built with GTK 4 and
+      libadwaita. It keeps mail available offline, renders HTML messages only
+      after sanitising them, and separates the user interface from the mail
+      engine so that the engine can be reused.
+    </p>
+    <p>
+      This is an early development version. It is not yet usable for real
+      mail.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">@APP_ID@.desktop</launchable>
+
+  <url type="homepage">https://github.com/GITHUB_USER/malachi</url>
+  <url type="bugtracker">https://github.com/GITHUB_USER/malachi/issues</url>
+  <url type="vcs-browser">https://github.com/GITHUB_USER/malachi</url>
+
+  <developer id="io.github.GITHUB_USER">
+    <name>Malachi Mail contributors</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+
+  <branding>
+    <color type="primary" scheme_preference="light">#f6d32d</color>
+    <color type="primary" scheme_preference="dark">#5e5c64</color>
+  </branding>
+
+  <!-- TODO: screenshots (Flathub requires at least one with a caption). -->
+
+  <releases>
+    <release version="@VERSION@" date="2026-09-02">
+      <description>
+        <p>Project bootstrap. Nothing works yet.</p>
+      </description>
+    </release>
+  </releases>
+</component>
