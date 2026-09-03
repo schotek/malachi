@@ -8,6 +8,7 @@ ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/widget/format.go
 ui/internal/widget/rpc.go
+ui/internal/window/accounts_page.go
 ui/internal/window/actions.go
 ui/internal/window/notify.go
 ui/internal/window/preferences.go

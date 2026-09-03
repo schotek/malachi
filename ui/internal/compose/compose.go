@@ -142,18 +142,28 @@ func newWindow(m *Manager, p Params) *Window {
 	return w
 }
 
-// setAccounts fills the From row. The row is only sensitive with a choice.
+// setAccounts fills the From row, keeping the selected identity when it is
+// still listed. The row is only sensitive with a choice.
 func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
+	var selectedID api.AccountID
+	if len(w.accounts) > 0 {
+		selectedID = w.account().ID
+	}
 	w.accounts = accounts
 	labels := make([]string, 0, len(accounts))
-	for _, a := range accounts {
+	selected := uint(0)
+	for i, a := range accounts {
 		name := a.Config.DisplayName
 		if name == "" {
 			name = a.Config.Name
 		}
 		labels = append(labels, widget.FormatAddress(api.Address{Name: name, Address: a.Config.Email}))
+		if a.ID == selectedID {
+			selected = uint(i)
+		}
 	}
 	w.from.SetModel(gtk.NewStringList(labels))
+	w.from.SetSelected(selected)
 	w.from.SetSensitive(len(accounts) > 1)
 	if placeholder {
 		w.setStatus(i18n.T("Using placeholder account"))

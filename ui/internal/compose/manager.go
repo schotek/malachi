@@ -77,8 +77,17 @@ func (m *Manager) remove(w *Window) {
 	}
 }
 
-// refreshAccounts asks the backend once per process and pushes the result
-// to open windows.
+// Invalidate drops the cached account list (notify.accountsChanged). Open
+// windows are refreshed at once; otherwise the next window fetches again.
+func (m *Manager) Invalidate() {
+	m.fetched = false
+	if len(m.windows) > 0 {
+		m.refreshAccounts()
+	}
+}
+
+// refreshAccounts asks the backend once per process (until Invalidate) and
+// pushes the result to open windows.
 func (m *Manager) refreshAccounts() {
 	m.fetched = true
 	go func() {

@@ -5,13 +5,41 @@ using Adw 1;
 // Preferences dialog, opened by the app.preferences action (Ctrl+,). Object
 // IDs are looked up from ui/internal/window/preferences.go; keep them in sync.
 //
-// Both pages are bound to GSettings (ui/internal/settings), except the
+// The "Accounts" page is owned by the daemon (account.list / account.remove
+// / account.setEnabled; rows are built in ui/internal/window/accounts_page.go).
+// The other pages are bound to GSettings (ui/internal/settings), except the
 // "Mail" group, which is owned by the daemon and goes through config.get /
 // config.set, and "Launch at Login", whose state is decided by the
 // Background portal (ui/internal/background).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
+
+  Adw.PreferencesPage accounts_page {
+    name: "accounts";
+    title: _("Accounts");
+    icon-name: "system-users-symbolic";
+
+    Adw.PreferencesGroup accounts_group {
+      title: _("Mail Accounts");
+
+      header-suffix: Button add_account_button {
+        icon-name: "list-add-symbolic";
+        tooltip-text: _("Add Account");
+        valign: center;
+
+        styles [
+          "flat",
+        ]
+      };
+
+      Adw.ActionRow accounts_empty_row {
+        title: _("No accounts yet");
+        subtitle: _("Use the + button to add one");
+        sensitive: false;
+      }
+    }
+  }
 
   Adw.PreferencesPage general_page {
     name: "general";

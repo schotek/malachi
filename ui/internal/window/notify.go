@@ -28,6 +28,8 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 			return
 		}
 		w.notifyNewMessage(n)
+	case api.NotifyAccountsChanged:
+		w.compose.Invalidate()
 	default:
 		// TODO(phase-1): notify.syncState → status line, notify.authRequired →
 		// OpenURI portal flow.

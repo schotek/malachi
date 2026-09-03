@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-03 15:04+0200\n"
+"POT-Creation-Date: 2026-09-03 20:59+0200\n"
 "PO-Revision-Date: 2026-09-03 15:04+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -15,7 +15,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
-
 
 #: ui/main.go:130
 msgid "A native mail client for the GNOME desktop."
@@ -29,73 +28,73 @@ msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:159 ui/internal/compose/draft.go:105
+#: ui/internal/compose/compose.go:169 ui/internal/compose/draft.go:105
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/compose.go:202 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:212 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/compose.go:329 ui/data/ui/compose.ui:175
+#: ui/internal/compose/compose.go:339 ui/data/ui/compose.ui:175
 #: ui/data/ui/compose.ui:353
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/compose.go:332
+#: ui/internal/compose/compose.go:342
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/compose.go:361 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:371 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/compose.go:371
+#: ui/internal/compose/compose.go:381
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/compose.go:381 ui/data/ui/compose.ui:268
+#: ui/internal/compose/compose.go:391 ui/data/ui/compose.ui:268
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/compose.go:383
+#: ui/internal/compose/compose.go:393
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/compose.go:397
+#: ui/internal/compose/compose.go:407
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/compose.go:411
+#: ui/internal/compose/compose.go:421
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/compose.go:420
+#: ui/internal/compose/compose.go:430
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/compose.go:452
+#: ui/internal/compose/compose.go:462
 msgid "Remove"
 msgstr "Odebrat"
 
 #. TRANSLATORS: file size in mebibytes.
-#: ui/internal/compose/compose.go:515
+#: ui/internal/compose/compose.go:525
 #, c-format
 msgid "%.1f MiB"
 msgstr "%.1f MiB"
 
 #. TRANSLATORS: file size in kibibytes.
-#: ui/internal/compose/compose.go:518
+#: ui/internal/compose/compose.go:528
 #, c-format
 msgid "%.0f KiB"
 msgstr "%.0f KiB"
 
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/compose/compose.go:521
+#: ui/internal/compose/compose.go:531
 #, c-format
 msgid "%d B"
 msgstr "%d B"
@@ -118,7 +117,8 @@ msgid "Draft saved %s"
 msgstr "Koncept uložen v %s"
 
 #: ui/internal/compose/draft.go:200
-msgid "This draft was changed elsewhere; your text will be saved as a new draft"
+msgid ""
+"This draft was changed elsewhere; your text will be saved as a new draft"
 msgstr "Tento koncept byl změněn jinde; váš text bude uložen jako nový koncept"
 
 #: ui/internal/compose/draft.go:203
@@ -154,7 +154,7 @@ msgstr "Za_hodit"
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:306 ui/internal/widget/rpc.go:76
+#: ui/internal/compose/draft.go:306 ui/internal/widget/rpc.go:87
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -280,10 +280,82 @@ msgstr "%s selhalo: formátovaný text zatím nelze uložit"
 msgid "%s failed: unknown account"
 msgstr "%s selhalo: neznámý účet"
 
-#: ui/internal/widget/rpc.go:56
+#: ui/internal/widget/rpc.go:55
+#, c-format
+msgid "%s failed: the system keyring is unavailable"
+msgstr "%s selhalo: systémová klíčenka není dostupná"
+
+#: ui/internal/widget/rpc.go:58
 #, c-format
 msgid "%s failed"
 msgstr "%s selhalo"
+
+#: ui/internal/window/accounts_page.go:42
+msgid "Adding accounts is not available yet"
+msgstr "Přidávání účtů zatím není k dispozici"
+
+#: ui/internal/window/accounts_page.go:59
+msgid "Loading accounts"
+msgstr "Načtení účtů"
+
+#: ui/internal/window/accounts_page.go:98
+msgid "Enabled"
+msgstr "Zapnuto"
+
+#: ui/internal/window/accounts_page.go:105
+msgid "Remove Account"
+msgstr "Odebrat účet"
+
+#: ui/internal/window/accounts_page.go:135
+msgid "Pausing the account"
+msgstr "Pozastavení účtu"
+
+#: ui/internal/window/accounts_page.go:137
+msgid "Resuming the account"
+msgstr "Obnovení účtu"
+
+#: ui/internal/window/accounts_page.go:168
+msgid "Also delete _drafts and downloaded data"
+msgstr "Smazat také _koncepty a stažená data"
+
+#. TRANSLATORS: %s is the account's e-mail address.
+#: ui/internal/window/accounts_page.go:171
+#, c-format
+msgid ""
+"%s will be removed from Malachi Mail. Mail on the server is not affected."
+msgstr "Účet %s bude z aplikace Malachi Mail odebrán. Pošta na serveru zůstane nedotčena."
+
+#: ui/internal/window/accounts_page.go:172
+msgid "Remove this account?"
+msgstr "Odebrat tento účet?"
+
+#: ui/internal/window/accounts_page.go:172
+msgid "_Remove"
+msgstr "_Odebrat"
+
+#: ui/internal/window/accounts_page.go:188
+msgid "Removing the account"
+msgstr "Odebrání účtu"
+
+#: ui/internal/window/accounts_page.go:210
+msgid "Paused"
+msgstr "Pozastaveno"
+
+#: ui/internal/window/accounts_page.go:212
+msgid "Syncing…"
+msgstr "Synchronizuje se…"
+
+#: ui/internal/window/accounts_page.go:214
+msgid "Offline"
+msgstr "Offline"
+
+#: ui/internal/window/accounts_page.go:216
+msgid "Sign-in required"
+msgstr "Vyžaduje přihlášení"
+
+#: ui/internal/window/accounts_page.go:218
+msgid "Error"
+msgstr "Chyba"
 
 #: ui/internal/window/actions.go:30
 msgid "Move to Trash?"
@@ -297,31 +369,31 @@ msgstr "Přesunout do _koše"
 msgid "Deleting"
 msgstr "Mazání"
 
-#: ui/internal/window/notify.go:62
+#: ui/internal/window/notify.go:64
 msgid "New message"
 msgstr "Nová zpráva"
 
-#: ui/internal/window/notify.go:70
+#: ui/internal/window/notify.go:72
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
-#: ui/internal/window/preferences.go:157
+#: ui/internal/window/preferences.go:168
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:179
+#: ui/internal/window/preferences.go:190
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:256
+#: ui/internal/window/preferences.go:267
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:259
+#: ui/internal/window/preferences.go:270
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:262
+#: ui/internal/window/preferences.go:273
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
@@ -496,174 +568,198 @@ msgid "Preferences"
 msgstr "Předvolby"
 
 #: ui/data/ui/preferences.ui:15
+msgid "Accounts"
+msgstr "Účty"
+
+#: ui/data/ui/preferences.ui:19
+msgid "Mail Accounts"
+msgstr "Poštovní účty"
+
+#: ui/data/ui/preferences.ui:23
+msgid "Add Account"
+msgstr "Přidat účet"
+
+#: ui/data/ui/preferences.ui:32
+msgid "No accounts yet"
+msgstr "Zatím žádné účty"
+
+#: ui/data/ui/preferences.ui:33
+msgid "Use the + button to add one"
+msgstr "Přidejte účet tlačítkem +"
+
+#: ui/data/ui/preferences.ui:44
 msgid "General"
 msgstr "Obecné"
 
-#: ui/data/ui/preferences.ui:19
+#: ui/data/ui/preferences.ui:48
 msgid "Startup"
 msgstr "Spouštění"
 
-#: ui/data/ui/preferences.ui:22
+#: ui/data/ui/preferences.ui:51
 msgid "Launch at Login"
 msgstr "Spustit při přihlášení"
 
-#: ui/data/ui/preferences.ui:23
+#: ui/data/ui/preferences.ui:52
 msgid "Start hidden in the background when you log in"
 msgstr "Po přihlášení se spustí skrytě na pozadí"
 
-#: ui/data/ui/preferences.ui:28
+#: ui/data/ui/preferences.ui:57
 msgid "Run in Background"
 msgstr "Běžet na pozadí"
 
-#: ui/data/ui/preferences.ui:29
+#: ui/data/ui/preferences.ui:58
 msgid "Closing the window keeps Malachi Mail running for notifications"
 msgstr "Zavření okna ponechá Malachi Mail běžet kvůli oznámením"
 
-#: ui/data/ui/preferences.ui:36
+#: ui/data/ui/preferences.ui:65
 msgid "Reading"
 msgstr "Čtení"
 
-#: ui/data/ui/preferences.ui:39
+#: ui/data/ui/preferences.ui:68
 msgid "Mark as Read After"
 msgstr "Označit jako přečtené po"
 
-#: ui/data/ui/preferences.ui:40
-msgid "Seconds a message must be shown before it is marked as read; 0 marks it immediately"
-msgstr "Počet sekund, po které musí být zpráva zobrazena, než se označí jako přečtená; 0 označí ihned"
+#: ui/data/ui/preferences.ui:69
+msgid ""
+"Seconds a message must be shown before it is marked as read; 0 marks it "
+"immediately"
+msgstr ""
+"Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
+"přečtená; 0 označí ihned"
 
-#: ui/data/ui/preferences.ui:53
+#: ui/data/ui/preferences.ui:82
 msgid "Confirm Before Deleting"
 msgstr "Potvrdit před smazáním"
 
-#: ui/data/ui/preferences.ui:61
+#: ui/data/ui/preferences.ui:90
 msgid "Notifications"
 msgstr "Oznámení"
 
-#: ui/data/ui/preferences.ui:64
+#: ui/data/ui/preferences.ui:93
 msgid "Show Desktop Notifications"
 msgstr "Zobrazovat oznámení na ploše"
 
-#: ui/data/ui/preferences.ui:70
+#: ui/data/ui/preferences.ui:99
 msgid "Play Sound"
 msgstr "Přehrát zvuk"
 
-#: ui/data/ui/preferences.ui:71 data/io.github.schotek.Malachi.gschema.xml:72
+#: ui/data/ui/preferences.ui:100 data/io.github.schotek.Malachi.gschema.xml:72
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
 
-#: ui/data/ui/preferences.ui:78
+#: ui/data/ui/preferences.ui:107
 msgid "Mail"
 msgstr "Pošta"
 
-#: ui/data/ui/preferences.ui:79
+#: ui/data/ui/preferences.ui:108
 msgid "Stored by the mail daemon."
 msgstr "Ukládá poštovní démon."
 
-#: ui/data/ui/preferences.ui:82
+#: ui/data/ui/preferences.ui:111
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
 
-#: ui/data/ui/preferences.ui:87
+#: ui/data/ui/preferences.ui:116
 msgid "Manually"
 msgstr "Ručně"
 
-#: ui/data/ui/preferences.ui:88
+#: ui/data/ui/preferences.ui:117
 msgid "Every 5 minutes"
 msgstr "Každých 5 minut"
 
-#: ui/data/ui/preferences.ui:89
+#: ui/data/ui/preferences.ui:118
 msgid "Every 15 minutes"
 msgstr "Každých 15 minut"
 
-#: ui/data/ui/preferences.ui:90
+#: ui/data/ui/preferences.ui:119
 msgid "Every 30 minutes"
 msgstr "Každých 30 minut"
 
-#: ui/data/ui/preferences.ui:98
+#: ui/data/ui/preferences.ui:127
 msgid "Load Remote Images"
 msgstr "Načítat vzdálené obrázky"
 
-#: ui/data/ui/preferences.ui:102
+#: ui/data/ui/preferences.ui:131
 msgid "Never"
 msgstr "Nikdy"
 
-#: ui/data/ui/preferences.ui:103
+#: ui/data/ui/preferences.ui:132
 msgid "From Known Senders"
 msgstr "Od známých odesílatelů"
 
-#: ui/data/ui/preferences.ui:104
+#: ui/data/ui/preferences.ui:133
 msgid "Always"
 msgstr "Vždy"
 
-#: ui/data/ui/preferences.ui:117
+#: ui/data/ui/preferences.ui:146
 msgid "Appearance"
 msgstr "Vzhled"
 
-#: ui/data/ui/preferences.ui:121
+#: ui/data/ui/preferences.ui:150
 msgid "Theme"
 msgstr "Motiv"
 
-#: ui/data/ui/preferences.ui:124
+#: ui/data/ui/preferences.ui:153
 msgid "Color Scheme"
 msgstr "Barevné schéma"
 
-#: ui/data/ui/preferences.ui:128
+#: ui/data/ui/preferences.ui:157
 msgid "Follow System"
 msgstr "Podle systému"
 
-#: ui/data/ui/preferences.ui:129
+#: ui/data/ui/preferences.ui:158
 msgid "Light"
 msgstr "Světlé"
 
-#: ui/data/ui/preferences.ui:130
+#: ui/data/ui/preferences.ui:159
 msgid "Dark"
 msgstr "Tmavé"
 
-#: ui/data/ui/preferences.ui:140
+#: ui/data/ui/preferences.ui:169
 msgid "Message List"
 msgstr "Seznam zpráv"
 
-#: ui/data/ui/preferences.ui:143
+#: ui/data/ui/preferences.ui:172
 msgid "Density"
 msgstr "Hustota"
 
-#: ui/data/ui/preferences.ui:147
+#: ui/data/ui/preferences.ui:176
 msgid "Comfortable"
 msgstr "Pohodlná"
 
-#: ui/data/ui/preferences.ui:148
+#: ui/data/ui/preferences.ui:177
 msgid "Compact"
 msgstr "Kompaktní"
 
-#: ui/data/ui/preferences.ui:156
+#: ui/data/ui/preferences.ui:185
 msgid "Show Preview Line"
 msgstr "Zobrazit řádek s náhledem"
 
-#: ui/data/ui/preferences.ui:162
+#: ui/data/ui/preferences.ui:191
 msgid "Show Avatars"
 msgstr "Zobrazit avatary"
 
-#: ui/data/ui/preferences.ui:168
+#: ui/data/ui/preferences.ui:197
 msgid "Monochrome Avatars"
 msgstr "Jednobarevné avatary"
 
-#: ui/data/ui/preferences.ui:169
+#: ui/data/ui/preferences.ui:198
 msgid "Neutral grey instead of a colour per sender"
 msgstr "Neutrální šedá místo barvy pro každého odesílatele"
 
-#: ui/data/ui/preferences.ui:176
+#: ui/data/ui/preferences.ui:205
 msgid "Message View"
 msgstr "Zobrazení zprávy"
 
-#: ui/data/ui/preferences.ui:179
+#: ui/data/ui/preferences.ui:208
 msgid "Use Monospace Font for Plain Text"
 msgstr "Pro prostý text použít neproporcionální písmo"
 
-#: ui/data/ui/preferences.ui:184
+#: ui/data/ui/preferences.ui:213
 msgid "Text Zoom"
 msgstr "Přiblížení textu"
 
-#: ui/data/ui/preferences.ui:185
+#: ui/data/ui/preferences.ui:214
 msgid "Percent"
 msgstr "Procenta"
 
@@ -748,16 +844,23 @@ msgid "Width of the message list pane"
 msgstr "Šířka panelu se seznamem zpráv"
 
 #: data/io.github.schotek.Malachi.gschema.xml:51
-msgid "Start hidden in the background at login (mirrors the Background portal's autostart decision)"
-msgstr "Spustit po přihlášení skrytě na pozadí (odráží rozhodnutí portálu Background o automatickém spouštění)"
+msgid ""
+"Start hidden in the background at login (mirrors the Background portal's "
+"autostart decision)"
+msgstr ""
+"Spustit po přihlášení skrytě na pozadí (odráží rozhodnutí portálu Background "
+"o automatickém spouštění)"
 
 #: data/io.github.schotek.Malachi.gschema.xml:55
 msgid "Closing the main window keeps the application running"
 msgstr "Zavření hlavního okna ponechá aplikaci běžet"
 
 #: data/io.github.schotek.Malachi.gschema.xml:60
-msgid "Seconds a message must be shown before it is marked as read; 0 = immediately"
-msgstr "Počet sekund, po které musí být zpráva zobrazena, než se označí jako přečtená; 0 = ihned"
+msgid ""
+"Seconds a message must be shown before it is marked as read; 0 = immediately"
+msgstr ""
+"Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
+"přečtená; 0 = ihned"
 
 #: data/io.github.schotek.Malachi.gschema.xml:64
 msgid "Ask before moving a message to Trash"
@@ -820,11 +923,20 @@ msgid "Native email client for the GNOME desktop"
 msgstr "Nativní poštovní klient pro prostředí GNOME"
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:11
-msgid "Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused."
-msgstr "Malachi Mail je desktopový poštovní klient pro Linux postavený na GTK 4 a libadwaita. Poštu udržuje dostupnou offline, HTML zprávy zobrazuje až po jejich vyčištění a odděluje uživatelské rozhraní od poštovního jádra, aby šlo jádro znovu použít."
+msgid ""
+"Malachi Mail is a desktop email client for Linux, built with GTK 4 and "
+"libadwaita. It keeps mail available offline, renders HTML messages only "
+"after sanitising them, and separates the user interface from the mail engine "
+"so that the engine can be reused."
+msgstr ""
+"Malachi Mail je desktopový poštovní klient pro Linux postavený na GTK 4 a "
+"libadwaita. Poštu udržuje dostupnou offline, HTML zprávy zobrazuje až po "
+"jejich vyčištění a odděluje uživatelské rozhraní od poštovního jádra, aby "
+"šlo jádro znovu použít."
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:17
-msgid "This is an early development version. It is not yet usable for real mail."
+msgid ""
+"This is an early development version. It is not yet usable for real mail."
 msgstr "Toto je raná vývojová verze. Na skutečnou poštu zatím není použitelná."
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30

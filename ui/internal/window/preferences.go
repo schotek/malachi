@@ -9,6 +9,7 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
@@ -21,10 +22,16 @@ import (
 
 // PreferencesDialog is the application preferences dialog, built from
 // data/ui/preferences.blp. UI-only rows are bound to the settings store;
-// "Launch at Login" goes through the Background portal; the Mail group is
-// owned by the daemon (config.get / config.set).
+// "Launch at Login" goes through the Background portal; the Mail group and
+// the Accounts page are owned by the daemon (config.get / config.set,
+// account.*).
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
+
+	accountsGroup *adw.PreferencesGroup
+	addAccount    *gtk.Button
+	accountsEmpty *adw.ActionRow
+	accountRows   []*accountRow
 
 	launchAtLogin        *adw.SwitchRow
 	runInBackground      *adw.SwitchRow
@@ -69,6 +76,9 @@ func NewPreferences(s *settings.Store, c *client.Client) *PreferencesDialog {
 
 	d := &PreferencesDialog{
 		PreferencesDialog:    b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
+		accountsGroup:        b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
+		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.Button),
+		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
 		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
 		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),
 		markReadDelay:        b.GetObject("mark_read_delay").Cast().(*adw.SpinRow),
@@ -104,6 +114,7 @@ func NewPreferences(s *settings.Store, c *client.Client) *PreferencesDialog {
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
 		d.bindLaunchAtLogin(s),
 		d.bindMail(c),
+		d.bindAccounts(c),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true

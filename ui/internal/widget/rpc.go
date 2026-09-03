@@ -51,6 +51,8 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s failed: formatted text cannot be saved yet"), what)
 		case api.CodeAccountNotFound:
 			return fmt.Sprintf(i18n.T("%s failed: unknown account"), what)
+		case api.CodeKeyringError:
+			return fmt.Sprintf(i18n.T("%s failed: the system keyring is unavailable"), what)
 		}
 	}
 	return fmt.Sprintf(i18n.T("%s failed"), what)
@@ -70,9 +72,18 @@ func PlainToast(text string) *adw.Toast {
 // label is the destructive button's label with a mnemonic. proceed runs
 // only when the user confirms.
 func ConfirmDestructive(parent gtk.Widgetter, heading, body, label string, proceed func()) {
+	ConfirmDestructiveExtra(parent, heading, body, label, nil, proceed)
+}
+
+// ConfirmDestructiveExtra is ConfirmDestructive with an extra child widget
+// (typically a check button) shown between the body and the buttons.
+func ConfirmDestructiveExtra(parent gtk.Widgetter, heading, body, label string, extra gtk.Widgetter, proceed func()) {
 	d := adw.NewAlertDialog(heading, body)
 	d.SetHeadingUseMarkup(false)
 	d.SetBodyUseMarkup(false)
+	if extra != nil {
+		d.SetExtraChild(extra)
+	}
 	d.AddResponse("cancel", i18n.T("_Cancel"))
 	d.AddResponse("confirm", label)
 	d.SetResponseAppearance("confirm", adw.ResponseDestructive)
