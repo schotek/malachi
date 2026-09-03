@@ -18,6 +18,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 
 	// Pinned for the SASL mechanisms this package will implement.
 	_ "github.com/emersion/go-sasl"
@@ -25,12 +26,37 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// Keyring abstracts the secret store. The production implementation talks to
-// org.freedesktop.secrets; tests use an in-memory one.
+// Keyring abstracts the secret store. The production implementation
+// (secretservice) talks to org.freedesktop.secrets; tests use an in-memory
+// one. Get returns ErrNoSecret when nothing is stored; any other failure is
+// an *api.Error with CodeKeyringError.
 type Keyring interface {
 	Get(ctx context.Context, account api.AccountID, key string) (string, error)
 	Set(ctx context.Context, account api.AccountID, key, value string) error
 	Delete(ctx context.Context, account api.AccountID, key string) error
+}
+
+// ErrNoSecret is returned by Keyring.Get when no item matches. Callers decide
+// whether that means authRequired (sync) or simply nothing to delete.
+var ErrNoSecret = errors.New("auth: no such secret")
+
+// UnavailableKeyring refuses every operation with keyringError. It is what
+// MALACHI_KEYRING=none installs: accounts still work, but no password can be
+// stored and nothing falls back to plaintext.
+type UnavailableKeyring struct{}
+
+func (UnavailableKeyring) Get(context.Context, api.AccountID, string) (string, error) {
+	return "", errKeyringDisabled()
+}
+func (UnavailableKeyring) Set(context.Context, api.AccountID, string, string) error {
+	return errKeyringDisabled()
+}
+func (UnavailableKeyring) Delete(context.Context, api.AccountID, string) error {
+	return errKeyringDisabled()
+}
+
+func errKeyringDisabled() error {
+	return api.NewError(api.CodeKeyringError, "keyring disabled (MALACHI_KEYRING=none)")
 }
 
 // Secret keys stored per account.

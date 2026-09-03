@@ -23,7 +23,11 @@ type memKeyring struct {
 func newMemKeyring() *memKeyring { return &memKeyring{values: map[string]string{}} }
 
 func (k *memKeyring) Get(_ context.Context, id api.AccountID, key string) (string, error) {
-	return k.values[string(id)+"/"+key], nil
+	v, ok := k.values[string(id)+"/"+key]
+	if !ok {
+		return "", auth.ErrNoSecret
+	}
+	return v, nil
 }
 func (k *memKeyring) Set(_ context.Context, id api.AccountID, key, value string) error {
 	k.values[string(id)+"/"+key] = value

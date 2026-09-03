@@ -213,12 +213,12 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `credentials.password` only when an endpoint uses `password`.
 
 The password is optional (an account without one ends in `authRequired`
-once syncing exists). It is written to the keyring and discarded; if the
-keyring refuses it nothing is kept and the keyring's error is returned.
-Transitional: while the keyring is a stub, an `account.add` **with** a
-password fails with `notImplemented` and stores nothing; without a password
-it succeeds. For `oauth2` no credentials are passed; the backend starts the
-flow and emits `notify.authRequired` with `authUrl`.
+once syncing exists). It is written to the system keyring
+(`org.freedesktop.secrets`) and discarded; if the keyring refuses it nothing
+is kept and `keyringError` is returned. That happens when no Secret Service
+is running, when the user dismisses the unlock prompt, or when the daemon
+runs with `MALACHI_KEYRING=none`. For `oauth2` no credentials are passed;
+the backend starts the flow and emits `notify.authRequired` with `authUrl`.
 
 #### `account.remove`
 - params: `{ "accountId", "deleteLocalData": bool }`

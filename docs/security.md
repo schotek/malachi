@@ -163,6 +163,18 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `account.add` forwards `credentials.password` to the keyring before it
   returns and drops the account again if the keyring refuses; the
   `accounts` row holds only the non-secret `api.AccountConfig`.
+- The keyring client (`internal/auth/secretservice`) speaks the Secret
+  Service D-Bus API directly. Items carry the attributes `app`
+  (`io.github.schotek.Malachi`), `account` (the opaque account id) and
+  `key` (`password` / `oauth2.refresh_token`); the label names the account
+  id and key only. The session is `plain`: the session bus is per-user and
+  a process able to eavesdrop on it runs as the same user and can already
+  read `store.db` and the RPC socket, so the encrypted
+  `dh-ietf1024-sha256-aes128-cbc-pkcs7` session would not change the threat
+  model. It is the upgrade path if a sandbox ever filters bus traffic.
+  Unlock prompts are the desktop's own dialogs; a dismissed prompt is a
+  `keyringError`. `MALACHI_KEYRING=none` disables the keyring for
+  development and makes every secret operation fail the same way.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 

@@ -17,6 +17,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/schotek/malachi/backend/internal/auth"
+	"github.com/schotek/malachi/backend/internal/auth/secretservice"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/core"
 	"github.com/schotek/malachi/backend/internal/rpc"
@@ -80,6 +82,17 @@ func run() error {
 	log.Info("store ready", "path", st.Path())
 
 	backend := core.New(version, st, cfg, log)
+	switch v := strings.ToLower(os.Getenv("MALACHI_KEYRING")); v {
+	case "", "secretservice":
+		ks := secretservice.New(log)
+		defer ks.Close()
+		backend.Keyring = ks
+	case "none":
+		log.Warn("MALACHI_KEYRING=none: passwords cannot be stored; adding an account with a password fails with keyringError")
+		backend.Keyring = auth.UnavailableKeyring{}
+	default:
+		return fmt.Errorf("unknown MALACHI_KEYRING %q (secretservice|none)", v)
+	}
 	if err := backend.ImportConfigAccounts(ctx); err != nil {
 		return fmt.Errorf("import accounts from %s: %w", *flagConfig, err)
 	}

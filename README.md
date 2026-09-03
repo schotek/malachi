@@ -105,7 +105,10 @@ stuck. Subsequent builds are fast.
 Other targets: `make test`, `make lint`, `make clean`, `make flatpak`
 (needs `flatpak-builder` on the host; the manifest is a skeleton for now).
 
-Set `MALACHI_LOG_LEVEL=debug` to see every RPC call.
+Set `MALACHI_LOG_LEVEL=debug` to see every RPC call. Passwords go to the
+system keyring over D-Bus; in a container without a Secret Service set
+`MALACHI_KEYRING=none` to get a clean `keyringError` instead of a timeout
+(accounts without a stored password still work).
 
 UI preferences are stored in GSettings. `make build` compiles the schema
 into `build/glib-2.0/schemas`, and `make run-dev` / `make run-frontend`
