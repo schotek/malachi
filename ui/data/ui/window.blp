@@ -38,6 +38,13 @@ Adw.ApplicationWindow main_window {
       child: Adw.ToolbarView {
         [top]
         Adw.HeaderBar {
+          [start]
+          Button {
+            icon-name: "mail-message-new-symbolic";
+            tooltip-text: _("New Message (Ctrl+N)");
+            action-name: "app.compose";
+          }
+
           [end]
           MenuButton {
             icon-name: "open-menu-symbolic";
@@ -142,10 +149,26 @@ Adw.ApplicationWindow main_window {
           child: Adw.ToolbarView {
             [top]
             Adw.HeaderBar {
-              [end]
-              Button {
+              // Enabled from Go while a message is selected.
+
+              [start]
+              Button reply_button {
                 icon-name: "mail-reply-sender-symbolic";
                 tooltip-text: _("Reply");
+                sensitive: false;
+              }
+
+              [start]
+              Button reply_all_button {
+                icon-name: "mail-reply-all-symbolic";
+                tooltip-text: _("Reply All");
+                sensitive: false;
+              }
+
+              [start]
+              Button forward_button {
+                icon-name: "mail-forward-symbolic";
+                tooltip-text: _("Forward");
                 sensitive: false;
               }
 
@@ -241,6 +264,13 @@ Adw.ApplicationWindow main_window {
 }
 
 menu primary_menu {
+  section {
+    item {
+      label: _("_New Message");
+      action: "app.compose";
+    }
+  }
+
   section {
     item {
       label: _("_Preferences");

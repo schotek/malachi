@@ -24,11 +24,22 @@ Adw.Window message_window {
         title: _("Message");
       };
 
-      [end]
-      Button {
+      [start]
+      Button reply_button {
         icon-name: "mail-reply-sender-symbolic";
         tooltip-text: _("Reply");
-        sensitive: false;
+      }
+
+      [start]
+      Button reply_all_button {
+        icon-name: "mail-reply-all-symbolic";
+        tooltip-text: _("Reply All");
+      }
+
+      [start]
+      Button forward_button {
+        icon-name: "mail-forward-symbolic";
+        tooltip-text: _("Forward");
       }
 
       [end]

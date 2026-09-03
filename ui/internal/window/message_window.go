@@ -5,6 +5,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -40,6 +41,13 @@ func newMessageWindow(w *Window, idx int) *MessageWindow {
 	}
 	mw.SetApplication(&w.app.Application)
 	mw.trash.ConnectClicked(func() { w.trashMessage(idx, mw, mw.toasts) })
+	for _, r := range []struct {
+		id   string
+		kind compose.Kind
+	}{{"reply_button", compose.KindReply}, {"reply_all_button", compose.KindReplyAll}, {"forward_button", compose.KindForward}} {
+		r := r
+		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openCompose(r.kind, idx) })
+	}
 	mw.show(dummyMessages[idx])
 	return mw
 }

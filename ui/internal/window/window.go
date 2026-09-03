@@ -20,6 +20,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/sound"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -36,6 +37,7 @@ type Window struct {
 	client   *client.Client
 	log      *slog.Logger
 	settings *settings.Store
+	compose  *compose.Manager
 
 	// openMessages tracks stand-alone message windows by message index so a
 	// second double-click raises the existing window instead of opening
@@ -63,6 +65,9 @@ type Window struct {
 	messageFrom    *gtk.Label
 	messageBody    *gtk.Label
 	trashButton    *gtk.Button
+	replyButton    *gtk.Button
+	replyAllButton *gtk.Button
+	forwardButton  *gtk.Button
 
 	connIcon   *gtk.Image
 	connStatus *gtk.Label
@@ -70,7 +75,7 @@ type Window struct {
 
 // New builds the window, populates placeholder data and starts connecting
 // to the backend. Settings from s are applied now and whenever they change.
-func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store) *Window {
+func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager) *Window {
 	b := gtk.NewBuilderFromString(data.MustUI("window.ui"))
 
 	w := &Window{
@@ -79,6 +84,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		client:            c,
 		log:               log.With("component", "window"),
 		settings:          s,
+		compose:           cm,
 		openMessages:      make(map[int]*MessageWindow),
 		outerSplit:        b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit:        b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -92,6 +98,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		messageFrom:       b.GetObject("message_from").Cast().(*gtk.Label),
 		messageBody:       b.GetObject("message_body").Cast().(*gtk.Label),
 		trashButton:       b.GetObject("trash_button").Cast().(*gtk.Button),
+		replyButton:       b.GetObject("reply_button").Cast().(*gtk.Button),
+		replyAllButton:    b.GetObject("reply_all_button").Cast().(*gtk.Button),
+		forwardButton:     b.GetObject("forward_button").Cast().(*gtk.Button),
 		connIcon:          b.GetObject("connection_icon").Cast().(*gtk.Image),
 		connStatus:        b.GetObject("connection_status").Cast().(*gtk.Label),
 	}
@@ -129,12 +138,12 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil {
 			w.messageStack.SetVisibleChildName("empty")
-			w.trashButton.SetSensitive(false)
+			w.setMessageActionsSensitive(false)
 			w.scheduleMarkRead(-1)
 			return
 		}
 		w.showMessage(dummyMessages[row.Index()])
-		w.trashButton.SetSensitive(true)
+		w.setMessageActionsSensitive(true)
 		w.innerSplit.SetShowContent(true)
 		w.scheduleMarkRead(row.Index())
 	})
@@ -148,6 +157,17 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			w.trashMessage(row.Index(), w, w.toasts)
 		}
 	})
+	for _, r := range []struct {
+		b    *gtk.Button
+		kind compose.Kind
+	}{{w.replyButton, compose.KindReply}, {w.replyAllButton, compose.KindReplyAll}, {w.forwardButton, compose.KindForward}} {
+		r := r
+		r.b.ConnectClicked(func() {
+			if row := w.messageList.SelectedRow(); row != nil {
+				w.openCompose(r.kind, row.Index())
+			}
+		})
+	}
 	w.banner.ConnectButtonClicked(w.reconnect)
 
 	// Client callbacks arrive on a background goroutine; hop to the main loop.
@@ -186,6 +206,31 @@ func (w *Window) populateFolders() {
 	if first := w.folderList.RowAtIndex(0); first != nil {
 		w.folderList.SelectRow(first)
 	}
+}
+
+// setMessageActionsSensitive enables the per-message header buttons.
+func (w *Window) setMessageActionsSensitive(on bool) {
+	for _, b := range []*gtk.Button{w.trashButton, w.replyButton, w.replyAllButton, w.forwardButton} {
+		b.SetSensitive(on)
+	}
+}
+
+// openCompose opens a reply or forward of message idx.
+//
+// TODO(phase-1): call draft.create and fall back to compose.Prefill only
+// while the backend cannot see the message.
+func (w *Window) openCompose(kind compose.Kind, idx int) {
+	if idx < 0 || idx >= len(dummyMessages) {
+		return
+	}
+	m := dummyMessages[idx]
+	src := compose.Source{From: []api.Address{m.From}, Subject: m.Subject, Date: m.Date, Text: m.Body}
+	w.compose.Open(compose.Prefill(kind, src, w.compose.SelfAddress(), time.Now()))
+}
+
+// Toast shows a transient message over the message pane.
+func (w *Window) Toast(text string) {
+	w.toasts.AddToast(widget.PlainToast(text))
 }
 
 // messageOf projects a placeholder message onto what a list row shows.

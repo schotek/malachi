@@ -14,6 +14,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
 	"github.com/schotek/malachi/ui/internal/window"
@@ -28,7 +29,9 @@ var version = "dev"
 func main() {
 	log := newLogger()
 
-	app := adw.NewApplication(AppID, gio.ApplicationFlagsNone)
+	// HandlesOpen: mailto: URIs arrive through the "open" signal (desktop
+	// file MimeType, D-Bus Open, or `malachi mailto:…`).
+	app := adw.NewApplication(AppID, gio.ApplicationHandlesOpen)
 	rpc := client.New(client.DefaultSocketPath())
 
 	// Preferences are opened on startup (GTK and libadwaita are initialised
@@ -36,6 +39,7 @@ func main() {
 	var (
 		prefs   *settings.Store
 		mainWin *window.Window
+		mgr     *compose.Manager
 		// serviceHold is set when started with --gapplication-service (the
 		// autostart entry): there is no window yet, so hold the application
 		// until the first activation shows one.
@@ -44,6 +48,12 @@ func main() {
 	app.ConnectStartup(func() {
 		prefs = settings.Open(log)
 		style.Apply(prefs)
+		mgr = compose.NewManager(app, rpc, log, prefs)
+		mgr.OnSent = func(text string) {
+			if mainWin != nil {
+				mainWin.Toast(text)
+			}
+		}
 		if app.Flags()&gio.ApplicationIsService != 0 {
 			app.Hold()
 			serviceHold = true
@@ -55,7 +65,7 @@ func main() {
 	// reused; when it really closes the application exits with it.
 	show := func() {
 		if mainWin == nil {
-			mainWin = window.New(app, rpc, log, prefs)
+			mainWin = window.New(app, rpc, log, prefs, mgr)
 		}
 		mainWin.Present()
 		if serviceHold {
@@ -64,15 +74,33 @@ func main() {
 		}
 	}
 	app.ConnectActivate(show)
+	// mailto: handling. The UI only splits the URI (compose.ParseMailto);
+	// everything else about the message is the backend's business.
+	app.ConnectOpen(func(files []gio.Filer, hint string) {
+		for _, f := range files {
+			uri := f.URI()
+			p, err := compose.ParseMailto(uri)
+			if err != nil {
+				log.Warn("ignoring non-mailto URI", "err", err)
+				continue
+			}
+			mgr.Open(p)
+		}
+	})
 	app.ConnectShutdown(func() { rpc.Close() })
 
-	addActions(app, rpc, func() *settings.Store { return prefs }, show)
+	addActions(app, rpc, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))
 }
 
 // addActions registers application actions. store yields the settings store,
 // which exists only after startup has run; show presents the main window.
-func addActions(app *adw.Application, rpc *client.Client, store func() *settings.Store, show func()) {
+func addActions(app *adw.Application, rpc *client.Client, store func() *settings.Store, show func(), composer func() *compose.Manager) {
+	newMessage := gio.NewSimpleAction("compose", nil)
+	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
+	app.AddAction(newMessage)
+	app.SetAccelsForAction("app.compose", []string{"<Control>n"})
+
 	// app.show is the default action of desktop notifications and the way
 	// a hidden (background) window comes back.
 	showAction := gio.NewSimpleAction("show", nil)
