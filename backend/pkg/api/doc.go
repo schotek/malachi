@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package api defines the public contract between the Malachi Mail backend
 // daemon (malachid) and any user interface talking to it.
 //

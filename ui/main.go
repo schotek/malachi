@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Command malachi is the GTK4/libadwaita user interface of Malachi Mail.
 //
 // It is a thin client of the malachid daemon; see docs/architecture.md.

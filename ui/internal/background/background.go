@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package background talks to the XDG Background portal
 // (org.freedesktop.portal.Background) to request permission to run without
 // a window and to be started at login. gotk4 does not wrap the portal, so

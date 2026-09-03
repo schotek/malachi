@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package store owns the SQLite database: opening, pragmas, migrations and
 // (later) all queries. No other package issues SQL.
 //

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package window builds the main application window from the Blueprint
 // definition in data/ui/window.blp and wires it to the RPC client.
 //

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package smtp sends messages and manages the outbox queue.
 //
 // Library: github.com/emersion/go-smtp (client side only).

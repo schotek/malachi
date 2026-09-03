@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Command malachid is the Malachi Mail backend daemon.
 //
 // It owns the mail store, talks IMAP/SMTP, and exposes everything to user

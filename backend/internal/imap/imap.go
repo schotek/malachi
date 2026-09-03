@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package imap contains the IMAP client and the synchronisation engine.
 //
 // Libraries: github.com/emersion/go-imap/v2 for the protocol,

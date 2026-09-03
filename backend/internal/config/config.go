@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package config loads the daemon configuration from
 // $XDG_CONFIG_HOME/malachi/config.toml and resolves XDG paths.
 //

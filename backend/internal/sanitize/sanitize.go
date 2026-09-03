@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package sanitize turns hostile e-mail HTML into something a
 // JavaScript-disabled webview can render safely. This is the single most
 // security-critical package in the backend; see docs/security.md.

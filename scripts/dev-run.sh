@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vladislav Janeček
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Start the backend in the background, wait for its socket, run the UI, and
 # stop the backend when the UI exits.
 #

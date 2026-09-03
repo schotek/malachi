@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package core composes the daemon's internal packages into the api.Backend
 // that malachid serves. It embeds rpc.StubBackend and overrides one service
 // at a time as they become real; anything not overridden still answers

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package account manages account configuration: validation, persistence,
 // and lookup by ID. It never touches secrets; those belong to internal/auth.
 package account

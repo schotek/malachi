@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 Vladislav Janeček
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 -- 0001_init: bootstrap schema.
 --
 -- The schema_migrations table itself is created by the migration runner.

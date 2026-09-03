@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package style applies application-wide appearance settings: the libadwaita
 // color scheme and a CSS provider for everything that cannot be expressed
 // per widget (message body zoom and font, list decorations).

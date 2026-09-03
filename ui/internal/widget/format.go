@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package widget holds reusable widgets built from Blueprint definitions,
 // plus the small pure formatting helpers they display data with.
 package widget

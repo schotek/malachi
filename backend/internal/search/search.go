@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package search provides full-text search over the local store using
 // SQLite FTS5 (external-content table over the messages table, trigram or
 // unicode61 tokenizer to be decided with real data).

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package editor is the rich-text editor of the compose window: a
 // WebKitGTK 6.0 view showing a contenteditable document, driven by WebKit's
 // native editing commands and observed through a small user script.

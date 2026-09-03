@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 Vladislav Janeček
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 -- 0002_preferences: daemon-owned user preferences and the remote-content
 -- allow-list.
 --

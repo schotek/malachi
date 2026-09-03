@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package auth handles credentials: keyring storage (libsecret via the
 // org.freedesktop.secrets D-Bus API), OAuth2 authorisation-code flow with
 // PKCE for Office 365, token refresh, and SASL mechanism selection (PLAIN,

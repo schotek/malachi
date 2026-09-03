@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package thread groups messages into conversations.
 //
 // Planned algorithm: JWZ threading (References / In-Reply-To) with subject

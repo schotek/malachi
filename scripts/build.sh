@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vladislav Janeček
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Full build: Blueprint → Go backend → Go UI → rendered data files.
 # Thin wrapper around the Makefile so CI and the Flatpak manifest have one
 # entry point. Pass PREFIX to also install (used by the Flatpak build).

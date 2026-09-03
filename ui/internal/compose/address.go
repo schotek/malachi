@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package compose is the "New Message" window: recipients, subject,
 // attachments, the rich-text editor and the draft lifecycle around them.
 // Mail logic stays in the backend; this package parses what the user typed

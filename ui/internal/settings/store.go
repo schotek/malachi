@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package settings persists UI-only preferences in GSettings.
 //
 // The schema lives in data/io.github.schotek.Malachi.gschema.xml. Only

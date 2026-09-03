@@ -59,6 +59,12 @@ nepřečíslovávají, jen přidávají. Nekompatibilní změna = bump `Protocol
 - Migrace databáze (`internal/store/migrations/NNNN_name.sql`) jsou dopředné
   a číslované, nikdy se needitují zpětně
 - Závislosti nad rámec zadání jen se zdůvodněním v commitu
+- Licence: `backend/` je AGPL-3.0-only (duálně licencované jádro, viz
+  `LICENSING.md`), vše ostatní GPL-3.0-or-later. Každý nový zdrojový soubor
+  (`.go`, `.blp`, `.sql`, `.sh`) začíná hlavičkou `SPDX-FileCopyrightText`
+  a `SPDX-License-Identifier` podle toho, ve které části leží. Do `backend/`
+  nepřidávej závislosti pod copyleftem silnějším než MPL/LGPL, jinak by
+  komerční licence jádra nebyla udělitelná
 
 ## Prostředí
 

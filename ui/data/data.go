@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package data embeds compiled UI definitions.
 //
 // Source of truth are the Blueprint files in data/ui/*.blp. They are

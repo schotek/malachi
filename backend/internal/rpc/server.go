@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package rpc implements the JSON-RPC 2.0 server that exposes the backend on
 // a local unix socket. Wire types and method names come from pkg/api; this
 // package owns only transport, framing, dispatch and notification fan-out.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Package safename turns attacker-controlled file names (MIME attachment
 // names, names supplied by the UI for imports) into names that are safe to
 // store and display: no path separators, no control characters, no leading

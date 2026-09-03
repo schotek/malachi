@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // Package client is the JSON-RPC 2.0 client for the malachid unix socket.
 //
 // It is transport only: it sends requests, matches responses by ID and

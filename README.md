@@ -149,7 +149,12 @@ touching anything that parses or renders mail. Conventional commits, `gofmt`,
 
 ## Licence
 
-GPL-3.0-or-later. See [LICENSE](LICENSE).
+The core (`backend/`, the `malachid` daemon and its API) is
+[AGPL-3.0-only](backend/LICENSE) and is also available under a commercial
+licence for use in proprietary clients. The reference GTK user interface and
+everything else is [GPL-3.0-or-later](LICENSE). See
+[LICENSING.md](LICENSING.md) for the details and
+[CLA.md](CLA.md) before contributing.
 
 ---
 

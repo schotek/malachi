@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 Vladislav Janeček
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 -- 0003_drafts: local compose drafts and the compose-side attachment store.
 --
 -- html_body holds ONLY sanitiser output (internal/sanitize, compose mode);
