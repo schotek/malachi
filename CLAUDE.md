@@ -90,9 +90,12 @@ WebKitGTK 6.0 binding je `gotk4-webkitgtk/pkg` `v0.0.0-20240108031600-dee1973cf4
 Vyžaduje jen gotk4 v0.1.0, takže náš pin zůstává. Binding **nemá žádné asynchronní
 funkce** (`evaluate_javascript` apod.); `ui/internal/editor/evaluate.go` má na to
 malý cgo shim. První kompilace `webkit/v6` trvá několik minut.
-Ladění WebKitu v kontejneru: `WEBKIT_DISABLE_DMABUF_RENDERER=1` při prázdném
-view nebo EGL chybách, `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` jen pokud
-bwrap selže (v tomto Toolbxu není potřeba ani jedno).
+DMA-BUF renderer WebKitu je v UI **vypnutý** (`ui/internal/editor/renderer.go`
+nastaví `WEBKIT_DISABLE_DMABUF_RENDERER=1` při startu): na Asahi grafice ukazoval
+první snímek view jako červený záblesk a skrytí widgetu nepomáhá, buffer obchází
+GSK. `MALACHI_WEBKIT_DMABUF=1` ho pro test zase zapne. Ladění sandboxu:
+`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` jen pokud bwrap selže (v tomto
+Toolbxu není potřeba).
 
 ## Stav a priority
 

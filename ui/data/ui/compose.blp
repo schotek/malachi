@@ -1,6 +1,5 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
-
 using Gtk 4.0;
 using Adw 1;
 // Compose window. Object IDs are looked up from ui/internal/compose;
@@ -251,9 +250,14 @@ Adw.Window compose_window {
           }
         }
 
+        // Shows the view background until the editor has painted.
         Box editor_slot {
           orientation: vertical;
           vexpand: true;
+
+          styles [
+            "view",
+          ]
         }
 
         // Attachment chips; shown only when non-empty.
