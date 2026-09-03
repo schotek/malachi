@@ -1,0 +1,35 @@
+using Gtk 4.0;
+using WebKit 6.0;
+// Rich-text editor view (ui/internal/editor). The construct-only WebKit
+// properties (network session, user content manager, settings) can only be
+// set here: the Go binding has no g_object_new with properties.
+//
+// JavaScript is enabled only so the application can run its own bridge
+// script; enable-javascript-markup: false makes WebKit drop <script>,
+// on*= attributes and javascript: URLs from the document itself. Network
+// access is additionally denied by the document's CSP and by the
+// decide-policy handler in Go.
+WebKit.WebView editor_view {
+  vexpand: true;
+  hexpand: true;
+  editable: true;
+
+  network-session: WebKit.NetworkSession {
+    is-ephemeral: true;
+  };
+
+  user-content-manager: WebKit.UserContentManager editor_ucm {};
+
+  settings: WebKit.Settings {
+    enable-javascript: true;
+    enable-javascript-markup: false;
+    enable-developer-extras: false;
+    enable-html5-local-storage: false;
+    enable-html5-database: false;
+    enable-media: false;
+    enable-webgl: false;
+    enable-webaudio: false;
+    enable-page-cache: false;
+    enable-write-console-messages-to-stdout: false;
+  };
+}
