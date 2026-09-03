@@ -15,9 +15,14 @@ cd "$ROOT"
 APP_ID="io.github.schotek.Malachi"
 PREFIX="${PREFIX:-/app}"
 
-make build data
+make PREFIX="$PREFIX" build data
 
 if [[ "${1:-}" == "install" ]]; then
+    while read -r lang; do
+        [[ -z "$lang" || "$lang" == \#* ]] && continue
+        install -Dm644 "build/locale/$lang/LC_MESSAGES/malachi.mo" \
+            "$PREFIX/share/locale/$lang/LC_MESSAGES/malachi.mo"
+    done < po/LINGUAS
     install -Dm755 build/malachid "$PREFIX/bin/malachid"
     install -Dm755 build/malachi  "$PREFIX/bin/malachi"
     install -Dm644 "data/$APP_ID.desktop" \

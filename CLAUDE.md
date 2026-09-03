@@ -59,6 +59,15 @@ nepřečíslovávají, jen přidávají. Nekompatibilní změna = bump `Protocol
 - Migrace databáze (`internal/store/migrations/NNNN_name.sql`) jsou dopředné
   a číslované, nikdy se needitují zpětně
 - Závislosti nad rámec zadání jen se zdůvodněním v commitu
+- Jazyk: **backend je jazykově neutrální** — vrací jen kódy, enumy a anglické technické
+  `error.message` (nestabilní, UI je nezobrazuje doslova); gettext se do `backend/` nikdy
+  nezavádí. Veškeré texty pro uživatele řeší desktopová aplikace: v Blueprintu `_("…")`,
+  v Go `i18n.T/N/C` (`ui/internal/i18n`, doména `malachi`). Věty nikdy neskládej
+  konkatenací, používej `fmt.Sprintf(i18n.T("… %s …"), x)`; plurály přes `i18n.N`;
+  nad nejednoznačné msgid dej `// TRANSLATORS:`; formáty data jsou strftime msgid.
+  Nový Go soubor s texty přidej do `po/POTFILES`; `make po` aktualizuje šablonu i `.po`,
+  `make lint` hlídá, že `po/malachi.pot` odpovídá zdrojům. Prefixy `Re:`/`Fwd:` se
+  nepřekládají.
 - Licence: `backend/` je AGPL-3.0-only (duálně licencované jádro, viz
   `LICENSING.md`), vše ostatní GPL-3.0-or-later. Každý nový zdrojový soubor
   (`.go`, `.blp`, `.sql`, `.sh`) začíná hlavičkou `SPDX-FileCopyrightText`

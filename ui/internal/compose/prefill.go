@@ -4,12 +4,14 @@
 package compose
 
 import (
+	"fmt"
 	"html"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -90,6 +92,8 @@ func stripPrefixes(s string) string {
 }
 
 // ReplySubject is "Re: " + subject without existing prefixes (idempotent).
+// The prefixes are deliberately not translated: other clients only
+// recognise the English forms when threading and de-duplicating them.
 func ReplySubject(s string) string { return "Re: " + stripPrefixes(s) }
 
 // ForwardSubject is "Fwd: " + subject without existing prefixes.
@@ -100,13 +104,16 @@ func ForwardSubject(s string) string { return "Fwd: " + stripPrefixes(s) }
 func quoteHTML(src Source) string {
 	var b strings.Builder
 	b.WriteString("<p><br></p><blockquote type=\"cite\">")
-	b.WriteString("On ")
-	if !src.Date.IsZero() {
-		b.WriteString(html.EscapeString(src.Date.Local().Format("Mon, 2 Jan 2006 at 15:04")))
-		b.WriteString(", ")
+	names := html.EscapeString(displayNames(src.From))
+	if src.Date.IsZero() {
+		// TRANSLATORS: quote header without a date; %s is the sender.
+		b.WriteString(fmt.Sprintf(i18n.T("%s wrote:"), names))
+	} else {
+		// TRANSLATORS: quote header; %s are the date and the sender.
+		b.WriteString(fmt.Sprintf(i18n.T("On %s, %s wrote:"),
+			html.EscapeString(widget.FormatDateTime(src.Date)), names))
 	}
-	b.WriteString(html.EscapeString(displayNames(src.From)))
-	b.WriteString(" wrote:<br>")
+	b.WriteString("<br>")
 	b.WriteString(escapeText(src.Text))
 	b.WriteString("</blockquote>")
 	return b.String()
@@ -115,14 +122,18 @@ func quoteHTML(src Source) string {
 // forwardHTML renders the forwarded-message header block and body.
 func forwardHTML(src Source) string {
 	var b strings.Builder
-	b.WriteString("<p><br></p><div>---------- Forwarded message ----------<br>")
-	b.WriteString("From: " + html.EscapeString(formatAll(src.From)) + "<br>")
-	if !src.Date.IsZero() {
-		b.WriteString("Date: " + html.EscapeString(src.Date.Local().Format("Mon, 2 Jan 2006 at 15:04")) + "<br>")
+	line := func(format, value string) {
+		b.WriteString(html.EscapeString(fmt.Sprintf(format, value)) + "<br>")
 	}
-	b.WriteString("Subject: " + html.EscapeString(src.Subject) + "<br>")
+	b.WriteString("<p><br></p><div>")
+	b.WriteString(html.EscapeString(i18n.T("---------- Forwarded message ----------")) + "<br>")
+	line(i18n.T("From: %s"), formatAll(src.From))
+	if !src.Date.IsZero() {
+		line(i18n.T("Date: %s"), widget.FormatDateTime(src.Date))
+	}
+	line(i18n.T("Subject: %s"), src.Subject)
 	if len(src.To) > 0 {
-		b.WriteString("To: " + html.EscapeString(formatAll(src.To)) + "<br>")
+		line(i18n.T("To: %s"), formatAll(src.To))
 	}
 	b.WriteString("</div><br>")
 	b.WriteString(escapeText(src.Text))

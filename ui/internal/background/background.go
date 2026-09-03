@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -126,7 +127,7 @@ func RequestAutostart(enable bool, done func(Result, error)) {
 	Request(Options{
 		Autostart: enable,
 		Command:   []string{"malachi", "--gapplication-service"},
-		Reason:    "Check for new mail and show notifications in the background",
+		Reason:    i18n.T("Check for new mail and show notifications in the background"),
 	}, done)
 }
 

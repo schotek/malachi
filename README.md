@@ -113,6 +113,25 @@ export `GSETTINGS_SCHEMA_DIR` so the uninstalled binary finds it. Running
 `build/malachi` directly without that variable still works, but preferences
 then live in memory and are lost on exit (a warning is logged).
 
+### Translating
+
+The UI is translated with gettext (domain `malachi`); the daemon itself is
+language-neutral and only returns codes. Blueprint files mark strings with
+`_("…")`, Go code uses `i18n.T` / `i18n.N`. `make build` compiles `po/*.po`
+into `build/locale`, which `make run-dev` / `make run-frontend` point the
+uninstalled binary at (`MALACHI_LOCALE_DIR`); `scripts/build.sh install`
+puts the `.mo` files under `share/locale`.
+
+```sh
+make po                      # refresh po/malachi.pot and merge it into every po/*.po
+LANGUAGE=cs make run-dev     # try a translation
+```
+
+To add a language, append its code to `po/LINGUAS`, run
+`msginit -l <code> -i po/malachi.pot -o po/<code>.po`, translate, and open a
+pull request. `make lint` checks that every `.po` compiles and that the
+committed template matches the sources.
+
 "Launch at Login" asks the Background portal for autostart. Inside the
 Toolbx container the portal cannot identify the application ("no AppId
 detected") and refuses; test that setting on the host from the installed

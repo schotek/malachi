@@ -12,6 +12,10 @@ package data
 import (
 	"embed"
 	"fmt"
+
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+
+	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
 //go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/compose.blp
@@ -35,4 +39,16 @@ func MustUI(name string) string {
 		panic(err)
 	}
 	return s
+}
+
+// Builder parses the named definition with the application's translation
+// domain, so _("…") strings in Blueprint come out translated. Every window
+// and widget must be built through it, never with NewBuilderFromString.
+func Builder(name string) *gtk.Builder {
+	b := gtk.NewBuilder()
+	b.SetTranslationDomain(i18n.Domain)
+	if err := b.AddFromString(MustUI(name)); err != nil {
+		panic(fmt.Errorf("ui definition %q: %w", name, err))
+	}
+	return b
 }

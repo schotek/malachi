@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -26,7 +27,7 @@ func confirmTrash(parent gtk.Widgetter, s *settings.Store, subject string, proce
 		proceed()
 		return
 	}
-	widget.ConfirmDestructive(parent, "Move to Trash?", subject, "Move to _Trash", proceed)
+	widget.ConfirmDestructive(parent, i18n.T("Move to Trash?"), subject, i18n.T("Move to _Trash"), proceed)
 }
 
 // trashMessage moves message idx to Trash through message.delete, after the
@@ -44,7 +45,7 @@ func (w *Window) trashMessage(idx int, parent gtk.Widgetter, toasts *adw.ToastOv
 			glib.IdleAdd(func() {
 				if err != nil {
 					w.log.Debug("message.delete", "err", err)
-					toasts.AddToast(widget.PlainToast(widget.RPCErrorText("Deleting", err)))
+					toasts.AddToast(widget.PlainToast(widget.RPCErrorText(i18n.T("Deleting"), err)))
 					return
 				}
 				// TODO(phase-1): drop the row once the backend really deletes.

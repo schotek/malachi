@@ -48,3 +48,6 @@ config.local.toml
 *~
 .DS_Store
 .claude/settings.local.json
+
+# Compiled translations (built into build/locale)
+/po/*.mo

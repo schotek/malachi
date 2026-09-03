@@ -14,6 +14,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/editor"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -93,15 +94,15 @@ func (w *Window) refreshStatus() {
 	d := &w.draft
 	switch {
 	case d.sending:
-		w.setStatus("Sending…")
+		w.setStatus(i18n.T("Sending…"))
 	case d.saving:
-		w.setStatus("Saving draft…")
+		w.setStatus(i18n.T("Saving draft…"))
 	case d.dirty:
-		w.setStatus("Unsaved changes")
+		w.setStatus(i18n.T("Unsaved changes"))
 	case !d.lastSaved.IsZero():
-		w.setStatus("Draft saved " + d.lastSaved.Format("15:04"))
+		w.setStatus(fmt.Sprintf(i18n.T("Draft saved %s"), widget.FormatTime(d.lastSaved)))
 	case w.m.Placeholder():
-		w.setStatus("Using placeholder account")
+		w.setStatus(i18n.T("Using placeholder account"))
 	default:
 		w.setStatus("")
 	}
@@ -196,10 +197,10 @@ func (w *Window) saveFailed(reason saveReason, err error) {
 	if errors.As(err, &e) && e.Code == api.CodeConflict {
 		// Local wins: the next save creates a fresh draft with our text.
 		d.draftID, d.version = "", 0
-		w.toast("This draft was changed elsewhere; your text will be saved as a new draft")
+		w.toast(i18n.T("This draft was changed elsewhere; your text will be saved as a new draft"))
 		return
 	}
-	text := widget.RPCErrorText("Saving the draft", err)
+	text := widget.RPCErrorText(i18n.T("Saving the draft"), err)
 	if reason == saveAutosave {
 		// Do not nag every 30 s with the same failure (e.g. no backend).
 		if text == d.lastError {
@@ -223,11 +224,11 @@ func (w *Window) send() {
 	}
 	to, cc, bcc, ok := w.recipients()
 	if !ok {
-		w.toast("Fix the highlighted recipients")
+		w.toast(i18n.T("Fix the highlighted recipients"))
 		return
 	}
 	if len(to)+len(cc)+len(bcc) == 0 {
-		w.toast("Add at least one recipient")
+		w.toast(i18n.T("Add at least one recipient"))
 		return
 	}
 	d.sending = true
@@ -256,13 +257,13 @@ func (w *Window) send() {
 					d.draftID, d.version = "", 0
 					d.dirty = true
 				}
-				w.toast(widget.RPCErrorText("Sending", err))
+				w.toast(widget.RPCErrorText(i18n.T("Sending"), err))
 				fail()
 				return
 			}
 			d.discard = true
 			if w.m.OnSent != nil {
-				w.m.OnSent("Message queued for sending")
+				w.m.OnSent(i18n.T("Message queued for sending"))
 			}
 			w.Close()
 		})
@@ -290,7 +291,7 @@ func (w *Window) discard() {
 		proceed()
 		return
 	}
-	widget.ConfirmDestructive(w, "Discard this message?", "", "_Discard", proceed)
+	widget.ConfirmDestructive(w, i18n.T("Discard this message?"), "", i18n.T("_Discard"), proceed)
 }
 
 // closeRequest keeps the window open while there are unsaved edits and
@@ -301,10 +302,10 @@ func (w *Window) closeRequest() bool {
 		w.cleanup()
 		return false
 	}
-	dlg := adw.NewAlertDialog("Save changes to this draft?", "")
-	dlg.AddResponse("cancel", "_Cancel")
-	dlg.AddResponse("discard", "_Discard")
-	dlg.AddResponse("save", "_Save Draft")
+	dlg := adw.NewAlertDialog(i18n.T("Save changes to this draft?"), "")
+	dlg.AddResponse("cancel", i18n.T("_Cancel"))
+	dlg.AddResponse("discard", i18n.T("_Discard"))
+	dlg.AddResponse("save", i18n.T("_Save Draft"))
 	dlg.SetResponseAppearance("discard", adw.ResponseDestructive)
 	dlg.SetResponseAppearance("save", adw.ResponseSuggested)
 	dlg.SetDefaultResponse("save")
@@ -351,5 +352,6 @@ func blockedSummary(b api.BlockedContent) string {
 	if n == 0 {
 		return ""
 	}
-	return fmt.Sprintf("%d unsafe element(s) were removed from the message", n)
+	return fmt.Sprintf(i18n.N("%d unsafe element was removed from the message",
+		"%d unsafe elements were removed from the message", n), n)
 }

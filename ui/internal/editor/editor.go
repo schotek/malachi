@@ -15,7 +15,6 @@ import (
 
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/javascriptcore/v6"
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
-	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/data"
 )
@@ -48,7 +47,7 @@ type Editor struct {
 func New(log *slog.Logger) *Editor {
 	registerCIDScheme()
 
-	b := gtk.NewBuilderFromString(data.MustUI("editor.ui"))
+	b := data.Builder("editor.ui")
 	e := &Editor{
 		WebView: b.GetObject("editor_view").Cast().(*webkit.WebView),
 		ucm:     b.GetObject("editor_ucm").Cast().(*webkit.UserContentManager),

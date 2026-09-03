@@ -13,8 +13,11 @@ func TestBlockedSummary(t *testing.T) {
 	if got := blockedSummary(api.BlockedContent{}); got != "" {
 		t.Errorf("empty = %q", got)
 	}
-	if got := blockedSummary(api.BlockedContent{RemoteImages: 2, Scripts: 1}); got != "3 unsafe element(s) were removed from the message" {
-		t.Errorf("got %q", got)
+	if got := blockedSummary(api.BlockedContent{RemoteImages: 2, Scripts: 1}); got != "3 unsafe elements were removed from the message" {
+		t.Errorf("plural: got %q", got)
+	}
+	if got := blockedSummary(api.BlockedContent{Forms: 1}); got != "1 unsafe element was removed from the message" {
+		t.Errorf("singular: got %q", got)
 	}
 }
 

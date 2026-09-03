@@ -31,7 +31,7 @@ type MessageWindow struct {
 // window is open) but is not transient for the main window: the user asked
 // for independent windows.
 func newMessageWindow(w *Window, idx int) *MessageWindow {
-	b := gtk.NewBuilderFromString(data.MustUI("message_window.ui"))
+	b := data.Builder("message_window.ui")
 
 	mw := &MessageWindow{
 		Window:  b.GetObject("message_window").Cast().(*adw.Window),

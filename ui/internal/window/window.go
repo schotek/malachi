@@ -24,6 +24,7 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/sound"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -79,7 +80,7 @@ type Window struct {
 // New builds the window, populates placeholder data and starts connecting
 // to the backend. Settings from s are applied now and whenever they change.
 func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager) *Window {
-	b := gtk.NewBuilderFromString(data.MustUI("window.ui"))
+	b := data.Builder("window.ui")
 
 	w := &Window{
 		ApplicationWindow: b.GetObject("main_window").Cast().(*adw.ApplicationWindow),
@@ -298,7 +299,7 @@ func (w *Window) showMessage(m dummyMessage) {
 // playNewMailSound plays the theme's new-mail event; failures are logged
 // once at debug level (no sound theme or server is a normal desktop state).
 func (w *Window) playNewMailSound() {
-	if err := sound.Play("message-new-email", "New mail"); err != nil {
+	if err := sound.Play("message-new-email", i18n.T("New mail")); err != nil {
 		w.log.Debug("notification sound", "err", err)
 	}
 }
@@ -313,15 +314,15 @@ func (w *Window) showConnectionState(s client.State, err error) {
 	switch s {
 	case client.Connecting:
 		w.connIcon.SetFromIconName("network-idle-symbolic")
-		w.connStatus.SetLabel("Connecting to backend…")
+		w.connStatus.SetLabel(i18n.T("Connecting to backend…"))
 	case client.Connected:
 		w.connIcon.SetFromIconName("network-transmit-receive-symbolic")
-		w.connStatus.SetLabel("Connected")
+		w.connStatus.SetLabel(i18n.T("Connected"))
 		w.banner.SetRevealed(false)
 		go w.fetchSystemInfo()
 	default:
 		w.connIcon.SetFromIconName("network-offline-symbolic")
-		w.connStatus.SetLabel("Backend unavailable")
+		w.connStatus.SetLabel(i18n.T("Backend unavailable"))
 		w.banner.SetRevealed(true)
 		if err != nil {
 			// Repeated dial failures while the daemon is down are expected;
@@ -338,15 +339,15 @@ func (w *Window) fetchSystemInfo() {
 	err := w.client.Call(ctx, api.MethodSystemInfo, api.SystemInfoParams{}, &info)
 	glib.IdleAdd(func() {
 		if err != nil {
-			w.connStatus.SetLabel("Connected, but system.info failed")
+			w.connStatus.SetLabel(i18n.T("Connected, but system.info failed"))
 			w.log.Error("system.info", "err", err)
 			return
 		}
 		if info.ProtocolVersion != api.ProtocolVersion {
-			w.connStatus.SetLabel(fmt.Sprintf("Protocol mismatch: UI %d, backend %d",
+			w.connStatus.SetLabel(fmt.Sprintf(i18n.T("Protocol mismatch: UI %d, backend %d"),
 				api.ProtocolVersion, info.ProtocolVersion))
 			return
 		}
-		w.connStatus.SetLabel(fmt.Sprintf("Connected to malachid %s (pid %d)", info.Version, info.PID))
+		w.connStatus.SetLabel(fmt.Sprintf(i18n.T("Connected to malachid %s (pid %d)"), info.Version, info.PID))
 	})
 }

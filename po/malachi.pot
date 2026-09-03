@@ -1,0 +1,847 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR Vladislav Janeček
+# This file is distributed under the same license as the malachi package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: malachi\n"
+"Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
+"POT-Creation-Date: 2026-09-03 15:07+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+
+#: ui/main.go:130
+msgid "A native mail client for the GNOME desktop."
+msgstr ""
+
+#: ui/internal/background/background.go:130
+msgid "Check for new mail and show notifications in the background"
+msgstr ""
+
+#: ui/internal/compose/compose.go:120
+msgid "The editor crashed; your last text was restored"
+msgstr ""
+
+#: ui/internal/compose/compose.go:159 ui/internal/compose/draft.go:105
+msgid "Using placeholder account"
+msgstr ""
+
+#: ui/internal/compose/compose.go:202 ui/data/ui/compose.ui:10
+#: ui/data/ui/compose.ui:49
+msgid "New Message"
+msgstr ""
+
+#: ui/internal/compose/compose.go:329 ui/data/ui/compose.ui:175
+#: ui/data/ui/compose.ui:353
+msgid "Paragraph"
+msgstr ""
+
+#: ui/internal/compose/compose.go:332
+#, c-format
+msgid "Heading %s"
+msgstr ""
+
+#: ui/internal/compose/compose.go:361 ui/data/ui/compose.ui:55
+msgid "Attach Files"
+msgstr ""
+
+#: ui/internal/compose/compose.go:371
+msgid "Only local files can be attached"
+msgstr ""
+
+#: ui/internal/compose/compose.go:381 ui/data/ui/compose.ui:268
+msgid "Insert Image"
+msgstr ""
+
+#: ui/internal/compose/compose.go:383
+msgid "Images"
+msgstr ""
+
+#: ui/internal/compose/compose.go:397
+msgid "Only local images can be inserted"
+msgstr ""
+
+#: ui/internal/compose/compose.go:411
+#, c-format
+msgid "Attaching %s…"
+msgstr ""
+
+#: ui/internal/compose/compose.go:420
+#, c-format
+msgid "Attaching %s"
+msgstr ""
+
+#: ui/internal/compose/compose.go:452
+msgid "Remove"
+msgstr ""
+
+#. TRANSLATORS: file size in mebibytes.
+#: ui/internal/compose/compose.go:515
+#, c-format
+msgid "%.1f MiB"
+msgstr ""
+
+#. TRANSLATORS: file size in kibibytes.
+#: ui/internal/compose/compose.go:518
+#, c-format
+msgid "%.0f KiB"
+msgstr ""
+
+#. TRANSLATORS: file size in bytes.
+#: ui/internal/compose/compose.go:521
+#, c-format
+msgid "%d B"
+msgstr ""
+
+#: ui/internal/compose/draft.go:97
+msgid "Sending…"
+msgstr ""
+
+#: ui/internal/compose/draft.go:99
+msgid "Saving draft…"
+msgstr ""
+
+#: ui/internal/compose/draft.go:101
+msgid "Unsaved changes"
+msgstr ""
+
+#: ui/internal/compose/draft.go:103
+#, c-format
+msgid "Draft saved %s"
+msgstr ""
+
+#: ui/internal/compose/draft.go:200
+msgid ""
+"This draft was changed elsewhere; your text will be saved as a new draft"
+msgstr ""
+
+#: ui/internal/compose/draft.go:203
+msgid "Saving the draft"
+msgstr ""
+
+#: ui/internal/compose/draft.go:227
+msgid "Fix the highlighted recipients"
+msgstr ""
+
+#: ui/internal/compose/draft.go:231
+msgid "Add at least one recipient"
+msgstr ""
+
+#: ui/internal/compose/draft.go:260
+msgid "Sending"
+msgstr ""
+
+#: ui/internal/compose/draft.go:266
+msgid "Message queued for sending"
+msgstr ""
+
+#: ui/internal/compose/draft.go:294
+msgid "Discard this message?"
+msgstr ""
+
+#: ui/internal/compose/draft.go:294 ui/internal/compose/draft.go:307
+#: ui/data/ui/compose.ui:346
+msgid "_Discard"
+msgstr ""
+
+#: ui/internal/compose/draft.go:305
+msgid "Save changes to this draft?"
+msgstr ""
+
+#: ui/internal/compose/draft.go:306 ui/internal/widget/rpc.go:76
+msgid "_Cancel"
+msgstr ""
+
+#: ui/internal/compose/draft.go:308 ui/data/ui/compose.ui:332
+msgid "_Save Draft"
+msgstr ""
+
+#: ui/internal/compose/draft.go:355
+#, c-format
+msgid "%d unsafe element was removed from the message"
+msgid_plural "%d unsafe elements were removed from the message"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: quote header without a date; %s is the sender.
+#: ui/internal/compose/prefill.go:110
+#, c-format
+msgid "%s wrote:"
+msgstr ""
+
+#. TRANSLATORS: quote header; %s are the date and the sender.
+#: ui/internal/compose/prefill.go:113
+#, c-format
+msgid "On %s, %s wrote:"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:129
+msgid "---------- Forwarded message ----------"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:130
+#, c-format
+msgid "From: %s"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:132
+#, c-format
+msgid "Date: %s"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:134
+#, c-format
+msgid "Subject: %s"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:136
+#, c-format
+msgid "To: %s"
+msgstr ""
+
+#. TRANSLATORS: strftime format for a date in the current year in
+#. the message list, e.g. "2 Sep".
+#: ui/internal/widget/format.go:59
+#, no-c-format
+msgid "%-d %b"
+msgstr ""
+
+#. TRANSLATORS: strftime format for a date in another year in the
+#. message list, e.g. "2025-09-02".
+#: ui/internal/widget/format.go:64
+#, no-c-format
+msgid "%Y-%m-%d"
+msgstr ""
+
+#. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
+#: ui/internal/widget/format.go:72
+#, no-c-format
+msgid "%H:%M"
+msgstr ""
+
+#. TRANSLATORS: strftime format for a full date and time, e.g.
+#. "Wed, 2 Sep 2026 at 15:04".
+#: ui/internal/widget/format.go:81
+#, no-c-format
+msgid "%a, %-d %b %Y at %H:%M"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:33
+#, c-format
+msgid "%s needs a running mail backend"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:35
+#, c-format
+msgid "%s timed out"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:39
+#, c-format
+msgid "%s is not available yet"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:41
+#, c-format
+msgid "%s conflicted with another change"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:43
+#, c-format
+msgid "%s was rejected: %s"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:45
+msgid "The draft no longer exists"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:47
+msgid "The attachment no longer exists"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:49
+msgid "The attachment is too big"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:51
+#, c-format
+msgid "%s failed: formatted text cannot be saved yet"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:53
+#, c-format
+msgid "%s failed: unknown account"
+msgstr ""
+
+#: ui/internal/widget/rpc.go:56
+#, c-format
+msgid "%s failed"
+msgstr ""
+
+#: ui/internal/window/actions.go:30
+msgid "Move to Trash?"
+msgstr ""
+
+#: ui/internal/window/actions.go:30
+msgid "Move to _Trash"
+msgstr ""
+
+#: ui/internal/window/actions.go:48
+msgid "Deleting"
+msgstr ""
+
+#: ui/internal/window/notify.go:62
+msgid "New message"
+msgstr ""
+
+#: ui/internal/window/notify.go:70
+msgid "(No subject)"
+msgstr ""
+
+#: ui/internal/window/preferences.go:157
+msgid "Saving mail settings"
+msgstr ""
+
+#: ui/internal/window/preferences.go:179
+msgid "Loading mail settings"
+msgstr ""
+
+#: ui/internal/window/preferences.go:256
+msgid "The desktop portal refused to change autostart"
+msgstr ""
+
+#: ui/internal/window/preferences.go:259
+msgid "Autostart needs xdg-desktop-portal"
+msgstr ""
+
+#: ui/internal/window/preferences.go:262
+msgid "Autostart was not granted"
+msgstr ""
+
+#: ui/internal/window/window.go:302
+msgid "New mail"
+msgstr ""
+
+#: ui/internal/window/window.go:317
+msgid "Connecting to backend…"
+msgstr ""
+
+#: ui/internal/window/window.go:320
+msgid "Connected"
+msgstr ""
+
+#: ui/internal/window/window.go:325
+msgid "Backend unavailable"
+msgstr ""
+
+#: ui/internal/window/window.go:342
+msgid "Connected, but system.info failed"
+msgstr ""
+
+#: ui/internal/window/window.go:347
+#, c-format
+msgid "Protocol mismatch: UI %d, backend %d"
+msgstr ""
+
+#: ui/internal/window/window.go:351
+#, c-format
+msgid "Connected to malachid %s (pid %d)"
+msgstr ""
+
+#: ui/data/ui/compose.ui:62
+msgid "Send (Ctrl+Enter)"
+msgstr ""
+
+#: ui/data/ui/compose.ui:66
+msgid "_Send"
+msgstr ""
+
+#: ui/data/ui/compose.ui:79
+msgid "Draft Menu"
+msgstr ""
+
+#: ui/data/ui/compose.ui:101
+msgid "From"
+msgstr ""
+
+#: ui/data/ui/compose.ui:107
+msgid "To"
+msgstr ""
+
+#: ui/data/ui/compose.ui:110
+msgid "Cc/Bcc"
+msgstr ""
+
+#: ui/data/ui/compose.ui:121
+msgid "Cc"
+msgstr ""
+
+#: ui/data/ui/compose.ui:127
+msgid "Bcc"
+msgstr ""
+
+#: ui/data/ui/compose.ui:133
+msgid "Subject"
+msgstr ""
+
+#: ui/data/ui/compose.ui:150
+msgid "Bold (Ctrl+B)"
+msgstr ""
+
+#: ui/data/ui/compose.ui:157
+msgid "Italic (Ctrl+I)"
+msgstr ""
+
+#: ui/data/ui/compose.ui:164
+msgid "Underline (Ctrl+U)"
+msgstr ""
+
+#: ui/data/ui/compose.ui:177
+msgid "Paragraph Style"
+msgstr ""
+
+#: ui/data/ui/compose.ui:185
+msgid "Alignment"
+msgstr ""
+
+#: ui/data/ui/compose.ui:197
+msgid "Bulleted List"
+msgstr ""
+
+#: ui/data/ui/compose.ui:204
+msgid "Numbered List"
+msgstr ""
+
+#: ui/data/ui/compose.ui:211
+msgid "Quote"
+msgstr ""
+
+#: ui/data/ui/compose.ui:223
+msgid "Insert Link"
+msgstr ""
+
+#: ui/data/ui/compose.ui:242
+msgid "Insert"
+msgstr ""
+
+#: ui/data/ui/compose.ui:256
+msgid "Text Colour"
+msgstr ""
+
+#: ui/data/ui/compose.ui:276
+msgid "Clear Formatting"
+msgstr ""
+
+#: ui/data/ui/compose.ui:336
+msgid "Attach _Files…"
+msgstr ""
+
+#: ui/data/ui/compose.ui:340
+msgid "Insert _Image…"
+msgstr ""
+
+#: ui/data/ui/compose.ui:358
+msgid "Heading 1"
+msgstr ""
+
+#: ui/data/ui/compose.ui:363
+msgid "Heading 2"
+msgstr ""
+
+#: ui/data/ui/compose.ui:368
+msgid "Heading 3"
+msgstr ""
+
+#: ui/data/ui/compose.ui:375
+msgid "Left"
+msgstr ""
+
+#: ui/data/ui/compose.ui:380
+msgid "Center"
+msgstr ""
+
+#: ui/data/ui/compose.ui:385
+msgid "Right"
+msgstr ""
+
+#: ui/data/ui/message_window.ui:31 ui/data/ui/window.ui:158
+msgid "Message"
+msgstr ""
+
+#: ui/data/ui/message_window.ui:37 ui/data/ui/window.ui:167
+msgid "Reply"
+msgstr ""
+
+#: ui/data/ui/message_window.ui:43 ui/data/ui/window.ui:174
+msgid "Reply All"
+msgstr ""
+
+#: ui/data/ui/message_window.ui:49 ui/data/ui/window.ui:181
+msgid "Forward"
+msgstr ""
+
+#: ui/data/ui/message_window.ui:55 ui/data/ui/window.ui:188
+msgid "Move to Trash"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:10
+msgid "Preferences"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:15
+msgid "General"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:19
+msgid "Startup"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:22
+msgid "Launch at Login"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:23
+msgid "Start hidden in the background when you log in"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:28
+msgid "Run in Background"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:29
+msgid "Closing the window keeps Malachi Mail running for notifications"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:36
+msgid "Reading"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:39
+msgid "Mark as Read After"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:40
+msgid ""
+"Seconds a message must be shown before it is marked as read; 0 marks it "
+"immediately"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:53
+msgid "Confirm Before Deleting"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:61
+msgid "Notifications"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:64
+msgid "Show Desktop Notifications"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:70
+msgid "Play Sound"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:71 data/io.github.schotek.Malachi.gschema.xml:72
+msgid "Play the system new-mail sound"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:78
+msgid "Mail"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:79
+msgid "Stored by the mail daemon."
+msgstr ""
+
+#: ui/data/ui/preferences.ui:82
+msgid "Check for New Mail"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:87
+msgid "Manually"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:88
+msgid "Every 5 minutes"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:89
+msgid "Every 15 minutes"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:90
+msgid "Every 30 minutes"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:98
+msgid "Load Remote Images"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:102
+msgid "Never"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:103
+msgid "From Known Senders"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:104
+msgid "Always"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:117
+msgid "Appearance"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:121
+msgid "Theme"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:124
+msgid "Color Scheme"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:128
+msgid "Follow System"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:129
+msgid "Light"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:130
+msgid "Dark"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:140
+msgid "Message List"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:143
+msgid "Density"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:147
+msgid "Comfortable"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:148
+msgid "Compact"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:156
+msgid "Show Preview Line"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:162
+msgid "Show Avatars"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:168
+msgid "Monochrome Avatars"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:169
+msgid "Neutral grey instead of a colour per sender"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:176
+msgid "Message View"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:179
+msgid "Use Monospace Font for Plain Text"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:184
+msgid "Text Zoom"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:185
+msgid "Percent"
+msgstr ""
+
+#: ui/data/ui/window.ui:35
+msgid "Folders"
+msgstr ""
+
+#: ui/data/ui/window.ui:44
+msgid "New Message (Ctrl+N)"
+msgstr ""
+
+#: ui/data/ui/window.ui:51
+msgid "Main Menu"
+msgstr ""
+
+#: ui/data/ui/window.ui:85
+msgid "Connecting…"
+msgstr ""
+
+#: ui/data/ui/window.ui:103
+msgid "Messages"
+msgstr ""
+
+#: ui/data/ui/window.ui:112
+msgid "Inbox"
+msgstr ""
+
+#: ui/data/ui/window.ui:121
+msgid "Search"
+msgstr ""
+
+#: ui/data/ui/window.ui:131
+msgid "The mail backend (malachid) is not running."
+msgstr ""
+
+#: ui/data/ui/window.ui:132
+msgid "Retry"
+msgstr ""
+
+#: ui/data/ui/window.ui:205
+msgid "No Message Selected"
+msgstr ""
+
+#: ui/data/ui/window.ui:206
+msgid "Select a message to read it here."
+msgstr ""
+
+#: ui/data/ui/window.ui:291
+msgid "_New Message"
+msgstr ""
+
+#: ui/data/ui/window.ui:297
+msgid "_Preferences"
+msgstr ""
+
+#: ui/data/ui/window.ui:301
+msgid "_Keyboard Shortcuts"
+msgstr ""
+
+#: ui/data/ui/window.ui:305
+msgid "_About Malachi Mail"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:28
+msgid "Window width"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:32
+msgid "Window height"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:36
+msgid "Window maximized state"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:40
+msgid "Width of the folder sidebar"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:44
+msgid "Width of the message list pane"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:51
+msgid ""
+"Start hidden in the background at login (mirrors the Background portal's "
+"autostart decision)"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:55
+msgid "Closing the main window keeps the application running"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:60
+msgid ""
+"Seconds a message must be shown before it is marked as read; 0 = immediately"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:64
+msgid "Ask before moving a message to Trash"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:68
+msgid "Show a desktop notification for new mail"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:78
+msgid "Color scheme"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:79
+msgid "Follow the system preference, or force a light or dark appearance."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:83
+msgid "Message list density"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:87
+msgid "Show a one-line preview under each message in the list"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:91
+msgid "Show sender avatars in the message list"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:95
+msgid "Draw avatars in neutral grey instead of per-sender colours"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:99
+msgid "Use a monospace font for plain-text message bodies"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:104
+msgid "Message body text zoom in percent"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.desktop.in:3
+msgid "Email Client"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.desktop.in:4
+msgid "Read and send email"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.desktop.in:10
+msgid "mail;email;imap;"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:7
+msgid "Malachi Mail"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:8
+msgid "Native email client for the GNOME desktop"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:11
+msgid ""
+"Malachi Mail is a desktop email client for Linux, built with GTK 4 and "
+"libadwaita. It keeps mail available offline, renders HTML messages only "
+"after sanitising them, and separates the user interface from the mail engine "
+"so that the engine can be reused."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:17
+msgid ""
+"This is an early development version. It is not yet usable for real mail."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:30
+msgid "Malachi Mail contributors"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.metainfo.xml.in:54
+msgid "Project bootstrap. Nothing works yet."
+msgstr ""

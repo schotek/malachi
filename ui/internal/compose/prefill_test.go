@@ -81,7 +81,7 @@ func TestPrefillEscapes(t *testing.T) {
 	}
 
 	r := Prefill(KindReply, Source{From: []api.Address{{Address: "x@example.invalid"}}, Text: "hi"}, self, time.Now())
-	if len(r.To) != 1 || len(r.CC) != 0 || !strings.Contains(r.BodyHTML, "On x@example.invalid wrote:") {
+	if len(r.To) != 1 || len(r.CC) != 0 || !strings.Contains(r.BodyHTML, ">x@example.invalid wrote:<br>") {
 		t.Errorf("reply without name/date: %+v", r)
 	}
 }

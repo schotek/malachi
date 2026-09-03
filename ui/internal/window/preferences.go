@@ -9,12 +9,12 @@ import (
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
-	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/client"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -65,7 +65,7 @@ var (
 // NewPreferences builds the dialog bound to s and, for the Mail group, to
 // the daemon through c. Present it with Present(parent).
 func NewPreferences(s *settings.Store, c *client.Client) *PreferencesDialog {
-	b := gtk.NewBuilderFromString(data.MustUI("preferences.ui"))
+	b := data.Builder("preferences.ui")
 
 	d := &PreferencesDialog{
 		PreferencesDialog:    b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
@@ -154,7 +154,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 				}
 				d.mailGroup.SetSensitive(true)
 				if err != nil {
-					d.AddToast(widget.PlainToast(widget.RPCErrorText("Saving mail settings", err)))
+					d.AddToast(widget.PlainToast(widget.RPCErrorText(i18n.T("Saving mail settings"), err)))
 					apply(current)
 					return
 				}
@@ -176,7 +176,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 				return
 			}
 			if err != nil {
-				d.mailGroup.SetDescription(widget.RPCErrorText("Loading mail settings", err))
+				d.mailGroup.SetDescription(widget.RPCErrorText(i18n.T("Loading mail settings"), err))
 				return
 			}
 			current = res.Preferences
@@ -253,13 +253,13 @@ func (d *PreferencesDialog) bindLaunchAtLogin(s *settings.Store) (unbind func())
 				// Typical inside a container or when launched outside a
 				// .desktop file: the portal cannot identify the application.
 				set(!want)
-				d.AddToast(widget.PlainToast("The desktop portal refused to change autostart"))
+				d.AddToast(widget.PlainToast(i18n.T("The desktop portal refused to change autostart")))
 			case err != nil:
 				set(!want)
-				d.AddToast(widget.PlainToast("Autostart needs xdg-desktop-portal"))
+				d.AddToast(widget.PlainToast(i18n.T("Autostart needs xdg-desktop-portal")))
 			case res.Autostart != want:
 				set(!want)
-				d.AddToast(widget.PlainToast("Autostart was not granted"))
+				d.AddToast(widget.PlainToast(i18n.T("Autostart was not granted")))
 			}
 		})
 	})

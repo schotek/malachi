@@ -172,6 +172,7 @@ ui/
   internal/widget     reusable widgets (message list row) and pure formatters
   internal/settings   UI-only preferences (GSettings, in-memory fallback)
   internal/style      colour scheme and the application CSS provider
+  internal/i18n       gettext binding (domain "malachi"); the daemon is language-neutral
   internal/compose    "New Message" window: recipients, drafts, attachments
   internal/editor     rich-text editor on WebKitGTK 6.0 (no mail knowledge)
 ```

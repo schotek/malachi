@@ -30,6 +30,9 @@ else
     echo "dev-run: $SCHEMAS/gschemas.compiled missing (run 'make build'); settings will not persist" >&2
 fi
 
+# Uninstalled translations (compiled by `make locale`).
+export MALACHI_LOCALE_DIR="$BUILD/locale"
+
 # Resolve the socket the same way the daemon does.
 if [[ -n "${MALACHI_SOCKET:-}" ]]; then
     SOCK="$MALACHI_SOCKET"

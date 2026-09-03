@@ -18,6 +18,7 @@ import (
 
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
 	"github.com/schotek/malachi/ui/internal/window"
@@ -26,11 +27,17 @@ import (
 // AppID must match the desktop file, metainfo, gschema and Flatpak manifest.
 const AppID = "io.github.schotek.Malachi"
 
-// version is injected at build time: -ldflags "-X main.version=…".
-var version = "dev"
+// version and localeDir are injected at build time:
+// -ldflags "-X main.version=… -X main.localeDir=…".
+var (
+	version   = "dev"
+	localeDir = ""
+)
 
 func main() {
 	log := newLogger()
+	// Translations first: every widget built from here on is localised.
+	i18n.Init(i18n.LocaleDir(localeDir))
 
 	// HandlesOpen: mailto: URIs arrive through the "open" signal (desktop
 	// file MimeType, D-Bus Open, or `malachi mailto:…`).
@@ -120,7 +127,7 @@ func addActions(app *adw.Application, rpc *client.Client, store func() *settings
 		d.SetLicenseType(gtk.LicenseGPL30)
 		d.SetWebsite("https://github.com/schotek/malachi")
 		d.SetIssueURL("https://github.com/schotek/malachi/issues")
-		d.SetComments("A native mail client for the GNOME desktop.")
+		d.SetComments(i18n.T("A native mail client for the GNOME desktop."))
 		d.Present(app.ActiveWindow())
 	})
 	app.AddAction(about)

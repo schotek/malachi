@@ -10,6 +10,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -58,7 +59,7 @@ func (w *Window) notifyNewMessage(n api.NewMessageNotification) {
 // bodies are not markup, but the text is still attacker-controlled: it is
 // trimmed and capped.
 func notificationText(n api.NewMessageNotification) (title, body string) {
-	title = "New message"
+	title = i18n.T("New message")
 	if len(n.Message.From) > 0 {
 		if name := widget.DisplayName(n.Message.From[0]); name != "" {
 			title = name
@@ -66,7 +67,7 @@ func notificationText(n api.NewMessageNotification) (title, body string) {
 	}
 	body = strings.TrimSpace(n.Message.Subject)
 	if body == "" {
-		body = "(No subject)"
+		body = i18n.T("(No subject)")
 	}
 	if len(body) > notificationBodyMax {
 		body = strings.ToValidUTF8(body[:notificationBodyMax], "") + "…"

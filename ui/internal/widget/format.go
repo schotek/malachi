@@ -9,7 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4/pkg/glib/v2"
+
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
 // DisplayName is the short form of an address for lists and avatars: the
@@ -48,10 +51,41 @@ func FormatDate(t, now time.Time) string {
 	ny, nm, nd := now.Date()
 	switch {
 	case ty == ny && tm == nm && td == nd:
-		return t.Format("15:04")
+		return FormatTime(t)
 	case ty == ny:
-		return t.Format("2 Jan")
+		// TRANSLATORS: strftime format for a date in the current year in
+		// the message list, e.g. "2 Sep".
+		// xgettext:no-c-format
+		return strftime(t, i18n.T("%-d %b"))
 	default:
-		return t.Format("2006-01-02")
+		// TRANSLATORS: strftime format for a date in another year in the
+		// message list, e.g. "2025-09-02".
+		// xgettext:no-c-format
+		return strftime(t, i18n.T("%Y-%m-%d"))
 	}
+}
+
+// FormatTime renders a wall-clock time.
+func FormatTime(t time.Time) string {
+	// TRANSLATORS: strftime format for a time of day, e.g. "15:04".
+	// xgettext:no-c-format
+	return strftime(t, i18n.T("%H:%M"))
+}
+
+// FormatDateTime renders a full date with time (quote headers, "draft
+// saved" status).
+func FormatDateTime(t time.Time) string {
+	// TRANSLATORS: strftime format for a full date and time, e.g.
+	// "Wed, 2 Sep 2026 at 15:04".
+	// xgettext:no-c-format
+	return strftime(t, i18n.T("%a, %-d %b %Y at %H:%M"))
+}
+
+// strftime formats through GLib so month and day names follow the locale.
+func strftime(t time.Time, format string) string {
+	dt := glib.NewDateTimeFromUnixLocal(t.Unix())
+	if dt == nil {
+		return t.Format(time.RFC3339)
+	}
+	return dt.Format(format)
 }

@@ -50,7 +50,7 @@ type MessageRow struct {
 
 // NewMessageRow builds an empty row; call SetMessage to fill it.
 func NewMessageRow() *MessageRow {
-	b := gtk.NewBuilderFromString(data.MustUI("message_row.ui"))
+	b := data.Builder("message_row.ui")
 	return &MessageRow{
 		ListBoxRow: b.GetObject("message_row").Cast().(*gtk.ListBoxRow),
 		box:        b.GetObject("content_box").Cast().(*gtk.Box),

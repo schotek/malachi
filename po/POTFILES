@@ -1,0 +1,14 @@
+# Go sources containing translatable strings (T, N, C from ui/internal/i18n).
+# Blueprint output, the gschema, the desktop file and the metainfo are added
+# by the Makefile's pot target. Keep this list in sync when adding files.
+ui/main.go
+ui/internal/background/background.go
+ui/internal/compose/compose.go
+ui/internal/compose/draft.go
+ui/internal/compose/prefill.go
+ui/internal/widget/format.go
+ui/internal/widget/rpc.go
+ui/internal/window/actions.go
+ui/internal/window/notify.go
+ui/internal/window/preferences.go
+ui/internal/window/window.go

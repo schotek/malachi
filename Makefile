@@ -12,6 +12,27 @@ GO          ?= go
 GOFLAGS     ?=
 LDFLAGS     := -X main.version=$(VERSION)
 
+# Install prefix (scripts/build.sh passes /app for Flatpak). The UI needs the
+# locale directory compiled in to find its .mo files when installed.
+PREFIX      ?= /usr/local
+LOCALEDIR   ?= $(PREFIX)/share/locale
+LDFLAGS_UI  := $(LDFLAGS) -X main.localeDir=$(LOCALEDIR)
+
+# Translations. po/POTFILES lists the Go sources; Blueprint output,
+# gschema, desktop and metainfo are extracted through gettext's ITS rules.
+# xgettext has no Go mode; C mode handles Go's double-quoted literals.
+PO_DIR      := po
+POT         := $(PO_DIR)/malachi.pot
+LINGUAS     := $(shell grep -v '^\#' $(PO_DIR)/LINGUAS 2>/dev/null)
+PO_FILES    := $(foreach l,$(LINGUAS),$(PO_DIR)/$(l).po)
+LOCALE_DIR  := $(BUILD_DIR)/locale
+MO_OUT      := $(foreach l,$(LINGUAS),$(LOCALE_DIR)/$(l)/LC_MESSAGES/malachi.mo)
+LOCALE_ENV  := MALACHI_LOCALE_DIR=$(CURDIR)/$(LOCALE_DIR)
+POTFILES_GO := $(shell grep -v '^\#' $(PO_DIR)/POTFILES 2>/dev/null)
+XGETTEXT    := xgettext --from-code=UTF-8 --package-name=malachi \
+               --msgid-bugs-address=https://github.com/schotek/malachi/issues \
+               --copyright-holder="Vladislav Janeček" --add-comments=TRANSLATORS
+
 BLP_SRC     := $(wildcard ui/data/ui/*.blp)
 BLP_OUT     := $(BLP_SRC:.blp=.ui)
 
@@ -35,12 +56,12 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend ui blueprint data schemas run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help
+.PHONY: all build backend ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help
 
 all: build
 
 ## build: compile backend daemon and UI into ./build
-build: backend ui schemas
+build: backend ui schemas locale
 
 backend: $(BUILD_DIR)/malachid
 
@@ -52,7 +73,7 @@ ui: blueprint $(BUILD_DIR)/malachi
 
 $(BUILD_DIR)/malachi: $(BLP_OUT) $(shell find ui -name '*.go' -o -name go.mod) backend/pkg/api/*.go
 	@mkdir -p $(BUILD_DIR)
-	cd ui && $(GO) build $(GOFLAGS) $(UI_TAGS) -ldflags '$(LDFLAGS)' -o ../$@ .
+	cd ui && $(GO) build $(GOFLAGS) $(UI_TAGS) -ldflags '$(LDFLAGS_UI)' -o ../$@ .
 
 ## blueprint: compile Blueprint (.blp) files to GtkBuilder XML
 blueprint: $(BLP_OUT)
@@ -60,11 +81,38 @@ blueprint: $(BLP_OUT)
 ui/data/ui/%.ui: ui/data/ui/%.blp
 	blueprint-compiler compile --output $@ $<
 
-## data: render desktop/metainfo templates (substitutes @APP_ID@ and @VERSION@)
+## data: render desktop/metainfo templates (substitutes @APP_ID@ and @VERSION@, merges translations)
 data: $(DATA_OUT)
 
-data/%: data/%.in
-	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $@
+data/%.desktop: data/%.desktop.in $(PO_FILES) $(PO_DIR)/LINGUAS
+	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $@.tmp
+	msgfmt --desktop --template=$@.tmp -d $(PO_DIR) --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords -o $@
+	rm -f $@.tmp
+
+# msgfmt picks the ITS rules from the template's file name, so the
+# intermediate file must still end in .metainfo.xml (it lives in build/).
+data/%.metainfo.xml: data/%.metainfo.xml.in $(PO_FILES) $(PO_DIR)/LINGUAS
+	@mkdir -p $(BUILD_DIR)
+	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $(BUILD_DIR)/$(notdir $@)
+	msgfmt --xml --template=$(BUILD_DIR)/$(notdir $@) -d $(PO_DIR) -o $@
+
+## locale: compile po/*.po into build/locale (for uninstalled runs and install)
+locale: $(MO_OUT)
+
+$(LOCALE_DIR)/%/LC_MESSAGES/malachi.mo: $(PO_DIR)/%.po
+	@mkdir -p $(dir $@)
+	msgfmt --check -o $@ $<
+
+## pot: regenerate po/malachi.pot from Go, Blueprint, gschema, desktop and metainfo
+pot: blueprint
+	$(XGETTEXT) --language=C --keyword=T --keyword=N:1,2 --keyword=C:1c,2 -o $(POT) $(POTFILES_GO)
+	$(XGETTEXT) -j -o $(POT) $(BLP_OUT) data/$(APP_ID).gschema.xml
+	$(XGETTEXT) -j -o $(POT) --language=Desktop --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords data/$(APP_ID).desktop.in
+	$(XGETTEXT) -j -o $(POT) --its=/usr/share/gettext/its/metainfo.its data/$(APP_ID).metainfo.xml.in
+
+## po: update every po/*.po from the template (run after pot)
+po: pot
+	@for l in $(LINGUAS); do msgmerge --update --backup=none --quiet $(PO_DIR)/$$l.po $(POT); done
 
 ## schemas: compile the GSettings schema into build/glib-2.0/schemas (for uninstalled runs)
 schemas: $(SCHEMA_OUT)
@@ -85,8 +133,8 @@ run-backend: backend
 	./$(BUILD_DIR)/malachid $(ARGS)
 
 ## run-frontend: build and start only the UI (connects to a running malachid, or shows a banner)
-run-frontend: ui schemas
-	$(SCHEMA_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
+run-frontend: ui schemas locale
+	$(SCHEMA_ENV) $(LOCALE_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
 
 ## test: run Go tests for both modules
 test: blueprint schemas
@@ -95,6 +143,13 @@ test: blueprint schemas
 
 ## lint: golangci-lint if installed, otherwise go vet; validate Blueprint, schema and desktop/metainfo files
 lint: blueprint data schemas vet
+	@for l in $(LINGUAS); do msgfmt --check --statistics -o /dev/null $(PO_DIR)/$$l.po; done
+	@# The committed template must match the sources (ignoring the timestamp).
+	@$(MAKE) --no-print-directory POT=$(BUILD_DIR)/malachi.check.pot pot >/dev/null
+	@grep -v POT-Creation-Date $(POT) > $(BUILD_DIR)/malachi.pot.a; \
+	grep -v POT-Creation-Date $(BUILD_DIR)/malachi.check.pot > $(BUILD_DIR)/malachi.pot.b; \
+	if ! diff -q $(BUILD_DIR)/malachi.pot.a $(BUILD_DIR)/malachi.pot.b >/dev/null; then \
+		echo "po/malachi.pot is out of date: run 'make po'"; exit 1; fi
 	@if command -v golangci-lint >/dev/null 2>&1; then \
 		(cd backend && golangci-lint run ./...); \
 		(cd ui && golangci-lint run $(UI_TAGS) ./...); \

@@ -17,6 +17,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/editor"
+	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -66,7 +67,7 @@ type Window struct {
 
 // newWindow builds and prefills a window; Manager.Open presents it.
 func newWindow(m *Manager, p Params) *Window {
-	b := gtk.NewBuilderFromString(data.MustUI("compose.ui"))
+	b := data.Builder("compose.ui")
 	w := &Window{
 		Window:      b.GetObject("compose_window").Cast().(*adw.Window),
 		m:           m,
@@ -116,7 +117,7 @@ func newWindow(m *Manager, p Params) *Window {
 		if w.draft.closed {
 			return
 		}
-		w.toast("The editor crashed; your last text was restored")
+		w.toast(i18n.T("The editor crashed; your last text was restored"))
 		w.editor.Load(w.editor.HTML())
 	}
 
@@ -155,7 +156,7 @@ func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
 	w.from.SetModel(gtk.NewStringList(labels))
 	w.from.SetSensitive(len(accounts) > 1)
 	if placeholder {
-		w.setStatus("Using placeholder account")
+		w.setStatus(i18n.T("Using placeholder account"))
 	}
 }
 
@@ -198,7 +199,7 @@ func (w *Window) updateTitle() {
 	if s := strings.TrimSpace(w.subject.Text()); s != "" {
 		w.title.SetTitle(s)
 	} else {
-		w.title.SetTitle("New Message")
+		w.title.SetTitle(i18n.T("New Message"))
 	}
 }
 
@@ -325,10 +326,10 @@ func (w *Window) applyState(st editor.State) {
 	w.quote.SetActive(st.Block == "blockquote")
 
 	block := st.Block
-	label := "Paragraph"
+	label := i18n.T("Paragraph")
 	switch block {
 	case "h1", "h2", "h3":
-		label = "Heading " + block[1:]
+		label = fmt.Sprintf(i18n.T("Heading %s"), block[1:])
 	default:
 		block = "p"
 	}
@@ -357,7 +358,7 @@ func (w *Window) setStatus(text string) {
 
 func (w *Window) attachFiles() {
 	dlg := gtk.NewFileDialog()
-	dlg.SetTitle("Attach Files")
+	dlg.SetTitle(i18n.T("Attach Files"))
 	dlg.OpenMultiple(w.ctx(), &w.Window.Window, func(res gio.AsyncResulter) {
 		files, err := dlg.OpenMultipleFinish(res)
 		if err != nil || w.draft.closed {
@@ -367,7 +368,7 @@ func (w *Window) attachFiles() {
 			f := files.Item(i).Cast().(*gio.File)
 			path := f.Path()
 			if path == "" {
-				w.toast("Only local files can be attached")
+				w.toast(i18n.T("Only local files can be attached"))
 				continue
 			}
 			w.importFile(path, f.Basename(), false, nil)
@@ -377,9 +378,9 @@ func (w *Window) attachFiles() {
 
 func (w *Window) insertImage() {
 	dlg := gtk.NewFileDialog()
-	dlg.SetTitle("Insert Image")
+	dlg.SetTitle(i18n.T("Insert Image"))
 	filter := gtk.NewFileFilter()
-	filter.SetName("Images")
+	filter.SetName(i18n.T("Images"))
 	for _, p := range []string{"*.png", "*.jpg", "*.jpeg", "*.gif", "*.webp"} {
 		filter.AddPattern(p)
 	}
@@ -393,7 +394,7 @@ func (w *Window) insertImage() {
 		}
 		path := f.Path()
 		if path == "" {
-			w.toast("Only local images can be inserted")
+			w.toast(i18n.T("Only local images can be inserted"))
 			return
 		}
 		w.importFile(path, f.Basename(), true, func(att api.DraftAttachment) {
@@ -407,7 +408,7 @@ func (w *Window) insertImage() {
 // importFile hands the path to the backend and adds the attachment on
 // success; then (optional) runs afterwards on the main loop.
 func (w *Window) importFile(path, name string, inline bool, then func(api.DraftAttachment)) {
-	w.setStatus("Attaching " + name + "…")
+	w.setStatus(fmt.Sprintf(i18n.T("Attaching %s…"), name))
 	w.rpc(func() (any, error) {
 		var res api.AttachmentImportResult
 		err := w.m.client.Call(w.ctx(), api.MethodAttachmentImport, api.AttachmentImportParams{
@@ -416,7 +417,7 @@ func (w *Window) importFile(path, name string, inline bool, then func(api.DraftA
 		return res, err
 	}, func(v any, err error) {
 		if err != nil {
-			w.toast(widget.RPCErrorText("Attaching "+name, err))
+			w.toast(widget.RPCErrorText(fmt.Sprintf(i18n.T("Attaching %s"), name), err))
 			w.refreshStatus()
 			return
 		}
@@ -448,7 +449,7 @@ func (w *Window) addChip(att api.DraftAttachment) {
 	size.AddCSSClass("dim-label")
 	remove := gtk.NewButtonFromIconName("window-close-symbolic")
 	remove.AddCSSClass("flat")
-	remove.SetTooltipText("Remove")
+	remove.SetTooltipText(i18n.T("Remove"))
 	remove.ConnectClicked(func() { w.removeAttachment(att.ID) })
 	box.Append(icon)
 	box.Append(name)
@@ -510,10 +511,13 @@ func (w *Window) setAttachments(atts []api.DraftAttachment) {
 func formatSize(n int64) string {
 	switch {
 	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
+		// TRANSLATORS: file size in mebibytes.
+		return fmt.Sprintf(i18n.T("%.1f MiB"), float64(n)/(1<<20))
 	case n >= 1<<10:
-		return fmt.Sprintf("%.0f KiB", float64(n)/(1<<10))
+		// TRANSLATORS: file size in kibibytes.
+		return fmt.Sprintf(i18n.T("%.0f KiB"), float64(n)/(1<<10))
 	default:
-		return fmt.Sprintf("%d B", n)
+		// TRANSLATORS: file size in bytes.
+		return fmt.Sprintf(i18n.T("%d B"), n)
 	}
 }
