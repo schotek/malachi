@@ -15,8 +15,10 @@ import (
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/config"
+	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
+	"github.com/schotek/malachi/backend/internal/smtp"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -41,6 +43,11 @@ type Backend struct {
 	// placeholder and is a field so tests can substitute an in-memory one.
 	Keyring auth.Keyring
 
+	// ProbeIMAP and ProbeSMTP back account.test. They default to the real
+	// probes and are fields so tests can substitute fakes.
+	ProbeIMAP func(ctx context.Context, cfg api.ServerConfig, password string) (imap.ProbeResult, error)
+	ProbeSMTP func(ctx context.Context, cfg api.ServerConfig, password string) (smtp.ProbeResult, error)
+
 	mu       sync.RWMutex
 	notifier api.Notifier // nil until SetNotifier
 }
@@ -60,6 +67,8 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		log:         log.With("component", "core"),
 		Sanitize:    sanitize.Sanitize,
 		Keyring:     auth.NotImplementedKeyring{},
+		ProbeIMAP:   imap.Probe,
+		ProbeSMTP:   smtp.Probe,
 	}
 }
 

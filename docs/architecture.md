@@ -82,9 +82,11 @@ backend/
   internal/rpc        socket server, framing, dispatch, notification fan-out
   internal/config     config.toml + XDG paths
   internal/account    config.toml form of an account (bootstrap import)
-  internal/auth       keyring, OAuth2, SASL
-  internal/imap       IMAP client + sync engine
-  internal/smtp       sending + outbox
+  internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
+                      org.freedesktop.secrets client
+  internal/transport  TLS policy, dialling, timeouts, error classification
+  internal/imap       IMAP client + sync engine (probe.go: connection test)
+  internal/smtp       sending + outbox (probe.go: connection test)
   internal/store      SQLite, migrations, all SQL
   internal/search     FTS5 indexing and query parsing
   internal/thread     conversation threading

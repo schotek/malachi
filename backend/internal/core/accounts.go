@@ -7,15 +7,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/url"
-	"regexp"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -27,7 +28,6 @@ const metaImportedAccounts = "accounts.imported"
 // Limits for account configuration fields.
 const (
 	maxAccountNameBytes = 256
-	maxHostBytes        = 253
 	maxUsernameBytes    = 256
 	maxOAuth2Scopes     = 32
 )
@@ -122,14 +122,57 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	return &api.AccountSetEnabledResult{}, nil
 }
 
-// Test validates like Add and then reports notImplemented.
-// TODO(phase-1): connect to both endpoints once internal/imap and
-// internal/smtp exist.
-func (s *accountService) Test(_ context.Context, p api.AccountTestParams) (*api.AccountTestResult, error) {
+// Test validates like Add, then probes both endpoints concurrently. Each
+// endpoint reports its own outcome; the call itself fails only for an
+// invalid configuration. The password is used for the connections and
+// never logged.
+func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*api.AccountTestResult, error) {
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
-	return nil, api.ErrNotImplemented
+	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
+		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	}
+
+	var res api.AccountTestResult
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		r, err := s.b.ProbeIMAP(ctx, p.Config.IMAP, p.Credentials.Password)
+		res.IMAP = endpointResult(r.Capabilities, r.Latency, err)
+		s.logProbe("imap", p.Config.IMAP, res.IMAP)
+	}()
+	go func() {
+		defer wg.Done()
+		r, err := s.b.ProbeSMTP(ctx, p.Config.SMTP, p.Credentials.Password)
+		res.SMTP = endpointResult(r.Capabilities, r.Latency, err)
+		s.logProbe("smtp", p.Config.SMTP, res.SMTP)
+	}()
+	wg.Wait()
+	return &res, nil
+}
+
+func endpointResult(caps []string, latency time.Duration, err error) api.EndpointTestResult {
+	r := api.EndpointTestResult{Capabilities: caps, LatencyMS: int(latency / time.Millisecond)}
+	if err == nil {
+		r.OK = true
+		return r
+	}
+	var apiErr *api.Error
+	if !errors.As(err, &apiErr) {
+		apiErr = api.NewError(api.CodeServerError, "%s", transport.CleanMessage(err.Error()))
+	}
+	r.Error = apiErr
+	return r
+}
+
+func (s *accountService) logProbe(kind string, sc api.ServerConfig, r api.EndpointTestResult) {
+	attrs := []any{"kind", kind, "host", sc.Host, "port", sc.Port, "security", sc.Security, "ok", r.OK, "latencyMs", r.LatencyMS}
+	if r.Error != nil {
+		attrs = append(attrs, "code", r.Error.Code)
+	}
+	s.b.log.Info("account test", attrs...)
 }
 
 // ImportConfigAccounts copies the [[accounts]] entries of config.toml into
@@ -224,9 +267,6 @@ func usesAuth(c api.AccountConfig, m api.AuthMethod) bool {
 	return c.IMAP.AuthMethod == m || c.SMTP.AuthMethod == m
 }
 
-// hostLabel is one DNS label: letters, digits and inner hyphens.
-var hostLabel = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$`)
-
 // validateAccountConfig checks an AccountConfig against the rules documented
 // in docs/api.md §4.1 and trims the free-text fields in place. Every failure
 // is invalidArgument.
@@ -283,7 +323,7 @@ func validateServer(which string, sc *api.ServerConfig) error {
 	if sc.Host == "" {
 		return bad("host is required")
 	}
-	if !validHost(sc.Host) {
+	if !transport.ValidHost(sc.Host) {
 		return bad("invalid host %q", sc.Host)
 	}
 	if sc.Port < 1 || sc.Port > 65535 {
@@ -292,7 +332,7 @@ func validateServer(which string, sc *api.ServerConfig) error {
 	switch sc.Security {
 	case api.SecurityTLS, api.SecuritySTARTTLS:
 	case api.SecurityNone:
-		if !isLoopbackHost(sc.Host) {
+		if !transport.IsLoopbackHost(sc.Host) {
 			return bad("security \"none\" is allowed only for localhost")
 		}
 	default:
@@ -338,32 +378,6 @@ func validateOAuth2(o *api.OAuth2Config) error {
 		}
 	}
 	return nil
-}
-
-// validHost accepts an IP literal or a hostname made of DNS labels.
-func validHost(h string) bool {
-	if len(h) > maxHostBytes {
-		return false
-	}
-	if net.ParseIP(h) != nil {
-		return true
-	}
-	for _, label := range strings.Split(strings.TrimSuffix(h, "."), ".") {
-		if len(label) > 63 || !hostLabel.MatchString(label) {
-			return false
-		}
-	}
-	return true
-}
-
-// isLoopbackHost is where plaintext connections are tolerated
-// (docs/security.md §7).
-func isLoopbackHost(h string) bool {
-	if strings.EqualFold(h, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(h)
-	return ip != nil && ip.IsLoopback()
 }
 
 func hasControl(s string) bool {

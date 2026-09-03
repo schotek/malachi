@@ -240,15 +240,31 @@ configuration and local data, is never synchronised and reports
 `state.status = "disabled"`.
 
 #### `account.test`
-Connectivity test without persisting anything. Validates like `account.add`,
-then returns `notImplemented` until the IMAP phase.
+Connectivity test without persisting anything. Validates like `account.add`
+(the same `invalidArgument` cases, including a password for an account
+without a `password` endpoint), then probes both endpoints concurrently.
 
 - params: same as `account.add`
 - result: `{ "imap": EndpointTestResult, "smtp": EndpointTestResult }`
+- errors: invalidArgument only; each endpoint reports its own outcome
 
 ```jsonc
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
 ```
+
+A probe dials, secures the connection (TLS 1.2+, system trust store, no
+override; STARTTLS is mandatory when configured), authenticates with the
+password and disconnects. Per-endpoint `error.code` is one of `authFailed`
+(credentials rejected), `tlsError` (certificate, handshake, STARTTLS not
+offered, or the server demanding TLS before login), `networkError`
+(unresolvable, refused, connection dropped), `serverTimeout` (no answer in
+time), `serverError` (protocol error or no usable authentication
+mechanism), `notImplemented` (an `oauth2` endpoint, until OAuth2 lands).
+`capabilities` are the server's post-login IMAP CAPABILITY list or the EHLO
+keywords the backend knows about, scrubbed to printable ASCII, ≤ 64 entries;
+`latencyMs` is dial → ready (greeting read, STARTTLS done). Budget: 10 s
+to connect, 20 s per endpoint. The password is used for the connections
+only and never logged.
 
 ### 4.2 folder
 
@@ -644,3 +660,6 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   implemented (`account.list`, `account.add`, `account.remove`); new
   `account.setEnabled`; new `notify.accountsChanged`; validation rules and
   the `config.toml` bootstrap import documented in §4.1.
+- **1** (2026-09-03, add-account wizard): keyring implemented over
+  `org.freedesktop.secrets` (`account.add` stores the password);
+  `account.test` implemented with per-endpoint outcomes.

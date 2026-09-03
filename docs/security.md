@@ -190,6 +190,19 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - Minimum TLS 1.2.
 - Server-supplied strings (capabilities, folder names, error text) are
   treated as untrusted display data.
+- Every outbound connection goes through `internal/transport`: one
+  `TLSConfig` (TLS 1.2+, system roots, host name verified, no insecure
+  knob), a context-aware dial, and one error classifier. Timeouts: 10 s to
+  connect, 10 s per command, 20 s for a whole endpoint probe; the socket is
+  closed when the deadline passes because the protocol libraries have no
+  context support. PREAUTH greetings on a STARTTLS connection are refused.
+  The libraries' debug writers are never set: they would log credentials.
+- Error mapping for `account.test` and later sync: certificate/handshake
+  failures and a missing or refused STARTTLS → `tlsError`; DNS, refused and
+  dropped connections → `networkError`; deadlines → `serverTimeout`; IMAP
+  `NO` on login and SMTP 535/534/5.7.8/5.7.9 → `authFailed`; anything else
+  the server said → `serverError`. Messages forwarded to clients are
+  control-stripped and capped at 200 bytes.
 
 ## 8. Local storage
 
@@ -252,3 +265,5 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] Does any path store or send HTML that did not pass
       `internal/sanitize`, including outgoing drafts?
 - [ ] New `finish-args` entry: is there a portal instead?
+- [ ] New outbound connection: does it use `transport.TLSConfig` /
+      `transport.DialContext` and classify errors through `transport`?
