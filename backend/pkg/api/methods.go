@@ -13,6 +13,7 @@ const (
 	MethodAccountAdd        = "account.add"
 	MethodAccountRemove     = "account.remove"
 	MethodAccountSetEnabled = "account.setEnabled"
+	MethodAccountDiscover   = "account.discover"
 	MethodAccountTest       = "account.test"
 
 	// Folders.
@@ -71,7 +72,8 @@ const (
 // stubs and tests use it to check docs/api.md coverage.
 var AllMethods = []string{
 	MethodSystemInfo,
-	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled, MethodAccountTest,
+	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
+	MethodAccountDiscover, MethodAccountTest,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,

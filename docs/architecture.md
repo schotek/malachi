@@ -85,6 +85,7 @@ backend/
   internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
                       org.freedesktop.secrets client
   internal/transport  TLS policy, dialling, timeouts, error classification
+  internal/discover   account.discover: ISPDB, provider autoconfig, SRV, guesses
   internal/imap       IMAP client + sync engine (probe.go: connection test)
   internal/smtp       sending + outbox (probe.go: connection test)
   internal/store      SQLite, migrations, all SQL
@@ -92,6 +93,7 @@ backend/
   internal/thread     conversation threading
   internal/sanitize   HTML sanitisation (security-critical)
   testdata/mime       MIME samples, including malformed ones
+  testdata/autoconfig Thunderbird autoconfig samples, including hostile ones
 ```
 
 Dependency direction: `cmd` → `rpc` → (`api` + service implementations);
@@ -250,6 +252,11 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   account with the same e-mail exists and the e-mail has not been imported
   before (`meta` key `accounts.imported`, so a removed account is not
   resurrected); the daemon never writes `config.toml`.
+- Secret Service session: `plain` today (see docs/security.md §6); switch
+  to the DH-encrypted session if bus traffic ever becomes observable from
+  a different trust domain.
+- Internationalised e-mail domains in `account.discover`: not handled
+  (IDNA encoding of the domain before the ISPDB/DNS lookups).
 - Daemon lifecycle at login: the UI's autostart entry launches only
   `malachi --gapplication-service`; nothing starts `malachid`. Options: the UI
   spawns it when the socket is unreachable, or a systemd user unit / second

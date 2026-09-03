@@ -15,6 +15,7 @@ import (
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/config"
+	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
@@ -47,6 +48,8 @@ type Backend struct {
 	// probes and are fields so tests can substitute fakes.
 	ProbeIMAP func(ctx context.Context, cfg api.ServerConfig, password string) (imap.ProbeResult, error)
 	ProbeSMTP func(ctx context.Context, cfg api.ServerConfig, password string) (smtp.ProbeResult, error)
+	// Discover backs account.discover; a field for the same reason.
+	Discover func(ctx context.Context, email string) (discover.Result, error)
 
 	mu       sync.RWMutex
 	notifier api.Notifier // nil until SetNotifier
@@ -69,6 +72,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Keyring:     auth.NotImplementedKeyring{},
 		ProbeIMAP:   imap.Probe,
 		ProbeSMTP:   smtp.Probe,
+		Discover:    discover.New(log).Discover,
 	}
 }
 

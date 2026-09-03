@@ -1,0 +1,17 @@
+<clientConfig version="1.1">
+  <emailProvider id="example.org">
+    <displayName>Bad	Name</displayName>
+    <incomingServer type="imap">
+      <hostname>imap.exa mple.org</hostname>
+      <port>993</port>
+      <socketType>SSL</socketType>
+      <authentication>password-cleartext</authentication>
+    </incomingServer>
+    <outgoingServer type="smtp">
+      <hostname>-smtp.example.org</hostname>
+      <port>587</port>
+      <socketType>STARTTLS</socketType>
+      <authentication>password-cleartext</authentication>
+    </outgoingServer>
+  </emailProvider>
+</clientConfig>

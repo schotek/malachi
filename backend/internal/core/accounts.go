@@ -122,6 +122,35 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	return &api.AccountSetEnabledResult{}, nil
 }
 
+// Discover suggests server settings for an address. "Nothing found" is a
+// result with source "none", not an error; a suggestion that would not
+// pass Add is dropped the same way.
+func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverParams) (*api.AccountDiscoverResult, error) {
+	email := strings.TrimSpace(p.Email)
+	if err := validateAddress(api.Address{Address: email}); err != nil {
+		return nil, err
+	}
+	res, err := s.b.Discover(ctx, email)
+	switch {
+	case errors.Is(err, context.Canceled):
+		return nil, err
+	case err != nil:
+		s.b.log.Warn("account discovery", "err", err)
+		return &api.AccountDiscoverResult{Source: api.DiscoverNone}, nil
+	}
+	if res.Config != nil {
+		if err := validateAccountConfig(res.Config); err != nil {
+			s.b.log.Warn("discovered configuration rejected", "source", res.Source, "err", err)
+			res.Config, res.Source = nil, api.DiscoverNone
+		}
+	}
+	if res.Config == nil {
+		res.Source = api.DiscoverNone
+	}
+	s.b.log.Info("account discovery", "source", res.Source)
+	return &api.AccountDiscoverResult{Config: res.Config, Source: res.Source, ProviderName: res.ProviderName}, nil
+}
+
 // Test validates like Add, then probes both endpoints concurrently. Each
 // endpoint reports its own outcome; the call itself fails only for an
 // invalid configuration. The password is used for the connections and

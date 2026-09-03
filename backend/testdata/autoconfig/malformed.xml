@@ -1,0 +1,5 @@
+<clientConfig version="1.1">
+  <emailProvider id="example.org">
+    <incomingServer type="imap">
+      <hostname>imap.example.org</hostname>
+      <port>993

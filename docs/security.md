@@ -197,6 +197,14 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   closed when the deadline passes because the protocol libraries have no
   context support. PREAUTH greetings on a STARTTLS connection are refused.
   The libraries' debug writers are never set: they would log credentials.
+- Discovery (`account.discover`), what leaves the machine: the domain to
+  Mozilla's ISPDB over HTTPS; the full address to the provider's own
+  `autoconfig.<domain>` / `.well-known` URLs (it already knows it); the
+  domain to the DNS resolver (SRV); and unauthenticated TLS connections to
+  `imap.`/`mail.`/`smtp.<domain>`. It is triggered only by the user typing
+  an address in the wizard, never by content. Documents are capped at
+  256 KiB and parsed with Go's strict decoder (no entity expansion);
+  redirects are followed only to https and at most three times.
 - Error mapping for `account.test` and later sync: certificate/handshake
   failures and a missing or refused STARTTLS → `tlsError`; DNS, refused and
   dropped connections → `networkError`; deadlines → `serverTimeout`; IMAP
@@ -241,8 +249,11 @@ Does not give:
   accepted; the two-process split is about architecture and crash
   isolation, not privilege separation;
 - protection of the keyring: `org.freedesktop.secrets` access is
-  all-or-nothing; we can read other apps' secrets and they can read ours.
-  A future portal-based secrets API would improve this;
+  all-or-nothing; we can read other apps' secrets and they can read ours
+  (the items `internal/auth/secretservice` creates included). A future
+  portal-based secrets API would improve this;
+- any limit on outbound traffic: `--share=network` covers IMAP/SMTP, the
+  discovery HTTPS/DNS lookups and OAuth2 alike;
 - protection against a malicious X11 server (`--socket=fallback-x11`):
   under X11 any client can snoop input. Wayland is the supported path.
 

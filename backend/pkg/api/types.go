@@ -164,6 +164,36 @@ type AccountSetEnabledParams struct {
 
 type AccountSetEnabledResult struct{}
 
+// AccountDiscoverParams asks for server settings matching an e-mail
+// address. Only the domain leaves the machine for the ISPDB and DNS
+// lookups; the provider's own autoconfig URL receives the address.
+type AccountDiscoverParams struct {
+	Email string `json:"email"`
+}
+
+// DiscoverSource says where a suggestion came from, from most to least
+// trustworthy. When endpoints come from different sources the result
+// reports the weakest.
+type DiscoverSource string
+
+const (
+	DiscoverISPDB      DiscoverSource = "ispdb"      // Mozilla autoconfig database
+	DiscoverAutoconfig DiscoverSource = "autoconfig" // the provider's own autoconfig document
+	DiscoverSRV        DiscoverSource = "srv"        // RFC 6186 DNS SRV records
+	DiscoverGuess      DiscoverSource = "guess"      // common host names verified by a TLS connection
+	DiscoverNone       DiscoverSource = "none"       // nothing found; Config is omitted
+)
+
+// AccountDiscoverResult is a suggestion only: nothing is stored and
+// nothing is authenticated. Config, when present, passes account.add
+// validation with authMethod "password" and the username prefilled; the
+// UI still asks for the password and should run account.test.
+type AccountDiscoverResult struct {
+	Config       *AccountConfig `json:"config,omitempty"`
+	Source       DiscoverSource `json:"source"`
+	ProviderName string         `json:"providerName,omitempty"` // display-only, untrusted text
+}
+
 // AccountTestParams tests connectivity without persisting anything.
 type AccountTestParams struct {
 	Config      AccountConfig `json:"config"`

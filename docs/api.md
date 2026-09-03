@@ -239,6 +239,42 @@ Pauses (`false`) or resumes (`true`) an account. A paused account keeps its
 configuration and local data, is never synchronised and reports
 `state.status = "disabled"`.
 
+#### `account.discover`
+Suggests server settings for an address. Nothing is stored and nothing is
+authenticated; the UI still asks for the password and should run
+`account.test`.
+
+- params: `{ "email": "me@example.org" }`
+- result: `{ "config": AccountConfig (opt), "source": "ispdb|autoconfig|srv|guess|none", "providerName": "…" (opt) }`
+- errors: invalidArgument (not a bare address)
+
+Sources, from most to least trustworthy, each consulted only for what the
+previous ones left open:
+
+1. `ispdb`: Mozilla's autoconfig database at
+   `https://autoconfig.thunderbird.net/v1.1/<domain>`. Only the domain is
+   sent.
+2. `autoconfig`: the provider's own document at
+   `https://autoconfig.<domain>/mail/config-v1.1.xml` and
+   `https://<domain>/.well-known/autoconfig/mail/config-v1.1.xml`. These
+   receive the address, as the provider already knows it.
+3. `srv`: RFC 6186 / RFC 8314 DNS records `_imaps`, `_imap`,
+   `_submissions`, `_submission` (`_tcp`). The domain goes to the resolver.
+4. `guess`: `imap.`/`mail.<domain>` on 993 (TLS) and 143 (STARTTLS),
+   `smtp.`/`mail.<domain>` on 587 (STARTTLS) and 465 (TLS), verified by
+   opening the connection under the transport policy without logging in.
+
+When the two endpoints come from different sources, `source` reports the
+weaker one. Autoconfig documents are capped at 256 KiB, parsed strictly,
+plaintext socket types and OAuth2-only entries are skipped, hosts and
+ports are validated, and `%EMAILADDRESS%`/`%EMAILLOCALPART%`/
+`%EMAILDOMAIN%` are substituted. `config`, when present, passes
+`account.add` validation with `authMethod: "password"` and the username
+prefilled (the address unless the document says otherwise); `name` is the
+provider's display name or the domain. `providerName` is display-only
+text from the document. Whole lookup ≤ 20 s; internationalised domains
+are not handled yet and yield `none`.
+
 #### `account.test`
 Connectivity test without persisting anything. Validates like `account.add`
 (the same `invalidArgument` cases, including a password for an account
@@ -660,6 +696,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   implemented (`account.list`, `account.add`, `account.remove`); new
   `account.setEnabled`; new `notify.accountsChanged`; validation rules and
   the `config.toml` bootstrap import documented in §4.1.
-- **1** (2026-09-03, add-account wizard): keyring implemented over
-  `org.freedesktop.secrets` (`account.add` stores the password);
-  `account.test` implemented with per-endpoint outcomes.
+- **1** (2026-09-03, compatible addition, add-account wizard): keyring
+  implemented over `org.freedesktop.secrets` (`account.add` stores the
+  password); `account.test` implemented with per-endpoint outcomes; new
+  `account.discover` (ISPDB, provider autoconfig, DNS SRV, verified
+  guesses).
