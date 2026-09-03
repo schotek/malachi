@@ -11,7 +11,7 @@ import (
 	"fmt"
 )
 
-//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/message_row.blp ui/preferences.blp
+//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/compose.blp
 
 //go:embed ui/*.ui
 var ui embed.FS

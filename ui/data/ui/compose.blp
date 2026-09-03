@@ -1,0 +1,361 @@
+using Gtk 4.0;
+using Adw 1;
+// Compose window. Object IDs are looked up from ui/internal/compose;
+// keep them in sync. The rich-text editor (ui/internal/editor) is appended
+// to editor_slot from Go.
+Adw.Window compose_window {
+  title: _("New Message");
+  default-width: 760;
+  default-height: 640;
+  width-request: 360;
+  height-request: 420;
+  focus-widget: to_row;
+  // Capture phase: these must win over the WebKit view, which otherwise
+  // claims the key events.
+  ShortcutController {
+    propagation-phase: capture;
+
+    Shortcut {
+      trigger: "<Control>Return";
+      action: "action(compose.send)";
+    }
+
+    Shortcut {
+      trigger: "<Control>s";
+      action: "action(compose.save)";
+    }
+  }
+
+  // Bubble phase, as in message_window.blp, so in-window dialogs and
+  // popovers see Escape first.
+  ShortcutController {
+    Shortcut {
+      trigger: "Escape";
+      action: "action(window.close)";
+    }
+  }
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Adw.WindowTitle window_title {
+        title: _("New Message");
+      };
+
+      [start]
+      Button attach_button {
+        icon-name: "mail-attachment-symbolic";
+        tooltip-text: _("Attach Files");
+        action-name: "compose.attach";
+      }
+
+      [end]
+      Button send_button {
+        action-name: "compose.send";
+        tooltip-text: _("Send (Ctrl+Enter)");
+
+        child: Adw.ButtonContent {
+          icon-name: "mail-send-symbolic";
+          label: _("_Send");
+          use-underline: true;
+        };
+
+        styles [
+          "suggested-action",
+        ]
+      }
+
+      [end]
+      MenuButton {
+        icon-name: "view-more-symbolic";
+        menu-model: compose_menu;
+        tooltip-text: _("Draft Menu");
+      }
+    }
+
+    content: Adw.ToastOverlay toast_overlay {
+      child: Box {
+        orientation: vertical;
+
+        ListBox header_rows {
+          selection-mode: none;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 12;
+          margin-bottom: 6;
+
+          styles [
+            "boxed-list",
+          ]
+
+          Adw.ComboRow from_row {
+            title: _("From");
+            use-markup: false;
+          }
+
+          Adw.EntryRow to_row {
+            title: _("To");
+
+            [suffix]
+            Button cc_bcc_button {
+              label: _("Cc/Bcc");
+              valign: center;
+
+              styles [
+                "flat",
+              ]
+            }
+          }
+
+          Adw.EntryRow cc_row {
+            title: _("Cc");
+            visible: false;
+          }
+
+          Adw.EntryRow bcc_row {
+            title: _("Bcc");
+            visible: false;
+          }
+
+          Adw.EntryRow subject_row {
+            title: _("Subject");
+          }
+        }
+
+        // Every control keeps focus in the editor so commands act on the
+        // page selection.
+        Box format_toolbar {
+          orientation: horizontal;
+          spacing: 2;
+          margin-start: 6;
+          margin-end: 6;
+
+          styles [
+            "toolbar",
+          ]
+
+          ToggleButton bold_button {
+            icon-name: "format-text-bold-symbolic";
+            tooltip-text: _("Bold (Ctrl+B)");
+            focus-on-click: false;
+          }
+
+          ToggleButton italic_button {
+            icon-name: "format-text-italic-symbolic";
+            tooltip-text: _("Italic (Ctrl+I)");
+            focus-on-click: false;
+          }
+
+          ToggleButton underline_button {
+            icon-name: "format-text-underline-symbolic";
+            tooltip-text: _("Underline (Ctrl+U)");
+            focus-on-click: false;
+          }
+
+          Separator {
+            orientation: vertical;
+          }
+
+          MenuButton block_button {
+            label: _("Paragraph");
+            menu-model: block_menu;
+            tooltip-text: _("Paragraph Style");
+            focus-on-click: false;
+          }
+
+          MenuButton align_button {
+            icon-name: "format-justify-left-symbolic";
+            menu-model: align_menu;
+            tooltip-text: _("Alignment");
+            focus-on-click: false;
+          }
+
+          Separator {
+            orientation: vertical;
+          }
+
+          ToggleButton ul_button {
+            icon-name: "view-list-bullet-symbolic";
+            tooltip-text: _("Bulleted List");
+            focus-on-click: false;
+          }
+
+          ToggleButton ol_button {
+            icon-name: "view-list-ordered-symbolic";
+            tooltip-text: _("Numbered List");
+            focus-on-click: false;
+          }
+
+          ToggleButton quote_button {
+            icon-name: "format-indent-more-symbolic";
+            tooltip-text: _("Quote");
+            focus-on-click: false;
+          }
+
+          Separator {
+            orientation: vertical;
+          }
+
+          MenuButton link_button {
+            icon-name: "insert-link-symbolic";
+            tooltip-text: _("Insert Link");
+            focus-on-click: false;
+
+            popover: Popover link_popover {
+              child: Box {
+                spacing: 6;
+                margin-top: 6;
+                margin-bottom: 6;
+                margin-start: 6;
+                margin-end: 6;
+
+                Entry link_entry {
+                  placeholder-text: "https://";
+                  width-chars: 32;
+                }
+
+                Button link_apply {
+                  label: _("Insert");
+
+                  styles [
+                    "suggested-action",
+                  ]
+                }
+              };
+            };
+          }
+
+          ColorDialogButton color_button {
+            tooltip-text: _("Text Colour");
+            focus-on-click: false;
+
+            dialog: ColorDialog {
+              with-alpha: false;
+            };
+          }
+
+          Button image_button {
+            icon-name: "insert-image-symbolic";
+            tooltip-text: _("Insert Image");
+            action-name: "compose.insert-image";
+            focus-on-click: false;
+          }
+
+          Button clear_button {
+            icon-name: "edit-clear-symbolic";
+            tooltip-text: _("Clear Formatting");
+            focus-on-click: false;
+          }
+        }
+
+        Box editor_slot {
+          orientation: vertical;
+          vexpand: true;
+        }
+
+        // Attachment chips; shown only when non-empty.
+        FlowBox attachments_box {
+          visible: false;
+          selection-mode: none;
+          max-children-per-line: 6;
+          homogeneous: false;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 6;
+          margin-bottom: 6;
+        }
+      };
+    };
+
+    [bottom]
+    Box {
+      margin-start: 12;
+      margin-end: 12;
+      margin-top: 4;
+      margin-bottom: 4;
+
+      Label draft_status {
+        xalign: 0;
+        hexpand: true;
+        ellipsize: end;
+
+        styles [
+          "dim-label",
+          "caption",
+        ]
+      }
+    }
+  };
+}
+
+menu compose_menu {
+  section {
+    item {
+      label: _("_Save Draft");
+      action: "compose.save";
+    }
+
+    item {
+      label: _("Attach _Files…");
+      action: "compose.attach";
+    }
+
+    item {
+      label: _("Insert _Image…");
+      action: "compose.insert-image";
+    }
+  }
+
+  section {
+    item {
+      label: _("_Discard");
+      action: "compose.discard";
+    }
+  }
+}
+
+menu block_menu {
+  item {
+    label: _("Paragraph");
+    action: "compose.block";
+    target: "p";
+  }
+
+  item {
+    label: _("Heading 1");
+    action: "compose.block";
+    target: "h1";
+  }
+
+  item {
+    label: _("Heading 2");
+    action: "compose.block";
+    target: "h2";
+  }
+
+  item {
+    label: _("Heading 3");
+    action: "compose.block";
+    target: "h3";
+  }
+}
+
+menu align_menu {
+  item {
+    label: _("Left");
+    action: "compose.align";
+    target: "left";
+  }
+
+  item {
+    label: _("Center");
+    action: "compose.align";
+    target: "center";
+  }
+
+  item {
+    label: _("Right");
+    action: "compose.align";
+    target: "right";
+  }
+}
