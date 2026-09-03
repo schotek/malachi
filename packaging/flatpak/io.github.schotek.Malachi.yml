@@ -79,6 +79,10 @@ modules:
         url: https://gitlab.gnome.org/GNOME/blueprint-compiler.git
         tag: v0.16.0
 
+  # The UI links WebKitGTK 6.0 (compose editor, later rendering); the GNOME
+  # runtime ships libwebkitgtk-6.0 and the Sdk its headers and typelib.
+  # Verify on the host before a release build:
+  #   flatpak run --command=sh org.gnome.Sdk//48 -c 'pkg-config --modversion webkitgtk-6.0'
   # The UI links gsound for the new-mail sound. org.gnome.Platform ships
   # libgsound; if a future runtime drops it, add a module here:
   #   - name: gsound  (meson; https://gitlab.gnome.org/GNOME/gsound.git, tag 1.0.3)

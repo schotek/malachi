@@ -79,6 +79,15 @@ Fedora 42 má GLib 2.84 a libadwaita 1.7. Při povýšení runtime (GNOME 50+)
 povyš obojí najednou. Čistá kompilace gotk4 trvá ~15 min; `CC="ccache gcc"`
 by při další plné rekompilaci většinu času ušetřil.
 
+WebKitGTK 6.0 binding je `gotk4-webkitgtk/pkg` `v0.0.0-20240108031600-dee1973cf440`
+(balíček `webkit/v6`, generováno pro WebKit 2.42, repozitář od té doby stojí).
+Vyžaduje jen gotk4 v0.1.0, takže náš pin zůstává. Binding **nemá žádné asynchronní
+funkce** (`evaluate_javascript` apod.); `ui/internal/editor/evaluate.go` má na to
+malý cgo shim. První kompilace `webkit/v6` trvá několik minut.
+Ladění WebKitu v kontejneru: `WEBKIT_DISABLE_DMABUF_RENDERER=1` při prázdném
+view nebo EGL chybách, `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` jen pokud
+bwrap selže (v tomto Toolbxu není potřeba ani jedno).
+
 ## Stav a priority
 
 Aktuální fáze: bootstrap / rané stádium. Backend startuje, odpovídá

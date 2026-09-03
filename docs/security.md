@@ -97,6 +97,19 @@ Layer 2 — **the UI webview** (later phase, WebKitGTK 6.0):
 Layer 2 exists so a sanitiser bug is not automatically a compromise; it is
 not a reason to relax layer 1.
 
+### 3.3 Composed HTML
+
+HTML written in the compose editor is hostile too: a paste from a web page
+carries tracking pixels, scripts, hidden text and forms. It crosses the
+local socket raw, but the backend sanitises it in `draft.save` (compose
+mode: fixed `block` policy, `data:` URLs removed, `cid:` only to the
+draft's own inline attachments) before anything is stored, listed or sent;
+`blocked` in the result tells the UI what was removed. The UI editor
+itself renders only what the user typed, backend-returned draft HTML and
+escaped quotes, under the layer-2 rules: no page JavaScript, a CSP without
+network access, navigation denied, and a `cid:` handler that serves only
+the current draft's attachments.
+
 ## 4. Message parsing (MIME)
 
 - Parsers assume malformed input: missing boundaries, wrong `Content-Length`,
@@ -110,6 +123,13 @@ not a reason to relax layer 1.
   crash, never a hang.
 - Every new parser gets pathological samples in `testdata/mime` and a fuzz
   target.
+- Attachment import (`attachment.import`) treats the path from the UI as
+  input, not as trust: it must be absolute and name a regular file after
+  following symlinks; it is opened `O_NONBLOCK` so a FIFO or device cannot
+  hang the daemon; the size cap is checked at stat time *and* enforced
+  during the copy; the content type is sniffed, never taken from the client
+  or the extension alone; the file name goes through the same sanitiser
+  (`internal/safename`) as received names.
 
 ## 5. Signatures and encryption (EFAIL and friends)
 
@@ -165,6 +185,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   no additional authentication is layered on the socket.
 - Temporary files for attachments go into `$XDG_RUNTIME_DIR` or
   `$XDG_CACHE_HOME/malachi`, `0600`, removed after use.
+- Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
+  `0700` directory); imports that never reach a saved draft are swept
+  after 24 h.
 
 ## 9. Sandbox: what Flatpak gives and what it does not
 
@@ -208,4 +231,8 @@ Advisories) rather than a public issue. No bug bounty.
       shown?
 - [ ] New network request: is it triggered by user action, not by content?
 - [ ] New log line: can it contain a secret or message content?
+- [ ] New file path accepted from the UI: validated as a regular file,
+      size-capped during the copy, content type sniffed?
+- [ ] Does any path store or send HTML that did not pass
+      `internal/sanitize`, including outgoing drafts?
 - [ ] New `finish-args` entry: is there a portal instead?

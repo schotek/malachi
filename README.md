@@ -64,10 +64,12 @@ Details: [docs/architecture.md](docs/architecture.md), the RPC contract in
 ### Dependencies
 
 Go ≥ 1.22 (developed with 1.25), a C compiler (gotk4 uses cgo), GTK 4,
-libadwaita, Blueprint, and gsound for the new-mail sound (optional: without
-it `make` builds with `-tags nosound` and prints a warning). WebKitGTK is
-not used yet but will be required soon; note that the GTK 4 flavour is API
-version **6.0**.
+libadwaita, Blueprint, WebKitGTK **6.0** (the GTK 4 flavour; it powers the
+rich-text compose editor and, later, message rendering; Blueprint also
+needs its typelib at build time) and gsound for the new-mail sound
+(optional: without it `make` builds with `-tags nosound` and prints a
+warning). The first build compiles the gotk4 and WebKitGTK bindings, which
+takes a long time.
 
 Fedora:
 
@@ -81,7 +83,7 @@ Debian / Ubuntu (Debian 13 "trixie", Ubuntu 24.04 or newer):
 
 ```sh
 sudo apt install golang-go gcc pkg-config git \
-    libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev libgsound-dev \
+    libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev gir1.2-webkit-6.0 libgsound-dev \
     libgirepository1.0-dev libsqlite3-dev blueprint-compiler
 ```
 

@@ -107,10 +107,12 @@ compiled in). Schema changes are forward-only numbered migrations embedded in
 the binary and applied in a transaction at startup. A migration, once
 committed, is never edited.
 
-Planned tables (phase 1): `accounts`, `folders` (with UIDVALIDITY,
-HIGHESTMODSEQ), `messages` (envelope + flags + local state), `message_parts`
-(MIME tree with on-disk or in-db bodies), `threads`, `drafts`, `outbox`,
-`messages_fts` (external-content FTS5), `sync_log`.
+Tables today: `meta`, `preferences`, `known_senders` (0002), `drafts` and
+`attachments` (0003; attachment data as files under
+`<data dir>/attachments/`, see §7). Planned (phase 1): `accounts`, `folders`
+(with UIDVALIDITY, HIGHESTMODSEQ), `messages` (envelope + flags + local
+state), `message_parts` (MIME tree with on-disk or in-db bodies), `threads`,
+`outbox`, `messages_fts` (external-content FTS5), `sync_log`.
 
 ### 3.2 Sync model (planned)
 
@@ -170,6 +172,8 @@ ui/
   internal/widget     reusable widgets (message list row) and pure formatters
   internal/settings   UI-only preferences (GSettings, in-memory fallback)
   internal/style      colour scheme and the application CSS provider
+  internal/compose    "New Message" window: recipients, drafts, attachments
+  internal/editor     rich-text editor on WebKitGTK 6.0 (no mail knowledge)
 ```
 
 Three panes built from nested `Adw.NavigationSplitView`s with breakpoints
@@ -189,6 +193,19 @@ every open window follows.
 When the schema is not installed the store falls back to memory and logs a
 warning; `make build` compiles the schema into `build/` and the run targets
 export `GSETTINGS_SCHEMA_DIR`.
+
+Composing: `app.compose` (Ctrl+N, the header button, `mailto:` through
+`GApplication::open`) and the Reply / Reply All / Forward buttons open a
+`compose.Window`. The editor is a WebKitGTK 6.0 view with a contenteditable
+document: formatting goes through WebKit's native editing commands, a user
+script reports content and caret state back over a script message handler,
+and the document's CSP plus the decide-policy handler keep it offline.
+The window parses recipients into `api.Address`, autosaves through
+`draft.save` (the backend sanitises `htmlBody` and derives `textBody`),
+imports attachments by path with `attachment.import`, shows inline images
+through a `cid:` URI scheme served only for ids the window itself minted,
+and sends with `message.send`. Reply/forward prefill lives in
+`compose.Prefill` only until `draft.create` exists in the backend.
 
 The *General* page: *Run in Background* makes the main window hide instead
 of close (a hidden window keeps the application alive; `app.show` and
@@ -226,4 +243,6 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   autostart entry.
 - Whether message bodies live inside SQLite or as files under
   `$XDG_DATA_HOME/malachi/parts/` (SQLite is simpler; files are cheaper for
-  large attachments).
+  large attachments). Decided for *compose attachments*: data as files
+  under `<data dir>/attachments/<id>`, metadata (including SHA-256) in
+  SQLite; large message parts are expected to follow the same split.
