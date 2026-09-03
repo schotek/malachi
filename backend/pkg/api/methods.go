@@ -9,10 +9,11 @@ const (
 	MethodSystemInfo = "system.info"
 
 	// Accounts.
-	MethodAccountList   = "account.list"
-	MethodAccountAdd    = "account.add"
-	MethodAccountRemove = "account.remove"
-	MethodAccountTest   = "account.test"
+	MethodAccountList       = "account.list"
+	MethodAccountAdd        = "account.add"
+	MethodAccountRemove     = "account.remove"
+	MethodAccountSetEnabled = "account.setEnabled"
+	MethodAccountTest       = "account.test"
 
 	// Folders.
 	MethodFolderList      = "folder.list"
@@ -60,16 +61,17 @@ const (
 
 // Notification names (backend → client, no reply expected).
 const (
-	NotifyNewMessage   = "notify.newMessage"
-	NotifySyncState    = "notify.syncState"
-	NotifyAuthRequired = "notify.authRequired"
+	NotifyNewMessage      = "notify.newMessage"
+	NotifySyncState       = "notify.syncState"
+	NotifyAuthRequired    = "notify.authRequired"
+	NotifyAccountsChanged = "notify.accountsChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
 // stubs and tests use it to check docs/api.md coverage.
 var AllMethods = []string{
 	MethodSystemInfo,
-	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountTest,
+	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled, MethodAccountTest,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
@@ -84,5 +86,5 @@ var AllMethods = []string{
 
 // AllNotifications lists every server-initiated notification.
 var AllNotifications = []string{
-	NotifyNewMessage, NotifySyncState, NotifyAuthRequired,
+	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged,
 }

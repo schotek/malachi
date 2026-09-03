@@ -1,24 +1,27 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package account manages account configuration: validation, persistence,
-// and lookup by ID. It never touches secrets; those belong to internal/auth.
+// Package account defines the config.toml form of an account. It is used
+// only for the bootstrap import at daemon start: the registry itself lives
+// in the store (accounts table) and is managed by internal/core through the
+// account.* methods. It never touches secrets; those belong to internal/auth.
 package account
 
 import "github.com/schotek/malachi/backend/pkg/api"
 
-// Config is one account as stored on disk. It is the api.AccountConfig plus
-// a stable local identifier.
+// Config is one [[accounts]] entry of config.toml: api.AccountConfig plus an
+// optional stable local identifier and the enabled flag.
 type Config struct {
-	ID          string `toml:"id"`
-	Name        string `toml:"name"`
-	Email       string `toml:"email"`
-	DisplayName string `toml:"display_name"`
-	IMAP        Server `toml:"imap"`
-	SMTP        Server `toml:"smtp"`
-	Enabled     bool   `toml:"enabled"`
-	// TODO: oauth2 section (provider, client_id, tenant_id) once internal/auth
-	// defines what it needs.
+	ID          string  `toml:"id"`
+	Name        string  `toml:"name"`
+	Email       string  `toml:"email"`
+	DisplayName string  `toml:"display_name"`
+	IMAP        Server  `toml:"imap"`
+	SMTP        Server  `toml:"smtp"`
+	OAuth2      *OAuth2 `toml:"oauth2"`
+	// Enabled is a pointer so that a missing key means enabled, not paused.
+	Enabled             *bool `toml:"enabled"`
+	SyncIntervalSeconds int   `toml:"sync_interval_seconds"`
 }
 
 // Server mirrors api.ServerConfig with TOML tags.
@@ -30,15 +33,42 @@ type Server struct {
 	AuthMethod string `toml:"auth_method"` // password | oauth2
 }
 
-// ToAPI converts the stored form to the wire form.
+// OAuth2 mirrors api.OAuth2Config with TOML tags.
+type OAuth2 struct {
+	Provider string   `toml:"provider"` // office365 | custom
+	ClientID string   `toml:"client_id"`
+	TenantID string   `toml:"tenant_id"`
+	AuthURL  string   `toml:"auth_url"`
+	TokenURL string   `toml:"token_url"`
+	Scopes   []string `toml:"scopes"`
+}
+
+// IsEnabled reports the enabled flag with the missing-key default.
+func (c Config) IsEnabled() bool {
+	return c.Enabled == nil || *c.Enabled
+}
+
+// ToAPI converts the TOML form to the wire form.
 func (c Config) ToAPI() api.AccountConfig {
-	return api.AccountConfig{
-		Name:        c.Name,
-		Email:       c.Email,
-		DisplayName: c.DisplayName,
-		IMAP:        c.IMAP.toAPI(),
-		SMTP:        c.SMTP.toAPI(),
+	out := api.AccountConfig{
+		Name:         c.Name,
+		Email:        c.Email,
+		DisplayName:  c.DisplayName,
+		IMAP:         c.IMAP.toAPI(),
+		SMTP:         c.SMTP.toAPI(),
+		SyncInterval: c.SyncIntervalSeconds,
 	}
+	if c.OAuth2 != nil {
+		out.OAuth2 = &api.OAuth2Config{
+			Provider: c.OAuth2.Provider,
+			ClientID: c.OAuth2.ClientID,
+			TenantID: c.OAuth2.TenantID,
+			AuthURL:  c.OAuth2.AuthURL,
+			TokenURL: c.OAuth2.TokenURL,
+			Scopes:   c.OAuth2.Scopes,
+		}
+	}
+	return out
 }
 
 func (s Server) toAPI() api.ServerConfig {
@@ -49,19 +79,4 @@ func (s Server) toAPI() api.ServerConfig {
 		Username:   s.Username,
 		AuthMethod: api.AuthMethod(s.AuthMethod),
 	}
-}
-
-// Validate checks structural sanity (not connectivity).
-// TODO: hostnames, port ranges, security/port consistency, e-mail syntax.
-func (c Config) Validate() error {
-	return api.ErrNotImplemented
-}
-
-// Manager is the account registry used by the RPC layer and the sync engine.
-// TODO: implement over internal/store.
-type Manager interface {
-	List() ([]Config, error)
-	Get(id api.AccountID) (Config, error)
-	Add(cfg Config) (api.AccountID, error)
-	Remove(id api.AccountID, deleteLocalData bool) error
 }

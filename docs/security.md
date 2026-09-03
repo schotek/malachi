@@ -160,13 +160,17 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - Log lines are scrubbed: authentication commands are logged as
   `AUTHENTICATE <redacted>`.
 - `account.list` never returns secrets; `Credentials` is write-only.
+  `account.add` forwards `credentials.password` to the keyring before it
+  returns and drops the account again if the keyring refuses; the
+  `accounts` row holds only the non-secret `api.AccountConfig`.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 
 ## 7. Transport
 
 - TLS by default (implicit TLS or STARTTLS with mandatory upgrade).
-  `security: none` is accepted only for `localhost` and is meant for tests.
+  `security: none` is accepted only for `localhost` (or a loopback IP) and
+  is meant for tests; `account.add` validation enforces it.
 - System CA store; certificate errors are fatal for the connection, with a
   clear `tlsError` in `notify.syncState`. No "ignore certificate" option in
   phase 1; if one is ever added it is per-account, per-fingerprint, and

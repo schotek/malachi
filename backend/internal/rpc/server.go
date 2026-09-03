@@ -194,6 +194,9 @@ func (s *Server) SyncState(n api.SyncStateNotification)   { s.broadcast(api.Noti
 func (s *Server) AuthRequired(n api.AuthRequiredNotification) {
 	s.broadcast(api.NotifyAuthRequired, n)
 }
+func (s *Server) AccountsChanged(n api.AccountsChangedNotification) {
+	s.broadcast(api.NotifyAccountsChanged, n)
+}
 
 // --- connection ----------------------------------------------------------
 

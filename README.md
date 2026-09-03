@@ -148,6 +148,33 @@ desktop file or in the Flatpak.
 
 The store is not encrypted at rest. Use full-disk encryption.
 
+Accounts are managed from *Preferences → Accounts* and stored in the mail
+store. For testing, `config.toml` can seed an account; it is imported once,
+at the next daemon start, and never written back:
+
+```toml
+[[accounts]]
+name = "Work"
+email = "me@example.org"
+
+[accounts.imap]
+host = "imap.example.org"
+port = 993
+security = "tls"
+username = "me@example.org"
+auth_method = "password"
+
+[accounts.smtp]
+host = "smtp.example.org"
+port = 587
+security = "starttls"
+username = "me@example.org"
+auth_method = "password"
+```
+
+Passwords never go into this file; they are asked for and kept in the
+keyring.
+
 ## Supported providers
 
 | Provider | Status |

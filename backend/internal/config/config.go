@@ -26,9 +26,10 @@ const appDir = "malachi"
 type Config struct {
 	// Sync holds daemon-wide synchronisation defaults.
 	Sync SyncConfig `toml:"sync"`
-	// Accounts are non-secret account definitions. TODO: decide whether
-	// accounts live in config.toml (user-editable, git-friendly) or in the
-	// SQLite store (managed through account.add). Both are read here for now.
+	// Accounts are bootstrap entries: at daemon start they are imported into
+	// the store when no account with the same e-mail exists and the e-mail has
+	// not been imported before (core.Backend.ImportConfigAccounts). The store
+	// is authoritative and the daemon never writes this file.
 	Accounts []account.Config `toml:"accounts"`
 }
 

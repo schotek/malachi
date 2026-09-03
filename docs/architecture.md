@@ -81,7 +81,7 @@ backend/
   pkg/api             the contract (types, method names, error codes, interfaces)
   internal/rpc        socket server, framing, dispatch, notification fan-out
   internal/config     config.toml + XDG paths
-  internal/account    account registry (non-secret config)
+  internal/account    config.toml form of an account (bootstrap import)
   internal/auth       keyring, OAuth2, SASL
   internal/imap       IMAP client + sync engine
   internal/smtp       sending + outbox
@@ -109,7 +109,9 @@ committed, is never edited.
 
 Tables today: `meta`, `preferences`, `known_senders` (0002), `drafts` and
 `attachments` (0003; attachment data as files under
-`<data dir>/attachments/`, see §7). Planned (phase 1): `accounts`, `folders`
+`<data dir>/attachments/`, see §7), `accounts` (0004; the non-secret
+`api.AccountConfig` as JSON plus the columns the store enforces or sorts
+by). Planned (phase 1): `folders`
 (with UIDVALIDITY, HIGHESTMODSEQ), `messages` (envelope + flags + local
 state), `message_parts` (MIME tree with on-disk or in-db bodies), `threads`,
 `outbox`, `messages_fts` (external-content FTS5), `sync_log`.
@@ -183,7 +185,13 @@ objects by ID and populates them. Callbacks from the client run on a
 background goroutine and hop to the GTK main loop with `glib.IdleAdd`.
 
 Preferences are an `Adw.PreferencesDialog` (`app.preferences`, Ctrl+,)
-with *General* and *Appearance* pages. UI-only options live in GSettings
+with *Accounts*, *General* and *Appearance* pages. The *Accounts* page lists
+`account.list`, pauses with `account.setEnabled` and removes with
+`account.remove` after an `Adw.AlertDialog` with a *delete local data*
+check; it reloads after its own actions and when opened, while
+`notify.accountsChanged` invalidates the compose manager's account cache.
+Adding an account is a placeholder until the account assistant exists.
+UI-only options live in GSettings
 (`data/*.gschema.xml`, read through `internal/settings`); anything that
 affects mail handling (check interval, remote content) is owned by the
 daemon and set through the RPC API. The *Appearance* page is functional:
@@ -233,11 +241,13 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   remain possible because the backend does not care.
 - Sanitiser library: candidates listed in `internal/sanitize/sanitize.go`;
   decision pending evaluation against `docs/security.md`.
-- Account definitions: `config.toml` (user-editable) vs. store (managed via
-  `account.add`). Both are loadable today; pick one before phase 1 ends.
-  Decided for *daemon options* (`config.get`/`config.set`): the store is
-  authoritative, `config.toml` supplies bootstrap defaults, the daemon never
-  writes `config.toml`.
+- Account definitions: **decided**, the same rule as for daemon options
+  (`config.get`/`config.set`). The store is authoritative (`accounts`,
+  migration 0004, managed through `account.*`); `[[accounts]]` in
+  `config.toml` are bootstrap defaults imported once at start when no
+  account with the same e-mail exists and the e-mail has not been imported
+  before (`meta` key `accounts.imported`, so a removed account is not
+  resurrected); the daemon never writes `config.toml`.
 - Daemon lifecycle at login: the UI's autostart entry launches only
   `malachi --gapplication-service`; nothing starts `malachid`. Options: the UI
   spawns it when the socket is unreachable, or a systemd user unit / second

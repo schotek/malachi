@@ -10,8 +10,10 @@ package core
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
@@ -34,6 +36,13 @@ type Backend struct {
 	// Sanitize is the HTML sanitiser used for composed bodies. It defaults
 	// to sanitize.Sanitize and is a field so tests can substitute a fake.
 	Sanitize func(sanitize.Input) (sanitize.Output, error)
+
+	// Keyring stores account secrets. It defaults to the not-implemented
+	// placeholder and is a field so tests can substitute an in-memory one.
+	Keyring auth.Keyring
+
+	mu       sync.RWMutex
+	notifier api.Notifier // nil until SetNotifier
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -50,9 +59,26 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		defaults:    cfg,
 		log:         log.With("component", "core"),
 		Sanitize:    sanitize.Sanitize,
+		Keyring:     auth.NotImplementedKeyring{},
 	}
 }
 
+// SetNotifier wires the RPC server so that services can push notifications.
+// malachid calls it right after rpc.NewServer, before Listen. Without a
+// notifier, notifications are dropped.
+func (b *Backend) SetNotifier(n api.Notifier) {
+	b.mu.Lock()
+	b.notifier = n
+	b.mu.Unlock()
+}
+
+func (b *Backend) getNotifier() api.Notifier {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.notifier
+}
+
+func (b *Backend) Accounts() api.AccountService       { return &accountService{b} }
 func (b *Backend) Config() api.ConfigService          { return &configService{b} }
 func (b *Backend) Senders() api.SenderService         { return &senderService{b} }
 func (b *Backend) Drafts() api.DraftService           { return &draftService{b} }

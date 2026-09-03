@@ -154,6 +154,16 @@ type AccountRemoveParams struct {
 
 type AccountRemoveResult struct{}
 
+// AccountSetEnabledParams pauses (enabled=false) or resumes an account. A
+// paused account keeps its configuration and local data, is never
+// synchronised and reports SyncState.status "disabled".
+type AccountSetEnabledParams struct {
+	AccountID AccountID `json:"accountId"`
+	Enabled   bool      `json:"enabled"`
+}
+
+type AccountSetEnabledResult struct{}
+
 // AccountTestParams tests connectivity without persisting anything.
 type AccountTestParams struct {
 	Config      AccountConfig `json:"config"`
@@ -797,3 +807,8 @@ type AuthRequiredNotification struct {
 	// portal. The backend completes the flow on its loopback redirect listener.
 	AuthURL string `json:"authUrl,omitempty"`
 }
+
+// AccountsChangedNotification is emitted after account.add, account.remove
+// and account.setEnabled, to every client including the caller. It carries
+// no payload: clients re-run account.list.
+type AccountsChangedNotification struct{}

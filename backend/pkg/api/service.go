@@ -21,6 +21,7 @@ type AccountService interface {
 	List(ctx context.Context, p AccountListParams) (*AccountListResult, error)
 	Add(ctx context.Context, p AccountAddParams) (*AccountAddResult, error)
 	Remove(ctx context.Context, p AccountRemoveParams) (*AccountRemoveResult, error)
+	SetEnabled(ctx context.Context, p AccountSetEnabledParams) (*AccountSetEnabledResult, error)
 	Test(ctx context.Context, p AccountTestParams) (*AccountTestResult, error)
 }
 
@@ -98,4 +99,5 @@ type Notifier interface {
 	NewMessage(n NewMessageNotification)
 	SyncState(n SyncStateNotification)
 	AuthRequired(n AuthRequiredNotification)
+	AccountsChanged(n AccountsChangedNotification)
 }

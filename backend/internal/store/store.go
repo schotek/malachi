@@ -31,6 +31,7 @@ var migrationFS embed.FS
 // error codes.
 var (
 	ErrNotFound        = errors.New("store: not found")
+	ErrExists          = errors.New("store: already exists")
 	ErrVersionConflict = errors.New("store: version conflict")
 	ErrAttachmentBound = errors.New("store: attachment bound to another draft")
 	ErrTooBig          = errors.New("store: size limit exceeded")

@@ -161,9 +161,20 @@ Health check and version negotiation. The first call a UI makes.
 
 ### 4.1 account
 
+Accounts live in the daemon's store and are managed only through these
+methods. `[[accounts]]` entries in `config.toml` are bootstrap defaults: at
+start the daemon imports each one whose e-mail is not in the store and has
+not been imported before (so an account removed through `account.remove`
+stays removed); the daemon never writes `config.toml`. `account.list`
+returns accounts in creation order. Every mutation is followed by
+`notify.accountsChanged`.
+
 #### `account.list`
 - params: `{}`
 - result: `{ "accounts": [Account] }`
+
+`state` is `disabled` for a paused account; otherwise, until the sync engine
+exists, it is `idle` with `progress: -1`.
 
 ```jsonc
 Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": SyncState }
@@ -179,22 +190,58 @@ OAuth2Config { "provider": "office365|custom", "clientId" (opt), "tenantId" (opt
 ```
 
 Secrets are **never** part of `AccountConfig` and never returned.
+`credentials.password` is write-only: it goes to the keyring and is never
+logged, echoed or stored in the SQLite store.
 
 #### `account.add`
 - params: `{ "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
 - result: `{ "accountId": "acc_2" }`
-- errors: invalidArgument, keyringError, conflict (same e-mail already configured)
+- errors: invalidArgument, keyringError, conflict (same e-mail already configured, case-insensitive)
 
-The password is written to the keyring and discarded. For `oauth2` no
-credentials are passed; the backend starts the flow and emits
-`notify.authRequired` with `authUrl`.
+Validation (all failures are invalidArgument; free-text fields are trimmed):
+- `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
+  at most 256 bytes;
+- `email` a bare, syntactically valid address (no display name);
+- `imap`/`smtp`: `host` an IP literal or hostname of DNS labels (≤ 253
+  bytes), `port` 1–65535, `security` one of `tls|starttls|none` where `none`
+  is accepted only for `localhost` or a loopback IP, `username` required
+  (≤ 256 bytes, no control characters), `authMethod` one of `password|oauth2`;
+- `oauth2` present exactly when an endpoint uses `oauth2`; `provider`
+  `office365|custom`, `custom` needs `https` `authUrl` and `tokenUrl`; at
+  most 32 scopes without whitespace;
+- `syncIntervalSeconds` 0 or ≥ 60;
+- `credentials.password` only when an endpoint uses `password`.
+
+The password is optional (an account without one ends in `authRequired`
+once syncing exists). It is written to the keyring and discarded; if the
+keyring refuses it nothing is kept and the keyring's error is returned.
+Transitional: while the keyring is a stub, an `account.add` **with** a
+password fails with `notImplemented` and stores nothing; without a password
+it succeeds. For `oauth2` no credentials are passed; the backend starts the
+flow and emits `notify.authRequired` with `authUrl`.
 
 #### `account.remove`
 - params: `{ "accountId", "deleteLocalData": bool }`
 - result: `{}`
+- errors: invalidArgument, accountNotFound, storageError
+
+`deleteLocalData: true` also deletes the account's drafts and attachments
+(rows and files); `false` keeps them, orphaned, until a later phase defines
+what happens to local data of a removed account. Keyring secrets are
+deleted best-effort: an unavailable keyring never keeps the account alive.
+
+#### `account.setEnabled`
+- params: `{ "accountId", "enabled": bool }`
+- result: `{}`
+- errors: invalidArgument, accountNotFound, storageError
+
+Pauses (`false`) or resumes (`true`) an account. A paused account keeps its
+configuration and local data, is never synchronised and reports
+`state.status = "disabled"`.
 
 #### `account.test`
-Connectivity test without persisting anything.
+Connectivity test without persisting anything. Validates like `account.add`,
+then returns `notImplemented` until the IMAP phase.
 
 - params: same as `account.add`
 - result: `{ "imap": EndpointTestResult, "smtp": EndpointTestResult }`
@@ -555,6 +602,11 @@ as `<img src="cid:<contentId>">`.
 | `notify.newMessage` | `{ "accountId", "folderId", "message": MessageSummary }` |
 | `notify.syncState` | `{ "state": SyncState }` |
 | `notify.authRequired` | `{ "accountId", "reason": 1200\|1201\|1202, "message": "…", "authUrl": "https://…" (opt) }` |
+| `notify.accountsChanged` | `{}` |
+
+`notify.accountsChanged` is sent after `account.add`, `account.remove` and
+`account.setEnabled` to every client, including the caller; it carries no
+payload and clients re-run `account.list`.
 
 `notify.authRequired` with `authUrl` means an OAuth2 flow is waiting. The UI
 opens the URL through the OpenURI portal; the backend's loopback listener
@@ -588,3 +640,7 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `draft.create` (stub), `attachment.import`, `attachment.remove`; new
   error code 1105 `attachmentNotFound`; limits `api.MaxDraft*` /
   `api.MaxAttachment*` documented in §4.5 and §4.10.
+- **1** (2026-09-03, compatible addition, accounts): account registry
+  implemented (`account.list`, `account.add`, `account.remove`); new
+  `account.setEnabled`; new `notify.accountsChanged`; validation rules and
+  the `config.toml` bootstrap import documented in §4.1.
