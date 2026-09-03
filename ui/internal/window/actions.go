@@ -2,7 +2,6 @@ package window
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -10,8 +9,8 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
-	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // rpcTimeout bounds user-triggered calls to the daemon.
@@ -24,19 +23,7 @@ func confirmTrash(parent gtk.Widgetter, s *settings.Store, subject string, proce
 		proceed()
 		return
 	}
-	d := adw.NewAlertDialog("Move to Trash?", subject)
-	d.SetBodyUseMarkup(false)
-	d.AddResponse("cancel", "_Cancel")
-	d.AddResponse("trash", "Move to _Trash")
-	d.SetResponseAppearance("trash", adw.ResponseDestructive)
-	d.SetDefaultResponse("cancel")
-	d.SetCloseResponse("cancel")
-	d.ConnectResponse(func(response string) {
-		if response == "trash" {
-			proceed()
-		}
-	})
-	d.Present(parent)
+	widget.ConfirmDestructive(parent, "Move to Trash?", subject, "Move to _Trash", proceed)
 }
 
 // trashMessage moves message idx to Trash through message.delete, after the
@@ -54,7 +41,7 @@ func (w *Window) trashMessage(idx int, parent gtk.Widgetter, toasts *adw.ToastOv
 			glib.IdleAdd(func() {
 				if err != nil {
 					w.log.Debug("message.delete", "err", err)
-					toasts.AddToast(adw.NewToast(rpcErrorText("Deleting", err)))
+					toasts.AddToast(widget.PlainToast(widget.RPCErrorText("Deleting", err)))
 					return
 				}
 				// TODO(phase-1): drop the row once the backend really deletes.
@@ -102,17 +89,4 @@ func (w *Window) scheduleMarkRead(idx int) {
 		w.markRead(idx)
 		return false
 	})
-}
-
-// rpcErrorText turns a client error into a short user-facing sentence.
-func rpcErrorText(what string, err error) string {
-	var e *api.Error
-	switch {
-	case errors.Is(err, client.ErrDisconnected):
-		return what + " needs a running mail backend"
-	case errors.As(err, &e) && e.Code == api.CodeNotImplemented:
-		return what + " is not available yet"
-	default:
-		return what + " failed"
-	}
 }

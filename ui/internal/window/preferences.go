@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // PreferencesDialog is the application preferences dialog, built from
@@ -150,7 +151,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 				}
 				d.mailGroup.SetSensitive(true)
 				if err != nil {
-					d.AddToast(adw.NewToast(rpcErrorText("Saving mail settings", err)))
+					d.AddToast(widget.PlainToast(widget.RPCErrorText("Saving mail settings", err)))
 					apply(current)
 					return
 				}
@@ -172,7 +173,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 				return
 			}
 			if err != nil {
-				d.mailGroup.SetDescription(rpcErrorText("Loading mail settings", err))
+				d.mailGroup.SetDescription(widget.RPCErrorText("Loading mail settings", err))
 				return
 			}
 			current = res.Preferences
@@ -249,13 +250,13 @@ func (d *PreferencesDialog) bindLaunchAtLogin(s *settings.Store) (unbind func())
 				// Typical inside a container or when launched outside a
 				// .desktop file: the portal cannot identify the application.
 				set(!want)
-				d.AddToast(adw.NewToast("The desktop portal refused to change autostart"))
+				d.AddToast(widget.PlainToast("The desktop portal refused to change autostart"))
 			case err != nil:
 				set(!want)
-				d.AddToast(adw.NewToast("Autostart needs xdg-desktop-portal"))
+				d.AddToast(widget.PlainToast("Autostart needs xdg-desktop-portal"))
 			case res.Autostart != want:
 				set(!want)
-				d.AddToast(adw.NewToast("Autostart was not granted"))
+				d.AddToast(widget.PlainToast("Autostart was not granted"))
 			}
 		})
 	})
