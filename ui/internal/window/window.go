@@ -55,6 +55,10 @@ type Window struct {
 	// markReadSource is the pending mark-as-read timer, 0 when none.
 	markReadSource glib.SourceHandle
 
+	// hasAccounts mirrors account.list. It starts true: "unknown" must not
+	// show the No Accounts page before the daemon has answered.
+	hasAccounts bool
+
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
 	listPage   *adw.NavigationPage
@@ -89,6 +93,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		log:               log.With("component", "window"),
 		settings:          s,
 		compose:           cm,
+		hasAccounts:       true,
 		openMessages:      make(map[int]*MessageWindow),
 		outerSplit:        b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit:        b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
@@ -112,7 +117,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 
 	w.populateFolders()
 	w.populateMessages()
-	w.messageStack.SetVisibleChildName("empty")
+	w.messageStack.SetVisibleChildName(w.emptyPageName())
 
 	// Settings callbacks arrive on the main loop; no IdleAdd needed. The main
 	// window lives as long as the application, so the handlers are never
@@ -141,7 +146,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	})
 	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil {
-			w.messageStack.SetVisibleChildName("empty")
+			w.messageStack.SetVisibleChildName(w.emptyPageName())
 			w.setMessageActionsSensitive(false)
 			w.scheduleMarkRead(-1)
 			return
@@ -320,6 +325,7 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		w.connStatus.SetLabel(i18n.T("Connected"))
 		w.banner.SetRevealed(false)
 		go w.fetchSystemInfo()
+		go w.checkAccounts()
 	default:
 		w.connIcon.SetFromIconName("network-offline-symbolic")
 		w.connStatus.SetLabel(i18n.T("Backend unavailable"))
@@ -330,6 +336,34 @@ func (w *Window) showConnectionState(s client.State, err error) {
 			w.log.Debug("backend unavailable", "err", err)
 		}
 	}
+}
+
+// emptyPageName is the message pane's placeholder: the No Accounts call to
+// action while the daemon has no account, otherwise the usual empty page.
+func (w *Window) emptyPageName() string {
+	if !w.hasAccounts {
+		return "no-accounts"
+	}
+	return "empty"
+}
+
+// checkAccounts asks account.list and switches the placeholder when no
+// message is selected. Errors leave the state untouched.
+func (w *Window) checkAccounts() {
+	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	defer cancel()
+	var res api.AccountListResult
+	err := w.client.Call(ctx, api.MethodAccountList, api.AccountListParams{}, &res)
+	glib.IdleAdd(func() {
+		if err != nil {
+			w.log.Debug("account.list", "err", err)
+			return
+		}
+		w.hasAccounts = len(res.Accounts) > 0
+		if w.messageList.SelectedRow() == nil {
+			w.messageStack.SetVisibleChildName(w.emptyPageName())
+		}
+	})
 }
 
 func (w *Window) fetchSystemInfo() {

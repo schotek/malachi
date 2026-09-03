@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -37,9 +38,17 @@ func (d *PreferencesDialog) bindAccounts(c *client.Client) (unbind func()) {
 	d.accountsGroup.SetSensitive(false)
 	d.loadAccounts(c)
 
+	// The wizard is built here rather than through app.add-account so the
+	// page can reload itself: the preferences dialog does not receive
+	// notify.accountsChanged.
 	handle := d.addAccount.ConnectClicked(func() {
-		// TODO: open the account assistant once it exists.
-		d.AddToast(widget.PlainToast(i18n.T("Adding accounts is not available yet")))
+		wz := accountwizard.New(c, d.log)
+		wz.OnAdded = func(_ api.AccountID, cfg api.AccountConfig) {
+			d.loadAccounts(c)
+			// TRANSLATORS: %s is the new account's e-mail address.
+			d.AddToast(widget.PlainToast(fmt.Sprintf(i18n.T("Added %s"), cfg.Email)))
+		}
+		wz.Present(d)
 	})
 	return func() { d.addAccount.HandlerDisconnect(handle) }
 }

@@ -53,9 +53,46 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s failed: unknown account"), what)
 		case api.CodeKeyringError:
 			return fmt.Sprintf(i18n.T("%s failed: the system keyring is unavailable"), what)
+		case api.CodeAuthFailed:
+			return fmt.Sprintf(i18n.T("%s failed: the server rejected the user name or password"), what)
+		case api.CodeNetworkError:
+			return fmt.Sprintf(i18n.T("%s failed: the server could not be reached"), what)
+		case api.CodeServerError:
+			return fmt.Sprintf(i18n.T("%s failed: the server returned an error"), what)
+		case api.CodeTLSError:
+			return fmt.Sprintf(i18n.T("%s failed: the secure connection could not be established"), what)
+		case api.CodeServerTimeout:
+			return fmt.Sprintf(i18n.T("%s failed: the server did not respond in time"), what)
 		}
 	}
 	return fmt.Sprintf(i18n.T("%s failed"), what)
+}
+
+// EndpointErrorText is the sentence for one endpoint of account.test. The
+// backend's message is technical English and only ever a trailing detail.
+func EndpointErrorText(e *api.Error) string {
+	if e == nil {
+		return i18n.T("Failed")
+	}
+	switch e.Code {
+	case api.CodeAuthFailed:
+		return i18n.T("The server rejected the user name or password")
+	case api.CodeNetworkError:
+		return i18n.T("The server could not be reached")
+	case api.CodeServerError:
+		return i18n.T("The server returned an error")
+	case api.CodeTLSError:
+		return i18n.T("The secure connection could not be established")
+	case api.CodeServerTimeout:
+		return i18n.T("The server did not respond in time")
+	case api.CodeNotImplemented:
+		return i18n.T("Not supported yet")
+	case api.CodeInvalidArgument:
+		// TRANSLATORS: %s is a technical message from the mail backend.
+		return fmt.Sprintf(i18n.T("Rejected: %s"), e.Message)
+	}
+	// TRANSLATORS: %s is a technical message from the mail backend.
+	return fmt.Sprintf(i18n.T("Failed: %s"), e.Message)
 }
 
 // PlainToast builds a toast whose title is plain text. Toast titles are

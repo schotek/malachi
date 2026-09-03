@@ -193,8 +193,20 @@ with *Accounts*, *General* and *Appearance* pages. The *Accounts* page lists
 `account.list`, pauses with `account.setEnabled` and removes with
 `account.remove` after an `Adw.AlertDialog` with a *delete local data*
 check; it reloads after its own actions and when opened, while
-`notify.accountsChanged` invalidates the compose manager's account cache.
-Adding an account is a placeholder until the account assistant exists.
+`notify.accountsChanged` invalidates the compose manager's account cache
+and re-checks the main window's placeholder.
+
+Adding an account is `internal/accountwizard`: an `Adw.Dialog` with an
+`Adw.NavigationView` (identity → server settings → connection test),
+opened by `app.add-account`, by the + button of the Accounts page and by
+the main window's *No Accounts* page (shown when `account.list` is empty).
+The wizard calls `account.discover` after the identity page (a hit goes
+straight to the test, a miss opens the prefilled Servers page),
+`account.test` (45 s budget, per-endpoint results; `authFailed` returns to
+the identity page, other failures offer Retry / Edit Servers / Add
+Anyway) and finally `account.add`. The UI only checks address syntax,
+non-empty fields and the port defaults per security mode; discovery,
+probing and validation are the daemon's.
 UI-only options live in GSettings
 (`data/*.gschema.xml`, read through `internal/settings`); anything that
 affects mail handling (check interval, remote content) is owned by the

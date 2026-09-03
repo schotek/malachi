@@ -2,6 +2,8 @@
 # Blueprint output, the gschema, the desktop file and the metainfo are added
 # by the Makefile's pot target. Keep this list in sync when adding files.
 ui/main.go
+ui/internal/accountwizard/results.go
+ui/internal/accountwizard/wizard.go
 ui/internal/background/background.go
 ui/internal/compose/compose.go
 ui/internal/compose/draft.go

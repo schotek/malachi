@@ -197,6 +197,29 @@ Adw.ApplicationWindow main_window {
                   };
                 }
 
+                // Shown instead of "empty" while account.list is empty.
+                StackPage {
+                  name: "no-accounts";
+
+                  child: Adw.StatusPage no_accounts_page {
+                    icon-name: "system-users-symbolic";
+                    title: _("No Accounts");
+                    description: _("Add a mail account to start reading and sending mail.");
+
+                    child: Button {
+                      label: _("_Add Account…");
+                      use-underline: true;
+                      halign: center;
+                      action-name: "app.add-account";
+
+                      styles [
+                        "suggested-action",
+                        "pill",
+                      ]
+                    };
+                  };
+                }
+
                 StackPage {
                   name: "message";
 

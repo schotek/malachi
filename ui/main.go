@@ -16,6 +16,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
+	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -99,13 +100,13 @@ func main() {
 	})
 	app.ConnectShutdown(func() { rpc.Close() })
 
-	addActions(app, rpc, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
+	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))
 }
 
 // addActions registers application actions. store yields the settings store,
 // which exists only after startup has run; show presents the main window.
-func addActions(app *adw.Application, rpc *client.Client, store func() *settings.Store, show func(), composer func() *compose.Manager) {
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, show func(), composer func() *compose.Manager) {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -134,10 +135,19 @@ func addActions(app *adw.Application, rpc *client.Client, store func() *settings
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {
-		window.NewPreferences(store(), rpc).Present(app.ActiveWindow())
+		window.NewPreferences(store(), rpc, log).Present(app.ActiveWindow())
 	})
 	app.AddAction(prefs)
 	app.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
+
+	// app.add-account opens the wizard from the main window's empty state
+	// (and anywhere else without a reload callback: the window learns of
+	// the new account through notify.accountsChanged).
+	addAccount := gio.NewSimpleAction("add-account", nil)
+	addAccount.ConnectActivate(func(*glib.Variant) {
+		accountwizard.New(rpc, log).Present(app.ActiveWindow())
+	})
+	app.AddAction(addAccount)
 
 	quit := gio.NewSimpleAction("quit", nil)
 	quit.ConnectActivate(func(*glib.Variant) { app.Quit() })

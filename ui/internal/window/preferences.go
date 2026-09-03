@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -27,6 +28,8 @@ import (
 // account.*).
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
+
+	log *slog.Logger
 
 	accountsGroup *adw.PreferencesGroup
 	addAccount    *gtk.Button
@@ -69,13 +72,18 @@ var (
 	remoteChoices   = []api.RemoteContentPolicy{api.RemoteBlock, api.RemoteKnownSenders, api.RemoteAllow}
 )
 
-// NewPreferences builds the dialog bound to s and, for the Mail group, to
-// the daemon through c. Present it with Present(parent).
-func NewPreferences(s *settings.Store, c *client.Client) *PreferencesDialog {
+// NewPreferences builds the dialog bound to s and, for the Mail group and
+// the Accounts page, to the daemon through c. Present it with
+// Present(parent).
+func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *PreferencesDialog {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 	b := data.Builder("preferences.ui")
 
 	d := &PreferencesDialog{
 		PreferencesDialog:    b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
+		log:                  log.With("component", "preferences"),
 		accountsGroup:        b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
 		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.Button),
 		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),

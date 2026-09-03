@@ -1,0 +1,307 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// "Add Account" wizard: identity → (account.discover) → server settings →
+// account.test → account.add. Object IDs are looked up from
+// ui/internal/accountwizard/wizard.go; keep them in sync. The daemon
+// discovers, tests and validates; this dialog only checks field syntax and
+// fills port defaults.
+Adw.Dialog account_wizard {
+  title: _("Add Account");
+  content-width: 520;
+  content-height: 640;
+  focus-widget: email_row;
+
+  child: Adw.ToastOverlay wizard_toasts {
+    child: Adw.NavigationView wizard_nav {
+      Adw.NavigationPage identity_page {
+        tag: "identity";
+        title: _("Add Account");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Box {
+            orientation: vertical;
+
+            Adw.Banner identity_banner {
+              revealed: false;
+            }
+
+            ScrolledWindow {
+              hscrollbar-policy: never;
+              vexpand: true;
+
+              child: Adw.Clamp {
+                maximum-size: 480;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 18;
+                  margin-top: 24;
+                  margin-bottom: 24;
+                  margin-start: 24;
+                  margin-end: 24;
+
+                  Label {
+                    label: _("Enter your e-mail address and password. Malachi Mail will look up the server settings for you.");
+                    wrap: true;
+                    xalign: 0;
+
+                    styles [
+                      "dim-label",
+                    ]
+                  }
+
+                  ListBox identity_rows {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.EntryRow display_name_row {
+                      title: _("Your Name");
+                    }
+
+                    Adw.EntryRow email_row {
+                      title: _("E-mail Address");
+                      input-purpose: email;
+                    }
+
+                    Adw.PasswordEntryRow password_row {
+                      title: _("Password");
+                    }
+                  }
+                };
+              };
+            }
+          };
+
+          [bottom]
+          Box {
+            halign: end;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button identity_next_button {
+              label: _("_Next");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      Adw.NavigationPage servers_page {
+        tag: "servers";
+        title: _("Server Settings");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Adw.PreferencesPage servers_prefs {
+            Adw.PreferencesGroup {
+              title: _("Account");
+
+              Adw.EntryRow account_name_row {
+                title: _("Account Name");
+              }
+            }
+
+            Adw.PreferencesGroup {
+              title: _("Incoming Mail (IMAP)");
+
+              Adw.EntryRow imap_host_row {
+                title: _("Server");
+              }
+
+              Adw.SpinRow imap_port_row {
+                title: _("Port");
+
+                adjustment: Adjustment {
+                  lower: 1;
+                  upper: 65535;
+                  step-increment: 1;
+                  value: 993;
+                };
+              }
+
+              Adw.ComboRow imap_security_row {
+                title: _("Security");
+
+                model: StringList {
+                  strings [
+                    _("TLS"),
+                    _("STARTTLS"),
+                    _("None"),
+                  ]
+                };
+              }
+
+              Adw.EntryRow imap_user_row {
+                title: _("User Name");
+              }
+            }
+
+            Adw.PreferencesGroup {
+              title: _("Outgoing Mail (SMTP)");
+
+              Adw.EntryRow smtp_host_row {
+                title: _("Server");
+              }
+
+              Adw.SpinRow smtp_port_row {
+                title: _("Port");
+
+                adjustment: Adjustment {
+                  lower: 1;
+                  upper: 65535;
+                  step-increment: 1;
+                  value: 587;
+                };
+              }
+
+              Adw.ComboRow smtp_security_row {
+                title: _("Security");
+
+                model: StringList {
+                  strings [
+                    _("TLS"),
+                    _("STARTTLS"),
+                    _("None"),
+                  ]
+                };
+              }
+
+              Adw.EntryRow smtp_user_row {
+                title: _("User Name");
+              }
+            }
+          };
+
+          [bottom]
+          Box {
+            halign: end;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button servers_test_button {
+              label: _("_Test Connection");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+
+      Adw.NavigationPage testing_page {
+        tag: "testing";
+        title: _("Connection Test");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Stack testing_stack {
+            transition-type: crossfade;
+
+            StackPage {
+              name: "progress";
+
+              child: Adw.StatusPage testing_progress {
+                title: _("Testing Connection…");
+                description: _("This can take a moment.");
+
+                paintable: Adw.SpinnerPaintable {
+                  widget: testing_progress;
+                };
+              };
+            }
+
+            StackPage {
+              name: "results";
+
+              child: Adw.StatusPage testing_results {
+                child: Adw.Clamp {
+                  maximum-size: 480;
+
+                  child: ListBox result_rows {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+
+                    Adw.ActionRow imap_result_row {
+                      title: _("Incoming (IMAP)");
+                      use-markup: false;
+
+                      [prefix]
+                      Image imap_result_icon {}
+                    }
+
+                    Adw.ActionRow smtp_result_row {
+                      title: _("Outgoing (SMTP)");
+                      use-markup: false;
+
+                      [prefix]
+                      Image smtp_result_icon {}
+                    }
+                  };
+                };
+              };
+            }
+          };
+
+          [bottom]
+          Box testing_buttons {
+            halign: end;
+            spacing: 8;
+            margin-top: 12;
+            margin-bottom: 12;
+            margin-start: 12;
+            margin-end: 12;
+
+            Button test_edit_button {
+              label: _("_Edit Servers");
+              use-underline: true;
+            }
+
+            Button test_retry_button {
+              label: _("_Retry");
+              use-underline: true;
+            }
+
+            Button test_add_anyway_button {
+              label: _("Add _Anyway");
+              use-underline: true;
+            }
+
+            Button test_add_button {
+              label: _("_Add Account");
+              use-underline: true;
+
+              styles [
+                "suggested-action",
+              ]
+            }
+          }
+        };
+      }
+    };
+  };
+}
