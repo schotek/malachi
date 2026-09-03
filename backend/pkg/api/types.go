@@ -460,42 +460,79 @@ type ThreadGetResult struct {
 // Drafts and sending
 // ---------------------------------------------------------------------------
 
-// Draft is a message being composed. The compose body is plain text in this
-// phase; HTML composition is a later decision and will be a separate field
-// with its own sanitisation on the way *in*.
+// Limits enforced by draft.save and attachment.*. Exceeding one is
+// invalidArgument unless noted. Exported so clients can pre-check.
+const (
+	MaxDraftBodyBytes       = 1 << 20  // textBody and htmlBody, each
+	MaxDraftSubjectBytes    = 1024     // bytes
+	MaxDraftRecipients      = 500      // to + cc + bcc
+	MaxDraftAttachments     = 100      // per draft
+	MaxAttachmentBytes      = 25 << 20 // one file (attachment.import) → attachmentTooBig
+	MaxDraftAttachmentBytes = 25 << 20 // sum over a draft (draft.save) → attachmentTooBig
+	MaxAttachmentDataBytes  = 16 << 20 // inline base64 payloads; the transport line cap is 32 MiB
+)
+
+// Draft is a message being composed. The backend is the authority for every
+// derived field: it sanitises HTMLBody on the way in, derives TextBody from
+// it, assigns attachment metadata and sets UpdatedAt.
 type Draft struct {
 	ID        DraftID   `json:"id,omitempty"` // empty on first save
 	AccountID AccountID `json:"accountId"`
 	// Version implements optimistic concurrency: draft.save fails with
 	// CodeConflict when the stored version differs from the one supplied.
-	Version     int               `json:"version"`
-	To          []Address         `json:"to"`
-	CC          []Address         `json:"cc,omitempty"`
-	BCC         []Address         `json:"bcc,omitempty"`
-	Subject     string            `json:"subject"`
-	TextBody    string            `json:"textBody"`
-	InReplyTo   MessageID         `json:"inReplyTo,omitempty"` // local ID; backend resolves headers
-	Forwarding  MessageID         `json:"forwarding,omitempty"`
+	// Ignored on the first save, which returns version 1.
+	Version int       `json:"version"`
+	To      []Address `json:"to"`
+	CC      []Address `json:"cc,omitempty"`
+	BCC     []Address `json:"bcc,omitempty"`
+	Subject string    `json:"subject"`
+	// TextBody is the message body as typed when HTMLBody is empty. When
+	// HTMLBody is set the value sent to draft.save is ignored: the stored and
+	// returned TextBody is the plain-text alternative the backend derives
+	// from the sanitised HTML.
+	TextBody string `json:"textBody"`
+	// HTMLBody is the rich-text body. In draft.save params it is the
+	// editor's HTML, treated as hostile (pasted web content) and run through
+	// internal/sanitize in compose mode: scripts, forms, event handlers,
+	// remote references and data: URLs are removed; <img src> survives only
+	// as "cid:<contentId>" of one of this draft's inline attachments. Only
+	// the sanitiser's output is stored, listed and sent. Empty = plain text.
+	HTMLBody    string            `json:"htmlBody,omitempty"`
+	InReplyTo   MessageID         `json:"inReplyTo,omitempty"`  // local ID; backend resolves headers
+	Forwarding  MessageID         `json:"forwarding,omitempty"` // mutually exclusive with InReplyTo
 	Attachments []DraftAttachment `json:"attachments,omitempty"`
-	UpdatedAt   time.Time         `json:"updatedAt"`
+	UpdatedAt   time.Time         `json:"updatedAt"` // server-set; ignored in params
 }
 
-// DraftAttachment references a file already imported into the backend's
-// attachment store (import method to be added with the compose phase).
+// DraftAttachment is a file in the backend's attachment store, created by
+// attachment.import. In draft.save params only ID is read; every other
+// field is backend-assigned.
 type DraftAttachment struct {
 	ID          string `json:"id"`
-	Filename    string `json:"filename"`
-	ContentType string `json:"contentType"`
+	Filename    string `json:"filename"`    // sanitised; never the raw client name
+	ContentType string `json:"contentType"` // detected from content, not taken from the client
 	Size        int64  `json:"size"`
+	// Inline marks an image referenced from HTMLBody as "cid:<contentId>";
+	// it is sent as Content-Disposition: inline inside multipart/related.
+	// Only image/* may be inline.
+	Inline    bool   `json:"inline"`
+	ContentID string `json:"contentId,omitempty"` // backend-assigned, without angle brackets
 }
 
 type DraftSaveParams struct {
 	Draft Draft `json:"draft"`
 }
 
+// DraftSaveResult echoes what the backend stored, which is what will be
+// sent: the derived text, the sanitised HTML, what the sanitiser removed and
+// the attachment list after reconciliation.
 type DraftSaveResult struct {
-	DraftID DraftID `json:"draftId"`
-	Version int     `json:"version"`
+	DraftID     DraftID           `json:"draftId"`
+	Version     int               `json:"version"`
+	TextBody    string            `json:"textBody"`
+	HTMLBody    string            `json:"htmlBody,omitempty"`
+	Blocked     BlockedContent    `json:"blocked"`
+	Attachments []DraftAttachment `json:"attachments,omitempty"`
 }
 
 type DraftListParams struct {
@@ -504,8 +541,43 @@ type DraftListParams struct {
 }
 
 type DraftListResult struct {
-	Drafts []Draft  `json:"drafts"`
+	Drafts []Draft  `json:"drafts"` // newest updatedAt first, full bodies
 	Page   PageInfo `json:"page"`
+}
+
+type DraftDeleteParams struct {
+	AccountID AccountID `json:"accountId"`
+	DraftID   DraftID   `json:"draftId"`
+}
+
+type DraftDeleteResult struct{}
+
+// ComposeMode selects how draft.create pre-fills a draft.
+type ComposeMode string
+
+const (
+	ComposeNew      ComposeMode = "new"
+	ComposeReply    ComposeMode = "reply"
+	ComposeReplyAll ComposeMode = "replyAll"
+	ComposeForward  ComposeMode = "forward"
+)
+
+// DraftCreateParams asks the backend for an unsaved template: recipients
+// computed from the original (Reply-To/From/To/CC minus the account's own
+// addresses), a Re:/Fwd: subject, the quoted sanitised body in both forms,
+// forwarded attachments imported into the store, or a parsed mailto: URI.
+// Reply and forward logic lives here, not in the UI (CLAUDE.md rule 1).
+type DraftCreateParams struct {
+	AccountID AccountID   `json:"accountId"`
+	Mode      ComposeMode `json:"mode"`
+	MessageID MessageID   `json:"messageId,omitempty"` // required unless Mode is ComposeNew
+	Mailto    string      `json:"mailto,omitempty"`    // ComposeNew only
+}
+
+// DraftCreateResult.Draft has an empty ID and version 0; nothing is
+// persisted until the first draft.save.
+type DraftCreateResult struct {
+	Draft Draft `json:"draft"`
 }
 
 // MessageSendParams queues a saved draft for delivery. Delivery is
@@ -520,6 +592,34 @@ type MessageSendParams struct {
 type MessageSendResult struct {
 	OutboxID MessageID `json:"outboxId"`
 }
+
+// ---------------------------------------------------------------------------
+// Attachments (compose-side store)
+// ---------------------------------------------------------------------------
+
+// AttachmentImportParams copies a file into the backend's attachment store.
+// Exactly one of Path and Data is set. Path must be absolute and name a
+// regular file (the UI obtains it from the FileChooser portal; both
+// processes share the sandbox). Data carries pasted or dragged content and
+// is capped by MaxAttachmentDataBytes; larger content must go through Path.
+type AttachmentImportParams struct {
+	AccountID AccountID `json:"accountId"`
+	Path      string    `json:"path,omitempty"`
+	Data      []byte    `json:"data,omitempty"`     // base64 on the wire
+	Filename  string    `json:"filename,omitempty"` // required with Data; overrides the basename of Path
+	Inline    bool      `json:"inline,omitempty"`   // image to be referenced as cid:<contentId>
+}
+
+type AttachmentImportResult struct {
+	Attachment DraftAttachment `json:"attachment"`
+}
+
+type AttachmentRemoveParams struct {
+	AccountID    AccountID `json:"accountId"`
+	AttachmentID string    `json:"attachmentId"`
+}
+
+type AttachmentRemoveResult struct{}
 
 // ---------------------------------------------------------------------------
 // Search

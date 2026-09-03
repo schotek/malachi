@@ -20,6 +20,20 @@ func TestStubFailsClosed(t *testing.T) {
 	}
 }
 
+// Composed HTML is hostile too. Compose mode must never echo its input, must
+// leave Text empty when it fails, and must never keep an https: image even
+// if a caller wrongly passes RemoteAllow.
+func TestComposeModeFailsClosed(t *testing.T) {
+	in := Input{HTML: `<script>x()</script><img src="https://x/1.png"><p>hi</p>`, Mode: ModeCompose, Policy: api.RemoteAllow}
+	out, err := Sanitize(in)
+	if strings.Contains(out.HTML, "<script") || strings.Contains(out.HTML, "https://x/1.png") {
+		t.Fatalf("compose mode kept hostile content: %q", out.HTML)
+	}
+	if err != nil && out.Text != "" {
+		t.Fatalf("failed sanitisation must not produce text: %q", out.Text)
+	}
+}
+
 // The sanitiser only understands the two-state block/allow decision. A
 // policy it does not know (knownSenders is resolved by internal/core before
 // the call, anything else is a bug) must never keep remote references.

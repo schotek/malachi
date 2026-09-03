@@ -37,3 +37,14 @@ func TestErrorCodesUnique(t *testing.T) {
 		seen[name] = code
 	}
 }
+
+// The transport is line-delimited JSON with a 32 MiB line cap
+// (internal/rpc.maxLineBytes). Inline attachment payloads are base64, so
+// the limit must leave room for the 4/3 expansion plus the rest of the
+// request.
+func TestAttachmentDataFitsTransport(t *testing.T) {
+	const maxLineBytes = 32 << 20
+	if MaxAttachmentDataBytes*4/3+(1<<20) > maxLineBytes {
+		t.Fatalf("MaxAttachmentDataBytes %d does not fit the %d transport line cap", MaxAttachmentDataBytes, maxLineBytes)
+	}
+}

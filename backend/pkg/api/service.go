@@ -44,6 +44,13 @@ type ThreadService interface {
 type DraftService interface {
 	Save(ctx context.Context, p DraftSaveParams) (*DraftSaveResult, error)
 	List(ctx context.Context, p DraftListParams) (*DraftListResult, error)
+	Delete(ctx context.Context, p DraftDeleteParams) (*DraftDeleteResult, error)
+	Create(ctx context.Context, p DraftCreateParams) (*DraftCreateResult, error)
+}
+
+type AttachmentService interface {
+	Import(ctx context.Context, p AttachmentImportParams) (*AttachmentImportResult, error)
+	Remove(ctx context.Context, p AttachmentRemoveParams) (*AttachmentRemoveResult, error)
 }
 
 type SearchService interface {
@@ -74,6 +81,7 @@ type Backend interface {
 	Messages() MessageService
 	Threads() ThreadService
 	Drafts() DraftService
+	Attachments() AttachmentService
 	Search() SearchService
 	Sync() SyncService
 	Config() ConfigService

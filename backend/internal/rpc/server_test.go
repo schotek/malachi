@@ -93,6 +93,11 @@ func TestRoundTrip(t *testing.T) {
 		t.Errorf("expected notImplemented, got %+v", resp)
 	}
 
+	resp = call(t, c, r, api.MethodAttachmentImport, api.AttachmentImportParams{AccountID: "x", Path: "/tmp/x"})
+	if resp.Error == nil || resp.Error.Code != api.CodeNotImplemented {
+		t.Errorf("expected notImplemented from the stub, got %+v", resp)
+	}
+
 	resp = call(t, c, r, "nope.nothing", nil)
 	if resp.Error == nil || resp.Error.Code != api.CodeMethodNotFound {
 		t.Errorf("expected methodNotFound, got %+v", resp)

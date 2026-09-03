@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -22,6 +23,16 @@ import (
 
 //go:embed migrations/*.sql
 var migrationFS embed.FS
+
+// Sentinel errors returned by the query methods; callers map them to API
+// error codes.
+var (
+	ErrNotFound        = errors.New("store: not found")
+	ErrVersionConflict = errors.New("store: version conflict")
+	ErrAttachmentBound = errors.New("store: attachment bound to another draft")
+	ErrTooBig          = errors.New("store: size limit exceeded")
+	ErrBadCursor       = errors.New("store: bad cursor")
+)
 
 // Store wraps the database handle.
 type Store struct {
@@ -55,11 +66,21 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := os.MkdirAll(s.AttachmentDir(), 0o700); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create attachment directory: %w", err)
+	}
 	return s, nil
 }
 
 // Path returns the database file location.
 func (s *Store) Path() string { return s.path }
+
+// AttachmentDir is where attachment data lives (0600 files in a 0700
+// directory next to the database); metadata is in the attachments table.
+func (s *Store) AttachmentDir() string {
+	return filepath.Join(filepath.Dir(s.path), "attachments")
+}
 
 // DB exposes the handle for internal packages. TODO: remove once all queries
 // live in this package.

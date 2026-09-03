@@ -51,19 +51,41 @@ import "github.com/schotek/malachi/backend/pkg/api"
 // cached bodies can be invalidated.
 const Version = "0-stub"
 
-// Input is what the MIME layer hands over.
+// Mode selects which direction the HTML is travelling.
+type Mode int
+
+const (
+	// ModeView: incoming mail for display. cid: references are rewritten to
+	// the webview's local scheme; the remote policy comes from the caller.
+	ModeView Mode = iota
+	// ModeCompose: HTML written in the editor, on its way into a draft.
+	// Policy must be RemoteBlock (anything else is an error); cid: is kept
+	// verbatim only when present in KnownCIDs; data: URLs are removed.
+	ModeCompose
+)
+
+// Input is what the MIME layer (ModeView) or draft.save (ModeCompose)
+// hands over.
 type Input struct {
 	HTML          string
+	Mode          Mode
 	Policy        api.RemoteContentPolicy
-	KnownCIDs     map[string]string // Content-ID → PartID present in the message
+	KnownCIDs     map[string]string // Content-ID → PartID (view) / attachment ID (compose)
 	MaxOutputSize int               // bytes; 0 = default
 }
 
 // Output is the only form of HTML that may cross the API.
 type Output struct {
-	HTML    string
+	HTML string
+	// Text is the plain-text rendering of the sanitised tree: the text
+	// alternative of a composed message and the "text derived from html" of
+	// message.body.
+	Text    string
 	Blocked api.BlockedContent
 	Links   []api.Link
+	// CIDs lists the cid: references that survived (ModeCompose uses it to
+	// keep only referenced inline attachments bound).
+	CIDs    []string
 	Version string
 }
 

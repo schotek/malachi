@@ -29,8 +29,14 @@ const (
 	MethodThreadGet  = "thread.get"
 
 	// Drafts.
-	MethodDraftSave = "draft.save"
-	MethodDraftList = "draft.list"
+	MethodDraftSave   = "draft.save"
+	MethodDraftList   = "draft.list"
+	MethodDraftDelete = "draft.delete"
+	MethodDraftCreate = "draft.create"
+
+	// Attachments (compose-side store).
+	MethodAttachmentImport = "attachment.import"
+	MethodAttachmentRemove = "attachment.remove"
 
 	// Search.
 	MethodSearchQuery = "search.query"
@@ -65,7 +71,8 @@ var AllMethods = []string{
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
 	MethodThreadList, MethodThreadGet,
-	MethodDraftSave, MethodDraftList,
+	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate,
+	MethodAttachmentImport, MethodAttachmentRemove,
 	MethodSearchQuery,
 	MethodSyncStatus, MethodSyncTrigger,
 	MethodConfigGet, MethodConfigSet,

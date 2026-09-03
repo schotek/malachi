@@ -30,6 +30,9 @@ const (
 	CodeMessageNotFound ErrorCode = 1102
 	CodeThreadNotFound  ErrorCode = 1103
 	CodeDraftNotFound   ErrorCode = 1104
+	// CodeAttachmentNotFound: unknown id, another account's, or already bound
+	// to a different draft.
+	CodeAttachmentNotFound ErrorCode = 1105
 
 	// 1200–1299: authentication.
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
@@ -50,6 +53,8 @@ const (
 	// 1500–1599: content.
 	CodeMalformedMessage ErrorCode = 1500 // MIME could not be parsed even leniently
 	CodeSanitizeFailed   ErrorCode = 1501 // sanitiser refused the input; body withheld
+	// CodeAttachmentTooBig: over MaxAttachmentBytes, MaxDraftAttachmentBytes
+	// or MaxAttachmentDataBytes; Error.Data = {"limit": n, "size": n}.
 	CodeAttachmentTooBig ErrorCode = 1502
 )
 
@@ -62,34 +67,35 @@ func (c ErrorCode) String() string {
 }
 
 var codeNames = map[ErrorCode]string{
-	CodeParseError:       "parseError",
-	CodeInvalidRequest:   "invalidRequest",
-	CodeMethodNotFound:   "methodNotFound",
-	CodeInvalidParams:    "invalidParams",
-	CodeInternalError:    "internalError",
-	CodeNotImplemented:   "notImplemented",
-	CodeInvalidArgument:  "invalidArgument",
-	CodeConflict:         "conflict",
-	CodeCancelled:        "cancelled",
-	CodeUnavailable:      "unavailable",
-	CodeAccountNotFound:  "accountNotFound",
-	CodeFolderNotFound:   "folderNotFound",
-	CodeMessageNotFound:  "messageNotFound",
-	CodeThreadNotFound:   "threadNotFound",
-	CodeDraftNotFound:    "draftNotFound",
-	CodeAuthRequired:     "authRequired",
-	CodeAuthFailed:       "authFailed",
-	CodeKeyringError:     "keyringError",
-	CodeOffline:          "offline",
-	CodeNetworkError:     "networkError",
-	CodeServerError:      "serverError",
-	CodeTLSError:         "tlsError",
-	CodeServerTimeout:    "serverTimeout",
-	CodeStorageError:     "storageError",
-	CodeMigrationFailed:  "migrationFailed",
-	CodeMalformedMessage: "malformedMessage",
-	CodeSanitizeFailed:   "sanitizeFailed",
-	CodeAttachmentTooBig: "attachmentTooBig",
+	CodeParseError:         "parseError",
+	CodeInvalidRequest:     "invalidRequest",
+	CodeMethodNotFound:     "methodNotFound",
+	CodeInvalidParams:      "invalidParams",
+	CodeInternalError:      "internalError",
+	CodeNotImplemented:     "notImplemented",
+	CodeInvalidArgument:    "invalidArgument",
+	CodeConflict:           "conflict",
+	CodeCancelled:          "cancelled",
+	CodeUnavailable:        "unavailable",
+	CodeAccountNotFound:    "accountNotFound",
+	CodeFolderNotFound:     "folderNotFound",
+	CodeMessageNotFound:    "messageNotFound",
+	CodeThreadNotFound:     "threadNotFound",
+	CodeDraftNotFound:      "draftNotFound",
+	CodeAttachmentNotFound: "attachmentNotFound",
+	CodeAuthRequired:       "authRequired",
+	CodeAuthFailed:         "authFailed",
+	CodeKeyringError:       "keyringError",
+	CodeOffline:            "offline",
+	CodeNetworkError:       "networkError",
+	CodeServerError:        "serverError",
+	CodeTLSError:           "tlsError",
+	CodeServerTimeout:      "serverTimeout",
+	CodeStorageError:       "storageError",
+	CodeMigrationFailed:    "migrationFailed",
+	CodeMalformedMessage:   "malformedMessage",
+	CodeSanitizeFailed:     "sanitizeFailed",
+	CodeAttachmentTooBig:   "attachmentTooBig",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

@@ -21,16 +21,17 @@ type StubBackend struct {
 
 var _ api.Backend = (*StubBackend)(nil)
 
-func (b *StubBackend) System() api.SystemService    { return stubSystem{b} }
-func (b *StubBackend) Accounts() api.AccountService { return stubAccounts{} }
-func (b *StubBackend) Folders() api.FolderService   { return stubFolders{} }
-func (b *StubBackend) Messages() api.MessageService { return stubMessages{} }
-func (b *StubBackend) Threads() api.ThreadService   { return stubThreads{} }
-func (b *StubBackend) Drafts() api.DraftService     { return stubDrafts{} }
-func (b *StubBackend) Search() api.SearchService    { return stubSearch{} }
-func (b *StubBackend) Sync() api.SyncService        { return stubSync{} }
-func (b *StubBackend) Config() api.ConfigService    { return stubConfig{} }
-func (b *StubBackend) Senders() api.SenderService   { return stubSenders{} }
+func (b *StubBackend) System() api.SystemService          { return stubSystem{b} }
+func (b *StubBackend) Accounts() api.AccountService       { return stubAccounts{} }
+func (b *StubBackend) Folders() api.FolderService         { return stubFolders{} }
+func (b *StubBackend) Messages() api.MessageService       { return stubMessages{} }
+func (b *StubBackend) Threads() api.ThreadService         { return stubThreads{} }
+func (b *StubBackend) Drafts() api.DraftService           { return stubDrafts{} }
+func (b *StubBackend) Attachments() api.AttachmentService { return stubAttachments{} }
+func (b *StubBackend) Search() api.SearchService          { return stubSearch{} }
+func (b *StubBackend) Sync() api.SyncService              { return stubSync{} }
+func (b *StubBackend) Config() api.ConfigService          { return stubConfig{} }
+func (b *StubBackend) Senders() api.SenderService         { return stubSenders{} }
 
 type stubSystem struct{ b *StubBackend }
 
@@ -108,6 +109,21 @@ func (stubDrafts) Save(context.Context, api.DraftSaveParams) (*api.DraftSaveResu
 	return nil, api.ErrNotImplemented
 }
 func (stubDrafts) List(context.Context, api.DraftListParams) (*api.DraftListResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Delete(context.Context, api.DraftDeleteParams) (*api.DraftDeleteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubDrafts) Create(context.Context, api.DraftCreateParams) (*api.DraftCreateResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubAttachments struct{}
+
+func (stubAttachments) Import(context.Context, api.AttachmentImportParams) (*api.AttachmentImportResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAttachments) Remove(context.Context, api.AttachmentRemoveParams) (*api.AttachmentRemoveResult, error) {
 	return nil, api.ErrNotImplemented
 }
 

@@ -76,11 +76,12 @@ func run() error {
 	}()
 	log.Info("store ready", "path", st.Path())
 
-	backend := core.New(version, st, cfg)
+	backend := core.New(version, st, cfg, log)
 	srv := rpc.NewServer(backend, log)
 	if err := srv.Listen(*flagSocket); err != nil {
 		return err
 	}
+	go backend.Maintain(ctx)
 
 	// TODO(phase-1): start per-account sync engines here, giving them srv as
 	// their api.Notifier.

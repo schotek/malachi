@@ -19,7 +19,7 @@ func newTestBackend(t *testing.T, cfg config.Config) *Backend {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return New("test", st, cfg)
+	return New("test", st, cfg, nil)
 }
 
 func errCode(t *testing.T, err error) api.ErrorCode {
@@ -69,7 +69,7 @@ func TestConfigSetOverridesAndPersists(t *testing.T) {
 	// The stored value wins over config.toml on a fresh backend over the same store.
 	cfg := config.Default()
 	cfg.Sync.IntervalSeconds = 123
-	b2 := New("test", b.store, cfg)
+	b2 := New("test", b.store, cfg, nil)
 	got, _ = b2.Config().Get(ctx, api.ConfigGetParams{})
 	if got.Preferences.SyncIntervalSeconds != 0 {
 		t.Fatalf("store did not take precedence over config.toml: %+v", got.Preferences)
@@ -184,3 +184,5 @@ func TestRemoteContentForUsesStore(t *testing.T) {
 		t.Fatalf("unknown sender via store: %q", got)
 	}
 }
+
+func errorsAs(err error, target **api.Error) bool { return errors.As(err, target) }

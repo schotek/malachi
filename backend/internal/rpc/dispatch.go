@@ -33,7 +33,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	sys, acc, fol := b.System(), b.Accounts(), b.Folders()
 	msg, thr, drf := b.Messages(), b.Threads(), b.Drafts()
 	srch, sync := b.Search(), b.Sync()
-	cfg, snd := b.Config(), b.Senders()
+	cfg, snd, att := b.Config(), b.Senders(), b.Attachments()
 
 	s.handlers[api.MethodSystemInfo] = wrap(sys.Info)
 
@@ -58,6 +58,11 @@ func (s *Server) registerBackend(b api.Backend) {
 
 	s.handlers[api.MethodDraftSave] = wrap(drf.Save)
 	s.handlers[api.MethodDraftList] = wrap(drf.List)
+	s.handlers[api.MethodDraftDelete] = wrap(drf.Delete)
+	s.handlers[api.MethodDraftCreate] = wrap(drf.Create)
+
+	s.handlers[api.MethodAttachmentImport] = wrap(att.Import)
+	s.handlers[api.MethodAttachmentRemove] = wrap(att.Remove)
 
 	s.handlers[api.MethodSearchQuery] = wrap(srch.Query)
 

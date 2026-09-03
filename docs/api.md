@@ -80,6 +80,7 @@ No `id`; the client must not reply.
 | 1102 | messageNotFound | |
 | 1103 | threadNotFound | |
 | 1104 | draftNotFound | |
+| 1105 | attachmentNotFound | unknown id, another account's, or already bound to a different draft |
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
@@ -92,7 +93,7 @@ No `id`; the client must not reply.
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
 | 1501 | sanitizeFailed | sanitiser refused the body; **body is withheld**, never returned raw |
-| 1502 | attachmentTooBig | |
+| 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
 
 Codes are never renumbered; new ones are appended within their group.
 
@@ -311,6 +312,13 @@ Delivery is asynchronous; progress and failures arrive through
 `notify.syncState` (folder role `outbox`, `pendingOutbox`). A failed send
 stays in the outbox; it is never silently dropped.
 
+Recipients (`to` + `cc` + `bcc`) must be non-empty; an empty subject or body
+is allowed. The message is built from the *stored* draft: text/plain alone,
+or multipart/alternative (text/plain + text/html) wrapped in
+multipart/related when inline attachments are referenced. On success the
+draft is removed and its attachments move with the outbox message. Until
+the SMTP phase this method returns notImplemented.
+
 ### 4.4 thread
 
 #### `thread.list`
@@ -332,28 +340,100 @@ A thread is listed in a folder if at least one member is in that folder.
 
 ### 4.5 draft
 
-#### `draft.save`
-- params: `{ "draft": Draft }`
-- result: `{ "draftId": "d_1", "version": 2 }`
-- errors: conflict (stored version ≠ supplied version), invalidArgument
+Drafts are local until sent; they are not synchronised to the IMAP Drafts
+folder in this phase. The backend owns every derived field: it sanitises
+`htmlBody` on the way **in**, derives `textBody` from it, assigns attachment
+metadata and sets `updatedAt`.
 
 ```jsonc
-Draft { "id": "d_1" (opt on first save), "accountId", "version": 1,
+Draft { "id": "d_1" (absent on first save), "accountId", "version": 1,
         "to": [Address], "cc": [Address] (opt), "bcc": [Address] (opt),
-        "subject": "…", "textBody": "plain text",
+        "subject": "…",
+        "textBody": "plain text",
+        "htmlBody": "<p>…</p>" (opt; rich text),
         "inReplyTo": "m_123" (opt, local id), "forwarding": "m_124" (opt),
-        "attachments": [ { "id", "filename", "contentType", "size" } ] (opt),
+        "attachments": [DraftAttachment] (opt),
         "updatedAt": Time }
+DraftAttachment { "id": "att_…", "filename": "safe-name.pdf", "contentType": "application/pdf",
+                  "size": 12345, "inline": false, "contentId": "…@malachi.local" (opt) }
 ```
 
-Optimistic concurrency: the client sends the version it last saw; the
-backend increments on success. Compose bodies are plain text in protocol
-version 1. HTML composition, if ever added, gets its own field and its own
-inbound sanitisation.
+Bodies:
+
+- `htmlBody` empty → plain-text message; `textBody` is stored as typed
+  (CRLF normalised to LF).
+- `htmlBody` non-empty → multipart/alternative. The value sent is the
+  editor's HTML and is treated as hostile (pasted web content). It passes
+  through the same sanitiser as incoming mail, in compose mode: scripts,
+  forms, event handlers, frames, CSS outside the allow-list, every remote
+  reference and every `data:` URL are removed (`block` policy, no per-call
+  override); `<img src>` survives only as `cid:<contentId>` of an
+  attachment listed in `attachments` with `inline: true`. `textBody` in
+  params is **ignored**; the backend derives the plain-text alternative
+  from the sanitised HTML. Only the sanitiser's output is stored, returned
+  by `draft.list` and sent.
+- Limits (`api.MaxDraft*`): `textBody` and `htmlBody` ≤ 1 MiB each,
+  `subject` ≤ 1024 bytes, ≤ 500 recipients, ≤ 100 attachments, attachments
+  ≤ 25 MiB in total. Subject and address names must not contain CR, LF or
+  NUL; all strings must be valid UTF-8.
+
+The UI editor keeps its own live copy of the HTML; the backend's copy is
+the one that is sent. `draft.save` therefore echoes what it stored
+(`htmlBody`, `textBody`) and what it removed (`blocked`) so the UI can be
+honest about removals. Reopening a draft always yields the sanitised form.
+
+#### `draft.save`
+- params: `{ "draft": Draft }`
+- result: `{ "draftId": "d_1", "version": 2, "textBody": "…", "htmlBody": "…" (opt),
+             "blocked": BlockedContent, "attachments": [DraftAttachment] (opt) }`
+- errors: invalidArgument (limits, bad address, CR/LF in header fields,
+  both `inReplyTo` and `forwarding`), conflict (stored version ≠ supplied
+  version), draftNotFound (`id` given but unknown), attachmentNotFound
+  (listed attachment unknown, of another account, or bound to another
+  draft), attachmentTooBig (sum over 25 MiB), sanitizeFailed (nothing is
+  stored), storageError
+
+Optimistic concurrency: with `id` absent the draft is created and
+`version` is ignored (result `version` = 1). With `id` present the supplied
+`version` must equal the stored one; the result is `version + 1`.
+
+Attachments: only `attachments[].id` is read. Listed attachments become
+bound to this draft in the given order; attachments previously bound but no
+longer listed are released (kept for 24 h by the orphan sweep, see §4.10).
+An `inline` attachment whose `contentId` is not referenced from the
+*sanitised* `htmlBody` is released as well: deleting the picture from the
+body drops it. A plain-text draft cannot keep inline attachments.
+
+Transitional: while `internal/sanitize` is a stub, every `draft.save` with
+a non-empty `htmlBody` fails with sanitizeFailed and the draft is left
+unchanged. Plain-text drafts work.
 
 #### `draft.list`
 - params: `{ "accountId", "page": Page }`
-- result: `{ "drafts": [Draft], "page": PageInfo }`
+- result: `{ "drafts": [Draft], "page": PageInfo }` (newest `updatedAt` first; full bodies)
+
+#### `draft.delete`
+- params: `{ "accountId", "draftId" }`
+- result: `{}` (deleting an unknown draft is not an error). Bound
+  attachments are deleted with it.
+
+#### `draft.create`
+Returns an **unsaved** template (`id` empty, `version` 0) with everything a
+compose window needs pre-filled by the backend: for `reply`/`replyAll` the
+recipients computed from `Reply-To`/`From`/`To`/`CC` minus the account's
+own addresses, a `Re:` subject, the original quoted in both `htmlBody`
+(sanitised, `<blockquote type="cite">`) and `textBody` (`> ` prefixed) and
+`inReplyTo` set; for `forward` a `Fwd:` subject, the quoted body,
+`forwarding` set and the original's attachments imported (unbound, swept
+after 24 h if never saved); for `new` with `mailto` the parsed URI. Nothing
+is persisted. Reply and forward logic lives here so that every UI behaves
+the same.
+
+- params: `{ "accountId", "mode": "new" | "reply" | "replyAll" | "forward",
+             "messageId" (opt; required unless mode is new), "mailto": "mailto:…" (opt, new only) }`
+- result: `{ "draft": Draft }`
+- errors: invalidArgument, messageNotFound, sanitizeFailed, notImplemented
+  (until the message store exists)
 
 ### 4.6 search
 
@@ -432,6 +512,42 @@ KnownSender { "address": "alice@example.org", "source": "sent" | "user", "addedA
 - params: `{ "address" }`
 - result: `{}` (removing an unknown address is not an error)
 
+### 4.10 attachment
+
+The compose-side attachment store. Files are copied into
+`<data dir>/attachments/<id>` (0600 in a 0700 directory, next to
+`store.db`) at import; metadata lives in the store. An imported attachment
+belongs to an account, not yet to a draft; `draft.save` binds it. Unbound
+attachments older than 24 h are deleted by a sweep at daemon start and
+hourly, so an import that never made it into a save does not leak disk.
+
+#### `attachment.import`
+- params: `{ "accountId", "path": "/abs/file" (opt), "data": base64 (opt),
+             "filename": "…" (opt), "inline": bool (opt) }` — exactly one of `path` / `data`
+- result: `{ "attachment": DraftAttachment }`
+- errors: invalidArgument (relative path, not a regular file, empty file,
+  neither or both of `path`/`data`, `data` without `filename`, `inline`
+  with a non-image type), attachmentTooBig (file over 25 MiB; `data` over
+  16 MiB), storageError
+
+`path` comes from the FileChooser portal; the daemon shares the sandbox and
+reads it directly. Symlinks are followed; the target must be a regular file
+(directories, FIFOs and devices are rejected without blocking). The file is
+copied immediately, so the portal grant may lapse afterwards. `data` is for
+clipboard or drag content that has no path (standard base64 on the wire).
+`contentType` is detected from the content and only falls back to the
+extension when sniffing is inconclusive; the client cannot set it.
+`filename` is sanitised like received attachment names (`docs/security.md`
+§4) and defaults to the basename of `path`. With `inline: true` (images
+only) a `contentId` is assigned; the HTML must reference the image exactly
+as `<img src="cid:<contentId>">`.
+
+#### `attachment.remove`
+- params: `{ "accountId", "attachmentId" }`
+- result: `{}` (removing an unknown id is not an error). If the attachment
+  was bound to a draft it disappears from that draft; the draft's `version`
+  is not changed.
+
 ## 5. Notifications
 
 | Method | params |
@@ -465,3 +581,10 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `sender.list`, `sender.add`, `sender.remove`; new stored remote-content
   policy value `knownSenders`; `message.body` `remoteContent` is now an
   optional per-call override of the stored preference.
+- **1** (2026-09-02, compatible addition, compose): `Draft.htmlBody`
+  (sanitised on the way in; `textBody` derived by the backend when set),
+  `DraftAttachment.inline`/`contentId`, `draft.save` result now echoes
+  `textBody`, `htmlBody`, `blocked`, `attachments`; new `draft.delete`,
+  `draft.create` (stub), `attachment.import`, `attachment.remove`; new
+  error code 1105 `attachmentNotFound`; limits `api.MaxDraft*` /
+  `api.MaxAttachment*` documented in §4.5 and §4.10.
