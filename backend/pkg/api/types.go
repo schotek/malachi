@@ -317,7 +317,35 @@ type MessageSummary struct {
 	Flags          []Flag    `json:"flags"`
 	HasAttachments bool      `json:"hasAttachments"`
 	Size           int64     `json:"size"`
+	// Outbox is present only for a message in the account's outbox folder
+	// (role "outbox"): its delivery state.
+	Outbox *OutboxInfo `json:"outbox,omitempty"`
 }
+
+// OutboxState is the delivery state of a queued message.
+type OutboxState string
+
+const (
+	OutboxQueued  OutboxState = "queued"  // waiting for the next attempt
+	OutboxSending OutboxState = "sending" // an SMTP session is running
+	OutboxSent    OutboxState = "sent"    // delivered; the Sent copy is pending
+	OutboxFailed  OutboxState = "failed"  // permanent failure; outbox.retry re-queues
+)
+
+// OutboxInfo describes a message in the outbox.
+type OutboxInfo struct {
+	State    OutboxState `json:"state"`
+	Attempts int         `json:"attempts"`
+	// NextAttemptAt is set while queued after a transient failure.
+	NextAttemptAt *time.Time `json:"nextAttemptAt,omitempty"`
+	// Error is the last failure; absent before the first attempt and after
+	// a success.
+	Error *Error `json:"error,omitempty"`
+}
+
+// MaxOutgoingMessageBytes caps the built RFC 5322 message: attachments are
+// base64-encoded, so 25 MiB of files become roughly 34 MiB on the wire.
+const MaxOutgoingMessageBytes = 36 << 20
 
 // Attachment describes a MIME part the user can download. Content is fetched
 // through a separate method in a later phase; only metadata crosses here now.
@@ -433,13 +461,26 @@ type Link struct {
 // it in a JavaScript-disabled webview with a strict CSP. Text is the plain
 // text alternative, or a text rendering derived from HTML when the message
 // has no text part.
+// BodyState says whether the daemon holds the message content.
+type BodyState string
+
+const (
+	BodyFetched BodyState = "fetched" // text (and, once the sanitiser exists, html) available
+	BodyPending BodyState = "pending" // the sync engine has not downloaded the body yet
+	BodyTooBig  BodyState = "tooBig"  // over the daemon's raw-message cap; never downloaded
+	BodyFailed  BodyState = "failed"  // downloaded but unparsable; nothing shown
+)
+
 type MessageBodyResult struct {
-	MessageID MessageID      `json:"messageId"`
-	HasHTML   bool           `json:"hasHtml"`
-	HTML      string         `json:"html,omitempty"` // sanitised; empty when HasHTML is false
-	Text      string         `json:"text"`
-	Blocked   BlockedContent `json:"blocked"`
-	Links     []Link         `json:"links"`
+	MessageID MessageID `json:"messageId"`
+	BodyState BodyState `json:"bodyState"`
+	HasHTML   bool      `json:"hasHtml"`
+	// HTML is the sanitised body. Withheld (empty) while the sanitiser is a
+	// stub (SanitizerVersion "0-stub"); Text is always the plain-text form.
+	HTML    string         `json:"html,omitempty"`
+	Text    string         `json:"text"`
+	Blocked BlockedContent `json:"blocked"`
+	Links   []Link         `json:"links"`
 	// InlineParts maps cid: references present in HTML to attachment PartIDs.
 	InlineParts map[string]string `json:"inlineParts,omitempty"`
 	// SanitizerVersion identifies the sanitiser ruleset; bump on any rule change.
@@ -638,8 +679,9 @@ type DraftCreateResult struct {
 }
 
 // MessageSendParams queues a saved draft for delivery. Delivery is
-// asynchronous: the result only confirms enqueueing; progress arrives via
-// notify.syncState for the outbox folder.
+// asynchronous: the result only confirms enqueueing. The queued message
+// lives in the account's outbox folder; SyncState.PendingOutbox counts it
+// and MessageSummary.Outbox carries its state and last error.
 type MessageSendParams struct {
 	AccountID AccountID `json:"accountId"`
 	DraftID   DraftID   `json:"draftId"`
@@ -649,6 +691,15 @@ type MessageSendParams struct {
 type MessageSendResult struct {
 	OutboxID MessageID `json:"outboxId"`
 }
+
+// OutboxRetryParams re-queues a queued or failed outbox message for an
+// immediate attempt.
+type OutboxRetryParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+}
+
+type OutboxRetryResult struct{}
 
 // ---------------------------------------------------------------------------
 // Attachments (compose-side store)
@@ -736,7 +787,7 @@ type SyncState struct {
 	Progress int        `json:"progress"`
 	LastSync *time.Time `json:"lastSync,omitempty"`
 	Error    *Error     `json:"error,omitempty"`
-	// PendingOutbox counts messages waiting to be sent.
+	// PendingOutbox counts outbox messages in state queued or sending.
 	PendingOutbox int `json:"pendingOutbox"`
 }
 
@@ -765,6 +816,13 @@ type SyncTriggerResult struct{}
 // the backend accepts; 0 disables periodic sync (manual sync.trigger only).
 const SyncIntervalMin = 60
 
+// OfflineDaysMax bounds Preferences.OfflineDays (0 = keep everything).
+const OfflineDaysMax = 3650
+
+// MaxMessageIDsPerCall bounds messageIds in message.flag, message.move and
+// message.delete.
+const MaxMessageIDsPerCall = 1000
+
 // Preferences are the user-settable daemon options. They affect mail
 // handling and therefore live in the backend, not in the UI's own settings.
 // Precedence: value set through config.set, then config.toml, then the
@@ -775,6 +833,10 @@ type Preferences struct {
 	// RemoteContent is the default policy for message.body when the call
 	// does not override it: block (default), knownSenders or allow.
 	RemoteContent RemoteContentPolicy `json:"remoteContent"`
+	// OfflineDays bounds the local mail cache: headers and bodies of messages
+	// newer than this many days are kept; older ones are not stored at all.
+	// 0 keeps everything.
+	OfflineDays int `json:"offlineDays"`
 }
 
 type ConfigGetParams struct{}

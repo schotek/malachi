@@ -30,6 +30,9 @@ const (
 	MethodMessageDelete = "message.delete"
 	MethodMessageSend   = "message.send"
 
+	// Outbox.
+	MethodOutboxRetry = "outbox.retry"
+
 	// Threads.
 	MethodThreadList = "thread.list"
 	MethodThreadGet  = "thread.get"
@@ -78,6 +81,7 @@ var AllMethods = []string{
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
+	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate,
 	MethodAttachmentImport, MethodAttachmentRemove,

@@ -58,6 +58,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodMessageMove] = wrap(msg.Move)
 	s.handlers[api.MethodMessageDelete] = wrap(msg.Delete)
 	s.handlers[api.MethodMessageSend] = wrap(msg.Send)
+	s.handlers[api.MethodOutboxRetry] = wrap(b.Outbox().Retry)
 
 	s.handlers[api.MethodThreadList] = wrap(thr.List)
 	s.handlers[api.MethodThreadGet] = wrap(thr.Get)

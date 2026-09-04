@@ -28,6 +28,7 @@ func (b *StubBackend) System() api.SystemService          { return stubSystem{b}
 func (b *StubBackend) Accounts() api.AccountService       { return stubAccounts{} }
 func (b *StubBackend) Folders() api.FolderService         { return stubFolders{} }
 func (b *StubBackend) Messages() api.MessageService       { return stubMessages{} }
+func (b *StubBackend) Outbox() api.OutboxService          { return stubOutbox{} }
 func (b *StubBackend) Threads() api.ThreadService         { return stubThreads{} }
 func (b *StubBackend) Drafts() api.DraftService           { return stubDrafts{} }
 func (b *StubBackend) Attachments() api.AttachmentService { return stubAttachments{} }
@@ -112,6 +113,12 @@ func (stubThreads) List(context.Context, api.ThreadListParams) (*api.ThreadListR
 	return nil, api.ErrNotImplemented
 }
 func (stubThreads) Get(context.Context, api.ThreadGetParams) (*api.ThreadGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubOutbox struct{}
+
+func (stubOutbox) Retry(context.Context, api.OutboxRetryParams) (*api.OutboxRetryResult, error) {
 	return nil, api.ErrNotImplemented
 }
 

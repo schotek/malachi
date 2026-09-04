@@ -42,6 +42,10 @@ type MessageService interface {
 	Send(ctx context.Context, p MessageSendParams) (*MessageSendResult, error)
 }
 
+type OutboxService interface {
+	Retry(ctx context.Context, p OutboxRetryParams) (*OutboxRetryResult, error)
+}
+
 type ThreadService interface {
 	List(ctx context.Context, p ThreadListParams) (*ThreadListResult, error)
 	Get(ctx context.Context, p ThreadGetParams) (*ThreadGetResult, error)
@@ -85,6 +89,7 @@ type Backend interface {
 	Accounts() AccountService
 	Folders() FolderService
 	Messages() MessageService
+	Outbox() OutboxService
 	Threads() ThreadService
 	Drafts() DraftService
 	Attachments() AttachmentService

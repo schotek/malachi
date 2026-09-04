@@ -35,11 +35,13 @@ type Config struct {
 
 type SyncConfig struct {
 	IntervalSeconds int `toml:"interval_seconds"`
+	// OfflineDays bounds the local mail cache (0 = keep everything).
+	OfflineDays int `toml:"offline_days"`
 }
 
 // Default returns the configuration used when no file exists.
 func Default() Config {
-	return Config{Sync: SyncConfig{IntervalSeconds: 300}}
+	return Config{Sync: SyncConfig{IntervalSeconds: 300, OfflineDays: 30}}
 }
 
 // Load reads path. A missing file is not an error: defaults are returned and

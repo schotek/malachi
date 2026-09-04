@@ -120,9 +120,25 @@ Time      RFC 3339 string, UTC
   "from": [Address], "to": [Address],
   "subject": "…", "date": "2026-09-02T10:00:00Z",
   "snippet": "plain text, ≤ ~200 chars, derived by the backend",
-  "flags": ["seen"], "hasAttachments": false, "size": 4321
+  "flags": ["seen"], "hasAttachments": false, "size": 4321,
+  "outbox": OutboxInfo (opt)
 }
 ```
+
+`outbox` is present only for a message in the account's outbox folder
+(role `outbox`, §4.2) and describes its delivery:
+
+```jsonc
+OutboxInfo { "state": "queued|sending|sent|failed", "attempts": 1,
+             "nextAttemptAt": Time (opt), "error": Error (opt) }
+```
+
+- `queued`: waiting for the next attempt (`nextAttemptAt` set after a
+  transient failure, absent when due now); `sending`: an SMTP session is
+  running; `sent`: delivered, the copy in the Sent folder is pending;
+  `failed`: a permanent failure, `outbox.retry` re-queues it.
+- `error`: the last failure (a network, server, TLS, timeout or auth code
+  from §2), absent before the first attempt and after a success.
 
 ### Message (message.get)
 
@@ -145,6 +161,20 @@ characters, length-capped).
 { "accountId": "acc_1", "status": "idle|syncing|offline|authRequired|error|disabled",
   "folderId": "f_inbox", "progress": 42, "lastSync": Time, "error": Error, "pendingOutbox": 0 }
 ```
+
+- `status`: `idle` (connected or between passes, no work), `syncing` (a pass
+  is running; `folderId`/`progress` describe it), `offline` (the last attempt
+  failed for a network reason; `error` set; retrying with backoff),
+  `authRequired` (missing or refused credentials; a `notify.authRequired`
+  was sent; nothing is retried until the account is updated), `error`
+  (server or storage error; `error` set), `disabled` (paused, or no syncer).
+- `folderId`: only while `syncing` a specific folder.
+- `progress`: 0–100 within the current pass, -1 otherwise.
+- `lastSync`: end of the last *successful* pass; absent before the first.
+- `error`: the last failure, cleared by the next successful pass.
+- `pendingOutbox`: outbox messages in state `queued` or `sending` (§4.3
+  `message.send`). Sending is not a `status`: it runs beside the IMAP
+  sync, and a `failed` message does not count.
 
 ## 4. Methods
 
@@ -173,8 +203,9 @@ returns accounts in creation order. Every mutation is followed by
 - params: `{}`
 - result: `{ "accounts": [Account] }`
 
-`state` is `disabled` for a paused account; otherwise, until the sync engine
-exists, it is `idle` with `progress: -1`.
+`state` is `disabled` for a paused account; otherwise the live `SyncState`
+of the account's syncer (§3), `idle` with `progress: -1` and no `lastSync`
+before the first pass. Identical to `sync.status`.
 
 ```jsonc
 Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": SyncState }
@@ -225,6 +256,8 @@ the backend starts the flow and emits `notify.authRequired` with `authUrl`.
 - result: `{}`
 - errors: invalidArgument, accountNotFound, storageError
 
+The mail cache (folders, messages, raw files, operation log) is always
+removed with the account; the syncer is stopped first.
 `deleteLocalData: true` also deletes the account's drafts and attachments
 (rows and files); `false` keeps them, orphaned, until a later phase defines
 what happens to local data of a removed account. Keyring secrets are
@@ -329,11 +362,31 @@ Folder { "id": "f_1", "accountId", "parentId" (opt), "name": "Inbox", "path": "I
 ```
 
 Folder lists are not paginated: even large accounts have at most a few
-thousand folders. `outbox` is a local pseudo-folder holding queued messages.
+thousand folders. `outbox` is a local pseudo-folder holding queued
+messages: it exists once the first message was sent from the account, is
+never synchronised with the server, has an empty server path and counts
+every queued, sending, sent-pending and failed message in `total` (`unread`
+is always 0). Clients typically show it only while `total` is non-zero.
+
+- errors: invalidArgument (no `accountId`), accountNotFound, storageError
+
+The list is what the daemon learned from the server's last `LIST` (with
+special-use attributes when offered, name heuristics otherwise); `unread`
+and `total` are counted from the local store, so they cover only messages
+within the `offlineDays` window and lag the server by at most one sync.
+Without `includeUnsubscribed`, unsubscribed folders are omitted except role
+folders, which are always listed. Order: role folders first (inbox, drafts,
+sent, archive, junk, trash, outbox), then the rest by `path`. Before the first
+successful sync the list is empty (not an error).
 
 #### `folder.subscribe`
 - params: `{ "accountId", "folderId", "subscribed": bool }`
 - result: `{}`
+- errors: notImplemented
+
+Not implemented yet: the sync engine synchronises every selectable folder
+regardless of subscription, and a local-only flag would be overwritten by
+the next `LIST`. Use `includeUnsubscribed` meanwhile.
 
 ### 4.3 message
 
@@ -341,14 +394,26 @@ thousand folders. `outbox` is a local pseudo-folder holding queued messages.
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt), "unreadOnly": bool (opt) }`
 - result: `{ "messages": [MessageSummary], "page": PageInfo }`
 
+- errors: invalidArgument (missing ids, unknown `sort`, bad cursor),
+  accountNotFound, folderNotFound (unknown or another account's folder),
+  storageError
+
 Cursor stability: a cursor encodes a (sort key, id) position and stays valid
 across syncs; new messages inserted before the position are simply not seen
-by an in-progress pagination. Clients refresh from the start on
-`notify.newMessage`.
+by an in-progress pagination. A cursor is bound to the `sort` it was issued
+for. Clients refresh from the start on `notify.newMessage`. `page.total` is
+the folder's local count after the `unreadOnly` filter. Only messages within
+the `offlineDays` window exist locally; `threadId` is empty until threading
+exists.
 
 #### `message.get`
 - params: `{ "accountId", "messageId" }`
 - result: `{ "message": Message }`
+- errors: invalidArgument, accountNotFound, messageNotFound, storageError
+
+`attachments` come from the server's `BODYSTRUCTURE` at header sync and are
+refined from the parsed MIME once the body is downloaded; `headers` is the
+curated subset parsed from the body (empty before it is downloaded).
 
 #### `message.body`
 **The only method that returns message content, and it returns only
@@ -360,6 +425,7 @@ sanitised content.**
 ```jsonc
 {
   "messageId": "m_123",
+  "bodyState": "fetched",                // fetched | pending | tooBig | failed
   "hasHtml": true,
   "html": "<div>…sanitised…</div>",      // absent/empty when hasHtml is false
   "text": "plain text alternative, or text derived from html",
@@ -387,6 +453,22 @@ Guarantees of `html` (enforced in `backend/internal/sanitize`, see
 There is **no** parameter, flag, environment variable or debug method that
 returns the original HTML.
 
+**Text-only phase (sanitiser `0-stub`).** Until `internal/sanitize` is
+implemented, `message.body` returns `text` only: the `text/plain` part, or
+for HTML-only messages a plain-text rendering derived by the MIME layer from
+the HTML *tree* (tags never reach `text`). `hasHtml` reports whether an HTML
+part exists; `html` is omitted, `blocked` is all zeros, `links` is `[]`,
+`inlineParts` is omitted and `sanitizerVersion` is `"0-stub"`. This is not
+an error: `sanitizeFailed` is reserved for a real sanitiser refusing a body.
+A UI treats `sanitizerVersion == "0-stub"` as "HTML unavailable" and shows
+`text`.
+
+`bodyState` says whether content exists at all: `pending` (the sync engine
+has not downloaded the body yet; `text` empty), `tooBig` (over the daemon's
+raw-message cap, never downloaded), `failed` (downloaded but unparsable),
+`fetched`. Bodies are downloaded for every message within the `offlineDays`
+window; there is no on-demand fetch.
+
 Which policy applies: when `remoteContent` is omitted the stored preference
 from `config.get` is used (`block` by default; `knownSenders` resolves to
 `allow` only when every sender address of the message is on the `sender.list`
@@ -395,42 +477,109 @@ overrides the preference for this one call and is not remembered;
 `"knownSenders"` is not accepted per call (invalidArgument). Decrypted
 content is always `block`, whatever the policy (see `docs/security.md` §5).
 
-- errors: messageNotFound, sanitizeFailed (body withheld), malformedMessage,
-  invalidArgument (bad `remoteContent`)
+- errors: invalidArgument (bad `remoteContent`, missing ids), accountNotFound,
+  messageNotFound, storageError; sanitizeFailed and malformedMessage are
+  reserved for the sanitiser phase (today they surface as `bodyState`)
 
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
 - result: `{}`
+- errors: invalidArgument (empty `messageIds`, more than 1000, unknown flag,
+  `deleted` in either list (use `message.delete`), a flag in both lists,
+  nothing to change), accountNotFound, messageNotFound (any unknown id:
+  nothing is changed), storageError
 
-Applied locally at once, pushed to the server asynchronously.
+Local-first: the flags are updated in the store atomically for all ids
+(all-or-nothing per call), an operation-log entry is queued and the syncer
+pushes it; the result does not wait for the server. `folder.list` counters
+reflect the change at once. A server-side conflict is resolved server-wins
+on the next sync, after the queued change has been pushed.
 
 #### `message.move`
 - params: `{ "accountId", "messageIds": [..], "targetFolderId" }`
 - result: `{}`
+- errors: invalidArgument (ids as above, target not selectable),
+  accountNotFound, folderNotFound (unknown target), messageNotFound,
+  storageError
+
+Local-first as above. Ids already in the target folder are ignored. The
+moved message keeps its `id` (it is a local id, not the IMAP UID).
 
 #### `message.delete`
 - params: `{ "accountId", "messageIds": [..], "permanent": bool (opt) }`
 - result: `{}`
+- errors: invalidArgument, accountNotFound, folderNotFound (no folder with
+  role `trash` while `permanent` is false), messageNotFound, storageError
 
-Default moves to the Trash role folder; `permanent` expunges.
+With `permanent: false` (default) messages not already in the Trash role
+folder are moved there (same rules as `message.move`); messages already in
+Trash, or any message with `permanent: true`, are removed from the store at
+once and expunged on the server by the syncer. All-or-nothing per call.
 
 #### `message.send`
-Queues a saved draft into the outbox.
+Builds the message from a saved draft and queues it into the outbox.
 
 - params: `{ "accountId", "draftId", "version": 3 }`
-- result: `{ "outboxId": "m_out_7" }`
-- errors: draftNotFound, conflict (version mismatch), invalidArgument (no recipients)
+- result: `{ "outboxId": "m_7" }` — the id of the queued message
+- errors: accountNotFound, draftNotFound, conflict (version mismatch),
+  invalidArgument (no recipients, or an invalid recipient address),
+  attachmentTooBig (built message over `api.MaxOutgoingMessageBytes`,
+  36 MiB; `data` = `{ "limit", "size" }`), storageError
 
-Delivery is asynchronous; progress and failures arrive through
-`notify.syncState` (folder role `outbox`, `pendingOutbox`). A failed send
-stays in the outbox; it is never silently dropped.
+The result only confirms enqueueing. Delivery is asynchronous and runs
+beside the IMAP sync: the queued message is an ordinary message in the
+account's outbox folder (§4.2) with `flags: ["seen"]` and an `outbox`
+field (§3) that carries its state; `notify.syncState` is emitted whenever
+`pendingOutbox` changes. A failed send stays in the outbox with `state:
+"failed"` and the reason in `outbox.error`; it is never silently dropped.
+Sending from a disabled account only queues; delivery starts when the
+account is enabled.
 
-Recipients (`to` + `cc` + `bcc`) must be non-empty; an empty subject or body
-is allowed. The message is built from the *stored* draft: text/plain alone,
-or multipart/alternative (text/plain + text/html) wrapped in
-multipart/related when inline attachments are referenced. On success the
-draft is removed and its attachments move with the outbox message. Until
-the SMTP phase this method returns notImplemented.
+Recipients (`to` + `cc` + `bcc`) must be non-empty and valid; an empty
+subject or body is allowed. The message is built from the *stored* draft
+at call time and the draft is removed together with the call: its
+attachments move with the outbox message. In this phase the body is
+`text/plain` (UTF-8, quoted-printable); with attachments it becomes
+`multipart/mixed` (base64, sanitised file names). Headers: `From` is
+always the account's `displayName <email>`, `To` and `Cc` from the draft,
+never `Bcc` (Bcc recipients exist only in the SMTP envelope), `Subject`,
+`Date`, a generated `Message-ID` under the account's domain, `MIME-Version`,
+`User-Agent`, and `In-Reply-To`/`References` when the draft's `inReplyTo`
+names a stored message. Every header value is stripped of control
+characters before it is written.
+
+Delivery: one SMTP session per attempt through the account's `smtp`
+endpoint with the stored password. Transient failures (network, TLS,
+timeouts, 4xx replies) are retried with backoff from 1 minute up to 4 hours;
+a 5xx reply after MAIL, RCPT or DATA, a message over the server's `SIZE`
+limit, or a server without a usable AUTH mechanism is permanent
+(`failed`). A refused password or a missing keyring secret defers every
+queued message of the account and sends `notify.authRequired`; editing the
+account (`account.update`) retries at once. After a successful delivery the
+recipients are recorded as known senders with source `sent` (§4.9) and,
+when the account has a folder with role `sent`, the message is uploaded
+there with `\Seen` by the IMAP syncer and that folder is synchronised;
+until then `outbox.state` is `sent`. Without a Sent folder the local copy
+is dropped after delivery (servers such as Gmail or Office 365 file the
+copy themselves).
+
+Outbox messages: `message.flag` and `message.move` reject them with
+invalidArgument; `message.delete` cancels the send and removes the message
+permanently whatever `permanent` says (no Trash), and returns conflict while
+the message is `sending`. `message.get` and `message.body` work as for any
+message.
+
+#### `outbox.retry`
+Re-queues an outbox message for an immediate attempt.
+
+- params: `{ "accountId", "messageId" }`
+- result: `{}`
+- errors: invalidArgument (message already delivered, `state: "sent"`),
+  accountNotFound, messageNotFound (not an outbox message of this account),
+  conflict (message is `sending`), storageError
+
+Works for `failed` and `queued` messages alike (a queued message waiting for
+its backoff is attempted at once).
 
 ### 4.4 thread
 
@@ -570,10 +719,23 @@ plain words. Snippets are plain text with byte ranges; never HTML.
 #### `sync.status`
 - params: `{ "accountId" (opt) }`
 - result: `{ "accounts": [SyncState] }`
+- errors: accountNotFound (a given `accountId` must exist), storageError
+
+Empty `accountId` = every account in `account.list` order, paused ones
+included with `status: "disabled"`. Identical to `Account.state`.
 
 #### `sync.trigger`
 - params: `{ "accountId" (opt), "folderId" (opt), "full": bool (opt) }`
 - result: `{}` (returns immediately; progress via `notify.syncState`)
+- errors: invalidArgument (`folderId` without `accountId`), accountNotFound,
+  folderNotFound
+
+A paused account is skipped silently, so "sync everything" never fails
+because one account is paused. Triggers coalesce: a trigger during a running
+pass schedules one more pass, not several. `full: true` ignores the
+per-folder change detection so every selectable folder is walked and its
+flags re-read; it does not discard local data (only a server-side
+UIDVALIDITY change does). Queued local operations are pushed first.
 
 ### 4.8 config
 
@@ -585,9 +747,19 @@ values: set through `config.set` (persisted in the store), else
 ```jsonc
 Preferences {
   "syncIntervalSeconds": 300,   // 0 = manual sync only; otherwise >= 60
-  "remoteContent": "block" | "knownSenders" | "allow"
+  "remoteContent": "block" | "knownSenders" | "allow",
+  "offlineDays": 30             // 0 = keep everything; otherwise 1..3650
 }
 ```
+
+`offlineDays` bounds the local mail cache: headers *and* bodies of messages
+whose server date is within the last N days are synchronised; older messages
+are not stored locally at all (they stay on the server and disappear from
+`message.list` as they age out). Shrinking the window prunes on the next
+pass, growing it backfills silently (no `notify.newMessage`). Changing it,
+or the interval, wakes every syncer. Precedence: `config.set`, else
+`config.toml` `[sync] offline_days`, else 30. Because `config.set` is
+read-modify-write, a client must echo the value it got from `config.get`.
 
 #### `config.get`
 - params: `{}`
@@ -670,9 +842,23 @@ as `<img src="cid:<contentId>">`.
 | `notify.authRequired` | `{ "accountId", "reason": 1200\|1201\|1202, "message": "…", "authUrl": "https://…" (opt) }` |
 | `notify.accountsChanged` | `{}` |
 
-`notify.accountsChanged` is sent after `account.add`, `account.remove` and
-`account.setEnabled` to every client, including the caller; it carries no
-payload and clients re-run `account.list`.
+`notify.accountsChanged` is sent after `account.add`, `account.remove`,
+`account.setEnabled` and `account.update` to every client, including the
+caller; it carries no payload and clients re-run `account.list`.
+
+`notify.newMessage` is sent once per message that arrives *after* a folder's
+initial synchronisation finished, and only once its body is stored (the
+`message` is a complete `MessageSummary` with `snippet`). The first download
+of an account, and a backfill after `offlineDays` grew, never produce it;
+clients refresh from `folder.list`/`message.list` when `notify.syncState`
+leaves `syncing` instead. Folders with role `sent`, `drafts`, `trash`,
+`junk` and `outbox` never produce it either (a copy of the user's own sent
+message is not new mail).
+
+`notify.syncState` is sent immediately on every change of `status`,
+`folderId`, `error`, `lastSync` or `pendingOutbox`, and for progress-only
+changes at most every 500 ms per account (the last value is always
+delivered). Clients must not assume every intermediate `progress` value.
 
 `notify.authRequired` with `authUrl` means an OAuth2 flow is waiting. The UI
 opens the URL through the OpenURI portal; the backend's loopback listener
@@ -718,3 +904,20 @@ some. Clients must be able to resynchronise their view via `sync.status`,
 - **1** (2026-09-04, compatible addition, account editing): new
   `account.update`; `account.test` accepts `accountId` to reuse the stored
   password.
+- **1** (2026-09-04, compatible addition, IMAP reading): `folder.list`,
+  `message.list`, `message.get`, `message.body` (text only while the
+  sanitiser is a stub; new `bodyState` field), `message.flag`,
+  `message.move`, `message.delete` (local-first with an operation log),
+  `sync.status`, `sync.trigger` implemented; `notify.newMessage` and
+  `notify.syncState` emitted with the rules in §5; new preference
+  `offlineDays`; `SyncState` field semantics and live `account.list` state
+  documented. `folder.subscribe`, `thread.*`, `search.query` and
+  `message.send` remain `notImplemented`.
+- **1** (2026-09-04, compatible addition, sending): `message.send`
+  implemented (text/plain phase; outbox folder with role `outbox`, retry
+  with backoff, Sent copy via IMAP); new `outbox.retry`; new optional
+  `MessageSummary.outbox` (`OutboxInfo`); `SyncState.pendingOutbox` is
+  live; `notify.newMessage` is no longer sent for sent/drafts/trash/junk/
+  outbox folders; new limit `api.MaxOutgoingMessageBytes`.
+  `folder.subscribe`, `thread.*` and `search.query` remain
+  `notImplemented`.
