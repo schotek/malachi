@@ -194,8 +194,22 @@ type AccountDiscoverResult struct {
 	ProviderName string         `json:"providerName,omitempty"` // display-only, untrusted text
 }
 
-// AccountTestParams tests connectivity without persisting anything.
+// AccountUpdateParams replaces the configuration of an existing account.
+// The password is optional: empty keeps the stored one. Enabled is not
+// touched (see account.setEnabled).
+type AccountUpdateParams struct {
+	AccountID   AccountID     `json:"accountId"`
+	Config      AccountConfig `json:"config"`
+	Credentials Credentials   `json:"credentials"`
+}
+
+type AccountUpdateResult struct{}
+
+// AccountTestParams tests connectivity without persisting anything. With
+// AccountID set and no password given, the stored password of that account
+// is used, so an existing account can be re-tested without retyping it.
 type AccountTestParams struct {
+	AccountID   AccountID     `json:"accountId,omitempty"`
 	Config      AccountConfig `json:"config"`
 	Credentials Credentials   `json:"credentials"`
 }

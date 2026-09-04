@@ -204,9 +204,12 @@ The wizard calls `account.discover` after the identity page (a hit goes
 straight to the test, a miss opens the prefilled Servers page),
 `account.test` (45 s budget, per-endpoint results; `authFailed` returns to
 the identity page, other failures offer Retry / Edit Servers / Add
-Anyway) and finally `account.add`. The UI only checks address syntax,
-non-empty fields and the port defaults per security mode; discovery,
-probing and validation are the daemon's.
+Anyway) and finally `account.add`. The same dialog edits an existing
+account (the pencil button of an Accounts row): prefilled, no discovery,
+an empty password keeps the stored one (`account.test` with `accountId`
+reuses it for the test), and the last step is `account.update`. The UI
+only checks address syntax, non-empty fields and the port defaults per
+security mode; discovery, probing and validation are the daemon's.
 UI-only options live in GSettings
 (`data/*.gschema.xml`, read through `internal/settings`); anything that
 affects mail handling (check interval, remote content) is owned by the

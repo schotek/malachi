@@ -22,6 +22,7 @@ type AccountService interface {
 	Add(ctx context.Context, p AccountAddParams) (*AccountAddResult, error)
 	Remove(ctx context.Context, p AccountRemoveParams) (*AccountRemoveResult, error)
 	SetEnabled(ctx context.Context, p AccountSetEnabledParams) (*AccountSetEnabledResult, error)
+	Update(ctx context.Context, p AccountUpdateParams) (*AccountUpdateResult, error)
 	Discover(ctx context.Context, p AccountDiscoverParams) (*AccountDiscoverResult, error)
 	Test(ctx context.Context, p AccountTestParams) (*AccountTestResult, error)
 }

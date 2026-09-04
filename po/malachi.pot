@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-03 22:14+0200\n"
+"POT-Creation-Date: 2026-09-04 09:47+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -28,36 +28,66 @@ msgstr ""
 msgid "Connected in %d ms"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:302 ui/data/ui/account_wizard.ui:260
+#: ui/internal/accountwizard/wizard.go:155
+#: ui/internal/accountwizard/wizard.go:156
+#: ui/internal/window/accounts_page.go:115
+msgid "Edit Account"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:157
+msgid "New Password (leave empty to keep)"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:158
+msgid "_Save"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:159
+msgid "Save _Anyway"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:331 ui/data/ui/account_wizard.ui:260
 msgid "Testing Connection…"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:326
+#: ui/internal/accountwizard/wizard.go:357
 msgid "Testing the connection"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:348
+#: ui/internal/accountwizard/wizard.go:380
+msgid "Ready to Save"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:382
 msgid "Ready to Add"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:351
-#: ui/internal/accountwizard/wizard.go:359
+#: ui/internal/accountwizard/wizard.go:386
+#: ui/internal/accountwizard/wizard.go:394
 msgid "Connection Failed"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:354 ui/internal/widget/rpc.go:79
+#: ui/internal/accountwizard/wizard.go:389 ui/internal/widget/rpc.go:79
 msgid "The server rejected the user name or password"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:369
+#: ui/internal/accountwizard/wizard.go:407
+msgid "Saving Account…"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:409
 msgid "Adding Account…"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:401
+#: ui/internal/accountwizard/wizard.go:451
 msgid "An account with this e-mail address already exists"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:403
+#: ui/internal/accountwizard/wizard.go:454
+msgid "Saving the account"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:456
 msgid "Adding the account"
 msgstr ""
 
@@ -392,71 +422,77 @@ msgid "Failed: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is the new account's e-mail address.
-#: ui/internal/window/accounts_page.go:49
+#: ui/internal/window/accounts_page.go:50
 #, c-format
 msgid "Added %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:68
+#: ui/internal/window/accounts_page.go:69
 msgid "Loading accounts"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:107
+#: ui/internal/window/accounts_page.go:108
 msgid "Enabled"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:114
+#: ui/internal/window/accounts_page.go:121
 msgid "Remove Account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:144
+#: ui/internal/window/accounts_page.go:152
 msgid "Pausing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:146
+#: ui/internal/window/accounts_page.go:154
 msgid "Resuming the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:177
+#. TRANSLATORS: %s is the edited account's e-mail address.
+#: ui/internal/window/accounts_page.go:188
+#, c-format
+msgid "Saved %s"
+msgstr ""
+
+#: ui/internal/window/accounts_page.go:196
 msgid "Also delete _drafts and downloaded data"
 msgstr ""
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/window/accounts_page.go:180
+#: ui/internal/window/accounts_page.go:199
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:181
+#: ui/internal/window/accounts_page.go:200
 msgid "Remove this account?"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:181
+#: ui/internal/window/accounts_page.go:200
 msgid "_Remove"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:197
+#: ui/internal/window/accounts_page.go:216
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:219
+#: ui/internal/window/accounts_page.go:238
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:221
+#: ui/internal/window/accounts_page.go:240
 msgid "Syncing…"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:223
+#: ui/internal/window/accounts_page.go:242
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:225
+#: ui/internal/window/accounts_page.go:244
 msgid "Sign-in required"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:227
+#: ui/internal/window/accounts_page.go:246
 msgid "Error"
 msgstr ""
 

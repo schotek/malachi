@@ -122,6 +122,59 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	return &api.AccountSetEnabledResult{}, nil
 }
 
+// Update replaces an account's configuration and, when a password is given,
+// its keyring entry. The row is written first and reverted if the keyring
+// refuses the new password, so both stay consistent.
+func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) (*api.AccountUpdateResult, error) {
+	if p.AccountID == "" {
+		return nil, api.NewError(api.CodeInvalidArgument, "accountId is required")
+	}
+	if err := validateAccountConfig(&p.Config); err != nil {
+		return nil, err
+	}
+	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
+		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	}
+	existing, err := s.b.store.GetAccount(ctx, string(p.AccountID))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeAccountNotFound, "unknown account %q", p.AccountID)
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+
+	updated := existing
+	updated.Name = p.Config.Name
+	updated.Email = store.NormalizeAddress(p.Config.Email)
+	updated.Config = p.Config
+	err = s.b.store.UpdateAccount(ctx, &updated)
+	switch {
+	case errors.Is(err, store.ErrExists):
+		return nil, api.NewError(api.CodeConflict, "another account already uses this e-mail")
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeAccountNotFound, "unknown account %q", p.AccountID)
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+
+	if p.Credentials.Password != "" {
+		if err := s.b.Keyring.Set(ctx, p.AccountID, auth.KeyPassword, p.Credentials.Password); err != nil {
+			revert := existing
+			if rerr := s.b.store.UpdateAccount(ctx, &revert); rerr != nil {
+				s.b.log.Warn("revert account after keyring failure", "id", p.AccountID, "err", rerr)
+			}
+			var apiErr *api.Error
+			if errors.As(err, &apiErr) {
+				return nil, apiErr
+			}
+			return nil, api.NewError(api.CodeKeyringError, "%v", err)
+		}
+	}
+	s.b.log.Info("account updated", "id", p.AccountID, "passwordChanged", p.Credentials.Password != "")
+	s.b.accountsChanged()
+	return &api.AccountUpdateResult{}, nil
+}
+
 // Discover suggests server settings for an address. "Nothing found" is a
 // result with source "none", not an error; a suggestion that would not
 // pass Add is dropped the same way.
@@ -162,24 +215,55 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
 		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
 	}
+	password := p.Credentials.Password
+	if password == "" && p.AccountID != "" && usesAuth(p.Config, api.AuthPassword) {
+		pw, err := s.storedPassword(ctx, p.AccountID)
+		if err != nil {
+			return nil, err
+		}
+		password = pw
+	}
 
 	var res api.AccountTestResult
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		r, err := s.b.ProbeIMAP(ctx, p.Config.IMAP, p.Credentials.Password)
+		r, err := s.b.ProbeIMAP(ctx, p.Config.IMAP, password)
 		res.IMAP = endpointResult(r.Capabilities, r.Latency, err)
 		s.logProbe("imap", p.Config.IMAP, res.IMAP)
 	}()
 	go func() {
 		defer wg.Done()
-		r, err := s.b.ProbeSMTP(ctx, p.Config.SMTP, p.Credentials.Password)
+		r, err := s.b.ProbeSMTP(ctx, p.Config.SMTP, password)
 		res.SMTP = endpointResult(r.Capabilities, r.Latency, err)
 		s.logProbe("smtp", p.Config.SMTP, res.SMTP)
 	}()
 	wg.Wait()
 	return &res, nil
+}
+
+// storedPassword reads an existing account's password from the keyring.
+// A missing entry is authRequired; the keyring's own failures pass through.
+func (s *accountService) storedPassword(ctx context.Context, id api.AccountID) (string, error) {
+	if _, err := s.b.store.GetAccount(ctx, string(id)); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return "", api.NewError(api.CodeAccountNotFound, "unknown account %q", id)
+		}
+		return "", api.NewError(api.CodeStorageError, "%v", err)
+	}
+	pw, err := s.b.Keyring.Get(ctx, id, auth.KeyPassword)
+	switch {
+	case errors.Is(err, auth.ErrNoSecret):
+		return "", api.NewError(api.CodeAuthRequired, "no stored password for account %q", id)
+	case err != nil:
+		var apiErr *api.Error
+		if errors.As(err, &apiErr) {
+			return "", apiErr
+		}
+		return "", api.NewError(api.CodeKeyringError, "%v", err)
+	}
+	return pw, nil
 }
 
 func endpointResult(caps []string, latency time.Duration, err error) api.EndpointTestResult {

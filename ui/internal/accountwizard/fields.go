@@ -150,10 +150,11 @@ type IdentityProblems struct{ Email, Password bool }
 // Any reports whether anything is wrong.
 func (p IdentityProblems) Any() bool { return p.Email || p.Password }
 
-// ValidateIdentity checks address syntax and a non-empty password.
-func ValidateIdentity(id Identity) IdentityProblems {
+// ValidateIdentity checks address syntax and, when required, a non-empty
+// password (editing an account may keep the stored one).
+func ValidateIdentity(id Identity, passwordRequired bool) IdentityProblems {
 	_, ok := ValidateEmail(id.Email)
-	return IdentityProblems{Email: !ok, Password: id.Password == ""}
+	return IdentityProblems{Email: !ok, Password: passwordRequired && id.Password == ""}
 }
 
 // ServerProblems flags the server rows that cannot be sent.

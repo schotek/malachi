@@ -13,6 +13,7 @@ const (
 	MethodAccountAdd        = "account.add"
 	MethodAccountRemove     = "account.remove"
 	MethodAccountSetEnabled = "account.setEnabled"
+	MethodAccountUpdate     = "account.update"
 	MethodAccountDiscover   = "account.discover"
 	MethodAccountTest       = "account.test"
 
@@ -73,7 +74,7 @@ const (
 var AllMethods = []string{
 	MethodSystemInfo,
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
-	MethodAccountDiscover, MethodAccountTest,
+	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,

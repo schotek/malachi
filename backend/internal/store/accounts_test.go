@@ -100,6 +100,53 @@ func TestAccountsConfigRoundTrip(t *testing.T) {
 	}
 }
 
+func TestAccountsUpdate(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+
+	a := Account{Name: "Work", Enabled: false, Config: testAccountConfig("me@example.invalid")}
+	if err := s.AddAccount(ctx, &a); err != nil {
+		t.Fatal(err)
+	}
+	b := Account{Name: "Other", Enabled: true, Config: testAccountConfig("other@example.invalid")}
+	if err := s.AddAccount(ctx, &b); err != nil {
+		t.Fatal(err)
+	}
+
+	upd := a
+	upd.Name = "Renamed"
+	upd.Email = ""
+	upd.Config.Email = "New@Example.invalid"
+	upd.Config.IMAP.Host = "imap2.example.invalid"
+	if err := s.UpdateAccount(ctx, &upd); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetAccount(ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Renamed" || got.Email != "new@example.invalid" || got.Config.Email != "New@Example.invalid" ||
+		got.Config.IMAP.Host != "imap2.example.invalid" || got.Enabled || got.Position != a.Position {
+		t.Fatalf("after update: %+v", got)
+	}
+
+	clash := upd
+	clash.Email = ""
+	clash.Config.Email = "OTHER@example.invalid"
+	if err := s.UpdateAccount(ctx, &clash); !errors.Is(err, ErrExists) {
+		t.Fatalf("clash: %v", err)
+	}
+	same := upd // keeping one's own e-mail is not a clash
+	if err := s.UpdateAccount(ctx, &same); err != nil {
+		t.Fatalf("same e-mail: %v", err)
+	}
+	unknown := upd
+	unknown.ID = "acc_nope"
+	if err := s.UpdateAccount(ctx, &unknown); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("unknown: %v", err)
+	}
+}
+
 func TestAccountsSetEnabled(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)

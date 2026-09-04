@@ -239,6 +239,18 @@ Pauses (`false`) or resumes (`true`) an account. A paused account keeps its
 configuration and local data, is never synchronised and reports
 `state.status = "disabled"`.
 
+#### `account.update`
+- params: `{ "accountId", "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
+- result: `{}`
+- errors: invalidArgument (same rules as `account.add`), accountNotFound,
+  conflict (another account already uses the e-mail), keyringError,
+  storageError
+
+Replaces the whole configuration; `enabled` is not touched. An empty
+password keeps the stored one; a given password replaces it in the
+keyring, and if the keyring refuses, the configuration is reverted so the
+row and the keyring never disagree. Emits `notify.accountsChanged`.
+
 #### `account.discover`
 Suggests server settings for an address. Nothing is stored and nothing is
 authenticated; the UI still asks for the password and should run
@@ -280,9 +292,11 @@ Connectivity test without persisting anything. Validates like `account.add`
 (the same `invalidArgument` cases, including a password for an account
 without a `password` endpoint), then probes both endpoints concurrently.
 
-- params: same as `account.add`
+- params: same as `account.add`, plus `"accountId"` (opt): with it and an
+  empty `credentials.password`, the stored password of that account is used
 - result: `{ "imap": EndpointTestResult, "smtp": EndpointTestResult }`
-- errors: invalidArgument only; each endpoint reports its own outcome
+- errors: invalidArgument; with `accountId`: accountNotFound, authRequired
+  (no stored password), keyringError. Each endpoint reports its own outcome
 
 ```jsonc
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
@@ -701,3 +715,6 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   password); `account.test` implemented with per-endpoint outcomes; new
   `account.discover` (ISPDB, provider autoconfig, DNS SRV, verified
   guesses).
+- **1** (2026-09-04, compatible addition, account editing): new
+  `account.update`; `account.test` accepts `accountId` to reuse the stored
+  password.

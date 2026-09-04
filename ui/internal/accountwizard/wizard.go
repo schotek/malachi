@@ -42,13 +42,17 @@ type Wizard struct {
 	client *client.Client
 	log    *slog.Logger
 
-	// OnAdded runs on the main loop after account.add succeeded, before the
-	// dialog closes. May be nil.
-	OnAdded func(id api.AccountID, cfg api.AccountConfig)
+	// OnDone runs on the main loop after account.add or account.update
+	// succeeded, before the dialog closes. May be nil.
+	OnDone func(id api.AccountID, cfg api.AccountConfig)
+
+	// editing is the account being changed; nil when adding a new one.
+	editing *api.Account
 
 	nav    *adw.NavigationView
 	toasts *adw.ToastOverlay
 
+	identityPage   *adw.NavigationPage
 	identityBanner *adw.Banner
 	identityRows   *gtk.ListBox
 	displayName    *adw.EntryRow
@@ -100,6 +104,7 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		log:            log.With("component", "accountwizard"),
 		nav:            b.GetObject("wizard_nav").Cast().(*adw.NavigationView),
 		toasts:         b.GetObject("wizard_toasts").Cast().(*adw.ToastOverlay),
+		identityPage:   b.GetObject("identity_page").Cast().(*adw.NavigationPage),
 		identityBanner: b.GetObject("identity_banner").Cast().(*adw.Banner),
 		identityRows:   b.GetObject("identity_rows").Cast().(*gtk.ListBox),
 		displayName:    entry("display_name_row"),
@@ -137,6 +142,25 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 	}
 	w.identityBanner.SetUseMarkup(false)
 	w.wire()
+	return w
+}
+
+// NewEdit builds the dialog for changing an existing account: the pages
+// are prefilled, discovery is skipped, an empty password keeps the stored
+// one, and the final step is account.update. It opens on the Servers page;
+// Back leads to the identity page.
+func NewEdit(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
+	w := New(c, log)
+	w.editing = &a
+	w.SetTitle(i18n.T("Edit Account"))
+	w.identityPage.SetTitle(i18n.T("Edit Account"))
+	w.password.SetTitle(i18n.T("New Password (leave empty to keep)"))
+	w.add.SetLabel(i18n.T("_Save"))
+	w.addAnyway.SetLabel(i18n.T("Save _Anyway"))
+	w.displayName.SetText(a.Config.DisplayName)
+	w.email.SetText(a.Config.Email)
+	w.applyConfig(a.Config)
+	w.nav.ReplaceWithTags([]string{tagIdentity, tagServers})
 	return w
 }
 
@@ -223,7 +247,7 @@ func (w *Wizard) assembleConfig() api.AccountConfig {
 // Servers page with guessed defaults.
 func (w *Wizard) onNext() {
 	id := w.readIdentity()
-	if p := ValidateIdentity(id); p.Any() {
+	if p := ValidateIdentity(id, w.editing == nil); p.Any() {
 		if p.Email {
 			w.email.AddCSSClass("error")
 			w.email.GrabFocus()
@@ -237,6 +261,11 @@ func (w *Wizard) onNext() {
 		return
 	}
 	id.Email, _ = ValidateEmail(id.Email)
+	if w.editing != nil {
+		// The servers are known; only the identity may have changed.
+		w.nav.PushByTag(tagServers)
+		return
+	}
 	w.setBusy(true)
 	w.op++
 	op := w.op
@@ -302,15 +331,17 @@ func (w *Wizard) runTest() {
 	w.progress.SetTitle(i18n.T("Testing Connection…"))
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
-	cfg := w.assembleConfig()
-	creds := credentialsFor(w.readIdentity())
+	params := api.AccountTestParams{Config: w.assembleConfig(), Credentials: credentialsFor(w.readIdentity())}
+	if w.editing != nil {
+		params.AccountID = w.editing.ID // an empty password means "use the stored one"
+	}
 	w.op++
 	op := w.op
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 		defer cancel()
 		var res api.AccountTestResult
-		err := w.client.Call(ctx, api.MethodAccountTest, api.AccountTestParams{Config: cfg, Credentials: creds}, &res)
+		err := w.client.Call(ctx, api.MethodAccountTest, params, &res)
 		glib.IdleAdd(func() {
 			if w.closed || op != w.op {
 				return
@@ -345,7 +376,11 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 	switch outcome {
 	case OutcomeOK:
 		w.results.SetIconName("emblem-ok-symbolic")
-		w.results.SetTitle(i18n.T("Ready to Add"))
+		if w.editing != nil {
+			w.results.SetTitle(i18n.T("Ready to Save"))
+		} else {
+			w.results.SetTitle(i18n.T("Ready to Add"))
+		}
 	case OutcomeAuthFailed:
 		w.results.SetIconName("dialog-warning-symbolic")
 		w.results.SetTitle(i18n.T("Connection Failed"))
@@ -362,11 +397,17 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 	w.testingStack.SetVisibleChildName("results")
 }
 
-// onAdd stores the account with account.add and closes on success.
+// onAdd stores the account (account.add, or account.update when editing)
+// and closes on success.
 func (w *Wizard) onAdd() {
 	cfg := w.assembleConfig()
 	creds := credentialsFor(w.readIdentity())
-	w.progress.SetTitle(i18n.T("Adding Account…"))
+	editing := w.editing
+	if editing != nil {
+		w.progress.SetTitle(i18n.T("Saving Account…"))
+	} else {
+		w.progress.SetTitle(i18n.T("Adding Account…"))
+	}
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
 	w.op++
@@ -374,8 +415,17 @@ func (w *Wizard) onAdd() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), addTimeout)
 		defer cancel()
-		var res api.AccountAddResult
-		err := w.client.Call(ctx, api.MethodAccountAdd, api.AccountAddParams{Config: cfg, Credentials: creds}, &res)
+		var id api.AccountID
+		var err error
+		if editing != nil {
+			id = editing.ID
+			err = w.client.Call(ctx, api.MethodAccountUpdate,
+				api.AccountUpdateParams{AccountID: id, Config: cfg, Credentials: creds}, &api.AccountUpdateResult{})
+		} else {
+			var res api.AccountAddResult
+			err = w.client.Call(ctx, api.MethodAccountAdd, api.AccountAddParams{Config: cfg, Credentials: creds}, &res)
+			id = res.AccountID
+		}
 		glib.IdleAdd(func() {
 			if w.closed || op != w.op {
 				return
@@ -383,22 +433,25 @@ func (w *Wizard) onAdd() {
 			if err != nil {
 				w.testingStack.SetVisibleChildName("results")
 				w.showButtons(w.lastOutcome)
-				w.toast(addErrorText(err))
+				w.toast(saveErrorText(err, editing != nil))
 				return
 			}
-			w.log.Info("account added", "id", res.AccountID)
-			if w.OnAdded != nil {
-				w.OnAdded(res.AccountID, cfg)
+			w.log.Info("account saved", "id", id, "edit", editing != nil)
+			if w.OnDone != nil {
+				w.OnDone(id, cfg)
 			}
 			w.ForceClose()
 		})
 	}()
 }
 
-func addErrorText(err error) string {
+func saveErrorText(err error, editing bool) string {
 	var e *api.Error
 	if errors.As(err, &e) && e.Code == api.CodeConflict {
 		return i18n.T("An account with this e-mail address already exists")
+	}
+	if editing {
+		return widget.RPCErrorText(i18n.T("Saving the account"), err)
 	}
 	return widget.RPCErrorText(i18n.T("Adding the account"), err)
 }

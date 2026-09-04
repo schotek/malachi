@@ -61,6 +61,9 @@ func (stubAccounts) Remove(context.Context, api.AccountRemoveParams) (*api.Accou
 func (stubAccounts) SetEnabled(context.Context, api.AccountSetEnabledParams) (*api.AccountSetEnabledResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAccounts) Update(context.Context, api.AccountUpdateParams) (*api.AccountUpdateResult, error) {
+	return nil, api.ErrNotImplemented
+}
 func (stubAccounts) Discover(context.Context, api.AccountDiscoverParams) (*api.AccountDiscoverResult, error) {
 	return nil, api.ErrNotImplemented
 }

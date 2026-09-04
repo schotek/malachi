@@ -85,12 +85,15 @@ func TestGuessAndMerge(t *testing.T) {
 }
 
 func TestValidateAndBuild(t *testing.T) {
-	p := ValidateIdentity(Identity{Email: "bad", Password: ""})
+	p := ValidateIdentity(Identity{Email: "bad", Password: ""}, true)
 	if !p.Email || !p.Password || !p.Any() {
 		t.Errorf("identity problems = %+v", p)
 	}
-	if ValidateIdentity(Identity{Email: "me@x.org", Password: "p"}).Any() {
+	if ValidateIdentity(Identity{Email: "me@x.org", Password: "p"}, true).Any() {
 		t.Error("valid identity flagged")
+	}
+	if ValidateIdentity(Identity{Email: "me@x.org"}, false).Any() {
+		t.Error("optional password flagged")
 	}
 
 	sp := ValidateServers(ServerFields{Host: " ", Username: "u"}, ServerFields{Host: "smtp.x.org", Username: ""})

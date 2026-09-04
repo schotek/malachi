@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-03 22:14+0200\n"
+"POT-Creation-Date: 2026-09-04 09:47+0200\n"
 "PO-Revision-Date: 2026-09-03 15:04+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -26,36 +26,66 @@ msgstr "Nativní poštovní klient pro prostředí GNOME."
 msgid "Connected in %d ms"
 msgstr "Připojeno za %d ms"
 
-#: ui/internal/accountwizard/wizard.go:302 ui/data/ui/account_wizard.ui:260
+#: ui/internal/accountwizard/wizard.go:155
+#: ui/internal/accountwizard/wizard.go:156
+#: ui/internal/window/accounts_page.go:115
+msgid "Edit Account"
+msgstr "Upravit účet"
+
+#: ui/internal/accountwizard/wizard.go:157
+msgid "New Password (leave empty to keep)"
+msgstr "Nové heslo (prázdné = ponechat)"
+
+#: ui/internal/accountwizard/wizard.go:158
+msgid "_Save"
+msgstr "_Uložit"
+
+#: ui/internal/accountwizard/wizard.go:159
+msgid "Save _Anyway"
+msgstr "Uložit _přesto"
+
+#: ui/internal/accountwizard/wizard.go:331 ui/data/ui/account_wizard.ui:260
 msgid "Testing Connection…"
 msgstr "Testuje se připojení…"
 
-#: ui/internal/accountwizard/wizard.go:326
+#: ui/internal/accountwizard/wizard.go:357
 msgid "Testing the connection"
 msgstr "Test připojení"
 
-#: ui/internal/accountwizard/wizard.go:348
+#: ui/internal/accountwizard/wizard.go:380
+msgid "Ready to Save"
+msgstr "Připraveno k uložení"
+
+#: ui/internal/accountwizard/wizard.go:382
 msgid "Ready to Add"
 msgstr "Připraveno k přidání"
 
-#: ui/internal/accountwizard/wizard.go:351
-#: ui/internal/accountwizard/wizard.go:359
+#: ui/internal/accountwizard/wizard.go:386
+#: ui/internal/accountwizard/wizard.go:394
 msgid "Connection Failed"
 msgstr "Připojení selhalo"
 
-#: ui/internal/accountwizard/wizard.go:354 ui/internal/widget/rpc.go:79
+#: ui/internal/accountwizard/wizard.go:389 ui/internal/widget/rpc.go:79
 msgid "The server rejected the user name or password"
 msgstr "Server odmítl uživatelské jméno nebo heslo"
 
-#: ui/internal/accountwizard/wizard.go:369
+#: ui/internal/accountwizard/wizard.go:407
+msgid "Saving Account…"
+msgstr "Ukládá se účet…"
+
+#: ui/internal/accountwizard/wizard.go:409
 msgid "Adding Account…"
 msgstr "Přidává se účet…"
 
-#: ui/internal/accountwizard/wizard.go:401
+#: ui/internal/accountwizard/wizard.go:451
 msgid "An account with this e-mail address already exists"
 msgstr "Účet s touto e-mailovou adresou už existuje"
 
-#: ui/internal/accountwizard/wizard.go:403
+#: ui/internal/accountwizard/wizard.go:454
+msgid "Saving the account"
+msgstr "Uložení účtu"
+
+#: ui/internal/accountwizard/wizard.go:456
 msgid "Adding the account"
 msgstr "Přidání účtu"
 
@@ -391,37 +421,43 @@ msgid "Failed: %s"
 msgstr "Selhalo: %s"
 
 #. TRANSLATORS: %s is the new account's e-mail address.
-#: ui/internal/window/accounts_page.go:49
+#: ui/internal/window/accounts_page.go:50
 #, c-format
 msgid "Added %s"
 msgstr "Přidán účet %s"
 
-#: ui/internal/window/accounts_page.go:68
+#: ui/internal/window/accounts_page.go:69
 msgid "Loading accounts"
 msgstr "Načtení účtů"
 
-#: ui/internal/window/accounts_page.go:107
+#: ui/internal/window/accounts_page.go:108
 msgid "Enabled"
 msgstr "Zapnuto"
 
-#: ui/internal/window/accounts_page.go:114
+#: ui/internal/window/accounts_page.go:121
 msgid "Remove Account"
 msgstr "Odebrat účet"
 
-#: ui/internal/window/accounts_page.go:144
+#: ui/internal/window/accounts_page.go:152
 msgid "Pausing the account"
 msgstr "Pozastavení účtu"
 
-#: ui/internal/window/accounts_page.go:146
+#: ui/internal/window/accounts_page.go:154
 msgid "Resuming the account"
 msgstr "Obnovení účtu"
 
-#: ui/internal/window/accounts_page.go:177
+#. TRANSLATORS: %s is the edited account's e-mail address.
+#: ui/internal/window/accounts_page.go:188
+#, c-format
+msgid "Saved %s"
+msgstr "Uložen účet %s"
+
+#: ui/internal/window/accounts_page.go:196
 msgid "Also delete _drafts and downloaded data"
 msgstr "Smazat také _koncepty a stažená data"
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/window/accounts_page.go:180
+#: ui/internal/window/accounts_page.go:199
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
@@ -429,35 +465,35 @@ msgstr ""
 "Účet %s bude z aplikace Malachi Mail odebrán. Pošta na serveru zůstane "
 "nedotčena."
 
-#: ui/internal/window/accounts_page.go:181
+#: ui/internal/window/accounts_page.go:200
 msgid "Remove this account?"
 msgstr "Odebrat tento účet?"
 
-#: ui/internal/window/accounts_page.go:181
+#: ui/internal/window/accounts_page.go:200
 msgid "_Remove"
 msgstr "_Odebrat"
 
-#: ui/internal/window/accounts_page.go:197
+#: ui/internal/window/accounts_page.go:216
 msgid "Removing the account"
 msgstr "Odebrání účtu"
 
-#: ui/internal/window/accounts_page.go:219
+#: ui/internal/window/accounts_page.go:238
 msgid "Paused"
 msgstr "Pozastaveno"
 
-#: ui/internal/window/accounts_page.go:221
+#: ui/internal/window/accounts_page.go:240
 msgid "Syncing…"
 msgstr "Synchronizuje se…"
 
-#: ui/internal/window/accounts_page.go:223
+#: ui/internal/window/accounts_page.go:242
 msgid "Offline"
 msgstr "Offline"
 
-#: ui/internal/window/accounts_page.go:225
+#: ui/internal/window/accounts_page.go:244
 msgid "Sign-in required"
 msgstr "Vyžaduje přihlášení"
 
-#: ui/internal/window/accounts_page.go:227
+#: ui/internal/window/accounts_page.go:246
 msgid "Error"
 msgstr "Chyba"
 

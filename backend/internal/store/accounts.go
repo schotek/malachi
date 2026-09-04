@@ -115,6 +115,60 @@ func (s *Store) GetAccount(ctx context.Context, id string) (Account, error) {
 	return a, err
 }
 
+// UpdateAccount replaces name, e-mail and configuration of a.ID; Enabled and
+// Position are left alone. ErrNotFound for an unknown id, ErrExists when
+// another account already uses the e-mail (case-insensitive).
+func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
+	if a.Email == "" {
+		a.Email = NormalizeAddress(a.Config.Email)
+	}
+	if a.Email == "" {
+		return fmt.Errorf("update account: empty e-mail")
+	}
+	cfg, err := json.Marshal(a.Config)
+	if err != nil {
+		return fmt.Errorf("encode account config: %w", err)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("update account: %w", err)
+	}
+	defer tx.Rollback()
+
+	var found string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM accounts WHERE id = ?`, a.ID).Scan(&found)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNotFound
+	case err != nil:
+		return fmt.Errorf("update account: %w", err)
+	}
+	var other string
+	err = tx.QueryRowContext(ctx,
+		`SELECT id FROM accounts WHERE email = ? AND id != ? LIMIT 1`, a.Email, a.ID).Scan(&other)
+	switch {
+	case err == nil:
+		return ErrExists
+	case !errors.Is(err, sql.ErrNoRows):
+		return fmt.Errorf("update account: %w", err)
+	}
+	stamp := nowStamp()
+	res, err := tx.ExecContext(ctx,
+		`UPDATE accounts SET email = ?, name = ?, config = ?, updated_at = ? WHERE id = ?`,
+		a.Email, a.Name, string(cfg), stamp, a.ID)
+	if err != nil {
+		return fmt.Errorf("update account: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("update account: %w", err)
+	}
+	a.UpdatedAt = parseStamp(stamp)
+	return nil
+}
+
 // SetAccountEnabled pauses or resumes an account. ErrNotFound for an unknown
 // id.
 func (s *Store) SetAccountEnabled(ctx context.Context, id string, enabled bool) error {

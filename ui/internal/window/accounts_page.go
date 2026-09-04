@@ -27,6 +27,7 @@ type accountRow struct {
 	account   api.Account
 	status    *gtk.Label
 	toggle    *gtk.Switch
+	edit      *gtk.Button
 	remove    *gtk.Button
 	reverting bool // the switch is being set programmatically
 }
@@ -43,7 +44,7 @@ func (d *PreferencesDialog) bindAccounts(c *client.Client) (unbind func()) {
 	// notify.accountsChanged.
 	handle := d.addAccount.ConnectClicked(func() {
 		wz := accountwizard.New(c, d.log)
-		wz.OnAdded = func(_ api.AccountID, cfg api.AccountConfig) {
+		wz.OnDone = func(_ api.AccountID, cfg api.AccountConfig) {
 			d.loadAccounts(c)
 			// TRANSLATORS: %s is the new account's e-mail address.
 			d.AddToast(widget.PlainToast(fmt.Sprintf(i18n.T("Added %s"), cfg.Email)))
@@ -108,6 +109,12 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 	row.AddSuffix(row.toggle)
 	row.SetActivatableWidget(row.toggle)
 
+	row.edit = gtk.NewButtonFromIconName("document-edit-symbolic")
+	row.edit.SetVAlign(gtk.AlignCenter)
+	row.edit.AddCSSClass("flat")
+	row.edit.SetTooltipText(i18n.T("Edit Account"))
+	row.AddSuffix(row.edit)
+
 	row.remove = gtk.NewButtonFromIconName("user-trash-symbolic")
 	row.remove.SetVAlign(gtk.AlignCenter)
 	row.remove.AddCSSClass("flat")
@@ -122,6 +129,7 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 		}
 		d.setAccountEnabled(c, row, row.toggle.Active())
 	})
+	row.edit.ConnectClicked(func() { d.editAccount(c, row) })
 	row.remove.ConnectClicked(func() { d.removeAccount(c, row) })
 	return row
 }
@@ -169,6 +177,17 @@ func (d *PreferencesDialog) setAccountEnabled(c *client.Client, row *accountRow,
 			row.apply(a)
 		})
 	}()
+}
+
+// editAccount opens the wizard prefilled with the row's account.
+func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
+	wz := accountwizard.NewEdit(c, d.log, row.account)
+	wz.OnDone = func(_ api.AccountID, cfg api.AccountConfig) {
+		d.loadAccounts(c)
+		// TRANSLATORS: %s is the edited account's e-mail address.
+		d.AddToast(widget.PlainToast(fmt.Sprintf(i18n.T("Saved %s"), cfg.Email)))
+	}
+	wz.Present(d)
 }
 
 // removeAccount confirms, then calls account.remove. The check button
