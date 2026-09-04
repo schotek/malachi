@@ -6,8 +6,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-04 09:47+0200\n"
-"PO-Revision-Date: 2026-09-03 15:04+0200\n"
+"POT-Creation-Date: 2026-09-04 14:35+0200\n"
+"PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
 "Language: cs\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:131
+#: ui/main.go:133
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -93,145 +93,145 @@ msgstr "Přidání účtu"
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 
-#: ui/internal/compose/compose.go:120
+#: ui/internal/compose/compose.go:124
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:169 ui/internal/compose/draft.go:105
+#: ui/internal/compose/compose.go:182 ui/internal/compose/draft.go:112
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/compose.go:212 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:225 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/compose.go:339 ui/data/ui/compose.ui:175
-#: ui/data/ui/compose.ui:353
+#: ui/internal/compose/compose.go:352 ui/data/ui/compose.ui:175
+#: ui/data/ui/compose.ui:368
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/compose.go:342
+#: ui/internal/compose/compose.go:355
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/compose.go:371 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:384 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/compose.go:381
+#: ui/internal/compose/compose.go:394
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/compose.go:391 ui/data/ui/compose.ui:268
+#: ui/internal/compose/compose.go:404 ui/data/ui/compose.ui:268
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/compose.go:393
+#: ui/internal/compose/compose.go:406
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/compose.go:407
+#: ui/internal/compose/compose.go:420
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/compose.go:421
+#: ui/internal/compose/compose.go:434
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/compose.go:430
+#: ui/internal/compose/compose.go:443
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/compose.go:462
+#: ui/internal/compose/compose.go:475
 msgid "Remove"
 msgstr "Odebrat"
 
 #. TRANSLATORS: file size in mebibytes.
-#: ui/internal/compose/compose.go:525
+#: ui/internal/compose/compose.go:538
 #, c-format
 msgid "%.1f MiB"
 msgstr "%.1f MiB"
 
 #. TRANSLATORS: file size in kibibytes.
-#: ui/internal/compose/compose.go:528
+#: ui/internal/compose/compose.go:541
 #, c-format
 msgid "%.0f KiB"
 msgstr "%.0f KiB"
 
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/compose/compose.go:531
+#: ui/internal/compose/compose.go:544
 #, c-format
 msgid "%d B"
 msgstr "%d B"
 
-#: ui/internal/compose/draft.go:97
+#: ui/internal/compose/draft.go:104 ui/internal/window/outbox.go:63
 msgid "Sending…"
 msgstr "Odesílá se…"
 
-#: ui/internal/compose/draft.go:99
+#: ui/internal/compose/draft.go:106
 msgid "Saving draft…"
 msgstr "Ukládá se koncept…"
 
-#: ui/internal/compose/draft.go:101
+#: ui/internal/compose/draft.go:108
 msgid "Unsaved changes"
 msgstr "Neuložené změny"
 
-#: ui/internal/compose/draft.go:103
+#: ui/internal/compose/draft.go:110
 #, c-format
 msgid "Draft saved %s"
 msgstr "Koncept uložen v %s"
 
-#: ui/internal/compose/draft.go:200
+#: ui/internal/compose/draft.go:209
 msgid ""
 "This draft was changed elsewhere; your text will be saved as a new draft"
 msgstr "Tento koncept byl změněn jinde; váš text bude uložen jako nový koncept"
 
-#: ui/internal/compose/draft.go:203
+#: ui/internal/compose/draft.go:212
 msgid "Saving the draft"
 msgstr "Uložení konceptu"
 
-#: ui/internal/compose/draft.go:227
+#: ui/internal/compose/draft.go:236
 msgid "Fix the highlighted recipients"
 msgstr "Opravte zvýrazněné adresáty"
 
-#: ui/internal/compose/draft.go:231
+#: ui/internal/compose/draft.go:240
 msgid "Add at least one recipient"
 msgstr "Přidejte alespoň jednoho adresáta"
 
-#: ui/internal/compose/draft.go:260
+#: ui/internal/compose/draft.go:269
 msgid "Sending"
 msgstr "Odeslání"
 
-#: ui/internal/compose/draft.go:266
+#: ui/internal/compose/draft.go:275
 msgid "Message queued for sending"
 msgstr "Zpráva byla zařazena k odeslání"
 
-#: ui/internal/compose/draft.go:294
+#: ui/internal/compose/draft.go:303
 msgid "Discard this message?"
 msgstr "Zahodit tuto zprávu?"
 
-#: ui/internal/compose/draft.go:294 ui/internal/compose/draft.go:307
-#: ui/data/ui/compose.ui:346
+#: ui/internal/compose/draft.go:303 ui/internal/compose/draft.go:316
+#: ui/data/ui/compose.ui:361
 msgid "_Discard"
 msgstr "Za_hodit"
 
-#: ui/internal/compose/draft.go:305
+#: ui/internal/compose/draft.go:314
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:306 ui/internal/widget/rpc.go:124
+#: ui/internal/compose/draft.go:315 ui/internal/widget/rpc.go:124
 msgid "_Cancel"
 msgstr "_Zrušit"
 
-#: ui/internal/compose/draft.go:308 ui/data/ui/compose.ui:332
+#: ui/internal/compose/draft.go:317 ui/data/ui/compose.ui:347
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/draft.go:355
+#: ui/internal/compose/draft.go:364
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -240,37 +240,38 @@ msgstr[1] "%d nebezpečné prvky byly ze zprávy odstraněny"
 msgstr[2] "%d nebezpečných prvků bylo ze zprávy odstraněno"
 
 #. TRANSLATORS: quote header without a date; %s is the sender.
-#: ui/internal/compose/prefill.go:110
+#: ui/internal/compose/prefill.go:122
 #, c-format
 msgid "%s wrote:"
 msgstr "%s napsal(a):"
 
 #. TRANSLATORS: quote header; %s are the date and the sender.
-#: ui/internal/compose/prefill.go:113
+#: ui/internal/compose/prefill.go:125
 #, c-format
 msgid "On %s, %s wrote:"
 msgstr "Dne %s %s napsal(a):"
 
-#: ui/internal/compose/prefill.go:129
+#: ui/internal/compose/prefill.go:141
 msgid "---------- Forwarded message ----------"
 msgstr "---------- Přeposlaná zpráva ----------"
 
-#: ui/internal/compose/prefill.go:130
+#: ui/internal/compose/prefill.go:142
 #, c-format
 msgid "From: %s"
 msgstr "Od: %s"
 
-#: ui/internal/compose/prefill.go:132
+#: ui/internal/compose/prefill.go:144
 #, c-format
 msgid "Date: %s"
 msgstr "Datum: %s"
 
-#: ui/internal/compose/prefill.go:134
+#: ui/internal/compose/prefill.go:146
 #, c-format
 msgid "Subject: %s"
 msgstr "Předmět: %s"
 
-#: ui/internal/compose/prefill.go:136
+#. TRANSLATORS: message header line; %s is a list of recipients.
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:150
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -301,6 +302,11 @@ msgstr "%H:%M"
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr "%a %-d. %-m. %Y v %H:%M"
+
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:142
+#: ui/internal/window/notify.go:90
+msgid "(No subject)"
+msgstr "(Bez předmětu)"
 
 #: ui/internal/widget/rpc.go:33
 #, c-format
@@ -489,7 +495,7 @@ msgstr "Synchronizuje se…"
 msgid "Offline"
 msgstr "Offline"
 
-#: ui/internal/window/accounts_page.go:244
+#: ui/internal/window/accounts_page.go:244 ui/internal/window/sync.go:145
 msgid "Sign-in required"
 msgstr "Vyžaduje přihlášení"
 
@@ -497,72 +503,386 @@ msgstr "Vyžaduje přihlášení"
 msgid "Error"
 msgstr "Chyba"
 
-#: ui/internal/window/actions.go:30
+#: ui/internal/window/actions.go:35
 msgid "Move to Trash?"
 msgstr "Přesunout do koše?"
 
-#: ui/internal/window/actions.go:30
+#: ui/internal/window/actions.go:35
 msgid "Move to _Trash"
 msgstr "Přesunout do _koše"
 
-#: ui/internal/window/actions.go:48
-msgid "Deleting"
-msgstr "Mazání"
+#: ui/internal/window/actions.go:51
+msgid "Unstar"
+msgstr "Odebrat hvězdičku"
 
-#: ui/internal/window/notify.go:65
+#: ui/internal/window/actions.go:54 ui/data/ui/message_window.ui:62
+#: ui/data/ui/window.ui:312
+msgid "Star"
+msgstr "Přidat hvězdičku"
+
+#: ui/internal/window/actions.go:117
+msgid "Marking the message as unread"
+msgstr "Označení zprávy jako nepřečtené"
+
+#: ui/internal/window/actions.go:119
+msgid "Marking the message as read"
+msgstr "Označení zprávy jako přečtené"
+
+#: ui/internal/window/actions.go:142
+msgid "Removing the star"
+msgstr "Odebrání hvězdičky"
+
+#: ui/internal/window/actions.go:144
+msgid "Starring the message"
+msgstr "Označení zprávy hvězdičkou"
+
+#: ui/internal/window/actions.go:178
+msgid "Moving the message to Trash"
+msgstr "Přesunutí zprávy do koše"
+
+#: ui/internal/window/actions.go:209
+msgid "Archiving the message"
+msgstr "Archivace zprávy"
+
+#: ui/internal/window/actions.go:209
+msgid "This account has no archive folder"
+msgstr "Tento účet nemá složku Archiv"
+
+#: ui/internal/window/actions.go:225 ui/internal/window/actions.go:229
+msgid "This account has no junk folder"
+msgstr "Tento účet nemá složku pro nevyžádanou poštu"
+
+#: ui/internal/window/actions.go:228
+msgid "Mark as junk?"
+msgstr "Označit jako nevyžádanou poštu?"
+
+#: ui/internal/window/actions.go:228
+msgid "Mark as _Junk"
+msgstr "Označit jako _nevyžádanou"
+
+#: ui/internal/window/actions.go:229
+msgid "Marking the message as junk"
+msgstr "Označení zprávy jako nevyžádané"
+
+#: ui/internal/window/folders.go:46 ui/internal/window/message_view.go:126
+#: ui/internal/window/message_view.go:133 ui/internal/window/messages.go:177
+msgid "Loading…"
+msgstr "Načítá se…"
+
+#: ui/internal/window/folders.go:60 ui/internal/window/folders.go:264
+msgid "Folders Unavailable"
+msgstr "Složky nejsou dostupné"
+
+#: ui/internal/window/folders.go:61 ui/internal/window/folders.go:265
+msgid "Loading folders"
+msgstr "Načtení složek"
+
+#: ui/internal/window/folders.go:201
+msgctxt "folder"
+msgid "Inbox"
+msgstr "Doručená pošta"
+
+#: ui/internal/window/folders.go:203
+msgctxt "folder"
+msgid "Drafts"
+msgstr "Koncepty"
+
+#: ui/internal/window/folders.go:205
+msgctxt "folder"
+msgid "Sent"
+msgstr "Odeslaná pošta"
+
+#: ui/internal/window/folders.go:207
+msgctxt "folder"
+msgid "Trash"
+msgstr "Koš"
+
+#: ui/internal/window/folders.go:209
+msgctxt "folder"
+msgid "Junk"
+msgstr "Nevyžádaná pošta"
+
+#: ui/internal/window/folders.go:211
+msgctxt "folder"
+msgid "Archive"
+msgstr "Archiv"
+
+#: ui/internal/window/folders.go:213
+msgctxt "folder"
+msgid "All Mail"
+msgstr "Všechna pošta"
+
+#: ui/internal/window/folders.go:215
+msgctxt "folder"
+msgid "Outbox"
+msgstr "Pošta k odeslání"
+
+#: ui/internal/window/folders.go:256 ui/data/ui/window.ui:367
+msgid "No Accounts"
+msgstr "Žádné účty"
+
+#: ui/internal/window/folders.go:257
+msgid "Add a mail account in Preferences to see its folders here."
+msgstr "Přidejte poštovní účet v Předvolbách a jeho složky se zobrazí zde."
+
+#: ui/internal/window/folders.go:259
+msgid "No Enabled Accounts"
+msgstr "Žádné povolené účty"
+
+#: ui/internal/window/folders.go:260
+msgid "Enable an account in Preferences to see its folders here."
+msgstr "Povolte účet v Předvolbách a jeho složky se zobrazí zde."
+
+#: ui/internal/window/folders.go:269
+msgid "No Folders Yet"
+msgstr "Zatím žádné složky"
+
+#: ui/internal/window/folders.go:270
+msgid "Folders appear after the first synchronisation."
+msgstr "Složky se objeví po první synchronizaci."
+
+#: ui/internal/window/folders.go:303 ui/data/ui/window.ui:149
+msgid "Messages"
+msgstr "Zprávy"
+
+#: ui/internal/window/message_view.go:114
+msgid "Loading the message"
+msgstr "Načtení zprávy"
+
+#. TRANSLATORS: message header line; %s is a list of recipients.
+#: ui/internal/window/message_view.go:154
+#, c-format
+msgid "Cc: %s"
+msgstr "Kopie: %s"
+
+#. TRANSLATORS: %d is the number of attachments.
+#: ui/internal/window/message_view.go:182
+#, c-format
+msgid "%d attachment"
+msgid_plural "%d attachments"
+msgstr[0] "%d příloha"
+msgstr[1] "%d přílohy"
+msgstr[2] "%d příloh"
+
+#. TRANSLATORS: %d is the number of attachments, %s their names.
+#: ui/internal/window/message_view.go:185
+#, c-format
+msgid "%d attachment: %s"
+msgid_plural "%d attachments: %s"
+msgstr[0] "%d příloha: %s"
+msgstr[1] "%d přílohy: %s"
+msgstr[2] "%d příloh: %s"
+
+#: ui/internal/window/message_view.go:192
+#: ui/internal/window/message_view.go:204
+msgid "(Empty message)"
+msgstr "(Prázdná zpráva)"
+
+#: ui/internal/window/message_view.go:196
+msgid "Downloading…"
+msgstr "Stahuje se…"
+
+#: ui/internal/window/message_view.go:198
+msgid "This message is too large to download."
+msgstr "Tato zpráva je příliš velká ke stažení."
+
+#: ui/internal/window/message_view.go:200
+msgid "This message could not be read."
+msgstr "Tuto zprávu se nepodařilo přečíst."
+
+#: ui/internal/window/messages.go:61 ui/internal/window/messages.go:175
+msgid "Loading messages"
+msgstr "Načtení zpráv"
+
+#: ui/internal/window/messages.go:105
+msgid "Loading more messages"
+msgstr "Načtení dalších zpráv"
+
+#: ui/internal/window/messages.go:170
+msgid "Select a folder"
+msgstr "Vyberte složku"
+
+#: ui/internal/window/messages.go:171
+msgid "Choose a folder in the sidebar to see its messages."
+msgstr "Zvolte složku v postranním panelu a zobrazí se její zprávy."
+
+#: ui/internal/window/messages.go:174
+msgid "Messages Unavailable"
+msgstr "Zprávy nejsou dostupné"
+
+#: ui/internal/window/messages.go:179
+msgid "No Messages"
+msgstr "Žádné zprávy"
+
+#: ui/internal/window/messages.go:180
+msgid "This folder is empty."
+msgstr "Tato složka je prázdná."
+
+#: ui/internal/window/notify.go:82
 msgid "New message"
 msgstr "Nová zpráva"
 
-#: ui/internal/window/notify.go:73
-msgid "(No subject)"
-msgstr "(Bez předmětu)"
+#. TRANSLATORS: toast after delivery; %d is the number of messages.
+#: ui/internal/window/outbox.go:48
+#, c-format
+msgid "%d message sent"
+msgid_plural "%d messages sent"
+msgstr[0] "%d zpráva odeslána"
+msgstr[1] "%d zprávy odeslány"
+msgstr[2] "%d zpráv odesláno"
 
-#: ui/internal/window/preferences.go:176
+#: ui/internal/window/outbox.go:61
+msgid "Queued for sending"
+msgstr "Zařazeno k odeslání"
+
+#: ui/internal/window/outbox.go:70
+msgid "Sending the message"
+msgstr "Odesílání zprávy"
+
+#: ui/internal/window/outbox.go:70 ui/data/ui/window.ui:186
+msgid "Retry"
+msgstr "Zkusit znovu"
+
+#: ui/internal/window/outbox.go:182
+msgid "Retrying the send"
+msgstr "Opakování odeslání"
+
+#. TRANSLATORS: %s is the subject of the message.
+#: ui/internal/window/outbox.go:199
+#, c-format
+msgid "“%s” will be removed from the outbox and not sent."
+msgstr "„%s“ bude odstraněna z pošty k odeslání a neodešle se."
+
+#: ui/internal/window/outbox.go:200
+msgid "Cancel sending this message?"
+msgstr "Zrušit odeslání této zprávy?"
+
+#: ui/internal/window/outbox.go:200
+msgid "Do Not _Send"
+msgstr "_Neodesílat"
+
+#: ui/internal/window/outbox.go:204
+msgid "Cancelling the send"
+msgstr "Rušení odeslání"
+
+#: ui/internal/window/outbox.go:226
+msgid "Cancel Sending"
+msgstr "Zrušit odeslání"
+
+#: ui/internal/window/outbox.go:228 ui/data/ui/message_window.ui:80
+#: ui/data/ui/window.ui:333
+msgid "Move to Trash"
+msgstr "Přesunout do koše"
+
+#: ui/internal/window/preferences.go:185
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:198
+#: ui/internal/window/preferences.go:208
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:275
+#: ui/internal/window/preferences.go:309
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:278
+#: ui/internal/window/preferences.go:312
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:281
+#: ui/internal/window/preferences.go:315
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
-#: ui/internal/window/window.go:307
+#: ui/internal/window/sync.go:43
+msgid "Not syncing"
+msgstr "Nesynchronizuje se"
+
+#. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
+#: ui/internal/window/sync.go:140
+#, c-format
+msgid "Syncing %s… %d %%"
+msgstr "Synchronizuje se %s… %d %%"
+
+#. TRANSLATORS: %s is a folder or account name.
+#: ui/internal/window/sync.go:143
+#, c-format
+msgid "Syncing %s…"
+msgstr "Synchronizuje se %s…"
+
+#. TRANSLATORS: %d is the number of messages waiting in the outbox.
+#: ui/internal/window/sync.go:148
+#, c-format
+msgid "Sending %d message…"
+msgid_plural "Sending %d messages…"
+msgstr[0] "Odesílá se %d zpráva…"
+msgstr[1] "Odesílají se %d zprávy…"
+msgstr[2] "Odesílá se %d zpráv…"
+
+#: ui/internal/window/sync.go:150
+msgid "Sync error"
+msgstr "Chyba synchronizace"
+
+#: ui/internal/window/sync.go:152
+msgid "Offline, retrying"
+msgstr "Offline, zkusí se to znovu"
+
+#: ui/internal/window/sync.go:154
+msgid "Up to date"
+msgstr "Aktuální"
+
+#: ui/internal/window/sync.go:168
+msgid "Checking for new mail…"
+msgstr "Kontroluje se nová pošta…"
+
+#: ui/internal/window/sync.go:184
+msgid "Checking for new mail"
+msgstr "Ověření nové pošty"
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:217
+#, c-format
+msgid "Sign in to %s again"
+msgstr "Přihlaste se znovu k účtu %s"
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:220
+#, c-format
+msgid "The system keyring is unavailable; %s cannot sign in"
+msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlásit"
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:223
+#, c-format
+msgid "%s needs attention"
+msgstr "Účet %s vyžaduje pozornost"
+
+#: ui/internal/window/window.go:375
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:322
+#: ui/internal/window/window.go:390
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:325
+#: ui/internal/window/window.go:393
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:331
+#: ui/internal/window/window.go:400
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:376
+#: ui/internal/window/window.go:438
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:381
+#: ui/internal/window/window.go:443
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:385
+#: ui/internal/window/window.go:447
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"
@@ -764,57 +1084,77 @@ msgstr "Barva textu"
 msgid "Clear Formatting"
 msgstr "Vymazat formátování"
 
-#: ui/data/ui/compose.ui:336
+#: ui/data/ui/compose.ui:284
+msgid "This message will be sent as plain text."
+msgstr "Tato zpráva bude odeslána jako prostý text."
+
+#: ui/data/ui/compose.ui:351
 msgid "Attach _Files…"
 msgstr "Přiložit _soubory…"
 
-#: ui/data/ui/compose.ui:340
+#: ui/data/ui/compose.ui:355
 msgid "Insert _Image…"
 msgstr "Vložit _obrázek…"
 
-#: ui/data/ui/compose.ui:358
+#: ui/data/ui/compose.ui:373
 msgid "Heading 1"
 msgstr "Nadpis 1"
 
-#: ui/data/ui/compose.ui:363
+#: ui/data/ui/compose.ui:378
 msgid "Heading 2"
 msgstr "Nadpis 2"
 
-#: ui/data/ui/compose.ui:368
+#: ui/data/ui/compose.ui:383
 msgid "Heading 3"
 msgstr "Nadpis 3"
 
-#: ui/data/ui/compose.ui:375
+#: ui/data/ui/compose.ui:390
 msgid "Left"
 msgstr "Vlevo"
 
-#: ui/data/ui/compose.ui:380
+#: ui/data/ui/compose.ui:395
 msgid "Center"
 msgstr "Na střed"
 
-#: ui/data/ui/compose.ui:385
+#: ui/data/ui/compose.ui:400
 msgid "Right"
 msgstr "Vpravo"
 
-#: ui/data/ui/message_window.ui:31 ui/data/ui/window.ui:158
+#: ui/data/ui/message_window.ui:31 ui/data/ui/window.ui:275
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:37 ui/data/ui/window.ui:167
+#: ui/data/ui/message_window.ui:37 ui/data/ui/window.ui:284
 msgid "Reply"
 msgstr "Odpovědět"
 
-#: ui/data/ui/message_window.ui:43 ui/data/ui/window.ui:174
+#: ui/data/ui/message_window.ui:43 ui/data/ui/window.ui:291
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/data/ui/message_window.ui:49 ui/data/ui/window.ui:181
+#: ui/data/ui/message_window.ui:49 ui/data/ui/window.ui:298
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/data/ui/message_window.ui:55 ui/data/ui/window.ui:188
-msgid "Move to Trash"
-msgstr "Přesunout do koše"
+#: ui/data/ui/message_window.ui:55 ui/data/ui/window.ui:305
+msgid "More Actions"
+msgstr "Další akce"
+
+#: ui/data/ui/message_window.ui:68 ui/data/ui/window.ui:319
+msgid "Archive"
+msgstr "Archivovat"
+
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:326
+msgid "Mark as Junk"
+msgstr "Označit jako nevyžádanou"
+
+#: ui/data/ui/message_window.ui:187 ui/data/ui/window.ui:516
+msgid "Mark as _Unread"
+msgstr "Označit jako _nepřečtené"
+
+#: ui/data/ui/message_window.ui:191 ui/data/ui/window.ui:520
+msgid "Mark as _Read"
+msgstr "Označit jako _přečtené"
 
 #: ui/data/ui/preferences.ui:10
 msgid "Preferences"
@@ -904,7 +1244,7 @@ msgstr "Pošta"
 msgid "Stored by the mail daemon."
 msgstr "Ukládá poštovní démon."
 
-#: ui/data/ui/preferences.ui:111
+#: ui/data/ui/preferences.ui:111 ui/data/ui/window.ui:167
 msgid "Check for New Mail"
 msgstr "Kontrolovat novou poštu"
 
@@ -940,75 +1280,103 @@ msgstr "Od známých odesílatelů"
 msgid "Always"
 msgstr "Vždy"
 
+#: ui/data/ui/preferences.ui:141
+msgid "Keep Mail Offline For"
+msgstr "Uchovávat poštu offline po dobu"
+
+#: ui/data/ui/preferences.ui:142
+msgid "Older messages stay on the server and are not shown"
+msgstr "Starší zprávy zůstávají na serveru a nezobrazují se"
+
 #: ui/data/ui/preferences.ui:146
+msgid "1 week"
+msgstr "1 týden"
+
+#: ui/data/ui/preferences.ui:147
+msgid "1 month"
+msgstr "1 měsíc"
+
+#: ui/data/ui/preferences.ui:148
+msgid "3 months"
+msgstr "3 měsíce"
+
+#: ui/data/ui/preferences.ui:149
+msgid "1 year"
+msgstr "1 rok"
+
+#: ui/data/ui/preferences.ui:150
+msgid "Everything"
+msgstr "Vše"
+
+#: ui/data/ui/preferences.ui:163
 msgid "Appearance"
 msgstr "Vzhled"
 
-#: ui/data/ui/preferences.ui:150
+#: ui/data/ui/preferences.ui:167
 msgid "Theme"
 msgstr "Motiv"
 
-#: ui/data/ui/preferences.ui:153
+#: ui/data/ui/preferences.ui:170
 msgid "Color Scheme"
 msgstr "Barevné schéma"
 
-#: ui/data/ui/preferences.ui:157
+#: ui/data/ui/preferences.ui:174
 msgid "Follow System"
 msgstr "Podle systému"
 
-#: ui/data/ui/preferences.ui:158
+#: ui/data/ui/preferences.ui:175
 msgid "Light"
 msgstr "Světlé"
 
-#: ui/data/ui/preferences.ui:159
+#: ui/data/ui/preferences.ui:176
 msgid "Dark"
 msgstr "Tmavé"
 
-#: ui/data/ui/preferences.ui:169
+#: ui/data/ui/preferences.ui:186
 msgid "Message List"
 msgstr "Seznam zpráv"
 
-#: ui/data/ui/preferences.ui:172
+#: ui/data/ui/preferences.ui:189
 msgid "Density"
 msgstr "Hustota"
 
-#: ui/data/ui/preferences.ui:176
+#: ui/data/ui/preferences.ui:193
 msgid "Comfortable"
 msgstr "Pohodlná"
 
-#: ui/data/ui/preferences.ui:177
+#: ui/data/ui/preferences.ui:194
 msgid "Compact"
 msgstr "Kompaktní"
 
-#: ui/data/ui/preferences.ui:185
+#: ui/data/ui/preferences.ui:202
 msgid "Show Preview Line"
 msgstr "Zobrazit řádek s náhledem"
 
-#: ui/data/ui/preferences.ui:191
+#: ui/data/ui/preferences.ui:208
 msgid "Show Avatars"
 msgstr "Zobrazit avatary"
 
-#: ui/data/ui/preferences.ui:197
+#: ui/data/ui/preferences.ui:214
 msgid "Monochrome Avatars"
 msgstr "Jednobarevné avatary"
 
-#: ui/data/ui/preferences.ui:198
+#: ui/data/ui/preferences.ui:215
 msgid "Neutral grey instead of a colour per sender"
 msgstr "Neutrální šedá místo barvy pro každého odesílatele"
 
-#: ui/data/ui/preferences.ui:205
+#: ui/data/ui/preferences.ui:222
 msgid "Message View"
 msgstr "Zobrazení zprávy"
 
-#: ui/data/ui/preferences.ui:208
+#: ui/data/ui/preferences.ui:225
 msgid "Use Monospace Font for Plain Text"
 msgstr "Pro prostý text použít neproporcionální písmo"
 
-#: ui/data/ui/preferences.ui:213
+#: ui/data/ui/preferences.ui:230
 msgid "Text Zoom"
 msgstr "Přiblížení textu"
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:231
 msgid "Percent"
 msgstr "Procenta"
 
@@ -1024,63 +1392,63 @@ msgstr "Nová zpráva (Ctrl+N)"
 msgid "Main Menu"
 msgstr "Hlavní nabídka"
 
-#: ui/data/ui/window.ui:85
+#: ui/data/ui/window.ui:129
 msgid "Connecting…"
 msgstr "Připojování…"
 
-#: ui/data/ui/window.ui:103
-msgid "Messages"
-msgstr "Zprávy"
-
-#: ui/data/ui/window.ui:112
+#: ui/data/ui/window.ui:158
 msgid "Inbox"
 msgstr "Doručená pošta"
 
-#: ui/data/ui/window.ui:121
+#: ui/data/ui/window.ui:174
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/data/ui/window.ui:131
+#: ui/data/ui/window.ui:185
 msgid "The mail backend (malachid) is not running."
 msgstr "Poštovní démon (malachid) neběží."
 
-#: ui/data/ui/window.ui:132
-msgid "Retry"
+#: ui/data/ui/window.ui:192
+msgid "Open Preferences"
+msgstr "Otevřít předvolby"
+
+#: ui/data/ui/window.ui:228
+msgid "Load More"
+msgstr "Načíst další"
+
+#: ui/data/ui/window.ui:253
+msgid "Try Again"
 msgstr "Zkusit znovu"
 
-#: ui/data/ui/window.ui:205
+#: ui/data/ui/window.ui:355
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:206
+#: ui/data/ui/window.ui:356
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:217
-msgid "No Accounts"
-msgstr "Žádné účty"
-
-#: ui/data/ui/window.ui:218
+#: ui/data/ui/window.ui:368
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:221
+#: ui/data/ui/window.ui:371
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:315
+#: ui/data/ui/window.ui:495
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
-#: ui/data/ui/window.ui:321
+#: ui/data/ui/window.ui:501
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:325
+#: ui/data/ui/window.ui:505
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:329
+#: ui/data/ui/window.ui:509
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 

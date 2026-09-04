@@ -28,12 +28,29 @@ func (w *Window) handleNotification(method string, params json.RawMessage) {
 			return
 		}
 		w.notifyNewMessage(n)
+		w.onNewMessage(n)
+	case api.NotifySyncState:
+		var n api.SyncStateNotification
+		if err := json.Unmarshal(params, &n); err != nil {
+			w.log.Warn("bad notify.syncState payload", "err", err)
+			return
+		}
+		w.applySyncState(n.State)
+	case api.NotifyAuthRequired:
+		var n api.AuthRequiredNotification
+		if err := json.Unmarshal(params, &n); err != nil {
+			w.log.Warn("bad notify.authRequired payload", "err", err)
+			return
+		}
+		w.showAuthRequired(n)
 	case api.NotifyAccountsChanged:
+		// The account set changed under us: the banner's account may be
+		// gone or edited; a still-failing account is announced again by
+		// the daemon once its syncer restarts.
+		w.hideAuthBanner()
 		w.compose.Invalidate()
-		go w.checkAccounts()
+		w.loadAccounts()
 	default:
-		// TODO(phase-1): notify.syncState → status line, notify.authRequired →
-		// OpenURI portal flow.
 		w.log.Info("notification", "method", method)
 	}
 }

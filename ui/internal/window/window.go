@@ -13,10 +13,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -43,46 +43,97 @@ type Window struct {
 	settings *settings.Store
 	compose  *compose.Manager
 
-	// openMessages tracks stand-alone message windows by message index so a
-	// second double-click raises the existing window instead of opening
-	// another one. TODO(phase-1): key by api.MessageID.
-	openMessages map[int]*MessageWindow
+	// model caches what the backend returned; the widgets are built from it.
+	model mailModel
 
-	// rows are the message list rows, kept so appearance settings can be
-	// re-applied to them when they change.
-	rows []*widget.MessageRow
+	// rows are the message list rows by message ID, kept so appearance
+	// settings and flag changes can be pushed to them.
+	rows map[api.MessageID]*widget.MessageRow
 
-	// markReadSource is the pending mark-as-read timer, 0 when none.
+	// folderRows are the sidebar rows by folder (header rows are not kept).
+	folderRows map[folderKey]*folderRow
+
+	// reselecting is set while Go code selects or removes list rows itself
+	// (rebuilds, restoring the selection); the row-selected handlers ignore
+	// those signals so they only react to the user.
+	reselecting bool
+
+	// loaded caches message.get / message.body results (bounded; see
+	// message_view.go).
+	loaded map[api.MessageID]*loadedMessage
+
+	// openMessages tracks stand-alone message windows so a second
+	// double-click raises the existing window instead of opening another.
+	openMessages map[api.MessageID]*MessageWindow
+
+	// markReadSource is the pending mark-as-read timer, 0 when none;
+	// markReadID is the message it will mark.
 	markReadSource glib.SourceHandle
+	markReadID     api.MessageID
 
 	// hasAccounts mirrors account.list. It starts true: "unknown" must not
 	// show the No Accounts page before the daemon has answered.
 	hasAccounts bool
 
+	// syncStates is the last notify.syncState / sync.status per account.
+	syncStates map[api.AccountID]api.SyncState
+	// outboxSeen is the last known size of each account's outbox folder and
+	// outboxCancelled the drops the user caused (outbox.go: sent toast).
+	outboxSeen      map[api.AccountID]int
+	outboxCancelled map[api.AccountID]int
+
+	// authBannerAccount is the account auth_banner is shown for, empty when
+	// the banner is hidden.
+	authBannerAccount api.AccountID
+
+	// actions are the win.* actions by name (without the prefix).
+	actions map[string]*gio.SimpleAction
+
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
 	listPage   *adw.NavigationPage
 
-	folderList  *gtk.ListBox
-	messageList *gtk.ListBox
-	banner      *adw.Banner
-	toasts      *adw.ToastOverlay
+	folderStack      *gtk.Stack
+	folderList       *gtk.ListBox
+	folderStatusPage *adw.StatusPage
+	syncSpinner      *adw.Spinner
+	syncLabel        *gtk.Label
+	connIcon         *gtk.Image
+	connStatus       *gtk.Label
 
-	messageStack   *gtk.Stack
-	messageSubject *gtk.Label
-	messageFrom    *gtk.Label
-	messageBody    *gtk.Label
-	trashButton    *gtk.Button
-	replyButton    *gtk.Button
-	replyAllButton *gtk.Button
-	forwardButton  *gtk.Button
+	refreshButton   *gtk.Button
+	searchButton    *gtk.ToggleButton
+	banner          *adw.Banner
+	authBanner      *adw.Banner
+	listStack       *gtk.Stack
+	listScroller    *gtk.ScrolledWindow
+	messageList     *gtk.ListBox
+	loadMoreButton  *gtk.Button
+	loadMoreSpinner *adw.Spinner
+	listStatusPage  *adw.StatusPage
+	listRetryButton *gtk.Button
 
-	connIcon   *gtk.Image
-	connStatus *gtk.Label
+	toasts             *adw.ToastOverlay
+	messageStack       *gtk.Stack
+	messageSubject     *gtk.Label
+	messageFrom        *gtk.Label
+	messageRecipients  *gtk.Label
+	messageDate        *gtk.Label
+	messageAttachments *gtk.Label
+	messageBody        *gtk.Label
+	starButton         *gtk.ToggleButton
+	archiveButton      *gtk.Button
+	junkButton         *gtk.Button
+	trashButton        *gtk.Button
+	messageMenu        *gtk.MenuButton
+	replyButton        *gtk.Button
+	replyAllButton     *gtk.Button
+	forwardButton      *gtk.Button
+	outboxBanner       *adw.Banner
 }
 
-// New builds the window, populates placeholder data and starts connecting
-// to the backend. Settings from s are applied now and whenever they change.
+// New builds the window, registers its actions and starts connecting to
+// the backend. Settings from s are applied now and whenever they change.
 func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager) *Window {
 	b := data.Builder("window.ui")
 
@@ -94,29 +145,57 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		settings:          s,
 		compose:           cm,
 		hasAccounts:       true,
-		openMessages:      make(map[int]*MessageWindow),
-		outerSplit:        b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
-		innerSplit:        b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
-		listPage:          b.GetObject("list_page").Cast().(*adw.NavigationPage),
-		folderList:        b.GetObject("folder_list").Cast().(*gtk.ListBox),
-		messageList:       b.GetObject("message_list").Cast().(*gtk.ListBox),
-		banner:            b.GetObject("backend_banner").Cast().(*adw.Banner),
-		toasts:            b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
-		messageStack:      b.GetObject("message_stack").Cast().(*gtk.Stack),
-		messageSubject:    b.GetObject("message_subject").Cast().(*gtk.Label),
-		messageFrom:       b.GetObject("message_from").Cast().(*gtk.Label),
-		messageBody:       b.GetObject("message_body").Cast().(*gtk.Label),
-		trashButton:       b.GetObject("trash_button").Cast().(*gtk.Button),
-		replyButton:       b.GetObject("reply_button").Cast().(*gtk.Button),
-		replyAllButton:    b.GetObject("reply_all_button").Cast().(*gtk.Button),
-		forwardButton:     b.GetObject("forward_button").Cast().(*gtk.Button),
-		connIcon:          b.GetObject("connection_icon").Cast().(*gtk.Image),
-		connStatus:        b.GetObject("connection_status").Cast().(*gtk.Label),
+		rows:              make(map[api.MessageID]*widget.MessageRow),
+		folderRows:        make(map[folderKey]*folderRow),
+		loaded:            make(map[api.MessageID]*loadedMessage),
+		openMessages:      make(map[api.MessageID]*MessageWindow),
+		syncStates:        make(map[api.AccountID]api.SyncState),
+		actions:           make(map[string]*gio.SimpleAction),
+
+		outerSplit: b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
+		innerSplit: b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
+		listPage:   b.GetObject("list_page").Cast().(*adw.NavigationPage),
+
+		folderStack:      b.GetObject("folder_stack").Cast().(*gtk.Stack),
+		folderList:       b.GetObject("folder_list").Cast().(*gtk.ListBox),
+		folderStatusPage: b.GetObject("folder_status_page").Cast().(*adw.StatusPage),
+		syncSpinner:      b.GetObject("sync_spinner").Cast().(*adw.Spinner),
+		syncLabel:        b.GetObject("sync_label").Cast().(*gtk.Label),
+		connIcon:         b.GetObject("connection_icon").Cast().(*gtk.Image),
+		connStatus:       b.GetObject("connection_status").Cast().(*gtk.Label),
+
+		refreshButton:   b.GetObject("refresh_button").Cast().(*gtk.Button),
+		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
+		banner:          b.GetObject("backend_banner").Cast().(*adw.Banner),
+		authBanner:      b.GetObject("auth_banner").Cast().(*adw.Banner),
+		listStack:       b.GetObject("list_stack").Cast().(*gtk.Stack),
+		listScroller:    b.GetObject("list_scroller").Cast().(*gtk.ScrolledWindow),
+		messageList:     b.GetObject("message_list").Cast().(*gtk.ListBox),
+		loadMoreButton:  b.GetObject("load_more_button").Cast().(*gtk.Button),
+		loadMoreSpinner: b.GetObject("load_more_spinner").Cast().(*adw.Spinner),
+		listStatusPage:  b.GetObject("list_status_page").Cast().(*adw.StatusPage),
+		listRetryButton: b.GetObject("list_retry_button").Cast().(*gtk.Button),
+
+		toasts:             b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
+		messageStack:       b.GetObject("message_stack").Cast().(*gtk.Stack),
+		messageSubject:     b.GetObject("message_subject").Cast().(*gtk.Label),
+		messageFrom:        b.GetObject("message_from").Cast().(*gtk.Label),
+		messageRecipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
+		messageDate:        b.GetObject("message_date").Cast().(*gtk.Label),
+		messageAttachments: b.GetObject("message_attachments").Cast().(*gtk.Label),
+		messageBody:        b.GetObject("message_body").Cast().(*gtk.Label),
+		starButton:         b.GetObject("star_button").Cast().(*gtk.ToggleButton),
+		archiveButton:      b.GetObject("archive_button").Cast().(*gtk.Button),
+		junkButton:         b.GetObject("junk_button").Cast().(*gtk.Button),
+		trashButton:        b.GetObject("trash_button").Cast().(*gtk.Button),
+		messageMenu:        b.GetObject("message_menu").Cast().(*gtk.MenuButton),
+		replyButton:        b.GetObject("reply_button").Cast().(*gtk.Button),
+		replyAllButton:     b.GetObject("reply_all_button").Cast().(*gtk.Button),
+		forwardButton:      b.GetObject("forward_button").Cast().(*gtk.Button),
+		outboxBanner:       b.GetObject("outbox_banner").Cast().(*adw.Banner),
 	}
 	w.SetApplication(&app.Application)
-
-	w.populateFolders()
-	w.populateMessages()
+	w.registerActions()
 	w.messageStack.SetVisibleChildName(w.emptyPageName())
 
 	// Settings callbacks arrive on the main loop; no IdleAdd needed. The main
@@ -137,33 +216,49 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		return true
 	})
 
+	// Sidebar rows mirror model.entries one to one (rebuildFolderList).
+	// Programmatic selection (w.reselecting) is handled by selectFolder
+	// itself and must not navigate a collapsed split view to the list.
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
-		if row == nil {
+		if row == nil || w.reselecting {
 			return
 		}
-		w.listPage.SetTitle(dummyFolders[row.Index()].Name)
+		idx := row.Index()
+		if idx < 0 || idx >= len(w.model.entries) {
+			return
+		}
+		e := w.model.entries[idx]
+		if e.Header {
+			return
+		}
+		w.selectFolder(folderKey{Account: e.Account.ID, Folder: e.Folder.ID})
 		w.outerSplit.SetShowContent(true)
 	})
+
+	// List rows mirror model.messages one to one (rebuildMessageRows).
 	w.messageList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
-		if row == nil {
-			w.messageStack.SetVisibleChildName(w.emptyPageName())
-			w.setMessageActionsSensitive(false)
-			w.scheduleMarkRead(-1)
-			return
+		if !w.reselecting {
+			w.onMessageRowSelected(row)
 		}
-		w.showMessage(dummyMessages[row.Index()])
-		w.setMessageActionsSensitive(true)
-		w.innerSplit.SetShowContent(true)
-		w.scheduleMarkRead(row.Index())
 	})
 	// Fires on double-click or Enter (activate-on-single-click is off).
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
-		w.log.Debug("message row activated", "index", row.Index())
-		w.openMessageWindow(row.Index())
+		if s, ok := w.model.messageAt(row.Index()); ok {
+			w.openMessageWindow(s.ID)
+		}
 	})
-	w.trashButton.ConnectClicked(func() {
-		if row := w.messageList.SelectedRow(); row != nil {
-			w.trashMessage(row.Index(), w, w.toasts)
+	w.loadMoreButton.ConnectClicked(w.loadMore)
+	w.listScroller.ConnectEdgeReached(func(pos gtk.PositionType) {
+		if pos == gtk.PosBottom {
+			w.loadMore()
+		}
+	})
+	w.listRetryButton.ConnectClicked(w.loadMessages)
+
+	// "clicked" fires for user clicks only, not for SetActive from Go.
+	w.starButton.ConnectClicked(func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.toggleFlagged(s.ID)
 		}
 	})
 	for _, r := range []struct {
@@ -172,12 +267,21 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}{{w.replyButton, compose.KindReply}, {w.replyAllButton, compose.KindReplyAll}, {w.forwardButton, compose.KindForward}} {
 		r := r
 		r.b.ConnectClicked(func() {
-			if row := w.messageList.SelectedRow(); row != nil {
-				w.openCompose(r.kind, row.Index())
+			if s, ok := w.selectedMessage(); ok {
+				w.openCompose(r.kind, s.ID)
 			}
 		})
 	}
 	w.banner.ConnectButtonClicked(w.reconnect)
+	w.authBanner.ConnectButtonClicked(func() {
+		w.app.ActivateAction("preferences", nil)
+	})
+	// The only button the outbox banner ever has is Retry (outbox.go).
+	w.outboxBanner.ConnectButtonClicked(func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.retryOutbox(s.ID)
+		}
+	})
 
 	// Client callbacks arrive on a background goroutine; hop to the main loop.
 	c.OnStateChange = func(s client.State, err error) {
@@ -198,43 +302,58 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	return w
 }
 
-func (w *Window) populateFolders() {
-	for _, f := range dummyFolders {
-		row := adw.NewActionRow()
-		row.SetUseMarkup(false) // folder names are untrusted server data
-		row.SetTitle(f.Name)
-		row.AddPrefix(gtk.NewImageFromIconName(f.Icon))
-		if f.Unread > 0 {
-			count := gtk.NewLabel(strconv.Itoa(f.Unread))
-			count.AddCSSClass("caption")
-			count.AddCSSClass("dim-label")
-			row.AddSuffix(count)
-		}
-		w.folderList.Append(row)
-	}
-	if first := w.folderList.RowAtIndex(0); first != nil {
-		w.folderList.SelectRow(first)
-	}
-}
-
-// setMessageActionsSensitive enables the per-message header buttons.
-func (w *Window) setMessageActionsSensitive(on bool) {
-	for _, b := range []*gtk.Button{w.trashButton, w.replyButton, w.replyAllButton, w.forwardButton} {
-		b.SetSensitive(on)
-	}
-}
-
-// openCompose opens a reply or forward of message idx.
-//
-// TODO(phase-1): call draft.create and fall back to compose.Prefill only
-// while the backend cannot see the message.
-func (w *Window) openCompose(kind compose.Kind, idx int) {
-	if idx < 0 || idx >= len(dummyMessages) {
+// onMessageRowSelected shows the message behind row in the pane, or the
+// placeholder when row is nil (selection cleared). The list code calls it
+// directly when it changes the selection on the user's behalf.
+func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
+	if row == nil {
+		w.messageStack.SetVisibleChildName(w.emptyPageName())
+		w.outboxBanner.SetRevealed(false)
+		w.setMessageActionsSensitive(false)
+		w.scheduleMarkRead("")
 		return
 	}
-	m := dummyMessages[idx]
-	src := compose.Source{From: []api.Address{m.From}, Subject: m.Subject, Date: m.Date, Text: m.Body}
-	w.compose.Open(compose.Prefill(kind, src, w.compose.SelfAddress(), time.Now()))
+	s, ok := w.model.messageAt(row.Index())
+	if !ok {
+		return
+	}
+	w.showMessage(s.ID)
+	w.setMessageActionsSensitive(true)
+	w.innerSplit.SetShowContent(true)
+	if w.model.inOutbox(s) {
+		w.scheduleMarkRead("") // the daemon refuses flags on outbox messages
+	} else {
+		w.scheduleMarkRead(s.ID)
+	}
+}
+
+// registerActions adds the win.* actions. All but refresh start disabled;
+// setMessageActionsSensitive enables them while a message is selected.
+// Accelerators are assigned in main.go.
+func (w *Window) registerActions() {
+	forSelected := func(fn func(api.MessageID)) func() {
+		return func() {
+			if s, ok := w.selectedMessage(); ok {
+				fn(s.ID)
+			}
+		}
+	}
+	w.addAction("refresh", true, w.triggerSync)
+	w.addAction("trash", false, forSelected(w.trash))
+	w.addAction("archive", false, forSelected(w.archive))
+	w.addAction("junk", false, forSelected(w.junk))
+	w.addAction("mark-read", false, forSelected(w.markRead))
+	w.addAction("mark-unread", false, forSelected(w.markUnread))
+	w.addAction("toggle-flag", false, forSelected(w.toggleFlagged))
+}
+
+// addAction registers one stateless win.<name> action.
+func (w *Window) addAction(name string, enabled bool, fn func()) {
+	a := gio.NewSimpleAction(name, nil)
+	a.SetEnabled(enabled)
+	a.ConnectActivate(func(*glib.Variant) { fn() })
+	w.AddAction(a)
+	w.actions[name] = a
 }
 
 // Toast shows a transient message over the message pane.
@@ -242,63 +361,12 @@ func (w *Window) Toast(text string) {
 	w.toasts.AddToast(widget.PlainToast(text))
 }
 
-// messageOf projects a placeholder message onto what a list row shows.
-func messageOf(m dummyMessage) widget.Message {
-	return widget.Message{
-		From:    m.From,
-		Subject: m.Subject,
-		Snippet: m.Snippet,
-		Date:    m.Date,
-		Unread:  m.Unread,
-	}
-}
-
-func (w *Window) populateMessages() {
-	for _, m := range dummyMessages {
-		row := widget.NewMessageRow()
-		row.SetMessage(messageOf(m))
-		w.rows = append(w.rows, row)
-		w.messageList.Append(row)
-	}
-	w.applyListAppearance()
-}
-
-// applyListAppearance pushes the current list settings to every row.
-func (w *Window) applyListAppearance() {
-	compact := w.settings.Density() == settings.DensityCompact
-	preview := w.settings.ShowPreviewLine()
-	avatars := w.settings.ShowAvatars()
-	for _, r := range w.rows {
-		r.SetCompact(compact)
-		r.SetShowPreview(preview)
-		r.SetShowAvatar(avatars)
-	}
-}
-
-// openMessageWindow opens message idx in its own window, or raises the
-// window that already shows it.
-func (w *Window) openMessageWindow(idx int) {
-	if idx < 0 || idx >= len(dummyMessages) {
-		return
-	}
-	if mw, ok := w.openMessages[idx]; ok {
-		mw.Present()
-		return
-	}
-	mw := newMessageWindow(w, idx)
-	w.openMessages[idx] = mw
-	mw.ConnectCloseRequest(func() bool {
-		delete(w.openMessages, idx)
-		return false // let the window close
-	})
-	mw.Present()
-}
-
-func (w *Window) showMessage(m dummyMessage) {
-	w.messageSubject.SetLabel(m.Subject)
-	w.messageFrom.SetLabel(widget.FormatAddress(m.From))
-	w.messageBody.SetLabel(m.Body)
-	w.messageStack.SetVisibleChildName("message")
+// ToastFor is Toast with an explicit timeout in seconds (0 = stays until
+// dismissed) instead of libadwaita's default 5 s.
+func (w *Window) ToastFor(text string, seconds uint) {
+	t := widget.PlainToast(text)
+	t.SetTimeout(seconds)
+	w.toasts.AddToast(t)
 }
 
 // playNewMailSound plays the theme's new-mail event; failures are logged
@@ -325,11 +393,16 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		w.connStatus.SetLabel(i18n.T("Connected"))
 		w.banner.SetRevealed(false)
 		go w.fetchSystemInfo()
-		go w.checkAccounts()
+		w.loadAccounts()
+		w.loadSyncStatus()
 	default:
 		w.connIcon.SetFromIconName("network-offline-symbolic")
 		w.connStatus.SetLabel(i18n.T("Backend unavailable"))
 		w.banner.SetRevealed(true)
+		// Late replies of in-flight calls are dropped; what is shown stays
+		// until the reconnect reloads it.
+		w.model.bumpAll()
+		w.showLoadMore()
 		if err != nil {
 			// Repeated dial failures while the daemon is down are expected;
 			// keep them at debug so the log stays readable.
@@ -347,23 +420,12 @@ func (w *Window) emptyPageName() string {
 	return "empty"
 }
 
-// checkAccounts asks account.list and switches the placeholder when no
-// message is selected. Errors leave the state untouched.
+// checkAccounts re-runs account.list (loadAccounts, which also toggles the
+// No Accounts placeholder). Safe to call from any goroutine.
+//
+// Deprecated: call loadAccounts on the main loop instead.
 func (w *Window) checkAccounts() {
-	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
-	defer cancel()
-	var res api.AccountListResult
-	err := w.client.Call(ctx, api.MethodAccountList, api.AccountListParams{}, &res)
-	glib.IdleAdd(func() {
-		if err != nil {
-			w.log.Debug("account.list", "err", err)
-			return
-		}
-		w.hasAccounts = len(res.Accounts) > 0
-		if w.messageList.SelectedRow() == nil {
-			w.messageStack.SetVisibleChildName(w.emptyPageName())
-		}
-	})
+	glib.IdleAdd(w.loadAccounts)
 }
 
 func (w *Window) fetchSystemInfo() {

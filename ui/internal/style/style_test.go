@@ -10,6 +10,9 @@ import (
 
 func TestCSS(t *testing.T) {
 	css := CSS(120, false, false)
+	if !strings.Contains(css, "row.folder-row") {
+		t.Error("folder row density rule missing")
+	}
 	if !strings.Contains(css, ".message-body { font-size: 120%; }") {
 		t.Errorf("zoom rule missing:\n%s", css)
 	}

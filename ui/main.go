@@ -62,7 +62,9 @@ func main() {
 		mgr = compose.NewManager(app, rpc, log, prefs)
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
-				mainWin.Toast(text)
+				// A short confirmation: the outbox folder and the "sent"
+				// toast that follows carry the rest.
+				mainWin.ToastFor(text, 2)
 			}
 		}
 		if app.Flags()&gio.ApplicationIsService != 0 {
@@ -153,6 +155,21 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	quit.ConnectActivate(func(*glib.Variant) { app.Quit() })
 	app.AddAction(quit)
 	app.SetAccelsForAction("app.quit", []string{"<Control>q"})
+
+	// Per-message actions of the main window (window.registerActions).
+	// Single-letter accelerators are safe: the main window has no text
+	// entry that could want the key. A message window mirrors them for its
+	// msg.* group (window.messageShortcuts).
+	for action, accel := range map[string]string{
+		"win.trash":       "Delete",
+		"win.archive":     "a",
+		"win.junk":        "j",
+		"win.mark-unread": "u",
+		"win.toggle-flag": "s",
+		"win.refresh":     "<Control>r",
+	} {
+		app.SetAccelsForAction(action, []string{accel})
+	}
 }
 
 func newLogger() *slog.Logger {

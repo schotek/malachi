@@ -46,6 +46,7 @@ type PreferencesDialog struct {
 	mailGroup     *adw.PreferencesGroup
 	checkInterval *adw.ComboRow
 	remoteImages  *adw.ComboRow
+	offlineDays   *adw.ComboRow
 
 	colorScheme *adw.ComboRow
 	density     *adw.ComboRow
@@ -70,6 +71,9 @@ var (
 var (
 	intervalChoices = []int{0, 300, 900, 1800} // Manually, 5, 15, 30 minutes
 	remoteChoices   = []api.RemoteContentPolicy{api.RemoteBlock, api.RemoteKnownSenders, api.RemoteAllow}
+	// retentionChoices are Preferences.OfflineDays per row: 1 week, 1 month,
+	// 3 months, 1 year, Everything (0).
+	retentionChoices = []int{7, 30, 90, 365, 0}
 )
 
 // NewPreferences builds the dialog bound to s and, for the Mail group and
@@ -96,6 +100,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		mailGroup:            b.GetObject("mail_group").Cast().(*adw.PreferencesGroup),
 		checkInterval:        b.GetObject("check_interval").Cast().(*adw.ComboRow),
 		remoteImages:         b.GetObject("remote_images").Cast().(*adw.ComboRow),
+		offlineDays:          b.GetObject("offline_days").Cast().(*adw.ComboRow),
 		colorScheme:          b.GetObject("color_scheme").Cast().(*adw.ComboRow),
 		density:              b.GetObject("list_density").Cast().(*adw.ComboRow),
 		showPreview:          b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
@@ -148,6 +153,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 		syncing = true
 		d.checkInterval.SetSelected(nearestInterval(p.SyncIntervalSeconds))
 		d.remoteImages.SetSelected(indexOfPolicy(p.RemoteContent))
+		d.offlineDays.SetSelected(indexOfRetention(p.OfflineDays))
 		syncing = false
 	}
 	save := func() {
@@ -160,6 +166,9 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 		}
 		if i := d.remoteImages.Selected(); i < uint(len(remoteChoices)) {
 			want.RemoteContent = remoteChoices[i]
+		}
+		if i := d.offlineDays.Selected(); i < uint(len(retentionChoices)) {
+			want.OfflineDays = retentionChoices[i]
 		}
 		d.mailGroup.SetSensitive(false)
 		go func() {
@@ -184,6 +193,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 	}
 	h1 := d.checkInterval.NotifyProperty("selected", save)
 	h2 := d.remoteImages.NotifyProperty("selected", save)
+	h3 := d.offlineDays.NotifyProperty("selected", save)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -207,6 +217,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 	return func() {
 		d.checkInterval.HandlerDisconnect(h1)
 		d.remoteImages.HandlerDisconnect(h2)
+		d.offlineDays.HandlerDisconnect(h3)
 	}
 }
 
@@ -224,6 +235,29 @@ func nearestInterval(seconds int) uint {
 		}
 		if bestDiff < 0 || diff < bestDiff {
 			best, bestDiff = uint(i+1), diff
+		}
+	}
+	return best
+}
+
+// indexOfRetention maps Preferences.OfflineDays to the closest combo
+// position; 0 (keep everything) and invalid negative values select
+// "Everything".
+func indexOfRetention(days int) uint {
+	if days <= 0 {
+		return uint(len(retentionChoices) - 1)
+	}
+	best, bestDiff := uint(0), -1
+	for i, v := range retentionChoices {
+		if v == 0 {
+			continue
+		}
+		diff := v - days
+		if diff < 0 {
+			diff = -diff
+		}
+		if bestDiff < 0 || diff < bestDiff {
+			best, bestDiff = uint(i), diff
 		}
 	}
 	return best

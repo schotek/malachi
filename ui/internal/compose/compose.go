@@ -41,6 +41,8 @@ type Window struct {
 	attBox     *gtk.FlowBox
 	status     *gtk.Label
 	sendButton *gtk.Button
+	toolbar    *gtk.Box
+	plainHint  *gtk.Label
 
 	bold, italic, underline *gtk.ToggleButton
 	ul, ol, quote           *gtk.ToggleButton
@@ -85,6 +87,8 @@ func newWindow(m *Manager, p Params) *Window {
 		attBox:      b.GetObject("attachments_box").Cast().(*gtk.FlowBox),
 		status:      b.GetObject("draft_status").Cast().(*gtk.Label),
 		sendButton:  b.GetObject("send_button").Cast().(*gtk.Button),
+		toolbar:     b.GetObject("format_toolbar").Cast().(*gtk.Box),
+		plainHint:   b.GetObject("plain_text_hint").Cast().(*gtk.Label),
 		bold:        b.GetObject("bold_button").Cast().(*gtk.ToggleButton),
 		italic:      b.GetObject("italic_button").Cast().(*gtk.ToggleButton),
 		underline:   b.GetObject("underline_button").Cast().(*gtk.ToggleButton),
@@ -138,14 +142,23 @@ func newWindow(m *Manager, p Params) *Window {
 	w.wireActions()
 	w.wireToolbar()
 	w.wireRows()
+	if !richText {
+		// Text-only phase (see richText): no formatting to offer, no
+		// inline images, and the user is told what will go out.
+		w.toolbar.SetVisible(false)
+		w.actions["insert-image"].SetEnabled(false)
+		w.plainHint.SetVisible(true)
+	}
 	w.ConnectCloseRequest(w.closeRequest)
 	return w
 }
 
 // setAccounts fills the From row, keeping the selected identity when it is
-// still listed. The row is only sensitive with a choice.
+// still listed; before any choice was made the account the window was
+// opened for (Params.AccountID) is preselected. The row is only sensitive
+// with a choice.
 func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
-	var selectedID api.AccountID
+	selectedID := w.params.AccountID
 	if len(w.accounts) > 0 {
 		selectedID = w.account().ID
 	}

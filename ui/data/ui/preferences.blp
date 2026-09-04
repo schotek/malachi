@@ -124,6 +124,21 @@ Adw.PreferencesDialog preferences_dialog {
           ]
         };
       }
+
+      Adw.ComboRow offline_days {
+        title: _("Keep Mail Offline For");
+        subtitle: _("Older messages stay on the server and are not shown");
+
+        model: StringList {
+          strings [
+            _("1 week"),
+            _("1 month"),
+            _("3 months"),
+            _("1 year"),
+            _("Everything"),
+          ]
+        };
+      }
     }
   }
 

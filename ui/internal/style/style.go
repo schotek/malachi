@@ -59,6 +59,10 @@ func adwColorScheme(c settings.ColorScheme) adw.ColorScheme {
 func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	var b strings.Builder
 	b.WriteString(".unread-dot { min-width: 8px; min-height: 8px; border-radius: 4px; background-color: @accent_bg_color; }\n")
+	// Folder rows are denser than libadwaita's action rows: the sidebar
+	// lists many one-line entries.
+	b.WriteString(".navigation-sidebar row.folder-row { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }\n")
+	b.WriteString("row.folder-row > box.header { min-height: 0; padding-top: 0; padding-bottom: 0; }\n")
 	fmt.Fprintf(&b, ".message-body { font-size: %d%%; }\n", textZoomPercent)
 	if monospace {
 		b.WriteString(".message-body { font-family: monospace; }\n")

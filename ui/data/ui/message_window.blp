@@ -44,11 +44,47 @@ Adw.Window message_window {
         tooltip-text: _("Forward");
       }
 
+      // [end] packs right to left: the first child is rightmost. The
+      // buttons are wired from Go (no win.* actions in this window); the
+      // menu items use the window-local "msg" action group.
+
+      [end]
+      MenuButton message_menu {
+        icon-name: "view-more-symbolic";
+        tooltip-text: _("More Actions");
+        menu-model: message_menu_model;
+      }
+
+      [end]
+      ToggleButton star_button {
+        icon-name: "non-starred-symbolic";
+        tooltip-text: _("Star");
+      }
+
+      [end]
+      Button archive_button {
+        icon-name: "folder-download-symbolic";
+        tooltip-text: _("Archive");
+      }
+
+      [end]
+      Button junk_button {
+        icon-name: "mail-mark-junk-symbolic";
+        tooltip-text: _("Mark as Junk");
+      }
+
       [end]
       Button trash_button {
         icon-name: "user-trash-symbolic";
         tooltip-text: _("Move to Trash");
       }
+    }
+
+    // Delivery state of a message in the outbox (title and button set from
+    // Go, see window/outbox.go); hidden otherwise.
+    [top]
+    Adw.Banner outbox_banner {
+      revealed: false;
     }
 
     content: Adw.ToastOverlay toast_overlay {
@@ -90,9 +126,41 @@ Adw.Window message_window {
               ]
             }
 
+            // To / Cc line; hidden while the headers are loading.
+            Label message_recipients {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
+              visible: false;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Label message_date {
+              xalign: 0;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
+
+            // "N attachments: names"; hidden without attachments.
+            Label message_attachments {
+              xalign: 0;
+              wrap: true;
+              visible: false;
+
+              styles [
+                "caption",
+              ]
+            }
+
             Separator {}
 
-            // Plain-text placeholder; see window.blp for the rendering note.
+            // Plain-text body; see window.blp for the rendering note.
             Label message_body {
               xalign: 0;
               yalign: 0;
@@ -110,4 +178,16 @@ Adw.Window message_window {
       };
     };
   };
+}
+
+menu message_menu_model {
+  item {
+    label: _("Mark as _Unread");
+    action: "msg.mark-unread";
+  }
+
+  item {
+    label: _("Mark as _Read");
+    action: "msg.mark-read";
+  }
 }

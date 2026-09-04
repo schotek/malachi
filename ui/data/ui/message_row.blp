@@ -40,6 +40,24 @@ ListBoxRow message_row {
           hexpand: true;
         }
 
+        Image attachment_icon {
+          icon-name: "mail-attachment-symbolic";
+          visible: false;
+
+          styles [
+            "dim-label",
+          ]
+        }
+
+        Image star_icon {
+          icon-name: "starred-symbolic";
+          visible: false;
+
+          styles [
+            "accent",
+          ]
+        }
+
         Label date_label {
           xalign: 1;
 

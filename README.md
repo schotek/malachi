@@ -3,12 +3,18 @@
 A native email client for the Linux desktop, built because the existing
 options are either showing their age or do not work reliably anymore.
 
-> **Project status: early bootstrap. Nothing works yet.**
+> **Project status: early. IMAP reading and plain-text sending work; there
+> is no HTML rendering yet.**
 >
-> There is no IMAP, no sending, no rendering. The repository contains the
-> architecture, the API contract, a daemon that answers "not implemented",
-> and a window with placeholder data. Do not point it at a mailbox you care
-> about; there is nothing to point it at yet.
+> The daemon synchronises IMAP accounts into a local store (folders,
+> headers, bodies as plain text within a configurable retention window),
+> pushes flag, move and delete changes back, and the window shows real
+> folders and messages. Messages are composed and sent as plain text with
+> attachments: they wait in a local Outbox, go out over SMTP with retries,
+> and a copy lands in the Sent folder. Messages are displayed as text only;
+> HTML bodies are withheld until the sanitiser exists. Do not point it at a
+> mailbox you care about yet: it is young, and a bug in the sync engine can
+> still touch messages on the server.
 
 ## Goals
 
@@ -182,7 +188,7 @@ keyring.
 
 | Provider | Status |
 |---|---|
-| Generic IMAP/SMTP with password | ✅ planned first (phase 1) |
+| Generic IMAP/SMTP with password | 🚧 reading and plain-text sending work |
 | Microsoft 365 / Outlook.com via OAuth2 | 🚧 planned (phase 2) |
 | Gmail via OAuth2 | ⏸️ deferred: requires a Google CASA security assessment or a bring-your-own-client-ID mode; see [docs/architecture.md](docs/architecture.md) |
 

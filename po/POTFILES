@@ -9,9 +9,16 @@ ui/internal/compose/compose.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/widget/format.go
+ui/internal/widget/message_row.go
 ui/internal/widget/rpc.go
 ui/internal/window/accounts_page.go
 ui/internal/window/actions.go
+ui/internal/window/folders.go
+ui/internal/window/message_view.go
+ui/internal/window/message_window.go
+ui/internal/window/messages.go
 ui/internal/window/notify.go
+ui/internal/window/outbox.go
 ui/internal/window/preferences.go
+ui/internal/window/sync.go
 ui/internal/window/window.go

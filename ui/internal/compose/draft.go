@@ -21,6 +21,13 @@ import (
 // autosaveDelay is how long after the last edit a dirty draft is saved.
 const autosaveDelay = 30 // seconds
 
+// richText is whether the editor's HTML is transmitted with the draft. The
+// backend's HTML sanitiser is still a fail-closed stub, so draft.save
+// rejects any non-empty htmlBody: only the plain text goes over the wire,
+// the formatting toolbar is hidden and inline images are off. Flip it once
+// the sanitiser lands.
+const richText = false
+
 type saveReason int
 
 const (
@@ -121,9 +128,11 @@ func (w *Window) build() api.Draft {
 		BCC:        bcc,
 		Subject:    w.subject.Text(),
 		TextBody:   w.editor.Text(),
-		HTMLBody:   w.editor.HTML(),
 		InReplyTo:  w.draft.inReplyTo,
 		Forwarding: w.draft.forwarding,
+	}
+	if richText {
+		d.HTMLBody = w.editor.HTML()
 	}
 	if to == nil {
 		d.To = []api.Address{}

@@ -30,6 +30,7 @@ const (
 type Source struct {
 	ID      api.MessageID
 	From    []api.Address
+	ReplyTo []api.Address // Reply-To header; replies go here instead of From
 	To      []api.Address
 	CC      []api.Address
 	Subject string
@@ -39,7 +40,9 @@ type Source struct {
 
 // Params opens a compose window with these fields prefilled.
 type Params struct {
-	Kind        Kind
+	Kind Kind
+	// AccountID preselects the From identity; empty means the first account.
+	AccountID   api.AccountID
 	To, CC, BCC []api.Address
 	Subject     string
 	// BodyHTML is inserted into the editor document verbatim and must
@@ -58,12 +61,12 @@ func Prefill(kind Kind, src Source, self api.Address, now time.Time) Params {
 	p := Params{Kind: kind}
 	switch kind {
 	case KindReply:
-		p.To = dedupeAddresses(src.From, nil)
+		p.To = dedupeAddresses(replyTargets(src), nil)
 		p.Subject = ReplySubject(src.Subject)
 		p.BodyHTML = quoteHTML(src)
 		p.InReplyTo = src.ID
 	case KindReplyAll:
-		p.To = dedupeAddresses(src.From, nil)
+		p.To = dedupeAddresses(replyTargets(src), nil)
 		exclude := append([]api.Address{self}, p.To...)
 		p.CC = dedupeAddresses(append(append([]api.Address{}, src.To...), src.CC...), exclude)
 		p.Subject = ReplySubject(src.Subject)
@@ -76,6 +79,15 @@ func Prefill(kind Kind, src Source, self api.Address, now time.Time) Params {
 	}
 	_ = now
 	return p
+}
+
+// replyTargets is where a reply goes: Reply-To when the sender set one,
+// otherwise From.
+func replyTargets(src Source) []api.Address {
+	if len(src.ReplyTo) > 0 {
+		return src.ReplyTo
+	}
+	return src.From
 }
 
 var subjectPrefix = regexp.MustCompile(`(?i)^\s*(re|fwd?|aw|wg)\s*:\s*`)

@@ -56,39 +56,80 @@ Adw.ApplicationWindow main_window {
           }
         }
 
-        content: ScrolledWindow {
-          hscrollbar-policy: never;
+        // "folders" is the list; "status" replaces it while there is
+        // nothing to list (no account, loading, error).
+        content: Stack folder_stack {
+          StackPage {
+            name: "folders";
 
-          child: ListBox folder_list {
-            styles [
-              "navigation-sidebar",
-            ]
-          };
+            child: ScrolledWindow {
+              hscrollbar-policy: never;
+
+              child: ListBox folder_list {
+                styles [
+                  "navigation-sidebar",
+                ]
+              };
+            };
+          }
+
+          StackPage {
+            name: "status";
+
+            child: Adw.StatusPage folder_status_page {};
+          }
         };
 
         [bottom]
         Box {
-          orientation: horizontal;
-          spacing: 8;
+          orientation: vertical;
+          spacing: 4;
           margin-start: 12;
           margin-end: 12;
           margin-top: 6;
           margin-bottom: 6;
+          // Sync progress of the accounts (filled from notify.syncState).
+          Box {
+            orientation: horizontal;
+            spacing: 8;
 
-          Image connection_icon {
-            icon-name: "network-offline-symbolic";
+            Adw.Spinner sync_spinner {
+              visible: false;
+              valign: center;
+            }
+
+            Label sync_label {
+              ellipsize: end;
+              xalign: 0;
+              hexpand: true;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
           }
 
-          Label connection_status {
-            label: _("Connecting…");
-            ellipsize: end;
-            xalign: 0;
-            hexpand: true;
+          // Connection to the local daemon.
+          Box {
+            orientation: horizontal;
+            spacing: 8;
 
-            styles [
-              "dim-label",
-              "caption",
-            ]
+            Image connection_icon {
+              icon-name: "network-offline-symbolic";
+            }
+
+            Label connection_status {
+              label: _("Connecting…");
+              ellipsize: end;
+              xalign: 0;
+              hexpand: true;
+
+              styles [
+                "dim-label",
+                "caption",
+              ]
+            }
           }
         }
       };
@@ -110,10 +151,19 @@ Adw.ApplicationWindow main_window {
           child: Adw.ToolbarView {
             [top]
             Adw.HeaderBar {
+              [start]
+              Button refresh_button {
+                icon-name: "view-refresh-symbolic";
+                tooltip-text: _("Check for New Mail");
+                action-name: "win.refresh";
+              }
+
               [end]
               ToggleButton search_button {
                 icon-name: "edit-find-symbolic";
                 tooltip-text: _("Search");
+                // Hidden until search.* exists in the backend.
+                visible: false;
               }
             }
 
@@ -126,19 +176,77 @@ Adw.ApplicationWindow main_window {
                 revealed: false;
               }
 
-              ScrolledWindow {
-                hscrollbar-policy: never;
+              // Title is set from Go (account and reason) on
+              // notify.authRequired; the button opens the preferences.
+              Adw.Banner auth_banner {
+                button-label: _("Open Preferences");
+                revealed: false;
+              }
+
+              // "messages" is the list with its Load More footer; "status"
+              // replaces it for empty / loading / error states.
+              Stack list_stack {
                 vexpand: true;
 
-                child: ListBox message_list {
-                  // Single click selects (preview in the right pane);
-                  // double-click or Enter activates (opens a window).
-                  activate-on-single-click: false;
+                StackPage {
+                  name: "messages";
 
-                  styles [
-                    "navigation-sidebar",
-                  ]
-                };
+                  child: Box {
+                    orientation: vertical;
+
+                    ScrolledWindow list_scroller {
+                      hscrollbar-policy: never;
+                      vexpand: true;
+
+                      child: ListBox message_list {
+                        // Single click selects (preview in the right pane);
+                        // double-click or Enter activates (opens a window).
+                        activate-on-single-click: false;
+
+                        styles [
+                          "navigation-sidebar",
+                        ]
+                      };
+                    }
+
+                    Box {
+                      orientation: horizontal;
+                      halign: center;
+                      spacing: 6;
+                      margin-top: 6;
+                      margin-bottom: 6;
+
+                      Button load_more_button {
+                        label: _("Load More");
+                        visible: false;
+
+                        styles [
+                          "flat",
+                        ]
+                      }
+
+                      Adw.Spinner load_more_spinner {
+                        visible: false;
+                      }
+                    }
+                  };
+                }
+
+                StackPage {
+                  name: "status";
+
+                  child: Adw.StatusPage list_status_page {
+                    child: Button list_retry_button {
+                      label: _("Try Again");
+                      visible: false;
+                      halign: center;
+
+                      styles [
+                        "pill",
+                      ]
+                    };
+                  };
+                }
               }
             };
           };
@@ -151,7 +259,8 @@ Adw.ApplicationWindow main_window {
           child: Adw.ToolbarView {
             [top]
             Adw.HeaderBar {
-              // Enabled from Go while a message is selected.
+              // Enabled from Go while a message is selected; the buttons
+              // with an action-name follow the win.* action's enabled state.
 
               [start]
               Button reply_button {
@@ -174,13 +283,49 @@ Adw.ApplicationWindow main_window {
                 sensitive: false;
               }
 
+              // [end] packs right to left: the first child is rightmost.
+
+              [end]
+              MenuButton message_menu {
+                icon-name: "view-more-symbolic";
+                tooltip-text: _("More Actions");
+                menu-model: message_menu_model;
+              }
+
+              [end]
+              ToggleButton star_button {
+                icon-name: "non-starred-symbolic";
+                tooltip-text: _("Star");
+                sensitive: false;
+              }
+
+              [end]
+              Button archive_button {
+                icon-name: "folder-download-symbolic";
+                tooltip-text: _("Archive");
+                action-name: "win.archive";
+              }
+
+              [end]
+              Button junk_button {
+                icon-name: "mail-mark-junk-symbolic";
+                tooltip-text: _("Mark as Junk");
+                action-name: "win.junk";
+              }
+
               [end]
               Button trash_button {
                 icon-name: "user-trash-symbolic";
                 tooltip-text: _("Move to Trash");
-                // Enabled from Go while a message is selected.
-                sensitive: false;
+                action-name: "win.trash";
               }
+            }
+
+            // Delivery state of a message in the outbox (title and button
+            // set from Go, see window/outbox.go); hidden otherwise.
+            [top]
+            Adw.Banner outbox_banner {
+              revealed: false;
             }
 
             content: Adw.ToastOverlay toast_overlay {
@@ -258,11 +403,43 @@ Adw.ApplicationWindow main_window {
                           ]
                         }
 
+                        // To / Cc line; hidden while the headers are loading.
+                        Label message_recipients {
+                          xalign: 0;
+                          wrap: true;
+                          selectable: true;
+                          visible: false;
+
+                          styles [
+                            "dim-label",
+                          ]
+                        }
+
+                        Label message_date {
+                          xalign: 0;
+
+                          styles [
+                            "caption",
+                            "dim-label",
+                          ]
+                        }
+
+                        // "N attachments: names"; hidden without attachments.
+                        Label message_attachments {
+                          xalign: 0;
+                          wrap: true;
+                          visible: false;
+
+                          styles [
+                            "caption",
+                          ]
+                        }
+
                         Separator {}
 
-                        // Plain-text placeholder. HTML rendering (sanitised
-                        // in the backend, shown in a JS-disabled WebKitGTK
-                        // 6.0 view) is a separate, later task.
+                        // Plain-text body. HTML rendering (sanitised in the
+                        // backend, shown in a JS-disabled WebKitGTK 6.0
+                        // view) is a separate, later task.
                         Label message_body {
                           xalign: 0;
                           yalign: 0;
@@ -311,5 +488,17 @@ menu primary_menu {
       label: _("_About Malachi Mail");
       action: "app.about";
     }
+  }
+}
+
+menu message_menu_model {
+  item {
+    label: _("Mark as _Unread");
+    action: "win.mark-unread";
+  }
+
+  item {
+    label: _("Mark as _Read");
+    action: "win.mark-read";
   }
 }

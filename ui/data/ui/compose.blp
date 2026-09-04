@@ -250,6 +250,23 @@ Adw.Window compose_window {
           }
         }
 
+        // Shown instead of the toolbar while only plain text is sent
+        // (compose/draft.go richText).
+        Label plain_text_hint {
+          label: _("This message will be sent as plain text.");
+          xalign: 0;
+          visible: false;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 4;
+          margin-bottom: 4;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
         // Shows the view background until the editor has painted.
         Box editor_slot {
           orientation: vertical;

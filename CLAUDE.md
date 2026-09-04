@@ -108,14 +108,24 @@ Toolbxu není potřeba).
 
 ## Stav a priority
 
-Aktuální fáze: bootstrap / rané stádium. Backend startuje, odpovídá
-`notImplemented`, UI zobrazuje dummy data a stav připojení.
+Aktuální fáze: IMAP čtení i odesílání fungují. Účty (registr, keyring přes
+Secret Service, průvodce s autodetekcí, editace), sync engine (`internal/imap`:
+jeden syncer na účet, IDLE + polling, operační log pro příznaky/přesuny/
+mazání, okno retence `offlineDays`, APPEND odeslaných kopií do Sent), MIME
+parser (`internal/mime`), odesílání (`internal/smtp` builder + SMTP doručení,
+`internal/outbox` worker na účet s backoffem, lokální složka role `outbox`,
+`message.send` / `outbox.retry`) a UI se skutečnými složkami, zprávami a
+oknem Nová zpráva. Vše jen jako prostý text: sanitizér HTML je stále
+fail-closed stub, proto compose posílá jen `textBody` (`richText = false`
+v `ui/internal/compose/draft.go`) a zprávy odcházejí jako `text/plain`.
+HTML render, threading a vyhledávání zatím `notImplemented`.
 
 Pořadí prací:
-1. IMAP — čtení, synchronizace, offline store
-2. OAuth2 pro Office 365
-3. SMTP a odesílání
-4. Renderování HTML s webview (WebKitGTK 6.0, JS vypnutý, CSP)
+1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo (text-only těla)
+2. ~~SMTP a odesílání~~ hotovo (text/plain, přílohy, outbox, kopie do Sent)
+3. OAuth2 pro Office 365
+4. Sanitizér HTML (compose i view) a renderování s webview (WebKitGTK 6.0,
+   JS vypnutý, CSP); potom `richText = true` a multipart/alternative
 5. Vyhledávání, threading
 
 Gmail je vědomě odložený — vyžadoval by CASA audit nebo

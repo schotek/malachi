@@ -48,3 +48,17 @@ func TestNearestInterval(t *testing.T) {
 		t.Error("indexOfPolicy mapping wrong")
 	}
 }
+
+func TestIndexOfRetention(t *testing.T) {
+	cases := map[int]uint{7: 0, 10: 0, 30: 1, 60: 1, 90: 2, 200: 2, 365: 3, 1000: 3, 0: 4, -1: 4}
+	for in, want := range cases {
+		if got := indexOfRetention(in); got != want {
+			t.Errorf("indexOfRetention(%d) = %d, want %d", in, got, want)
+		}
+	}
+	for i, days := range retentionChoices {
+		if got := indexOfRetention(days); got != uint(i) {
+			t.Errorf("retentionChoices[%d]=%d maps back to %d", i, days, got)
+		}
+	}
+}
