@@ -9,8 +9,6 @@ import (
 	"time"
 
 	"github.com/emersion/go-imap/v2"
-	"github.com/emersion/go-imap/v2/imapclient"
-	"github.com/emersion/go-sasl"
 
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -22,49 +20,11 @@ type ProbeResult struct {
 	Latency      time.Duration // dial start → ready (greeting read, STARTTLS done)
 }
 
-// Conn is an open, not yet authenticated client whose connection is closed
-// when the context that opened it ends.
-type Conn struct {
-	*imapclient.Client
-	stop func() bool
-}
-
-// Close releases the connection and the watchdog.
-func (c *Conn) Close() error {
-	c.stop()
-	return c.Client.Close()
-}
-
 // Connect dials, secures the connection according to cfg.Security and reads
 // the greeting. It never authenticates and never logs traffic. Errors are
 // *api.Error. The caller must Close the result while ctx is still alive.
 func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, error) {
-	start := time.Now()
-	raw, err := transport.DialContext(ctx, cfg.Host, cfg.Port, cfg.Security)
-	if err != nil {
-		return nil, 0, err
-	}
-	// The library has no context support and a 30 s internal read timeout;
-	// closing the socket when ctx ends is what enforces our budget.
-	stop := context.AfterFunc(ctx, func() { raw.Close() })
-	opts := &imapclient.Options{TLSConfig: transport.TLSConfig(cfg.Host)}
-
-	var c *imapclient.Client
-	if cfg.Security == api.SecuritySTARTTLS {
-		c, err = imapclient.NewStartTLS(raw, opts)
-		if err != nil {
-			stop()
-			return nil, 0, classify(ctx, transport.StageTLS, err)
-		}
-	} else {
-		c = imapclient.New(raw, opts)
-		if err := c.WaitGreeting(); err != nil {
-			c.Close()
-			stop()
-			return nil, 0, classify(ctx, transport.StageGreeting, err)
-		}
-	}
-	return &Conn{Client: c, stop: stop}, time.Since(start), nil
+	return connect(ctx, cfg, nil)
 }
 
 // Probe connects, authenticates with the password, reads CAPABILITY and
@@ -82,17 +42,8 @@ func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeRes
 	}
 	defer c.Close()
 
-	caps := c.Caps()
-	switch {
-	case caps.Has(imap.AuthCap(sasl.Plain)):
-		err = c.Authenticate(sasl.NewPlainClient("", cfg.Username, password))
-	case !caps.Has(imap.CapLoginDisabled):
-		err = c.Login(cfg.Username, password).Wait()
-	default:
-		return ProbeResult{}, api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
-	}
-	if err != nil {
-		return ProbeResult{}, classify(ctx, transport.StageAuth, err)
+	if err := login(ctx, c, cfg, password); err != nil {
+		return ProbeResult{}, err
 	}
 
 	set, err := c.Capability().Wait()

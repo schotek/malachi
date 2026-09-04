@@ -3,44 +3,22 @@
 
 // Package imap contains the IMAP client and the synchronisation engine.
 //
-// Libraries: github.com/emersion/go-imap/v2 for the protocol,
-// github.com/emersion/go-message for MIME parsing.
+// Libraries: github.com/emersion/go-imap/v2 for the protocol, the charset
+// table of github.com/emersion/go-message for encoded words; message
+// bodies are parsed by internal/mime.
 //
-// Before implementing synchronisation, read how Geary (engine/imap-engine)
-// and Evolution (camel-imapx) deal with:
-//   - servers that violate the RFCs (Exchange, Dovecot quirks, UIDVALIDITY
-//     churn, CONDSTORE/QRESYNC absence),
-//   - MIME that is malformed, truncated, mislabelled or recursively nested,
-//   - threading when References/In-Reply-To are missing or lie.
+// Layout: probe.go/client.go (connect, login, per-command budgets),
+// folders.go (LIST → store folders, roles), folder_sync.go (the one
+// per-folder algorithm), ops.go (pushing local flag/move/delete
+// operations), sync.go (the per-account actor: Syncer) and supervisor.go
+// (one Syncer per enabled account; the core.SyncSupervisor implementation).
 //
-// See docs/architecture.md for the sync model (folder state machine,
-// incremental fetch by UID ranges, IDLE for INBOX, backoff on failure).
+// See docs/architecture.md §3.2 for the sync model: retention window by
+// UID SEARCH SINCE, envelopes before bodies, IDLE on INBOX, backoff on
+// failure, local-first mutations through the operation log.
 //
-// Every byte received from the server is hostile input. Parsers must be
-// exercised with the pathological samples in backend/testdata/mime.
+// Every byte received from the server is hostile input: strings are
+// cleaned and capped, sets are size-checked before they are expanded,
+// literals are bounded by the raw-message cap and drained, and the
+// parsers are exercised with the samples in backend/testdata/mime.
 package imap
-
-import (
-	"context"
-
-	// Pinned dependencies for this package.
-	_ "github.com/emersion/go-imap/v2"
-	_ "github.com/emersion/go-message"
-
-	"github.com/schotek/malachi/backend/pkg/api"
-)
-
-// Syncer drives synchronisation for one account.
-// TODO(phase-1): implement.
-type Syncer interface {
-	// Run blocks until ctx is cancelled, synchronising on the configured
-	// interval and on Trigger.
-	Run(ctx context.Context) error
-	Trigger(folder api.FolderID, full bool)
-	State() api.SyncState
-}
-
-// NewSyncer is the bootstrap placeholder.
-func NewSyncer(account api.AccountID) (Syncer, error) {
-	return nil, api.ErrNotImplemented
-}
