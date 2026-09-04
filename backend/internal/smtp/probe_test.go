@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,23 +23,97 @@ import (
 
 const password = "hunter2-secret"
 
-// backend accepts one user; with auth=false it advertises no AUTH at all.
-type backend struct{ auth bool }
+// serverOpts configures the test server. The zero value is a plaintext
+// server without AUTH that accepts every envelope and message.
+type serverOpts struct {
+	tls      *tls.Config
+	insecure bool  // AllowInsecureAuth
+	auth     bool  // advertise AUTH PLAIN for user "me" / password
+	utf8     bool  // advertise SMTPUTF8
+	maxBytes int64 // advertise SIZE and enforce it (0 = none)
 
-func (b *backend) NewSession(*smtp.Conn) (smtp.Session, error) {
-	if !b.auth {
-		return &session{}, nil
-	}
-	return &authSession{}, nil
+	mailErr   error         // returned from MAIL FROM
+	rcptErr   error         // returned from every RCPT TO
+	dataErr   error         // returned after the message was read
+	dataDelay time.Duration // wait before answering DATA (cancelled at shutdown)
 }
 
-type session struct{}
+// testServer is a running server plus what the last session recorded.
+type testServer struct {
+	port int
+	done chan struct{}
 
-func (*session) Reset()                               {}
-func (*session) Logout() error                        { return nil }
-func (*session) Mail(string, *smtp.MailOptions) error { return nil }
-func (*session) Rcpt(string, *smtp.RcptOptions) error { return nil }
-func (*session) Data(r io.Reader) error               { _, err := io.Copy(io.Discard, r); return err }
+	mu    sync.Mutex
+	from  string
+	rcpts []string
+	data  []byte
+}
+
+// envelope returns what the server received so far.
+func (ts *testServer) envelope() (from string, rcpts []string, data []byte) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	return ts.from, append([]string(nil), ts.rcpts...), append([]byte(nil), ts.data...)
+}
+
+// backend accepts one user; with auth=false it advertises no AUTH at all.
+type backend struct {
+	opts serverOpts
+	ts   *testServer
+}
+
+func (b *backend) NewSession(*smtp.Conn) (smtp.Session, error) {
+	s := session{b: b}
+	if !b.opts.auth {
+		return &s, nil
+	}
+	return &authSession{session: s}, nil
+}
+
+type session struct{ b *backend }
+
+func (*session) Reset()        {}
+func (*session) Logout() error { return nil }
+
+func (s *session) Mail(from string, _ *smtp.MailOptions) error {
+	if err := s.b.opts.mailErr; err != nil {
+		return err
+	}
+	s.b.ts.mu.Lock()
+	defer s.b.ts.mu.Unlock()
+	s.b.ts.from = from
+	return nil
+}
+
+func (s *session) Rcpt(to string, _ *smtp.RcptOptions) error {
+	if err := s.b.opts.rcptErr; err != nil {
+		return err
+	}
+	s.b.ts.mu.Lock()
+	defer s.b.ts.mu.Unlock()
+	s.b.ts.rcpts = append(s.b.ts.rcpts, to)
+	return nil
+}
+
+func (s *session) Data(r io.Reader) error {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	if d := s.b.opts.dataDelay; d > 0 {
+		select {
+		case <-time.After(d):
+		case <-s.b.ts.done:
+		}
+	}
+	if err := s.b.opts.dataErr; err != nil {
+		return err
+	}
+	s.b.ts.mu.Lock()
+	defer s.b.ts.mu.Unlock()
+	s.b.ts.data = data
+	return nil
+}
 
 type authSession struct{ session }
 
@@ -54,17 +129,26 @@ func (*authSession) Auth(string) (sasl.Server, error) {
 
 func startServer(t *testing.T, tlsCfg *tls.Config, insecure, auth bool) int {
 	t.Helper()
-	srv := smtp.NewServer(&backend{auth: auth})
+	return startServerWith(t, serverOpts{tls: tlsCfg, insecure: insecure, auth: auth}).port
+}
+
+func startServerWith(t *testing.T, opts serverOpts) *testServer {
+	t.Helper()
+	ts := &testServer{done: make(chan struct{})}
+	srv := smtp.NewServer(&backend{opts: opts, ts: ts})
 	srv.Domain = "localhost"
-	srv.TLSConfig = tlsCfg
-	srv.AllowInsecureAuth = insecure
+	srv.TLSConfig = opts.tls
+	srv.AllowInsecureAuth = opts.insecure
+	srv.EnableSMTPUTF8 = opts.utf8
+	srv.MaxMessageBytes = opts.maxBytes
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
 	go srv.Serve(ln)
-	t.Cleanup(func() { srv.Close() })
-	return ln.Addr().(*net.TCPAddr).Port
+	t.Cleanup(func() { close(ts.done); srv.Close() })
+	ts.port = ln.Addr().(*net.TCPAddr).Port
+	return ts
 }
 
 func cfg(port int, sec api.Security) api.ServerConfig {

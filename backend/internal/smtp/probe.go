@@ -98,26 +98,47 @@ func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeRes
 		}
 	}
 
+	if err := authenticate(ctx, c, cfg, password); err != nil {
+		return ProbeResult{}, err
+	}
+
+	res := ProbeResult{Capabilities: transport.CleanCapabilities(caps), Latency: latency}
+	quit(c)
+	return res, nil
+}
+
+// errNoAuthMechanism is returned when the server advertises neither PLAIN
+// nor LOGIN; a retry cannot change that.
+var errNoAuthMechanism = api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+
+// authenticate runs the password SASL exchange shared by Probe and
+// Deliver: PLAIN when offered, LOGIN otherwise. The returned error is
+// already classified (*api.Error) and never carries the password.
+func authenticate(ctx context.Context, c *Conn, cfg api.ServerConfig, password string) error {
+	var err error
 	switch {
 	case c.SupportsAuth(sasl.Plain):
 		err = c.Auth(sasl.NewPlainClient("", cfg.Username, password))
 	case c.SupportsAuth(sasl.Login):
 		err = c.Auth(sasl.NewLoginClient(cfg.Username, password))
 	default:
-		return ProbeResult{}, api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+		return errNoAuthMechanism
 	}
 	if err != nil {
-		return ProbeResult{}, classify(ctx, transport.StageAuth, err)
+		return classify(ctx, transport.StageAuth, err)
 	}
+	return nil
+}
 
-	res := ProbeResult{Capabilities: transport.CleanCapabilities(caps), Latency: latency}
+// quit sends QUIT on a best-effort basis, bounded by transport.QuitTimeout;
+// the caller still closes the connection.
+func quit(c *Conn) {
 	done := make(chan struct{})
 	go func() { _ = c.Quit(); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(transport.QuitTimeout):
 	}
-	return res, nil
 }
 
 // Verify is Connect plus Close: it proves that the endpoint speaks SMTP
