@@ -36,6 +36,8 @@ var (
 	ErrAttachmentBound = errors.New("store: attachment bound to another draft")
 	ErrTooBig          = errors.New("store: size limit exceeded")
 	ErrBadCursor       = errors.New("store: bad cursor")
+	ErrOutboxBusy      = errors.New("store: outbox message is being sent")
+	ErrOutbox          = errors.New("store: not allowed for an outbox message")
 )
 
 // Store wraps the database handle.
@@ -53,8 +55,13 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	}
 
 	// WAL for concurrent readers, foreign keys on, wait instead of failing on
-	// short lock contention. Mail data is private: restrict the file mode.
-	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
+	// short lock contention. Transactions take the write lock up front
+	// (BEGIN IMMEDIATE): our transactions read then write, and in WAL mode a
+	// deferred transaction upgrading to a write cannot wait on busy_timeout,
+	// so a sync pass and an RPC mutation would otherwise fail with
+	// SQLITE_BUSY instead of queueing. Mail data is private: restrict the
+	// file mode.
+	dsn := "file:" + path + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -74,6 +81,10 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create attachment directory: %w", err)
 	}
+	if err := os.MkdirAll(s.MessageDir(), 0o700); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create message directory: %w", err)
+	}
 	return s, nil
 }
 
@@ -84,6 +95,13 @@ func (s *Store) Path() string { return s.path }
 // directory next to the database); metadata is in the attachments table.
 func (s *Store) AttachmentDir() string {
 	return filepath.Join(filepath.Dir(s.path), "attachments")
+}
+
+// MessageDir is where raw RFC 822 messages live, one 0600 file per message
+// under a 0700 per-account subdirectory (MessageRawPath); headers and text
+// bodies are in the messages table.
+func (s *Store) MessageDir() string {
+	return filepath.Join(filepath.Dir(s.path), "messages")
 }
 
 // DB exposes the handle for internal packages. TODO: remove once all queries

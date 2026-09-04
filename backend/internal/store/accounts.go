@@ -183,9 +183,11 @@ func (s *Store) SetAccountEnabled(ctx context.Context, id string, enabled bool) 
 	return nil
 }
 
-// DeleteAccount removes the account row. With deleteLocalData it also
-// deletes the account's drafts and attachments (rows in the same
-// transaction, files afterwards). ErrNotFound for an unknown id.
+// DeleteAccount removes the account row together with its mail cache
+// (folders, messages, pending operations — always, they are worthless
+// without the account; raw message files after the commit). With
+// deleteLocalData it also deletes the account's drafts and attachments (rows
+// in the same transaction, files afterwards). ErrNotFound for an unknown id.
 func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bool) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -199,6 +201,13 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM message_ops WHERE account_id = ?`, id); err != nil {
+		return fmt.Errorf("delete account operations: %w", err)
+	}
+	// Messages go with their folders (ON DELETE CASCADE).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM folders WHERE account_id = ?`, id); err != nil {
+		return fmt.Errorf("delete account folders: %w", err)
 	}
 
 	var files []string
@@ -232,6 +241,7 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	for _, aid := range files {
 		s.removeAttachmentFile(aid)
 	}
+	s.removeMessageDir(id)
 	return nil
 }
 
