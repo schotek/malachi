@@ -86,7 +86,11 @@ backend/
                       org.freedesktop.secrets client
   internal/transport  TLS policy, dialling, timeouts, error classification
   internal/discover   account.discover: ISPDB, provider autoconfig, SRV, guesses
-  internal/imap       IMAP client + sync engine (probe.go: connection test)
+  internal/core       composes services, owns the supervisor lifecycle and the
+                      notification coalescer
+  internal/imap       IMAP client + sync supervisor, one syncer per enabled
+                      account (probe.go: connection test)
+  internal/mime       MIME parsing (headers, text extraction, part tree; hostile input)
   internal/smtp       sending + outbox (probe.go: connection test)
   internal/store      SQLite, migrations, all SQL
   internal/search     FTS5 indexing and query parsing
@@ -115,35 +119,94 @@ Tables today: `meta`, `preferences`, `known_senders` (0002), `drafts` and
 `attachments` (0003; attachment data as files under
 `<data dir>/attachments/`, see §7), `accounts` (0004; the non-secret
 `api.AccountConfig` as JSON plus the columns the store enforces or sorts
-by). Planned (phase 1): `folders`
-(with UIDVALIDITY, HIGHESTMODSEQ), `messages` (envelope + flags + local
-state), `message_parts` (MIME tree with on-disk or in-db bodies), `threads`,
-`outbox`, `messages_fts` (external-content FTS5), `sync_log`.
+by), and the mail tables (0005): `folders` (the mirror of `LIST` with role,
+subscription, selectability, UIDVALIDITY/UIDNEXT/HIGHESTMODSEQ, server and
+local counts), `messages` (envelope, flags, the curated header subset,
+attachment metadata, plus the cached `text_body` / `has_html` and a
+`body_state` of `none|fetched|tooBig|failed`; UID 0 marks a row whose local
+move has not been pushed yet) and `message_ops` (the operation log: one
+`flag|move|delete` row per message and local change, with the source
+folder/UID snapshot, attempts and backoff). Raw RFC 822 messages are files
+under `<data dir>/messages/<account>/<id>` (see §7). `outbox` (0006) holds
+the delivery metadata of a queued message (envelope sender and recipients,
+`queued|sending|sent|failed`, attempts, next attempt, last error); the
+message itself is a `messages` row in the account's local `outbox` role
+folder with its raw file next to received mail. Planned: `threads`,
+`messages_fts` (external-content FTS5).
 
-### 3.2 Sync model (planned)
+### 3.2 Sync model (implemented)
 
-Per account, one sync goroutine with a folder state machine:
+`internal/imap` runs one supervisor with one syncer goroutine per enabled
+account; `internal/core` owns its lifecycle:
 
-1. `LIST` + special-use detection → folder table.
-2. Per selected folder: check UIDVALIDITY (reset on change), then
-   incremental fetch by UID ranges: envelopes first, bodies lazily or by
-   policy (recent N days eagerly). CONDSTORE/QRESYNC when offered, flag
-   re-scan by UID otherwise.
-3. `IDLE` on INBOX for push; polling elsewhere.
-4. Local changes (flags, moves, deletes, appends) go into an operation log
-   applied to the server in order with retry/backoff; conflicts resolve
-   server-wins for flags, local-wins for drafts (with `version` guarding
-   concurrent UI edits).
-5. Every network failure degrades to `offline`; nothing blocks the UI.
+- **Lifecycle.** `malachid` starts the supervisor after the config.toml
+  import (`Backend.StartSync`: `Run` plus `Start` for every enabled
+  account); the account service hooks it — `account.add` starts,
+  `account.remove` stops *before* the rows are deleted, `account.setEnabled`
+  starts or stops, `account.update` restarts an enabled account once the
+  keyring accepted the new password — and `config.set` wakes every syncer
+  (`Reload`) so a new interval or retention window applies at once.
+  `sync.status` merges the account list with the live states (paused
+  accounts report `disabled`, accounts without a running syncer `idle`).
+- **Retention window.** `offlineDays` bounds what exists locally: headers
+  *and* bodies of messages within the window are fetched (`UID SEARCH
+  SINCE`), older messages are not stored at all. Shrinking the window prunes
+  on the next pass; growing it backfills silently.
+- **Local-first mutations.** `message.flag/move/delete` change the rows and
+  queue `message_ops` in one transaction, then nudge the syncer
+  (`Trigger`). Every cycle pushes the queued operations first (in order,
+  merged into UID sets, retry with backoff, dropped after a limit), then
+  synchronises folders. A move keeps the local id; the row waits with UID 0
+  until the server's COPYUID (or a Message-ID reconciliation on servers
+  without UIDPLUS) assigns the new one. Flags are server-wins after the
+  queued change has been pushed.
+- **Cycle.** connect → `LIST` (special-use, `STATUS`) → push ops → per
+  changed folder: UIDVALIDITY check (reset on change), UID diff against the
+  window, envelopes and `BODYSTRUCTURE` first, then bodies newest-first
+  (raw file → `internal/mime` → text body; over the raw cap → `tooBig`,
+  unparsable → `failed`), server flags for the rest → `IDLE` on INBOX where
+  offered, polling at the configured interval otherwise, or a trigger.
+- **Failures.** A network error degrades the account to `offline` with
+  backoff; a refused login to `authRequired` (plus `notify.authRequired`,
+  no retry until the account is updated); nothing blocks the UI.
+- **Notifications.** `notify.newMessage` only for messages that arrive
+  after a folder's initial sync and only once their body is stored;
+  `notify.syncState` goes through a coalescer in `internal/core` that sends
+  status/folder/error/lastSync changes at once and progress-only changes at
+  most every 500 ms per account, from its own goroutine so a slow client
+  never stalls a syncer.
 
-**Before implementing this, read Geary's `engine/imap-engine` and
+**When extending this, read Geary's `engine/imap-engine` and
 Evolution's `camel-imapx`.** Not to copy code, but to learn how they handle
 broken MIME, servers that violate RFC 3501/9051 (Exchange, some Dovecot
 setups, quota and UID gaps), thread display when headers lie, and the
 countless "this server says X but means Y" cases. Both projects have a
 decade of scar tissue that is cheaper to read than to re-earn.
 
-### 3.3 Threading (planned)
+### 3.3 Sending (implemented, text/plain phase)
+
+`message.send` builds the RFC 5322 message from the stored draft
+(`internal/smtp` builder on `go-message`: `text/plain` quoted-printable,
+`multipart/mixed` with base64 attachments, `From` always the account
+identity, `Bcc` only in the envelope, every header control-stripped), writes
+it as a `messages` row in the account's local `outbox` role folder plus an
+`outbox` row, and deletes the draft in the same transaction. One outbox
+worker goroutine per enabled account (`internal/outbox`, supervised like the
+syncers and started/stopped by the same account hooks) delivers due rows
+over SMTP (`internal/smtp` `Deliver`: the transport policy, PLAIN/LOGIN
+auth, `SIZE`, one session per attempt). Transient failures back off from
+one minute to four hours; permanent replies mark the row `failed` for
+`outbox.retry`; a refused password defers the whole account and raises
+`notify.authRequired`. After delivery the row becomes `sent` and the IMAP
+syncer, which owns the connection, uploads the raw file to the `sent` role
+folder with `APPEND` (`\Seen`) in its next cycle, deletes the local copy and
+re-syncs that folder so the message comes back under a server UID. Outbox
+messages never get operation-log entries: flagging and moving them is
+refused and deleting them cancels the send. `SyncState.pendingOutbox` is
+filled in by `internal/core` from the store on every emitted state and on
+every outbox change.
+
+### 3.4 Threading (planned)
 
 JWZ-style threading on `References`/`In-Reply-To` with subject fallback, per
 account. Message-IDs are untrusted: cap the number considered, break
@@ -187,14 +250,56 @@ Three panes built from nested `Adw.NavigationSplitView`s with breakpoints
 for narrow windows. All UI structure lives in Blueprint; Go code binds
 objects by ID and populates them. Callbacks from the client run on a
 background goroutine and hop to the GTK main loop with `glib.IdleAdd`.
+The window keeps a plain-Go view model (`window/model.go`: accounts,
+folders, the current message page) that mirrors what the daemon returned;
+widgets are rebuilt from it and asynchronous replies are guarded by
+generation counters so a late answer never overwrites a newer state.
+
+The sidebar is one `gtk.ListBox` for every enabled account: a
+non-selectable header row per account (only when there are at least two),
+then the account's `folder.list` as a tree, Inbox first, then the other
+special-use roles, then alphabetically, nested folders indented by depth,
+with an unread badge per row. The list pane shows `message.list` for the
+selected folder (newest first, `DefaultPageLimit` per page); further pages
+are fetched with `page.nextCursor` from a *Load More* footer or when the
+list is scrolled to its bottom, and a status page replaces the list while
+it is empty, loading or failed (with Retry). The message pane fills the
+headers from the list summary at once and then runs `message.get` and
+`message.body`; the body is plain text, and `bodyState`
+(`pending`/`tooBig`/`failed`) becomes a sentence in the pane rather than
+an error. Actions are `win.*` (`mark-read`, `mark-unread`, `toggle-flag`,
+`trash`, `archive`, `junk`, `refresh`) with accelerators Delete, a, j, u,
+s and Ctrl+R; flag changes and moves are applied optimistically and
+reverted with a toast when the daemon refuses.
+
+The bottom of the sidebar carries the sync line — an `adw.Spinner` and a
+caption computed from `sync.status` and `notify.syncState` across the
+enabled accounts: "Syncing *folder*… 42 %", then sign-in required, sync
+error, offline, otherwise "Up to date" — above the daemon connection
+status. Ctrl+R and the refresh button send `sync.trigger` for the
+selected folder (or for everything when nothing is selected); the
+spinner starts immediately and a 30 s timer clears it if no state
+notification follows. `notify.authRequired` reveals an `Adw.Banner` above
+the message list ("Sign in to *account* again", or the keyring variant)
+whose button opens the preferences; the banner hides when that account's
+`notify.syncState` leaves `authRequired` or when the account set changes.
+Folder and account names in both come from the server and are set as
+plain text.
+
+Notifications are dispatched in `window/notify.go`: `notify.newMessage`
+becomes a `GNotification` (unless the window is active) and, when its
+folder is the selected one, a row inserted at the top of the list, with
+the folder's unread badge adjusted either way; `notify.syncState` updates
+the sync line and, when an account leaves `syncing`, reloads its folders
+and the list of the affected folder; `notify.authRequired` shows the
+banner; `notify.accountsChanged` invalidates the compose manager's account
+cache and reloads accounts and folders.
 
 Preferences are an `Adw.PreferencesDialog` (`app.preferences`, Ctrl+,)
 with *Accounts*, *General* and *Appearance* pages. The *Accounts* page lists
 `account.list`, pauses with `account.setEnabled` and removes with
 `account.remove` after an `Adw.AlertDialog` with a *delete local data*
-check; it reloads after its own actions and when opened, while
-`notify.accountsChanged` invalidates the compose manager's account cache
-and re-checks the main window's placeholder.
+check; it reloads after its own actions and when opened.
 
 Adding an account is `internal/accountwizard`: an `Adw.Dialog` with an
 `Adw.NavigationView` (identity → server settings → connection test),
@@ -212,8 +317,8 @@ only checks address syntax, non-empty fields and the port defaults per
 security mode; discovery, probing and validation are the daemon's.
 UI-only options live in GSettings
 (`data/*.gschema.xml`, read through `internal/settings`); anything that
-affects mail handling (check interval, remote content) is owned by the
-daemon and set through the RPC API. The *Appearance* page is functional:
+affects mail handling (check interval, remote content, offline retention)
+is owned by the daemon and set through the RPC API. The *Appearance* page is functional:
 colour scheme goes through `adw.StyleManager`, list density, preview line
 and avatars are pushed to the message rows, and body zoom, font and
 monochrome avatars are a display-wide CSS provider (`internal/style`) so
@@ -232,7 +337,14 @@ The window parses recipients into `api.Address`, autosaves through
 `draft.save` (the backend sanitises `htmlBody` and derives `textBody`),
 imports attachments by path with `attachment.import`, shows inline images
 through a `cid:` URI scheme served only for ids the window itself minted,
-and sends with `message.send`. Reply/forward prefill lives in
+and sends with `message.send`. While the sanitiser is a stub the window
+runs in a plain-text mode (`richText = false` in `compose/draft.go`): the
+formatting toolbar is hidden, a hint says the message goes out as plain
+text, and only the editor's text is saved. After a send the message shows
+up in the local Outbox folder (visible only while non-empty) with a banner
+for its delivery state; a failed send offers Retry (`outbox.retry`) and the
+trash button cancels the send (`message.delete`). The status line shows
+"Sending N messages…" from `SyncState.pendingOutbox`. Reply/forward prefill lives in
 `compose.Prefill` only until `draft.create` exists in the backend.
 
 The *General* page: *Run in Background* makes the main window hide instead
@@ -244,7 +356,11 @@ first activation; the mark-as-read delay is a timer around `message.flag`;
 deleting confirms with an `Adw.AlertDialog` before `message.delete`; new
 mail arrives as `notify.newMessage` and becomes a `GNotification` whose
 default action is `app.show`. The *Mail* group is daemon-owned
-(`config.get`/`config.set`).
+(`config.get`/`config.set`): check interval, remote content and *Keep
+Mail Offline For* (`offlineDays`; 1 week, 1 month, 3 months, 1 year or
+everything, an arbitrary stored value snapping to the nearest row).
+`config.set` is read-modify-write, so every change echoes the whole
+preference set the dialog last received.
 
 ## 6. Platform
 
@@ -276,8 +392,12 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   `malachi --gapplication-service`; nothing starts `malachid`. Options: the UI
   spawns it when the socket is unreachable, or a systemd user unit / second
   autostart entry.
-- Whether message bodies live inside SQLite or as files under
-  `$XDG_DATA_HOME/malachi/parts/` (SQLite is simpler; files are cheaper for
-  large attachments). Decided for *compose attachments*: data as files
-  under `<data dir>/attachments/<id>`, metadata (including SHA-256) in
-  SQLite; large message parts are expected to follow the same split.
+- Message body storage: **decided**. The raw RFC 822 message is a file
+  under `<data dir>/messages/<account>/<id>` (`0600` in a `0700` per-account
+  directory, removed with the folder or the account); the parsed plain
+  text, the curated headers and the attachment metadata live in SQLite
+  (`messages.text_body` and friends). HTML is never stored separately: when
+  the sanitiser lands, `message.body` re-parses the raw file and sanitises
+  on demand, so a ruleset bump never has to migrate cached HTML. Compose
+  attachments follow the same split (`<data dir>/attachments/<id>` plus
+  metadata including SHA-256 in SQLite).

@@ -41,14 +41,15 @@ func (s *accountService) List(ctx context.Context, _ api.AccountListParams) (*ap
 	}
 	out := make([]api.Account, 0, len(items))
 	for _, a := range items {
-		out = append(out, toAPIAccount(a))
+		out = append(out, s.b.toAPIAccount(a))
 	}
 	return &api.AccountListResult{Accounts: out}, nil
 }
 
 // Add validates the configuration, stores it and forwards the password to
 // the keyring. The password never reaches the store or the log; when the
-// keyring refuses it the account row is removed again.
+// keyring refuses it the account row is removed again. A successfully
+// added account starts synchronising at once.
 func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.AccountAddResult, error) {
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
@@ -79,17 +80,26 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 		}
 	}
 	s.b.log.Info("account added", "id", a.ID)
+	if a.Enabled {
+		s.b.Supervisor.Start(a)
+		s.b.Delivery.Start(a)
+	}
 	s.b.accountsChanged()
 	return &api.AccountAddResult{AccountID: id}, nil
 }
 
-// Remove deletes the account and, on request, its local data. Keyring
-// secrets are removed best-effort: a missing keyring must not keep a
-// removed account alive.
+// Remove stops the account's syncer, then deletes the account and, on
+// request, its local data. Keyring secrets are removed best-effort: a
+// missing keyring must not keep a removed account alive.
 func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) (*api.AccountRemoveResult, error) {
 	if p.AccountID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId is required")
 	}
+	// Stop before the rows go so neither the syncer nor the outbox worker
+	// can write into a half-deleted account; Stop on an unknown id is a
+	// no-op.
+	s.b.Supervisor.Stop(string(p.AccountID))
+	s.b.Delivery.Stop(string(p.AccountID))
 	err := s.b.store.DeleteAccount(ctx, string(p.AccountID), p.DeleteLocalData)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -117,6 +127,17 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 		return nil, api.NewError(api.CodeAccountNotFound, "unknown account %q", p.AccountID)
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if p.Enabled {
+		if a, err := s.b.store.GetAccount(ctx, string(p.AccountID)); err != nil {
+			s.b.log.Warn("start sync after enabling account", "id", p.AccountID, "err", err)
+		} else {
+			s.b.Supervisor.Start(a)
+			s.b.Delivery.Start(a)
+		}
+	} else {
+		s.b.Supervisor.Stop(string(p.AccountID))
+		s.b.Delivery.Stop(string(p.AccountID))
 	}
 	s.b.accountsChanged()
 	return &api.AccountSetEnabledResult{}, nil
@@ -171,6 +192,10 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 		}
 	}
 	s.b.log.Info("account updated", "id", p.AccountID, "passwordChanged", p.Credentials.Password != "")
+	if updated.Enabled {
+		s.b.Supervisor.Restart(updated)
+		s.b.Delivery.Restart(updated)
+	}
 	s.b.accountsChanged()
 	return &api.AccountUpdateResult{}, nil
 }
@@ -217,7 +242,7 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}
 	password := p.Credentials.Password
 	if password == "" && p.AccountID != "" && usesAuth(p.Config, api.AuthPassword) {
-		pw, err := s.storedPassword(ctx, p.AccountID)
+		pw, err := s.b.PasswordFor(ctx, string(p.AccountID))
 		if err != nil {
 			return nil, err
 		}
@@ -241,29 +266,6 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}()
 	wg.Wait()
 	return &res, nil
-}
-
-// storedPassword reads an existing account's password from the keyring.
-// A missing entry is authRequired; the keyring's own failures pass through.
-func (s *accountService) storedPassword(ctx context.Context, id api.AccountID) (string, error) {
-	if _, err := s.b.store.GetAccount(ctx, string(id)); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return "", api.NewError(api.CodeAccountNotFound, "unknown account %q", id)
-		}
-		return "", api.NewError(api.CodeStorageError, "%v", err)
-	}
-	pw, err := s.b.Keyring.Get(ctx, id, auth.KeyPassword)
-	switch {
-	case errors.Is(err, auth.ErrNoSecret):
-		return "", api.NewError(api.CodeAuthRequired, "no stored password for account %q", id)
-	case err != nil:
-		var apiErr *api.Error
-		if errors.As(err, &apiErr) {
-			return "", apiErr
-		}
-		return "", api.NewError(api.CodeKeyringError, "%v", err)
-	}
-	return pw, nil
 }
 
 func endpointResult(caps []string, latency time.Duration, err error) api.EndpointTestResult {
@@ -366,14 +368,9 @@ func (b *Backend) accountsChanged() {
 	}
 }
 
-// toAPIAccount derives the wire form. Until the sync engine exists the state
-// is only "disabled" or "idle" with unknown progress.
-func toAPIAccount(a store.Account) api.Account {
-	state := api.SyncState{AccountID: api.AccountID(a.ID), Status: api.SyncIdle, Progress: -1}
-	if !a.Enabled {
-		state.Status = api.SyncDisabled
-	}
-	return api.Account{ID: api.AccountID(a.ID), Config: a.Config, Enabled: a.Enabled, State: state}
+// toAPIAccount derives the wire form with the live sync state (stateFor).
+func (b *Backend) toAPIAccount(a store.Account) api.Account {
+	return api.Account{ID: api.AccountID(a.ID), Config: a.Config, Enabled: a.Enabled, State: b.stateFor(a)}
 }
 
 func usesAuth(c api.AccountConfig, m api.AuthMethod) bool {

@@ -14,6 +14,7 @@ import (
 const (
 	prefSyncInterval  = "sync.interval_seconds"
 	prefRemoteContent = "remote_content"
+	prefOfflineDays   = "sync.offline_days"
 )
 
 type configService struct{ b *Backend }
@@ -28,21 +29,23 @@ func (s *configService) Get(ctx context.Context, _ api.ConfigGetParams) (*api.Co
 	return &api.ConfigGetResult{Preferences: p}, nil
 }
 
-// Set validates and stores the whole preference set.
-//
-// TODO(phase-1): the sync engine reads the interval from here and must be
-// told about changes (restart its ticker).
+// Set validates and stores the whole preference set, then wakes the sync
+// supervisor so intervals and the retention window take effect.
 func (s *configService) Set(ctx context.Context, p api.ConfigSetParams) (*api.ConfigSetResult, error) {
 	if err := ValidatePreferences(p.Preferences); err != nil {
 		return nil, err
 	}
 	st := s.b.store
-	if err := st.SetPreference(ctx, prefSyncInterval, strconv.Itoa(p.Preferences.SyncIntervalSeconds)); err != nil {
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	for _, kv := range []struct{ key, value string }{
+		{prefSyncInterval, strconv.Itoa(p.Preferences.SyncIntervalSeconds)},
+		{prefRemoteContent, string(p.Preferences.RemoteContent)},
+		{prefOfflineDays, strconv.Itoa(p.Preferences.OfflineDays)},
+	} {
+		if err := st.SetPreference(ctx, kv.key, kv.value); err != nil {
+			return nil, api.NewError(api.CodeStorageError, "%v", err)
+		}
 	}
-	if err := st.SetPreference(ctx, prefRemoteContent, string(p.Preferences.RemoteContent)); err != nil {
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
-	}
+	s.b.preferencesChanged()
 	return &api.ConfigSetResult{Preferences: p.Preferences}, nil
 }
 
@@ -58,6 +61,10 @@ func ValidatePreferences(p api.Preferences) error {
 	default:
 		return api.NewError(api.CodeInvalidArgument, "remoteContent must be block, knownSenders or allow")
 	}
+	if p.OfflineDays < 0 || p.OfflineDays > api.OfflineDaysMax {
+		return api.NewError(api.CodeInvalidArgument,
+			"offlineDays must be 0 (everything) or 1–%d", api.OfflineDaysMax)
+	}
 	return nil
 }
 
@@ -66,6 +73,7 @@ func (b *Backend) preferences(ctx context.Context) (api.Preferences, error) {
 	p := api.Preferences{
 		SyncIntervalSeconds: b.defaults.Sync.IntervalSeconds,
 		RemoteContent:       api.RemoteBlock,
+		OfflineDays:         b.defaults.Sync.OfflineDays,
 	}
 	if v, ok, err := b.store.GetPreference(ctx, prefSyncInterval); err != nil {
 		return p, api.NewError(api.CodeStorageError, "%v", err)
@@ -82,5 +90,16 @@ func (b *Backend) preferences(ctx context.Context) (api.Preferences, error) {
 			p.RemoteContent = pol
 		}
 	}
+	if v, ok, err := b.store.GetPreference(ctx, prefOfflineDays); err != nil {
+		return p, api.NewError(api.CodeStorageError, "%v", err)
+	} else if ok {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= api.OfflineDaysMax {
+			p.OfflineDays = n
+		}
+	}
 	return p, nil
 }
+
+// preferencesChanged wakes every syncer so a new interval or retention
+// window takes effect without waiting for the next pass.
+func (b *Backend) preferencesChanged() { b.Supervisor.Reload() }

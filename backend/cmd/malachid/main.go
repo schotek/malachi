@@ -16,6 +16,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/secretservice"
@@ -101,16 +102,25 @@ func run() error {
 	if err := srv.Listen(*flagSocket); err != nil {
 		return err
 	}
+	syncDone := backend.StartSync(ctx)
 	go backend.Maintain(ctx)
-
-	// TODO(phase-1): start per-account sync engines here; srv is already the
-	// backend's api.Notifier.
 
 	err = srv.Serve(ctx)
 	log.Info("shutting down", "reason", ctxReason(ctx))
 	srv.Close() // idempotent; closes connections and unlinks the socket
+
+	// Let the syncers log out and finish their current store writes before
+	// the deferred store close; a hung connection must not hold the exit.
+	select {
+	case <-syncDone:
+	case <-time.After(syncStopTimeout):
+		log.Warn("sync supervisor did not stop in time", "timeout", syncStopTimeout)
+	}
 	return err
 }
+
+// syncStopTimeout caps how long shutdown waits for the sync supervisor.
+const syncStopTimeout = 10 * time.Second
 
 func newLogger() *slog.Logger {
 	level := slog.LevelInfo

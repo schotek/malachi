@@ -116,6 +116,20 @@ the current draft's attachments.
   8-bit in 7-bit parts, nested `message/rfc822` bombs, hundreds of
   alternative parts, invalid charsets, header injection with bare CR/LF.
 - Caps on: part count, nesting depth, header count and size, decoded size.
+  `internal/mime` enforces 500 parts, nesting depth 20, a 256 KiB header
+  block and 1 MiB of extracted text per message; the syncer refuses raw
+  messages over its own cap before they are downloaded (`bodyState:
+  "tooBig"`). A message that breaks a cap is `failed`, never partially
+  trusted.
+- Raw RFC 822 messages are stored as received, as `0600` files in a `0700`
+  per-account directory under `<data dir>/messages/`, and are removed with
+  their folder or account. They are input for later parsing, never served.
+- `messages.text_body` (what `message.body` returns as `text`) is derived
+  text only: the decoded `text/plain` part, or for HTML-only messages a
+  text rendering produced by walking the HTML *tokens*
+  (`golang.org/x/net/html` tokenizer, text nodes only; scripts and styles
+  skipped). No tag, attribute or entity reaches that column, and no HTML is
+  cached anywhere: the sanitiser will work from the raw file.
 - Attachment filenames are sanitised (no `/`, `\`, control chars, leading
   dots, over-long names) and shown with their detected type, not only the
   claimed one. Executable types are never opened directly.
@@ -212,6 +226,26 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   the server said → `serverError`. Messages forwarded to clients are
   control-stripped and capped at 200 bytes.
 
+### 7.1 Outgoing mail
+
+- The `From` header and the envelope sender are always the account's own
+  identity; a draft carries no sender field, so a client cannot spoof one.
+- `Bcc` recipients exist only in the SMTP envelope. They are never written
+  to the message, so neither the other recipients nor the copy in the Sent
+  folder reveal them.
+- Every header value (subject, display names, addresses, ids) is validated
+  at `draft.save` and stripped of CR, LF and NUL again by the builder, so
+  header injection cannot add recipients or forge headers; addresses are
+  re-parsed with `net/mail` at send time.
+- The built message is capped (`api.MaxOutgoingMessageBytes`) while it is
+  streamed to disk; the SMTP `SIZE` extension is honoured before `DATA`.
+- The body is `text/plain` in this phase: nothing that did not pass
+  `internal/sanitize` is sent as HTML (`draft.save` refuses `htmlBody` while
+  the sanitiser is a stub).
+- One SMTP session per delivery attempt, retried with backoff; a refused
+  password stops all attempts for the account until it is edited, so a
+  wrong password cannot lock the account out through repeated logins.
+
 ## 8. Local storage
 
 - `store.db` is `0600` in a `0700` directory. Mail is stored unencrypted at
@@ -267,6 +301,8 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] Does any path return HTML that did not pass `internal/sanitize`?
 - [ ] New parser: are there malformed samples in `testdata/mime` and a
       fuzz target?
+- [ ] New MIME-derived field: text-only, capped, never the raw header
+      block?
 - [ ] New URL handling: is the scheme allow-listed, is the real target
       shown?
 - [ ] New network request: is it triggered by user action, not by content?
