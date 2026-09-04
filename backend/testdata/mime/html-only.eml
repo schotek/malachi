@@ -1,0 +1,15 @@
+From: news@example.org
+To: bob@example.net
+Subject: Newsletter
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html><head><title>Ignored title</title><style>p { color: red }</style></head>
+<body>
+<script>alert('x')</script>
+<h1>Welcome &amp; hello</h1>
+<p>First   paragraph with
+line break in source.</p>
+<ul><li>one</li><li>two</li></ul>
+<p>Copyright &copy; 2026 &#8212; done</p>
+</body></html>

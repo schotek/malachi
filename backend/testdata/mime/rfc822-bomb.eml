@@ -1,0 +1,90 @@
+From: alice@example.org
+Subject: bomb
+Content-Type: multipart/mixed; boundary="b"
+
+--b
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Content-Type: message/rfc822
+
+Subject: bottom
+Content-Type: text/plain
+
+bottom
+--b--

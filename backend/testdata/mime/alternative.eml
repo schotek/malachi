@@ -1,0 +1,17 @@
+From: alice@example.org
+To: bob@example.net
+Subject: =?UTF-8?Q?P=C5=99edm=C4=9Bt?=
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Ahoj, tohle je =C4=8Desk=C3=BD text.
+--alt
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Ahoj, tohle je <b>český</b> text.</p></body></html>
+--alt--

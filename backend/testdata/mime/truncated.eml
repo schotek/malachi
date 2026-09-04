@@ -1,0 +1,13 @@
+From: alice@example.org
+Subject: Truncated
+Content-Type: multipart/mixed; boundary="b"
+
+--b
+Content-Type: text/plain
+
+first
+--b
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="cut.bin"
+
+partial data

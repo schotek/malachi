@@ -1,0 +1,29 @@
+From: alice@example.org
+To: bob@example.net
+Subject: Fwd: report
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: text/plain; charset=utf-8
+
+Forwarding the report.
+--outer
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="report.eml"
+
+From: carol@example.net
+To: alice@example.org
+Subject: report
+Content-Type: multipart/mixed; boundary="inner"
+
+--inner
+Content-Type: text/plain
+
+Inner text must not become the outer body.
+--inner
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="inner.pdf"
+
+%PDF-1.4 inner
+--inner--
+--outer--

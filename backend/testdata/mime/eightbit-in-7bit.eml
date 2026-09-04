@@ -1,0 +1,7 @@
+From: alice@example.org
+Subject: 8bit
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 7bit
+
+Čeština ok
+� lone byte

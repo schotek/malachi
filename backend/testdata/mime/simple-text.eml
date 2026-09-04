@@ -1,0 +1,19 @@
+From: Alice Example <alice@example.org>
+To: Bob <bob@example.net>, "Carol, C." <carol@example.net>
+Cc: dave@example.net
+Reply-To: Alice Reply <reply@example.org>
+Subject: Hello
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <simple-1@example.org>
+In-Reply-To: <root-0@example.org>
+References: <root-0@example.org> <mid-1@example.org>
+List-Unsubscribe: <mailto:unsub@example.org>
+X-Mailer: TestMailer 1.0
+X-Not-Curated: hidden
+Content-Type: text/plain; charset=utf-8
+
+Hello Bob,
+
+this is a simple message.
+> quoted line
+Bye

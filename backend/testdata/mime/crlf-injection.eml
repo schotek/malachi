@@ -1,0 +1,6 @@
+From: "Alice" <alice@example.org>
+To: =?utf-8?q?Bob=0D=0ABcc:_evil@example.org?= <bob@example.net>
+Subject: =?utf-8?q?Hi=0D=0AX-Injected:_yes?=
+Content-Type: text/plain
+
+body

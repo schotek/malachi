@@ -1,0 +1,9 @@
+From: alice@example.org
+Subject: No boundary
+Content-Type: multipart/mixed
+
+--x
+Content-Type: text/plain
+
+lost
+--x--

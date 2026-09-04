@@ -1,0 +1,9 @@
+From: alice@example.org
+Subject: =?utf-8?q?broken=ZZ?=
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Good line=
+continued =C4=8D ok
+Bad =ZZ sequence
+Trailing = sign
