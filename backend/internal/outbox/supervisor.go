@@ -15,14 +15,18 @@ import (
 
 // SupervisorDeps is what every worker of the supervisor shares. See Deps
 // for the meaning of the fields; Password takes the account id here.
+// DeliverFor, when set, picks the delivery function per account (a Graph
+// account sends through the service, not SMTP) and wins over Deliver.
 type SupervisorDeps struct {
-	Store    *store.Store
-	Password func(ctx context.Context, accountID string) (string, error)
-	Notifier api.Notifier
-	Deliver  DeliverFunc
-	Trigger  func(accountID string, folder api.FolderID, full bool) bool
-	Changed  func(accountID string)
-	Log      *slog.Logger
+	Store         *store.Store
+	Password      func(ctx context.Context, accountID string) (string, error)
+	Notifier      api.Notifier
+	Deliver       DeliverFunc
+	DeliverFor    func(a store.Account) DeliverFunc
+	FilesSentCopy bool
+	Trigger       func(accountID string, folder api.FolderID, full bool) bool
+	Changed       func(accountID string)
+	Log           *slog.Logger
 }
 
 // Supervisor owns one Worker per started account. It satisfies
@@ -106,14 +110,19 @@ func (sv *Supervisor) Start(a store.Account) {
 		return
 	}
 	id := a.ID
+	deliver := sv.deps.Deliver
+	if sv.deps.DeliverFor != nil {
+		deliver = sv.deps.DeliverFor(a)
+	}
 	worker := NewWorker(a, Deps{
-		Store:    sv.deps.Store,
-		Password: func(ctx context.Context) (string, error) { return sv.deps.Password(ctx, id) },
-		Notifier: sv.deps.Notifier,
-		Deliver:  sv.deps.Deliver,
-		Trigger:  sv.deps.Trigger,
-		Changed:  sv.deps.Changed,
-		Log:      sv.deps.Log,
+		Store:         sv.deps.Store,
+		Password:      func(ctx context.Context) (string, error) { return sv.deps.Password(ctx, id) },
+		Notifier:      sv.deps.Notifier,
+		Deliver:       deliver,
+		FilesSentCopy: sv.deps.FilesSentCopy,
+		Trigger:       sv.deps.Trigger,
+		Changed:       sv.deps.Changed,
+		Log:           sv.deps.Log,
 	})
 	ctx, cancel := context.WithCancel(sv.ctx)
 	e := &entry{worker: worker, cancel: cancel, done: make(chan struct{})}

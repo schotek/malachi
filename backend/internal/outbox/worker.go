@@ -57,8 +57,13 @@ type Deps struct {
 	Notifier api.Notifier
 	// Deliver runs one SMTP session; nil means smtp.Deliver.
 	Deliver DeliverFunc
-	// Trigger asks the IMAP syncer for a pass of one folder after a
-	// delivery, so the Sent copy is appended at once.
+	// FilesSentCopy says the delivery path stores the Sent copy on the
+	// server itself (Microsoft Graph's sendMail does): after a delivery the
+	// local copy is dropped and the Sent folder re-synchronised, instead of
+	// being kept for the syncer to upload.
+	FilesSentCopy bool
+	// Trigger asks the account's syncer for a pass of one folder after a
+	// delivery, so the Sent copy is appended (or fetched) at once.
 	Trigger func(accountID string, folder api.FolderID, full bool) bool
 	// Changed is called after every change of an outbox row; core re-emits
 	// the account's SyncState with the new pendingOutbox count.
@@ -232,8 +237,12 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		return
 	}
 
+	var smtpCfg api.ServerConfig
+	if w.account.Config.SMTP != nil {
+		smtpCfg = *w.account.Config.SMTP
+	}
 	dctx, cancel := context.WithTimeout(ctx, deliverTimeout)
-	err = w.deps.Deliver(dctx, w.account.Config.SMTP, password, e.EnvelopeFrom, e.Recipients, f, info.Size())
+	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, info.Size())
 	cancel()
 	if err == nil {
 		w.succeed(ctx, e)
@@ -277,13 +286,17 @@ func (w *Worker) succeed(ctx context.Context, e store.OutboxEntry) {
 	}
 	sent, err := w.deps.Store.FolderByRole(ctx, w.account.ID, api.RoleSent)
 	switch {
-	case errors.Is(err, store.ErrNotFound):
-		// No Sent folder: the server files its own copy (or the user has
-		// none); the local copy has served its purpose.
+	case errors.Is(err, store.ErrNotFound), w.deps.FilesSentCopy:
+		// No Sent folder, or the server files its own copy: the local copy
+		// has served its purpose. When the server filed one, the Sent
+		// folder is re-synchronised so the copy shows up under its identity.
 		if err := w.deps.Store.DeleteOutboxMessage(ctx, w.account.ID, id); err != nil && !errors.Is(err, store.ErrNotFound) {
 			w.log.Warn("drop delivered outbox message", "message", id, "err", err)
 		}
-		w.log.Info("outbox delivered", "message", id, "attempts", e.Attempts+1, "sentCopy", false)
+		w.log.Info("outbox delivered", "message", id, "attempts", e.Attempts+1, "sentCopy", w.deps.FilesSentCopy)
+		if w.deps.FilesSentCopy && err == nil && sent.ID != "" && w.deps.Trigger != nil {
+			w.deps.Trigger(w.account.ID, api.FolderID(sent.ID), false)
+		}
 		return
 	case err != nil:
 		w.log.Warn("look up sent folder", "err", err)

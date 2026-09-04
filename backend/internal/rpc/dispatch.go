@@ -47,6 +47,8 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodAccountUpdate] = wrap(acc.Update)
 	s.handlers[api.MethodAccountDiscover] = wrap(acc.Discover)
 	s.handlers[api.MethodAccountTest] = wrap(acc.Test)
+	s.handlers[api.MethodAccountLinked] = wrap(acc.Linked)
+	s.handlers[api.MethodAccountReorder] = wrap(acc.Reorder)
 
 	s.handlers[api.MethodFolderList] = wrap(fol.List)
 	s.handlers[api.MethodFolderSubscribe] = wrap(fol.Subscribe)

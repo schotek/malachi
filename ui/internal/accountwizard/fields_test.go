@@ -76,7 +76,7 @@ func TestGuessAndMerge(t *testing.T) {
 		t.Error("account name")
 	}
 
-	discovered := api.AccountConfig{Name: "  ", IMAP: api.ServerConfig{Host: "imap.x.org", Username: ""}, SMTP: api.ServerConfig{Host: "smtp.x.org", Username: "custom"}}
+	discovered := api.AccountConfig{Name: "  ", IMAP: &api.ServerConfig{Host: "imap.x.org", Username: ""}, SMTP: &api.ServerConfig{Host: "smtp.x.org", Username: "custom"}}
 	m := MergeIdentity(discovered, Identity{DisplayName: " Me ", Email: "me@x.org", Password: "p"})
 	if m.Name != "x.org" || m.Email != "me@x.org" || m.DisplayName != "Me" || m.IMAP.Username != "me@x.org" ||
 		m.SMTP.Username != "custom" || m.IMAP.AuthMethod != api.AuthPassword || m.SMTP.AuthMethod != api.AuthPassword {
@@ -110,5 +110,24 @@ func TestValidateAndBuild(t *testing.T) {
 	}
 	if credentialsFor(Identity{Password: "p"}).Password != "p" {
 		t.Error("credentials")
+	}
+}
+
+func TestGraphConfigAndLinkedMatch(t *testing.T) {
+	cfg := GraphConfig(Identity{DisplayName: " Me ", Email: " Me@Contoso.example ", Password: "ignored"}, "", "account_1_0")
+	if cfg.Kind != api.AccountGraph || cfg.Email != "Me@Contoso.example" || cfg.Name != "contoso.example" || cfg.DisplayName != "Me" ||
+		cfg.IMAP != nil || cfg.SMTP != nil || cfg.OAuth2 != nil || cfg.Graph == nil ||
+		cfg.Graph.Source != api.GraphSourceGOA || cfg.Graph.GOAAccountID != "account_1_0" {
+		t.Fatalf("graph config = %+v", cfg)
+	}
+	if named := GraphConfig(Identity{Email: "me@contoso.example"}, " Work ", "account_1_0"); named.Name != "Work" {
+		t.Fatalf("name kept: %q", named.Name)
+	}
+	linked := []api.LinkedAccount{{Email: "Me@Contoso.example", GOAAccountID: "account_1_0"}}
+	if l, ok := LinkedMatch(linked, " me@contoso.EXAMPLE "); !ok || l.GOAAccountID != "account_1_0" {
+		t.Fatalf("match = %+v %v", l, ok)
+	}
+	if _, ok := LinkedMatch(linked, "other@contoso.example"); ok {
+		t.Fatal("unexpected match")
 	}
 }

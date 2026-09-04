@@ -173,7 +173,7 @@ characters, length-capped).
 - `lastSync`: end of the last *successful* pass; absent before the first.
 - `error`: the last failure, cleared by the next successful pass.
 - `pendingOutbox`: outbox messages in state `queued` or `sending` (§4.3
-  `message.send`). Sending is not a `status`: it runs beside the IMAP
+  `message.send`). Sending is not a `status`: it runs beside the account's
   sync, and a `failed` message does not count.
 
 ## 4. Methods
@@ -196,7 +196,8 @@ methods. `[[accounts]]` entries in `config.toml` are bootstrap defaults: at
 start the daemon imports each one whose e-mail is not in the store and has
 not been imported before (so an account removed through `account.remove`
 stays removed); the daemon never writes `config.toml`. `account.list`
-returns accounts in creation order. Every mutation is followed by
+returns accounts in display order: the order the user arranged with
+`account.reorder`, creation order until then. Every mutation is followed by
 `notify.accountsChanged`.
 
 #### `account.list`
@@ -211,18 +212,32 @@ before the first pass. Identical to `sync.status`.
 Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": SyncState }
 AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
-  "imap": ServerConfig, "smtp": ServerConfig,
-  "oauth2": OAuth2Config (opt), "syncIntervalSeconds": 300 (opt)
+  "kind": "imap|graph" (opt, default imap),
+  "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
+  "oauth2": OAuth2Config (opt, imap only),
+  "graph": GraphConfig (graph only),
+  "syncIntervalSeconds": 300 (opt)
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
                "username": "me@example.org", "authMethod": "password|oauth2" }
 OAuth2Config { "provider": "office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
+GraphConfig  { "source": "goa", "goaAccountId": "account_1788512854_0" }
 ```
+
+`kind` selects the protocol behind the account. `imap` (the default when
+absent) is a classic mailbox: IMAP for reading, SMTP for sending. `graph`
+is a Microsoft 365 / Outlook.com mailbox accessed through the Microsoft
+Graph API; it has no servers of its own, only a token source. With
+`source: "goa"` the sign-in belongs to GNOME Online Accounts: the daemon
+asks it for access tokens (`goaAccountId` is the GOA account id) and holds
+them in memory only; refresh tokens never reach Malachi. A Graph account
+sends and receives through Graph alone — no IMAP or SMTP is involved.
 
 Secrets are **never** part of `AccountConfig` and never returned.
 `credentials.password` is write-only: it goes to the keyring and is never
-logged, echoed or stored in the SQLite store.
+logged, echoed or stored in the SQLite store. A `graph` account takes no
+credentials at all.
 
 #### `account.add`
 - params: `{ "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
@@ -233,13 +248,18 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
   at most 256 bytes;
 - `email` a bare, syntactically valid address (no display name);
-- `imap`/`smtp`: `host` an IP literal or hostname of DNS labels (≤ 253
-  bytes), `port` 1–65535, `security` one of `tls|starttls|none` where `none`
-  is accepted only for `localhost` or a loopback IP, `username` required
-  (≤ 256 bytes, no control characters), `authMethod` one of `password|oauth2`;
-- `oauth2` present exactly when an endpoint uses `oauth2`; `provider`
-  `office365|custom`, `custom` needs `https` `authUrl` and `tokenUrl`; at
-  most 32 scopes without whitespace;
+- `kind` absent, `imap` or `graph`;
+- for `imap`: `imap` and `smtp` required, `graph` absent; `host` an IP
+  literal or hostname of DNS labels (≤ 253 bytes), `port` 1–65535,
+  `security` one of `tls|starttls|none` where `none` is accepted only for
+  `localhost` or a loopback IP, `username` required (≤ 256 bytes, no
+  control characters), `authMethod` one of `password|oauth2`;
+- for `imap`: `oauth2` present exactly when an endpoint uses `oauth2`;
+  `provider` `office365|custom`, `custom` needs `https` `authUrl` and
+  `tokenUrl`; at most 32 scopes without whitespace;
+- for `graph`: `graph` required with `source: "goa"` and a `goaAccountId`
+  (letters, digits and `_`, ≤ 128 bytes); `imap`, `smtp` and `oauth2`
+  absent;
 - `syncIntervalSeconds` 0 or ≥ 60;
 - `credentials.password` only when an endpoint uses `password`.
 
@@ -249,7 +269,11 @@ once syncing exists). It is written to the system keyring
 is kept and `keyringError` is returned. That happens when no Secret Service
 is running, when the user dismisses the unlock prompt, or when the daemon
 runs with `MALACHI_KEYRING=none`. For `oauth2` no credentials are passed;
-the backend starts the flow and emits `notify.authRequired` with `authUrl`.
+the backend starts the flow and emits `notify.authRequired` with `authUrl`
+(not implemented). A `graph` account needs no keyring: adding it works
+with `MALACHI_KEYRING=none`, and a sign-in that GNOME Online Accounts has
+lost surfaces as `authRequired` until the user signs in again in the
+desktop's account settings.
 
 #### `account.remove`
 - params: `{ "accountId", "deleteLocalData": bool }`
@@ -272,6 +296,20 @@ Pauses (`false`) or resumes (`true`) an account. A paused account keeps its
 configuration and local data, is never synchronised and reports
 `state.status = "disabled"`.
 
+#### `account.reorder`
+- params: `{ "accountIds": ["acc_2", "acc_1"] }`
+- result: `{}`
+- errors: invalidArgument (a duplicate id, or more ids than there are
+  accounts), accountNotFound, storageError
+
+Sets the display order of `account.list`, which is the order a UI shows
+accounts in (its sidebar, its account pickers). The listed accounts take the
+head in the given order; accounts left out keep their relative order behind
+them, so a client that has not seen a just-added account does not move it.
+An empty list is accepted and changes nothing. Nothing about the accounts
+themselves changes — this is not an account update — but the reorder is
+persistent and is followed by `notify.accountsChanged`.
+
 #### `account.update`
 - params: `{ "accountId", "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
 - result: `{}`
@@ -290,12 +328,16 @@ authenticated; the UI still asks for the password and should run
 `account.test`.
 
 - params: `{ "email": "me@example.org" }`
-- result: `{ "config": AccountConfig (opt), "source": "ispdb|autoconfig|srv|guess|none", "providerName": "…" (opt) }`
+- result: `{ "config": AccountConfig (opt), "source": "goa|ispdb|autoconfig|srv|provider|guess|none", "providerName": "…" (opt) }`
 - errors: invalidArgument (not a bare address)
 
 Sources, from most to least trustworthy, each consulted only for what the
 previous ones left open:
 
+0. `goa`: the address is a Microsoft 365 account signed in through GNOME
+   Online Accounts. `config` is a complete `graph` account (`goaAccountId`
+   set) that passes `account.add` as is; no password is needed.
+   `providerName` is `Microsoft 365`.
 1. `ispdb`: Mozilla's autoconfig database at
    `https://autoconfig.thunderbird.net/v1.1/<domain>`. Only the domain is
    sent.
@@ -305,29 +347,38 @@ previous ones left open:
    receive the address, as the provider already knows it.
 3. `srv`: RFC 6186 / RFC 8314 DNS records `_imaps`, `_imap`,
    `_submissions`, `_submission` (`_tcp`). The domain goes to the resolver.
-4. `guess`: `imap.`/`mail.<domain>` on 993 (TLS) and 143 (STARTTLS),
+4. `provider`: the domain is hosted by a provider Malachi speaks to
+   through its own API. Today that is Microsoft 365, recognised by an MX
+   record under `mail.protection.outlook.com` or by Microsoft hosts in an
+   autoconfig answer. `config` is then a `graph` account **without**
+   `goaAccountId`: it does not pass `account.add`; the UI must have the
+   user add the account in GNOME Online Accounts first and re-run
+   discovery (or use `account.linked`).
+5. `guess`: `imap.`/`mail.<domain>` on 993 (TLS) and 143 (STARTTLS),
    `smtp.`/`mail.<domain>` on 587 (STARTTLS) and 465 (TLS), verified by
    opening the connection under the transport policy without logging in.
 
 When the two endpoints come from different sources, `source` reports the
 weaker one. Autoconfig documents are capped at 256 KiB, parsed strictly,
-plaintext socket types and OAuth2-only entries are skipped, hosts and
-ports are validated, and `%EMAILADDRESS%`/`%EMAILLOCALPART%`/
-`%EMAILDOMAIN%` are substituted. `config`, when present, passes
-`account.add` validation with `authMethod: "password"` and the username
-prefilled (the address unless the document says otherwise); `name` is the
-provider's display name or the domain. `providerName` is display-only
-text from the document. Whole lookup ≤ 20 s; internationalised domains
-are not handled yet and yield `none`.
+plaintext socket types and OAuth2-only entries are skipped (for Microsoft
+hosts they turn into the `provider` answer), hosts and ports are
+validated, and `%EMAILADDRESS%`/`%EMAILLOCALPART%`/`%EMAILDOMAIN%` are
+substituted. An `imap` `config`, when present, passes `account.add`
+validation with `authMethod: "password"` and the username prefilled (the
+address unless the document says otherwise); `name` is the provider's
+display name or the domain. `providerName` is display-only text from the
+document. Whole lookup ≤ 20 s; internationalised domains are not handled
+yet and yield `none`.
 
 #### `account.test`
 Connectivity test without persisting anything. Validates like `account.add`
 (the same `invalidArgument` cases, including a password for an account
-without a `password` endpoint), then probes both endpoints concurrently.
+without a `password` endpoint), then probes the endpoints of the account
+kind: `imap` and `smtp` concurrently, or the `graph` mailbox.
 
 - params: same as `account.add`, plus `"accountId"` (opt): with it and an
   empty `credentials.password`, the stored password of that account is used
-- result: `{ "imap": EndpointTestResult, "smtp": EndpointTestResult }`
+- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph) }`
 - errors: invalidArgument; with `accountId`: accountNotFound, authRequired
   (no stored password), keyringError. Each endpoint reports its own outcome
 
@@ -335,19 +386,49 @@ without a `password` endpoint), then probes both endpoints concurrently.
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
 ```
 
-A probe dials, secures the connection (TLS 1.2+, system trust store, no
-override; STARTTLS is mandatory when configured), authenticates with the
-password and disconnects. Per-endpoint `error.code` is one of `authFailed`
-(credentials rejected), `tlsError` (certificate, handshake, STARTTLS not
-offered, or the server demanding TLS before login), `networkError`
-(unresolvable, refused, connection dropped), `serverTimeout` (no answer in
-time), `serverError` (protocol error or no usable authentication
-mechanism), `notImplemented` (an `oauth2` endpoint, until OAuth2 lands).
-`capabilities` are the server's post-login IMAP CAPABILITY list or the EHLO
-keywords the backend knows about, scrubbed to printable ASCII, ≤ 64 entries;
-`latencyMs` is dial → ready (greeting read, STARTTLS done). Budget: 10 s
-to connect, 20 s per endpoint. The password is used for the connections
-only and never logged.
+An IMAP/SMTP probe dials, secures the connection (TLS 1.2+, system trust
+store, no override; STARTTLS is mandatory when configured), authenticates
+with the password and disconnects. Per-endpoint `error.code` is one of
+`authFailed` (credentials rejected), `tlsError` (certificate, handshake,
+STARTTLS not offered, or the server demanding TLS before login),
+`networkError` (unresolvable, refused, connection dropped), `serverTimeout`
+(no answer in time), `serverError` (protocol error or no usable
+authentication mechanism), `notImplemented` (an `oauth2` endpoint, until
+OAuth2 lands). `capabilities` are the server's post-login IMAP CAPABILITY
+list or the EHLO keywords the backend knows about, scrubbed to printable
+ASCII, ≤ 64 entries; `latencyMs` is dial → ready (greeting read, STARTTLS
+done). Budget: 10 s to connect, 20 s per endpoint. The password is used
+for the connections only and never logged.
+
+A Graph probe fetches a token from the account's source and opens the
+mailbox. `error.code` is `authRequired` when the source has no valid
+sign-in (sign in again in GNOME Online Accounts), `unavailable` when there
+is no session bus or no GNOME Online Accounts, `invalidArgument` when the
+signed-in mailbox is not `config.email`, otherwise the network/server
+codes above; `capabilities` is `["graph"]`.
+
+#### `account.linked`
+Lists accounts other desktop services are signed in to and that Malachi
+can use as `graph` accounts: the Microsoft 365 accounts of GNOME Online
+Accounts with mail enabled. Nothing is stored; a UI shows them as one-click
+choices in the add-account flow.
+
+- params: `{}`
+- result: `{ "accounts": [LinkedAccount] }`
+- errors: serverError (GNOME Online Accounts answered with an error).
+  Without a session bus or GNOME Online Accounts the list is empty, not an
+  error.
+
+```jsonc
+LinkedAccount { "provider": "microsoft365", "email": "me@contoso.com", "name": "Me" (opt),
+                "goaAccountId": "account_1788512854_0", "configured": false, "attentionNeeded": false }
+```
+
+`configured` says a Malachi account with that address exists already.
+`attentionNeeded` mirrors GNOME Online Accounts: the service wants the
+user to sign in again; adding the account still works, syncing will report
+`authRequired` until then. `name` and `email` are untrusted text from the
+service; `email` is always a bare valid address.
 
 ### 4.2 folder
 
@@ -921,3 +1002,19 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   outbox folders; new limit `api.MaxOutgoingMessageBytes`.
   `folder.subscribe`, `thread.*` and `search.query` remain
   `notImplemented`.
+- **1** (2026-09-04, compatible addition, Microsoft Graph accounts): new
+  `AccountConfig.kind` (`imap`, the default, or `graph`) and
+  `AccountConfig.graph` (`GraphConfig`, token source `goa` = GNOME Online
+  Accounts); `imap`/`smtp` are now optional and absent for `graph`
+  accounts (readers must not assume them); `account.test` result gained
+  `graph` and its `imap`/`smtp` entries are present only for `imap`
+  accounts; new `account.linked`; `account.discover` sources `goa` and
+  `provider`. Graph accounts synchronise through delta queries (polled:
+  the inbox every minute, every folder at the sync interval), push local
+  changes through the Graph API and send through `sendMail`, which files
+  the Sent copy itself; the same `SyncState`, notifications, outbox and
+  retention rules apply.
+- **1** (2026-09-04, compatible addition, account ordering): new
+  `account.reorder`; `account.list` now returns accounts in the order the
+  user arranged (creation order until they do), which the preferences
+  dialog sets by dragging rows.

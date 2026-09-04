@@ -102,21 +102,63 @@ type OAuth2Config struct {
 	Scopes   []string `json:"scopes,omitempty"`
 }
 
+// AccountKind selects the protocol behind an account.
+type AccountKind string
+
+const (
+	// AccountIMAP is a classic account: IMAP for the mailbox, SMTP for
+	// sending. The default when Kind is empty.
+	AccountIMAP AccountKind = "imap"
+	// AccountGraph is a Microsoft 365 / Outlook.com account accessed through
+	// the Microsoft Graph API; the token comes from GraphConfig.Source.
+	AccountGraph AccountKind = "graph"
+)
+
+// GraphSource says who holds the OAuth2 session of a Graph account.
+type GraphSource string
+
+const (
+	// GraphSourceGOA: GNOME Online Accounts owns the sign-in and the refresh
+	// token; the backend asks it for access tokens. GOAAccountID is the GOA
+	// account id ("account_…").
+	GraphSourceGOA GraphSource = "goa"
+)
+
+// GraphConfig is present only when Kind == AccountGraph.
+type GraphConfig struct {
+	Source       GraphSource `json:"source"`
+	GOAAccountID string      `json:"goaAccountId,omitempty"`
+}
+
 // AccountConfig is the non-secret part of an account. Secrets (passwords,
 // refresh tokens) travel only in Credentials at add/test time and are stored
 // in the system keyring. They are never returned by any method.
+//
+// IMAP and SMTP are set for AccountIMAP and absent for AccountGraph; Graph
+// the other way round.
 type AccountConfig struct {
 	Name         string        `json:"name"`  // display name of the account
 	Email        string        `json:"email"` // primary address
 	DisplayName  string        `json:"displayName,omitempty"`
-	IMAP         ServerConfig  `json:"imap"`
-	SMTP         ServerConfig  `json:"smtp"`
+	Kind         AccountKind   `json:"kind,omitempty"` // "" = AccountIMAP
+	IMAP         *ServerConfig `json:"imap,omitempty"`
+	SMTP         *ServerConfig `json:"smtp,omitempty"`
 	OAuth2       *OAuth2Config `json:"oauth2,omitempty"`
+	Graph        *GraphConfig  `json:"graph,omitempty"`
 	SyncInterval int           `json:"syncIntervalSeconds,omitempty"` // 0 = default
 }
 
+// Protocol returns Kind with the empty default resolved.
+func (c AccountConfig) Protocol() AccountKind {
+	if c.Kind == "" {
+		return AccountIMAP
+	}
+	return c.Kind
+}
+
 // Credentials carries secrets for account.add / account.test. Exactly the
-// fields relevant to the AuthMethod are set.
+// fields relevant to the AuthMethod are set; a Graph account has none (the
+// token source holds them).
 type Credentials struct {
 	Password string `json:"password,omitempty"`
 	// For OAuth2 the backend drives the flow itself and emits
@@ -164,6 +206,16 @@ type AccountSetEnabledParams struct {
 
 type AccountSetEnabledResult struct{}
 
+// AccountReorderParams sets the display order of account.list. The listed
+// accounts take the head in the given order; accounts left out keep their
+// relative order behind them, so a client that has not seen a just-added
+// account does not move it.
+type AccountReorderParams struct {
+	AccountIDs []AccountID `json:"accountIds"`
+}
+
+type AccountReorderResult struct{}
+
 // AccountDiscoverParams asks for server settings matching an e-mail
 // address. Only the domain leaves the machine for the ISPDB and DNS
 // lookups; the provider's own autoconfig URL receives the address.
@@ -177,21 +229,45 @@ type AccountDiscoverParams struct {
 type DiscoverSource string
 
 const (
+	DiscoverGOA        DiscoverSource = "goa"        // the address is signed in through GNOME Online Accounts (a Graph account)
 	DiscoverISPDB      DiscoverSource = "ispdb"      // Mozilla autoconfig database
 	DiscoverAutoconfig DiscoverSource = "autoconfig" // the provider's own autoconfig document
 	DiscoverSRV        DiscoverSource = "srv"        // RFC 6186 DNS SRV records
+	DiscoverProvider   DiscoverSource = "provider"   // a known provider recognised by DNS or host names; may need a sign-in first
 	DiscoverGuess      DiscoverSource = "guess"      // common host names verified by a TLS connection
 	DiscoverNone       DiscoverSource = "none"       // nothing found; Config is omitted
 )
 
 // AccountDiscoverResult is a suggestion only: nothing is stored and
-// nothing is authenticated. Config, when present, passes account.add
-// validation with authMethod "password" and the username prefilled; the
-// UI still asks for the password and should run account.test.
+// nothing is authenticated. An IMAP Config passes account.add validation
+// with authMethod "password" and the username prefilled; the UI still asks
+// for the password and should run account.test. A Graph Config with source
+// "goa" is complete (goaAccountId set) or, with source "provider", tells
+// the UI the address belongs to Microsoft 365 and must first be added in
+// GNOME Online Accounts.
 type AccountDiscoverResult struct {
 	Config       *AccountConfig `json:"config,omitempty"`
 	Source       DiscoverSource `json:"source"`
 	ProviderName string         `json:"providerName,omitempty"` // display-only, untrusted text
+}
+
+// LinkedAccount is an account another desktop service is signed in to and
+// that Malachi can use: today Microsoft 365 accounts in GNOME Online
+// Accounts. Configured says whether a Malachi account with that address
+// already exists.
+type LinkedAccount struct {
+	Provider        string `json:"provider"` // "microsoft365"
+	Email           string `json:"email"`
+	Name            string `json:"name,omitempty"` // display name, untrusted text
+	GOAAccountID    string `json:"goaAccountId"`
+	Configured      bool   `json:"configured"`
+	AttentionNeeded bool   `json:"attentionNeeded"` // the service wants the user to sign in again
+}
+
+type AccountLinkedParams struct{}
+
+type AccountLinkedResult struct {
+	Accounts []LinkedAccount `json:"accounts"`
 }
 
 // AccountUpdateParams replaces the configuration of an existing account.
@@ -222,9 +298,12 @@ type EndpointTestResult struct {
 	LatencyMS    int      `json:"latencyMs"`
 }
 
+// AccountTestResult carries one entry per endpoint of the account kind:
+// imap and smtp for an IMAP account, graph for a Graph account.
 type AccountTestResult struct {
-	IMAP EndpointTestResult `json:"imap"`
-	SMTP EndpointTestResult `json:"smtp"`
+	IMAP  *EndpointTestResult `json:"imap,omitempty"`
+	SMTP  *EndpointTestResult `json:"smtp,omitempty"`
+	Graph *EndpointTestResult `json:"graph,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

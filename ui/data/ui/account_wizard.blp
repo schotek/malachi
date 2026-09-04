@@ -55,6 +55,22 @@ Adw.Dialog account_wizard {
                     ]
                   }
 
+                  // Accounts other desktop services are signed in to
+                  // (account.linked); filled from Go, hidden when empty.
+                  Adw.PreferencesGroup linked_group {
+                    title: _("Signed In on This Computer");
+                    description: _("Accounts from GNOME Online Accounts can be added without a password.");
+                    visible: false;
+
+                    ListBox linked_rows {
+                      selection-mode: none;
+
+                      styles [
+                        "boxed-list",
+                      ]
+                    }
+                  }
+
                   ListBox identity_rows {
                     selection-mode: none;
 
@@ -208,6 +224,47 @@ Adw.Dialog account_wizard {
         };
       }
 
+      // A Microsoft 365 address that is not signed in through GNOME Online
+      // Accounts yet: the sign-in happens in GNOME Settings.
+      Adw.NavigationPage goa_hint_page {
+        tag: "goa";
+        title: _("Sign In");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Adw.StatusPage goa_hint {
+            icon-name: "system-users-symbolic";
+            title: _("Sign In Through GNOME Settings");
+            description: _("This address belongs to a Microsoft 365 account. Add it under Settings → Online Accounts, then come back here.");
+
+            child: Box {
+              orientation: vertical;
+              spacing: 12;
+              halign: center;
+
+              Button goa_open_button {
+                label: _("Open Online Accounts");
+
+                styles [
+                  "pill",
+                  "suggested-action",
+                ]
+              }
+
+              Button goa_recheck_button {
+                label: _("Check Again");
+
+                styles [
+                  "pill",
+                ]
+              }
+            };
+          };
+        };
+      }
+
       Adw.NavigationPage testing_page {
         tag: "testing";
         title: _("Connection Test");
@@ -260,6 +317,15 @@ Adw.Dialog account_wizard {
 
                       [prefix]
                       Image smtp_result_icon {}
+                    }
+
+                    Adw.ActionRow graph_result_row {
+                      title: _("Microsoft 365");
+                      use-markup: false;
+                      visible: false;
+
+                      [prefix]
+                      Image graph_result_icon {}
                     }
                   };
                 };

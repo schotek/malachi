@@ -35,6 +35,7 @@ type Folder struct {
 	UIDValidity    uint32
 	UIDNext        uint32
 	HighestModSeq  uint64
+	DeltaLink      string // delta-query cursor of a Graph folder; "" = full sync
 	ServerMessages int
 	ServerUnseen   int
 	Unread         int // local count, see RecountFolder
@@ -51,6 +52,7 @@ type FolderSyncState struct {
 	UIDValidity    uint32
 	UIDNext        uint32
 	HighestModSeq  uint64
+	DeltaLink      string
 	ServerMessages int
 	ServerUnseen   int
 	LastSyncAt     time.Time
@@ -302,10 +304,10 @@ func deleteFoldersTx(ctx context.Context, tx *sql.Tx, ids []string) ([]messageFi
 // ErrNotFound for an unknown id.
 func (s *Store) SetFolderSyncState(ctx context.Context, id string, st FolderSyncState) error {
 	res, err := s.db.ExecContext(ctx, `
-		UPDATE folders SET uidvalidity = ?, uidnext = ?, highestmodseq = ?, server_messages = ?,
+		UPDATE folders SET uidvalidity = ?, uidnext = ?, highestmodseq = ?, delta_link = ?, server_messages = ?,
 		       server_unseen = ?, last_sync_at = ?, updated_at = ?
 		WHERE id = ?`,
-		int64(st.UIDValidity), int64(st.UIDNext), int64(st.HighestModSeq), st.ServerMessages,
+		int64(st.UIDValidity), int64(st.UIDNext), int64(st.HighestModSeq), st.DeltaLink, st.ServerMessages,
 		st.ServerUnseen, optStamp(st.LastSyncAt), nowStamp(), id)
 	if err != nil {
 		return fmt.Errorf("set folder sync state: %w", err)
@@ -317,8 +319,9 @@ func (s *Store) SetFolderSyncState(ctx context.Context, id string, st FolderSync
 }
 
 // ResetFolder forgets everything synchronised for a folder (UIDVALIDITY
-// changed): its messages with their raw files, its pending operations and
-// the server counters; the folder then carries the new uidValidity.
+// changed, or a delta cursor the server no longer accepts): its messages
+// with their raw files, its pending operations, the delta cursor and the
+// server counters; the folder then carries the new uidValidity.
 // ErrNotFound for an unknown id.
 func (s *Store) ResetFolder(ctx context.Context, id string, uidValidity uint32) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -328,7 +331,7 @@ func (s *Store) ResetFolder(ctx context.Context, id string, uidValidity uint32) 
 	defer tx.Rollback()
 
 	res, err := tx.ExecContext(ctx, `
-		UPDATE folders SET uidvalidity = ?, uidnext = 0, highestmodseq = 0, server_messages = 0,
+		UPDATE folders SET uidvalidity = ?, uidnext = 0, highestmodseq = 0, delta_link = '', server_messages = 0,
 		       server_unseen = 0, unread = 0, total = 0, last_sync_at = '', updated_at = ?
 		WHERE id = ?`, int64(uidValidity), nowStamp(), id)
 	if err != nil {
@@ -389,7 +392,7 @@ func recountFolderTx(ctx context.Context, q execQuerier, id string) (unread, tot
 
 const folderColumns = `id, account_id, mailbox, delimiter, parent_id,
 	COALESCE((SELECT p.mailbox FROM folders p WHERE p.id = folders.parent_id), ''),
-	name, path, role, subscribed, selectable, uidvalidity, uidnext, highestmodseq,
+	name, path, role, subscribed, selectable, uidvalidity, uidnext, highestmodseq, delta_link,
 	server_messages, server_unseen, unread, total, last_sync_at, position, created_at, updated_at`
 
 func scanFolder(row scanner) (Folder, error) {
@@ -398,7 +401,7 @@ func scanFolder(row scanner) (Folder, error) {
 	var subscribed, selectable int
 	var uidvalidity, uidnext, modseq int64
 	if err := row.Scan(&f.ID, &f.AccountID, &f.Mailbox, &f.Delimiter, &f.ParentID, &f.ParentMailbox,
-		&f.Name, &f.Path, &role, &subscribed, &selectable, &uidvalidity, &uidnext, &modseq,
+		&f.Name, &f.Path, &role, &subscribed, &selectable, &uidvalidity, &uidnext, &modseq, &f.DeltaLink,
 		&f.ServerMessages, &f.ServerUnseen, &f.Unread, &f.Total, &lastSync, &f.Position, &created, &updated); err != nil {
 		return Folder{}, err
 	}

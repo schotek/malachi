@@ -16,12 +16,20 @@ type Config struct {
 	Name        string  `toml:"name"`
 	Email       string  `toml:"email"`
 	DisplayName string  `toml:"display_name"`
-	IMAP        Server  `toml:"imap"`
-	SMTP        Server  `toml:"smtp"`
+	Kind        string  `toml:"kind"` // imap (default) | graph
+	IMAP        *Server `toml:"imap"`
+	SMTP        *Server `toml:"smtp"`
 	OAuth2      *OAuth2 `toml:"oauth2"`
+	Graph       *Graph  `toml:"graph"`
 	// Enabled is a pointer so that a missing key means enabled, not paused.
 	Enabled             *bool `toml:"enabled"`
 	SyncIntervalSeconds int   `toml:"sync_interval_seconds"`
+}
+
+// Graph mirrors api.GraphConfig with TOML tags.
+type Graph struct {
+	Source       string `toml:"source"` // goa
+	GOAAccountID string `toml:"goa_account_id"`
 }
 
 // Server mirrors api.ServerConfig with TOML tags.
@@ -54,9 +62,19 @@ func (c Config) ToAPI() api.AccountConfig {
 		Name:         c.Name,
 		Email:        c.Email,
 		DisplayName:  c.DisplayName,
-		IMAP:         c.IMAP.toAPI(),
-		SMTP:         c.SMTP.toAPI(),
+		Kind:         api.AccountKind(c.Kind),
 		SyncInterval: c.SyncIntervalSeconds,
+	}
+	if c.IMAP != nil {
+		sc := c.IMAP.toAPI()
+		out.IMAP = &sc
+	}
+	if c.SMTP != nil {
+		sc := c.SMTP.toAPI()
+		out.SMTP = &sc
+	}
+	if c.Graph != nil {
+		out.Graph = &api.GraphConfig{Source: api.GraphSource(c.Graph.Source), GOAAccountID: c.Graph.GOAAccountID}
 	}
 	if c.OAuth2 != nil {
 		out.OAuth2 = &api.OAuth2Config{

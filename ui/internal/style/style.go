@@ -63,6 +63,20 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// lists many one-line entries.
 	b.WriteString(".navigation-sidebar row.folder-row { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }\n")
 	b.WriteString("row.folder-row > box.header { min-height: 0; padding-top: 0; padding-bottom: 0; }\n")
+	// Separators between messages (show-separators on the list in window.blp).
+	// The sidebar style rounds its rows and insets them, which would bend the
+	// separator into a shallow arc and leave a gap under it, so the message
+	// rows are squared and flush; selection stays the sidebar's subtle tint,
+	// now spanning the full width. The last row keeps no trailing line.
+	b.WriteString("list.message-list > row { border-radius: 0; margin: 0; }\n")
+	b.WriteString("list.message-list > row:last-child { border-bottom: none; }\n")
+	// Account reordering in preferences: the insertion line is a box-shadow
+	// rather than a border so the row does not change height, and therefore
+	// does not twitch, while the pointer moves over it.
+	b.WriteString(".drag-handle { color: alpha(@window_fg_color, 0.55); }\n")
+	b.WriteString("row.account-row.dragging { opacity: 0.4; }\n")
+	b.WriteString("row.account-row.drop-above { box-shadow: inset 0 2px 0 0 @accent_bg_color; }\n")
+	b.WriteString("row.account-row.drop-below { box-shadow: inset 0 -2px 0 0 @accent_bg_color; }\n")
 	fmt.Fprintf(&b, ".message-body { font-size: %d%%; }\n", textZoomPercent)
 	if monospace {
 		b.WriteString(".message-body { font-family: monospace; }\n")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/settingspanel"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -188,24 +189,61 @@ func (w *Window) triggerSync() {
 
 // showAuthRequired reveals auth_banner for the affected account. The
 // banner's button opens the preferences (wired in New), where the account
-// can be edited. An OAuth2 authUrl is only logged for now: the OpenURI
-// portal flow is a later phase.
+// can be edited; for a Microsoft 365 account the sign-in lives in GNOME
+// Online Accounts, so the button opens that panel instead. An OAuth2
+// authUrl is only logged for now: the OpenURI portal flow is a later phase.
 func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	name := string(n.AccountID)
+	graph := false
 	if a, ok := w.model.account(n.AccountID); ok {
 		name = accountRowTitle(a)
+		graph = a.Config.Protocol() == api.AccountGraph
 	}
-	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL)
+	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL, "graph", graph)
 	w.authBannerAccount = n.AccountID
+	w.authBannerGraph = graph
 	w.authBanner.SetUseMarkup(false)
-	w.authBanner.SetTitle(authBannerText(n.Reason, name))
+	if graph {
+		w.authBanner.SetTitle(graphAuthBannerText(n.Reason, name))
+		w.authBanner.SetButtonLabel(i18n.T("Open Online Accounts"))
+	} else {
+		w.authBanner.SetTitle(authBannerText(n.Reason, name))
+		w.authBanner.SetButtonLabel(i18n.T("Open Preferences"))
+	}
 	w.authBanner.SetRevealed(true)
 }
 
 // hideAuthBanner hides auth_banner and forgets its account.
 func (w *Window) hideAuthBanner() {
 	w.authBannerAccount = ""
+	w.authBannerGraph = false
 	w.authBanner.SetRevealed(false)
+}
+
+// onAuthBannerButton is the banner button: GNOME Settings for a Microsoft
+// 365 account, the preferences otherwise.
+func (w *Window) onAuthBannerButton() {
+	if !w.authBannerGraph {
+		w.app.ActivateAction("preferences", nil)
+		return
+	}
+	settingspanel.OpenOnlineAccounts(func(err error) {
+		if err != nil {
+			w.log.Warn("open online accounts", "err", err)
+			w.Toast(i18n.T("Could not open Online Accounts; open GNOME Settings yourself"))
+		}
+	})
+}
+
+// graphAuthBannerText is authBannerText for an account whose sign-in
+// belongs to GNOME Online Accounts.
+func graphAuthBannerText(reason api.ErrorCode, account string) string {
+	if reason == api.CodeUnavailable {
+		// TRANSLATORS: %s is an account name.
+		return fmt.Sprintf(i18n.T("GNOME Online Accounts is not available; %s cannot sign in"), account)
+	}
+	// TRANSLATORS: %s is an account name.
+	return fmt.Sprintf(i18n.T("Sign in to %s again in Settings → Online Accounts"), account)
 }
 
 // authBannerText is the banner sentence for a notify.authRequired reason;

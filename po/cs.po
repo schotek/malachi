@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-04 14:35+0200\n"
+"POT-Creation-Date: 2026-09-04 19:58+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -20,72 +20,101 @@ msgstr ""
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
+#: ui/internal/accountwizard/linked.go:95
+msgid "Use"
+msgstr "Použít"
+
+#
+#: ui/internal/accountwizard/linked.go:98
+msgid "Added"
+msgstr "Přidán"
+
+#: ui/internal/accountwizard/linked.go:157 ui/internal/window/sync.go:233
+msgid "Could not open Online Accounts; open GNOME Settings yourself"
+msgstr "Účty online se nepodařilo otevřít; otevřete Nastavení GNOME ručně"
+
+#: ui/internal/accountwizard/linked.go:173
+msgid "This address is not signed in yet"
+msgstr "Tato adresa ještě není přihlášená"
+
+#: ui/internal/accountwizard/results.go:61
+msgid "Not tested"
+msgstr "Netestováno"
+
 #. TRANSLATORS: %d is the connection latency in milliseconds.
-#: ui/internal/accountwizard/results.go:41
+#: ui/internal/accountwizard/results.go:65
 #, c-format
 msgid "Connected in %d ms"
 msgstr "Připojeno za %d ms"
 
-#: ui/internal/accountwizard/wizard.go:155
-#: ui/internal/accountwizard/wizard.go:156
-#: ui/internal/window/accounts_page.go:115
+#: ui/internal/accountwizard/wizard.go:175
+#: ui/internal/accountwizard/wizard.go:176
+#: ui/internal/window/accounts_page.go:156
 msgid "Edit Account"
 msgstr "Upravit účet"
 
-#: ui/internal/accountwizard/wizard.go:157
+#: ui/internal/accountwizard/wizard.go:177
 msgid "New Password (leave empty to keep)"
 msgstr "Nové heslo (prázdné = ponechat)"
 
-#: ui/internal/accountwizard/wizard.go:158
+#: ui/internal/accountwizard/wizard.go:178
 msgid "_Save"
 msgstr "_Uložit"
 
-#: ui/internal/accountwizard/wizard.go:159
+#: ui/internal/accountwizard/wizard.go:179
 msgid "Save _Anyway"
 msgstr "Uložit _přesto"
 
-#: ui/internal/accountwizard/wizard.go:331 ui/data/ui/account_wizard.ui:260
+#: ui/internal/accountwizard/wizard.go:189 ui/data/ui/account_wizard.ui:245
+msgid "_Test Connection"
+msgstr "_Otestovat připojení"
+
+#: ui/internal/accountwizard/wizard.go:292
+msgid "Enter the password for this account"
+msgstr "Zadejte heslo k tomuto účtu"
+
+#: ui/internal/accountwizard/wizard.go:400 ui/data/ui/account_wizard.ui:319
 msgid "Testing Connection…"
 msgstr "Testuje se připojení…"
 
-#: ui/internal/accountwizard/wizard.go:357
+#: ui/internal/accountwizard/wizard.go:433
 msgid "Testing the connection"
 msgstr "Test připojení"
 
-#: ui/internal/accountwizard/wizard.go:380
+#: ui/internal/accountwizard/wizard.go:464
 msgid "Ready to Save"
 msgstr "Připraveno k uložení"
 
-#: ui/internal/accountwizard/wizard.go:382
+#: ui/internal/accountwizard/wizard.go:466
 msgid "Ready to Add"
 msgstr "Připraveno k přidání"
 
-#: ui/internal/accountwizard/wizard.go:386
-#: ui/internal/accountwizard/wizard.go:394
+#: ui/internal/accountwizard/wizard.go:470
+#: ui/internal/accountwizard/wizard.go:478
 msgid "Connection Failed"
 msgstr "Připojení selhalo"
 
-#: ui/internal/accountwizard/wizard.go:389 ui/internal/widget/rpc.go:79
+#: ui/internal/accountwizard/wizard.go:473 ui/internal/widget/rpc.go:79
 msgid "The server rejected the user name or password"
 msgstr "Server odmítl uživatelské jméno nebo heslo"
 
-#: ui/internal/accountwizard/wizard.go:407
+#: ui/internal/accountwizard/wizard.go:494
 msgid "Saving Account…"
 msgstr "Ukládá se účet…"
 
-#: ui/internal/accountwizard/wizard.go:409
+#: ui/internal/accountwizard/wizard.go:496
 msgid "Adding Account…"
 msgstr "Přidává se účet…"
 
-#: ui/internal/accountwizard/wizard.go:451
+#: ui/internal/accountwizard/wizard.go:538
 msgid "An account with this e-mail address already exists"
 msgstr "Účet s touto e-mailovou adresou už existuje"
 
-#: ui/internal/accountwizard/wizard.go:454
+#: ui/internal/accountwizard/wizard.go:541
 msgid "Saving the account"
 msgstr "Uložení účtu"
 
-#: ui/internal/accountwizard/wizard.go:456
+#: ui/internal/accountwizard/wizard.go:543
 msgid "Adding the account"
 msgstr "Přidání účtu"
 
@@ -223,7 +252,7 @@ msgstr "Za_hodit"
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:315 ui/internal/widget/rpc.go:124
+#: ui/internal/compose/draft.go:315 ui/internal/widget/rpc.go:128
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -414,56 +443,70 @@ msgstr "Server včas neodpověděl"
 msgid "Not supported yet"
 msgstr "Zatím není podporováno"
 
+#
+#: ui/internal/widget/rpc.go:91
+msgid "Sign in to this account again"
+msgstr "Přihlaste se k tomuto účtu znovu"
+
+#
+#: ui/internal/widget/rpc.go:93
+msgid "The sign-in service is not available"
+msgstr "Přihlašovací služba není dostupná"
+
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:92
+#: ui/internal/widget/rpc.go:96
 #, c-format
 msgid "Rejected: %s"
 msgstr "Odmítnuto: %s"
 
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:95
+#: ui/internal/widget/rpc.go:99
 #, c-format
 msgid "Failed: %s"
 msgstr "Selhalo: %s"
 
 #. TRANSLATORS: %s is the new account's e-mail address.
-#: ui/internal/window/accounts_page.go:50
+#: ui/internal/window/accounts_page.go:81
 #, c-format
 msgid "Added %s"
 msgstr "Přidán účet %s"
 
-#: ui/internal/window/accounts_page.go:69
+#: ui/internal/window/accounts_page.go:100
 msgid "Loading accounts"
 msgstr "Načtení účtů"
 
-#: ui/internal/window/accounts_page.go:108
+#: ui/internal/window/accounts_page.go:135
+msgid "Drag to reorder, or press Ctrl+Up and Ctrl+Down"
+msgstr "Přetažením změníte pořadí, nebo stiskněte Ctrl+↑ a Ctrl+↓"
+
+#: ui/internal/window/accounts_page.go:149
 msgid "Enabled"
 msgstr "Zapnuto"
 
-#: ui/internal/window/accounts_page.go:121
+#: ui/internal/window/accounts_page.go:162
 msgid "Remove Account"
 msgstr "Odebrat účet"
 
-#: ui/internal/window/accounts_page.go:152
+#: ui/internal/window/accounts_page.go:194
 msgid "Pausing the account"
 msgstr "Pozastavení účtu"
 
-#: ui/internal/window/accounts_page.go:154
+#: ui/internal/window/accounts_page.go:196
 msgid "Resuming the account"
 msgstr "Obnovení účtu"
 
 #. TRANSLATORS: %s is the edited account's e-mail address.
-#: ui/internal/window/accounts_page.go:188
+#: ui/internal/window/accounts_page.go:230
 #, c-format
 msgid "Saved %s"
 msgstr "Uložen účet %s"
 
-#: ui/internal/window/accounts_page.go:196
+#: ui/internal/window/accounts_page.go:238
 msgid "Also delete _drafts and downloaded data"
 msgstr "Smazat také _koncepty a stažená data"
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/window/accounts_page.go:199
+#: ui/internal/window/accounts_page.go:241
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
@@ -471,37 +514,42 @@ msgstr ""
 "Účet %s bude z aplikace Malachi Mail odebrán. Pošta na serveru zůstane "
 "nedotčena."
 
-#: ui/internal/window/accounts_page.go:200
+#: ui/internal/window/accounts_page.go:242
 msgid "Remove this account?"
 msgstr "Odebrat tento účet?"
 
-#: ui/internal/window/accounts_page.go:200
+#: ui/internal/window/accounts_page.go:242
 msgid "_Remove"
 msgstr "_Odebrat"
 
-#: ui/internal/window/accounts_page.go:216
+#: ui/internal/window/accounts_page.go:258
 msgid "Removing the account"
 msgstr "Odebrání účtu"
 
-#: ui/internal/window/accounts_page.go:238
+#: ui/internal/window/accounts_page.go:280
 msgid "Paused"
 msgstr "Pozastaveno"
 
-#: ui/internal/window/accounts_page.go:240
+#: ui/internal/window/accounts_page.go:282
 msgid "Syncing…"
 msgstr "Synchronizuje se…"
 
-#: ui/internal/window/accounts_page.go:242
+#: ui/internal/window/accounts_page.go:284
 msgid "Offline"
 msgstr "Offline"
 
-#: ui/internal/window/accounts_page.go:244 ui/internal/window/sync.go:145
+#: ui/internal/window/accounts_page.go:286 ui/internal/window/sync.go:146
 msgid "Sign-in required"
 msgstr "Vyžaduje přihlášení"
 
-#: ui/internal/window/accounts_page.go:246
+#: ui/internal/window/accounts_page.go:288
 msgid "Error"
 msgstr "Chyba"
+
+#
+#: ui/internal/window/accounts_reorder.go:249
+msgid "Saving the account order"
+msgstr "Uložení pořadí účtů"
 
 #: ui/internal/window/actions.go:35
 msgid "Move to Trash?"
@@ -516,7 +564,7 @@ msgid "Unstar"
 msgstr "Odebrat hvězdičku"
 
 #: ui/internal/window/actions.go:54 ui/data/ui/message_window.ui:62
-#: ui/data/ui/window.ui:312
+#: ui/data/ui/window.ui:314
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
@@ -617,7 +665,7 @@ msgctxt "folder"
 msgid "Outbox"
 msgstr "Pošta k odeslání"
 
-#: ui/internal/window/folders.go:256 ui/data/ui/window.ui:367
+#: ui/internal/window/folders.go:256 ui/data/ui/window.ui:369
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -770,7 +818,7 @@ msgid "Cancel Sending"
 msgstr "Zrušit odeslání"
 
 #: ui/internal/window/outbox.go:228 ui/data/ui/message_window.ui:80
-#: ui/data/ui/window.ui:333
+#: ui/data/ui/window.ui:335
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
@@ -794,24 +842,24 @@ msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
-#: ui/internal/window/sync.go:43
+#: ui/internal/window/sync.go:44
 msgid "Not syncing"
 msgstr "Nesynchronizuje se"
 
 #. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
-#: ui/internal/window/sync.go:140
+#: ui/internal/window/sync.go:141
 #, c-format
 msgid "Syncing %s… %d %%"
 msgstr "Synchronizuje se %s… %d %%"
 
 #. TRANSLATORS: %s is a folder or account name.
-#: ui/internal/window/sync.go:143
+#: ui/internal/window/sync.go:144
 #, c-format
 msgid "Syncing %s…"
 msgstr "Synchronizuje se %s…"
 
 #. TRANSLATORS: %d is the number of messages waiting in the outbox.
-#: ui/internal/window/sync.go:148
+#: ui/internal/window/sync.go:149
 #, c-format
 msgid "Sending %d message…"
 msgid_plural "Sending %d messages…"
@@ -819,70 +867,91 @@ msgstr[0] "Odesílá se %d zpráva…"
 msgstr[1] "Odesílají se %d zprávy…"
 msgstr[2] "Odesílá se %d zpráv…"
 
-#: ui/internal/window/sync.go:150
+#: ui/internal/window/sync.go:151
 msgid "Sync error"
 msgstr "Chyba synchronizace"
 
-#: ui/internal/window/sync.go:152
+#: ui/internal/window/sync.go:153
 msgid "Offline, retrying"
 msgstr "Offline, zkusí se to znovu"
 
-#: ui/internal/window/sync.go:154
+#: ui/internal/window/sync.go:155
 msgid "Up to date"
 msgstr "Aktuální"
 
-#: ui/internal/window/sync.go:168
+#: ui/internal/window/sync.go:169
 msgid "Checking for new mail…"
 msgstr "Kontroluje se nová pošta…"
 
-#: ui/internal/window/sync.go:184
+#: ui/internal/window/sync.go:185
 msgid "Checking for new mail"
 msgstr "Ověření nové pošty"
 
+#
+#: ui/internal/window/sync.go:208 ui/data/ui/account_wizard.ui:279
+msgid "Open Online Accounts"
+msgstr "Otevřít Účty online"
+
+#: ui/internal/window/sync.go:211 ui/data/ui/window.ui:192
+msgid "Open Preferences"
+msgstr "Otevřít předvolby"
+
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:217
+#: ui/internal/window/sync.go:243
+#, c-format
+msgid "GNOME Online Accounts is not available; %s cannot sign in"
+msgstr "Účty online GNOME nejsou dostupné; účet %s se nemůže přihlásit"
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:246
+#, c-format
+msgid "Sign in to %s again in Settings → Online Accounts"
+msgstr "Přihlaste se znovu k účtu %s v Nastavení → Účty online"
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:255
 #, c-format
 msgid "Sign in to %s again"
 msgstr "Přihlaste se znovu k účtu %s"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:220
+#: ui/internal/window/sync.go:258
 #, c-format
 msgid "The system keyring is unavailable; %s cannot sign in"
 msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlásit"
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:223
+#: ui/internal/window/sync.go:261
 #, c-format
 msgid "%s needs attention"
 msgstr "Účet %s vyžaduje pozornost"
 
-#: ui/internal/window/window.go:375
+#: ui/internal/window/window.go:376
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:390
+#: ui/internal/window/window.go:391
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:393
+#: ui/internal/window/window.go:394
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:400
+#: ui/internal/window/window.go:401
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:438
+#: ui/internal/window/window.go:439
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:443
+#: ui/internal/window/window.go:444
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:447
+#: ui/internal/window/window.go:448
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"
@@ -900,103 +969,132 @@ msgstr ""
 "Zadejte svou e-mailovou adresu a heslo. Malachi Mail nastavení serverů "
 "vyhledá za vás."
 
-#: ui/data/ui/account_wizard.ui:68
+#: ui/data/ui/account_wizard.ui:62
+msgid "Signed In on This Computer"
+msgstr "Přihlášeno na tomto počítači"
+
+#: ui/data/ui/account_wizard.ui:63
+msgid "Accounts from GNOME Online Accounts can be added without a password."
+msgstr "Účty z Účtů online GNOME lze přidat bez hesla."
+
+#: ui/data/ui/account_wizard.ui:83
 msgid "Your Name"
 msgstr "Vaše jméno"
 
-#: ui/data/ui/account_wizard.ui:73
+#: ui/data/ui/account_wizard.ui:88
 msgid "E-mail Address"
 msgstr "E-mailová adresa"
 
-#: ui/data/ui/account_wizard.ui:79
+#: ui/data/ui/account_wizard.ui:94
 msgid "Password"
 msgstr "Heslo"
 
-#: ui/data/ui/account_wizard.ui:101
+#: ui/data/ui/account_wizard.ui:116
 msgid "_Next"
 msgstr "_Další"
 
-#: ui/data/ui/account_wizard.ui:117
+#: ui/data/ui/account_wizard.ui:132
 msgid "Server Settings"
 msgstr "Nastavení serverů"
 
-#: ui/data/ui/account_wizard.ui:127
+#: ui/data/ui/account_wizard.ui:142
 msgid "Account"
 msgstr "Účet"
 
-#: ui/data/ui/account_wizard.ui:130
+#: ui/data/ui/account_wizard.ui:145
 msgid "Account Name"
 msgstr "Název účtu"
 
-#: ui/data/ui/account_wizard.ui:137
+#: ui/data/ui/account_wizard.ui:152
 msgid "Incoming Mail (IMAP)"
 msgstr "Příchozí pošta (IMAP)"
 
-#: ui/data/ui/account_wizard.ui:140 ui/data/ui/account_wizard.ui:182
+#: ui/data/ui/account_wizard.ui:155 ui/data/ui/account_wizard.ui:197
 msgid "Server"
 msgstr "Server"
 
-#: ui/data/ui/account_wizard.ui:145 ui/data/ui/account_wizard.ui:187
+#: ui/data/ui/account_wizard.ui:160 ui/data/ui/account_wizard.ui:202
 msgid "Port"
 msgstr "Port"
 
-#: ui/data/ui/account_wizard.ui:158 ui/data/ui/account_wizard.ui:200
+#: ui/data/ui/account_wizard.ui:173 ui/data/ui/account_wizard.ui:215
 msgid "Security"
 msgstr "Zabezpečení"
 
-#: ui/data/ui/account_wizard.ui:162 ui/data/ui/account_wizard.ui:204
+#: ui/data/ui/account_wizard.ui:177 ui/data/ui/account_wizard.ui:219
 msgid "TLS"
 msgstr "TLS"
 
-#: ui/data/ui/account_wizard.ui:163 ui/data/ui/account_wizard.ui:205
+#: ui/data/ui/account_wizard.ui:178 ui/data/ui/account_wizard.ui:220
 msgid "STARTTLS"
 msgstr "STARTTLS"
 
-#: ui/data/ui/account_wizard.ui:164 ui/data/ui/account_wizard.ui:206
+#: ui/data/ui/account_wizard.ui:179 ui/data/ui/account_wizard.ui:221
 msgid "None"
 msgstr "Žádné"
 
-#: ui/data/ui/account_wizard.ui:172 ui/data/ui/account_wizard.ui:214
+#: ui/data/ui/account_wizard.ui:187 ui/data/ui/account_wizard.ui:229
 msgid "User Name"
 msgstr "Uživatelské jméno"
 
-#: ui/data/ui/account_wizard.ui:179
+#: ui/data/ui/account_wizard.ui:194
 msgid "Outgoing Mail (SMTP)"
 msgstr "Odchozí pošta (SMTP)"
 
-#: ui/data/ui/account_wizard.ui:230
-msgid "_Test Connection"
-msgstr "_Otestovat připojení"
+#: ui/data/ui/account_wizard.ui:261
+msgid "Sign In"
+msgstr "Přihlášení"
 
-#: ui/data/ui/account_wizard.ui:246
+#: ui/data/ui/account_wizard.ui:270
+msgid "Sign In Through GNOME Settings"
+msgstr "Přihlaste se přes Nastavení GNOME"
+
+#: ui/data/ui/account_wizard.ui:271
+msgid ""
+"This address belongs to a Microsoft 365 account. Add it under Settings → "
+"Online Accounts, then come back here."
+msgstr ""
+"Tato adresa patří k účtu Microsoft 365. Přidejte ho v Nastavení → Účty "
+"online a pak se sem vraťte."
+
+#
+#: ui/data/ui/account_wizard.ui:288
+msgid "Check Again"
+msgstr "Zkontrolovat znovu"
+
+#: ui/data/ui/account_wizard.ui:305
 msgid "Connection Test"
 msgstr "Test připojení"
 
-#: ui/data/ui/account_wizard.ui:261
+#: ui/data/ui/account_wizard.ui:320
 msgid "This can take a moment."
 msgstr "Může to chvíli trvat."
 
-#: ui/data/ui/account_wizard.ui:287
+#: ui/data/ui/account_wizard.ui:346
 msgid "Incoming (IMAP)"
 msgstr "Příchozí (IMAP)"
 
-#: ui/data/ui/account_wizard.ui:296
+#: ui/data/ui/account_wizard.ui:355
 msgid "Outgoing (SMTP)"
 msgstr "Odchozí (SMTP)"
 
-#: ui/data/ui/account_wizard.ui:323
+#: ui/data/ui/account_wizard.ui:364
+msgid "Microsoft 365"
+msgstr "Microsoft 365"
+
+#: ui/data/ui/account_wizard.ui:392
 msgid "_Edit Servers"
 msgstr "_Upravit servery"
 
-#: ui/data/ui/account_wizard.ui:329
+#: ui/data/ui/account_wizard.ui:398
 msgid "_Retry"
 msgstr "_Zkusit znovu"
 
-#: ui/data/ui/account_wizard.ui:335
+#: ui/data/ui/account_wizard.ui:404
 msgid "Add _Anyway"
 msgstr "Přidat _přesto"
 
-#: ui/data/ui/account_wizard.ui:341
+#: ui/data/ui/account_wizard.ui:410
 msgid "_Add Account"
 msgstr "_Přidat účet"
 
@@ -1120,39 +1218,39 @@ msgstr "Na střed"
 msgid "Right"
 msgstr "Vpravo"
 
-#: ui/data/ui/message_window.ui:31 ui/data/ui/window.ui:275
+#: ui/data/ui/message_window.ui:31 ui/data/ui/window.ui:277
 msgid "Message"
 msgstr "Zpráva"
 
-#: ui/data/ui/message_window.ui:37 ui/data/ui/window.ui:284
+#: ui/data/ui/message_window.ui:37 ui/data/ui/window.ui:286
 msgid "Reply"
 msgstr "Odpovědět"
 
-#: ui/data/ui/message_window.ui:43 ui/data/ui/window.ui:291
+#: ui/data/ui/message_window.ui:43 ui/data/ui/window.ui:293
 msgid "Reply All"
 msgstr "Odpovědět všem"
 
-#: ui/data/ui/message_window.ui:49 ui/data/ui/window.ui:298
+#: ui/data/ui/message_window.ui:49 ui/data/ui/window.ui:300
 msgid "Forward"
 msgstr "Přeposlat"
 
-#: ui/data/ui/message_window.ui:55 ui/data/ui/window.ui:305
+#: ui/data/ui/message_window.ui:55 ui/data/ui/window.ui:307
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/data/ui/message_window.ui:68 ui/data/ui/window.ui:319
+#: ui/data/ui/message_window.ui:68 ui/data/ui/window.ui:321
 msgid "Archive"
 msgstr "Archivovat"
 
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:326
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:328
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
-#: ui/data/ui/message_window.ui:187 ui/data/ui/window.ui:516
+#: ui/data/ui/message_window.ui:187 ui/data/ui/window.ui:518
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/data/ui/message_window.ui:191 ui/data/ui/window.ui:520
+#: ui/data/ui/message_window.ui:191 ui/data/ui/window.ui:522
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
@@ -1408,47 +1506,43 @@ msgstr "Hledat"
 msgid "The mail backend (malachid) is not running."
 msgstr "Poštovní démon (malachid) neběží."
 
-#: ui/data/ui/window.ui:192
-msgid "Open Preferences"
-msgstr "Otevřít předvolby"
-
-#: ui/data/ui/window.ui:228
+#: ui/data/ui/window.ui:230
 msgid "Load More"
 msgstr "Načíst další"
 
-#: ui/data/ui/window.ui:253
+#: ui/data/ui/window.ui:255
 msgid "Try Again"
 msgstr "Zkusit znovu"
 
-#: ui/data/ui/window.ui:355
+#: ui/data/ui/window.ui:357
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:356
+#: ui/data/ui/window.ui:358
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:368
+#: ui/data/ui/window.ui:370
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:371
+#: ui/data/ui/window.ui:373
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:495
+#: ui/data/ui/window.ui:497
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
-#: ui/data/ui/window.ui:501
+#: ui/data/ui/window.ui:503
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:505
+#: ui/data/ui/window.ui:507
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:509
+#: ui/data/ui/window.ui:511
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 

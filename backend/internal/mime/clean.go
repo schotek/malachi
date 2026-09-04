@@ -117,3 +117,19 @@ func truncateBytes(s string, max int) string {
 	}
 	return s[:cut]
 }
+
+// CleanHeaderText is cleanField for header text that arrives outside a
+// MIME message (an API's subject, say): valid UTF-8, no control
+// characters, collapsed whitespace, capped like a parsed subject.
+func CleanHeaderText(s string) string {
+	return cleanField(s, DefaultLimits().MaxFieldBytes)
+}
+
+// TrimMessageID normalises a Message-ID from an API: angle brackets and
+// whitespace removed, control characters dropped, capped like a parsed id.
+func TrimMessageID(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "<")
+	s = strings.TrimSuffix(s, ">")
+	return cleanID(s, DefaultLimits().MaxFieldBytes)
+}

@@ -22,6 +22,23 @@ import (
 // fakeResolver answers from a map keyed by "_service._tcp.domain".
 type fakeResolver map[string][]*net.SRV
 
+func (r fakeResolver) LookupMX(_ context.Context, name string) ([]*net.MX, error) {
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+// mxResolver adds MX answers to a fakeResolver.
+type mxResolver struct {
+	fakeResolver
+	mx map[string][]*net.MX
+}
+
+func (r mxResolver) LookupMX(_ context.Context, name string) ([]*net.MX, error) {
+	if records, ok := r.mx[name]; ok {
+		return records, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
 func (r fakeResolver) LookupSRV(_ context.Context, service, proto, name string) (string, []*net.SRV, error) {
 	addrs, ok := r["_"+service+"._"+proto+"."+name]
 	if !ok {
@@ -242,5 +259,84 @@ func TestProviderURLsAndRedirects(t *testing.T) {
 	}
 	if !strings.HasPrefix(DefaultISPDBBase, "https://") {
 		t.Fatal("ISPDB base must be https")
+	}
+}
+
+func TestDiscoverGOAAccountWins(t *testing.T) {
+	s := newISPDB(t, map[string]string{"contoso.example": "example-ssl-starttls.xml"})
+	d := newDiscoverer(t, s)
+	var asked string
+	d.GOA = func(_ context.Context, email string) (string, bool) {
+		asked = email
+		return "account_1788512854_0", email == "Me@contoso.example"
+	}
+	res, err := d.Discover(context.Background(), "Me@contoso.example")
+	if err != nil || res.Source != api.DiscoverGOA || res.ProviderName != MicrosoftProviderName {
+		t.Fatalf("res = %+v err = %v", res, err)
+	}
+	c := res.Config
+	if c == nil || c.Kind != api.AccountGraph || c.IMAP != nil || c.SMTP != nil || c.Graph == nil ||
+		c.Graph.Source != api.GraphSourceGOA || c.Graph.GOAAccountID != "account_1788512854_0" ||
+		c.Email != "Me@contoso.example" || c.Name != "contoso.example" {
+		t.Fatalf("config = %+v", c)
+	}
+	if asked != "Me@contoso.example" {
+		t.Fatalf("GOA asked for %q", asked)
+	}
+	s.mu.Lock()
+	paths := len(s.paths)
+	s.mu.Unlock()
+	if paths != 0 {
+		t.Fatalf("ISPDB consulted although GOA matched: %v", s.paths)
+	}
+
+	// No match: the usual lookups run.
+	d.GOA = func(context.Context, string) (string, bool) { return "", false }
+	res, err = d.Discover(context.Background(), "me@contoso.example")
+	if err != nil || res.Source != api.DiscoverISPDB || res.Config.Kind != api.AccountIMAP {
+		t.Fatalf("without GOA match: %+v err = %v", res, err)
+	}
+}
+
+func TestDiscoverMicrosoftByMX(t *testing.T) {
+	s := newISPDB(t, nil)
+	d := newDiscoverer(t, s)
+	d.Resolver = mxResolver{fakeResolver: fakeResolver{}, mx: map[string][]*net.MX{
+		"contoso.example": {{Host: "contoso-example.mail.protection.outlook.com.", Pref: 0}},
+	}}
+	verified := 0
+	d.VerifyIMAP = func(context.Context, api.ServerConfig) error { verified++; return nil }
+	d.VerifySMTP = d.VerifyIMAP
+	res, err := d.Discover(context.Background(), "me@contoso.example")
+	if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != MicrosoftProviderName {
+		t.Fatalf("res = %+v err = %v", res, err)
+	}
+	c := res.Config
+	if c == nil || c.Kind != api.AccountGraph || c.Graph == nil || c.Graph.Source != api.GraphSourceGOA || c.Graph.GOAAccountID != "" || c.IMAP != nil {
+		t.Fatalf("config = %+v", c)
+	}
+	if verified != 0 {
+		t.Fatalf("guesses verified for a Microsoft domain: %d", verified)
+	}
+}
+
+func TestDiscoverMicrosoftByISPDBHosts(t *testing.T) {
+	s := newISPDB(t, map[string]string{"outlook.example": "microsoft-oauth2.xml"})
+	d := newDiscoverer(t, s)
+	res, err := d.Discover(context.Background(), "me@outlook.example")
+	if err != nil || res.Source != api.DiscoverProvider || res.Config == nil || res.Config.Kind != api.AccountGraph {
+		t.Fatalf("res = %+v err = %v", res, err)
+	}
+}
+
+func TestDiscoverPasswordEntryWinsOverMicrosoftMX(t *testing.T) {
+	s := newISPDB(t, map[string]string{"example.org": "example-ssl-starttls.xml"})
+	d := newDiscoverer(t, s)
+	d.Resolver = mxResolver{fakeResolver: fakeResolver{}, mx: map[string][]*net.MX{
+		"example.org": {{Host: "example-org.mail.protection.outlook.com."}},
+	}}
+	res, err := d.Discover(context.Background(), "me@example.org")
+	if err != nil || res.Source != api.DiscoverISPDB || res.Config.Kind != api.AccountIMAP {
+		t.Fatalf("res = %+v err = %v", res, err)
 	}
 }

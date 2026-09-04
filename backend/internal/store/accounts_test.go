@@ -17,8 +17,8 @@ func testAccountConfig(email string) api.AccountConfig {
 	return api.AccountConfig{
 		Name:  "Work",
 		Email: email,
-		IMAP:  api.ServerConfig{Host: "imap.example.invalid", Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthPassword},
-		SMTP:  api.ServerConfig{Host: "smtp.example.invalid", Port: 587, Security: api.SecuritySTARTTLS, Username: email, AuthMethod: api.AuthPassword},
+		IMAP:  &api.ServerConfig{Host: "imap.example.invalid", Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthPassword},
+		SMTP:  &api.ServerConfig{Host: "smtp.example.invalid", Port: 587, Security: api.SecuritySTARTTLS, Username: email, AuthMethod: api.AuthPassword},
 	}
 }
 
@@ -256,4 +256,154 @@ func TestMeta(t *testing.T) {
 	if v, ok, _ := s.GetMeta(ctx, "created_at"); !ok || v == "" {
 		t.Fatal("created_at seed missing")
 	}
+}
+
+// seedAccounts adds n accounts named a0..a(n-1) and returns their ids in
+// creation order.
+func seedAccounts(t *testing.T, s *Store, n int) []string {
+	t.Helper()
+	ctx := context.Background()
+	ids := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		name := string(rune('a' + i))
+		a := Account{Name: name, Enabled: true, Config: testAccountConfig(name + "@example.invalid")}
+		if err := s.AddAccount(ctx, &a); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, a.ID)
+	}
+	return ids
+}
+
+// listIDs is the stored display order.
+func listIDs(t *testing.T, s *Store) []string {
+	t.Helper()
+	list, err := s.ListAccounts(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(list))
+	for _, a := range list {
+		out = append(out, a.ID)
+	}
+	return out
+}
+
+func TestReorderAccounts(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	ids := seedAccounts(t, s, 4) // a b c d
+
+	// A full order is taken verbatim and positions are compacted.
+	want := []string{ids[3], ids[0], ids[2], ids[1]}
+	if err := s.ReorderAccounts(ctx, want); err != nil {
+		t.Fatal(err)
+	}
+	if got := listIDs(t, s); !equalIDs(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+	list, _ := s.ListAccounts(ctx)
+	for i, a := range list {
+		if a.Position != i {
+			t.Fatalf("positions not compacted: %d has position %d", i, a.Position)
+		}
+	}
+
+	// Accounts the caller did not name keep their relative order behind the
+	// named ones: a client that has not seen a new account cannot move it.
+	if err := s.ReorderAccounts(ctx, []string{ids[1]}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := listIDs(t, s), []string{ids[1], ids[3], ids[0], ids[2]}; !equalIDs(got, want) {
+		t.Fatalf("partial order = %v, want %v", got, want)
+	}
+
+	// An empty list changes nothing but still compacts.
+	before := listIDs(t, s)
+	if err := s.ReorderAccounts(ctx, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := listIDs(t, s); !equalIDs(got, before) {
+		t.Fatalf("empty reorder changed the order: %v", got)
+	}
+}
+
+func TestReorderAccountsRejects(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	ids := seedAccounts(t, s, 2)
+	before := listIDs(t, s)
+
+	if err := s.ReorderAccounts(ctx, []string{ids[0], ids[0]}); err == nil {
+		t.Error("duplicate id accepted")
+	}
+	if err := s.ReorderAccounts(ctx, []string{ids[0], ids[1], "acc_extra"}); err == nil {
+		t.Error("more ids than accounts accepted")
+	}
+	if err := s.ReorderAccounts(ctx, []string{ids[1], "acc_nope"}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown id: %v", err)
+	}
+	if got := listIDs(t, s); !equalIDs(got, before) {
+		t.Fatalf("a rejected reorder changed the order: %v", got)
+	}
+}
+
+// TestReorderAccountsAfterDelete covers the gaps DeleteAccount leaves in the
+// position sequence.
+func TestReorderAccountsAfterDelete(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	ids := seedAccounts(t, s, 3)
+	if err := s.DeleteAccount(ctx, ids[1], true); err != nil {
+		t.Fatal(err)
+	}
+	// Positions are now 0 and 2.
+	if err := s.ReorderAccounts(ctx, []string{ids[2], ids[0]}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.ListAccounts(ctx)
+	if len(list) != 2 || list[0].ID != ids[2] || list[0].Position != 0 || list[1].ID != ids[0] || list[1].Position != 1 {
+		t.Fatalf("after delete: %+v", list)
+	}
+	// A deleted account can no longer be named.
+	if err := s.ReorderAccounts(ctx, []string{ids[1]}); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleted id: %v", err)
+	}
+}
+
+// TestReorderAccountsKeepsRows makes sure only the order changes.
+func TestReorderAccountsKeepsRows(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	ids := seedAccounts(t, s, 2)
+	before, err := s.GetAccount(ctx, ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ReorderAccounts(ctx, []string{ids[1], ids[0]}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := s.GetAccount(ctx, ids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Name != before.Name || after.Email != before.Email || after.Enabled != before.Enabled ||
+		after.Config.Email != before.Config.Email || !after.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Fatalf("reorder changed the row: %+v vs %+v", after, before)
+	}
+	if after.Position != 1 {
+		t.Fatalf("position = %d", after.Position)
+	}
+}
+
+func equalIDs(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

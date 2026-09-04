@@ -28,4 +28,16 @@ func TestCSS(t *testing.T) {
 	if !strings.Contains(CSS(100, false, true), "avatar { background-image: none;") {
 		t.Error("monochrome avatar rule missing when enabled")
 	}
+	// The message separator and account reordering rules do not depend on any
+	// setting.
+	for _, want := range []string{
+		"list.message-list > row { border-radius: 0; margin: 0; }",
+		"list.message-list > row:last-child { border-bottom: none; }",
+		"row.account-row.drop-above", "row.account-row.drop-below", "@accent_bg_color", ".drag-handle"} {
+		for _, got := range []string{CSS(100, false, false), CSS(150, true, true)} {
+			if !strings.Contains(got, want) {
+				t.Errorf("reorder rule %q missing:\n%s", want, got)
+			}
+		}
+	}
 }

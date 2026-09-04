@@ -71,6 +71,12 @@ func (stubAccounts) Discover(context.Context, api.AccountDiscoverParams) (*api.A
 func (stubAccounts) Test(context.Context, api.AccountTestParams) (*api.AccountTestResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAccounts) Linked(context.Context, api.AccountLinkedParams) (*api.AccountLinkedResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) Reorder(context.Context, api.AccountReorderParams) (*api.AccountReorderResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubFolders struct{}
 

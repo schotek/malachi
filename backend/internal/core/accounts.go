@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/internal/auth"
+	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -143,6 +144,30 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	return &api.AccountSetEnabledResult{}, nil
 }
 
+// Reorder sets the order account.list reports, which is the order the UI
+// shows accounts in. Nothing about the accounts themselves changes.
+func (s *accountService) Reorder(ctx context.Context, p api.AccountReorderParams) (*api.AccountReorderResult, error) {
+	ids := make([]string, 0, len(p.AccountIDs))
+	for _, id := range p.AccountIDs {
+		if id == "" {
+			return nil, api.NewError(api.CodeInvalidArgument, "accountIds must not contain an empty id")
+		}
+		ids = append(ids, string(id))
+	}
+	err := s.b.store.ReorderAccounts(ctx, ids)
+	switch {
+	case errors.Is(err, store.ErrBadOrder):
+		return nil, api.NewError(api.CodeInvalidArgument, "%v", err)
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeAccountNotFound, "unknown account in accountIds")
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	s.b.log.Info("accounts reordered", "count", len(ids))
+	s.b.accountsChanged()
+	return &api.AccountReorderResult{}, nil
+}
+
 // Update replaces an account's configuration and, when a password is given,
 // its keyring entry. The row is written first and reverted if the keyring
 // refuses the new password, so both stay consistent.
@@ -216,7 +241,9 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 		s.b.log.Warn("account discovery", "err", err)
 		return &api.AccountDiscoverResult{Source: api.DiscoverNone}, nil
 	}
-	if res.Config != nil {
+	// A "provider" answer is a deliberately incomplete Graph account (the
+	// sign-in is still missing); every other suggestion must pass Add.
+	if res.Config != nil && res.Source != api.DiscoverProvider {
 		if err := validateAccountConfig(res.Config); err != nil {
 			s.b.log.Warn("discovered configuration rejected", "source", res.Source, "err", err)
 			res.Config, res.Source = nil, api.DiscoverNone
@@ -229,16 +256,19 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 	return &api.AccountDiscoverResult{Config: res.Config, Source: res.Source, ProviderName: res.ProviderName}, nil
 }
 
-// Test validates like Add, then probes both endpoints concurrently. Each
-// endpoint reports its own outcome; the call itself fails only for an
-// invalid configuration. The password is used for the connections and
-// never logged.
+// Test validates like Add, then probes the endpoints of the account kind
+// (IMAP and SMTP concurrently, or the Graph mailbox). Each endpoint reports
+// its own outcome; the call itself fails only for an invalid configuration.
+// The password is used for the connections and never logged.
 func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*api.AccountTestResult, error) {
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
 	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
 		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	}
+	if p.Config.Protocol() == api.AccountGraph {
+		return &api.AccountTestResult{Graph: s.testGraph(ctx, p.Config)}, nil
 	}
 	password := p.Credentials.Password
 	if password == "" && p.AccountID != "" && usesAuth(p.Config, api.AuthPassword) {
@@ -254,22 +284,108 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		r, err := s.b.ProbeIMAP(ctx, p.Config.IMAP, password)
+		r, err := s.b.ProbeIMAP(ctx, *p.Config.IMAP, password)
 		res.IMAP = endpointResult(r.Capabilities, r.Latency, err)
-		s.logProbe("imap", p.Config.IMAP, res.IMAP)
+		s.logProbe("imap", *p.Config.IMAP, *res.IMAP)
 	}()
 	go func() {
 		defer wg.Done()
-		r, err := s.b.ProbeSMTP(ctx, p.Config.SMTP, password)
+		r, err := s.b.ProbeSMTP(ctx, *p.Config.SMTP, password)
 		res.SMTP = endpointResult(r.Capabilities, r.Latency, err)
-		s.logProbe("smtp", p.Config.SMTP, res.SMTP)
+		s.logProbe("smtp", *p.Config.SMTP, *res.SMTP)
 	}()
 	wg.Wait()
 	return &res, nil
 }
 
-func endpointResult(caps []string, latency time.Duration, err error) api.EndpointTestResult {
-	r := api.EndpointTestResult{Capabilities: caps, LatencyMS: int(latency / time.Millisecond)}
+// testGraph fetches a token from the account's source and opens the
+// mailbox. A token problem (sign-in revoked, no GNOME Online Accounts) is
+// the endpoint's error, like a refused password on IMAP. The mailbox must
+// belong to the configured address.
+func (s *accountService) testGraph(ctx context.Context, cfg api.AccountConfig) *api.EndpointTestResult {
+	token, err := s.b.graphToken(ctx, cfg)
+	if err != nil {
+		r := endpointResult(nil, 0, err)
+		s.b.log.Info("account test", "kind", "graph", "ok", false, "code", r.Error.Code)
+		return r
+	}
+	pr, err := s.b.ProbeGraph(ctx, token)
+	if err == nil && pr.Email != "" && !strings.EqualFold(store.NormalizeAddress(pr.Email), store.NormalizeAddress(cfg.Email)) {
+		err = api.NewError(api.CodeInvalidArgument, "the signed-in mailbox is not %s", cfg.Email)
+	}
+	r := endpointResult(pr.Capabilities, pr.Latency, err)
+	attrs := []any{"kind", "graph", "ok", r.OK, "latencyMs", r.LatencyMS}
+	if r.Error != nil {
+		attrs = append(attrs, "code", r.Error.Code)
+	}
+	s.b.log.Info("account test", attrs...)
+	return r
+}
+
+// Linked lists the accounts other desktop services are signed in to and
+// that Malachi can use: Microsoft 365 accounts of GNOME Online Accounts
+// with mail enabled. Without a session bus or GOA the list is empty.
+func (s *accountService) Linked(ctx context.Context, _ api.AccountLinkedParams) (*api.AccountLinkedResult, error) {
+	out := &api.AccountLinkedResult{Accounts: []api.LinkedAccount{}}
+	if s.b.GOA == nil {
+		return out, nil
+	}
+	accounts, err := s.b.GOA.Accounts(ctx)
+	if err != nil {
+		var apiErr *api.Error
+		if errors.As(err, &apiErr) && apiErr.Code == api.CodeUnavailable {
+			s.b.log.Debug("gnome online accounts unavailable", "err", err)
+			return out, nil
+		}
+		if errors.As(err, &apiErr) {
+			return nil, apiErr
+		}
+		return nil, api.NewError(api.CodeServerError, "%v", err)
+	}
+	existing, err := s.b.store.ListAccounts(ctx)
+	if err != nil {
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	configured := make(map[string]bool, len(existing))
+	for _, a := range existing {
+		configured[a.Email] = true
+	}
+	for _, a := range accounts {
+		if a.ProviderType != goa.ProviderMicrosoft365 || !a.OAuth2 || a.MailDisabled {
+			continue
+		}
+		email := strings.TrimSpace(a.Email)
+		if email == "" {
+			email = strings.TrimSpace(a.Identity)
+		}
+		if validateAddress(api.Address{Address: email}) != nil {
+			s.b.log.Debug("linked account without a usable address", "id", a.ID)
+			continue
+		}
+		out.Accounts = append(out.Accounts, api.LinkedAccount{
+			Provider:        "microsoft365",
+			Email:           email,
+			Name:            cleanDisplayName(a.Name),
+			GOAAccountID:    a.ID,
+			Configured:      configured[store.NormalizeAddress(email)],
+			AttentionNeeded: a.AttentionNeeded,
+		})
+	}
+	return out, nil
+}
+
+// cleanDisplayName trims an untrusted display name to what account.add
+// would accept; anything else becomes empty.
+func cleanDisplayName(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > maxAccountNameBytes || !utf8.ValidString(s) || hasControl(s) {
+		return ""
+	}
+	return s
+}
+
+func endpointResult(caps []string, latency time.Duration, err error) *api.EndpointTestResult {
+	r := &api.EndpointTestResult{Capabilities: caps, LatencyMS: int(latency / time.Millisecond)}
 	if err == nil {
 		r.OK = true
 		return r
@@ -373,8 +489,10 @@ func (b *Backend) toAPIAccount(a store.Account) api.Account {
 	return api.Account{ID: api.AccountID(a.ID), Config: a.Config, Enabled: a.Enabled, State: b.stateFor(a)}
 }
 
+// usesAuth reports whether an IMAP or SMTP endpoint of the account uses the
+// method; a Graph account has neither.
 func usesAuth(c api.AccountConfig, m api.AuthMethod) bool {
-	return c.IMAP.AuthMethod == m || c.SMTP.AuthMethod == m
+	return (c.IMAP != nil && c.IMAP.AuthMethod == m) || (c.SMTP != nil && c.SMTP.AuthMethod == m)
 }
 
 // validateAccountConfig checks an AccountConfig against the rules documented
@@ -401,22 +519,46 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		return bad("displayName must be valid UTF-8 without line breaks (limit %d bytes)", maxAccountNameBytes)
 	}
 
-	if err := validateServer("imap", &c.IMAP); err != nil {
-		return err
-	}
-	if err := validateServer("smtp", &c.SMTP); err != nil {
-		return err
-	}
-
-	switch {
-	case usesAuth(*c, api.AuthOAuth2) && c.OAuth2 == nil:
-		return bad("oauth2 settings are required when an endpoint uses oauth2")
-	case !usesAuth(*c, api.AuthOAuth2) && c.OAuth2 != nil:
-		return bad("oauth2 settings given but no endpoint uses oauth2")
-	case c.OAuth2 != nil:
-		if err := validateOAuth2(c.OAuth2); err != nil {
+	switch c.Protocol() {
+	case api.AccountIMAP:
+		if c.Graph != nil {
+			return bad("graph settings given for an imap account")
+		}
+		if c.IMAP == nil || c.SMTP == nil {
+			return bad("imap and smtp settings are required")
+		}
+		if err := validateServer("imap", c.IMAP); err != nil {
 			return err
 		}
+		if err := validateServer("smtp", c.SMTP); err != nil {
+			return err
+		}
+		switch {
+		case usesAuth(*c, api.AuthOAuth2) && c.OAuth2 == nil:
+			return bad("oauth2 settings are required when an endpoint uses oauth2")
+		case !usesAuth(*c, api.AuthOAuth2) && c.OAuth2 != nil:
+			return bad("oauth2 settings given but no endpoint uses oauth2")
+		case c.OAuth2 != nil:
+			if err := validateOAuth2(c.OAuth2); err != nil {
+				return err
+			}
+		}
+	case api.AccountGraph:
+		if c.IMAP != nil || c.SMTP != nil || c.OAuth2 != nil {
+			return bad("imap, smtp and oauth2 settings do not apply to a graph account")
+		}
+		if c.Graph == nil {
+			return bad("graph settings are required")
+		}
+		if c.Graph.Source != api.GraphSourceGOA {
+			return bad("graph: source must be goa")
+		}
+		c.Graph.GOAAccountID = strings.TrimSpace(c.Graph.GOAAccountID)
+		if !goa.ValidID(c.Graph.GOAAccountID) {
+			return bad("graph: goaAccountId is required")
+		}
+	default:
+		return bad("kind must be imap or graph")
 	}
 
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {

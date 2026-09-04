@@ -16,6 +16,8 @@ const (
 	MethodAccountUpdate     = "account.update"
 	MethodAccountDiscover   = "account.discover"
 	MethodAccountTest       = "account.test"
+	MethodAccountLinked     = "account.linked"
+	MethodAccountReorder    = "account.reorder"
 
 	// Folders.
 	MethodFolderList      = "folder.list"
@@ -77,7 +79,8 @@ const (
 var AllMethods = []string{
 	MethodSystemInfo,
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
-	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest,
+	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
+	MethodAccountReorder,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,

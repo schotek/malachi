@@ -122,25 +122,41 @@ func GuessConfig(email string) api.AccountConfig {
 	d := Domain(email)
 	return api.AccountConfig{
 		Email: email,
-		IMAP:  api.ServerConfig{Host: "imap." + d, Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthPassword},
-		SMTP:  api.ServerConfig{Host: "smtp." + d, Port: 587, Security: api.SecuritySTARTTLS, Username: email, AuthMethod: api.AuthPassword},
+		Kind:  api.AccountIMAP,
+		IMAP:  &api.ServerConfig{Host: "imap." + d, Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthPassword},
+		SMTP:  &api.ServerConfig{Host: "smtp." + d, Port: 587, Security: api.SecuritySTARTTLS, Username: email, AuthMethod: api.AuthPassword},
 	}
 }
 
 // MergeIdentity copies what the identity page knows into a discovered or
-// guessed configuration.
+// guessed IMAP configuration. Missing endpoints are filled from the guess
+// so the Servers page always has both; a copy is returned, the input's
+// endpoints are not modified.
 func MergeIdentity(cfg api.AccountConfig, id Identity) api.AccountConfig {
 	cfg.Email = id.Email
 	cfg.DisplayName = strings.TrimSpace(id.DisplayName)
 	if strings.TrimSpace(cfg.Name) == "" {
 		cfg.Name = SuggestAccountName(id.Email)
 	}
-	for _, sc := range []*api.ServerConfig{&cfg.IMAP, &cfg.SMTP} {
+	guess := GuessConfig(id.Email)
+	cfg.Kind = api.AccountIMAP
+	cfg.Graph = nil
+	imap, smtp := guess.IMAP, guess.SMTP
+	if cfg.IMAP != nil {
+		c := *cfg.IMAP
+		imap = &c
+	}
+	if cfg.SMTP != nil {
+		c := *cfg.SMTP
+		smtp = &c
+	}
+	for _, sc := range []*api.ServerConfig{imap, smtp} {
 		if strings.TrimSpace(sc.Username) == "" {
 			sc.Username = id.Email
 		}
 		sc.AuthMethod = api.AuthPassword
 	}
+	cfg.IMAP, cfg.SMTP = imap, smtp
 	return cfg
 }
 
@@ -188,13 +204,14 @@ func BuildConfig(id Identity, name string, imap, smtp ServerFields) api.AccountC
 		Name:        name,
 		Email:       email,
 		DisplayName: strings.TrimSpace(id.DisplayName),
+		Kind:        api.AccountIMAP,
 		IMAP:        serverConfig(imap),
 		SMTP:        serverConfig(smtp),
 	}
 }
 
-func serverConfig(f ServerFields) api.ServerConfig {
-	return api.ServerConfig{
+func serverConfig(f ServerFields) *api.ServerConfig {
+	return &api.ServerConfig{
 		Host:       strings.TrimSpace(f.Host),
 		Port:       f.Port,
 		Security:   f.Security,

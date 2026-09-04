@@ -85,6 +85,9 @@ type Window struct {
 	// authBannerAccount is the account auth_banner is shown for, empty when
 	// the banner is hidden.
 	authBannerAccount api.AccountID
+	// authBannerGraph says the banner's account signs in through GNOME
+	// Online Accounts (the button opens that panel).
+	authBannerGraph bool
 
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction
@@ -273,9 +276,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		})
 	}
 	w.banner.ConnectButtonClicked(w.reconnect)
-	w.authBanner.ConnectButtonClicked(func() {
-		w.app.ActivateAction("preferences", nil)
-	})
+	w.authBanner.ConnectButtonClicked(w.onAuthBannerButton)
 	// The only button the outbox banner ever has is Retry (outbox.go).
 	w.outboxBanner.ConnectButtonClicked(func() {
 		if s, ok := w.selectedMessage(); ok {

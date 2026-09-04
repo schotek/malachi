@@ -25,6 +25,8 @@ type AccountService interface {
 	Update(ctx context.Context, p AccountUpdateParams) (*AccountUpdateResult, error)
 	Discover(ctx context.Context, p AccountDiscoverParams) (*AccountDiscoverResult, error)
 	Test(ctx context.Context, p AccountTestParams) (*AccountTestResult, error)
+	Linked(ctx context.Context, p AccountLinkedParams) (*AccountLinkedResult, error)
+	Reorder(ctx context.Context, p AccountReorderParams) (*AccountReorderResult, error)
 }
 
 type FolderService interface {

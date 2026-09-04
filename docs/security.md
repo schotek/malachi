@@ -167,10 +167,18 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `org.freedesktop.secrets` (libsecret). **Never** to `config.toml`, the
   SQLite store, logs, or crash reports.
 - Access tokens are held in memory only.
-- OAuth2 uses the authorization-code flow with PKCE; the redirect listener
-  binds `127.0.0.1` on an ephemeral port, accepts one callback with the
-  expected `state`, then closes. The UI opens the URL via the OpenURI
-  portal; the backend never launches a browser.
+- Microsoft 365 accounts (`kind: graph`) have no secret of their own: the
+  sign-in and the refresh token live in GNOME Online Accounts, and the
+  daemon asks `org.gnome.OnlineAccounts` (`internal/auth/goa`) for access
+  tokens over the session bus, the same trust domain as the Secret Service
+  below. A token is cached in memory until shortly before the expiry GOA
+  reports, dropped when the service rejects it, and scrubbed from any error
+  text the service echoes. Revoking the sign-in in GNOME Settings cuts the
+  daemon off at the next token request.
+- The planned own OAuth2 flow (authorization code with PKCE; a redirect
+  listener on `127.0.0.1`, one callback with the expected `state`; the UI
+  opening the URL via the OpenURI portal, the backend never launching a
+  browser) is deferred and not implemented.
 - Log lines are scrubbed: authentication commands are logged as
   `AUTHENTICATE <redacted>`.
 - `account.list` never returns secrets; `Credentials` is write-only.
@@ -287,7 +295,11 @@ Does not give:
   (the items `internal/auth/secretservice` creates included). A future
   portal-based secrets API would improve this;
 - any limit on outbound traffic: `--share=network` covers IMAP/SMTP, the
-  discovery HTTPS/DNS lookups and OAuth2 alike;
+  discovery HTTPS/DNS lookups and Microsoft Graph (`graph.microsoft.com`)
+  alike;
+- isolation from GNOME Online Accounts: `--talk-name=org.gnome.OnlineAccounts`
+  is all-or-nothing as well; the daemon can read the tokens of every
+  account the desktop is signed in to, not only the ones added here;
 - protection against a malicious X11 server (`--socket=fallback-x11`):
   under X11 any client can snoop input. Wayland is the supported path.
 

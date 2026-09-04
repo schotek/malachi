@@ -31,6 +31,12 @@ finish-args:
   - --talk-name=org.freedesktop.secrets
   # New-mail notifications.
   - --talk-name=org.freedesktop.Notifications
+  # GNOME Online Accounts: tokens of Microsoft 365 accounts (no portal
+  # exists for it; Geary and Evolution grant the same name).
+  - --talk-name=org.gnome.OnlineAccounts
+  # Opening Settings → Online Accounts from the wizard and the sign-in
+  # banner (org.freedesktop.Application.ActivateAction "launch-panel").
+  - --talk-name=org.gnome.Settings
   # Both processes run inside the same sandbox instance and share
   # $XDG_RUNTIME_DIR/app/<app-id>/, so the unix socket needs no extra hole.
 

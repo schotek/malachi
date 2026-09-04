@@ -203,8 +203,16 @@ Adw.ApplicationWindow main_window {
                         // double-click or Enter activates (opens a window).
                         activate-on-single-click: false;
 
+                        // A hairline between messages, in the theme's border
+                        // colour. The rows are squared off in the application
+                        // CSS (see ui/internal/style) so the line runs
+                        // straight across instead of following the rounded
+                        // corners the sidebar style gives them.
+                        show-separators: true;
+
                         styles [
                           "navigation-sidebar",
+                          "message-list",
                         ]
                       };
                     }

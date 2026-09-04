@@ -246,7 +246,7 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	acc := store.Account{Enabled: true, Config: api.AccountConfig{Name: "Test", Email: "me@example.test", IMAP: cfg(px.port(), api.SecurityNone)}}
+	acc := store.Account{Enabled: true, Config: api.AccountConfig{Name: "Test", Email: "me@example.test", IMAP: func() *api.ServerConfig { c := cfg(px.port(), api.SecurityNone); return &c }()}}
 	if err := st.AddAccount(context.Background(), &acc); err != nil {
 		t.Fatal(err)
 	}

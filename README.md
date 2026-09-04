@@ -41,8 +41,8 @@ options are either showing their age or do not work reliably anymore.
 ## Architecture
 
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
-store, speaks IMAP and SMTP, synchronises, threads, searches, sanitises HTML
-and manages credentials. `malachi` is a GTK 4 application that connects to
+store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
+synchronises, threads, searches, sanitises HTML and manages credentials. `malachi` is a GTK 4 application that connects to
 the daemon over a local unix socket and displays what it is given.
 
 ```
@@ -189,7 +189,7 @@ keyring.
 | Provider | Status |
 |---|---|
 | Generic IMAP/SMTP with password | 🚧 reading and plain-text sending work |
-| Microsoft 365 / Outlook.com via OAuth2 | 🚧 planned (phase 2) |
+| Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | 🚧 reading and plain-text sending work; sign in under Settings → Online Accounts first |
 | Gmail via OAuth2 | ⏸️ deferred: requires a Google CASA security assessment or a bring-your-own-client-ID mode; see [docs/architecture.md](docs/architecture.md) |
 
 "Planned" means "designed for, not implemented". See the status note at the

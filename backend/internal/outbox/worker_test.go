@@ -137,8 +137,8 @@ func newHarness(t *testing.T) *harness {
 	t.Cleanup(func() { s.Close() })
 	a := store.Account{Name: "Me", Enabled: true, Config: api.AccountConfig{
 		Name: "Me", Email: "me@example.invalid", DisplayName: "Me",
-		IMAP: api.ServerConfig{Host: "127.0.0.1", Port: 143, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword},
-		SMTP: api.ServerConfig{Host: "127.0.0.1", Port: 25, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword},
+		IMAP: &api.ServerConfig{Host: "127.0.0.1", Port: 143, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword},
+		SMTP: &api.ServerConfig{Host: "127.0.0.1", Port: 25, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword},
 	}}
 	if err := s.AddAccount(context.Background(), &a); err != nil {
 		t.Fatal(err)
@@ -597,4 +597,60 @@ func containsPassword(s string) bool {
 		}
 	}
 	return false
+}
+
+func TestWorkerFilesSentCopyDropsLocalCopyAndTriggersSent(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	folders, _, err := h.s.UpsertFolders(ctx, h.account.ID, []store.Folder{
+		{Mailbox: "AAMkSent", Name: "Sent Items", Path: "Sent Items", Role: api.RoleSent, Selectable: true, Subscribed: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sentID := folders[0].ID
+	id := h.enqueue("one")
+	deps := h.deps()
+	deps.FilesSentCopy = true
+	w := NewWorker(h.account, deps)
+	wctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); w.Run(wctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+
+	waitFor(t, "message delivered and dropped", func() bool { return h.gone(id) })
+	if _, err := h.s.OpenMessageRaw(ctx, h.account.ID, id); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("raw file after a server-filed delivery: %v", err)
+	}
+	want := fmt.Sprintf("%s:%s:false", h.account.ID, sentID)
+	waitFor(t, "sent folder trigger", func() bool { got := h.rec.triggered(); return len(got) == 1 && got[0] == want })
+}
+
+func TestSupervisorDeliverForPicksPerAccount(t *testing.T) {
+	h := newHarness(t)
+	var picked []string
+	sv := NewSupervisor(SupervisorDeps{
+		Store:    h.s,
+		Password: func(context.Context, string) (string, error) { return "", nil },
+		Notifier: h.rec,
+		Deliver: func(context.Context, api.ServerConfig, string, string, []string, io.Reader, int64) error {
+			t.Error("shared Deliver used although DeliverFor is set")
+			return nil
+		},
+		DeliverFor: func(a store.Account) DeliverFunc {
+			picked = append(picked, a.ID)
+			return h.deliver.deliver
+		},
+		Trigger: h.rec.onTrigger,
+		Changed: h.rec.onChanged,
+	})
+	first := h.enqueue("one")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); sv.Run(ctx) }()
+	t.Cleanup(func() { cancel(); <-done })
+	sv.Start(h.account)
+	waitFor(t, "delivered through the per-account function", func() bool { return h.gone(first) })
+	if len(picked) != 1 || picked[0] != h.account.ID {
+		t.Fatalf("DeliverFor calls = %v", picked)
+	}
 }

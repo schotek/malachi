@@ -77,8 +77,8 @@ func TestEndToEndSync(t *testing.T) {
 	})
 
 	acc := validConfig()
-	acc.IMAP = api.ServerConfig{Host: "127.0.0.1", Port: port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
-	acc.SMTP = api.ServerConfig{Host: "127.0.0.1", Port: port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	acc.IMAP = &api.ServerConfig{Host: "127.0.0.1", Port: port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	acc.SMTP = &api.ServerConfig{Host: "127.0.0.1", Port: port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
 	added, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: acc, Credentials: api.Credentials{Password: "pw"}})
 	if err != nil {
 		t.Fatal(err)
@@ -205,8 +205,8 @@ func TestEndToEndSend(t *testing.T) {
 
 	acc := validConfig()
 	acc.DisplayName = "Me"
-	acc.IMAP = api.ServerConfig{Host: "127.0.0.1", Port: imapLn.Addr().(*net.TCPAddr).Port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
-	acc.SMTP = api.ServerConfig{Host: "127.0.0.1", Port: smtpRec.port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	acc.IMAP = &api.ServerConfig{Host: "127.0.0.1", Port: imapLn.Addr().(*net.TCPAddr).Port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	acc.SMTP = &api.ServerConfig{Host: "127.0.0.1", Port: smtpRec.port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
 	added, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: acc, Credentials: api.Credentials{Password: "pw"}})
 	if err != nil {
 		t.Fatal(err)

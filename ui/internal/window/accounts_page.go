@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -25,11 +26,41 @@ type accountRow struct {
 	*adw.ActionRow
 
 	account   api.Account
+	handle    *gtk.Image // drag handle; the whole row is the drop target
 	status    *gtk.Label
 	toggle    *gtk.Switch
 	edit      *gtk.Button
 	remove    *gtk.Button
 	reverting bool // the switch is being set programmatically
+
+	// hint is the insertion line shown while a drag hovers this row.
+	hint dropHint
+}
+
+// dropHint is the insertion line an account row shows while a drag hovers
+// it: none, above the row, or below it.
+type dropHint int
+
+const (
+	hintNone dropHint = iota
+	hintAbove
+	hintBelow
+)
+
+// setDropHint shows or hides the insertion line (CSS in internal/style).
+func (r *accountRow) setDropHint(h dropHint) {
+	if r.hint == h {
+		return
+	}
+	r.hint = h
+	r.RemoveCSSClass("drop-above")
+	r.RemoveCSSClass("drop-below")
+	switch h {
+	case hintAbove:
+		r.AddCSSClass("drop-above")
+	case hintBelow:
+		r.AddCSSClass("drop-below")
+	}
 }
 
 // bindAccounts fills the Accounts page from account.list and wires the add
@@ -94,9 +125,19 @@ func (d *PreferencesDialog) setAccounts(c *client.Client, accounts []api.Account
 func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *accountRow {
 	row := &accountRow{ActionRow: adw.NewActionRow(), account: a}
 	row.SetUseMarkup(false)
+	row.AddCSSClass("account-row")
 	row.SetTitle(accountRowTitle(a))
 	row.SetSubtitle(a.Config.Email)
-	row.AddPrefix(gtk.NewImageFromIconName("mail-unread-symbolic"))
+
+	row.handle = gtk.NewImageFromIconName("list-drag-handle-symbolic")
+	row.handle.AddCSSClass("drag-handle")
+	row.handle.SetCursorFromName("grab")
+	row.handle.SetTooltipText(i18n.T("Drag to reorder, or press Ctrl+Up and Ctrl+Down"))
+
+	// AdwActionRow prepends prefixes, so the last one added sits leftmost:
+	// the handle goes in after the account icon to end up before it.
+	row.AddPrefix(gtk.NewImageFromIconName(accountIcon(a)))
+	row.AddPrefix(row.handle)
 
 	row.status = gtk.NewLabel("")
 	row.status.AddCSSClass("caption")
@@ -131,6 +172,7 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 	})
 	row.edit.ConnectClicked(func() { d.editAccount(c, row) })
 	row.remove.ConnectClicked(func() { d.removeAccount(c, row) })
+	d.addRowReorder(c, row)
 	return row
 }
 
@@ -246,4 +288,16 @@ func accountStatusText(s api.SyncStatus) string {
 		return i18n.T("Error")
 	}
 	return ""
+}
+
+// accountIcon is the row icon by account kind: the Microsoft 365 icon of
+// GNOME Online Accounts when the theme has it, the generic mail icon
+// otherwise.
+func accountIcon(a api.Account) string {
+	if a.Config.Protocol() == api.AccountGraph {
+		if display := gdk.DisplayGetDefault(); display != nil && gtk.IconThemeGetForDisplay(display).HasIcon("goa-account-ms365-symbolic") {
+			return "goa-account-ms365-symbolic"
+		}
+	}
+	return "mail-unread-symbolic"
 }

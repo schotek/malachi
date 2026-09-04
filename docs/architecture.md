@@ -26,6 +26,8 @@ shape of the system and the reasoning behind it. The RPC contract is in
 The backend (`backend/`, Go) owns everything that is not pixels:
 
 - IMAP and SMTP (`emersion/go-imap`, `go-message`, `go-smtp`, `go-sasl`)
+- Microsoft Graph for Microsoft 365 / Outlook.com mailboxes (REST over
+  `net/http`, tokens from GNOME Online Accounts)
 - the offline store, synchronisation, conflict handling
 - conversation threading
 - full-text search (SQLite FTS5)
@@ -83,11 +85,15 @@ backend/
   internal/config     config.toml + XDG paths
   internal/account    config.toml form of an account (bootstrap import)
   internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
-                      org.freedesktop.secrets client
+                      org.freedesktop.secrets client, auth/goa the GNOME Online
+                      Accounts client (Microsoft Graph tokens)
   internal/transport  TLS policy, dialling, timeouts, error classification
-  internal/discover   account.discover: ISPDB, provider autoconfig, SRV, guesses
-  internal/core       composes services, owns the supervisor lifecycle and the
-                      notification coalescer
+  internal/discover   account.discover: GNOME Online Accounts, ISPDB, provider
+                      autoconfig, SRV, Microsoft 365 hint (MX), guesses
+  internal/core       composes services, owns the supervisor lifecycle (one
+                      dispatcher per account kind) and the notification coalescer
+  internal/graph      Microsoft Graph client + sync supervisor for Microsoft 365
+                      accounts, sendMail delivery (probe.go: mailbox test)
   internal/imap       IMAP client + sync supervisor, one syncer per enabled
                       account (probe.go: connection test)
   internal/mime       MIME parsing (headers, text extraction, part tree; hostile input)
@@ -176,6 +182,41 @@ account; `internal/core` owns its lifecycle:
   most every 500 ms per account, from its own goroutine so a slow client
   never stalls a syncer.
 
+#### Microsoft Graph accounts (`kind: graph`)
+
+Microsoft 365 and Outlook.com mailboxes are synchronised by
+`internal/graph` instead of `internal/imap`; `internal/core` routes every
+supervisor call by the account's kind, so the lifecycle hooks, `sync.status`
+and the notifications above are the same. What differs:
+
+- **Token.** The account has no servers and no password. The sign-in
+  belongs to GNOME Online Accounts (`GraphConfig.source = "goa"`); the
+  daemon asks `org.gnome.OnlineAccounts` for an access token
+  (`internal/auth/goa`), caches it in memory until shortly before its
+  expiry and never stores it. A rejected or revoked sign-in is
+  `authRequired`, retried every five minutes (the user fixes it in GNOME
+  Settings, which nothing wakes the daemon for); no session bus is `error`.
+- **Identity.** Messages are keyed by Graph's immutable id
+  (`messages.remote_id`, requested with `Prefer: IdType="ImmutableId"`),
+  which survives a move; folders by the Graph folder id (`folders.mailbox`).
+  Roles come from the well-known folder names (inbox, sentitems, drafts,
+  deleteditems, junkemail, archive).
+- **Cycle.** resolve roles → list the folder hierarchy → push ops (`PATCH`
+  read/flag, `POST …/move`, `POST …/permanentDelete` with `DELETE` as the
+  fallback) → per folder a delta query (`mailFolders/{id}/messages/delta`,
+  cursor in `folders.delta_link`, the first enumeration bounded by
+  `receivedDateTime ge <window>`) → bodies newest-first through
+  `messages/{id}/$value` (four at a time; the same raw-file → `internal/mime`
+  pipeline as IMAP) → tombstones applied only after every folder of the
+  pass ran, so a message that reappears elsewhere is moved locally, not
+  deleted and re-created. A cursor the service rejects (410 /
+  `SyncStateNotFound`) restarts the folder from scratch.
+- **Polling.** Graph offers no push a desktop can receive (change
+  notifications need a public webhook), so the inbox is polled every minute
+  and every folder at the sync interval; triggers interrupt the wait.
+  Throttling (429/503 with `Retry-After`) is honoured per request up to a
+  minute, then the syncer backs off as a whole.
+
 **When extending this, read Geary's `engine/imap-engine` and
 Evolution's `camel-imapx`.** Not to copy code, but to learn how they handle
 broken MIME, servers that violate RFC 3501/9051 (Exchange, some Dovecot
@@ -205,6 +246,16 @@ messages never get operation-log entries: flagging and moving them is
 refused and deleting them cancels the send. `SyncState.pendingOutbox` is
 filled in by `internal/core` from the store on every emitted state and on
 every outbox change.
+
+A Graph account has its own outbox supervisor behind the same dispatcher:
+the worker submits the very same RFC 5322 file through `sendMail` (base64
+MIME) with a `Bcc` header added for the envelope recipients the builder
+left out, since Graph takes recipients from the headers. The service files
+the Sent copy itself, so the worker drops the local copy after delivery
+and triggers a pass of the Sent folder instead of keeping the row for an
+upload. New personal Outlook.com accounts have SMTP AUTH disabled by
+Microsoft; sending through Graph is unaffected, which is one reason the
+Graph path exists.
 
 ### 3.4 Threading (planned)
 
@@ -386,6 +437,17 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
 - Secret Service session: `plain` today (see docs/security.md §6); switch
   to the DH-encrypted session if bus traffic ever becomes observable from
   a different trust domain.
+- Microsoft accounts: **decided** (2026-09-04) — Microsoft Graph with the
+  token from GNOME Online Accounts, never IMAP/SMTP with XOAUTH2. GNOME
+  Online Accounts holds only Graph scopes (its `Mail` interface reports no
+  IMAP/SMTP), so its token cannot drive XOAUTH2; an own OAuth2 flow would
+  need an Entra app registration and a client id shipped with the app; and
+  Microsoft has disabled SMTP AUTH for new personal Outlook.com mailboxes,
+  which `sendMail` does not care about. EWS is being retired in Exchange
+  Online (October 2026) and was never an option. Deferred: an own PKCE
+  flow (`api.OAuth2Config`, `internal/auth` refresh-token storage) for
+  desktops without GNOME Online Accounts; the API types stay reserved for
+  it. Gmail remains deferred (CASA audit / bring-your-own client id).
 - Internationalised e-mail domains in `account.discover`: not handled
   (IDNA encoding of the domain before the ISPDB/DNS lookups).
 - Daemon lifecycle at login: the UI's autostart entry launches only

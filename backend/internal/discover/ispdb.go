@@ -19,10 +19,14 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// autoconfig is what one document yielded.
+// autoconfig is what one document yielded. microsoft is set when any
+// server entry names a Microsoft 365 / Outlook.com host, whatever its
+// authentication: such mailboxes are reached through Microsoft Graph, not
+// IMAP with a password.
 type autoconfig struct {
 	imap, smtp   *api.ServerConfig
 	providerName string
+	microsoft    bool
 }
 
 // clientConfig mirrors the Thunderbird autoconfig format (version 1.1).
@@ -57,26 +61,50 @@ const maxProviderNameBytes = 256
 // validates hosts and ports, and returns nil for endpoints it could not
 // fill. Malformed XML is an error; an empty document is not.
 func ParseClientConfig(r io.Reader, email string) (imap, smtp *api.ServerConfig, providerName string, err error) {
+	ac, err := parseClientConfig(r, email)
+	return ac.imap, ac.smtp, ac.providerName, err
+}
+
+func parseClientConfig(r io.Reader, email string) (autoconfig, error) {
 	lr := &io.LimitedReader{R: r, N: MaxAutoconfigBytes + 1}
 	dec := xml.NewDecoder(lr)
 	dec.Strict = true
 	var doc clientConfig
 	if err := dec.Decode(&doc); err != nil {
 		if lr.N == 0 {
-			return nil, nil, "", ErrTooBig
+			return autoconfig{}, ErrTooBig
 		}
-		return nil, nil, "", fmt.Errorf("parse autoconfig: %w", err)
+		return autoconfig{}, fmt.Errorf("parse autoconfig: %w", err)
 	}
 	if lr.N == 0 {
-		return nil, nil, "", ErrTooBig
+		return autoconfig{}, ErrTooBig
 	}
 	if len(doc.Providers) == 0 {
-		return nil, nil, "", nil
+		return autoconfig{}, nil
 	}
 	p := doc.Providers[0]
-	imap = pickServer(p.Incoming, "imap", email)
-	smtp = pickServer(p.Outgoing, "smtp", email)
-	return imap, smtp, cleanProviderName(p.DisplayName), nil
+	ac := autoconfig{
+		imap:         pickServer(p.Incoming, "imap", email),
+		smtp:         pickServer(p.Outgoing, "smtp", email),
+		providerName: cleanProviderName(p.DisplayName),
+	}
+	for _, e := range append(append([]serverEntry{}, p.Incoming...), p.Outgoing...) {
+		if IsMicrosoftHost(substitute(e.Hostname, email)) {
+			ac.microsoft = true
+		}
+	}
+	return ac, nil
+}
+
+// IsMicrosoftHost reports a mail host of Microsoft 365 / Outlook.com.
+func IsMicrosoftHost(host string) bool {
+	h := strings.ToLower(strings.TrimSpace(host))
+	for _, suffix := range []string{".office365.com", ".outlook.com", ".office.com"} {
+		if strings.HasSuffix(h, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // pickServer prefers an entry with cleartext password authentication and
@@ -178,10 +206,10 @@ func (d *Discoverer) fetchAutoconfig(ctx context.Context, u, email string) autoc
 		d.Log.Debug("autoconfig fetch", "url", u, "status", resp.StatusCode)
 		return autoconfig{}
 	}
-	imapCfg, smtpCfg, name, err := ParseClientConfig(resp.Body, email)
+	ac, err := parseClientConfig(resp.Body, email)
 	if err != nil {
 		d.Log.Debug("autoconfig parse", "url", u, "err", err)
 		return autoconfig{}
 	}
-	return autoconfig{imap: imapCfg, smtp: smtpCfg, providerName: name}
+	return ac
 }

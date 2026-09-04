@@ -222,7 +222,7 @@ func (s *Syncer) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		sess, err := openSession(ctx, s.account.Config.IMAP, pw, s.deps.CapFilter)
+		sess, err := openSession(ctx, *s.account.Config.IMAP, pw, s.deps.CapFilter)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()

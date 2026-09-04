@@ -115,24 +115,34 @@ mazání, okno retence `offlineDays`, APPEND odeslaných kopií do Sent), MIME
 parser (`internal/mime`), odesílání (`internal/smtp` builder + SMTP doručení,
 `internal/outbox` worker na účet s backoffem, lokální složka role `outbox`,
 `message.send` / `outbox.retry`) a UI se skutečnými složkami, zprávami a
-oknem Nová zpráva. Vše jen jako prostý text: sanitizér HTML je stále
-fail-closed stub, proto compose posílá jen `textBody` (`richText = false`
-v `ui/internal/compose/draft.go`) a zprávy odcházejí jako `text/plain`.
+oknem Nová zpráva. Microsoft 365 / Outlook.com jde přes Microsoft Graph
+(`kind: graph`, `internal/graph`: delta dotazy, immutable ID, polling
+inboxu po minutě, `sendMail`), token výhradně z GNOME Online Accounts
+(`internal/auth/goa`, D-Bus), žádné vlastní client ID ani PKCE flow;
+core rozděluje účty podle `kind` na IMAP a Graph supervisor
+(`internal/core/dispatch.go`); průvodce nabízí účty z GOA (`account.linked`)
+a pro M365 adresy bez přihlášení odkazuje do Nastavení → Účty online.
+Vše jen jako prostý text: sanitizér HTML je stále fail-closed stub, proto
+compose posílá jen `textBody` (`richText = false` v
+`ui/internal/compose/draft.go`) a zprávy odcházejí jako `text/plain`.
 HTML render, threading a vyhledávání zatím `notImplemented`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo (text-only těla)
 2. ~~SMTP a odesílání~~ hotovo (text/plain, přílohy, outbox, kopie do Sent)
-3. OAuth2 pro Office 365
+3. ~~Microsoft 365 přes Graph + GNOME Online Accounts~~ hotovo (místo
+   XOAUTH2/IMAP; zdůvodnění v `docs/architecture.md` §7)
 4. Sanitizér HTML (compose i view) a renderování s webview (WebKitGTK 6.0,
    JS vypnutý, CSP); potom `richText = true` a multipart/alternative
 5. Vyhledávání, threading
 
 Gmail je vědomě odložený — vyžadoval by CASA audit nebo
-bring-your-own-credentials režim. Neimplementuj bez zadání.
+bring-your-own-credentials režim. Neimplementuj bez zadání. XOAUTH2 pro
+IMAP a vlastní OAuth2 flow (typy `AuthOAuth2`/`OAuth2Config` v API) jsou
+rezervované pro desktopy bez GOA; neimplementuj bez zadání.
 
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
-knihovna, umístění definic účtů, uložení těl zpráv).
+knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
 
 ## Čeho si být vědom
 

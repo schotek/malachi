@@ -87,6 +87,10 @@ func EndpointErrorText(e *api.Error) string {
 		return i18n.T("The server did not respond in time")
 	case api.CodeNotImplemented:
 		return i18n.T("Not supported yet")
+	case api.CodeAuthRequired:
+		return i18n.T("Sign in to this account again")
+	case api.CodeUnavailable:
+		return i18n.T("The sign-in service is not available")
 	case api.CodeInvalidArgument:
 		// TRANSLATORS: %s is a technical message from the mail backend.
 		return fmt.Sprintf(i18n.T("Rejected: %s"), e.Message)

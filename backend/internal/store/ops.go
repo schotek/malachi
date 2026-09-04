@@ -25,10 +25,10 @@ const (
 )
 
 // Op is a row of message_ops: one local change waiting to be pushed.
-// FolderID/UID are the snapshot taken before the change, i.e. where the
-// server still has the message; UID 0 means the message had no server
-// identity yet (blocked until AssignUID). Set/Clear belong to OpFlag,
-// TargetFolderID to OpMove.
+// FolderID/UID/RemoteID are the snapshot taken before the change, i.e.
+// where the server still has the message; UID 0 without a RemoteID means
+// the message had no server identity yet (blocked until AssignUID).
+// Set/Clear belong to OpFlag, TargetFolderID to OpMove.
 type Op struct {
 	ID             int64
 	AccountID      string
@@ -36,6 +36,7 @@ type Op struct {
 	MessageID      string
 	FolderID       string
 	UID            uint32
+	RemoteID       string
 	Set, Clear     []api.Flag
 	TargetFolderID string
 	Attempts       int
@@ -59,6 +60,7 @@ type messageLoc struct {
 	id          string
 	folderID    string
 	uid         uint32
+	remoteID    string
 	flags       []api.Flag
 	outbox      bool
 	outboxState OutboxState
@@ -255,10 +257,10 @@ func (s *Store) mutate(ctx context.Context, accountID string, ids []string,
 		var uid int64
 		var flags, outboxState string
 		err := tx.QueryRowContext(ctx, `
-			SELECT m.id, m.folder_id, m.uid, m.flags, COALESCE(o.state, '')
+			SELECT m.id, m.folder_id, m.uid, m.remote_id, m.flags, COALESCE(o.state, '')
 			FROM messages m LEFT JOIN outbox o ON o.message_id = m.id
 			WHERE m.id = ? AND m.account_id = ?`,
-			id, accountID).Scan(&loc.id, &loc.folderID, &uid, &flags, &outboxState)
+			id, accountID).Scan(&loc.id, &loc.folderID, &uid, &loc.remoteID, &flags, &outboxState)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			return ErrNotFound
@@ -336,9 +338,9 @@ func deleteMessageTx(ctx context.Context, tx *sql.Tx, accountID string, loc mess
 
 func enqueueOp(ctx context.Context, tx *sql.Tx, accountID string, kind OpKind, loc messageLoc, payload, now string) error {
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO message_ops (account_id, kind, message_id, folder_id, uid, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		accountID, string(kind), loc.id, loc.folderID, int64(loc.uid), payload, now); err != nil {
+		INSERT INTO message_ops (account_id, kind, message_id, folder_id, uid, remote_id, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		accountID, string(kind), loc.id, loc.folderID, int64(loc.uid), loc.remoteID, payload, now); err != nil {
 		return fmt.Errorf("enqueue %s operation: %w", kind, err)
 	}
 	return nil
@@ -361,14 +363,14 @@ func applyFlags(flags, set, clear []api.Flag) []api.Flag {
 
 // NextOps returns the account's operations that are due at now (never
 // attempted, or whose retry time has passed), oldest first, at most limit
-// (<= 0 → 100). Blocked operations (UID 0) are included; the caller decides
-// what to do with them.
+// (<= 0 → 100). Blocked operations (no server identity) are included; the
+// caller decides what to do with them.
 func (s *Store) NextOps(ctx context.Context, accountID string, now time.Time, limit int) ([]Op, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, account_id, kind, message_id, folder_id, uid, payload, attempts, next_attempt_at, last_error, created_at
+		SELECT id, account_id, kind, message_id, folder_id, uid, remote_id, payload, attempts, next_attempt_at, last_error, created_at
 		FROM message_ops
 		WHERE account_id = ? AND (next_attempt_at = '' OR next_attempt_at <= ?)
 		ORDER BY id LIMIT ?`, accountID, stamp(now), limit)
@@ -442,7 +444,7 @@ func scanOp(row scanner) (Op, error) {
 	var op Op
 	var kind, payload, next, created string
 	var uid int64
-	if err := row.Scan(&op.ID, &op.AccountID, &kind, &op.MessageID, &op.FolderID, &uid, &payload,
+	if err := row.Scan(&op.ID, &op.AccountID, &kind, &op.MessageID, &op.FolderID, &uid, &op.RemoteID, &payload,
 		&op.Attempts, &next, &op.LastError, &created); err != nil {
 		return Op{}, fmt.Errorf("scan operation: %w", err)
 	}

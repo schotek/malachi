@@ -36,6 +36,7 @@ var (
 	ErrAttachmentBound = errors.New("store: attachment bound to another draft")
 	ErrTooBig          = errors.New("store: size limit exceeded")
 	ErrBadCursor       = errors.New("store: bad cursor")
+	ErrBadOrder        = errors.New("store: bad account order")
 	ErrOutboxBusy      = errors.New("store: outbox message is being sent")
 	ErrOutbox          = errors.New("store: not allowed for an outbox message")
 )

@@ -31,13 +31,16 @@ const (
 )
 
 // Message is a row of the messages table. UID is the IMAP UID within
-// FolderID, or 0 while a local move waits to be pushed. The "unread" column
-// is derived from Flags (no "seen") and has no field of its own.
+// FolderID, or 0 while a local move waits to be pushed. RemoteID is the
+// server's opaque message id for backends that have one (Microsoft Graph);
+// IMAP rows leave it empty. The "unread" column is derived from Flags (no
+// "seen") and has no field of its own.
 type Message struct {
 	ID        string
 	AccountID string
 	FolderID  string
 	UID       uint32
+	RemoteID  string
 	ModSeq    uint64
 	Flags     []api.Flag
 
@@ -59,18 +62,22 @@ type Message struct {
 	CreatedAt, UpdatedAt       time.Time
 }
 
-// MessageRef identifies a message whose body is still to be fetched.
+// MessageRef identifies a message whose body is still to be fetched, by
+// UID (IMAP) or RemoteID (Graph).
 type MessageRef struct {
-	ID   string
-	UID  uint32
-	Size int64
+	ID       string
+	UID      uint32
+	RemoteID string
+	Size     int64
 }
 
 // BodyUpdate is what SetMessageBody stores after the raw message was
 // parsed. Text, HasHTML, Snippet, Attachments, HasAttachments, Headers,
 // References and State (empty → BodyFetched) replace the stored values;
 // Subject, From, Date, RFCMessageID and InReplyTo only fill in a column
-// that is still empty (the envelope from the server wins over the parser).
+// that is still empty (the envelope from the server wins over the parser);
+// Size replaces the stored size when > 0 (backends whose listing carries
+// no size learn it from the download).
 type BodyUpdate struct {
 	Text           string
 	HasHTML        bool
@@ -80,6 +87,7 @@ type BodyUpdate struct {
 	Headers        map[string]string
 	References     []string
 	State          BodyState
+	Size           int64
 
 	Subject      string
 	From         []api.Address
@@ -89,10 +97,11 @@ type BodyUpdate struct {
 }
 
 // UpsertMessages stores a batch in one transaction. Rows are matched on
-// (FolderID, UID) when UID > 0: an existing row keeps everything except
-// flags, modseq and updated_at, and msgs[i].ID is set to its id; new rows
-// get an "m_" id (an empty msgs[i].ID is filled in). Nothing is stored when
-// any row fails. Folder counts are not touched (RecountFolder).
+// (FolderID, UID) when UID > 0 or on (FolderID, RemoteID) when RemoteID is
+// set: an existing row keeps everything except flags, modseq, thread id
+// and updated_at, and msgs[i].ID is set to its id; new rows get an "m_" id
+// (an empty msgs[i].ID is filled in). Nothing is stored when any row fails.
+// Folder counts are not touched (RecountFolder).
 func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -101,13 +110,17 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO messages (id, account_id, folder_id, uid, modseq, flags, unread,
+		INSERT INTO messages (id, account_id, folder_id, uid, remote_id, modseq, flags, unread,
 			from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 			rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 			attachments_json, headers_json, has_html, text_body, body_state, thread_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
 		ON CONFLICT (folder_id, uid) WHERE uid > 0 DO UPDATE SET
 			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread, updated_at = excluded.updated_at
+		ON CONFLICT (folder_id, remote_id) WHERE remote_id != '' DO UPDATE SET
+			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread,
+			thread_id = CASE WHEN excluded.thread_id = '' THEN thread_id ELSE excluded.thread_id END,
+			updated_at = excluded.updated_at
 		RETURNING id, created_at`)
 	if err != nil {
 		return fmt.Errorf("upsert messages: %w", err)
@@ -135,7 +148,7 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		}
 		var r result
 		err = stmt.QueryRowContext(ctx,
-			id, m.AccountID, m.FolderID, int64(m.UID), int64(m.ModSeq), enc.flags, enc.unread,
+			id, m.AccountID, m.FolderID, int64(m.UID), m.RemoteID, int64(m.ModSeq), enc.flags, enc.unread,
 			enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 			m.RFCMessageID, m.InReplyTo, enc.references, m.Size, m.Snippet, boolInt(m.HasAttachments),
 			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), m.ThreadID, now, now,
@@ -201,15 +214,15 @@ func (s *Store) ListUIDs(ctx context.Context, folderID string) ([]uint32, error)
 }
 
 // ListUnfetched returns up to limit messages of the folder whose body has
-// not been fetched (BodyNone) and that have a server UID, newest first.
-// limit <= 0 → 100.
+// not been fetched (BodyNone) and that have a server identity (UID or
+// RemoteID), newest first. limit <= 0 → 100.
 func (s *Store) ListUnfetched(ctx context.Context, folderID string, limit int) ([]MessageRef, error) {
 	if limit <= 0 {
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, uid, size FROM messages
-		WHERE folder_id = ? AND body_state = 'none' AND uid > 0
+		SELECT id, uid, remote_id, size FROM messages
+		WHERE folder_id = ? AND body_state = 'none' AND (uid > 0 OR remote_id != '')
 		ORDER BY date DESC, id DESC LIMIT ?`, folderID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list unfetched: %w", err)
@@ -219,7 +232,7 @@ func (s *Store) ListUnfetched(ctx context.Context, folderID string, limit int) (
 	for rows.Next() {
 		var r MessageRef
 		var uid int64
-		if err := rows.Scan(&r.ID, &uid, &r.Size); err != nil {
+		if err := rows.Scan(&r.ID, &uid, &r.RemoteID, &r.Size); err != nil {
 			return nil, fmt.Errorf("scan unfetched: %w", err)
 		}
 		r.UID = uint32(uid)
@@ -237,6 +250,19 @@ func (s *Store) ListUnfetched(ctx context.Context, folderID string, limit int) (
 // when the flags already match (modseq is still refreshed then).
 // ErrNotFound when the folder has no such UID.
 func (s *Store) ApplyServerFlags(ctx context.Context, folderID string, uid uint32, flags []api.Flag, modseq uint64) (changed bool, err error) {
+	return s.applyServerFlags(ctx, `folder_id = ? AND uid = ?`, []any{folderID, int64(uid)}, flags, modseq)
+}
+
+// ApplyServerFlagsByRemoteID is ApplyServerFlags for a message addressed
+// by its remote id. ErrNotFound when the folder has no such message.
+func (s *Store) ApplyServerFlagsByRemoteID(ctx context.Context, folderID, remoteID string, flags []api.Flag, modseq uint64) (changed bool, err error) {
+	if remoteID == "" {
+		return false, ErrNotFound
+	}
+	return s.applyServerFlags(ctx, `folder_id = ? AND remote_id = ?`, []any{folderID, remoteID}, flags, modseq)
+}
+
+func (s *Store) applyServerFlags(ctx context.Context, where string, args []any, flags []api.Flag, modseq uint64) (changed bool, err error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, fmt.Errorf("apply server flags: %w", err)
@@ -245,8 +271,7 @@ func (s *Store) ApplyServerFlags(ctx context.Context, folderID string, uid uint3
 
 	var id, stored string
 	var storedModseq int64
-	err = tx.QueryRowContext(ctx, `SELECT id, flags, modseq FROM messages WHERE folder_id = ? AND uid = ?`,
-		folderID, int64(uid)).Scan(&id, &stored, &storedModseq)
+	err = tx.QueryRowContext(ctx, `SELECT id, flags, modseq FROM messages WHERE `+where, args...).Scan(&id, &stored, &storedModseq)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return false, ErrNotFound
@@ -327,6 +352,137 @@ func (s *Store) DeleteMessagesByUID(ctx context.Context, folderID string, uids [
 	}
 	s.removeMessageFiles(files)
 	return nil
+}
+
+// ListRemoteIDs returns the remote ids present in a folder, sorted.
+func (s *Store) ListRemoteIDs(ctx context.Context, folderID string) ([]string, error) {
+	return s.listRemoteIDs(ctx, `SELECT remote_id FROM messages WHERE folder_id = ? AND remote_id != '' ORDER BY remote_id`, folderID)
+}
+
+// ListRemoteIDsOlderThan returns the remote ids of a folder whose
+// internal date (the server's received time) is before the cutoff, sorted.
+// It backs the retention window of delta-query backends.
+func (s *Store) ListRemoteIDsOlderThan(ctx context.Context, folderID string, before time.Time) ([]string, error) {
+	return s.listRemoteIDs(ctx,
+		`SELECT remote_id FROM messages WHERE folder_id = ? AND remote_id != '' AND internal_date < ? ORDER BY remote_id`,
+		folderID, before.UTC().Format(timeLayout))
+}
+
+func (s *Store) listRemoteIDs(ctx context.Context, query string, args ...any) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list remote ids: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan remote id: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list remote ids: %w", err)
+	}
+	return out, nil
+}
+
+// DeleteMessagesByRemoteID removes messages the server no longer has in
+// the folder, together with their pending operations and raw files (files
+// after the commit). Unknown ids are ignored; counts are not touched.
+func (s *Store) DeleteMessagesByRemoteID(ctx context.Context, folderID string, remoteIDs []string) error {
+	if len(remoteIDs) == 0 {
+		return nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete messages by remote id: %w", err)
+	}
+	defer tx.Rollback()
+
+	var files []messageFile
+	for _, chunk := range chunkStrings(remoteIDs, 500) {
+		args := []any{folderID}
+		for _, id := range chunk {
+			if id != "" {
+				args = append(args, id)
+			}
+		}
+		if len(args) == 1 {
+			continue
+		}
+		in := inPlaceholders(len(args) - 1)
+		got, err := listMessageFiles(ctx, tx, `SELECT account_id, id FROM messages WHERE folder_id = ? AND remote_id IN (`+in+`)`, args...)
+		if err != nil {
+			return err
+		}
+		files = append(files, got...)
+	}
+	if err := deleteMessageRowsTx(ctx, tx, files); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("delete messages by remote id: %w", err)
+	}
+	s.removeMessageFiles(files)
+	return nil
+}
+
+// MoveByRemoteID records a move the server reports: the account's message
+// with the remote id is moved to targetFolderID keeping its local id (uid
+// and modseq are reset; pending operations are untouched, their snapshot
+// still names the folder they were queued in). It reports whether a row
+// was moved: false when the account has no such message or it is already
+// in the target. Both folders are recounted.
+func (s *Store) MoveByRemoteID(ctx context.Context, accountID, remoteID, targetFolderID string) (moved bool, err error) {
+	if remoteID == "" {
+		return false, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("move by remote id: %w", err)
+	}
+	defer tx.Rollback()
+
+	var id, folderID string
+	err = tx.QueryRowContext(ctx, `SELECT id, folder_id FROM messages WHERE account_id = ? AND remote_id = ? ORDER BY updated_at, id LIMIT 1`,
+		accountID, remoteID).Scan(&id, &folderID)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("move by remote id: %w", err)
+	case folderID == targetFolderID:
+		return false, nil
+	}
+	if err := requireFolder(ctx, tx, accountID, targetFolderID); err != nil {
+		return false, err
+	}
+	// A row already holding (target, remote id) — the target was synchronised
+	// first — gives way so the local id of the original stays stable.
+	dup, err := listMessageFiles(ctx, tx, `SELECT account_id, id FROM messages WHERE folder_id = ? AND remote_id = ? AND id != ?`,
+		targetFolderID, remoteID, id)
+	if err != nil {
+		return false, err
+	}
+	if err := deleteMessageRowsTx(ctx, tx, dup); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET folder_id = ?, uid = 0, modseq = 0, updated_at = ? WHERE id = ?`,
+		targetFolderID, nowStamp(), id); err != nil {
+		return false, fmt.Errorf("move by remote id: %w", err)
+	}
+	for _, f := range []string{folderID, targetFolderID} {
+		if _, _, err := recountFolderTx(ctx, tx, f); err != nil && !errors.Is(err, ErrNotFound) {
+			return false, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("move by remote id: %w", err)
+	}
+	s.removeMessageFiles(dup)
+	return true, nil
 }
 
 // FindPendingMessage returns the oldest row of the folder that still waits
@@ -427,12 +583,13 @@ func (s *Store) AssignUID(ctx context.Context, id string, uid uint32, modseq uin
 	return nil
 }
 
-// DeleteStalePending removes rows of the folder that still have UID 0, were
-// last touched before the given time and have no pending operation left
-// (their move was pushed but never reconciled, so the server copy has shown
-// up under another local id). It returns the number of rows removed; raw
-// files go after the commit. The outbox pseudo-folder is never touched (its
-// rows all have UID 0 by design): 0 is returned for it.
+// DeleteStalePending removes rows of the folder that still have UID 0 and
+// no remote id, were last touched before the given time and have no
+// pending operation left (their move was pushed but never reconciled, so
+// the server copy has shown up under another local id). It returns the
+// number of rows removed; raw files go after the commit. The outbox
+// pseudo-folder is never touched (its rows all have UID 0 by design): 0 is
+// returned for it.
 func (s *Store) DeleteStalePending(ctx context.Context, folderID string, before time.Time) (int, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -452,7 +609,7 @@ func (s *Store) DeleteStalePending(ctx context.Context, folderID string, before 
 	}
 	files, err := listMessageFiles(ctx, tx, `
 		SELECT account_id, id FROM messages m
-		WHERE folder_id = ? AND uid = 0 AND updated_at < ?
+		WHERE folder_id = ? AND uid = 0 AND remote_id = '' AND updated_at < ?
 		  AND NOT EXISTS (SELECT 1 FROM message_ops o WHERE o.message_id = m.id)`, folderID, stamp(before))
 	if err != nil {
 		return 0, err
@@ -500,11 +657,12 @@ func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) err
 			date           = CASE WHEN date = ? THEN ? ELSE date END,
 			rfc_message_id = CASE WHEN rfc_message_id = '' THEN ? ELSE rfc_message_id END,
 			in_reply_to    = CASE WHEN in_reply_to = '' THEN ? ELSE in_reply_to END,
+			size           = CASE WHEN ? > 0 THEN ? ELSE size END,
 			updated_at = ?
 		WHERE id = ?`,
 		u.Text, boolInt(u.HasHTML), u.Snippet, attachments, boolInt(u.HasAttachments),
 		headers, references, string(state),
-		u.Subject, from, zeroStamp, stamp(u.Date), u.RFCMessageID, u.InReplyTo, nowStamp(), id)
+		u.Subject, from, zeroStamp, stamp(u.Date), u.RFCMessageID, u.InReplyTo, u.Size, u.Size, nowStamp(), id)
 	if err != nil {
 		return fmt.Errorf("set message body: %w", err)
 	}
@@ -822,7 +980,7 @@ func (s *Store) removeMessageDir(accountID string) {
 	}
 }
 
-const messageColumns = `id, account_id, folder_id, uid, modseq, flags,
+const messageColumns = `id, account_id, folder_id, uid, remote_id, modseq, flags,
 	from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 	rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 	attachments_json, headers_json, has_html, body_state, thread_id, created_at, updated_at`
@@ -839,7 +997,7 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 	var uid, modseq int64
 	var flags, from, to, cc, bcc, replyTo, date, internalDate, references, attachments, headers, state, created, updated string
 	var hasAttachments, hasHTML int
-	if err := row.Scan(&m.ID, &m.AccountID, &m.FolderID, &uid, &modseq, &flags,
+	if err := row.Scan(&m.ID, &m.AccountID, &m.FolderID, &uid, &m.RemoteID, &modseq, &flags,
 		&from, &to, &cc, &bcc, &replyTo, &m.Subject, &date, &internalDate,
 		&m.RFCMessageID, &m.InReplyTo, &references, &m.Size, &m.Snippet, &hasAttachments,
 		&attachments, &headers, &hasHTML, &state, &m.ThreadID, &created, &updated); err != nil {

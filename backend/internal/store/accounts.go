@@ -81,8 +81,8 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	return nil
 }
 
-// ListAccounts returns every account in display order (creation order until
-// reordering exists).
+// ListAccounts returns every account in display order: the order the user
+// arranged with ReorderAccounts, creation order until then.
 func (s *Store) ListAccounts(ctx context.Context) ([]Account, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT `+accountColumns+` FROM accounts ORDER BY position, created_at, id`)
@@ -166,6 +166,78 @@ func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 		return fmt.Errorf("update account: %w", err)
 	}
 	a.UpdatedAt = parseStamp(stamp)
+	return nil
+}
+
+// ReorderAccounts arranges the display order (ListAccounts): the given
+// accounts take the head in the given order, accounts the caller did not
+// name keep their relative order behind them — so a client that has not
+// seen a just-added account does not move it. Positions are rewritten to
+// 0..n-1, which also closes the gaps DeleteAccount leaves behind.
+//
+// Only position changes; updated_at is not touched, because the accounts
+// themselves did not change. A duplicate id or more ids than accounts is
+// ErrBadOrder, an unknown id is ErrNotFound, and nothing is written then.
+func (s *Store) ReorderAccounts(ctx context.Context, ids []string) error {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return fmt.Errorf("%w: duplicate id %q", ErrBadOrder, id)
+		}
+		seen[id] = true
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("reorder accounts: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM accounts ORDER BY position, created_at, id`)
+	if err != nil {
+		return fmt.Errorf("reorder accounts: %w", err)
+	}
+	var current []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("reorder accounts: %w", err)
+		}
+		current = append(current, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("reorder accounts: %w", err)
+	}
+	if len(ids) > len(current) {
+		return fmt.Errorf("%w: %d ids for %d accounts", ErrBadOrder, len(ids), len(current))
+	}
+	known := make(map[string]bool, len(current))
+	for _, id := range current {
+		known[id] = true
+	}
+	for _, id := range ids {
+		if !known[id] {
+			return ErrNotFound
+		}
+	}
+
+	order := make([]string, 0, len(current))
+	order = append(order, ids...)
+	for _, id := range current {
+		if !seen[id] {
+			order = append(order, id)
+		}
+	}
+	for i, id := range order {
+		if _, err := tx.ExecContext(ctx, `UPDATE accounts SET position = ? WHERE id = ?`, i, id); err != nil {
+			return fmt.Errorf("reorder accounts: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("reorder accounts: %w", err)
+	}
 	return nil
 }
 

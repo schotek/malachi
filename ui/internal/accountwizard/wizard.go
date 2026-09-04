@@ -32,6 +32,7 @@ const (
 const (
 	tagIdentity = "identity"
 	tagServers  = "servers"
+	tagGOA      = "goa"
 	tagTesting  = "testing"
 )
 
@@ -59,6 +60,10 @@ type Wizard struct {
 	email          *adw.EntryRow
 	password       *adw.PasswordEntryRow
 	next           *gtk.Button
+	linkedGroup    *adw.PreferencesGroup
+	linkedRows     *gtk.ListBox
+
+	goaOpen, goaRecheck *gtk.Button
 
 	serversPrefs *adw.PreferencesPage
 	accountName  *adw.EntryRow
@@ -70,8 +75,16 @@ type Wizard struct {
 	results            *adw.StatusPage
 	imapRow, smtpRow   *adw.ActionRow
 	imapIcon, smtpIcon *gtk.Image
+	graphRow           *adw.ActionRow
+	graphIcon          *gtk.Image
 	edit, retry        *gtk.Button
 	addAnyway, add     *gtk.Button
+
+	// graphCfg is set on the Microsoft 365 path: the account has no servers
+	// and no password, the sign-in lives in GNOME Online Accounts. nil is
+	// the IMAP path.
+	graphCfg *api.AccountConfig
+	linked   []api.LinkedAccount
 
 	closed      bool
 	op          int  // bumped per RPC so stale callbacks bail out
@@ -111,6 +124,10 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		email:          entry("email_row"),
 		password:       b.GetObject("password_row").Cast().(*adw.PasswordEntryRow),
 		next:           button("identity_next_button"),
+		linkedGroup:    b.GetObject("linked_group").Cast().(*adw.PreferencesGroup),
+		linkedRows:     b.GetObject("linked_rows").Cast().(*gtk.ListBox),
+		goaOpen:        button("goa_open_button"),
+		goaRecheck:     button("goa_recheck_button"),
 		serversPrefs:   b.GetObject("servers_prefs").Cast().(*adw.PreferencesPage),
 		accountName:    entry("account_name_row"),
 		imap: serverRows{
@@ -135,6 +152,8 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		smtpRow:      b.GetObject("smtp_result_row").Cast().(*adw.ActionRow),
 		imapIcon:     b.GetObject("imap_result_icon").Cast().(*gtk.Image),
 		smtpIcon:     b.GetObject("smtp_result_icon").Cast().(*gtk.Image),
+		graphRow:     b.GetObject("graph_result_row").Cast().(*adw.ActionRow),
+		graphIcon:    b.GetObject("graph_result_icon").Cast().(*gtk.Image),
 		edit:         button("test_edit_button"),
 		retry:        button("test_retry_button"),
 		addAnyway:    button("test_add_anyway_button"),
@@ -142,6 +161,7 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 	}
 	w.identityBanner.SetUseMarkup(false)
 	w.wire()
+	w.loadLinked(nil)
 	return w
 }
 
@@ -159,6 +179,17 @@ func NewEdit(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
 	w.addAnyway.SetLabel(i18n.T("Save _Anyway"))
 	w.displayName.SetText(a.Config.DisplayName)
 	w.email.SetText(a.Config.Email)
+	if a.Config.Protocol() == api.AccountGraph {
+		// The address and the sign-in belong to GNOME Online Accounts; only
+		// the name can change here, and the test re-checks the sign-in.
+		cfg := a.Config
+		w.graphCfg = &cfg
+		w.email.SetSensitive(false)
+		w.password.SetVisible(false)
+		w.next.SetLabel(i18n.T("_Test Connection"))
+		w.nav.ReplaceWithTags([]string{tagIdentity})
+		return w
+	}
 	w.applyConfig(a.Config)
 	w.nav.ReplaceWithTags([]string{tagIdentity, tagServers})
 	return w
@@ -195,6 +226,8 @@ func (w *Wizard) wire() {
 	w.edit.ConnectClicked(func() { w.nav.PopToTag(tagServers) })
 	w.add.ConnectClicked(w.onAdd)
 	w.addAnyway.ConnectClicked(w.onAdd)
+	w.goaOpen.ConnectClicked(w.onGOAOpen)
+	w.goaRecheck.ConnectClicked(w.onGOARecheck)
 
 	w.ConnectClosed(func() { w.closed = true })
 }
@@ -208,6 +241,7 @@ func (w *Wizard) toast(text string) { w.toasts.AddToast(widget.PlainToast(text))
 // close button keep working; callbacks check closed and op.
 func (w *Wizard) setBusy(busy bool) {
 	w.identityRows.SetSensitive(!busy)
+	w.linkedGroup.SetSensitive(!busy)
 	w.next.SetSensitive(!busy)
 	w.serversPrefs.SetSensitive(!busy)
 	w.test.SetSensitive(!busy)
@@ -221,7 +255,10 @@ func (r *serverRows) read() ServerFields {
 	return ServerFields{Host: r.host.Text(), Port: int(r.port.Value()), Security: securityAt(r.security.Selected()), Username: r.user.Text()}
 }
 
-func (r *serverRows) apply(sc api.ServerConfig) {
+func (r *serverRows) apply(sc *api.ServerConfig) {
+	if sc == nil {
+		return
+	}
 	r.host.SetText(sc.Host)
 	r.port.SetValue(float64(sc.Port))
 	r.security.SetSelected(indexOfSecurity(sc.Security))
@@ -239,31 +276,51 @@ func (w *Wizard) applyConfig(cfg api.AccountConfig) {
 }
 
 func (w *Wizard) assembleConfig() api.AccountConfig {
+	if w.graphCfg != nil {
+		return GraphConfig(w.readIdentity(), w.graphCfg.Name, w.graphCfg.Graph.GOAAccountID)
+	}
 	return BuildConfig(w.readIdentity(), w.accountName.Text(), w.imap.read(), w.smtp.read())
 }
 
+// requirePassword flags the empty password row once discovery has shown
+// the account needs one (a Microsoft 365 account does not).
+func (w *Wizard) requirePassword() bool {
+	if w.editing != nil || w.password.Text() != "" {
+		return true
+	}
+	w.password.AddCSSClass("error")
+	w.identityBanner.SetTitle(i18n.T("Enter the password for this account"))
+	w.identityBanner.SetRevealed(true)
+	w.password.GrabFocus()
+	return false
+}
+
 // onNext validates the identity page and asks the daemon for server
-// settings. A hit goes straight to the connection test; a miss opens the
-// Servers page with guessed defaults.
+// settings. A Microsoft 365 address goes to the connection test (signed in
+// through GNOME Online Accounts) or to the sign-in hint; an IMAP hit goes
+// to the connection test; a miss opens the Servers page with guessed
+// defaults. The password is asked for only once the account turns out to
+// need one.
 func (w *Wizard) onNext() {
 	id := w.readIdentity()
-	if p := ValidateIdentity(id, w.editing == nil); p.Any() {
-		if p.Email {
-			w.email.AddCSSClass("error")
-			w.email.GrabFocus()
-		}
-		if p.Password {
-			w.password.AddCSSClass("error")
-			if !p.Email {
-				w.password.GrabFocus()
-			}
-		}
+	if p := ValidateIdentity(id, false); p.Any() {
+		w.email.AddCSSClass("error")
+		w.email.GrabFocus()
 		return
 	}
 	id.Email, _ = ValidateEmail(id.Email)
 	if w.editing != nil {
+		if w.graphCfg != nil {
+			w.nav.ReplaceWithTags([]string{tagIdentity, tagTesting})
+			w.runTest()
+			return
+		}
 		// The servers are known; only the identity may have changed.
 		w.nav.PushByTag(tagServers)
+		return
+	}
+	if l, ok := LinkedMatch(w.linked, id.Email); ok && !l.Configured {
+		w.useLinked(l)
 		return
 	}
 	w.setBusy(true)
@@ -279,6 +336,18 @@ func (w *Wizard) onNext() {
 				return
 			}
 			w.setBusy(false)
+			if err == nil && res.Config != nil && res.Config.Protocol() == api.AccountGraph {
+				w.log.Info("account discovered", "source", res.Source)
+				if res.Config.Graph != nil && res.Config.Graph.GOAAccountID != "" {
+					w.startGraph(GraphConfig(id, res.Config.Name, res.Config.Graph.GOAAccountID))
+					return
+				}
+				w.showGOAHint()
+				return
+			}
+			if !w.requirePassword() {
+				return
+			}
 			if err != nil || res.Config == nil {
 				w.log.Debug("account.discover", "err", err, "source", res.Source)
 				w.applyConfig(MergeIdentity(GuessConfig(id.Email), id))
@@ -314,7 +383,7 @@ func (w *Wizard) onTest() {
 }
 
 func (w *Wizard) showButtons(o Outcome) {
-	w.edit.SetVisible(true)
+	w.edit.SetVisible(w.graphCfg == nil)
 	w.retry.SetVisible(o == OutcomeFailed)
 	w.addAnyway.SetVisible(o == OutcomeFailed)
 	w.add.SetVisible(o == OutcomeOK)
@@ -331,7 +400,10 @@ func (w *Wizard) runTest() {
 	w.progress.SetTitle(i18n.T("Testing Connection…"))
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
-	params := api.AccountTestParams{Config: w.assembleConfig(), Credentials: credentialsFor(w.readIdentity())}
+	params := api.AccountTestParams{Config: w.assembleConfig()}
+	if w.graphCfg == nil {
+		params.Credentials = credentialsFor(w.readIdentity())
+	}
 	if w.editing != nil {
 		params.AccountID = w.editing.ID // an empty password means "use the stored one"
 	}
@@ -352,16 +424,25 @@ func (w *Wizard) runTest() {
 }
 
 func (w *Wizard) showResults(res api.AccountTestResult, err error) {
+	graph := w.graphCfg != nil
+	w.graphRow.SetVisible(graph)
+	w.imapRow.SetVisible(!graph)
+	w.smtpRow.SetVisible(!graph)
 	var outcome Outcome
 	if err != nil {
 		text := widget.RPCErrorText(i18n.T("Testing the connection"), err)
-		for _, row := range []*adw.ActionRow{w.imapRow, w.smtpRow} {
+		for _, row := range []*adw.ActionRow{w.imapRow, w.smtpRow, w.graphRow} {
 			row.SetSubtitle(text)
 		}
-		for _, icon := range []*gtk.Image{w.imapIcon, w.smtpIcon} {
+		for _, icon := range []*gtk.Image{w.imapIcon, w.smtpIcon, w.graphIcon} {
 			icon.SetFromIconName("dialog-warning-symbolic")
 		}
 		outcome = OutcomeFailed
+	} else if graph {
+		icon, text := EndpointSummary(res.Graph)
+		w.graphIcon.SetFromIconName(icon)
+		w.graphRow.SetSubtitle(text)
+		outcome = Classify(res)
 	} else {
 		icon, text := EndpointSummary(res.IMAP)
 		w.imapIcon.SetFromIconName(icon)
@@ -370,6 +451,9 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 		w.smtpIcon.SetFromIconName(icon)
 		w.smtpRow.SetSubtitle(text)
 		outcome = Classify(res)
+	}
+	if graph && outcome == OutcomeAuthFailed {
+		outcome = OutcomeFailed // there is no password to correct here
 	}
 	w.lastOutcome = outcome
 
@@ -401,7 +485,10 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 // and closes on success.
 func (w *Wizard) onAdd() {
 	cfg := w.assembleConfig()
-	creds := credentialsFor(w.readIdentity())
+	var creds api.Credentials
+	if w.graphCfg == nil {
+		creds = credentialsFor(w.readIdentity())
+	}
 	editing := w.editing
 	if editing != nil {
 		w.progress.SetTitle(i18n.T("Saving Account…"))

@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package discover suggests IMAP/SMTP settings for an e-mail address, in
-// order of trust: the Mozilla ISPDB (only the domain is sent), the
-// provider's own autoconfig document (the address is sent to the provider
-// itself), RFC 6186 DNS SRV records, and finally common host names
-// verified by opening a TLS connection without authenticating. Nothing is
-// stored; the caller validates the result like an account.add request.
+// Package discover suggests account settings for an e-mail address, in
+// order of trust: an account already signed in through GNOME Online
+// Accounts (a Microsoft Graph account, nothing leaves the machine), the
+// Mozilla ISPDB (only the domain is sent), the provider's own autoconfig
+// document (the address is sent to the provider itself), RFC 6186 DNS SRV
+// records, a known provider recognised by DNS MX or autoconfig hosts
+// (Microsoft 365, which needs a sign-in in GNOME Online Accounts first),
+// and finally common host names verified by opening a TLS connection
+// without authenticating. Nothing is stored; the caller validates the
+// result like an account.add request.
 //
 // Every document and DNS answer is hostile input: sizes are capped, hosts
 // and ports are validated, plaintext socket types are refused.
@@ -46,7 +50,15 @@ const (
 // Resolver is the slice of net.Resolver we use; tests substitute a map.
 type Resolver interface {
 	LookupSRV(ctx context.Context, service, proto, name string) (cname string, addrs []*net.SRV, err error)
+	LookupMX(ctx context.Context, name string) ([]*net.MX, error)
 }
+
+// MicrosoftMXSuffix is where every Microsoft 365 hosted domain points its
+// MX record.
+const MicrosoftMXSuffix = ".mail.protection.outlook.com"
+
+// MicrosoftProviderName is the display name of the Microsoft 365 hint.
+const MicrosoftProviderName = "Microsoft 365"
 
 // Discoverer runs the lookups. Zero fields are filled by New.
 type Discoverer struct {
@@ -58,7 +70,10 @@ type Discoverer struct {
 	Resolver   Resolver
 	VerifyIMAP func(ctx context.Context, cfg api.ServerConfig) error
 	VerifySMTP func(ctx context.Context, cfg api.ServerConfig) error
-	Log        *slog.Logger
+	// GOA finds the address among the Microsoft 365 accounts signed in
+	// through GNOME Online Accounts; nil = no such lookup.
+	GOA func(ctx context.Context, email string) (goaAccountID string, ok bool)
+	Log *slog.Logger
 }
 
 // Result is the suggestion. Source is DiscoverNone when Config is nil.
@@ -136,13 +151,26 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	ctx, cancel := context.WithTimeout(ctx, OverallTimeout)
 	defer cancel()
 
+	// Phase 0: an account the desktop is already signed in to.
+	if d.GOA != nil {
+		if id, ok := d.GOA(ctx, email); ok {
+			cfg := microsoftConfig(email, domain)
+			cfg.Graph.GOAAccountID = id
+			return Result{Config: cfg, Source: api.DiscoverGOA, ProviderName: MicrosoftProviderName}, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return none, err
+		}
+	}
+
 	// Phase 1: ISPDB and DNS in parallel.
 	var (
-		wg    sync.WaitGroup
-		ispdb autoconfig
-		srv   srvResult
+		wg          sync.WaitGroup
+		ispdb       autoconfig
+		srv         srvResult
+		microsoftMX bool
 	)
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		ispdb = d.fetchAutoconfig(ctx, d.ISPDBBase+url.PathEscape(domain), email)
@@ -150,6 +178,10 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	go func() {
 		defer wg.Done()
 		srv = d.lookupSRV(ctx, domain)
+	}()
+	go func() {
+		defer wg.Done()
+		microsoftMX = d.microsoftMX(ctx, domain)
 	}()
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
@@ -167,6 +199,13 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	}
 	providerName := ispdb.providerName
 	fill(ispdb.imap, ispdb.smtp, api.DiscoverISPDB)
+
+	// A Microsoft 365 mailbox without a password entry in the ISPDB: the
+	// answer is a Graph account that still needs its sign-in.
+	if (in.cfg == nil || out.cfg == nil) && (ispdb.microsoft || microsoftMX) {
+		d.Log.Debug("microsoft 365 domain", "domain", domain, "ispdb", ispdb.microsoft, "mx", microsoftMX)
+		return Result{Config: microsoftConfig(email, domain), Source: api.DiscoverProvider, ProviderName: MicrosoftProviderName}, nil
+	}
 
 	// Phase 2: the provider's own document, then DNS, then guesses.
 	if (in.cfg == nil || out.cfg == nil) && d.Provider {
@@ -204,12 +243,40 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	if name == "" {
 		name = domain
 	}
-	cfg := &api.AccountConfig{Name: name, Email: email, IMAP: *in.cfg, SMTP: *out.cfg}
+	cfg := &api.AccountConfig{Name: name, Email: email, Kind: api.AccountIMAP, IMAP: in.cfg, SMTP: out.cfg}
 	return Result{Config: cfg, Source: weakest(in.source, out.source), ProviderName: providerName}, nil
 }
 
+// microsoftConfig is the Graph account for a Microsoft 365 address; the
+// caller fills in the GOA account id when it knows one.
+func microsoftConfig(email, domain string) *api.AccountConfig {
+	return &api.AccountConfig{
+		Name: domain, Email: email, Kind: api.AccountGraph,
+		Graph: &api.GraphConfig{Source: api.GraphSourceGOA},
+	}
+}
+
+// microsoftMX reports whether the domain's mail is hosted by Microsoft
+// 365 (an MX under MicrosoftMXSuffix). The domain goes to the resolver.
+func (d *Discoverer) microsoftMX(ctx context.Context, domain string) bool {
+	ctx, cancel := context.WithTimeout(ctx, SRVTimeout)
+	defer cancel()
+	records, err := d.Resolver.LookupMX(ctx, domain)
+	if err != nil {
+		d.Log.Debug("mx lookup", "domain", domain, "err", err)
+		return false
+	}
+	for _, mx := range records {
+		host := strings.ToLower(strings.TrimSuffix(mx.Host, "."))
+		if strings.HasSuffix(host, MicrosoftMXSuffix) {
+			return true
+		}
+	}
+	return false
+}
+
 var sourceRank = map[api.DiscoverSource]int{
-	api.DiscoverISPDB: 0, api.DiscoverAutoconfig: 1, api.DiscoverSRV: 2, api.DiscoverGuess: 3,
+	api.DiscoverGOA: 0, api.DiscoverISPDB: 1, api.DiscoverAutoconfig: 2, api.DiscoverSRV: 3, api.DiscoverProvider: 4, api.DiscoverGuess: 5,
 }
 
 func weakest(a, b api.DiscoverSource) api.DiscoverSource {

@@ -54,8 +54,8 @@ func validConfig() api.AccountConfig {
 	return api.AccountConfig{
 		Name:  "Work",
 		Email: "me@example.invalid",
-		IMAP:  api.ServerConfig{Host: "imap.example.invalid", Port: 993, Security: api.SecurityTLS, Username: "me@example.invalid", AuthMethod: api.AuthPassword},
-		SMTP:  api.ServerConfig{Host: "smtp.example.invalid", Port: 587, Security: api.SecuritySTARTTLS, Username: "me@example.invalid", AuthMethod: api.AuthPassword},
+		IMAP:  &api.ServerConfig{Host: "imap.example.invalid", Port: 993, Security: api.SecurityTLS, Username: "me@example.invalid", AuthMethod: api.AuthPassword},
+		SMTP:  &api.ServerConfig{Host: "smtp.example.invalid", Port: 587, Security: api.SecuritySTARTTLS, Username: "me@example.invalid", AuthMethod: api.AuthPassword},
 	}
 }
 
@@ -276,13 +276,13 @@ func TestImportConfigAccounts(t *testing.T) {
 	cfg.Accounts = []account.Config{
 		{
 			Name: "Work", Email: "work@example.invalid",
-			IMAP: account.Server{Host: "imap.example.invalid", Port: 993, Security: "tls", Username: "w", AuthMethod: "password"},
-			SMTP: account.Server{Host: "smtp.example.invalid", Port: 587, Security: "starttls", Username: "w", AuthMethod: "password"},
+			IMAP: &account.Server{Host: "imap.example.invalid", Port: 993, Security: "tls", Username: "w", AuthMethod: "password"},
+			SMTP: &account.Server{Host: "smtp.example.invalid", Port: 587, Security: "starttls", Username: "w", AuthMethod: "password"},
 		},
 		{
 			ID: "acc_home", Name: "Home", Email: "home@example.invalid", Enabled: &off, SyncIntervalSeconds: 600,
-			IMAP: account.Server{Host: "imap.example.invalid", Port: 993, Security: "tls", Username: "h", AuthMethod: "password"},
-			SMTP: account.Server{Host: "smtp.example.invalid", Port: 587, Security: "starttls", Username: "h", AuthMethod: "password"},
+			IMAP: &account.Server{Host: "imap.example.invalid", Port: 993, Security: "tls", Username: "h", AuthMethod: "password"},
+			SMTP: &account.Server{Host: "smtp.example.invalid", Port: 587, Security: "starttls", Username: "h", AuthMethod: "password"},
 		},
 		{Name: "Broken", Email: "nope"},
 	}
@@ -327,8 +327,8 @@ func TestImportConfigAccountsKeepsStoreVersion(t *testing.T) {
 	cfg := config.Default()
 	cfg.Accounts = []account.Config{{
 		Name: "TOML", Email: "me@example.invalid",
-		IMAP: account.Server{Host: "toml.example.invalid", Port: 993, Security: "tls", Username: "w", AuthMethod: "password"},
-		SMTP: account.Server{Host: "toml.example.invalid", Port: 587, Security: "starttls", Username: "w", AuthMethod: "password"},
+		IMAP: &account.Server{Host: "toml.example.invalid", Port: 993, Security: "tls", Username: "w", AuthMethod: "password"},
+		SMTP: &account.Server{Host: "toml.example.invalid", Port: 587, Security: "starttls", Username: "w", AuthMethod: "password"},
 	}}
 	b := newTestBackend(t, cfg)
 	if _, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: validConfig()}); err != nil {
@@ -341,4 +341,112 @@ func TestImportConfigAccountsKeepsStoreVersion(t *testing.T) {
 	if len(list.Accounts) != 1 || list.Accounts[0].Config.IMAP.Host != "imap.example.invalid" {
 		t.Fatalf("store row replaced: %+v", list.Accounts)
 	}
+}
+
+// addTestAccount adds one account with the given address and returns its id.
+func addTestAccount(t *testing.T, acc api.AccountService, email string) api.AccountID {
+	t.Helper()
+	cfg := validConfig()
+	cfg.Name = email
+	cfg.Email = email
+	res, err := acc.Add(context.Background(), api.AccountAddParams{Config: cfg})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.AccountID
+}
+
+// listIDs is the order account.list reports.
+func listIDs(t *testing.T, acc api.AccountService) []api.AccountID {
+	t.Helper()
+	res, err := acc.List(context.Background(), api.AccountListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]api.AccountID, 0, len(res.Accounts))
+	for _, a := range res.Accounts {
+		out = append(out, a.ID)
+	}
+	return out
+}
+
+func TestAccountReorder(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	n := &recNotifier{}
+	b.SetNotifier(n)
+	acc := b.Accounts()
+
+	first := addTestAccount(t, acc, "a@example.invalid")
+	second := addTestAccount(t, acc, "b@example.invalid")
+	third := addTestAccount(t, acc, "c@example.invalid")
+	before := n.accountsChanged
+
+	if _, err := acc.Reorder(ctx, api.AccountReorderParams{AccountIDs: []api.AccountID{third, first, second}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := listIDs(t, acc), []api.AccountID{third, first, second}; !equalAccountIDs(got, want) {
+		t.Fatalf("order = %v, want %v", got, want)
+	}
+	if n.accountsChanged != before+1 {
+		t.Errorf("accountsChanged = %d, want %d", n.accountsChanged, before+1)
+	}
+
+	// An unnamed account keeps its place behind the named ones.
+	if _, err := acc.Reorder(ctx, api.AccountReorderParams{AccountIDs: []api.AccountID{second}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := listIDs(t, acc), []api.AccountID{second, third, first}; !equalAccountIDs(got, want) {
+		t.Fatalf("partial order = %v, want %v", got, want)
+	}
+
+	// An empty list is accepted and changes nothing.
+	kept := listIDs(t, acc)
+	if _, err := acc.Reorder(ctx, api.AccountReorderParams{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := listIDs(t, acc); !equalAccountIDs(got, kept) {
+		t.Fatalf("empty reorder changed the order: %v", got)
+	}
+}
+
+func TestAccountReorderRejects(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	acc := b.Accounts()
+	first := addTestAccount(t, acc, "a@example.invalid")
+	second := addTestAccount(t, acc, "b@example.invalid")
+	before := listIDs(t, acc)
+
+	cases := []struct {
+		name string
+		ids  []api.AccountID
+		want api.ErrorCode
+	}{
+		{"duplicate", []api.AccountID{first, first}, api.CodeInvalidArgument},
+		{"too many", []api.AccountID{first, second, "acc_extra"}, api.CodeInvalidArgument},
+		{"unknown", []api.AccountID{"acc_nope"}, api.CodeAccountNotFound},
+		{"empty id", []api.AccountID{first, ""}, api.CodeInvalidArgument},
+	}
+	for _, tc := range cases {
+		_, err := acc.Reorder(ctx, api.AccountReorderParams{AccountIDs: tc.ids})
+		if got := errCode(t, err); got != tc.want {
+			t.Errorf("%s: code %v, want %v", tc.name, got, tc.want)
+		}
+	}
+	if got := listIDs(t, acc); !equalAccountIDs(got, before) {
+		t.Fatalf("a rejected reorder changed the order: %v", got)
+	}
+}
+
+func equalAccountIDs(a, b []api.AccountID) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
