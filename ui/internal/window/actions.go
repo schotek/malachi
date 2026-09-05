@@ -305,12 +305,14 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 
 	seen := hasFlag(s.Flags, api.FlagSeen)
 	enabled := map[string]bool{
-		"trash":       on,
-		"archive":     on && !outbox && w.canMoveToRole(s, api.RoleArchive),
-		"junk":        on && !outbox && w.canMoveToRole(s, api.RoleJunk),
-		"mark-read":   on && !outbox && !seen,
-		"mark-unread": on && !outbox && seen,
-		"toggle-flag": on && !outbox,
+		"trash":        on,
+		"archive":      on && !outbox && w.canMoveToRole(s, api.RoleArchive),
+		"junk":         on && !outbox && w.canMoveToRole(s, api.RoleJunk),
+		"mark-read":    on && !outbox && !seen,
+		"mark-unread":  on && !outbox && seen,
+		"toggle-flag":  on && !outbox,
+		"load-images":  on,
+		"trust-sender": on && !outbox,
 	}
 	for name, e := range enabled {
 		if a := w.actions[name]; a != nil {

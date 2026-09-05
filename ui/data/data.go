@@ -18,7 +18,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
 
-//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/compose.blp ui/account_wizard.blp
+//go:generate blueprint-compiler batch-compile ui ui ui/window.blp ui/message_window.blp ui/message_row.blp ui/preferences.blp ui/editor.blp ui/html_view.blp ui/compose.blp ui/account_wizard.blp
 
 //go:embed ui/*.ui
 var ui embed.FS

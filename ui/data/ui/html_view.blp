@@ -1,0 +1,50 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using WebKit 6.0;
+// Message viewer (ui/internal/htmlview): shows the backend-sanitised HTML of
+// one message. The construct-only WebKit properties (network session, user
+// content manager, settings, default CSP) can only be set here: the Go
+// binding has no g_object_new with properties.
+//
+// No JavaScript at all: the document is sanitised and inert, and nothing in
+// the application needs to run inside it. The CSP allows images from the
+// application's own malachi-cid: scheme (served through message.part) and
+// data: URIs (what the daemon inlined), inline styles, and nothing else; the
+// Go side additionally points the network session at an unreachable proxy
+// and refuses every navigation but the initial load.
+WebKit.WebView html_view {
+  vexpand: true;
+  hexpand: true;
+
+  network-session: WebKit.NetworkSession {
+    is-ephemeral: true;
+  };
+
+  user-content-manager: WebKit.UserContentManager html_ucm {};
+
+  default-content-security-policy: "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'";
+
+  settings: WebKit.Settings {
+    enable-javascript: false;
+    enable-javascript-markup: false;
+    enable-developer-extras: false;
+    enable-html5-local-storage: false;
+    enable-html5-database: false;
+    enable-offline-web-application-cache: false;
+    enable-media: false;
+    enable-mediasource: false;
+    enable-webgl: false;
+    enable-webaudio: false;
+    enable-page-cache: false;
+    enable-dns-prefetching: false;
+    enable-hyperlink-auditing: false;
+    enable-site-specific-quirks: false;
+    allow-file-access-from-file-urls: false;
+    allow-universal-access-from-file-urls: false;
+    allow-top-navigation-to-data-urls: false;
+    allow-modal-dialogs: false;
+    auto-load-images: true;
+    enable-write-console-messages-to-stdout: false;
+  };
+}

@@ -131,3 +131,43 @@ func TestCoerce(t *testing.T) {
 		}
 	}
 }
+
+func TestStringListRoundTrip(t *testing.T) {
+	s := NewMemory()
+	if got := s.CollapsedFolders(); len(got) != 0 {
+		t.Fatalf("CollapsedFolders() = %v, want empty by default", got)
+	}
+
+	changed := 0
+	s.OnChanged(KeyCollapsedFolders, func() { changed++ })
+
+	s.SetCollapsedFolders([]string{"acc_1/f_1", "acc_1/f_2"})
+	got := s.CollapsedFolders()
+	if len(got) != 2 || got[0] != "acc_1/f_1" || got[1] != "acc_1/f_2" {
+		t.Fatalf("CollapsedFolders() = %v", got)
+	}
+	if changed != 1 {
+		t.Errorf("changed fired %d times, want 1", changed)
+	}
+
+	// Writing the same contents is not a change; slices are compared element
+	// by element, because == on two of them panics.
+	s.SetCollapsedFolders([]string{"acc_1/f_1", "acc_1/f_2"})
+	if changed != 1 {
+		t.Errorf("changed fired %d times after a no-op write, want 1", changed)
+	}
+
+	// The store hands out copies, so a caller cannot mutate it from outside.
+	got[0] = "tampered"
+	if s.CollapsedFolders()[0] != "acc_1/f_1" {
+		t.Error("mutating the returned slice reached the store")
+	}
+
+	s.SetCollapsedFolders(nil)
+	if got := s.CollapsedFolders(); len(got) != 0 {
+		t.Errorf("CollapsedFolders() = %v, want empty after clearing", got)
+	}
+	if changed != 2 {
+		t.Errorf("changed fired %d times, want 2", changed)
+	}
+}

@@ -48,12 +48,12 @@ func TestSortFoldersHeadersOnlyForEnabled(t *testing.T) {
 		"b": {{ID: "in-b", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
 	}
 	// One enabled account: no header, the disabled one is absent entirely.
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, []string{"in@0"}) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, []string{"in@0"}) {
 		t.Errorf("single enabled: %v", got)
 	}
 	accounts[1].Enabled = true
 	want := []string{"#a", "in@0", "#b", "in-b@0"}
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, want) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, want) {
 		t.Errorf("two enabled: %v", got)
 	}
 }
@@ -66,7 +66,7 @@ func TestSortFoldersEmptyAccountKeepsHeader(t *testing.T) {
 		"b": {{ID: "in-b", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
 	}
 	want := []string{"#a", "#b", "in-b@0"}
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, want) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, want) {
 		t.Errorf("got %v", got)
 	}
 	m := mailModel{accounts: accounts, folders: folders}
@@ -94,7 +94,7 @@ func TestSortFoldersOrdering(t *testing.T) {
 	// Roles in rank order regardless of path, then plain folders by
 	// case-insensitive path.
 	want := []string{"in@0", "drafts@0", "sent@0", "arch@0", "junk@0", "trash@0", "out@0", "all@0", "A@0", "b@0"}
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, want) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, want) {
 		t.Errorf("got %v", got)
 	}
 }
@@ -112,7 +112,7 @@ func TestSortFoldersChildrenFollowParent(t *testing.T) {
 		{ID: "p-junk", Path: "Projects/zz", ParentID: "p", Role: api.RoleJunk, Selectable: true},
 	}}
 	want := []string{"in@0", "p@0", "p-junk@1", "p-a@1", "p-a-x@2", "p-b@1"}
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, want) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, want) {
 		t.Errorf("got %v", got)
 	}
 }
@@ -134,7 +134,7 @@ func TestSortFoldersDepthCap(t *testing.T) {
 		}
 		list = append(list, f)
 	}
-	entries := sortFolders([]api.Account{{ID: "a", Enabled: true}}, map[api.AccountID][]api.Folder{"a": list})
+	entries := sortFolders([]api.Account{{ID: "a", Enabled: true}}, map[api.AccountID][]api.Folder{"a": list}, newCollapseState())
 	if len(entries) != n {
 		t.Fatalf("got %d entries, want %d", len(entries), n)
 	}
@@ -162,7 +162,7 @@ func TestSortFoldersIgnoresFoldersOfUnknownAccounts(t *testing.T) {
 		"a":     {{ID: "in", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
 		"ghost": {{ID: "g", Path: "INBOX", Role: api.RoleInbox, Selectable: true}},
 	}
-	if got := ids(sortFolders(accounts, folders)); !equalIDs(got, []string{"in@0"}) {
+	if got := ids(sortFolders(accounts, folders, newCollapseState())); !equalIDs(got, []string{"in@0"}) {
 		t.Errorf("got %v", got)
 	}
 }

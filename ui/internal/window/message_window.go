@@ -27,7 +27,7 @@ type MessageWindow struct {
 	closed bool
 
 	title  *adw.WindowTitle
-	labels messageLabels
+	view   *messageView
 	star   *gtk.ToggleButton
 	menu   *gtk.MenuButton
 	toasts *adw.ToastOverlay
@@ -56,21 +56,14 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 		Window: b.GetObject("message_window").Cast().(*adw.Window),
 		id:     id,
 		title:  b.GetObject("window_title").Cast().(*adw.WindowTitle),
-		labels: messageLabels{
-			subject:     b.GetObject("message_subject").Cast().(*gtk.Label),
-			from:        b.GetObject("message_from").Cast().(*gtk.Label),
-			recipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
-			date:        b.GetObject("message_date").Cast().(*gtk.Label),
-			attachments: b.GetObject("message_attachments").Cast().(*gtk.Label),
-			body:        b.GetObject("message_body").Cast().(*gtk.Label),
-		},
 		star:   b.GetObject("star_button").Cast().(*gtk.ToggleButton),
 		menu:   b.GetObject("message_menu").Cast().(*gtk.MenuButton),
 		toasts: b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 		banner: b.GetObject("outbox_banner").Cast().(*adw.Banner),
 	}
 	mw.SetApplication(&w.app.Application)
-	mw.labels.plain()
+	mw.view = newMessageView(w, &mw.Window.Window, b)
+	mw.view.banner.ConnectButtonClicked(func() { w.loadRemoteImages(id) })
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the
@@ -91,6 +84,8 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	add("trash", true, func() { w.trashFrom(mw, id) })
 	add("archive", !outbox && w.canMoveToRole(s, api.RoleArchive), func() { w.archive(id) })
 	add("junk", !outbox && w.canMoveToRole(s, api.RoleJunk), func() { w.junkFrom(mw, id) })
+	add("load-images", true, func() { w.loadRemoteImages(id) })
+	add("trust-sender", !outbox, func() { w.trustSender(id) })
 	mw.InsertActionGroup("msg", g)
 	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button", "junk": "junk_button"} {
 		b.GetObject(obj).Cast().(*gtk.Button).SetActionName("msg." + name)
@@ -109,8 +104,10 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	}
 
 	// Single-letter shortcuts are safe here: the window has no text entry,
-	// and selectable labels do not consume plain keys.
+	// and selectable labels do not consume plain keys. Capture phase so the
+	// HTML view, when it has the focus, does not see them first.
 	sc := gtk.NewShortcutController()
+	sc.SetPropagationPhase(gtk.PhaseCapture)
 	for _, short := range messageShortcuts {
 		sc.AddShortcut(gtk.NewShortcut(gtk.NewShortcutTriggerParseString(short.trigger), gtk.NewNamedAction(short.action)))
 	}
@@ -122,8 +119,9 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 
 // show displays the summary headers and, when lm is not nil, the full
 // headers, the body (or the error) and the outbox banner. Everything is
-// untrusted data: plain labels, no markup. Body zoom and font are applied
-// globally by internal/style.
+// untrusted data: plain labels, no markup, and the HTML view gets the
+// sanitiser's output only. Body zoom and font are applied globally by
+// internal/style.
 func (mw *MessageWindow) show(s api.MessageSummary, lm *loadedMessage) {
 	subject := subjectText(s.Subject)
 	var msg *api.Message
@@ -134,6 +132,6 @@ func (mw *MessageWindow) show(s api.MessageSummary, lm *loadedMessage) {
 	mw.title.SetTitle(subject)
 	mw.SetTitle(subject)
 	setStar(mw.star, hasFlag(s.Flags, api.FlagFlagged))
-	mw.labels.render(s, lm)
+	mw.view.render(s, lm)
 	renderOutboxBanner(mw.banner, msg)
 }

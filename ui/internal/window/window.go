@@ -58,6 +58,10 @@ type Window struct {
 	// those signals so they only react to the user.
 	reselecting bool
 
+	// savingCollapse is set while this window writes the sidebar's fold
+	// state, so it does not treat its own settings change as somebody else's.
+	savingCollapse bool
+
 	// loaded caches message.get / message.body results (bounded; see
 	// message_view.go).
 	loaded map[api.MessageID]*loadedMessage
@@ -116,23 +120,18 @@ type Window struct {
 	listStatusPage  *adw.StatusPage
 	listRetryButton *gtk.Button
 
-	toasts             *adw.ToastOverlay
-	messageStack       *gtk.Stack
-	messageSubject     *gtk.Label
-	messageFrom        *gtk.Label
-	messageRecipients  *gtk.Label
-	messageDate        *gtk.Label
-	messageAttachments *gtk.Label
-	messageBody        *gtk.Label
-	starButton         *gtk.ToggleButton
-	archiveButton      *gtk.Button
-	junkButton         *gtk.Button
-	trashButton        *gtk.Button
-	messageMenu        *gtk.MenuButton
-	replyButton        *gtk.Button
-	replyAllButton     *gtk.Button
-	forwardButton      *gtk.Button
-	outboxBanner       *adw.Banner
+	toasts         *adw.ToastOverlay
+	messageStack   *gtk.Stack
+	pane           *messageView // the message pane's display (message_view.go)
+	starButton     *gtk.ToggleButton
+	archiveButton  *gtk.Button
+	junkButton     *gtk.Button
+	trashButton    *gtk.Button
+	messageMenu    *gtk.MenuButton
+	replyButton    *gtk.Button
+	replyAllButton *gtk.Button
+	forwardButton  *gtk.Button
+	outboxBanner   *adw.Banner
 }
 
 // New builds the window, registers its actions and starts connecting to
@@ -179,27 +178,36 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		listStatusPage:  b.GetObject("list_status_page").Cast().(*adw.StatusPage),
 		listRetryButton: b.GetObject("list_retry_button").Cast().(*gtk.Button),
 
-		toasts:             b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
-		messageStack:       b.GetObject("message_stack").Cast().(*gtk.Stack),
-		messageSubject:     b.GetObject("message_subject").Cast().(*gtk.Label),
-		messageFrom:        b.GetObject("message_from").Cast().(*gtk.Label),
-		messageRecipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
-		messageDate:        b.GetObject("message_date").Cast().(*gtk.Label),
-		messageAttachments: b.GetObject("message_attachments").Cast().(*gtk.Label),
-		messageBody:        b.GetObject("message_body").Cast().(*gtk.Label),
-		starButton:         b.GetObject("star_button").Cast().(*gtk.ToggleButton),
-		archiveButton:      b.GetObject("archive_button").Cast().(*gtk.Button),
-		junkButton:         b.GetObject("junk_button").Cast().(*gtk.Button),
-		trashButton:        b.GetObject("trash_button").Cast().(*gtk.Button),
-		messageMenu:        b.GetObject("message_menu").Cast().(*gtk.MenuButton),
-		replyButton:        b.GetObject("reply_button").Cast().(*gtk.Button),
-		replyAllButton:     b.GetObject("reply_all_button").Cast().(*gtk.Button),
-		forwardButton:      b.GetObject("forward_button").Cast().(*gtk.Button),
-		outboxBanner:       b.GetObject("outbox_banner").Cast().(*adw.Banner),
+		toasts:         b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
+		messageStack:   b.GetObject("message_stack").Cast().(*gtk.Stack),
+		starButton:     b.GetObject("star_button").Cast().(*gtk.ToggleButton),
+		archiveButton:  b.GetObject("archive_button").Cast().(*gtk.Button),
+		junkButton:     b.GetObject("junk_button").Cast().(*gtk.Button),
+		trashButton:    b.GetObject("trash_button").Cast().(*gtk.Button),
+		messageMenu:    b.GetObject("message_menu").Cast().(*gtk.MenuButton),
+		replyButton:    b.GetObject("reply_button").Cast().(*gtk.Button),
+		replyAllButton: b.GetObject("reply_all_button").Cast().(*gtk.Button),
+		forwardButton:  b.GetObject("forward_button").Cast().(*gtk.Button),
+		outboxBanner:   b.GetObject("outbox_banner").Cast().(*adw.Banner),
 	}
 	w.SetApplication(&app.Application)
+	w.pane = newMessageView(w, &w.ApplicationWindow.Window, b)
+	w.pane.banner.ConnectButtonClicked(func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.loadRemoteImages(s.ID)
+		}
+	})
 	w.registerActions()
 	w.messageStack.SetVisibleChildName(w.emptyPageName())
+	// The HTML views scale with the text-zoom setting; the plain-text label
+	// follows it through internal/style.
+	s.OnChanged(settings.KeyTextZoom, func() {
+		z := s.TextZoom()
+		w.pane.setZoom(z)
+		for _, mw := range w.openMessages {
+			mw.view.setZoom(z)
+		}
+	})
 
 	// Settings callbacks arrive on the main loop; no IdleAdd needed. The main
 	// window lives as long as the application, so the handlers are never
@@ -222,6 +230,13 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// Sidebar rows mirror model.entries one to one (rebuildFolderList).
 	// Programmatic selection (w.reselecting) is handled by selectFolder
 	// itself and must not navigate a collapsed split view to the list.
+	// The folded-away parts of the sidebar are restored from the last
+	// session, and follow along when another window folds something.
+	w.model.collapsed = loadCollapse(s)
+	for _, key := range []string{settings.KeyCollapsedFolders, settings.KeyCollapsedAccounts} {
+		s.OnChanged(key, w.onCollapseChanged)
+	}
+
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil || w.reselecting {
 			return
@@ -346,6 +361,8 @@ func (w *Window) registerActions() {
 	w.addAction("mark-read", false, forSelected(w.markRead))
 	w.addAction("mark-unread", false, forSelected(w.markUnread))
 	w.addAction("toggle-flag", false, forSelected(w.toggleFlagged))
+	w.addAction("load-images", false, forSelected(w.loadRemoteImages))
+	w.addAction("trust-sender", false, forSelected(w.trustSender))
 }
 
 // addAction registers one stateless win.<name> action.

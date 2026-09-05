@@ -157,7 +157,7 @@ func testAccounts() ([]api.Account, map[api.AccountID][]api.Folder) {
 
 func TestSortFolders(t *testing.T) {
 	accounts, folders := testAccounts()
-	entries := sortFolders(accounts, folders)
+	entries := sortFolders(accounts, folders, newCollapseState())
 
 	type row struct {
 		id     api.FolderID
@@ -187,11 +187,11 @@ func TestSortFolders(t *testing.T) {
 	}
 
 	// A single enabled account gets no header row.
-	single := sortFolders(accounts[:1], folders)
+	single := sortFolders(accounts[:1], folders, newCollapseState())
 	if len(single) != 9 || single[0].Header {
 		t.Errorf("single account: %+v", single)
 	}
-	if got := sortFolders(nil, nil); len(got) != 0 {
+	if got := sortFolders(nil, nil, newCollapseState()); len(got) != 0 {
 		t.Errorf("no accounts: %+v", got)
 	}
 }
@@ -204,7 +204,7 @@ func TestSortFoldersCycleGuard(t *testing.T) {
 		{ID: "self", Name: "self", Path: "self", ParentID: "self", Selectable: true},
 		{ID: "orphan", Name: "o", Path: "gone/o", ParentID: "missing", Selectable: true},
 	}}
-	entries := sortFolders(accounts, folders)
+	entries := sortFolders(accounts, folders, newCollapseState())
 	if len(entries) != 4 {
 		t.Fatalf("got %d entries: %+v", len(entries), entries)
 	}

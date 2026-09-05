@@ -48,6 +48,15 @@ const (
 	KeyTextZoom           = "text-zoom"
 )
 
+// Keys of the sidebar state: which parts of the folder tree the user folded
+// away. Each entry is one collapsed node; the encoding is the window
+// package's business (internal/window/collapse.go). They must match the
+// gschema.
+const (
+	KeyCollapsedFolders  = "collapsed-folders"
+	KeyCollapsedAccounts = "collapsed-accounts"
+)
+
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
 
@@ -84,6 +93,9 @@ var defaults = map[string]any{
 	KeyMonochromeAvatars:  false,
 	KeyMonospacePlainText: false,
 	KeyTextZoom:           100,
+
+	KeyCollapsedFolders:  []string(nil),
+	KeyCollapsedAccounts: []string(nil),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -203,6 +215,16 @@ func (s *Store) SetTextZoom(v int) {
 	s.set(KeyTextZoom, min(max(v, TextZoomMin), TextZoomMax))
 }
 
+// CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
+// folder sidebar, each entry one node. The window package owns the encoding
+// and tolerates entries it cannot parse, so an older or newer version of the
+// application never loses more than the rows it does not understand.
+func (s *Store) CollapsedFolders() []string     { return s.strv(KeyCollapsedFolders) }
+func (s *Store) SetCollapsedFolders(v []string) { s.set(KeyCollapsedFolders, v) }
+
+func (s *Store) CollapsedAccounts() []string     { return s.strv(KeyCollapsedAccounts) }
+func (s *Store) SetCollapsedAccounts(v []string) { s.set(KeyCollapsedAccounts, v) }
+
 // OnChanged calls f whenever key changes, from any source (this process or,
 // with the GSettings backend, another one). The returned function removes
 // the handler; callers that outlive the store may ignore it.
@@ -268,6 +290,16 @@ func (s *Store) integer(key string) int {
 	return v
 }
 
+// strv reads a string-array key. The result is always a fresh slice, so a
+// caller may keep and mutate it without touching the store.
+func (s *Store) strv(key string) []string {
+	if s.gs != nil {
+		return s.gs.Strv(key)
+	}
+	v, _ := s.mem[key].([]string)
+	return append([]string(nil), v...)
+}
+
 // set stores v; the GSettings backend emits "changed" itself, the memory
 // backend fires handlers synchronously when the value actually changed.
 func (s *Store) set(key string, v any) {
@@ -279,7 +311,20 @@ func (s *Store) set(key string, v any) {
 			s.gs.SetBoolean(key, v)
 		case int:
 			s.gs.SetInt(key, v)
+		case []string:
+			s.gs.SetStrv(key, v)
 		}
+		return
+	}
+	// Slices are not comparable: == on two interfaces holding one panics, so
+	// they are compared element by element and stored as a copy.
+	if list, ok := v.([]string); ok {
+		old, _ := s.mem[key].([]string)
+		if equalStrings(old, list) {
+			return
+		}
+		s.mem[key] = append([]string(nil), list...)
+		s.fire(key)
 		return
 	}
 	if s.mem[key] == v {
@@ -287,6 +332,19 @@ func (s *Store) set(key string, v any) {
 	}
 	s.mem[key] = v
 	s.fire(key)
+}
+
+// equalStrings reports whether two string lists have the same contents.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) fire(key string) {

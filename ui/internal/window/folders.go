@@ -27,13 +27,39 @@ const folderIndent = 12
 // folderRow is one selectable sidebar row with its unread badge.
 type folderRow struct {
 	*adw.ActionRow
-	badge *gtk.Label
+	badge  *gtk.Label
+	twisty *gtk.Button
 }
 
 // setUnread shows n on the badge, hiding it at zero.
 func (r *folderRow) setUnread(n int) {
 	r.badge.SetVisible(n > 0)
 	r.badge.SetText(strconv.Itoa(n))
+}
+
+// newTwisty builds the fold arrow shown left of a row's icon. A row that
+// cannot be folded still gets one, invisible and inert, so that its title
+// lines up with its foldable siblings.
+func newTwisty(collapsed, active bool) *gtk.Button {
+	name := "pan-down-symbolic"
+	tip := i18n.T("Collapse")
+	if collapsed {
+		name = "pan-end-symbolic"
+		tip = i18n.T("Expand")
+	}
+	b := gtk.NewButtonFromIconName(name)
+	b.AddCSSClass("flat")
+	b.AddCSSClass("folder-twisty")
+	b.SetVAlign(gtk.AlignCenter)
+	if !active {
+		b.SetOpacity(0)
+		b.SetSensitive(false)
+		b.SetCanTarget(false)
+		b.SetCanFocus(false)
+		return b
+	}
+	b.SetTooltipText(tip)
+	return b
 }
 
 // loadAccounts runs account.list, then folder.list for every enabled
@@ -133,6 +159,10 @@ func (w *Window) fetchFolders(acc api.AccountID, gen uint64, done func()) {
 // per entry, in order: the row-selected handler in New maps
 // row.Index() back onto model.entries. The selection is preserved when its
 // folder still exists, otherwise the initial folder is selected.
+//
+// A folder hidden under a fold still exists: folding must not move the
+// selection or reload the message list, so existence is decided against the
+// model and not against the rows that happen to be on screen.
 func (w *Window) rebuildFolderList() {
 	w.model.rebuildEntries()
 
@@ -141,16 +171,26 @@ func (w *Window) rebuildFolderList() {
 	w.folderRows = make(map[folderKey]*folderRow, len(w.model.entries))
 	for _, e := range w.model.entries {
 		if e.Header {
-			w.folderList.Append(newHeaderRow(accountLabel(e.Account)))
+			row, twisty := newHeaderRow(accountLabel(e.Account), e.Collapsed)
+			acc := e.Account.ID
+			twisty.ConnectClicked(func() { w.toggleAccount(acc) })
+			w.folderList.Append(row)
 			continue
 		}
+		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
 		r := newFolderRow(e)
-		w.folderRows[folderKey{Account: e.Account.ID, Folder: e.Folder.ID}] = r
+		if e.HasChildren && r.twisty != nil {
+			r.twisty.ConnectClicked(func() { w.toggleFolder(k) })
+		}
+		w.addFolderShortcuts(r, k, e)
+		w.folderRows[k] = r
 		w.folderList.Append(r)
 	}
 	w.reselecting = false
 
-	if len(w.folderRows) == 0 {
+	// Entries, not rows: an account folded shut leaves its header behind and
+	// the sidebar is not empty.
+	if len(w.model.entries) == 0 {
 		w.showEmptySidebarStatus()
 		// Nothing to show; a folder selected earlier is gone with its rows.
 		if w.model.selected != (folderKey{}) {
@@ -161,7 +201,9 @@ func (w *Window) rebuildFolderList() {
 	}
 	w.folderStack.SetVisibleChildName("folders")
 
-	if _, ok := w.folderRows[w.model.selected]; ok {
+	if w.model.folderListed(w.model.selected) {
+		// Highlights the row when there is one, and does nothing beyond
+		// that while the folder is folded out of sight.
 		w.selectFolder(w.model.selected)
 		return
 	}
@@ -174,23 +216,29 @@ func (w *Window) rebuildFolderList() {
 	w.loadMessages()
 }
 
-// newHeaderRow builds an account heading row. It cannot be selected or
-// activated, so the row-selected handler never sees it.
-func newHeaderRow(text string) *gtk.ListBoxRow {
+// newHeaderRow builds an account heading row with its fold arrow. The row
+// cannot be selected or activated, so the row-selected handler never sees
+// it; the arrow is a button and receives its clicks regardless.
+func newHeaderRow(text string, collapsed bool) (*gtk.ListBoxRow, *gtk.Button) {
 	row := gtk.NewListBoxRow()
 	row.SetActivatable(false)
 	row.SetSelectable(false)
+
 	label := gtk.NewLabel(text)
 	label.SetUseMarkup(false)
 	label.SetXAlign(0)
 	label.SetEllipsize(pango.EllipsizeEnd)
-	label.SetMarginTop(6)
-	label.SetMarginBottom(0)
-	label.SetMarginStart(6)
+	label.SetHExpand(true)
 	label.AddCSSClass("caption-heading")
 	label.AddCSSClass("dim-label")
-	row.SetChild(label)
-	return row
+
+	twisty := newTwisty(collapsed, true)
+	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
+	box.SetMarginTop(6)
+	box.Append(twisty)
+	box.Append(label)
+	row.SetChild(box)
+	return row, twisty
 }
 
 // folderTitle is the display name of a folder: the localised name for a
@@ -229,6 +277,14 @@ func newFolderRow(e folderEntry) *folderRow {
 	row.SetMarginStart(folderIndent * e.Depth)
 	row.AddPrefix(gtk.NewImageFromIconName(roleIcon(e.Folder.Role)))
 
+	// AddPrefix prepends, so the arrow goes in after the icon to end up left
+	// of it. Accounts without any nesting get no arrow column at all.
+	var twisty *gtk.Button
+	if e.Nested {
+		twisty = newTwisty(e.Collapsed, e.HasChildren)
+		row.AddPrefix(twisty)
+	}
+
 	badge := gtk.NewLabel("")
 	badge.SetUseMarkup(false)
 	badge.AddCSSClass("caption")
@@ -242,8 +298,8 @@ func newFolderRow(e folderEntry) *folderRow {
 		row.SetActivatable(false)
 		row.AddCSSClass("dim-label")
 	}
-	r := &folderRow{ActionRow: row, badge: badge}
-	r.setUnread(e.Folder.Unread)
+	r := &folderRow{ActionRow: row, badge: badge, twisty: twisty}
+	r.setUnread(e.Badge)
 	return r
 }
 
@@ -322,14 +378,17 @@ func (w *Window) highlightFolderRow(k folderKey) {
 	w.reselecting = false
 }
 
-// updateFolderRow refreshes the unread badge of one sidebar row.
+// updateFolderRow refreshes the unread badges after the count of k moved.
+// Every row is refreshed, not just k's: a collapsed ancestor's badge counts
+// the folders it hides, and k itself may be one of them.
 func (w *Window) updateFolderRow(k folderKey) {
-	r := w.folderRows[k]
-	if r == nil {
-		return
-	}
-	if f, ok := w.model.folder(k); ok {
-		r.setUnread(f.Unread)
+	for _, e := range w.model.entries {
+		if e.Header {
+			continue
+		}
+		if r := w.folderRows[folderKey{Account: e.Account.ID, Folder: e.Folder.ID}]; r != nil {
+			r.setUnread(e.Badge)
+		}
 	}
 }
 

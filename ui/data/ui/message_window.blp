@@ -12,7 +12,10 @@ Adw.Window message_window {
   height-request: 294;
   focus-widget: message_scroller;
 
+  // Capture phase: the HTML view would otherwise take the key first.
   ShortcutController {
+    propagation-phase: capture;
+
     Shortcut {
       trigger: "Escape";
       action: "action(window.close)";
@@ -87,14 +90,20 @@ Adw.Window message_window {
       revealed: false;
     }
 
-    content: Adw.ToastOverlay toast_overlay {
-      child: ScrolledWindow message_scroller {
-        hscrollbar-policy: never;
-        // Receives the initial focus (see focus-widget on the window) so the
-        // selectable subject label is not focused and select-all'd on open.
-        focusable: true;
+    // Remote images the sanitiser removed (window/remote.go).
+    [top]
+    Adw.Banner remote_banner {
+      revealed: false;
+    }
 
-        child: Adw.Clamp {
+    // The headers stay put; the body below scrolls on its own (a WebKit
+    // view scrolls itself and would have no height inside a scrolled
+    // window).
+    content: Adw.ToastOverlay toast_overlay {
+      child: Box {
+        orientation: vertical;
+
+        Adw.Clamp {
           maximum-size: 900;
           tightening-threshold: 700;
 
@@ -104,7 +113,6 @@ Adw.Window message_window {
             margin-start: 24;
             margin-end: 24;
             margin-top: 24;
-            margin-bottom: 24;
 
             Label message_subject {
               xalign: 0;
@@ -158,36 +166,96 @@ Adw.Window message_window {
               ]
             }
 
-            Separator {}
-
-            // Plain-text body; see window.blp for the rendering note.
-            Label message_body {
+            // Why only the plain text is shown; hidden otherwise.
+            Label body_hint {
               xalign: 0;
-              yalign: 0;
               wrap: true;
-              wrap-mode: word_char;
-              selectable: true;
-              vexpand: true;
-              // Zoom and font come from ui/internal/style.
+              visible: false;
+
               styles [
-                "message-body",
+                "caption",
+                "dim-label",
               ]
             }
+
+            Separator {}
           };
-        };
+        }
+
+        // "text": the plain-text body; "html": the sanitised HTML in a
+        // WebKit view appended from Go (window/message_view.go).
+        Stack body_stack {
+          vexpand: true;
+
+          StackPage {
+            name: "text";
+
+            child: ScrolledWindow message_scroller {
+              hscrollbar-policy: never;
+              // Receives the initial focus (see focus-widget on the window)
+              // so the selectable subject label is not focused and
+              // select-all'd on open.
+              focusable: true;
+
+              child: Adw.Clamp {
+                maximum-size: 900;
+                tightening-threshold: 700;
+
+                child: Label message_body {
+                  xalign: 0;
+                  yalign: 0;
+                  wrap: true;
+                  wrap-mode: word_char;
+                  selectable: true;
+                  vexpand: true;
+                  margin-start: 24;
+                  margin-end: 24;
+                  margin-top: 12;
+                  margin-bottom: 24;
+                  // Zoom and font come from ui/internal/style.
+                  styles [
+                    "message-body",
+                  ]
+                };
+              };
+            };
+          }
+
+          StackPage {
+            name: "html";
+
+            child: Box html_slot {
+              orientation: vertical;
+            };
+          }
+        }
       };
     };
   };
 }
 
 menu message_menu_model {
-  item {
-    label: _("Mark as _Unread");
-    action: "msg.mark-unread";
+  section {
+    item {
+      label: _("Mark as _Unread");
+      action: "msg.mark-unread";
+    }
+
+    item {
+      label: _("Mark as _Read");
+      action: "msg.mark-read";
+    }
   }
 
-  item {
-    label: _("Mark as _Read");
-    action: "msg.mark-read";
+  section {
+    item {
+      label: _("Load _Images");
+      action: "msg.load-images";
+    }
+
+    item {
+      label: _("Always Load Images From This _Sender");
+      action: "msg.trust-sender";
+    }
   }
 }

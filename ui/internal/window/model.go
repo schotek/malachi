@@ -29,6 +29,19 @@ type folderEntry struct {
 	Account api.Account
 	Folder  api.Folder
 	Depth   int
+
+	// HasChildren means the row can be folded; Collapsed means it currently
+	// is, and its descendants are left out of the list entirely.
+	HasChildren bool
+	Collapsed   bool
+	// Nested is set on every row of an account whose tree has at least one
+	// parent, so childless rows can reserve the width of the arrow and their
+	// titles line up. An account with a flat folder list looks as before.
+	Nested bool
+	// Badge is the number the row shows: the folder's own unread count, or
+	// that plus every hidden descendant's while it is collapsed. Unread mail
+	// folded away is still visible on the ancestor.
+	Badge int
 }
 
 // mailModel holds what the main window currently shows.
@@ -42,6 +55,8 @@ type mailModel struct {
 	folderErr map[api.AccountID]error
 	entries   []folderEntry
 	selected  folderKey
+	// collapsed is which sidebar nodes are folded away (collapse.go).
+	collapsed collapseState
 
 	// listFolder is the folder messages belong to (or are being loaded
 	// for); it lags selected between selectFolder and loadMessages.
@@ -88,7 +103,21 @@ const maxFolderDepth = 32
 
 // rebuildEntries recomputes the sidebar rows from accounts and folders.
 func (m *mailModel) rebuildEntries() {
-	m.entries = sortFolders(m.accounts, m.folders)
+	m.entries = sortFolders(m.accounts, m.folders, m.collapsed)
+}
+
+// refreshBadges recomputes the number every visible row shows, after an
+// unread count moved. A collapsed row sums its hidden descendants, so one
+// changed folder can move an ancestor's badge and a single-row update is not
+// enough.
+func (m *mailModel) refreshBadges() {
+	for i := range m.entries {
+		e := &m.entries[i]
+		if e.Header {
+			continue
+		}
+		e.Badge = badgeFor(m.folders[e.Account.ID], e.Folder, e.Collapsed)
+	}
 }
 
 // setMessages replaces the list with a first page. Duplicate IDs (which a
@@ -234,6 +263,26 @@ func (m *mailModel) folder(k folderKey) (api.Folder, bool) {
 	return api.Folder{}, false
 }
 
+// folderListed reports whether the sidebar still lists k, whether or not a
+// fold currently hides its row. It is the test for keeping a selection:
+// folding a parent must not move it, but an account switched off, a folder
+// gone from the server or an outbox that has just drained must.
+func (m *mailModel) folderListed(k folderKey) bool {
+	if k == (folderKey{}) {
+		return false
+	}
+	a, ok := m.account(k.Account)
+	if !ok || !a.Enabled {
+		return false
+	}
+	for _, f := range visibleFolders(m.folders[k.Account]) {
+		if f.ID == k.Folder {
+			return true
+		}
+	}
+	return false
+}
+
 // folderByRole returns the account's folder with the given special-use
 // role (the first one when a server reports several).
 func (m *mailModel) folderByRole(acc api.AccountID, role api.FolderRole) (api.Folder, bool) {
@@ -294,6 +343,9 @@ func (m *mailModel) adjustUnread(k folderKey, delta int) {
 				e.Folder.Unread = list[i].Unread
 			}
 		}
+		// The folder may be hidden under a collapsed ancestor whose badge
+		// counts it, so every badge is recomputed, not just this row's.
+		m.refreshBadges()
 		return
 	}
 }
@@ -384,22 +436,31 @@ func enabledAccounts(accounts []api.Account) []api.Account {
 // maxFolderDepth are appended after the tree with a depth counted from
 // their display path. Non-selectable containers are kept so their children
 // have somewhere to hang.
-func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder) []folderEntry {
+func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState) []folderEntry {
 	enabled := enabledAccounts(accounts)
 	headers := len(enabled) >= 2
 	var out []folderEntry
 	for _, a := range enabled {
+		// Only a header can fold a whole account away, and headers only
+		// exist from two accounts on.
+		folded := headers && collapsed.accountCollapsed(a.ID)
 		if headers {
-			out = append(out, folderEntry{Header: true, Account: a})
+			out = append(out, folderEntry{
+				Header: true, Account: a,
+				HasChildren: true, Collapsed: folded,
+			})
 		}
-		out = append(out, folderTree(a, folders[a.ID])...)
+		if folded {
+			continue
+		}
+		out = append(out, folderTree(a, folders[a.ID], collapsed)...)
 	}
 	return out
 }
 
 // folderTree orders one account's folders (see sortFolders), leaving out
-// what visibleFolders hides.
-func folderTree(a api.Account, list []api.Folder) []folderEntry {
+// what visibleFolders hides and everything below a collapsed folder.
+func folderTree(a api.Account, list []api.Folder, collapsed collapseState) []folderEntry {
 	list = visibleFolders(list)
 	byID := make(map[api.FolderID]bool, len(list))
 	for _, f := range list {
@@ -418,6 +479,9 @@ func folderTree(a api.Account, list []api.Folder) []folderEntry {
 	for id := range children {
 		sortSiblings(children[id])
 	}
+	// One row of an account either all reserve the arrow's width or none do,
+	// so a flat mailbox keeps the layout it had before folding existed.
+	nested := len(children) > 0
 
 	out := make([]folderEntry, 0, len(list))
 	visited := make(map[api.FolderID]bool, len(list))
@@ -427,8 +491,24 @@ func folderTree(a api.Account, list []api.Folder) []folderEntry {
 			return
 		}
 		visited[f.ID] = true
-		out = append(out, folderEntry{Account: a, Folder: f, Depth: depth})
-		for _, c := range children[f.ID] {
+		kids := children[f.ID]
+		fold := len(kids) > 0 && collapsed.folderCollapsed(folderKey{Account: a.ID, Folder: f.ID})
+		out = append(out, folderEntry{
+			Account: a, Folder: f, Depth: depth,
+			HasChildren: len(kids) > 0,
+			Collapsed:   fold,
+			Nested:      nested,
+			Badge:       badgeFor(list, f, fold),
+		})
+		if fold {
+			// Mark the whole subtree seen, or the orphan sweep below would
+			// list every hidden descendant flat.
+			for _, c := range kids {
+				markSubtree(children, c, visited)
+			}
+			return
+		}
+		for _, c := range kids {
 			walk(c, depth+1)
 		}
 	}
@@ -446,9 +526,55 @@ func folderTree(a api.Account, list []api.Folder) []folderEntry {
 	}
 	sortSiblings(orphans)
 	for _, f := range orphans {
-		out = append(out, folderEntry{Account: a, Folder: f, Depth: strings.Count(f.Path, "/")})
+		out = append(out, folderEntry{
+			Account: a, Folder: f, Depth: strings.Count(f.Path, "/"),
+			Nested: nested, Badge: f.Unread,
+		})
 	}
 	return out
+}
+
+// markSubtree records f and everything below it as visited, so a collapsed
+// branch is not mistaken for an unreachable one.
+func markSubtree(children map[api.FolderID][]api.Folder, f api.Folder, visited map[api.FolderID]bool) {
+	if visited[f.ID] {
+		return
+	}
+	visited[f.ID] = true
+	for _, c := range children[f.ID] {
+		markSubtree(children, c, visited)
+	}
+}
+
+// badgeFor is the unread count a row shows: the folder's own, plus every
+// descendant's while the folder is collapsed and they are out of sight. The
+// walk is over the account's whole list, which is why it tolerates parent
+// cycles by visiting each folder at most once.
+func badgeFor(list []api.Folder, f api.Folder, collapsed bool) int {
+	if !collapsed {
+		return f.Unread
+	}
+	children := make(map[api.FolderID][]api.Folder, len(list))
+	for _, c := range list {
+		if c.ParentID != "" && c.ParentID != c.ID {
+			children[c.ParentID] = append(children[c.ParentID], c)
+		}
+	}
+	total := f.Unread
+	seen := map[api.FolderID]bool{f.ID: true}
+	var sum func(id api.FolderID)
+	sum = func(id api.FolderID) {
+		for _, c := range children[id] {
+			if seen[c.ID] {
+				continue
+			}
+			seen[c.ID] = true
+			total += c.Unread
+			sum(c.ID)
+		}
+	}
+	sum(f.ID)
+	return total
 }
 
 // sortSiblings orders folders at one tree level: special-use roles first

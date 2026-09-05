@@ -23,5 +23,6 @@ ui/internal/window/messages.go
 ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
+ui/internal/window/remote.go
 ui/internal/window/sync.go
 ui/internal/window/window.go

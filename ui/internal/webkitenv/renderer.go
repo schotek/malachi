@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package editor
+// Package webkitenv configures the WebKitGTK process environment before the
+// first WebView exists. Every package that creates a WebView imports it for
+// its side effect (the compose editor, the message viewer), so the setting
+// below is in place whichever of them comes first.
+package webkitenv
 
 import "os"
 
@@ -19,7 +23,7 @@ const (
 // WebKit only reads the variable when it launches its web process, so it
 // must be set before the first WebView exists; package init is early
 // enough. The fallback path (GL textures through GSK) is fast enough for
-// an editor and, later, message rendering.
+// an editor and for message rendering.
 //
 // Set MALACHI_WEBKIT_DMABUF=1 to keep WebKit's default renderer (e.g. to
 // re-test a driver), or set WEBKIT_DISABLE_DMABUF_RENDERER yourself.

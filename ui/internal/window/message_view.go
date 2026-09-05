@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -22,8 +24,13 @@ import (
 // message.body in parallel; the loaded cache is shared with stand-alone
 // message windows and the compose prefill.
 
-// maxLoaded bounds the loaded cache; the oldest entries are evicted first.
-const maxLoaded = 64
+// maxLoaded bounds the loaded cache by entries and maxLoadedBytes by the
+// size of the bodies in it (an HTML body carries its inlined pictures);
+// the oldest entries are evicted first.
+const (
+	maxLoaded      = 64
+	maxLoadedBytes = 32 << 20
+)
 
 // loadedSeq numbers cache insertions so pruneLoaded can find the oldest.
 // Touched on the main loop only.
@@ -37,6 +44,10 @@ type loadedMessage struct {
 	msg  *api.Message
 	body *api.MessageBodyResult
 	err  error // message.body failure
+
+	// allowed is set once the body was fetched with remote images allowed
+	// (the user asked for them); the banner offering that stays down then.
+	allowed bool
 
 	seq uint64 // insertion order in Window.loaded
 
@@ -53,35 +64,98 @@ func (lm *loadedMessage) complete() bool { return lm.msg != nil && lm.body != ni
 // bodySettled reports whether the body half has an answer (content or error).
 func (lm *loadedMessage) bodySettled() bool { return lm.body != nil || lm.err != nil }
 
-// messageLabels are the header and body labels of one message view, shared
-// by the main pane and the stand-alone window. Everything shown is server
-// data: the labels never interpret markup.
-type messageLabels struct {
-	subject, from, recipients, date, attachments, body *gtk.Label
+// size is what the entry costs the cache: its body.
+func (lm *loadedMessage) size() int {
+	if lm.body == nil {
+		return 0
+	}
+	return len(lm.body.HTML) + len(lm.body.Text)
 }
 
-// paneLabels are the main window's message pane labels.
-func (w *Window) paneLabels() messageLabels {
-	return messageLabels{
-		subject:     w.messageSubject,
-		from:        w.messageFrom,
-		recipients:  w.messageRecipients,
-		date:        w.messageDate,
-		attachments: w.messageAttachments,
-		body:        w.messageBody,
+// messageView is one message display, shared in shape by the main pane and
+// the stand-alone window: the header labels, the plain-text body, the HTML
+// view (created when the first HTML message is shown) and the remote-image
+// banner. Everything shown is server data: the labels never interpret
+// markup, and the HTML view only ever gets the sanitiser's output.
+type messageView struct {
+	win    *Window
+	parent *gtk.Window // for dialogs the view opens
+
+	subject, from, recipients, date, attachments, body *gtk.Label
+	hint                                               *gtk.Label // why only text is shown
+	stack                                              *gtk.Stack // "text" | "html"
+	slot                                               *gtk.Box   // hosts html
+	banner                                             *adw.Banner
+	html                                               *htmlview.View
+
+	links []api.Link // of the body on display, for link activation
+}
+
+// newMessageView binds the widgets of one message display from a builder;
+// the object IDs are the same in window.blp and message_window.blp.
+func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView {
+	v := &messageView{
+		win:         w,
+		parent:      parent,
+		subject:     b.GetObject("message_subject").Cast().(*gtk.Label),
+		from:        b.GetObject("message_from").Cast().(*gtk.Label),
+		recipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
+		date:        b.GetObject("message_date").Cast().(*gtk.Label),
+		attachments: b.GetObject("message_attachments").Cast().(*gtk.Label),
+		body:        b.GetObject("message_body").Cast().(*gtk.Label),
+		hint:        b.GetObject("body_hint").Cast().(*gtk.Label),
+		stack:       b.GetObject("body_stack").Cast().(*gtk.Stack),
+		slot:        b.GetObject("html_slot").Cast().(*gtk.Box),
+		banner:      b.GetObject("remote_banner").Cast().(*adw.Banner),
+	}
+	v.plain()
+	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
+	v.banner.SetUseMarkup(false)
+	v.banner.SetButtonLabel(i18n.T("Load Images"))
+	return v
+}
+
+// paneLabels is the main window's message pane.
+func (w *Window) paneLabels() *messageView { return w.pane }
+
+// plain switches markup off on every label (CLAUDE.md rule 3).
+func (v *messageView) plain() {
+	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.attachments, v.body, v.hint} {
+		lb.SetUseMarkup(false)
 	}
 }
 
-// plain switches markup off on every label (CLAUDE.md rule 3).
-func (l messageLabels) plain() {
-	for _, lb := range []*gtk.Label{l.subject, l.from, l.recipients, l.date, l.attachments, l.body} {
-		lb.SetUseMarkup(false)
+// htmlView is the WebKit view, created on first use: a plain-text mailbox
+// never starts a web process.
+func (v *messageView) htmlView() *htmlview.View {
+	if v.html == nil {
+		v.html = htmlview.New(v.win.log, v.win.fetchPart)
+		v.html.OnLink = func(uri string) { v.win.openLink(v.parent, uri, v.links) }
+		v.html.SetZoom(v.win.settings.TextZoom())
+		v.slot.Append(v.html)
+	}
+	return v.html
+}
+
+// setZoom pushes the text-zoom setting to the HTML view, if there is one.
+func (v *messageView) setZoom(percent int) {
+	if v.html != nil {
+		v.html.SetZoom(percent)
+	}
+}
+
+// showText shows plain text in the body area.
+func (v *messageView) showText(text string) {
+	v.body.SetLabel(text)
+	v.stack.SetVisibleChildName("text")
+	if v.html != nil {
+		v.html.Clear() // drop the pictures of the previous message
 	}
 }
 
 // renderHeaders shows the headers: from the summary alone, or from the full
 // message when m is not nil (recipients with Cc, attachments).
-func (l messageLabels) renderHeaders(s api.MessageSummary, m *api.Message) {
+func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 	from, to, date := s.From, s.To, s.Date
 	var cc []api.Address
 	var atts []api.Attachment
@@ -89,49 +163,74 @@ func (l messageLabels) renderHeaders(s api.MessageSummary, m *api.Message) {
 		from, to, cc, date, atts = m.From, m.To, m.CC, m.Date, m.Attachments
 		s.Subject = m.Subject
 	}
-	l.subject.SetLabel(subjectText(s.Subject))
+	v.subject.SetLabel(subjectText(s.Subject))
 	var first api.Address
 	if len(from) > 0 {
 		first = from[0]
 	}
-	l.from.SetLabel(widget.FormatAddress(first))
+	v.from.SetLabel(widget.FormatAddress(first))
 	r := recipientsText(to, cc)
-	l.recipients.SetLabel(r)
-	l.recipients.SetVisible(r != "")
+	v.recipients.SetLabel(r)
+	v.recipients.SetVisible(r != "")
 	if date.IsZero() {
-		l.date.SetLabel("")
+		v.date.SetLabel("")
 	} else {
-		l.date.SetLabel(widget.FormatDateTime(date))
+		v.date.SetLabel(widget.FormatDateTime(date))
 	}
 	caption := attachmentsCaption(len(atts), attachmentNames(atts))
-	l.attachments.SetLabel(caption)
-	l.attachments.SetVisible(caption != "")
+	v.attachments.SetLabel(caption)
+	v.attachments.SetVisible(caption != "")
 }
 
-// renderBody shows the body, its state, or the error that prevented it.
-func (l messageLabels) renderBody(b *api.MessageBodyResult, err error) {
+// renderBody shows the body, its state, or the error that prevented it:
+// the sanitised HTML in the web view when there is one, the plain text
+// otherwise, with a hint when the HTML was withheld and the banner when
+// remote images were removed.
+func (v *messageView) renderBody(lm *loadedMessage) {
+	b, err := lm.body, lm.err
+	v.links = nil
 	if err != nil {
-		l.body.SetLabel(widget.RPCErrorText(i18n.T("Loading the message"), err))
+		v.hint.SetVisible(false)
+		v.banner.SetRevealed(false)
+		v.showText(widget.RPCErrorText(i18n.T("Loading the message"), err))
 		return
 	}
-	l.body.SetLabel(bodyText(b))
+	if b != nil && b.BodyState == api.BodyFetched && b.HTML != "" {
+		v.links = b.Links
+		v.hint.SetVisible(false)
+		v.htmlView().Load(b.HTML)
+		v.stack.SetVisibleChildName("html")
+		renderRemoteBanner(v.banner, lm)
+		return
+	}
+	v.hint.SetVisible(b != nil && b.HTMLWithheld)
+	v.banner.SetRevealed(false)
+	v.showText(bodyText(b))
 }
 
 // render shows whatever lm holds so far: full headers once message.get
 // answered, the body once message.body did. A nil lm shows the summary
 // and the loading placeholder.
-func (l messageLabels) render(s api.MessageSummary, lm *loadedMessage) {
+func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	if lm == nil {
-		l.renderHeaders(s, nil)
-		l.body.SetLabel(i18n.T("Loading…"))
+		v.renderHeaders(s, nil)
+		v.loading()
 		return
 	}
-	l.renderHeaders(s, lm.msg)
+	v.renderHeaders(s, lm.msg)
 	if lm.bodySettled() {
-		l.renderBody(lm.body, lm.err)
+		v.renderBody(lm)
 	} else {
-		l.body.SetLabel(i18n.T("Loading…"))
+		v.loading()
 	}
+}
+
+// loading shows the placeholder while the body is on its way.
+func (v *messageView) loading() {
+	v.links = nil
+	v.hint.SetVisible(false)
+	v.banner.SetRevealed(false)
+	v.showText(i18n.T("Loading…"))
 }
 
 // subjectText is the subject to display; an empty one gets a placeholder.
@@ -216,7 +315,6 @@ func (w *Window) showMessage(id api.MessageID) {
 	}
 	gen := w.model.bumpBody()
 	labels := w.paneLabels()
-	labels.plain()
 	labels.render(s, nil)
 	w.outboxBanner.SetRevealed(false)
 	w.messageStack.SetVisibleChildName("message")
@@ -302,18 +400,23 @@ func (w *Window) settleLoaded(id api.MessageID, lm *loadedMessage) {
 	}
 }
 
-// storeLoaded caches lm for id, evicting the oldest entries beyond maxLoaded.
+// storeLoaded caches lm for id, evicting the oldest entries beyond the
+// caps.
 func (w *Window) storeLoaded(id api.MessageID, lm *loadedMessage) {
 	loadedSeq++
 	lm.seq = loadedSeq
 	w.loaded[id] = lm
-	pruneLoaded(w.loaded, maxLoaded)
+	pruneLoaded(w.loaded, maxLoaded, maxLoadedBytes)
 }
 
 // pruneLoaded evicts the entries with the lowest seq until at most limit
-// remain.
-func pruneLoaded(m map[api.MessageID]*loadedMessage, limit int) {
-	for len(m) > limit {
+// remain and their bodies fit in maxBytes; the newest entry always stays.
+func pruneLoaded(m map[api.MessageID]*loadedMessage, limit, maxBytes int) {
+	total := 0
+	for _, lm := range m {
+		total += lm.size()
+	}
+	for len(m) > 1 && (len(m) > limit || total > maxBytes) {
 		var oldest api.MessageID
 		first := true
 		for id, lm := range m {
@@ -321,6 +424,7 @@ func pruneLoaded(m map[api.MessageID]*loadedMessage, limit int) {
 				oldest, first = id, false
 			}
 		}
+		total -= m[oldest].size()
 		delete(m, oldest)
 	}
 }

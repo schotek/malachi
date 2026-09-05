@@ -17,6 +17,7 @@ import (
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
 
 	"github.com/schotek/malachi/ui/data"
+	_ "github.com/schotek/malachi/ui/internal/webkitenv" // renderer switch before the first view
 )
 
 // Editor is the WebView plus the bridge state. Embed it where a widget is

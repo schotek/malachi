@@ -107,13 +107,29 @@ func TestPruneLoaded(t *testing.T) {
 	for i, id := range []api.MessageID{"a", "b", "c", "d"} {
 		m[id] = &loadedMessage{seq: uint64(i + 1)}
 	}
-	pruneLoaded(m, 2)
+	pruneLoaded(m, 2, maxLoadedBytes)
 	if len(m) != 2 || m["c"] == nil || m["d"] == nil {
 		t.Errorf("pruneLoaded kept %v", m)
 	}
-	pruneLoaded(m, 2) // no-op at the limit
+	pruneLoaded(m, 2, maxLoadedBytes) // no-op at the limit
 	if len(m) != 2 {
 		t.Errorf("pruneLoaded at limit: %d entries", len(m))
+	}
+
+	// Bodies count too: big HTML evicts older entries before the count
+	// limit, but the newest entry always stays, however big.
+	big := func(seq uint64, n int) *loadedMessage {
+		return &loadedMessage{seq: seq, body: &api.MessageBodyResult{HTML: strings.Repeat("x", n)}}
+	}
+	m = map[api.MessageID]*loadedMessage{"a": big(1, 600), "b": big(2, 600), "c": big(3, 600)}
+	pruneLoaded(m, 10, 1000)
+	if len(m) != 1 || m["c"] == nil {
+		t.Errorf("byte cap kept %v, want only the newest", m)
+	}
+	m = map[api.MessageID]*loadedMessage{"a": big(1, 5000)}
+	pruneLoaded(m, 10, 1000)
+	if len(m) != 1 {
+		t.Errorf("the newest entry must survive the byte cap: %v", m)
 	}
 }
 

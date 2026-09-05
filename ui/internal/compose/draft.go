@@ -22,11 +22,10 @@ import (
 const autosaveDelay = 30 // seconds
 
 // richText is whether the editor's HTML is transmitted with the draft. The
-// backend's HTML sanitiser is still a fail-closed stub, so draft.save
-// rejects any non-empty htmlBody: only the plain text goes over the wire,
-// the formatting toolbar is hidden and inline images are off. Flip it once
-// the sanitiser lands.
-const richText = false
+// backend sanitises it in compose mode and derives the text alternative,
+// so the formatting toolbar and inline images are on. Off, only the plain
+// text goes over the wire (kept as a switch for a text-only build).
+const richText = true
 
 type saveReason int
 

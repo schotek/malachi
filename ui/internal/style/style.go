@@ -63,6 +63,9 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// lists many one-line entries.
 	b.WriteString(".navigation-sidebar row.folder-row { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }\n")
 	b.WriteString("row.folder-row > box.header { min-height: 0; padding-top: 0; padding-bottom: 0; }\n")
+	// The fold arrow of a sidebar row. A default button would push the row
+	// past the 32px above, so it is squeezed to the size of its icon.
+	b.WriteString("button.folder-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
 	// Separators between messages (show-separators on the list in window.blp).
 	// The sidebar style rounds its rows and insets them, which would bend the
 	// separator into a shallow arc and leave a gap under it, so the message
