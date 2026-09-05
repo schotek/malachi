@@ -31,6 +31,13 @@ const (
 	maxLoadedBytes = 32 << 20
 )
 
+// bodySpinnerDelay is how long the body area stays blank before the
+// spinner appears, in milliseconds. Bodies come from the local store, so
+// most messages render sooner than this and never show a spinner at all;
+// without the delay one would flash on every click, which is more
+// distracting than the blank area it replaces.
+const bodySpinnerDelay = 400
+
 // loadedSeq numbers cache insertions so pruneLoaded can find the oldest.
 // Touched on the main loop only.
 var loadedSeq uint64
@@ -89,6 +96,9 @@ type messageView struct {
 	load, trust func()
 
 	links []api.Link // of the body on display, for link activation
+
+	// spinner is the pending "reveal the spinner" timer, 0 when none.
+	spinner glib.SourceHandle
 }
 
 // newMessageView binds the widgets of one message display from a builder;
@@ -196,6 +206,7 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 // otherwise, with a hint when the HTML was withheld and the banner when
 // remote images were removed.
 func (v *messageView) renderBody(lm *loadedMessage) {
+	v.cancelSpinner()
 	b, err := lm.body, lm.err
 	v.links = nil
 	if err != nil {
@@ -234,12 +245,29 @@ func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	}
 }
 
-// loading shows the placeholder while the body is on its way.
+// loading empties the body area while the body is on its way and, if it
+// takes long enough to notice, shows a spinner in the middle of it.
 func (v *messageView) loading() {
+	v.cancelSpinner()
 	v.links = nil
 	v.hint.SetVisible(false)
 	v.bar.SetVisible(false)
-	v.showText(i18n.T("Loading…"))
+	// Blank at once: this also drops the pictures of the message before.
+	v.showText("")
+	v.spinner = glib.TimeoutAdd(bodySpinnerDelay, func() bool {
+		v.spinner = 0
+		v.stack.SetVisibleChildName("loading")
+		return false
+	})
+}
+
+// cancelSpinner disarms the pending spinner, if any. Safe to call twice
+// and after the view is gone.
+func (v *messageView) cancelSpinner() {
+	if v.spinner != 0 {
+		glib.SourceRemove(v.spinner)
+		v.spinner = 0
+	}
 }
 
 // subjectText is the subject to display; an empty one gets a placeholder.
@@ -493,6 +521,8 @@ func (w *Window) openMessageWindow(id api.MessageID) {
 	w.openMessages[id] = mw
 	mw.ConnectCloseRequest(func() bool {
 		mw.closed = true
+		// The only timer that would outlive the window.
+		mw.view.cancelSpinner()
 		delete(w.openMessages, id)
 		return false
 	})
