@@ -37,6 +37,9 @@ WebKit.WebView html_view {
     enable-webgl: false;
     enable-webaudio: false;
     enable-page-cache: false;
+    // Wheel steps land at once: WebKit's scroll animation lags behind the
+    // wheel and feels sticky next to the native list.
+    enable-smooth-scrolling: false;
     enable-dns-prefetching: false;
     enable-hyperlink-auditing: false;
     enable-site-specific-quirks: false;
