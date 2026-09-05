@@ -57,6 +57,8 @@ func main() {
 		serviceHold bool
 	)
 	app.ConnectStartup(func() {
+		// Attachments a previous run wrote for opening (docs/security.md §8).
+		window.SweepOpenedAttachments()
 		prefs = settings.Open(log)
 		style.Apply(prefs)
 		mgr = compose.NewManager(app, rpc, log, prefs)
@@ -100,7 +102,10 @@ func main() {
 			mgr.Open(p)
 		}
 	})
-	app.ConnectShutdown(func() { rpc.Close() })
+	app.ConnectShutdown(func() {
+		window.SweepOpenedAttachments()
+		rpc.Close()
+	})
 
 	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))

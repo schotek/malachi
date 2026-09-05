@@ -180,15 +180,12 @@ Adw.Window message_window {
               ]
             }
 
-            // "N attachments: names"; hidden without attachments.
-            Label message_attachments {
-              xalign: 0;
-              wrap: true;
+            // Attachment chips, built from Go (window/attachments.go);
+            // hidden without any.
+            Adw.WrapBox message_attachments {
+              child-spacing: 6;
+              line-spacing: 6;
               visible: false;
-
-              styles [
-                "caption",
-              ]
             }
 
             // Why only the plain text is shown; hidden otherwise.

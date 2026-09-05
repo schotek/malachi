@@ -6,6 +6,7 @@
 package widget
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -79,6 +80,21 @@ func FormatDateTime(t time.Time) string {
 	// "Wed, 2 Sep 2026 at 15:04".
 	// xgettext:no-c-format
 	return strftime(t, i18n.T("%a, %-d %b %Y at %H:%M"))
+}
+
+// FormatSize renders a byte count for attachment chips: MiB, KiB or B.
+func FormatSize(n int64) string {
+	switch {
+	case n >= 1<<20:
+		// TRANSLATORS: file size in mebibytes.
+		return fmt.Sprintf(i18n.T("%.1f MiB"), float64(n)/(1<<20))
+	case n >= 1<<10:
+		// TRANSLATORS: file size in kibibytes.
+		return fmt.Sprintf(i18n.T("%.0f KiB"), float64(n)/(1<<10))
+	default:
+		// TRANSLATORS: file size in bytes.
+		return fmt.Sprintf(i18n.T("%d B"), n)
+	}
 }
 
 // strftime formats through GLib so month and day names follow the locale.

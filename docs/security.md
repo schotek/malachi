@@ -285,8 +285,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - The RPC socket is `0600`; any process running as the user can talk to the
   daemon. That is the same trust level as reading `store.db` directly, so
   no additional authentication is layered on the socket.
-- Temporary files for attachments go into `$XDG_RUNTIME_DIR` or
-  `$XDG_CACHE_HOME/malachi`, `0600`, removed after use.
+- An attachment being opened is written by the UI to a private `0700`
+  directory under `$XDG_RUNTIME_DIR/malachi/open` (or
+  `$XDG_CACHE_HOME/malachi/open` without a runtime dir) as a `0600` file
+  and handed to the OpenURI portal / the default application. The viewer
+  may read it lazily, so the file is not removed at once: the directory is
+  emptied when the UI starts and exits, and entries older than an hour are
+  swept whenever the next attachment is opened.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.

@@ -202,6 +202,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			w.trustSender(s.ID)
 		}
 	}
+	w.pane.toast = w.Toast
 	w.registerActions()
 	w.messageStack.SetVisibleChildName(w.emptyPageName())
 	// The HTML views scale with the text-zoom setting; the plain-text label

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -83,17 +84,24 @@ type messageView struct {
 	win    *Window
 	parent *gtk.Window // for dialogs the view opens
 
-	subject, from, recipients, date, attachments, body *gtk.Label
-	hint                                               *gtk.Label // why only text is shown
-	stack                                              *gtk.Stack // "text" | "html"
-	slot                                               *gtk.Box   // hosts html
-	html                                               *htmlview.View
+	subject, from, recipients, date, body *gtk.Label
+	hint                                  *gtk.Label // why only text is shown
+	stack                                 *gtk.Stack // "text" | "loading" | "html"
+	slot                                  *gtk.Box   // hosts html
+	html                                  *htmlview.View
+
+	// The attachment chips (attachments.go) and what is in the box now.
+	attachments *adw.WrapBox
+	chips       []gtk.Widgetter
 
 	// The remote-image bar: the count, and the buttons whose work the
 	// owner supplies as load (this message) and trust (this sender).
 	bar         *gtk.Box
 	barLabel    *gtk.Label
 	load, trust func()
+
+	// toast shows a message in the owning window, when it wired one.
+	toast func(string)
 
 	links []api.Link // of the body on display, for link activation
 
@@ -111,7 +119,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		from:        b.GetObject("message_from").Cast().(*gtk.Label),
 		recipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
 		date:        b.GetObject("message_date").Cast().(*gtk.Label),
-		attachments: b.GetObject("message_attachments").Cast().(*gtk.Label),
+		attachments: b.GetObject("message_attachments").Cast().(*adw.WrapBox),
 		body:        b.GetObject("message_body").Cast().(*gtk.Label),
 		hint:        b.GetObject("body_hint").Cast().(*gtk.Label),
 		stack:       b.GetObject("body_stack").Cast().(*gtk.Stack),
@@ -139,7 +147,7 @@ func (w *Window) paneLabels() *messageView { return w.pane }
 
 // plain switches markup off on every label (CLAUDE.md rule 3).
 func (v *messageView) plain() {
-	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.attachments, v.body, v.hint, v.barLabel} {
+	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.body, v.hint, v.barLabel} {
 		lb.SetUseMarkup(false)
 	}
 }
@@ -173,13 +181,13 @@ func (v *messageView) showText(text string) {
 }
 
 // renderHeaders shows the headers: from the summary alone, or from the full
-// message when m is not nil (recipients with Cc, attachments).
+// message when m is not nil (recipients with Cc). The attachment chips are
+// renderAttachments' business: they depend on the body too.
 func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 	from, to, date := s.From, s.To, s.Date
 	var cc []api.Address
-	var atts []api.Attachment
 	if m != nil {
-		from, to, cc, date, atts = m.From, m.To, m.CC, m.Date, m.Attachments
+		from, to, cc, date = m.From, m.To, m.CC, m.Date
 		s.Subject = m.Subject
 	}
 	v.subject.SetLabel(subjectText(s.Subject))
@@ -196,9 +204,6 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 	} else {
 		v.date.SetLabel(widget.FormatDateTime(date))
 	}
-	caption := attachmentsCaption(len(atts), attachmentNames(atts))
-	v.attachments.SetLabel(caption)
-	v.attachments.SetVisible(caption != "")
 }
 
 // renderBody shows the body, its state, or the error that prevented it:
@@ -215,7 +220,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 		v.showText(widget.RPCErrorText(i18n.T("Loading the message"), err))
 		return
 	}
-	if b != nil && b.BodyState == api.BodyFetched && b.HTML != "" {
+	if showsHTML(b) {
 		v.links = b.Links
 		v.hint.SetVisible(false)
 		v.htmlView().Load(b.HTML)
@@ -229,12 +234,13 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 }
 
 // render shows whatever lm holds so far: full headers once message.get
-// answered, the body once message.body did. A nil lm shows the summary
-// and the loading placeholder.
+// answered, the body once message.body did, and the attachment chips from
+// both. A nil lm shows the summary and the loading placeholder.
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	if lm == nil {
 		v.renderHeaders(s, nil)
 		v.loading()
+		v.renderAttachments(s, nil)
 		return
 	}
 	v.renderHeaders(s, lm.msg)
@@ -243,6 +249,7 @@ func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	} else {
 		v.loading()
 	}
+	v.renderAttachments(s, lm)
 }
 
 // loading empties the body area while the body is on its way and, if it
@@ -290,36 +297,6 @@ func recipientsText(to, cc []api.Address) string {
 		lines = append(lines, fmt.Sprintf(i18n.T("Cc: %s"), compose.FormatAddressList(cc)))
 	}
 	return strings.Join(lines, "\n")
-}
-
-// attachmentNames lists what to call each attachment: its file name, or
-// its content type when the part has none. Nameless, typeless parts are
-// skipped (attachmentsCaption still counts them).
-func attachmentNames(atts []api.Attachment) []string {
-	names := make([]string, 0, len(atts))
-	for _, a := range atts {
-		switch {
-		case strings.TrimSpace(a.Filename) != "":
-			names = append(names, strings.TrimSpace(a.Filename))
-		case strings.TrimSpace(a.ContentType) != "":
-			names = append(names, strings.TrimSpace(a.ContentType))
-		}
-	}
-	return names
-}
-
-// attachmentsCaption is the "N attachments: names" line; empty when n is 0.
-func attachmentsCaption(n int, names []string) string {
-	switch {
-	case n <= 0:
-		return ""
-	case len(names) == 0:
-		// TRANSLATORS: %d is the number of attachments.
-		return fmt.Sprintf(i18n.N("%d attachment", "%d attachments", n), n)
-	default:
-		// TRANSLATORS: %d is the number of attachments, %s their names.
-		return fmt.Sprintf(i18n.N("%d attachment: %s", "%d attachments: %s", n), n, strings.Join(names, ", "))
-	}
 }
 
 // bodyText is what the body label shows for a message.body result.

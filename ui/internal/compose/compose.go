@@ -467,7 +467,7 @@ func (w *Window) addChip(att api.DraftAttachment) {
 	name := gtk.NewLabel(att.Filename) // backend-sanitised, still plain text
 	name.SetEllipsize(3)               // PANGO_ELLIPSIZE_END
 	name.SetMaxWidthChars(24)
-	size := gtk.NewLabel(formatSize(att.Size))
+	size := gtk.NewLabel(widget.FormatSize(att.Size))
 	size.AddCSSClass("caption")
 	size.AddCSSClass("dim-label")
 	remove := gtk.NewButtonFromIconName("window-close-symbolic")
@@ -529,18 +529,4 @@ func (w *Window) setAttachments(atts []api.DraftAttachment) {
 		w.addChip(a)
 	}
 	w.attBox.SetVisible(len(w.attachments) > 0)
-}
-
-func formatSize(n int64) string {
-	switch {
-	case n >= 1<<20:
-		// TRANSLATORS: file size in mebibytes.
-		return fmt.Sprintf(i18n.T("%.1f MiB"), float64(n)/(1<<20))
-	case n >= 1<<10:
-		// TRANSLATORS: file size in kibibytes.
-		return fmt.Sprintf(i18n.T("%.0f KiB"), float64(n)/(1<<10))
-	default:
-		// TRANSLATORS: file size in bytes.
-		return fmt.Sprintf(i18n.T("%d B"), n)
-	}
 }

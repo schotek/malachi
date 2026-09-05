@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 10:26+0200\n"
+"POT-Creation-Date: 2026-09-05 10:57+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:133
+#: ui/main.go:138
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -180,24 +180,6 @@ msgstr ""
 msgid "Remove"
 msgstr ""
 
-#. TRANSLATORS: file size in mebibytes.
-#: ui/internal/compose/compose.go:538
-#, c-format
-msgid "%.1f MiB"
-msgstr ""
-
-#. TRANSLATORS: file size in kibibytes.
-#: ui/internal/compose/compose.go:541
-#, c-format
-msgid "%.0f KiB"
-msgstr ""
-
-#. TRANSLATORS: file size in bytes.
-#: ui/internal/compose/compose.go:544
-#, c-format
-msgid "%d B"
-msgstr ""
-
 #: ui/internal/compose/draft.go:103 ui/internal/window/outbox.go:63
 msgid "Sending…"
 msgstr ""
@@ -301,39 +283,57 @@ msgid "Subject: %s"
 msgstr ""
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:286
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:293
 #, c-format
 msgid "To: %s"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
-#: ui/internal/widget/format.go:59
+#: ui/internal/widget/format.go:60
 #, no-c-format
 msgid "%-d %b"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in another year in the
 #. message list, e.g. "2025-09-02".
-#: ui/internal/widget/format.go:64
+#: ui/internal/widget/format.go:65
 #, no-c-format
 msgid "%Y-%m-%d"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
-#: ui/internal/widget/format.go:72
+#: ui/internal/widget/format.go:73
 #, no-c-format
 msgid "%H:%M"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a full date and time, e.g.
 #. "Wed, 2 Sep 2026 at 15:04".
-#: ui/internal/widget/format.go:81
+#: ui/internal/widget/format.go:82
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr ""
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:278
+#. TRANSLATORS: file size in mebibytes.
+#: ui/internal/widget/format.go:90
+#, c-format
+msgid "%.1f MiB"
+msgstr ""
+
+#. TRANSLATORS: file size in kibibytes.
+#: ui/internal/widget/format.go:93
+#, c-format
+msgid "%.0f KiB"
+msgstr ""
+
+#. TRANSLATORS: file size in bytes.
+#: ui/internal/widget/format.go:96
+#, c-format
+msgid "%d B"
+msgstr ""
+
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:285
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr ""
@@ -608,6 +608,85 @@ msgstr ""
 msgid "Marking the message as junk"
 msgstr ""
 
+#: ui/internal/window/attachments.go:114 ui/data/ui/message_window.ui:56
+#: ui/data/ui/window.ui:307
+msgid "More Actions"
+msgstr ""
+
+#: ui/internal/window/attachments.go:140
+msgid ""
+"Programs and scripts are not opened directly; save the file and decide "
+"yourself."
+msgstr ""
+
+#: ui/internal/window/attachments.go:152
+msgid "_Open"
+msgstr ""
+
+#: ui/internal/window/attachments.go:153
+msgid "Save _As…"
+msgstr ""
+
+#: ui/internal/window/attachments.go:164
+msgid "Save _All"
+msgstr ""
+
+#: ui/internal/window/attachments.go:205
+msgid "This message has not been downloaded yet."
+msgstr ""
+
+#: ui/internal/window/attachments.go:207 ui/internal/window/message_view.go:311
+msgid "This message is too large to download."
+msgstr ""
+
+#: ui/internal/window/attachments.go:209 ui/internal/window/message_view.go:313
+msgid "This message could not be read."
+msgstr ""
+
+#. TRANSLATORS: %s is a size such as "16.0 MiB".
+#: ui/internal/window/attachments.go:215
+#, c-format
+msgid "Attachments over %s cannot be opened or saved yet."
+msgstr ""
+
+#: ui/internal/window/attachments.go:282
+msgid "Attachment"
+msgstr ""
+
+#. TRANSLATORS: %d is the number of files written.
+#: ui/internal/window/attachments.go:339
+#, c-format
+msgid "Saved %d attachment"
+msgid_plural "Saved %d attachments"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: the first %d is how many failed, the second how many there were.
+#: ui/internal/window/attachments.go:342
+#, c-format
+msgid "%d of %d attachments could not be saved"
+msgstr ""
+
+#: ui/internal/window/attachments.go:365
+msgid "Opening the attachment"
+msgstr ""
+
+#: ui/internal/window/attachments.go:371 ui/internal/window/attachments.go:379
+msgid "The attachment could not be opened"
+msgstr ""
+
+#: ui/internal/window/attachments.go:392
+msgid "Save Attachment"
+msgstr ""
+
+#: ui/internal/window/attachments.go:408
+msgid "Saving the attachment"
+msgstr ""
+
+#: ui/internal/window/attachments.go:421
+msgid "Save Attachments"
+msgstr ""
+
 #: ui/internal/window/folders.go:45
 msgid "Collapse"
 msgstr ""
@@ -696,53 +775,29 @@ msgstr ""
 msgid "Messages"
 msgstr ""
 
-#: ui/internal/window/message_view.go:123
+#: ui/internal/window/message_view.go:131
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/message_view.go:215
+#: ui/internal/window/message_view.go:220
 msgid "Loading the message"
 msgstr ""
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:290
+#: ui/internal/window/message_view.go:297
 #, c-format
 msgid "Cc: %s"
 msgstr ""
 
-#. TRANSLATORS: %d is the number of attachments.
-#: ui/internal/window/message_view.go:318
-#, c-format
-msgid "%d attachment"
-msgid_plural "%d attachments"
-msgstr[0] ""
-msgstr[1] ""
-
-#. TRANSLATORS: %d is the number of attachments, %s their names.
-#: ui/internal/window/message_view.go:321
-#, c-format
-msgid "%d attachment: %s"
-msgid_plural "%d attachments: %s"
-msgstr[0] ""
-msgstr[1] ""
-
-#: ui/internal/window/message_view.go:328
-#: ui/internal/window/message_view.go:340
+#: ui/internal/window/message_view.go:305
+#: ui/internal/window/message_view.go:317
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:332
+#: ui/internal/window/message_view.go:309
 msgid "Downloading…"
-msgstr ""
-
-#: ui/internal/window/message_view.go:334
-msgid "This message is too large to download."
-msgstr ""
-
-#: ui/internal/window/message_view.go:336
-msgid "This message could not be read."
 msgstr ""
 
 #: ui/internal/window/messages.go:61 ui/internal/window/messages.go:175
@@ -970,32 +1025,32 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/window.go:398
+#: ui/internal/window/window.go:399
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:413
+#: ui/internal/window/window.go:414
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/window.go:416
+#: ui/internal/window/window.go:417
 msgid "Connected"
 msgstr ""
 
-#: ui/internal/window/window.go:423
+#: ui/internal/window/window.go:424
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/window.go:461
+#: ui/internal/window/window.go:462
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/window.go:466
+#: ui/internal/window/window.go:467
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/window.go:470
+#: ui/internal/window/window.go:471
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
@@ -1273,10 +1328,6 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:56 ui/data/ui/window.ui:307
-msgid "More Actions"
-msgstr ""
-
 #: ui/data/ui/message_window.ui:69 ui/data/ui/window.ui:321
 msgid "Archive"
 msgstr ""
@@ -1285,8 +1336,8 @@ msgstr ""
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:109 ui/data/ui/message_window.ui:291
-#: ui/data/ui/window.ui:364 ui/data/ui/window.ui:621
+#: ui/data/ui/message_window.ui:109 ui/data/ui/message_window.ui:288
+#: ui/data/ui/window.ui:364 ui/data/ui/window.ui:618
 msgid "Load _Images"
 msgstr ""
 
@@ -1298,20 +1349,20 @@ msgstr ""
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:253 ui/data/ui/window.ui:549
+#: ui/data/ui/message_window.ui:250 ui/data/ui/window.ui:546
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:281 ui/data/ui/window.ui:611
+#: ui/data/ui/message_window.ui:278 ui/data/ui/window.ui:608
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:285 ui/data/ui/window.ui:615
+#: ui/data/ui/message_window.ui:282 ui/data/ui/window.ui:612
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:295 ui/data/ui/window.ui:625
+#: ui/data/ui/message_window.ui:292 ui/data/ui/window.ui:622
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -1589,19 +1640,19 @@ msgstr ""
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:589
+#: ui/data/ui/window.ui:586
 msgid "_New Message"
 msgstr ""
 
-#: ui/data/ui/window.ui:595
+#: ui/data/ui/window.ui:592
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:599
+#: ui/data/ui/window.ui:596
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:603
+#: ui/data/ui/window.ui:600
 msgid "_About Malachi Mail"
 msgstr ""
 

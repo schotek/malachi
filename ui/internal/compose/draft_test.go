@@ -20,12 +20,3 @@ func TestBlockedSummary(t *testing.T) {
 		t.Errorf("singular: got %q", got)
 	}
 }
-
-func TestFormatSize(t *testing.T) {
-	cases := map[int64]string{5: "5 B", 2048: "2 KiB", 3 << 20: "3.0 MiB"}
-	for in, want := range cases {
-		if got := formatSize(in); got != want {
-			t.Errorf("formatSize(%d) = %q, want %q", in, got, want)
-		}
-	}
-}

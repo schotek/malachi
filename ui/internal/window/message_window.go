@@ -12,6 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // MessageWindow shows one message in its own top-level window. It is built
@@ -65,6 +66,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.view = newMessageView(w, &mw.Window.Window, b)
 	mw.view.load = func() { w.loadRemoteImages(id) }
 	mw.view.trust = func() { w.trustSender(id) }
+	mw.view.toast = func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) }
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the

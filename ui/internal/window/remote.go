@@ -65,8 +65,8 @@ func loadableImages(b *api.MessageBodyResult) int {
 // fetchPart serves the web view's malachi-cid: pictures through
 // message.part. It runs off the main loop.
 func (w *Window) fetchPart(ctx context.Context, acc api.AccountID, id api.MessageID, part string) (string, []byte, error) {
-	var res api.MessagePartResult
-	if err := w.client.Call(ctx, api.MethodMessagePart, api.MessagePartParams{AccountID: acc, MessageID: id, PartID: part}, &res); err != nil {
+	res, err := w.fetchAttachment(ctx, acc, id, part)
+	if err != nil {
 		return "", nil, err
 	}
 	return res.ContentType, res.Data, nil

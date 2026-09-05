@@ -39,37 +39,6 @@ func TestRecipientsText(t *testing.T) {
 	}
 }
 
-func TestAttachmentNames(t *testing.T) {
-	atts := []api.Attachment{
-		{Filename: " report.pdf "},
-		{ContentType: "image/png"},
-		{}, // nameless and typeless: counted, not named
-	}
-	got := attachmentNames(atts)
-	if len(got) != 2 || got[0] != "report.pdf" || got[1] != "image/png" {
-		t.Errorf("attachmentNames: got %q", got)
-	}
-}
-
-func TestAttachmentsCaption(t *testing.T) {
-	tests := []struct {
-		n     int
-		names []string
-		want  string
-	}{
-		{0, nil, ""},
-		{1, []string{"a.txt"}, "1 attachment: a.txt"},
-		{2, []string{"a.txt", "b.png"}, "2 attachments: a.txt, b.png"},
-		{3, nil, "3 attachments"},
-		{1, nil, "1 attachment"},
-	}
-	for _, tc := range tests {
-		if got := attachmentsCaption(tc.n, tc.names); got != tc.want {
-			t.Errorf("attachmentsCaption(%d, %q) = %q, want %q", tc.n, tc.names, got, tc.want)
-		}
-	}
-}
-
 func TestBodyText(t *testing.T) {
 	tests := []struct {
 		name string
