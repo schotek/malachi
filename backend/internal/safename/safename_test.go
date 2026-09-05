@@ -23,6 +23,10 @@ func TestFilename(t *testing.T) {
 		"  spaced.txt  ":       "spaced.txt",
 		"Jörg's Übersicht.ods": "Jörg's Übersicht.ods",
 		"\xff\xfebad.txt":      "bad.txt",
+		// Bidi controls would make the displayed extension lie.
+		"photo‮gnp.exe":     "photognp.exe",
+		"‫x‬⁦y⁩.txt": "xy.txt",
+		"‎name‏؜.pdf":     "name.pdf",
 	}
 	for in, want := range cases {
 		if got := Filename(in); got != want {

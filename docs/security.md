@@ -146,9 +146,12 @@ the current draft's attachments.
   (`golang.org/x/net/html` tokenizer, text nodes only; scripts and styles
   skipped). No tag, attribute or entity reaches that column, and no HTML is
   cached anywhere: the sanitiser will work from the raw file.
-- Attachment filenames are sanitised (no `/`, `\`, control chars, leading
-  dots, over-long names) and shown with their detected type, not only the
-  claimed one. Executable types are never opened directly.
+- Attachment filenames are sanitised (no `/`, `\`, control chars, bidi
+  controls such as U+202E that would make the displayed extension lie,
+  leading dots, over-long names) and shown with their detected type, not
+  only the claimed one. Executable types are never opened directly: the UI
+  offers only "Save As" for them, judged by the last extension and the
+  claimed content type (`ui/internal/window/attachments.go`).
 - Charset decoding is best-effort with replacement characters; never a
   crash, never a hang.
 - Every new parser gets pathological samples in `testdata/mime` and a fuzz

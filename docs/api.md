@@ -153,8 +153,8 @@ Attachment { "partId": "2.1", "filename": "safe-name.pdf", "contentType": "appli
              "size": 12345, "inline": false, "contentId": "…" }
 ```
 
-Filenames are sanitised by the backend (no path separators, no control
-characters, length-capped).
+Filenames are sanitised by the backend (no path separators, no control or
+bidi-control characters, length-capped).
 
 ### SyncState
 
