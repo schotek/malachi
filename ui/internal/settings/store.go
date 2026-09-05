@@ -49,12 +49,13 @@ const (
 )
 
 // Keys of the sidebar state: which parts of the folder tree the user folded
-// away. Each entry is one collapsed node; the encoding is the window
-// package's business (internal/window/collapse.go). They must match the
-// gschema.
+// away and which folders are pinned to the Favourites section. Each entry is
+// one node; the encoding is the window package's business
+// (internal/window/collapse.go, favourites.go). They must match the gschema.
 const (
 	KeyCollapsedFolders  = "collapsed-folders"
 	KeyCollapsedAccounts = "collapsed-accounts"
+	KeyFavouriteFolders  = "favourite-folders"
 )
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
@@ -96,6 +97,7 @@ var defaults = map[string]any{
 
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
+	KeyFavouriteFolders:  []string(nil),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -224,6 +226,11 @@ func (s *Store) SetCollapsedFolders(v []string) { s.set(KeyCollapsedFolders, v) 
 
 func (s *Store) CollapsedAccounts() []string     { return s.strv(KeyCollapsedAccounts) }
 func (s *Store) SetCollapsedAccounts(v []string) { s.set(KeyCollapsedAccounts, v) }
+
+// FavouriteFolders are the folders pinned to the sidebar's Favourites
+// section, encoded like CollapsedFolders (internal/window/favourites.go).
+func (s *Store) FavouriteFolders() []string     { return s.strv(KeyFavouriteFolders) }
+func (s *Store) SetFavouriteFolders(v []string) { s.set(KeyFavouriteFolders, v) }
 
 // OnChanged calls f whenever key changes, from any source (this process or,
 // with the GSettings backend, another one). The returned function removes

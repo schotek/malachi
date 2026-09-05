@@ -18,7 +18,11 @@
       "Bash(git -C /home/schotek/Coding/GitHub/Malachi status --short)",
       "Bash(git -C /home/schotek/Coding/GitHub/Malachi diff --stat)",
       "Bash(git -C /home/schotek/Coding/GitHub/Malachi diff -- backend/ ui/internal/ ui/data/ui/compose.blp)",
-      "Bash(git --no-pager log -1 --stat --format='%h %s%n')"
+      "Bash(git --no-pager log -1 --stat --format='%h %s%n')",
+      "Bash(sed -i 's/newCollapseState\\(\\)\\)/newCollapseState\\(\\), newFavouriteState\\(\\)\\)/g' model_test.go folders_test.go collapse_test.go)",
+      "Bash(sed -i 's/sortFolders\\(accounts, folders, c\\)/sortFolders\\(accounts, folders, c, newFavouriteState\\(\\)\\)/g' collapse_test.go)",
+      "Bash(GSETTINGS_BACKEND=memory go test -tags nosound ./...)",
+      "Bash(git --no-pager log -1 --format='%h %s')"
     ]
   }
 }

@@ -50,17 +50,20 @@ type Window struct {
 	// settings and flag changes can be pushed to them.
 	rows map[api.MessageID]*widget.MessageRow
 
-	// folderRows are the sidebar rows by folder (header rows are not kept).
-	folderRows map[folderKey]*folderRow
+	// folderRows are the sidebar rows by folder and section (header rows
+	// are not kept).
+	folderRows map[rowKey]*folderRow
 
 	// reselecting is set while Go code selects or removes list rows itself
 	// (rebuilds, restoring the selection); the row-selected handlers ignore
 	// those signals so they only react to the user.
 	reselecting bool
 
-	// savingCollapse is set while this window writes the sidebar's fold
-	// state, so it does not treat its own settings change as somebody else's.
-	savingCollapse bool
+	// savingCollapse and savingFavourites are set while this window writes
+	// the sidebar's fold state or its pinned folders, so it does not treat
+	// its own settings change as somebody else's.
+	savingCollapse   bool
+	savingFavourites bool
 
 	// loaded caches message.get / message.body results (bounded; see
 	// message_view.go).
@@ -152,7 +155,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		compose:           cm,
 		hasAccounts:       true,
 		rows:              make(map[api.MessageID]*widget.MessageRow),
-		folderRows:        make(map[folderKey]*folderRow),
+		folderRows:        make(map[rowKey]*folderRow),
 		loaded:            make(map[api.MessageID]*loadedMessage),
 		openMessages:      make(map[api.MessageID]*MessageWindow),
 		openEmbedded:      make(map[embeddedKey]*EmbeddedWindow),
@@ -244,12 +247,15 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	// Sidebar rows mirror model.entries one to one (rebuildFolderList).
 	// Programmatic selection (w.reselecting) is handled by selectFolder
 	// itself and must not navigate a collapsed split view to the list.
-	// The folded-away parts of the sidebar are restored from the last
-	// session, and follow along when another window folds something.
+	// The folded-away parts of the sidebar and the pinned folders are
+	// restored from the last session, and follow along when another window
+	// folds or pins something.
 	w.model.collapsed = loadCollapse(s)
 	for _, key := range []string{settings.KeyCollapsedFolders, settings.KeyCollapsedAccounts} {
 		s.OnChanged(key, w.onCollapseChanged)
 	}
+	w.model.favourites = loadFavourites(s)
+	s.OnChanged(settings.KeyFavouriteFolders, w.onFavouritesChanged)
 
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil || w.reselecting {
@@ -263,6 +269,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		if e.Header {
 			return
 		}
+		// Remember which of a pinned folder's two rows was clicked, so the
+		// highlight stays on it across rebuilds.
+		w.model.selectedFav = e.Favourite
 		w.selectFolder(folderKey{Account: e.Account.ID, Folder: e.Folder.ID})
 		w.outerSplit.SetShowContent(true)
 	})

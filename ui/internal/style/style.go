@@ -63,9 +63,18 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// lists many one-line entries.
 	b.WriteString(".navigation-sidebar row.folder-row { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }\n")
 	b.WriteString("row.folder-row > box.header { min-height: 0; padding-top: 0; padding-bottom: 0; }\n")
-	// The fold arrow of a sidebar row. A default button would push the row
-	// past the 32px above, so it is squeezed to the size of its icon.
-	b.WriteString("button.folder-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
+	// The fold arrow and the pin star of a sidebar row. A default button
+	// would push the row past the 32px above, so both are squeezed to the
+	// size of their icon.
+	b.WriteString("button.folder-twisty, button.folder-star { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
+	// The star waits for the pointer or the keyboard focus. Opacity rather
+	// than visibility, so nothing moves under the pointer.
+	b.WriteString("row.folder-row button.folder-star { opacity: 0; transition: opacity 150ms; }\n")
+	b.WriteString("row.folder-row:hover button.folder-star, row.folder-row:focus-within button.folder-star { opacity: 1; }\n")
+	// In the tree a filled star stays visible: it is what says the folder is
+	// pinned. In the Favourites section every row is pinned by definition, so
+	// a column of stars would say nothing and the star waits there too.
+	b.WriteString("row.folder-row:not(.favourite) button.folder-star.starred { opacity: 1; }\n")
 	// The remote-image bar above a message: a neutral tint that reads as a
 	// notice in light and dark alike (Adw.Banner has room for one button).
 	b.WriteString("box.remote-bar { background-color: alpha(@window_fg_color, 0.06); padding: 6px 12px; }\n")

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 12:58+0200\n"
+"POT-Creation-Date: 2026-09-05 14:06+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -716,91 +716,103 @@ msgstr "Přiloženo ke zprávě „%s“"
 msgid "Loading the images"
 msgstr "Načtení obrázků"
 
-#: ui/internal/window/folders.go:45
+#: ui/internal/window/favourites.go:111
+msgid "Add to Favourites"
+msgstr "Přidat do oblíbených"
+
+#: ui/internal/window/favourites.go:113
+msgid "Remove from Favourites"
+msgstr "Odebrat z oblíbených"
+
+#: ui/internal/window/folders.go:55
 msgid "Collapse"
 msgstr "Sbalit"
 
-#: ui/internal/window/folders.go:48
+#: ui/internal/window/folders.go:58
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/window/folders.go:72 ui/internal/window/messages.go:177
+#: ui/internal/window/folders.go:82 ui/internal/window/messages.go:177
 msgid "Loading…"
 msgstr "Načítá se…"
 
-#: ui/internal/window/folders.go:86 ui/internal/window/folders.go:320
+#: ui/internal/window/folders.go:96 ui/internal/window/folders.go:363
 msgid "Folders Unavailable"
 msgstr "Složky nejsou dostupné"
 
-#: ui/internal/window/folders.go:87 ui/internal/window/folders.go:321
+#: ui/internal/window/folders.go:97 ui/internal/window/folders.go:364
 msgid "Loading folders"
 msgstr "Načtení složek"
 
-#: ui/internal/window/folders.go:249
+#: ui/internal/window/folders.go:187
+msgid "Favourites"
+msgstr "Oblíbené"
+
+#: ui/internal/window/folders.go:276
 msgctxt "folder"
 msgid "Inbox"
 msgstr "Doručená pošta"
 
-#: ui/internal/window/folders.go:251
+#: ui/internal/window/folders.go:278
 msgctxt "folder"
 msgid "Drafts"
 msgstr "Koncepty"
 
-#: ui/internal/window/folders.go:253
+#: ui/internal/window/folders.go:280
 msgctxt "folder"
 msgid "Sent"
 msgstr "Odeslaná pošta"
 
-#: ui/internal/window/folders.go:255
+#: ui/internal/window/folders.go:282
 msgctxt "folder"
 msgid "Trash"
 msgstr "Koš"
 
-#: ui/internal/window/folders.go:257
+#: ui/internal/window/folders.go:284
 msgctxt "folder"
 msgid "Junk"
 msgstr "Nevyžádaná pošta"
 
-#: ui/internal/window/folders.go:259
+#: ui/internal/window/folders.go:286
 msgctxt "folder"
 msgid "Archive"
 msgstr "Archiv"
 
-#: ui/internal/window/folders.go:261
+#: ui/internal/window/folders.go:288
 msgctxt "folder"
 msgid "All Mail"
 msgstr "Všechna pošta"
 
-#: ui/internal/window/folders.go:263
+#: ui/internal/window/folders.go:290
 msgctxt "folder"
 msgid "Outbox"
 msgstr "Pošta k odeslání"
 
-#: ui/internal/window/folders.go:312 ui/data/ui/window.ui:400
+#: ui/internal/window/folders.go:355 ui/data/ui/window.ui:400
 msgid "No Accounts"
 msgstr "Žádné účty"
 
-#: ui/internal/window/folders.go:313
+#: ui/internal/window/folders.go:356
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr "Přidejte poštovní účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:315
+#: ui/internal/window/folders.go:358
 msgid "No Enabled Accounts"
 msgstr "Žádné povolené účty"
 
-#: ui/internal/window/folders.go:316
+#: ui/internal/window/folders.go:359
 msgid "Enable an account in Preferences to see its folders here."
 msgstr "Povolte účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:325
+#: ui/internal/window/folders.go:368
 msgid "No Folders Yet"
 msgstr "Zatím žádné složky"
 
-#: ui/internal/window/folders.go:326
+#: ui/internal/window/folders.go:369
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/folders.go:359 ui/data/ui/window.ui:149
+#: ui/internal/window/folders.go:402 ui/data/ui/window.ui:149
 msgid "Messages"
 msgstr "Zprávy"
 
@@ -1056,32 +1068,32 @@ msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlási
 msgid "%s needs attention"
 msgstr "Účet %s vyžaduje pozornost"
 
-#: ui/internal/window/window.go:407
+#: ui/internal/window/window.go:416
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:422
+#: ui/internal/window/window.go:431
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:425
+#: ui/internal/window/window.go:434
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:432
+#: ui/internal/window/window.go:441
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:470
+#: ui/internal/window/window.go:479
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:475
+#: ui/internal/window/window.go:484
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:479
+#: ui/internal/window/window.go:488
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"
@@ -1484,7 +1496,7 @@ msgstr "Zobrazovat oznámení na ploše"
 msgid "Play Sound"
 msgstr "Přehrát zvuk"
 
-#: ui/data/ui/preferences.ui:100 data/io.github.schotek.Malachi.gschema.xml:84
+#: ui/data/ui/preferences.ui:100 data/io.github.schotek.Malachi.gschema.xml:89
 msgid "Play the system new-mail sound"
 msgstr "Přehrát systémový zvuk nové pošty"
 
@@ -1720,15 +1732,19 @@ msgstr "Šířka postranního panelu složek"
 msgid "Width of the message list pane"
 msgstr "Šířka panelu se seznamem zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:52
+#: data/io.github.schotek.Malachi.gschema.xml:53
 msgid "Folders whose subfolders are hidden in the sidebar"
 msgstr "Složky, jejichž podsložky jsou v bočním panelu skryté"
 
-#: data/io.github.schotek.Malachi.gschema.xml:56
+#: data/io.github.schotek.Malachi.gschema.xml:57
 msgid "Accounts whose folders are hidden in the sidebar"
 msgstr "Účty, jejichž složky jsou v bočním panelu skryté"
 
-#: data/io.github.schotek.Malachi.gschema.xml:63
+#: data/io.github.schotek.Malachi.gschema.xml:61
+msgid "Folders pinned to the Favourites section of the sidebar"
+msgstr "Složky připnuté v sekci Oblíbené v bočním panelu"
+
+#: data/io.github.schotek.Malachi.gschema.xml:68
 msgid ""
 "Start hidden in the background at login (mirrors the Background portal's "
 "autostart decision)"
@@ -1736,54 +1752,54 @@ msgstr ""
 "Spustit po přihlášení skrytě na pozadí (odráží rozhodnutí portálu Background "
 "o automatickém spouštění)"
 
-#: data/io.github.schotek.Malachi.gschema.xml:67
+#: data/io.github.schotek.Malachi.gschema.xml:72
 msgid "Closing the main window keeps the application running"
 msgstr "Zavření hlavního okna ponechá aplikaci běžet"
 
-#: data/io.github.schotek.Malachi.gschema.xml:72
+#: data/io.github.schotek.Malachi.gschema.xml:77
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
 msgstr ""
 "Počet sekund, po které musí být zpráva zobrazena, než se označí jako "
 "přečtená; 0 = ihned"
 
-#: data/io.github.schotek.Malachi.gschema.xml:76
+#: data/io.github.schotek.Malachi.gschema.xml:81
 msgid "Ask before moving a message to Trash"
 msgstr "Ptát se před přesunutím zprávy do koše"
 
-#: data/io.github.schotek.Malachi.gschema.xml:80
+#: data/io.github.schotek.Malachi.gschema.xml:85
 msgid "Show a desktop notification for new mail"
 msgstr "Zobrazit oznámení na ploše při nové poště"
 
-#: data/io.github.schotek.Malachi.gschema.xml:90
+#: data/io.github.schotek.Malachi.gschema.xml:95
 msgid "Color scheme"
 msgstr "Barevné schéma"
 
-#: data/io.github.schotek.Malachi.gschema.xml:91
+#: data/io.github.schotek.Malachi.gschema.xml:96
 msgid "Follow the system preference, or force a light or dark appearance."
 msgstr "Řídit se nastavením systému, nebo vynutit světlý či tmavý vzhled."
 
-#: data/io.github.schotek.Malachi.gschema.xml:95
+#: data/io.github.schotek.Malachi.gschema.xml:100
 msgid "Message list density"
 msgstr "Hustota seznamu zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:99
+#: data/io.github.schotek.Malachi.gschema.xml:104
 msgid "Show a one-line preview under each message in the list"
 msgstr "Zobrazit jednořádkový náhled pod každou zprávou v seznamu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:103
+#: data/io.github.schotek.Malachi.gschema.xml:108
 msgid "Show sender avatars in the message list"
 msgstr "Zobrazit avatary odesílatelů v seznamu zpráv"
 
-#: data/io.github.schotek.Malachi.gschema.xml:107
+#: data/io.github.schotek.Malachi.gschema.xml:112
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr "Kreslit avatary neutrální šedou místo barvy pro každého odesílatele"
 
-#: data/io.github.schotek.Malachi.gschema.xml:111
+#: data/io.github.schotek.Malachi.gschema.xml:116
 msgid "Use a monospace font for plain-text message bodies"
 msgstr "Použít neproporcionální písmo pro těla zpráv v prostém textu"
 
-#: data/io.github.schotek.Malachi.gschema.xml:116
+#: data/io.github.schotek.Malachi.gschema.xml:121
 msgid "Message body text zoom in percent"
 msgstr "Přiblížení textu zprávy v procentech"
 

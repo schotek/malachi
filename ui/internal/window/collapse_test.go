@@ -47,7 +47,7 @@ func entryByID(entries []folderEntry, id api.FolderID) (folderEntry, bool) {
 
 func TestFolderTreeExpandedByDefault(t *testing.T) {
 	accounts, folders := nestedAccount()
-	entries := sortFolders(accounts, folders, newCollapseState())
+	entries := sortFolders(accounts, folders, newCollapseState(), newFavouriteState())
 
 	want := []string{"in@0", "work@0", "bugs@1", "old@2", "zulu@0"}
 	if got := ids(entries); !equalIDs(got, want) {
@@ -77,7 +77,7 @@ func TestFolderTreeCollapsedHidesWholeSubtree(t *testing.T) {
 	accounts, folders := nestedAccount()
 	c := newCollapseState()
 	c.setFolder(folderKey{Account: "a", Folder: "work"}, true)
-	entries := sortFolders(accounts, folders, c)
+	entries := sortFolders(accounts, folders, c, newFavouriteState())
 
 	// Both the child and the grandchild go, not just the child.
 	want := []string{"in@0", "work@0", "zulu@0"}
@@ -102,7 +102,7 @@ func TestFolderTreeCollapsedInnerNode(t *testing.T) {
 	accounts, folders := nestedAccount()
 	c := newCollapseState()
 	c.setFolder(folderKey{Account: "a", Folder: "bugs"}, true)
-	entries := sortFolders(accounts, folders, c)
+	entries := sortFolders(accounts, folders, c, newFavouriteState())
 
 	want := []string{"in@0", "work@0", "bugs@1", "zulu@0"}
 	if got := ids(entries); !equalIDs(got, want) {
@@ -125,7 +125,7 @@ func TestFolderTreeCollapsingALeafDoesNothing(t *testing.T) {
 	// A stale entry for a folder that has no children any more must not
 	// remove it from the list or change its badge.
 	c.setFolder(folderKey{Account: "a", Folder: "zulu"}, true)
-	entries := sortFolders(accounts, folders, c)
+	entries := sortFolders(accounts, folders, c, newFavouriteState())
 
 	want := []string{"in@0", "work@0", "bugs@1", "old@2", "zulu@0"}
 	if got := ids(entries); !equalIDs(got, want) {
@@ -145,7 +145,7 @@ func TestSortFoldersCollapsedAccount(t *testing.T) {
 	}
 	c := newCollapseState()
 	c.setAccount("a", true)
-	entries := sortFolders(accounts, folders, c)
+	entries := sortFolders(accounts, folders, c, newFavouriteState())
 
 	// The header stays, its whole tree goes, the other account is untouched.
 	want := []string{"#a", "#b", "in-b@0"}
@@ -167,7 +167,7 @@ func TestSortFoldersSingleAccountIgnoresAccountFold(t *testing.T) {
 	c := newCollapseState()
 	c.setAccount("a", true)
 
-	if got := len(sortFolders(accounts, folders, c)); got != 5 {
+	if got := len(sortFolders(accounts, folders, c, newFavouriteState())); got != 5 {
 		t.Fatalf("entries = %d, want all 5 folders", got)
 	}
 }
@@ -178,7 +178,7 @@ func TestFolderTreeFlatAccountReservesNoArrow(t *testing.T) {
 		{ID: "in", Path: "INBOX", Role: api.RoleInbox, Selectable: true},
 		{ID: "zulu", Path: "Zulu", Selectable: true},
 	}}
-	for _, e := range sortFolders(accounts, folders, newCollapseState()) {
+	for _, e := range sortFolders(accounts, folders, newCollapseState(), newFavouriteState()) {
 		if e.Nested || e.HasChildren {
 			t.Errorf("%s: Nested=%v HasChildren=%v, want false in a flat account",
 				e.Folder.ID, e.Nested, e.HasChildren)
@@ -196,7 +196,7 @@ func TestFolderTreeCollapsedParentCycleStaysFlat(t *testing.T) {
 	}}
 	c := newCollapseState()
 	c.setFolder(folderKey{Account: "a", Folder: "x"}, true)
-	entries := sortFolders(accounts, folders, c)
+	entries := sortFolders(accounts, folders, c, newFavouriteState())
 
 	if len(entries) != 2 {
 		t.Fatalf("entries = %v, want both folders listed", ids(entries))

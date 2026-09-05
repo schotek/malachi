@@ -32,6 +32,9 @@ func TestCSS(t *testing.T) {
 	// setting.
 	for _, want := range []string{
 		"button.folder-twisty",
+		"button.folder-star",
+		"row.folder-row:hover button.folder-star",
+		"row.folder-row:not(.favourite) button.folder-star.starred",
 		"box.remote-bar",
 		"box.attachment-chip button, button.chip-action { min-height: 0;",
 		"box.attachment-chip menubutton.chip-arrow > button",

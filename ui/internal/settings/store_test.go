@@ -132,6 +132,22 @@ func TestCoerce(t *testing.T) {
 	}
 }
 
+func TestFavouriteFoldersRoundTrip(t *testing.T) {
+	s := NewMemory()
+	if got := s.FavouriteFolders(); len(got) != 0 {
+		t.Fatalf("FavouriteFolders() = %v, want empty by default", got)
+	}
+	changed := 0
+	s.OnChanged(KeyFavouriteFolders, func() { changed++ })
+	s.SetFavouriteFolders([]string{"acc_1/f_1"})
+	if got := s.FavouriteFolders(); len(got) != 1 || got[0] != "acc_1/f_1" {
+		t.Errorf("FavouriteFolders() = %v", got)
+	}
+	if changed != 1 {
+		t.Errorf("changed fired %d times, want 1", changed)
+	}
+}
+
 func TestStringListRoundTrip(t *testing.T) {
 	s := NewMemory()
 	if got := s.CollapsedFolders(); len(got) != 0 {

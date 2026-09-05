@@ -325,7 +325,14 @@ to its own badge, so folded-away mail stays visible. Folding never moves
 the selection or reloads the message list: a hidden folder is still
 selected, it just has no row. Which nodes are folded is presentational and
 therefore kept in GSettings (`collapsed-folders`, `collapsed-accounts`,
-encoded in `internal/window/collapse.go`), not in the daemon. The list pane shows `message.list` for the
+encoded in `internal/window/collapse.go`), not in the daemon. A folder can
+also be pinned to a *Favourites* section at the top of the sidebar with the
+star at the right end of its row: it waits for the pointer, except on a
+pinned folder's row in the tree, where the filled star is what says the
+folder is pinned. The section lists pinned folders without their children,
+in tree order, and gives every account a heading while it exists.
+Pins are presentational in the same way (`favourite-folders`,
+`internal/window/favourites.go`); the daemon knows nothing of them. The list pane shows `message.list` for the
 selected folder (newest first, `DefaultPageLimit` per page); further pages
 are fetched with `page.nextCursor` from a *Load More* footer or when the
 list is scrolled to its bottom, and a status page replaces the list while

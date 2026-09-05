@@ -44,9 +44,10 @@
       <summary>Width of the message list pane</summary>
     </key>
 
-    <!-- Sidebar state. Which parts of the folder tree the user folded away;
-         one entry per collapsed node, encoded by ui/internal/window. Purely
-         presentational, hence GSettings and not the daemon. -->
+    <!-- Sidebar state. Which parts of the folder tree the user folded away
+         and which folders are pinned to the Favourites section; one entry
+         per node, encoded by ui/internal/window. Purely presentational,
+         hence GSettings and not the daemon. -->
     <key name="collapsed-folders" type="as">
       <default>[]</default>
       <summary>Folders whose subfolders are hidden in the sidebar</summary>
@@ -54,6 +55,10 @@
     <key name="collapsed-accounts" type="as">
       <default>[]</default>
       <summary>Accounts whose folders are hidden in the sidebar</summary>
+    </key>
+    <key name="favourite-folders" type="as">
+      <default>[]</default>
+      <summary>Folders pinned to the Favourites section of the sidebar</summary>
     </key>
 
     <!-- General (UI behaviour). Mail options such as the sync interval and

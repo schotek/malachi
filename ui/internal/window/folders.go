@@ -24,11 +24,21 @@ import (
 // folderIndent is the sidebar indentation per tree level, in pixels.
 const folderIndent = 12
 
-// folderRow is one selectable sidebar row with its unread badge.
+// folderRow is one selectable sidebar row with its unread badge, its fold
+// arrow (nested accounts only) and its pin star (selectable folders only).
 type folderRow struct {
 	*adw.ActionRow
 	badge  *gtk.Label
 	twisty *gtk.Button
+	star   *gtk.Button
+}
+
+// rowKey addresses a sidebar row: the folder, and whether the row is the one
+// in the Favourites section or the one in the account's tree — a pinned
+// folder has both.
+type rowKey struct {
+	folderKey
+	fav bool
 }
 
 // setUnread shows n on the badge, hiding it at zero.
@@ -166,24 +176,39 @@ func (w *Window) fetchFolders(acc api.AccountID, gen uint64, done func()) {
 func (w *Window) rebuildFolderList() {
 	w.model.rebuildEntries()
 
+	// With several accounts a pinned "Inbox" says whose it is.
+	several := len(w.model.enabledAccounts()) >= 2
+
 	w.reselecting = true
 	w.folderList.RemoveAll()
-	w.folderRows = make(map[folderKey]*folderRow, len(w.model.entries))
+	w.folderRows = make(map[rowKey]*folderRow, len(w.model.entries))
 	for _, e := range w.model.entries {
+		if e.Header && e.Favourite {
+			row, _ := newHeaderRow(i18n.T("Favourites"), false, false)
+			w.folderList.Append(row)
+			continue
+		}
 		if e.Header {
-			row, twisty := newHeaderRow(accountLabel(e.Account), e.Collapsed)
+			row, twisty := newHeaderRow(accountLabel(e.Account), e.Collapsed, true)
 			acc := e.Account.ID
 			twisty.ConnectClicked(func() { w.toggleAccount(acc) })
 			w.folderList.Append(row)
 			continue
 		}
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
-		r := newFolderRow(e)
+		subtitle := ""
+		if e.Favourite && several {
+			subtitle = accountLabel(e.Account)
+		}
+		r := newFolderRow(e, subtitle)
 		if e.HasChildren && r.twisty != nil {
 			r.twisty.ConnectClicked(func() { w.toggleFolder(k) })
 		}
+		if r.star != nil {
+			r.star.ConnectClicked(func() { w.toggleFavourite(k) })
+		}
 		w.addFolderShortcuts(r, k, e)
-		w.folderRows[k] = r
+		w.folderRows[rowKey{folderKey: k, fav: e.Favourite}] = r
 		w.folderList.Append(r)
 	}
 	w.reselecting = false
@@ -216,10 +241,12 @@ func (w *Window) rebuildFolderList() {
 	w.loadMessages()
 }
 
-// newHeaderRow builds an account heading row with its fold arrow. The row
-// cannot be selected or activated, so the row-selected handler never sees
-// it; the arrow is a button and receives its clicks regardless.
-func newHeaderRow(text string, collapsed bool) (*gtk.ListBoxRow, *gtk.Button) {
+// newHeaderRow builds a heading row with its fold arrow: an account, or the
+// Favourites section, which does not fold (foldable false keeps the arrow's
+// space so the headings line up, but nothing to click). The row cannot be
+// selected or activated, so the row-selected handler never sees it; the
+// arrow is a button and receives its clicks regardless.
+func newHeaderRow(text string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.Button) {
 	row := gtk.NewListBoxRow()
 	row.SetActivatable(false)
 	row.SetSelectable(false)
@@ -232,7 +259,7 @@ func newHeaderRow(text string, collapsed bool) (*gtk.ListBoxRow, *gtk.Button) {
 	label.AddCSSClass("caption-heading")
 	label.AddCSSClass("dim-label")
 
-	twisty := newTwisty(collapsed, true)
+	twisty := newTwisty(collapsed, foldable)
 	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	box.SetMarginTop(6)
 	box.Append(twisty)
@@ -265,14 +292,22 @@ func folderTitle(f api.Folder) string {
 	return f.Name
 }
 
-// newFolderRow builds the row for one folder entry. The folder name is
-// hostile input and is shown as plain text.
-func newFolderRow(e folderEntry) *folderRow {
+// newFolderRow builds the row for one folder entry; subtitle, when given,
+// goes under the name (the account of a pinned folder). The folder name and
+// the account's are hostile input and are shown as plain text.
+func newFolderRow(e folderEntry, subtitle string) *folderRow {
 	row := adw.NewActionRow()
 	row.AddCSSClass("folder-row")
+	if e.Favourite {
+		row.AddCSSClass("favourite")
+	}
 	row.SetUseMarkup(false)
 	row.SetTitle(folderTitle(e.Folder))
 	row.SetTitleLines(1)
+	if subtitle != "" {
+		row.SetSubtitle(subtitle)
+		row.SetSubtitleLines(1)
+	}
 	row.SetTooltipText(e.Folder.Path)
 	row.SetMarginStart(folderIndent * e.Depth)
 	row.AddPrefix(gtk.NewImageFromIconName(roleIcon(e.Folder.Role)))
@@ -293,12 +328,20 @@ func newFolderRow(e folderEntry) *folderRow {
 	badge.SetVAlign(gtk.AlignCenter)
 	row.AddSuffix(badge)
 
+	// AddSuffix appends, so the star ends up at the far right, after the
+	// badge. A container that cannot be opened cannot be pinned either.
+	var star *gtk.Button
+	if e.Folder.Selectable {
+		star = newStar(e.Starred)
+		row.AddSuffix(star)
+	}
+
 	if !e.Folder.Selectable {
 		row.SetSelectable(false)
 		row.SetActivatable(false)
 		row.AddCSSClass("dim-label")
 	}
-	r := &folderRow{ActionRow: row, badge: badge, twisty: twisty}
+	r := &folderRow{ActionRow: row, badge: badge, twisty: twisty, star: star}
 	r.setUnread(e.Badge)
 	return r
 }
@@ -364,9 +407,14 @@ func (w *Window) selectFolder(k folderKey) {
 
 // highlightFolderRow selects k's sidebar row without re-entering the
 // row-selected handler (w.reselecting) and without navigating a collapsed
-// split view to the list.
+// split view to the list. A pinned folder has two rows: the one the user
+// clicked last is preferred, the other one stands in when it is folded away
+// or was just unpinned.
 func (w *Window) highlightFolderRow(k folderKey) {
-	r := w.folderRows[k]
+	r := w.folderRows[rowKey{folderKey: k, fav: w.model.selectedFav}]
+	if r == nil {
+		r = w.folderRows[rowKey{folderKey: k, fav: !w.model.selectedFav}]
+	}
 	if r == nil {
 		return
 	}
@@ -380,13 +428,15 @@ func (w *Window) highlightFolderRow(k folderKey) {
 
 // updateFolderRow refreshes the unread badges after the count of k moved.
 // Every row is refreshed, not just k's: a collapsed ancestor's badge counts
-// the folders it hides, and k itself may be one of them.
+// the folders it hides, k itself may be one of them, and a pinned folder
+// has a second row in the Favourites section.
 func (w *Window) updateFolderRow(k folderKey) {
 	for _, e := range w.model.entries {
 		if e.Header {
 			continue
 		}
-		if r := w.folderRows[folderKey{Account: e.Account.ID, Folder: e.Folder.ID}]; r != nil {
+		key := rowKey{folderKey: folderKey{Account: e.Account.ID, Folder: e.Folder.ID}, fav: e.Favourite}
+		if r := w.folderRows[key]; r != nil {
 			r.setUnread(e.Badge)
 		}
 	}

@@ -23,12 +23,22 @@ type folderKey struct {
 }
 
 // folderEntry is one row of the sidebar: an account header (Header set,
-// Folder zero) or a folder at the given tree depth.
+// Folder zero), the Favourites heading (Header and Favourite set, Account
+// zero too) or a folder at the given tree depth.
 type folderEntry struct {
 	Header  bool
 	Account api.Account
 	Folder  api.Folder
 	Depth   int
+
+	// Favourite is set on the rows of the Favourites section at the top of
+	// the sidebar: its heading and one row per pinned folder, each at depth
+	// 0 without children. The same folder has a second row in its account's
+	// tree, so a folder key alone does not name a row (rowKey does).
+	Favourite bool
+	// Starred means the folder is pinned: its star is filled, on the row in
+	// the section and on the one in the tree alike.
+	Starred bool
 
 	// HasChildren means the row can be folded; Collapsed means it currently
 	// is, and its descendants are left out of the list entirely.
@@ -55,8 +65,14 @@ type mailModel struct {
 	folderErr map[api.AccountID]error
 	entries   []folderEntry
 	selected  folderKey
-	// collapsed is which sidebar nodes are folded away (collapse.go).
-	collapsed collapseState
+	// selectedFav says which of the selected folder's rows carries the
+	// highlight: the one in the Favourites section or the one in the tree,
+	// whichever the user clicked last. Display only; selected is the folder.
+	selectedFav bool
+	// collapsed is which sidebar nodes are folded away (collapse.go);
+	// favourites which folders are pinned to the top (favourites.go).
+	collapsed  collapseState
+	favourites favouriteState
 
 	// listFolder is the folder messages belong to (or are being loaded
 	// for); it lags selected between selectFolder and loadMessages.
@@ -103,7 +119,7 @@ const maxFolderDepth = 32
 
 // rebuildEntries recomputes the sidebar rows from accounts and folders.
 func (m *mailModel) rebuildEntries() {
-	m.entries = sortFolders(m.accounts, m.folders, m.collapsed)
+	m.entries = sortFolders(m.accounts, m.folders, m.collapsed, m.favourites)
 }
 
 // refreshBadges recomputes the number every visible row shows, after an
@@ -366,12 +382,24 @@ func (m *mailModel) enabledAccounts() []api.Account {
 }
 
 // initialFolder is the folder to select when nothing is selected yet: the
-// first Inbox, otherwise the first selectable folder.
+// first Inbox, otherwise the first selectable folder. The tree is searched
+// before the Favourites section, which repeats folders of the tree: a pinned
+// Inbox of a later account must not win over the first account's. The
+// section only decides when the tree gave nothing (every account folded).
 func (m *mailModel) initialFolder() (folderKey, bool) {
+	if k, ok := firstFolder(m.entries, false); ok {
+		return k, true
+	}
+	return firstFolder(m.entries, true)
+}
+
+// firstFolder is initialFolder over the rows of one section: the Favourites
+// rows when favourite is set, the tree rows otherwise.
+func firstFolder(entries []folderEntry, favourite bool) (folderKey, bool) {
 	var first folderKey
 	found := false
-	for _, e := range m.entries {
-		if e.Header || !e.Folder.Selectable {
+	for _, e := range entries {
+		if e.Header || e.Favourite != favourite || !e.Folder.Selectable {
 			continue
 		}
 		k := folderKey{Account: e.Account.ID, Folder: e.Folder.ID}
@@ -428,18 +456,21 @@ func enabledAccounts(accounts []api.Account) []api.Account {
 	return out
 }
 
-// sortFolders lays the sidebar out: enabled accounts in list order, each
-// preceded by a header row when there are at least two of them, then the
-// account's folders as a tree. Roots are ordered by (roleRank, path); the
-// children of a folder follow it, ordered the same way. Depth comes from
-// ParentID; folders whose parent chain is cyclic or deeper than
-// maxFolderDepth are appended after the tree with a depth counted from
-// their display path. Non-selectable containers are kept so their children
-// have somewhere to hang.
-func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState) []folderEntry {
+// sortFolders lays the sidebar out: the Favourites section when anything is
+// pinned (favouriteSection), then the enabled accounts in list order, each
+// preceded by a header row when there are at least two of them or a
+// Favourites section above them, then the account's folders as a tree.
+// Roots are ordered by (roleRank, path); the children of a folder follow
+// it, ordered the same way. Depth comes from ParentID; folders whose parent
+// chain is cyclic or deeper than maxFolderDepth are appended after the tree
+// with a depth counted from their display path. Non-selectable containers
+// are kept so their children have somewhere to hang.
+func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder, collapsed collapseState, favourites favouriteState) []folderEntry {
 	enabled := enabledAccounts(accounts)
-	headers := len(enabled) >= 2
-	var out []folderEntry
+	out := favouriteSection(enabled, folders, favourites)
+	// A single account needs no heading of its own, unless a Favourites
+	// section sits above its folders and the two would run into each other.
+	headers := len(enabled) >= 2 || len(out) > 0
 	for _, a := range enabled {
 		// Only a header can fold a whole account away, and headers only
 		// exist from two accounts on.
@@ -453,14 +484,43 @@ func sortFolders(accounts []api.Account, folders map[api.AccountID][]api.Folder,
 		if folded {
 			continue
 		}
-		out = append(out, folderTree(a, folders[a.ID], collapsed)...)
+		out = append(out, folderTree(a, folders[a.ID], collapsed, favourites)...)
 	}
 	return out
 }
 
+// favouriteSection is the block at the top of the sidebar: a heading and
+// one row per pinned folder, in tree order (accounts in list order, then
+// roles, then names), each at depth 0 and without its children. A pin that
+// does not resolve — the folder gone or renamed on the server, its account
+// switched off, a container that cannot be opened, an outbox with nothing
+// in it — is left out silently; when none resolves there is no section at
+// all. Account folds do not apply here: the section is what stays in view
+// while the tree is folded away.
+func favouriteSection(enabled []api.Account, folders map[api.AccountID][]api.Folder, favourites favouriteState) []folderEntry {
+	var rows []folderEntry
+	for _, a := range enabled {
+		var pinned []api.Folder
+		for _, f := range visibleFolders(folders[a.ID]) {
+			if f.Selectable && favourites.has(folderKey{Account: a.ID, Folder: f.ID}) {
+				pinned = append(pinned, f)
+			}
+		}
+		sortSiblings(pinned)
+		for _, f := range pinned {
+			rows = append(rows, folderEntry{Favourite: true, Starred: true, Account: a, Folder: f, Badge: f.Unread})
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	return append([]folderEntry{{Header: true, Favourite: true}}, rows...)
+}
+
 // folderTree orders one account's folders (see sortFolders), leaving out
-// what visibleFolders hides and everything below a collapsed folder.
-func folderTree(a api.Account, list []api.Folder, collapsed collapseState) []folderEntry {
+// what visibleFolders hides and everything below a collapsed folder. Pinned
+// folders are marked Starred.
+func folderTree(a api.Account, list []api.Folder, collapsed collapseState, favourites favouriteState) []folderEntry {
 	list = visibleFolders(list)
 	byID := make(map[api.FolderID]bool, len(list))
 	for _, f := range list {
@@ -499,6 +559,7 @@ func folderTree(a api.Account, list []api.Folder, collapsed collapseState) []fol
 			Collapsed:   fold,
 			Nested:      nested,
 			Badge:       badgeFor(list, f, fold),
+			Starred:     favourites.has(folderKey{Account: a.ID, Folder: f.ID}),
 		})
 		if fold {
 			// Mark the whole subtree seen, or the orphan sweep below would
@@ -529,6 +590,7 @@ func folderTree(a api.Account, list []api.Folder, collapsed collapseState) []fol
 		out = append(out, folderEntry{
 			Account: a, Folder: f, Depth: strings.Count(f.Path, "/"),
 			Nested: nested, Badge: f.Unread,
+			Starred: favourites.has(folderKey{Account: a.ID, Folder: f.ID}),
 		})
 	}
 	return out

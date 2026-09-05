@@ -18,6 +18,7 @@ ui/internal/window/accounts_reorder.go
 ui/internal/window/actions.go
 ui/internal/window/attachments.go
 ui/internal/window/embedded.go
+ui/internal/window/favourites.go
 ui/internal/window/folders.go
 ui/internal/window/message_view.go
 ui/internal/window/message_window.go
