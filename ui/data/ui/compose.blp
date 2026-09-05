@@ -79,26 +79,70 @@ Adw.Window compose_window {
       child: Box {
         orientation: vertical;
 
-        ListBox header_rows {
-          selection-mode: none;
+        // One line per field: a label of uniform width (size_group below)
+        // and the entry beside it. Adw.EntryRow stacks its title above the
+        // text, which cost the header more height than the editor itself
+        // had. Density is CSS (.compose-headers in ui/internal/style).
+        Box header_rows {
+          orientation: vertical;
           margin-start: 12;
           margin-end: 12;
           margin-top: 12;
           margin-bottom: 6;
 
           styles [
-            "boxed-list",
+            "card",
+            "compose-headers",
           ]
 
-          Adw.ComboRow from_row {
-            title: _("From");
-            use-markup: false;
+          Box {
+            spacing: 12;
+
+            Label from_label {
+              label: _("From");
+              xalign: 0;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            DropDown from_row {
+              hexpand: true;
+
+              accessibility {
+                labelled-by: from_label;
+              }
+
+              styles [
+                "flat",
+              ]
+            }
           }
 
-          Adw.EntryRow to_row {
-            title: _("To");
+          Separator {}
 
-            [suffix]
+          Box {
+            spacing: 12;
+
+            Label to_label {
+              label: _("To");
+              xalign: 0;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Entry to_row {
+              hexpand: true;
+              has-frame: false;
+
+              accessibility {
+                labelled-by: to_label;
+              }
+            }
+
             Button cc_bcc_button {
               label: _("Cc/Bcc");
               valign: center;
@@ -109,18 +153,82 @@ Adw.Window compose_window {
             }
           }
 
-          Adw.EntryRow cc_row {
-            title: _("Cc");
+          Separator cc_separator {
             visible: false;
           }
 
-          Adw.EntryRow bcc_row {
-            title: _("Bcc");
+          Box cc_box {
+            spacing: 12;
+            visible: false;
+
+            Label cc_label {
+              label: _("Cc");
+              xalign: 0;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Entry cc_row {
+              hexpand: true;
+              has-frame: false;
+
+              accessibility {
+                labelled-by: cc_label;
+              }
+            }
+          }
+
+          Separator bcc_separator {
             visible: false;
           }
 
-          Adw.EntryRow subject_row {
-            title: _("Subject");
+          Box bcc_box {
+            spacing: 12;
+            visible: false;
+
+            Label bcc_label {
+              label: _("Bcc");
+              xalign: 0;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Entry bcc_row {
+              hexpand: true;
+              has-frame: false;
+
+              accessibility {
+                labelled-by: bcc_label;
+              }
+            }
+          }
+
+          Separator {}
+
+          Box {
+            spacing: 12;
+
+            Label subject_label {
+              label: _("Subject");
+              xalign: 0;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Entry subject_row {
+              hexpand: true;
+              has-frame: false;
+
+              accessibility {
+                labelled-by: subject_label;
+              }
+            }
           }
         }
 
@@ -382,4 +490,17 @@ menu align_menu {
     action: "compose.align";
     target: "right";
   }
+}
+
+// The header field labels share one width so the entries line up.
+SizeGroup header_labels {
+  mode: horizontal;
+
+  widgets [
+    from_label,
+    to_label,
+    cc_label,
+    bcc_label,
+    subject_label,
+  ]
 }

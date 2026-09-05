@@ -94,6 +94,11 @@ type messageView struct {
 	attachments *adw.WrapBox
 	chips       []gtk.Widgetter
 
+	// nested is set on the view of an attached message (embedded.go): its
+	// parts have no numbers and message.part cannot serve them, so the
+	// chips only name them.
+	nested bool
+
 	// The remote-image bar: the count, and the buttons whose work the
 	// owner supplies as load (this message) and trust (this sender).
 	bar         *gtk.Box
@@ -512,10 +517,12 @@ func (w *Window) openMessageWindow(id api.MessageID) {
 	})
 }
 
-// closeMessageWindow closes the stand-alone window of message id, if any
-// (the message left the folder).
+// closeMessageWindow closes the stand-alone window of message id, if any,
+// and the windows of the messages attached to it (the message left the
+// folder).
 func (w *Window) closeMessageWindow(id api.MessageID) {
 	if mw, ok := w.openMessages[id]; ok {
 		mw.Close()
 	}
+	w.closeEmbeddedWindows(id)
 }

@@ -224,8 +224,25 @@ func (w *walker) imageSrc(val string, tiny bool) (string, bool) {
 	switch class {
 	case urlCID:
 		id := contentID(u)
+		if id == "" {
+			w.blocked.DangerousURLs++
+			return "", false
+		}
+		if w.view && w.in.InlineCID != nil {
+			// An attached message shown from its own bytes: nothing can
+			// serve its parts by URL, so the picture goes in as data:.
+			mt, data, ok := w.in.InlineCID(id)
+			if !ok || len(data) == 0 || !safeImageType(mt) {
+				w.blocked.DangerousURLs++
+				return "", false
+			}
+			w.cids[id] = true
+			d := dataURI(mt, data)
+			w.inlined += len(d)
+			return d, true
+		}
 		target, ok := w.in.KnownCIDs[id]
-		if !ok || id == "" {
+		if !ok {
 			w.blocked.DangerousURLs++
 			return "", false
 		}
@@ -266,7 +283,7 @@ func (w *walker) imageSrc(val string, tiny bool) (string, bool) {
 			w.blocked.RemoteImages++
 			return "", false
 		}
-		d := "data:" + strings.ToLower(strings.TrimSpace(mt)) + ";base64," + base64.StdEncoding.EncodeToString(data)
+		d := dataURI(mt, data)
 		w.inlined += len(d)
 		return d, true
 	case urlHTTP, urlRelative:
@@ -280,6 +297,12 @@ func (w *walker) imageSrc(val string, tiny bool) (string, bool) {
 	// data:, javascript:, mailto:, unknown schemes, invalid values
 	w.blocked.DangerousURLs++
 	return "", false
+}
+
+// dataURI is how an inlined picture (fetched remote image, cid: part of an
+// attached message) is written into the output.
+func dataURI(mediaType string, data []byte) string {
+	return "data:" + strings.ToLower(strings.TrimSpace(mediaType)) + ";base64," + base64.StdEncoding.EncodeToString(data)
 }
 
 // isTrackingPixel is the heuristic for a beacon: an image that is at most

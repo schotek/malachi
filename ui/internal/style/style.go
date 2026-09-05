@@ -69,6 +69,21 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// The remote-image bar above a message: a neutral tint that reads as a
 	// notice in light and dark alike (Adw.Banner has room for one button).
 	b.WriteString("box.remote-bar { background-color: alpha(@window_fg_color, 0.06); padding: 6px 12px; }\n")
+	// Compose header fields (compose.blp): one line each, so the entries
+	// and the account drop-down lose the height a stand-alone input would
+	// claim and the card supplies the padding the rows no longer have.
+	b.WriteString("box.compose-headers > box { padding: 0 12px; }\n")
+	b.WriteString("box.compose-headers entry, box.compose-headers dropdown > button { min-height: 30px; }\n")
+	b.WriteString("box.compose-headers dropdown > button { padding-left: 0; }\n")
+	// Attachment chips under the message headers: two have to fit side by
+	// side in a narrow pane, so the buttons drop libadwaita's roomy
+	// padding, the labels go down a size and the menu arrow is barely
+	// wider than its icon. The name itself is capped in Go (chipNameChars).
+	b.WriteString("box.attachment-chip button, button.chip-action { min-height: 0; padding: 3px 8px; }\n")
+	b.WriteString("box.attachment-chip image, button.chip-action image { -gtk-icon-size: 14px; }\n")
+	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
+	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
+	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
 	// Separators between messages (show-separators on the list in window.blp).
 	// The sidebar style rounds its rows and insets them, which would bend the
 	// separator into a shallow arc and leave a gap under it, so the message

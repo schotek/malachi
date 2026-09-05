@@ -112,6 +112,26 @@ func TestExecutableAttachment(t *testing.T) {
 	}
 }
 
+func TestAttachedMessage(t *testing.T) {
+	cases := []struct {
+		a    api.Attachment
+		want bool
+	}{
+		{api.Attachment{Filename: "report.eml", ContentType: "message/rfc822"}, true},
+		{api.Attachment{Filename: "attachment-1.eml", ContentType: "message/rfc822"}, true},
+		{api.Attachment{Filename: "whatever", ContentType: "Message/RFC822; name=x"}, true},
+		{api.Attachment{Filename: "Forwarded.EML", ContentType: "application/octet-stream"}, true},
+		{api.Attachment{Filename: "report.eml.exe", ContentType: "application/octet-stream"}, false},
+		{api.Attachment{Filename: "a.pdf", ContentType: "application/pdf"}, false},
+		{api.Attachment{}, false},
+	}
+	for _, c := range cases {
+		if got := attachedMessage(c.a); got != c.want {
+			t.Errorf("attachedMessage(%q, %q) = %v, want %v", c.a.Filename, c.a.ContentType, got, c.want)
+		}
+	}
+}
+
 func TestUniqueName(t *testing.T) {
 	taken := map[string]bool{"a.txt": true, "a (2).txt": true, "b": true, "c.tar.gz": true}
 	has := func(n string) bool { return taken[n] }

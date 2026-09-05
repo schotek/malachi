@@ -152,6 +152,15 @@ the current draft's attachments.
   only the claimed one. Executable types are never opened directly: the UI
   offers only "Save As" for them, judged by the last extension and the
   claimed content type (`ui/internal/window/attachments.go`).
+- An attached message (`message/rfc822`, or a part named `.eml`) is never
+  parsed during sync. `message.embedded` renders it only when the user
+  opens it, from the part's bytes, through the same parser, limits and
+  sanitiser as any body; its `cid:` pictures are inlined under the
+  remote-image caps with their type sniffed from the bytes, the parser does
+  not recurse into a message attached to it, its other parts are named but
+  cannot be fetched, and nothing about it is stored. The remote-content
+  policy is resolved for the containing message's sender, not for the
+  forwarded `From`.
 - Charset decoding is best-effort with replacement characters; never a
   crash, never a hang.
 - Every new parser gets pathological samples in `testdata/mime` and a fuzz

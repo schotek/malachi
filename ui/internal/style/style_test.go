@@ -33,6 +33,8 @@ func TestCSS(t *testing.T) {
 	for _, want := range []string{
 		"button.folder-twisty",
 		"box.remote-bar",
+		"box.attachment-chip button, button.chip-action { min-height: 0;",
+		"box.attachment-chip menubutton.chip-arrow > button",
 		"list.message-list > row { border-radius: 0; margin: 0; }",
 		"list.message-list > row:last-child { border-bottom: none; }",
 		"row.account-row.drop-above", "row.account-row.drop-below", "@accent_bg_color", ".drag-handle"} {

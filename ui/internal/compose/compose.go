@@ -10,9 +10,11 @@ import (
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
@@ -29,13 +31,19 @@ type Window struct {
 	log    *slog.Logger
 	params Params
 
-	title      *adw.WindowTitle
-	from       *adw.ComboRow
-	to         *adw.EntryRow
-	cc         *adw.EntryRow
-	bcc        *adw.EntryRow
-	subject    *adw.EntryRow
-	ccBcc      *gtk.Button
+	title   *adw.WindowTitle
+	from    *gtk.DropDown
+	to      *gtk.Entry
+	cc      *gtk.Entry
+	bcc     *gtk.Entry
+	subject *gtk.Entry
+
+	// The Cc and Bcc lines start hidden; the button reveals them, and
+	// each carries the separator above it.
+	ccBcc         *gtk.Button
+	ccBox, bccBox *gtk.Box
+	ccSep, bccSep *gtk.Separator
+
 	toasts     *adw.ToastOverlay
 	editorSlot *gtk.Box
 	attBox     *gtk.FlowBox
@@ -76,12 +84,16 @@ func newWindow(m *Manager, p Params) *Window {
 		log:         m.log,
 		params:      p,
 		title:       b.GetObject("window_title").Cast().(*adw.WindowTitle),
-		from:        b.GetObject("from_row").Cast().(*adw.ComboRow),
-		to:          b.GetObject("to_row").Cast().(*adw.EntryRow),
-		cc:          b.GetObject("cc_row").Cast().(*adw.EntryRow),
-		bcc:         b.GetObject("bcc_row").Cast().(*adw.EntryRow),
-		subject:     b.GetObject("subject_row").Cast().(*adw.EntryRow),
+		from:        b.GetObject("from_row").Cast().(*gtk.DropDown),
+		to:          b.GetObject("to_row").Cast().(*gtk.Entry),
+		cc:          b.GetObject("cc_row").Cast().(*gtk.Entry),
+		bcc:         b.GetObject("bcc_row").Cast().(*gtk.Entry),
+		subject:     b.GetObject("subject_row").Cast().(*gtk.Entry),
 		ccBcc:       b.GetObject("cc_bcc_button").Cast().(*gtk.Button),
+		ccBox:       b.GetObject("cc_box").Cast().(*gtk.Box),
+		bccBox:      b.GetObject("bcc_box").Cast().(*gtk.Box),
+		ccSep:       b.GetObject("cc_separator").Cast().(*gtk.Separator),
+		bccSep:      b.GetObject("bcc_separator").Cast().(*gtk.Separator),
 		toasts:      b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 		editorSlot:  b.GetObject("editor_slot").Cast().(*gtk.Box),
 		attBox:      b.GetObject("attachments_box").Cast().(*gtk.FlowBox),
@@ -131,9 +143,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.cc.SetText(FormatAddressList(p.CC))
 	w.bcc.SetText(FormatAddressList(p.BCC))
 	w.subject.SetText(p.Subject)
-	if len(p.CC) > 0 || len(p.BCC) > 0 {
-		w.showCcBcc()
-	}
+	w.setCcBccVisible(len(p.CC) > 0, len(p.BCC) > 0)
 	w.updateTitle()
 	w.draft.inReplyTo, w.draft.forwarding = p.InReplyTo, p.Forwarding
 	w.editor.Load(p.BodyHTML)
@@ -151,6 +161,41 @@ func newWindow(m *Manager, p Params) *Window {
 	}
 	w.ConnectCloseRequest(w.closeRequest)
 	return w
+}
+
+// fromFactory renders one identity in the From drop-down. GtkDropDown's
+// built-in factory uses a label that never elides, so a long
+// "Name <address>" would become the compose window's minimum width; this
+// one elides and, as everywhere, shows the account's own text as plain
+// text rather than markup.
+func fromFactory() *gtk.SignalListItemFactory {
+	f := gtk.NewSignalListItemFactory()
+	f.ConnectSetup(func(obj *coreglib.Object) {
+		item, ok := obj.Cast().(*gtk.ListItem)
+		if !ok {
+			return
+		}
+		l := gtk.NewLabel("")
+		l.SetUseMarkup(false)
+		l.SetXAlign(0)
+		l.SetEllipsize(pango.EllipsizeEnd)
+		l.SetMaxWidthChars(30)
+		item.SetChild(l)
+	})
+	f.ConnectBind(func(obj *coreglib.Object) {
+		item, ok := obj.Cast().(*gtk.ListItem)
+		if !ok {
+			return
+		}
+		l, ok := item.Child().(*gtk.Label)
+		if !ok {
+			return
+		}
+		if s, ok := item.Item().Cast().(*gtk.StringObject); ok {
+			l.SetLabel(s.String())
+		}
+	})
+	return f
 }
 
 // setAccounts fills the From row, keeping the selected identity when it is
@@ -175,6 +220,7 @@ func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
 			selected = uint(i)
 		}
 	}
+	w.from.SetFactory(&fromFactory().ListItemFactory)
 	w.from.SetModel(gtk.NewStringList(labels))
 	w.from.SetSelected(selected)
 	w.from.SetSensitive(len(accounts) > 1)
@@ -197,7 +243,7 @@ func (w *Window) self() api.Address {
 }
 
 func (w *Window) wireRows() {
-	for _, row := range []*adw.EntryRow{w.to, w.cc, w.bcc} {
+	for _, row := range []*gtk.Entry{w.to, w.cc, w.bcc} {
 		row := row
 		row.ConnectChanged(func() {
 			w.validateRow(row)
@@ -212,11 +258,23 @@ func (w *Window) wireRows() {
 	w.ccBcc.ConnectClicked(w.showCcBcc)
 }
 
-func (w *Window) showCcBcc() {
-	w.cc.SetVisible(true)
-	w.bcc.SetVisible(true)
-	w.ccBcc.SetVisible(false)
+// setCcBccVisible reveals the lines asked for and keeps the Cc/Bcc button
+// only while one of them is still hidden. A reply carrying only a Cc
+// therefore does not open an empty Bcc line as well.
+func (w *Window) setCcBccVisible(cc, bcc bool) {
+	if cc {
+		w.ccBox.SetVisible(true)
+		w.ccSep.SetVisible(true)
+	}
+	if bcc {
+		w.bccBox.SetVisible(true)
+		w.bccSep.SetVisible(true)
+	}
+	w.ccBcc.SetVisible(!w.ccBox.Visible() || !w.bccBox.Visible())
 }
+
+// showCcBcc is the Cc/Bcc button: both lines at once.
+func (w *Window) showCcBcc() { w.setCcBccVisible(true, true) }
 
 func (w *Window) updateTitle() {
 	if s := strings.TrimSpace(w.subject.Text()); s != "" {
@@ -227,7 +285,7 @@ func (w *Window) updateTitle() {
 }
 
 // validateRow flags a recipient row with unparsable tokens.
-func (w *Window) validateRow(row *adw.EntryRow) bool {
+func (w *Window) validateRow(row *gtk.Entry) bool {
 	_, invalid := ParseAddressList(row.Text())
 	if len(invalid) > 0 {
 		row.AddCSSClass("error")
@@ -240,7 +298,7 @@ func (w *Window) validateRow(row *adw.EntryRow) bool {
 // recipients parses the three rows; ok is false when any token is invalid.
 func (w *Window) recipients() (to, cc, bcc []api.Address, ok bool) {
 	ok = true
-	parse := func(row *adw.EntryRow) []api.Address {
+	parse := func(row *gtk.Entry) []api.Address {
 		addrs, invalid := ParseAddressList(row.Text())
 		if len(invalid) > 0 {
 			ok = false

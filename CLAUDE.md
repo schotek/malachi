@@ -127,7 +127,10 @@ verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
 `message.body` vrací `html`, `blocked`, `links`, `inlineParts`, případně
 `htmlWithheld`; vzdálené obrázky pod politikou `allow` stahuje démon
 (`internal/remoteimg`) a vkládá jako `data:`; `message.part` servíruje
-části zprávy pro schéma `malachi-cid:`. UI je vykresluje ve WebKitGTK 6.0
+části zprávy pro schéma `malachi-cid:`; `message.embedded` vykreslí
+přiloženou zprávu (`message/rfc822`, `.eml`) jen pro čtení a jen na
+vyžádání, obrázky vloží jako `data:`, parser nerekurzuje, nic se neukládá
+(UI ji otevře z chipu přílohy v samostatném okně). UI je vykresluje ve WebKitGTK 6.0
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`

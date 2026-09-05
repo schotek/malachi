@@ -30,24 +30,19 @@ const remoteFetchBudget = 10 * time.Second
 // error: the caller already has the text, and a missing formatted version
 // is a state of the result, not a failure of the call.
 func (b *Backend) renderHTML(ctx context.Context, accountID, id string, policy api.RemoteContentPolicy, res *api.MessageBodyResult) {
-	withhold := func(why string, err error) {
-		res.HTMLWithheld = true
-		res.HTML = ""
-		b.log.Warn("html withheld", "id", id, "why", why, "err", err)
-	}
 	f, err := b.store.OpenMessageRaw(ctx, accountID, id)
 	if err != nil {
-		withhold("raw message unavailable", err)
+		b.withholdHTML(res, id, "raw message unavailable", err)
 		return
 	}
 	defer f.Close()
 	parsed, err := mime.Parse(f, mime.DefaultLimits())
 	if err != nil {
-		withhold("raw message unparsable", err)
+		b.withholdHTML(res, id, "raw message unparsable", err)
 		return
 	}
 	if !parsed.HasHTML {
-		withhold("no html part on re-parse", nil)
+		b.withholdHTML(res, id, "no html part on re-parse", nil)
 		return
 	}
 
@@ -70,24 +65,43 @@ func (b *Backend) renderHTML(ctx context.Context, accountID, id string, policy a
 		KnownCIDs:     known,
 		MaxOutputSize: viewHTMLCap,
 	}
-	if policy == api.RemoteAllow {
+	b.sanitizeInto(ctx, id, in, partOf, res)
+}
+
+// withholdHTML records in res that the formatted version cannot be shown
+// safely; the text is still there.
+func (b *Backend) withholdHTML(res *api.MessageBodyResult, id, why string, err error) {
+	res.HTMLWithheld = true
+	res.HTML = ""
+	b.log.Warn("html withheld", "id", id, "why", why, "err", err)
+}
+
+// sanitizeInto runs the sanitiser over in (fetching the remote images first
+// under RemoteAllow) and fills res from its output, or withholds the HTML
+// when the sanitiser refuses it. partOf maps a Content-ID to the part number
+// InlineParts reports; nil when the caller inlined the pictures itself (an
+// attached message, embedded.go). It returns the Content-IDs whose
+// references survived.
+func (b *Backend) sanitizeInto(ctx context.Context, id string, in sanitize.Input, partOf map[string]string, res *api.MessageBodyResult) []string {
+	if in.Policy == api.RemoteAllow {
 		in.RemoteImage = b.remoteImageHook(ctx, in)
 	}
 	out, err := b.Sanitize(in)
 	if err != nil {
-		withhold("sanitiser refused the body", err)
-		return
+		b.withholdHTML(res, id, "sanitiser refused the body", err)
+		return nil
 	}
 	res.HTML = out.HTML
 	res.Blocked = out.Blocked
 	res.Links = out.Links
 	res.SanitizerVersion = out.Version
-	if len(out.CIDs) > 0 {
+	if partOf != nil && len(out.CIDs) > 0 {
 		res.InlineParts = make(map[string]string, len(out.CIDs))
 		for _, cid := range out.CIDs {
 			res.InlineParts[cid] = partOf[cid]
 		}
 	}
+	return out.CIDs
 }
 
 // remoteImageHook fetches, in parallel and within the budget, every https:
@@ -139,24 +153,9 @@ func (s *messageService) Part(ctx context.Context, p api.MessagePartParams) (*ap
 	if err != nil {
 		return nil, err
 	}
-	f, err := s.b.store.OpenMessageRaw(ctx, a.ID, m.ID)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return nil, api.NewError(api.CodePartNotFound, "message content is not stored")
-	case err != nil:
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
-	}
-	defer f.Close()
-	part, err := mime.ExtractPart(f, p.PartID, mime.DefaultLimits(), api.MaxAttachmentDataBytes)
-	switch {
-	case errors.Is(err, mime.ErrPartNotFound):
-		return nil, api.NewError(api.CodePartNotFound, "no part %q", p.PartID)
-	case errors.Is(err, mime.ErrPartTooBig):
-		e := api.NewError(api.CodeAttachmentTooBig, "part %q exceeds %d bytes", p.PartID, api.MaxAttachmentDataBytes)
-		e.Data = map[string]int64{"limit": api.MaxAttachmentDataBytes}
-		return nil, e
-	case err != nil:
-		return nil, api.NewError(api.CodeMalformedMessage, "%v", err)
+	part, err := s.b.extractPart(ctx, a.ID, m.ID, p.PartID)
+	if err != nil {
+		return nil, err
 	}
 	return &api.MessagePartResult{
 		PartID:      part.PartID,
@@ -165,4 +164,30 @@ func (s *messageService) Part(ctx context.Context, p api.MessagePartParams) (*ap
 		Size:        int64(len(part.Body)),
 		Data:        part.Body,
 	}, nil
+}
+
+// extractPart reads one part of a stored message, decoded and capped at
+// api.MaxAttachmentDataBytes, with the failures mapped to the API errors
+// message.part documents.
+func (b *Backend) extractPart(ctx context.Context, accountID, id, partID string) (*mime.Part, error) {
+	f, err := b.store.OpenMessageRaw(ctx, accountID, id)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodePartNotFound, "message content is not stored")
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	defer f.Close()
+	part, err := mime.ExtractPart(f, partID, mime.DefaultLimits(), api.MaxAttachmentDataBytes)
+	switch {
+	case errors.Is(err, mime.ErrPartNotFound):
+		return nil, api.NewError(api.CodePartNotFound, "no part %q", partID)
+	case errors.Is(err, mime.ErrPartTooBig):
+		e := api.NewError(api.CodeAttachmentTooBig, "part %q exceeds %d bytes", partID, api.MaxAttachmentDataBytes)
+		e.Data = map[string]int64{"limit": api.MaxAttachmentDataBytes}
+		return nil, e
+	case err != nil:
+		return nil, api.NewError(api.CodeMalformedMessage, "%v", err)
+	}
+	return part, nil
 }

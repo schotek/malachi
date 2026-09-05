@@ -1,0 +1,90 @@
+From: alice@example.org
+To: bob@example.net
+Subject: Fwd: report
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: text/plain; charset=utf-8
+
+Forwarding the report and a couple of files.
+--outer
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="report.eml"
+
+From: Carol <carol@example.net>
+To: alice@example.org
+Cc: dave@example.net
+Subject: report
+Date: Tue, 2 Sep 2025 10:00:00 +0000
+Message-ID: <report@example.net>
+Content-Type: multipart/mixed; boundary="inner"
+
+--inner
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Inner <b>html</b> report.</p>
+<img src="cid:pic@inner" alt="chart">
+<img src="cid:fake@inner" alt="lies about its type">
+<img src="cid:svg@inner" alt="svg">
+<img src="cid:nowhere@inner" alt="no such part">
+<img src="https://remote.invalid/x.png" width="100" height="100">
+<a href="https://example.invalid/r">read more</a></body></html>
+--rel
+Content-Type: image/png
+Content-ID: <pic@inner>
+Content-Disposition: inline; filename="chart.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--rel
+Content-Type: image/png
+Content-ID: <fake@inner>
+Content-Disposition: inline; filename="fake.png"
+
+<!DOCTYPE html><p>not a picture at all</p>
+--rel
+Content-Type: image/svg+xml
+Content-ID: <svg@inner>
+Content-Disposition: inline; filename="logo.svg"
+
+<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>
+--rel--
+--inner
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="inner.pdf"
+
+%PDF-1.4 inner
+--inner
+Content-Type: message/rfc822
+Content-Disposition: attachment; filename="deep.eml"
+
+From: erin@example.org
+Subject: deeper still
+Content-Type: text/plain
+
+This one must stay a named attachment: no recursion.
+--inner--
+--outer
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="outer.pdf"
+
+%PDF-1.4 outer
+--outer
+Content-Type: application/octet-stream; name="forwarded.eml"
+Content-Disposition: attachment; filename="forwarded.eml"
+
+From: frank@example.org
+To: alice@example.org
+Subject: plain
+Content-Type: text/plain; charset=utf-8
+
+Just text, saved as a file by some client.
+--outer
+Content-Type: application/octet-stream; name="junk.eml"
+Content-Disposition: attachment; filename="junk.eml"
+
+this is not a message at all
+--outer--

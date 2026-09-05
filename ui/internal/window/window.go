@@ -70,6 +70,10 @@ type Window struct {
 	// double-click raises the existing window instead of opening another.
 	openMessages map[api.MessageID]*MessageWindow
 
+	// openEmbedded tracks the windows of attached messages (embedded.go),
+	// by containing message and part, for the same reason.
+	openEmbedded map[embeddedKey]*EmbeddedWindow
+
 	// markReadSource is the pending mark-as-read timer, 0 when none;
 	// markReadID is the message it will mark.
 	markReadSource glib.SourceHandle
@@ -151,6 +155,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		folderRows:        make(map[folderKey]*folderRow),
 		loaded:            make(map[api.MessageID]*loadedMessage),
 		openMessages:      make(map[api.MessageID]*MessageWindow),
+		openEmbedded:      make(map[embeddedKey]*EmbeddedWindow),
 		syncStates:        make(map[api.AccountID]api.SyncState),
 		actions:           make(map[string]*gio.SimpleAction),
 
@@ -212,6 +217,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.pane.setZoom(z)
 		for _, mw := range w.openMessages {
 			mw.view.setZoom(z)
+		}
+		for _, ew := range w.openEmbedded {
+			ew.view.setZoom(z)
 		}
 	})
 

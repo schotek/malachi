@@ -39,6 +39,13 @@ const partTimeout = 60 * time.Second
 // next open sweeps it: the viewer may still be reading it lazily.
 const openMaxAge = time.Hour
 
+// chipNameChars bounds the file name on a chip. Two chips have to fit
+// side by side in a narrow message pane, and the middle of the name is
+// what gets elided, so the extension survives; the full name is the
+// button's tooltip. The rest of the chip's density is CSS
+// (.attachment-chip in ui/internal/style).
+const chipNameChars = 14
+
 // renderAttachments rebuilds the chips for what lm holds: nothing until
 // message.get answered, otherwise every attachment except the pictures the
 // HTML body on display already shows.
@@ -59,6 +66,11 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 	allOK := true
 	for _, a := range atts {
 		ok, why := partAvailable(a, lm.body)
+		if v.nested {
+			// The parts of an attached message have no numbers; nothing
+			// can fetch them (message.embedded in docs/api.md).
+			ok, why = false, i18n.T("Files inside an attached message cannot be opened or saved yet.")
+		}
 		allOK = allOK && ok
 		v.addChip(v.buildChip(s.AccountID, s.ID, a, ok, why))
 	}
@@ -86,23 +98,27 @@ func (v *messageView) say(text string) {
 // group on the chip itself and close over the attachment, so a chip never
 // acts on a message other than the one it was built for. An unavailable
 // part (ok false) leaves the chip insensitive with why as its tooltip; an
-// executable keeps Open disabled and saves on click instead.
+// attached message is viewed in its own window on click (embedded.go), the
+// menu adding View; an executable keeps Open disabled and saves on click
+// instead.
 func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attachment, ok bool, why string) gtk.Widgetter {
 	name := chipName(a)
 	exe := executableAttachment(a.Filename, a.ContentType)
+	nested := attachedMessage(a)
 
 	icon := gtk.NewImageFromGIcon(gio.ContentTypeGetSymbolicIcon(chipIconType(a)))
 	label := gtk.NewLabel(name)
 	label.SetUseMarkup(false)
 	label.SetEllipsize(pango.EllipsizeMiddle) // keep the extension visible
-	label.SetMaxWidthChars(28)
-	inner := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	label.SetMaxWidthChars(chipNameChars)
+	label.AddCSSClass("chip-name")
+	inner := gtk.NewBox(gtk.OrientationHorizontal, 4)
 	inner.Append(icon)
 	inner.Append(label)
 	if a.Size > 0 {
 		size := gtk.NewLabel(widget.FormatSize(a.Size))
 		size.SetUseMarkup(false)
-		size.AddCSSClass("caption")
+		size.AddCSSClass("chip-size")
 		size.AddCSSClass("dim-label")
 		inner.Append(size)
 	}
@@ -110,8 +126,9 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	button.SetChild(inner)
 	arrow := gtk.NewMenuButton()
 	arrow.SetIconName("pan-down-symbolic")
-	arrow.SetMenuModel(chipMenu())
+	arrow.SetMenuModel(chipMenu(nested))
 	arrow.SetTooltipText(i18n.T("More Actions"))
+	arrow.AddCSSClass("chip-arrow")
 
 	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	box.AddCSSClass("linked")
@@ -121,6 +138,7 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 
 	open := func() { v.openAttachment(acc, id, a) }
 	save := func() { v.saveAttachment(acc, id, a) }
+	view := func() { v.openEmbeddedWindow(acc, id, a) }
 	g := gio.NewSimpleActionGroup()
 	openAction := gio.NewSimpleAction("open", nil)
 	openAction.SetEnabled(!exe)
@@ -129,6 +147,11 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	saveAction.ConnectActivate(func(*glib.Variant) { save() })
 	g.AddAction(openAction)
 	g.AddAction(saveAction)
+	if nested {
+		viewAction := gio.NewSimpleAction("view", nil)
+		viewAction.ConnectActivate(func(*glib.Variant) { view() })
+		g.AddAction(viewAction)
+	}
 	box.InsertActionGroup("att", g)
 
 	switch {
@@ -136,6 +159,11 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 		box.SetSensitive(false)
 		button.SetTooltipText(why)
 		arrow.SetTooltipText(why)
+	case nested:
+		// Rendered by the daemon, read-only: the safest thing to do with
+		// it, whatever it is called.
+		button.SetTooltipText(name)
+		button.ConnectClicked(view)
 	case exe:
 		button.SetTooltipText(i18n.T("Programs and scripts are not opened directly; save the file and decide yourself."))
 		button.ConnectClicked(save)
@@ -146,9 +174,13 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	return box
 }
 
-// chipMenu is the arrow's menu; the actions resolve on the chip.
-func chipMenu() *gio.Menu {
+// chipMenu is the arrow's menu; the actions resolve on the chip. An
+// attached message (nested) also offers to be viewed in its own window.
+func chipMenu(nested bool) *gio.Menu {
 	m := gio.NewMenu()
+	if nested {
+		m.Append(i18n.T("_View"), "att.view")
+	}
 	m.Append(i18n.T("_Open"), "att.open")
 	m.Append(i18n.T("Save _As…"), "att.save")
 	return m
@@ -159,7 +191,8 @@ func chipMenu() *gio.Menu {
 func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []api.Attachment) gtk.Widgetter {
 	button := gtk.NewButton()
 	button.AddCSSClass("flat")
-	content := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	button.AddCSSClass("chip-action") // as dense as the chips beside it
+	content := gtk.NewBox(gtk.OrientationHorizontal, 4)
 	content.Append(gtk.NewImageFromIconName("document-save-symbolic"))
 	label := gtk.NewLabelWithMnemonic(i18n.T("Save _All"))
 	content.Append(label)
@@ -232,31 +265,31 @@ var executableExtensions = map[string]bool{
 }
 
 var executableTypes = map[string]bool{
-	"application/x-executable":                     true,
-	"application/x-sharedlib":                      true,
-	"application/x-shellscript":                    true,
-	"application/x-desktop":                        true,
-	"application/x-ms-dos-executable":              true,
-	"application/x-msdownload":                     true,
-	"application/x-msi":                            true,
+	"application/x-executable":                      true,
+	"application/x-sharedlib":                       true,
+	"application/x-shellscript":                     true,
+	"application/x-desktop":                         true,
+	"application/x-ms-dos-executable":               true,
+	"application/x-msdownload":                      true,
+	"application/x-msi":                             true,
 	"application/vnd.microsoft.portable-executable": true,
-	"application/x-elf":                            true,
-	"application/x-pie-executable":                 true,
-	"application/java-archive":                     true,
-	"application/x-java-archive":                   true,
-	"application/vnd.appimage":                     true,
-	"application/x-iso9660-appimage":               true,
-	"application/x-bat":                            true,
-	"application/x-msdos-program":                  true,
-	"application/x-perl":                           true,
-	"application/javascript":                       true,
-	"application/x-ms-shortcut":                    true,
-	"application/hta":                              true,
-	"text/x-shellscript":                           true,
-	"text/x-python":                                true,
-	"text/x-perl":                                  true,
-	"text/javascript":                              true,
-	"text/x-msdos-batch":                           true,
+	"application/x-elf":                             true,
+	"application/x-pie-executable":                  true,
+	"application/java-archive":                      true,
+	"application/x-java-archive":                    true,
+	"application/vnd.appimage":                      true,
+	"application/x-iso9660-appimage":                true,
+	"application/x-bat":                             true,
+	"application/x-msdos-program":                   true,
+	"application/x-perl":                            true,
+	"application/javascript":                        true,
+	"application/x-ms-shortcut":                     true,
+	"application/hta":                               true,
+	"text/x-shellscript":                            true,
+	"text/x-python":                                 true,
+	"text/x-perl":                                   true,
+	"text/javascript":                               true,
+	"text/x-msdos-batch":                            true,
 }
 
 // executableAttachment reports whether an attachment must not be opened

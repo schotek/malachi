@@ -111,6 +111,13 @@ type Input struct {
 	// media type and bytes for inlining as a data: URI; ok = false drops the
 	// image. nil leaves https: image references in place.
 	RemoteImage func(url string) (mediaType string, data []byte, ok bool)
+	// InlineCID resolves one cid: reference to picture bytes when the
+	// caller cannot serve parts by URL (an attached message shown from its
+	// own bytes, message.embedded): the picture is inlined as a data: URI
+	// like a fetched remote image, and the Content-ID is reported in CIDs.
+	// ok = false drops the reference. nil (the usual case) leaves cid: to
+	// KnownCIDs. ModeView only.
+	InlineCID func(contentID string) (mediaType string, data []byte, ok bool)
 }
 
 // Output is the only form of HTML that may cross the API.

@@ -24,14 +24,15 @@ const (
 	MethodFolderSubscribe = "folder.subscribe"
 
 	// Messages.
-	MethodMessageList   = "message.list"
-	MethodMessageGet    = "message.get"
-	MethodMessageBody   = "message.body"
-	MethodMessagePart   = "message.part"
-	MethodMessageFlag   = "message.flag"
-	MethodMessageMove   = "message.move"
-	MethodMessageDelete = "message.delete"
-	MethodMessageSend   = "message.send"
+	MethodMessageList     = "message.list"
+	MethodMessageGet      = "message.get"
+	MethodMessageBody     = "message.body"
+	MethodMessagePart     = "message.part"
+	MethodMessageEmbedded = "message.embedded"
+	MethodMessageFlag     = "message.flag"
+	MethodMessageMove     = "message.move"
+	MethodMessageDelete   = "message.delete"
+	MethodMessageSend     = "message.send"
 
 	// Outbox.
 	MethodOutboxRetry = "outbox.retry"
@@ -84,7 +85,8 @@ var AllMethods = []string{
 	MethodAccountReorder,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
-	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
+	MethodMessageEmbedded, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
+	MethodMessageSend,
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate,

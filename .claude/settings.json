@@ -2,7 +2,23 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git --no-pager log --oneline -3)",
+      "Bash(git rm *)",
+      "Bash(git --no-pager log --oneline -5)",
+      "Bash(git --no-pager log --oneline -6)",
+      "Bash(python3 -)",
+      "Bash(git --no-pager log --oneline -1)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:gitlab.gnome.org)",
+      "Bash(curl -sL -o gtkshow.c \"https://gitlab.gnome.org/GNOME/gtk/-/raw/gtk-4-18/gtk/deprecated/gtkshow.c\")",
+      "Bash(curl -sL -o gtkopenuriportal.c \"https://gitlab.gnome.org/GNOME/gtk/-/raw/gtk-4-18/gtk/gtkopenuriportal.c\")",
+      "Bash(curl -sL -o gtkdropdown.c \"https://gitlab.gnome.org/GNOME/gtk/-/raw/gtk-4-18/gtk/gtkdropdown.c\")",
+      "Bash(git -C /home/schotek/Coding/GitHub/Malachi status --short)",
+      "Bash(git -C /home/schotek/Coding/GitHub/Malachi diff --stat)",
+      "Bash(git -C /home/schotek/Coding/GitHub/Malachi diff -- backend/ ui/internal/ ui/data/ui/compose.blp)",
+      "Bash(git --no-pager log -1 --stat --format='%h %s%n')"
     ]
   }
 }

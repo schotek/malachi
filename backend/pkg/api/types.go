@@ -598,6 +598,36 @@ type MessagePartResult struct {
 	Data        []byte `json:"data"` // base64 on the wire
 }
 
+// MessageEmbeddedParams names an attached message (a message/rfc822 part,
+// or a part named *.eml) of a stored message, by the PartID Attachment
+// carries, to be shown as a message of its own.
+type MessageEmbeddedParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+	PartID    string    `json:"partId"`
+	// RemoteContent overrides the stored preference for this call only, as
+	// in MessageBodyParams. The policy is resolved for the senders of the
+	// containing message, not the attached one.
+	RemoteContent RemoteContentPolicy `json:"remoteContent,omitempty"`
+}
+
+// MessageEmbeddedResult is the attached message rendered read-only: its
+// headers as message.get would report them and its body as message.body
+// would, produced from the part's bytes on demand and never stored.
+//
+// Message.ID, AccountID and FolderID are those of the containing message
+// (the attached one has no id of its own); Flags is empty. Its cid:
+// pictures are inlined into Body.HTML as data: URIs, since nothing can
+// serve its parts by URL, so Body.InlineParts is empty and the pictures
+// shown are left out of Message.Attachments. The attachments listed have
+// no PartID: message.part serves the containing message's parts only, so
+// they cannot be fetched.
+type MessageEmbeddedResult struct {
+	PartID  string            `json:"partId"`
+	Message Message           `json:"message"`
+	Body    MessageBodyResult `json:"body"`
+}
+
 type MessageFlagParams struct {
 	AccountID  AccountID   `json:"accountId"`
 	MessageIDs []MessageID `json:"messageIds"`

@@ -1,0 +1,215 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// An attached message (a message/rfc822 or .eml part) shown read-only in its
+// own window, opened from its chip under the containing message's headers
+// (ui/internal/window/embedded.go). The message display shares its object
+// IDs with window.blp and message_window.blp (message_view.go); keep them in
+// sync. No actions: the message has no id of its own, so there is nothing
+// to flag, move or reply to.
+Adw.Window embedded_window {
+  default-width: 820;
+  default-height: 620;
+  width-request: 360;
+  height-request: 294;
+  focus-widget: message_scroller;
+
+  // Capture phase: the HTML view would otherwise take the key first.
+  ShortcutController {
+    propagation-phase: capture;
+
+    Shortcut {
+      trigger: "Escape";
+      action: "action(window.close)";
+    }
+  }
+
+  content: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      title-widget: Adw.WindowTitle window_title {
+        title: _("Attached Message");
+      };
+    }
+
+    // Remote images the sanitiser removed (window/remote.go): only "load
+    // now" here. Trusting a sender is about the containing message's
+    // sender, who decides the policy, and belongs in that message's view.
+    [top]
+    Box remote_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+      ]
+
+      Label remote_label {
+        xalign: 0;
+        wrap: true;
+        hexpand: true;
+      }
+
+      Button remote_load {
+        label: _("Load _Images");
+        use-underline: true;
+      }
+
+      Button remote_trust {
+        visible: false;
+      }
+    }
+
+    // The headers stay put; the body below scrolls on its own (a WebKit
+    // view scrolls itself and would have no height inside a scrolled
+    // window).
+    content: Adw.ToastOverlay toast_overlay {
+      child: Box {
+        orientation: vertical;
+
+        Adw.Clamp {
+          maximum-size: 900;
+          tightening-threshold: 700;
+
+          child: Box {
+            orientation: vertical;
+            spacing: 12;
+            margin-start: 24;
+            margin-end: 24;
+            margin-top: 24;
+
+            Label message_subject {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
+
+              styles [
+                "title-2",
+              ]
+            }
+
+            Label message_from {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            // To / Cc line; hidden without recipients.
+            Label message_recipients {
+              xalign: 0;
+              wrap: true;
+              selectable: true;
+              visible: false;
+
+              styles [
+                "dim-label",
+              ]
+            }
+
+            Label message_date {
+              xalign: 0;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
+
+            // Attachment chips, built from Go (window/attachments.go). The
+            // parts of an attached message cannot be fetched, so the chips
+            // only name them.
+            Adw.WrapBox message_attachments {
+              child-spacing: 6;
+              line-spacing: 6;
+              visible: false;
+            }
+
+            // Why only the plain text is shown; hidden otherwise.
+            Label body_hint {
+              xalign: 0;
+              wrap: true;
+              visible: false;
+
+              styles [
+                "caption",
+                "dim-label",
+              ]
+            }
+
+            Separator {}
+          };
+        }
+
+        // "text": the plain-text body; "html": the sanitised HTML in a
+        // WebKit view appended from Go (window/message_view.go).
+        Stack body_stack {
+          vexpand: true;
+
+          StackPage {
+            name: "text";
+
+            child: ScrolledWindow message_scroller {
+              hscrollbar-policy: never;
+              // Receives the initial focus (see focus-widget on the window)
+              // so the selectable subject label is not focused and
+              // select-all'd on open.
+              focusable: true;
+
+              child: Adw.Clamp {
+                maximum-size: 900;
+                tightening-threshold: 700;
+
+                child: Label message_body {
+                  xalign: 0;
+                  yalign: 0;
+                  wrap: true;
+                  wrap-mode: word_char;
+                  selectable: true;
+                  vexpand: true;
+                  margin-start: 24;
+                  margin-end: 24;
+                  margin-top: 12;
+                  margin-bottom: 24;
+                  // Zoom and font come from ui/internal/style.
+                  styles [
+                    "message-body",
+                  ]
+                };
+              };
+            };
+          }
+
+          StackPage {
+            name: "loading";
+
+            child: Adw.Spinner body_spinner {
+              halign: center;
+              valign: center;
+              width-request: 32;
+              height-request: 32;
+
+              accessibility {
+                label: C_("accessibility", "Loading the message");
+              }
+            };
+          }
+
+          StackPage {
+            name: "html";
+
+            child: Box html_slot {
+              orientation: vertical;
+            };
+          }
+        }
+      };
+    };
+  };
+}

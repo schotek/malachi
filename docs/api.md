@@ -615,6 +615,42 @@ for inline images (and serves only `image/*` other than SVG from it);
 saving an attachment will use it too. The part is read from the raw message
 each time; nothing is cached.
 
+#### `message.embedded`
+- params: `{ "accountId", "messageId", "partId", "remoteContent": "block" | "allow" (opt) }`
+- result: `{ "partId", "message": Message, "body": MessageBodyResult }`
+- errors: invalidArgument (missing ids, `partId` not a part number, bad
+  `remoteContent`, the part is not an attached message), accountNotFound,
+  messageNotFound, partNotFound (as in `message.part`), attachmentTooBig
+  (the part exceeds `api.MaxAttachmentDataBytes`), malformedMessage (the
+  containing message or the attached one cannot be parsed), storageError
+
+An attached message — a `message/rfc822` part, or a part named `*.eml`
+(the file a mail client writes when a message is dragged into a new one) —
+rendered as a message of its own, read-only. The part's bytes are read from
+the containing message's raw file, parsed by the same parser and sanitised
+by the same ruleset as any body; nothing about it is stored, and the parser
+never recurses: an `.eml` inside the attached message stays a named
+attachment. Nothing is parsed until a client asks.
+
+`message` is what `message.get` would report for it: `from`, `to`, `cc`,
+`subject`, `date`, `attachments`, `headers`. Its `id`, `accountId` and
+`folderId` are those of the containing message (the attached one has no id
+of its own) and `flags` is empty. `body` is what `message.body` would
+return, with `bodyState` always `fetched`; every guarantee of `html` above
+holds. Two differences follow from the part having no address of its own:
+its `cid:` pictures cannot be served by URL, so the ones the HTML
+references are inlined as `data:` URIs under the caps that apply to fetched
+remote images (2 MiB each, 8 MiB and 32 images per message; the type is
+sniffed from the bytes, never taken from the header) and left out of
+`attachments` (`inlineParts` stays empty); and the attachments listed carry
+no `partId`, since `message.part` serves the containing message's parts
+only — a client shows them by name and cannot fetch them.
+
+`remoteContent` resolves as for `message.body`, for the senders of the
+*containing* message: the attached message's own `From` is forwarded
+content, chosen by whoever attached it, and does not decide about loading
+images. Under `allow` the call may take several seconds, as `message.body`.
+
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
 - result: `{}`
@@ -1091,3 +1127,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   daemon fetches and inlines remote images instead of leaving `https:`
   references in place; new `message.part`; new error code 1503
   `partNotFound`. `draft.save` accepts `htmlBody`.
+- **1** (2026-09-05, compatible addition, attached messages): new
+  `message.embedded` renders a `message/rfc822` (or `*.eml`) part as a
+  read-only message of its own — headers and sanitised body, its `cid:`
+  pictures inlined as `data:` URIs, its attachments listed without
+  `partId`.
