@@ -272,10 +272,18 @@ HTML in mail is hostile input. It is sanitised **in the backend**
 report of what was removed. There is no raw-HTML path: no flag, no debug
 endpoint, no test-only shortcut.
 
-The UI (later phase) renders that output in a WebKitGTK 6.0 view with
-JavaScript disabled, a strict CSP, no network access for the view, `cid:`
-resources served from the backend, and link activation intercepted so the
-real destination is shown and opened through the OpenURI portal.
+The UI renders that output in a WebKitGTK 6.0 view (`internal/htmlview`)
+with JavaScript disabled, a strict CSP, no network access for the view (an
+ephemeral session pointed at an unreachable proxy, every navigation but the
+initial load refused), the message's inline pictures served through its own
+`malachi-cid:` scheme from `message.part`, remote images only after the
+user asked and only as the daemon fetched and inlined them, the link under
+the pointer shown in a corner label, and link activation intercepted: a
+link whose text reads as another site's address is confirmed first, then
+opened through the OpenURI portal; `mailto:` opens a new message. The HTML
+document is always shown on a light canvas whatever the desktop theme,
+because colours a mail did not set cannot be adapted without breaking the
+ones it did.
 
 Full threat model: [security.md](security.md).
 
@@ -398,10 +406,10 @@ The window parses recipients into `api.Address`, autosaves through
 `draft.save` (the backend sanitises `htmlBody` and derives `textBody`),
 imports attachments by path with `attachment.import`, shows inline images
 through a `cid:` URI scheme served only for ids the window itself minted,
-and sends with `message.send`. While the sanitiser is a stub the window
-runs in a plain-text mode (`richText = false` in `compose/draft.go`): the
-formatting toolbar is hidden, a hint says the message goes out as plain
-text, and only the editor's text is saved. After a send the message shows
+and sends with `message.send`: a rich-text draft goes out as
+`multipart/alternative` with the derived text and the sanitised HTML, its
+inline pictures in a `multipart/related`. (`richText` in `compose/draft.go`
+is the switch back to a plain-text build.) After a send the message shows
 up in the local Outbox folder (visible only while non-empty) with a banner
 for its delivery state; a failed send offers Retry (`outbox.retry`) and the
 trash button cancels the send (`message.delete`). The status line shows
@@ -435,8 +443,13 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
 
 - UI language: Go + gotk4 for phase 1; Rust + gtk4-rs or Python + PyGObject
   remain possible because the backend does not care.
-- Sanitiser library: candidates listed in `internal/sanitize/sanitize.go`;
-  decision pending evaluation against `docs/security.md`.
+- Sanitiser library: **decided**, own code over `golang.org/x/net/html`
+  (already a dependency), with an own minimal CSS filter. E-mail depends on
+  `<style>` blocks and inline CSS that general-purpose sanitisers drop, and
+  the remote-content policy, the `cid:` rewrite and the blocked-content
+  report are specific to this program; a library would have been a base to
+  work around. The ruleset is versioned (`sanitizerVersion`) and fuzzed
+  against the corpus.
 - Account definitions: **decided**, the same rule as for daemon options
   (`config.get`/`config.set`). The store is authoritative (`accounts`,
   migration 0004, managed through `account.*`); `[[accounts]]` in

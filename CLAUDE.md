@@ -122,18 +122,26 @@ inboxu po minutě, `sendMail`), token výhradně z GNOME Online Accounts
 core rozděluje účty podle `kind` na IMAP a Graph supervisor
 (`internal/core/dispatch.go`); průvodce nabízí účty z GOA (`account.linked`)
 a pro M365 adresy bez přihlášení odkazuje do Nastavení → Účty online.
-Vše jen jako prostý text: sanitizér HTML je stále fail-closed stub, proto
-compose posílá jen `textBody` (`richText = false` v
-`ui/internal/compose/draft.go`) a zprávy odcházejí jako `text/plain`.
-HTML render, threading a vyhledávání zatím `notImplemented`.
+HTML pošta: sanitizér (`internal/sanitize`, vlastní nad `x/net/html`,
+verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
+`message.body` vrací `html`, `blocked`, `links`, `inlineParts`, případně
+`htmlWithheld`; vzdálené obrázky pod politikou `allow` stahuje démon
+(`internal/remoteimg`) a vkládá jako `data:`; `message.part` servíruje
+části zprávy pro schéma `malachi-cid:`. UI je vykresluje ve WebKitGTK 6.0
+bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
+načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
+(`richText = true`), odchozí zprávy jsou `multipart/alternative`
+(+ `related` pro vložené obrázky, + `mixed` pro přílohy). Threading a
+vyhledávání zatím `notImplemented`.
 
 Pořadí prací:
-1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo (text-only těla)
-2. ~~SMTP a odesílání~~ hotovo (text/plain, přílohy, outbox, kopie do Sent)
+1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo
+2. ~~SMTP a odesílání~~ hotovo (přílohy, outbox, kopie do Sent)
 3. ~~Microsoft 365 přes Graph + GNOME Online Accounts~~ hotovo (místo
    XOAUTH2/IMAP; zdůvodnění v `docs/architecture.md` §7)
-4. Sanitizér HTML (compose i view) a renderování s webview (WebKitGTK 6.0,
-   JS vypnutý, CSP); potom `richText = true` a multipart/alternative
+4. ~~Sanitizér HTML (compose i view) a renderování s webview~~ hotovo
+   (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
+   démonem, multipart/alternative)
 5. Vyhledávání, threading
 
 Gmail je vědomě odložený — vyžadoval by CASA audit nebo
