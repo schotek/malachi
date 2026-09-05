@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -85,8 +84,13 @@ type messageView struct {
 	hint                                               *gtk.Label // why only text is shown
 	stack                                              *gtk.Stack // "text" | "html"
 	slot                                               *gtk.Box   // hosts html
-	banner                                             *adw.Banner
 	html                                               *htmlview.View
+
+	// The remote-image bar: the count, and the buttons whose work the
+	// owner supplies as load (this message) and trust (this sender).
+	bar         *gtk.Box
+	barLabel    *gtk.Label
+	load, trust func()
 
 	links []api.Link // of the body on display, for link activation
 }
@@ -106,12 +110,21 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		hint:        b.GetObject("body_hint").Cast().(*gtk.Label),
 		stack:       b.GetObject("body_stack").Cast().(*gtk.Stack),
 		slot:        b.GetObject("html_slot").Cast().(*gtk.Box),
-		banner:      b.GetObject("remote_banner").Cast().(*adw.Banner),
+		bar:         b.GetObject("remote_bar").Cast().(*gtk.Box),
+		barLabel:    b.GetObject("remote_label").Cast().(*gtk.Label),
 	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
-	v.banner.SetUseMarkup(false)
-	v.banner.SetButtonLabel(i18n.T("Load Images"))
+	b.GetObject("remote_load").Cast().(*gtk.Button).ConnectClicked(func() {
+		if v.load != nil {
+			v.load()
+		}
+	})
+	b.GetObject("remote_trust").Cast().(*gtk.Button).ConnectClicked(func() {
+		if v.trust != nil {
+			v.trust()
+		}
+	})
 	return v
 }
 
@@ -120,7 +133,7 @@ func (w *Window) paneLabels() *messageView { return w.pane }
 
 // plain switches markup off on every label (CLAUDE.md rule 3).
 func (v *messageView) plain() {
-	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.attachments, v.body, v.hint} {
+	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.attachments, v.body, v.hint, v.barLabel} {
 		lb.SetUseMarkup(false)
 	}
 }
@@ -191,7 +204,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 	v.links = nil
 	if err != nil {
 		v.hint.SetVisible(false)
-		v.banner.SetRevealed(false)
+		v.bar.SetVisible(false)
 		v.showText(widget.RPCErrorText(i18n.T("Loading the message"), err))
 		return
 	}
@@ -200,11 +213,11 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 		v.hint.SetVisible(false)
 		v.htmlView().Load(b.HTML)
 		v.stack.SetVisibleChildName("html")
-		renderRemoteBanner(v.banner, lm)
+		renderRemoteBar(v, lm)
 		return
 	}
 	v.hint.SetVisible(b != nil && b.HTMLWithheld)
-	v.banner.SetRevealed(false)
+	v.bar.SetVisible(false)
 	v.showText(bodyText(b))
 }
 
@@ -229,7 +242,7 @@ func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 func (v *messageView) loading() {
 	v.links = nil
 	v.hint.SetVisible(false)
-	v.banner.SetRevealed(false)
+	v.bar.SetVisible(false)
 	v.showText(i18n.T("Loading…"))
 }
 

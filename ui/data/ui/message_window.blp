@@ -90,10 +90,35 @@ Adw.Window message_window {
       revealed: false;
     }
 
-    // Remote images the sanitiser removed (window/remote.go).
+    // Remote images the sanitiser removed (window/remote.go): the count and
+    // the two ways of loading them.
     [top]
-    Adw.Banner remote_banner {
-      revealed: false;
+    Box remote_bar {
+      orientation: horizontal;
+      spacing: 12;
+      visible: false;
+
+      styles [
+        "toolbar",
+        "remote-bar",
+      ]
+
+      Label remote_label {
+        xalign: 0;
+        wrap: true;
+        hexpand: true;
+      }
+
+      Button remote_load {
+        label: _("Load _Images");
+        use-underline: true;
+      }
+
+      Button remote_trust {
+        label: _("Always From This _Sender");
+        use-underline: true;
+        tooltip-text: _("Load remote images now and whenever this sender writes");
+      }
     }
 
     // The headers stay put; the body below scrolls on its own (a WebKit

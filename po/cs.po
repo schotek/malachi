@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 09:02+0200\n"
+"POT-Creation-Date: 2026-09-05 09:39+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -301,7 +301,7 @@ msgid "Subject: %s"
 msgstr "Předmět: %s"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:249
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:262
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -333,7 +333,7 @@ msgstr "%H:%M"
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr "%a %-d. %-m. %Y v %H:%M"
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:241
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:254
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -621,7 +621,7 @@ msgstr "Sbalit"
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:233
+#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:246
 #: ui/internal/window/messages.go:177
 msgid "Loading…"
 msgstr "Načítá se…"
@@ -674,7 +674,7 @@ msgctxt "folder"
 msgid "Outbox"
 msgstr "Pošta k odeslání"
 
-#: ui/internal/window/folders.go:312 ui/data/ui/window.ui:374
+#: ui/internal/window/folders.go:312 ui/data/ui/window.ui:400
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -702,28 +702,26 @@ msgstr "Složky se objeví po první synchronizaci."
 msgid "Messages"
 msgstr "Zprávy"
 
-#: ui/internal/window/message_view.go:112
+#: ui/internal/window/message_view.go:117
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
-msgstr "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý text."
+msgstr ""
+"Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
+"text."
 
-#: ui/internal/window/message_view.go:114
-msgid "Load Images"
-msgstr "Načíst obrázky"
-
-#: ui/internal/window/message_view.go:195
+#: ui/internal/window/message_view.go:208
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:253
+#: ui/internal/window/message_view.go:266
 #, c-format
 msgid "Cc: %s"
 msgstr "Kopie: %s"
 
 #. TRANSLATORS: %d is the number of attachments.
-#: ui/internal/window/message_view.go:281
+#: ui/internal/window/message_view.go:294
 #, c-format
 msgid "%d attachment"
 msgid_plural "%d attachments"
@@ -732,7 +730,7 @@ msgstr[1] "%d přílohy"
 msgstr[2] "%d příloh"
 
 #. TRANSLATORS: %d is the number of attachments, %s their names.
-#: ui/internal/window/message_view.go:284
+#: ui/internal/window/message_view.go:297
 #, c-format
 msgid "%d attachment: %s"
 msgid_plural "%d attachments: %s"
@@ -740,20 +738,20 @@ msgstr[0] "%d příloha: %s"
 msgstr[1] "%d přílohy: %s"
 msgstr[2] "%d příloh: %s"
 
-#: ui/internal/window/message_view.go:291
-#: ui/internal/window/message_view.go:303
+#: ui/internal/window/message_view.go:304
+#: ui/internal/window/message_view.go:316
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:295
+#: ui/internal/window/message_view.go:308
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
-#: ui/internal/window/message_view.go:297
+#: ui/internal/window/message_view.go:310
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/message_view.go:299
+#: ui/internal/window/message_view.go:312
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -898,6 +896,7 @@ msgstr "_Otevřít odkaz"
 
 #. TRANSLATORS: %s is a technical error message.
 #: ui/internal/window/remote.go:217
+#, c-format
 msgid "The link could not be opened: %s"
 msgstr "Odkaz se nepodařilo otevřít: %s"
 
@@ -985,32 +984,32 @@ msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlási
 msgid "%s needs attention"
 msgstr "Účet %s vyžaduje pozornost"
 
-#: ui/internal/window/window.go:393
+#: ui/internal/window/window.go:398
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:408
+#: ui/internal/window/window.go:413
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:411
+#: ui/internal/window/window.go:416
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:418
+#: ui/internal/window/window.go:423
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:456
+#: ui/internal/window/window.go:461
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:461
+#: ui/internal/window/window.go:466
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:465
+#: ui/internal/window/window.go:470
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"
@@ -1305,19 +1304,28 @@ msgstr "Archivovat"
 msgid "Mark as Junk"
 msgstr "Označit jako nevyžádanou"
 
-#: ui/data/ui/message_window.ui:239 ui/data/ui/window.ui:569
-msgid "Mark as _Unread"
-msgstr "Označit jako _nepřečtené"
-
-#: ui/data/ui/message_window.ui:243 ui/data/ui/window.ui:573
-msgid "Mark as _Read"
-msgstr "Označit jako _přečtené"
-
-#: ui/data/ui/message_window.ui:249 ui/data/ui/window.ui:579
+#: ui/data/ui/message_window.ui:109 ui/data/ui/message_window.ui:275
+#: ui/data/ui/window.ui:364 ui/data/ui/window.ui:605
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/data/ui/message_window.ui:253 ui/data/ui/window.ui:583
+#: ui/data/ui/message_window.ui:115 ui/data/ui/window.ui:370
+msgid "Always From This _Sender"
+msgstr "Vždy od tohoto _odesílatele"
+
+#: ui/data/ui/message_window.ui:117 ui/data/ui/window.ui:372
+msgid "Load remote images now and whenever this sender writes"
+msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
+
+#: ui/data/ui/message_window.ui:265 ui/data/ui/window.ui:595
+msgid "Mark as _Unread"
+msgstr "Označit jako _nepřečtené"
+
+#: ui/data/ui/message_window.ui:269 ui/data/ui/window.ui:599
+msgid "Mark as _Read"
+msgstr "Označit jako _přečtené"
+
+#: ui/data/ui/message_window.ui:279 ui/data/ui/window.ui:609
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -1581,35 +1589,35 @@ msgstr "Načíst další"
 msgid "Try Again"
 msgstr "Zkusit znovu"
 
-#: ui/data/ui/window.ui:362
+#: ui/data/ui/window.ui:388
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:363
+#: ui/data/ui/window.ui:389
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:375
+#: ui/data/ui/window.ui:401
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:378
+#: ui/data/ui/window.ui:404
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:547
+#: ui/data/ui/window.ui:573
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
-#: ui/data/ui/window.ui:553
+#: ui/data/ui/window.ui:579
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:557
+#: ui/data/ui/window.ui:583
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:561
+#: ui/data/ui/window.ui:587
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 
@@ -1744,3 +1752,6 @@ msgstr "Přispěvatelé Malachi Mail"
 #: data/io.github.schotek.Malachi.metainfo.xml.in:54
 msgid "Project bootstrap. Nothing works yet."
 msgstr "Založení projektu. Zatím nic nefunguje."
+
+#~ msgid "Load Images"
+#~ msgstr "Načíst obrázky"

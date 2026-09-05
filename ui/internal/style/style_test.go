@@ -32,6 +32,7 @@ func TestCSS(t *testing.T) {
 	// setting.
 	for _, want := range []string{
 		"button.folder-twisty",
+		"box.remote-bar",
 		"list.message-list > row { border-radius: 0; margin: 0; }",
 		"list.message-list > row:last-child { border-bottom: none; }",
 		"row.account-row.drop-above", "row.account-row.drop-below", "@accent_bg_color", ".drag-handle"} {

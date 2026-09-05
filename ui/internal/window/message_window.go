@@ -63,7 +63,8 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	}
 	mw.SetApplication(&w.app.Application)
 	mw.view = newMessageView(w, &mw.Window.Window, b)
-	mw.view.banner.ConnectButtonClicked(func() { w.loadRemoteImages(id) })
+	mw.view.load = func() { w.loadRemoteImages(id) }
+	mw.view.trust = func() { w.trustSender(id) }
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the

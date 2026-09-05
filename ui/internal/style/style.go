@@ -66,6 +66,9 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// The fold arrow of a sidebar row. A default button would push the row
 	// past the 32px above, so it is squeezed to the size of its icon.
 	b.WriteString("button.folder-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
+	// The remote-image bar above a message: a neutral tint that reads as a
+	// notice in light and dark alike (Adw.Banner has room for one button).
+	b.WriteString("box.remote-bar { background-color: alpha(@window_fg_color, 0.06); padding: 6px 12px; }\n")
 	// Separators between messages (show-separators on the list in window.blp).
 	// The sidebar style rounds its rows and insets them, which would bend the
 	// separator into a shallow arc and leave a gap under it, so the message

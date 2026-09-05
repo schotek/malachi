@@ -32,21 +32,21 @@ import (
 // enough.
 const remoteTimeout = 30 * time.Second
 
-// renderRemoteBanner shows how many remote images the sanitiser removed
-// from the body on display, with the button that loads them. Tracking
-// pixels are not counted: they are never loaded, there is nothing to offer.
-// Once the user asked for the images the banner stays down, whatever the
-// daemon could not fetch.
-func renderRemoteBanner(b *adw.Banner, lm *loadedMessage) {
+// renderRemoteBar shows how many remote images the sanitiser removed from
+// the body on display, with the buttons that load them. Tracking pixels
+// are not counted: they are never loaded, there is nothing to offer. Once
+// the user asked for the images the bar stays down, whatever the daemon
+// could not fetch.
+func renderRemoteBar(v *messageView, lm *loadedMessage) {
 	n := 0
 	if lm != nil && lm.body != nil && lm.body.HTML != "" && !lm.allowed {
 		n = lm.body.Blocked.RemoteImages
 	}
 	if n > 0 {
 		// TRANSLATORS: %d is the number of remote images the message tried to load.
-		b.SetTitle(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", n), n))
+		v.barLabel.SetLabel(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", n), n))
 	}
-	b.SetRevealed(n > 0)
+	v.bar.SetVisible(n > 0)
 }
 
 // fetchPart serves the web view's malachi-cid: pictures through
