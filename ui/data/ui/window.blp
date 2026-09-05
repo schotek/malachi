@@ -65,9 +65,13 @@ Adw.ApplicationWindow main_window {
             child: ScrolledWindow {
               hscrollbar-policy: never;
 
+              // folder-list carries the sidebar's density (ui/internal/style);
+              // the message list below shares navigation-sidebar and must not
+              // be caught by those rules.
               child: ListBox folder_list {
                 styles [
                   "navigation-sidebar",
+                  "folder-list",
                 ]
               };
             };

@@ -31,6 +31,8 @@ func TestCSS(t *testing.T) {
 	// The message separator and account reordering rules do not depend on any
 	// setting.
 	for _, want := range []string{
+		"list.folder-list row.folder-row { min-height: 24px;",
+		"row.folder-row > box.header > box.title { margin-top: 2px;",
 		"button.folder-twisty",
 		"button.folder-star",
 		"row.folder-row:hover button.folder-star",

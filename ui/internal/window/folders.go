@@ -24,6 +24,11 @@ import (
 // folderIndent is the sidebar indentation per tree level, in pixels.
 const folderIndent = 12
 
+// folderHeadingGap is the space above a sidebar heading, in pixels: enough
+// to set the sections apart, in keeping with the density the rows have
+// (.folder-list in internal/style).
+const folderHeadingGap = 3
+
 // folderRow is one selectable sidebar row with its unread badge, its fold
 // arrow (nested accounts only) and its pin star (selectable folders only).
 type folderRow struct {
@@ -261,7 +266,7 @@ func newHeaderRow(text string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.
 
 	twisty := newTwisty(collapsed, foldable)
 	box := gtk.NewBox(gtk.OrientationHorizontal, 0)
-	box.SetMarginTop(6)
+	box.SetMarginTop(folderHeadingGap)
 	box.Append(twisty)
 	box.Append(label)
 	row.SetChild(box)

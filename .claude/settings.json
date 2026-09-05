@@ -22,7 +22,9 @@
       "Bash(sed -i 's/newCollapseState\\(\\)\\)/newCollapseState\\(\\), newFavouriteState\\(\\)\\)/g' model_test.go folders_test.go collapse_test.go)",
       "Bash(sed -i 's/sortFolders\\(accounts, folders, c\\)/sortFolders\\(accounts, folders, c, newFavouriteState\\(\\)\\)/g' collapse_test.go)",
       "Bash(GSETTINGS_BACKEND=memory go test -tags nosound ./...)",
-      "Bash(git --no-pager log -1 --format='%h %s')"
+      "Bash(git --no-pager log -1 --format='%h %s')",
+      "Bash(strings /usr/lib64/libadwaita-1.so.0 | grep -o 'navigation-sidebar[^}]*}' | head -20)",
+      "Read(//usr/lib64/**)"
     ]
   }
 }

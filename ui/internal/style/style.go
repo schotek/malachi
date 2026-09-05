@@ -59,14 +59,25 @@ func adwColorScheme(c settings.ColorScheme) adw.ColorScheme {
 func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	var b strings.Builder
 	b.WriteString(".unread-dot { min-width: 8px; min-height: 8px; border-radius: 4px; background-color: @accent_bg_color; }\n")
-	// Folder rows are denser than libadwaita's action rows: the sidebar
-	// lists many one-line entries.
-	b.WriteString(".navigation-sidebar row.folder-row { min-height: 32px; padding-top: 2px; padding-bottom: 2px; }\n")
+	// The folder sidebar is navigation, not content: it lists many one-line
+	// entries and is therefore denser than libadwaita's action rows. Most of
+	// the height a row gets is not the label but the 6px libadwaita puts
+	// above and below the title box, so that is what comes down first; the
+	// row's own floor follows, and the title goes to 88% so the shorter rows
+	// do not look crowded. The unread badge keeps the .caption size it has,
+	// being outside the title box. Only this list is affected: the message
+	// list shares the navigation-sidebar class (window.blp).
+	b.WriteString("list.folder-list { padding: 3px 0; }\n")
+	b.WriteString("list.folder-list row.folder-row { min-height: 24px; padding-top: 1px; padding-bottom: 1px; }\n")
 	b.WriteString("row.folder-row > box.header { min-height: 0; padding-top: 0; padding-bottom: 0; }\n")
+	b.WriteString("row.folder-row > box.header > box.title { margin-top: 2px; margin-bottom: 2px; font-size: 88%; }\n")
+	// Every icon of the sidebar at once: the folder icons, the fold arrows of
+	// rows and headings alike, and the stars.
+	b.WriteString("list.folder-list image { -gtk-icon-size: 14px; }\n")
 	// The fold arrow and the pin star of a sidebar row. A default button
-	// would push the row past the 32px above, so both are squeezed to the
+	// would push the row past the height above, so both are squeezed to the
 	// size of their icon.
-	b.WriteString("button.folder-twisty, button.folder-star { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
+	b.WriteString("button.folder-twisty, button.folder-star { min-width: 18px; min-height: 18px; padding: 0; margin: 0; }\n")
 	// The star waits for the pointer or the keyboard focus. Opacity rather
 	// than visibility, so nothing moves under the pointer.
 	b.WriteString("row.folder-row button.folder-star { opacity: 0; transition: opacity 150ms; }\n")
