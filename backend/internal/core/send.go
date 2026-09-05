@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/mime"
@@ -76,26 +75,39 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 		CC:         d.CC,
 		Subject:    d.Subject,
 		Text:       d.TextBody,
+		HTML:       d.HTMLBody, // the sanitiser's output, stored by draft.save
 		InReplyTo:  inReplyTo,
 		References: references,
 		Date:       now,
 		MessageID:  smtp.NewMessageID(a.Config.Email),
 	}
-	var parts []api.Attachment
-	for i, att := range d.Attachments {
+	for _, att := range d.Attachments {
 		path := s.b.store.AttachmentPath(att.ID)
 		in.Attachments = append(in.Attachments, smtp.Attachment{
 			Filename:    att.Filename,
 			ContentType: att.ContentType,
 			Size:        att.Size,
+			Inline:      att.Inline,
+			ContentID:   att.ContentID,
 			Open:        func() (io.ReadCloser, error) { return os.Open(path) },
 		})
-		// The text is part 1 of the multipart/mixed; attachments follow.
+	}
+	// The stored copy lists the parts as the built message numbers them.
+	ids := smtp.PartIDs(in)
+	var parts []api.Attachment
+	hasFiles := false
+	for i, att := range in.Attachments {
+		inline := in.IsInline(att)
+		if !inline {
+			hasFiles = true
+		}
 		parts = append(parts, api.Attachment{
-			PartID:      strconv.Itoa(i + 2),
+			PartID:      ids[i],
 			Filename:    att.Filename,
 			ContentType: att.ContentType,
 			Size:        att.Size,
+			Inline:      inline,
+			ContentID:   att.ContentID,
 		})
 	}
 
@@ -116,7 +128,8 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 			InReplyTo:      inReplyTo,
 			References:     references,
 			Snippet:        mime.Snippet(d.TextBody, snippetRunes),
-			HasAttachments: len(parts) > 0,
+			HasAttachments: hasFiles,
+			HasHTML:        d.HTMLBody != "",
 			Attachments:    parts,
 		},
 		Text:         d.TextBody,
@@ -177,10 +190,11 @@ func (b *Backend) threadingHeaders(ctx context.Context, accountID, inReplyTo str
 	return m.RFCMessageID, refs
 }
 
-// estimateOutgoingSize approximates the built message: the text as is,
-// each attachment base64-encoded with line breaks, plus header overhead.
+// estimateOutgoingSize approximates the built message: the text and HTML
+// as they are, each attachment base64-encoded with line breaks, plus
+// header overhead.
 func estimateOutgoingSize(d store.Draft) int64 {
-	n := int64(len(d.TextBody)) + 2048
+	n := int64(len(d.TextBody)) + int64(len(d.HTMLBody)) + 2048
 	for _, a := range d.Attachments {
 		n += (a.Size+2)/3*4 + a.Size/57*2 + 512
 	}

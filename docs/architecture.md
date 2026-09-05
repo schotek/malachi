@@ -310,7 +310,14 @@ The sidebar is one `gtk.ListBox` for every enabled account: a
 non-selectable header row per account (only when there are at least two),
 then the account's `folder.list` as a tree, Inbox first, then the other
 special-use roles, then alphabetically, nested folders indented by depth,
-with an unread badge per row. The list pane shows `message.list` for the
+with an unread badge per row. A folder with subfolders carries a fold
+arrow, and so does an account header; Left and Right fold and unfold the
+focused row. A collapsed row adds the unread counts of everything it hides
+to its own badge, so folded-away mail stays visible. Folding never moves
+the selection or reloads the message list: a hidden folder is still
+selected, it just has no row. Which nodes are folded is presentational and
+therefore kept in GSettings (`collapsed-folders`, `collapsed-accounts`,
+encoded in `internal/window/collapse.go`), not in the daemon. The list pane shows `message.list` for the
 selected folder (newest first, `DefaultPageLimit` per page); further pages
 are fetched with `page.nextCursor` from a *Load More* footer or when the
 list is scrolled to its bottom, and a status page replaces the list while
@@ -369,7 +376,10 @@ security mode; discovery, probing and validation are the daemon's.
 UI-only options live in GSettings
 (`data/*.gschema.xml`, read through `internal/settings`); anything that
 affects mail handling (check interval, remote content, offline retention)
-is owned by the daemon and set through the RPC API. The *Appearance* page is functional:
+is owned by the daemon and set through the RPC API. Sidebar fold state lives
+there too, as two string lists that store one entry per collapsed node; a
+window listens for their `changed` signal so several windows sharing the
+profile stay in step. The *Appearance* page is functional:
 colour scheme goes through `adw.StyleManager`, list density, preview line
 and avatars are pushed to the message rows, and body zoom, font and
 monochrome avatars are a display-wide CSS provider (`internal/style`) so

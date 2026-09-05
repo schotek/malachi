@@ -100,6 +100,9 @@ func (stubMessages) Body(context.Context, api.MessageBodyParams) (*api.MessageBo
 	// return the stored HTML directly. See docs/security.md.
 	return nil, api.ErrNotImplemented
 }
+func (stubMessages) Part(context.Context, api.MessagePartParams) (*api.MessagePartResult, error) {
+	return nil, api.ErrNotImplemented
+}
 func (stubMessages) Flag(context.Context, api.MessageFlagParams) (*api.MessageFlagResult, error) {
 	return nil, api.ErrNotImplemented
 }

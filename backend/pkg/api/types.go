@@ -532,38 +532,62 @@ type Link struct {
 	Href string `json:"href"` // normalised absolute URL; only http(s) and mailto survive
 }
 
-// MessageBodyResult carries the renderable content of a message.
-//
-// HTML is ALWAYS the sanitiser's output: no scripts, no event handlers, no
-// javascript:/data: URLs, no external CSS, no forms, no frames, and remote
-// references removed or rewritten according to RemoteContent. The UI renders
-// it in a JavaScript-disabled webview with a strict CSP. Text is the plain
-// text alternative, or a text rendering derived from HTML when the message
-// has no text part.
 // BodyState says whether the daemon holds the message content.
 type BodyState string
 
 const (
-	BodyFetched BodyState = "fetched" // text (and, once the sanitiser exists, html) available
+	BodyFetched BodyState = "fetched" // text and html available
 	BodyPending BodyState = "pending" // the sync engine has not downloaded the body yet
 	BodyTooBig  BodyState = "tooBig"  // over the daemon's raw-message cap; never downloaded
 	BodyFailed  BodyState = "failed"  // downloaded but unparsable; nothing shown
 )
 
+// MessageBodyResult carries the renderable content of a message.
+//
+// HTML is ALWAYS the sanitiser's output: no scripts, no event handlers, no
+// javascript:/data: URLs, no external CSS, no forms, no frames, and remote
+// references removed or, under RemoteAllow, fetched by the daemon and
+// inlined. The UI renders it in a JavaScript-disabled webview with a strict
+// CSP. Text is the plain text alternative, or a text rendering derived from
+// HTML when the message has no text part.
 type MessageBodyResult struct {
 	MessageID MessageID `json:"messageId"`
 	BodyState BodyState `json:"bodyState"`
 	HasHTML   bool      `json:"hasHtml"`
-	// HTML is the sanitised body. Withheld (empty) while the sanitiser is a
-	// stub (SanitizerVersion "0-stub"); Text is always the plain-text form.
-	HTML    string         `json:"html,omitempty"`
-	Text    string         `json:"text"`
-	Blocked BlockedContent `json:"blocked"`
-	Links   []Link         `json:"links"`
-	// InlineParts maps cid: references present in HTML to attachment PartIDs.
+	// HTML is the sanitised body: a fragment for the webview's <body>, with
+	// cid: images rewritten to malachi-cid:<accountId>/<messageId>/<partId>
+	// (served by message.part). Empty when HasHTML is false or HTMLWithheld.
+	HTML string `json:"html,omitempty"`
+	// HTMLWithheld is set when the message has an HTML part that could not
+	// be shown safely: the sanitiser refused it (a cap breach), or the raw
+	// message could not be read again. Text is still the plain-text form.
+	HTMLWithheld bool           `json:"htmlWithheld,omitempty"`
+	Text         string         `json:"text"`
+	Blocked      BlockedContent `json:"blocked"`
+	Links        []Link         `json:"links"`
+	// InlineParts maps the Content-IDs whose cid: references survived in
+	// HTML to their attachment PartIDs.
 	InlineParts map[string]string `json:"inlineParts,omitempty"`
 	// SanitizerVersion identifies the sanitiser ruleset; bump on any rule change.
 	SanitizerVersion string `json:"sanitizerVersion"`
+}
+
+// MessagePartParams names one MIME part of a received message, by the
+// PartID Attachment carries and malachi-cid: URLs end with.
+type MessagePartParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+	PartID    string    `json:"partId"`
+}
+
+// MessagePartResult is the decoded content of the part. Data is capped by
+// MaxAttachmentDataBytes; a larger part fails with attachmentTooBig.
+type MessagePartResult struct {
+	PartID      string `json:"partId"`
+	ContentType string `json:"contentType"`
+	Filename    string `json:"filename"` // sanitised, as in Attachment
+	Size        int64  `json:"size"`
+	Data        []byte `json:"data"` // base64 on the wire
 }
 
 type MessageFlagParams struct {

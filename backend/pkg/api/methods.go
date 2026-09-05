@@ -27,6 +27,7 @@ const (
 	MethodMessageList   = "message.list"
 	MethodMessageGet    = "message.get"
 	MethodMessageBody   = "message.body"
+	MethodMessagePart   = "message.part"
 	MethodMessageFlag   = "message.flag"
 	MethodMessageMove   = "message.move"
 	MethodMessageDelete = "message.delete"
@@ -82,7 +83,7 @@ var AllMethods = []string{
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
 	MethodAccountReorder,
 	MethodFolderList, MethodFolderSubscribe,
-	MethodMessageList, MethodMessageGet, MethodMessageBody,
+	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
 	MethodMessageFlag, MethodMessageMove, MethodMessageDelete, MethodMessageSend,
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,

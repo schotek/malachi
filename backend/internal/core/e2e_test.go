@@ -56,6 +56,9 @@ func TestEndToEndSync(t *testing.T) {
 	go srv.Serve(ln)
 	t.Cleanup(func() { srv.Close() })
 	port := ln.Addr().(*net.TCPAddr).Port
+	// The oldest message is HTML with a text alternative; the three text
+	// ones follow, so the newest ("first" below) is plain text.
+	appendRawTestMessage(t, ln.Addr().String(), htmlTestMessage)
 	for i := 1; i <= 3; i++ {
 		appendTestMessage(t, ln.Addr().String(), fmt.Sprintf("Hello %d", i), fmt.Sprintf("Body %d with čeština.", i))
 	}
@@ -87,13 +90,13 @@ func TestEndToEndSync(t *testing.T) {
 
 	// Folders and messages arrive.
 	var inbox api.Folder
-	waitUntil(t, ctx, "inbox with 3 messages", func() bool {
+	waitUntil(t, ctx, "inbox with 4 messages", func() bool {
 		res, err := b.Folders().List(ctx, api.FolderListParams{AccountID: id})
 		if err != nil {
 			return false
 		}
 		for _, f := range res.Folders {
-			if f.Role == api.RoleInbox && f.Total == 3 {
+			if f.Role == api.RoleInbox && f.Total == 4 {
 				inbox = f
 				return true
 			}
@@ -104,7 +107,7 @@ func TestEndToEndSync(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Messages) != 3 || list.Page.Total != 3 {
+	if len(list.Messages) != 4 || list.Page.Total != 4 {
 		t.Fatalf("list = %+v", list)
 	}
 	first := list.Messages[0]
@@ -118,8 +121,28 @@ func TestEndToEndSync(t *testing.T) {
 		return err == nil && body.BodyState == api.BodyFetched && strings.Contains(body.Text, "čeština")
 	})
 	body, _ := b.Messages().Body(ctx, api.MessageBodyParams{AccountID: id, MessageID: first.ID})
-	if body.HTML != "" || body.SanitizerVersion != "0-stub" || body.Links == nil {
-		t.Fatalf("body shape = %+v", body)
+	if body.HTML != "" || body.HasHTML || body.HTMLWithheld || body.SanitizerVersion == "" || body.SanitizerVersion == "0-stub" || body.Links == nil {
+		t.Fatalf("text body shape = %+v", body)
+	}
+	// The HTML message comes back sanitised through the whole stack: the
+	// text alternative as text, the HTML without its script and beacon.
+	rich := list.Messages[3]
+	if rich.Subject != "Rich" {
+		t.Fatalf("oldest message = %+v, want the HTML one", rich)
+	}
+	waitUntil(t, ctx, "html body fetched", func() bool {
+		b, err := b.Messages().Body(ctx, api.MessageBodyParams{AccountID: id, MessageID: rich.ID})
+		return err == nil && b.BodyState == api.BodyFetched
+	})
+	html, err := b.Messages().Body(ctx, api.MessageBodyParams{AccountID: id, MessageID: rich.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !html.HasHTML || html.HTMLWithheld || html.Text != "plain čeština" || html.HTML != "<p>rich <b>čeština</b></p>" {
+		t.Fatalf("html body = %+v", html)
+	}
+	if html.Blocked != (api.BlockedContent{Scripts: 1, TrackingPixels: 1}) {
+		t.Fatalf("html blocked = %+v", html.Blocked)
 	}
 	// The pass may still be storing the other bodies; it ends idle with a
 	// lastSync.
@@ -146,7 +169,7 @@ func TestEndToEndSync(t *testing.T) {
 	}
 	res, _ := b.Folders().List(ctx, api.FolderListParams{AccountID: id})
 	for _, f := range res.Folders {
-		if f.Role == api.RoleInbox && f.Total != 2 {
+		if f.Role == api.RoleInbox && f.Total != 3 {
 			t.Fatalf("inbox total after trash = %d", f.Total)
 		}
 	}
@@ -396,7 +419,24 @@ func hasFlagE2E(flags []api.Flag, f api.Flag) bool {
 	return false
 }
 
+// htmlTestMessage is a multipart/alternative message with a script and a
+// tracking pixel in its HTML part.
+var htmlTestMessage = "From: Bob <bob@example.org>\r\nTo: me@example.org\r\nSubject: Rich\r\nDate: Mon, 1 Sep 2026 08:00:00 +0200\r\n" +
+	"Message-ID: <rich@example.org>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"alt\"\r\n\r\n" +
+	"--alt\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nplain čeština\r\n" +
+	"--alt\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" +
+	`<p>rich <b>čeština</b><script>x()</script><img src="https://t.invalid/p.gif" width="1" height="1"></p>` + "\r\n" +
+	"--alt--\r\n"
+
 func appendTestMessage(t *testing.T, addr, subject, body string) {
+	t.Helper()
+	raw := "From: Alice <alice@example.org>\r\nTo: me@example.org\r\nSubject: " + subject +
+		"\r\nDate: " + time.Now().Format(time.RFC1123Z) + "\r\nMessage-ID: <" + strings.ReplaceAll(subject, " ", "") + "@example.org>\r\n" +
+		"Content-Type: text/plain; charset=utf-8\r\n\r\n" + body + "\r\n"
+	appendRawTestMessage(t, addr, raw)
+}
+
+func appendRawTestMessage(t *testing.T, addr, raw string) {
 	t.Helper()
 	c, err := imapclient.DialInsecure(addr, nil)
 	if err != nil {
@@ -406,9 +446,6 @@ func appendTestMessage(t *testing.T, addr, subject, body string) {
 	if err := c.Login("me", "pw").Wait(); err != nil {
 		t.Fatal(err)
 	}
-	raw := "From: Alice <alice@example.org>\r\nTo: me@example.org\r\nSubject: " + subject +
-		"\r\nDate: " + time.Now().Format(time.RFC1123Z) + "\r\nMessage-ID: <" + strings.ReplaceAll(subject, " ", "") + "@example.org>\r\n" +
-		"Content-Type: text/plain; charset=utf-8\r\n\r\n" + body + "\r\n"
 	cmd := c.Append("INBOX", int64(len(raw)), nil)
 	if _, err := cmd.Write([]byte(raw)); err != nil {
 		t.Fatal(err)

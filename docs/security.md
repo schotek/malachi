@@ -53,8 +53,15 @@ defence. Requirements are listed in that package's documentation; summary:
 - attribute allow-list per element; all `on*` removed; URL-valued attributes
   parsed and restricted (`http`, `https`, `mailto`, `cid`); anything else
   removed and counted;
-- remote references removed under the default `block` policy, `https:`
-  images kept only under `allow`. `allow` comes either from an explicit
+- remote references removed under the default `block` policy. Under
+  `allow`, `https:` images are fetched by the daemon (`internal/remoteimg`)
+  and inlined as `data:` URIs, so the webview itself never makes a request:
+  no cookies, no `Referer`, a fixed `User-Agent`, https only including
+  redirects, the media type sniffed from the bytes (never trusted from the
+  server, SVG never accepted), 2 MiB per image, 8 MiB and 32 images per
+  message, 10 s in total; an image that fails to load is dropped and
+  counted. A tracking pixel (at most 2 px wide or high, or hidden) is never
+  fetched under any policy. `allow` comes either from an explicit
   per-call override or from the stored preference; the `knownSenders`
   preference is resolved to `allow`/`block` *before* the sanitiser runs
   (`internal/core`), so the sanitiser only ever sees the two-state decision
@@ -71,23 +78,32 @@ defence. Requirements are listed in that package's documentation; summary:
 - links: only `http(s)`/`mailto`; `target` removed; every link exported in
   `links[]` with its real `href` so the UI displays the destination;
   homograph-suspicious hosts flagged (later);
-- `cid:` rewritten to `malachi-cid:<partId>` only for parts that exist;
-- size cap on input and output, nesting-depth cap, attribute-count cap;
+- `cid:` rewritten to `malachi-cid:<accountId>/<messageId>/<partId>` only
+  for parts that exist, so the view's scheme handler is stateless and a
+  message cannot name another message's parts (a `malachi-cid:` URL written
+  by the mail itself is kept only when it names one of its own parts);
+- size cap on input and output, nesting-depth cap, node-count cap,
+  attribute-count cap, CSS rule cap;
 - a `sanitizerVersion` string returned with every body; bump on any rule
   change so cached bodies are regenerated;
-- **fail closed**: any parser error or cap breach → `sanitizeFailed`, body
-  withheld, plain-text alternative offered instead.
+- **fail closed**: any parser error or cap breach withholds the HTML
+  (`message.body` sets `htmlWithheld` and still serves the plain text;
+  `draft.save` fails with `sanitizeFailed`). Sanitising the output again
+  is the identity, which the fuzz target checks.
 
-Layer 2 — **the UI webview** (later phase, WebKitGTK 6.0):
+Layer 2 — **the UI webview** (WebKitGTK 6.0):
 
 - JavaScript disabled in `WebKitSettings`; plugins, media, WebGL, WebAudio,
-  local storage, databases off;
-- Content-Security-Policy `default-src 'none'; img-src malachi-cid: https:
-  (only when allowed); style-src 'unsafe-inline'`, set on the loaded
-  document;
-- a custom URI scheme handler serving `cid:` parts from the backend;
-  network access for the view otherwise denied (`WebKitNetworkSession` with
-  a blocking policy / `decide-policy` denial for anything not allowed);
+  local storage, databases, DNS prefetching and hyperlink auditing off;
+- Content-Security-Policy `default-src 'none'; img-src malachi-cid: data:;
+  style-src 'unsafe-inline'`, set both as the view's default policy and as
+  a `<meta>` in the loaded document; `data:` covers only what the daemon
+  inlined, the sanitiser removes a message's own `data:` URLs;
+- a custom URI scheme handler serving `malachi-cid:` parts through
+  `message.part` (images only, never SVG); network access for the view
+  otherwise denied (an ephemeral `WebKitNetworkSession` pointed at an
+  unreachable proxy, plus `decide-policy` denial of every navigation but
+  the initial load);
 - navigation intercepted: any link activation is cancelled, the destination
   displayed, and opened via the OpenURI portal on user confirmation;
 - the view is a separate process (WebKit's process model) with a fresh
@@ -247,9 +263,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   re-parsed with `net/mail` at send time.
 - The built message is capped (`api.MaxOutgoingMessageBytes`) while it is
   streamed to disk; the SMTP `SIZE` extension is honoured before `DATA`.
-- The body is `text/plain` in this phase: nothing that did not pass
-  `internal/sanitize` is sent as HTML (`draft.save` refuses `htmlBody` while
-  the sanitiser is a stub).
+- A rich-text draft goes out as `multipart/alternative` (the plain-text
+  rendering first, then the HTML; inline pictures in a `multipart/related`
+  around the HTML, files in a `multipart/mixed` around everything). The
+  HTML part is exactly what `draft.save` stored, which is exactly what
+  `internal/sanitize` produced in compose mode: nothing that did not pass
+  the sanitiser is ever sent as HTML, and a `cid:` in it can only name one
+  of the draft's own inline attachments.
 - One SMTP session per delivery attempt, retried with backoff; a refused
   password stops all attempts for the account until it is edited, so a
   wrong password cannot lock the account out through repeated logins.

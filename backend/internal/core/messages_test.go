@@ -6,13 +6,52 @@ package core
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/remoteimg"
 	"github.com/schotek/malachi/backend/internal/sanitize"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
+
+// seedRawHTML is the raw form of the first seeded message: an HTML part
+// with an inline image (part 1.2), a script, a handler and a remote image,
+// plus the PDF attachment (part 2) the envelope lists.
+var seedRawHTML = strings.Join([]string{
+	"From: Alice <alice@example.invalid>",
+	"To: me@example.invalid",
+	"Subject: first",
+	"Message-ID: <one@example.invalid>",
+	"MIME-Version: 1.0",
+	`Content-Type: multipart/mixed; boundary="mix"`,
+	"",
+	"--mix",
+	`Content-Type: multipart/related; boundary="rel"`,
+	"",
+	"--rel",
+	"Content-Type: text/html; charset=utf-8",
+	"",
+	`<html><body><p>hello <b>body</b> <a href="https://example.invalid/x" onclick="x()">link</a></p>` +
+		`<img src="cid:logo@example.invalid" alt="logo"><img src="https://remote.invalid/pic.png" width="200"><script>x()</script></body></html>`,
+	"--rel",
+	"Content-Type: image/png",
+	"Content-ID: <logo@example.invalid>",
+	`Content-Disposition: inline; filename="logo.png"`,
+	"Content-Transfer-Encoding: base64",
+	"",
+	"iVBORw0KGgo=",
+	"--rel--",
+	"--mix",
+	"Content-Type: application/pdf",
+	`Content-Disposition: attachment; filename="a.pdf"`,
+	"Content-Transfer-Encoding: base64",
+	"",
+	"JVBERi0xLjQK",
+	"--mix--",
+	"",
+}, "\r\n")
 
 // mailbox is one seeded account with an inbox, a trash folder, a
 // non-selectable container and three messages in the inbox.
@@ -54,6 +93,10 @@ func seedMailbox(t *testing.T) *mailbox {
 	if err := b.store.SetMessageBody(ctx, rows[0].ID, store.BodyUpdate{Text: "hello body", HasHTML: true, Snippet: "hello body",
 		Attachments: rows[0].Attachments, HasAttachments: true,
 		Headers: map[string]string{"List-Unsubscribe": "<mailto:u@example.invalid>"}}); err != nil {
+		t.Fatal(err)
+	}
+	// message.body and message.part re-read the raw message.
+	if _, err := b.store.WriteMessageRaw(ctx, acc, rows[0].ID, strings.NewReader(seedRawHTML), 25<<20); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := b.store.RecountFolder(ctx, inbox); err != nil {
@@ -197,18 +240,75 @@ func TestMessageBody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.MessageID != m.msgs[0] || res.BodyState != api.BodyFetched || !res.HasHTML || res.Text != "hello body" {
+	if res.MessageID != m.msgs[0] || res.BodyState != api.BodyFetched || !res.HasHTML || res.Text != "hello body" || res.HTMLWithheld {
 		t.Fatalf("body = %+v", res)
 	}
-	if res.HTML != "" || res.Links == nil || len(res.Links) != 0 || res.Blocked != (api.BlockedContent{}) || res.InlineParts != nil {
-		t.Fatalf("text-only phase violated: %+v", res)
+	// The sanitised HTML: script gone, handler gone, remote image gone,
+	// the inline image pointing at this message's own part.
+	wantHTML := `<p>hello <b>body</b> <a href="https://example.invalid/x" rel="noopener noreferrer">link</a></p>` +
+		`<img src="malachi-cid:` + string(m.acc) + `/` + string(m.msgs[0]) + `/1.2" alt="logo"/>`
+	if res.HTML != wantHTML {
+		t.Fatalf("html:\n got %q\nwant %q", res.HTML, wantHTML)
 	}
-	if res.SanitizerVersion != "0-stub" {
-		t.Fatalf("sanitizerVersion = %q, want 0-stub (the UI keys \"HTML unavailable\" on it)", res.SanitizerVersion)
+	if want := (api.BlockedContent{RemoteImages: 1, Scripts: 1, EventHandlers: 1}); res.Blocked != want {
+		t.Fatalf("blocked = %+v, want %+v", res.Blocked, want)
 	}
-	if res.SanitizerVersion != sanitize.Version {
+	if len(res.Links) != 1 || res.Links[0] != (api.Link{Text: "link", Href: "https://example.invalid/x"}) {
+		t.Fatalf("links = %+v", res.Links)
+	}
+	if len(res.InlineParts) != 1 || res.InlineParts["logo@example.invalid"] != "1.2" {
+		t.Fatalf("inlineParts = %+v", res.InlineParts)
+	}
+	if res.SanitizerVersion != sanitize.Version || res.SanitizerVersion == "0-stub" {
 		t.Fatalf("sanitizerVersion = %q, sanitiser reports %q", res.SanitizerVersion, sanitize.Version)
 	}
+
+	// Under allow the daemon fetches the remote image and the sanitiser
+	// inlines it; the view never sees the https: URL.
+	var asked []string
+	m.b.FetchRemoteImages = func(_ context.Context, urls []string) map[string]remoteimg.Image {
+		asked = append(asked, urls...)
+		return map[string]remoteimg.Image{"https://remote.invalid/pic.png": {MediaType: "image/png", Data: []byte("PNG")}}
+	}
+	allow, err := svc.Body(ctx, api.MessageBodyParams{AccountID: m.acc, MessageID: m.msgs[0], RemoteContent: api.RemoteAllow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(allow.HTML, `src="data:image/png;base64,UE5H"`) || strings.Contains(allow.HTML, "https://remote.invalid") || allow.Blocked.RemoteImages != 0 {
+		t.Fatalf("allow body = %+v", allow)
+	}
+	if len(asked) != 1 || asked[0] != "https://remote.invalid/pic.png" {
+		t.Fatalf("fetcher asked for %v", asked)
+	}
+	// An image the fetcher could not get is dropped and counted, like a
+	// blocked one.
+	m.b.FetchRemoteImages = func(context.Context, []string) map[string]remoteimg.Image { return nil }
+	failed, err := svc.Body(ctx, api.MessageBodyParams{AccountID: m.acc, MessageID: m.msgs[0], RemoteContent: api.RemoteAllow})
+	if err != nil || strings.Contains(failed.HTML, "remote.invalid") || failed.Blocked.RemoteImages != 1 {
+		t.Fatalf("failed fetch body = %+v, %v", failed, err)
+	}
+
+	// An HTML part whose raw message is gone is withheld, with the text
+	// still served and no error.
+	if err := m.b.store.SetMessageBody(ctx, string(m.msgs[1]), store.BodyUpdate{Text: "second text", HasHTML: true, Snippet: "second text"}); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := svc.Body(ctx, api.MessageBodyParams{AccountID: m.acc, MessageID: m.msgs[1]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gone.HTMLWithheld || gone.HTML != "" || gone.Text != "second text" || !gone.HasHTML || gone.BodyState != api.BodyFetched {
+		t.Fatalf("withheld body = %+v", gone)
+	}
+	// The same when the sanitiser refuses.
+	m.b.Sanitize = func(sanitize.Input) (sanitize.Output, error) {
+		return sanitize.Output{Version: sanitize.Version}, api.NewError(api.CodeSanitizeFailed, "refused")
+	}
+	refused, err := svc.Body(ctx, api.MessageBodyParams{AccountID: m.acc, MessageID: m.msgs[0]})
+	if err != nil || !refused.HTMLWithheld || refused.HTML != "" || refused.Text != "hello body" || len(refused.Links) != 0 {
+		t.Fatalf("refused body = %+v, %v", refused, err)
+	}
+	m.b.Sanitize = sanitize.Sanitize
 
 	pending, err := svc.Body(ctx, api.MessageBodyParams{AccountID: m.acc, MessageID: m.msgs[2], RemoteContent: api.RemoteAllow})
 	if err != nil {

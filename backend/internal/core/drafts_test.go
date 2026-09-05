@@ -116,11 +116,41 @@ func TestPlainDraftRoundTrip(t *testing.T) {
 	}
 }
 
-// With the stub sanitiser an HTML draft must fail closed and leave the
-// store untouched.
-func TestHTMLDraftFailsClosedWithStubSanitiser(t *testing.T) {
+// An HTML draft is stored as the sanitiser's output, with the text
+// alternative derived from it; what the client sent as textBody is ignored.
+func TestHTMLDraftSanitised(t *testing.T) {
 	ctx := context.Background()
 	b := newTestBackend(t, config.Default())
+	res, err := b.Drafts().Save(ctx, api.DraftSaveParams{Draft: api.Draft{
+		AccountID: "acc", TextBody: "ignored",
+		HTMLBody: `<p>hi <b>there</b></p><script>x()</script><img src="https://x/1.png"><a href="https://x/y" onclick="z()">link</a>`,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.HTMLBody != `<p>hi <b>there</b></p><a href="https://x/y">link</a>` {
+		t.Errorf("stored html = %q", res.HTMLBody)
+	}
+	if res.TextBody != "hi there\n\nlink <https://x/y>" {
+		t.Errorf("derived text = %q", res.TextBody)
+	}
+	if res.Blocked != (api.BlockedContent{Scripts: 1, RemoteImages: 1, EventHandlers: 1}) {
+		t.Errorf("blocked = %+v", res.Blocked)
+	}
+	list, _ := b.Drafts().List(ctx, api.DraftListParams{AccountID: "acc"})
+	if list.Page.Total != 1 || list.Drafts[0].HTMLBody != res.HTMLBody || list.Drafts[0].TextBody != res.TextBody {
+		t.Errorf("listed draft = %+v", list.Drafts)
+	}
+}
+
+// An HTML draft the sanitiser refuses fails closed and leaves the store
+// untouched.
+func TestHTMLDraftFailsClosed(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	b.Sanitize = func(sanitize.Input) (sanitize.Output, error) {
+		return sanitize.Output{Version: sanitize.Version}, api.NewError(api.CodeSanitizeFailed, "refused")
+	}
 	d := b.Drafts()
 
 	first, err := d.Save(ctx, api.DraftSaveParams{Draft: api.Draft{AccountID: "acc", TextBody: "plain"}})
@@ -131,7 +161,7 @@ func TestHTMLDraftFailsClosedWithStubSanitiser(t *testing.T) {
 		ID: first.DraftID, AccountID: "acc", Version: 1, HTMLBody: `<script>alert(1)</script><p>hi</p>`,
 	}})
 	if errCode(t, err) != api.CodeSanitizeFailed {
-		t.Fatalf("html with stub sanitiser: %v", err)
+		t.Fatalf("html with a refusing sanitiser: %v", err)
 	}
 	list, _ := d.List(ctx, api.DraftListParams{AccountID: "acc"})
 	if list.Page.Total != 1 || list.Drafts[0].Version != 1 || list.Drafts[0].TextBody != "plain" || list.Drafts[0].HTMLBody != "" {

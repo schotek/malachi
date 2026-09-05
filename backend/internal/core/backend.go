@@ -22,6 +22,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/outbox"
+	"github.com/schotek/malachi/backend/internal/remoteimg"
 	"github.com/schotek/malachi/backend/internal/rpc"
 	"github.com/schotek/malachi/backend/internal/sanitize"
 	"github.com/schotek/malachi/backend/internal/smtp"
@@ -41,9 +42,15 @@ type Backend struct {
 	defaults config.Config // config.toml as loaded at startup (bootstrap defaults)
 	log      *slog.Logger
 
-	// Sanitize is the HTML sanitiser used for composed bodies. It defaults
-	// to sanitize.Sanitize and is a field so tests can substitute a fake.
+	// Sanitize is the HTML sanitiser behind message.body (view mode) and
+	// draft.save (compose mode). It defaults to sanitize.Sanitize and is a
+	// field so tests can substitute a fake.
 	Sanitize func(sanitize.Input) (sanitize.Output, error)
+	// FetchRemoteImages downloads the https: images of a message once the
+	// remote-content policy allowed them, for inlining by the sanitiser. It
+	// defaults to a remoteimg.Fetcher and is a field so tests never touch
+	// the network.
+	FetchRemoteImages func(ctx context.Context, urls []string) map[string]remoteimg.Image
 
 	// Keyring stores account secrets. It defaults to the not-implemented
 	// placeholder and is a field so tests can substitute an in-memory one.
@@ -98,16 +105,17 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		log = slog.New(slog.DiscardHandler)
 	}
 	b := &Backend{
-		StubBackend: rpc.StubBackend{Version: version, StorePath: st.Path()},
-		store:       st,
-		defaults:    cfg,
-		log:         log.With("component", "core"),
-		Sanitize:    sanitize.Sanitize,
-		Keyring:     auth.NotImplementedKeyring{},
-		ProbeIMAP:   imap.Probe,
-		ProbeSMTP:   smtp.Probe,
-		ProbeGraph:  graph.Probe,
-		GOA:         goa.New(log),
+		StubBackend:       rpc.StubBackend{Version: version, StorePath: st.Path()},
+		store:             st,
+		defaults:          cfg,
+		log:               log.With("component", "core"),
+		Sanitize:          sanitize.Sanitize,
+		Keyring:           auth.NotImplementedKeyring{},
+		FetchRemoteImages: remoteimg.New(log).FetchAll,
+		ProbeIMAP:         imap.Probe,
+		ProbeSMTP:         smtp.Probe,
+		ProbeGraph:        graph.Probe,
+		GOA:               goa.New(log),
 	}
 	disc := discover.New(log)
 	disc.GOA = b.goaAccountFor

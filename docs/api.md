@@ -94,6 +94,7 @@ No `id`; the client must not reply.
 | 1500 | malformedMessage | MIME unparsable even leniently |
 | 1501 | sanitizeFailed | sanitiser refused the body; **body is withheld**, never returned raw |
 | 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
+| 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
 
 Codes are never renumbered; new ones are appended within their group.
 
@@ -508,7 +509,8 @@ sanitised content.**
   "messageId": "m_123",
   "bodyState": "fetched",                // fetched | pending | tooBig | failed
   "hasHtml": true,
-  "html": "<div>…sanitised…</div>",      // absent/empty when hasHtml is false
+  "html": "<p>…sanitised…</p>",          // absent/empty when hasHtml is false or htmlWithheld
+  "htmlWithheld": false,                 // (opt) true: the HTML part could not be shown safely
   "text": "plain text alternative, or text derived from html",
   "blocked": { "remoteImages": 3, "remoteStyles": 1, "remoteFonts": 0, "scripts": 1,
                "forms": 0, "eventHandlers": 2, "dangerousUrls": 0, "embeddedFrames": 0,
@@ -519,30 +521,49 @@ sanitised content.**
 }
 ```
 
+`html` is a fragment for the webview's `<body>`, not a document. It is
+produced on demand from the raw message (no HTML is ever stored), so a
+ruleset change takes effect at once and `sanitizerVersion` identifies the
+rules that produced it.
+
 Guarantees of `html` (enforced in `backend/internal/sanitize`, see
 `docs/security.md`):
 
-- no `<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, `<meta>`, `<link>`, `<base>`;
-- no event-handler attributes; no `javascript:`, `vbscript:`, `data:text/html` URLs;
+- no `<script>`, `<iframe>`, `<object>`, `<embed>`, `<form>` and controls,
+  `<meta>`, `<link>`, `<base>`, `<svg>`, `<math>`, media elements; unknown
+  elements are unwrapped, their text kept;
+- no event-handler attributes; no `javascript:`, `vbscript:`, `data:` or
+  unknown-scheme URLs, including obfuscated spellings;
 - under `block`: no reference to any remote resource (images, CSS, fonts,
-  media). Under `allow`: `https:` images only, everything else still removed;
-- inline CSS filtered through a property allow-list; no `url()`, `@import`, `position: fixed`;
-- links restricted to `http(s):` and `mailto:`; the real target is listed in `links`;
-- `cid:` references rewritten to `malachi-cid:<partId>` and only for parts that exist;
-- output size- and depth-capped.
+  media); each is counted in `blocked`. Under `allow`: `https:` images are
+  fetched **by the daemon** (no cookies, no referrer, image bytes only,
+  capped at 2 MiB each, 8 MiB and 32 images per message, 10 s in total) and
+  inlined as `data:` URIs, so the webview never touches the network; an
+  image that could not be fetched is dropped and counted as blocked. A
+  tracking pixel (at most 2 px wide or high, or hidden) is never fetched
+  under any policy and is counted in `trackingPixels`;
+- CSS in `style=""` and `<style>` filtered through a property allow-list:
+  no `url()`, `expression()`, `@import`, `@font-face`, `position: fixed` or
+  `absolute`, hidden text, `content:`; `<style>` elements are hoisted to
+  the top of the fragment; a `<body>`'s own colours and style move to a
+  wrapping `<div class="malachi-body">`;
+- links restricted to `http(s):` and `mailto:`, with `target` removed and
+  `rel="noopener noreferrer"` added; the real target is listed in `links`;
+- `cid:` references rewritten to
+  `malachi-cid:<accountId>/<messageId>/<partId>`, only for parts the
+  message has (`inlineParts` lists the surviving ones); the webview serves
+  them through `message.part`;
+- caps on input, output, nesting depth, node count, attribute count and
+  CSS rules; sanitising the output again changes nothing.
 
 There is **no** parameter, flag, environment variable or debug method that
 returns the original HTML.
 
-**Text-only phase (sanitiser `0-stub`).** Until `internal/sanitize` is
-implemented, `message.body` returns `text` only: the `text/plain` part, or
-for HTML-only messages a plain-text rendering derived by the MIME layer from
-the HTML *tree* (tags never reach `text`). `hasHtml` reports whether an HTML
-part exists; `html` is omitted, `blocked` is all zeros, `links` is `[]`,
-`inlineParts` is omitted and `sanitizerVersion` is `"0-stub"`. This is not
-an error: `sanitizeFailed` is reserved for a real sanitiser refusing a body.
-A UI treats `sanitizerVersion == "0-stub"` as "HTML unavailable" and shows
-`text`.
+`htmlWithheld` is set, with `html` empty and `text` still served, when the
+message has an HTML part that cannot be shown: the sanitiser refused it (a
+cap breach) or the raw message could not be read again. It is a state of
+the result, not an error: the caller shows `text`. `sanitizeFailed` as an
+error belongs to `draft.save`, where there is no text to fall back on.
 
 `bodyState` says whether content exists at all: `pending` (the sync engine
 has not downloaded the body yet; `text` empty), `tooBig` (over the daemon's
@@ -559,8 +580,30 @@ overrides the preference for this one call and is not remembered;
 content is always `block`, whatever the policy (see `docs/security.md` §5).
 
 - errors: invalidArgument (bad `remoteContent`, missing ids), accountNotFound,
-  messageNotFound, storageError; sanitizeFailed and malformedMessage are
-  reserved for the sanitiser phase (today they surface as `bodyState`)
+  messageNotFound, storageError. A refused or unreadable HTML part is not an
+  error (`htmlWithheld`).
+
+A call under `allow` may take several seconds while the daemon fetches the
+images; a client should allow for that (30 s is a reasonable timeout) rather
+than use its usual short one.
+
+#### `message.part`
+- params: `{ "accountId", "messageId", "partId" }`
+- result: `{ "partId", "contentType", "filename", "size", "data" }` (`data`
+  is base64; `filename` is sanitised as in `Attachment`)
+- errors: invalidArgument (missing ids, `partId` not a part number such as
+  `2` or `1.2`), accountNotFound, messageNotFound, partNotFound (no such
+  leaf part — a multipart container cannot be fetched — or the message's
+  content is no longer stored), attachmentTooBig (`data` would exceed
+  `api.MaxAttachmentDataBytes`; `error.data` = `{ "limit": bytes }`),
+  malformedMessage, storageError
+
+The decoded content of one MIME part of a received message, addressed by
+the `partId` that `Attachment` and `inlineParts` carry and that a
+`malachi-cid:` URL in `html` ends with. The webview's scheme handler uses it
+for inline images (and serves only `image/*` other than SVG from it);
+saving an attachment will use it too. The part is read from the raw message
+each time; nothing is cached.
 
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
@@ -619,9 +662,15 @@ account is enabled.
 Recipients (`to` + `cc` + `bcc`) must be non-empty and valid; an empty
 subject or body is allowed. The message is built from the *stored* draft
 at call time and the draft is removed together with the call: its
-attachments move with the outbox message. In this phase the body is
-`text/plain` (UTF-8, quoted-printable); with attachments it becomes
-`multipart/mixed` (base64, sanitised file names). Headers: `From` is
+attachments move with the outbox message. A plain-text draft goes out as
+`text/plain` (UTF-8, quoted-printable); a rich-text one as
+`multipart/alternative` with the derived text first and the stored
+(sanitised) HTML second, the HTML wrapped in a `multipart/related` together
+with the draft's `inline` attachments (`Content-ID`, `Content-Disposition:
+inline`) when it has any; files add a `multipart/mixed` around the whole
+body (base64, sanitised file names). The outbox copy's `attachments` carry
+the part numbers of that tree, so `message.part` works on sent mail too.
+Headers: `From` is
 always the account's `displayName <email>`, `To` and `Cc` from the draft,
 never `Bcc` (Bcc recipients exist only in the SMTP envelope), `Subject`,
 `Date`, a generated `Message-ID` under the account's domain, `MIME-Version`,
@@ -747,9 +796,10 @@ An `inline` attachment whose `contentId` is not referenced from the
 *sanitised* `htmlBody` is released as well: deleting the picture from the
 body drops it. A plain-text draft cannot keep inline attachments.
 
-Transitional: while `internal/sanitize` is a stub, every `draft.save` with
-a non-empty `htmlBody` fails with sanitizeFailed and the draft is left
-unchanged. Plain-text drafts work.
+A `draft.save` whose `htmlBody` the sanitiser refuses (a cap breach) fails
+with sanitizeFailed and leaves the draft unchanged; unlike `message.body`
+there is no text to fall back on, because the text alternative is derived
+from the sanitised HTML.
 
 #### `draft.list`
 - params: `{ "accountId", "page": Page }`
@@ -1018,3 +1068,11 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `account.reorder`; `account.list` now returns accounts in the order the
   user arranged (creation order until they do), which the preferences
   dialog sets by dragging rows.
+- **1** (2026-09-05, compatible addition, HTML rendering): the sanitiser is
+  implemented (`sanitizerVersion` `"1"`), so `message.body` now returns
+  `html`, `blocked`, `links` and `inlineParts` for messages with an HTML
+  part; new response field `htmlWithheld`; `cid:` references are rewritten
+  to `malachi-cid:<accountId>/<messageId>/<partId>`; under `allow` the
+  daemon fetches and inlines remote images instead of leaving `https:`
+  references in place; new `message.part`; new error code 1503
+  `partNotFound`. `draft.save` accepts `htmlBody`.

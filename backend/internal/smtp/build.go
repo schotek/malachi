@@ -10,11 +10,13 @@ import (
 	"io"
 	"mime"
 	netmail "net/mail"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/emersion/go-message"
 	"github.com/emersion/go-message/mail"
 
 	"github.com/schotek/malachi/backend/internal/safename"
@@ -40,10 +42,15 @@ var ErrInvalidAddress = api.NewError(api.CodeInvalidArgument, "invalid email add
 
 // Attachment is one file to attach. Open is called once, while the
 // message is being written; the returned reader is closed by BuildMessage.
+// An Inline attachment with a ContentID is a picture the HTML body refers
+// to as cid:<ContentID>; it goes into the multipart/related around the
+// HTML. Without an HTML body it is sent as an ordinary attachment.
 type Attachment struct {
 	Filename    string
 	ContentType string
 	Size        int64
+	Inline      bool
+	ContentID   string // bare id without <>
 	Open        func() (io.ReadCloser, error)
 }
 
@@ -56,6 +63,10 @@ type BuildInput struct {
 
 	Subject string
 	Text    string // UTF-8 plain text; CRLF and bare CR are normalised to LF
+	// HTML is the rich-text alternative. It must be the sanitiser's output
+	// and nothing else (CLAUDE.md rule 2); Text is then its plain-text
+	// rendering. Empty = a plain-text message.
+	HTML string
 
 	InReplyTo  string   // bare id without <>; empty = omit
 	References []string // bare ids without <>; empty = omit
@@ -64,6 +75,46 @@ type BuildInput struct {
 	MessageID string    // bare id; NewMessageID(From.Address) when empty
 
 	Attachments []Attachment
+}
+
+// IsInline says whether the attachment is written as an inline picture of
+// the HTML body rather than as a file.
+func (in BuildInput) IsInline(a Attachment) bool {
+	return a.Inline && a.ContentID != "" && in.HTML != ""
+}
+
+// PartIDs reports the IMAP part number each of in.Attachments gets in the
+// message BuildMessage writes, in the same order, so the stored copy of a
+// sent message can address its parts like a received one. The numbering
+// follows the tree writeBody builds:
+//
+//	text only:            text/plain
+//	html:                 alternative[text/plain, text/html]
+//	html + pictures:      alternative[text/plain, related[text/html, picture…]]
+//	+ files:              mixed[body as above, file…]
+//
+// so a file is always part 2, 3, … of the mixed, and a picture 2.2, 2.3, …
+// of the alternative (1.2.2, … when a mixed wraps it).
+func PartIDs(in BuildInput) []string {
+	body := ""
+	for _, a := range in.Attachments {
+		if !in.IsInline(a) {
+			body = "1."
+			break
+		}
+	}
+	out := make([]string, 0, len(in.Attachments))
+	pictures, files := 0, 0
+	for _, a := range in.Attachments {
+		if in.IsInline(a) {
+			out = append(out, body+"2."+strconv.Itoa(pictures+2))
+			pictures++
+		} else {
+			out = append(out, strconv.Itoa(files+2))
+			files++
+		}
+	}
+	return out
 }
 
 // NewMessageID returns a fresh "<32 hex random>@<domain>" identifier
@@ -96,11 +147,13 @@ func messageIDDomain(email string) string {
 }
 
 // BuildMessage writes an RFC 5322 message to w. See BuildInput for the
-// headers; the body is text/plain (quoted-printable) alone, or a
-// multipart/mixed with the text as inline part and each attachment as a
-// base64 part. Errors are *api.Error, except: errors from w are returned
-// unchanged so that a counting writer's own sentinel propagates, and an
-// attachment Open/read error is returned wrapped (errors.Is/As work).
+// headers and PartIDs for the body's shape: text/plain (quoted-printable)
+// alone, a multipart/alternative with the HTML, a multipart/related around
+// the HTML for its inline pictures, and a multipart/mixed around all of it
+// when there are files (base64 parts). Errors are *api.Error, except:
+// errors from w are returned unchanged so that a counting writer's own
+// sentinel propagates, and an attachment Open/read error is returned
+// wrapped (errors.Is/As work).
 func BuildMessage(w io.Writer, in BuildInput) error {
 	h, err := buildHeader(in)
 	if err != nil {
@@ -164,57 +217,130 @@ func buildHeader(in BuildInput) (mail.Header, error) {
 	return h, nil
 }
 
+// partFunc creates one part from its header: message.CreateWriter for the
+// root, Writer.CreatePart below it.
+type partFunc func(message.Header) (*message.Writer, error)
+
 func writeBody(w io.Writer, h mail.Header, in BuildInput) error {
 	text := normaliseNewlines(in.Text)
-
-	if len(in.Attachments) == 0 {
-		h.SetContentType("text/plain", map[string]string{"charset": "utf-8"})
-		pw, err := mail.CreateSingleInlineWriter(w, h)
-		if err != nil {
-			return err
+	html := normaliseNewlines(in.HTML)
+	var pictures, files []Attachment
+	for _, a := range in.Attachments {
+		if in.IsInline(a) {
+			pictures = append(pictures, a)
+		} else {
+			files = append(files, a)
 		}
-		if _, err := io.WriteString(pw, text); err != nil {
-			return err
-		}
-		return pw.Close()
 	}
 
-	mw, err := mail.CreateWriter(w, h)
+	// The root part's type and encoding belong to the message header; the
+	// message writer adds MIME-Version.
+	root := func(ph message.Header) (*message.Writer, error) {
+		h.Set("Content-Type", ph.Get("Content-Type"))
+		if cte := ph.Get("Content-Transfer-Encoding"); cte != "" {
+			h.Set("Content-Transfer-Encoding", cte)
+		}
+		return message.CreateWriter(w, h.Header)
+	}
+	if len(files) == 0 {
+		return writeContent(root, text, html, pictures)
+	}
+
+	var mh message.Header
+	mh.SetContentType("multipart/mixed", nil)
+	mw, err := root(mh)
 	if err != nil {
 		return err
 	}
-	var ih mail.InlineHeader
-	ih.SetContentType("text/plain", map[string]string{"charset": "utf-8"})
-	pw, err := mw.CreateSingleInline(ih)
-	if err != nil {
+	if err := writeContent(mw.CreatePart, text, html, pictures); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(pw, text); err != nil {
-		return err
-	}
-	if err := pw.Close(); err != nil {
-		return err
-	}
-
-	for i, a := range in.Attachments {
-		if err := writeAttachment(mw, i, a); err != nil {
+	for i, a := range files {
+		if err := writeFile(mw, i, a, "attachment", ""); err != nil {
 			return err
 		}
 	}
 	return mw.Close()
 }
 
-func writeAttachment(mw *mail.Writer, i int, a Attachment) error {
-	var ah mail.AttachmentHeader
+// writeContent writes the readable body: the text alone, or the
+// alternative with the HTML, or the alternative with the related group of
+// HTML and pictures.
+func writeContent(create partFunc, text, html string, pictures []Attachment) error {
+	if html == "" {
+		return writeText(create, "text/plain", text)
+	}
+	var ah message.Header
+	ah.SetContentType("multipart/alternative", nil)
+	aw, err := create(ah)
+	if err != nil {
+		return err
+	}
+	if err := writeText(aw.CreatePart, "text/plain", text); err != nil {
+		return err
+	}
+	if len(pictures) == 0 {
+		if err := writeText(aw.CreatePart, "text/html", html); err != nil {
+			return err
+		}
+		return aw.Close()
+	}
+	var rh message.Header
+	rh.SetContentType("multipart/related", map[string]string{"type": "text/html"})
+	rw, err := aw.CreatePart(rh)
+	if err != nil {
+		return err
+	}
+	if err := writeText(rw.CreatePart, "text/html", html); err != nil {
+		return err
+	}
+	for i, a := range pictures {
+		if err := writeFile(rw, i, a, "inline", a.ContentID); err != nil {
+			return err
+		}
+	}
+	if err := rw.Close(); err != nil {
+		return err
+	}
+	return aw.Close()
+}
+
+// writeText writes a quoted-printable UTF-8 text part.
+func writeText(create partFunc, ctype, body string) error {
+	var ph message.Header
+	ph.SetContentType(ctype, map[string]string{"charset": "utf-8"})
+	ph.Set("Content-Transfer-Encoding", "quoted-printable")
+	pw, err := create(ph)
+	if err != nil {
+		return err
+	}
+	if _, err := io.WriteString(pw, body); err != nil {
+		return err
+	}
+	return pw.Close()
+}
+
+// writeFile writes an attachment as a base64 part with the given
+// disposition; an inline picture also gets its Content-ID.
+func writeFile(mw *message.Writer, i int, a Attachment, disposition, contentID string) error {
+	var ah message.Header
 	ah.SetContentType(attachmentContentType(a.ContentType))
+	ah.Set("Content-Transfer-Encoding", "base64")
 	// Not AttachmentHeader.SetFilename: go-message puts an RFC 2047
 	// encoded-word inside the parameter, while mime.FormatMediaType emits
 	// the standard RFC 2231 filename*=utf-8''… form for non-ASCII names.
-	disp := mime.FormatMediaType("attachment", map[string]string{"filename": safename.Filename(a.Filename)})
+	disp := mime.FormatMediaType(disposition, map[string]string{"filename": safename.Filename(a.Filename)})
 	if disp == "" {
-		disp = mime.FormatMediaType("attachment", map[string]string{"filename": safename.Fallback})
+		disp = mime.FormatMediaType(disposition, map[string]string{"filename": safename.Fallback})
 	}
 	ah.Set("Content-Disposition", disp)
+	if contentID != "" {
+		id := cleanMsgID(contentID)
+		if id == "" {
+			return api.NewError(api.CodeInvalidArgument, "attachment %d has an invalid content id", i)
+		}
+		ah.Set("Content-ID", "<"+id+">")
+	}
 
 	if a.Open == nil {
 		return api.NewError(api.CodeInvalidArgument, "attachment %d has no content", i)
@@ -225,7 +351,7 @@ func writeAttachment(mw *mail.Writer, i int, a Attachment) error {
 	}
 	defer rc.Close()
 
-	aw, err := mw.CreateAttachment(ah)
+	aw, err := mw.CreatePart(ah)
 	if err != nil {
 		return err
 	}

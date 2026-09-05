@@ -54,8 +54,8 @@ type EnqueueInput struct {
 
 	// Message supplies the header columns of the new row: AccountID,
 	// From/To/CC/BCC/ReplyTo, Subject, Date, InternalDate, RFCMessageID,
-	// InReplyTo, References, Snippet, HasAttachments, Attachments and
-	// Headers. ID, FolderID, UID, ModSeq, Flags, Size, HasHTML, BodyState and
+	// InReplyTo, References, Snippet, HasAttachments, HasHTML, Attachments
+	// and Headers. ID, FolderID, UID, ModSeq, Flags, Size, BodyState and
 	// ThreadID are set by the store.
 	Message Message
 	// Text is the plain-text body cached in messages.text_body.
@@ -197,7 +197,9 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 	m := in.Message
 	m.ID, m.FolderID, m.UID, m.ModSeq = id, folder.ID, 0, 0
 	m.Flags = []api.Flag{api.FlagSeen}
-	m.Size, m.HasHTML, m.BodyState, m.ThreadID = size, false, BodyFetched, ""
+	// HasHTML is the caller's: a rich-text draft's outbox copy renders its
+	// HTML part from the raw file like any received message.
+	m.Size, m.BodyState, m.ThreadID = size, BodyFetched, ""
 	enc, err := encodeMessage(&m)
 	if err != nil {
 		return Message{}, nil, err

@@ -110,12 +110,14 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 	return &api.MessageGetResult{Message: out}, nil
 }
 
-// Body returns the message content. Text-only phase: the plain text the
-// MIME layer derived at sync time; html is withheld while the sanitiser is
-// a stub. When internal/sanitize lands, the sanitiser call goes here, fed
-// with the raw file (store.OpenMessageRaw) and the resolved remote-content
-// policy; its output is the only HTML that may ever cross the API
-// (CLAUDE.md rule 2). Nothing in this method reads stored HTML.
+// Body returns the message content: the plain text the MIME layer derived
+// at sync time, and for a message with an HTML part the sanitiser's output
+// over the raw file (store.OpenMessageRaw) under the resolved remote-content
+// policy. That output is the only HTML that may ever cross the API
+// (CLAUDE.md rule 2); nothing here reads stored HTML, because none is
+// stored. An HTML part that cannot be shown safely is withheld, not an
+// error: the text is still there and the caller learns why from
+// htmlWithheld.
 func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
@@ -146,15 +148,20 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
-	s.b.log.Debug("message body", "id", m.ID, "bodyState", state, "hasHtml", hasHTML, "remoteContent", policy)
-	return &api.MessageBodyResult{
+	res := &api.MessageBodyResult{
 		MessageID:        api.MessageID(m.ID),
 		BodyState:        toAPIBodyState(state),
 		HasHTML:          hasHTML,
 		Text:             text,
 		Links:            []api.Link{},
 		SanitizerVersion: sanitize.Version,
-	}, nil
+	}
+	if state == store.BodyFetched && hasHTML {
+		s.b.renderHTML(ctx, a.ID, m.ID, policy, res)
+	}
+	s.b.log.Debug("message body", "id", m.ID, "bodyState", state, "hasHtml", hasHTML,
+		"remoteContent", policy, "htmlWithheld", res.HTMLWithheld, "blocked", res.Blocked)
+	return res, nil
 }
 
 // Flag applies flag changes locally (all-or-nothing) and queues them for

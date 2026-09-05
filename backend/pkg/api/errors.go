@@ -59,6 +59,9 @@ const (
 	// CodeAttachmentTooBig: over MaxAttachmentBytes, MaxDraftAttachmentBytes
 	// or MaxAttachmentDataBytes; Error.Data = {"limit": n, "size": n}.
 	CodeAttachmentTooBig ErrorCode = 1502
+	// CodePartNotFound: message.part named a MIME part the message does not
+	// have, or the message's content is no longer stored.
+	CodePartNotFound ErrorCode = 1503
 )
 
 // String returns the stable symbolic name of the code.
@@ -99,6 +102,7 @@ var codeNames = map[ErrorCode]string{
 	CodeMalformedMessage:   "malformedMessage",
 	CodeSanitizeFailed:     "sanitizeFailed",
 	CodeAttachmentTooBig:   "attachmentTooBig",
+	CodePartNotFound:       "partNotFound",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so
