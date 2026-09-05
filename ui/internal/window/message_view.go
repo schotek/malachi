@@ -134,17 +134,39 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
-	b.GetObject("remote_load").Cast().(*gtk.Button).ConnectClicked(func() {
+	load := b.GetObject("remote_load").Cast().(*gtk.Button)
+	load.ConnectClicked(func() {
 		if v.load != nil {
 			v.load()
 		}
 	})
-	b.GetObject("remote_trust").Cast().(*gtk.Button).ConnectClicked(func() {
+	trust := b.GetObject("remote_trust").Cast().(*gtk.Button)
+	trust.ConnectClicked(func() {
 		if v.trust != nil {
 			v.trust()
 		}
 	})
+	// The bar goes away the moment the images are in, and hiding the widget
+	// that holds the focus makes GTK pass the focus to the next one in the
+	// chain — one of the selectable header labels, which selects all of its
+	// text as soon as it is focused (see the note on focus-widget in
+	// message_window.blp). The message then looked as though it had selected
+	// itself while the user was still letting go of the button. Clicking
+	// these two therefore leaves the focus where it was; setBarVisible takes
+	// care of the keyboard, which has to focus the button to press it.
+	load.SetFocusOnClick(false)
+	trust.SetFocusOnClick(false)
 	return v
+}
+
+// setBarVisible shows or hides the remote-image bar, taking the focus out of
+// it first: the body is somewhere harmless to put it, unlike the selectable
+// label GTK would pick (see newMessageView).
+func (v *messageView) setBarVisible(show bool) {
+	if !show && v.bar.FocusChild() != nil {
+		v.stack.GrabFocus()
+	}
+	v.bar.SetVisible(show)
 }
 
 // paneLabels is the main window's message pane.
@@ -221,7 +243,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 	v.links = nil
 	if err != nil {
 		v.hint.SetVisible(false)
-		v.bar.SetVisible(false)
+		v.setBarVisible(false)
 		v.showText(widget.RPCErrorText(i18n.T("Loading the message"), err))
 		return
 	}
@@ -234,7 +256,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 		return
 	}
 	v.hint.SetVisible(b != nil && b.HTMLWithheld)
-	v.bar.SetVisible(false)
+	v.setBarVisible(false)
 	v.showText(bodyText(b))
 }
 
@@ -263,7 +285,7 @@ func (v *messageView) loading() {
 	v.cancelSpinner()
 	v.links = nil
 	v.hint.SetVisible(false)
-	v.bar.SetVisible(false)
+	v.setBarVisible(false)
 	// Blank at once: this also drops the pictures of the message before.
 	v.showText("")
 	v.spinner = glib.TimeoutAdd(bodySpinnerDelay, func() bool {

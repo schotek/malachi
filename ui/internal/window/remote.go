@@ -43,7 +43,7 @@ func renderRemoteBar(v *messageView, lm *loadedMessage) {
 		// TRANSLATORS: %d is the number of remote images the message tried to load.
 		v.barLabel.SetLabel(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", n), n))
 	}
-	v.bar.SetVisible(n > 0)
+	v.setBarVisible(n > 0)
 }
 
 // loadableImages is how many remote images of the body could still be

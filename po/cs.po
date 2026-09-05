@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 14:32+0200\n"
+"POT-Creation-Date: 2026-09-05 20:02+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -283,7 +283,7 @@ msgid "Subject: %s"
 msgstr "Předmět: %s"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:298
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:320
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -333,7 +333,7 @@ msgstr "%.0f KiB"
 msgid "%d B"
 msgstr "%d B"
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:290
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:312
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -649,11 +649,11 @@ msgstr "Uložit _vše"
 msgid "This message has not been downloaded yet."
 msgstr "Tato zpráva ještě nebyla stažena."
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:316
+#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:338
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:318
+#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:340
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -824,22 +824,22 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/message_view.go:225
+#: ui/internal/window/message_view.go:247
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:302
+#: ui/internal/window/message_view.go:324
 #, c-format
 msgid "Cc: %s"
 msgstr "Kopie: %s"
 
-#: ui/internal/window/message_view.go:310
-#: ui/internal/window/message_view.go:322
+#: ui/internal/window/message_view.go:332
+#: ui/internal/window/message_view.go:344
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:314
+#: ui/internal/window/message_view.go:336
 msgid "Downloading…"
 msgstr "Stahuje se…"
 

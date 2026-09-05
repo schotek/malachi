@@ -24,7 +24,8 @@
       "Bash(GSETTINGS_BACKEND=memory go test -tags nosound ./...)",
       "Bash(git --no-pager log -1 --format='%h %s')",
       "Bash(strings /usr/lib64/libadwaita-1.so.0 | grep -o 'navigation-sidebar[^}]*}' | head -20)",
-      "Read(//usr/lib64/**)"
+      "Read(//usr/lib64/**)",
+      "Bash(git --no-pager log -1 --format='%h %s' --stat)"
     ]
   }
 }
