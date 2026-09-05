@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 09:39+0200\n"
+"POT-Creation-Date: 2026-09-05 10:11+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -253,7 +253,7 @@ msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
 #: ui/internal/compose/draft.go:314 ui/internal/widget/rpc.go:128
-#: ui/internal/window/remote.go:184
+#: ui/internal/window/remote.go:197
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -301,7 +301,7 @@ msgid "Subject: %s"
 msgstr "Předmět: %s"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:262
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:258
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -333,7 +333,7 @@ msgstr "%H:%M"
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr "%a %-d. %-m. %Y v %H:%M"
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:254
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:250
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -621,7 +621,7 @@ msgstr "Sbalit"
 msgid "Expand"
 msgstr "Rozbalit"
 
-#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:246
+#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:242
 #: ui/internal/window/messages.go:177
 msgid "Loading…"
 msgstr "Načítá se…"
@@ -702,7 +702,7 @@ msgstr "Složky se objeví po první synchronizaci."
 msgid "Messages"
 msgstr "Zprávy"
 
-#: ui/internal/window/message_view.go:117
+#: ui/internal/window/message_view.go:113
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -710,18 +710,18 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/message_view.go:208
+#: ui/internal/window/message_view.go:204
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:266
+#: ui/internal/window/message_view.go:262
 #, c-format
 msgid "Cc: %s"
 msgstr "Kopie: %s"
 
 #. TRANSLATORS: %d is the number of attachments.
-#: ui/internal/window/message_view.go:294
+#: ui/internal/window/message_view.go:290
 #, c-format
 msgid "%d attachment"
 msgid_plural "%d attachments"
@@ -730,7 +730,7 @@ msgstr[1] "%d přílohy"
 msgstr[2] "%d příloh"
 
 #. TRANSLATORS: %d is the number of attachments, %s their names.
-#: ui/internal/window/message_view.go:297
+#: ui/internal/window/message_view.go:293
 #, c-format
 msgid "%d attachment: %s"
 msgid_plural "%d attachments: %s"
@@ -738,20 +738,20 @@ msgstr[0] "%d příloha: %s"
 msgstr[1] "%d přílohy: %s"
 msgstr[2] "%d příloh: %s"
 
-#: ui/internal/window/message_view.go:304
-#: ui/internal/window/message_view.go:316
+#: ui/internal/window/message_view.go:300
+#: ui/internal/window/message_view.go:312
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:308
+#: ui/internal/window/message_view.go:304
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
-#: ui/internal/window/message_view.go:310
+#: ui/internal/window/message_view.go:306
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/message_view.go:312
+#: ui/internal/window/message_view.go:308
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -860,7 +860,7 @@ msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:47
+#: ui/internal/window/remote.go:44
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
@@ -868,34 +868,34 @@ msgstr[0] "%d vzdálený obrázek byl blokován"
 msgstr[1] "%d vzdálené obrázky byly blokovány"
 msgstr[2] "%d vzdálených obrázků bylo blokováno"
 
-#: ui/internal/window/remote.go:90
+#: ui/internal/window/remote.go:103
 msgid "Loading the images"
 msgstr "Načtení obrázků"
 
-#: ui/internal/window/remote.go:125
+#: ui/internal/window/remote.go:138
 msgid "Trusting the sender"
 msgstr "Přidání odesílatele mezi známé"
 
-#: ui/internal/window/remote.go:148
+#: ui/internal/window/remote.go:161
 msgid "Changing the remote content preference"
 msgstr "Změna předvolby vzdáleného obsahu"
 
-#: ui/internal/window/remote.go:179
+#: ui/internal/window/remote.go:192
 msgid "Open This Link?"
 msgstr "Otevřít tento odkaz?"
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:181
+#: ui/internal/window/remote.go:194
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr "Odkaz se zobrazuje jako „%s“, ale vede na %s."
 
-#: ui/internal/window/remote.go:185
+#: ui/internal/window/remote.go:198
 msgid "_Open Link"
 msgstr "_Otevřít odkaz"
 
 #. TRANSLATORS: %s is a technical error message.
-#: ui/internal/window/remote.go:217
+#: ui/internal/window/remote.go:230
 #, c-format
 msgid "The link could not be opened: %s"
 msgstr "Odkaz se nepodařilo otevřít: %s"

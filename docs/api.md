@@ -517,6 +517,7 @@ sanitised content.**
                "trackingPixels": 1 },
   "links": [ { "text": "Click here", "href": "https://real.destination/…" } ],
   "inlineParts": { "image001@…": "2.1" },
+  "remoteContent": "block",              // the policy that was applied
   "sanitizerVersion": "1"
 }
 ```
@@ -558,6 +559,15 @@ Guarantees of `html` (enforced in `backend/internal/sanitize`, see
 
 There is **no** parameter, flag, environment variable or debug method that
 returns the original HTML.
+
+`remoteContent` in the **result** is the policy that was actually applied,
+after the stored preference, the per-call override and the known-senders
+list were resolved: `block` or `allow`, never `knownSenders`. A client
+offers to load the images only under `block`. Under `allow` everything
+loadable was loaded already, and what `blocked.remoteImages` still counts
+are the references the sanitiser removes whatever the policy (CSS `url()`,
+`srcset`, `background` attributes, plain `http:`) plus any download that
+failed: asking again would change nothing.
 
 `htmlWithheld` is set, with `html` empty and `text` still served, when the
 message has an HTML part that cannot be shown: the sanitiser refused it (a
@@ -1068,6 +1078,11 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `account.reorder`; `account.list` now returns accounts in the order the
   user arranged (creation order until they do), which the preferences
   dialog sets by dragging rows.
+- **1** (2026-09-05, compatible addition, applied remote-content policy):
+  `message.body` result gained `remoteContent`, the policy that was applied
+  (`block` or `allow`). Without it a client could not tell "blocked, ask
+  again to load" from "loaded, and these references can never be loaded",
+  and offered a button that changed nothing.
 - **1** (2026-09-05, compatible addition, HTML rendering): the sanitiser is
   implemented (`sanitizerVersion` `"1"`), so `message.body` now returns
   `html`, `blocked`, `links` and `inlineParts` for messages with an HTML

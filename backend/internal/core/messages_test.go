@@ -259,6 +259,11 @@ func TestMessageBody(t *testing.T) {
 	if len(res.InlineParts) != 1 || res.InlineParts["logo@example.invalid"] != "1.2" {
 		t.Fatalf("inlineParts = %+v", res.InlineParts)
 	}
+	// The applied policy is reported, so a client knows whether offering to
+	// load the images would change anything.
+	if res.RemoteContent != api.RemoteBlock {
+		t.Fatalf("remoteContent = %q, want block", res.RemoteContent)
+	}
 	if res.SanitizerVersion != sanitize.Version || res.SanitizerVersion == "0-stub" {
 		t.Fatalf("sanitizerVersion = %q, sanitiser reports %q", res.SanitizerVersion, sanitize.Version)
 	}
@@ -279,6 +284,9 @@ func TestMessageBody(t *testing.T) {
 	}
 	if len(asked) != 1 || asked[0] != "https://remote.invalid/pic.png" {
 		t.Fatalf("fetcher asked for %v", asked)
+	}
+	if allow.RemoteContent != api.RemoteAllow {
+		t.Fatalf("remoteContent = %q, want allow", allow.RemoteContent)
 	}
 	// An image the fetcher could not get is dropped and counted, like a
 	// blocked one.

@@ -147,3 +147,33 @@ func TestLoadedMessageState(t *testing.T) {
 		t.Error("both halves present but not complete")
 	}
 }
+
+func TestLoadableImages(t *testing.T) {
+	html := &api.MessageBodyResult{HTML: "<p>x</p>", Blocked: api.BlockedContent{RemoteImages: 3}}
+	cases := []struct {
+		name string
+		body *api.MessageBodyResult
+		want int
+	}{
+		{"nil body", nil, 0},
+		{"blocked html", withPolicy(html, api.RemoteBlock), 3},
+		// Already allowed: the daemon fetched what it could, and what the
+		// counter still holds (CSS url(), srcset, plain http:, a failed
+		// download) no button can bring back.
+		{"allowed html", withPolicy(html, api.RemoteAllow), 0},
+		{"text only", withPolicy(&api.MessageBodyResult{Blocked: api.BlockedContent{RemoteImages: 2}}, api.RemoteBlock), 0},
+		{"nothing blocked", withPolicy(&api.MessageBodyResult{HTML: "<p>x</p>"}, api.RemoteBlock), 0},
+	}
+	for _, c := range cases {
+		if got := loadableImages(c.body); got != c.want {
+			t.Errorf("%s: loadableImages = %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// withPolicy copies b with the applied remote-content policy set.
+func withPolicy(b *api.MessageBodyResult, p api.RemoteContentPolicy) *api.MessageBodyResult {
+	c := *b
+	c.RemoteContent = p
+	return &c
+}

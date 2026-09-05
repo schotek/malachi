@@ -154,6 +154,7 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 		HasHTML:          hasHTML,
 		Text:             text,
 		Links:            []api.Link{},
+		RemoteContent:    policy,
 		SanitizerVersion: sanitize.Version,
 	}
 	if state == store.BodyFetched && hasHTML {

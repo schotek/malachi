@@ -568,6 +568,14 @@ type MessageBodyResult struct {
 	// InlineParts maps the Content-IDs whose cid: references survived in
 	// HTML to their attachment PartIDs.
 	InlineParts map[string]string `json:"inlineParts,omitempty"`
+	// RemoteContent is the policy that was applied, after the stored
+	// preference, the per-call override and the known-senders list were
+	// resolved: "block" or "allow", never "knownSenders". A client offers
+	// to load the images only under "block"; under "allow" everything
+	// loadable was loaded already and what Blocked still counts (CSS
+	// url(), srcset, background attributes, plain http:, a fetch that
+	// failed) cannot be loaded by asking again.
+	RemoteContent RemoteContentPolicy `json:"remoteContent"`
 	// SanitizerVersion identifies the sanitiser ruleset; bump on any rule change.
 	SanitizerVersion string `json:"sanitizerVersion"`
 }

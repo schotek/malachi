@@ -33,20 +33,33 @@ import (
 const remoteTimeout = 30 * time.Second
 
 // renderRemoteBar shows how many remote images the sanitiser removed from
-// the body on display, with the buttons that load them. Tracking pixels
-// are not counted: they are never loaded, there is nothing to offer. Once
-// the user asked for the images the bar stays down, whatever the daemon
-// could not fetch.
+// the body on display, with the buttons that load them.
 func renderRemoteBar(v *messageView, lm *loadedMessage) {
 	n := 0
-	if lm != nil && lm.body != nil && lm.body.HTML != "" && !lm.allowed {
-		n = lm.body.Blocked.RemoteImages
+	if lm != nil {
+		n = loadableImages(lm.body)
 	}
 	if n > 0 {
 		// TRANSLATORS: %d is the number of remote images the message tried to load.
 		v.barLabel.SetLabel(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", n), n))
 	}
 	v.bar.SetVisible(n > 0)
+}
+
+// loadableImages is how many remote images of the body could still be
+// shown by asking the daemon again, which is what the bar offers.
+//
+// Only the block policy leaves anything to load. Under allow the daemon
+// already fetched what it could, and the images the sanitiser still counts
+// are the ones it removes whatever the policy: CSS url(), srcset,
+// background attributes, plain http:, a download that failed. Offering to
+// load those would be a button that changes nothing. Tracking pixels are
+// counted separately and never loaded at all.
+func loadableImages(b *api.MessageBodyResult) int {
+	if b == nil || b.HTML == "" || b.RemoteContent != api.RemoteBlock {
+		return 0
+	}
+	return b.Blocked.RemoteImages
 }
 
 // fetchPart serves the web view's malachi-cid: pictures through
@@ -90,7 +103,7 @@ func (w *Window) loadRemoteImages(id api.MessageID) {
 				w.Toast(widget.RPCErrorText(i18n.T("Loading the images"), err))
 				return
 			}
-			lm.body, lm.err, lm.allowed = &res, nil, true
+			lm.body, lm.err = &res, nil
 			if w.loaded[id] == nil {
 				w.storeLoaded(id, lm)
 			}

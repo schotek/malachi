@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-05 09:39+0200\n"
+"POT-Creation-Date: 2026-09-05 10:11+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -254,7 +254,7 @@ msgid "Save changes to this draft?"
 msgstr ""
 
 #: ui/internal/compose/draft.go:314 ui/internal/widget/rpc.go:128
-#: ui/internal/window/remote.go:184
+#: ui/internal/window/remote.go:197
 msgid "_Cancel"
 msgstr ""
 
@@ -301,7 +301,7 @@ msgid "Subject: %s"
 msgstr ""
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:262
+#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:258
 #, c-format
 msgid "To: %s"
 msgstr ""
@@ -333,7 +333,7 @@ msgstr ""
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr ""
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:254
+#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:250
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr ""
@@ -616,7 +616,7 @@ msgstr ""
 msgid "Expand"
 msgstr ""
 
-#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:246
+#: ui/internal/window/folders.go:72 ui/internal/window/message_view.go:242
 #: ui/internal/window/messages.go:177
 msgid "Loading…"
 msgstr ""
@@ -697,24 +697,24 @@ msgstr ""
 msgid "Messages"
 msgstr ""
 
-#: ui/internal/window/message_view.go:117
+#: ui/internal/window/message_view.go:113
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/message_view.go:208
+#: ui/internal/window/message_view.go:204
 msgid "Loading the message"
 msgstr ""
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:266
+#: ui/internal/window/message_view.go:262
 #, c-format
 msgid "Cc: %s"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of attachments.
-#: ui/internal/window/message_view.go:294
+#: ui/internal/window/message_view.go:290
 #, c-format
 msgid "%d attachment"
 msgid_plural "%d attachments"
@@ -722,27 +722,27 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: %d is the number of attachments, %s their names.
-#: ui/internal/window/message_view.go:297
+#: ui/internal/window/message_view.go:293
 #, c-format
 msgid "%d attachment: %s"
 msgid_plural "%d attachments: %s"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/message_view.go:304
-#: ui/internal/window/message_view.go:316
+#: ui/internal/window/message_view.go:300
+#: ui/internal/window/message_view.go:312
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:308
+#: ui/internal/window/message_view.go:304
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/message_view.go:310
+#: ui/internal/window/message_view.go:306
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/message_view.go:312
+#: ui/internal/window/message_view.go:308
 msgid "This message could not be read."
 msgstr ""
 
@@ -850,41 +850,41 @@ msgid "Autostart was not granted"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:47
+#: ui/internal/window/remote.go:44
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/remote.go:90
+#: ui/internal/window/remote.go:103
 msgid "Loading the images"
 msgstr ""
 
-#: ui/internal/window/remote.go:125
+#: ui/internal/window/remote.go:138
 msgid "Trusting the sender"
 msgstr ""
 
-#: ui/internal/window/remote.go:148
+#: ui/internal/window/remote.go:161
 msgid "Changing the remote content preference"
 msgstr ""
 
-#: ui/internal/window/remote.go:179
+#: ui/internal/window/remote.go:192
 msgid "Open This Link?"
 msgstr ""
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:181
+#: ui/internal/window/remote.go:194
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr ""
 
-#: ui/internal/window/remote.go:185
+#: ui/internal/window/remote.go:198
 msgid "_Open Link"
 msgstr ""
 
 #. TRANSLATORS: %s is a technical error message.
-#: ui/internal/window/remote.go:217
+#: ui/internal/window/remote.go:230
 #, c-format
 msgid "The link could not be opened: %s"
 msgstr ""

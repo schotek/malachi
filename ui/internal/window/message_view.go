@@ -44,10 +44,6 @@ type loadedMessage struct {
 	body *api.MessageBodyResult
 	err  error // message.body failure
 
-	// allowed is set once the body was fetched with remote images allowed
-	// (the user asked for them); the banner offering that stays down then.
-	allowed bool
-
 	seq uint64 // insertion order in Window.loaded
 
 	// In-flight halves and who wants to hear about them; a second
