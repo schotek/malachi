@@ -1,0 +1,21 @@
+From: Newsletter <news@example.org>
+To: Alice <alice@example.org>
+Subject: Remote images everywhere
+Date: Fri, 5 Sep 2026 10:00:00 +0200
+Message-ID: <remote-images@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Hero image below.</p>
+<img src="https://cdn.example.org/hero.png" width="600" alt="Hero">
+<img src="http://cdn.example.org/plain.png" width="300">
+<img srcset="https://cdn.example.org/a.png 1x, https://cdn.example.org/a@2x.png 2x" src="https://cdn.example.org/a.png">
+<img src="//cdn.example.org/protocol-relative.png">
+<img src="images/relative.png" alt="relative">
+<table background="https://cdn.example.org/bg.png"><tr><td style="background: url(https://cdn.example.org/cell.png)">cell</td></tr></table>
+<div style="background-image: url('https://cdn.example.org/div.png'); color: navy">styled</div>
+<video poster="https://cdn.example.org/poster.png" src="https://cdn.example.org/clip.mp4"></video>
+<audio src="https://cdn.example.org/clip.mp3"></audio>
+<link rel="stylesheet" href="https://cdn.example.org/style.css">
+</body></html>

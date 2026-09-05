@@ -1,0 +1,29 @@
+From: Bob <bob@example.org>
+To: Alice <alice@example.org>
+Subject: Inline references
+Date: Fri, 5 Sep 2026 10:07:00 +0200
+Message-ID: <cid-foreign@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"; type="text/html"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Logo: <img src="cid:img1@example.org" alt="logo" width="64"></p>
+<p>Missing: <img src="cid:missing@example.org" alt="missing"></p>
+<p>Traversal: <img src="cid:../../etc/passwd" alt="traversal"></p>
+<p>Encoded: <img src="cid:img1%40example.org" alt="encoded"></p>
+<p>Brackets: <img src="cid:<img1@example.org>" alt="brackets"></p>
+<p>Foreign: <img src="malachi-cid:acc_other/msg_other/2" alt="foreign"></p>
+</body></html>
+
+--rel
+Content-Type: image/png
+Content-ID: <img1@example.org>
+Content-Disposition: inline; filename="logo.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--rel--

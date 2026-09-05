@@ -1,0 +1,24 @@
+From: Attacker <x@example.org>
+To: Alice <alice@example.org>
+Subject: Frames and navigation
+Date: Fri, 5 Sep 2026 10:05:00 +0200
+Message-ID: <frames-meta@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<base href="https://evil.example.org/">
+<meta http-equiv="refresh" content="0; url=https://evil.example.org/redirect">
+<meta http-equiv="Content-Security-Policy" content="default-src *">
+<meta name="viewport" content="width=device-width">
+<link rel="stylesheet" href="https://evil.example.org/s.css">
+<link rel="icon" href="https://evil.example.org/favicon.ico">
+</head><body>
+<iframe src="https://evil.example.org/frame" width="600" height="400"></iframe>
+<frameset><frame src="https://evil.example.org/f"></frameset>
+<object data="https://evil.example.org/o.swf" type="application/x-shockwave-flash"></object>
+<embed src="https://evil.example.org/e.swf">
+<applet code="Evil.class"></applet>
+<a href="relative-to-base">follows the base</a>
+<p>Visible text survives.</p>
+</body></html>

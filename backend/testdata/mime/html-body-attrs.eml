@@ -1,0 +1,37 @@
+From: Designer <d@example.org>
+To: Alice <alice@example.org>
+Subject: Dark newsletter
+Date: Fri, 5 Sep 2026 10:10:00 +0200
+Message-ID: <body-attrs@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dark newsletter</title>
+<style type="text/css">
+  body { margin: 0; padding: 0; }
+  .wrapper { max-width: 600px; margin: 0 auto; }
+  h1 { font-size: 24px; line-height: 1.2; }
+  a { color: #66ccff; text-decoration: underline; }
+</style>
+</head>
+<body bgcolor="#101010" text="#f0f0f0" link="#66ccff" style="font-family: Helvetica, Arial, sans-serif; background-color: #101010" onload="init()">
+<style>
+  .late { color: #ffcc00; }
+</style>
+<div class="wrapper">
+  <h1>Dark newsletter</h1>
+  <p class="late">Styled from a body-level stylesheet.</p>
+  <p><a href="https://example.org/read">Read more</a></p>
+  <table width="100%" cellpadding="8" cellspacing="0" border="0" bgcolor="#202020">
+    <tr><td align="center" valign="top" width="50%">left</td><td align="center" valign="top" width="50%">right</td></tr>
+  </table>
+  <font color="#ff0000" face="Georgia, serif" size="+1">font element</font>
+  <center>centered</center>
+  <p>&copy; 2026 &mdash; Example &amp; Co.</p>
+</div>
+</body>
+</html>

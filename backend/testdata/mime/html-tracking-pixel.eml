@@ -1,0 +1,17 @@
+From: Marketing <mkt@example.org>
+To: Alice <alice@example.org>
+Subject: We miss you
+Date: Fri, 5 Sep 2026 10:01:00 +0200
+Message-ID: <tracking-pixel@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Come back for a 10% discount.</p>
+<img src="https://track.example.org/open?id=42" width="1" height="1" alt="">
+<img src="https://track.example.org/open?id=43" style="display:none">
+<img src="https://track.example.org/open?id=44" style="width:1px;height:1px;border:0">
+<img src="https://track.example.org/open?id=45" width="0" height="0">
+<img src="https://track.example.org/open?id=46" hidden>
+<img src="https://cdn.example.org/real.png" width="400" height="200" alt="A real picture">
+</body></html>

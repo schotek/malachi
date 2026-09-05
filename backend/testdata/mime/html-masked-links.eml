@@ -1,0 +1,20 @@
+From: Phisher <x@example.org>
+To: Alice <alice@example.org>
+Subject: Please verify your account
+Date: Fri, 5 Sep 2026 10:04:00 +0200
+Message-ID: <masked-links@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<p>Log in at <a href="https://evil.example.org/login">https://bank.example.org/</a> now.</p>
+<p><a href="https://xn--bnk-3va.example.org/">bank.example.org</a></p>
+<p><a href="javascript:alert(document.cookie)">javascript link</a></p>
+<p><a href="vbscript:MsgBox(1)">vbscript link</a></p>
+<p><a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==">data link</a></p>
+<p><a href="blob:https://example.org/uuid">blob link</a></p>
+<p><a href="ftp://files.example.org/x">ftp link</a></p>
+<p><a href="mailto:support@example.org?subject=Hi">mail us</a></p>
+<p><a href="https://example.org/ok" target="_blank" rel="opener">ok link</a></p>
+<p><a href="/relative/path">relative</a> and <a href="#anchor">anchor</a></p>
+</body></html>

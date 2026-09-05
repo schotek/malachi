@@ -1,0 +1,26 @@
+From: Attacker <x@example.org>
+To: Alice <alice@example.org>
+Subject: Obfuscated URLs
+Date: Fri, 5 Sep 2026 10:09:00 +0200
+Message-ID: <obfuscated-urls@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body>
+<a href="jav&#x09;ascript:alert(1)">tab entity</a>
+<a href="jav&#x0A;ascript:alert(2)">newline entity</a>
+<a href="&#106;&#97;&#118;&#97;script:alert(3)">decimal entities</a>
+<a href=" JaVaScRiPt:alert(4)">mixed case and leading space</a>
+<a href="javascript&colon;alert(5)">named colon entity</a>
+<a href="java&#0;script:alert(6)">null entity</a>
+<a href="&#x6A;avascript:alert(7)">hex entity</a>
+<a href="JAVASCRIPT:alert(8)">upper case</a>
+<a href="  &#9;javascript:alert(9)">leading tab</a>
+<a href="javascript://%0aalert(10)">comment trick</a>
+<a href="vbscript:MsgBox(11)">vbscript</a>
+<a href="data:text/html,<script>alert(12)</script>">data html</a>
+<a href="HTTPS://Example.ORG/Path?Q=1#F">upper scheme, kept</a>
+<img src="jav&#x09;ascript:alert(13)">
+<img src="x" onerror="alert(14)" alt="onerror with bad src">
+<img src="https://cdn.example.org/ok.png?a=1&amp;b=2" width="10" height="10" alt="ok">
+</body></html>
