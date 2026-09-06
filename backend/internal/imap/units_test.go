@@ -262,3 +262,64 @@ func TestSameStateAndTriggerCoalescing(t *testing.T) {
 		t.Fatalf("initial state = %+v", st)
 	}
 }
+
+func TestGmailFolders(t *testing.T) {
+	if !virtualView([]imap.MailboxAttr{imap.MailboxAttrHasNoChildren, "\\Important"}) ||
+		!virtualView([]imap.MailboxAttr{"\\FLAGGED"}) || virtualView([]imap.MailboxAttr{imap.MailboxAttrAll}) {
+		t.Fatal("virtual views not recognised")
+	}
+	if roleFromAttrs([]imap.MailboxAttr{"\\All"}) != api.RoleAll {
+		t.Fatal("\\All is not RoleAll")
+	}
+
+	// On Gmail the unsynchronised All Mail becomes the archive target.
+	all := &store.Folder{Mailbox: "[Gmail]/All Mail", Role: api.RoleAll, Unsynced: true}
+	folders := []*store.Folder{{Mailbox: "INBOX", Role: api.RoleInbox}, all, {Mailbox: "[Gmail]/Trash", Role: api.RoleTrash}}
+	gmailArchive(folders)
+	if all.Role != api.RoleArchive || !all.Unsynced {
+		t.Fatalf("all mail = %+v", all)
+	}
+	// A folder the server marks \Archive keeps precedence.
+	all.Role = api.RoleAll
+	gmailArchive(append(folders, &store.Folder{Mailbox: "Archive", Role: api.RoleArchive}))
+	if all.Role != api.RoleAll {
+		t.Fatalf("all mail promoted over \\Archive: %+v", all)
+	}
+	// A synchronised \All folder is not an archive target.
+	synced := &store.Folder{Mailbox: "All", Role: api.RoleAll}
+	gmailArchive([]*store.Folder{synced})
+	if synced.Role != api.RoleAll {
+		t.Fatalf("synced \\All promoted: %+v", synced)
+	}
+}
+
+func TestSyncTargetsSkipUnsynced(t *testing.T) {
+	stored := []store.Folder{
+		{ID: "f1", Mailbox: "INBOX", Selectable: true},
+		{ID: "f2", Mailbox: "[Gmail]", Selectable: false},
+		{ID: "f3", Mailbox: "[Gmail]/All Mail", Selectable: true, Unsynced: true},
+		{ID: "f4", Mailbox: "Sent", Selectable: true},
+	}
+	ids := func(fs []store.Folder) []string {
+		var out []string
+		for _, f := range fs {
+			out = append(out, f.ID)
+		}
+		return out
+	}
+	cases := []struct {
+		req      request
+		appended map[string]bool
+		want     []string
+	}{
+		{request{}, nil, []string{"f1", "f4"}},
+		{request{folder: "f4"}, nil, []string{"f4"}},
+		{request{folder: "f1"}, map[string]bool{"Sent": true}, []string{"f1", "f4"}},
+		{request{folder: "f3"}, nil, nil}, // an explicit request cannot force it
+	}
+	for _, c := range cases {
+		if got := ids(syncTargets(stored, c.req, c.appended)); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("syncTargets(%+v) = %v, want %v", c.req, got, c.want)
+		}
+	}
+}

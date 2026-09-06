@@ -97,6 +97,7 @@ func toAPIFolder(f store.Folder) api.Folder {
 		Role:       role,
 		Subscribed: f.Subscribed,
 		Selectable: f.Selectable,
+		Synced:     !f.Unsynced,
 		Unread:     f.Unread,
 		Total:      f.Total,
 	}

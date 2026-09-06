@@ -119,3 +119,24 @@ func TestFolderListErrors(t *testing.T) {
 		t.Fatalf("subscribe: %v", err)
 	}
 }
+
+func TestFolderListSynced(t *testing.T) {
+	b, _ := newSyncBackend(t)
+	ctx := context.Background()
+	acc := seedAccount(t, b, "me@gmail.invalid")
+	seedFolders(t, b, acc, []store.Folder{
+		{Mailbox: "INBOX", Name: "Inbox", Path: "Inbox", Role: api.RoleInbox, Subscribed: true, Selectable: true},
+		{Mailbox: "[Gmail]/All Mail", Name: "All Mail", Path: "[Gmail]/All Mail", Role: api.RoleArchive, Subscribed: true, Selectable: true, Unsynced: true},
+	})
+	res, err := b.Folders().List(ctx, api.FolderListParams{AccountID: api.AccountID(acc)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	synced := map[string]bool{}
+	for _, f := range res.Folders {
+		synced[f.Path] = f.Synced
+	}
+	if len(synced) != 2 || !synced["Inbox"] || synced["[Gmail]/All Mail"] {
+		t.Fatalf("synced = %v", synced)
+	}
+}

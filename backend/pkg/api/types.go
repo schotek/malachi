@@ -363,8 +363,12 @@ type Folder struct {
 	Role       FolderRole `json:"role"`
 	Subscribed bool       `json:"subscribed"`
 	Selectable bool       `json:"selectable"` // false for \Noselect containers
-	Unread     int        `json:"unread"`
-	Total      int        `json:"total"`
+	// Synced is false for a folder the daemon lists and accepts moves
+	// into but never downloads: Gmail's All Mail, the archive target. A
+	// message moved there leaves the local store.
+	Synced bool `json:"synced"`
+	Unread int  `json:"unread"`
+	Total  int  `json:"total"`
 }
 
 type FolderListParams struct {

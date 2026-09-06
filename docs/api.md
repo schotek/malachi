@@ -476,11 +476,19 @@ service; `email` is always a bare valid address.
 ```jsonc
 Folder { "id": "f_1", "accountId", "parentId" (opt), "name": "Inbox", "path": "Inbox",
          "role": "none|inbox|sent|drafts|trash|junk|archive|all|outbox",
-         "subscribed": true, "selectable": true, "unread": 3, "total": 120 }
+         "subscribed": true, "selectable": true, "synced": true, "unread": 3, "total": 120 }
 ```
 
 Folder lists are not paginated: even large accounts have at most a few
-thousand folders. `outbox` is a local pseudo-folder holding queued
+thousand folders. `synced: false` marks a folder the daemon lists and
+accepts moves into but never downloads: a server's `\All` folder, which
+holds every message the other folders already hold. On Gmail that is All
+Mail, and there it carries the `archive` role (unless the server marks a
+folder `\Archive` itself), since moving a message out of the inbox into
+All Mail is what Gmail calls archiving; `unread` and `total` are 0 and
+`message.list` on it is empty. Gmail's Important and Starred (`\Important`,
+`\Flagged`) are views of the same messages and are not listed at all.
+`outbox` is a local pseudo-folder holding queued
 messages: it exists once the first message was sent from the account, is
 never synchronised with the server, has an empty server path and counts
 every queued, sending, sent-pending and failed message in `total` (`unread`
@@ -718,7 +726,11 @@ on the next sync, after the queued change has been pushed.
   storageError
 
 Local-first as above. Ids already in the target folder are ignored. The
-moved message keeps its `id` (it is a local id, not the IMAP UID).
+moved message keeps its `id` (it is a local id, not the IMAP UID) — except
+into a folder with `synced: false`: the server gets the move as usual,
+but locally the message is gone at once, the way an archived message
+leaves a Gmail inbox; it is not listed again until the server returns it
+to a synchronised folder.
 
 #### `message.delete`
 - params: `{ "accountId", "messageIds": [..], "permanent": bool (opt) }`
@@ -1239,3 +1251,7 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   password entry; `account.test` probes `oauth2` endpoints instead of
   reporting `notImplemented`. The backend's own OAuth2 flow (an `oauth2`
   block without `source`) stays reserved.
+- **1** (2026-09-06, compatible addition, unsynchronised folders): `Folder`
+  gained `synced`; a `\All` folder is listed but never downloaded, on
+  Gmail as the `archive` role, and `message.move` into it drops the local
+  copy. `\Important` and `\Flagged` folders are no longer listed.

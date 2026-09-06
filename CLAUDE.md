@@ -138,8 +138,10 @@ načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 sebrané adresy (`collected_addresses`, plní outbox worker po doručení a
 jednorázový backfill ze složek Odeslané, nikdy z příchozího `From`)
 s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`
-+ `AddressBook10`, jen čtení, bez EDS tiše prázdné). Threading a
-vyhledávání zatím `notImplemented`.
++ `AddressBook10`, jen čtení, bez EDS tiše prázdné). Gmail / Google
+Workspace: IMAP+SMTP s XOAUTH2 tokenem z GOA (`core/goa_accounts.go`,
+`credentialFor`), All Mail jako nesynchronizovaný cíl archivace.
+Threading a vyhledávání zatím `notImplemented`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo
@@ -151,10 +153,13 @@ Pořadí prací:
    démonem, multipart/alternative)
 5. Vyhledávání, threading
 
-Gmail je vědomě odložený — vyžadoval by CASA audit nebo
-bring-your-own-credentials režim. Neimplementuj bez zadání. XOAUTH2 pro
-IMAP a vlastní OAuth2 flow (typy `AuthOAuth2`/`OAuth2Config` v API) jsou
-rezervované pro desktopy bez GOA; neimplementuj bez zadání.
+Gmail jde přes GNOME Online Accounts: token s IMAP/SMTP scopem drží GOA
+(i registrované klient ID GNOME, proto žádný CASA audit), backend se
+přihlašuje SASL XOAUTH2 (`internal/auth/xoauth2.go`) stávajícím IMAP
+enginem a SMTP; `OAuth2Config{source: goa, provider: google}`. Heslový
+(app password) Gmail se nenabízí. Vlastní OAuth2 flow (`OAuth2Config` bez
+`source`) je rezervovaný pro desktopy bez GOA a `notImplemented`;
+neimplementuj bez zadání.
 
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
 knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).

@@ -254,6 +254,21 @@ func (s *Syncer) Run(ctx context.Context) error {
 	}
 }
 
+// syncTargets picks the folders a pass visits: selectable and
+// synchronised (an \All folder is neither downloaded nor counted), and,
+// for a single-folder request, that folder plus any a Sent copy was just
+// appended to.
+func syncTargets(stored []store.Folder, req request, appended map[string]bool) []store.Folder {
+	var targets []store.Folder
+	for _, f := range stored {
+		if !f.Selectable || f.Unsynced || (req.folder != "" && api.FolderID(f.ID) != req.folder && !appended[f.Mailbox]) {
+			continue
+		}
+		targets = append(targets, f)
+	}
+	return targets
+}
+
 // serve runs passes on one connection until it fails or ctx ends.
 func (s *Syncer) serve(ctx context.Context, sess *session) error {
 	req, _ := s.takePending()
@@ -317,13 +332,7 @@ func (s *Syncer) cycle(ctx context.Context, sess *session, req request) error {
 		delete(disc.status, mailbox)
 	}
 
-	var targets []store.Folder
-	for _, f := range stored {
-		if !f.Selectable || (req.folder != "" && api.FolderID(f.ID) != req.folder && !appended[f.Mailbox]) {
-			continue
-		}
-		targets = append(targets, f)
-	}
+	targets := syncTargets(stored, req, appended)
 	n := len(targets)
 	for i, f := range targets {
 		fresh, err := s.deps.Store.GetFolder(ctx, s.account.ID, f.ID)

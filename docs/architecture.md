@@ -477,7 +477,26 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   Online (October 2026) and was never an option. Deferred: an own PKCE
   flow (`api.OAuth2Config`, `internal/auth` refresh-token storage) for
   desktops without GNOME Online Accounts; the API types stay reserved for
-  it. Gmail remains deferred (CASA audit / bring-your-own client id).
+  it.
+- Gmail: **decided** (2026-09-06) — IMAP and SMTP with SASL XOAUTH2, the
+  token from GNOME Online Accounts (`internal/auth/goa`, `internal/auth`
+  `XOAuth2Client`). The objection above does not carry over: GNOME Online
+  Accounts asks Google for the `https://mail.google.com/` scope and its
+  `Mail` interface names `imap.gmail.com` / `smtp.gmail.com` with XOAUTH2,
+  so the existing sync engine and sender do the work; and GNOME's own
+  registered OAuth client is what Google sees, which is what made the CASA
+  assessment moot — Malachi registers no client of its own, exactly as
+  with Microsoft 365. Only a sign-in through GNOME Online Accounts is
+  offered (`account.discover` answers a Google address with the hint even
+  over the ISPDB's password entry, which needs an app password). Gmail's
+  All Mail is listed as the archive target but never synchronised, and
+  Important and Starred are not listed: they are views of messages the
+  other folders already hold, and the store has no cross-folder identity
+  to fold them into. Gmail's SMTP files its own Sent copy, so such an
+  account skips the APPEND like a Graph one. Rejected: an own OAuth
+  client (the CASA assessment), an app-password path (dead end once Google
+  finishes retiring basic authentication), the Gmail REST API (nothing it
+  adds over IMAP is needed).
 - Internationalised e-mail domains in `account.discover`: not handled
   (IDNA encoding of the domain before the ISPDB/DNS lookups).
 - Daemon lifecycle at login: the UI's autostart entry launches only

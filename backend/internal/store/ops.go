@@ -123,17 +123,41 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		if err := rejectOutbox(locs); err != nil {
 			return nil, err
 		}
+		unsynced, err := folderUnsynced(ctx, tx, targetFolderID)
+		if err != nil {
+			return nil, err
+		}
 		now := nowStamp()
+		var files []messageFile
 		for _, loc := range locs {
 			if loc.folderID == targetFolderID {
+				continue
+			}
+			if unsynced {
+				// The target is never downloaded (Gmail's All Mail): the
+				// server gets the move as usual, but locally the message
+				// is gone, as an archived message is from a Gmail inbox.
+				if err := archiveMessageTx(ctx, tx, accountID, loc, targetFolderID, now); err != nil {
+					return nil, err
+				}
+				files = append(files, messageFile{accountID: accountID, id: loc.id})
 				continue
 			}
 			if err := moveMessageTx(ctx, tx, accountID, loc, targetFolderID, now); err != nil {
 				return nil, err
 			}
 		}
-		return nil, nil
+		return files, nil
 	}, targetFolderID)
+}
+
+// folderUnsynced reads the flag of a folder requireFolder has vouched for.
+func folderUnsynced(ctx context.Context, tx *sql.Tx, folderID string) (bool, error) {
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT unsynced FROM folders WHERE id = ?`, folderID).Scan(&n); err != nil {
+		return false, fmt.Errorf("lookup folder: %w", err)
+	}
+	return n != 0, nil
 }
 
 // TrashMessages moves the messages to the trash folder; a message already
@@ -312,11 +336,7 @@ func requireFolder(ctx context.Context, tx *sql.Tx, accountID, folderID string) 
 }
 
 func moveMessageTx(ctx context.Context, tx *sql.Tx, accountID string, loc messageLoc, targetFolderID, now string) error {
-	payload, err := json.Marshal(opPayload{TargetFolderID: targetFolderID})
-	if err != nil {
-		return fmt.Errorf("encode move operation: %w", err)
-	}
-	if err := enqueueOp(ctx, tx, accountID, OpMove, loc, string(payload), now); err != nil {
+	if err := enqueueMoveTx(ctx, tx, accountID, loc, targetFolderID, now); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE messages SET folder_id = ?, uid = 0, modseq = 0, updated_at = ? WHERE id = ?`,
@@ -324,6 +344,27 @@ func moveMessageTx(ctx context.Context, tx *sql.Tx, accountID string, loc messag
 		return fmt.Errorf("move message: %w", err)
 	}
 	return nil
+}
+
+// archiveMessageTx is a move into a folder that is never downloaded: the
+// operation is queued like any move, but the local row goes, as for a
+// delete; the caller removes the raw file after the commit.
+func archiveMessageTx(ctx context.Context, tx *sql.Tx, accountID string, loc messageLoc, targetFolderID, now string) error {
+	if err := enqueueMoveTx(ctx, tx, accountID, loc, targetFolderID, now); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE id = ?`, loc.id); err != nil {
+		return fmt.Errorf("archive message: %w", err)
+	}
+	return nil
+}
+
+func enqueueMoveTx(ctx context.Context, tx *sql.Tx, accountID string, loc messageLoc, targetFolderID, now string) error {
+	payload, err := json.Marshal(opPayload{TargetFolderID: targetFolderID})
+	if err != nil {
+		return fmt.Errorf("encode move operation: %w", err)
+	}
+	return enqueueOp(ctx, tx, accountID, OpMove, loc, string(payload), now)
 }
 
 func deleteMessageTx(ctx context.Context, tx *sql.Tx, accountID string, loc messageLoc, now string) error {

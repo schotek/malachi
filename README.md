@@ -190,7 +190,7 @@ keyring.
 |---|---|
 | Generic IMAP/SMTP with password | 🚧 reading and plain-text sending work |
 | Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | 🚧 reading and plain-text sending work; sign in under Settings → Online Accounts first |
-| Gmail via OAuth2 | ⏸️ deferred: requires a Google CASA security assessment or a bring-your-own-client-ID mode; see [docs/architecture.md](docs/architecture.md) |
+| Gmail / Google Workspace via GNOME Online Accounts (IMAP/SMTP with XOAUTH2) | 🚧 reading and sending work; sign in under Settings → Online Accounts first. All Mail is the archive target and is not downloaded |
 
 "Planned" means "designed for, not implemented". See the status note at the
 top.

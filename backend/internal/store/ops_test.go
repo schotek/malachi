@@ -296,3 +296,48 @@ func TestDeleteAccountRemovesMailCache(t *testing.T) {
 		t.Error("other account's file removed")
 	}
 }
+
+// A move into a folder that is never downloaded (Gmail's All Mail) queues
+// the server move and drops the local copy, file included.
+func TestMoveMessagesIntoUnsyncedFolder(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	stored, _, err := s.UpsertFolders(ctx, "acc", []Folder{
+		{Mailbox: "INBOX", Name: "INBOX", Path: "INBOX", Role: api.RoleInbox, Selectable: true, Subscribed: true},
+		{Mailbox: "[Gmail]/All Mail", Name: "All Mail", Path: "[Gmail]/All Mail", Role: api.RoleArchive, Selectable: true, Subscribed: true, Unsynced: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inbox, all := stored[0], stored[1]
+	if got, _ := s.GetFolder(ctx, "acc", all.ID); !got.Unsynced || got.Role != api.RoleArchive {
+		t.Fatalf("all mail stored as %+v", got)
+	}
+	if got, _ := s.GetFolder(ctx, "acc", inbox.ID); got.Unsynced {
+		t.Fatalf("inbox unsynced: %+v", got)
+	}
+	a := seedMessage(t, s, inbox, 1, "a", time.Now())
+	keep := seedMessage(t, s, inbox, 2, "keep", time.Now(), api.FlagSeen)
+
+	if err := s.MoveMessages(ctx, "acc", []string{a.ID}, all.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.GetMessage(ctx, "acc", a.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("row after archiving: %v", err)
+	}
+	if fileExists(t, s.MessageRawPath("acc", a.ID)) {
+		t.Error("raw file kept after archiving")
+	}
+	ops, _ := s.NextOps(ctx, "acc", time.Now(), 10)
+	if len(ops) != 1 || ops[0].Kind != OpMove || ops[0].FolderID != inbox.ID || ops[0].UID != 1 || ops[0].TargetFolderID != all.ID {
+		t.Errorf("ops = %+v", ops)
+	}
+	in, _ := s.GetFolder(ctx, "acc", inbox.ID)
+	allF, _ := s.GetFolder(ctx, "acc", all.ID)
+	if in.Total != 1 || allF.Total != 0 {
+		t.Errorf("counts: inbox %d, all mail %d", in.Total, allF.Total)
+	}
+	if got, _ := s.GetMessage(ctx, "acc", keep.ID); got.FolderID != inbox.ID || got.UID != 2 {
+		t.Errorf("other message touched: %+v", got)
+	}
+}

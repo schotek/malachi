@@ -74,6 +74,12 @@ func discoverFolders(ctx context.Context, sess *session) (discovered, error) {
 			// a duplicate would make the upsert fail.
 			continue
 		}
+		if virtualView(ld.Attrs) {
+			// Gmail's Important and Starred: views of messages the other
+			// folders already hold, and the store has no cross-folder
+			// identity to fold them into.
+			continue
+		}
 		delim := ""
 		if ld.Delim != 0 {
 			delim = string(ld.Delim)
@@ -84,6 +90,9 @@ func discoverFolders(ctx context.Context, sess *session) (discovered, error) {
 			Selectable: !hasAttr(ld.Attrs, imap.MailboxAttrNoSelect),
 			Subscribed: !extended || hasAttr(ld.Attrs, imap.MailboxAttrSubscribed),
 			Role:       roleFromAttrs(ld.Attrs),
+			// An \All folder holds every message the others already hold:
+			// listed, a move target, never downloaded.
+			Unsynced: hasAttr(ld.Attrs, imap.MailboxAttrAll),
 		}
 		add(f)
 		if ld.Status != nil {
@@ -107,6 +116,9 @@ func discoverFolders(ctx context.Context, sess *session) (discovered, error) {
 		}
 	}
 	assignRoles(folders, byMailbox)
+	if sess.caps.Has(capGmail) {
+		gmailArchive(folders)
+	}
 
 	sort.SliceStable(folders, func(i, j int) bool {
 		a, b := folders[i], folders[j]
@@ -143,6 +155,34 @@ func hasAttr(attrs []imap.MailboxAttr, want imap.MailboxAttr) bool {
 		}
 	}
 	return false
+}
+
+// capGmail is the capability Gmail's IMAP announces its extensions with.
+// Nothing of X-GM-EXT-1 itself is used; it says which server this is.
+const capGmail = imap.Cap("X-GM-EXT-1")
+
+// virtualView reports a folder that only shows messages held elsewhere
+// (\Important, \Flagged): Gmail's Important and Starred.
+func virtualView(attrs []imap.MailboxAttr) bool {
+	return hasAttr(attrs, imap.MailboxAttrImportant) || hasAttr(attrs, imap.MailboxAttrFlagged)
+}
+
+// gmailArchive makes Gmail's All Mail the archive target: a message moved
+// there loses its INBOX label, which is what Gmail calls archiving. A
+// folder the server marks \Archive itself keeps precedence, and the
+// folder stays unsynchronised whatever its role.
+func gmailArchive(folders []*store.Folder) {
+	for _, f := range folders {
+		if f.Role == api.RoleArchive {
+			return
+		}
+	}
+	for _, f := range folders {
+		if f.Role == api.RoleAll && f.Unsynced {
+			f.Role = api.RoleArchive
+			return
+		}
+	}
 }
 
 // roleFromAttrs maps RFC 6154 attributes to roles.
