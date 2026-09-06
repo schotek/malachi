@@ -95,6 +95,19 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("box.compose-headers > box { padding: 0 12px; }\n")
 	b.WriteString("box.compose-headers entry, box.compose-headers dropdown > button { min-height: 30px; }\n")
 	b.WriteString("box.compose-headers dropdown > button { padding-left: 0; }\n")
+	// The card is one surface: the fields sit on it rather than each being
+	// a control of its own. .flat on the drop-down does not reach the
+	// button GtkDropDown builds inside itself, which is what put a grey
+	// slab behind the sender, so the background comes off here; hover and
+	// the open popup keep theirs, or the row would stop looking clickable.
+	b.WriteString("box.compose-headers dropdown > button { background: none; box-shadow: none; }\n")
+	b.WriteString("box.compose-headers dropdown > button:hover { background: alpha(@window_fg_color, 0.05); }\n")
+	b.WriteString("box.compose-headers dropdown > button:active, box.compose-headers dropdown > button:checked { background: alpha(@window_fg_color, 0.1); }\n")
+	// No focus ring inside the card either: moving between From, To and
+	// Subject would otherwise draw an outline around each in turn. The
+	// text caret still says which field takes typing.
+	b.WriteString("box.compose-headers entry, box.compose-headers entry:focus-within { outline: none; box-shadow: none; }\n")
+	b.WriteString("box.compose-headers button:focus-visible, box.compose-headers dropdown > button:focus-visible { outline: none; }\n")
 	// Attachment chips under the message headers: two have to fit side by
 	// side in a narrow pane, so the buttons drop libadwaita's roomy
 	// padding, the labels go down a size and the menu arrow is barely
