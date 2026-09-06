@@ -36,8 +36,24 @@ func ParseAddressList(s string) (addrs []api.Address, invalid []string) {
 // splitAddresses splits on commas and semicolons that are outside quotes
 // and angle brackets.
 func splitAddresses(s string) []string {
+	ranges := splitAddressRanges(s)
+	out := make([]string, 0, len(ranges))
+	for _, r := range ranges {
+		out = append(out, s[r.start:r.end])
+	}
+	return out
+}
+
+// span is a byte range [start, end) of s.
+type span struct{ start, end int }
+
+// splitAddressRanges is splitAddresses with positions: one range per
+// token, separators excluded, the last one running to the end of s. The
+// completion uses it to find the token under the caret with the same
+// rules the parser applies.
+func splitAddressRanges(s string) []span {
 	var (
-		out     []string
+		out     []span
 		start   int
 		quoted  bool
 		angled  bool
@@ -57,11 +73,11 @@ func splitAddresses(s string) []string {
 		case r == '>':
 			angled = false
 		case (r == ',' || r == ';') && !angled:
-			out = append(out, s[start:i])
+			out = append(out, span{start, i})
 			start = i + 1
 		}
 	}
-	return append(out, s[start:])
+	return append(out, span{start, len(s)})
 }
 
 // FormatAddressList is the inverse of ParseAddressList for prefilled rows:

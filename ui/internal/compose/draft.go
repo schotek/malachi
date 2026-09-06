@@ -345,6 +345,9 @@ func (w *Window) cleanup() {
 		glib.SourceRemove(d.autosave)
 		d.autosave = 0
 	}
+	for _, s := range w.suggest {
+		s.hide() // a pending search must not touch the rows after this
+	}
 	for _, a := range w.attachments {
 		if a.Inline {
 			editor.UnregisterCID(a.ContentID)

@@ -71,6 +71,8 @@ type Window struct {
 	accounts    []api.Account
 	attachments []api.DraftAttachment
 	chips       map[string]gtk.Widgetter
+	// suggest is the recipient completion of the To, Cc and Bcc rows.
+	suggest []*suggestions
 
 	draft draftState
 }
@@ -245,16 +247,26 @@ func (w *Window) self() api.Address {
 func (w *Window) wireRows() {
 	for _, row := range []*gtk.Entry{w.to, w.cc, w.bcc} {
 		row := row
+		s := newSuggestions(w, row)
+		w.suggest = append(w.suggest, s)
 		row.ConnectChanged(func() {
 			w.validateRow(row)
 			w.markDirty()
+			s.onChanged()
 		})
 	}
 	w.subject.ConnectChanged(func() {
 		w.updateTitle()
 		w.markDirty()
 	})
-	w.from.NotifyProperty("selected", w.markDirty)
+	w.from.NotifyProperty("selected", func() {
+		w.markDirty()
+		// Another identity means other address books: what is shown was
+		// asked on behalf of the previous one.
+		for _, s := range w.suggest {
+			s.hide()
+		}
+	})
 	w.ccBcc.ConnectClicked(w.showCcBcc)
 }
 

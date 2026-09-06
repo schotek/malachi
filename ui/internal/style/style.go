@@ -108,6 +108,13 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// text caret still says which field takes typing.
 	b.WriteString("box.compose-headers entry, box.compose-headers entry:focus-within { outline: none; box-shadow: none; }\n")
 	b.WriteString("box.compose-headers button:focus-visible, box.compose-headers dropdown > button:focus-visible { outline: none; }\n")
+	// Recipient suggestions (compose): a popover the width of the row, its
+	// list flush with the popover's edges rather than inset like a menu,
+	// and compact two-line rows — it is a list to pick from, not a dialog.
+	b.WriteString("popover.recipient-suggestions > contents { padding: 0; }\n")
+	b.WriteString("popover.recipient-suggestions list { background: none; }\n")
+	b.WriteString("popover.recipient-suggestions row { padding: 4px 10px; }\n")
+	b.WriteString("popover.recipient-suggestions image { -gtk-icon-size: 16px; }\n")
 	// Attachment chips under the message headers: two have to fit side by
 	// side in a narrow pane, so the buttons drop libadwaita's roomy
 	// padding, the labels go down a size and the menu arrow is barely

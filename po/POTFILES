@@ -9,6 +9,7 @@ ui/internal/background/background.go
 ui/internal/compose/compose.go
 ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
+ui/internal/compose/suggest.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/format.go
 ui/internal/widget/message_row.go

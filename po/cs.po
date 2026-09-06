@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-06 10:08+0200\n"
+"POT-Creation-Date: 2026-09-06 12:11+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -122,60 +122,60 @@ msgstr "Přidání účtu"
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 
-#: ui/internal/compose/compose.go:136
+#: ui/internal/compose/compose.go:138
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:228 ui/internal/compose/draft.go:111
+#: ui/internal/compose/compose.go:230 ui/internal/compose/draft.go:111
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/compose.go:283 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:295 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/compose.go:410 ui/data/ui/compose.ui:283
+#: ui/internal/compose/compose.go:422 ui/data/ui/compose.ui:283
 #: ui/data/ui/compose.ui:476
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/compose.go:413
+#: ui/internal/compose/compose.go:425
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/compose.go:442 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:454 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/compose.go:452
+#: ui/internal/compose/compose.go:464
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/compose.go:462 ui/data/ui/compose.ui:376
+#: ui/internal/compose/compose.go:474 ui/data/ui/compose.ui:376
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/compose.go:464
+#: ui/internal/compose/compose.go:476
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/compose.go:478
+#: ui/internal/compose/compose.go:490
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/compose.go:492
+#: ui/internal/compose/compose.go:504
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/compose.go:501
+#: ui/internal/compose/compose.go:513
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/compose.go:533
+#: ui/internal/compose/compose.go:545
 msgid "Remove"
 msgstr "Odebrat"
 
@@ -243,7 +243,7 @@ msgstr "_Zrušit"
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/draft.go:363
+#: ui/internal/compose/draft.go:366
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -287,6 +287,18 @@ msgstr "Předmět: %s"
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
+
+#. TRANSLATORS: tooltip of a recipient suggestion that came from a
+#. system address book whose name is unknown.
+#: ui/internal/compose/suggest.go:275
+msgid "Address book"
+msgstr "Adresář"
+
+#. TRANSLATORS: tooltip of a recipient suggestion that is an address
+#. the user has written to before.
+#: ui/internal/compose/suggest.go:279
+msgid "Recently used"
+msgstr "Nedávno použité"
 
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
