@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Alice Longname
+  Wrapped
+EMAIL:alice.long
+ @example.org
+END:VCARD

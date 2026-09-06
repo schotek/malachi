@@ -37,6 +37,14 @@ finish-args:
   # Opening Settings → Online Accounts from the wizard and the sign-in
   # banner (org.freedesktop.Application.ActivateAction "launch-panel").
   - --talk-name=org.gnome.Settings
+  # Evolution Data Server: recipient completion reads the system address
+  # books (no portal exists; Geary and Evolution grant the same names).
+  # The registry, the address-book factory, and the per-backend names an
+  # older EDS answers book calls from. Read-only by our code; the bus
+  # itself cannot enforce that (docs/security.md §9).
+  - --talk-name=org.gnome.evolution.dataserver.Sources5
+  - --talk-name=org.gnome.evolution.dataserver.AddressBook10
+  - --talk-name=org.gnome.evolution.dataserver.Subprocess.Backend.*
   # Both processes run inside the same sandbox instance and share
   # $XDG_RUNTIME_DIR/app/<app-id>/, so the unix socket needs no extra hole.
 

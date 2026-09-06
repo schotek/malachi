@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Grouped Person
+item1.EMAIL;type=INTERNET;type=pref:grouped@example.org
+item1.X-ABLabel:_$!<Work>!$_
+item2.EMAIL;type=INTERNET:home@example.org
+END:VCARD

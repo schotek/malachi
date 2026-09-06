@@ -134,7 +134,11 @@ vyžádání, obrázky vloží jako `data:`, parser nerekurzuje, nic se neuklád
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`
-(+ `related` pro vložené obrázky, + `mixed` pro přílohy). Threading a
+(+ `related` pro vložené obrázky, + `mixed` pro přílohy). Doplňování příjemců: `contact.search` slévá
+sebrané adresy (`collected_addresses`, plní outbox worker po doručení a
+jednorázový backfill ze složek Odeslané, nikdy z příchozího `From`)
+s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`
++ `AddressBook10`, jen čtení, bez EDS tiše prázdné). Threading a
 vyhledávání zatím `notImplemented`.
 
 Pořadí prací:

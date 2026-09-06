@@ -1,0 +1,5 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Quoted Param
+EMAIL;X-LABEL="a:b";TYPE=INTERNET:quoted@example.org
+END:VCARD

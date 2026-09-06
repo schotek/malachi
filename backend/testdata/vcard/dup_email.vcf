@@ -1,0 +1,6 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Dup Mail
+EMAIL:Dup@Example.org
+EMAIL:dup@example.org
+END:VCARD

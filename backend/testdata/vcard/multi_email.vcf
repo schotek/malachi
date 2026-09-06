@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Many Mails
+EMAIL:one@example.org
+EMAIL;TYPE=INTERNET,PREF:two@example.org
+EMAIL;PREF=1:three@example.org
+END:VCARD

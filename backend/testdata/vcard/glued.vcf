@@ -1,0 +1,10 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:First Card
+EMAIL:first@example.org
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+FN:Second Card
+EMAIL:second@example.org
+END:VCARD

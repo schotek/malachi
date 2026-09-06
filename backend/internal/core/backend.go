@@ -19,6 +19,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/contacts"
+	"github.com/schotek/malachi/backend/internal/contacts/eds"
 	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
@@ -70,10 +71,10 @@ type Backend struct {
 	// every call reports unavailable. Tests substitute a fake.
 	GOA GOAClient
 
-	// Directory is the system address-book client behind contact.search
-	// (Evolution Data Server over D-Bus once internal/contacts/eds exists).
-	// nil, no session bus, no service: the address-book part of a search
-	// is simply empty. Tests substitute a fake.
+	// Directory is the system address-book client behind contact.search:
+	// Evolution Data Server over D-Bus. It connects lazily; nil, no session
+	// bus or no service leave the address-book part of a search simply
+	// empty. Tests substitute a fake.
 	Directory contacts.Directory
 
 	// Supervisor runs one syncer per enabled account. New installs a
@@ -123,6 +124,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		ProbeSMTP:         smtp.Probe,
 		ProbeGraph:        graph.Probe,
 		GOA:               goa.New(log),
+		Directory:         eds.New(log),
 	}
 	disc := discover.New(log)
 	disc.GOA = b.goaAccountFor

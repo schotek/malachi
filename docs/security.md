@@ -304,6 +304,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.
+- `collected_addresses` holds the recipients of mail the user sent (To, Cc
+  and Bcc, with the display name the draft carried) for recipient
+  completion. It is never fed from incoming `From` headers: a suggestion
+  list that repeated attacker-chosen display names would be a phishing
+  aid. Address-book contacts (Evolution Data Server) are read per search
+  and never stored; their names are cleaned like any other untrusted
+  display text (`docs/api.md` §4.11).
 
 ## 9. Sandbox: what Flatpak gives and what it does not
 
@@ -313,7 +320,8 @@ Gives:
   are opened/saved through the FileChooser portal, so a mail cannot make
   us read `~/.ssh`;
 - no direct D-Bus access except the names listed in `finish-args`
-  (`org.freedesktop.secrets`, `org.freedesktop.Notifications`);
+  (`org.freedesktop.secrets`, `org.freedesktop.Notifications`,
+  `org.gnome.OnlineAccounts`, the Evolution Data Server names);
 - WebKitGTK's own process sandbox (bubblewrap) works inside Flatpak;
 - a defined runtime, so library versions are known.
 
@@ -337,6 +345,10 @@ Does not give:
 - isolation from GNOME Online Accounts: `--talk-name=org.gnome.OnlineAccounts`
   is all-or-nothing as well; the daemon can read the tokens of every
   account the desktop is signed in to, not only the ones added here;
+- isolation from the address books: the Evolution Data Server names are
+  all-or-nothing too, and its D-Bus interface can create, change and
+  delete contacts in every book the desktop has. The daemon only ever
+  reads (`GetContactList`), by construction, not by enforcement;
 - protection against a malicious X11 server (`--socket=fallback-x11`):
   under X11 any client can snoop input. Wayland is the supported path.
 

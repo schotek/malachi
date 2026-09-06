@@ -493,3 +493,24 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   on demand, so a ruleset bump never has to migrate cached HTML. Compose
   attachments follow the same split (`<data dir>/attachments/<id>` plus
   metadata including SHA-256 in SQLite).
+- Contacts and recipient completion: **decided** (2026-09-06) — the
+  system address books through Evolution Data Server over D-Bus
+  (`internal/contacts/eds`: `Sources5` for the registry,
+  `AddressBook10` for the books, `GetContactList` with a
+  `contains x-evolution-any-field` query, read-only), plus an own table of
+  addresses the user wrote to (`collected_addresses`, fed by the outbox
+  worker after a delivery and once from the Sent folders, never from
+  incoming `From`). On GNOME the EDS backend for Microsoft 365 already
+  provides the personal contacts, the recent people (Graph `/me/people`,
+  cached offline) and the organisation directory (searched live), so
+  nothing of that is duplicated here; elsewhere completion runs on the
+  collected addresses alone. Only the books of the sending account's own
+  collection are searched (matched on the GNOME Online Accounts id, else
+  on the collection's e-mail); a user with two tenants does not get them
+  mixed. Rejected: Microsoft Graph directly (duplicates EDS on GNOME, and
+  without GNOME Online Accounts there is no token anyway); an own CardDAV
+  client (the same work EDS already does, and Microsoft 365 has no
+  CardDAV); reading EDS's cache files (two on-disk formats, the directory
+  is not cached at all, and a Flatpak hole into `~/.cache`). The D-Bus
+  interface of EDS is formally private and versioned in its bus names;
+  a bump means one constant here and one line in the Flatpak manifest.

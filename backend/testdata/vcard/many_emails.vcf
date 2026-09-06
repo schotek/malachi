@@ -1,0 +1,14 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Many Addresses
+EMAIL:m1@example.org
+EMAIL:m2@example.org
+EMAIL:m3@example.org
+EMAIL:m4@example.org
+EMAIL:m5@example.org
+EMAIL:m6@example.org
+EMAIL:m7@example.org
+EMAIL:m8@example.org
+EMAIL:m9@example.org
+EMAIL:m10@example.org
+END:VCARD

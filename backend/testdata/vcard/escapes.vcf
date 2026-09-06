@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:Example\, Alice\; Jr\\
+N:Example\;Jr;Alice;;;
+NOTE:line\nbreak
+EMAIL:escaped@example.org
+END:VCARD

@@ -1,0 +1,7 @@
+BEGIN:VCARD
+VERSION:3.0
+FN:No Address
+EMAIL:not an address
+EMAIL:"Name" <x@example.org>
+EMAIL:x@example.org (comment)
+END:VCARD
