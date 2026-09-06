@@ -55,7 +55,9 @@ config.local.toml
 *.swp
 *~
 .DS_Store
+.claude/settings.json
 .claude/settings.local.json
+.claude/*.tmp.*
 
 # Compiled translations (built into build/locale)
 /po/*.mo
