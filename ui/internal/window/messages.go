@@ -34,6 +34,12 @@ func (w *Window) loadMessages() {
 		w.showListState()
 		return
 	}
+	if f, ok := w.model.folder(k); ok && !f.Synced {
+		// Never downloaded (Gmail's All Mail): nothing to ask for.
+		w.model.loading = false
+		w.showListState()
+		return
+	}
 	w.model.loading = true
 	w.model.listErr = nil
 	w.showListState()
@@ -189,6 +195,9 @@ func (w *Window) showListState() {
 	case m.selected == (folderKey{}):
 		setStatusPage(w.listStatusPage, "folder-symbolic", i18n.T("Select a folder"),
 			i18n.T("Choose a folder in the sidebar to see its messages."))
+	case w.folderUnsynced(m.selected):
+		setStatusPage(w.listStatusPage, "folder-download-symbolic", i18n.T("Not Synchronised"),
+			i18n.T("Messages moved here are archived on the server; the folder itself is not downloaded."))
 	case m.listErr != nil:
 		retry = true
 		setStatusPage(w.listStatusPage, "dialog-warning-symbolic", i18n.T("Messages Unavailable"),
@@ -207,6 +216,12 @@ func (w *Window) showListState() {
 	}
 	w.listRetryButton.SetVisible(retry)
 	w.listStack.SetVisibleChildName("status")
+}
+
+// folderUnsynced reports a selected folder the daemon never downloads.
+func (w *Window) folderUnsynced(k folderKey) bool {
+	f, ok := w.model.folder(k)
+	return ok && !f.Synced
 }
 
 // showLoadMore shows the Load More button while a further page exists and

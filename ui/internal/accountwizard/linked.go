@@ -5,10 +5,10 @@ package accountwizard
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -18,21 +18,27 @@ import (
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-// GraphConfig is the account configuration for a linked Microsoft 365
-// account: no servers, the sign-in belongs to GNOME Online Accounts.
-func GraphConfig(id Identity, name, goaAccountID string) api.AccountConfig {
-	email := strings.TrimSpace(id.Email)
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = SuggestAccountName(email)
+// linkedAccountID is the GNOME Online Accounts id an account signs in
+// with, "" when it has none yet (the sign-in hint of account.discover).
+func linkedAccountID(cfg api.AccountConfig) string {
+	switch {
+	case cfg.Graph != nil:
+		return cfg.Graph.GOAAccountID
+	case cfg.OAuth2 != nil && cfg.OAuth2.Source == api.OAuth2SourceGOA:
+		return cfg.OAuth2.GOAAccountID
 	}
-	return api.AccountConfig{
-		Name:        name,
-		Email:       email,
-		DisplayName: strings.TrimSpace(id.DisplayName),
-		Kind:        api.AccountGraph,
-		Graph:       &api.GraphConfig{Source: api.GraphSourceGOA, GOAAccountID: goaAccountID},
+	return ""
+}
+
+// withIdentity is the daemon-built account of a linked sign-in with what
+// the identity page adds: the display name, and an account name derived
+// from the address when the daemon left it at the address itself.
+func withIdentity(cfg api.AccountConfig, id Identity) api.AccountConfig {
+	cfg.DisplayName = strings.TrimSpace(id.DisplayName)
+	if strings.TrimSpace(cfg.Name) == "" || strings.EqualFold(strings.TrimSpace(cfg.Name), cfg.Email) {
+		cfg.Name = SuggestAccountName(cfg.Email)
 	}
+	return cfg
 }
 
 // LinkedMatch finds the linked account with the address (case-insensitive).
@@ -91,7 +97,7 @@ func (w *Wizard) showLinked(accounts []api.LinkedAccount) {
 		}
 		row.SetTitle(title)
 		row.SetSubtitle(l.Email)
-		row.AddPrefix(gtk.NewImageFromIconName(providerIcon()))
+		row.AddPrefix(gtk.NewImageFromIconName(widget.ProviderIcon(l.Provider)))
 		use := gtk.NewButtonWithLabel(i18n.T("Use"))
 		use.SetVAlign(gtk.AlignCenter)
 		if l.Configured {
@@ -109,38 +115,41 @@ func (w *Wizard) showLinked(accounts []api.LinkedAccount) {
 	w.linkedGroup.SetVisible(shown > 0)
 }
 
-// providerIcon is the Microsoft 365 icon GNOME Online Accounts installs,
-// with a generic fallback where it is missing.
-func providerIcon() string {
-	if display := gdk.DisplayGetDefault(); display != nil {
-		if gtk.IconThemeGetForDisplay(display).HasIcon("goa-account-ms365-symbolic") {
-			return "goa-account-ms365-symbolic"
-		}
-	}
-	return "mail-unread-symbolic"
-}
-
 // useLinked fills the identity from a linked account and goes straight to
-// the connection test: there is nothing to type and nothing to discover.
+// the connection test with the account the daemon built for it: there is
+// nothing to type and nothing to discover.
 func (w *Wizard) useLinked(l api.LinkedAccount) {
+	if l.Config == nil {
+		// A daemon older than the config field; the sign-in is there,
+		// but not the account to add it as.
+		w.toast(i18n.T("The mail service does not describe this account; update it and try again"))
+		return
+	}
 	w.email.SetText(l.Email)
 	if strings.TrimSpace(w.displayName.Text()) == "" {
 		w.displayName.SetText(l.Name)
 	}
-	w.startGraph(GraphConfig(w.readIdentity(), "", l.GOAAccountID))
+	w.startLinked(*l.Config)
 }
 
-// startGraph switches the wizard to the Graph path for cfg and tests it.
-func (w *Wizard) startGraph(cfg api.AccountConfig) {
-	w.graphCfg = &cfg
+// startLinked switches the wizard to an account whose sign-in belongs to
+// GNOME Online Accounts (no password, no servers to edit) and tests it.
+func (w *Wizard) startLinked(cfg api.AccountConfig) {
+	cfg = withIdentity(cfg, w.readIdentity())
+	w.linkedCfg = &cfg
 	w.password.SetText("")
 	w.nav.ReplaceWithTags([]string{tagIdentity, tagTesting})
 	w.runTest()
 }
 
-// showGOAHint opens the "sign in through GNOME Settings" page for a
-// Microsoft 365 address the desktop is not signed in to yet.
-func (w *Wizard) showGOAHint() {
+// showGOAHint opens the "sign in through GNOME Settings" page for an
+// address of the named provider that the desktop is not signed in to yet.
+func (w *Wizard) showGOAHint(providerName string) {
+	if providerName == "" {
+		providerName = widget.ProviderName(widget.ProviderMicrosoft365)
+	}
+	// TRANSLATORS: %s is a provider such as "Microsoft 365" or "Google".
+	w.goaHint.SetDescription(fmt.Sprintf(i18n.T("This address belongs to a %s account. Add it under Settings → Online Accounts, then come back here."), providerName))
 	w.nav.PushByTag(tagGOA)
 }
 

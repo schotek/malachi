@@ -113,15 +113,25 @@ func TestValidateAndBuild(t *testing.T) {
 	}
 }
 
-func TestGraphConfigAndLinkedMatch(t *testing.T) {
-	cfg := GraphConfig(Identity{DisplayName: " Me ", Email: " Me@Contoso.example ", Password: "ignored"}, "", "account_1_0")
-	if cfg.Kind != api.AccountGraph || cfg.Email != "Me@Contoso.example" || cfg.Name != "contoso.example" || cfg.DisplayName != "Me" ||
-		cfg.IMAP != nil || cfg.SMTP != nil || cfg.OAuth2 != nil || cfg.Graph == nil ||
-		cfg.Graph.Source != api.GraphSourceGOA || cfg.Graph.GOAAccountID != "account_1_0" {
-		t.Fatalf("graph config = %+v", cfg)
+func TestLinkedConfigAndMatch(t *testing.T) {
+	graph := api.AccountConfig{Name: "Me@Contoso.example", Email: "Me@Contoso.example", Kind: api.AccountGraph,
+		Graph: &api.GraphConfig{Source: api.GraphSourceGOA, GOAAccountID: "account_1_0"}}
+	google := api.AccountConfig{Name: "Work", Email: "me@gmail.example",
+		IMAP: &api.ServerConfig{AuthMethod: api.AuthOAuth2}, SMTP: &api.ServerConfig{AuthMethod: api.AuthOAuth2},
+		OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle, GOAAccountID: "account_2_0"}}
+	hint := api.AccountConfig{Email: "me@gmail.example", OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle}}
+	if linkedAccountID(graph) != "account_1_0" || linkedAccountID(google) != "account_2_0" || linkedAccountID(hint) != "" ||
+		linkedAccountID(api.AccountConfig{}) != "" {
+		t.Fatal("linkedAccountID")
 	}
-	if named := GraphConfig(Identity{Email: "me@contoso.example"}, " Work ", "account_1_0"); named.Name != "Work" {
-		t.Fatalf("name kept: %q", named.Name)
+	// The identity page adds the display name; a name the daemon left at
+	// the address becomes the suggested one, a chosen name stays.
+	cfg := withIdentity(graph, Identity{DisplayName: " Me ", Email: " Me@Contoso.example ", Password: "ignored"})
+	if cfg.Name != "contoso.example" || cfg.DisplayName != "Me" || cfg.Email != "Me@Contoso.example" || cfg.Graph.GOAAccountID != "account_1_0" {
+		t.Fatalf("with identity = %+v", cfg)
+	}
+	if named := withIdentity(google, Identity{}); named.Name != "Work" || named.DisplayName != "" {
+		t.Fatalf("name kept: %+v", named)
 	}
 	linked := []api.LinkedAccount{{Email: "Me@Contoso.example", GOAAccountID: "account_1_0"}}
 	if l, ok := LinkedMatch(linked, " me@contoso.EXAMPLE "); !ok || l.GOAAccountID != "account_1_0" {

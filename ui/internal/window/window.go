@@ -96,9 +96,9 @@ type Window struct {
 	// authBannerAccount is the account auth_banner is shown for, empty when
 	// the banner is hidden.
 	authBannerAccount api.AccountID
-	// authBannerGraph says the banner's account signs in through GNOME
+	// authBannerGOA says the banner's account signs in through GNOME
 	// Online Accounts (the button opens that panel).
-	authBannerGraph bool
+	authBannerGOA bool
 
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction

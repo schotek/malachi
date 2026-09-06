@@ -224,8 +224,10 @@ Adw.Dialog account_wizard {
         };
       }
 
-      // A Microsoft 365 address that is not signed in through GNOME Online
-      // Accounts yet: the sign-in happens in GNOME Settings.
+      // An address of a provider whose sign-in belongs to GNOME Online
+      // Accounts (Microsoft 365, Google) that the desktop is not signed in
+      // to yet: the sign-in happens in GNOME Settings. The description
+      // names the provider and is set from Go.
       Adw.NavigationPage goa_hint_page {
         tag: "goa";
         title: _("Sign In");
@@ -237,7 +239,6 @@ Adw.Dialog account_wizard {
           content: Adw.StatusPage goa_hint {
             icon-name: "system-users-symbolic";
             title: _("Sign In Through GNOME Settings");
-            description: _("This address belongs to a Microsoft 365 account. Add it under Settings → Online Accounts, then come back here.");
 
             child: Box {
               orientation: vertical;
@@ -279,13 +280,11 @@ Adw.Dialog account_wizard {
             StackPage {
               name: "progress";
 
+              // The spinner paintable is set from Go: GtkBuilder takes an
+              // inline object in a paintable property for a file name.
               child: Adw.StatusPage testing_progress {
                 title: _("Testing Connection…");
                 description: _("This can take a moment.");
-
-                paintable: Adw.SpinnerPaintable {
-                  widget: testing_progress;
-                };
               };
             }
 

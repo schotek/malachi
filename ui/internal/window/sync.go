@@ -189,22 +189,23 @@ func (w *Window) triggerSync() {
 
 // showAuthRequired reveals auth_banner for the affected account. The
 // banner's button opens the preferences (wired in New), where the account
-// can be edited; for a Microsoft 365 account the sign-in lives in GNOME
-// Online Accounts, so the button opens that panel instead. An OAuth2
-// authUrl is only logged for now: the OpenURI portal flow is a later phase.
+// can be edited; for an account whose sign-in lives in GNOME Online
+// Accounts (Microsoft 365, Google) the button opens that panel instead.
+// An OAuth2 authUrl is only logged for now: the OpenURI portal flow is a
+// later phase.
 func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	name := string(n.AccountID)
-	graph := false
+	goa := false
 	if a, ok := w.model.account(n.AccountID); ok {
 		name = accountRowTitle(a)
-		graph = a.Config.Protocol() == api.AccountGraph
+		goa = widget.GOAOwned(a.Config)
 	}
-	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL, "graph", graph)
+	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL, "goa", goa)
 	w.authBannerAccount = n.AccountID
-	w.authBannerGraph = graph
+	w.authBannerGOA = goa
 	w.authBanner.SetUseMarkup(false)
-	if graph {
-		w.authBanner.SetTitle(graphAuthBannerText(n.Reason, name))
+	if goa {
+		w.authBanner.SetTitle(goaAuthBannerText(n.Reason, name))
 		w.authBanner.SetButtonLabel(i18n.T("Open Online Accounts"))
 	} else {
 		w.authBanner.SetTitle(authBannerText(n.Reason, name))
@@ -216,14 +217,14 @@ func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 // hideAuthBanner hides auth_banner and forgets its account.
 func (w *Window) hideAuthBanner() {
 	w.authBannerAccount = ""
-	w.authBannerGraph = false
+	w.authBannerGOA = false
 	w.authBanner.SetRevealed(false)
 }
 
-// onAuthBannerButton is the banner button: GNOME Settings for a Microsoft
-// 365 account, the preferences otherwise.
+// onAuthBannerButton is the banner button: GNOME Settings for an account
+// signed in through Online Accounts, the preferences otherwise.
 func (w *Window) onAuthBannerButton() {
-	if !w.authBannerGraph {
+	if !w.authBannerGOA {
 		w.app.ActivateAction("preferences", nil)
 		return
 	}
@@ -235,9 +236,9 @@ func (w *Window) onAuthBannerButton() {
 	})
 }
 
-// graphAuthBannerText is authBannerText for an account whose sign-in
+// goaAuthBannerText is authBannerText for an account whose sign-in
 // belongs to GNOME Online Accounts.
-func graphAuthBannerText(reason api.ErrorCode, account string) string {
+func goaAuthBannerText(reason api.ErrorCode, account string) string {
 	if reason == api.CodeUnavailable {
 		// TRANSLATORS: %s is an account name.
 		return fmt.Sprintf(i18n.T("GNOME Online Accounts is not available; %s cannot sign in"), account)

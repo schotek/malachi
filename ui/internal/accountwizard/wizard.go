@@ -80,11 +80,13 @@ type Wizard struct {
 	edit, retry        *gtk.Button
 	addAnyway, add     *gtk.Button
 
-	// graphCfg is set on the Microsoft 365 path: the account has no servers
-	// and no password, the sign-in lives in GNOME Online Accounts. nil is
-	// the IMAP path.
-	graphCfg *api.AccountConfig
-	linked   []api.LinkedAccount
+	// linkedCfg is set for an account whose sign-in lives in GNOME Online
+	// Accounts (Microsoft 365 through Graph, Google over IMAP with a
+	// token): the daemon built it, there is no password and the servers
+	// are not the user's to edit. nil is the password path.
+	linkedCfg *api.AccountConfig
+	goaHint   *adw.StatusPage
+	linked    []api.LinkedAccount
 
 	closed      bool
 	op          int  // bumped per RPC so stale callbacks bail out
@@ -128,6 +130,7 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		linkedRows:     b.GetObject("linked_rows").Cast().(*gtk.ListBox),
 		goaOpen:        button("goa_open_button"),
 		goaRecheck:     button("goa_recheck_button"),
+		goaHint:        b.GetObject("goa_hint").Cast().(*adw.StatusPage),
 		serversPrefs:   b.GetObject("servers_prefs").Cast().(*adw.PreferencesPage),
 		accountName:    entry("account_name_row"),
 		imap: serverRows{
@@ -160,6 +163,9 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		add:          button("test_add_button"),
 	}
 	w.identityBanner.SetUseMarkup(false)
+	// From Go rather than the Blueprint: GtkBuilder takes an inline object
+	// in a paintable property for a file name ("Could not load image").
+	w.progress.SetPaintable(adw.NewSpinnerPaintable(w.progress))
 	w.wire()
 	w.loadLinked(nil)
 	return w
@@ -179,11 +185,11 @@ func NewEdit(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
 	w.addAnyway.SetLabel(i18n.T("Save _Anyway"))
 	w.displayName.SetText(a.Config.DisplayName)
 	w.email.SetText(a.Config.Email)
-	if a.Config.Protocol() == api.AccountGraph {
+	if widget.GOAOwned(a.Config) {
 		// The address and the sign-in belong to GNOME Online Accounts; only
 		// the name can change here, and the test re-checks the sign-in.
 		cfg := a.Config
-		w.graphCfg = &cfg
+		w.linkedCfg = &cfg
 		w.email.SetSensitive(false)
 		w.password.SetVisible(false)
 		w.next.SetLabel(i18n.T("_Test Connection"))
@@ -276,8 +282,8 @@ func (w *Wizard) applyConfig(cfg api.AccountConfig) {
 }
 
 func (w *Wizard) assembleConfig() api.AccountConfig {
-	if w.graphCfg != nil {
-		return GraphConfig(w.readIdentity(), w.graphCfg.Name, w.graphCfg.Graph.GOAAccountID)
+	if w.linkedCfg != nil {
+		return withIdentity(*w.linkedCfg, w.readIdentity())
 	}
 	return BuildConfig(w.readIdentity(), w.accountName.Text(), w.imap.read(), w.smtp.read())
 }
@@ -310,7 +316,7 @@ func (w *Wizard) onNext() {
 	}
 	id.Email, _ = ValidateEmail(id.Email)
 	if w.editing != nil {
-		if w.graphCfg != nil {
+		if w.linkedCfg != nil {
 			w.nav.ReplaceWithTags([]string{tagIdentity, tagTesting})
 			w.runTest()
 			return
@@ -336,13 +342,16 @@ func (w *Wizard) onNext() {
 				return
 			}
 			w.setBusy(false)
-			if err == nil && res.Config != nil && res.Config.Protocol() == api.AccountGraph {
+			if err == nil && res.Config != nil && widget.GOAOwned(*res.Config) {
+				// Signed in through GNOME Online Accounts: the daemon's
+				// account is complete; otherwise it is the hint that the
+				// sign-in must happen there first.
 				w.log.Info("account discovered", "source", res.Source)
-				if res.Config.Graph != nil && res.Config.Graph.GOAAccountID != "" {
-					w.startGraph(GraphConfig(id, res.Config.Name, res.Config.Graph.GOAAccountID))
+				if linkedAccountID(*res.Config) != "" {
+					w.startLinked(*res.Config)
 					return
 				}
-				w.showGOAHint()
+				w.showGOAHint(res.ProviderName)
 				return
 			}
 			if !w.requirePassword() {
@@ -383,7 +392,7 @@ func (w *Wizard) onTest() {
 }
 
 func (w *Wizard) showButtons(o Outcome) {
-	w.edit.SetVisible(w.graphCfg == nil)
+	w.edit.SetVisible(w.linkedCfg == nil)
 	w.retry.SetVisible(o == OutcomeFailed)
 	w.addAnyway.SetVisible(o == OutcomeFailed)
 	w.add.SetVisible(o == OutcomeOK)
@@ -401,7 +410,7 @@ func (w *Wizard) runTest() {
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
 	params := api.AccountTestParams{Config: w.assembleConfig()}
-	if w.graphCfg == nil {
+	if w.linkedCfg == nil {
 		params.Credentials = credentialsFor(w.readIdentity())
 	}
 	if w.editing != nil {
@@ -424,10 +433,14 @@ func (w *Wizard) runTest() {
 }
 
 func (w *Wizard) showResults(res api.AccountTestResult, err error) {
-	graph := w.graphCfg != nil
+	// A Graph account has one endpoint, the mailbox; a Google account is
+	// tested like any IMAP one, only without a password to correct.
+	linked := w.linkedCfg != nil
+	graph := linked && w.linkedCfg.Protocol() == api.AccountGraph
 	w.graphRow.SetVisible(graph)
 	w.imapRow.SetVisible(!graph)
 	w.smtpRow.SetVisible(!graph)
+	w.results.SetDescription("")
 	var outcome Outcome
 	if err != nil {
 		text := widget.RPCErrorText(i18n.T("Testing the connection"), err)
@@ -452,8 +465,11 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 		w.smtpRow.SetSubtitle(text)
 		outcome = Classify(res)
 	}
-	if graph && outcome == OutcomeAuthFailed {
-		outcome = OutcomeFailed // there is no password to correct here
+	if linked && outcome == OutcomeAuthFailed {
+		// There is no password to correct here: the sign-in, or the
+		// permissions it was granted, live in GNOME Online Accounts.
+		outcome = OutcomeFailed
+		w.results.SetDescription(i18n.T("The server refused the sign-in. Sign in to the account again in Settings → Online Accounts and make sure access to mail is allowed."))
 	}
 	w.lastOutcome = outcome
 
@@ -486,7 +502,7 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 func (w *Wizard) onAdd() {
 	cfg := w.assembleConfig()
 	var creds api.Credentials
-	if w.graphCfg == nil {
+	if w.linkedCfg == nil {
 		creds = credentialsFor(w.readIdentity())
 	}
 	editing := w.editing

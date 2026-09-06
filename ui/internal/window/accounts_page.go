@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -290,14 +289,9 @@ func accountStatusText(s api.SyncStatus) string {
 	return ""
 }
 
-// accountIcon is the row icon by account kind: the Microsoft 365 icon of
-// GNOME Online Accounts when the theme has it, the generic mail icon
-// otherwise.
+// accountIcon is the row icon by account kind: the provider's icon of
+// GNOME Online Accounts when the account signs in there and the theme
+// has it, the generic mail icon otherwise.
 func accountIcon(a api.Account) string {
-	if a.Config.Protocol() == api.AccountGraph {
-		if display := gdk.DisplayGetDefault(); display != nil && gtk.IconThemeGetForDisplay(display).HasIcon("goa-account-ms365-symbolic") {
-			return "goa-account-ms365-symbolic"
-		}
-	}
-	return "mail-unread-symbolic"
+	return widget.ProviderIcon(widget.AccountProvider(a.Config))
 }
