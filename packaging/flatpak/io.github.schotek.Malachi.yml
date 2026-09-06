@@ -1,9 +1,10 @@
-# Flatpak manifest for Malachi Mail (skeleton).
+# Flatpak manifest for Malachi Mail.
 #
-# Status: structurally complete, NOT yet buildable — the Go module sources
-# for an offline build still have to be generated (see "Offline builds").
 # Build on the host, not inside Toolbx:
-#   make flatpak      (flatpak-builder --user --install-deps-from=flathub …)
+#   scripts/flatpak-vendor.sh   (once per dependency change; needs network)
+#   make flatpak                (flatpak-builder --user --install-deps-from=flathub …)
+# `make flatpak` runs the vendor script for you. CI does the same on every
+# push to main, for x86_64 and aarch64 (.github/workflows/flatpak.yml).
 #
 # Runtime version: GNOME 48 matches the GTK 4.18 / libadwaita 1.7 / GLib 2.84
 # stack the project is developed against in the Fedora 42 Toolbx, and the
@@ -67,17 +68,16 @@ finish-args:
 build-options:
   append-path: /usr/lib/sdk/golang/bin
   env:
-    # Flathub builds run WITHOUT network access. `go mod download` inside
-    # the build will fail. Two workable options:
-    #   1. vendor:  run `go mod vendor` in backend/ and ui/ and commit or
-    #      ship the vendor/ trees; build with -mod=vendor.
-    #   2. generate sources: use flatpak-go-mod / flatpak-builder-tools
-    #      (https://github.com/flatpak/flatpak-builder-tools, tree "go")
-    #      to turn go.sum into a `go-modules.json` sources list included
-    #      below, and set GOFLAGS=-mod=mod GOPROXY=off.
-    # Option 2 keeps the repository small and is what Flathub reviewers
-    # expect. Until that is set up, this manifest is only a skeleton.
-    GOFLAGS: -mod=mod
+    # The build runs WITHOUT network access, so the dependencies come from
+    # the vendor/ trees that scripts/flatpak-vendor.sh generates next to
+    # the sources. GOWORK=off because a build in workspace mode ignores
+    # per-module vendor/ directories (go.work is in the copied tree).
+    #
+    # The alternative Flathub reviewers also accept is a generated
+    # `go-modules.json` sources list (flatpak-builder-tools, tree "go");
+    # vendoring keeps it to one script and no generated JSON in review.
+    GOFLAGS: -mod=vendor
+    GOWORK: 'off'
     GOPROXY: 'off'
     GOMODCACHE: /run/build/malachi/go-mod-cache
     CGO_ENABLED: '1'
@@ -112,7 +112,14 @@ modules:
       #     url: https://github.com/schotek/malachi.git
       #     tag: v0.1.0
       #     commit: <the tag's commit sha>
+      #
+      # .git is skipped, so `git describe` cannot run in the sandbox; the
+      # Makefile falls back to the .version file that `make flatpak` (and
+      # CI) writes beside it.
       - type: dir
         path: ../..
-      # TODO: generated Go module sources (see build-options.env above), e.g.
-      # - go-modules.json
+        skip:
+          - .git
+          - .flatpak-builder
+          - build
+          - repo

@@ -10,7 +10,11 @@ APP_ID      := io.github.schotek.Malachi
 # because AppStream and Flatpak want a bare number. Between tags this is
 # "0.1.0-3-gabc1234", and without any tag the bare commit (see
 # docs/releasing.md).
-VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
+# The Flatpak build gets a copy of the tree without .git, so git describe
+# has nothing to read there; it falls back to the .version file that
+# `make flatpak` and the CI workflow write.
+VERSION     ?= $(shell { git describe --tags --always --dirty 2>/dev/null \
+                 || cat .version 2>/dev/null || echo dev; } | sed 's/^v//')
 BUILD_DIR   := build
 GO          ?= go
 GOFLAGS     ?=
@@ -189,8 +193,13 @@ clean:
 	rm -rf $(BUILD_DIR) $(BLP_OUT) $(DATA_OUT)
 	rm -rf .flatpak-builder repo
 
+## vendor: fetch dependencies into backend/vendor and ui/vendor (for offline builds)
+vendor:
+	./scripts/flatpak-vendor.sh
+
 ## flatpak: build the Flatpak (run on the host, needs flatpak-builder)
-flatpak:
+flatpak: vendor
+	@echo $(VERSION) > .version
 	flatpak-builder --force-clean --user --install-deps-from=flathub \
 		--repo=repo $(BUILD_DIR)/flatpak packaging/flatpak/$(APP_ID).yml
 
