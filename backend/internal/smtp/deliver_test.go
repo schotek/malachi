@@ -93,6 +93,26 @@ func TestDeliverSuccess(t *testing.T) {
 	}
 }
 
+// An oauth2 endpoint delivers with the token in the password's place; a
+// refused token is an authentication failure that never names the token.
+func TestDeliverXOAuth2(t *testing.T) {
+	ts := startServerWith(t, serverOpts{xoauth2: "ya29.good", insecure: true})
+	oauth := cfg(ts.port, api.SecurityNone)
+	oauth.AuthMethod = api.AuthOAuth2
+	msg := testMessage(t)
+	if err := Deliver(context.Background(), oauth, "ya29.good", sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg))); err != nil {
+		t.Fatalf("Deliver: %v", err)
+	}
+	if from, _, data := ts.envelope(); from != sender || data == nil {
+		t.Fatalf("envelope = %q, data %d bytes", from, len(data))
+	}
+	err := Deliver(context.Background(), oauth, "ya29.bad", sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg)))
+	se := sendErr(t, err)
+	if se.Stage != StageAuth || se.Err.Code != api.CodeAuthFailed || strings.Contains(se.Err.Message, "ya29") {
+		t.Fatalf("wrong token: %+v", se)
+	}
+}
+
 func TestDeliverRcptRejected(t *testing.T) {
 	ts := authServer(t, serverOpts{rcptErr: &smtp.SMTPError{Code: 550, EnhancedCode: smtp.EnhancedCode{5, 1, 1}, Message: "no such user " + password}})
 	err := deliver(context.Background(), ts.port, password, []string{alice.Address}, testMessage(t))
@@ -241,9 +261,16 @@ func TestDeliverReaderError(t *testing.T) {
 	}
 }
 
-func TestDeliverOAuthNotImplemented(t *testing.T) {
-	c := cfg(0, api.SecurityNone)
+// An oauth2 endpoint against a server that offers no OAuth2 mechanism is
+// the server's fault, at the authentication stage.
+func TestDeliverOAuth2WithoutMechanism(t *testing.T) {
+	ts := authServer(t, serverOpts{})
+	c := cfg(ts.port, api.SecurityNone)
 	c.AuthMethod = api.AuthOAuth2
-	err := Deliver(context.Background(), c, "", sender, []string{alice.Address}, strings.NewReader(""), 0)
-	expectSend(t, err, StageAuth, api.CodeNotImplemented, true)
+	msg := testMessage(t)
+	err := Deliver(context.Background(), c, "ya29.token", sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg)))
+	se := sendErr(t, err)
+	if se.Stage != StageAuth || se.Err.Code != api.CodeServerError {
+		t.Fatalf("got %+v", se)
+	}
 }

@@ -27,12 +27,10 @@ func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, e
 	return connect(ctx, cfg, nil)
 }
 
-// Probe connects, authenticates with the password, reads CAPABILITY and
-// logs out. Only password authentication is supported so far.
+// Probe connects, authenticates with the password (or, for an oauth2
+// endpoint, the access token passed in its place), reads CAPABILITY and
+// logs out.
 func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeResult, error) {
-	if cfg.AuthMethod != api.AuthPassword {
-		return ProbeResult{}, api.ErrNotImplemented
-	}
 	ctx, cancel := context.WithTimeout(ctx, transport.EndpointTimeout)
 	defer cancel()
 

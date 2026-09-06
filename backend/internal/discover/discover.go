@@ -60,6 +60,13 @@ const MicrosoftMXSuffix = ".mail.protection.outlook.com"
 // MicrosoftProviderName is the display name of the Microsoft 365 hint.
 const MicrosoftProviderName = "Microsoft 365"
 
+// GoogleMXSuffix is where Gmail and Google Workspace domains point their
+// MX records (aspmx.l.google.com, gmail-smtp-in.l.google.com, …).
+const GoogleMXSuffix = ".google.com"
+
+// GoogleProviderName is the display name of the Google hint.
+const GoogleProviderName = "Google"
+
 // Discoverer runs the lookups. Zero fields are filled by New.
 type Discoverer struct {
 	HTTP      *http.Client
@@ -70,9 +77,10 @@ type Discoverer struct {
 	Resolver   Resolver
 	VerifyIMAP func(ctx context.Context, cfg api.ServerConfig) error
 	VerifySMTP func(ctx context.Context, cfg api.ServerConfig) error
-	// GOA finds the address among the Microsoft 365 accounts signed in
-	// through GNOME Online Accounts; nil = no such lookup.
-	GOA func(ctx context.Context, email string) (goaAccountID string, ok bool)
+	// GOA finds the address among the accounts signed in through GNOME
+	// Online Accounts and answers with the complete account it would be
+	// added as and the provider's display name; nil = no such lookup.
+	GOA func(ctx context.Context, email string) (cfg *api.AccountConfig, providerName string, ok bool)
 	Log *slog.Logger
 }
 
@@ -153,10 +161,8 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 
 	// Phase 0: an account the desktop is already signed in to.
 	if d.GOA != nil {
-		if id, ok := d.GOA(ctx, email); ok {
-			cfg := microsoftConfig(email, domain)
-			cfg.Graph.GOAAccountID = id
-			return Result{Config: cfg, Source: api.DiscoverGOA, ProviderName: MicrosoftProviderName}, nil
+		if cfg, name, ok := d.GOA(ctx, email); ok && cfg != nil {
+			return Result{Config: cfg, Source: api.DiscoverGOA, ProviderName: name}, nil
 		}
 		if err := ctx.Err(); err != nil {
 			return none, err
@@ -169,8 +175,9 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 		ispdb       autoconfig
 		srv         srvResult
 		microsoftMX bool
+		googleMX    bool
 	)
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		ispdb = d.fetchAutoconfig(ctx, d.ISPDBBase+url.PathEscape(domain), email)
@@ -181,11 +188,23 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	}()
 	go func() {
 		defer wg.Done()
-		microsoftMX = d.microsoftMX(ctx, domain)
+		microsoftMX = d.hostedMX(ctx, domain, MicrosoftMXSuffix)
+	}()
+	go func() {
+		defer wg.Done()
+		googleMX = d.hostedMX(ctx, domain, GoogleMXSuffix)
 	}()
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
 		return none, err
+	}
+
+	// A Google mailbox: the only way in is a sign-in through GNOME Online
+	// Accounts, so the answer is that hint even when the ISPDB has a
+	// password entry (which works with an app password at best).
+	if googleDomain(domain) || ispdb.google || googleMX {
+		d.Log.Debug("google domain", "domain", domain, "ispdb", ispdb.google, "mx", googleMX)
+		return Result{Config: googleConfig(email, domain), Source: api.DiscoverProvider, ProviderName: GoogleProviderName}, nil
 	}
 
 	var in, out endpoint
@@ -247,8 +266,9 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	return Result{Config: cfg, Source: weakest(in.source, out.source), ProviderName: providerName}, nil
 }
 
-// microsoftConfig is the Graph account for a Microsoft 365 address; the
-// caller fills in the GOA account id when it knows one.
+// microsoftConfig is the Graph account for a Microsoft 365 address
+// without its GOA account id: the hint that the address must be signed
+// in through GNOME Online Accounts first.
 func microsoftConfig(email, domain string) *api.AccountConfig {
 	return &api.AccountConfig{
 		Name: domain, Email: email, Kind: api.AccountGraph,
@@ -256,9 +276,30 @@ func microsoftConfig(email, domain string) *api.AccountConfig {
 	}
 }
 
-// microsoftMX reports whether the domain's mail is hosted by Microsoft
-// 365 (an MX under MicrosoftMXSuffix). The domain goes to the resolver.
-func (d *Discoverer) microsoftMX(ctx context.Context, domain string) bool {
+// googleConfig is the IMAP account of a Google address without its GOA
+// account id: Gmail's servers with oauth2 on both, the same hint as
+// microsoftConfig. With a sign-in, GOA names the servers itself.
+func googleConfig(email, domain string) *api.AccountConfig {
+	return &api.AccountConfig{
+		Name: domain, Email: email, Kind: api.AccountIMAP,
+		IMAP:   &api.ServerConfig{Host: "imap.gmail.com", Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthOAuth2},
+		SMTP:   &api.ServerConfig{Host: "smtp.gmail.com", Port: 465, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthOAuth2},
+		OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle},
+	}
+}
+
+// googleDomain reports Google's own consumer mail domains.
+func googleDomain(domain string) bool {
+	switch strings.ToLower(domain) {
+	case "gmail.com", "googlemail.com":
+		return true
+	}
+	return false
+}
+
+// hostedMX reports whether the domain's mail is hosted by the provider
+// whose MX hosts end in suffix. The domain goes to the resolver.
+func (d *Discoverer) hostedMX(ctx context.Context, domain, suffix string) bool {
 	ctx, cancel := context.WithTimeout(ctx, SRVTimeout)
 	defer cancel()
 	records, err := d.Resolver.LookupMX(ctx, domain)
@@ -268,7 +309,7 @@ func (d *Discoverer) microsoftMX(ctx context.Context, domain string) bool {
 	}
 	for _, mx := range records {
 		host := strings.ToLower(strings.TrimSuffix(mx.Host, "."))
-		if strings.HasSuffix(host, MicrosoftMXSuffix) {
+		if strings.HasSuffix(host, suffix) {
 			return true
 		}
 	}

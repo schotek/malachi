@@ -80,7 +80,7 @@ type AuthMethod string
 
 const (
 	AuthPassword AuthMethod = "password" // PLAIN / LOGIN
-	AuthOAuth2   AuthMethod = "oauth2"   // XOAUTH2 (Office 365 first; Gmail deferred)
+	AuthOAuth2   AuthMethod = "oauth2"   // SASL XOAUTH2, OAUTHBEARER as fallback (Gmail through GNOME Online Accounts)
 )
 
 // ServerConfig describes one endpoint (IMAP or SMTP).
@@ -92,14 +92,37 @@ type ServerConfig struct {
 	AuthMethod AuthMethod `json:"authMethod"`
 }
 
-// OAuth2Config is present only when AuthMethod == AuthOAuth2.
+// OAuth2Source says who holds the sign-in of an oauth2 endpoint.
+type OAuth2Source string
+
+const (
+	// OAuth2SourceGOA: GNOME Online Accounts owns the sign-in, the refresh
+	// token and the OAuth client id; the backend asks it for access tokens
+	// and authenticates with SASL XOAUTH2. GOAAccountID is the GOA account
+	// id ("account_…"). This is how Google accounts are used.
+	OAuth2SourceGOA OAuth2Source = "goa"
+)
+
+// OAuth2 providers.
+const (
+	OAuth2ProviderGoogle    = "google"    // with OAuth2SourceGOA
+	OAuth2ProviderOffice365 = "office365" // the backend's own flow; reserved
+	OAuth2ProviderCustom    = "custom"    // the backend's own flow; reserved
+)
+
+// OAuth2Config is present only when an endpoint uses AuthOAuth2. With
+// Source "goa" only Provider and GOAAccountID are set. The remaining
+// fields describe the backend's own authorisation flow, reserved for
+// desktops without GNOME Online Accounts and not implemented.
 type OAuth2Config struct {
-	Provider string   `json:"provider"`           // "office365" | "custom"
-	ClientID string   `json:"clientId,omitempty"` // bring-your-own-credentials
-	TenantID string   `json:"tenantId,omitempty"`
-	AuthURL  string   `json:"authUrl,omitempty"`
-	TokenURL string   `json:"tokenUrl,omitempty"`
-	Scopes   []string `json:"scopes,omitempty"`
+	Source       OAuth2Source `json:"source,omitempty"`
+	GOAAccountID string       `json:"goaAccountId,omitempty"`
+	Provider     string       `json:"provider"`           // "google" | "office365" | "custom"
+	ClientID     string       `json:"clientId,omitempty"` // bring-your-own-credentials
+	TenantID     string       `json:"tenantId,omitempty"`
+	AuthURL      string       `json:"authUrl,omitempty"`
+	TokenURL     string       `json:"tokenUrl,omitempty"`
+	Scopes       []string     `json:"scopes,omitempty"`
 }
 
 // AccountKind selects the protocol behind an account.
@@ -229,7 +252,7 @@ type AccountDiscoverParams struct {
 type DiscoverSource string
 
 const (
-	DiscoverGOA        DiscoverSource = "goa"        // the address is signed in through GNOME Online Accounts (a Graph account)
+	DiscoverGOA        DiscoverSource = "goa"        // the address is signed in through GNOME Online Accounts (Graph for Microsoft 365, IMAP with oauth2 for Google)
 	DiscoverISPDB      DiscoverSource = "ispdb"      // Mozilla autoconfig database
 	DiscoverAutoconfig DiscoverSource = "autoconfig" // the provider's own autoconfig document
 	DiscoverSRV        DiscoverSource = "srv"        // RFC 6186 DNS SRV records
@@ -239,12 +262,14 @@ const (
 )
 
 // AccountDiscoverResult is a suggestion only: nothing is stored and
-// nothing is authenticated. An IMAP Config passes account.add validation
-// with authMethod "password" and the username prefilled; the UI still asks
-// for the password and should run account.test. A Graph Config with source
-// "goa" is complete (goaAccountId set) or, with source "provider", tells
-// the UI the address belongs to Microsoft 365 and must first be added in
-// GNOME Online Accounts.
+// nothing is authenticated. A password IMAP Config passes account.add
+// validation with the username prefilled; the UI still asks for the
+// password and should run account.test. With source "goa" the Config is
+// complete (a Graph account for Microsoft 365, an oauth2 IMAP account for
+// Google, goaAccountId set) and needs no password. With source "provider"
+// it tells the UI the address belongs to a provider that signs in through
+// GNOME Online Accounts (ProviderName says which) and must be added there
+// first.
 type AccountDiscoverResult struct {
 	Config       *AccountConfig `json:"config,omitempty"`
 	Source       DiscoverSource `json:"source"`
@@ -252,16 +277,20 @@ type AccountDiscoverResult struct {
 }
 
 // LinkedAccount is an account another desktop service is signed in to and
-// that Malachi can use: today Microsoft 365 accounts in GNOME Online
-// Accounts. Configured says whether a Malachi account with that address
-// already exists.
+// that Malachi can use: the Microsoft 365 and Google accounts of GNOME
+// Online Accounts with mail enabled. Configured says whether a Malachi
+// account with that address already exists.
 type LinkedAccount struct {
-	Provider        string `json:"provider"` // "microsoft365"
+	Provider        string `json:"provider"` // "microsoft365" | "google"
 	Email           string `json:"email"`
 	Name            string `json:"name,omitempty"` // display name, untrusted text
 	GOAAccountID    string `json:"goaAccountId"`
 	Configured      bool   `json:"configured"`
 	AttentionNeeded bool   `json:"attentionNeeded"` // the service wants the user to sign in again
+	// Config is the account to add, built from what the service knows
+	// (servers, user names, the token source); it passes account.add as
+	// is, without credentials.
+	Config *AccountConfig `json:"config,omitempty"`
 }
 
 type AccountLinkedParams struct{}

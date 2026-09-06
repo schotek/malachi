@@ -49,9 +49,13 @@ type DeliverFunc func(ctx context.Context, cfg api.ServerConfig, password, from 
 // is optional (nil = default or no-op).
 type Deps struct {
 	Store *store.Store
-	// Password fetches the account's SMTP password from the keyring. Its
-	// error codes 1200/1201/1202 take the authentication path.
+	// Password fetches the account's SMTP password from the keyring — or,
+	// for an oauth2 endpoint, its access token. Its error codes
+	// 1200/1201/1202 take the authentication path.
 	Password func(ctx context.Context) (string, error)
+	// AuthFailed is called when the server refused what Password
+	// returned: a token source drops its cached token. nil = nothing.
+	AuthFailed func()
 	// Notifier receives notify.authRequired; notify.syncState is core's job
 	// (see Changed).
 	Notifier api.Notifier
@@ -345,6 +349,9 @@ func (w *Worker) fail(ctx context.Context, e store.OutboxEntry, err error, perma
 
 	switch {
 	case code == api.CodeAuthRequired || code == api.CodeAuthFailed || code == api.CodeKeyringError:
+		if code == api.CodeAuthFailed && w.deps.AuthFailed != nil {
+			w.deps.AuthFailed()
+		}
 		until := now.Add(authDefer)
 		w.log.Warn("outbox delivery needs credentials", "message", id, "code", code, "err", msg)
 		if err := w.deps.Store.MarkOutboxRetry(ctx, id, code, msg, until); err != nil && !errors.Is(err, store.ErrNotFound) {

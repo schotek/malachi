@@ -47,6 +47,10 @@ const (
 	// ProviderMicrosoft365 is the GOA provider type of "Microsoft 365"
 	// accounts; their tokens are scoped to Microsoft Graph.
 	ProviderMicrosoft365 = "ms_graph"
+	// ProviderGoogle is GOA's provider type of a Google account. Its token
+	// carries the https://mail.google.com/ scope, so the account is used
+	// over IMAP and SMTP with the servers its Mail interface names.
+	ProviderGoogle = "google"
 
 	// CallTimeout bounds a local round trip; TokenTimeout bounds
 	// GetAccessToken, which may refresh over the network.
@@ -66,7 +70,7 @@ func ValidID(id string) bool { return idPattern.MatchString(id) }
 // Account is what GOA exposes about one account, secrets excluded.
 type Account struct {
 	ID                   string // last segment of the object path, e.g. "account_1788512854_0"
-	ProviderType         string // e.g. ProviderMicrosoft365
+	ProviderType         string // ProviderMicrosoft365, ProviderGoogle, …
 	ProviderName         string // display name, untrusted text
 	Identity             string
 	PresentationIdentity string
@@ -74,7 +78,28 @@ type Account struct {
 	Name                 string // Mail.Name
 	MailDisabled         bool
 	AttentionNeeded      bool
-	OAuth2               bool // implements OAuth2Based
+	OAuth2               bool         // implements OAuth2Based
+	Mail                 MailSettings // the Mail interface's servers; zero without it
+}
+
+// MailSettings is what the Mail interface says about the account's IMAP
+// and SMTP servers. The Google provider fills it in (imap.gmail.com,
+// smtp.gmail.com, XOAUTH2); Microsoft 365 reports no servers, since its
+// token has no IMAP scope.
+type MailSettings struct {
+	IMAPSupported bool
+	IMAPHost      string
+	IMAPUserName  string
+	IMAPUseSSL    bool // implicit TLS
+	IMAPUseTLS    bool // STARTTLS
+
+	SMTPSupported   bool
+	SMTPHost        string
+	SMTPUserName    string
+	SMTPUseAuth     bool
+	SMTPUseSSL      bool
+	SMTPUseTLS      bool
+	SMTPAuthXOAuth2 bool
 }
 
 // Client talks to GOA over the session bus.
@@ -260,6 +285,20 @@ func parseAccount(path dbus.ObjectPath, ifaces map[string]map[string]dbus.Varian
 	if mail, ok := ifaces[ifaceMail]; ok {
 		a.Email = str(mail, "EmailAddress")
 		a.Name = str(mail, "Name")
+		a.Mail = MailSettings{
+			IMAPSupported:   boolean(mail, "ImapSupported"),
+			IMAPHost:        str(mail, "ImapHost"),
+			IMAPUserName:    str(mail, "ImapUserName"),
+			IMAPUseSSL:      boolean(mail, "ImapUseSsl"),
+			IMAPUseTLS:      boolean(mail, "ImapUseTls"),
+			SMTPSupported:   boolean(mail, "SmtpSupported"),
+			SMTPHost:        str(mail, "SmtpHost"),
+			SMTPUserName:    str(mail, "SmtpUserName"),
+			SMTPUseAuth:     boolean(mail, "SmtpUseAuth"),
+			SMTPUseSSL:      boolean(mail, "SmtpUseSsl"),
+			SMTPUseTLS:      boolean(mail, "SmtpUseTls"),
+			SMTPAuthXOAuth2: boolean(mail, "SmtpAuthXoauth2"),
+		}
 	}
 	_, a.OAuth2 = ifaces[ifaceOAuth2]
 	return a, true

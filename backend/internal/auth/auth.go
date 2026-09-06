@@ -1,27 +1,24 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// Package auth handles credentials: keyring storage (libsecret via the
-// org.freedesktop.secrets D-Bus API), OAuth2 authorisation-code flow with
-// PKCE for Office 365, token refresh, and SASL mechanism selection (PLAIN,
-// XOAUTH2 via github.com/emersion/go-sasl).
+// Package auth handles credentials: the keyring abstraction (libsecret
+// through the org.freedesktop.secrets D-Bus API lives in the secretservice
+// subpackage), and the SASL XOAUTH2 mechanism with which an OAuth2 access
+// token signs in to IMAP and SMTP. The tokens themselves come from GNOME
+// Online Accounts (the goa subpackage): it owns the sign-in, the refresh
+// token and the OAuth client id, which is why Gmail needs no Google
+// verification of an own client. An own authorisation-code flow for
+// desktops without GNOME Online Accounts is reserved in the API
+// (api.OAuth2Config) and not implemented.
 //
 // Rules (docs/security.md):
-//   - secrets are never written to config.toml, the SQLite store, or logs;
-//   - the OAuth2 redirect listener binds to 127.0.0.1 on an ephemeral port
-//     and accepts exactly one callback per pending flow;
-//   - the UI opens the authorisation URL through the OpenURI portal; the
-//     backend never spawns a browser itself.
-//
-// Gmail is deliberately out of scope (CASA audit / BYO credentials).
+//   - secrets, tokens included, are never written to config.toml, the
+//     SQLite store, or logs; a token lives in memory for the exchange.
 package auth
 
 import (
 	"context"
 	"errors"
-
-	// Pinned for the SASL mechanisms this package will implement.
-	_ "github.com/emersion/go-sasl"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )

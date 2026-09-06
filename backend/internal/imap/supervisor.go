@@ -18,9 +18,12 @@ import (
 type SupervisorDeps struct {
 	Store    *store.Store
 	Password func(ctx context.Context, accountID string) (string, error)
-	Notifier api.Notifier
-	Prefs    func() SyncPrefs
-	Log      *slog.Logger
+	// AuthFailed is told which account's credentials the server refused
+	// (see Deps.AuthFailed); nil = nothing.
+	AuthFailed func(accountID string)
+	Notifier   api.Notifier
+	Prefs      func() SyncPrefs
+	Log        *slog.Logger
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -112,6 +115,11 @@ func (sv *Supervisor) Start(a store.Account) {
 	syncer := NewSyncer(a, Deps{
 		Store:    sv.deps.Store,
 		Password: func(ctx context.Context) (string, error) { return sv.deps.Password(ctx, id) },
+		AuthFailed: func() {
+			if sv.deps.AuthFailed != nil {
+				sv.deps.AuthFailed(id)
+			}
+		},
 		Notifier: sv.deps.Notifier,
 		Prefs:    sv.deps.Prefs,
 		Log:      sv.deps.Log,

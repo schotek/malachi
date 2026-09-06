@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -189,6 +190,10 @@ type harnessOptions struct {
 	prefs   SyncPrefs     // initial preferences; zero = 0 s interval, 30 days
 	backoff time.Duration // reconnect delay; zero = 50 ms
 	now     func() time.Time
+	// token makes the server take SASL XOAUTH2 with this token for user
+	// "me" and the account sign in with oauth2; Password then yields the
+	// token (setPassword changes it).
+	token string
 }
 
 // harness is a memserver behind a proxy, a temporary store with one
@@ -207,6 +212,8 @@ type harness struct {
 	password string
 	pwErr    error
 	prefs    SyncPrefs
+
+	authFailed atomic.Int32 // Deps.AuthFailed calls
 
 	syncer *Syncer
 	cancel context.CancelFunc
@@ -227,7 +234,11 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 	}
 	srv := imapserver.New(&imapserver.Options{
 		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
-			return mem.NewSession(), nil, nil
+			s := mem.NewSession()
+			if o.token != "" {
+				return &saslSession{Session: s, username: "me", password: password, token: o.token}, nil, nil
+			}
+			return s, nil, nil
 		},
 		Caps:         caps,
 		InsecureAuth: true,
@@ -246,7 +257,13 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	acc := store.Account{Enabled: true, Config: api.AccountConfig{Name: "Test", Email: "me@example.test", IMAP: func() *api.ServerConfig { c := cfg(px.port(), api.SecurityNone); return &c }()}}
+	server := cfg(px.port(), api.SecurityNone)
+	secret := password
+	if o.token != "" {
+		server.AuthMethod = api.AuthOAuth2
+		secret = o.token
+	}
+	acc := store.Account{Enabled: true, Config: api.AccountConfig{Name: "Test", Email: "me@example.test", IMAP: &server}}
 	if err := st.AddAccount(context.Background(), &acc); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +272,7 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 	if prefs.OfflineDays == 0 && prefs.IntervalSeconds == 0 {
 		prefs.OfflineDays = 30
 	}
-	h := &harness{t: t, mem: mem, user: user, srvURL: ln.Addr().String(), proxy: px, st: st, acc: acc, notes: newRecorder(), password: password, prefs: prefs}
+	h := &harness{t: t, mem: mem, user: user, srvURL: ln.Addr().String(), proxy: px, st: st, acc: acc, notes: newRecorder(), password: secret, prefs: prefs}
 	backoff := o.backoff
 	if backoff == 0 {
 		backoff = 50 * time.Millisecond
@@ -267,7 +284,8 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 			defer h.mu.Unlock()
 			return h.password, h.pwErr
 		},
-		Notifier: h.notes,
+		AuthFailed: func() { h.authFailed.Add(1) },
+		Notifier:   h.notes,
 		Prefs: func() SyncPrefs {
 			h.mu.Lock()
 			defer h.mu.Unlock()

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -126,6 +127,8 @@ type harness struct {
 	// password is what Password returns; passwordErr wins when set.
 	mu          sync.Mutex
 	passwordErr error
+
+	authFailed atomic.Int32 // Deps.AuthFailed calls
 }
 
 func newHarness(t *testing.T) *harness {
@@ -157,14 +160,15 @@ func (h *harness) password(context.Context) (string, error) {
 
 func (h *harness) deps() Deps {
 	return Deps{
-		Store:    h.s,
-		Password: h.password,
-		Notifier: h.rec,
-		Deliver:  h.deliver.deliver,
-		Trigger:  h.rec.onTrigger,
-		Changed:  h.rec.onChanged,
-		Now:      func() time.Time { return fixedNow },
-		Backoff:  func(attempt int) time.Duration { return time.Duration(attempt) * time.Minute },
+		Store:      h.s,
+		Password:   h.password,
+		AuthFailed: func() { h.authFailed.Add(1) },
+		Notifier:   h.rec,
+		Deliver:    h.deliver.deliver,
+		Trigger:    h.rec.onTrigger,
+		Changed:    h.rec.onChanged,
+		Now:        func() time.Time { return fixedNow },
+		Backoff:    func(attempt int) time.Duration { return time.Duration(attempt) * time.Minute },
 	}
 }
 
@@ -437,6 +441,9 @@ func TestWorkerAuthFailureDefersQueue(t *testing.T) {
 	time.Sleep(30 * time.Millisecond)
 	if h.deliver.count() != 1 {
 		t.Fatalf("deliveries = %d, want 1", h.deliver.count())
+	}
+	if h.authFailed.Load() != 1 {
+		t.Fatalf("AuthFailed called %d times", h.authFailed.Load())
 	}
 	if n := h.rec.authCount(); n != 1 {
 		t.Fatalf("authRequired = %d, want 1", n)

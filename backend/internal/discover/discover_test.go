@@ -266,19 +266,24 @@ func TestDiscoverGOAAccountWins(t *testing.T) {
 	s := newISPDB(t, map[string]string{"contoso.example": "example-ssl-starttls.xml"})
 	d := newDiscoverer(t, s)
 	var asked string
-	d.GOA = func(_ context.Context, email string) (string, bool) {
+	linked := &api.AccountConfig{
+		Name: "Me@contoso.example", Email: "Me@contoso.example", Kind: api.AccountGraph,
+		Graph: &api.GraphConfig{Source: api.GraphSourceGOA, GOAAccountID: "account_1788512854_0"},
+	}
+	d.GOA = func(_ context.Context, email string) (*api.AccountConfig, string, bool) {
 		asked = email
-		return "account_1788512854_0", email == "Me@contoso.example"
+		if email != "Me@contoso.example" {
+			return nil, "", false
+		}
+		return linked, MicrosoftProviderName, true
 	}
 	res, err := d.Discover(context.Background(), "Me@contoso.example")
 	if err != nil || res.Source != api.DiscoverGOA || res.ProviderName != MicrosoftProviderName {
 		t.Fatalf("res = %+v err = %v", res, err)
 	}
-	c := res.Config
-	if c == nil || c.Kind != api.AccountGraph || c.IMAP != nil || c.SMTP != nil || c.Graph == nil ||
-		c.Graph.Source != api.GraphSourceGOA || c.Graph.GOAAccountID != "account_1788512854_0" ||
-		c.Email != "Me@contoso.example" || c.Name != "contoso.example" {
-		t.Fatalf("config = %+v", c)
+	// The hook's answer goes out as it is: it knows the account.
+	if res.Config != linked {
+		t.Fatalf("config = %+v", res.Config)
 	}
 	if asked != "Me@contoso.example" {
 		t.Fatalf("GOA asked for %q", asked)
@@ -291,7 +296,7 @@ func TestDiscoverGOAAccountWins(t *testing.T) {
 	}
 
 	// No match: the usual lookups run.
-	d.GOA = func(context.Context, string) (string, bool) { return "", false }
+	d.GOA = func(context.Context, string) (*api.AccountConfig, string, bool) { return nil, "", false }
 	res, err = d.Discover(context.Background(), "me@contoso.example")
 	if err != nil || res.Source != api.DiscoverISPDB || res.Config.Kind != api.AccountIMAP {
 		t.Fatalf("without GOA match: %+v err = %v", res, err)
@@ -317,6 +322,56 @@ func TestDiscoverMicrosoftByMX(t *testing.T) {
 	}
 	if verified != 0 {
 		t.Fatalf("guesses verified for a Microsoft domain: %d", verified)
+	}
+}
+
+// A Google address is the sign-in hint even though the ISPDB has a
+// password entry for it: that entry works with an app password at best.
+func TestDiscoverGoogleDomain(t *testing.T) {
+	s := newISPDB(t, map[string]string{"gmail.com": "example-ssl-starttls.xml"})
+	d := newDiscoverer(t, s)
+	verified := 0
+	d.VerifyIMAP = func(context.Context, api.ServerConfig) error { verified++; return nil }
+	d.VerifySMTP = d.VerifyIMAP
+	for _, email := range []string{"me@gmail.com", "me@GoogleMail.com"} {
+		res, err := d.Discover(context.Background(), email)
+		if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != GoogleProviderName {
+			t.Fatalf("%s: res = %+v err = %v", email, res, err)
+		}
+		c := res.Config
+		if c == nil || c.Kind != api.AccountIMAP || c.IMAP == nil || c.SMTP == nil || c.OAuth2 == nil ||
+			c.IMAP.Host != "imap.gmail.com" || c.IMAP.AuthMethod != api.AuthOAuth2 || c.SMTP.AuthMethod != api.AuthOAuth2 ||
+			c.OAuth2.Source != api.OAuth2SourceGOA || c.OAuth2.Provider != api.OAuth2ProviderGoogle || c.OAuth2.GOAAccountID != "" ||
+			c.Email != email {
+			t.Fatalf("%s: config = %+v", email, c)
+		}
+	}
+	if verified != 0 {
+		t.Fatalf("guesses verified for a Google domain: %d", verified)
+	}
+
+	// Signed in: the hook's complete account wins over the hint.
+	linked := &api.AccountConfig{Email: "me@gmail.com", Kind: api.AccountIMAP}
+	d.GOA = func(context.Context, string) (*api.AccountConfig, string, bool) {
+		return linked, GoogleProviderName, true
+	}
+	res, err := d.Discover(context.Background(), "me@gmail.com")
+	if err != nil || res.Source != api.DiscoverGOA || res.Config != linked {
+		t.Fatalf("with GOA: %+v err = %v", res, err)
+	}
+}
+
+// A Google Workspace domain is recognised by its MX records.
+func TestDiscoverGoogleByMX(t *testing.T) {
+	s := newISPDB(t, nil)
+	d := newDiscoverer(t, s)
+	d.Resolver = mxResolver{fakeResolver: fakeResolver{}, mx: map[string][]*net.MX{
+		"example.org": {{Host: "ASPMX.L.GOOGLE.COM.", Pref: 1}, {Host: "alt1.aspmx.l.google.com.", Pref: 5}},
+	}}
+	res, err := d.Discover(context.Background(), "me@example.org")
+	if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != GoogleProviderName ||
+		res.Config == nil || res.Config.OAuth2 == nil || res.Config.OAuth2.Provider != api.OAuth2ProviderGoogle {
+		t.Fatalf("res = %+v err = %v", res, err)
 	}
 }
 

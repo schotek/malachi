@@ -18,6 +18,7 @@ import (
 	"github.com/emersion/go-message/charset"
 	"github.com/emersion/go-sasl"
 
+	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -112,21 +113,36 @@ func connect(ctx context.Context, cfg api.ServerConfig, opts *imapclient.Options
 	return &Conn{Client: c, raw: raw, stop: stop}, time.Since(start), nil
 }
 
-// login authenticates with the password (SASL PLAIN when offered, LOGIN
-// otherwise). Errors are *api.Error; the password never appears in them.
-func login(ctx context.Context, c *Conn, cfg api.ServerConfig, password string) error {
-	if cfg.AuthMethod != api.AuthPassword {
-		return api.ErrNotImplemented
-	}
+// login authenticates. With a password: SASL PLAIN when offered, LOGIN
+// otherwise. With AuthOAuth2 the secret is an access token: SASL XOAUTH2,
+// or OAUTHBEARER when that is all the server offers. Errors are
+// *api.Error; the secret never appears in them.
+func login(ctx context.Context, c *Conn, cfg api.ServerConfig, secret string) error {
 	caps := c.Caps()
 	var err error
-	switch {
-	case caps.Has(imap.AuthCap(sasl.Plain)):
-		err = c.Authenticate(sasl.NewPlainClient("", cfg.Username, password))
-	case !caps.Has(imap.CapLoginDisabled):
-		err = c.Login(cfg.Username, password).Wait()
+	switch cfg.AuthMethod {
+	case api.AuthPassword:
+		switch {
+		case caps.Has(imap.AuthCap(sasl.Plain)):
+			err = c.Authenticate(sasl.NewPlainClient("", cfg.Username, secret))
+		case !caps.Has(imap.CapLoginDisabled):
+			err = c.Login(cfg.Username, secret).Wait()
+		default:
+			return api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+		}
+	case api.AuthOAuth2:
+		switch {
+		case caps.Has(imap.AuthCap(auth.XOAuth2)):
+			err = c.Authenticate(auth.NewXOAuth2Client(cfg.Username, secret))
+		case caps.Has(imap.AuthCap(sasl.OAuthBearer)):
+			err = c.Authenticate(sasl.NewOAuthBearerClient(&sasl.OAuthBearerOptions{
+				Username: cfg.Username, Token: secret, Host: cfg.Host, Port: cfg.Port,
+			}))
+		default:
+			return api.NewError(api.CodeServerError, "server offers no OAuth2 authentication mechanism")
+		}
 	default:
-		return api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+		return api.ErrNotImplemented
 	}
 	if err != nil {
 		return classify(ctx, transport.StageAuth, err)

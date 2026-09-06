@@ -53,13 +53,11 @@ func (e *SendError) Error() string {
 func (e *SendError) Unwrap() error { return e.Err }
 
 // Deliver submits one already-serialised message of size bytes read from r
-// to the envelope recipients rcpts. It connects, authenticates, checks the
-// server's SIZE limit, runs MAIL/RCPT/DATA and quits. Cancelling ctx closes
-// the socket. The result is nil or a *SendError.
+// to the envelope recipients rcpts. It connects, authenticates with
+// password (an access token for an oauth2 endpoint), checks the server's
+// SIZE limit, runs MAIL/RCPT/DATA and quits. Cancelling ctx closes the
+// socket. The result is nil or a *SendError.
 func Deliver(ctx context.Context, cfg api.ServerConfig, password, from string, rcpts []string, r io.Reader, size int64) error {
-	if cfg.AuthMethod != api.AuthPassword {
-		return &SendError{Err: api.ErrNotImplemented, Stage: StageAuth, Permanent: true}
-	}
 	if !validEnvelopeAddress(from) {
 		return &SendError{Err: api.NewError(api.CodeInvalidArgument, "invalid envelope sender"), Stage: StageMail, Permanent: true}
 	}

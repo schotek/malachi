@@ -18,15 +18,20 @@ import (
 // DeliverFor, when set, picks the delivery function per account (a Graph
 // account sends through the service, not SMTP) and wins over Deliver.
 type SupervisorDeps struct {
-	Store         *store.Store
-	Password      func(ctx context.Context, accountID string) (string, error)
-	Notifier      api.Notifier
-	Deliver       DeliverFunc
-	DeliverFor    func(a store.Account) DeliverFunc
-	FilesSentCopy bool
-	Trigger       func(accountID string, folder api.FolderID, full bool) bool
-	Changed       func(accountID string)
-	Log           *slog.Logger
+	Store    *store.Store
+	Password func(ctx context.Context, accountID string) (string, error)
+	// AuthFailed is told which account's credentials the server refused
+	// (see Deps.AuthFailed); nil = nothing.
+	AuthFailed func(accountID string)
+	Notifier   api.Notifier
+	Deliver    DeliverFunc
+	DeliverFor func(a store.Account) DeliverFunc
+	// FilesSentCopyFor says, per account, whether the delivery path files
+	// the Sent copy on the server itself (Deps.FilesSentCopy); nil = never.
+	FilesSentCopyFor func(a store.Account) bool
+	Trigger          func(accountID string, folder api.FolderID, full bool) bool
+	Changed          func(accountID string)
+	Log              *slog.Logger
 }
 
 // Supervisor owns one Worker per started account. It satisfies
@@ -114,12 +119,21 @@ func (sv *Supervisor) Start(a store.Account) {
 	if sv.deps.DeliverFor != nil {
 		deliver = sv.deps.DeliverFor(a)
 	}
+	filesSentCopy := false
+	if sv.deps.FilesSentCopyFor != nil {
+		filesSentCopy = sv.deps.FilesSentCopyFor(a)
+	}
 	worker := NewWorker(a, Deps{
-		Store:         sv.deps.Store,
-		Password:      func(ctx context.Context) (string, error) { return sv.deps.Password(ctx, id) },
+		Store:    sv.deps.Store,
+		Password: func(ctx context.Context) (string, error) { return sv.deps.Password(ctx, id) },
+		AuthFailed: func() {
+			if sv.deps.AuthFailed != nil {
+				sv.deps.AuthFailed(id)
+			}
+		},
 		Notifier:      sv.deps.Notifier,
 		Deliver:       deliver,
-		FilesSentCopy: sv.deps.FilesSentCopy,
+		FilesSentCopy: filesSentCopy,
 		Trigger:       sv.deps.Trigger,
 		Changed:       sv.deps.Changed,
 		Log:           sv.deps.Log,

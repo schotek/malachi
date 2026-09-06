@@ -373,6 +373,9 @@ func TestWrongPasswordThenWake(t *testing.T) {
 	if h.syncer.State().Status != api.SyncAuthRequired || h.notes.authCount() != 1 {
 		t.Fatalf("state = %+v, auth notifications = %d", h.syncer.State(), h.notes.authCount())
 	}
+	if h.authFailed.Load() != 1 {
+		t.Fatalf("AuthFailed called %d times", h.authFailed.Load())
+	}
 	h.setPassword(password, nil)
 	h.syncer.Wake()
 	h.waitIdle(time.Time{})

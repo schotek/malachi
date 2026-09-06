@@ -12,6 +12,7 @@ import (
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 
+	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -73,12 +74,9 @@ func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, e
 	return &Conn{Client: c, stop: stop}, time.Since(start), nil
 }
 
-// Probe connects, authenticates with the password and quits. Only password
-// authentication is supported so far.
+// Probe connects, authenticates with the password (or, for an oauth2
+// endpoint, the access token passed in its place) and quits.
 func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeResult, error) {
-	if cfg.AuthMethod != api.AuthPassword {
-		return ProbeResult{}, api.ErrNotImplemented
-	}
 	ctx, cancel := context.WithTimeout(ctx, transport.EndpointTimeout)
 	defer cancel()
 
@@ -108,21 +106,43 @@ func Probe(ctx context.Context, cfg api.ServerConfig, password string) (ProbeRes
 }
 
 // errNoAuthMechanism is returned when the server advertises neither PLAIN
-// nor LOGIN; a retry cannot change that.
-var errNoAuthMechanism = api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+// nor LOGIN (or, for an oauth2 endpoint, neither XOAUTH2 nor
+// OAUTHBEARER); a retry cannot change that.
+var (
+	errNoAuthMechanism   = api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
+	errNoOAuth2Mechanism = api.NewError(api.CodeServerError, "server offers no OAuth2 authentication mechanism")
+)
 
-// authenticate runs the password SASL exchange shared by Probe and
-// Deliver: PLAIN when offered, LOGIN otherwise. The returned error is
-// already classified (*api.Error) and never carries the password.
-func authenticate(ctx context.Context, c *Conn, cfg api.ServerConfig, password string) error {
+// authenticate runs the SASL exchange shared by Probe and Deliver. With a
+// password: PLAIN when offered, LOGIN otherwise. With AuthOAuth2 the
+// secret is an access token: XOAUTH2, or OAUTHBEARER when that is all the
+// server offers. The returned error is already classified (*api.Error)
+// and never carries the secret.
+func authenticate(ctx context.Context, c *Conn, cfg api.ServerConfig, secret string) error {
 	var err error
-	switch {
-	case c.SupportsAuth(sasl.Plain):
-		err = c.Auth(sasl.NewPlainClient("", cfg.Username, password))
-	case c.SupportsAuth(sasl.Login):
-		err = c.Auth(sasl.NewLoginClient(cfg.Username, password))
+	switch cfg.AuthMethod {
+	case api.AuthPassword:
+		switch {
+		case c.SupportsAuth(sasl.Plain):
+			err = c.Auth(sasl.NewPlainClient("", cfg.Username, secret))
+		case c.SupportsAuth(sasl.Login):
+			err = c.Auth(sasl.NewLoginClient(cfg.Username, secret))
+		default:
+			return errNoAuthMechanism
+		}
+	case api.AuthOAuth2:
+		switch {
+		case c.SupportsAuth(auth.XOAuth2):
+			err = c.Auth(auth.NewXOAuth2Client(cfg.Username, secret))
+		case c.SupportsAuth(sasl.OAuthBearer):
+			err = c.Auth(sasl.NewOAuthBearerClient(&sasl.OAuthBearerOptions{
+				Username: cfg.Username, Token: secret, Host: cfg.Host, Port: cfg.Port,
+			}))
+		default:
+			return errNoOAuth2Mechanism
+		}
 	default:
-		return errNoAuthMechanism
+		return api.ErrNotImplemented
 	}
 	if err != nil {
 		return classify(ctx, transport.StageAuth, err)

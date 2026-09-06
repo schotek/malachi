@@ -27,6 +27,7 @@ type autoconfig struct {
 	imap, smtp   *api.ServerConfig
 	providerName string
 	microsoft    bool
+	google       bool // any host is Google's
 }
 
 // clientConfig mirrors the Thunderbird autoconfig format (version 1.1).
@@ -89,11 +90,23 @@ func parseClientConfig(r io.Reader, email string) (autoconfig, error) {
 		providerName: cleanProviderName(p.DisplayName),
 	}
 	for _, e := range append(append([]serverEntry{}, p.Incoming...), p.Outgoing...) {
-		if IsMicrosoftHost(substitute(e.Hostname, email)) {
+		host := substitute(e.Hostname, email)
+		if IsMicrosoftHost(host) {
 			ac.microsoft = true
+		}
+		if IsGoogleHost(host) {
+			ac.google = true
 		}
 	}
 	return ac, nil
+}
+
+// IsGoogleHost reports a mail host of Gmail / Google Workspace.
+func IsGoogleHost(host string) bool {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	return host == "gmail.com" || strings.HasSuffix(host, ".gmail.com") ||
+		host == "googlemail.com" || strings.HasSuffix(host, ".googlemail.com") ||
+		strings.HasSuffix(host, ".google.com")
 }
 
 // IsMicrosoftHost reports a mail host of Microsoft 365 / Outlook.com.

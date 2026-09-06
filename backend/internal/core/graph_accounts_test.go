@@ -268,6 +268,8 @@ func TestAccountLinked(t *testing.T) {
 		{ID: "account_3_0", ProviderType: goa.ProviderMicrosoft365, Identity: "fallback@contoso.invalid", OAuth2: true},
 		{ID: "account_4_0", ProviderType: goa.ProviderMicrosoft365, Email: "not an address", OAuth2: true},
 		{ID: "account_5_0", ProviderType: goa.ProviderMicrosoft365, Email: "bad@contoso.invalid", Name: "a\x01b", OAuth2: true},
+		{ID: "account_6_0", ProviderType: goa.ProviderGoogle, Email: "me@gmail.invalid", Name: "G Mail", OAuth2: true, Mail: gmailSettings()},
+		{ID: "account_7_0", ProviderType: goa.ProviderGoogle, Email: "noservers@gmail.invalid", OAuth2: true},
 	}}
 	b.GOA = fg
 
@@ -280,7 +282,7 @@ func TestAccountLinked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Accounts) != 3 {
+	if len(res.Accounts) != 4 {
 		t.Fatalf("linked = %+v", res.Accounts)
 	}
 	me := res.Accounts[0]
@@ -288,11 +290,25 @@ func TestAccountLinked(t *testing.T) {
 		!me.Configured || !me.AttentionNeeded {
 		t.Fatalf("first = %+v", me)
 	}
+	if me.Config == nil || me.Config.Kind != api.AccountGraph || me.Config.Graph.GOAAccountID != goaID || me.Config.Email != "Me@Contoso.invalid" ||
+		me.Config.DisplayName != "Me Myself" || validateAccountConfig(me.Config) != nil {
+		t.Fatalf("first config = %+v", me.Config)
+	}
 	if res.Accounts[1].Email != "fallback@contoso.invalid" || res.Accounts[1].Configured {
 		t.Fatalf("identity fallback = %+v", res.Accounts[1])
 	}
 	if res.Accounts[2].Name != "" {
 		t.Fatalf("control characters in name kept: %+v", res.Accounts[2])
+	}
+	// The Google account comes with the IMAP account GOA describes; the
+	// one without servers is not offered.
+	g := res.Accounts[3]
+	if g.Provider != "google" || g.Email != "me@gmail.invalid" || g.GOAAccountID != "account_6_0" || g.Config == nil ||
+		g.Config.Kind != api.AccountIMAP || g.Config.IMAP.Host != "imap.gmail.com" || g.Config.IMAP.Port != 993 ||
+		g.Config.IMAP.AuthMethod != api.AuthOAuth2 || g.Config.SMTP.Host != "smtp.gmail.com" || g.Config.SMTP.Port != 465 ||
+		g.Config.OAuth2 == nil || g.Config.OAuth2.Source != api.OAuth2SourceGOA || g.Config.OAuth2.GOAAccountID != "account_6_0" ||
+		validateAccountConfig(g.Config) != nil {
+		t.Fatalf("google = %+v config %+v", g, g.Config)
 	}
 
 	// No GOA: an empty list. Other failures propagate.
@@ -325,13 +341,17 @@ func TestGOAAccountForAndProviderDiscovery(t *testing.T) {
 		"off@contoso.invalid": "", "cloud@example.invalid": "", "nobody@contoso.invalid": "",
 	}
 	for email, want := range cases {
-		id, ok := b.goaAccountFor(ctx, email)
-		if id != want || ok != (want != "") {
-			t.Errorf("goaAccountFor(%q) = %q, %v", email, id, ok)
+		cfg, name, ok := b.goaAccountFor(ctx, email)
+		if ok != (want != "") {
+			t.Errorf("goaAccountFor(%q) = %+v, %v", email, cfg, ok)
+			continue
+		}
+		if ok && (cfg.Kind != api.AccountGraph || cfg.Graph.GOAAccountID != want || name != discover.MicrosoftProviderName) {
+			t.Errorf("goaAccountFor(%q) = %+v, %q", email, cfg, name)
 		}
 	}
 	b.GOA = &fakeGOA{listErr: api.NewError(api.CodeUnavailable, "no bus")}
-	if _, ok := b.goaAccountFor(ctx, "me@contoso.invalid"); ok {
+	if _, _, ok := b.goaAccountFor(ctx, "me@contoso.invalid"); ok {
 		t.Error("match without GOA")
 	}
 

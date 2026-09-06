@@ -28,13 +28,18 @@ type SyncPrefs struct {
 // Deps wires one syncer to the rest of the daemon.
 type Deps struct {
 	Store *store.Store
-	// Password returns the account's password; an *api.Error with
-	// CodeAuthRequired or CodeKeyringError drives the state machine.
+	// Password returns the account's password — or, for an oauth2
+	// endpoint, its access token; an *api.Error with CodeAuthRequired or
+	// CodeKeyringError drives the state machine.
 	Password func(ctx context.Context) (string, error)
-	Notifier api.Notifier // nil = no notifications
-	Prefs    func() SyncPrefs
-	Log      *slog.Logger
-	Now      func() time.Time // retention window and op scheduling; nil = time.Now
+	// AuthFailed is called when the server refused what Password
+	// returned, before the syncer parks: a token source drops its cached
+	// token so that the next attempt asks for a fresh one. nil = nothing.
+	AuthFailed func()
+	Notifier   api.Notifier // nil = no notifications
+	Prefs      func() SyncPrefs
+	Log        *slog.Logger
+	Now        func() time.Time // retention window and op scheduling; nil = time.Now
 	// CapFilter may hide server capabilities (tests: no IDLE).
 	CapFilter func(imap.CapSet) imap.CapSet
 	// NoSinceSearch forces the client-side retention window (as if every
@@ -472,6 +477,9 @@ func (s *Syncer) fail(err error) {
 		status = api.SyncOffline
 	case api.CodeAuthFailed, api.CodeAuthRequired:
 		status = api.SyncAuthRequired
+	}
+	if ae.Code == api.CodeAuthFailed && s.deps.AuthFailed != nil {
+		s.deps.AuthFailed()
 	}
 	s.log.Warn("sync failed", "status", status, "code", ae.Code, "err", ae.Message)
 	s.setState(func(st *api.SyncState) {

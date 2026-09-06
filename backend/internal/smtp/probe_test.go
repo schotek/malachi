@@ -17,6 +17,7 @@ import (
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
 
+	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/transport/transporttest"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -31,6 +32,9 @@ type serverOpts struct {
 	auth     bool  // advertise AUTH PLAIN for user "me" / password
 	utf8     bool  // advertise SMTPUTF8
 	maxBytes int64 // advertise SIZE and enforce it (0 = none)
+	// xoauth2 makes the server advertise AUTH XOAUTH2 only, accepting
+	// this token for user "me".
+	xoauth2 string
 
 	mailErr   error         // returned from MAIL FROM
 	rcptErr   error         // returned from every RCPT TO
@@ -64,10 +68,48 @@ type backend struct {
 
 func (b *backend) NewSession(*smtp.Conn) (smtp.Session, error) {
 	s := session{b: b}
-	if !b.opts.auth {
+	switch {
+	case b.opts.xoauth2 != "":
+		return &xoauth2Session{session: s, token: b.opts.xoauth2}, nil
+	case !b.opts.auth:
 		return &s, nil
 	}
 	return &authSession{session: s}, nil
+}
+
+// xoauth2Session takes SASL XOAUTH2 the way Gmail does: the right token
+// for "me" passes; a wrong one gets a JSON report as the challenge and
+// then the 535.
+type xoauth2Session struct {
+	session
+	token string
+}
+
+func (*xoauth2Session) AuthMechanisms() []string { return []string{auth.XOAuth2} }
+func (s *xoauth2Session) Auth(mech string) (sasl.Server, error) {
+	if mech != auth.XOAuth2 {
+		return nil, smtp.ErrAuthFailed
+	}
+	return &xoauth2Server{want: "user=me\x01auth=Bearer " + s.token + "\x01\x01"}, nil
+}
+
+type xoauth2Server struct {
+	want   string
+	failed bool
+}
+
+func (x *xoauth2Server) Next(resp []byte) (challenge []byte, done bool, err error) {
+	switch {
+	case x.failed:
+		return nil, false, smtp.ErrAuthFailed
+	case resp == nil:
+		return []byte{}, false, nil
+	case string(resp) == x.want:
+		return nil, true, nil
+	default:
+		x.failed = true
+		return []byte(`{"status":"400","schemes":"Bearer"}`), false, nil
+	}
 }
 
 type session struct{ b *backend }
@@ -165,6 +207,32 @@ func code(t *testing.T, err error) api.ErrorCode {
 		t.Fatalf("password leaked into %q", e.Message)
 	}
 	return e.Code
+}
+
+func TestProbeXOAuth2(t *testing.T) {
+	ts := startServerWith(t, serverOpts{xoauth2: "ya29.good", insecure: true})
+	oauth := cfg(ts.port, api.SecurityNone)
+	oauth.AuthMethod = api.AuthOAuth2
+
+	if _, err := Probe(context.Background(), oauth, "ya29.good"); err != nil {
+		t.Fatalf("right token: %v", err)
+	}
+	_, err := Probe(context.Background(), oauth, "ya29.bad")
+	if code(t, err) != api.CodeAuthFailed || strings.Contains(err.Error(), "ya29") {
+		t.Fatalf("wrong token: %v", err)
+	}
+
+	// A password endpoint cannot use this server, and an oauth2 endpoint
+	// cannot use a server without an OAuth2 mechanism: both are the
+	// server's fault, not a sign-in problem.
+	if _, err := Probe(context.Background(), cfg(ts.port, api.SecurityNone), password); code(t, err) != api.CodeServerError {
+		t.Fatalf("password against XOAUTH2 only: %v", err)
+	}
+	plain := startServer(t, nil, true, true)
+	oauth.Port = plain
+	if _, err := Probe(context.Background(), oauth, "ya29.good"); code(t, err) != api.CodeServerError {
+		t.Fatalf("oauth2 against PLAIN only: %v", err)
+	}
 }
 
 func TestProbeSuccess(t *testing.T) {

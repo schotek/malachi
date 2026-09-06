@@ -222,7 +222,8 @@ AccountConfig {
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
                "username": "me@example.org", "authMethod": "password|oauth2" }
-OAuth2Config { "provider": "office365|custom", "clientId" (opt), "tenantId" (opt),
+OAuth2Config { "source": "goa" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
+               "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
 GraphConfig  { "source": "goa", "goaAccountId": "account_1788512854_0" }
 ```
@@ -235,6 +236,16 @@ Graph API; it has no servers of its own, only a token source. With
 asks it for access tokens (`goaAccountId` is the GOA account id) and holds
 them in memory only; refresh tokens never reach Malachi. A Graph account
 sends and receives through Graph alone — no IMAP or SMTP is involved.
+
+An `imap` account whose endpoints use `authMethod: "oauth2"` signs in with
+an access token through SASL XOAUTH2 (OAUTHBEARER when that is all the
+server offers). With `oauth2.source: "goa"` the token comes from GNOME
+Online Accounts exactly as for a Graph account, and `provider` says whose
+account it is — today `google`: Gmail and Google Workspace, with the
+servers GNOME Online Accounts names (`account.linked` and
+`account.discover` build the whole config). Without `source` the `oauth2`
+block describes the backend's own authorisation flow, which is reserved
+for desktops without GNOME Online Accounts and reports `notImplemented`.
 
 Secrets are **never** part of `AccountConfig` and never returned.
 `credentials.password` is write-only: it goes to the keyring and is never
@@ -256,9 +267,13 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
   `security` one of `tls|starttls|none` where `none` is accepted only for
   `localhost` or a loopback IP, `username` required (≤ 256 bytes, no
   control characters), `authMethod` one of `password|oauth2`;
-- for `imap`: `oauth2` present exactly when an endpoint uses `oauth2`;
-  `provider` `office365|custom`, `custom` needs `https` `authUrl` and
-  `tokenUrl`; at most 32 scopes without whitespace;
+- for `imap`: `oauth2` present exactly when an endpoint uses `oauth2`.
+  With `source: "goa"`: `provider` `google`, a `goaAccountId` (letters,
+  digits and `_`, ≤ 128 bytes), both endpoints `oauth2`, and none of
+  `clientId`, `tenantId`, `authUrl`, `tokenUrl`, `scopes`. Without
+  `source`: `provider` `office365|custom`, `custom` needs `https`
+  `authUrl` and `tokenUrl`, at most 32 scopes without whitespace, no
+  `goaAccountId`;
 - for `graph`: `graph` required with `source: "goa"` and a `goaAccountId`
   (letters, digits and `_`, ≤ 128 bytes); `imap`, `smtp` and `oauth2`
   absent;
@@ -270,12 +285,13 @@ once syncing exists). It is written to the system keyring
 (`org.freedesktop.secrets`) and discarded; if the keyring refuses it nothing
 is kept and `keyringError` is returned. That happens when no Secret Service
 is running, when the user dismisses the unlock prompt, or when the daemon
-runs with `MALACHI_KEYRING=none`. For `oauth2` no credentials are passed;
-the backend starts the flow and emits `notify.authRequired` with `authUrl`
-(not implemented). A `graph` account needs no keyring: adding it works
-with `MALACHI_KEYRING=none`, and a sign-in that GNOME Online Accounts has
-lost surfaces as `authRequired` until the user signs in again in the
-desktop's account settings.
+runs with `MALACHI_KEYRING=none`. For `oauth2` no credentials are passed.
+A `graph` account, and an `oauth2` account with `source: "goa"`, need no
+keyring: adding them works with `MALACHI_KEYRING=none`, and a sign-in that
+GNOME Online Accounts has lost surfaces as `authRequired` until the user
+signs in again in the desktop's account settings. An `oauth2` account
+without `source` would start the backend's own flow here; it is not
+implemented.
 
 #### `account.remove`
 - params: `{ "accountId", "deleteLocalData": bool }`
@@ -336,10 +352,12 @@ authenticated; the UI still asks for the password and should run
 Sources, from most to least trustworthy, each consulted only for what the
 previous ones left open:
 
-0. `goa`: the address is a Microsoft 365 account signed in through GNOME
-   Online Accounts. `config` is a complete `graph` account (`goaAccountId`
-   set) that passes `account.add` as is; no password is needed.
-   `providerName` is `Microsoft 365`.
+0. `goa`: the address is signed in through GNOME Online Accounts.
+   `config` is complete and passes `account.add` as is, without a
+   password: a `graph` account for Microsoft 365 (`providerName`
+   `Microsoft 365`), an `imap` account with `oauth2` endpoints and
+   `source: "goa"` for Google (`providerName` `Google`), with the servers
+   GNOME Online Accounts names.
 1. `ispdb`: Mozilla's autoconfig database at
    `https://autoconfig.thunderbird.net/v1.1/<domain>`. Only the domain is
    sent.
@@ -349,13 +367,17 @@ previous ones left open:
    receive the address, as the provider already knows it.
 3. `srv`: RFC 6186 / RFC 8314 DNS records `_imaps`, `_imap`,
    `_submissions`, `_submission` (`_tcp`). The domain goes to the resolver.
-4. `provider`: the domain is hosted by a provider Malachi speaks to
-   through its own API. Today that is Microsoft 365, recognised by an MX
-   record under `mail.protection.outlook.com` or by Microsoft hosts in an
-   autoconfig answer. `config` is then a `graph` account **without**
-   `goaAccountId`: it does not pass `account.add`; the UI must have the
-   user add the account in GNOME Online Accounts first and re-run
-   discovery (or use `account.linked`).
+4. `provider`: the domain is hosted by a provider whose sign-in belongs
+   to GNOME Online Accounts. Microsoft 365 is recognised by an MX record
+   under `mail.protection.outlook.com` or by Microsoft hosts in an
+   autoconfig answer; Google by the `gmail.com` / `googlemail.com`
+   domains, an MX record under `google.com`, or Google hosts in an
+   autoconfig answer — and for Google this answer wins even over a
+   password entry in the ISPDB, which would need an app password.
+   `config` is then the account **without** `goaAccountId` (a `graph`
+   account, or an `imap` one with `oauth2` endpoints): it does not pass
+   `account.add`; the UI must have the user add the account in GNOME
+   Online Accounts first and re-run discovery (or use `account.linked`).
 5. `guess`: `imap.`/`mail.<domain>` on 993 (TLS) and 143 (STARTTLS),
    `smtp.`/`mail.<domain>` on 587 (STARTTLS) and 465 (TLS), verified by
    opening the connection under the transport policy without logging in.
@@ -363,7 +385,7 @@ previous ones left open:
 When the two endpoints come from different sources, `source` reports the
 weaker one. Autoconfig documents are capped at 256 KiB, parsed strictly,
 plaintext socket types and OAuth2-only entries are skipped (for Microsoft
-hosts they turn into the `provider` answer), hosts and ports are
+and Google hosts they turn into the `provider` answer), hosts and ports are
 validated, and `%EMAILADDRESS%`/`%EMAILLOCALPART%`/`%EMAILDOMAIN%` are
 substituted. An `imap` `config`, when present, passes `account.add`
 validation with `authMethod: "password"` and the username prefilled (the
@@ -381,8 +403,9 @@ kind: `imap` and `smtp` concurrently, or the `graph` mailbox.
 - params: same as `account.add`, plus `"accountId"` (opt): with it and an
   empty `credentials.password`, the stored password of that account is used
 - result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph) }`
-- errors: invalidArgument; with `accountId`: accountNotFound, authRequired
-  (no stored password), keyringError. Each endpoint reports its own outcome
+- errors: invalidArgument; with `accountId` and `password` endpoints:
+  accountNotFound, authRequired (no stored password), keyringError. Each
+  endpoint reports its own outcome
 
 ```jsonc
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
@@ -395,8 +418,13 @@ with the password and disconnects. Per-endpoint `error.code` is one of
 STARTTLS not offered, or the server demanding TLS before login),
 `networkError` (unresolvable, refused, connection dropped), `serverTimeout`
 (no answer in time), `serverError` (protocol error or no usable
-authentication mechanism), `notImplemented` (an `oauth2` endpoint, until
-OAuth2 lands). `capabilities` are the server's post-login IMAP CAPABILITY
+authentication mechanism — for an `oauth2` endpoint, no XOAUTH2 and no
+OAUTHBEARER). For `oauth2` endpoints with `source: "goa"` the access
+token stands in for the password; a token problem is both endpoints'
+outcome before anything is dialled: `authRequired` (sign in again in GNOME
+Online Accounts), `unavailable` (no session bus or no GNOME Online
+Accounts). An `oauth2` block without `source` reports `notImplemented`.
+`capabilities` are the server's post-login IMAP CAPABILITY
 list or the EHLO keywords the backend knows about, scrubbed to printable
 ASCII, ≤ 64 entries; `latencyMs` is dial → ready (greeting read, STARTTLS
 done). Budget: 10 s to connect, 20 s per endpoint. The password is used
@@ -411,9 +439,9 @@ codes above; `capabilities` is `["graph"]`.
 
 #### `account.linked`
 Lists accounts other desktop services are signed in to and that Malachi
-can use as `graph` accounts: the Microsoft 365 accounts of GNOME Online
-Accounts with mail enabled. Nothing is stored; a UI shows them as one-click
-choices in the add-account flow.
+can use: the Microsoft 365 and Google accounts of GNOME Online Accounts
+with mail enabled. Nothing is stored; a UI shows them as one-click choices
+in the add-account flow and passes `config` to `account.add`.
 
 - params: `{}`
 - result: `{ "accounts": [LinkedAccount] }`
@@ -422,10 +450,17 @@ choices in the add-account flow.
   error.
 
 ```jsonc
-LinkedAccount { "provider": "microsoft365", "email": "me@contoso.com", "name": "Me" (opt),
-                "goaAccountId": "account_1788512854_0", "configured": false, "attentionNeeded": false }
+LinkedAccount { "provider": "microsoft365|google", "email": "me@contoso.com", "name": "Me" (opt),
+                "goaAccountId": "account_1788512854_0", "configured": false, "attentionNeeded": false,
+                "config": AccountConfig }
 ```
 
+`config` is the account to add, complete and needing no credentials: a
+`graph` account for `microsoft365`, an `imap` account with `oauth2`
+endpoints and `source: "goa"` for `google`, with the servers and user
+names GNOME Online Accounts reports (a Google account whose mail is
+switched off there, or that names no IMAP/SMTP servers, is not listed).
+`name` and `displayName` may be replaced before `account.add`.
 `configured` says a Malachi account with that address exists already.
 `attentionNeeded` mirrors GNOME Online Accounts: the service wants the
 user to sign in again; adding the account still works, syncing will report
@@ -1194,3 +1229,13 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   the system address books of the sending account, read from Evolution
   Data Server; the address-book part is empty, not an error, wherever the
   service is missing.
+- **1** (2026-09-06, compatible addition, Gmail): `oauth2` endpoints are
+  implemented for tokens from GNOME Online Accounts — `OAuth2Config`
+  gained `source: "goa"` and `goaAccountId`, `provider` the value
+  `google`; the daemon signs in to IMAP and SMTP with SASL XOAUTH2.
+  `account.linked` lists Google accounts (`provider: "google"`) and
+  carries the ready `config` for every provider; `account.discover`
+  answers a Google address with `goa` or the `provider` hint, never a
+  password entry; `account.test` probes `oauth2` endpoints instead of
+  reporting `notImplemented`. The backend's own OAuth2 flow (an `oauth2`
+  block without `source`) stays reserved.

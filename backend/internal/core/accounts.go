@@ -271,7 +271,18 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 		return &api.AccountTestResult{Graph: s.testGraph(ctx, p.Config)}, nil
 	}
 	password := p.Credentials.Password
-	if password == "" && p.AccountID != "" && usesAuth(p.Config, api.AuthPassword) {
+	switch {
+	case usesAuth(p.Config, api.AuthOAuth2):
+		// The token stands in for the password. A token problem (sign-in
+		// lost, no GNOME Online Accounts) is both endpoints' outcome, as a
+		// refused password would be.
+		token, err := s.b.oauth2Token(ctx, p.Config)
+		if err != nil {
+			s.b.log.Info("account test", "kind", "oauth2", "ok", false, "err", err)
+			return &api.AccountTestResult{IMAP: endpointResult(nil, 0, err), SMTP: endpointResult(nil, 0, err)}, nil
+		}
+		password = token
+	case password == "" && p.AccountID != "" && usesAuth(p.Config, api.AuthPassword):
 		pw, err := s.b.PasswordFor(ctx, string(p.AccountID))
 		if err != nil {
 			return nil, err
@@ -351,24 +362,23 @@ func (s *accountService) Linked(ctx context.Context, _ api.AccountLinkedParams) 
 		configured[a.Email] = true
 	}
 	for _, a := range accounts {
-		if a.ProviderType != goa.ProviderMicrosoft365 || !a.OAuth2 || a.MailDisabled {
+		cfg, _, ok := goaConfigFor(a)
+		if !ok {
 			continue
 		}
-		email := strings.TrimSpace(a.Email)
-		if email == "" {
-			email = strings.TrimSpace(a.Identity)
-		}
-		if validateAddress(api.Address{Address: email}) != nil {
+		if validateAddress(api.Address{Address: cfg.Email}) != nil {
 			s.b.log.Debug("linked account without a usable address", "id", a.ID)
 			continue
 		}
+		provider, _ := providerOf(a.ProviderType)
 		out.Accounts = append(out.Accounts, api.LinkedAccount{
-			Provider:        "microsoft365",
-			Email:           email,
-			Name:            cleanDisplayName(a.Name),
+			Provider:        provider,
+			Email:           cfg.Email,
+			Name:            cfg.DisplayName,
 			GOAAccountID:    a.ID,
-			Configured:      configured[store.NormalizeAddress(email)],
+			Configured:      configured[store.NormalizeAddress(cfg.Email)],
 			AttentionNeeded: a.AttentionNeeded,
+			Config:          cfg,
 		})
 	}
 	return out, nil
@@ -542,6 +552,11 @@ func validateAccountConfig(c *api.AccountConfig) error {
 			if err := validateOAuth2(c.OAuth2); err != nil {
 				return err
 			}
+			// One sign-in for both: a GOA account has no password to
+			// give the other endpoint.
+			if c.OAuth2.Source == api.OAuth2SourceGOA && (c.IMAP.AuthMethod != api.AuthOAuth2 || c.SMTP.AuthMethod != api.AuthOAuth2) {
+				return bad("oauth2: both endpoints must use oauth2 with source goa")
+			}
 		}
 	case api.AccountGraph:
 		if c.IMAP != nil || c.SMTP != nil || c.OAuth2 != nil {
@@ -609,9 +624,31 @@ func validateOAuth2(o *api.OAuth2Config) error {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, "oauth2: "+format, args...)
 	}
+	o.GOAAccountID = strings.TrimSpace(o.GOAAccountID)
+	switch o.Source {
+	case api.OAuth2SourceGOA:
+		// GNOME Online Accounts holds the sign-in: nothing of an own flow
+		// applies, and the only provider used this way is Google.
+		if o.Provider != api.OAuth2ProviderGoogle {
+			return bad("provider must be google with source goa")
+		}
+		if !goa.ValidID(o.GOAAccountID) {
+			return bad("goaAccountId is required with source goa")
+		}
+		if o.ClientID != "" || o.TenantID != "" || o.AuthURL != "" || o.TokenURL != "" || len(o.Scopes) > 0 {
+			return bad("clientId, tenantId, authUrl, tokenUrl and scopes do not apply with source goa")
+		}
+		return nil
+	case "":
+		if o.GOAAccountID != "" {
+			return bad("goaAccountId needs source goa")
+		}
+	default:
+		return bad("source must be goa or absent")
+	}
 	switch o.Provider {
-	case "office365":
-	case "custom":
+	case api.OAuth2ProviderOffice365:
+	case api.OAuth2ProviderCustom:
 		for name, raw := range map[string]string{"authUrl": o.AuthURL, "tokenUrl": o.TokenURL} {
 			u, err := url.Parse(raw)
 			if err != nil || u.Scheme != "https" || u.Host == "" {

@@ -135,9 +135,10 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 	// constructing them starts nothing (Run does), so tests may still
 	// replace them with fakes before StartSync.
 	imapSync := imap.NewSupervisor(imap.SupervisorDeps{
-		Store:    st,
-		Password: b.PasswordFor,
-		Notifier: notifier,
+		Store:      st,
+		Password:   b.credentialFor,
+		AuthFailed: b.invalidateCredentialsFor,
+		Notifier:   notifier,
 		Prefs: func() imap.SyncPrefs {
 			interval, days := b.SyncPrefs()
 			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
@@ -159,23 +160,25 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 	// Through b.Supervisor, not the values above: tests swap it.
 	trigger := func(id string, f api.FolderID, full bool) bool { return b.Supervisor.Trigger(id, f, full) }
 	imapOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
-		Store:    st,
-		Password: b.PasswordFor,
-		Notifier: notifier,
-		Trigger:  trigger,
-		Changed:  b.outboxChanged,
-		Log:      log,
+		Store:            st,
+		Password:         b.credentialFor,
+		AuthFailed:       b.invalidateCredentialsFor,
+		Notifier:         notifier,
+		FilesSentCopyFor: func(a store.Account) bool { return serverFilesSentCopy(a.Config) },
+		Trigger:          trigger,
+		Changed:          b.outboxChanged,
+		Log:              log,
 	})
 	graphOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
 		Store: st,
 		// No password: the token is fetched inside the delivery function.
-		Password:      func(context.Context, string) (string, error) { return "", nil },
-		Notifier:      notifier,
-		DeliverFor:    b.graphDeliverFor,
-		FilesSentCopy: true,
-		Trigger:       trigger,
-		Changed:       b.outboxChanged,
-		Log:           log,
+		Password:         func(context.Context, string) (string, error) { return "", nil },
+		Notifier:         notifier,
+		DeliverFor:       b.graphDeliverFor,
+		FilesSentCopyFor: func(store.Account) bool { return true },
+		Trigger:          trigger,
+		Changed:          b.outboxChanged,
+		Log:              log,
 	})
 	b.Delivery = newKindOutbox(imapOutbox, graphOutbox)
 	return b
@@ -240,30 +243,6 @@ func (b *Backend) graphToken(ctx context.Context, cfg api.AccountConfig) (string
 	default:
 		return "", api.NewError(api.CodeInvalidArgument, "unsupported graph token source %q", cfg.Graph.Source)
 	}
-}
-
-// goaAccountFor finds the address among the Microsoft 365 accounts of
-// GNOME Online Accounts (mail enabled, OAuth2), for account.discover. A
-// missing or failing GOA is simply no match.
-func (b *Backend) goaAccountFor(ctx context.Context, email string) (string, bool) {
-	if b.GOA == nil {
-		return "", false
-	}
-	accounts, err := b.GOA.Accounts(ctx)
-	if err != nil {
-		b.log.Debug("gnome online accounts lookup", "err", err)
-		return "", false
-	}
-	want := store.NormalizeAddress(email)
-	for _, a := range accounts {
-		if a.ProviderType != goa.ProviderMicrosoft365 || !a.OAuth2 || a.MailDisabled {
-			continue
-		}
-		if store.NormalizeAddress(a.Email) == want || (a.Email == "" && store.NormalizeAddress(a.Identity) == want) {
-			return a.ID, true
-		}
-	}
-	return "", false
 }
 
 // InvalidateGraphToken drops the cached token of a Graph account after the

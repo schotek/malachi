@@ -203,6 +203,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   reports, dropped when the service rejects it, and scrubbed from any error
   text the service echoes. Revoking the sign-in in GNOME Settings cuts the
   daemon off at the next token request.
+- Google accounts (`oauth2` endpoints with `source: goa`) take the same
+  route with a token scoped for IMAP/SMTP: the daemon presents it through
+  SASL XOAUTH2 (`internal/auth`). Inside the sync engine and the outbox
+  the token travels in the parameter the password would, so the same
+  redaction scrubs it from error text, and a server refusing it drops it
+  from the cache at once (`AuthFailed` hooks) so the next attempt asks
+  GNOME Online Accounts again.
 - The planned own OAuth2 flow (authorization code with PKCE; a redirect
   listener on `127.0.0.1`, one callback with the expected `state`; the UI
   opening the URL via the OpenURI portal, the backend never launching a

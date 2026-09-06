@@ -105,6 +105,8 @@ const (
 	msID       = "account_1788512854_0"
 	msPath     = dbus.ObjectPath(accountsPrefix + msID)
 	cloudPath  = dbus.ObjectPath(accountsPrefix + "account_1788289873_0")
+	googleID   = "account_1788683507_0"
+	googlePath = dbus.ObjectPath(accountsPrefix + googleID)
 	tokenValue = "EwBAAl3BAAUFFpUAo7J3Ve0bjLBWZWCclRC3EoAA"
 )
 
@@ -129,6 +131,15 @@ func managedObjects() map[dbus.ObjectPath]map[string]map[string]dbus.Variant {
 			ifaceMail:   props("EmailAddress", "me@contoso.com", "Name", "Me Myself"),
 			ifaceOAuth2: props("ClientId", "b155a604"),
 		},
+		googlePath: {
+			ifaceAccount: props("ProviderType", ProviderGoogle, "ProviderName", "Google", "Identity", "me@gmail.com",
+				"PresentationIdentity", "me@gmail.com", "MailDisabled", false, "AttentionNeeded", false),
+			ifaceMail: props("EmailAddress", "me@gmail.com", "Name", "G Mail",
+				"ImapSupported", true, "ImapHost", "imap.gmail.com", "ImapUserName", "me@gmail.com", "ImapUseSsl", true, "ImapUseTls", false,
+				"SmtpSupported", true, "SmtpHost", "smtp.gmail.com", "SmtpUserName", "me@gmail.com", "SmtpUseAuth", true,
+				"SmtpUseSsl", true, "SmtpUseTls", true, "SmtpAuthXoauth2", true, "SmtpAuthPlain", false),
+			ifaceOAuth2: props("ClientId", "44438659992"),
+		},
 		"/org/gnome/OnlineAccounts/Accounts/../etc": {ifaceAccount: props("ProviderType", ProviderMicrosoft365)},
 	}
 }
@@ -149,7 +160,7 @@ func TestAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 {
+	if len(got) != 3 {
 		t.Fatalf("accounts = %+v", got)
 	}
 	// Sorted by id: the Nextcloud account first.
@@ -160,6 +171,21 @@ func TestAccounts(t *testing.T) {
 	if ms.ID != msID || ms.ProviderType != ProviderMicrosoft365 || ms.ProviderName != "Microsoft 365" ||
 		ms.Email != "me@contoso.com" || ms.Name != "Me Myself" || !ms.AttentionNeeded || ms.MailDisabled || !ms.OAuth2 {
 		t.Fatalf("microsoft = %+v", ms)
+	}
+	if ms.Mail != (MailSettings{}) {
+		t.Fatalf("microsoft reports servers: %+v", ms.Mail)
+	}
+	g := got[2]
+	if g.ID != googleID || g.ProviderType != ProviderGoogle || g.Email != "me@gmail.com" || g.Name != "G Mail" || !g.OAuth2 {
+		t.Fatalf("google = %+v", g)
+	}
+	want := MailSettings{
+		IMAPSupported: true, IMAPHost: "imap.gmail.com", IMAPUserName: "me@gmail.com", IMAPUseSSL: true,
+		SMTPSupported: true, SMTPHost: "smtp.gmail.com", SMTPUserName: "me@gmail.com", SMTPUseAuth: true,
+		SMTPUseSSL: true, SMTPUseTLS: true, SMTPAuthXOAuth2: true,
+	}
+	if g.Mail != want {
+		t.Fatalf("google mail = %+v, want %+v", g.Mail, want)
 	}
 }
 
@@ -278,7 +304,7 @@ func TestReconnectsOnce(t *testing.T) {
 		}
 		return []any{managedObjects()}, nil
 	})
-	if got, err := c.Accounts(context.Background()); err != nil || len(got) != 2 {
+	if got, err := c.Accounts(context.Background()); err != nil || len(got) != 3 {
 		t.Fatalf("got %v, %v", got, err)
 	}
 	if dials != 2 {

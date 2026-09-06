@@ -195,10 +195,14 @@ func TestProbeServerClosesAfterGreeting(t *testing.T) {
 	}
 }
 
-func TestProbeOAuth2NotImplemented(t *testing.T) {
-	c := cfg(1, api.SecurityTLS)
+// An oauth2 endpoint against a server without XOAUTH2 or OAUTHBEARER is
+// the server's fault, not a sign-in problem, and the token is never sent.
+func TestProbeOAuth2WithoutMechanism(t *testing.T) {
+	port := startServer(t, nil, true)
+	c := cfg(port, api.SecurityNone)
 	c.AuthMethod = api.AuthOAuth2
-	if _, err := Probe(context.Background(), c, ""); code(t, err) != api.CodeNotImplemented {
+	_, err := Probe(context.Background(), c, "ya29.token")
+	if code(t, err) != api.CodeServerError || strings.Contains(err.Error(), "ya29") {
 		t.Fatalf("oauth2: %v", err)
 	}
 }

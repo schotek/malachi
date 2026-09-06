@@ -55,21 +55,28 @@ func TestAccountTest(t *testing.T) {
 		}
 	})
 
-	t.Run("oauth2 endpoint not implemented", func(t *testing.T) {
+	t.Run("own oauth2 flow not implemented", func(t *testing.T) {
 		b := newTestBackend(t, config.Default())
 		c := validConfig()
 		c.IMAP.AuthMethod = api.AuthOAuth2
 		c.OAuth2 = &api.OAuth2Config{Provider: "office365"}
-		b.ProbeIMAP = imap.Probe // real one refuses oauth2 before touching the network
+		// No token source yet: nothing is dialled, both endpoints say so.
+		probed := false
+		b.ProbeIMAP = func(context.Context, api.ServerConfig, string) (imap.ProbeResult, error) {
+			probed = true
+			return imap.ProbeResult{}, nil
+		}
 		b.ProbeSMTP = func(context.Context, api.ServerConfig, string) (smtp.ProbeResult, error) {
+			probed = true
 			return smtp.ProbeResult{}, nil
 		}
 		res, err := b.Accounts().Test(ctx, api.AccountTestParams{Config: c})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if res.IMAP.Error == nil || res.IMAP.Error.Code != api.CodeNotImplemented || !res.SMTP.OK {
-			t.Fatalf("res = %+v", res)
+		if res.IMAP.Error == nil || res.IMAP.Error.Code != api.CodeNotImplemented ||
+			res.SMTP.Error == nil || res.SMTP.Error.Code != api.CodeNotImplemented || probed {
+			t.Fatalf("res = %+v probed %v", res, probed)
 		}
 	})
 
