@@ -1020,6 +1020,41 @@ as `<img src="cid:<contentId>">`.
   was bound to a draft it disappears from that draft; the draft's `version`
   is not changed.
 
+### 4.11 contact
+
+Recipient completion for the compose window. Suggestions come from two
+sources, merged and ranked by the backend: addresses the user has written
+to (`"source": "sent"` — collected from outgoing mail after delivery, To,
+Cc and Bcc alike, and once from the Sent folders already in the store;
+**never** from incoming `From` headers, which are attacker-controlled), and
+the system address books of the sending account (`"source": "addressBook"`,
+read from Evolution Data Server over D-Bus; on Microsoft 365 that includes
+the organisation directory and recent people). `name` and `book` are
+untrusted display text.
+
+```jsonc
+Contact { "name": "Alice Example" (opt), "address": "alice@example.org",
+          "source": "sent" | "addressBook", "book": "Contacts" (opt) }
+```
+
+#### `contact.search`
+- params: `{ "accountId", "query", "limit": 10 (opt, max 50) }`
+- result: `{ "contacts": [Contact] }` — best match first; the same address
+  from both sources is one entry, reported as the address book's
+- errors: invalidArgument (empty query, over 256 bytes, control
+  characters), accountNotFound, storageError
+
+Ranking: a whole-address match, then an address prefix, a word of the name,
+anywhere in the name, anywhere in the address; a collected address is
+lifted by how often and how recently it was written to. The address books
+searched are those of the account's own collection in Evolution Data
+Server — matched on the GNOME Online Accounts id of a Microsoft 365
+account, else on the collection's e-mail identity. An account with no such
+collection, a desktop without a session bus or without Evolution Data
+Server, and an address book that fails or times out all leave the
+address-book part simply empty, never an error. A query is at least one
+character; clients wait for two before asking.
+
 ## 5. Notifications
 
 | Method | params |
@@ -1148,3 +1183,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   after it. `unreadOnly` is deprecated in favour of `filter: "unread"` and
   is honoured only while `filter` is absent. Cursors do not encode the
   filter, so changing it means starting from the first page.
+- **1** (2026-09-06, compatible addition, recipient completion): new
+  `contact.search` over addresses the user wrote to (collected after each
+  delivery and once from the Sent folders; never from incoming `From`) and
+  the system address books of the sending account, read from Evolution
+  Data Server; the address-book part is empty, not an error, wherever the
+  service is missing.

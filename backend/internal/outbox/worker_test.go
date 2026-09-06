@@ -172,14 +172,16 @@ func (h *harness) deps() Deps {
 func (h *harness) enqueue(subject string) string {
 	h.t.Helper()
 	ctx := context.Background()
-	d := store.Draft{AccountID: h.account.ID, Subject: subject, To: []api.Address{{Address: "to@example.invalid"}}, TextBody: "hello"}
+	d := store.Draft{AccountID: h.account.ID, Subject: subject,
+		To:  []api.Address{{Name: "Recipient One", Address: "to@example.invalid"}},
+		BCC: []api.Address{{Address: "bcc@example.invalid"}}, TextBody: "hello"}
 	if err := h.s.SaveDraft(ctx, &d, nil); err != nil {
 		h.t.Fatal(err)
 	}
 	m, err := h.s.EnqueueOutbox(ctx, store.EnqueueInput{
 		DraftID: d.ID, DraftVersion: d.Version,
 		Message: store.Message{AccountID: h.account.ID, From: []api.Address{{Address: "me@example.invalid"}},
-			To: d.To, Subject: subject, Date: fixedNow, RFCMessageID: "x@example.invalid"},
+			To: d.To, BCC: d.BCC, Subject: subject, Date: fixedNow, RFCMessageID: "x@example.invalid"},
 		Text:         "hello",
 		EnvelopeFrom: "me@example.invalid",
 		Recipients:   []string{"to@example.invalid", "bcc@example.invalid"},
@@ -277,6 +279,42 @@ func TestWorkerDeliversWithoutSentFolder(t *testing.T) {
 	}
 	if n := h.rec.authCount(); n != 0 {
 		t.Errorf("authRequired = %d", n)
+	}
+}
+
+// A delivery records every recipient, with the display name the draft
+// carried, for recipient completion; the sender is not a recipient.
+func TestWorkerCollectsRecipients(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	id := h.enqueue("one")
+	_, cancel := h.run()
+	waitFor(t, "first message delivered", func() bool { return h.gone(id) })
+	cancel()
+
+	got, err := h.s.SearchCollectedAddresses(ctx, "example.invalid", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byAddr := map[string]store.CollectedAddress{}
+	for _, c := range got {
+		byAddr[c.Address] = c
+	}
+	if c := byAddr["to@example.invalid"]; c.Name != "Recipient One" || c.Uses != 1 || !c.LastUsed.Equal(fixedNow) {
+		t.Errorf("to = %+v", c)
+	}
+	if c, ok := byAddr["bcc@example.invalid"]; !ok || c.Name != "" || c.Uses != 1 {
+		t.Errorf("bcc = %+v (present %v)", c, ok)
+	}
+	if _, ok := byAddr["me@example.invalid"]; ok {
+		t.Error("the sender was collected as a recipient")
+	}
+
+	id2 := h.enqueue("two")
+	h.run()
+	waitFor(t, "second message delivered", func() bool { return h.gone(id2) })
+	if got, _ := h.s.SearchCollectedAddresses(ctx, "to@", 10); len(got) != 1 || got[0].Uses != 2 {
+		t.Errorf("after the second delivery: %+v", got)
 	}
 }
 

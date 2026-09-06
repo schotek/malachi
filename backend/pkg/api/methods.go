@@ -66,6 +66,9 @@ const (
 	MethodSenderList   = "sender.list"
 	MethodSenderAdd    = "sender.add"
 	MethodSenderRemove = "sender.remove"
+
+	// Contacts (recipient completion).
+	MethodContactSearch = "contact.search"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -95,6 +98,7 @@ var AllMethods = []string{
 	MethodSyncStatus, MethodSyncTrigger,
 	MethodConfigGet, MethodConfigSet,
 	MethodSenderList, MethodSenderAdd, MethodSenderRemove,
+	MethodContactSearch,
 }
 
 // AllNotifications lists every server-initiated notification.

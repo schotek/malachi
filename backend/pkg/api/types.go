@@ -1057,6 +1057,47 @@ type SenderRemoveParams struct {
 
 type SenderRemoveResult struct{}
 
+// ContactSource says where a recipient suggestion came from.
+type ContactSource string
+
+const (
+	// ContactSourceSent: a recipient of mail the user sent. Never fed from
+	// incoming From headers, which are attacker-controlled.
+	ContactSourceSent ContactSource = "sent"
+	// ContactSourceAddressBook: a system address book (Evolution Data
+	// Server), read only.
+	ContactSourceAddressBook ContactSource = "addressBook"
+)
+
+// Contact is one recipient suggestion. Name and Book are untrusted display
+// text; UIs must not interpret them as markup.
+type Contact struct {
+	Name    string        `json:"name,omitempty"`
+	Address string        `json:"address"` // normalised, syntactically valid
+	Source  ContactSource `json:"source"`
+	// Book is the display name of the address book the contact came from;
+	// empty for a collected address.
+	Book string `json:"book,omitempty"`
+}
+
+const (
+	DefaultContactLimit  = 10
+	MaxContactLimit      = 50
+	MaxContactQueryBytes = 256
+)
+
+type ContactSearchParams struct {
+	AccountID AccountID `json:"accountId"`
+	Query     string    `json:"query"`
+	// Limit caps the result; 0 means DefaultContactLimit, more than
+	// MaxContactLimit is clamped.
+	Limit int `json:"limit,omitempty"`
+}
+
+type ContactSearchResult struct {
+	Contacts []Contact `json:"contacts"` // never null; ranked best first
+}
+
 // ---------------------------------------------------------------------------
 // Notifications (backend → client)
 // ---------------------------------------------------------------------------

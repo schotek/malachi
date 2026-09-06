@@ -87,6 +87,10 @@ type SenderService interface {
 	Remove(ctx context.Context, p SenderRemoveParams) (*SenderRemoveResult, error)
 }
 
+type ContactService interface {
+	Search(ctx context.Context, p ContactSearchParams) (*ContactSearchResult, error)
+}
+
 // Backend is the complete server-side surface.
 type Backend interface {
 	System() SystemService
@@ -101,6 +105,7 @@ type Backend interface {
 	Sync() SyncService
 	Config() ConfigService
 	Senders() SenderService
+	Contacts() ContactService
 }
 
 // Notifier is how backend components push events to connected clients.

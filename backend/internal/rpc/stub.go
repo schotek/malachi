@@ -36,6 +36,13 @@ func (b *StubBackend) Search() api.SearchService          { return stubSearch{} 
 func (b *StubBackend) Sync() api.SyncService              { return stubSync{} }
 func (b *StubBackend) Config() api.ConfigService          { return stubConfig{} }
 func (b *StubBackend) Senders() api.SenderService         { return stubSenders{} }
+func (b *StubBackend) Contacts() api.ContactService       { return stubContacts{} }
+
+type stubContacts struct{}
+
+func (stubContacts) Search(context.Context, api.ContactSearchParams) (*api.ContactSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubSystem struct{ b *StubBackend }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
 	"github.com/schotek/malachi/backend/internal/config"
+	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
@@ -68,6 +69,12 @@ type Backend struct {
 	// tokens of Graph accounts. It connects lazily; without a session bus
 	// every call reports unavailable. Tests substitute a fake.
 	GOA GOAClient
+
+	// Directory is the system address-book client behind contact.search
+	// (Evolution Data Server over D-Bus once internal/contacts/eds exists).
+	// nil, no session bus, no service: the address-book part of a search
+	// is simply empty. Tests substitute a fake.
+	Directory contacts.Directory
 
 	// Supervisor runs one syncer per enabled account. New installs a
 	// kind dispatcher over imap.NewSupervisor (and the Graph supervisor);
@@ -364,15 +371,20 @@ func (b *Backend) Accounts() api.AccountService       { return &accountService{b
 func (b *Backend) Outbox() api.OutboxService          { return &outboxService{b} }
 func (b *Backend) Config() api.ConfigService          { return &configService{b} }
 func (b *Backend) Senders() api.SenderService         { return &senderService{b} }
+func (b *Backend) Contacts() api.ContactService       { return &contactService{b} }
 func (b *Backend) Drafts() api.DraftService           { return &draftService{b} }
 func (b *Backend) Attachments() api.AttachmentService { return &attachmentService{b} }
 func (b *Backend) Folders() api.FolderService         { return &folderService{b} }
 func (b *Backend) Messages() api.MessageService       { return &messageService{b} }
 func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
-// Maintain runs periodic housekeeping until ctx is cancelled: the orphan
-// attachment sweep at start and then hourly.
+// Maintain runs periodic housekeeping until ctx is cancelled: the one-off
+// seeding of recipient completion, then the orphan attachment sweep at
+// start and hourly.
 func (b *Backend) Maintain(ctx context.Context) {
+	if err := b.backfillCollectedAddresses(ctx); err != nil {
+		b.log.Warn("backfill collected addresses", "err", err)
+	}
 	sweep := func() {
 		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
 		if err != nil {

@@ -284,6 +284,19 @@ func (w *Worker) succeed(ctx context.Context, e store.OutboxEntry) {
 			w.log.Warn("record recipient as known sender", "err", err)
 		}
 	}
+	// Recipient completion. The message row is still there (it is dropped
+	// or filed below), so the recipients' display names are at hand; the
+	// envelope has only bare addresses. Cc and Bcc count as much as To:
+	// the user chose them all.
+	if msg, err := w.deps.Store.GetMessage(ctx, w.account.ID, id); err != nil {
+		w.log.Warn("read delivered message for recipient completion", "err", err)
+	} else {
+		addrs := make([]api.Address, 0, len(msg.To)+len(msg.CC)+len(msg.BCC))
+		addrs = append(append(append(addrs, msg.To...), msg.CC...), msg.BCC...)
+		if err := w.deps.Store.TouchCollectedAddresses(ctx, addrs, w.deps.Now()); err != nil {
+			w.log.Warn("record recipients for completion", "err", err)
+		}
+	}
 	sent, err := w.deps.Store.FolderByRole(ctx, w.account.ID, api.RoleSent)
 	switch {
 	case errors.Is(err, store.ErrNotFound), w.deps.FilesSentCopy:
