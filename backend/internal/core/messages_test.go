@@ -166,9 +166,29 @@ func TestMessageList(t *testing.T) {
 		t.Fatalf("asc page 2 = %+v, %v", page2, err)
 	}
 
-	unread, err := svc.List(ctx, api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, UnreadOnly: true})
+	unread, err := svc.List(ctx, api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Filter: api.FilterUnread})
 	if err != nil || len(unread.Messages) != 2 || unread.Page.Total != 2 {
 		t.Fatalf("unread = %+v, %v", unread, err)
+	}
+	// The deprecated unreadOnly is honoured while filter is absent, and
+	// ignored once filter is given.
+	legacy, err := svc.List(ctx, api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, UnreadOnly: true})
+	if err != nil || len(legacy.Messages) != 2 || legacy.Page.Total != 2 {
+		t.Fatalf("unreadOnly = %+v, %v", legacy, err)
+	}
+	all, err := svc.List(ctx, api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Filter: api.FilterAll, UnreadOnly: true})
+	if err != nil || all.Page.Total != 3 {
+		t.Fatalf("filter overrides unreadOnly = %+v, %v", all, err)
+	}
+
+	// "second" is the seen one; flagging it must show up under the flagged
+	// filter regardless of its seen state.
+	if _, err := svc.Flag(ctx, api.MessageFlagParams{AccountID: m.acc, MessageIDs: []api.MessageID{m.msgs[1]}, Set: []api.Flag{api.FlagFlagged}}); err != nil {
+		t.Fatal(err)
+	}
+	flagged, err := svc.List(ctx, api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Filter: api.FilterFlagged})
+	if err != nil || len(flagged.Messages) != 1 || flagged.Page.Total != 1 || flagged.Messages[0].Subject != "second" {
+		t.Fatalf("flagged = %+v, %v", flagged, err)
 	}
 
 	cases := []struct {
@@ -181,6 +201,7 @@ func TestMessageList(t *testing.T) {
 		{"unknown account", api.MessageListParams{AccountID: "acc_nope", FolderID: m.inbox}, api.CodeAccountNotFound},
 		{"unknown folder", api.MessageListParams{AccountID: m.acc, FolderID: "f_nope"}, api.CodeFolderNotFound},
 		{"bad sort", api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Sort: "subject"}, api.CodeInvalidArgument},
+		{"bad filter", api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Filter: "starred"}, api.CodeInvalidArgument},
 		{"bad cursor", api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Page: api.Page{Cursor: "!!"}}, api.CodeInvalidArgument},
 		{"cursor from other sort", api.MessageListParams{AccountID: m.acc, FolderID: m.inbox, Page: api.Page{Cursor: asc.Page.NextCursor}}, api.CodeInvalidArgument},
 	}

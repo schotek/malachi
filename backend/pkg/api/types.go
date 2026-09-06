@@ -460,13 +460,40 @@ const (
 	SortDateAsc  SortOrder = "dateAsc"
 )
 
+// MessageFilter narrows a message listing to a subset of the folder. The
+// counts in PageInfo are taken after the filter. Empty means FilterAll.
+type MessageFilter string
+
+const (
+	FilterAll     MessageFilter = "all"
+	FilterUnread  MessageFilter = "unread"  // without the "seen" flag
+	FilterFlagged MessageFilter = "flagged" // with the "flagged" flag
+)
+
 type MessageListParams struct {
-	AccountID AccountID `json:"accountId"`
-	FolderID  FolderID  `json:"folderId"`
-	Page      Page      `json:"page"`
-	Sort      SortOrder `json:"sort,omitempty"`
+	AccountID AccountID     `json:"accountId"`
+	FolderID  FolderID      `json:"folderId"`
+	Page      Page          `json:"page"`
+	Sort      SortOrder     `json:"sort,omitempty"`
+	Filter    MessageFilter `json:"filter,omitempty"`
 	// UnreadOnly restricts the list to messages without the "seen" flag.
+	//
+	// Deprecated: use Filter. Honoured only while Filter is empty, so that
+	// a client written against the older contract keeps working.
 	UnreadOnly bool `json:"unreadOnly,omitempty"`
+}
+
+// EffectiveFilter resolves Filter, falling back to the deprecated UnreadOnly
+// when no filter was given. An unknown Filter is returned unchanged: the
+// backend rejects it with invalidArgument.
+func (p MessageListParams) EffectiveFilter() MessageFilter {
+	if p.Filter != "" {
+		return p.Filter
+	}
+	if p.UnreadOnly {
+		return FilterUnread
+	}
+	return FilterAll
 }
 
 type MessageListResult struct {

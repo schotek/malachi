@@ -93,9 +93,9 @@ func (s *Store) FlagMessages(ctx context.Context, accountID string, ids []string
 		now := nowStamp()
 		for _, loc := range locs {
 			flags := applyFlags(loc.flags, set, clear)
-			encoded, unread := encodeFlags(flags)
-			if _, err := tx.ExecContext(ctx, `UPDATE messages SET flags = ?, unread = ?, updated_at = ? WHERE id = ?`,
-				encoded, unread, now, loc.id); err != nil {
+			encoded, unread, flagged := encodeFlags(flags)
+			if _, err := tx.ExecContext(ctx, `UPDATE messages SET flags = ?, unread = ?, flagged = ?, updated_at = ? WHERE id = ?`,
+				encoded, unread, flagged, now, loc.id); err != nil {
 				return nil, fmt.Errorf("flag message: %w", err)
 			}
 			if err := enqueueOp(ctx, tx, accountID, OpFlag, loc, string(payload), now); err != nil {

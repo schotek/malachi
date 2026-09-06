@@ -491,8 +491,10 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			return // delivered twice; the badge was adjusted the first time
 		}
 		// While the page is (re)loading the reply will include the message;
-		// only a settled list gets the row prepended.
-		if !w.model.loading && w.model.listErr == nil && w.model.insertMessage(0, s) {
+		// only a settled list gets the row prepended, and only when the
+		// active filter would have listed it anyway.
+		if !w.model.loading && w.model.listErr == nil && matchesFilter(s, w.model.listFilter) &&
+			w.model.insertMessage(0, s) {
 			r := w.newMessageRow(s)
 			w.rows[s.ID] = r
 			w.messageList.Prepend(r)

@@ -110,15 +110,17 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 	defer tx.Rollback()
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO messages (id, account_id, folder_id, uid, remote_id, modseq, flags, unread,
+		INSERT INTO messages (id, account_id, folder_id, uid, remote_id, modseq, flags, unread, flagged,
 			from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 			rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 			attachments_json, headers_json, has_html, text_body, body_state, thread_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?)
 		ON CONFLICT (folder_id, uid) WHERE uid > 0 DO UPDATE SET
-			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread, updated_at = excluded.updated_at
+			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread,
+			flagged = excluded.flagged, updated_at = excluded.updated_at
 		ON CONFLICT (folder_id, remote_id) WHERE remote_id != '' DO UPDATE SET
 			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread,
+			flagged = excluded.flagged,
 			thread_id = CASE WHEN excluded.thread_id = '' THEN thread_id ELSE excluded.thread_id END,
 			updated_at = excluded.updated_at
 		RETURNING id, created_at`)
@@ -148,7 +150,7 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		}
 		var r result
 		err = stmt.QueryRowContext(ctx,
-			id, m.AccountID, m.FolderID, int64(m.UID), m.RemoteID, int64(m.ModSeq), enc.flags, enc.unread,
+			id, m.AccountID, m.FolderID, int64(m.UID), m.RemoteID, int64(m.ModSeq), enc.flags, enc.unread, enc.flagged,
 			enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 			m.RFCMessageID, m.InReplyTo, enc.references, m.Size, m.Snippet, boolInt(m.HasAttachments),
 			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), m.ThreadID, now, now,
@@ -285,7 +287,7 @@ func (s *Store) applyServerFlags(ctx context.Context, where string, args []any, 
 	if pending > 0 {
 		return false, nil
 	}
-	encoded, unread := encodeFlags(flags)
+	encoded, unread, flagged := encodeFlags(flags)
 	old, err := decodeFlags(stored)
 	if err != nil {
 		return false, fmt.Errorf("decode flags of %s: %w", id, err)
@@ -301,8 +303,8 @@ func (s *Store) applyServerFlags(ctx context.Context, where string, args []any, 
 		}
 		return false, nil
 	}
-	if _, err := tx.ExecContext(ctx, `UPDATE messages SET flags = ?, unread = ?, modseq = ?, updated_at = ? WHERE id = ?`,
-		encoded, unread, int64(modseq), nowStamp(), id); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET flags = ?, unread = ?, flagged = ?, modseq = ?, updated_at = ? WHERE id = ?`,
+		encoded, unread, flagged, int64(modseq), nowStamp(), id); err != nil {
 		return false, fmt.Errorf("apply server flags: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -564,9 +566,9 @@ func (s *Store) AssignUID(ctx context.Context, id string, uid uint32, modseq uin
 			return err
 		}
 		files = dup
-		encoded, unread := encodeFlags(flags)
-		if _, err := tx.ExecContext(ctx, `UPDATE messages SET uid = ?, modseq = ?, flags = ?, unread = ?, updated_at = ? WHERE id = ?`,
-			int64(uid), int64(modseq), encoded, unread, nowStamp(), id); err != nil {
+		encoded, unread, flagged := encodeFlags(flags)
+		if _, err := tx.ExecContext(ctx, `UPDATE messages SET uid = ?, modseq = ?, flags = ?, unread = ?, flagged = ?, updated_at = ? WHERE id = ?`,
+			int64(uid), int64(modseq), encoded, unread, flagged, nowStamp(), id); err != nil {
 			return fmt.Errorf("assign uid: %w", err)
 		}
 	}
@@ -688,10 +690,12 @@ func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) e
 
 // ListMessages pages through a folder. The cursor is opaque and bound to
 // the sort order it was issued for: a cursor from the other order (or a
-// malformed one) is ErrBadCursor. sort "" means SortDateDesc; limit <= 0
-// means 50. total counts the whole folder under the unreadOnly filter.
+// malformed one) is ErrBadCursor. It does not encode the filter, so a
+// caller that changes the filter must start again from the first page.
+// sort "" means SortDateDesc; filter "" means api.FilterAll; limit <= 0
+// means 50. total counts the whole folder under the filter.
 // ErrNotFound when the account has no such folder.
-func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor string, limit int, sortOrder api.SortOrder, unreadOnly bool) (items []Message, next string, total int, err error) {
+func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []Message, next string, total int, err error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -719,16 +723,22 @@ func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor st
 		return nil, "", 0, ErrNotFound
 	}
 
-	filter := ` WHERE folder_id = ? AND account_id = ?`
+	where := ` WHERE folder_id = ? AND account_id = ?`
 	args := []any{folderID, accountID}
-	if unreadOnly {
-		filter += ` AND unread = 1`
+	switch listFilter {
+	case "", api.FilterAll:
+	case api.FilterUnread:
+		where += ` AND unread = 1`
+	case api.FilterFlagged:
+		where += ` AND flagged = 1`
+	default:
+		return nil, "", 0, fmt.Errorf("list messages: unsupported filter %q", listFilter)
 	}
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`+filter, args...).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages`+where, args...).Scan(&total); err != nil {
 		return nil, "", 0, fmt.Errorf("count messages: %w", err)
 	}
 
-	query := `SELECT ` + messageColumns + ` FROM messages` + filter
+	query := `SELECT ` + messageColumns + ` FROM messages` + where
 	if cursor != "" {
 		query += ` AND (date ` + cmp + ` ? OR (date = ? AND id ` + cmp + ` ?))`
 		args = append(args, cursorStamp, cursorStamp, cursorID)
@@ -1034,7 +1044,7 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 
 type encodedMessage struct {
 	flags                            string
-	unread                           int
+	unread, flagged                  int
 	from, to, cc, bcc, replyTo       string
 	references, attachments, headers string
 }
@@ -1042,7 +1052,7 @@ type encodedMessage struct {
 func encodeMessage(m *Message) (encodedMessage, error) {
 	var e encodedMessage
 	var err error
-	e.flags, e.unread = encodeFlags(m.Flags)
+	e.flags, e.unread, e.flagged = encodeFlags(m.Flags)
 	for _, p := range []struct {
 		src []api.Address
 		dst *string
@@ -1077,17 +1087,22 @@ func encodeJSON(v any, empty string) (string, error) {
 }
 
 // encodeFlags stores flags as a sorted, de-duplicated JSON array and
-// derives the unread column (1 when "seen" is absent).
-func encodeFlags(flags []api.Flag) (string, int) {
+// derives the unread column (1 when "seen" is absent) and the flagged
+// column (1 when "flagged" is present). Both exist only so the filtered
+// listings can use a partial index; the array stays the source of truth.
+func encodeFlags(flags []api.Flag) (encoded string, unread, flagged int) {
 	set := normalizeFlags(flags)
 	b, _ := json.Marshal(set)
-	unread := 1
+	unread = 1
 	for _, f := range set {
-		if f == api.FlagSeen {
+		switch f {
+		case api.FlagSeen:
 			unread = 0
+		case api.FlagFlagged:
+			flagged = 1
 		}
 	}
-	return string(b), unread
+	return string(b), unread, flagged
 }
 
 func decodeFlags(raw string) ([]api.Flag, error) {

@@ -104,6 +104,14 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
 	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
 	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
+	// The All / Unread / Flagged switch above the message list: it is a
+	// filter, not the column's heading, so it stays out of the way. The
+	// toggles lose the height and the roomy padding a stand-alone button
+	// claims, the label goes down a size, and the bold weight Adwaita
+	// gives buttons comes off — three short words in bold read as a title
+	// bar. CSS node names come from AdwToggleGroup (toggle-group > toggle).
+	b.WriteString("toggle-group.message-filter toggle { min-height: 0; padding: 3px 12px; }\n")
+	b.WriteString("toggle-group.message-filter toggle label { font-size: 90%; font-weight: normal; }\n")
 	// Separators between messages (show-separators on the list in window.blp).
 	// The sidebar style rounds its rows and insets them, which would bend the
 	// separator into a shallow arc and leave a gap under it, so the message

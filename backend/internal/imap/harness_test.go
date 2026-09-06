@@ -416,7 +416,7 @@ func (h *harness) folder(roleOrMailbox string) store.Folder {
 // messages lists a folder's local messages, newest first.
 func (h *harness) messages(folderID string) []store.Message {
 	h.t.Helper()
-	items, _, _, err := h.st.ListMessages(context.Background(), h.acc.ID, folderID, "", 500, api.SortDateDesc, false)
+	items, _, _, err := h.st.ListMessages(context.Background(), h.acc.ID, folderID, "", 500, api.SortDateDesc, api.FilterAll)
 	if err != nil {
 		h.t.Fatal(err)
 	}

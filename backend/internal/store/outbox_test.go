@@ -216,7 +216,7 @@ func TestEnqueueOutbox(t *testing.T) {
 		t.Errorf("unfetched: %+v", refs)
 	}
 	// Listing the outbox folder works like any other.
-	if items, _, total, err := s.ListMessages(ctx, "acc", outbox.ID, "", 10, "", false); err != nil || total != 1 || len(items) != 1 || items[0].ID != m.ID {
+	if items, _, total, err := s.ListMessages(ctx, "acc", outbox.ID, "", 10, "", api.FilterAll); err != nil || total != 1 || len(items) != 1 || items[0].ID != m.ID {
 		t.Errorf("list: %+v %d %v", items, total, err)
 	}
 }

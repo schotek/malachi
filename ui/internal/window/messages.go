@@ -43,6 +43,7 @@ func (w *Window) loadMessages() {
 		FolderID:  k.Folder,
 		Page:      api.Page{Limit: api.DefaultPageLimit},
 		Sort:      api.SortDateDesc,
+		Filter:    w.model.listFilter,
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -72,6 +73,24 @@ func (w *Window) loadMessages() {
 	}()
 }
 
+// setListFilter switches the list between all, unread and flagged
+// messages. The backend does the filtering, so the rows and the cursor
+// from the previous filter are dropped and the folder is paged again from
+// the start. Called from the toggle group, which also fires when Go sets
+// the active name, hence the no-op on an unchanged filter.
+func (w *Window) setListFilter(f api.MessageFilter) {
+	if f == "" {
+		f = api.FilterAll
+	}
+	if f == w.model.listFilter {
+		return
+	}
+	w.model.listFilter = f
+	w.model.clearMessages()
+	w.rebuildMessageRows()
+	w.loadMessages()
+}
+
 // loadMore fetches the next page (Load More button, scroll edge). It is a
 // no-op while a page is in flight or when the last page is shown.
 func (w *Window) loadMore() {
@@ -89,6 +108,7 @@ func (w *Window) loadMore() {
 		FolderID:  k.Folder,
 		Page:      api.Page{Cursor: m.nextCursor, Limit: api.DefaultPageLimit},
 		Sort:      api.SortDateDesc,
+		Filter:    w.model.listFilter,
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -175,6 +195,12 @@ func (w *Window) showListState() {
 			widget.RPCErrorText(i18n.T("Loading messages"), m.listErr))
 	case m.loading:
 		setStatusPage(w.listStatusPage, "", i18n.T("Loading…"), "")
+	case m.listFilter == api.FilterUnread:
+		setStatusPage(w.listStatusPage, "mail-read-symbolic", i18n.T("No Unread Messages"),
+			i18n.T("Everything in this folder has been read."))
+	case m.listFilter == api.FilterFlagged:
+		setStatusPage(w.listStatusPage, "starred-symbolic", i18n.T("No Flagged Messages"),
+			i18n.T("No message in this folder carries a flag."))
 	default:
 		setStatusPage(w.listStatusPage, "mail-unread-symbolic", i18n.T("No Messages"),
 			i18n.T("This folder is empty."))

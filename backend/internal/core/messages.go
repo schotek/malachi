@@ -39,7 +39,13 @@ func (s *messageService) List(ctx context.Context, p api.MessageListParams) (*ap
 	default:
 		return nil, api.NewError(api.CodeInvalidArgument, "sort must be dateDesc or dateAsc")
 	}
-	items, next, total, err := s.b.store.ListMessages(ctx, a.ID, string(p.FolderID), p.Page.Cursor, limit, sortOrder, p.UnreadOnly)
+	listFilter := p.EffectiveFilter()
+	switch listFilter {
+	case api.FilterAll, api.FilterUnread, api.FilterFlagged:
+	default:
+		return nil, api.NewError(api.CodeInvalidArgument, "filter must be all, unread or flagged")
+	}
+	items, next, total, err := s.b.store.ListMessages(ctx, a.ID, string(p.FolderID), p.Page.Cursor, limit, sortOrder, listFilter)
 	switch {
 	case errors.Is(err, store.ErrBadCursor):
 		return nil, api.NewError(api.CodeInvalidArgument, "invalid page cursor")

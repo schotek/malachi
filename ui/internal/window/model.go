@@ -77,6 +77,10 @@ type mailModel struct {
 	// listFolder is the folder messages belong to (or are being loaded
 	// for); it lags selected between selectFolder and loadMessages.
 	listFolder folderKey
+	// listFilter narrows the listing (message.list "filter"). It is one
+	// setting for the whole window, kept across folder switches but not
+	// across restarts, and "" is read as api.FilterAll.
+	listFilter api.MessageFilter
 	messages   []api.MessageSummary
 	index      map[api.MessageID]int
 	nextCursor string
@@ -442,6 +446,23 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		Unread:         !hasFlag(s.Flags, api.FlagSeen),
 		Flagged:        hasFlag(s.Flags, api.FlagFlagged),
 		HasAttachments: s.HasAttachments,
+	}
+}
+
+// matchesFilter reports whether s belongs in a list shown under f. It
+// mirrors what the backend selects, and is used for the one message the UI
+// adds without asking (notify.newMessage). A row already on screen is left
+// alone when a flag change makes it stop matching: it would vanish from
+// under the pointer of the user who has just read it. The next load of the
+// list applies the filter again.
+func matchesFilter(s api.MessageSummary, f api.MessageFilter) bool {
+	switch f {
+	case api.FilterUnread:
+		return !hasFlag(s.Flags, api.FlagSeen)
+	case api.FilterFlagged:
+		return hasFlag(s.Flags, api.FlagFlagged)
+	default:
+		return true
 	}
 }
 

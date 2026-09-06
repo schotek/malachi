@@ -110,6 +110,7 @@ PageInfo  { "nextCursor": "opaque", "total": 1234 }  // nextCursor absent on las
 Address   { "name": "Alice", "address": "alice@example.org" }
 Flag      "seen" | "answered" | "flagged" | "draft" | "deleted" | "junk" | "forwarded"
 SortOrder "dateDesc" (default) | "dateAsc"
+MessageFilter "all" (default) | "unread" | "flagged"
 Time      RFC 3339 string, UTC
 ```
 
@@ -473,18 +474,27 @@ the next `LIST`. Use `includeUnsubscribed` meanwhile.
 ### 4.3 message
 
 #### `message.list`
-- params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt), "unreadOnly": bool (opt) }`
+- params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
+  "filter": MessageFilter (opt), "unreadOnly": bool (opt, deprecated) }`
 - result: `{ "messages": [MessageSummary], "page": PageInfo }`
 
-- errors: invalidArgument (missing ids, unknown `sort`, bad cursor),
-  accountNotFound, folderNotFound (unknown or another account's folder),
-  storageError
+- errors: invalidArgument (missing ids, unknown `sort`, unknown `filter`,
+  bad cursor), accountNotFound, folderNotFound (unknown or another account's
+  folder), storageError
+
+`filter` narrows the listing to messages without the `seen` flag (`unread`)
+or with the `flagged` flag (`flagged`). `unreadOnly` is the older spelling of
+`filter: "unread"`; it is honoured only while `filter` is absent, so a client
+written against either version works. The two filters overlap: a message can
+be both read and flagged.
 
 Cursor stability: a cursor encodes a (sort key, id) position and stays valid
 across syncs; new messages inserted before the position are simply not seen
 by an in-progress pagination. A cursor is bound to the `sort` it was issued
-for. Clients refresh from the start on `notify.newMessage`. `page.total` is
-the folder's local count after the `unreadOnly` filter. Only messages within
+for. It does **not** encode `filter`, so a client that changes the filter must
+start again from the first page rather than reuse the cursor it holds.
+Clients refresh from the start on `notify.newMessage`. `page.total` is
+the folder's local count after `filter`. Only messages within
 the `offlineDays` window exist locally; `threadId` is empty until threading
 exists.
 
@@ -1132,3 +1142,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   read-only message of its own — headers and sanitised body, its `cid:`
   pictures inlined as `data:` URIs, its attachments listed without
   `partId`.
+- **1** (2026-09-06, compatible addition, message-list filter): `message.list`
+  gained `filter` (`all` | `unread` | `flagged`), which the client's
+  segmented switch above the list uses; `page.total` counts the folder
+  after it. `unreadOnly` is deprecated in favour of `filter: "unread"` and
+  is honoured only while `filter` is absent. Cursors do not encode the
+  filter, so changing it means starting from the first page.

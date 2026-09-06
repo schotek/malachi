@@ -187,6 +187,42 @@ Adw.ApplicationWindow main_window {
                 revealed: false;
               }
 
+              // Narrows the list to unread or flagged messages. The filter
+              // is applied by the backend (message.list "filter") so the
+              // paging cursor and page.total stay consistent; it is global
+              // for the session and resets to All on restart.
+              Adw.ToggleGroup message_filter {
+                halign: center;
+                margin-top: 4;
+                margin-bottom: 4;
+                homogeneous: true;
+
+                Adw.Toggle {
+                  name: "all";
+                  label: _("All");
+                }
+
+                Adw.Toggle {
+                  name: "unread";
+                  // TRANSLATORS: a filter over the message list, not an
+                  // action: show only the messages that are unread.
+                  label: _("Unread");
+                }
+
+                Adw.Toggle {
+                  name: "flagged";
+                  // TRANSLATORS: a filter over the message list, not an
+                  // action: show only the messages carrying the flagged
+                  // (starred, follow-up) mark.
+                  label: _("Flagged");
+                }
+
+                styles [
+                  "flat",
+                  "message-filter",
+                ]
+              }
+
               // "messages" is the list with its Load More footer; "status"
               // replaces it for empty / loading / error states.
               Stack list_stack {

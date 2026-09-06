@@ -56,6 +56,10 @@ func setStar(b *gtk.ToggleButton, on bool) {
 }
 
 // refreshRow pushes the model's summary of id to its list row, if listed.
+// A row that the change makes stop matching the active list filter is
+// updated in place rather than removed (see matchesFilter): reading a
+// message under the unread filter must not pull it out from under the
+// user. The filter is applied again on the next load of the list.
 func (w *Window) refreshRow(id api.MessageID) {
 	s, _, ok := w.model.message(id)
 	if !ok {

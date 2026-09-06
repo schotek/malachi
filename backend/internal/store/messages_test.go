@@ -130,6 +130,11 @@ func TestListMessagesCursors(t *testing.T) {
 		if i < 3 {
 			flags = []api.Flag{api.FlagSeen}
 		}
+		// s2 is both seen and flagged, s5 only flagged: the two filters
+		// must select overlapping but different sets.
+		if i == 2 || i == 5 {
+			flags = append(flags, api.FlagFlagged)
+		}
 		// Two messages share a date so the id tiebreak is exercised.
 		d := base.Add(time.Duration(i/2) * time.Hour)
 		msgs[i] = &Message{AccountID: "acc", FolderID: inbox.ID, UID: uint32(i + 1), Subject: fmt.Sprint("s", i), Date: d, Flags: flags}
@@ -139,11 +144,11 @@ func TestListMessagesCursors(t *testing.T) {
 	}
 	seedMessage(t, s, other, 1, "elsewhere", base)
 
-	walk := func(sort api.SortOrder, unreadOnly bool, limit int) (subjects []string, total int) {
+	walk := func(sort api.SortOrder, filter api.MessageFilter, limit int) (subjects []string, total int) {
 		t.Helper()
 		cursor := ""
 		for {
-			items, next, tot, err := s.ListMessages(ctx, "acc", inbox.ID, cursor, limit, sort, unreadOnly)
+			items, next, tot, err := s.ListMessages(ctx, "acc", inbox.ID, cursor, limit, sort, filter)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -160,11 +165,11 @@ func TestListMessagesCursors(t *testing.T) {
 			cursor = next
 		}
 	}
-	desc, total := walk(api.SortDateDesc, false, 2)
+	desc, total := walk(api.SortDateDesc, api.FilterAll, 2)
 	if total != 7 || len(desc) != 7 {
 		t.Fatalf("desc: total=%d %v", total, desc)
 	}
-	asc, _ := walk(api.SortDateAsc, false, 3)
+	asc, _ := walk(api.SortDateAsc, "", 3)
 	for i := range asc {
 		if asc[i] != desc[len(desc)-1-i] {
 			t.Fatalf("asc is not the reverse of desc: %v vs %v", asc, desc)
@@ -179,9 +184,9 @@ func TestListMessagesCursors(t *testing.T) {
 			t.Fatalf("asc out of order: %v", asc)
 		}
 	}
-	unread, total := walk("", true, 2)
+	unread, total := walk("", api.FilterUnread, 2)
 	if total != 4 || len(unread) != 4 {
-		t.Fatalf("unreadOnly: total=%d %v", total, unread)
+		t.Fatalf("unread: total=%d %v", total, unread)
 	}
 	for _, sub := range unread {
 		if sub < "s3" {
@@ -189,32 +194,41 @@ func TestListMessagesCursors(t *testing.T) {
 		}
 	}
 
+	// The flagged filter crosses the seen/unread split and pages the same way.
+	flagged, total := walk(api.SortDateAsc, api.FilterFlagged, 1)
+	if total != 2 || len(flagged) != 2 || flagged[0] != "s2" || flagged[1] != "s5" {
+		t.Fatalf("flagged: total=%d %v", total, flagged)
+	}
+	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, "", 10, "", api.MessageFilter("starred")); err == nil {
+		t.Error("unknown filter accepted")
+	}
+
 	// Cursors are bound to their sort order; garbage is rejected.
-	_, next, _, err := s.ListMessages(ctx, "acc", inbox.ID, "", 2, api.SortDateDesc, false)
+	_, next, _, err := s.ListMessages(ctx, "acc", inbox.ID, "", 2, api.SortDateDesc, api.FilterAll)
 	if err != nil || next == "" {
 		t.Fatal(err, next)
 	}
-	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, next, 2, api.SortDateAsc, false); !errors.Is(err, ErrBadCursor) {
+	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, next, 2, api.SortDateAsc, api.FilterAll); !errors.Is(err, ErrBadCursor) {
 		t.Errorf("cross-sort cursor: %v", err)
 	}
-	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, next, 2, api.SortDateDesc, false); err != nil {
+	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, next, 2, api.SortDateDesc, api.FilterAll); err != nil {
 		t.Errorf("own cursor: %v", err)
 	}
 	for _, bad := range []string{"!!!", base64.RawURLEncoding.EncodeToString([]byte("d\x00x")),
 		base64.RawURLEncoding.EncodeToString([]byte("d\x00not a date\x00m_1")),
 		base64.RawURLEncoding.EncodeToString([]byte("\x00" + zeroStamp + "\x00m_1")),
 		base64.RawURLEncoding.EncodeToString([]byte("d\x00" + zeroStamp + "\x00"))} {
-		if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, bad, 2, api.SortDateDesc, false); !errors.Is(err, ErrBadCursor) {
+		if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, bad, 2, api.SortDateDesc, api.FilterAll); !errors.Is(err, ErrBadCursor) {
 			t.Errorf("cursor %q: %v", bad, err)
 		}
 	}
-	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, "", 2, "bogus", false); err == nil {
+	if _, _, _, err := s.ListMessages(ctx, "acc", inbox.ID, "", 2, "bogus", api.FilterAll); err == nil {
 		t.Error("bogus sort accepted")
 	}
-	if _, _, _, err := s.ListMessages(ctx, "other", inbox.ID, "", 2, "", false); !errors.Is(err, ErrNotFound) {
+	if _, _, _, err := s.ListMessages(ctx, "other", inbox.ID, "", 2, "", api.FilterAll); !errors.Is(err, ErrNotFound) {
 		t.Errorf("foreign folder: %v", err)
 	}
-	if items, next, total, err := s.ListMessages(ctx, "acc", other.ID, "", 0, "", false); err != nil || len(items) != 1 || next != "" || total != 1 {
+	if items, next, total, err := s.ListMessages(ctx, "acc", other.ID, "", 0, "", api.FilterAll); err != nil || len(items) != 1 || next != "" || total != 1 {
 		t.Errorf("other folder: %d %q %d %v", len(items), next, total, err)
 	}
 	// Zero dates still page (never an empty stamp in the cursor).
@@ -222,11 +236,11 @@ func TestListMessagesCursors(t *testing.T) {
 	if err := s.UpsertMessages(ctx, []*Message{zero}); err != nil {
 		t.Fatal(err)
 	}
-	items, next, _, err := s.ListMessages(ctx, "acc", other.ID, "", 1, api.SortDateAsc, false)
+	items, next, _, err := s.ListMessages(ctx, "acc", other.ID, "", 1, api.SortDateAsc, api.FilterAll)
 	if err != nil || len(items) != 1 || items[0].Subject != "nodate" || !items[0].Date.IsZero() || next == "" {
 		t.Fatalf("zero date page: %+v %q %v", items, next, err)
 	}
-	if items, _, _, err = s.ListMessages(ctx, "acc", other.ID, next, 1, api.SortDateAsc, false); err != nil || len(items) != 1 || items[0].Subject != "elsewhere" {
+	if items, _, _, err = s.ListMessages(ctx, "acc", other.ID, next, 1, api.SortDateAsc, api.FilterAll); err != nil || len(items) != 1 || items[0].Subject != "elsewhere" {
 		t.Fatalf("after zero date: %+v %v", items, err)
 	}
 }

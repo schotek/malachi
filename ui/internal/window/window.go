@@ -119,6 +119,7 @@ type Window struct {
 	searchButton    *gtk.ToggleButton
 	banner          *adw.Banner
 	authBanner      *adw.Banner
+	messageFilter   *adw.ToggleGroup
 	listStack       *gtk.Stack
 	listScroller    *gtk.ScrolledWindow
 	messageList     *gtk.ListBox
@@ -178,6 +179,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
 		banner:          b.GetObject("backend_banner").Cast().(*adw.Banner),
 		authBanner:      b.GetObject("auth_banner").Cast().(*adw.Banner),
+		messageFilter:   b.GetObject("message_filter").Cast().(*adw.ToggleGroup),
 		listStack:       b.GetObject("list_stack").Cast().(*gtk.Stack),
 		listScroller:    b.GetObject("list_scroller").Cast().(*gtk.ScrolledWindow),
 		messageList:     b.GetObject("message_list").Cast().(*gtk.ListBox),
@@ -256,6 +258,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.model.favourites = loadFavourites(s)
 	s.OnChanged(settings.KeyFavouriteFolders, w.onFavouritesChanged)
+	// The filter is deliberately not persisted: a window that came back
+	// still hiding most of the mailbox would be read as lost mail.
+	w.model.listFilter = api.FilterAll
 
 	w.folderList.ConnectRowSelected(func(row *gtk.ListBoxRow) {
 		if row == nil || w.reselecting {
@@ -295,6 +300,12 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		}
 	})
 	w.listRetryButton.ConnectClicked(w.loadMessages)
+	// Unlike "clicked" on a button, notify::active-name also fires for a
+	// SetActiveName from Go, so setListFilter guards against the reload
+	// its own write-back would otherwise trigger.
+	w.messageFilter.NotifyProperty("active-name", func() {
+		w.setListFilter(api.MessageFilter(w.messageFilter.ActiveName()))
+	})
 
 	// "clicked" fires for user clicks only, not for SetActive from Go.
 	w.starButton.ConnectClicked(func() {

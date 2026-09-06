@@ -21,6 +21,30 @@ func TestHasFlag(t *testing.T) {
 	}
 }
 
+func TestMatchesFilter(t *testing.T) {
+	seen := summary("a", api.FlagSeen)
+	seenFlagged := summary("b", api.FlagSeen, api.FlagFlagged)
+	unread := summary("c")
+	unreadFlagged := summary("d", api.FlagFlagged)
+
+	cases := []struct {
+		filter api.MessageFilter
+		want   map[api.MessageID]bool
+	}{
+		{"", map[api.MessageID]bool{"a": true, "b": true, "c": true, "d": true}},
+		{api.FilterAll, map[api.MessageID]bool{"a": true, "b": true, "c": true, "d": true}},
+		{api.FilterUnread, map[api.MessageID]bool{"a": false, "b": false, "c": true, "d": true}},
+		{api.FilterFlagged, map[api.MessageID]bool{"a": false, "b": true, "c": false, "d": true}},
+	}
+	for _, c := range cases {
+		for _, s := range []api.MessageSummary{seen, seenFlagged, unread, unreadFlagged} {
+			if got := matchesFilter(s, c.filter); got != c.want[s.ID] {
+				t.Errorf("matchesFilter(%s, %q) = %v", s.ID, c.filter, got)
+			}
+		}
+	}
+}
+
 func TestSummaryMessage(t *testing.T) {
 	date := time.Date(2026, 9, 3, 10, 0, 0, 0, time.UTC)
 	s := api.MessageSummary{
