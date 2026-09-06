@@ -1098,6 +1098,11 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   incompatible; bump `protocolVersion`, update the client, document below.
 - Servers ignore unknown request fields; clients ignore unknown response
   fields.
+- `protocolVersion` has nothing to do with the application's release
+  version (`system.info` reports both, and `docs/releasing.md` explains
+  which is which). The two ship together in one Flatpak, so a mismatch
+  means someone is running a daemon left over from an older install; the
+  client compares `protocolVersion`, never the release version.
 
 ## 7. Changelog
 

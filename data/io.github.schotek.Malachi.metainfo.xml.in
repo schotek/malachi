@@ -15,8 +15,8 @@
       engine so that the engine can be reused.
     </p>
     <p>
-      This is an early development version. It is not yet usable for real
-      mail.
+      This is an early version. Mail can be read, written and sent, but
+      search and conversation threading are still missing.
     </p>
   </description>
 
@@ -48,11 +48,6 @@
 
   <!-- TODO: screenshots (Flathub requires at least one with a caption). -->
 
-  <releases>
-    <release version="@VERSION@" date="2026-09-02">
-      <description>
-        <p>Project bootstrap. Nothing works yet.</p>
-      </description>
-    </release>
-  </releases>
+  <!-- <releases> is generated from NEWS at build time; see the metainfo
+       rule in the Makefile and docs/releasing.md. Do not add it here. -->
 </component>

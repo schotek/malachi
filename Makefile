@@ -6,7 +6,11 @@
 # is meant to be run on the host where flatpak-builder lives.
 
 APP_ID      := io.github.schotek.Malachi
-VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Release versions are the git tags, "v0.1.0" style; the leading v is cut
+# because AppStream and Flatpak want a bare number. Between tags this is
+# "0.1.0-3-gabc1234", and without any tag the bare commit (see
+# docs/releasing.md).
+VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' || echo dev)
 BUILD_DIR   := build
 GO          ?= go
 GOFLAGS     ?=
@@ -89,12 +93,22 @@ data/%.desktop: data/%.desktop.in $(PO_FILES) $(PO_DIR)/LINGUAS
 	msgfmt --desktop --template=$@.tmp -d $(PO_DIR) --keyword= --keyword=GenericName --keyword=Comment --keyword=Keywords -o $@
 	rm -f $@.tmp
 
-# msgfmt picks the ITS rules from the template's file name, so the
-# intermediate file must still end in .metainfo.xml (it lives in build/).
-data/%.metainfo.xml: data/%.metainfo.xml.in $(PO_FILES) $(PO_DIR)/LINGUAS
-	@mkdir -p $(BUILD_DIR)
+# The <releases> block is generated from NEWS, which is the single source
+# of the release notes; the template carries none. Descriptions are not
+# marked translatable (-t 0), so a release does not churn the catalogues.
+# msgfmt picks the ITS rules from the template's file name, so every
+# intermediate file must still end in .metainfo.xml (they live in build/).
+data/%.metainfo.xml: data/%.metainfo.xml.in NEWS $(PO_FILES) $(PO_DIR)/LINGUAS
+	@mkdir -p $(BUILD_DIR)/news
 	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $(BUILD_DIR)/$(notdir $@)
-	msgfmt --xml --template=$(BUILD_DIR)/$(notdir $@) -d $(PO_DIR) -o $@
+	@if command -v appstreamcli >/dev/null 2>&1; then \
+		appstreamcli news-to-metainfo --format=text -t 0 NEWS \
+			$(BUILD_DIR)/$(notdir $@) $(BUILD_DIR)/news/$(notdir $@); \
+	else \
+		echo "$@: appstreamcli not found; building without release notes" >&2; \
+		cp $(BUILD_DIR)/$(notdir $@) $(BUILD_DIR)/news/$(notdir $@); \
+	fi
+	msgfmt --xml --template=$(BUILD_DIR)/news/$(notdir $@) -d $(PO_DIR) -o $@
 
 ## locale: compile po/*.po into build/locale (for uninstalled runs and install)
 locale: $(MO_OUT)

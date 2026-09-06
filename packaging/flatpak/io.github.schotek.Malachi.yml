@@ -105,6 +105,13 @@ modules:
     build-commands:
       - PREFIX=/app ./scripts/build.sh install
     sources:
+      # The working tree, for local testing. A published build must take
+      # the tag instead, so the version compiled in is the released one
+      # and not "<commit>-dirty" (docs/releasing.md §4):
+      #   - type: git
+      #     url: https://github.com/schotek/malachi.git
+      #     tag: v0.1.0
+      #     commit: <the tag's commit sha>
       - type: dir
         path: ../..
       # TODO: generated Go module sources (see build-options.env above), e.g.

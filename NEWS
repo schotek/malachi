@@ -1,0 +1,32 @@
+Version 0.1.0
+~~~~~~~~~~~~~
+Released: 2026-09-06
+
+Notes:
+ * First tagged release. Mail can be read, written and sent, but this is
+   still an early version: keep a second mail program for anything that
+   matters.
+
+Features:
+ * IMAP accounts with a setup assistant that finds the server settings for
+   most providers; passwords are kept in the system keyring.
+ * Mail is synchronised for offline reading, with new messages arriving as
+   the server announces them.
+ * Writing and sending, with formatted text, attachments and inline
+   images. A message that cannot be sent right away waits in the outbox
+   and is retried; a copy is filed in Sent.
+ * Microsoft 365 and Outlook.com accounts through GNOME Online Accounts,
+   with no separate sign-in.
+ * HTML mail is cleaned before it is shown, and remote images stay blocked
+   until you ask for them or trust the sender. Attached messages open in a
+   window of their own.
+ * Attachments can be opened, saved one by one or saved all at once.
+ * The message list can be narrowed to unread or flagged messages.
+ * The folder sidebar can be folded, and folders pinned to Favourites.
+ * Recipients are completed from the system address books and from the
+   people you have written to before.
+ * Czech translation.
+
+Notes:
+ * Search and conversation threading are not available yet.
+ * Gmail accounts are not supported yet.

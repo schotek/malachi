@@ -1,0 +1,98 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+# Releasing
+
+## 1. What is versioned, and separately
+
+Four things carry a version and **none of them follows another**. Bumping
+one because another moved is a mistake.
+
+| What | Where | Rule |
+|---|---|---|
+| The application | git tag `v0.1.0` | this document |
+| The RPC contract | `api.ProtocolVersion` | `docs/api.md` §6: bump only on an incompatible change |
+| The store schema | `internal/store/migrations/NNNN_*.sql` | forward-only, numbered, never edited after commit |
+| The sanitiser ruleset | `sanitizerVersion` in `message.body` | bumped when the ruleset changes, so a client can tell |
+
+The application version is `MAJOR.MINOR.PATCH`, tagged `v0.1.0`. It is not
+a promise about an API — there is no public API — so it says how big the
+change is:
+
+- **PATCH** — fixes only.
+- **MINOR** — new features, or anything a user will notice.
+- **MAJOR** — stays at 0 until the program can be someone's only mail
+  client. That means at least search and threading; see the work order in
+  `CLAUDE.md`.
+
+Nothing hard-codes the number. `make` derives it with
+`git describe --tags --always --dirty`, cutting the leading `v`, so a
+tagged tree builds `0.1.0`, three commits later `0.1.0-3-gabc1234`, and an
+untagged clone the bare commit. It reaches the About dialog through
+`-X main.version` and clients through `system.info`.
+
+## 2. Release notes
+
+`NEWS` in the repository root is the only place release notes are written.
+The build turns it into the `<releases>` block of the AppStream metainfo
+(`appstreamcli news-to-metainfo`), which is what GNOME Software shows, so
+write for someone using the program: what they can now do, in sentences,
+never `feat(ui):` subjects. The format is checked by the tool — a version
+heading underlined with `~`, a `Released:` date, sections (`Features:`,
+`Bugfixes:`, `Notes:`) whose bullets start with ` * `, newest first.
+
+Descriptions are generated with `-t 0`, so they are not marked
+translatable and a release does not touch `po/`. The metainfo template
+carries no `<releases>` of its own.
+
+## 3. Cutting a release
+
+```bash
+# 1. The tree must be clean and the tests green.
+git status --short          # empty
+make test lint
+
+# 2. Write the entry at the top of NEWS, with today's date.
+$EDITOR NEWS
+
+# 3. Check what the metainfo will say, with the version the tag will give.
+VERSION=0.1.0 make data
+appstreamcli validate --no-net data/io.github.schotek.Malachi.metainfo.xml
+
+# 4. Commit the notes, then tag that commit.
+git commit -m "docs: release notes for 0.1.0" NEWS
+git tag -a v0.1.0 -m "Malachi Mail 0.1.0"
+
+# 5. Verify the tag builds what it claims. Both binaries get the number
+#    from the same LDFLAGS; the daemon is the one that will print it
+#    (the UI shows it in its About dialog).
+make clean && make build && ./build/malachid --version   # 0.1.0, no -dirty
+
+# 6. Publish.
+git push && git push --tags
+```
+
+`appstreamcli validate` reports one pedantic complaint,
+`cid-contains-uppercase-letter`, about the `M` in the application ID. The
+ID is fixed (`CLAUDE.md`); ignore it.
+
+## 4. Flatpak
+
+`packaging/flatpak/` builds from `type: dir` — the working tree — which is
+what local testing wants and what a published build must not use. For
+Flathub the `malachi` module takes the tag instead:
+
+```yaml
+  - name: malachi
+    sources:
+      - type: git
+        url: https://github.com/schotek/malachi.git
+        tag: v0.1.0
+        commit: <the tag's commit sha>
+```
+
+Flathub requires both `tag` and `commit`, at least one screenshot with a
+caption (still a TODO in the metainfo) and the release notes this document
+generates.

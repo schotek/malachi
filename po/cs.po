@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-06 12:11+0200\n"
+"POT-Creation-Date: 2026-09-06 14:11+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1877,16 +1877,23 @@ msgstr ""
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:17
 msgid ""
-"This is an early development version. It is not yet usable for real mail."
-msgstr "Toto je raná vývojová verze. Na skutečnou poštu zatím není použitelná."
+"This is an early version. Mail can be read, written and sent, but search and "
+"conversation threading are still missing."
+msgstr ""
+"Toto je raná verze. Poštu lze číst, psát i odesílat, ale vyhledávání "
+"a vlákna konverzací zatím chybí."
 
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
 
-#: data/io.github.schotek.Malachi.metainfo.xml.in:54
-msgid "Project bootstrap. Nothing works yet."
-msgstr "Založení projektu. Zatím nic nefunguje."
+#~ msgid ""
+#~ "This is an early development version. It is not yet usable for real mail."
+#~ msgstr ""
+#~ "Toto je raná vývojová verze. Na skutečnou poštu zatím není použitelná."
+
+#~ msgid "Project bootstrap. Nothing works yet."
+#~ msgstr "Založení projektu. Zatím nic nefunguje."
 
 #, c-format
 #~ msgid "%d attachment: %s"
