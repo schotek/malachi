@@ -59,6 +59,11 @@ type loadedMessage struct {
 	// the daemon twice.
 	getting, fetching bool
 	waiters           []func(*loadedMessage)
+
+	// loadingImages is set from the moment the user asks for the remote
+	// images (Load Images, Always From This Sender) until the daemon has
+	// answered; the bar shows it instead of the buttons (remote.go).
+	loadingImages bool
 }
 
 // complete reports whether nothing is left to fetch.
@@ -99,11 +104,15 @@ type messageView struct {
 	// chips only name them.
 	nested bool
 
-	// The remote-image bar: the count, and the buttons whose work the
-	// owner supplies as load (this message) and trust (this sender).
-	bar         *gtk.Box
-	barLabel    *gtk.Label
-	load, trust func()
+	// The remote-image bar: the count, the buttons whose work the owner
+	// supplies as load (this message) and trust (this sender; nil where
+	// the bar has no such button), and the spinner that stands in for the
+	// buttons while the images are on their way.
+	bar                     *gtk.Box
+	barLabel                *gtk.Label
+	barSpinner              *adw.Spinner
+	loadButton, trustButton *gtk.Button
+	load, trust             func()
 
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
@@ -131,16 +140,18 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		slot:        b.GetObject("html_slot").Cast().(*gtk.Box),
 		bar:         b.GetObject("remote_bar").Cast().(*gtk.Box),
 		barLabel:    b.GetObject("remote_label").Cast().(*gtk.Label),
+		barSpinner:  b.GetObject("remote_spinner").Cast().(*adw.Spinner),
+		loadButton:  b.GetObject("remote_load").Cast().(*gtk.Button),
+		trustButton: b.GetObject("remote_trust").Cast().(*gtk.Button),
 	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
-	load := b.GetObject("remote_load").Cast().(*gtk.Button)
+	load, trust := v.loadButton, v.trustButton
 	load.ConnectClicked(func() {
 		if v.load != nil {
 			v.load()
 		}
 	})
-	trust := b.GetObject("remote_trust").Cast().(*gtk.Button)
 	trust.ConnectClicked(func() {
 		if v.trust != nil {
 			v.trust()
@@ -167,6 +178,20 @@ func (v *messageView) setBarVisible(show bool) {
 		v.stack.GrabFocus()
 	}
 	v.bar.SetVisible(show)
+}
+
+// setBarLoading switches the bar between offering the images and showing
+// that they are on their way: the buttons make way for the spinner, so a
+// click has a visible answer even when the daemon takes its time on a slow
+// connection. Hiding a focused button would move the focus to the
+// selectable labels (see newMessageView), so it leaves the bar first.
+func (v *messageView) setBarLoading(loading bool) {
+	if loading && v.bar.FocusChild() != nil {
+		v.stack.GrabFocus()
+	}
+	v.barSpinner.SetVisible(loading)
+	v.loadButton.SetVisible(!loading)
+	v.trustButton.SetVisible(!loading && v.trust != nil)
 }
 
 // paneLabels is the main window's message pane.
@@ -375,11 +400,7 @@ func (w *Window) showMessage(id api.MessageID) {
 // bodyGen, a message window by its closed flag): the cache is keyed by id
 // and stays valid whatever the pane shows now.
 func (w *Window) fetchMessage(acc api.AccountID, id api.MessageID, done func(*loadedMessage)) {
-	lm := w.loaded[id]
-	if lm == nil {
-		lm = &loadedMessage{}
-		w.storeLoaded(id, lm)
-	}
+	lm := w.loadedFor(id)
 	if lm.complete() {
 		done(lm)
 		return
@@ -439,6 +460,16 @@ func (w *Window) settleLoaded(id api.MessageID, lm *loadedMessage) {
 	for _, done := range waiters {
 		done(lm)
 	}
+}
+
+// loadedFor is the cache entry of id, created empty when there is none.
+func (w *Window) loadedFor(id api.MessageID) *loadedMessage {
+	lm := w.loaded[id]
+	if lm == nil {
+		lm = &loadedMessage{}
+		w.storeLoaded(id, lm)
+	}
+	return lm
 }
 
 // storeLoaded caches lm for id, evicting the oldest entries beyond the

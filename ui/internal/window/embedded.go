@@ -42,8 +42,12 @@ type EmbeddedWindow struct {
 
 	// closed is set from close-request so a late reply is dropped.
 	closed bool
-	// loading is set while a message.embedded call for the images runs.
+	// loading is set while a message.embedded call for the images runs;
+	// the bar shows it in place of its button.
 	loading bool
+	// shown is what the window displays, for putting the bar back after a
+	// failed image load.
+	shown *api.MessageEmbeddedResult
 
 	title  *adw.WindowTitle
 	view   *messageView
@@ -135,6 +139,7 @@ func newEmbeddedWindow(w *Window, acc api.AccountID, key embeddedKey, res *api.M
 // containing message's as the subtitle, then headers, body and chips
 // through the shared view.
 func (ew *EmbeddedWindow) show(res *api.MessageEmbeddedResult) {
+	ew.shown = res
 	msg, body := res.Message, res.Body
 	subject := subjectText(msg.Subject)
 	ew.title.SetTitle(subject)
@@ -153,6 +158,7 @@ func (ew *EmbeddedWindow) loadImages() {
 		return
 	}
 	ew.loading = true
+	ew.view.showRemoteBar(remoteBarState{visible: true, loading: true})
 	w := ew.view.win
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
@@ -166,6 +172,8 @@ func (ew *EmbeddedWindow) loadImages() {
 			if err != nil {
 				w.log.Warn("message.embedded (allow)", "part", ew.key.part, "err", err)
 				ew.view.say(widget.RPCErrorText(i18n.T("Loading the images"), err))
+				// The bar offers the images again.
+				renderRemoteBar(ew.view, &loadedMessage{body: &ew.shown.Body})
 				return
 			}
 			ew.show(res)
