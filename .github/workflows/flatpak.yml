@@ -75,13 +75,16 @@ jobs:
           cat .version
 
       - name: Install flatpak-builder
-        # elfutils is not pulled in by flatpak-builder, but the debuginfo
-        # stage runs eu-strip/eu-elfcompress outside the sandbox and fails
-        # the build without them.
+        # Both extras are only Recommends, which --no-install-recommends drops:
+        #   elfutils        the debuginfo stage runs eu-strip/eu-elfcompress
+        #                   outside the sandbox and fails the build without them
+        #   librsvg2-common the gdk-pixbuf SVG loader; appstreamcli compose
+        #                   reads our scalable icon through it and reports
+        #                   file-read-error when it is missing
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            flatpak flatpak-builder ccache elfutils
+            flatpak flatpak-builder ccache elfutils librsvg2-common
 
       - name: Install the GNOME 48 runtime and the Go SDK extension
         # GNOME 48 is based on freedesktop 24.08, which is the branch the
