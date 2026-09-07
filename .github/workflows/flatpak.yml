@@ -75,10 +75,13 @@ jobs:
           cat .version
 
       - name: Install flatpak-builder
+        # elfutils is not pulled in by flatpak-builder, but the debuginfo
+        # stage runs eu-strip/eu-elfcompress outside the sandbox and fails
+        # the build without them.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            flatpak flatpak-builder ccache
+            flatpak flatpak-builder ccache elfutils
 
       - name: Install the GNOME 48 runtime and the Go SDK extension
         # GNOME 48 is based on freedesktop 24.08, which is the branch the
@@ -105,11 +108,25 @@ jobs:
             flatpak-${{ matrix.arch }}-${{ hashFiles('packaging/flatpak/io.github.schotek.Malachi.yml') }}-
             flatpak-${{ matrix.arch }}-
 
+      - name: Download sources
+        # gitlab.gnome.org (blueprint-compiler) occasionally answers 502/503;
+        # a failed clone must not throw away the whole build.
+        run: |
+          for attempt in 1 2 3; do
+            flatpak-builder --user --force-clean --disable-rofiles-fuse \
+              --install-deps-from=flathub \
+              --download-only build/flatpak "$MANIFEST" && exit 0
+            echo "download attempt $attempt failed, retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
+          exit 1
+
       - name: Build
-        # rofiles-fuse is unavailable on the hosted runners.
+        # rofiles-fuse is unavailable on the hosted runners. Everything is
+        # downloaded by the previous step, so the build itself stays offline.
         run: |
           flatpak-builder --user --force-clean --disable-rofiles-fuse \
-            --install-deps-from=flathub \
+            --disable-download \
             --repo=repo build/flatpak "$MANIFEST"
 
       - name: Bundle
