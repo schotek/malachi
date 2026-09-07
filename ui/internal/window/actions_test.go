@@ -140,6 +140,31 @@ func TestLoadableImages(t *testing.T) {
 	}
 }
 
+// The bar shows the wait from the click until the daemon answers, whatever
+// the body says meanwhile (issue #1: on a slow connection the button used
+// to sit there for twenty seconds as if the click had been lost).
+func TestRemoteBarState(t *testing.T) {
+	blocked := withPolicy(&api.MessageBodyResult{HTML: "<p>x</p>", Blocked: api.BlockedContent{RemoteImages: 2}}, api.RemoteBlock)
+	allowed := withPolicy(blocked, api.RemoteAllow)
+	cases := []struct {
+		name string
+		lm   *loadedMessage
+		want remoteBarState
+	}{
+		{"nothing loaded", nil, remoteBarState{}},
+		{"body on its way", &loadedMessage{}, remoteBarState{}},
+		{"blocked", &loadedMessage{body: blocked}, remoteBarState{visible: true, blocked: 2}},
+		{"loading", &loadedMessage{body: blocked, loadingImages: true}, remoteBarState{visible: true, loading: true}},
+		{"loading before the body", &loadedMessage{loadingImages: true}, remoteBarState{visible: true, loading: true}},
+		{"images in", &loadedMessage{body: allowed}, remoteBarState{}},
+	}
+	for _, c := range cases {
+		if got := remoteBarStateFor(c.lm); got != c.want {
+			t.Errorf("%s: remoteBarStateFor = %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
+
 // withPolicy copies b with the applied remote-content policy set.
 func withPolicy(b *api.MessageBodyResult, p api.RemoteContentPolicy) *api.MessageBodyResult {
 	c := *b

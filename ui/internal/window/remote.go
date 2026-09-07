@@ -32,18 +32,45 @@ import (
 // enough.
 const remoteTimeout = 30 * time.Second
 
+// remoteBarState is what the bar shows: nothing, how many remote images
+// were blocked with the buttons that load them, or the notice that they are
+// on their way.
+type remoteBarState struct {
+	visible bool
+	loading bool
+	blocked int
+}
+
+// remoteBarStateFor derives the bar from what is known about the message.
+func remoteBarStateFor(lm *loadedMessage) remoteBarState {
+	if lm == nil {
+		return remoteBarState{}
+	}
+	if lm.loadingImages {
+		return remoteBarState{visible: true, loading: true}
+	}
+	n := loadableImages(lm.body)
+	return remoteBarState{visible: n > 0, blocked: n}
+}
+
 // renderRemoteBar shows how many remote images the sanitiser removed from
-// the body on display, with the buttons that load them.
+// the body on display, with the buttons that load them, or the spinner
+// while they load.
 func renderRemoteBar(v *messageView, lm *loadedMessage) {
-	n := 0
-	if lm != nil {
-		n = loadableImages(lm.body)
-	}
-	if n > 0 {
+	v.showRemoteBar(remoteBarStateFor(lm))
+}
+
+// showRemoteBar puts the bar in state st.
+func (v *messageView) showRemoteBar(st remoteBarState) {
+	switch {
+	case st.loading:
+		v.barLabel.SetLabel(i18n.T("Loading remote images…"))
+	case st.blocked > 0:
 		// TRANSLATORS: %d is the number of remote images the message tried to load.
-		v.barLabel.SetLabel(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", n), n))
+		v.barLabel.SetLabel(fmt.Sprintf(i18n.N("%d remote image was blocked", "%d remote images were blocked", st.blocked), st.blocked))
 	}
-	v.setBarVisible(n > 0)
+	v.setBarLoading(st.loading)
+	v.setBarVisible(st.visible)
 }
 
 // loadableImages is how many remote images of the body could still be
@@ -75,21 +102,32 @@ func (w *Window) fetchPart(ctx context.Context, acc api.AccountID, id api.Messag
 // loadRemoteImages fetches the body of id again with remote images allowed
 // for this one call, and shows the result wherever the message is on
 // display. The daemon does the fetching; the view only gets the inlined
-// pictures.
+// pictures. The bar shows the wait from the click on: on a slow connection
+// the daemon can take most of remoteTimeout, and a button that seems to do
+// nothing gets clicked again.
 func (w *Window) loadRemoteImages(id api.MessageID) {
+	if _, ok := w.summary(id); !ok {
+		return
+	}
+	lm := w.loadedFor(id)
+	if lm.loadingImages {
+		return
+	}
+	lm.loadingImages = true
+	w.refreshRemoteBar(id, lm)
+	w.fetchRemoteImages(id, lm)
+}
+
+// fetchRemoteImages is the message.body call under allow for a request the
+// bar already shows as loading (lm.loadingImages); it ends the request
+// either way, with the images on display or the bar back as it was and a
+// toast.
+func (w *Window) fetchRemoteImages(id api.MessageID, lm *loadedMessage) {
 	s, ok := w.summary(id)
 	if !ok {
+		w.imagesDone(id, lm)
 		return
 	}
-	lm := w.loaded[id]
-	if lm == nil {
-		lm = &loadedMessage{}
-		w.storeLoaded(id, lm)
-	}
-	if lm.fetching {
-		return
-	}
-	lm.fetching = true
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 		defer cancel()
@@ -97,12 +135,13 @@ func (w *Window) loadRemoteImages(id api.MessageID) {
 		err := w.client.Call(ctx, api.MethodMessageBody,
 			api.MessageBodyParams{AccountID: s.AccountID, MessageID: id, RemoteContent: api.RemoteAllow}, &res)
 		glib.IdleAdd(func() {
-			lm.fetching = false
 			if err != nil {
 				w.log.Warn("message.body (allow)", "err", err)
 				w.Toast(widget.RPCErrorText(i18n.T("Loading the images"), err))
+				w.imagesDone(id, lm)
 				return
 			}
+			lm.loadingImages = false
 			lm.body, lm.err = &res, nil
 			if w.loaded[id] == nil {
 				w.storeLoaded(id, lm)
@@ -110,6 +149,24 @@ func (w *Window) loadRemoteImages(id api.MessageID) {
 			w.showLoaded(id, lm)
 		})
 	}()
+}
+
+// imagesDone ends a request for the images without a new body: the bar
+// offers them again.
+func (w *Window) imagesDone(id api.MessageID, lm *loadedMessage) {
+	lm.loadingImages = false
+	w.refreshRemoteBar(id, lm)
+}
+
+// refreshRemoteBar redraws the bar of message id wherever it is on display
+// and leaves the body alone (showLoaded would reload the web view).
+func (w *Window) refreshRemoteBar(id api.MessageID, lm *loadedMessage) {
+	if s, ok := w.selectedMessage(); ok && s.ID == id {
+		renderRemoteBar(w.pane, lm)
+	}
+	if mw, ok := w.openMessages[id]; ok {
+		renderRemoteBar(mw.view, lm)
+	}
 }
 
 // showLoaded re-renders message id wherever it is on display: the pane
@@ -128,16 +185,23 @@ func (w *Window) showLoaded(id api.MessageID, lm *loadedMessage) {
 // trustSender puts the sender of id on the daemon's known-senders list
 // (sender.add), switches the stored remote-content preference to "from
 // known senders" when it was "never" (otherwise the list would change
-// nothing), and loads this message's images now.
+// nothing), and loads this message's images now. The bar shows the wait
+// from the click on, through all three calls.
 func (w *Window) trustSender(id api.MessageID) {
 	s, ok := w.summary(id)
 	if !ok || len(s.From) == 0 || strings.TrimSpace(s.From[0].Address) == "" {
 		return
 	}
 	address := strings.TrimSpace(s.From[0].Address)
-	w.callThen(i18n.T("Trusting the sender"), api.MethodSenderAdd, api.SenderAddParams{Address: address}, nil, func() {
-		w.ensureKnownSendersPolicy(func() { w.loadRemoteImages(id) })
-	})
+	lm := w.loadedFor(id)
+	if lm.loadingImages {
+		return
+	}
+	lm.loadingImages = true
+	w.refreshRemoteBar(id, lm)
+	w.callThen(i18n.T("Trusting the sender"), api.MethodSenderAdd, api.SenderAddParams{Address: address},
+		func() { w.imagesDone(id, lm) },
+		func() { w.ensureKnownSendersPolicy(func() { w.fetchRemoteImages(id, lm) }) })
 }
 
 // ensureKnownSendersPolicy raises the stored remote-content preference from

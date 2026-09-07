@@ -380,7 +380,8 @@ Adw.ApplicationWindow main_window {
             // (window/remote.go): the count, a button that loads them
             // through the daemon for this message, and one that trusts the
             // sender. Adw.Banner has room for one button, hence a bar of
-            // our own.
+            // our own. While the daemon fetches, the spinner replaces the
+            // buttons.
             [top]
             Box remote_bar {
               orientation: horizontal;
@@ -391,6 +392,11 @@ Adw.ApplicationWindow main_window {
                 "toolbar",
                 "remote-bar",
               ]
+
+              Adw.Spinner remote_spinner {
+                visible: false;
+                valign: center;
+              }
 
               Label remote_label {
                 xalign: 0;

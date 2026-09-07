@@ -91,7 +91,7 @@ Adw.Window message_window {
     }
 
     // Remote images the sanitiser removed (window/remote.go): the count and
-    // the two ways of loading them.
+    // the two ways of loading them; the spinner while they load.
     [top]
     Box remote_bar {
       orientation: horizontal;
@@ -102,6 +102,11 @@ Adw.Window message_window {
         "toolbar",
         "remote-bar",
       ]
+
+      Adw.Spinner remote_spinner {
+        visible: false;
+        valign: center;
+      }
 
       Label remote_label {
         xalign: 0;
