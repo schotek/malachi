@@ -1,20 +1,48 @@
-# Malachi Mail
+<p align="center">
+  <img src="docs/malachi_icon.png" width="160" alt="Malachi Mail icon: a winged messenger carrying an envelope">
+</p>
 
-A native email client for the Linux desktop, built because the existing
-options are either showing their age or do not work reliably anymore.
+<h1 align="center">Malachi Mail</h1>
 
-> **Project status: early. IMAP reading and plain-text sending work; there
-> is no HTML rendering yet.**
+<p align="center">A native email client for the Linux desktop.</p>
+
+Built because the existing options are either showing their age or do not
+work reliably anymore.
+
+> **Project status: early, usable with care.** Version 0.1.0 reads, writes
+> and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
+> sanitising it, and keeps mail available offline; Gmail support landed
+> on `main` since. Search and conversation threading are not there yet.
 >
-> The daemon synchronises IMAP accounts into a local store (folders,
-> headers, bodies as plain text within a configurable retention window),
-> pushes flag, move and delete changes back, and the window shows real
-> folders and messages. Messages are composed and sent as plain text with
-> attachments: they wait in a local Outbox, go out over SMTP with retries,
-> and a copy lands in the Sent folder. Messages are displayed as text only;
-> HTML bodies are withheld until the sanitiser exists. Do not point it at a
-> mailbox you care about yet: it is young, and a bug in the sync engine can
-> still touch messages on the server.
+> It is young, and a bug in the sync engine can still touch messages on the
+> server. Keep a second mail program for anything that matters.
+
+## What works today
+
+- **Accounts.** IMAP/SMTP with a setup assistant that finds the server
+  settings for most providers; Microsoft 365 / Outlook.com and Gmail /
+  Google Workspace through GNOME Online Accounts, with no separate
+  sign-in. Passwords and tokens live in the system keyring.
+- **Reading offline.** Folders and messages are synchronised into a local
+  store within a configurable retention window; new mail arrives as the
+  server announces it (IMAP IDLE). Flags, moves and deletions are queued
+  locally and pushed back.
+- **HTML mail, safely.** Bodies are sanitised in the daemon before the UI
+  sees them. Remote images stay blocked until you load them or trust the
+  sender; the renderer runs with JavaScript off, a strict content policy
+  and no network. Attached messages open read-only in their own window.
+- **Writing.** Formatted text, attachments and inline images. A message
+  that cannot go out right away waits in a local Outbox and is retried; a
+  copy is filed in Sent. Recipients are completed from the system address
+  books (Evolution Data Server) and from people you have written to.
+- **Desktop integration.** `mailto:` links, new-mail notifications with an
+  optional sound, launch at login (through the Background portal), light
+  and dark styles, a message list with unread/flagged filters, a foldable
+  sidebar with favourite folders.
+- **Czech translation**, and the machinery to add more.
+
+Not yet: search and conversation threading. The RPC contract already
+defines both; the daemon answers `notImplemented`.
 
 ## Goals
 
@@ -27,23 +55,27 @@ options are either showing their age or do not work reliably anymore.
 - **Separated backend.** All mail logic lives in a daemon with a documented
   JSON-RPC API. The UI is replaceable; the security model is not
   re-implemented per UI.
-- **Offline first.** Mail lives in a local SQLite store with full-text
-  search; the network is an optimisation.
+- **Offline first.** Mail lives in a local SQLite store; full-text search
+  will run over it. The network is an optimisation.
 
 ## Non-goals
 
 - A webmail or a hosted service.
 - Mobile versions.
 - Windows or macOS in the foreseeable future. The architecture does not
-  prevent it, but no code will be written for it.
+  prevent it, but no code will be written for it. What a macOS port would
+  actually cost is written down in
+  [docs/macos-port.md](docs/macos-port.md) so the question need not be
+  re-researched.
 - Running a mail server, filtering spam server-side, calendaring.
 
 ## Architecture
 
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
 store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
-synchronises, threads, searches, sanitises HTML and manages credentials. `malachi` is a GTK 4 application that connects to
-the daemon over a local unix socket and displays what it is given.
+synchronises, sanitises HTML and manages credentials; threading and search
+will live there too. `malachi` is a GTK 4 application that connects to the
+daemon over a local unix socket and displays what it is given.
 
 ```
 ┌──────────────────┐     JSON-RPC 2.0      ┌────────────────────┐
@@ -62,20 +94,33 @@ which keeps business logic and security decisions in one place and makes a
 second UI (or a command-line tool) a realistic option later.
 
 Details: [docs/architecture.md](docs/architecture.md), the RPC contract in
-[docs/api.md](docs/api.md), and the threat model in
-[docs/security.md](docs/security.md).
+[docs/api.md](docs/api.md), the threat model in
+[docs/security.md](docs/security.md), and how versions and releases work in
+[docs/releasing.md](docs/releasing.md).
+
+## Installing
+
+There is no Flathub listing yet. CI builds a Flatpak bundle for **x86_64**
+and **aarch64** on every push to `main`; pick one up from the run's
+artifacts under [Actions](https://github.com/schotek/malachi/actions)
+(kept 30 days) and install it:
+
+```sh
+flatpak install --user ./malachi-<version>-x86_64.flatpak
+```
+
+Tagged versions will have their bundles attached to the GitHub release.
+The bundle pulls the GNOME 48 runtime from Flathub.
 
 ## Building from source
 
 ### Dependencies
 
-Go ≥ 1.22 (developed with 1.25), a C compiler (gotk4 uses cgo), GTK 4,
-libadwaita, Blueprint, WebKitGTK **6.0** (the GTK 4 flavour; it powers the
-rich-text compose editor and, later, message rendering; Blueprint also
-needs its typelib at build time) and gsound for the new-mail sound
-(optional: without it `make` builds with `-tags nosound` and prints a
-warning). The first build compiles the gotk4 and WebKitGTK bindings, which
-takes a long time.
+Go 1.25, a C compiler (gotk4 uses cgo), GTK 4, libadwaita, Blueprint,
+WebKitGTK **6.0** (the GTK 4 flavour; it renders messages and powers the
+rich-text compose editor; Blueprint also needs its typelib at build time)
+and gsound for the new-mail sound (optional: without it `make` builds with
+`-tags nosound` and prints a warning).
 
 Fedora:
 
@@ -104,12 +149,11 @@ make run-backend    # only the daemon, in the foreground (Ctrl+C stops it)
 make run-frontend   # only the UI; shows a banner until a daemon is reachable
 ```
 
-The first build compiles the gotk4 bindings, which takes a long time (tens
-of minutes on a laptop) and a few gigabytes of build cache. It is not
-stuck. Subsequent builds are fast.
+The first build compiles the gotk4 and WebKitGTK bindings, which takes a
+long time (tens of minutes on a laptop) and a few gigabytes of build cache.
+It is not stuck. Subsequent builds are fast.
 
-Other targets: `make test`, `make lint`, `make clean`, `make flatpak`
-(needs `flatpak-builder` on the host; the manifest is a skeleton for now).
+Other targets: `make test`, `make lint`, `make clean`, `make help`.
 
 Set `MALACHI_LOG_LEVEL=debug` to see every RPC call. Passwords go to the
 system keyring over D-Bus; in a container without a Secret Service set
@@ -121,6 +165,27 @@ into `build/glib-2.0/schemas`, and `make run-dev` / `make run-frontend`
 export `GSETTINGS_SCHEMA_DIR` so the uninstalled binary finds it. Running
 `build/malachi` directly without that variable still works, but preferences
 then live in memory and are lost on exit (a warning is logged).
+
+"Launch at Login" asks the Background portal for autostart. Inside a
+Toolbx container the portal cannot identify the application ("no AppId
+detected") and refuses; test that setting on the host from the installed
+desktop file or in the Flatpak.
+
+### Flatpak
+
+Build on the host, not inside a container (needs `flatpak-builder` and the
+Flathub remote):
+
+```sh
+make flatpak        # vendors Go dependencies, builds into build/flatpak and ./repo
+make flatpak-run    # runs the freshly built app from the build directory
+```
+
+The manifest is [packaging/flatpak/](packaging/flatpak/); the sandbox has
+no network, so `scripts/flatpak-vendor.sh` vendors both Go modules first.
+Only the keyring, notifications, GNOME Online Accounts, the Settings panel
+and the address-book D-Bus names are granted; files, links and autostart go
+through portals.
 
 ### Translating
 
@@ -141,18 +206,13 @@ To add a language, append its code to `po/LINGUAS`, run
 pull request. `make lint` checks that every `.po` compiles and that the
 committed template matches the sources.
 
-"Launch at Login" asks the Background portal for autostart. Inside the
-Toolbx container the portal cannot identify the application ("no AppId
-detected") and refuses; test that setting on the host from the installed
-desktop file or in the Flatpak.
-
 ### Where things go
 
 | What | Path |
 |---|---|
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
-| RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock` |
+| RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh). `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.
@@ -188,12 +248,11 @@ keyring.
 
 | Provider | Status |
 |---|---|
-| Generic IMAP/SMTP with password | 🚧 reading and plain-text sending work |
-| Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | 🚧 reading and plain-text sending work; sign in under Settings → Online Accounts first |
-| Gmail / Google Workspace via GNOME Online Accounts (IMAP/SMTP with XOAUTH2) | 🚧 reading and sending work; sign in under Settings → Online Accounts first. All Mail is the archive target and is not downloaded |
-
-"Planned" means "designed for, not implemented". See the status note at the
-top.
+| Generic IMAP/SMTP with password | ✅ reading and sending |
+| Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | ✅ reading and sending; sign in under Settings → Online Accounts first |
+| Gmail / Google Workspace via GNOME Online Accounts (IMAP/SMTP with XOAUTH2) | ✅ reading and sending (on `main`, not in 0.1.0); sign in under Settings → Online Accounts first. All Mail is the archive target and is not downloaded |
+| Gmail with an app password | ✗ not offered |
+| OAuth2 without GNOME Online Accounts | ✗ reserved for desktops without GOA, not implemented |
 
 ## Contributing
 
