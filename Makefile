@@ -167,7 +167,7 @@ run: run-dev
 run-backend: backend
 	./$(BUILD_DIR)/malachid $(ARGS)
 
-## run-frontend: build and start only the UI (connects to a running malachid, or shows a banner)
+## run-frontend: build and start the UI (connects to a running malachid, or starts build/malachid itself; MALACHI_DAEMON=none to only show the banner)
 run-frontend: ui schemas locale
 	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
 

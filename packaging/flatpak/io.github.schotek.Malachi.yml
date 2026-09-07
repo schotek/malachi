@@ -46,8 +46,11 @@ finish-args:
   - --talk-name=org.gnome.evolution.dataserver.Sources5
   - --talk-name=org.gnome.evolution.dataserver.AddressBook10
   - --talk-name=org.gnome.evolution.dataserver.Subprocess.Backend.*
-  # Both processes run inside the same sandbox instance and share
-  # $XDG_RUNTIME_DIR/app/<app-id>/, so the unix socket needs no extra hole.
+  # The UI starts malachid itself (ui/internal/daemon), so both processes
+  # run inside the same sandbox instance. The unix socket sits in
+  # $XDG_RUNTIME_DIR/app/<app-id>/ (api.SocketBase), which flatpak shares
+  # between every instance of the app and the host, so a UI started after
+  # a crash still finds the daemon; no extra hole is needed for it.
 
   # Deliberately NOT granted:
   #   --filesystem=home       attachments are opened/saved through the

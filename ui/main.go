@@ -20,6 +20,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/daemon"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/style"
@@ -45,6 +46,15 @@ func main() {
 	// file MimeType, D-Bus Open, or `malachi mailto:…`).
 	app := adw.NewApplication(AppID, gio.ApplicationHandlesOpen)
 	rpc := client.New(client.DefaultSocketPath())
+	// The daemon is ours to run: nothing on the desktop starts malachid
+	// (the Flatpak has one command, the autostart entry is this binary).
+	// One that already answers on the socket is used instead and left
+	// alone on exit.
+	daemonPath, err := daemon.Locate()
+	if err != nil {
+		log.Warn("not starting malachid; expecting one to be started by other means", "err", err)
+	}
+	sup := daemon.New(rpc.Socket, daemonPath, log)
 
 	// Preferences are opened on startup (GTK and libadwaita are initialised
 	// by then), before any window or action can use them.
@@ -76,13 +86,22 @@ func main() {
 			serviceHold = true
 			log.Info("started as a service; running in the background until activated")
 		}
+		// Startup runs in the primary instance only, so this is the one
+		// place a daemon is started even when no window ever opens (the
+		// login autostart, a mailto: activation). Off the main loop: the
+		// window's first dial waits for the same spawn.
+		go func() {
+			if err := sup.Ensure(); err != nil {
+				log.Warn("malachid is not running", "err", err)
+			}
+		}()
 	})
 	// show presents the main window, creating it on first use. The window
 	// hides instead of closing when "Run in Background" is on, so it is
 	// reused; when it really closes the application exits with it.
 	show := func() {
 		if mainWin == nil {
-			mainWin = window.New(app, rpc, log, prefs, mgr)
+			mainWin = window.New(app, rpc, log, prefs, mgr, sup)
 		}
 		mainWin.Present()
 		if serviceHold {
@@ -107,6 +126,11 @@ func main() {
 	app.ConnectShutdown(func() {
 		window.SweepOpenedAttachments()
 		rpc.Close()
+		// Quitting the application quits the daemon it started; "Run in
+		// Background" keeps the application (and so the daemon) alive by
+		// hiding the window instead. A UI crash skips this and leaves the
+		// daemon running for the next start to find.
+		sup.Stop()
 	})
 
 	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })

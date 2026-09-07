@@ -172,5 +172,11 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
 - Toolbx sdílí domovský adresář s hostitelem (včetně `~/go` a build cache).
 - `XDG_RUNTIME_DIR` nemusí být v kontejneru nastavený; backend i UI pak
   používají `~/.cache/malachi/run/rpc.sock`. `MALACHI_SOCKET` přebíjí obojí.
+  Ve Flatpaku (`FLATPAK_ID`) leží socket v `$XDG_RUNTIME_DIR/app/<app-id>/`,
+  jediné části runtime dir sdílené mezi instancemi sandboxu (`api.SocketBase`).
+- Démona nespouští nic na desktopu: UI si ho spustí samo (`ui/internal/daemon`,
+  hledá `malachid` vedle vlastní binárky, `MALACHI_DAEMON=none` vypne) a při
+  ukončení aplikace ho zastaví. Běžícího démona (`make run-backend`) použije
+  a nechá být.
 - `make build` musí proběhnout před `scripts/dev-run.sh`; skript binárky nestaví.
   `make run-dev` / `run-backend` / `run-frontend` build zajistí samy.

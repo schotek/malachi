@@ -70,13 +70,14 @@ func New(socket string) *Client {
 	return &Client{Socket: socket, pending: make(map[string]chan api.Response)}
 }
 
-// DefaultSocketPath mirrors the daemon's resolution of the socket location.
+// DefaultSocketPath mirrors the daemon's resolution of the socket location
+// (backend/internal/config.ResolvePaths); the Flatpak rule is api.SocketBase.
 func DefaultSocketPath() string {
 	if p := os.Getenv("MALACHI_SOCKET"); p != "" {
 		return p
 	}
-	if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
-		return filepath.Join(rt, api.SocketRelPath)
+	if base := api.SocketBase(os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("FLATPAK_ID")); base != "" {
+		return filepath.Join(base, api.SocketRelPath)
 	}
 	// Same fallback as backend/internal/config when no session runtime dir
 	// exists (containers, ssh).

@@ -61,8 +61,8 @@ content beyond rendering what the backend hands it.
 
 The cost is serialisation overhead and a second process to manage. For a
 mail client, where a "large" payload is one message body, the overhead is
-irrelevant; `scripts/dev-run.sh` and the desktop integration hide the second
-process from the user.
+irrelevant; the UI starts the daemon itself (`ui/internal/daemon`, §2), so
+the user never sees the second process.
 
 ## 2. Transport
 
@@ -74,6 +74,21 @@ connect; notifications are broadcast. Details: [api.md §1](api.md#1-transport).
 Startup ordering is not assumed: the UI keeps retrying the socket and shows
 its state; the daemon replaces a stale socket after a crash and refuses to
 start twice.
+
+Nothing on the desktop runs the daemon (the Flatpak has one command, the
+autostart entry is the UI, there is no systemd unit), so the UI does:
+`ui/internal/daemon` looks for `malachid` beside its own executable
+(`/app/bin`, `build/`, the install prefix; `MALACHI_DAEMON` overrides,
+`none` switches it off), starts it with `--socket` when nothing answers on
+the socket, waits for the socket before the first dial, restarts it after
+an exit with an exponential backoff, and sends it SIGTERM when the
+application quits. A daemon that already answers (`make run-backend`, a
+debugger, one left behind by a UI crash) is used as is and never stopped.
+The supervisor is process management only; it never speaks the protocol.
+Inside Flatpak the socket sits in `$XDG_RUNTIME_DIR/app/<app-id>`, the one
+directory shared between sandbox instances (`api.SocketBase`); anywhere
+else a later UI instance could not find the daemon and would start a
+second one over the same store.
 
 ## 3. Backend layout
 
@@ -295,6 +310,7 @@ ui/
   data/ui/*.blp       Blueprint UI definitions (compiled to .ui at build time, embedded)
   data/icons/
   internal/client     JSON-RPC client (transport only)
+  internal/daemon     starts, watches and stops the malachid process (§2)
   internal/window     main window: folders | list | message; message and
                       preferences dialogs
   internal/widget     reusable widgets (message list row) and pure formatters
@@ -499,10 +515,16 @@ Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
   adds over IMAP is needed).
 - Internationalised e-mail domains in `account.discover`: not handled
   (IDNA encoding of the domain before the ISPDB/DNS lookups).
-- Daemon lifecycle at login: the UI's autostart entry launches only
-  `malachi --gapplication-service`; nothing starts `malachid`. Options: the UI
-  spawns it when the socket is unreachable, or a systemd user unit / second
-  autostart entry.
+- Daemon lifecycle: **decided** (2026-09-07) — the UI starts `malachid`
+  when nothing answers on the socket and stops it when the application
+  quits (§2, `ui/internal/daemon`). Rejected: a systemd user unit (none in
+  a Flatpak, and the Background portal can only autostart the application
+  itself) and a second autostart entry (same reason). Open: a daemon
+  orphaned by a UI crash is adopted by the next UI but not stopped by it,
+  so it runs until logout; and a `--gapplication-service` instance
+  without a window starts the daemon but never connects to it, so a
+  mailto: composer opened that way sees no accounts until the main
+  window exists.
 - Message body storage: **decided**. The raw RFC 822 message is a file
   under `<data dir>/messages/<account>/<id>` (`0600` in a `0700` per-account
   directory, removed with the folder or the account); the parsed plain

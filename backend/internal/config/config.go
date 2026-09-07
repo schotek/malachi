@@ -18,6 +18,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/schotek/malachi/backend/internal/account"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 const appDir = "malachi"
@@ -65,7 +66,7 @@ func Load(path string) (Config, bool, error) {
 type Paths struct {
 	ConfigDir  string // $XDG_CONFIG_HOME/malachi
 	DataDir    string // $XDG_DATA_HOME/malachi
-	RuntimeDir string // $XDG_RUNTIME_DIR/malachi
+	RuntimeDir string // $XDG_RUNTIME_DIR/malachi (api.SocketBase: app dir inside Flatpak)
 	CacheDir   string // $XDG_CACHE_HOME/malachi
 }
 
@@ -91,9 +92,10 @@ func ResolvePaths() (Paths, error) {
 	}
 	// XDG_RUNTIME_DIR has no spec-defined fallback. Outside a session
 	// (containers, ssh) fall back to a private directory under the cache dir
-	// so the daemon still starts.
-	if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
-		p.RuntimeDir = filepath.Join(rt, appDir)
+	// so the daemon still starts. Inside Flatpak the base is the app's own
+	// runtime dir, shared between sandbox instances (api.SocketBase).
+	if base := api.SocketBase(os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("FLATPAK_ID")); base != "" {
+		p.RuntimeDir = filepath.Join(base, appDir)
 	} else {
 		p.RuntimeDir = filepath.Join(p.CacheDir, "run")
 	}

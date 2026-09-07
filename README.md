@@ -146,8 +146,15 @@ cd malachi
 make build          # backend → build/malachid, UI → build/malachi
 make run-dev        # starts the daemon, waits for its socket, starts the UI
 make run-backend    # only the daemon, in the foreground (Ctrl+C stops it)
-make run-frontend   # only the UI; shows a banner until a daemon is reachable
+make run-frontend   # the UI; it starts build/malachid itself unless one is already running
 ```
+
+The UI runs the daemon: it looks for `malachid` beside its own executable
+(then on `PATH`), starts it when nothing answers on the socket and stops it
+when the application quits. A daemon started by other means (`make
+run-backend`, a debugger) is used and left alone. `MALACHI_DAEMON=none`
+turns the automatic start off, and `MALACHI_DAEMON=/path/to/malachid`
+picks a different binary.
 
 The first build compiles the gotk4 and WebKitGTK bindings, which takes a
 long time (tens of minutes on a laptop) and a few gigabytes of build cache.
@@ -212,7 +219,7 @@ committed template matches the sources.
 |---|---|
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
-| RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh). `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
+| RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.

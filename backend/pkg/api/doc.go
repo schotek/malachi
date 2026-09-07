@@ -32,5 +32,27 @@ package api
 // Clients compare it against the value returned by system.info.
 const ProtocolVersion = 1
 
-// SocketRelPath is the socket location relative to $XDG_RUNTIME_DIR.
+// SocketRelPath is the socket location relative to the runtime base
+// directory that SocketBase returns.
 const SocketRelPath = "malachi/rpc.sock"
+
+// SocketBase is the directory the socket path is relative to: the session's
+// runtime dir, or inside Flatpak the application's own runtime dir
+// $XDG_RUNTIME_DIR/app/$FLATPAK_ID, the only part of the runtime dir that
+// every sandbox instance of the application (and the host) sees. The rest
+// of the sandbox's runtime dir is a private tmpfs per instance, so a socket
+// there would be invisible to a UI started after the one that started the
+// daemon. It returns "" when the session has no runtime dir; callers fall
+// back to a directory under the cache dir (docs/api.md §1).
+//
+// Both arguments are the environment variables of the same name; the
+// daemon and the UI resolve the path through this function so they agree.
+func SocketBase(xdgRuntimeDir, flatpakID string) string {
+	if xdgRuntimeDir == "" {
+		return ""
+	}
+	if flatpakID != "" {
+		return xdgRuntimeDir + "/app/" + flatpakID
+	}
+	return xdgRuntimeDir
+}

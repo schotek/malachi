@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-07 09:52+0200\n"
+"POT-Creation-Date: 2026-09-07 19:32+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
 
-#: ui/main.go:160
+#: ui/main.go:184
 msgid "A native mail client for the GNOME desktop."
 msgstr "Nativní poštovní klient pro prostředí GNOME."
 
@@ -1131,32 +1131,32 @@ msgstr "Systémová klíčenka není dostupná; účet %s se nemůže přihlási
 msgid "%s needs attention"
 msgstr "Účet %s vyžaduje pozornost"
 
-#: ui/internal/window/window.go:427
+#: ui/internal/window/window.go:437
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:442
+#: ui/internal/window/window.go:465
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:445
+#: ui/internal/window/window.go:468
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:452
+#: ui/internal/window/window.go:475
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:490
+#: ui/internal/window/window.go:513
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:495
+#: ui/internal/window/window.go:518
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:499
+#: ui/internal/window/window.go:522
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"

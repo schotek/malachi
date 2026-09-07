@@ -13,6 +13,7 @@ change and describe the change in the changelog section at the end.
 |---|---|
 | Protocol | JSON-RPC 2.0 |
 | Socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock` (mode 0600, directory 0700) |
+| Inside Flatpak (`FLATPAK_ID` set) | `$XDG_RUNTIME_DIR/app/$FLATPAK_ID/malachi/rpc.sock` (`api.SocketBase`) |
 | Fallback without `XDG_RUNTIME_DIR` | `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
 | Override | `malachid --socket PATH`; UI honours `MALACHI_SOCKET` |
 | Framing | newline-delimited JSON: one JSON object per line, terminated by `\n`. No `Content-Length` header. |
@@ -23,12 +24,18 @@ change and describe the change in the changelog section at the end.
 | Multiple clients | allowed; notifications are broadcast to all |
 
 Authentication: none beyond filesystem permissions. The socket is only
-reachable by the owning user. Inside Flatpak both processes share the sandbox
-runtime dir.
+reachable by the owning user. Inside Flatpak the socket lives in the
+application's own runtime dir, `$XDG_RUNTIME_DIR/app/<app-id>`: the rest of
+the sandbox's runtime dir is a private tmpfs per instance, and that
+directory is the one part every instance (and the host) sees, so a UI
+started later still finds a daemon an earlier instance left running.
 
 Startup: the daemon replaces a stale socket file left by a crash after
 checking that nothing answers on it. If another daemon is alive it exits with
-an error rather than stealing the socket.
+an error rather than stealing the socket. Nothing on the desktop starts the
+daemon; the UI does (`ui/internal/daemon`), passing `--socket` so both
+resolve the same path, and stops the one it started when it quits. A client
+that is not the UI has to run `malachid` itself.
 
 ### 1.1 Request
 

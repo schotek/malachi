@@ -39,6 +39,7 @@ type Window struct {
 
 	app      *adw.Application
 	client   *client.Client
+	starter  Starter
 	log      *slog.Logger
 	settings *settings.Store
 	compose  *compose.Manager
@@ -142,15 +143,24 @@ type Window struct {
 	outboxBanner   *adw.Banner
 }
 
+// Starter brings the daemon up before the window dials its socket
+// (ui/internal/daemon). Its error only says why no daemon answers; the
+// window keeps retrying either way.
+type Starter interface {
+	Ensure() error
+}
+
 // New builds the window, registers its actions and starts connecting to
-// the backend. Settings from s are applied now and whenever they change.
-func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager) *Window {
+// the backend, asking starter for a daemon first. Settings from s are
+// applied now and whenever they change.
+func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager, starter Starter) *Window {
 	b := data.Builder("window.ui")
 
 	w := &Window{
 		ApplicationWindow: b.GetObject("main_window").Cast().(*adw.ApplicationWindow),
 		app:               app,
 		client:            c,
+		starter:           starter,
 		log:               log.With("component", "window"),
 		settings:          s,
 		compose:           cm,
@@ -429,9 +439,22 @@ func (w *Window) playNewMailSound() {
 	}
 }
 
-// reconnect starts a connection attempt off the main loop.
+// reconnect starts a connection attempt off the main loop: first the
+// daemon is brought up (or found running), then the socket is dialled.
+// Ensure blocks while a freshly started daemon opens its socket; the
+// client's own state guard makes the overlapping attempts of the retry
+// timer harmless.
 func (w *Window) reconnect() {
-	go func() { _ = w.client.Connect() }()
+	go func() {
+		if w.starter != nil {
+			if err := w.starter.Ensure(); err != nil {
+				// The supervisor logs a daemon's exit itself; what is left
+				// here is the backoff and "nothing to start", both routine.
+				w.log.Debug("backend not started", "err", err)
+			}
+		}
+		_ = w.client.Connect()
+	}()
 }
 
 // showConnectionState runs on the main loop.

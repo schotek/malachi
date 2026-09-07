@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-07 09:52+0200\n"
+"POT-Creation-Date: 2026-09-07 19:32+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:160
+#: ui/main.go:184
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -1112,32 +1112,32 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/window.go:427
+#: ui/internal/window/window.go:437
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:442
+#: ui/internal/window/window.go:465
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/window.go:445
+#: ui/internal/window/window.go:468
 msgid "Connected"
 msgstr ""
 
-#: ui/internal/window/window.go:452
+#: ui/internal/window/window.go:475
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/window.go:490
+#: ui/internal/window/window.go:513
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/window.go:495
+#: ui/internal/window/window.go:518
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/window.go:499
+#: ui/internal/window/window.go:522
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
