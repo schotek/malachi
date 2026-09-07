@@ -23,6 +23,7 @@ LDFLAGS     := -X main.version=$(VERSION)
 # Install prefix (scripts/build.sh passes /app for Flatpak). The UI needs the
 # locale directory compiled in to find its .mo files when installed.
 PREFIX      ?= /usr/local
+BINDIR      ?= $(PREFIX)/bin
 LOCALEDIR   ?= $(PREFIX)/share/locale
 LDFLAGS_UI  := $(LDFLAGS) -X main.localeDir=$(LOCALEDIR)
 
@@ -66,7 +67,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help
+.PHONY: all build backend ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help FORCE
 
 all: build
 
@@ -91,8 +92,22 @@ blueprint: $(BLP_OUT)
 ui/data/ui/%.ui: ui/data/ui/%.blp
 	blueprint-compiler compile --output $@ $<
 
-## data: render desktop/metainfo templates (substitutes @APP_ID@ and @VERSION@, merges translations)
+## data: render desktop/metainfo/service templates (substitutes @APP_ID@, @VERSION@ and @BINDIR@, merges translations)
 data: $(DATA_OUT)
+
+# The D-Bus service file bakes in an absolute path, so it has to be rendered
+# again when PREFIX changes (the Flatpak build uses /app, a local install
+# /usr/local). The stamp records the PREFIX the tree was last rendered with;
+# without it a stale Exec= would ship silently, since flatpak build-export
+# only checks that the file exists.
+$(BUILD_DIR)/prefix.stamp: FORCE
+	@mkdir -p $(BUILD_DIR)
+	@echo '$(BINDIR)' | cmp -s - $@ || echo '$(BINDIR)' > $@
+
+FORCE:
+
+data/%.service: data/%.service.in $(BUILD_DIR)/prefix.stamp
+	sed -e 's|@APP_ID@|$(APP_ID)|g' -e 's|@BINDIR@|$(BINDIR)|g' $< > $@
 
 data/%.desktop: data/%.desktop.in $(PO_FILES) $(PO_DIR)/LINGUAS
 	sed -e 's/@APP_ID@/$(APP_ID)/g' -e 's/@VERSION@/$(VERSION)/g' $< > $@.tmp
@@ -178,6 +193,14 @@ lint: blueprint data schemas vet
 	fi
 	@if command -v desktop-file-validate >/dev/null 2>&1; then \
 		desktop-file-validate data/$(APP_ID).desktop; fi
+	@# DBusActivatable without an exported service file fails the Flatpak
+	@# export, which is the last step of a 20-minute build.
+	@if grep -q '^DBusActivatable=true' data/$(APP_ID).desktop; then \
+		test -f data/$(APP_ID).service || { \
+			echo "data/$(APP_ID).desktop is DBusActivatable but data/$(APP_ID).service.in is missing"; exit 1; }; \
+		grep -q '^Name=$(APP_ID)$$' data/$(APP_ID).service || { \
+			echo "data/$(APP_ID).service must own the bus name $(APP_ID)"; exit 1; }; \
+	fi
 	@# The desktop file names this icon and appstreamcli compose insists on
 	@# it; without it the Flatpak build fails late with icon-not-found.
 	@test -f $(ICON_SRC) || { echo "$(ICON_SRC) is missing (data/$(APP_ID).desktop names it as Icon=)"; exit 1; }

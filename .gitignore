@@ -23,9 +23,10 @@
 # Generated Blueprint output (compiled from .blp at build time)
 /ui/data/ui/*.ui
 
-# Generated desktop/metainfo files (from .in templates)
+# Generated desktop/metainfo/service files (from .in templates)
 /data/*.desktop
 /data/*.metainfo.xml
+/data/*.service
 
 # Databases
 *.db

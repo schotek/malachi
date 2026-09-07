@@ -27,6 +27,10 @@ if [[ "${1:-}" == "install" ]]; then
     install -Dm755 build/malachi  "$PREFIX/bin/malachi"
     install -Dm644 "data/$APP_ID.desktop" \
         "$PREFIX/share/applications/$APP_ID.desktop"
+    # DBusActivatable=true in the desktop file; flatpak build-export rejects
+    # the build when the matching service file is not exported.
+    install -Dm644 "data/$APP_ID.service" \
+        "$PREFIX/share/dbus-1/services/$APP_ID.service"
     install -Dm644 "data/$APP_ID.metainfo.xml" \
         "$PREFIX/share/metainfo/$APP_ID.metainfo.xml"
     install -Dm644 "data/$APP_ID.gschema.xml" \
