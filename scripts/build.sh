@@ -31,10 +31,11 @@ if [[ "${1:-}" == "install" ]]; then
         "$PREFIX/share/metainfo/$APP_ID.metainfo.xml"
     install -Dm644 "data/$APP_ID.gschema.xml" \
         "$PREFIX/share/glib-2.0/schemas/$APP_ID.gschema.xml"
-    if [[ -f "ui/data/icons/$APP_ID.svg" ]]; then
-        install -Dm644 "ui/data/icons/$APP_ID.svg" \
-            "$PREFIX/share/icons/hicolor/scalable/apps/$APP_ID.svg"
-    fi
+    # Not conditional: appstreamcli compose (and so the whole Flatpak build)
+    # fails with icon-not-found when the application icon is missing, and a
+    # silent skip here is what hid that until CI ran.
+    install -Dm644 "ui/data/icons/$APP_ID.svg" \
+        "$PREFIX/share/icons/hicolor/scalable/apps/$APP_ID.svg"
     if [[ -f "ui/data/icons/$APP_ID-symbolic.svg" ]]; then
         install -Dm644 "ui/data/icons/$APP_ID-symbolic.svg" \
             "$PREFIX/share/icons/hicolor/symbolic/apps/$APP_ID-symbolic.svg"

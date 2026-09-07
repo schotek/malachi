@@ -36,6 +36,8 @@ PO_FILES    := $(foreach l,$(LINGUAS),$(PO_DIR)/$(l).po)
 LOCALE_DIR  := $(BUILD_DIR)/locale
 MO_OUT      := $(foreach l,$(LINGUAS),$(LOCALE_DIR)/$(l)/LC_MESSAGES/malachi.mo)
 LOCALE_ENV  := MALACHI_LOCALE_DIR=$(CURDIR)/$(LOCALE_DIR)
+ICON_SRC    := ui/data/icons/$(APP_ID).svg
+ICON_ENV    := MALACHI_ICON_DIR=$(CURDIR)/$(dir $(ICON_SRC))
 POTFILES_GO := $(shell grep -v '^\#' $(PO_DIR)/POTFILES 2>/dev/null)
 XGETTEXT    := xgettext --from-code=UTF-8 --package-name=malachi \
                --msgid-bugs-address=https://github.com/schotek/malachi/issues \
@@ -152,7 +154,7 @@ run-backend: backend
 
 ## run-frontend: build and start only the UI (connects to a running malachid, or shows a banner)
 run-frontend: ui schemas locale
-	$(SCHEMA_ENV) $(LOCALE_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
+	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
 
 ## test: run Go tests for both modules
 test: blueprint schemas
@@ -176,6 +178,9 @@ lint: blueprint data schemas vet
 	fi
 	@if command -v desktop-file-validate >/dev/null 2>&1; then \
 		desktop-file-validate data/$(APP_ID).desktop; fi
+	@# The desktop file names this icon and appstreamcli compose insists on
+	@# it; without it the Flatpak build fails late with icon-not-found.
+	@test -f $(ICON_SRC) || { echo "$(ICON_SRC) is missing (data/$(APP_ID).desktop names it as Icon=)"; exit 1; }
 	@if command -v appstreamcli >/dev/null 2>&1; then \
 		appstreamcli validate --no-net data/$(APP_ID).metainfo.xml; fi
 

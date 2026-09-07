@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
@@ -59,6 +60,7 @@ func main() {
 	app.ConnectStartup(func() {
 		// Attachments a previous run wrote for opening (docs/security.md §8).
 		window.SweepOpenedAttachments()
+		addUninstalledIconPath()
 		prefs = settings.Open(log)
 		style.Apply(prefs)
 		mgr = compose.NewManager(app, rpc, log, prefs)
@@ -109,6 +111,26 @@ func main() {
 
 	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))
+}
+
+// iconDirEnv points at the application icon for uninstalled (development)
+// runs. Installed, the icon sits in the hicolor theme and GTK finds it on
+// its own; from a source tree nothing does, so the window and the about
+// dialog would fall back to the generic placeholder.
+const iconDirEnv = "MALACHI_ICON_DIR"
+
+// addUninstalledIconPath makes the icon of a source tree visible to GTK.
+// Call from startup, after GTK is initialised. A no-op when installed.
+func addUninstalledIconPath() {
+	dir := os.Getenv(iconDirEnv)
+	if dir == "" {
+		return
+	}
+	display := gdk.DisplayGetDefault()
+	if display == nil {
+		return
+	}
+	gtk.IconThemeGetForDisplay(display).AddSearchPath(dir)
 }
 
 // addActions registers application actions. store yields the settings store,

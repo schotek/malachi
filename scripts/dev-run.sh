@@ -33,6 +33,9 @@ fi
 # Uninstalled translations (compiled by `make locale`).
 export MALACHI_LOCALE_DIR="$BUILD/locale"
 
+# Uninstalled application icon: no hicolor theme holds it in a source tree.
+export MALACHI_ICON_DIR="$ROOT/ui/data/icons"
+
 # Resolve the socket the same way the daemon does.
 if [[ -n "${MALACHI_SOCKET:-}" ]]; then
     SOCK="$MALACHI_SOCKET"
