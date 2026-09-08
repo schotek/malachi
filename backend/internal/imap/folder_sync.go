@@ -336,10 +336,26 @@ func diffUIDs(local, server []uint32) (gone, fresh, common []uint32) {
 	return gone, fresh, common
 }
 
-// envelopeOptions is the header fetch of a new message.
+// envelopeOptions is the header fetch of a new message: the envelope plus
+// the References field, which the envelope does not carry and which
+// threading links on before the body is downloaded.
 var envelopeOptions = imap.FetchOptions{
 	UID: true, Flags: true, InternalDate: true, RFC822Size: true, Envelope: true,
 	BodyStructure: &imap.FetchItemBodyStructure{Extended: true},
+	BodySection:   []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, HeaderFields: []string{"References"}, Peek: true}},
+}
+
+// maxReferencesHeaderBytes bounds what referencesFromHeader reads of a
+// HEADER.FIELDS literal; a References field is a few hundred bytes, and
+// the parser keeps 50 identifiers anyway.
+const maxReferencesHeaderBytes = 64 << 10
+
+// referencesFromHeader parses the References field out of a header-fields
+// literal and drains the rest.
+func referencesFromHeader(r io.Reader) []string {
+	refs := mime.ParseReferences(io.LimitReader(r, maxReferencesHeaderBytes), mime.DefaultLimits())
+	io.Copy(io.Discard, r)
+	return refs
 }
 
 // fetchEnvelopes stores headers of the UIDs the store does not have yet.
@@ -423,7 +439,14 @@ func (s *Syncer) messageFromFetch(md *imapclient.FetchMessageData, f store.Folde
 		case imapclient.FetchItemDataBodyStructure:
 			m.Attachments, m.HasAttachments = attachmentsFromBodyStructure(it.BodyStructure)
 		case imapclient.FetchItemDataBodySection:
-			if it.Literal != nil {
+			if it.Literal == nil {
+				break
+			}
+			// The References field asked for by envelopeOptions; the
+			// items of a FETCH reply come in the server's order.
+			if it.Section != nil && it.Section.Specifier == imap.PartSpecifierHeader && len(it.Section.HeaderFields) > 0 {
+				m.References = referencesFromHeader(it.Literal)
+			} else {
 				io.Copy(io.Discard, it.Literal)
 			}
 		case imapclient.FetchItemDataBinarySection:
@@ -537,7 +560,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, sess *session, f store.Folder,
 				if err := s.settleBody(ctx, f, r, prevUIDNext, store.BodyFailed); err != nil {
 					return err
 				}
-			case r.Size > maxRawMessageBytes:
+			case r.Size > s.rawLimit():
 				attempted[r.ID] = true
 				if err := s.settleBody(ctx, f, r, prevUIDNext, store.BodyTooBig); err != nil {
 					return err
@@ -622,7 +645,7 @@ func (s *Syncer) fetchBodyBatch(ctx context.Context, sess *session, f store.Fold
 // storeBody writes the raw message, parses it and stores the result; the
 // literal is always drained so the decoder can continue.
 func (s *Syncer) storeBody(ctx context.Context, f store.Folder, ref store.MessageRef, lit io.Reader, prevUIDNext uint32) error {
-	_, err := s.deps.Store.WriteMessageRaw(ctx, s.account.ID, ref.ID, lit, maxRawMessageBytes)
+	_, err := s.deps.Store.WriteMessageRaw(ctx, s.account.ID, ref.ID, lit, s.rawLimit())
 	io.Copy(io.Discard, lit)
 	switch {
 	case errors.Is(err, store.ErrTooBig):
@@ -669,6 +692,14 @@ func (s *Syncer) storeBody(ctx context.Context, f store.Folder, ref store.Messag
 }
 
 // settleBody records a terminal body state and reports the message.
+// rawLimit is the largest message whose body is downloaded.
+func (s *Syncer) rawLimit() int64 {
+	if s.deps.MaxRawMessageBytes > 0 {
+		return s.deps.MaxRawMessageBytes
+	}
+	return maxRawMessageBytes
+}
+
 func (s *Syncer) settleBody(ctx context.Context, f store.Folder, ref store.MessageRef, prevUIDNext uint32, state store.BodyState) error {
 	if err := s.deps.Store.MarkBodyState(ctx, ref.ID, state); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

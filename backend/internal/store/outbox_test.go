@@ -142,7 +142,7 @@ func TestEnqueueOutbox(t *testing.T) {
 	}
 	if !strings.HasPrefix(m.ID, "m_") || m.AccountID != "acc" || m.FolderID != outbox.ID || m.UID != 0 || m.ModSeq != 0 ||
 		fmt.Sprint(m.Flags) != fmt.Sprint([]api.Flag{api.FlagSeen}) || m.Size != int64(len(raw)) || m.HasHTML ||
-		m.BodyState != BodyFetched || m.ThreadID != "" || m.Subject != "queued" || m.From[0].Address != "me@example.invalid" ||
+		m.BodyState != BodyFetched || !strings.HasPrefix(m.ThreadID, "t_") || m.Subject != "queued" || m.From[0].Address != "me@example.invalid" ||
 		len(m.To) != 1 || len(m.CC) != 1 || len(m.BCC) != 1 || m.RFCMessageID != "<q@example.invalid>" ||
 		m.InReplyTo != "<p@example.invalid>" || len(m.References) != 1 || m.Snippet != "hello" || !m.HasAttachments ||
 		len(m.Attachments) != 1 || m.CreatedAt.IsZero() || !m.Date.Equal(time.Date(2026, 9, 4, 10, 0, 0, 0, time.UTC)) {

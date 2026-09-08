@@ -77,6 +77,15 @@ func (b *Backend) attachOutboxInfo(ctx context.Context, accountID, folderID stri
 	if f.Role != api.RoleOutbox {
 		return nil
 	}
+	return b.attachOutboxEntries(ctx, accountID, list)
+}
+
+// attachOutboxEntries fills MessageSummary.outbox for whichever of the
+// summaries are queued messages, whatever folder the listing spans.
+func (b *Backend) attachOutboxEntries(ctx context.Context, accountID string, list []api.MessageSummary) error {
+	if len(list) == 0 {
+		return nil
+	}
 	ids := make([]string, 0, len(list))
 	for _, m := range list {
 		ids = append(ids, string(m.ID))

@@ -165,6 +165,13 @@ the current draft's attachments.
   crash, never a hang.
 - Every new parser gets pathological samples in `testdata/mime` and a fuzz
   target.
+- `Message-ID`, `In-Reply-To` and `References` only ever link
+  conversations (architecture §3.4): matched exactly, never used as an
+  identity, capped at 50 references per message (repeats count once), 512
+  rows per lookup and 500 members per merge, and never grouped by subject.
+  A message that forges a thousand identifiers of other people's mail
+  reaches at most one 500-member group; it cannot fold a mailbox into one
+  thread, and a Graph conversation is never rewritten by a local message.
 - Attachment import (`attachment.import`) treats the path from the UI as
   input, not as trust: it must be absolute and name a regular file after
   following symlinks; it is opened `O_NONBLOCK` so a FIFO or device cannot

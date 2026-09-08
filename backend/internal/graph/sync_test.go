@@ -331,6 +331,10 @@ func TestIncrementalNewMessageNotifiesAndSeenFlag(t *testing.T) {
 	if len(news) != 1 || news[0].Message.Subject != "Pong" || news[0].FolderID != api.FolderID(inbox.ID) || news[0].Message.Snippet != "second body line" {
 		t.Fatalf("notifications = %+v", news)
 	}
+	// The server's conversation id is the thread id.
+	if news[0].Message.ThreadID != "conv-Pong" {
+		t.Fatalf("thread id = %q", news[0].Message.ThreadID)
+	}
 	m, _ := h.byRemote(first)
 	if !hasFlag(m.Flags, api.FlagSeen) {
 		t.Fatalf("server read state not applied: %+v", m.Flags)

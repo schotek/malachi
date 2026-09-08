@@ -1,0 +1,9 @@
+From: Eve <eve@example.org>
+To: bob@example.net
+Subject: Re: several
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <list@example.org>
+In-Reply-To: <first@example.org> <second@example.org> (a comment)
+Content-Type: text/plain; charset=utf-8
+
+In-Reply-To with a list.

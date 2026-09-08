@@ -6,6 +6,7 @@ package imap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -89,6 +90,55 @@ func TestNewMessageViaIdle(t *testing.T) {
 		t.Fatalf("stored = %+v %v", m, err)
 	}
 	waitFor(t, "unread count", func() bool { return h.folder("inbox").Unread == 1 })
+
+	// The notification names the conversation, and a reply joins it.
+	if n.Message.ThreadID == "" {
+		t.Fatalf("no thread id in %+v", n.Message)
+	}
+	h.append("INBOX", replyMessage("n2", "Re: Ping", "n1", "reply"), time.Now())
+	reply := h.waitNewMessage()
+	if reply.Message.ThreadID != n.Message.ThreadID {
+		t.Fatalf("reply thread %q, original %q", reply.Message.ThreadID, n.Message.ThreadID)
+	}
+}
+
+// replyMessage is rawMessage with the threading headers of a reply to
+// parent (a rawMessage id).
+func replyMessage(id, subject, parent, body string) string {
+	return fmt.Sprintf("From: Bob <bob@example.test>\r\nTo: me@example.test\r\nSubject: %s\r\nDate: Mon, 01 Sep 2026 11:00:00 +0000\r\n"+
+		"Message-ID: <%s@example.test>\r\nIn-Reply-To: <%s@example.test>\r\nReferences: <root@example.test>\r\n <%s@example.test>\r\n"+
+		"Content-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", subject, id, parent, parent, body)
+}
+
+// References are fetched with the envelope, so a conversation is known
+// before (or without) the body: with bodies capped below the message
+// size, the stored row still carries the parsed References list.
+func TestReferencesStoredAtHeaderSync(t *testing.T) {
+	h := newHarness(t, harnessOptions{rawLimit: 256})
+	h.append("INBOX", rawMessage("n1", "Ping", strings.Repeat("x", 300)), daysAgo(2))
+	h.append("INBOX", replyMessage("n2", "Re: Ping", "n1", strings.Repeat("y", 300)), daysAgo(1))
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	msgs := h.messages(h.folder("inbox").ID)
+	if len(msgs) != 2 {
+		t.Fatalf("messages = %d", len(msgs))
+	}
+	byID := map[string]store.Message{}
+	for _, m := range msgs {
+		if m.BodyState != store.BodyTooBig {
+			t.Fatalf("body of %s was downloaded: %s", m.RFCMessageID, m.BodyState)
+		}
+		byID[m.RFCMessageID] = m
+	}
+	reply := byID["n2@example.test"]
+	if reply.InReplyTo != "n1@example.test" || fmt.Sprint(reply.References) != "[root@example.test n1@example.test]" {
+		t.Fatalf("reply headers: in-reply-to %q references %v", reply.InReplyTo, reply.References)
+	}
+	if reply.ThreadID == "" || reply.ThreadID != byID["n1@example.test"].ThreadID {
+		t.Fatalf("threads: %q vs %q", reply.ThreadID, byID["n1@example.test"].ThreadID)
+	}
 }
 
 func TestServerFlagChangeAppliedLocally(t *testing.T) {

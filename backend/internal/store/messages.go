@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/thread"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -99,9 +100,12 @@ type BodyUpdate struct {
 // UpsertMessages stores a batch in one transaction. Rows are matched on
 // (FolderID, UID) when UID > 0 or on (FolderID, RemoteID) when RemoteID is
 // set: an existing row keeps everything except flags, modseq, thread id
-// and updated_at, and msgs[i].ID is set to its id; new rows get an "m_" id
-// (an empty msgs[i].ID is filled in). Nothing is stored when any row fails.
-// Folder counts are not touched (RecountFolder).
+// (remote-id rows only, and only when the batch carries one) and
+// updated_at, and msgs[i].ID is set to its id; new rows get an "m_" id
+// (an empty msgs[i].ID is filled in). A new row with an empty ThreadID
+// gets a local one and is linked into its conversation (threads.go);
+// msgs[i].ThreadID is set to the stored id either way. Nothing is stored
+// when any row fails. Folder counts are not touched (RecountFolder).
 func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -109,6 +113,8 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 	}
 	defer tx.Rollback()
 
+	// The last parameter is the batch's own thread id (possibly empty):
+	// a remote-id row keeps its stored id when the batch has none.
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO messages (id, account_id, folder_id, uid, remote_id, modseq, flags, unread, flagged,
 			from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
@@ -121,17 +127,18 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		ON CONFLICT (folder_id, remote_id) WHERE remote_id != '' DO UPDATE SET
 			flags = excluded.flags, modseq = excluded.modseq, unread = excluded.unread,
 			flagged = excluded.flagged,
-			thread_id = CASE WHEN excluded.thread_id = '' THEN thread_id ELSE excluded.thread_id END,
+			thread_id = CASE WHEN ? = '' THEN thread_id ELSE excluded.thread_id END,
 			updated_at = excluded.updated_at
-		RETURNING id, created_at`)
+		RETURNING id, created_at, thread_id`)
 	if err != nil {
 		return fmt.Errorf("upsert messages: %w", err)
 	}
 	defer stmt.Close()
 
 	now := nowStamp()
-	type result struct{ id, created string }
+	type result struct{ id, created, thread string }
 	results := make([]result, len(msgs))
+	var fresh []linkRow
 	for i, m := range msgs {
 		if m == nil {
 			return fmt.Errorf("upsert messages: nil message at %d", i)
@@ -148,23 +155,76 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		if state == "" {
 			state = BodyNone
 		}
+		tid := m.ThreadID
+		if tid == "" {
+			tid = newID(thread.IDPrefix)
+		}
 		var r result
 		err = stmt.QueryRowContext(ctx,
 			id, m.AccountID, m.FolderID, int64(m.UID), m.RemoteID, int64(m.ModSeq), enc.flags, enc.unread, enc.flagged,
 			enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 			m.RFCMessageID, m.InReplyTo, enc.references, m.Size, m.Snippet, boolInt(m.HasAttachments),
-			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), m.ThreadID, now, now,
-		).Scan(&r.id, &r.created)
+			enc.attachments, enc.headers, boolInt(m.HasHTML), string(state), tid, now, now, m.ThreadID,
+		).Scan(&r.id, &r.created, &r.thread)
 		if err != nil {
 			return fmt.Errorf("upsert message uid %d in %s: %w", m.UID, m.FolderID, err)
 		}
 		results[i] = r
+		if r.id == id {
+			// Inserted, not matched: the id we chose came back.
+			fresh = append(fresh, linkRow{id: id, accountID: m.AccountID, threadID: r.thread,
+				rfcID: m.RFCMessageID, inReplyTo: m.InReplyTo, references: m.References})
+		}
+	}
+	// References of the whole batch first, so a parent links to the replies
+	// that arrived in the same batch whatever the order.
+	for _, r := range fresh {
+		if err := insertRefsTx(ctx, tx, r.id, r.accountID, r.inReplyTo, r.references); err != nil {
+			return err
+		}
+	}
+	for _, r := range fresh {
+		if _, err := linkMessageTx(ctx, tx, r); err != nil {
+			return err
+		}
+	}
+	if len(fresh) > 0 {
+		// A merge may have moved any fresh row; report the final ids.
+		ids := make([]string, len(fresh))
+		for i, r := range fresh {
+			ids[i] = r.id
+		}
+		final := map[string]string{}
+		for _, chunk := range chunkStrings(ids, linkChunk) {
+			rows, err := tx.QueryContext(ctx, `SELECT id, thread_id FROM messages WHERE id IN (`+inPlaceholders(len(chunk))+`)`, toAny(chunk)...)
+			if err != nil {
+				return fmt.Errorf("read thread ids: %w", err)
+			}
+			for rows.Next() {
+				var id, tid string
+				if err := rows.Scan(&id, &tid); err != nil {
+					rows.Close()
+					return fmt.Errorf("read thread ids: %w", err)
+				}
+				final[id] = tid
+			}
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				return fmt.Errorf("read thread ids: %w", err)
+			}
+		}
+		for i := range results {
+			if tid, ok := final[results[i].id]; ok {
+				results[i].thread = tid
+			}
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("upsert messages: %w", err)
 	}
 	for i, m := range msgs {
 		m.ID = results[i].id
+		m.ThreadID = results[i].thread
 		m.CreatedAt = parseStamp(results[i].created)
 		m.UpdatedAt = parseStamp(now)
 	}
@@ -627,8 +687,9 @@ func (s *Store) DeleteStalePending(ctx context.Context, folderID string, before 
 }
 
 // SetMessageBody stores the parse result of a fetched message; see
-// BodyUpdate for which fields replace and which only fill in. ErrNotFound
-// for an unknown id.
+// BodyUpdate for which fields replace and which only fill in. The message
+// is then linked into its conversation again, since the body may be the
+// first to carry References. ErrNotFound for an unknown id.
 func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) error {
 	state := u.State
 	if state == "" {
@@ -650,7 +711,12 @@ func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) err
 	if err != nil {
 		return fmt.Errorf("encode from: %w", err)
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set message body: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `
 		UPDATE messages SET
 			text_body = ?, has_html = ?, snippet = ?, attachments_json = ?, has_attachments = ?,
 			headers_json = ?, references_json = ?, body_state = ?,
@@ -670,6 +736,12 @@ func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
+	}
+	if _, err := relinkTx(ctx, tx, id); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("set message body: %w", err)
 	}
 	return nil
 }

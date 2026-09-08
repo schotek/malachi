@@ -357,6 +357,7 @@ func (b *Backend) Drafts() api.DraftService           { return &draftService{b} 
 func (b *Backend) Attachments() api.AttachmentService { return &attachmentService{b} }
 func (b *Backend) Folders() api.FolderService         { return &folderService{b} }
 func (b *Backend) Messages() api.MessageService       { return &messageService{b} }
+func (b *Backend) Threads() api.ThreadService         { return &threadService{b} }
 func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
@@ -365,6 +366,9 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
+	}
+	if err := b.backfillThreads(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill conversations", "err", err)
 	}
 	sweep := func() {
 		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)

@@ -156,6 +156,11 @@ func TestRemoteFlagsMoveAndDelete(t *testing.T) {
 	if err := s.UpsertMessages(ctx, []*Message{early}); err != nil {
 		t.Fatal(err)
 	}
+	// The original must be the older row; the stamps have millisecond
+	// resolution and the two inserts may share one.
+	if _, err := s.DB().ExecContext(ctx, `UPDATE messages SET updated_at = ? WHERE id = ?`, stamp(time.Now().Add(time.Second)), early.ID); err != nil {
+		t.Fatal(err)
+	}
 	if moved, err := s.MoveByRemoteID(ctx, "acc", "AAkA2", archive.ID); err != nil || !moved {
 		t.Fatalf("move over duplicate: %v %v", moved, err)
 	}

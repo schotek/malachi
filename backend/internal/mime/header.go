@@ -4,7 +4,10 @@
 package mime
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	stdmime "mime"
 	netmail "net/mail"
 	"strings"
@@ -12,6 +15,7 @@ import (
 
 	"github.com/emersion/go-message"
 	msgmail "github.com/emersion/go-message/mail"
+	"github.com/emersion/go-message/textproto"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -89,10 +93,10 @@ func (p *parser) envelope(h message.Header) {
 	out.MessageID = cleanID(id, max)
 
 	out.InReplyTo = ""
-	if l := p.msgIDs(&mh, "In-Reply-To", 1); len(l) > 0 {
+	if l := p.msgIDs(&mh, "In-Reply-To", 1, false); len(l) > 0 {
 		out.InReplyTo = l[0]
 	}
-	out.References = p.msgIDs(&mh, "References", p.limits.MaxReferences)
+	out.References = p.msgIDs(&mh, "References", p.limits.MaxReferences, true)
 
 	for _, name := range curatedHeaders {
 		if !h.Has(name) {
@@ -200,8 +204,11 @@ func (p *parser) date(raw string) time.Time {
 
 // msgIDs parses a message identifier list, falling back to whitespace
 // splitting when the strict parser rejects the field, and returns at most
-// max cleaned identifiers without angle brackets.
-func (p *parser) msgIDs(mh *msgmail.Header, key string, max int) []string {
+// max distinct cleaned identifiers without angle brackets: the first max,
+// or with tail the last max (References lists ancestors oldest first, and
+// the nearest ones are what threading links on). A repeated identifier
+// counts once, so repetition cannot fill the cap.
+func (p *parser) msgIDs(mh *msgmail.Header, key string, max int, tail bool) []string {
 	raw := mh.Get(key)
 	if strings.TrimSpace(raw) == "" {
 		return nil
@@ -216,20 +223,42 @@ func (p *parser) msgIDs(mh *msgmail.Header, key string, max int) []string {
 		}
 	}
 	out := make([]string, 0, min(len(list), max))
+	seen := make(map[string]bool, min(len(list), max))
 	for _, id := range list {
-		if id = cleanID(id, p.limits.MaxFieldBytes); id == "" {
+		if id = cleanID(id, p.limits.MaxFieldBytes); id == "" || seen[id] {
 			continue
 		}
-		if len(out) == max {
-			p.problem(fmt.Sprintf("%s: more than %d identifiers", strings.ToLower(key), max))
-			break
-		}
+		seen[id] = true
 		out = append(out, id)
+	}
+	if len(out) > max {
+		p.problem(fmt.Sprintf("%s: more than %d identifiers", strings.ToLower(key), max))
+		if tail {
+			out = out[len(out)-max:]
+		} else {
+			out = out[:max]
+		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// ParseReferences reads a header block (what IMAP's
+// BODY[HEADER.FIELDS (REFERENCES)] returns, with or without the blank
+// line) and returns the cleaned identifiers of its References field, the
+// last limits.MaxReferences of them; nil when there are none or the block
+// cannot be read. At most limits.MaxHeaderBytes are consumed from r.
+func ParseReferences(r io.Reader, limits Limits) []string {
+	limits = limits.withDefaults()
+	h, err := textproto.ReadHeader(bufio.NewReader(io.LimitReader(r, limits.MaxHeaderBytes)))
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil
+	}
+	mh := msgmail.Header{Header: message.Header{Header: h}}
+	p := &parser{limits: limits, out: &Parsed{}}
+	return p.msgIDs(&mh, "References", limits.MaxReferences, true)
 }
 
 // firstMsgID extracts the first identifier from a raw Message-ID value

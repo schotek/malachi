@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -645,11 +646,86 @@ func TestReferencesFallbackAndCap(t *testing.T) {
 		refs = append(refs, fmt.Sprintf("<r%d@example.org>", i))
 	}
 	p := parseString(t, "References: "+strings.Join(refs, " ")+"\r\nIn-Reply-To: broken id without brackets\r\n\r\n", DefaultLimits())
-	if len(p.References) != DefaultLimits().MaxReferences || p.References[0] != "r0@example.org" {
+	// The cap keeps the tail: the nearest ancestors are what threading links on.
+	if n := DefaultLimits().MaxReferences; len(p.References) != n || p.References[0] != "r10@example.org" || p.References[n-1] != "r59@example.org" {
 		t.Errorf("references = %v", p.References)
+	}
+	if !hasProblem(p, "references") {
+		t.Errorf("problems = %v", p.Problems)
 	}
 	if p.InReplyTo != "broken" {
 		t.Errorf("in-reply-to = %q", p.InReplyTo)
+	}
+}
+
+// The threading samples in testdata: what a hostile or broken header
+// leaves the linker with.
+func TestThreadingHeaders(t *testing.T) {
+	limits := DefaultLimits()
+	p := parseFile(t, "thread-self-reference.eml")
+	if p.MessageID != "self@example.org" || p.InReplyTo != "self@example.org" || len(p.References) != 1 || p.References[0] != "self@example.org" {
+		t.Errorf("self-reference: id %q in-reply-to %q refs %v", p.MessageID, p.InReplyTo, p.References)
+	}
+
+	p = parseFile(t, "thread-references-flood.eml")
+	if len(p.References) != limits.MaxReferences || p.References[len(p.References)-1] != "flood-4999@example.org" || p.References[0] != "flood-4950@example.org" {
+		t.Errorf("flood: %d references, first %q, last %q", len(p.References), p.References[0], p.References[len(p.References)-1])
+	}
+	if !hasProblem(p, "references") {
+		t.Errorf("flood problems = %v", p.Problems)
+	}
+
+	p = parseFile(t, "thread-references-garbage.eml")
+	for _, r := range p.References {
+		if r == "" || strings.ContainsAny(r, " <>\r\n\t") {
+			t.Errorf("garbage reference %q kept", r)
+		}
+	}
+	if len(p.References) == 0 || p.InReplyTo == "" {
+		t.Errorf("garbage: nothing salvaged: %v / %q", p.References, p.InReplyTo)
+	}
+
+	p = parseFile(t, "thread-in-reply-to-list.eml")
+	if p.InReplyTo != "first@example.org" {
+		t.Errorf("in-reply-to list: %q", p.InReplyTo)
+	}
+
+	p = parseFile(t, "thread-no-message-id.eml")
+	if p.MessageID != "" || len(p.References) != 2 {
+		t.Errorf("no message-id: id %q refs %v", p.MessageID, p.References)
+	}
+}
+
+func TestParseReferences(t *testing.T) {
+	limits := DefaultLimits()
+	cases := []struct {
+		name, in string
+		want     []string
+	}{
+		{"plain", "References: <a@x> <b@x>\r\n\r\n", []string{"a@x", "b@x"}},
+		{"no blank line", "References: <a@x>", []string{"a@x"}},
+		{"folded", "Subject: x\r\nReferences: <a@x>\r\n <b@x>\r\n\t<c@x>\r\n\r\n", []string{"a@x", "b@x", "c@x"}},
+		{"missing", "Subject: x\r\n\r\n", nil},
+		{"empty", "", nil},
+		{"garbage", "References: <a@x b@x> junk\r\n\r\n", []string{"a@x", "b@x", "junk"}},
+		{"duplicates", "References: <a@x> <b@x> <a@x>\r\n\r\n", []string{"a@x", "b@x"}},
+	}
+	for _, c := range cases {
+		if got := ParseReferences(strings.NewReader(c.in), limits); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: ParseReferences = %v, want %v", c.name, got, c.want)
+		}
+	}
+	var many []string
+	for i := range 70 {
+		many = append(many, fmt.Sprintf("<r%d@x>", i))
+	}
+	got := ParseReferences(strings.NewReader("References: "+strings.Join(many, " ")+"\r\n\r\n"), limits)
+	if len(got) != limits.MaxReferences || got[0] != "r20@x" || got[len(got)-1] != "r69@x" {
+		t.Errorf("capped = %d, first %q", len(got), got[0])
+	}
+	huge := "References: " + strings.Repeat("<a@x> ", 100000) + "\r\n\r\n"
+	if got := ParseReferences(strings.NewReader(huge), limits); len(got) > limits.MaxReferences {
+		t.Errorf("huge block: %d references", len(got))
 	}
 }
 

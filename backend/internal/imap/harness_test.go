@@ -194,6 +194,8 @@ type harnessOptions struct {
 	// "me" and the account sign in with oauth2; Password then yields the
 	// token (setPassword changes it).
 	token string
+	// rawLimit caps the bodies the syncer downloads (Deps.MaxRawMessageBytes).
+	rawLimit int64
 }
 
 // harness is a memserver behind a proxy, a temporary store with one
@@ -291,9 +293,10 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 			defer h.mu.Unlock()
 			return h.prefs
 		},
-		Log:     slog.New(slog.DiscardHandler),
-		Now:     o.now,
-		Backoff: func(int) time.Duration { return backoff },
+		Log:                slog.New(slog.DiscardHandler),
+		Now:                o.now,
+		Backoff:            func(int) time.Duration { return backoff },
+		MaxRawMessageBytes: o.rawLimit,
 	}
 	if o.noIdle {
 		deps.CapFilter = func(c imap.CapSet) imap.CapSet {

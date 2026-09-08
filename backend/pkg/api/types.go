@@ -417,9 +417,12 @@ type Address struct {
 // MessageSummary is the list-view projection of a message. It never contains
 // body content beyond Snippet, which is plain text derived by the backend.
 type MessageSummary struct {
-	ID             MessageID `json:"id"`
-	AccountID      AccountID `json:"accountId"`
-	FolderID       FolderID  `json:"folderId"`
+	ID        MessageID `json:"id"`
+	AccountID AccountID `json:"accountId"`
+	FolderID  FolderID  `json:"folderId"`
+	// ThreadID names the conversation (§4.4): opaque, per account, the
+	// same across folders. Empty only for a message an older daemon
+	// stored that has not been linked yet.
 	ThreadID       ThreadID  `json:"threadId,omitempty"`
 	From           []Address `json:"from"`
 	To             []Address `json:"to,omitempty"`
@@ -718,18 +721,34 @@ type MessageDeleteResult struct{}
 // Threads
 // ---------------------------------------------------------------------------
 
+// Thread listings are per folder: a ThreadSummary returned for a folder
+// describes the members in that folder (docs/api.md §4.4), except
+// FolderIDs, which is account-wide.
+const (
+	// MaxThreadMessages is the most members thread.get returns (the
+	// newest); ThreadSummary.MessageCount still counts them all.
+	MaxThreadMessages = 500
+	// MaxThreadParticipants caps ThreadSummary.Participants.
+	MaxThreadParticipants = 8
+)
+
 type ThreadSummary struct {
-	ID             ThreadID  `json:"id"`
-	AccountID      AccountID `json:"accountId"`
-	Subject        string    `json:"subject"` // normalised (Re:/Fwd: stripped)
-	Participants   []Address `json:"participants"`
-	MessageCount   int       `json:"messageCount"`
-	UnreadCount    int       `json:"unreadCount"`
-	LatestDate     time.Time `json:"latestDate"`
-	Snippet        string    `json:"snippet"` // from the latest message
-	Flags          []Flag    `json:"flags"`   // union of member flags
-	HasAttachments bool      `json:"hasAttachments"`
-	// FolderIDs lists every folder that contains at least one member.
+	ID           ThreadID  `json:"id"`
+	AccountID    AccountID `json:"accountId"`
+	Subject      string    `json:"subject"`      // the newest member's, Re:/Fwd: stripped
+	Participants []Address `json:"participants"` // distinct senders, newest first, ≤ MaxThreadParticipants
+	MessageCount int       `json:"messageCount"`
+	UnreadCount  int       `json:"unreadCount"`
+	LatestDate   time.Time `json:"latestDate"`
+	// Latest is the newest member in scope: what LatestDate, Snippet and
+	// Subject come from, in full, so a client shows it without another
+	// call.
+	Latest         MessageSummary `json:"latest"`
+	Snippet        string         `json:"snippet"` // from the latest message
+	Flags          []Flag         `json:"flags"`   // union of member flags
+	HasAttachments bool           `json:"hasAttachments"`
+	// FolderIDs lists every folder of the account that contains at least
+	// one member, whatever the scope.
 	FolderIDs []FolderID `json:"folderIds"`
 }
 
@@ -738,6 +757,9 @@ type ThreadListParams struct {
 	FolderID  FolderID  `json:"folderId"`
 	Page      Page      `json:"page"`
 	Sort      SortOrder `json:"sort,omitempty"`
+	// Filter narrows the listing like message.list's: a thread is unread
+	// or flagged when any member in the folder is. Empty = all.
+	Filter MessageFilter `json:"filter,omitempty"`
 }
 
 type ThreadListResult struct {
@@ -748,11 +770,14 @@ type ThreadListResult struct {
 type ThreadGetParams struct {
 	AccountID AccountID `json:"accountId"`
 	ThreadID  ThreadID  `json:"threadId"`
+	// FolderID restricts the members (and the summary) to one folder;
+	// empty = every member of the account.
+	FolderID FolderID `json:"folderId,omitempty"`
 }
 
 type ThreadGetResult struct {
 	Thread   ThreadSummary    `json:"thread"`
-	Messages []MessageSummary `json:"messages"` // chronological
+	Messages []MessageSummary `json:"messages"` // oldest first, at most MaxThreadMessages (the newest)
 }
 
 // ---------------------------------------------------------------------------

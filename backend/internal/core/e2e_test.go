@@ -176,6 +176,46 @@ func TestEndToEndSync(t *testing.T) {
 	waitUntil(t, ctx, "trash on server", func() bool {
 		return serverMailboxCount(t, ln.Addr().String(), "Trash") == 1
 	})
+
+	// A reply arriving on the server joins its conversation: the inbox
+	// lists three threads, the newest with two members and the reply's
+	// subject without its marker. The trashed message was whichever
+	// "Hello" sorted first (equal dates), so reply to another one, and
+	// date the reply past the originals' second.
+	target := "Hello 1"
+	if first.Subject == target {
+		target = "Hello 2"
+	}
+	targetID := strings.ReplaceAll(target, " ", "") + "@example.org"
+	appendRawTestMessage(t, ln.Addr().String(), "From: Bob <bob@example.org>\r\nTo: me@example.org\r\nSubject: Re: "+target+"\r\nDate: "+
+		time.Now().Add(time.Minute).Format(time.RFC1123Z)+"\r\nMessage-ID: <reply@example.org>\r\nIn-Reply-To: <"+targetID+">\r\nReferences: <"+targetID+">\r\n"+
+		"Content-Type: text/plain; charset=utf-8\r\n\r\nReply body.\r\n")
+	var last string
+	waitUntil(t, ctx, "reply threaded", func() bool {
+		res, err := b.Threads().List(ctx, api.ThreadListParams{AccountID: id, FolderID: inbox.ID})
+		if err != nil {
+			last = err.Error()
+			return false
+		}
+		last = ""
+		for _, th := range res.Threads {
+			last += fmt.Sprintf("%s n=%d unread=%d subject=%q latest=%q from=%v; ", th.ID, th.MessageCount, th.UnreadCount, th.Subject, th.Latest.Subject, th.Participants)
+		}
+		if len(res.Threads) != 3 || res.Page.Total != 3 {
+			return false
+		}
+		top := res.Threads[0]
+		return top.MessageCount == 2 && top.UnreadCount == 2 && top.Subject == target && top.Latest.Subject == "Re: "+target &&
+			len(top.Participants) == 2 && top.Participants[0].Address == "bob@example.org"
+	}, func() string { return "threads: " + last })
+	threads, err := b.Threads().List(ctx, api.ThreadListParams{AccountID: id, FolderID: inbox.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thr, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: threads.Threads[0].ID, FolderID: inbox.ID})
+	if err != nil || len(thr.Messages) != 2 || thr.Messages[0].Subject != target || thr.Messages[1].ThreadID != threads.Threads[0].ID {
+		t.Fatalf("thread.get = %+v, %v", thr, err)
+	}
 }
 
 // TestEndToEndSend runs the production stack against the in-memory IMAP
@@ -398,7 +438,7 @@ func (s *smtpSession) Data(r io.Reader) error {
 	return nil
 }
 
-func waitUntil(t *testing.T, ctx context.Context, what string, cond func() bool) {
+func waitUntil(t *testing.T, ctx context.Context, what string, cond func() bool, detail ...func() string) {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && ctx.Err() == nil {
@@ -406,6 +446,9 @@ func waitUntil(t *testing.T, ctx context.Context, what string, cond func() bool)
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	for _, d := range detail {
+		what += " (" + d() + ")"
 	}
 	t.Fatalf("timed out waiting for %s", what)
 }

@@ -545,8 +545,14 @@ for. It does **not** encode `filter`, so a client that changes the filter must
 start again from the first page rather than reuse the cursor it holds.
 Clients refresh from the start on `notify.newMessage`. `page.total` is
 the folder's local count after `filter`. Only messages within
-the `offlineDays` window exist locally; `threadId` is empty until threading
-exists.
+the `offlineDays` window exist locally. `threadId` names the conversation
+the message belongs to: an opaque id, assigned when the message is stored,
+the same for every member across the account's folders (Microsoft Graph
+accounts carry the server's conversation id, other accounts a locally
+computed one; see `docs/architecture.md` §3.4). It is empty only for a
+message stored by an older daemon that has not been linked yet, and it
+can change when two partial conversations turn out to be one (the larger
+keeps its id).
 
 #### `message.get`
 - params: `{ "accountId", "messageId" }`
@@ -823,22 +829,88 @@ its backoff is attempted at once).
 
 ### 4.4 thread
 
+Threads group the messages of one account into conversations. The daemon
+assigns every stored message a `threadId` as it arrives: from
+`References`, `In-Reply-To` and shared `Message-ID`s for IMAP accounts
+(the `References` field is fetched with the envelope, so the id is known
+before the body is), from the server's conversation id for Microsoft Graph
+accounts. Ids are opaque, never shared between accounts, and stable while
+a conversation lives: a reply joins the existing conversation under its
+id, and only two partial conversations found to be one merge under the
+larger one's id (a client holding the old id gets `threadNotFound` and
+lists again). A message without a `threadId` was
+stored by an older daemon and not linked yet; a client shows it on its
+own. The rules and caps are in `docs/architecture.md` §3.4.
+
+Threads are computed per account and **displayed per folder**: a thread is
+listed in a folder when at least one member is in that folder, and every
+field of the `ThreadSummary` a folder listing returns describes the
+members **in that folder** (a conversation with two messages in the inbox
+and one in Sent has `messageCount: 2` in the inbox), except `folderIds`,
+which always names every folder of the account with a member.
+
 #### `thread.list`
-- params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt) }`
+- params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
+  "filter": MessageFilter (opt) }`
 - result: `{ "threads": [ThreadSummary], "page": PageInfo }`
+- errors: invalidArgument (missing ids, unknown `sort` or `filter`, bad
+  cursor), accountNotFound, folderNotFound, storageError
 
 ```jsonc
-ThreadSummary { "id": "t_9", "accountId", "subject": "normalised (Re:/Fwd: stripped)",
-                "participants": [Address], "messageCount": 4, "unreadCount": 1,
-                "latestDate": Time, "snippet": "…", "flags": ["flagged"],
-                "hasAttachments": true, "folderIds": ["f_inbox","f_sent"] }
+ThreadSummary { "id": "t_9", "accountId": "acc_1",
+                "subject": "Lunch",                 // the latest member's, Re:/Fwd: stripped
+                "participants": [Address],         // distinct senders, newest first, ≤ 8
+                "messageCount": 3, "unreadCount": 1,
+                "latestDate": Time,
+                "latest": MessageSummary,          // the newest member, in full
+                "snippet": "…",                    // of the latest member
+                "flags": ["flagged", "seen"],      // union over the members
+                "hasAttachments": true,
+                "folderIds": ["f_inbox", "f_sent"] }
 ```
 
-A thread is listed in a folder if at least one member is in that folder.
+- Order: by the date of the latest member in the folder, `dateDesc` by
+  default, ties by thread id; a new reply moves its thread to the top.
+- `latest` is the member `latestDate`, `subject` and `snippet` come from,
+  as `message.list` would return it (with `outbox` in the outbox folder),
+  so a client shows a conversation without a `thread.get` round trip.
+- `subject` is that member's subject with reply and forward markers
+  removed (`Re:`, `Fwd:`, `AW:`, `Re[2]:` and the like; the raw subject
+  when nothing is left), so a thread does not rename itself as replies
+  arrive.
+- `participants`: the distinct `from` addresses of the members, newest
+  first, compared case-insensitively by address, the display name as the
+  newest member that carries one wrote it; at most
+  `api.MaxThreadParticipants` (8), taken from the newest 64 members.
+- `flags`: every flag some member carries. Read state comes from
+  `unreadCount`; `seen` here only says that some member was read.
+- `filter`: `unread` keeps threads with an unread member in the folder,
+  `flagged` those with a flagged member; `page.total` counts threads after
+  the filter.
+- Cursors follow §4.3: bound to `sort`, not to `filter`, stable across
+  syncs. A cursor from `message.list` is rejected here (invalidArgument)
+  and vice versa.
 
 #### `thread.get`
-- params: `{ "accountId", "threadId" }`
-- result: `{ "thread": ThreadSummary, "messages": [MessageSummary] }` (chronological)
+- params: `{ "accountId", "threadId", "folderId" (opt) }`
+- result: `{ "thread": ThreadSummary, "messages": [MessageSummary] }`
+- errors: invalidArgument, accountNotFound, folderNotFound (a `folderId`
+  that is not the account's), threadNotFound (no member in the account,
+  or none in `folderId` when given), storageError
+
+`messages` are oldest first (`date`, then `id`). With `folderId` only the
+members in that folder are returned and `thread` is aggregated over them,
+exactly as `thread.list` of that folder reports it; without it every
+member of the account is returned and `thread` covers them all
+(`folderIds` is the same either way). At most `api.MaxThreadMessages`
+(500) members are returned, the newest; `messageCount` still counts them
+all. A member in the outbox folder carries `outbox` as in `message.list`.
+
+Actions stay per message: `message.flag`, `message.move` and
+`message.delete` take the `messageIds` of the members a client wants to
+touch; there are no thread-level mutations and no thread notification.
+`notify.newMessage` carries the new message's `threadId`, so a client
+showing conversations merges the arrival into the thread row it shows.
 
 ### 4.5 draft
 
@@ -1129,7 +1201,9 @@ of an account, and a backfill after `offlineDays` grew, never produce it;
 clients refresh from `folder.list`/`message.list` when `notify.syncState`
 leaves `syncing` instead. Folders with role `sent`, `drafts`, `trash`,
 `junk` and `outbox` never produce it either (a copy of the user's own sent
-message is not new mail).
+message is not new mail). The `message` carries `threadId`, so a client
+showing conversations (§4.4) merges the arrival into its thread row
+instead of listing again.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync` or `pendingOutbox`, and for progress-only
@@ -1262,3 +1336,20 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   gained `synced`; a `\All` folder is listed but never downloaded, on
   Gmail as the `archive` role, and `message.move` into it drops the local
   copy. `\Important` and `\Flagged` folders are no longer listed.
+- **1** (2026-09-08, compatible change, thread ids): `MessageSummary.threadId`
+  is now set for every message, in `message.list`, `message.get` and
+  `notify.newMessage` alike: conversations are linked as messages are
+  stored, per account, from `In-Reply-To`, `References` and shared
+  `Message-ID`s, Graph accounts keep the server's conversation id. A store
+  from an older daemon is linked in the background after the upgrade.
+  `folder.subscribe` and `search.query` remain `notImplemented`.
+- **1** (2026-09-08, compatible addition, conversation threading):
+  `thread.list` and `thread.get` implemented — threads are computed per
+  account and listed per folder with the aggregates taken over the members
+  in that folder (§4.4); `ThreadListParams` gained `filter` (as
+  `message.list`), `ThreadGetParams` gained `folderId`, `ThreadSummary`
+  gained `latest` (the newest member in full); new limits
+  `api.MaxThreadMessages` (500) and `api.MaxThreadParticipants` (8); thread
+  cursors are bound to `thread.list`. IMAP fetches `References` with the
+  envelope, so a conversation is known before the body is. Only
+  `folder.subscribe` and `search.query` remain `notImplemented`.

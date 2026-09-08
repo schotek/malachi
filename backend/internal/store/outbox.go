@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/schotek/malachi/backend/internal/thread"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -198,8 +199,10 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 	m.ID, m.FolderID, m.UID, m.ModSeq = id, folder.ID, 0, 0
 	m.Flags = []api.Flag{api.FlagSeen}
 	// HasHTML is the caller's: a rich-text draft's outbox copy renders its
-	// HTML part from the raw file like any received message.
-	m.Size, m.BodyState, m.ThreadID = size, BodyFetched, ""
+	// HTML part from the raw file like any received message. The thread id
+	// starts as a singleton; the link below joins the parent's
+	// conversation (its In-Reply-To and References came from the draft).
+	m.Size, m.BodyState, m.ThreadID = size, BodyFetched, newID(thread.IDPrefix)
 	enc, err := encodeMessage(&m)
 	if err != nil {
 		return Message{}, nil, err
@@ -210,12 +213,19 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 			from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 			rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 			attachments_json, headers_json, has_html, text_body, body_state, thread_id, created_at, updated_at)
-		VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, '', ?, ?)`,
+		VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
 		id, accountID, folder.ID, enc.flags, enc.unread,
 		enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 		m.RFCMessageID, m.InReplyTo, enc.references, size, m.Snippet, boolInt(m.HasAttachments),
-		enc.attachments, enc.headers, in.Text, string(BodyFetched), now, now); err != nil {
+		enc.attachments, enc.headers, in.Text, string(BodyFetched), m.ThreadID, now, now); err != nil {
 		return Message{}, nil, fmt.Errorf("insert outbox message: %w", err)
+	}
+	if err := insertRefsTx(ctx, tx, id, accountID, m.InReplyTo, m.References); err != nil {
+		return Message{}, nil, err
+	}
+	if _, err := linkMessageTx(ctx, tx, linkRow{id: id, accountID: accountID, threadID: m.ThreadID,
+		rfcID: m.RFCMessageID, inReplyTo: m.InReplyTo, references: m.References}); err != nil {
+		return Message{}, nil, err
 	}
 	recipients, err := encodeJSON(dedupeStrings(in.Recipients), "[]")
 	if err != nil {
