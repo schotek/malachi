@@ -47,6 +47,11 @@ func (m *Manager) Open(p Params) *Window {
 	m.windows = append(m.windows, w)
 	w.SetApplication(&m.app.Application)
 	w.Present()
+	if msg := blockedSummary(p.Blocked); msg != "" {
+		// The backend quoted the original without its remote images and
+		// scripts; said once, as after a save.
+		w.toast(msg)
+	}
 	return w
 }
 

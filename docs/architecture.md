@@ -479,7 +479,8 @@ and the document's CSP plus the decide-policy handler keep it offline.
 The window parses recipients into `api.Address`, autosaves through
 `draft.save` (the backend sanitises `htmlBody` and derives `textBody`),
 imports attachments by path with `attachment.import`, shows inline images
-through a `cid:` URI scheme served only for ids the window itself minted,
+through a `cid:` URI scheme served only for ids the window registered
+(files it picked, and the backend's copies read through `attachment.get`),
 and sends with `message.send`: a rich-text draft goes out as
 `multipart/alternative` with the derived text and the sanitised HTML, its
 inline pictures in a `multipart/related`. (`richText` in `compose/draft.go`
@@ -487,8 +488,14 @@ is the switch back to a plain-text build.) After a send the message shows
 up in the local Outbox folder (visible only while non-empty) with a banner
 for its delivery state; a failed send offers Retry (`outbox.retry`) and the
 trash button cancels the send (`message.delete`). The status line shows
-"Sending N messages…" from `SyncState.pendingOutbox`. Reply/forward prefill lives in
-`compose.Prefill` only until `draft.create` exists in the backend.
+"Sending N messages…" from `SyncState.pendingOutbox`. Reply, Reply All
+and Forward ask the backend for the template (`draft.create`,
+`ui/internal/window/compose_open.go`): recipients, subject and the
+original quoted as sanitised HTML with its pictures copied into the
+attachment store; the UI contributes only the localised line above the
+quote (`compose.Attribution`) and shows what the sanitiser removed as a
+toast. `compose.Prefill`, the UI's own plain-text quote, is the fallback
+for a daemon that cannot answer.
 
 The *General* page: *Run in Background* makes the main window hide instead
 of close (a hidden window keeps the application alive; `app.show` and

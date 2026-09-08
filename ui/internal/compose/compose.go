@@ -4,6 +4,7 @@
 package compose
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -150,6 +151,10 @@ func newWindow(m *Manager, p Params) *Window {
 	w.draft.inReplyTo, w.draft.forwarding = p.InReplyTo, p.Forwarding
 	w.editor.Load(p.BodyHTML)
 	w.setAccounts(m.Accounts(), m.Placeholder())
+	// What the backend imported for the template (a quoted original's
+	// pictures, a forwarded message's files): listed and shown now, bound
+	// by the first save.
+	w.setAttachments(p.Attachments)
 
 	w.wireActions()
 	w.wireToolbar()
@@ -588,15 +593,45 @@ func (w *Window) removeAttachment(id string) {
 }
 
 // setAttachments replaces the list and chips with what the backend kept.
+// An inline picture the window did not insert itself (the backend copied
+// it out of a quoted original) is served to the editor from the backend;
+// one that is gone from the list is forgotten.
 func (w *Window) setAttachments(atts []api.DraftAttachment) {
 	for id, chip := range w.chips {
 		w.attBox.Remove(chip)
 		delete(w.chips, id)
 	}
+	kept := make(map[string]bool, len(atts))
+	for _, a := range atts {
+		if a.Inline {
+			kept[a.ContentID] = true
+		}
+	}
+	for _, a := range w.attachments {
+		if a.Inline && !kept[a.ContentID] {
+			editor.UnregisterCID(a.ContentID)
+		}
+	}
 	w.attachments = nil
 	for _, a := range atts {
 		w.attachments = append(w.attachments, a)
 		w.addChip(a)
+		if a.Inline && !editor.CIDRegistered(a.ContentID) {
+			w.registerInline(a)
+		}
 	}
 	w.attBox.SetVisible(len(w.attachments) > 0)
+}
+
+// registerInline makes the editor fetch the picture behind cid:<contentId>
+// from the backend (attachment.get), for a copy the backend made.
+func (w *Window) registerInline(a api.DraftAttachment) {
+	c, accountID, id := w.m.client, w.account().ID, a.ID
+	editor.RegisterCIDFetcher(a.ContentID, func(ctx context.Context) ([]byte, string, error) {
+		var res api.AttachmentGetResult
+		if err := c.Call(ctx, api.MethodAttachmentGet, api.AttachmentGetParams{AccountID: accountID, AttachmentID: id}, &res); err != nil {
+			return nil, "", err
+		}
+		return res.Data, res.ContentType, nil
+	})
 }

@@ -278,11 +278,14 @@ func (w *Window) send() {
 	})
 }
 
-// discard drops the draft (after confirmation when the setting is on).
+// discard drops the draft (after confirmation when the setting is on). A
+// draft never saved has no id, but may hold attachments the backend
+// imported for it (the template's pictures and files); those are released
+// rather than left for the sweep.
 func (w *Window) discard() {
 	proceed := func() {
+		accountID := w.account().ID
 		if id := w.draft.draftID; id != "" {
-			accountID := w.account().ID
 			w.rpc(func() (any, error) {
 				return nil, w.m.client.Call(w.ctx(), api.MethodDraftDelete,
 					api.DraftDeleteParams{AccountID: accountID, DraftID: id}, &api.DraftDeleteResult{})
@@ -291,6 +294,18 @@ func (w *Window) discard() {
 					w.log.Debug("draft.delete", "err", err)
 				}
 			})
+		} else {
+			for _, a := range w.attachments {
+				attID := a.ID
+				w.rpc(func() (any, error) {
+					return nil, w.m.client.Call(w.ctx(), api.MethodAttachmentRemove,
+						api.AttachmentRemoveParams{AccountID: accountID, AttachmentID: attID}, &api.AttachmentRemoveResult{})
+				}, func(_ any, err error) {
+					if err != nil {
+						w.log.Debug("attachment.remove", "err", err)
+					}
+				})
+			}
 		}
 		w.draft.discard = true
 		w.Close()

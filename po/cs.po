@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-08 21:06+0200\n"
+"POT-Creation-Date: 2026-09-08 22:03+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -146,60 +146,60 @@ msgstr "Přidání účtu"
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 
-#: ui/internal/compose/compose.go:138
+#: ui/internal/compose/compose.go:139
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:230 ui/internal/compose/draft.go:111
+#: ui/internal/compose/compose.go:235 ui/internal/compose/draft.go:111
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/compose.go:295 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:300 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/compose.go:422 ui/data/ui/compose.ui:283
+#: ui/internal/compose/compose.go:427 ui/data/ui/compose.ui:283
 #: ui/data/ui/compose.ui:476
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/compose.go:425
+#: ui/internal/compose/compose.go:430
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/compose.go:454 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:459 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/compose.go:464
+#: ui/internal/compose/compose.go:469
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/compose.go:474 ui/data/ui/compose.ui:376
+#: ui/internal/compose/compose.go:479 ui/data/ui/compose.ui:376
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/compose.go:476
+#: ui/internal/compose/compose.go:481
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/compose.go:490
+#: ui/internal/compose/compose.go:495
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/compose.go:504
+#: ui/internal/compose/compose.go:509
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/compose.go:513
+#: ui/internal/compose/compose.go:518
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/compose.go:545
+#: ui/internal/compose/compose.go:550
 msgid "Remove"
 msgstr "Odebrat"
 
@@ -245,29 +245,29 @@ msgstr "Odeslání"
 msgid "Message queued for sending"
 msgstr "Zpráva byla zařazena k odeslání"
 
-#: ui/internal/compose/draft.go:302
+#: ui/internal/compose/draft.go:317
 msgid "Discard this message?"
 msgstr "Zahodit tuto zprávu?"
 
-#: ui/internal/compose/draft.go:302 ui/internal/compose/draft.go:315
+#: ui/internal/compose/draft.go:317 ui/internal/compose/draft.go:330
 #: ui/data/ui/compose.ui:469
 msgid "_Discard"
 msgstr "Za_hodit"
 
-#: ui/internal/compose/draft.go:313
+#: ui/internal/compose/draft.go:328
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:314 ui/internal/widget/rpc.go:128
+#: ui/internal/compose/draft.go:329 ui/internal/widget/rpc.go:128
 #: ui/internal/window/remote.go:261
 msgid "_Cancel"
 msgstr "_Zrušit"
 
-#: ui/internal/compose/draft.go:316 ui/data/ui/compose.ui:455
+#: ui/internal/compose/draft.go:331 ui/data/ui/compose.ui:455
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/draft.go:366
+#: ui/internal/compose/draft.go:381
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -276,38 +276,38 @@ msgstr[1] "%d nebezpečné prvky byly ze zprávy odstraněny"
 msgstr[2] "%d nebezpečných prvků bylo ze zprávy odstraněno"
 
 #. TRANSLATORS: quote header without a date; %s is the sender.
-#: ui/internal/compose/prefill.go:122
+#: ui/internal/compose/prefill.go:138
 #, c-format
 msgid "%s wrote:"
 msgstr "%s napsal(a):"
 
 #. TRANSLATORS: quote header; %s are the date and the sender.
-#: ui/internal/compose/prefill.go:125
+#: ui/internal/compose/prefill.go:141
 #, c-format
 msgid "On %s, %s wrote:"
 msgstr "Dne %s %s napsal(a):"
 
-#: ui/internal/compose/prefill.go:141
+#: ui/internal/compose/prefill.go:145
 msgid "---------- Forwarded message ----------"
 msgstr "---------- Přeposlaná zpráva ----------"
 
-#: ui/internal/compose/prefill.go:142
+#: ui/internal/compose/prefill.go:146
 #, c-format
 msgid "From: %s"
 msgstr "Od: %s"
 
-#: ui/internal/compose/prefill.go:144
+#: ui/internal/compose/prefill.go:149
 #, c-format
 msgid "Date: %s"
 msgstr "Datum: %s"
 
-#: ui/internal/compose/prefill.go:146
+#: ui/internal/compose/prefill.go:151
 #, c-format
 msgid "Subject: %s"
 msgstr "Předmět: %s"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:148 ui/internal/window/message_view.go:345
+#: ui/internal/compose/prefill.go:153 ui/internal/window/message_view.go:344
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -384,7 +384,7 @@ msgstr[0] "%d zpráva"
 msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
-#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:337
+#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:336
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -782,11 +782,11 @@ msgstr "Uložit _vše"
 msgid "This message has not been downloaded yet."
 msgstr "Tato zpráva ještě nebyla stažena."
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:363
+#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:362
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:365
+#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:364
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -834,6 +834,14 @@ msgstr "Ukládání přílohy"
 #: ui/internal/window/attachments.go:454
 msgid "Save Attachments"
 msgstr "Uložit přílohy"
+
+#: ui/internal/window/compose_open.go:99
+msgid "Preparing the forwarded message"
+msgstr "Příprava přeposílané zprávy"
+
+#: ui/internal/window/compose_open.go:101
+msgid "Preparing the reply"
+msgstr "Příprava odpovědi"
 
 #: ui/internal/window/embedded.go:97
 msgid "Opening the attached message"
@@ -941,7 +949,7 @@ msgstr "Složky se objeví po první synchronizaci."
 msgid "Messages"
 msgstr "Zprávy"
 
-#: ui/internal/window/message_view.go:148
+#: ui/internal/window/message_view.go:147
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -949,22 +957,22 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/message_view.go:272
+#: ui/internal/window/message_view.go:271
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
 #. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/window/message_view.go:349
+#: ui/internal/window/message_view.go:348
 #, c-format
 msgid "Cc: %s"
 msgstr "Kopie: %s"
 
-#: ui/internal/window/message_view.go:357
-#: ui/internal/window/message_view.go:369
+#: ui/internal/window/message_view.go:356
+#: ui/internal/window/message_view.go:368
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:361
+#: ui/internal/window/message_view.go:360
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -1229,32 +1237,32 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:454
+#: ui/internal/window/window.go:460
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:482
+#: ui/internal/window/window.go:488
 msgid "Connecting to backend…"
 msgstr "Připojování k démonu…"
 
-#: ui/internal/window/window.go:485
+#: ui/internal/window/window.go:491
 msgid "Connected"
 msgstr "Připojeno"
 
-#: ui/internal/window/window.go:492
+#: ui/internal/window/window.go:498
 msgid "Backend unavailable"
 msgstr "Démon není dostupný"
 
-#: ui/internal/window/window.go:535
+#: ui/internal/window/window.go:541
 msgid "Connected, but system.info failed"
 msgstr "Připojeno, ale volání system.info selhalo"
 
-#: ui/internal/window/window.go:540
+#: ui/internal/window/window.go:546
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr "Neshoda protokolu: UI %d, démon %d"
 
-#: ui/internal/window/window.go:544
+#: ui/internal/window/window.go:550
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr "Připojeno k malachid %s (pid %d)"

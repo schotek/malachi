@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -512,33 +511,6 @@ func (w *Window) summary(id api.MessageID) (api.MessageSummary, bool) {
 		return lm.msg.MessageSummary, true
 	}
 	return api.MessageSummary{}, false
-}
-
-// openCompose opens a reply or forward of message id, prefilled from the
-// loaded message when message.get and message.body have answered, else
-// from the summary alone.
-func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
-	s, ok := w.summary(id)
-	if !ok {
-		return
-	}
-	src := compose.Source{ID: id, From: s.From, To: s.To, Subject: s.Subject, Date: s.Date}
-	if lm := w.loaded[id]; lm != nil {
-		if m := lm.msg; m != nil {
-			src.From, src.ReplyTo, src.To, src.CC = m.From, m.ReplyTo, m.To, m.CC
-			src.Subject, src.Date = m.Subject, m.Date
-		}
-		if lm.body != nil && lm.body.BodyState == api.BodyFetched {
-			src.Text = lm.body.Text
-		}
-	}
-	self := w.compose.SelfAddress()
-	if acc, ok := w.model.account(s.AccountID); ok {
-		self = selfAddress(acc)
-	}
-	p := compose.Prefill(kind, src, self, time.Now())
-	p.AccountID = s.AccountID
-	w.compose.Open(p)
 }
 
 // openMessageWindow opens message id in its own window, or raises the

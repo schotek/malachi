@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -24,6 +25,19 @@ const (
 	KindReplyAll
 	KindForward
 )
+
+// Mode is the draft.create mode of the kind.
+func (k Kind) Mode() api.ComposeMode {
+	switch k {
+	case KindReply:
+		return api.ComposeReply
+	case KindReplyAll:
+		return api.ComposeReplyAll
+	case KindForward:
+		return api.ComposeForward
+	}
+	return api.ComposeNew
+}
 
 // Source is what the caller knows about the message being replied to or
 // forwarded. Every field is hostile input.
@@ -46,39 +60,113 @@ type Params struct {
 	To, CC, BCC []api.Address
 	Subject     string
 	// BodyHTML is inserted into the editor document verbatim and must
-	// therefore already be safe: only Prefill and ParseMailto produce it.
+	// therefore already be safe: only the backend (FromDraft), Prefill and
+	// ParseMailto produce it.
 	BodyHTML   string
 	InReplyTo  api.MessageID
 	Forwarding api.MessageID
+	// Attachments are what the backend imported for the draft (the quoted
+	// original's pictures, a forwarded message's files): not yet bound,
+	// the first draft.save binds them.
+	Attachments []api.DraftAttachment
+	// Blocked is what the backend's sanitiser removed from the quoted
+	// original; the window says so once.
+	Blocked api.BlockedContent
 }
 
-// Prefill builds the reply / reply-all / forward parameters from src.
-//
-// TODO(phase-1): this is the UI fallback while draft.create is a stub;
-// once the backend has the message store the window calls draft.create
-// first and only falls back here for placeholder data.
-func Prefill(kind Kind, src Source, self api.Address, now time.Time) Params {
+// FromDraft turns a draft.create result into window parameters. A draft
+// without HTML (the backend could not quote formatted) shows its text.
+func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
+	p := Params{
+		Kind:        kind,
+		AccountID:   d.AccountID,
+		To:          d.To,
+		CC:          d.CC,
+		BCC:         d.BCC,
+		Subject:     d.Subject,
+		BodyHTML:    d.HTMLBody,
+		InReplyTo:   d.InReplyTo,
+		Forwarding:  d.Forwarding,
+		Attachments: d.Attachments,
+		Blocked:     blocked,
+	}
+	if p.BodyHTML == "" {
+		p.BodyHTML = escapeText(d.TextBody)
+	}
+	return p
+}
+
+// Prefill builds the reply / reply-all / forward parameters from src on
+// the UI's own: the fallback when draft.create cannot be asked (no
+// backend), quoting the plain text only. The normal path is draft.create,
+// which quotes the original formatted, with its pictures.
+func Prefill(kind Kind, src Source, self api.Address) Params {
 	p := Params{Kind: kind}
 	switch kind {
 	case KindReply:
 		p.To = dedupeAddresses(replyTargets(src), nil)
 		p.Subject = ReplySubject(src.Subject)
-		p.BodyHTML = quoteHTML(src)
+		p.BodyHTML = quoteHTML(kind, src)
 		p.InReplyTo = src.ID
 	case KindReplyAll:
 		p.To = dedupeAddresses(replyTargets(src), nil)
 		exclude := append([]api.Address{self}, p.To...)
 		p.CC = dedupeAddresses(append(append([]api.Address{}, src.To...), src.CC...), exclude)
 		p.Subject = ReplySubject(src.Subject)
-		p.BodyHTML = quoteHTML(src)
+		p.BodyHTML = quoteHTML(kind, src)
 		p.InReplyTo = src.ID
 	case KindForward:
 		p.Subject = ForwardSubject(src.Subject)
-		p.BodyHTML = forwardHTML(src)
+		p.BodyHTML = forwardHTML(kind, src)
 		p.Forwarding = src.ID
 	}
-	_ = now
 	return p
+}
+
+// Attribution is the line above a quote in the user's language: "On
+// <date>, <sender> wrote:" for a reply, the header block of a forwarded
+// message. Plain text, lines separated by "\n", nothing escaped: it is
+// what draft.create is handed (the backend escapes it) and what the
+// fallback quote escapes itself. Nothing for a new message.
+func Attribution(kind Kind, src Source) string {
+	var s string
+	switch kind {
+	case KindReply, KindReplyAll:
+		names := displayNames(src.From)
+		if src.Date.IsZero() {
+			// TRANSLATORS: quote header without a date; %s is the sender.
+			s = fmt.Sprintf(i18n.T("%s wrote:"), names)
+		} else {
+			// TRANSLATORS: quote header; %s are the date and the sender.
+			s = fmt.Sprintf(i18n.T("On %s, %s wrote:"), widget.FormatDateTime(src.Date), names)
+		}
+	case KindForward:
+		lines := []string{
+			i18n.T("---------- Forwarded message ----------"),
+			fmt.Sprintf(i18n.T("From: %s"), formatAll(src.From)),
+		}
+		if !src.Date.IsZero() {
+			lines = append(lines, fmt.Sprintf(i18n.T("Date: %s"), widget.FormatDateTime(src.Date)))
+		}
+		lines = append(lines, fmt.Sprintf(i18n.T("Subject: %s"), src.Subject))
+		if len(src.To) > 0 {
+			lines = append(lines, fmt.Sprintf(i18n.T("To: %s"), formatAll(src.To)))
+		}
+		s = strings.Join(lines, "\n")
+	default:
+		return ""
+	}
+	// The backend's cap; a message to hundreds of people has a To: line
+	// that would break it.
+	s = strings.ToValidUTF8(s, "�")
+	if len(s) > api.MaxDraftAttributionBytes {
+		s = s[:api.MaxDraftAttributionBytes-len("…")]
+		for len(s) > 0 && !utf8.ValidString(s) {
+			s = s[:len(s)-1]
+		}
+		s += "…"
+	}
+	return s
 }
 
 // replyTargets is where a reply goes: Reply-To when the sender set one,
@@ -111,42 +199,24 @@ func ReplySubject(s string) string { return "Re: " + stripPrefixes(s) }
 // ForwardSubject is "Fwd: " + subject without existing prefixes.
 func ForwardSubject(s string) string { return "Fwd: " + stripPrefixes(s) }
 
-// quoteHTML renders the original as a cite block under an empty paragraph
-// for the answer. Everything from src is escaped.
-func quoteHTML(src Source) string {
+// quoteHTML renders the original's text as a cite block under the
+// attribution and an empty paragraph for the answer, the layout
+// draft.create produces. Everything from src is escaped.
+func quoteHTML(kind Kind, src Source) string {
 	var b strings.Builder
-	b.WriteString("<p><br></p><blockquote type=\"cite\">")
-	names := html.EscapeString(displayNames(src.From))
-	if src.Date.IsZero() {
-		// TRANSLATORS: quote header without a date; %s is the sender.
-		b.WriteString(fmt.Sprintf(i18n.T("%s wrote:"), names))
-	} else {
-		// TRANSLATORS: quote header; %s are the date and the sender.
-		b.WriteString(fmt.Sprintf(i18n.T("On %s, %s wrote:"),
-			html.EscapeString(widget.FormatDateTime(src.Date)), names))
-	}
-	b.WriteString("<br>")
+	b.WriteString("<p><br></p><div>")
+	b.WriteString(escapeText(Attribution(kind, src)))
+	b.WriteString("</div><blockquote type=\"cite\">")
 	b.WriteString(escapeText(src.Text))
 	b.WriteString("</blockquote>")
 	return b.String()
 }
 
-// forwardHTML renders the forwarded-message header block and body.
-func forwardHTML(src Source) string {
+// forwardHTML renders the forwarded-message header block and the text.
+func forwardHTML(kind Kind, src Source) string {
 	var b strings.Builder
-	line := func(format, value string) {
-		b.WriteString(html.EscapeString(fmt.Sprintf(format, value)) + "<br>")
-	}
 	b.WriteString("<p><br></p><div>")
-	b.WriteString(html.EscapeString(i18n.T("---------- Forwarded message ----------")) + "<br>")
-	line(i18n.T("From: %s"), formatAll(src.From))
-	if !src.Date.IsZero() {
-		line(i18n.T("Date: %s"), widget.FormatDateTime(src.Date))
-	}
-	line(i18n.T("Subject: %s"), src.Subject)
-	if len(src.To) > 0 {
-		line(i18n.T("To: %s"), formatAll(src.To))
-	}
+	b.WriteString(escapeText(Attribution(kind, src)))
 	b.WriteString("</div><br>")
 	b.WriteString(escapeText(src.Text))
 	return b.String()

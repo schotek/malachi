@@ -71,6 +71,11 @@ type Window struct {
 	// message_view.go).
 	loaded map[api.MessageID]*loadedMessage
 
+	// composing holds the messages whose reply or forward the backend is
+	// preparing (compose_open.go), so a second click opens no second
+	// window.
+	composing map[api.MessageID]bool
+
 	// openMessages tracks stand-alone message windows so a second
 	// double-click raises the existing window instead of opening another.
 	openMessages map[api.MessageID]*MessageWindow
@@ -169,6 +174,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		rows:              make(map[listKey]*widget.MessageRow),
 		folderRows:        make(map[rowKey]*folderRow),
 		loaded:            make(map[api.MessageID]*loadedMessage),
+		composing:         make(map[api.MessageID]bool),
 		openMessages:      make(map[api.MessageID]*MessageWindow),
 		openEmbedded:      make(map[embeddedKey]*EmbeddedWindow),
 		syncStates:        make(map[api.AccountID]api.SyncState),
