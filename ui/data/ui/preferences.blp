@@ -75,8 +75,14 @@ Adw.PreferencesDialog preferences_dialog {
         };
       }
 
+    }
+
+    Adw.PreferencesGroup {
+      title: _("Deleting");
+
       Adw.SwitchRow confirm_delete {
         title: _("Confirm Before Deleting");
+        subtitle: _("Ask before moving a message to Trash");
         active: true;
       }
     }

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-08 20:54+0200\n"
+"POT-Creation-Date: 2026-09-08 21:06+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1599,175 +1599,183 @@ msgid ""
 "immediately"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:82
+#: ui/data/ui/preferences.ui:84
+msgid "Deleting"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:87
 msgid "Confirm Before Deleting"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:90
+#: ui/data/ui/preferences.ui:88 data/io.github.schotek.Malachi.gschema.xml:81
+msgid "Ask before moving a message to Trash"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:96
 msgid "Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:93
+#: ui/data/ui/preferences.ui:99
 msgid "Show Desktop Notifications"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:99
+#: ui/data/ui/preferences.ui:105
 msgid "Play Sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:100 data/io.github.schotek.Malachi.gschema.xml:89
+#: ui/data/ui/preferences.ui:106 data/io.github.schotek.Malachi.gschema.xml:89
 msgid "Play the system new-mail sound"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:107
+#: ui/data/ui/preferences.ui:113
 msgid "Mail"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:108
+#: ui/data/ui/preferences.ui:114
 msgid "Stored by the mail daemon."
 msgstr ""
 
-#: ui/data/ui/preferences.ui:111 ui/data/ui/window.ui:168
+#: ui/data/ui/preferences.ui:117 ui/data/ui/window.ui:168
 msgid "Check for New Mail"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:116
+#: ui/data/ui/preferences.ui:122
 msgid "Manually"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:117
+#: ui/data/ui/preferences.ui:123
 msgid "Every 5 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:118
+#: ui/data/ui/preferences.ui:124
 msgid "Every 15 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:119
+#: ui/data/ui/preferences.ui:125
 msgid "Every 30 minutes"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:127
+#: ui/data/ui/preferences.ui:133
 msgid "Load Remote Images"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:131
+#: ui/data/ui/preferences.ui:137
 msgid "Never"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:132
+#: ui/data/ui/preferences.ui:138
 msgid "From Known Senders"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:133
+#: ui/data/ui/preferences.ui:139
 msgid "Always"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:141
+#: ui/data/ui/preferences.ui:147
 msgid "Keep Mail Offline For"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:142
+#: ui/data/ui/preferences.ui:148
 msgid "Older messages stay on the server and are not shown"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:146
+#: ui/data/ui/preferences.ui:152
 msgid "1 week"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:147
+#: ui/data/ui/preferences.ui:153
 msgid "1 month"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:148
+#: ui/data/ui/preferences.ui:154
 msgid "3 months"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:149
+#: ui/data/ui/preferences.ui:155
 msgid "1 year"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:150
+#: ui/data/ui/preferences.ui:156
 msgid "Everything"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:163
+#: ui/data/ui/preferences.ui:169
 msgid "Appearance"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:167
+#: ui/data/ui/preferences.ui:173
 msgid "Theme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:170
+#: ui/data/ui/preferences.ui:176
 msgid "Color Scheme"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:174
+#: ui/data/ui/preferences.ui:180
 msgid "Follow System"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:175
+#: ui/data/ui/preferences.ui:181
 msgid "Light"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:176
+#: ui/data/ui/preferences.ui:182
 msgid "Dark"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:186
+#: ui/data/ui/preferences.ui:192
 msgid "Message List"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:189
+#: ui/data/ui/preferences.ui:195
 msgid "Density"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:193
+#: ui/data/ui/preferences.ui:199
 msgid "Comfortable"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:194
+#: ui/data/ui/preferences.ui:200
 msgid "Compact"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:202
+#: ui/data/ui/preferences.ui:208
 msgid "Group by Conversation"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:203
+#: ui/data/ui/preferences.ui:209
 msgid "One row per conversation; expand it to see its messages"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:208
+#: ui/data/ui/preferences.ui:214
 msgid "Show Preview Line"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:220
 msgid "Show Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:220
+#: ui/data/ui/preferences.ui:226
 msgid "Monochrome Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:221
+#: ui/data/ui/preferences.ui:227
 msgid "Neutral grey instead of a colour per sender"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:228
+#: ui/data/ui/preferences.ui:234
 msgid "Message View"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:231
+#: ui/data/ui/preferences.ui:237
 msgid "Use Monospace Font for Plain Text"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:236
+#: ui/data/ui/preferences.ui:242
 msgid "Text Zoom"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:237
+#: ui/data/ui/preferences.ui:243
 msgid "Percent"
 msgstr ""
 
@@ -1896,10 +1904,6 @@ msgstr ""
 #: data/io.github.schotek.Malachi.gschema.xml:77
 msgid ""
 "Seconds a message must be shown before it is marked as read; 0 = immediately"
-msgstr ""
-
-#: data/io.github.schotek.Malachi.gschema.xml:81
-msgid "Ask before moving a message to Trash"
 msgstr ""
 
 #: data/io.github.schotek.Malachi.gschema.xml:85
