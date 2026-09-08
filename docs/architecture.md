@@ -152,8 +152,13 @@ under `<data dir>/messages/<account>/<id>` (see §7). `outbox` (0006) holds
 the delivery metadata of a queued message (envelope sender and recipients,
 `queued|sending|sent|failed`, attempts, next attempt, last error); the
 message itself is a `messages` row in the account's local `outbox` role
-folder with its raw file next to received mail. Planned: `threads`,
-`messages_fts` (external-content FTS5).
+folder with its raw file next to received mail. Threads have no table of
+their own: `messages.thread_id` (never empty since 0011) plus the indexes
+`(account_id, thread_id, date, id)` and `(folder_id, thread_id, date, …)`
+let a listing group a folder by conversation at query time; `message_refs`
+(0011) is the derived index of the identifiers each message points at
+(`In-Reply-To` and `References`), so a parent arriving after its replies
+finds them (§3.4). Planned: `messages_fts` (external-content FTS5).
 
 ### 3.2 Sync model (implemented)
 
@@ -272,12 +277,44 @@ upload. New personal Outlook.com accounts have SMTP AUTH disabled by
 Microsoft; sending through Graph is unaffected, which is one reason the
 Graph path exists.
 
-### 3.4 Threading (planned)
+### 3.4 Threading (implemented)
 
-JWZ-style threading on `References`/`In-Reply-To` with subject fallback, per
-account. Message-IDs are untrusted: cap the number considered, break
-cycles, and never let one crafted message merge unrelated conversations
-into a mega-thread.
+Every message carries a thread id, assigned inside the transaction that
+writes it (`UpsertMessages`, `SetMessageBody`, `EnqueueOutbox`), so a
+`notify.newMessage` already names the conversation. The rule is a union,
+not the JWZ tree: the new message's thread merges with every thread its
+`In-Reply-To` or `References` name, with every twin that shares its
+`Message-ID`, and with every stored message that names it (found through
+`message_refs`). That is idempotent, independent of arrival order (Sent
+often syncs after Inbox; References may only arrive with the body) and has
+no cycles to break. The policy lives in `internal/thread` (`Resolve`), the
+SQL in `internal/store/threads.go`; a store from before threading is
+linked in batches by `core.Maintain` at the next start (`meta` key
+`threads.linked`, resumable).
+
+Message-IDs are untrusted, so they are linking hints matched exactly,
+never an identity, and the caps bound a crafted message: at most 50
+`References` are kept (the nearest ancestors), a lookup reads at most 512
+rows, and a merge that would pass 500 members is skipped, so the rest
+forms further threads instead of one mega-thread. There is no subject
+fallback: a reply without headers stays apart rather than joining
+strangers. Threads never cross accounts. Microsoft Graph accounts keep the
+server's `conversationId` as the thread id; local messages (an outbox
+reply) may join such a thread, server threads are never merged or renamed
+locally. Local ids are `t_` + 32 hex, server ids carry no prefix. The
+larger thread keeps its id on a merge and, on a tie, the one that was
+there first (a reply joins the conversation, the conversation does not
+take the reply's id), so ids are stable for most of a conversation's life
+but not forever: a client holding a stale id refreshes.
+
+Listing is per folder (`thread.list`, `thread.get`, `core/threads.go`,
+docs/api.md §4.4): a thread appears in a folder when a member is there,
+and its aggregates cover the members in that folder, grouped at query
+time over the folder/thread index; `latest` is the newest member in full,
+so a client shows a conversation row from the listing alone. Actions stay
+per message. The IMAP header fetch asks for the `References` field next
+to the envelope (`BODY.PEEK[HEADER.FIELDS (REFERENCES)]`), so a reply is
+linked before its body arrives.
 
 ## 4. Security boundary: HTML
 
@@ -329,6 +366,20 @@ The window keeps a plain-Go view model (`window/model.go`: accounts,
 folders, the current message page) that mirrors what the daemon returned;
 widgets are rebuilt from it and asynchronous replies are guarded by
 generation counters so a late answer never overwrites a newer state.
+
+With *Group by Conversation* on (GSettings `group-by-conversation`, off by
+default) the list pane shows `thread.list` of the folder instead of
+`message.list`: one row per conversation with the participants, a member
+count and a fold arrow; unfolding asks `thread.get {folderId}` and lists
+the folder's members as indented rows (`window/thread_model.go` is the
+plain-Go model, `window/threads.go` the ListBox mirror, reconciled by key
+so the scroll position survives). A single-message conversation is a
+plain row. Selecting a conversation row shows its newest member and marks
+only that one read; an action on it (trash, archive, junk, read/unread,
+star) applies to every member in the folder, which the `message.*`
+methods take as a list. Left and Right fold and unfold, Enter toggles a
+conversation row and opens a member. A notified arrival is folded into
+its row from `threadId`; the outbox folder is never grouped.
 
 The sidebar is one `gtk.ListBox` for every enabled account: a
 non-selectable header row per account (only when there are at least two),

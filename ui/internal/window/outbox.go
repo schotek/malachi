@@ -172,11 +172,11 @@ func (w *Window) retryOutbox(id api.MessageID) {
 		o.Error = nil
 		lm.msg.Outbox = &o
 	}
-	if _, idx, ok := w.model.message(id); ok && w.model.messages[idx].Outbox != nil {
-		o := *w.model.messages[idx].Outbox
+	if s, _, ok := w.model.message(id); ok && s.Outbox != nil {
+		o := *s.Outbox
 		o.State = api.OutboxQueued
 		o.Error = nil
-		w.model.messages[idx].Outbox = &o
+		w.model.setOutbox(id, &o)
 	}
 	w.showOutboxState(id)
 	w.call(i18n.T("Retrying the send"), api.MethodOutboxRetry, api.OutboxRetryParams{

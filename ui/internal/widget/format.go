@@ -40,6 +40,37 @@ func FormatAddress(a api.Address) string {
 	}
 }
 
+// FormatParticipants joins the display names of a conversation's
+// participants in the order given (newest first), each address once,
+// compared case-insensitively; entries with neither name nor address are
+// skipped. Plain text, like DisplayName.
+func FormatParticipants(list []api.Address) string {
+	seen := make(map[string]bool, len(list))
+	names := make([]string, 0, len(list))
+	for _, a := range list {
+		key := strings.ToLower(strings.TrimSpace(a.Address))
+		if key == "" {
+			key = "name:" + strings.ToLower(strings.TrimSpace(a.Name))
+		}
+		if key == "name:" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		names = append(names, DisplayName(a))
+	}
+	// TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
+	return strings.Join(names, i18n.C("participant list separator", ", "))
+}
+
+// ThreadCountText is the badge of a conversation row: the member count
+// from two on, nothing below.
+func ThreadCountText(n int) string {
+	if n < 2 {
+		return ""
+	}
+	return fmt.Sprint(n)
+}
+
 // FormatDate renders a message date for the list, relative to now: the time
 // for today, day and month for the current year, the full date otherwise.
 // A zero time renders as an empty string.

@@ -19,10 +19,38 @@ ListBoxRow message_row {
     margin-top: 8;
     margin-bottom: 8;
 
-    Adw.Avatar avatar {
-      size: 40;
-      show-initials: true;
+    // The avatar with, on a conversation row of the grouped list
+    // (window/threads.go), the fold arrow in front of it: its own box, so
+    // the arrow centres on the avatar rather than on the whole row, with
+    // a tighter gap than the columns keep between them.
+    Box lead_box {
+      orientation: horizontal;
+      spacing: 4;
       valign: start;
+
+      // Hidden on plain rows. The spinner takes its place while thread.get
+      // runs. Not focusable: Enter and Space keep acting on the row itself.
+      Button expander {
+        icon-name: "pan-end-symbolic";
+        valign: center;
+        visible: false;
+        can-focus: false;
+
+        styles [
+          "flat",
+          "thread-twisty",
+        ]
+      }
+
+      Adw.Spinner expander_spinner {
+        valign: center;
+        visible: false;
+      }
+
+      Adw.Avatar avatar {
+        size: 40;
+        show-initials: true;
+      }
     }
 
     Box {
@@ -38,6 +66,18 @@ ListBoxRow message_row {
           xalign: 0;
           ellipsize: end;
           hexpand: true;
+        }
+
+        // Member count of a conversation row; hidden below two.
+        Label count_badge {
+          visible: false;
+          valign: center;
+
+          styles [
+            "caption",
+            "numeric",
+            "thread-count",
+          ]
         }
 
         Image attachment_icon {

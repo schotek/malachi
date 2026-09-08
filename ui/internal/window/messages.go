@@ -15,17 +15,22 @@ import (
 )
 
 // The message list: message.list paging, the rows and the list states.
+// With "Group by Conversation" on the list is thread.list instead
+// (threads.go, thread_model.go); the outbox folder is never grouped.
 
-// loadMessages runs message.list for the selected folder (first page).
-// A switch to another folder empties the list at once; a reload of the
-// same folder keeps the rows until the reply, so the list never flickers
-// through the loading state and the selection survives (by ID).
+// loadMessages runs message.list (or thread.list) for the selected folder
+// (first page). A switch to another folder, or of the grouping mode,
+// empties the list at once; a reload of the same folder keeps the rows
+// until the reply, so the list never flickers through the loading state
+// and the selection survives (by key).
 func (w *Window) loadMessages() {
 	k := w.model.selected
 	gen := w.model.bumpList()
 	w.model.loadingMore = false
-	if k != w.model.listFolder {
+	grouped := w.settings.GroupByConversation() && w.model.folderRole(k) != api.RoleOutbox
+	if k != w.model.listFolder || grouped != w.model.grouped {
 		w.model.listFolder = k
+		w.model.grouped = grouped
 		w.model.clearMessages()
 		w.rebuildMessageRows()
 	}
@@ -43,6 +48,10 @@ func (w *Window) loadMessages() {
 	w.model.loading = true
 	w.model.listErr = nil
 	w.showListState()
+	if grouped {
+		w.loadThreadPage(k, gen)
+		return
+	}
 
 	params := api.MessageListParams{
 		AccountID: k.Account,
@@ -63,7 +72,7 @@ func (w *Window) loadMessages() {
 			w.model.loading = false
 			if err != nil {
 				w.log.Warn("message.list", "folder", k.Folder, "err", err)
-				if len(w.model.messages) > 0 {
+				if w.model.rowCount() > 0 {
 					// A reload failed: keep what is shown, say so once.
 					w.Toast(widget.RPCErrorText(i18n.T("Loading messages"), err))
 					return
@@ -108,6 +117,10 @@ func (w *Window) loadMore() {
 	gen := m.listGen
 	m.loadingMore = true
 	w.showLoadMore()
+	if m.grouped {
+		w.loadMoreThreads(k, gen)
+		return
+	}
 
 	params := api.MessageListParams{
 		AccountID: k.Account,
@@ -135,7 +148,7 @@ func (w *Window) loadMore() {
 			added := w.model.appendMessages(res.Messages, res.Page)
 			for _, s := range w.model.messages[len(w.model.messages)-added:] {
 				r := w.newMessageRow(s)
-				w.rows[s.ID] = r
+				w.rows[listKey{Message: s.ID}] = r
 				w.messageList.Append(r)
 			}
 			w.showListState()
@@ -143,24 +156,33 @@ func (w *Window) loadMore() {
 	}()
 }
 
-// rebuildMessageRows recreates the rows from model.messages. One row per
-// message, in order: the row handlers in New map row.Index() back onto
-// model.messages. The selected message stays selected when it is still
-// listed, without re-entering the row-selected handler (the pane already
-// shows it); when it is gone the pane is cleared.
+// rebuildMessageRows recreates the rows from the model. In flat mode one
+// row per message, in order: the row handlers in New map row.Index() back
+// onto model.messages. The selected message stays selected when it is
+// still listed, without re-entering the row-selected handler (the pane
+// already shows it); when it is gone the pane is cleared. In grouped mode
+// the rows are keyed and syncRows does the same from scratch.
 func (w *Window) rebuildMessageRows() {
+	if w.model.grouped {
+		w.reselecting = true
+		w.messageList.RemoveAll()
+		w.reselecting = false
+		w.rows = make(map[listKey]*widget.MessageRow, w.model.rowCount())
+		w.syncRows()
+		return
+	}
 	prev, hadSelection := w.selectedMessage()
 
 	w.reselecting = true
 	w.messageList.RemoveAll()
-	w.rows = make(map[api.MessageID]*widget.MessageRow, len(w.model.messages))
+	w.rows = make(map[listKey]*widget.MessageRow, len(w.model.messages))
 	for _, s := range w.model.messages {
 		r := w.newMessageRow(s)
-		w.rows[s.ID] = r
+		w.rows[listKey{Message: s.ID}] = r
 		w.messageList.Append(r)
 	}
 	if hadSelection {
-		if r := w.rows[prev.ID]; r != nil {
+		if r := w.rows[listKey{Message: prev.ID}]; r != nil {
 			w.messageList.SelectRow(r.ListBoxRow)
 		} else {
 			hadSelection = false
@@ -185,7 +207,7 @@ func (w *Window) newMessageRow(s api.MessageSummary) *widget.MessageRow {
 // (nothing selected, loading, no messages, error with retry).
 func (w *Window) showListState() {
 	m := &w.model
-	if len(m.messages) > 0 {
+	if m.rowCount() > 0 {
 		w.listStack.SetVisibleChildName("messages")
 		w.showLoadMore()
 		return
@@ -232,21 +254,19 @@ func (w *Window) showLoadMore() {
 	w.loadMoreButton.SetVisible(!m.loadingMore && m.nextCursor != "" && m.listErr == nil)
 }
 
-// selectedMessage is the summary behind the selected row, if any. It relies
-// on the rows mirroring model.messages.
+// selectedMessage is the summary behind the selected row, if any: on a
+// conversation row its newest folder member (what the pane shows).
 func (w *Window) selectedMessage() (api.MessageSummary, bool) {
-	row := w.messageList.SelectedRow()
-	if row == nil {
-		return api.MessageSummary{}, false
-	}
-	return w.model.messageAt(row.Index())
+	r, ok := w.selectedRow()
+	return r.Message, ok
 }
 
-// removeMessageRow drops a message from the model and the list. When it
-// was the selected one its neighbour is selected (the pane follows), or
-// the pane is cleared when the list ran empty. The returned function puts
-// the message back at its place, for reverting a failed move or delete; it
-// does nothing once the list was reloaded in the meantime.
+// removeMessageRow drops a message from the flat list. When it was the
+// selected one its neighbour is selected (the pane follows), or the pane
+// is cleared when the list ran empty. The returned function puts the
+// message back at its place, for reverting a failed move or delete; it
+// does nothing once the list was reloaded in the meantime. Grouped mode
+// goes through removeRows.
 func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
 	s, idx, ok := w.model.removeMessage(id)
 	if !ok {
@@ -254,11 +274,12 @@ func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
 	}
 	gen := w.model.listGen
 	wasSelected := false
-	if r := w.rows[id]; r != nil {
+	key := listKey{Message: id}
+	if r := w.rows[key]; r != nil {
 		if sel := w.messageList.SelectedRow(); sel != nil && sel.Index() == idx {
 			wasSelected = true
 		}
-		delete(w.rows, id)
+		delete(w.rows, key)
 		// Removing the selected row emits row-selected(nil); skip it so the
 		// pane does not blink through the empty page before the neighbour.
 		w.reselecting = true
@@ -284,9 +305,41 @@ func (w *Window) removeMessageRow(id api.MessageID) (restore func()) {
 		}
 		_, at, _ := w.model.message(s.ID)
 		r := w.newMessageRow(s)
-		w.rows[s.ID] = r
+		w.rows[listKey{Message: s.ID}] = r
 		w.messageList.Insert(r, at)
 		w.showListState()
+	}
+}
+
+// removeRows drops messages from the list in either mode and returns the
+// function that puts them back after a failed move or delete. A grouped
+// conversation whose members are not all known cannot be edited in place;
+// the list is loaded again instead and the restore does nothing.
+func (w *Window) removeRows(ids []api.MessageID) (restore func()) {
+	if !w.model.grouped {
+		restores := make([]func(), 0, len(ids))
+		for _, id := range ids {
+			restores = append(restores, w.removeMessageRow(id))
+		}
+		return func() {
+			for i := len(restores) - 1; i >= 0; i-- {
+				restores[i]()
+			}
+		}
+	}
+	r, ok := w.model.removeMessages(ids)
+	if !ok {
+		w.loadMessages()
+		return func() {}
+	}
+	gen := w.model.listGen
+	w.syncRows()
+	return func() {
+		if w.model.listGen != gen {
+			return
+		}
+		w.model.restoreRemoval(r)
+		w.syncRows()
 	}
 }
 

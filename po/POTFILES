@@ -29,4 +29,5 @@ ui/internal/window/outbox.go
 ui/internal/window/preferences.go
 ui/internal/window/remote.go
 ui/internal/window/sync.go
+ui/internal/window/threads.go
 ui/internal/window/window.go

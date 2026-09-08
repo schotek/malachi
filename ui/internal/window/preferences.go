@@ -48,13 +48,14 @@ type PreferencesDialog struct {
 	remoteImages  *adw.ComboRow
 	offlineDays   *adw.ComboRow
 
-	colorScheme *adw.ComboRow
-	density     *adw.ComboRow
-	showPreview *adw.SwitchRow
-	showAvatars *adw.SwitchRow
-	monochrome  *adw.SwitchRow
-	monospace   *adw.SwitchRow
-	textZoom    *adw.SpinRow
+	colorScheme         *adw.ComboRow
+	density             *adw.ComboRow
+	showPreview         *adw.SwitchRow
+	groupByConversation *adw.SwitchRow
+	showAvatars         *adw.SwitchRow
+	monochrome          *adw.SwitchRow
+	monospace           *adw.SwitchRow
+	textZoom            *adw.SpinRow
 
 	closed bool
 }
@@ -104,6 +105,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		colorScheme:          b.GetObject("color_scheme").Cast().(*adw.ComboRow),
 		density:              b.GetObject("list_density").Cast().(*adw.ComboRow),
 		showPreview:          b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
+		groupByConversation:  b.GetObject("group_by_conversation").Cast().(*adw.SwitchRow),
 		showAvatars:          b.GetObject("show_avatars").Cast().(*adw.SwitchRow),
 		monochrome:           b.GetObject("monochrome_avatars").Cast().(*adw.SwitchRow),
 		monospace:            b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
@@ -119,6 +121,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		s.Bind(settings.KeyDesktopNotifications, d.desktopNotifications.Object, "active"),
 		s.Bind(settings.KeyNotificationSound, d.notificationSound.Object, "active"),
 		s.Bind(settings.KeyShowPreviewLine, d.showPreview.Object, "active"),
+		s.Bind(settings.KeyGroupByConversation, d.groupByConversation.Object, "active"),
 		s.Bind(settings.KeyShowAvatars, d.showAvatars.Object, "active"),
 		s.Bind(settings.KeyMonochromeAvatars, d.monochrome.Object, "active"),
 		s.Bind(settings.KeyMonospacePlainText, d.monospace.Object, "active"),

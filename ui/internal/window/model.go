@@ -87,6 +87,18 @@ type mailModel struct {
 	total      int // -1 when the backend could not compute it
 	listErr    error
 
+	// Grouped mode (thread_model.go): the conversations of listFolder and
+	// what is known of their members; rows mirrors the ListBox. messages
+	// stays empty then, and the other way round.
+	grouped  bool
+	threads  []api.ThreadSummary
+	tindex   map[api.ThreadID]int
+	members  map[api.ThreadID]*threadMembers
+	memberOf map[api.MessageID]api.ThreadID
+	expanded map[api.ThreadID]bool
+	rows     []listRow
+	rowIdx   map[listKey]int
+
 	listGen, bodyGen, foldersGen uint64
 	loading, loadingMore         bool
 }
@@ -95,6 +107,7 @@ type mailModel struct {
 // touching the generation counters.
 func (m *mailModel) clearMessages() {
 	m.setMessages(nil, api.PageInfo{Total: -1})
+	m.clearThreads()
 }
 
 // bumpAll invalidates every in-flight reply and clears the loading flags
@@ -234,13 +247,22 @@ func (m *mailModel) messageAt(idx int) (api.MessageSummary, bool) {
 	return m.messages[idx], true
 }
 
-// message returns the summary with the given ID and its list position.
+// message returns the summary with the given ID and its list position. In
+// grouped mode a member of a listed conversation is found too; idx is then
+// the row it has (-1 while the conversation is folded), never a position
+// in messages.
 func (m *mailModel) message(id api.MessageID) (s api.MessageSummary, idx int, ok bool) {
-	idx, ok = m.index[id]
-	if !ok {
-		return api.MessageSummary{}, -1, false
+	if idx, ok = m.index[id]; ok {
+		return m.messages[idx], idx, true
 	}
-	return m.messages[idx], idx, true
+	if tid, ok := m.memberOf[id]; ok {
+		for _, s := range m.members[tid].list {
+			if s.ID == id {
+				return s, m.rowIndexOf(listKey{Thread: tid, Message: id}), true
+			}
+		}
+	}
+	return api.MessageSummary{}, -1, false
 }
 
 // updateFlags applies a flag change to the cached summary (optimistic

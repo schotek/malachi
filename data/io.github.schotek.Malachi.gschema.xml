@@ -103,6 +103,11 @@
       <default>true</default>
       <summary>Show a one-line preview under each message in the list</summary>
     </key>
+    <key name="group-by-conversation" type="b">
+      <default>false</default>
+      <summary>Group the message list by conversation</summary>
+      <description>Show one row per conversation in the selected folder; expanding it lists the messages the folder holds.</description>
+    </key>
     <key name="show-avatars" type="b">
       <default>true</default>
       <summary>Show sender avatars in the message list</summary>

@@ -73,3 +73,29 @@ func TestFormatDate(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatParticipants(t *testing.T) {
+	list := []api.Address{
+		{Name: "Bob", Address: "bob@example.invalid"},
+		{Address: "BOB@example.invalid"}, // the same person
+		{Name: "Alice", Address: "alice@example.invalid"},
+		{Name: "Carol"}, // name only
+		{},              // nothing
+		{Address: "dave@example.invalid"},
+		{Name: "<b>x</b>", Address: "x@example.invalid"}, // markup is text
+	}
+	if got, want := FormatParticipants(list), "Bob, Alice, Carol, dave@example.invalid, <b>x</b>"; got != want {
+		t.Errorf("FormatParticipants = %q, want %q", got, want)
+	}
+	if got := FormatParticipants(nil); got != "" {
+		t.Errorf("empty = %q", got)
+	}
+}
+
+func TestThreadCountText(t *testing.T) {
+	for n, want := range map[int]string{0: "", 1: "", 2: "2", 17: "17"} {
+		if got := ThreadCountText(n); got != want {
+			t.Errorf("ThreadCountText(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

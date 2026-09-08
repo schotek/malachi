@@ -46,6 +46,9 @@ const (
 	KeyMonochromeAvatars  = "monochrome-avatars"
 	KeyMonospacePlainText = "monospace-plain-text"
 	KeyTextZoom           = "text-zoom"
+	// KeyGroupByConversation switches the message list to one row per
+	// conversation (thread.list) instead of one per message.
+	KeyGroupByConversation = "group-by-conversation"
 )
 
 // Keys of the sidebar state: which parts of the folder tree the user folded
@@ -87,13 +90,14 @@ var defaults = map[string]any{
 	KeyDesktopNotifications: true,
 	KeyNotificationSound:    false,
 
-	KeyColorScheme:        string(ColorSchemeSystem),
-	KeyDensity:            string(DensityComfortable),
-	KeyShowPreviewLine:    true,
-	KeyShowAvatars:        true,
-	KeyMonochromeAvatars:  false,
-	KeyMonospacePlainText: false,
-	KeyTextZoom:           100,
+	KeyColorScheme:         string(ColorSchemeSystem),
+	KeyDensity:             string(DensityComfortable),
+	KeyShowPreviewLine:     true,
+	KeyShowAvatars:         true,
+	KeyMonochromeAvatars:   false,
+	KeyMonospacePlainText:  false,
+	KeyTextZoom:            100,
+	KeyGroupByConversation: false,
 
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
@@ -205,6 +209,9 @@ func (s *Store) SetShowAvatars(v bool) { s.set(KeyShowAvatars, v) }
 
 func (s *Store) MonochromeAvatars() bool     { return s.boolean(KeyMonochromeAvatars) }
 func (s *Store) SetMonochromeAvatars(v bool) { s.set(KeyMonochromeAvatars, v) }
+
+func (s *Store) GroupByConversation() bool     { return s.boolean(KeyGroupByConversation) }
+func (s *Store) SetGroupByConversation(v bool) { s.set(KeyGroupByConversation, v) }
 
 func (s *Store) MonospacePlainText() bool     { return s.boolean(KeyMonospacePlainText) }
 func (s *Store) SetMonospacePlainText(v bool) { s.set(KeyMonospacePlainText, v) }

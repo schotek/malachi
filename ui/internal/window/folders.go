@@ -493,10 +493,20 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 		// While the page is (re)loading the reply will include the message;
 		// only a settled list gets the row prepended, and only when the
 		// active filter would have listed it anyway.
-		if !w.model.loading && w.model.listErr == nil && matchesFilter(s, w.model.listFilter) &&
-			w.model.insertMessage(0, s) {
+		switch {
+		case w.model.loading || w.model.listErr != nil:
+		case w.model.grouped:
+			// Into its conversation row, or a new one at the top; without
+			// a thread id (a daemon still linking) the list is asked again.
+			sel, _ := w.selectedKey()
+			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
+				w.syncRows()
+			} else {
+				w.loadMessages()
+			}
+		case matchesFilter(s, w.model.listFilter) && w.model.insertMessage(0, s):
 			r := w.newMessageRow(s)
-			w.rows[s.ID] = r
+			w.rows[listKey{Message: s.ID}] = r
 			w.messageList.Prepend(r)
 			w.showListState()
 		}

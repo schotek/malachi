@@ -12,7 +12,7 @@ work reliably anymore.
 > **Project status: early, usable with care.** Version 0.1.0 reads, writes
 > and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
 > sanitising it, and keeps mail available offline; Gmail support landed
-> on `main` since. Search and conversation threading are not there yet.
+> on `main` since, and so has conversation threading. Search is not there yet.
 >
 > It is young, and a bug in the sync engine can still touch messages on the
 > server. Keep a second mail program for anything that matters.
@@ -39,10 +39,13 @@ work reliably anymore.
   optional sound, launch at login (through the Background portal), light
   and dark styles, a message list with unread/flagged filters, a foldable
   sidebar with favourite folders.
+- **Conversations.** The daemon threads mail by its headers as it
+  arrives; *Group by Conversation* in the preferences turns the message
+  list into one row per conversation, expandable to its messages.
 - **Czech translation**, and the machinery to add more.
 
-Not yet: search and conversation threading. The RPC contract already
-defines both; the daemon answers `notImplemented`.
+Not yet: search. The RPC contract already defines it; the daemon answers
+`notImplemented`.
 
 ## Goals
 
@@ -73,8 +76,8 @@ defines both; the daemon answers `notImplemented`.
 
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
 store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
-synchronises, sanitises HTML and manages credentials; threading and search
-will live there too. `malachi` is a GTK 4 application that connects to the
+synchronises, sanitises HTML, manages credentials and threads
+conversations; search will live there too. `malachi` is a GTK 4 application that connects to the
 daemon over a local unix socket and displays what it is given.
 
 ```

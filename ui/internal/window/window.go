@@ -47,9 +47,10 @@ type Window struct {
 	// model caches what the backend returned; the widgets are built from it.
 	model mailModel
 
-	// rows are the message list rows by message ID, kept so appearance
-	// settings and flag changes can be pushed to them.
-	rows map[api.MessageID]*widget.MessageRow
+	// rows are the message list rows by key (a message, or a conversation
+	// in grouped mode), kept so appearance settings and flag changes can be
+	// pushed to them.
+	rows map[listKey]*widget.MessageRow
 
 	// folderRows are the sidebar rows by folder and section (header rows
 	// are not kept).
@@ -165,7 +166,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		settings:          s,
 		compose:           cm,
 		hasAccounts:       true,
-		rows:              make(map[api.MessageID]*widget.MessageRow),
+		rows:              make(map[listKey]*widget.MessageRow),
 		folderRows:        make(map[rowKey]*folderRow),
 		loaded:            make(map[api.MessageID]*loadedMessage),
 		openMessages:      make(map[api.MessageID]*MessageWindow),
@@ -244,6 +245,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	for _, key := range []string{settings.KeyDensity, settings.KeyShowPreviewLine, settings.KeyShowAvatars} {
 		s.OnChanged(key, w.applyListAppearance)
 	}
+	// Grouping is a different listing (thread.list): loadMessages notices
+	// the mode change and starts the folder over.
+	s.OnChanged(settings.KeyGroupByConversation, w.loadMessages)
 
 	// "Run in Background": closing hides the window instead of destroying
 	// it. A hidden window still keeps the GtkApplication alive, so no
@@ -297,10 +301,15 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			w.onMessageRowSelected(row)
 		}
 	})
-	// Fires on double-click or Enter (activate-on-single-click is off).
+	// Fires on double-click or Enter (activate-on-single-click is off): a
+	// conversation row folds or unfolds, a message opens in a window.
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
-		if s, ok := w.model.messageAt(row.Index()); ok {
-			w.openMessageWindow(s.ID)
+		if r, ok := w.model.rowAt(row.Index()); ok {
+			if r.Thread {
+				w.toggleThread(r.Key.Thread)
+			} else {
+				w.openMessageWindow(r.Message.ID)
+			}
 		}
 	})
 	w.loadMoreButton.ConnectClicked(w.loadMore)
@@ -317,11 +326,12 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.setListFilter(api.MessageFilter(w.messageFilter.ActiveName()))
 	})
 
-	// "clicked" fires for user clicks only, not for SetActive from Go.
+	// "clicked" fires for user clicks only, not for SetActive from Go. On a
+	// conversation row the star acts on every member (flagTarget).
 	w.starButton.ConnectClicked(func() {
-		if s, ok := w.selectedMessage(); ok {
-			w.toggleFlagged(s.ID)
-		}
+		w.selectedIDs(func(row listRow, ids []api.MessageID) {
+			w.setFlaggedIDs(ids, w.model.flagTarget(row))
+		})
 	})
 	for _, r := range []struct {
 		b    *gtk.Button
@@ -373,10 +383,12 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 		w.scheduleMarkRead("")
 		return
 	}
-	s, ok := w.model.messageAt(row.Index())
+	r, ok := w.model.rowAt(row.Index())
 	if !ok {
 		return
 	}
+	// A conversation row shows (and marks read) its newest folder member.
+	s := r.Message
 	w.showMessage(s.ID)
 	w.setMessageActionsSensitive(true)
 	w.innerSplit.SetShowContent(true)
@@ -398,13 +410,18 @@ func (w *Window) registerActions() {
 			}
 		}
 	}
+	// forRows acts on every message the selected row stands for: one, or
+	// all the folder members of a conversation row.
+	forRows := func(fn func(listRow, []api.MessageID)) func() {
+		return func() { w.selectedIDs(fn) }
+	}
 	w.addAction("refresh", true, w.triggerSync)
-	w.addAction("trash", false, forSelected(w.trash))
-	w.addAction("archive", false, forSelected(w.archive))
-	w.addAction("junk", false, forSelected(w.junk))
-	w.addAction("mark-read", false, forSelected(w.markRead))
-	w.addAction("mark-unread", false, forSelected(w.markUnread))
-	w.addAction("toggle-flag", false, forSelected(w.toggleFlagged))
+	w.addAction("trash", false, forRows(func(row listRow, ids []api.MessageID) { w.trashIDs(w, ids, rowSubject(row)) }))
+	w.addAction("archive", false, forRows(func(_ listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
+	w.addAction("junk", false, forRows(func(row listRow, ids []api.MessageID) { w.junkIDs(w, ids, rowSubject(row)) }))
+	w.addAction("mark-read", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, true) }))
+	w.addAction("mark-unread", false, forRows(func(_ listRow, ids []api.MessageID) { w.setSeenIDs(ids, false) }))
+	w.addAction("toggle-flag", false, forRows(func(row listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.model.flagTarget(row)) }))
 	w.addAction("load-images", false, forSelected(w.loadRemoteImages))
 	w.addAction("trust-sender", false, forSelected(w.trustSender))
 }
@@ -475,8 +492,13 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		w.connStatus.SetLabel(i18n.T("Backend unavailable"))
 		w.banner.SetRevealed(true)
 		// Late replies of in-flight calls are dropped; what is shown stays
-		// until the reconnect reloads it.
+		// until the reconnect reloads it. A conversation waiting for its
+		// members folds back, so no spinner outlives its reply.
 		w.model.bumpAll()
+		if w.model.grouped {
+			w.model.collapseLoading()
+			w.syncRows()
+		}
 		w.showLoadMore()
 		if err != nil {
 			// Repeated dial failures while the daemon is down are expected;

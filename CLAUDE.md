@@ -141,7 +141,20 @@ s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`
 + `AddressBook10`, jen čtení, bez EDS tiše prázdné). Gmail / Google
 Workspace: IMAP+SMTP s XOAUTH2 tokenem z GOA (`core/goa_accounts.go`,
 `credentialFor`), All Mail jako nesynchronizovaný cíl archivace.
-Threading a vyhledávání zatím `notImplemented`.
+Threading: hotovo v backendu. `internal/thread` = pravidla sjednocení
+(union, ne JWZ strom) a capy, `store/threads.go` = linkování v transakci
+zápisu + `ListThreads`/`GetThread`/`ThreadMessages`, migrace 0011 = indexy +
+`message_refs`, `thread_id` nikdy prázdné, Graph drží serverové
+`conversationId`, backfill starých řádků v `core.Maintain`, IMAP stahuje
+`References` už s obálkou; `thread.list`/`thread.get` (`core/threads.go`)
+počítají vlákna per účet a zobrazují per složku (agregáty jen přes členy
+složky, `latest` = nejnovější člen v plném souhrnu). UI: přepínač
+Předvolby → Seznam zpráv → Seskupovat podle konverzací (GSettings
+`group-by-conversation`, výchozí vypnuto) přepne seznam na `thread.list`
+(`ui/internal/window/thread_model.go` čistý model, `threads.go` zrcadlení
+do ListBoxu podle klíčů), rozbalení volá `thread.get {folderId}`, akce na
+sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
+Vyhledávání zatím `notImplemented`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo
@@ -151,7 +164,8 @@ Pořadí prací:
 4. ~~Sanitizér HTML (compose i view) a renderování s webview~~ hotovo
    (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
    démonem, multipart/alternative)
-5. Vyhledávání, threading
+5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
+6. Vyhledávání
 
 Gmail jde přes GNOME Online Accounts: token s IMAP/SMTP scopem drží GOA
 (i registrované klient ID GNOME, proto žádný CASA audit), backend se

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-07 19:46+0200\n"
+"POT-Creation-Date: 2026-09-08 20:54+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -319,54 +319,76 @@ msgstr ""
 msgid "Recently used"
 msgstr ""
 
+#. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
+#: ui/internal/widget/format.go:62
+msgctxt "participant list separator"
+msgid ", "
+msgstr ""
+
 #. TRANSLATORS: strftime format for a date in the current year in
 #. the message list, e.g. "2 Sep".
-#: ui/internal/widget/format.go:60
+#: ui/internal/widget/format.go:91
 #, no-c-format
 msgid "%-d %b"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a date in another year in the
 #. message list, e.g. "2025-09-02".
-#: ui/internal/widget/format.go:65
+#: ui/internal/widget/format.go:96
 #, no-c-format
 msgid "%Y-%m-%d"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a time of day, e.g. "15:04".
-#: ui/internal/widget/format.go:73
+#: ui/internal/widget/format.go:104
 #, no-c-format
 msgid "%H:%M"
 msgstr ""
 
 #. TRANSLATORS: strftime format for a full date and time, e.g.
 #. "Wed, 2 Sep 2026 at 15:04".
-#: ui/internal/widget/format.go:82
+#: ui/internal/widget/format.go:113
 #, no-c-format
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr ""
 
 #. TRANSLATORS: file size in mebibytes.
-#: ui/internal/widget/format.go:90
+#: ui/internal/widget/format.go:121
 #, c-format
 msgid "%.1f MiB"
 msgstr ""
 
 #. TRANSLATORS: file size in kibibytes.
-#: ui/internal/widget/format.go:93
+#: ui/internal/widget/format.go:124
 #, c-format
 msgid "%.0f KiB"
 msgstr ""
 
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/widget/format.go:96
+#: ui/internal/widget/format.go:127
 #, c-format
 msgid "%d B"
 msgstr ""
 
-#: ui/internal/widget/message_row.go:88 ui/internal/window/message_view.go:337
+#. TRANSLATORS: tooltip of the member count of a conversation row.
+#: ui/internal/widget/message_row.go:159
+#, c-format
+msgid "%d message"
+msgid_plural "%d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:337
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
+msgstr ""
+
+#: ui/internal/widget/message_row.go:200 ui/internal/window/folders.go:60
+msgid "Collapse"
+msgstr ""
+
+#: ui/internal/widget/message_row.go:204 ui/internal/window/folders.go:63
+msgid "Expand"
 msgstr ""
 
 #: ui/internal/widget/rpc.go:33
@@ -578,66 +600,131 @@ msgstr ""
 msgid "Saving the account order"
 msgstr ""
 
-#: ui/internal/window/actions.go:35
+#: ui/internal/window/actions.go:39
 msgid "Move to Trash?"
 msgstr ""
 
-#: ui/internal/window/actions.go:35
+#. TRANSLATORS: %d is the number of messages of a conversation.
+#: ui/internal/window/actions.go:42
+#, c-format
+msgid "Move %d message to Trash?"
+msgid_plural "Move %d messages to Trash?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:44
 msgid "Move to _Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:51
+#: ui/internal/window/actions.go:60
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/window/actions.go:54 ui/data/ui/message_window.ui:63
+#: ui/internal/window/actions.go:63 ui/data/ui/message_window.ui:63
 #: ui/data/ui/window.ui:345
 msgid "Star"
 msgstr ""
 
-#: ui/internal/window/actions.go:121
-msgid "Marking the message as unread"
-msgstr ""
-
-#: ui/internal/window/actions.go:123
+#: ui/internal/window/actions.go:179
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:146
-msgid "Removing the star"
+#: ui/internal/window/actions.go:181
+#, c-format
+msgid "Marking %d message as read"
+msgid_plural "Marking %d messages as read"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:183
+msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:148
+#: ui/internal/window/actions.go:185
+#, c-format
+msgid "Marking %d message as unread"
+msgid_plural "Marking %d messages as unread"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:233
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:182
+#: ui/internal/window/actions.go:235
+#, c-format
+msgid "Starring %d message"
+msgid_plural "Starring %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:237
+msgid "Removing the star"
+msgstr ""
+
+#: ui/internal/window/actions.go:239
+#, c-format
+msgid "Removing the star from %d message"
+msgid_plural "Removing the star from %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:289
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:213
+#: ui/internal/window/actions.go:291
+#, c-format
+msgid "Moving %d message to Trash"
+msgid_plural "Moving %d messages to Trash"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:340
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:213
+#: ui/internal/window/actions.go:342
+#, c-format
+msgid "Archiving %d message"
+msgid_plural "Archiving %d messages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:343
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:229 ui/internal/window/actions.go:233
+#: ui/internal/window/actions.go:369 ui/internal/window/actions.go:383
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:232
+#: ui/internal/window/actions.go:372
 msgid "Mark as junk?"
 msgstr ""
 
-#: ui/internal/window/actions.go:232
+#. TRANSLATORS: %d is the number of messages of a conversation.
+#: ui/internal/window/actions.go:375
+#, c-format
+msgid "Mark %d message as junk?"
+msgid_plural "Mark %d messages as junk?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/window/actions.go:377
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:233
+#: ui/internal/window/actions.go:380
 msgid "Marking the message as junk"
 msgstr ""
+
+#: ui/internal/window/actions.go:382
+#, c-format
+msgid "Marking %d message as junk"
+msgid_plural "Marking %d messages as junk"
+msgstr[0] ""
+msgstr[1] ""
 
 #: ui/internal/window/attachments.go:72
 msgid "Files inside an attached message cannot be opened or saved yet."
@@ -748,15 +835,7 @@ msgstr ""
 msgid "Remove from Favourites"
 msgstr ""
 
-#: ui/internal/window/folders.go:60
-msgid "Collapse"
-msgstr ""
-
-#: ui/internal/window/folders.go:63
-msgid "Expand"
-msgstr ""
-
-#: ui/internal/window/folders.go:87 ui/internal/window/messages.go:206
+#: ui/internal/window/folders.go:87 ui/internal/window/messages.go:228
 msgid "Loading…"
 msgstr ""
 
@@ -865,57 +944,58 @@ msgstr ""
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:68 ui/internal/window/messages.go:204
+#: ui/internal/window/messages.go:77 ui/internal/window/messages.go:226
+#: ui/internal/window/threads.go:46
 msgid "Loading messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:131
+#: ui/internal/window/messages.go:144 ui/internal/window/threads.go:82
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:196
+#: ui/internal/window/messages.go:218
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:197
+#: ui/internal/window/messages.go:219
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:199
+#: ui/internal/window/messages.go:221
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:200
+#: ui/internal/window/messages.go:222
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:203
+#: ui/internal/window/messages.go:225
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:208
+#: ui/internal/window/messages.go:230
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:209
+#: ui/internal/window/messages.go:231
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:211
+#: ui/internal/window/messages.go:233
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:212
+#: ui/internal/window/messages.go:234
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:214
+#: ui/internal/window/messages.go:236
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:215
+#: ui/internal/window/messages.go:237
 msgid "This folder is empty."
 msgstr ""
 
@@ -974,23 +1054,23 @@ msgstr ""
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:185
+#: ui/internal/window/preferences.go:188
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:208
+#: ui/internal/window/preferences.go:211
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:309
+#: ui/internal/window/preferences.go:312
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:312
+#: ui/internal/window/preferences.go:315
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:315
+#: ui/internal/window/preferences.go:318
 msgid "Autostart was not granted"
 msgstr ""
 
@@ -1116,32 +1196,36 @@ msgstr ""
 msgid "%s needs attention"
 msgstr ""
 
-#: ui/internal/window/window.go:437
+#: ui/internal/window/threads.go:145
+msgid "Loading the conversation"
+msgstr ""
+
+#: ui/internal/window/window.go:454
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:465
+#: ui/internal/window/window.go:482
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/window.go:468
+#: ui/internal/window/window.go:485
 msgid "Connected"
 msgstr ""
 
-#: ui/internal/window/window.go:475
+#: ui/internal/window/window.go:492
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/window.go:513
+#: ui/internal/window/window.go:535
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/window.go:518
+#: ui/internal/window/window.go:540
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/window.go:522
+#: ui/internal/window/window.go:544
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
@@ -1648,34 +1732,42 @@ msgid "Compact"
 msgstr ""
 
 #: ui/data/ui/preferences.ui:202
-msgid "Show Preview Line"
+msgid "Group by Conversation"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:203
+msgid "One row per conversation; expand it to see its messages"
 msgstr ""
 
 #: ui/data/ui/preferences.ui:208
-msgid "Show Avatars"
+msgid "Show Preview Line"
 msgstr ""
 
 #: ui/data/ui/preferences.ui:214
+msgid "Show Avatars"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:220
 msgid "Monochrome Avatars"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:215
+#: ui/data/ui/preferences.ui:221
 msgid "Neutral grey instead of a colour per sender"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:222
+#: ui/data/ui/preferences.ui:228
 msgid "Message View"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:225
+#: ui/data/ui/preferences.ui:231
 msgid "Use Monospace Font for Plain Text"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:230
+#: ui/data/ui/preferences.ui:236
 msgid "Text Zoom"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:231
+#: ui/data/ui/preferences.ui:237
 msgid "Percent"
 msgstr ""
 
@@ -1831,18 +1923,28 @@ msgid "Show a one-line preview under each message in the list"
 msgstr ""
 
 #: data/io.github.schotek.Malachi.gschema.xml:108
+msgid "Group the message list by conversation"
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:109
+msgid ""
+"Show one row per conversation in the selected folder; expanding it lists the "
+"messages the folder holds."
+msgstr ""
+
+#: data/io.github.schotek.Malachi.gschema.xml:113
 msgid "Show sender avatars in the message list"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:112
+#: data/io.github.schotek.Malachi.gschema.xml:117
 msgid "Draw avatars in neutral grey instead of per-sender colours"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:116
+#: data/io.github.schotek.Malachi.gschema.xml:121
 msgid "Use a monospace font for plain-text message bodies"
 msgstr ""
 
-#: data/io.github.schotek.Malachi.gschema.xml:121
+#: data/io.github.schotek.Malachi.gschema.xml:126
 msgid "Message body text zoom in percent"
 msgstr ""
 

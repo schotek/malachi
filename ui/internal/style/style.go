@@ -139,6 +139,14 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// now spanning the full width. The last row keeps no trailing line.
 	b.WriteString("list.message-list > row { border-radius: 0; margin: 0; }\n")
 	b.WriteString("list.message-list > row:last-child { border-bottom: none; }\n")
+	// Conversation rows of the grouped list (message_row.blp): a small fold
+	// arrow, a pill with the member count, and the members of an expanded
+	// conversation on a faint tint so they read as one group. The tint is
+	// for the resting state only: the rule outranks the sidebar style's
+	// hover and selection tints and would hide them.
+	b.WriteString("button.thread-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
+	b.WriteString("label.thread-count { padding: 0 6px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("list.message-list > row.thread-member:not(:selected):not(:hover):not(:active) { background-color: alpha(@window_fg_color, 0.03); }\n")
 	// Account reordering in preferences: the insertion line is a box-shadow
 	// rather than a border so the row does not change height, and therefore
 	// does not twitch, while the pointer moves over it.
