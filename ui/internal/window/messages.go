@@ -333,7 +333,7 @@ func (w *Window) removeRows(ids []api.MessageID) (restore func()) {
 		return func() {}
 	}
 	gen := w.model.listGen
-	w.syncRows()
+	w.syncRowsAfterRemoval()
 	return func() {
 		if w.model.listGen != gen {
 			return

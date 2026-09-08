@@ -175,8 +175,19 @@ func (w *Window) fetchExpandedMembers() {
 // a member row folded away its conversation row takes over (and the pane
 // shows the newest member); when the selected row is gone the pane is
 // cleared. Row signals from all this are suppressed (reselecting).
-func (w *Window) syncRows() {
+func (w *Window) syncRows() { w.reconcileRows(false) }
+
+// syncRowsAfterRemoval is syncRows for a removal: a selected row that is
+// gone hands the selection to the row now at its place, pane included,
+// as the flat list does.
+func (w *Window) syncRowsAfterRemoval() { w.reconcileRows(true) }
+
+func (w *Window) reconcileRows(neighbour bool) {
 	prev, hadSel := w.selectedKey()
+	prevIdx := -1
+	if hadSel {
+		prevIdx = w.messageList.SelectedRow().Index()
+	}
 	w.reselecting = true
 	for key, r := range w.rows {
 		if _, ok := w.model.rowIdx[key]; !ok {
@@ -208,6 +219,13 @@ func (w *Window) syncRows() {
 			w.reselecting = false
 			w.onMessageRowSelected(r.ListBoxRow)
 			selected = true
+		} else if next := min(prevIdx, w.model.rowCount()-1); neighbour && next >= 0 {
+			if row := w.messageList.RowAtIndex(next); row != nil {
+				w.messageList.SelectRow(row)
+				w.reselecting = false
+				w.onMessageRowSelected(row)
+				selected = true
+			}
 		}
 	}
 	w.reselecting = false
@@ -284,10 +302,22 @@ func (w *Window) selectedRow() (listRow, bool) {
 	return w.model.rowAt(row.Index())
 }
 
-// selectedKey is the key of the selected row, if any.
+// selectedKey is the key of the selected row, if any, read off the row
+// widgets rather than the model: reconcileRows needs it after the model
+// has moved on, when the selected row's index no longer says which row it
+// is (a removal above it, a conversation moved to the top).
 func (w *Window) selectedKey() (listKey, bool) {
-	r, ok := w.selectedRow()
-	return r.Key, ok
+	sel := w.messageList.SelectedRow()
+	if sel == nil {
+		return listKey{}, false
+	}
+	idx := sel.Index()
+	for key, r := range w.rows {
+		if r.Index() == idx {
+			return key, true
+		}
+	}
+	return listKey{}, false
 }
 
 // rowFor is the widget showing message id on its own row, if listed.
