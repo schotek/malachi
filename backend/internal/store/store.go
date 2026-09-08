@@ -62,7 +62,7 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	// so a sync pass and an RPC mutation would otherwise fail with
 	// SQLITE_BUSY instead of queueing. Mail data is private: restrict the
 	// file mode.
-	dsn := "file:" + path + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
+	dsn := "file:" + uriPath(path) + "?_txlock=immediate&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
@@ -91,6 +91,14 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 
 // Path returns the database file location.
 func (s *Store) Path() string { return s.path }
+
+// uriPath makes a file name safe inside a "file:" URI: SQLite reads "?" as
+// the start of the query and "#" as a fragment, and decodes "%HH", so all
+// three are percent-encoded. A directory named after a fuzz seed
+// ("seed#1") is where this bit first.
+func uriPath(p string) string {
+	return strings.NewReplacer("%", "%25", "?", "%3F", "#", "%23").Replace(p)
+}
 
 // AttachmentDir is where attachment data lives (0600 files in a 0700
 // directory next to the database); metadata is in the attachments table.
