@@ -1,0 +1,58 @@
+From: Carol <carol@example.org>
+Reply-To: Carol Work <carol.work@example.org>
+To: Me <me@example.invalid>, Dave <dave@example.org>
+Cc: Erin <erin@example.org>, me@example.invalid
+Subject: Re: RE: Fwd: Pictures
+Date: Mon, 7 Sep 2026 09:30:00 +0200
+Message-ID: <inline-cid@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: multipart/related; boundary="rel"; type="text/html"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>p { color: red }</style></head><body>
+<p>Hello <b>there</b>, a picture: <img src="cid:pic@example.org" alt="pic"></p>
+<p>Other spellings of it: <img src="cid:pic%40example.org" alt="enc"> <img src="cid:<pic@example.org>" alt="br"></p>
+<p>Not a picture: <img src="cid:cal@example.org" alt="cal"></p>
+<p>Inline data: <img src="data:image/png;base64,iVBORw0KGgo=" alt="data"></p>
+<p>Remote: <img src="https://remote.invalid/track.png" alt="remote" width="200"></p>
+<blockquote type="cite">older <script>x()</script><a href="https://example.org/x" onclick="y()">link</a></blockquote>
+</body></html>
+
+--rel
+Content-Type: image/png
+Content-ID: <pic@example.org>
+Content-Disposition: inline; filename="pic.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--rel
+Content-Type: image/gif
+Content-ID: <pic@example.org>
+Content-Disposition: inline; filename="dup.gif"
+Content-Transfer-Encoding: base64
+
+R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+
+--rel
+Content-Type: text/calendar; charset=utf-8
+Content-ID: <cal@example.org>
+Content-Disposition: inline; filename="invite.ics"
+
+BEGIN:VCALENDAR
+END:VCALENDAR
+
+--rel--
+--mix
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="report.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+
+--mix--

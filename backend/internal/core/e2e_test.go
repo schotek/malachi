@@ -4,6 +4,7 @@
 package core
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/emersion/go-imap/v2/imapclient"
 	"github.com/emersion/go-imap/v2/imapserver"
 	"github.com/emersion/go-imap/v2/imapserver/imapmemserver"
+	"github.com/emersion/go-message"
 	"github.com/emersion/go-sasl"
 	gosmtp "github.com/emersion/go-smtp"
 
@@ -349,6 +351,169 @@ func TestEndToEndSend(t *testing.T) {
 	if known != 2 {
 		t.Fatalf("known senders = %+v", senders.Senders)
 	}
+}
+
+// inlinePictureTestMessage is an HTML message with an inline picture, as
+// a reply with formatting to keep.
+var inlinePictureTestMessage = "From: Alice <alice@example.org>\r\nTo: me@example.invalid\r\nSubject: Picture\r\nDate: Mon, 7 Sep 2026 10:00:00 +0200\r\n" +
+	"Message-ID: <picture@example.org>\r\nMIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=\"rel\"\r\n\r\n" +
+	"--rel\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" +
+	`<p>Look <b>here</b>: <img src="cid:pic@example.org" alt="pic"><script>x()</script></p>` + "\r\n" +
+	"--rel\r\nContent-Type: image/png\r\nContent-ID: <pic@example.org>\r\nContent-Disposition: inline; filename=\"pic.png\"\r\nContent-Transfer-Encoding: base64\r\n\r\n" +
+	"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\r\n" +
+	"--rel--\r\n"
+
+// TestEndToEndReplyWithInlineImage takes a received HTML message with an
+// inline picture through draft.create, draft.save and message.send: the
+// reply goes out as multipart/alternative whose HTML quotes the original
+// formatted, in a cite block, with the picture in a related part under
+// the Content-ID the backend minted, and whose text quotes with "> ".
+func TestEndToEndReplyWithInlineImage(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	mem := imapmemserver.New()
+	user := imapmemserver.NewUser("me", "pw")
+	for _, mb := range []string{"INBOX", "Sent", "Trash"} {
+		if err := user.Create(mb, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mem.AddUser(user)
+	imapSrv := imapserver.New(&imapserver.Options{
+		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
+			return mem.NewSession(), nil, nil
+		},
+		Caps:         imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapMove: {}, imap.CapUIDPlus: {}, imap.CapSpecialUse: {}},
+		InsecureAuth: true,
+		Logger:       discardLogger{},
+	})
+	imapLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go imapSrv.Serve(imapLn)
+	t.Cleanup(func() { imapSrv.Close() })
+	appendRawTestMessage(t, imapLn.Addr().String(), inlinePictureTestMessage)
+
+	smtpRec := startSMTPRecorder(t)
+
+	cfg := config.Default()
+	cfg.Sync.IntervalSeconds = 0
+	b := newTestBackend(t, cfg)
+	b.Keyring = newMemKeyring()
+	syncCtx, stopSync := context.WithCancel(ctx)
+	done := b.StartSync(syncCtx)
+	t.Cleanup(func() {
+		stopSync()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			t.Error("supervisors did not stop")
+		}
+	})
+
+	acc := validConfig()
+	acc.IMAP = &api.ServerConfig{Host: "127.0.0.1", Port: imapLn.Addr().(*net.TCPAddr).Port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	acc.SMTP = &api.ServerConfig{Host: "127.0.0.1", Port: smtpRec.port, Security: api.SecurityNone, Username: "me", AuthMethod: api.AuthPassword}
+	added, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: acc, Credentials: api.Credentials{Password: "pw"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := added.AccountID
+
+	// The message arrives and its body is downloaded.
+	var original api.MessageSummary
+	waitUntil(t, ctx, "original with body", func() bool {
+		folders, err := b.Folders().List(ctx, api.FolderListParams{AccountID: id})
+		if err != nil {
+			return false
+		}
+		for _, f := range folders.Folders {
+			if f.Role != api.RoleInbox {
+				continue
+			}
+			list, err := b.Messages().List(ctx, api.MessageListParams{AccountID: id, FolderID: f.ID})
+			if err != nil || len(list.Messages) != 1 {
+				return false
+			}
+			original = list.Messages[0]
+			body, err := b.Messages().Body(ctx, api.MessageBodyParams{AccountID: id, MessageID: original.ID})
+			return err == nil && body.BodyState == api.BodyFetched
+		}
+		return false
+	})
+
+	created, err := b.Drafts().Create(ctx, api.DraftCreateParams{
+		AccountID: id, Mode: api.ComposeReply, MessageID: original.ID, Attribution: "On Monday, Alice wrote:",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := created.Draft
+	if created.Quoted != api.QuoteHTML || len(d.Attachments) != 1 || !d.Attachments[0].Inline || d.To[0].Address != "alice@example.org" || d.Subject != "Re: Picture" {
+		t.Fatalf("created = %+v %+v", created, d)
+	}
+	cid := d.Attachments[0].ContentID
+	saved, err := b.Drafts().Save(ctx, api.DraftSaveParams{Draft: d})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.HTMLBody != d.HTMLBody || len(saved.Attachments) != 1 || saved.Blocked != (api.BlockedContent{}) {
+		t.Fatalf("saved = %+v", saved)
+	}
+	if _, err := b.Messages().Send(ctx, api.MessageSendParams{AccountID: id, DraftID: saved.DraftID, Version: saved.Version}); err != nil {
+		t.Fatal(err)
+	}
+
+	waitUntil(t, ctx, "smtp delivery", func() bool { _, _, data := smtpRec.envelope(); return len(data) > 0 })
+	_, rcpts, data := smtpRec.envelope()
+	if strings.Join(rcpts, " ") != "alice@example.org" {
+		t.Fatalf("envelope = %v", rcpts)
+	}
+	parts := decodedParts(t, data)
+	html, text := parts["text/html"], strings.ReplaceAll(parts["text/plain"], "\r\n", "\n")
+	if !strings.Contains(html, `<div>On Monday, Alice wrote:</div><blockquote type="cite"><p>Look <b>here</b>: <img src="cid:`+cid+`"`) ||
+		strings.Contains(html, "&lt;b&gt;") || strings.Contains(html, "script") {
+		t.Errorf("html part:\n%s", html)
+	}
+	if !strings.Contains(text, "On Monday, Alice wrote:\n> Look here: [pic]") {
+		t.Errorf("text part:\n%q", text)
+	}
+	if _, ok := parts["image/png"]; !ok || !strings.Contains(strings.ToLower(string(data)), "content-id: <"+cid+">") ||
+		!strings.Contains(string(data), "multipart/related") || !strings.Contains(string(data), "In-Reply-To: <picture@example.org>") {
+		t.Errorf("message:\n%s", data)
+	}
+}
+
+// decodedParts maps the media type of every leaf part of raw to its
+// decoded body.
+func decodedParts(t *testing.T, raw []byte) map[string]string {
+	t.Helper()
+	root, err := message.Read(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := map[string]string{}
+	err = root.Walk(func(_ []int, e *message.Entity, err error) error {
+		if err != nil {
+			return err
+		}
+		ct, _, _ := e.Header.ContentType()
+		if strings.HasPrefix(ct, "multipart/") {
+			return nil
+		}
+		body, err := io.ReadAll(e.Body)
+		if err != nil {
+			return err
+		}
+		parts[ct] = string(body)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parts
 }
 
 // smtpRecorder is a go-smtp server that accepts AUTH PLAIN for me/pw and

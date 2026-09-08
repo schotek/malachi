@@ -120,11 +120,17 @@ carries tracking pixels, scripts, hidden text and forms. It crosses the
 local socket raw, but the backend sanitises it in `draft.save` (compose
 mode: fixed `block` policy, `data:` URLs removed, `cid:` only to the
 draft's own inline attachments) before anything is stored, listed or sent;
-`blocked` in the result tells the UI what was removed. The UI editor
-itself renders only what the user typed, backend-returned draft HTML and
-escaped quotes, under the layer-2 rules: no page JavaScript, a CSP without
-network access, navigation denied, and a `cid:` handler that serves only
-the current draft's attachments.
+`blocked` in the result tells the UI what was removed. A quoted original
+(reply, forward) never reaches the editor raw either: `draft.create`
+sanitises it in the backend, in the same compose mode, and copies its
+inline pictures into the attachment store under ids of the backend's own
+choosing, so the quote references nothing of the received message. The
+UI editor itself renders only what the user typed, backend-returned draft
+HTML and escaped fallback quotes, under the layer-2 rules: no page
+JavaScript, a CSP without network access, navigation denied, and a `cid:`
+handler that serves only ids the window registered — files the user
+picked, and the backend's copies fetched through `attachment.get`, which
+are served only when they are pictures (never SVG) within the cap.
 
 ## 4. Message parsing (MIME)
 

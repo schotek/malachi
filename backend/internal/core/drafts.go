@@ -138,11 +138,68 @@ func (s *draftService) Delete(ctx context.Context, p api.DraftDeleteParams) (*ap
 	return &api.DraftDeleteResult{}, nil
 }
 
-// Create needs the message store to quote and address replies.
-// TODO(phase-1): implement over internal/store messages; until then the UI
-// falls back to its own prefill for placeholder data.
-func (s *draftService) Create(context.Context, api.DraftCreateParams) (*api.DraftCreateResult, error) {
-	return nil, api.ErrNotImplemented
+// Create returns the unsaved template of a reply, a reply to all, a
+// forward or a new message (docs/api.md §4.5): the recipients and the
+// subject derived from the original, the original quoted as sanitised
+// HTML with its pictures copied into the attachment store, or a parsed
+// mailto: URI. Nothing is stored but the copied parts; the quote degrades
+// (HTML → text → plain) rather than failing. The helpers are in quote.go.
+func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*api.DraftCreateResult, error) {
+	bad := func(format string, args ...any) error {
+		return api.NewError(api.CodeInvalidArgument, format, args...)
+	}
+	switch p.Mode {
+	case api.ComposeNew, api.ComposeReply, api.ComposeReplyAll, api.ComposeForward:
+	default:
+		return nil, bad("mode must be new, reply, replyAll or forward")
+	}
+	a, err := s.b.requireAccount(ctx, string(p.AccountID))
+	if err != nil {
+		return nil, err
+	}
+	if p.Mode == api.ComposeNew {
+		if p.MessageID != "" {
+			return nil, bad("messageId is for reply and forward")
+		}
+		d, err := newDraft(s.b, a, p.Mailto)
+		if err != nil {
+			return nil, err
+		}
+		return &api.DraftCreateResult{Draft: d, Quoted: api.QuoteNone}, nil
+	}
+	if p.MessageID == "" {
+		return nil, bad("messageId is required for mode %s", p.Mode)
+	}
+	if p.Mailto != "" {
+		return nil, bad("mailto is for mode new")
+	}
+	attribution, err := validateAttribution(p.Attribution)
+	if err != nil {
+		return nil, err
+	}
+	m, err := s.b.getMessage(ctx, a.ID, string(p.MessageID))
+	if err != nil {
+		return nil, err
+	}
+
+	d := api.Draft{AccountID: api.AccountID(a.ID)}
+	forward := p.Mode == api.ComposeForward
+	if forward {
+		d.Subject = forwardSubject(m.Subject)
+		d.Forwarding = api.MessageID(m.ID)
+	} else {
+		d.To, d.CC = replyRecipients(m, selfAddresses(a), p.Mode == api.ComposeReplyAll)
+		d.Subject = replySubject(m.Subject)
+		d.InReplyTo = api.MessageID(m.ID)
+	}
+	q := &quoter{b: s.b, account: a.ID, forward: forward, attribution: attribution}
+	res, err := q.quote(ctx, m)
+	if err != nil {
+		return nil, err
+	}
+	d.HTMLBody, d.TextBody = res.html, res.text
+	d.Attachments = toAPIAttachments(res.atts)
+	return &api.DraftCreateResult{Draft: d, Quoted: res.form, Blocked: res.blocked, Skipped: res.skipped}, nil
 }
 
 func attachmentIDs(atts []api.DraftAttachment) []string {

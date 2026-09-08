@@ -167,7 +167,9 @@ func TestHTMLDraftFailsClosed(t *testing.T) {
 	if list.Page.Total != 1 || list.Drafts[0].Version != 1 || list.Drafts[0].TextBody != "plain" || list.Drafts[0].HTMLBody != "" {
 		t.Fatalf("failed save changed the draft: %+v", list.Drafts)
 	}
-	if _, err := d.Create(ctx, api.DraftCreateParams{AccountID: "acc", Mode: api.ComposeNew}); errCode(t, err) != api.CodeNotImplemented {
+	// draft.create checks the account before it touches anything; "acc"
+	// is the placeholder the saves above got away with.
+	if _, err := d.Create(ctx, api.DraftCreateParams{AccountID: "acc", Mode: api.ComposeNew}); errCode(t, err) != api.CodeAccountNotFound {
 		t.Errorf("create: %v", err)
 	}
 }
