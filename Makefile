@@ -234,5 +234,9 @@ flatpak: vendor
 flatpak-run:
 	flatpak-builder --run $(BUILD_DIR)/flatpak packaging/flatpak/$(APP_ID).yml malachi
 
+## deb: build a Debian package for this machine (needs dpkg-dev; libadwaita >= 1.7)
+deb:
+	./scripts/build-deb.sh
+
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed -e 's/^## /  /'

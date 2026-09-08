@@ -1,0 +1,142 @@
+# Debian packages for amd64 and arm64.
+#
+# The native counterpart to the Flatpak: it links the distribution's GTK 4,
+# libadwaita and WebKitGTK instead of carrying a runtime, so it installs with
+# apt and updates with the system, but only on a release whose libadwaita is
+# at least 1.7 (AdwToggleGroup, used by the message-list filter). That is
+# Ubuntu 26.04 LTS, not Ubuntu 24.04 LTS, which has libadwaita 1.5 — those
+# users want the Flatpak. The package is therefore built on 26.04 and that
+# is the release it is tested against; nothing here claims more.
+#
+# The ubuntu-26.04 runner images are in public preview, and a preview image
+# can be withdrawn or run short of capacity. If that happens, this workflow
+# is the only thing that breaks: the Flatpak build is on 24.04 runners and
+# does not share a job with it.
+name: Debian package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - packaging/debian/**
+      - scripts/build.sh
+      - scripts/build-deb.sh
+      - .github/workflows/deb.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deb-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          # The distribution's golang-go trails the version the modules ask
+          # for; the toolchain is a build-time dependency only and does not
+          # appear in the package's Depends.
+          go-version: '1.25'
+
+      - name: Install build dependencies
+        # The list of README "Building from source", plus dpkg-dev for
+        # dpkg-deb and dpkg-shlibdeps, gettext for msgfmt (the Flatpak gets
+        # it from the GNOME SDK) and desktop-file-utils for the check below.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc pkg-config gettext dpkg-dev desktop-file-utils \
+            libgtk-4-dev libadwaita-1-dev libwebkitgtk-6.0-dev gir1.2-webkit-6.0 \
+            libgsound-dev libgirepository1.0-dev libsqlite3-dev blueprint-compiler
+
+      - name: Record the version
+        # The same file the Flatpak build writes: one version for every
+        # artifact of a commit, and the source of the package version.
+        run: |
+          git describe --tags --always --dirty | sed 's/^v//' > .version
+          cat .version
+
+      - name: Build the package
+        run: ./scripts/build-deb.sh
+
+      - name: Check it against the archive rules
+        # Advisory: lintian knows more about Debian policy than we do, but a
+        # binary package built outside a source package trips tags that do
+        # not apply (no changelog, no copyright file in the archive layout).
+        # The output is for reading, so it never fails the job.
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y --no-install-recommends lintian
+          lintian --no-tag-display-limit build/*.deb || true
+
+      - name: Install it, and check that it is complete
+        # A package that unpacks is not yet a package that works: apt has to
+        # resolve every dependency the build computed, the schema trigger has
+        # to run, and the desktop entry has to be where the shell looks. The
+        # application itself needs a session bus and a display, so this stops
+        # at "installed and wired up".
+        run: |
+          sudo apt-get install -y ./build/*.deb
+          test -x /usr/bin/malachi
+          test -x /usr/bin/malachid
+          test -f /usr/share/applications/io.github.schotek.Malachi.desktop
+          desktop-file-validate /usr/share/applications/io.github.schotek.Malachi.desktop
+          # The dpkg trigger of libglib compiles the schema; without it the
+          # UI falls back to in-memory preferences.
+          gsettings --schemadir /usr/share/glib-2.0/schemas \
+            list-keys io.github.schotek.Malachi >/dev/null
+          malachid --version
+          sudo apt-get remove -y malachi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malachi-deb-${{ matrix.arch }}
+          path: build/*.deb
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach packages to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: malachi-deb-*
+          merge-multiple: true
+      - name: Upload
+        # As in the Flatpak workflow: the release notes stay manual, this
+        # only creates a draft if the tag has no release yet.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*.deb \
+            --clobber --repo "$GITHUB_REPOSITORY"

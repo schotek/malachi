@@ -1,0 +1,24 @@
+Package: malachi
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: Vladislav Janeček <38503981+schotek@users.noreply.github.com>
+Homepage: https://github.com/schotek/malachi
+Section: mail
+Priority: optional
+Installed-Size: @SIZE@
+Depends: @DEPENDS@
+Recommends: xdg-desktop-portal, gnome-keyring, librsvg2-common
+Suggests: evolution-data-server, gnome-online-accounts
+Description: mail client for the GNOME desktop
+ Malachi Mail is two processes: a Go daemon that speaks IMAP, SMTP and
+ Microsoft Graph and owns every mail decision, and a GTK4 user interface
+ that talks to it over a unix socket. The interface starts the daemon
+ itself; nothing needs to be enabled by hand.
+ .
+ Received HTML is sanitised in the daemon and shown in a WebKitGTK view
+ with JavaScript off, no network access and links opened only through the
+ portal after the real destination has been displayed.
+ .
+ Passwords and OAuth2 tokens are kept in the system keyring; Microsoft 365
+ and Gmail sign in through GNOME Online Accounts, so this package carries
+ no client credentials of its own.

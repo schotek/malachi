@@ -123,6 +123,38 @@ A tag build also uploads both bundles to that tag's GitHub release, creating
 a draft one if it does not exist yet. The notes stay manual — they come from
 `NEWS` (§2).
 
+## 6. Debian package
+
+`.github/workflows/deb.yml` builds a `.deb` for **amd64** and **arm64** on
+the same triggers, and attaches it to a tag's release beside the bundles.
+`scripts/build-deb.sh` does the work and runs anywhere dpkg-dev does:
+
+```bash
+make deb          # → build/malachi_<version>_<arch>.deb
+```
+
+It stages `scripts/build.sh install` with `PREFIX=/usr` and a `DESTDIR`,
+lets `dpkg-shlibdeps` read the two binaries for their library dependencies,
+and adds what no ELF header states: the GSettings backend and the
+libadwaita floor. The schema is shipped as XML, never as a compiled cache —
+dpkg's trigger on `/usr/share/glib-2.0/schemas` recompiles it, and a cache
+in the package would collide with every other application's.
+
+The package version is the `git describe` output with its hyphens turned
+into `+` and a `-1` revision appended (`0.1.0+21+g4f543f4-1`), because dpkg
+reads everything after the last hyphen as the Debian revision.
+
+Unlike the Flatpak this is not a portable build: it links the
+distribution's GTK 4, libadwaita and WebKitGTK, so it wants **libadwaita
+1.7 or newer** (`AdwToggleGroup`). That is Ubuntu 26.04 LTS and Debian 14;
+Ubuntu 24.04 LTS users need the Flatpak. The jobs run on the `ubuntu-26.04`
+runner images, which are still in public preview.
+
+There is no apt repository, so nothing installed from a `.deb` updates
+itself. Publishing one (a Launchpad PPA, or a repository of our own) is a
+separate decision: it means source builds with the Go modules vendored, and
+a signing key with somewhere safe to keep it.
+
 The Go build cache lives inside the sandbox and is not carried between runs,
 so cgo (gotk4, WebKitGTK) is recompiled every time; a run takes tens of
 minutes. Only flatpak-builder's own state (downloaded module sources,

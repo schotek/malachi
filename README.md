@@ -115,6 +115,29 @@ flatpak install --user ./malachi-<version>-x86_64.flatpak
 Tagged versions will have their bundles attached to the GitHub release.
 The bundle pulls the GNOME 48 runtime from Flathub.
 
+Ubuntu does not ship Flatpak any more, so it takes one step first:
+
+```sh
+sudo apt install flatpak
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+```
+
+### Debian package
+
+CI also builds a `.deb` for **amd64** and **arm64**, from the same
+artifacts page. It links the system GTK 4, libadwaita and WebKitGTK
+instead of carrying a runtime, so it needs **libadwaita 1.7 or newer**:
+Ubuntu 26.04 LTS and Debian 14, but *not* Ubuntu 24.04 LTS, whose
+libadwaita is 1.5 and which cannot run the message-list filter. On 24.04
+take the Flatpak.
+
+```sh
+sudo apt install ./malachi_<version>_amd64.deb
+```
+
+There is no apt repository, so a package installed this way is not
+updated by `apt upgrade`; the Flatpak is the build that updates itself.
+
 ## Building from source
 
 ### Dependencies
@@ -133,7 +156,10 @@ sudo dnf install golang gcc pkgconf-pkg-config git \
     gobject-introspection-devel sqlite-devel blueprint-compiler
 ```
 
-Debian / Ubuntu (Debian 13 "trixie", Ubuntu 24.04 or newer):
+Debian / Ubuntu. The UI uses `AdwToggleGroup`, so libadwaita must be at
+least 1.7: Ubuntu 26.04 LTS or Debian 14 "forky". Ubuntu 24.04 LTS has
+libadwaita 1.5 and the UI does not link against it; build the Flatpak
+there instead.
 
 ```sh
 sudo apt install golang-go gcc pkg-config git \
