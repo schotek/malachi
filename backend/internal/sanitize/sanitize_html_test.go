@@ -456,9 +456,34 @@ func TestTextRendering(t *testing.T) {
 <img src="cid:logo" alt="picture"><pre>  a
    b</pre><table><tr><td>1</td><td>2</td></tr><tr><td>3</td></tr></table><blockquote>quoted</blockquote><p>a&lt;b &amp; c</p>`)
 	// Indentation inside <pre> is content and stays.
-	want := "Title\n\nHello world, see the link <https://x/y> and https://x/z.\n\n- one\n- two w <https://x/w> x\n\n[picture]\n\n  a\n   b\n\n1\t2\n3\n\nquoted\n\na<b & c"
+	want := "Title\n\nHello world, see the link <https://x/y> and https://x/z.\n\n- one\n- two w <https://x/w> x\n\n[picture]\n\n  a\n   b\n\n1\t2\n3\n> quoted\n\na<b & c"
 	if out.Text != want {
 		t.Errorf("text:\n got %q\nwant %q", out.Text, want)
+	}
+}
+
+// A <blockquote> renders the way plain-text mail quotes: "> " on every
+// line, the bare mark on blank lines inside, "> > " when nested; the quote
+// starts right under what precedes it (its attribution), and the blank
+// line after one that closed stays plain.
+func TestTextQuotesBlockquote(t *testing.T) {
+	cases := []struct{ html, want string }{
+		{`<blockquote><div>On X wrote:</div><p>a</p><p>b</p><blockquote>c</blockquote></blockquote>`,
+			"> On X wrote:\n>\n> a\n>\n> b\n> > c"},
+		{`<div>On X wrote:</div><blockquote type="cite"><p>a</p><p>b</p></blockquote><p>after</p>`, "On X wrote:\n> a\n>\n> b\n\nafter"},
+		{`<p>x</p><blockquote><p>a</p></blockquote><p>after</p>`, "x\n> a\n\nafter"},
+		{`<blockquote><blockquote><p>a</p><p>b</p></blockquote><p>c</p></blockquote>`, "> > a\n> >\n> > b\n>\n> c"},
+		{"<blockquote><pre>one\n\n  two</pre></blockquote>", "> one\n>\n>   two"},
+		{`<blockquote><ul><li>one</li><li>two</li></ul>a<br>b</blockquote>`, "> - one\n> - two\n>\n> a\n> b"},
+		{`<blockquote><table><tr><td>1</td><td>2</td></tr></table></blockquote>`, "> 1\t2"},
+		{`<blockquote>   </blockquote><p>a</p>`, "a"},
+		{`<blockquote><p>a</p><p></p><p></p></blockquote>`, "> a"},
+	}
+	for _, c := range cases {
+		out := compose(t, c.html, nil)
+		if out.Text != c.want {
+			t.Errorf("%s:\n got %q\nwant %q", c.html, out.Text, c.want)
+		}
 	}
 }
 

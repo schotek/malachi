@@ -105,7 +105,13 @@ type Input struct {
 	// rewritten to: in the view the "<accountId>/<messageId>/<partId>"
 	// path behind malachi-cid:, in a draft the attachment ID (the reference
 	// itself is kept as cid:<contentId>).
-	KnownCIDs     map[string]string
+	KnownCIDs map[string]string
+	// RewriteCIDs maps a Content-ID of the input to the one the output
+	// uses instead: a quoted original whose pictures were copied into the
+	// attachment store under new ids (draft.create). A reference to a key
+	// survives as cid:<value> and CIDs reports the value; ids not listed
+	// fall through to KnownCIDs. ModeCompose only; ignored in the view.
+	RewriteCIDs   map[string]string
 	MaxOutputSize int // bytes; 0 = DefaultMaxOutputSize
 	// RemoteImage fetches one https: image under RemoteAllow and returns its
 	// media type and bytes for inlining as a data: URI; ok = false drops the
@@ -129,8 +135,9 @@ type Output struct {
 	Text    string
 	Blocked api.BlockedContent
 	Links   []api.Link
-	// CIDs lists the Content-IDs whose cid: references survived (ModeCompose
-	// uses it to keep only referenced inline attachments bound).
+	// CIDs lists the Content-IDs whose cid: references survived, as they
+	// appear in HTML (after RewriteCIDs); ModeCompose uses it to keep only
+	// referenced inline attachments bound.
 	CIDs    []string
 	Version string
 }

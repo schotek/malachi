@@ -16,10 +16,12 @@ import (
 // and image descriptions rather than dropping them.
 
 // blockNewlines is how many line breaks an element forces before and after
-// itself: two for paragraph-like elements, one for line-like ones.
+// itself: two for paragraph-like elements, one for line-like ones. <pre>
+// and <blockquote> are paragraph-like too but need bookkeeping of their
+// own, so walk handles them before consulting this.
 var blockNewlines = map[string]int{
 	"p": 2, "h1": 2, "h2": 2, "h3": 2, "h4": 2, "h5": 2, "h6": 2,
-	"blockquote": 2, "pre": 2, "table": 2, "ul": 2, "ol": 2, "dl": 2, "hr": 2,
+	"table": 2, "ul": 2, "ol": 2, "dl": 2, "hr": 2,
 	"section": 2, "article": 2, "header": 2, "footer": 2, "figure": 2,
 	"address": 2, "center": 2,
 	"div": 1, "li": 1, "tr": 1, "dd": 1, "dt": 1, "caption": 1, "thead": 1,
@@ -27,14 +29,21 @@ var blockNewlines = map[string]int{
 	"summary": 1, "details": 1,
 }
 
+// Line breaks are pending, not written: they go out, with the quote marks
+// of the lines they open, right before the next character that needs them.
+// That keeps trailing breaks (and trailing "> " lines) out of the output
+// and lets a quote that closes before the next paragraph leave a plain
+// blank line behind it.
 type textRenderer struct {
 	b       strings.Builder
 	max     int
 	started bool // something other than whitespace has been written
-	nl      int  // newlines at the end of b
+	nl      int  // pending line breaks
+	nlQuote int  // the lowest quote depth a pending break was asked at
 	space   bool // a collapsed space is pending
 	tab     bool // b ends with a cell separator
 	pre     int
+	quote   int // <blockquote> depth: lines inside are prefixed with "> " each
 }
 
 // renderText walks the tree that is about to be serialised, so it can only
@@ -89,6 +98,10 @@ func (r *textRenderer) walk(n *html.Node) {
 	case "pre":
 		r.pre++
 		r.newline(2)
+	case "blockquote":
+		// The mail convention: quoted lines carry "> ", nested ones "> > ".
+		r.newline(2)
+		r.quote++
 	default:
 		if k, ok := blockNewlines[name]; ok {
 			r.newline(k)
@@ -109,6 +122,9 @@ func (r *textRenderer) walk(n *html.Node) {
 		if r.pre > 0 {
 			r.pre--
 		}
+		r.newline(2)
+	case "blockquote":
+		r.quote--
 		r.newline(2)
 	case "td", "th":
 	default:
@@ -131,17 +147,54 @@ func linkTextIsHref(n *html.Node, href string) bool {
 	return strip(linkText(n)) == strip(href)
 }
 
-// newline ensures the output ends with at least n line breaks (at most two
-// are ever emitted in a row).
+// newline asks for at least n line breaks before the next text (at most
+// two are ever emitted in a row).
 func (r *textRenderer) newline(n int) {
 	if !r.started {
 		return
 	}
 	r.space, r.tab = false, false
-	for r.nl < n {
-		r.b.WriteByte('\n')
-		r.nl++
+	if r.nl == 0 || r.quote < r.nlQuote {
+		r.nlQuote = r.quote
 	}
+	if r.nl < n {
+		r.nl = n
+	}
+}
+
+// pendNewline adds one line break of preformatted content, which is not
+// collapsed with its neighbours.
+func (r *textRenderer) pendNewline() {
+	if r.nl == 0 || r.quote < r.nlQuote {
+		r.nlQuote = r.quote
+	}
+	r.nl++
+	r.tab = false
+}
+
+// flush writes the pending line breaks and the quote marks of the line
+// that is about to receive text. A blank line between two quoted lines
+// carries the bare mark of the shallower of the depths at its two ends,
+// so a blank line after a quote that closed stays plain; a quote's first
+// line follows what came before it without a blank line, the way "X
+// wrote:" sits right on top of the quoted text.
+func (r *textRenderer) flush() {
+	if r.nl > 0 {
+		n := r.nl
+		if r.quote > r.nlQuote {
+			n = 1
+		}
+		r.b.WriteByte('\n')
+		blank := strings.TrimRight(strings.Repeat("> ", min(r.nlQuote, r.quote)), " ")
+		for i := 1; i < n; i++ {
+			r.b.WriteString(blank)
+			r.b.WriteByte('\n')
+		}
+	}
+	if (r.nl > 0 || !r.started) && r.quote > 0 {
+		r.b.WriteString(strings.Repeat("> ", r.quote))
+	}
+	r.nl = 0
 }
 
 // cell separates table cells with a tab.
@@ -163,16 +216,15 @@ func (r *textRenderer) text(s string) {
 		switch {
 		case r.pre > 0 && c == '\n':
 			if r.started {
-				r.b.WriteByte('\n')
-				r.nl++
-				r.tab = false
+				r.pendNewline()
 			}
 		case r.pre > 0 && (c == ' ' || c == '\t'):
 			// Preformatted: indentation is content, except before anything
 			// has been written at all.
 			if r.started {
+				r.flush()
 				r.b.WriteRune(c)
-				r.nl, r.tab = 0, false
+				r.tab = false
 			}
 		case unicode.IsSpace(c) || unicode.IsControl(c):
 			if r.started {
@@ -186,8 +238,9 @@ func (r *textRenderer) text(s string) {
 			if c == utf8.RuneError {
 				c = '�'
 			}
+			r.flush()
 			r.b.WriteRune(c)
-			r.started, r.nl, r.tab = true, 0, false
+			r.started, r.tab = true, false
 		}
 	}
 }

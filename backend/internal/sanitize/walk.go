@@ -241,6 +241,14 @@ func (w *walker) imageSrc(val string, tiny bool) (string, bool) {
 			w.inlined += len(d)
 			return d, true
 		}
+		if !w.view {
+			// A quoted picture that was copied into the attachment store:
+			// the draft references the copy.
+			if to, ok := w.in.RewriteCIDs[id]; ok {
+				w.cids[to] = true
+				return "cid:" + to, true
+			}
+		}
 		target, ok := w.in.KnownCIDs[id]
 		if !ok {
 			w.blocked.DangerousURLs++
