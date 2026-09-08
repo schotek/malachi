@@ -108,6 +108,42 @@ func (s *attachmentService) Import(ctx context.Context, p api.AttachmentImportPa
 	return &api.AttachmentImportResult{Attachment: toAPIAttachment(a)}, nil
 }
 
+// Get reads an attachment back: what an editor shows for a cid: reference
+// the backend minted (a picture draft.create copied out of the quoted
+// original). The row is looked up before the file, so an id that is not
+// the account's never reaches the file system. Over
+// api.MaxAttachmentDataBytes is attachmentTooBig, as with message.part.
+func (s *attachmentService) Get(ctx context.Context, p api.AttachmentGetParams) (*api.AttachmentGetResult, error) {
+	if p.AccountID == "" || p.AttachmentID == "" {
+		return nil, api.NewError(api.CodeInvalidArgument, "accountId and attachmentId are required")
+	}
+	f, a, err := s.b.store.OpenAttachment(ctx, string(p.AccountID), p.AttachmentID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, api.NewError(api.CodeAttachmentNotFound, "unknown attachment")
+	case err != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	defer f.Close()
+	if a.Size > api.MaxAttachmentDataBytes {
+		return nil, tooBig(api.MaxAttachmentDataBytes, a.Size)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, api.MaxAttachmentDataBytes+1))
+	if err != nil {
+		return nil, api.NewError(api.CodeStorageError, "read attachment: %v", err)
+	}
+	if int64(len(data)) > api.MaxAttachmentDataBytes {
+		return nil, tooBig(api.MaxAttachmentDataBytes, int64(len(data)))
+	}
+	return &api.AttachmentGetResult{
+		AttachmentID: a.ID,
+		Filename:     a.Filename,
+		ContentType:  a.ContentType,
+		Size:         int64(len(data)),
+		Data:         data,
+	}, nil
+}
+
 // Remove deletes an attachment; unknown ids are ignored. If it was bound to
 // a draft it simply disappears from that draft.
 func (s *attachmentService) Remove(ctx context.Context, p api.AttachmentRemoveParams) (*api.AttachmentRemoveResult, error) {

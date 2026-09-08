@@ -6,6 +6,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,5 +150,48 @@ func TestDraftAttachmentTotalLimit(t *testing.T) {
 	_, err := b.Drafts().Save(ctx, api.DraftSaveParams{Draft: api.Draft{AccountID: "acc", Attachments: ids}})
 	if errCode(t, err) != api.CodeAttachmentTooBig {
 		t.Fatalf("sum over limit: %v", err)
+	}
+}
+
+func TestAttachmentGet(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)
+	imp, err := b.Attachments().Import(ctx, api.AttachmentImportParams{AccountID: "acc", Path: writeTestFile(t, "pic.png", png), Inline: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.Attachments().Get(ctx, api.AttachmentGetParams{AccountID: "acc", AttachmentID: imp.Attachment.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AttachmentID != imp.Attachment.ID || got.Filename != "pic.png" || got.ContentType != "image/png" || got.Size != int64(len(png)) || !bytes.Equal(got.Data, png) {
+		t.Errorf("get = %+v", got)
+	}
+
+	for name, p := range map[string]api.AttachmentGetParams{
+		"other account": {AccountID: "other", AttachmentID: imp.Attachment.ID},
+		"unknown":       {AccountID: "acc", AttachmentID: "att_nope"},
+		"traversal":     {AccountID: "acc", AttachmentID: "../store.db"},
+	} {
+		if _, err := b.Attachments().Get(ctx, p); errCode(t, err) != api.CodeAttachmentNotFound {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	if _, err := b.Attachments().Get(ctx, api.AttachmentGetParams{AccountID: "acc"}); errCode(t, err) != api.CodeInvalidArgument {
+		t.Errorf("no id: %v", err)
+	}
+
+	// Over the payload cap: the file is not read.
+	big := make([]byte, api.MaxAttachmentDataBytes+1)
+	copy(big, png)
+	imp, err = b.Attachments().Import(ctx, api.AttachmentImportParams{AccountID: "acc", Path: writeTestFile(t, "big.png", big)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.Attachments().Get(ctx, api.AttachmentGetParams{AccountID: "acc", AttachmentID: imp.Attachment.ID})
+	var apiErr *api.Error
+	if errCode(t, err) != api.CodeAttachmentTooBig || !errors.As(err, &apiErr) || apiErr.Data == nil {
+		t.Errorf("over the cap: %v", err)
 	}
 }

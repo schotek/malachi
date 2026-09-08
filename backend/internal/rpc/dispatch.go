@@ -75,6 +75,7 @@ func (s *Server) registerBackend(b api.Backend) {
 
 	s.handlers[api.MethodAttachmentImport] = wrap(att.Import)
 	s.handlers[api.MethodAttachmentRemove] = wrap(att.Remove)
+	s.handlers[api.MethodAttachmentGet] = wrap(att.Get)
 
 	s.handlers[api.MethodSearchQuery] = wrap(srch.Query)
 

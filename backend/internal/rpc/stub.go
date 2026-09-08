@@ -164,6 +164,9 @@ func (stubAttachments) Import(context.Context, api.AttachmentImportParams) (*api
 func (stubAttachments) Remove(context.Context, api.AttachmentRemoveParams) (*api.AttachmentRemoveResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAttachments) Get(context.Context, api.AttachmentGetParams) (*api.AttachmentGetResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubSearch struct{}
 

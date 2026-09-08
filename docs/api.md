@@ -994,21 +994,79 @@ from the sanitised HTML.
 
 #### `draft.create`
 Returns an **unsaved** template (`id` empty, `version` 0) with everything a
-compose window needs pre-filled by the backend: for `reply`/`replyAll` the
-recipients computed from `Reply-To`/`From`/`To`/`CC` minus the account's
-own addresses, a `Re:` subject, the original quoted in both `htmlBody`
-(sanitised, `<blockquote type="cite">`) and `textBody` (`> ` prefixed) and
-`inReplyTo` set; for `forward` a `Fwd:` subject, the quoted body,
-`forwarding` set and the original's attachments imported (unbound, swept
-after 24 h if never saved); for `new` with `mailto` the parsed URI. Nothing
-is persisted. Reply and forward logic lives here so that every UI behaves
-the same.
+compose window needs pre-filled by the backend. Reply and forward logic
+lives here so that every UI behaves the same; the one thing the client
+supplies is the line above the quote, because it has a language and the
+backend has none.
 
 - params: `{ "accountId", "mode": "new" | "reply" | "replyAll" | "forward",
-             "messageId" (opt; required unless mode is new), "mailto": "mailto:…" (opt, new only) }`
-- result: `{ "draft": Draft }`
-- errors: invalidArgument, messageNotFound, sanitizeFailed, notImplemented
-  (until the message store exists)
+             "messageId" (opt; required unless mode is new),
+             "mailto": "mailto:…" (opt, new only),
+             "attribution": "On …, X wrote:" (opt; reply and forward) }`
+- result: `{ "draft": Draft, "quoted": "html" | "text" | "none",
+             "blocked": BlockedContent, "skipped": [Attachment] (opt) }`
+- errors: invalidArgument (mode, a missing `messageId`, `mailto` or
+  `messageId` with the wrong mode, an attribution over its caps or with
+  control characters), accountNotFound, messageNotFound, storageError
+  (a copy of a part could not be stored; nothing is left behind)
+
+Per mode:
+
+- `reply`: `to` is the original's `Reply-To`, else its `From`, without the
+  account's own addresses; a message of one's own is answered to its `To`
+  (again without oneself), a note to oneself to oneself. `subject` is
+  `Re:` + the original's subject stripped of every `Re:`/`Fwd:`/`Fw:`/
+  `AW:`/`WG:` marker (so the prefix never stacks; the marker is never
+  translated, other clients only recognise the English form). `inReplyTo`
+  is set; the threading headers are resolved at send time.
+- `replyAll`: as `reply`, plus the original's `To` and `CC` as `cc`,
+  without oneself and without whoever is already in `to`. Recipients are
+  de-duplicated case-insensitively; an address a draft could not carry
+  (unparsable) is dropped, a display name that would break a header is
+  dropped from its address, so the first `draft.save` cannot fail on them.
+- `forward`: no recipients, `Fwd:` + the stripped subject, `forwarding`
+  set, and every part of the original that is not its body imported into
+  the attachment store (see below).
+- `new`: an empty draft, or the `mailto:` URI parsed — `to` (the path and
+  `to=`), `cc`, `bcc`, `subject`, `body`; nothing else is interpreted,
+  unusable addresses are dropped, the body is escaped into `htmlBody`.
+
+The quote. With `quoted: "html"` the original's HTML was sanitised **in
+compose mode** — exactly what `draft.save` will do to it — and placed
+under an empty paragraph for the answer: a reply as
+`<p><br/></p><div>attribution</div><blockquote type="cite">…</blockquote>`,
+a forward as `<p><br/></p><div>attribution</div>…`. `textBody` is the
+text rendering of that: quoted lines carry `> `, nested quotes `> > `.
+Because the result is the sanitiser's own output, sending it back
+unchanged in `draft.save` stores it byte for byte and reports nothing
+`blocked`. Compose mode removes from the original what it removes from
+any draft — remote images (the `block` policy, no override), scripts,
+forms, event handlers, `<style>` blocks and `data:` images — and the
+result's `blocked` counts the removals the way `draft.save` would, so the
+client can say so once. The original's inline pictures
+(`cid:` references to its own parts) are **copied into the attachment
+store** as inline attachments under fresh `contentId`s and the quote
+rewritten to them; they are listed in `draft.attachments`, unbound until
+the client sends their ids back in `draft.save` (the orphan sweep of §4.10
+applies), and readable through `attachment.get` for display. A reference
+to a part that is not a picture (or an SVG) is dropped from a reply and
+becomes a regular attachment of a forward. A forward imports every other
+part as well, `message/rfc822` as `.eml`. Caps: one part ≤ 16 MiB, 25 MiB
+in total, 32 pictures, 100 attachments; a part over a cap, unreadable, or
+otherwise not taken is listed in `skipped` with the metadata `message.get`
+reports for it, never an error.
+
+`attribution` is plain text, lines separated by LF (CRLF accepted), at
+most `api.MaxDraftAttributionBytes` (2048) and
+`api.MaxDraftAttributionLines` (16), no control characters other than
+tab; the backend escapes it. Empty means no line above the quote.
+
+Degradation, never a failure: a message whose HTML the sanitiser refuses
+(over its caps) or whose raw file is gone is quoted from its stored text
+inside the same cite block (`quoted: "text"`); should the sanitiser refuse
+even that, the draft is plain text with `> ` lines and no `htmlBody`
+(still `"text"`). A body that was never downloaded, and mode `new`, quote
+nothing (`"none"`). `sanitizeFailed` is never returned by this call.
 
 ### 4.6 search
 
@@ -1145,6 +1203,20 @@ as `<img src="cid:<contentId>">`.
 - result: `{}` (removing an unknown id is not an error). If the attachment
   was bound to a draft it disappears from that draft; the draft's `version`
   is not changed.
+
+#### `attachment.get`
+- params: `{ "accountId", "attachmentId" }`
+- result: `{ "attachmentId", "filename", "contentType", "size", "data": base64 }`
+- errors: invalidArgument, attachmentNotFound (unknown id, or another
+  account's), attachmentTooBig (over 16 MiB, `data` = `{ "limit", "size" }`),
+  storageError
+
+Reads an attachment of the store back: what a compose editor shows for a
+`cid:` reference it did not mint itself — the pictures `draft.create`
+copied out of a quoted original. The row is looked up before the file, so
+an id that is not the account's never reaches the file system. The
+payload cap is the one of `message.part`; the UI never needs more, as
+only pictures are shown this way.
 
 ### 4.11 contact
 
@@ -1353,3 +1425,17 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   cursors are bound to `thread.list`. IMAP fetches `References` with the
   envelope, so a conversation is known before the body is. Only
   `folder.subscribe` and `search.query` remain `notImplemented`.
+- **1** (2026-09-08, compatible addition, reply and forward quoting):
+  `draft.create` implemented — recipients, the `Re:`/`Fwd:` subject, and
+  the original quoted as its sanitised HTML (compose mode, so the first
+  `draft.save` is the identity) with its inline pictures copied into the
+  attachment store under new `contentId`s; new params field
+  `attribution` (the client's line above the quote, plain text) with
+  limits `api.MaxDraftAttributionBytes` / `api.MaxDraftAttributionLines`;
+  the result gained `quoted` (`html` | `text` | `none`), `blocked` and
+  `skipped`, and no longer returns `sanitizeFailed`. New `attachment.get`
+  for reading a stored attachment back. The text alternative the backend
+  derives from HTML (`draft.save`, `message.body`) now renders
+  `<blockquote>` with `> ` on every line; the HTML is unchanged, so the
+  sanitiser version stays `"1"`. Only `folder.subscribe` and
+  `search.query` remain `notImplemented`.

@@ -65,6 +65,7 @@ type DraftService interface {
 type AttachmentService interface {
 	Import(ctx context.Context, p AttachmentImportParams) (*AttachmentImportResult, error)
 	Remove(ctx context.Context, p AttachmentRemoveParams) (*AttachmentRemoveResult, error)
+	Get(ctx context.Context, p AttachmentGetParams) (*AttachmentGetResult, error)
 }
 
 type SearchService interface {

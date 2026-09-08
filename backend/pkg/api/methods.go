@@ -50,6 +50,7 @@ const (
 	// Attachments (compose-side store).
 	MethodAttachmentImport = "attachment.import"
 	MethodAttachmentRemove = "attachment.remove"
+	MethodAttachmentGet    = "attachment.get"
 
 	// Search.
 	MethodSearchQuery = "search.query"
@@ -93,7 +94,7 @@ var AllMethods = []string{
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,
 	MethodDraftSave, MethodDraftList, MethodDraftDelete, MethodDraftCreate,
-	MethodAttachmentImport, MethodAttachmentRemove,
+	MethodAttachmentImport, MethodAttachmentRemove, MethodAttachmentGet,
 	MethodSearchQuery,
 	MethodSyncStatus, MethodSyncTrigger,
 	MethodConfigGet, MethodConfigSet,

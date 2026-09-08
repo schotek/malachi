@@ -886,22 +886,53 @@ const (
 	ComposeForward  ComposeMode = "forward"
 )
 
+// Limits of draft.create's attribution (docs/api.md §4.5).
+const (
+	MaxDraftAttributionBytes = 2048
+	MaxDraftAttributionLines = 16
+)
+
 // DraftCreateParams asks the backend for an unsaved template: recipients
 // computed from the original (Reply-To/From/To/CC minus the account's own
 // addresses), a Re:/Fwd: subject, the quoted sanitised body in both forms,
-// forwarded attachments imported into the store, or a parsed mailto: URI.
-// Reply and forward logic lives here, not in the UI (CLAUDE.md rule 1).
+// the original's inline pictures (and, forwarding, its attachments)
+// imported into the store, or a parsed mailto: URI. Reply and forward
+// logic lives here, not in the UI (CLAUDE.md rule 1).
 type DraftCreateParams struct {
 	AccountID AccountID   `json:"accountId"`
 	Mode      ComposeMode `json:"mode"`
 	MessageID MessageID   `json:"messageId,omitempty"` // required unless Mode is ComposeNew
 	Mailto    string      `json:"mailto,omitempty"`    // ComposeNew only
+	// Attribution is the line the client wants above the quote ("On <date>,
+	// <sender> wrote:", or the header block of a forwarded message), in the
+	// user's language: the backend has none. Plain text, lines separated by
+	// LF, at most MaxDraftAttributionBytes and MaxDraftAttributionLines; the
+	// backend escapes it. Empty = no line. Ignored for ComposeNew.
+	Attribution string `json:"attribution,omitempty"`
 }
 
+// QuoteForm says how much of the original a draft.create result quotes.
+type QuoteForm string
+
+const (
+	QuoteHTML QuoteForm = "html" // the sanitised HTML of the original, with its pictures
+	QuoteText QuoteForm = "text" // the original's text (the message has no HTML, or it could not be used)
+	QuoteNone QuoteForm = "none" // nothing: the body is not downloaded, or Mode is ComposeNew
+)
+
 // DraftCreateResult.Draft has an empty ID and version 0; nothing is
-// persisted until the first draft.save.
+// persisted until the first draft.save. Draft.Attachments lists what was
+// imported for it (unbound until then; the client sends the ids back in
+// draft.save).
 type DraftCreateResult struct {
-	Draft Draft `json:"draft"`
+	Draft  Draft     `json:"draft"`
+	Quoted QuoteForm `json:"quoted"`
+	// Blocked counts what the sanitiser removed from the quoted original
+	// (remote images above all); empty unless Quoted is QuoteHTML.
+	Blocked BlockedContent `json:"blocked"`
+	// Skipped lists the parts of the original that were not imported
+	// (over a cap, unreadable, or of a kind the store does not take).
+	Skipped []Attachment `json:"skipped,omitempty"`
 }
 
 // MessageSendParams queues a saved draft for delivery. Delivery is
@@ -954,6 +985,24 @@ type AttachmentRemoveParams struct {
 }
 
 type AttachmentRemoveResult struct{}
+
+// AttachmentGetParams reads an attachment of the store back: what an
+// editor shows for a "cid:" reference the backend minted (a quoted
+// picture draft.create imported).
+type AttachmentGetParams struct {
+	AccountID    AccountID `json:"accountId"`
+	AttachmentID string    `json:"attachmentId"`
+}
+
+// AttachmentGetResult carries the whole file; one over
+// MaxAttachmentDataBytes is attachmentTooBig, as with message.part.
+type AttachmentGetResult struct {
+	AttachmentID string `json:"attachmentId"`
+	Filename     string `json:"filename"`
+	ContentType  string `json:"contentType"`
+	Size         int64  `json:"size"`
+	Data         []byte `json:"data"` // base64 on the wire
+}
 
 // ---------------------------------------------------------------------------
 // Search
