@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -258,5 +259,60 @@ func TestResetFolderAndRecount(t *testing.T) {
 	}
 	if err := s.SetFolderSyncState(ctx, "f_nope", FolderSyncState{}); !errors.Is(err, ErrNotFound) {
 		t.Errorf("sync state unknown: %v", err)
+	}
+}
+
+func TestSortSyncOrder(t *testing.T) {
+	// Deliberately adverse input: alphabetically the inbox is last, the
+	// role folders are scattered and children precede their parents.
+	batch := []Folder{
+		{Mailbox: "Trash/Old", ParentMailbox: "Trash", Path: "Trash/Old"},
+		{Mailbox: "Alpha", Path: "Alpha"},
+		{Mailbox: "Trash", Path: "Trash", Role: api.RoleTrash},
+		{Mailbox: "zeta", Path: "zeta"},
+		{Mailbox: "Junk", Path: "Junk", Role: api.RoleJunk},
+		{Mailbox: "INBOX/Work", ParentMailbox: "INBOX", Path: "Inbox/Work"},
+		{Mailbox: "Archive", Path: "Archive", Role: api.RoleArchive},
+		{Mailbox: "Beta", Path: "Beta"},
+		{Mailbox: "Sent", Path: "Sent", Role: api.RoleSent},
+		{Mailbox: "Trash/Old/Deeper", ParentMailbox: "Trash/Old", Path: "Trash/Old/Deeper"},
+		{Mailbox: "Drafts", Path: "Drafts", Role: api.RoleDrafts},
+		{Mailbox: "INBOX", Path: "Inbox", Role: api.RoleInbox},
+	}
+	SortSyncOrder(batch)
+
+	want := []string{
+		"INBOX", "Drafts", "Sent", // the inbox first, then what the user writes
+		"Alpha", "Beta", "INBOX/Work", "zeta", // ordinary, by lower-cased path
+		"Junk", "Archive", // bulky and rarely read
+		"Trash", "Trash/Old", "Trash/Old/Deeper", // the whole subtree last
+	}
+	got := make([]string, len(batch))
+	for i, f := range batch {
+		got[i] = f.Mailbox
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("order =\n  %v\nwant\n  %v", got, want)
+	}
+}
+
+func TestSortSyncOrderSurvivesParentCycles(t *testing.T) {
+	// ParentMailbox is server data; a cycle or a self-parent must not hang.
+	batch := []Folder{
+		{Mailbox: "self", ParentMailbox: "self", Path: "self"},
+		{Mailbox: "a", ParentMailbox: "b", Path: "a"},
+		{Mailbox: "b", ParentMailbox: "a", Path: "b"},
+		{Mailbox: "orphan", ParentMailbox: "gone", Path: "orphan"},
+		{Mailbox: "INBOX", Path: "Inbox", Role: api.RoleInbox},
+	}
+	done := make(chan struct{})
+	go func() { SortSyncOrder(batch); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("SortSyncOrder did not terminate")
+	}
+	if batch[0].Mailbox != "INBOX" {
+		t.Fatalf("inbox not first: %+v", batch)
 	}
 }

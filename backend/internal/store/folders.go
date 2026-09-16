@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -79,6 +80,71 @@ func optStamp(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(timeLayout)
+}
+
+// syncRank orders one role for SortSyncOrder. ordinaryRank is the rank of
+// a folder with no role; anything above it is visited last.
+const ordinaryRank = 3
+
+func syncRank(r api.FolderRole) int {
+	switch r {
+	case api.RoleInbox:
+		return 0
+	case api.RoleDrafts:
+		return 1
+	case api.RoleSent:
+		return 2
+	case api.RoleJunk:
+		return 4
+	case api.RoleArchive, api.RoleAll:
+		// All Mail holds what the other folders hold; with a \Archive
+		// folder of its own it keeps the role and still belongs last.
+		return 5
+	case api.RoleTrash:
+		return 6
+	default:
+		return ordinaryRank
+	}
+}
+
+// SortSyncOrder orders a folder batch the way a sync engine visits it: the
+// inbox first, then drafts and sent, then ordinary folders, and the bulky
+// or rarely read ones (junk, archive, trash) last. A folder under a demoted
+// one inherits its rank, so a whole subtree moves to the tail; a child of
+// the inbox stays ordinary rather than being promoted. Ties break on the
+// lower-cased path. This is the order UpsertFolders stores as Position;
+// the display order is folder.list's own (docs/api.md §4.2).
+func SortSyncOrder(folders []Folder) {
+	parent := make(map[string]string, len(folders))
+	rank := make(map[string]int, len(folders))
+	for _, f := range folders {
+		parent[f.Mailbox] = f.ParentMailbox
+		rank[f.Mailbox] = syncRank(f.Role)
+	}
+	eff := make(map[string]int, len(folders))
+	for _, f := range folders {
+		r := rank[f.Mailbox]
+		// ParentMailbox is server data: bound the walk and remember where
+		// it has been, so a cycle cannot hang the daemon.
+		seen := map[string]bool{f.Mailbox: true}
+		for p := f.ParentMailbox; p != "" && !seen[p]; p = parent[p] {
+			seen[p] = true
+			if pr, ok := rank[p]; ok && pr > ordinaryRank {
+				r = max(r, pr)
+			}
+		}
+		eff[f.Mailbox] = r
+	}
+	sort.SliceStable(folders, func(i, j int) bool {
+		a, b := folders[i], folders[j]
+		if eff[a.Mailbox] != eff[b.Mailbox] {
+			return eff[a.Mailbox] < eff[b.Mailbox]
+		}
+		if pa, pb := strings.ToLower(a.Path), strings.ToLower(b.Path); pa != pb {
+			return pa < pb
+		}
+		return a.Path < b.Path
+	})
 }
 
 // UpsertFolders replaces the folder list of an account with folders, in

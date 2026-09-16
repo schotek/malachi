@@ -55,7 +55,7 @@ func resolveRoles(ctx context.Context, c *Client) (map[string]api.FolderRole, er
 
 // listFolders walks the whole hierarchy (top level, then child folders of
 // every folder that has some) and returns the store's folder batch in
-// traversal order. Mailbox is the Graph id, Path the "/"-joined display
+// store.SortSyncOrder. Mailbox is the Graph id, Path the "/"-joined display
 // names, ParentMailbox the parent's id when the parent is in the batch.
 // Hidden folders are skipped.
 func listFolders(ctx context.Context, c *Client, roles map[string]api.FolderRole) ([]store.Folder, error) {
@@ -103,6 +103,9 @@ func listFolders(ctx context.Context, c *Client, roles map[string]api.FolderRole
 	if err := walk("", "me/mailFolders?$top=250&$select="+folderSelect); err != nil {
 		return nil, err
 	}
+	// After the walk: ParentMailbox depends on traversal order, the batch
+	// order does not (UpsertFolders resolves parents across the batch).
+	store.SortSyncOrder(out)
 	return out, nil
 }
 

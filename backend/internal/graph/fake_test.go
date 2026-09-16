@@ -64,6 +64,10 @@ type removal struct {
 func newFakeGraph(t *testing.T) *fakeGraph {
 	f := &fakeGraph{t: t, token: "tok-1", me: "me@contoso.invalid", pageSize: 2, messages: map[string]*fakeMsg{}, failValue: map[string]int{}}
 	f.folders = []*fakeFolder{
+		// Listed before the inbox on purpose: the service answers in this
+		// order and the batch must not come out inbox-first by accident.
+		{id: "F-ARCH", name: "Archive", parent: "ROOT", wellKnown: "archive"},
+		{id: "F-ALPHA", name: "Alpha", parent: "ROOT"},
 		{id: "F-INBOX", name: "Inbox", parent: "ROOT", wellKnown: "inbox"},
 		{id: "F-SENT", name: "Sent Items", parent: "ROOT", wellKnown: "sentitems"},
 		{id: "F-DRAFTS", name: "Drafts", parent: "ROOT", wellKnown: "drafts"},
@@ -71,6 +75,7 @@ func newFakeGraph(t *testing.T) *fakeGraph {
 		{id: "F-JUNK", name: "Junk Email", parent: "ROOT", wellKnown: "junkemail"},
 		{id: "F-PROJ", name: "Projects", parent: "ROOT"},
 		{id: "F-PROJ-A", name: "Alpha/Beta", parent: "F-PROJ"},
+		{id: "F-TRASH-OLD", name: "Old", parent: "F-TRASH"},
 	}
 	f.srv = httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(f.srv.Close)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -754,4 +755,35 @@ func code(t *testing.T, err error) api.ErrorCode {
 		t.Fatalf("expected *api.Error, got %T: %v", err, err)
 	}
 	return e.Code
+}
+
+// TestFolderSyncOrder pins the order a pass visits the folders in: the
+// service lists Archive and Alpha before the inbox, and the stored
+// positions must still start at the inbox and end with the trash subtree.
+func TestFolderSyncOrder(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	folders, err := h.st.ListFolders(context.Background(), h.acc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, f := range folders {
+		if f.Role == api.RoleOutbox {
+			continue // local pseudo-folder, never synchronised
+		}
+		got = append(got, f.Mailbox)
+	}
+	want := []string{
+		"F-INBOX", "F-DRAFTS", "F-SENT",
+		"F-ALPHA", "F-PROJ", "F-PROJ-A",
+		"F-JUNK", "F-ARCH",
+		"F-TRASH", "F-TRASH-OLD",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("sync order =\n  %v\nwant\n  %v", got, want)
+	}
 }

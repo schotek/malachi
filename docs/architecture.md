@@ -187,7 +187,11 @@ account; `internal/core` owns its lifecycle:
   without UIDPLUS) assigns the new one. Flags are server-wins after the
   queued change has been pushed.
 - **Cycle.** connect → `LIST` (special-use, `STATUS`) → push ops → per
-  changed folder: UIDVALIDITY check (reset on change), UID diff against the
+  changed folder, in `store.SortSyncOrder` (the inbox first, then drafts
+  and sent, then ordinary folders, and junk, archive and trash with their
+  subtrees last, so the folder the user is looking at is never queued
+  behind the bulky ones; the display order is `folder.list`'s own):
+  UIDVALIDITY check (reset on change), UID diff against the
   window, envelopes and `BODYSTRUCTURE` first, then bodies newest-first
   (raw file → `internal/mime` → text body; over the raw cap → `tooBig`,
   unparsable → `failed`), server flags for the rest → `IDLE` on INBOX where
@@ -221,7 +225,8 @@ and the notifications above are the same. What differs:
   which survives a move; folders by the Graph folder id (`folders.mailbox`).
   Roles come from the well-known folder names (inbox, sentitems, drafts,
   deleteditems, junkemail, archive).
-- **Cycle.** resolve roles → list the folder hierarchy → push ops (`PATCH`
+- **Cycle.** resolve roles → list the folder hierarchy (ordered by
+  `store.SortSyncOrder`, as above) → push ops (`PATCH`
   read/flag, `POST …/move`, `POST …/permanentDelete` with `DELETE` as the
   fallback) → per folder a delta query (`mailFolders/{id}/messages/delta`,
   cursor in `folders.delta_link`, the first enumeration bounded by

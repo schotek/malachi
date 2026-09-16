@@ -5,7 +5,6 @@ package imap
 
 import (
 	"context"
-	"sort"
 	"strings"
 
 	"github.com/emersion/go-imap/v2"
@@ -27,7 +26,7 @@ type discovered struct {
 // discoverFolders lists every mailbox of the account and maps it to the
 // store's folder model: hierarchy from the delimiter (missing parents get a
 // non-selectable placeholder), roles from SPECIAL-USE attributes or name
-// heuristics, INBOX first and the rest by path. Subscription is honoured
+// heuristics, and the batch in store.SortSyncOrder. Subscription is honoured
 // only when LIST-EXTENDED reports it; otherwise everything counts as
 // subscribed (there is no LSUB in the client).
 func discoverFolders(ctx context.Context, sess *session) (discovered, error) {
@@ -120,20 +119,11 @@ func discoverFolders(ctx context.Context, sess *session) (discovered, error) {
 		gmailArchive(folders)
 	}
 
-	sort.SliceStable(folders, func(i, j int) bool {
-		a, b := folders[i], folders[j]
-		if (a.Role == api.RoleInbox) != (b.Role == api.RoleInbox) {
-			return a.Role == api.RoleInbox
-		}
-		if la, lb := strings.ToLower(a.Path), strings.ToLower(b.Path); la != lb {
-			return la < lb
-		}
-		return a.Path < b.Path
-	})
 	d.folders = make([]store.Folder, len(folders))
 	for i, f := range folders {
 		d.folders[i] = *f
 	}
+	store.SortSyncOrder(d.folders)
 	return d, nil
 }
 
