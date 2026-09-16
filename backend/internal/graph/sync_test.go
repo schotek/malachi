@@ -879,3 +879,130 @@ func TestStaleFolderReconciles(t *testing.T) {
 		t.Fatalf("stale folder not reconciled: enumerations = %d, want more than %d", n, before)
 	}
 }
+
+// TestUnchangedFoldersSkipped keeps a quiet mailbox from costing one delta
+// request per folder per pass: a folder whose listed item counts match the
+// baseline the last pass committed is left alone.
+func TestUnchangedFoldersSkipped(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	h.fake.add("F-PROJ", "Quiet", "bob@example.test", daysAgo(2), "q")
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	const projDelta = "/me/mailFolders/F-PROJ/messages/delta"
+	const inboxDelta = "/me/mailFolders/F-INBOX/messages/delta"
+	proj, inbox := h.fake.count("GET", projDelta), h.fake.count("GET", inboxDelta)
+
+	// Nothing changed anywhere: only the inbox is asked again.
+	h.pass("", false)
+	if n := h.fake.count("GET", projDelta); n != proj {
+		t.Errorf("unchanged folder queried %d times, want %d", n, proj)
+	}
+	if n := h.fake.count("GET", inboxDelta); n <= inbox {
+		t.Errorf("inbox not queried: %d, want more than %d", n, inbox)
+	}
+	inbox = h.fake.count("GET", inboxDelta)
+
+	// A message lands in the quiet folder: its counts move and it is back.
+	arrived := h.fake.add("F-PROJ", "Awake", "bob@example.test", time.Now(), "a")
+	h.pass("", false)
+	if n := h.fake.count("GET", projDelta); n <= proj {
+		t.Fatalf("changed folder skipped: %d queries, want more than %d", n, proj)
+	}
+	if _, ok := h.byRemote(arrived); !ok {
+		t.Fatal("message in the changed folder missing")
+	}
+	proj = h.fake.count("GET", projDelta)
+
+	// A local move into the folder: the listing was taken before the move
+	// reached the service, so its counts must not be believed.
+	m, ok := h.byRemote(arrived)
+	if !ok {
+		t.Fatal("message gone")
+	}
+	target := h.folder("F-ALPHA")
+	if err := h.st.MoveMessages(context.Background(), h.acc.ID, []string{m.ID}, target.ID); err != nil {
+		t.Fatal(err)
+	}
+	alpha := h.fake.count("GET", "/me/mailFolders/F-ALPHA/messages/delta")
+	h.pass("", false)
+	if n := h.fake.count("GET", "/me/mailFolders/F-ALPHA/messages/delta"); n <= alpha {
+		t.Errorf("move target skipped: %d queries, want more than %d", n, alpha)
+	}
+	if n := h.fake.count("GET", projDelta); n <= proj {
+		t.Errorf("move source skipped: %d queries, want more than %d", n, proj)
+	}
+}
+
+// TestFolderOwingBodiesNotSkipped: a pass interrupted between the
+// envelopes and the bodies must resume even though the counts agree.
+func TestFolderOwingBodiesNotSkipped(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	h.fake.add("F-PROJ", "Quiet", "bob@example.test", daysAgo(2), "q")
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	const projDelta = "/me/mailFolders/F-PROJ/messages/delta"
+	proj := h.fake.count("GET", projDelta)
+	h.pass("", false)
+	if n := h.fake.count("GET", projDelta); n != proj {
+		t.Fatalf("quiet folder not skipped to begin with: %d, want %d", n, proj)
+	}
+
+	// A row whose body never arrived, as an interrupted pass leaves behind.
+	folder := h.folder("F-PROJ")
+	err := h.st.UpsertMessages(context.Background(), []*store.Message{{
+		AccountID: h.acc.ID, FolderID: folder.ID, RemoteID: "orphan-1", Subject: "Owed",
+		InternalDate: daysAgo(1), Flags: []api.Flag{}, BodyState: store.BodyNone, Size: 10,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.pass("", false)
+	if n := h.fake.count("GET", projDelta); n <= proj {
+		t.Fatalf("folder owing a body was skipped: %d queries, want more than %d", n, proj)
+	}
+}
+
+// TestRolesNotResolvedAgainAfterRestart: the six well-known folder lookups
+// are six serial round trips before the first message can be looked at, and
+// the answers are already in the store after the first pass.
+func TestRolesNotResolvedAgainAfterRestart(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	roleRequests := func() int {
+		n := 0
+		for _, wk := range wellKnown {
+			n += h.fake.count("GET", "/me/mailFolders/"+wk.name)
+		}
+		return n
+	}
+	first := roleRequests()
+	if first == 0 {
+		t.Fatal("roles were never resolved on the first pass")
+	}
+
+	h.stop()
+	h.newSyncer()
+	restart := time.Now()
+	h.start()
+	h.waitIdle(restart)
+
+	if n := roleRequests(); n != first {
+		t.Errorf("roles resolved again after a restart: %d requests, want %d", n, first)
+	}
+	if h.folder("inbox").Mailbox != "F-INBOX" || h.folder("trash").Mailbox != "F-TRASH" {
+		t.Error("roles lost when they were taken from the store")
+	}
+
+	// A full pass is the way a re-assigned well-known folder is picked up.
+	h.pass("", true)
+	if n := roleRequests(); n <= first {
+		t.Errorf("full pass did not re-resolve the roles: %d requests, want more than %d", n, first)
+	}
+}

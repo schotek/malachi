@@ -118,6 +118,9 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 		}
 		tombstones = append(tombstones, old...)
 	}
+	// The counts come from the listing the caller put on f: committing them
+	// here, and only here, is what makes them a baseline a later pass can
+	// compare against (skippable).
 	if err := s.deps.Store.SetFolderSyncState(ctx, f.ID, store.FolderSyncState{
 		DeltaLink: deltaLink, ServerMessages: f.ServerMessages, ServerUnseen: f.ServerUnseen, LastSyncAt: s.now(),
 	}); err != nil && !errors.Is(err, store.ErrNotFound) {
@@ -135,6 +138,33 @@ func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time
 	}
 	progress(1)
 	return tombstones, nil
+}
+
+// skippable reports a folder the pass can leave alone: the server's item
+// counts are still what the last successful pass recorded, the folder has
+// a usable cursor, and it owes no bodies. listed is the folder as this
+// pass's listing saw it.
+//
+// The inbox is never skipped: its counts can cancel out (one message read,
+// one arrived) and it is the folder the user is looking at. The same hole
+// exists for the others — Graph's mailFolder carries no monotonic counter
+// to close it with, the way IMAP's UIDNEXT does — which is what
+// reconcileAfter is the backstop for.
+func (s *Syncer) skippable(ctx context.Context, f, listed store.Folder) (bool, error) {
+	if f.Role == api.RoleInbox || f.DeltaLink == "" || f.LastSyncAt.IsZero() {
+		return false, nil
+	}
+	if listed.ServerMessages != f.ServerMessages || listed.ServerUnseen != f.ServerUnseen {
+		return false, nil
+	}
+	// A pass interrupted between the envelopes and the bodies must resume,
+	// however quiet the folder looks. Terminal states (failed, tooBig) are
+	// not listed, so this cannot keep the folder awake forever.
+	owed, err := s.deps.Store.ListUnfetched(ctx, f.ID, 1)
+	if err != nil {
+		return false, storageError(err)
+	}
+	return len(owed) == 0, nil
 }
 
 // initialDeltaURL is the first request of a full enumeration, bounded by

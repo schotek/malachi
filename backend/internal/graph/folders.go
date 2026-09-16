@@ -26,6 +26,30 @@ var wellKnown = []struct {
 	{"archive", api.RoleArchive},
 }
 
+// storedRoles rebuilds the role map from the folders a previous pass
+// stored: folders.mailbox is the Graph id and folders.role the role
+// resolveRoles assigned it. nil when the account has no folders yet (the
+// caller then asks the service), and a full pass re-resolves anyway, which
+// is what picks up a mailbox whose well-known folders were re-assigned.
+func (s *Syncer) storedRoles(ctx context.Context) (map[string]api.FolderRole, error) {
+	folders, err := s.deps.Store.ListFolders(ctx, s.account.ID)
+	if err != nil {
+		return nil, storageError(err)
+	}
+	roles := make(map[string]api.FolderRole, len(wellKnown))
+	for _, f := range folders {
+		// The outbox is local (no Graph id) and has no well-known folder.
+		if f.Mailbox == "" || f.Role == "" || f.Role == api.RoleNone || f.Role == api.RoleOutbox {
+			continue
+		}
+		roles[f.Mailbox] = f.Role
+	}
+	if len(roles) == 0 {
+		return nil, nil
+	}
+	return roles, nil
+}
+
 // folderSelect is the $select of folder listings.
 const folderSelect = "id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount,isHidden"
 

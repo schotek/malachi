@@ -20,28 +20,39 @@ import (
 // answering) is retried with backoff and dropped after maxOpAttempts; a
 // transient failure (network, throttling, 5xx, token) ends the pass and
 // the syncer backs off as a whole.
-func (s *Syncer) pushOps(ctx context.Context, byMailbox map[string]store.Folder) error {
+//
+// The returned set is the folders an attempted operation concerned, source
+// and target alike. The folder listing this pass compares against was taken
+// before these changes reached the service, so its item counts cannot be
+// trusted for them and the folders must be synchronised whatever they say.
+func (s *Syncer) pushOps(ctx context.Context, byMailbox map[string]store.Folder) (map[string]bool, error) {
+	touched := map[string]bool{}
 	for round := 0; round < 20; round++ {
 		ops, err := s.deps.Store.NextOps(ctx, s.account.ID, s.now(), 500)
 		if err != nil {
-			return storageError(err)
+			return touched, storageError(err)
 		}
 		if len(ops) == 0 {
-			return nil
+			return touched, nil
 		}
 		progressed := false
 		for _, op := range ops {
+			for _, id := range []string{op.FolderID, op.TargetFolderID} {
+				if id != "" {
+					touched[id] = true
+				}
+			}
 			settled, err := s.pushOp(ctx, op, byMailbox)
 			if err != nil {
-				return err
+				return touched, err
 			}
 			progressed = progressed || settled
 		}
 		if !progressed {
-			return nil
+			return touched, nil
 		}
 	}
-	return nil
+	return touched, nil
 }
 
 // pushOp applies one operation. It reports whether the operation left the

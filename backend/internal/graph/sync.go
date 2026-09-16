@@ -285,8 +285,21 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 	// stream never replays mail older than the cursor. A window that
 	// shrank prunes incrementally (ListRemoteIDsOlderThan in syncFolder).
 	full := req.full || since.Before(s.lastSince)
+	// A shrunk window prunes without an enumeration, but the pass still has
+	// to reach every folder to do it, so change detection stands down.
+	visitAll := full || !since.Equal(s.lastSince)
 	s.setState(func(st *api.SyncState) { st.Status, st.FolderID, st.Progress = api.SyncSyncing, "", 0 })
 
+	if s.roles == nil && !full {
+		// The roles of a mailbox that has been synchronised before are in
+		// the store already, so a restart need not spend six round trips
+		// on the well-known folders before it can look at any mail.
+		roles, err := s.storedRoles(ctx)
+		if err != nil {
+			return err
+		}
+		s.roles = roles // nil until the first pass has stored folders
+	}
 	if s.roles == nil || full {
 		roles, err := resolveRoles(ctx, s.client)
 		if err != nil {
@@ -297,6 +310,12 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 	listed, err := listFolders(ctx, s.client, s.roles)
 	if err != nil {
 		return err
+	}
+	// The listing carries the server's item counts; UpsertFolders does not
+	// store them (only a finished folder pass may move that baseline).
+	listing := make(map[string]store.Folder, len(listed))
+	for _, f := range listed {
+		listing[f.Mailbox] = f
 	}
 	stored, removed, err := s.deps.Store.UpsertFolders(ctx, s.account.ID, listed)
 	if err != nil {
@@ -314,7 +333,8 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 		}
 	}
 
-	if err := s.pushOps(ctx, byMailbox); err != nil {
+	opFolders, err := s.pushOps(ctx, byMailbox)
+	if err != nil {
 		return err
 	}
 
@@ -335,6 +355,24 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 		}
 		if err != nil {
 			return storageError(err)
+		}
+		lf, listedOK := listing[fresh.Mailbox]
+		// An explicit single-folder trigger is the user asking for a
+		// refresh; it is not answered with a skip.
+		if !visitAll && listedOK && req.folder == "" && !opFolders[fresh.ID] {
+			skip, err := s.skippable(ctx, fresh, lf)
+			if err != nil {
+				return err
+			}
+			if skip {
+				continue
+			}
+		}
+		if listedOK {
+			// The listing this pass started from is the baseline of the
+			// next one; counts read after the pass could hide a message
+			// that arrived while it ran.
+			fresh.ServerMessages, fresh.ServerUnseen = lf.ServerMessages, lf.ServerUnseen
 		}
 		base := float64(i) / float64(n)
 		s.setState(func(st *api.SyncState) { st.FolderID, st.Progress = api.FolderID(fresh.ID), int(base*100) })

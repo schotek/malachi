@@ -224,7 +224,9 @@ and the notifications above are the same. What differs:
   (`messages.remote_id`, requested with `Prefer: IdType="ImmutableId"`),
   which survives a move; folders by the Graph folder id (`folders.mailbox`).
   Roles come from the well-known folder names (inbox, sentitems, drafts,
-  deleteditems, junkemail, archive).
+  deleteditems, junkemail, archive) — one request each, so a mailbox that
+  has been synchronised before takes them from `folders.role` instead and
+  asks the service again only on a `full` pass.
 - **Cycle.** resolve roles → list the folder hierarchy (ordered by
   `store.SortSyncOrder`, as above) → push ops (`PATCH`
   read/flag, `POST …/move`, `POST …/permanentDelete` with `DELETE` as the
