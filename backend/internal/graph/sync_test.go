@@ -102,7 +102,8 @@ type harness struct {
 	token    string
 	tokenErr error
 	prefs    SyncPrefs
-	tokens   int // Token calls
+	tokens   int           // Token calls
+	offset   time.Duration // added to the syncer's clock
 
 	syncer *Syncer
 	cancel context.CancelFunc
@@ -128,8 +129,15 @@ func newHarness(t *testing.T, prefs SyncPrefs) *harness {
 		prefs.OfflineDays = 30
 	}
 	h := &harness{t: t, fake: fake, st: st, acc: acc, notes: newRecorder(), token: fake.token, prefs: prefs}
-	h.syncer = NewSyncer(acc, Deps{
-		Store: st,
+	h.newSyncer()
+	return h
+}
+
+// newSyncer replaces the harness's syncer with a fresh one over the same
+// store and account, the way a daemon restart does.
+func (h *harness) newSyncer() {
+	h.syncer = NewSyncer(h.acc, Deps{
+		Store: h.st,
 		Token: func(context.Context) (string, error) {
 			h.mu.Lock()
 			defer h.mu.Unlock()
@@ -143,11 +151,19 @@ func newHarness(t *testing.T, prefs SyncPrefs) *harness {
 			return h.prefs
 		},
 		Log:     slog.New(slog.DiscardHandler),
-		BaseURL: fake.srv.URL,
+		BaseURL: h.fake.srv.URL,
 		Backoff: func(int) time.Duration { return 50 * time.Millisecond },
 		Sleep:   func(context.Context, time.Duration) error { return nil },
+		Now:     h.clock,
 	})
-	return h
+}
+
+// clock is the syncer's time source: time.Now shifted by h.offset, so a
+// test can age a folder past reconcileAfter.
+func (h *harness) clock() time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return time.Now().Add(h.offset)
 }
 
 func (h *harness) start() {
@@ -507,6 +523,20 @@ func TestRetentionShrinkPrunes(t *testing.T) {
 	if inbox := h.folder("inbox"); inbox.Total != 1 {
 		t.Fatalf("total after shrink = %d", inbox.Total)
 	}
+	// The shrink prunes incrementally (ListRemoteIDsOlderThan), without
+	// throwing the cursor away. Growing the window back is the case that
+	// does need an enumeration: delta never replays older mail.
+	before := h.fake.enumerated("F-INBOX")
+	h.mu.Lock()
+	h.prefs = SyncPrefs{OfflineDays: 30}
+	h.mu.Unlock()
+	h.pass("", false)
+	if _, ok := h.byRemote(oldish); !ok {
+		t.Fatal("message did not come back when the window grew")
+	}
+	if n := h.fake.enumerated("F-INBOX"); n <= before {
+		t.Fatalf("enumerations = %d, want a fresh one after the window grew", n)
+	}
 }
 
 func TestTokenProblemsAndRecovery(t *testing.T) {
@@ -785,5 +815,67 @@ func TestFolderSyncOrder(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("sync order =\n  %v\nwant\n  %v", got, want)
+	}
+}
+
+// TestDeltaCursorsSurviveRestart is the reason a Graph account is usable
+// again a second after the desktop starts: a restart resumes every folder
+// from its stored cursor instead of enumerating the retention window.
+func TestDeltaCursorsSurviveRestart(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	h.fake.add("F-PROJ", "Before", "bob@example.test", daysAgo(2), "b")
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	before := map[string]int{}
+	for _, id := range []string{"F-INBOX", "F-PROJ", "F-TRASH"} {
+		before[id] = h.fake.enumerated(id)
+		if before[id] == 0 {
+			t.Fatalf("%s was never enumerated on the first pass", id)
+		}
+	}
+	// Mail that arrives while the daemon is down must still be picked up
+	// by the resumed cursor, not only by a re-enumeration.
+	h.stop()
+	during := h.fake.add("F-PROJ", "During", "bob@example.test", time.Now(), "d")
+
+	h.newSyncer()
+	restart := time.Now()
+	h.start()
+	h.waitIdle(restart)
+
+	for id, n := range before {
+		if got := h.fake.enumerated(id); got != n {
+			t.Errorf("%s enumerated %d times, want %d: the cursor was thrown away", id, got, n)
+		}
+	}
+	if _, ok := h.byRemote(during); !ok {
+		t.Fatal("message that arrived while the daemon was down is missing")
+	}
+}
+
+// TestStaleFolderReconciles keeps the repair path alive: a folder no pass
+// has enumerated for reconcileAfter is read from scratch, so drift the
+// delta stream cannot report does not last forever.
+func TestStaleFolderReconciles(t *testing.T) {
+	h := newHarness(t, SyncPrefs{})
+	h.fake.add("F-PROJ", "Hello", "bob@example.test", daysAgo(1), "h")
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+	before := h.fake.enumerated("F-PROJ")
+
+	h.pass("", false)
+	if n := h.fake.enumerated("F-PROJ"); n != before {
+		t.Fatalf("a fresh folder was re-enumerated: %d, want %d", n, before)
+	}
+
+	h.mu.Lock()
+	h.offset = reconcileAfter + time.Hour
+	h.mu.Unlock()
+	h.pass("", false)
+	if n := h.fake.enumerated("F-PROJ"); n <= before {
+		t.Fatalf("stale folder not reconciled: enumerations = %d, want more than %d", n, before)
 	}
 }

@@ -22,11 +22,13 @@ import (
 // of the pass ran, so a message that reappears in another folder is moved
 // (MoveByRemoteID) rather than deleted and re-created.
 //
-// Without a stored delta cursor (first pass, a full resync, or a cursor the
-// service rejected) the query enumerates the whole window; rows the server
-// did not mention are then gone as well.
+// Without a stored delta cursor (first pass, a full resync, a cursor the
+// service rejected, or a folder no pass has enumerated for reconcileAfter)
+// the query enumerates the whole window; rows the server did not mention
+// are then gone as well.
 func (s *Syncer) syncFolder(ctx context.Context, f store.Folder, since time.Time, full bool, progress func(float64)) ([]string, error) {
-	initial := full || f.DeltaLink == ""
+	initial := full || f.DeltaLink == "" || f.LastSyncAt.IsZero() ||
+		s.now().Sub(f.LastSyncAt) > reconcileAfter
 	link := f.DeltaLink
 	if initial {
 		link = s.initialDeltaURL(f, since)

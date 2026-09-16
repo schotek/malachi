@@ -23,6 +23,13 @@ const (
 	// channel a desktop can use, so polling is the whole story.
 	inboxPoll = 60 * time.Second
 
+	// reconcileAfter is how long a folder may go without a full
+	// enumeration. Delta is authoritative — a cursor the service will not
+	// honour comes back as 410 and restarts the folder — so this only
+	// repairs drift the delta stream cannot report (an interrupted pass, a
+	// local bug) and must stay rare: it costs one enumeration per folder.
+	reconcileAfter = 7 * 24 * time.Hour
+
 	backoffMin    = 5 * time.Second // first retry delay after a failure
 	backoffMax    = 5 * time.Minute // cap of the exponential backoff
 	backoffJitter = 0.2             // ±20 % randomisation of every delay
@@ -268,7 +275,16 @@ func (s *Syncer) Run(ctx context.Context) error {
 func (s *Syncer) cycle(ctx context.Context, req request) error {
 	prefs := s.prefs()
 	since := s.windowSince(prefs.OfflineDays)
-	full := req.full || s.passes == 0 || !since.Equal(s.lastSince)
+	// The retention window can only change while the daemon runs (it takes
+	// config.set), so the first pass of a process has nothing to compare
+	// with: the stored delta cursors are still good and are kept.
+	if s.passes == 0 {
+		s.lastSince = since
+	}
+	// Only a window that grew needs the cursors thrown away — a delta
+	// stream never replays mail older than the cursor. A window that
+	// shrank prunes incrementally (ListRemoteIDsOlderThan in syncFolder).
+	full := req.full || since.Before(s.lastSince)
 	s.setState(func(st *api.SyncState) { st.Status, st.FolderID, st.Progress = api.SyncSyncing, "", 0 })
 
 	if s.roles == nil || full {

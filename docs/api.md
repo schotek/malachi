@@ -1105,8 +1105,15 @@ A paused account is skipped silently, so "sync everything" never fails
 because one account is paused. Triggers coalesce: a trigger during a running
 pass schedules one more pass, not several. `full: true` ignores the
 per-folder change detection so every selectable folder is walked and its
-flags re-read; it does not discard local data (only a server-side
-UIDVALIDITY change does). Queued local operations are pushed first.
+flags re-read; on a `graph` account it additionally discards the folders'
+delta cursors and re-enumerates the retention window. It does not discard
+local data (only a server-side UIDVALIDITY change does). Queued local
+operations are pushed first.
+
+A `graph` account keeps its delta cursors across daemon restarts: a restart
+resumes every folder where the last pass left off instead of re-enumerating
+it. A folder no pass has enumerated for a week is read from scratch anyway,
+which repairs drift the delta stream cannot report.
 
 ### 4.8 config
 

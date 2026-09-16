@@ -36,6 +36,9 @@ type fakeGraph struct {
 	removed  []removal
 	requests []string
 	sent     [][]byte
+	// enumerations counts delta queries that started without a token, i.e.
+	// a folder being read from scratch rather than resumed.
+	enumerations map[string]int
 
 	throttle       int  // answer 429 to this many requests
 	unauthorized   int  // answer 401 to this many requests
@@ -62,7 +65,8 @@ type removal struct {
 }
 
 func newFakeGraph(t *testing.T) *fakeGraph {
-	f := &fakeGraph{t: t, token: "tok-1", me: "me@contoso.invalid", pageSize: 2, messages: map[string]*fakeMsg{}, failValue: map[string]int{}}
+	f := &fakeGraph{t: t, token: "tok-1", me: "me@contoso.invalid", pageSize: 2, messages: map[string]*fakeMsg{},
+		failValue: map[string]int{}, enumerations: map[string]int{}}
 	f.folders = []*fakeFolder{
 		// Listed before the inbox on purpose: the service answers in this
 		// order and the batch must not come out inbox-first by accident.
@@ -145,6 +149,13 @@ func (f *fakeGraph) count(method, pathPrefix string) int {
 		}
 	}
 	return n
+}
+
+// enumerated is how often the folder was read from scratch.
+func (f *fakeGraph) enumerated(folder string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.enumerations[folder]
 }
 
 func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
@@ -308,6 +319,9 @@ func (f *fakeGraph) listFolders(w http.ResponseWriter, r *http.Request, parent s
 func (f *fakeGraph) delta(w http.ResponseWriter, r *http.Request, folder string) {
 	q := r.URL.Query()
 	sinceSeq := -1
+	if q.Get("$deltatoken") == "" && q.Get("$skiptoken") == "" {
+		f.enumerations[folder]++ // first page of a from-scratch read
+	}
 	if tok := q.Get("$deltatoken"); tok != "" {
 		if f.staleTokens {
 			f.fail(w, http.StatusGone, "SyncStateNotFound", "resync")

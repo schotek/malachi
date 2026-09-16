@@ -236,6 +236,13 @@ and the notifications above are the same. What differs:
   pass ran, so a message that reappears elsewhere is moved locally, not
   deleted and re-created. A cursor the service rejects (410 /
   `SyncStateNotFound`) restarts the folder from scratch.
+- **Cursors across restarts.** The delta cursors are persisted, and a
+  daemon restart resumes from them: enumerating the window again is
+  reserved for a folder with no cursor, an explicit `sync.trigger`
+  `full: true`, a retention window that *grew* (delta never replays older
+  mail; a window that shrank prunes incrementally), and a folder no pass
+  has enumerated for a week. Without that, every start re-read every folder
+  and the inbox waited behind them.
 - **Polling.** Graph offers no push a desktop can receive (change
   notifications need a public webhook), so the inbox is polled every minute
   and every folder at the sync interval; triggers interrupt the wait.
