@@ -50,6 +50,9 @@ nepřečíslovávají, jen přidávají. Nekompatibilní změna = bump `Protocol
 
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
 - Struktura balíčků: `internal/` pro implementaci, `pkg/api/` pro veřejný kontrakt
+- MCP most (`backend/cmd/malachi-mcp`) je klient démona jako UI: z `backend/`
+  importuje jen `pkg/api`, nikdy nevrací HTML, každý řetězec z pošty prochází
+  `clean()` a ohradou s nonce, mutující nástroje jen za přepínačem (`docs/mcp.md`)
 - Dva Go moduly (`backend/`, `ui/`) + `go.work` v kořeni; `ui/go.mod` má
   `replace` na `../backend`, aby offline build fungoval i bez workspace
 - UI: Blueprint (`.blp`), ne ručně psané GtkBuilder XML; `.ui` jsou generované
@@ -160,7 +163,12 @@ Předvolby → Seznam zpráv → Seskupovat podle konverzací (GSettings
 (`ui/internal/window/thread_model.go` čistý model, `threads.go` zrcadlení
 do ListBoxu podle klíčů), rozbalení volá `thread.get {folderId}`, akce na
 sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
-Vyhledávání zatím `notImplemented`.
+Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
+(`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
+`pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
+čtení + koncepty, `--allow-modify` / `--allow-send` přes
+`MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
+obsah pošty v ohradě s nonce; viz `docs/mcp.md`).
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo

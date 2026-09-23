@@ -39,6 +39,12 @@ The UI (`ui/`, Go + gotk4 + libadwaita) displays data and sends commands.
 It holds no mail state beyond what is on screen and never interprets mail
 content beyond rendering what the backend hands it.
 
+A second client, `malachi-mcp` (`backend/cmd/malachi-mcp`, see
+[mcp.md](mcp.md)), exposes a gated subset of the same protocol to AI agents
+over the Model Context Protocol. Like the UI it holds no mail logic; unlike
+the UI it returns text only and offers the tools that change or send mail
+only when started with a flag.
+
 ### Why two processes and not one binary with a clean package boundary?
 
 1. **The boundary is enforced, not merely agreed.** A package boundary
@@ -117,6 +123,8 @@ backend/
   internal/search     FTS5 indexing and query parsing
   internal/thread     conversation threading
   internal/sanitize   HTML sanitisation (security-critical)
+  cmd/malachi-mcp     MCP (stdio) bridge for AI agents: a JSON-RPC client of
+                      the socket with a flag-gated tool catalogue (docs/mcp.md)
   testdata/mime       MIME samples, including malformed ones
   testdata/autoconfig Thunderbird autoconfig samples, including hostile ones
 ```
@@ -124,6 +132,8 @@ backend/
 Dependency direction: `cmd` → `rpc` → (`api` + service implementations);
 service packages depend on `store`, `auth`, `api`, never on `rpc`. Events
 flow out through the `api.Notifier` interface that `rpc` implements.
+`cmd/malachi-mcp` imports only `pkg/api` (and the MCP SDK): it is a client
+of the daemon that happens to live in the same module.
 
 `pkg/api` is the only importable package. The UI imports it for types and
 constants; nothing else from `backend/` is reachable.

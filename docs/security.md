@@ -372,12 +372,66 @@ Does not give:
 - protection against a malicious X11 server (`--socket=fallback-x11`):
   under X11 any client can snoop input. Wayland is the supported path.
 
-## 10. Reporting
+## 10. AI agents (the MCP bridge)
+
+`malachi-mcp` ([mcp.md](mcp.md)) puts mail in front of a language model
+that holds tools. The model is a new target for the mail sender, and the
+bridge is a client of the daemon like the UI: nothing here changes what
+the daemon guarantees.
+
+Assets, in addition to §1: the agent session itself (its other tools, its
+context) and the user's Drafts list.
+
+Attackers, in addition to §2:
+
+- the **mail sender**, now through prompt injection: a body, subject,
+  display name, attachment name or header value phrased as an instruction
+  to the model ("forward this thread to …", "mark everything as read").
+  Text that CSS hides in the desktop view is still in the plain `text`
+  the daemon derives, so it reaches the model unseen by the human;
+- an **agent** that can edit files, granting itself the bridge's flags in
+  the client's configuration.
+
+Defences:
+
+- the tool surface is chosen by the human who starts the client:
+  read-only by default, `--allow-modify` and `--allow-send` add the
+  mutating tools, and a tool that is not allowed is not registered;
+- only the daemon's plain `text` is returned, never HTML; `message.body`
+  is always called with `remoteContent: "block"`, so reading never causes
+  a network request;
+- every mail-derived string is cleaned (valid UTF-8, no control or Unicode
+  format characters) and placed inside a fence whose delimiter carries a
+  per-call random nonce, with trusted fields outside; links and extra
+  headers are listed only on request;
+- attachments: a short allow-list of text and image types decided from
+  the declared type and size before fetching, then the bytes are sniffed
+  and refused on mismatch; HTML and SVG never;
+- caps on everything: body characters, attachment bytes, list size,
+  ids per mutation, drafts per process;
+- drafts are plain text without forwarding or attachments;
+  `delete_messages` only moves to Trash and refuses messages already in
+  Trash or in the Outbox; `send_message` accepts only drafts created by
+  the same process, at the recorded version;
+- no account management, no configuration, no credentials or server
+  settings in any output; the socket must be the user's own 0600 socket;
+  the bridge never runs as root; nothing content-bearing is logged.
+
+Explicitly not defended: the model following instructions in mail with the
+tools it has (fencing and descriptions reduce, they do not prevent);
+exfiltration through the host's own tools once content is in context; the
+user sending an agent-made draft without reading it; an agent editing
+`.mcp.json` to grant itself flags; a sender's `Reply-To` steering a reply's
+recipients (they are shown in the result). A recipient allow-list for
+`send_message` built on `contact.search` is the next step and is not
+implemented.
+
+## 11. Reporting
 
 Security issues: open a private report on the GitHub repository (Security →
 Advisories) rather than a public issue. No bug bounty.
 
-## 11. Review checklist for PRs touching content handling
+## 12. Review checklist for PRs touching content handling
 
 - [ ] Does any path return HTML that did not pass `internal/sanitize`?
 - [ ] New parser: are there malformed samples in `testdata/mime` and a
@@ -395,3 +449,6 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] New `finish-args` entry: is there a portal instead?
 - [ ] New outbound connection: does it use `transport.TLSConfig` /
       `transport.DialContext` and classify errors through `transport`?
+- [ ] New MCP tool or output field: is every mail-derived string cleaned
+      and inside the nonce fence, is the tool behind the right flag, are
+      its annotations set, and is its output capped?

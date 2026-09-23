@@ -223,6 +223,19 @@ Only the keyring, notifications, GNOME Online Accounts, the Settings panel
 and the address-book D-Bus names are granted; files, links and autostart go
 through portals.
 
+### AI agents
+
+`make build` also produces `build/malachi-mcp`, a Model Context Protocol
+server over stdio that gives an AI agent a gated view of the mail through
+the daemon: the same socket, the same contract, no mail logic of its own.
+The repository's `.mcp.json` registers it for Claude Code, so an agent
+opened in this checkout can list folders, read messages and write drafts
+as soon as `make run-dev` is up. It is read-only by default; export
+`MALACHI_MCP_ALLOW_MODIFY=true` (flags, moves, deletes) or
+`MALACHI_MCP_ALLOW_SEND=true` (sending) in the shell that starts the agent
+to enable more. Tools, limits and the security model are in
+[docs/mcp.md](docs/mcp.md).
+
 ### Translating
 
 The UI is translated with gettext (domain `malachi`); the daemon itself is
@@ -249,6 +262,7 @@ committed template matches the sources.
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
+| MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.
