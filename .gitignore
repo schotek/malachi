@@ -9,6 +9,7 @@
 
 # Go binaries built in-place
 /backend/malachid
+/backend/malachi-mcp
 /ui/malachi
 /ui/ui
 

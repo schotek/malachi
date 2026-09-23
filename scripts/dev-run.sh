@@ -86,6 +86,14 @@ if [[ ! -S "$SOCK" ]]; then
     exit 1
 fi
 
+# The MCP bridge for AI agents is not started here: an MCP client (Claude
+# Code reads .mcp.json in the repository root) spawns it over stdio and it
+# connects to the same socket. It is read-only unless the client's shell
+# exported MALACHI_MCP_ALLOW_MODIFY=true / MALACHI_MCP_ALLOW_SEND=true.
+if [[ -x "$BUILD/malachi-mcp" ]]; then
+    echo "dev-run: MCP bridge available: $BUILD/malachi-mcp (socket: $SOCK; see docs/mcp.md)"
+fi
+
 echo "dev-run: starting UI"
 MALACHI_SOCKET="$SOCK" "$UI" "$@" &
 UI_PID=$!

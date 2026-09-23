@@ -67,18 +67,27 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help FORCE
 
 all: build
 
-## build: compile backend daemon and UI into ./build
-build: backend ui schemas locale
+## build: compile backend daemon, MCP bridge and UI into ./build
+build: backend mcp ui schemas locale
 
 backend: $(BUILD_DIR)/malachid
 
+# The find below also matches cmd/malachi-mcp, so an MCP-only edit relinks
+# malachid; with the Go build cache that is a sub-second no-op.
 $(BUILD_DIR)/malachid: $(shell find backend -name '*.go' -o -name '*.sql' -o -name go.mod)
 	@mkdir -p $(BUILD_DIR)
 	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachid
+
+## mcp: compile the MCP bridge for AI agents into ./build/malachi-mcp (see docs/mcp.md)
+mcp: $(BUILD_DIR)/malachi-mcp
+
+$(BUILD_DIR)/malachi-mcp: $(shell find backend/cmd/malachi-mcp backend/pkg/api -name '*.go') backend/go.mod
+	@mkdir -p $(BUILD_DIR)
+	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachi-mcp
 
 ui: blueprint $(BUILD_DIR)/malachi
 
