@@ -140,21 +140,26 @@ sudo apt install flatpak
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 ```
 
-### Debian package
+### Native packages
 
-CI also builds a `.deb` for **amd64** and **arm64**, from the same
-artifacts page. It links the system GTK 4, libadwaita and WebKitGTK
-instead of carrying a runtime, so it needs **libadwaita 1.7 or newer**:
-Ubuntu 26.04 LTS and Debian 14, but *not* Ubuntu 24.04 LTS, whose
-libadwaita is 1.5 and which cannot run the message-list filter. On 24.04
-take the Flatpak.
+CI also builds a `.deb` and an `.rpm` for both architectures, from the same
+artifacts page. They link the system GTK 4, libadwaita and WebKitGTK
+instead of carrying a runtime, so they need **libadwaita 1.7 or newer**:
+Ubuntu 26.04 LTS, Debian 14 and Fedora 42, but *not* Ubuntu 24.04 LTS,
+whose libadwaita is 1.5 and which cannot run the message-list filter. On
+24.04 take the Flatpak.
 
 ```sh
-sudo apt install ./malachi_<version>_amd64.deb
+sudo apt install ./malachi_<version>_amd64.deb      # Debian, Ubuntu
+sudo dnf install ./malachi-<version>-1.x86_64.rpm   # Fedora
 ```
 
-There is no apt repository, so a package installed this way is not
-updated by `apt upgrade`; the Flatpak is the build that updates itself.
+There is no apt or dnf repository, so a package installed this way is not
+updated by `apt upgrade` or `dnf upgrade`; the Flatpak is the build that
+updates itself.
+
+Unlike the Flatpak, these put `malachi-mcp` on `PATH`, which is what an
+[MCP client](#ai-agents-mcp) needs to spawn it.
 
 ## Building from source
 
@@ -207,7 +212,9 @@ The first build compiles the gotk4 and WebKitGTK bindings, which takes a
 long time (tens of minutes on a laptop) and a few gigabytes of build cache.
 It is not stuck. Subsequent builds are fast.
 
-Other targets: `make test`, `make lint`, `make clean`, `make help`.
+Other targets: `make test`, `make lint`, `make clean`, `make help`, and
+`make deb` / `make rpm` to build a native package for the machine you are
+on (they need `dpkg-dev` and `rpm-build` respectively).
 
 Set `MALACHI_LOG_LEVEL=debug` to see every RPC call. Passwords go to the
 system keyring over D-Bus; in a container without a Secret Service set

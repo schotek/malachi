@@ -30,6 +30,11 @@ if [[ "${1:-}" == "install" ]]; then
     done < po/LINGUAS
     install -Dm755 build/malachid "$DESTDIR$PREFIX/bin/malachid"
     install -Dm755 build/malachi  "$DESTDIR$PREFIX/bin/malachi"
+    # The MCP bridge (docs/mcp.md). An agent's client spawns it by path, so a
+    # native package earns its keep by putting it on PATH; in the Flatpak it
+    # is reachable only through `flatpak run --command=malachi-mcp` and the
+    # socket then lives in the app's own runtime directory.
+    install -Dm755 build/malachi-mcp "$DESTDIR$PREFIX/bin/malachi-mcp"
     install -Dm644 "data/$APP_ID.desktop" \
         "$DESTDIR$PREFIX/share/applications/$APP_ID.desktop"
     # DBusActivatable=true in the desktop file; flatpak build-export rejects

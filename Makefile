@@ -67,7 +67,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm help FORCE
 
 all: build
 
@@ -246,6 +246,10 @@ flatpak-run:
 ## deb: build a Debian package for this machine (needs dpkg-dev; libadwaita >= 1.7)
 deb:
 	./scripts/build-deb.sh
+
+## rpm: build an RPM package for this machine (needs rpm-build; libadwaita >= 1.7)
+rpm:
+	./scripts/build-rpm.sh
 
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed -e 's/^## /  /'

@@ -1,0 +1,63 @@
+Name:           malachi
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        Mail client for the GNOME desktop
+
+# The daemon and its API are AGPL-3.0-only (dual-licensed, see LICENSING.md);
+# the GTK interface and everything else GPL-3.0-or-later.
+License:        AGPL-3.0-only AND GPL-3.0-or-later
+URL:            https://github.com/schotek/malachi
+
+# The binaries are built before rpmbuild is called (scripts/build-rpm.sh) and
+# only staged here, so there is nothing to compile and no source archive.
+BuildArch:      @ARCH@
+AutoReqProv:    yes
+
+# What no ELF header can say. The rest of the dependencies come from the
+# automatic ELF scan, which is the RPM counterpart of dpkg-shlibdeps.
+Requires:       libadwaita >= 1.7
+Requires:       dconf
+
+Recommends:     xdg-desktop-portal
+Recommends:     gnome-keyring
+Suggests:       evolution-data-server
+Suggests:       gnome-online-accounts
+
+# Go binaries carry their own debug information and the extraction produces
+# nothing useful here; without this rpmbuild fails on the stripped tree.
+%global debug_package %{nil}
+
+%description
+Malachi Mail is two processes: a Go daemon that speaks IMAP, SMTP and
+Microsoft Graph and owns every mail decision, and a GTK4 user interface
+that talks to it over a unix socket. The interface starts the daemon
+itself; nothing needs to be enabled by hand.
+
+Received HTML is sanitised in the daemon and shown in a WebKitGTK view
+with JavaScript off, no network access and links opened only through the
+portal after the real destination has been displayed.
+
+Passwords and OAuth2 tokens are kept in the system keyring; Microsoft 365
+and Gmail sign in through GNOME Online Accounts, so this package carries
+no client credentials of its own.
+
+The package also installs malachi-mcp, a Model Context Protocol server
+that gives an AI agent a gated view of the mail through the daemon. It is
+read-only unless its flags say otherwise and is never started on its own.
+
+%install
+cp -a @STAGE@/. %{buildroot}/
+
+# The list is generated from the staged tree by scripts/build-rpm.sh rather
+# than written out here. Repeating it would make this a second copy of the
+# install manifest in scripts/build.sh, free to drift from it: the symbolic
+# icon and the set of translations are both conditional there, and a spec
+# that names them fails the build the day one of them is not produced.
+%files -f @FILELIST@
+
+%changelog
+# One generated entry, not a history: the history lives in git and in the
+# GitHub release notes, and copying it here would only let the two drift.
+# rpm insists on the tag existing at all, hence this.
+* @DATE@ Vladislav Janeček <38503981+schotek@users.noreply.github.com> - @VERSION@-1
+- Built from git @VERSION@; see the GitHub release notes for what changed.

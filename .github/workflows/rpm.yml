@@ -1,0 +1,148 @@
+# RPM packages for x86_64 and aarch64.
+#
+# The Fedora counterpart to deb.yml, and the same bargain: the distribution's
+# GTK 4, libadwaita and WebKitGTK instead of a bundled runtime, so it installs
+# with dnf and updates with the system, but only where libadwaita is at least
+# 1.7 (AdwToggleGroup, used by the message-list filter). Fedora 42 is the
+# release it is built on and the only one it is tested against.
+#
+# Deliberately a separate workflow rather than a "native packages" matrix
+# beside the Debian one: almost every step is distribution-specific (dnf
+# against apt, rpmlint against lintian), so merging them would put an `if:`
+# on each step and hide exactly the kind of mistake that kept deb.yml red for
+# a fortnight. What the two genuinely share lives in scripts/build*.sh.
+name: RPM package
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - packaging/rpm/**
+      - scripts/build.sh
+      - scripts/build-rpm.sh
+      - .github/workflows/rpm.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rpm-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  build:
+    name: ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    container: fedora:42
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Install build dependencies
+        # Before the checkout: actions/checkout without git in the container
+        # falls back to a source tarball, and `git describe` would then have
+        # no repository to read the version from.
+        #
+        # The list of README "Building from source" under its Fedora names,
+        # plus rpm-build, gettext for msgfmt and desktop-file-utils for the
+        # check below. Fedora 42 carries Go 1.25, the version the modules ask
+        # for, so the toolchain comes from dnf rather than actions/setup-go.
+        run: |
+          dnf -y install --setopt=install_weak_deps=False \
+            git golang gcc pkgconf-pkg-config gettext rpm-build \
+            desktop-file-utils gtk4-devel libadwaita-devel webkitgtk6.0-devel \
+            gsound-devel gobject-introspection-devel sqlite-devel \
+            blueprint-compiler
+
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Let git read the checkout
+        # The container runs as root while the checkout is owned by the
+        # runner's user; without this, git refuses the directory as unsafe
+        # and every `git describe` in the build comes back empty.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Record the version
+        # The same file the Flatpak and Debian builds write: one version for
+        # every artifact of a commit, and the source of the package version.
+        run: |
+          git describe --tags --always --dirty | sed 's/^v//' > .version
+          cat .version
+
+      - name: Build the package
+        run: ./scripts/build-rpm.sh
+
+      - name: Check it against the packaging rules
+        # Advisory, as lintian is on the Debian side: rpmlint knows Fedora
+        # policy better than we do, but a package built outside the Fedora
+        # source workflow trips tags that do not apply (no source RPM, no
+        # %changelog). The output is for reading, so it never fails the job.
+        continue-on-error: true
+        run: |
+          dnf -y install rpmlint
+          rpmlint build/*.rpm || true
+
+      - name: Install it, and check that it is complete
+        # A package that unpacks is not yet a package that works: dnf has to
+        # resolve every dependency the ELF scan computed, the schema trigger
+        # has to run, and the desktop entry has to be where the shell looks.
+        # The application itself needs a session bus and a display, so this
+        # stops at "installed and wired up".
+        run: |
+          dnf -y install ./build/*.rpm
+          test -x /usr/bin/malachi
+          test -x /usr/bin/malachid
+          test -x /usr/bin/malachi-mcp
+          test -f /usr/share/applications/io.github.schotek.Malachi.desktop
+          desktop-file-validate /usr/share/applications/io.github.schotek.Malachi.desktop
+          # The file trigger of glib2 compiles the schema; without it the UI
+          # falls back to in-memory preferences.
+          gsettings --schemadir /usr/share/glib-2.0/schemas \
+            list-keys io.github.schotek.Malachi >/dev/null
+          malachid --version
+          malachi-mcp -version
+          dnf -y remove malachi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malachi-rpm-${{ matrix.arch }}
+          path: build/*.rpm
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach packages to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: malachi-rpm-*
+          merge-multiple: true
+      - name: Upload
+        # As in the Flatpak and Debian workflows: the release notes stay
+        # manual, this only creates a draft if the tag has no release yet.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*.rpm \
+            --clobber --repo "$GITHUB_REPOSITORY"

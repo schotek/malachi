@@ -45,7 +45,8 @@ PREFIX=/usr DESTDIR="$STAGE" ./scripts/build.sh install
 # one exists for the length of the call and is never shipped.
 mkdir -p "$STAGE/debian"
 printf 'Source: %s\n\nPackage: %s\nArchitecture: %s\n' "$PKG" "$PKG" "$ARCH" > "$STAGE/debian/control"
-DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O --warnings=1 usr/bin/malachi usr/bin/malachid |
+DEPENDS="$(cd "$STAGE" && dpkg-shlibdeps -O --warnings=1 \
+        usr/bin/malachi usr/bin/malachid usr/bin/malachi-mcp |
     sed 's/^shlibs:Depends=//')"
 rm -rf "$STAGE/debian"
 
@@ -57,8 +58,15 @@ DEPENDS="$DEPENDS, libadwaita-1-0 (>= 1.7), dconf-gsettings-backend | gsettings-
 SIZE="$(du -ks "$STAGE" | cut -f1)"
 
 mkdir -p "$STAGE/DEBIAN"
-sed -e "s|@VERSION@|$VERSION|" -e "s|@ARCH@|$ARCH|" -e "s|@SIZE@|$SIZE|" \
-    -e "s|@DEPENDS@|$DEPENDS|" "$TEMPLATE" > "$STAGE/DEBIAN/control"
+# Filled in with bash substitution rather than sed: an alternative dependency
+# ("a | b") puts the delimiter of `s|…|…|` inside the replacement text, and
+# sed then reads it as the end of the expression. No delimiter, no collision.
+CONTROL="$(cat "$TEMPLATE")"
+CONTROL="${CONTROL//@VERSION@/$VERSION}"
+CONTROL="${CONTROL//@ARCH@/$ARCH}"
+CONTROL="${CONTROL//@SIZE@/$SIZE}"
+CONTROL="${CONTROL//@DEPENDS@/$DEPENDS}"
+printf '%s\n' "$CONTROL" > "$STAGE/DEBIAN/control"
 
 # md5sums lets dpkg --verify and debsums check an installed copy.
 (cd "$STAGE" && find usr -type f -exec md5sum {} + > DEBIAN/md5sums)

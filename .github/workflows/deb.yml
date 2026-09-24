@@ -101,6 +101,7 @@ jobs:
           sudo apt-get install -y ./build/*.deb
           test -x /usr/bin/malachi
           test -x /usr/bin/malachid
+          test -x /usr/bin/malachi-mcp
           test -f /usr/share/applications/io.github.schotek.Malachi.desktop
           desktop-file-validate /usr/share/applications/io.github.schotek.Malachi.desktop
           # The dpkg trigger of libglib compiles the schema; without it the
@@ -108,6 +109,7 @@ jobs:
           gsettings --schemadir /usr/share/glib-2.0/schemas \
             list-keys io.github.schotek.Malachi >/dev/null
           malachid --version
+          malachi-mcp -version
           sudo apt-get remove -y malachi
 
       - uses: actions/upload-artifact@v4
