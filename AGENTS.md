@@ -166,7 +166,8 @@ sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
 Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
 (`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
 `pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
-čtení + koncepty, `--allow-modify` / `--allow-send` přes
+čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
+`draft.create`), `--allow-modify` / `--allow-send` přes
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
 obsah pošty v ohradě s nonce; viz `docs/mcp.md`).
 

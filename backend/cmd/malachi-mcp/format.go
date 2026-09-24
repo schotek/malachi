@@ -7,7 +7,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"html"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -236,13 +238,177 @@ func parseAddresses(in []string) ([]api.Address, error) {
 	return out, nil
 }
 
-// replySubject prefixes "Re: " unless the subject already carries it.
-func replySubject(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) >= 3 && strings.EqualFold(s[:3], "re:") {
-		return s
+// --- create_draft helpers ---------------------------------------------------
+
+// parseComposeMode maps the tool's mode string to the daemon's enum. An
+// empty mode is a new message.
+func parseComposeMode(s string) (api.ComposeMode, bool) {
+	switch {
+	case s == "" || strings.EqualFold(s, string(api.ComposeNew)):
+		return api.ComposeNew, true
+	case strings.EqualFold(s, string(api.ComposeReply)):
+		return api.ComposeReply, true
+	case strings.EqualFold(s, string(api.ComposeReplyAll)):
+		return api.ComposeReplyAll, true
+	case strings.EqualFold(s, string(api.ComposeForward)):
+		return api.ComposeForward, true
 	}
-	return "Re: " + s
+	return "", false
+}
+
+// emptyParagraphs is the paragraph draft.create leaves at the top of the
+// template for the answer: the sanitiser's spelling first, quote.go's raw
+// spelling for safety.
+var emptyParagraphs = [...]string{"<p><br/></p>", "<p><br></p>"}
+
+var paragraphBreak = regexp.MustCompile(`\n[ \t]*\n+`)
+
+// bodyHTML turns the agent's plain text into escaped HTML: one <p> per
+// blank-line-separated paragraph, <br/> per line break. Markup in the text
+// is shown literally; the agent cannot inject elements. A blank body is "".
+func bodyHTML(text string) string {
+	text = strings.Trim(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, para := range paragraphBreak.Split(text, -1) {
+		b.WriteString("<p>")
+		b.WriteString(strings.ReplaceAll(html.EscapeString(para), "\n", "<br/>"))
+		b.WriteString("</p>")
+	}
+	return b.String()
+}
+
+// insertBody puts the body's paragraphs where the template's empty
+// paragraph is; a template without one gets them in front. An empty body
+// leaves the template as it is.
+func insertBody(tpl, body string) string {
+	if body == "" {
+		return tpl
+	}
+	for _, p := range emptyParagraphs {
+		if rest, ok := strings.CutPrefix(tpl, p); ok {
+			return body + rest
+		}
+	}
+	return body + tpl
+}
+
+// plainBody joins the agent's text and the daemon's plain-text quote (which
+// starts with a blank line in the daemon's fallback form).
+func plainBody(body, quote string) string {
+	body = strings.TrimRight(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	quote = strings.TrimLeft(quote, "\n")
+	switch {
+	case quote == "":
+		return body
+	case body == "":
+		return quote
+	}
+	return body + "\n\n" + quote
+}
+
+// attributionTime is the date format of the default line above a quote.
+const attributionTime = "Mon, 2 Jan 2006 15:04 UTC"
+
+// defaultAttribution is the English line above the quote when the agent
+// gives none: what the UI writes in the user's language. Every field is
+// mail-derived and goes through oneLine; the daemon escapes the result.
+func defaultAttribution(mode api.ComposeMode, m api.Message) string {
+	from := joinAddresses(m.From)
+	if mode == api.ComposeForward {
+		lines := []string{"---------- Forwarded message ----------"}
+		if from != "" {
+			lines = append(lines, "From: "+from)
+		}
+		if !m.Date.IsZero() {
+			lines = append(lines, "Date: "+m.Date.UTC().Format(attributionTime))
+		}
+		lines = append(lines, "Subject: "+oneLine(m.Subject))
+		if to := joinAddresses(m.To); to != "" {
+			lines = append(lines, "To: "+to)
+		}
+		return capAttribution(strings.Join(lines, "\n"))
+	}
+	switch {
+	case from == "":
+		return "The sender wrote:"
+	case m.Date.IsZero():
+		return capAttribution(from + " wrote:")
+	}
+	return capAttribution("On " + m.Date.UTC().Format(attributionTime) + ", " + from + " wrote:")
+}
+
+// capAttribution keeps the line within the daemon's limits so a default
+// attribution is never refused (a To: with hundreds of names is the
+// realistic overflow).
+func capAttribution(s string) string {
+	if lines := strings.Split(s, "\n"); len(lines) > api.MaxDraftAttributionLines {
+		s = strings.Join(lines[:api.MaxDraftAttributionLines], "\n")
+	}
+	const ellipsis = "…"
+	if len(s) > api.MaxDraftAttributionBytes {
+		s = truncateBytes(s, api.MaxDraftAttributionBytes-len(ellipsis)) + ellipsis
+	}
+	return s
+}
+
+// splitAttachments separates the inline pictures of a quote from the files.
+func splitAttachments(atts []api.DraftAttachment) (regular, inline []api.DraftAttachment) {
+	for _, a := range atts {
+		if a.Inline {
+			inline = append(inline, a)
+		} else {
+			regular = append(regular, a)
+		}
+	}
+	return regular, inline
+}
+
+// attachmentIDs is what draft.save reads: the ids alone.
+func attachmentIDs(atts []api.DraftAttachment) []api.DraftAttachment {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]api.DraftAttachment, 0, len(atts))
+	for _, a := range atts {
+		out = append(out, api.DraftAttachment{ID: a.ID})
+	}
+	return out
+}
+
+// quoteDescription explains the daemon's quoted form to the model.
+func quoteDescription(q api.QuoteForm) string {
+	switch q {
+	case api.QuoteHTML:
+		return "html"
+	case api.QuoteText:
+		return "text (the original's HTML could not be used; its text is quoted)"
+	case api.QuoteNone:
+		return "none (the original's body is not downloaded; nothing is quoted; trigger_sync and create again to include it)"
+	}
+	return string(q)
+}
+
+// blockedSummary lists the non-zero counters of a sanitiser report.
+func blockedSummary(b api.BlockedContent) string {
+	var parts []string
+	add := func(name string, n int) {
+		if n > 0 {
+			parts = append(parts, fmt.Sprintf("%s=%d", name, n))
+		}
+	}
+	add("remoteImages", b.RemoteImages)
+	add("remoteStyles", b.RemoteStyles)
+	add("remoteFonts", b.RemoteFonts)
+	add("scripts", b.Scripts)
+	add("forms", b.Forms)
+	add("eventHandlers", b.EventHandlers)
+	add("dangerousUrls", b.DangerousURLs)
+	add("embeddedFrames", b.EmbeddedFrames)
+	add("trackingPixels", b.TrackingPixels)
+	return strings.Join(parts, " ")
 }
 
 func boolPtr(b bool) *bool { return &b }

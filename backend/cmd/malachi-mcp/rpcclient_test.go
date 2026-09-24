@@ -161,15 +161,17 @@ func TestLogsContainNoContent(t *testing.T) {
 	h.ok(t, "read_message", map[string]any{"accountId": "a1", "messageId": "m1", "includeLinks": true})
 	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m1", "partId": "2"})
 	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "to": []string{"SENTINEL-NAME <sentinel@example.test>"}, "subject": "SENTINEL-SUBJECT", "body": "SENTINEL-BODY"})
+	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "SENTINEL-REPLY", "attribution": "SENTINEL-ATTR"})
+	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "omitQuote": true})
 	h.fail(t, "sync_status", nil, "SECRET-ERROR-TEXT")
 
 	logs := h.logs.String()
-	if !strings.Contains(logs, "method=message.body") {
+	if !strings.Contains(logs, "method=message.body") || !strings.Contains(logs, "method=draft.create") || !strings.Contains(logs, "method=attachment.remove") {
 		t.Fatalf("debug log does not even record calls:\n%s", logs)
 	}
 	mustNotContain(t, logs,
 		"alice@example.org", "Alice", "Quarterly", "Hello Bob", "notes.txt", "hello, notes", "example.org/x",
-		"SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML)
+		"logo.png", "report.pdf", "SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML)
 }
 
 func TestVersionFlag(t *testing.T) {

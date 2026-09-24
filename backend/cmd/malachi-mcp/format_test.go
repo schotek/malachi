@@ -4,9 +4,13 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
+
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 func TestCleanStripsFormatChars(t *testing.T) {
@@ -69,19 +73,109 @@ func TestSliceBytes(t *testing.T) {
 	}
 }
 
-func TestReplySubjectAndAddresses(t *testing.T) {
-	if got := replySubject("Hello"); got != "Re: Hello" {
-		t.Errorf("replySubject = %q", got)
-	}
-	if got := replySubject("  RE: Hello "); got != "RE: Hello" {
-		t.Errorf("replySubject keeps prefix: %q", got)
-	}
+func TestParseAddresses(t *testing.T) {
 	as, err := parseAddresses([]string{"Alice <alice@example.org>", " bob@example.com ", ""})
 	if err != nil || len(as) != 2 || as[0].Name != "Alice" || as[1].Address != "bob@example.com" || as[1].Name != "" {
 		t.Errorf("parseAddresses = %+v, %v", as, err)
 	}
 	if _, err := parseAddresses([]string{"no at sign"}); err == nil || !strings.Contains(err.Error(), "invalid address") {
 		t.Errorf("parseAddresses should fail: %v", err)
+	}
+}
+
+func TestParseComposeMode(t *testing.T) {
+	cases := map[string]api.ComposeMode{"": api.ComposeNew, "new": api.ComposeNew, "reply": api.ComposeReply,
+		"REPLY": api.ComposeReply, "replyall": api.ComposeReplyAll, "Forward": api.ComposeForward}
+	for in, want := range cases {
+		if got, ok := parseComposeMode(in); !ok || got != want {
+			t.Errorf("parseComposeMode(%q) = %q,%v; want %q", in, got, ok, want)
+		}
+	}
+	if _, ok := parseComposeMode("bogus"); ok {
+		t.Error("bogus mode accepted")
+	}
+}
+
+func TestBodyHTMLInsert(t *testing.T) {
+	cases := map[string]string{
+		"":                              "",
+		"  \n":                          "",
+		"Thanks <b>!</b>\nBye":          "<p>Thanks &lt;b&gt;!&lt;/b&gt;<br/>Bye</p>",
+		"one\r\ntwo\r\n\r\nthree":       "<p>one<br/>two</p><p>three</p>",
+		"\n\npara\n\n\n\nnext & last\n": "<p>para</p><p>next &amp; last</p>",
+	}
+	for in, want := range cases {
+		if got := bodyHTML(in); got != want {
+			t.Errorf("bodyHTML(%q) = %q, want %q", in, got, want)
+		}
+	}
+	tpl := `<p><br/></p><div>attr</div><blockquote type="cite">q</blockquote>`
+	if got := insertBody(tpl, "<p>x</p>"); got != `<p>x</p><div>attr</div><blockquote type="cite">q</blockquote>` {
+		t.Errorf("insertBody = %q", got)
+	}
+	if got := insertBody("<p><br></p><div>a</div>", "<p>x</p>"); got != "<p>x</p><div>a</div>" {
+		t.Errorf("insertBody raw spelling = %q", got)
+	}
+	if got := insertBody("<div>no marker</div>", "<p>x</p>"); got != "<p>x</p><div>no marker</div>" {
+		t.Errorf("insertBody without marker = %q", got)
+	}
+	if got := insertBody(tpl, ""); got != tpl {
+		t.Errorf("insertBody empty body = %q", got)
+	}
+	if got := plainBody("Hi\n", "\n\nAlice wrote:\n> x"); got != "Hi\n\nAlice wrote:\n> x" {
+		t.Errorf("plainBody = %q", got)
+	}
+	if got := plainBody("", "\n\n> x"); got != "> x" {
+		t.Errorf("plainBody empty body = %q", got)
+	}
+	if got := plainBody("Hi", ""); got != "Hi" {
+		t.Errorf("plainBody empty quote = %q", got)
+	}
+}
+
+func TestDefaultAttributionCaps(t *testing.T) {
+	date := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
+	m := api.Message{MessageSummary: api.MessageSummary{
+		From:    []api.Address{{Name: "Ali" + string(rune(0x202E)) + "ce", Address: "alice@example.org"}},
+		Subject: "Hello\r\nthere",
+		Date:    date,
+	}}
+	if got := defaultAttribution(api.ComposeReply, m); got != "On Wed, 23 Sep 2026 10:00 UTC, Alice <alice@example.org> wrote:" {
+		t.Errorf("reply attribution = %q", got)
+	}
+	m.Date = time.Time{}
+	if got := defaultAttribution(api.ComposeReply, m); got != "Alice <alice@example.org> wrote:" {
+		t.Errorf("reply attribution without date = %q", got)
+	}
+	m.From = nil
+	if got := defaultAttribution(api.ComposeReply, m); got != "The sender wrote:" {
+		t.Errorf("reply attribution without sender = %q", got)
+	}
+
+	m.Date = date
+	m.From = []api.Address{{Name: "Alice", Address: "alice@example.org"}}
+	for i := 0; i < 600; i++ {
+		m.To = append(m.To, api.Address{Name: fmt.Sprintf("Person %d", i), Address: fmt.Sprintf("p%d@example.org", i)})
+	}
+	got := defaultAttribution(api.ComposeForward, m)
+	if len(got) > api.MaxDraftAttributionBytes || !strings.HasSuffix(got, "…") || strings.Contains(got, "\r") {
+		t.Errorf("forward attribution not capped: %d bytes, suffix %q", len(got), got[len(got)-3:])
+	}
+	if n := strings.Count(got, "\n") + 1; n > api.MaxDraftAttributionLines || n != 5 {
+		t.Errorf("forward attribution has %d lines", n)
+	}
+	mustContain(t, got, "---------- Forwarded message ----------\nFrom: Alice <alice@example.org>\nDate: Wed, 23 Sep 2026 10:00 UTC\nSubject: Hello there\nTo: Person 0 <p0@example.org>")
+	if got := capAttribution(strings.Repeat("x\n", 20)); strings.Count(got, "\n") != api.MaxDraftAttributionLines-1 {
+		t.Errorf("capAttribution lines: %q", got)
+	}
+}
+
+func TestBlockedSummary(t *testing.T) {
+	if got := blockedSummary(api.BlockedContent{}); got != "" {
+		t.Errorf("empty summary = %q", got)
+	}
+	if got := blockedSummary(api.BlockedContent{RemoteImages: 3, Scripts: 1}); got != "remoteImages=3 scripts=1" {
+		t.Errorf("summary = %q", got)
 	}
 }
 

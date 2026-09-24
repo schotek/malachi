@@ -139,16 +139,45 @@ destructive, only `send_message` open-world.
 
 ### create_draft
 
-- input: `accountId`; optional `to`, `cc`, `bcc` (`Name <user@host>` or
-  `user@host`), `subject`, `body` (plain text), `replyTo` (a message id)
-- With `replyTo`: when `to` is empty the recipients come from the
-  original's `Reply-To`, else `From`; when `subject` is empty it becomes
-  `Re: …`; `inReplyTo` is set so the daemon threads the reply at send time.
-- The draft is plain text only: no HTML body, no forwarding, no
-  attachments. At most 20 drafts per bridge process.
-- output: a trusted line with `draftId`, `version` and whether
-  `send_message` is available, then a fence with the final recipients and
-  subject (for a reply they come from the mail).
+- input: `accountId`; optional `mode` (`reply` | `replyAll` | `forward`;
+  omitted = a new message) with `messageId`; optional `to`, `cc`, `bcc`
+  (`Name <user@host>` or `user@host`), `subject`, `body` (plain text),
+  `attribution` (the line above the quote, at most 2048 bytes and 16
+  lines), `omitQuote`
+- Without `mode` the draft is a new plain-text message: `textBody` only.
+- With `mode` the bridge asks the daemon for the template (`draft.create`,
+  [api.md §4.5](api.md#45-draft)), exactly as the desktop client does:
+  recipients (reply: the original's `Reply-To`, else `From`, minus the
+  account's own addresses; replyAll: plus its `To` and `Cc`), the
+  `Re:`/`Fwd:` subject with stacked markers stripped, `inReplyTo` or
+  `forwarding` for threading, and the original quoted as the daemon's own
+  sanitised HTML with its inline pictures copied into the attachment store;
+  a forward also imports the original's files. The agent's `body` is
+  HTML-escaped (one paragraph per blank-line-separated block, `<br/>` per
+  line) and placed in the empty paragraph the template starts with, then
+  the whole is saved with every attachment the daemon imported, and
+  `draft.save` sanitises it again. Markup in `body` is shown literally: the
+  agent cannot inject elements.
+- `attribution` defaults to an English line built from the original's
+  headers (`On Wed, 23 Sep 2026 10:00 UTC, Alice <alice@example.org>
+  wrote:`; a `---------- Forwarded message ----------` header block for a
+  forward), cleaned and capped so the daemon never refuses it. `to`, `cc`
+  and `subject`, when given, replace the prefilled values; `bcc` is only
+  ever the agent's. `omitQuote` keeps recipients, subject, threading and a
+  forward's files but drops the quote; the pictures the daemon copied for
+  it are removed at once (`attachment.remove`), as they are whenever the
+  save fails, so nothing waits for the daemon's sweep.
+- Degradation follows the daemon's `quoted`: `text` (the original's HTML
+  could not be used; its text is quoted, in a cite block or as `> ` lines)
+  and `none` (body not downloaded; nothing quoted) are reported in the
+  result. At most 20 drafts per bridge process.
+- output: a trusted head with `draftId`, `version`, whether `send_message`
+  is available, `mode`, `quoted`, the attachments bound and skipped and
+  any non-zero sanitiser counters from the save; then a fence with the
+  final recipients, subject, `in-reply-to` or `forwarding`, the bound
+  attachments (`id`, name, type, size, inline) and the parts the daemon
+  skipped. A forward has no recipients until the user or a second call
+  adds them.
 
 ### mark_messages, move_messages, delete_messages (`-allow-modify`)
 
@@ -179,10 +208,14 @@ in front of a model that holds tools, so:
 
 - **Text only.** No tool ever returns HTML, not even the sanitised HTML the
   webview gets. Remote content is always `block`: the daemon never fetches
-  anything because an agent read a message.
+  anything because an agent read a message. The one place HTML travels the
+  other way is `create_draft` with a `mode`: the daemon's own sanitised
+  quote of the original with the agent's text escaped into it, which
+  `draft.save` sanitises again; the agent never supplies markup.
 - **Fenced.** Every string that came from a message (names, addresses,
   subjects, snippets, folder paths, attachment names, header values,
-  bodies, the recipients of a reply draft) is inside a block delimited by
+  bodies, the recipients, subject and attachment names of a draft built
+  from one) is inside a block delimited by
   `--- BEGIN UNTRUSTED MAIL CONTENT <nonce> … ---` and `--- END … <nonce>
   ---`. The nonce is twelve hex characters from `crypto/rand`, new for every
   call, so a message cannot forge the closing line. Trusted, daemon-derived
@@ -281,8 +314,9 @@ stderr, and needs the daemon socket to be reachable under the same user.
 ## Not in this version
 
 - search (`search.query` is not implemented in the daemon yet), threads,
-  attached messages (`message.embedded`), draft listing and deletion,
-  attachments on drafts;
+  attached messages (`message.embedded`), draft listing and deletion, the
+  agent's own attachments on drafts (only what `draft.create` imports from
+  the original travels);
 - structured tool output (`structuredContent`); the results are text;
 - notifications (new mail as an MCP resource change);
 - the recipient policy above;

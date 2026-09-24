@@ -6,12 +6,18 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "read_message", "sync_status", "trigger_sync"}
+
+const (
+	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
+	fxForwardAttribution = "---------- Forwarded message ----------\nFrom: Alice Example <alice@example.org>\nDate: Wed, 23 Sep 2026 10:00 UTC\nSubject: Quarterly numbers\nTo: Bob <bob@example.com>"
+)
 
 func TestToolGatingByFlags(t *testing.T) {
 	cases := []struct {
@@ -76,37 +82,232 @@ func TestAnnotations(t *testing.T) {
 	}
 }
 
-func TestCreateDraftReplyPrefill(t *testing.T) {
+// draftCalls snapshots the fake's draft-related records.
+func draftCalls(h *harness) (creates []api.DraftCreateParams, saves []api.DraftSaveParams, removes []api.AttachmentRemoveParams, gets int) {
+	h.fb.mu.Lock()
+	defer h.fb.mu.Unlock()
+	return append([]api.DraftCreateParams(nil), h.fb.draftCreates...),
+		append([]api.DraftSaveParams(nil), h.fb.draftSaves...),
+		append([]api.AttachmentRemoveParams(nil), h.fb.attachmentRemoves...),
+		h.fb.getCalls
+}
+
+func ids(atts []api.DraftAttachment) []string {
+	var out []string
+	for _, a := range atts {
+		out = append(out, a.ID)
+	}
+	return out
+}
+
+func TestCreateDraftReplyRich(t *testing.T) {
 	h := newHarness(t, newFixture(), false, false)
-	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "replyTo": "m1", "body": "Thanks!"})
-	mustContain(t, out, "draft d1 (version 1) stored in account a1; it is NOT sent.", "without --allow-send",
-		"to: Alice Reply <reply@example.org>", "subject: Re: Quarterly numbers", "in-reply-to: m1")
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Thanks <b>!</b>\nBye"})
+	mustContain(t, out,
+		"draft d1 (version 1) stored in account a1; it is NOT sent.", "without --allow-send",
+		"mode: reply; quoted: html; attachments: 1 bound (1 inline), 0 skipped",
+		"to: Alice Reply <reply@example.org>", "subject: Re: Quarterly numbers", "in-reply-to: m1",
+		`- id=att_in filename="logo.png" type=image/png size=68 inline`)
+	mustNotContain(t, out, "no recipients yet", "blocked in save", "forwarding:")
 	fenceNonce(t, out)
 
-	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "replyTo": "m1", "to": []string{"Carol <carol@example.net>"}, "subject": "re: own subject"})
-	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "replyTo": "m2"})
-
-	h.fb.mu.Lock()
-	saves := append([]api.DraftSaveParams(nil), h.fb.draftSaves...)
-	h.fb.mu.Unlock()
-	if len(saves) != 3 {
-		t.Fatalf("%d draft saves, want 3", len(saves))
+	creates, saves, removes, _ := draftCalls(h)
+	if len(creates) != 1 || len(saves) != 1 || len(removes) != 0 {
+		t.Fatalf("creates=%d saves=%d removes=%d", len(creates), len(saves), len(removes))
+	}
+	if c := creates[0]; c.AccountID != "a1" || c.Mode != api.ComposeReply || c.MessageID != "m1" || c.Attribution != fxReplyAttribution {
+		t.Errorf("draft.create params: %+v", c)
 	}
 	d := saves[0].Draft
-	if d.AccountID != "a1" || d.TextBody != "Thanks!" || d.Subject != "Re: Quarterly numbers" || d.InReplyTo != "m1" ||
-		!reflect.DeepEqual(d.To, []api.Address{{Name: "Alice Reply", Address: "reply@example.org"}}) {
-		t.Errorf("reply draft: %+v", d)
+	wantHTML := `<p>Thanks &lt;b&gt;!&lt;/b&gt;<br/>Bye</p><div>On Wed, 23 Sep 2026 10:00 UTC, Alice Example &lt;alice@example.org&gt; wrote:</div><blockquote type="cite"><p>original</p></blockquote>`
+	if d.HTMLBody != wantHTML {
+		t.Errorf("saved HTMLBody:\n%s\nwant:\n%s", d.HTMLBody, wantHTML)
 	}
-	if d.HTMLBody != "" || d.Forwarding != "" || len(d.Attachments) != 0 || d.ID != "" || d.Version != 0 {
-		t.Errorf("draft must be plain text without forwarding/attachments: %+v", d)
+	if d.TextBody != "" || d.Subject != "Re: Quarterly numbers" || d.InReplyTo != "m1" || d.Forwarding != "" ||
+		!reflect.DeepEqual(d.To, []api.Address{{Name: "Alice Reply", Address: "reply@example.org"}}) ||
+		!reflect.DeepEqual(ids(d.Attachments), []string{fxInlineID}) || d.ID != "" || d.Version != 0 {
+		t.Errorf("saved draft: %+v", d)
 	}
-	d = saves[1].Draft
-	if d.Subject != "re: own subject" || !reflect.DeepEqual(d.To, []api.Address{{Name: "Carol", Address: "carol@example.net"}}) {
-		t.Errorf("explicit to/subject not honoured: %+v", d)
+}
+
+func TestCreateDraftOverrides(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{
+		"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "x",
+		"to": []string{"Carol <carol@example.net>"}, "cc": []string{"dave@example.net"}, "bcc": []string{"me@example.com"},
+		"subject": "re: own subject", "attribution": "custom",
+	})
+	mustContain(t, out, "to: Carol <carol@example.net>", "cc: dave@example.net", "bcc: me@example.com", "subject: re: own subject", "in-reply-to: m1")
+	creates, saves, _, gets := draftCalls(h)
+	if gets != 0 {
+		t.Errorf("message.get called %d times although the attribution was given", gets)
 	}
-	d = saves[2].Draft
-	if !reflect.DeepEqual(d.To, []api.Address{{Name: "Eve", Address: "eve@example.net"}}) || d.Subject != "Re: Pending body" {
-		t.Errorf("reply without Reply-To must use From: %+v", d)
+	if creates[0].Attribution != "custom" {
+		t.Errorf("attribution not forwarded: %+v", creates[0])
+	}
+	d := saves[0].Draft
+	if d.Subject != "re: own subject" || d.InReplyTo != "m1" ||
+		!reflect.DeepEqual(d.To, []api.Address{{Name: "Carol", Address: "carol@example.net"}}) ||
+		!reflect.DeepEqual(d.CC, []api.Address{{Address: "dave@example.net"}}) ||
+		!reflect.DeepEqual(d.BCC, []api.Address{{Address: "me@example.com"}}) {
+		t.Errorf("overrides not honoured: %+v", d)
+	}
+	if !strings.Contains(d.HTMLBody, "<div>custom</div>") || !strings.HasPrefix(d.HTMLBody, "<p>x</p>") {
+		t.Errorf("HTMLBody: %s", d.HTMLBody)
+	}
+}
+
+func TestCreateDraftReplyAll(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "replyAll", "messageId": "m6", "body": "all"})
+	mustContain(t, out, "mode: replyAll", "to: Alice Example <alice@example.org>", "cc: Carol <carol@example.net>", "subject: Re: Withheld html")
+	creates, saves, _, _ := draftCalls(h)
+	if creates[0].Mode != api.ComposeReplyAll {
+		t.Errorf("mode: %+v", creates[0])
+	}
+	if d := saves[0].Draft; !reflect.DeepEqual(d.CC, []api.Address{{Name: "Carol", Address: "carol@example.net"}}) {
+		t.Errorf("cc from the template: %+v", d.CC)
+	}
+}
+
+func TestCreateDraftForward(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "FYI"})
+	mustContain(t, out,
+		"mode: forward; quoted: html; attachments: 2 bound (1 inline), 1 skipped",
+		"no recipients yet", "to: \n", "subject: Fwd: Quarterly numbers", "forwarding: m1",
+		`- id=att_in filename="logo.png" type=image/png size=68 inline`,
+		`- id=att_pdf filename="report.pdf" type=application/pdf size=5242880`,
+		"skipped:\n- filename=\"big.png\" type=image/png size=3145729")
+	mustNotContain(t, out, "in-reply-to:")
+	creates, saves, removes, _ := draftCalls(h)
+	if creates[0].Mode != api.ComposeForward || creates[0].Attribution != fxForwardAttribution {
+		t.Errorf("forward create params: %+v", creates[0])
+	}
+	d := saves[0].Draft
+	if len(d.To) != 0 || d.Subject != "Fwd: Quarterly numbers" || d.Forwarding != "m1" || d.InReplyTo != "" ||
+		!reflect.DeepEqual(ids(d.Attachments), []string{fxInlineID, fxPDFID}) || !strings.HasPrefix(d.HTMLBody, "<p>FYI</p><div>") {
+		t.Errorf("forward draft: %+v", d)
+	}
+	if len(removes) != 0 {
+		t.Errorf("nothing should be removed after a successful save: %+v", removes)
+	}
+}
+
+func TestCreateDraftOmitQuote(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "FYI", "omitQuote": true})
+	mustContain(t, out, "quoted: omitted (omitQuote)", "attachments: 1 bound (0 inline), 1 skipped", `- id=att_pdf`)
+	mustNotContain(t, out, "att_in")
+	creates, saves, removes, gets := draftCalls(h)
+	if gets != 0 || creates[0].Attribution != "" {
+		t.Errorf("omitQuote must not build an attribution: gets=%d create=%+v", gets, creates[0])
+	}
+	d := saves[0].Draft
+	if d.HTMLBody != "" || d.TextBody != "FYI" || !reflect.DeepEqual(ids(d.Attachments), []string{fxPDFID}) {
+		t.Errorf("omitQuote forward draft: %+v", d)
+	}
+	if !reflect.DeepEqual(removes, []api.AttachmentRemoveParams{{AccountID: "a1", AttachmentID: fxInlineID}}) {
+		t.Errorf("inline copy not removed: %+v", removes)
+	}
+
+	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "omitQuote": true})
+	_, saves, removes, _ = draftCalls(h)
+	if d := saves[1].Draft; d.HTMLBody != "" || d.TextBody != "" || len(d.Attachments) != 0 || d.InReplyTo != "m1" {
+		t.Errorf("omitQuote reply draft: %+v", d)
+	}
+	if len(removes) != 2 || removes[1].AttachmentID != fxInlineID {
+		t.Errorf("removes: %+v", removes)
+	}
+}
+
+func TestCreateDraftQuoteDegradation(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m2", "body": "Hi"})
+	mustContain(t, out, "quoted: none (the original's body is not downloaded", "to: Eve <eve@example.net>")
+	mustNotContain(t, out, "attachments:")
+	_, saves, removes, _ := draftCalls(h)
+	if d := saves[0].Draft; d.HTMLBody != "" || d.TextBody != "Hi" || len(d.Attachments) != 0 || d.InReplyTo != "m2" {
+		t.Errorf("none draft: %+v", d)
+	}
+	if len(removes) != 0 {
+		t.Errorf("nothing to remove for quoted none: %+v", removes)
+	}
+
+	h.fb.mu.Lock()
+	h.fb.quoteForm["m1"] = api.QuoteText
+	h.fb.mu.Unlock()
+	out = h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "Hi"})
+	mustContain(t, out, "quoted: text (the original's HTML could not be used")
+	_, saves, _, _ = draftCalls(h)
+	if d := saves[1].Draft; d.HTMLBody != "" || d.TextBody != "Hi\n\n"+fxReplyAttribution+"\n> original" || len(d.Attachments) != 0 {
+		t.Errorf("text draft: %+v", d)
+	}
+	out = h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "Hi"})
+	mustContain(t, out, "quoted: text", "attachments: 1 bound (0 inline), 1 skipped")
+	_, saves, _, _ = draftCalls(h)
+	if d := saves[2].Draft; !reflect.DeepEqual(ids(d.Attachments), []string{fxPDFID}) || !strings.HasPrefix(d.TextBody, "Hi\n\n---------- Forwarded message") {
+		t.Errorf("text forward draft: %+v", d)
+	}
+}
+
+func TestCreateDraftEmptyBodyKeepsParagraph(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1"})
+	_, saves, _, _ := draftCalls(h)
+	if d := saves[0].Draft; !strings.HasPrefix(d.HTMLBody, "<p><br/></p><div>") {
+		t.Errorf("empty body must keep the template's empty paragraph: %s", d.HTMLBody)
+	}
+}
+
+func TestCreateDraftCreateErrorNoSave(t *testing.T) {
+	fb := newFixture()
+	fb.setFail(api.MethodDraftCreate, api.NewError(api.CodeMessageNotFound, "gone"))
+	h := newHarness(t, fb, false, false)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1"}, "messageNotFound (1102): gone")
+	_, saves, removes, _ := draftCalls(h)
+	if len(saves) != 0 || len(removes) != 0 {
+		t.Errorf("saves=%d removes=%d, want 0/0", len(saves), len(removes))
+	}
+	h.b.drafts.mu.Lock()
+	created := h.b.drafts.created
+	h.b.drafts.mu.Unlock()
+	if created != 0 {
+		t.Errorf("a failed create consumed a session slot")
+	}
+}
+
+func TestCreateDraftSaveErrorCleansUp(t *testing.T) {
+	fb := newFixture()
+	fb.setFail(api.MethodDraftSave, api.NewError(api.CodeStorageError, "disk"))
+	h := newHarness(t, fb, false, false)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "x"}, "storageError (1400): disk")
+	_, _, removes, _ := draftCalls(h)
+	var got []string
+	for _, r := range removes {
+		got = append(got, r.AttachmentID)
+	}
+	if !reflect.DeepEqual(got, []string{fxInlineID, fxPDFID}) {
+		t.Errorf("imported copies not cleaned up: %v", got)
+	}
+	h.b.drafts.mu.Lock()
+	n := len(h.b.drafts.drafts)
+	h.b.drafts.mu.Unlock()
+	if n != 0 {
+		t.Errorf("a failed save must not be sendable")
+	}
+}
+
+func TestCreateDraftModeValidation(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "bogus", "messageId": "m1"}, `unknown mode "bogus"`)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "messageId": "m1"}, "messageId needs mode")
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply"}, "mode reply needs messageId")
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "attribution": "x"}, "apply only to reply, replyAll and forward")
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "omitQuote": true}, "apply only to reply, replyAll and forward")
+	creates, saves, _, _ := draftCalls(h)
+	if len(creates) != 0 || len(saves) != 0 {
+		t.Errorf("creates=%d saves=%d, want 0/0", len(creates), len(saves))
 	}
 }
 
@@ -116,11 +317,9 @@ func TestCreateDraftRejectsBadAddress(t *testing.T) {
 	// A missing required field is refused by the SDK's schema validation
 	// before the handler runs; the text is the SDK's, but it is a tool error.
 	h.fail(t, "create_draft", map[string]any{"to": []string{"x@example.org"}}, `"accountId"`)
-	h.fb.mu.Lock()
-	n := len(h.fb.draftSaves)
-	h.fb.mu.Unlock()
-	if n != 0 {
-		t.Errorf("%d drafts saved, want 0", n)
+	_, saves, _, _ := draftCalls(h)
+	if len(saves) != 0 {
+		t.Errorf("%d drafts saved, want 0", len(saves))
 	}
 }
 
@@ -130,11 +329,10 @@ func TestCreateDraftSessionCap(t *testing.T) {
 		h.ok(t, "create_draft", map[string]any{"accountId": "a1", "to": []string{"x@example.org"}, "subject": fmt.Sprint(i)})
 	}
 	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "to": []string{"x@example.org"}}, "which is its limit")
-	h.fb.mu.Lock()
-	n := len(h.fb.draftSaves)
-	h.fb.mu.Unlock()
-	if n != maxSessionDrafts {
-		t.Errorf("%d drafts saved, want %d", n, maxSessionDrafts)
+	h.fail(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1"}, "which is its limit")
+	creates, saves, _, _ := draftCalls(h)
+	if len(saves) != maxSessionDrafts || len(creates) != 0 {
+		t.Errorf("saves=%d creates=%d, want %d/0", len(saves), len(creates), maxSessionDrafts)
 	}
 }
 

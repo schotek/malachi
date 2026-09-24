@@ -409,7 +409,10 @@ Defences:
   and refused on mismatch; HTML and SVG never;
 - caps on everything: body characters, attachment bytes, list size,
   ids per mutation, drafts per process;
-- drafts are plain text without forwarding or attachments;
+- drafts carry only escaped plain text from the agent; HTML and
+  attachments come solely from the daemon's own quote and import of the
+  original message (`draft.create`), and a forward attaches the original's
+  parts, all gated by the human who sends;
   `delete_messages` only moves to Trash and refuses messages already in
   Trash or in the Outbox; `send_message` accepts only drafts created by
   the same process, at the recorded version;
@@ -422,7 +425,9 @@ tools it has (fencing and descriptions reduce, they do not prevent);
 exfiltration through the host's own tools once content is in context; the
 user sending an agent-made draft without reading it; an agent editing
 `.mcp.json` to grant itself flags; a sender's `Reply-To` steering a reply's
-recipients (they are shown in the result). A recipient allow-list for
+recipients, and the quoted original (its pictures, a forward's files)
+travelling in an agent-made draft (both are shown in the result). A
+recipient allow-list for
 `send_message` built on `contact.search` is the next step and is not
 implemented.
 
