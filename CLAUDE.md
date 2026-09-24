@@ -36,9 +36,13 @@ Každý parser MIME, každý renderer, každý handler odkazu vychází z předp
 patologické případy (do `backend/testdata/mime`), ne jen šťastnou cestu.
 V UI: `SetUseMarkup(false)` na všem, co zobrazuje data ze serveru.
 
-### 4. Linux only
-Nepřidávej kód, build cesty ani abstrakce pro Windows a macOS.
-Přenositelnost je zajištěná hranicí na API, ne podmíněnou kompilací.
+### 4. Jeden kód na platformu, žádné větvení
+Jádro i GTK UI v tomto stromu jsou linuxový kód: nepřidávej do nich build
+tagy, podmíněnou kompilaci ani abstrakce „pro jistotu“ pro Windows a macOS.
+Jiné platformy dostanou vlastní nativní UI (Swift/AppKit pro macOS, WinUI 3
+pro Windows) jako samostatné klienty nad API démona, přičemž GTK UI je
+mustr, který zrcadlí; nikdy větvení tohoto kódu. Přenositelnost je
+zajištěná hranicí na API, ne podmíněnou kompilací.
 
 ### 5. Neměň API kontrakt bez aktualizace docs/api.md
 Kontrakt (`backend/pkg/api/`) a dokumentace (`docs/api.md`) se mění současně,

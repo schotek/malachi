@@ -538,11 +538,17 @@ preference set the dialog last received.
 
 ## 6. Platform
 
-Linux only. Portability of the *architecture* is provided by the socket
-boundary, not by conditional compilation. No Windows/macOS code paths,
-build tags, or "just in case" abstractions.
+One core, a native UI per platform. The daemon and the GTK UI in this tree
+are Linux code: no Windows/macOS code paths, build tags or "just in case"
+abstractions in either. Other platforms get their own native UI as a
+separate client of the daemon's API (Swift/AppKit on macOS, WinUI 3 on
+Windows); the GTK UI is the template they mirror feature for feature, and
+[macos-port.md](macos-port.md) records what the macOS one takes.
+Portability of the *architecture* is provided by the socket boundary, not
+by conditional compilation.
 
-Distribution: Flatpak first (`packaging/flatpak/`), AppImage second. No Snap.
+Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
+(`make deb` / `make rpm`). No Snap.
 
 ## 7. Open decisions
 

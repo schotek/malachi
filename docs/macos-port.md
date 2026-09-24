@@ -5,11 +5,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Exploration: a native macOS client
 
-**Status: exploration only. Nothing here is planned or approved.**
-[CLAUDE.md](../CLAUDE.md) rule 4 ("Linux only") stands unchanged until it is
-explicitly revised. This document records what a macOS port would actually
-cost, measured against the tree as it stands on 2026-09-07, so that the
-question does not have to be re-researched from scratch later.
+**Status: planned.** Since 2026-09-24 a native macOS client is part of the
+project's direction (README, *Goals*): one core, a native UI per platform,
+the GTK UI as the template the others mirror. [CLAUDE.md](../CLAUDE.md)
+rule 4 says how it is done: a separate Swift/AppKit client over the
+daemon's API, never a branch of the GTK code. This document records what
+that port takes, measured against the tree as it stood on 2026-09-07, so
+that the question does not have to be re-researched from scratch.
 
 The question asked: can there be a macOS variant of the finished GTK client
 using native macOS UI, and what would it involve?

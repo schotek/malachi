@@ -4,10 +4,10 @@
 
 <h1 align="center">Malachi Mail</h1>
 
-<p align="center">A native email client for the Linux desktop.</p>
+<p align="center">A native email client: one Go core with all the logic, a native UI for each platform. Linux today, macOS and Windows to follow.</p>
 
 Built because the existing options are either showing their age or do not
-work reliably anymore.
+work reliably anymore, and on Linux that is worse than anywhere else.
 
 > **Project status: early, usable with care.** Version 0.1.0 reads, writes
 > and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
@@ -63,15 +63,26 @@ Not yet: search. The RPC contract already defines it; the daemon answers
 
 ## Goals
 
-- **Linux first, and only.** GNOME desktop conventions, Flatpak
-  distribution, portals for everything that leaves the sandbox.
-- **Native GTK 4 / libadwaita UI.** No web technology for the chrome.
+- **One core, native UIs.** All mail logic, every security decision and
+  the offline store live in `malachid`, a Go daemon with a documented
+  JSON-RPC API and no GUI dependency of its own. Every user interface is a
+  thin client of it, so the security model is written once, not per UI,
+  and bringing the client to another platform means writing a UI, not a
+  mail client. Portability comes from that boundary, not from conditional
+  compilation.
+- **A native UI on every platform, no web technology for the chrome.**
+  GTK 4 / libadwaita on Linux is the primary UI and the template the
+  others mirror feature for feature; a Swift/AppKit UI for macOS and a
+  WinUI 3 UI for Windows are planned. What the macOS one takes is written
+  down in [docs/macos-port.md](docs/macos-port.md).
+- **Linux first.** GNOME desktop conventions, portals for everything that
+  leaves the sandbox, Flatpak and native packages.
+- **Lean.** A native toolkit and one small daemon: a mail client should
+  not need a browser engine per window or half a gigabyte of memory to
+  show an inbox.
 - **Safe HTML mail.** Messages are sanitised in the backend before the UI
   ever sees them; remote content is blocked until you allow it; the
   renderer runs with JavaScript off and a strict content policy.
-- **Separated backend.** All mail logic lives in a daemon with a documented
-  JSON-RPC API. The UI is replaceable; the security model is not
-  re-implemented per UI.
 - **Offline first.** Mail lives in a local SQLite store; full-text search
   will run over it. The network is an optimisation.
 
@@ -79,11 +90,6 @@ Not yet: search. The RPC contract already defines it; the daemon answers
 
 - A webmail or a hosted service.
 - Mobile versions.
-- Windows or macOS in the foreseeable future. The architecture does not
-  prevent it, but no code will be written for it. What a macOS port would
-  actually cost is written down in
-  [docs/macos-port.md](docs/macos-port.md) so the question need not be
-  re-researched.
 - Running a mail server, filtering spam server-side, calendaring.
 
 ## Architecture
@@ -91,8 +97,10 @@ Not yet: search. The RPC contract already defines it; the daemon answers
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
 store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
 synchronises, sanitises HTML, manages credentials and threads
-conversations; search will live there too. `malachi` is a GTK 4 application that connects to the
-daemon over a local unix socket and displays what it is given.
+conversations; search will live there too. `malachi` is the GTK 4
+application for Linux: it connects to the daemon over a local unix socket
+and displays what it is given. The macOS and Windows applications will do
+the same over the same socket and the same contract.
 
 ```
 ┌──────────────────┐
