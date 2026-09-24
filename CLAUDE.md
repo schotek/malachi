@@ -173,7 +173,12 @@ Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
 `draft.create`), `--allow-modify` / `--allow-send` přes
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
-obsah pošty v ohradě s nonce; viz `docs/mcp.md`).
+obsah pošty v ohradě s nonce; viz `docs/mcp.md`). macOS klient (`macos/`,
+Swift/AppKit, SwiftPM, GPL-3.0-or-later): kostra — spustí `malachid` z bundlu
+s `--config`/`--store` v `~/Library/Application Support/Malachi Mail/` a
+`MALACHI_KEYRING=none`, socket na výchozí cestě démona, okno ukazuje stav
+spojení a `system.info`, `malachi-mcp` je v bundlu; žádná pošta, viz
+`macos/README.md`. `make macos` / `run-macos` / `test-macos` jsou jen na Darwinu.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo

@@ -5,13 +5,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Exploration: a native macOS client
 
-**Status: planned.** Since 2026-09-24 a native macOS client is part of the
-project's direction (README, *Goals*): one core, a native UI per platform,
-the GTK UI as the template the others mirror. [CLAUDE.md](../CLAUDE.md)
+**Status: in progress.** Since 2026-09-24 a native macOS client is part of
+the project's direction (README, *Goals*): one core, a native UI per
+platform, the GTK UI as the template the others mirror. [CLAUDE.md](../CLAUDE.md)
 rule 4 says how it is done: a separate Swift/AppKit client over the
-daemon's API, never a branch of the GTK code. This document records what
-that port takes, measured against the tree as it stood on 2026-09-07, so
-that the question does not have to be re-researched from scratch.
+daemon's API, never a branch of the GTK code. The skeleton exists in
+`macos/` (see `macos/README.md`): it starts the daemon from the bundle,
+shows the connection and carries the MCP bridge; layer one of §2 (the
+Keychain keyring above all) and the UI of §4 are still ahead. This document
+records what that takes, measured against the tree as it stood on
+2026-09-07, so that the question does not have to be re-researched.
 
 The question asked: can there be a macOS variant of the finished GTK client
 using native macOS UI, and what would it involve?
@@ -162,32 +165,38 @@ entire point of the boundary, and this is the case it was designed for.
 
 New and non-trivial, separate from writing the client:
 
-- Xcode build, separate from `make` and `scripts/build.sh`
+- the build is a SwiftPM package in `macos/` and `make macos` assembles the
+  bundle (`build/Malachi Mail.app`, ad-hoc signed, with `malachid` and
+  `malachi-mcp` inside `Contents/MacOS/`); no `.xcodeproj` is kept in git,
+  Xcode opens `Package.swift` directly — done with the skeleton
 - Apple Developer Program membership, code signing, notarisation
-- App Sandbox entitlements for outgoing network and Keychain access
-- `malachid` shipped inside the bundle and managed as a LaunchAgent
+- App Sandbox entitlements for outgoing network and Keychain access (note:
+  a sandbox moves the data into the app container and the socket with it,
+  which the MCP bridge's default path does not survive)
+- `malachid` managed as a LaunchAgent (the skeleton starts it from the app
+  and stops it on quit, like the GTK UI)
 - an update mechanism (Sparkle, or the App Store, which reopens the licence
   question below)
 
 ## 6. Repository and licence
 
-Two decisions to take before any code, not after.
-
-**Where it lives.** Rule 4 forbids macOS code, build paths and abstractions
-in this repository. The clean resolution is that **the macOS UI lives in a
-separate repository** and speaks only the documented API. The core repo then
+**Where it lives — decided 2026-09-24: in this repository, under `macos/`.**
+Rule 4 was reworded the same day: the daemon and the GTK UI stay Linux code
+without build tags or platform abstractions, and other platforms are
+separate clients of the daemon's API in their own tree. The core repo still
 needs no `//go:build darwin` anywhere — only platform-neutral extension
 points (a keyring provider, a token provider), which are an improvement in
 their own right. This is precisely the scenario that "Why two processes and
 not one binary with a clean package boundary?" in
 [architecture.md](architecture.md) uses to justify the socket — reason 2,
-"replaceable UI" — and it keeps rule 4 intact rather than bending it.
+"replaceable UI". The alternative, a separate repository, was considered and
+rejected: the API contract and the clients move together, in one commit.
 
-**Licence.** `backend/` is AGPL-3.0-only. A separate macOS client talking to
-`malachid` over a socket is the boundary case
-[LICENSING.md](../LICENSING.md) already anticipates with the commercial core
-licence. If the macOS UI is to be proprietary, or App Store distributed,
-settle this first — not after a year of work.
+**Licence — decided: GPL-3.0-or-later**, like everything outside `backend/`.
+`backend/` is AGPL-3.0-only. A separate macOS client talking to `malachid`
+over a socket is the boundary case [LICENSING.md](../LICENSING.md) already
+anticipates with the commercial core licence; App Store distribution, if it
+ever matters, reopens this.
 
 ## 7. Estimates
 
@@ -203,10 +212,12 @@ settle this first — not after a year of work.
    §3 is a prerequisite, not a later phase.
 2. Who pays for and owns the CASA assessment, and does that change the
    answer for Linux desktops without GOA as well?
-3. Separate repository (recommended) or a rule 4 revision?
-4. Proprietary or GPL macOS UI, and does App Store distribution matter?
+3. ~~Separate repository (recommended) or a rule 4 revision?~~ Decided:
+   `macos/` in this repository, rule 4 reworded (§6).
+4. ~~Proprietary or GPL macOS UI, and does App Store distribution matter?~~
+   Decided: GPL-3.0-or-later (§6).
 5. Should the token source be generalised behind an interface now, the way
    `auth.Keyring` already is, independently of any port?
 
-Question 5 is the only one that is worth acting on regardless of whether the
-port ever happens.
+Question 5 is the only one that is worth acting on regardless of how far
+the port gets.

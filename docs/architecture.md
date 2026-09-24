@@ -547,6 +547,18 @@ Windows); the GTK UI is the template they mirror feature for feature, and
 Portability of the *architecture* is provided by the socket boundary, not
 by conditional compilation.
 
+The macOS client is `macos/`, a SwiftPM package: `Sources/MalachiCore` is
+the transport and the daemon supervision (the counterparts of
+`ui/internal/client` and `ui/internal/daemon`: an actor over
+`NWConnection` with the same newline framing, and an actor over
+`Foundation.Process` with the same locate → probe → spawn → poll → SIGTERM
+sequence), `Sources/MalachiMail` the AppKit application. `make macos`
+assembles `build/Malachi Mail.app` with `malachid` and `malachi-mcp` inside
+`Contents/MacOS/`; the app hands the daemon macOS paths for the config and
+the store (`~/Library/Application Support/Malachi Mail/`) and keeps the
+daemon's default socket path so the MCP bridge needs no configuration.
+See `macos/README.md`.
+
 Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
 (`make deb` / `make rpm`). No Snap.
 

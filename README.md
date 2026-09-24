@@ -240,6 +240,23 @@ Toolbx container the portal cannot identify the application ("no AppId
 detected") and refuses; test that setting on the host from the installed
 desktop file or in the Flatpak.
 
+### macOS
+
+The macOS client lives in [macos/](macos/): Swift/AppKit over the same
+daemon and the same contract, built with SwiftPM and assembled into an app
+bundle by make (needs Xcode 27; the daemon and the MCP bridge go inside the
+bundle):
+
+```sh
+make macos          # build/Malachi Mail.app with malachid and malachi-mcp inside
+make run-macos      # run it from the terminal so the daemon log stays visible
+make test-macos     # swift test
+```
+
+It is a skeleton for now: it starts the daemon, shows the connection and
+the daemon's version, and carries the MCP bridge. Details, paths and what is
+missing: [macos/README.md](macos/README.md).
+
 ### Flatpak
 
 Build on the host, not inside a container (needs `flatpak-builder` and the
@@ -283,6 +300,7 @@ committed template matches the sources.
 | Mail store | `~/.local/share/malachi/store.db` |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |
+| macOS | config and store in `~/Library/Application Support/Malachi Mail/`, the socket as above (see [macos/README.md](macos/README.md)) |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.
