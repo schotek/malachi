@@ -12,10 +12,21 @@ work reliably anymore.
 > **Project status: early, usable with care.** Version 0.1.0 reads, writes
 > and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
 > sanitising it, and keeps mail available offline; Gmail support landed
-> on `main` since, and so has conversation threading. Search is not there yet.
+> on `main` since, and so have conversation threading and an [MCP
+> bridge](#ai-agents-mcp) for AI agents. Search is not there yet.
 >
 > It is young, and a bug in the sync engine can still touch messages on the
 > server. Keep a second mail program for anything that matters.
+
+## Screenshots
+
+|  |  |
+|---|---|
+| [![The main window](docs/screenshots/Malachi01.png)](docs/screenshots/Malachi01.png) | **The main window.** Folders of every account in one sidebar, favourites pinned on top, the message list with its All / Unread / Flagged filter, and the message itself. The bar above the body says the remote images were blocked and offers to load them once or to trust the sender from now on. |
+| [![Adding an account](docs/screenshots/Malachi02.png)](docs/screenshots/Malachi02.png) | **Adding an account.** Accounts already signed in through GNOME Online Accounts are offered without a password; for anything else the assistant looks the server settings up from the address alone. |
+| [![Accounts in the preferences](docs/screenshots/Malachi03.png)](docs/screenshots/Malachi03.png) | **Accounts.** Every account can be reordered, paused, edited or removed, and shows what the synchronisation is doing right now. |
+| [![General preferences](docs/screenshots/Malachi04.png)](docs/screenshots/Malachi04.png) | **General preferences.** Launch at login and running in the background, when a message counts as read, desktop notifications with the system new-mail sound, and how often the mail is fetched. |
+| [![Appearance preferences](docs/screenshots/Malachi05.png)](docs/screenshots/Malachi05.png) | **Appearance.** Light, dark or the system's choice; the density of the message list, its preview line and avatars; the font and zoom of the message view. |
 
 ## What works today
 
@@ -42,6 +53,9 @@ work reliably anymore.
 - **Conversations.** The daemon threads mail by its headers as it
   arrives; *Group by Conversation* in the preferences turns the message
   list into one row per conversation, expandable to its messages.
+- **AI agents, on a leash.** An optional MCP bridge lets an agent read and
+  draft mail through the daemon. Read-only unless you say otherwise;
+  marking, moving, deleting and sending each need a separate flag.
 - **Czech translation**, and the machinery to add more.
 
 Not yet: search. The RPC contract already defines it; the daemon answers
@@ -81,23 +95,27 @@ conversations; search will live there too. `malachi` is a GTK 4 application that
 daemon over a local unix socket and displays what it is given.
 
 ```
-┌──────────────────┐     JSON-RPC 2.0      ┌────────────────────┐
-│  malachi (GTK4)  │ ◄── unix socket ────► │  malachid (Go)     │
-│  displays, asks  │                       │  all the logic     │
-└──────────────────┘                       └─────────┬──────────┘
-                                                     │
-                                              ┌──────┴──────┐
-                                              │ SQLite/FTS5 │
-                                              └─────────────┘
+┌──────────────────┐
+│  malachi (GTK4)  │ ◄─┐
+│  displays, asks  │   │                   ┌────────────────────┐
+└──────────────────┘   │   JSON-RPC 2.0    │  malachid (Go)     │
+                       ├── unix socket ──► │  all the logic     │
+┌──────────────────┐   │                   └─────────┬──────────┘
+│  malachi-mcp     │ ◄─┘                             │
+│  AI agent bridge │                           ┌─────┴───────┐
+└──────────────────┘                           │ SQLite/FTS5 │
+                                               └─────────────┘
 ```
 
 The boundary between them is deliberately hard: it is a socket, not a
 package import. Anything the UI needs has to be added to the documented API,
-which keeps business logic and security decisions in one place and makes a
-second UI (or a command-line tool) a realistic option later.
+which keeps business logic and security decisions in one place. The MCP
+bridge is the proof that it holds: a second client, written against the same
+contract, that needed no change in the daemon.
 
 Details: [docs/architecture.md](docs/architecture.md), the RPC contract in
-[docs/api.md](docs/api.md), the threat model in
+[docs/api.md](docs/api.md), the MCP bridge in [docs/mcp.md](docs/mcp.md),
+the threat model in
 [docs/security.md](docs/security.md), and how versions and releases work in
 [docs/releasing.md](docs/releasing.md).
 
@@ -223,19 +241,6 @@ Only the keyring, notifications, GNOME Online Accounts, the Settings panel
 and the address-book D-Bus names are granted; files, links and autostart go
 through portals.
 
-### AI agents
-
-`make build` also produces `build/malachi-mcp`, a Model Context Protocol
-server over stdio that gives an AI agent a gated view of the mail through
-the daemon: the same socket, the same contract, no mail logic of its own.
-The repository's `.mcp.json` registers it for Claude Code, so an agent
-opened in this checkout can list folders, read messages and write drafts
-as soon as `make run-dev` is up. It is read-only by default; export
-`MALACHI_MCP_ALLOW_MODIFY=true` (flags, moves, deletes) or
-`MALACHI_MCP_ALLOW_SEND=true` (sending) in the shell that starts the agent
-to enable more. Tools, limits and the security model are in
-[docs/mcp.md](docs/mcp.md).
-
 ### Translating
 
 The UI is translated with gettext (domain `malachi`); the daemon itself is
@@ -293,6 +298,41 @@ auth_method = "password"
 
 Passwords never go into this file; they are asked for and kept in the
 keyring.
+
+## AI agents (MCP)
+
+`make build` also produces `build/malachi-mcp`, a **Model Context Protocol**
+server over stdio that gives an AI agent — Claude Code, Zed, Cursor, or any
+other MCP client — a gated view of the mail. It is a second client of the
+daemon, exactly like the desktop UI: the same socket, the same documented
+contract, no mail logic and no credentials of its own. Nothing in the daemon
+changed to make it possible.
+
+The repository's `.mcp.json` registers it for Claude Code, so an agent opened
+in this checkout can work with the mail as soon as `make run-dev` is up. For
+another client, point it at the binary:
+
+```jsonc
+{ "command": "/path/to/build/malachi-mcp" }   // add "args": ["-allow-modify"] to permit more
+```
+
+What an agent may do is decided when the server starts, not by the model. A
+tool outside the granted tier is never registered, so it does not appear in
+the agent's tool list at all:
+
+| Tier | How to grant | Tools |
+|---|---|---|
+| Read and draft | always on | `list_accounts`, `list_folders`, `list_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
+| Modify | `-allow-modify`, or `MALACHI_MCP_ALLOW_MODIFY=true` for `.mcp.json` | `mark_messages`, `move_messages`, `delete_messages` |
+| Send | `-allow-send`, or `MALACHI_MCP_ALLOW_SEND=true` | `send_message` |
+
+Drafting needs no flag because a draft is inert: it stays in the local store,
+is never synchronised to the server, and goes out only when you send it
+yourself or when `send_message` is explicitly allowed. The bridge refuses to
+run as root, refuses a socket other users can reach, and checks the daemon's
+protocol version on every connection.
+
+Tools, arguments, limits and the threat model: [docs/mcp.md](docs/mcp.md).
 
 ## Supported providers
 
