@@ -67,7 +67,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos run-macos test-macos help FORCE
 
 all: build
 
@@ -250,6 +250,27 @@ deb:
 ## rpm: build an RPM package for this machine (needs rpm-build; libadwaita >= 1.7)
 rpm:
 	./scripts/build-rpm.sh
+
+# The macOS client (macos/, Swift/AppKit) is a separate client of the daemon;
+# these targets only delegate to macos/Makefile and exist on Darwin alone.
+UNAME_S := $(shell uname -s)
+
+## macos: build the macOS app bundle build/Malachi Mail.app with malachid and malachi-mcp inside (macOS only)
+## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
+## test-macos: run the Swift tests of the macOS client (macOS only)
+ifeq ($(UNAME_S),Darwin)
+macos: backend mcp
+	$(MAKE) -C macos app BUILD_DIR=$(CURDIR)/$(BUILD_DIR) VERSION=$(VERSION) APP_ID=$(APP_ID)
+
+run-macos: macos
+	$(MAKE) -C macos run BUILD_DIR=$(CURDIR)/$(BUILD_DIR)
+
+test-macos:
+	$(MAKE) -C macos test
+else
+macos run-macos test-macos:
+	@echo "$@ needs macOS (this is $(UNAME_S)); see macos/README.md" >&2; exit 1
+endif
 
 help:
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed -e 's/^## /  /'
