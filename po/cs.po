@@ -144,6 +144,83 @@ msgstr "Netestováno"
 msgid "Connected in %d ms"
 msgstr "Připojeno za %d ms"
 
+#. TRANSLATORS: joins two servers ("host:port") in the sentence
+#. "… accept exactly this certificate for %s and no other …".
+#: ui/internal/accountwizard/trust.go:83
+#, c-format
+msgid "%s and %s"
+msgstr "%s a %s"
+
+#. TRANSLATORS: %s is one server ("host:port") or two joined by
+#. "%s and %s".
+#: ui/internal/accountwizard/trust.go:110
+#, c-format
+msgid "Only trust a certificate you expect, for example the one of a mail bridge on your own computer. Malachi Mail will then accept exactly this certificate for %s and no other, even if it is self-signed, issued for another name or expired."
+msgstr "Důvěřujte jen certifikátu, který očekáváte, například certifikátu mostu pošty na vlastním počítači. Malachi Mail pak pro %s přijme přesně tento certifikát a žádný jiný, i když je podepsaný sám sebou, vystavený pro jiné jméno nebo prošlý."
+
+#. TRANSLATORS: dialog heading
+#: ui/internal/accountwizard/trust.go:107
+msgid "Trust This Certificate?"
+msgstr "Důvěřovat tomuto certifikátu?"
+
+#. TRANSLATORS: destructive confirm button of "Trust This Certificate?"
+#: ui/internal/accountwizard/trust.go:113
+msgid "_Trust"
+msgstr "_Důvěřovat"
+
+#: ui/internal/accountwizard/trust.go:171
+msgctxt "certificate"
+msgid "Issued to"
+msgstr "Vystaveno pro"
+
+#: ui/internal/accountwizard/trust.go:172
+msgctxt "certificate"
+msgid "Issued by"
+msgstr "Vydal"
+
+#. TRANSLATORS: validity period of a certificate: two dates
+#: ui/internal/accountwizard/trust.go:176
+#, c-format
+msgctxt "certificate"
+msgid "%s to %s"
+msgstr "%s až %s"
+
+#. TRANSLATORS: label of a certificate's validity period
+#: ui/internal/accountwizard/trust.go:178
+msgctxt "certificate"
+msgid "Valid"
+msgstr "Platnost"
+
+#: ui/internal/accountwizard/trust.go:181
+msgctxt "certificate"
+msgid "Self-signed"
+msgstr "Podepsaný sám sebou"
+
+#: ui/internal/accountwizard/trust.go:167
+msgctxt "certificate"
+msgid "SHA-256 fingerprint"
+msgstr "Otisk SHA-256"
+
+#. TRANSLATORS: dialog heading, the pinned certificate of a server
+#. has changed
+#: ui/internal/accountwizard/trust.go:101
+msgid "Trust the New Certificate?"
+msgstr "Důvěřovat novému certifikátu?"
+
+#. TRANSLATORS: %s is one server ("host:port") or two joined by
+#. "%s and %s".
+#: ui/internal/accountwizard/trust.go:104
+#, c-format
+msgid "The certificate of %s has changed since you trusted it. If you did not renew it yourself, someone may be intercepting the connection. Trust the new certificate only if you know why it changed."
+msgstr "Certifikát serveru %s se od chvíle, kdy jste mu začali důvěřovat, změnil. Pokud jste ho sami neobnovili, může někdo odposlouchávat spojení. Novému certifikátu důvěřujte, jen pokud víte, proč se změnil."
+
+#. TRANSLATORS: label of the fingerprint of the certificate that was
+#. pinned before
+#: ui/internal/accountwizard/trust.go:170
+msgctxt "certificate"
+msgid "Previously trusted"
+msgstr "Dříve důvěřovaný"
+
 #: ui/internal/accountwizard/wizard.go:222
 #: ui/internal/accountwizard/wizard.go:223
 #: ui/internal/window/accounts_page.go:162
@@ -631,6 +708,45 @@ msgstr "Odmítnuto: %s"
 #, c-format
 msgid "Failed: %s"
 msgstr "Selhalo: %s"
+
+#: ui/internal/widget/rpc.go:122
+msgid "The server's certificate is not from a trusted authority"
+msgstr "Certifikát serveru nepochází od důvěryhodné autority"
+
+#: ui/internal/widget/rpc.go:124
+msgid "The server's certificate is for another name"
+msgstr "Certifikát serveru je vystaven pro jiné jméno"
+
+#: ui/internal/widget/rpc.go:126
+msgid "The server's certificate has expired"
+msgstr "Platnost certifikátu serveru vypršela"
+
+#: ui/internal/widget/rpc.go:128
+msgid "The server's certificate is not valid yet"
+msgstr "Certifikát serveru ještě není platný"
+
+#: ui/internal/widget/rpc.go:130
+msgid "The server's certificate is not valid"
+msgstr "Certifikát serveru není platný"
+
+#: ui/internal/widget/rpc.go:132
+msgid "The server presented a different certificate than the one you trust"
+msgstr "Server předložil jiný certifikát než ten, kterému důvěřujete"
+
+#: ui/internal/widget/rpc.go:134
+msgid "The server does not offer STARTTLS"
+msgstr "Server nenabízí STARTTLS"
+
+#: ui/internal/widget/rpc.go:136
+msgid "The server requires TLS before signing in"
+msgstr "Server vyžaduje TLS před přihlášením"
+
+#. TRANSLATORS: the system's certificate check refused the server's
+#. certificate for a reason it does not name (e.g. "not standards
+#. compliant" on macOS).
+#: ui/internal/widget/rpc.go:143
+msgid "The system does not accept the server's certificate"
+msgstr "Systém certifikát serveru nepřijímá"
 
 #. TRANSLATORS: %s is a technical error message.
 #: ui/internal/widget/uri.go:34
@@ -1351,6 +1467,28 @@ msgstr "Kontroluje se nová pošta…"
 msgid "Checking for new mail"
 msgstr "Ověření nové pošty"
 
+#. TRANSLATORS: account status (sidebar, Settings → Accounts)
+#: ui/internal/window/sync.go:187
+msgid "Certificate changed"
+msgstr "Certifikát se změnil"
+
+#. TRANSLATORS: account status (sidebar, Settings → Accounts)
+#: ui/internal/window/sync.go:190
+msgid "Certificate problem"
+msgstr "Problém s certifikátem"
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/window/sync.go:235
+#, c-format
+msgid "The certificate of %s has changed"
+msgstr "Certifikát účtu %s se změnil"
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/window/sync.go:238
+#, c-format
+msgid "The certificate of %s is not trusted"
+msgstr "Certifikát účtu %s není důvěryhodný"
+
 #
 #: ui/internal/window/sync.go:306 ui/data/ui/account_wizard.ui:278
 msgid "Open Online Accounts"
@@ -1517,6 +1655,14 @@ msgstr "Žádné"
 msgid "User Name"
 msgstr "Uživatelské jméno"
 
+#: ui/data/ui/account_wizard.ui:190 ui/data/ui/account_wizard.ui:250
+msgid "Pinned Certificate"
+msgstr "Připnutý certifikát"
+
+#: ui/data/ui/account_wizard.ui:199 ui/data/ui/account_wizard.ui:259
+msgid "_Forget"
+msgstr "_Zapomenout"
+
 #: ui/data/ui/account_wizard.ui:194
 msgid "Outgoing Mail (SMTP)"
 msgstr "Odchozí pošta (SMTP)"
@@ -1573,6 +1719,10 @@ msgstr "Příchozí (IMAP)"
 #: ui/data/ui/account_wizard.ui:466
 msgid "Outgoing (SMTP)"
 msgstr "Odchozí (SMTP)"
+
+#: ui/data/ui/account_wizard.ui:490 ui/data/ui/account_wizard.ui:510
+msgid "_Trust Certificate…"
+msgstr "_Důvěřovat certifikátu…"
 
 #: ui/data/ui/account_wizard.ui:475
 msgid "Microsoft 365"
@@ -2064,6 +2214,10 @@ msgstr "Hledat"
 #: ui/data/ui/window.ui:186
 msgid "The mail backend (malachid) is not running."
 msgstr "Poštovní démon (malachid) neběží."
+
+#: ui/data/ui/window.ui:197
+msgid "_Edit Account…"
+msgstr "_Upravit účet…"
 
 #: ui/data/ui/window.ui:206
 msgid "All"

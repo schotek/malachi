@@ -187,6 +187,16 @@ Adw.ApplicationWindow main_window {
                 revealed: false;
               }
 
+              // Title is set from Go (sync.go) for the first account whose
+              // server certificate is refused or has changed
+              // (certtrust.FromSyncState); the button opens the account's
+              // settings, where the certificate can be trusted.
+              Adw.Banner cert_banner {
+                // TRANSLATORS: banner button
+                button-label: _("_Edit Account…");
+                revealed: false;
+              }
+
               // Narrows the list to unread or flagged messages. The filter
               // is applied by the backend (message.list "filter") so the
               // paging cursor and page.total stay consistent; it is global

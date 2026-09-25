@@ -4,6 +4,7 @@
 package accountwizard
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -107,6 +108,17 @@ func TestValidateAndBuild(t *testing.T) {
 	if cfg.Name != "x.org" || cfg.Email != "me@x.org" || cfg.IMAP.Host != "imap.x.org" || cfg.IMAP.AuthMethod != api.AuthPassword ||
 		cfg.SMTP.Port != 587 || cfg.SMTP.AuthMethod != api.AuthPassword || cfg.OAuth2 != nil {
 		t.Fatalf("config = %+v", cfg)
+	}
+	if cfg.IMAP.CertificateSHA256 != "" || cfg.SMTP.CertificateSHA256 != "" {
+		t.Fatalf("pin without one: %+v %+v", cfg.IMAP, cfg.SMTP)
+	}
+	// A trusted certificate travels with its endpoint only.
+	pin := strings.Repeat("ab", 32)
+	cfg = BuildConfig(Identity{Email: "me@x.org"}, "Bridge",
+		ServerFields{Host: "100.64.0.1", Port: 1143, Security: api.SecuritySTARTTLS, Username: "me", CertificateSHA256: pin},
+		ServerFields{Host: "100.64.0.1", Port: 1025, Security: api.SecuritySTARTTLS, Username: "me"})
+	if cfg.IMAP.CertificateSHA256 != pin || cfg.SMTP.CertificateSHA256 != "" {
+		t.Fatalf("pin: %+v %+v", cfg.IMAP, cfg.SMTP)
 	}
 	if credentialsFor(Identity{Password: "p"}).Password != "p" {
 		t.Error("credentials")

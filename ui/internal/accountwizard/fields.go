@@ -29,12 +29,16 @@ type Identity struct {
 	Password    string
 }
 
-// ServerFields mirrors the rows of one endpoint on the Servers page.
+// ServerFields mirrors the rows of one endpoint on the Servers page, plus
+// the certificate the endpoint pins (ServerConfig.CertificateSHA256): the
+// rows carry it only while they still describe the server it was trusted
+// for (certtrust.KeepPin), so an edit of the other settings keeps it.
 type ServerFields struct {
-	Host     string
-	Port     int
-	Security api.Security
-	Username string
+	Host              string
+	Port              int
+	Security          api.Security
+	Username          string
+	CertificateSHA256 string
 }
 
 // securityChoices is the order of the "Security" StringList in
@@ -212,11 +216,12 @@ func BuildConfig(id Identity, name string, imap, smtp ServerFields) api.AccountC
 
 func serverConfig(f ServerFields) *api.ServerConfig {
 	return &api.ServerConfig{
-		Host:       strings.TrimSpace(f.Host),
-		Port:       f.Port,
-		Security:   f.Security,
-		Username:   strings.TrimSpace(f.Username),
-		AuthMethod: api.AuthPassword,
+		Host:              strings.TrimSpace(f.Host),
+		Port:              f.Port,
+		Security:          f.Security,
+		Username:          strings.TrimSpace(f.Username),
+		AuthMethod:        api.AuthPassword,
+		CertificateSHA256: f.CertificateSHA256,
 	}
 }
 

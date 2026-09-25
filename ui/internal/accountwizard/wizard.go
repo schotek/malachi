@@ -16,6 +16,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -118,20 +119,37 @@ type Wizard struct {
 	// refused: the results page's first button signs in again.
 	signInAgain bool
 
+	// tested is the configuration the last account.test ran with; a
+	// certificate trusted on the results page is pinned to its endpoint.
+	tested api.AccountConfig
+
 	closed      bool
 	op          int  // bumped per RPC so stale callbacks bail out
 	applying    bool // rows are being set programmatically
 	lastOutcome Outcome
 }
 
-// serverRows are one endpoint's editors on the Servers page.
+// serverRows are one endpoint's editors on the Servers page, its pinned
+// certificate and the trust button of its result row.
 type serverRows struct {
 	kind         Endpoint
 	host         *adw.EntryRow
 	port         *adw.SpinRow
 	security     *adw.ComboRow
 	user         *adw.EntryRow
+	pinRow       *adw.ActionRow
+	pinForget    *gtk.Button
+	trust        *gtk.Button
 	lastSecurity api.Security
+
+	// pinned is the endpoint a certificate was trusted for, with the pin
+	// in CertificateSHA256 (loaded with the account, or trusted on the
+	// results page); nil when none. read sends the pin only while the
+	// rows still describe that server (certtrust.KeepPin).
+	pinned *api.ServerConfig
+	// offer is the refused certificate the results page offers to trust,
+	// nil when none (trust.go).
+	offer *trustOffer
 }
 
 // New builds the dialog. Present it with Present(parent).
@@ -174,18 +192,24 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 		serversPrefs:     b.GetObject("servers_prefs").Cast().(*adw.PreferencesPage),
 		accountName:      entry("account_name_row"),
 		imap: serverRows{
-			kind:     EndpointIMAP,
-			host:     entry("imap_host_row"),
-			port:     b.GetObject("imap_port_row").Cast().(*adw.SpinRow),
-			security: b.GetObject("imap_security_row").Cast().(*adw.ComboRow),
-			user:     entry("imap_user_row"),
+			kind:      EndpointIMAP,
+			host:      entry("imap_host_row"),
+			port:      b.GetObject("imap_port_row").Cast().(*adw.SpinRow),
+			security:  b.GetObject("imap_security_row").Cast().(*adw.ComboRow),
+			user:      entry("imap_user_row"),
+			pinRow:    b.GetObject("imap_pin_row").Cast().(*adw.ActionRow),
+			pinForget: button("imap_pin_forget_button"),
+			trust:     button("imap_trust_button"),
 		},
 		smtp: serverRows{
-			kind:     EndpointSMTP,
-			host:     entry("smtp_host_row"),
-			port:     b.GetObject("smtp_port_row").Cast().(*adw.SpinRow),
-			security: b.GetObject("smtp_security_row").Cast().(*adw.ComboRow),
-			user:     entry("smtp_user_row"),
+			kind:      EndpointSMTP,
+			host:      entry("smtp_host_row"),
+			port:      b.GetObject("smtp_port_row").Cast().(*adw.SpinRow),
+			security:  b.GetObject("smtp_security_row").Cast().(*adw.ComboRow),
+			user:      entry("smtp_user_row"),
+			pinRow:    b.GetObject("smtp_pin_row").Cast().(*adw.ActionRow),
+			pinForget: button("smtp_pin_forget_button"),
+			trust:     button("smtp_trust_button"),
 		},
 		test:         button("servers_test_button"),
 		testingStack: b.GetObject("testing_stack").Cast().(*gtk.Stack),
@@ -282,9 +306,18 @@ func (w *Wizard) wire() {
 			to := securityAt(rows.security.Selected())
 			rows.port.SetValue(float64(PortForSecurityChange(rows.kind, int(rows.port.Value()), rows.lastSecurity, to)))
 			rows.lastSecurity = to
+			rows.showPin()
 		})
-		rows.host.ConnectChanged(func() { rows.host.RemoveCSSClass("error") })
+		// The pin belongs to the server it was trusted for: another host
+		// or port hides it (and read stops sending it).
+		rows.host.ConnectChanged(func() {
+			rows.host.RemoveCSSClass("error")
+			rows.showPin()
+		})
+		rows.port.NotifyProperty("value", rows.showPin)
 		rows.user.ConnectChanged(func() { rows.user.RemoveCSSClass("error") })
+		rows.pinForget.ConnectClicked(rows.forgetPin)
+		rows.trust.ConnectClicked(func() { w.onTrust(rows) })
 	}
 	w.test.ConnectClicked(w.onTest)
 	w.retry.ConnectClicked(w.runTest)
@@ -326,9 +359,15 @@ func (w *Wizard) readIdentity() Identity {
 }
 
 func (r *serverRows) read() ServerFields {
-	return ServerFields{Host: r.host.Text(), Port: int(r.port.Value()), Security: securityAt(r.security.Selected()), Username: r.user.Text()}
+	f := ServerFields{Host: r.host.Text(), Port: int(r.port.Value()), Security: securityAt(r.security.Selected()), Username: r.user.Text()}
+	if r.pinned != nil {
+		f.CertificateSHA256 = certtrust.KeepPin(*r.pinned, *serverConfig(f))
+	}
+	return f
 }
 
+// apply fills the rows from a configuration; its pin, if any, becomes the
+// rows' pinned certificate and any earlier one is dropped.
 func (r *serverRows) apply(sc *api.ServerConfig) {
 	if sc == nil {
 		return
@@ -338,6 +377,12 @@ func (r *serverRows) apply(sc *api.ServerConfig) {
 	r.security.SetSelected(indexOfSecurity(sc.Security))
 	r.lastSecurity = sc.Security
 	r.user.SetText(sc.Username)
+	r.pinned = nil
+	if sc.CertificateSHA256 != "" {
+		c := *sc
+		r.pinned = &c
+	}
+	r.showPin()
 }
 
 // applyConfig fills the Servers page without triggering the port logic.
@@ -498,10 +543,12 @@ func (w *Wizard) showButtons(o Outcome) {
 	w.retry.SetVisible(o == OutcomeFailed)
 	w.addAnyway.SetVisible(o == OutcomeFailed)
 	w.add.SetVisible(o == OutcomeOK)
+	w.imap.trust.SetVisible(w.imap.offer != nil)
+	w.smtp.trust.SetVisible(w.smtp.offer != nil)
 }
 
 func (w *Wizard) hideButtons() {
-	for _, b := range []*gtk.Button{w.edit, w.retry, w.addAnyway, w.add} {
+	for _, b := range []*gtk.Button{w.edit, w.retry, w.addAnyway, w.add, w.imap.trust, w.smtp.trust} {
 		b.SetVisible(false)
 	}
 }
@@ -512,6 +559,7 @@ func (w *Wizard) runTest() {
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
 	params := api.AccountTestParams{Config: w.assembleConfig(), Credentials: w.credentials()}
+	w.tested = params.Config
 	if w.editing != nil {
 		// Empty credentials mean "use the stored password or sign-in".
 		params.AccountID = w.editing.ID
@@ -542,6 +590,7 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 	w.imapRow.SetVisible(!graph)
 	w.smtpRow.SetVisible(!graph)
 	w.results.SetDescription("")
+	w.imap.offer, w.smtp.offer = nil, nil
 	var outcome Outcome
 	if err != nil {
 		text := widget.RPCErrorText(i18n.T("Testing the connection"), err)
@@ -565,6 +614,10 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 		w.smtpIcon.SetFromIconName(icon)
 		w.smtpRow.SetSubtitle(text)
 		outcome = Classify(res)
+		if !linked {
+			w.imap.offer = offerFor(res.IMAP, w.tested.IMAP)
+			w.smtp.offer = offerFor(res.SMTP, w.tested.SMTP)
+		}
 	}
 	w.signInAgain = false
 	switch {

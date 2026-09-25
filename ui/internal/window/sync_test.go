@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/signin"
 )
 
@@ -64,6 +65,19 @@ func TestSyncStatusText(t *testing.T) {
 		{"sending beats offline", st(api.SyncState{AccountID: "a1", Status: api.SyncOffline}, api.SyncState{AccountID: "a2", Status: api.SyncIdle, PendingOutbox: 1}), accounts, "Sending 1 message…", true},
 		{"disabled account outbox is ignored", st(api.SyncState{AccountID: "a3", Status: api.SyncIdle, PendingOutbox: 4}, api.SyncState{AccountID: "a1", Status: api.SyncIdle}), accounts, "Up to date", false},
 		{"uncached account outbox from account.list", st(), []api.Account{{ID: "a9", Enabled: true, State: api.SyncState{AccountID: "a9", Status: api.SyncIdle, PendingOutbox: 1}}}, "Sending 1 message…", true},
+		// Certificates: a refused or changed certificate is named instead
+		// of "Offline, retrying", right after authRequired; a handshake
+		// failure stays offline. Precedence: authRequired > changed >
+		// problem > sending.
+		{"refused certificate", st(tlsState("a1", api.SyncOffline, api.TLSUntrusted), api.SyncState{AccountID: "a2", Status: api.SyncIdle}), accounts, "Certificate problem", false},
+		{"changed certificate", st(tlsState("a2", api.SyncOffline, api.TLSPinMismatch)), accounts, "Certificate changed", false},
+		{"changed beats refused", st(tlsState("a1", api.SyncOffline, api.TLSExpired), tlsState("a2", api.SyncOffline, api.TLSPinMismatch)), accounts, "Certificate changed", false},
+		{"authRequired beats a certificate", st(tlsState("a1", api.SyncOffline, api.TLSUntrusted), api.SyncState{AccountID: "a2", Status: api.SyncAuthRequired}), accounts, "Sign-in required", false},
+		{"certificate beats sending", st(tlsState("a1", api.SyncOffline, api.TLSUntrusted), api.SyncState{AccountID: "a2", Status: api.SyncIdle, PendingOutbox: 1}), accounts, "Certificate problem", false},
+		{"certificate beats error", st(tlsState("a1", api.SyncOffline, api.TLSUntrusted), api.SyncState{AccountID: "a2", Status: api.SyncError}), accounts, "Certificate problem", false},
+		{"handshake stays offline", st(tlsState("a1", api.SyncOffline, api.TLSHandshake)), accounts, "Offline, retrying", false},
+		{"tlsError without details stays offline", st(api.SyncState{AccountID: "a1", Status: api.SyncOffline, Error: api.NewError(api.CodeTLSError, "x")}), accounts, "Offline, retrying", false},
+		{"disabled account certificate is ignored", st(tlsState("a3", api.SyncOffline, api.TLSUntrusted)), accounts, "Up to date", false},
 	}
 	for _, c := range cases {
 		text, spinning := syncStatusText(c.states, c.accounts, folderName)
@@ -75,6 +89,52 @@ func TestSyncStatusText(t *testing.T) {
 	// A nil folderName must not crash and falls back to the account name.
 	if text, _ := syncStatusText(st(api.SyncState{AccountID: "a1", Status: api.SyncSyncing, FolderID: "f_inbox", Progress: -1}), accounts, nil); text != "Syncing Work…" {
 		t.Errorf("nil folderName: got %q", text)
+	}
+}
+
+// tlsState is an account state after a tlsError with the given reason, as
+// the client decodes it (data is a map).
+func tlsState(id api.AccountID, status api.SyncStatus, reason api.TLSErrorReason) api.SyncState {
+	return api.SyncState{AccountID: id, Status: status, Progress: -1,
+		Error: &api.Error{Code: api.CodeTLSError, Message: "tls", Data: map[string]any{"reason": string(reason)}}}
+}
+
+func TestCertBanner(t *testing.T) {
+	accounts := []api.Account{
+		{ID: "a1", Config: api.AccountConfig{Name: "Paused"}, Enabled: false},
+		{ID: "a2", Config: api.AccountConfig{Name: "Work"}, Enabled: true},
+		{ID: "a3", Config: api.AccountConfig{Email: "bridge@example.invalid"}, Enabled: true},
+	}
+	states := map[api.AccountID]api.SyncState{
+		"a1": tlsState("a1", api.SyncOffline, api.TLSUntrusted),
+		"a2": tlsState("a2", api.SyncOffline, api.TLSHandshake),
+		"a3": tlsState("a3", api.SyncOffline, api.TLSPinMismatch),
+	}
+	a, p, ok := certProblemAccount(states, accounts)
+	if !ok || a.ID != "a3" || p.Category() != certtrust.Changed {
+		t.Fatalf("got %s %+v %v", a.ID, p, ok)
+	}
+	if got := certBannerText(p.Category(), accountRowTitle(a)); got != "The certificate of bridge@example.invalid has changed" {
+		t.Errorf("changed: %q", got)
+	}
+	if got := certBannerText(certtrust.Certificate, "Work"); got != "The certificate of Work is not trusted" {
+		t.Errorf("refused: %q", got)
+	}
+	// The first account in order wins; an uncached one uses account.list.
+	states["a2"] = tlsState("a2", api.SyncError, api.TLSExpired)
+	if a, _, ok := certProblemAccount(states, accounts); !ok || a.ID != "a2" {
+		t.Errorf("order: %s %v", a.ID, ok)
+	}
+	delete(states, "a2")
+	accounts[1].State = tlsState("a2", api.SyncOffline, api.TLSUntrusted)
+	if a, _, ok := certProblemAccount(states, accounts); !ok || a.ID != "a2" {
+		t.Errorf("uncached: %s %v", a.ID, ok)
+	}
+	// Connected again: no banner.
+	states["a2"] = api.SyncState{AccountID: "a2", Status: api.SyncSyncing, Error: accounts[1].State.Error}
+	states["a3"] = api.SyncState{AccountID: "a3", Status: api.SyncIdle}
+	if a, _, ok := certProblemAccount(states, accounts); ok {
+		t.Errorf("reconnected: %s", a.ID)
 	}
 }
 

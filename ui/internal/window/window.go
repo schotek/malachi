@@ -111,6 +111,9 @@ type Window struct {
 	// authBannerURL is the notification's authUrl: the sign-in page to
 	// open when the daemon cannot start a fresh one.
 	authBannerURL string
+	// certBannerAccount is the account cert_banner is shown for, empty
+	// when the banner is hidden.
+	certBannerAccount api.AccountID
 
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction
@@ -131,6 +134,7 @@ type Window struct {
 	searchButton    *gtk.ToggleButton
 	banner          *adw.Banner
 	authBanner      *adw.Banner
+	certBanner      *adw.Banner
 	messageFilter   *adw.ToggleGroup
 	listStack       *gtk.Stack
 	listScroller    *gtk.ScrolledWindow
@@ -202,6 +206,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
 		banner:          b.GetObject("backend_banner").Cast().(*adw.Banner),
 		authBanner:      b.GetObject("auth_banner").Cast().(*adw.Banner),
+		certBanner:      b.GetObject("cert_banner").Cast().(*adw.Banner),
 		messageFilter:   b.GetObject("message_filter").Cast().(*adw.ToggleGroup),
 		listStack:       b.GetObject("list_stack").Cast().(*gtk.Stack),
 		listScroller:    b.GetObject("list_scroller").Cast().(*gtk.ScrolledWindow),
@@ -363,6 +368,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.banner.ConnectButtonClicked(w.reconnect)
 	w.authBanner.ConnectButtonClicked(w.onAuthBannerButton)
+	w.certBanner.ConnectButtonClicked(w.onCertBannerButton)
 	// The only button the outbox banner ever has is Retry (outbox.go).
 	w.outboxBanner.ConnectButtonClicked(func() {
 		if s, ok := w.selectedMessage(); ok {

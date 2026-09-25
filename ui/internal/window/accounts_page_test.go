@@ -31,8 +31,31 @@ func TestAccountStatusText(t *testing.T) {
 		"unknown":            "",
 	}
 	for status, want := range cases {
-		if got := accountStatusText(status); got != want {
+		if got := accountStatusText(api.SyncState{Status: status}); got != want {
 			t.Errorf("%s: got %q, want %q", status, got, want)
+		}
+	}
+
+	// A refused certificate is named; a handshake failure stays offline.
+	tls := func(status api.SyncStatus, reason api.TLSErrorReason) api.SyncState {
+		return api.SyncState{Status: status, Error: &api.Error{Code: api.CodeTLSError, Data: api.TLSErrorData{Reason: reason}}}
+	}
+	for _, c := range []struct {
+		state api.SyncState
+		want  string
+	}{
+		{tls(api.SyncOffline, api.TLSUntrusted), "Certificate problem"},
+		{tls(api.SyncOffline, api.TLSExpired), "Certificate problem"},
+		{tls(api.SyncError, api.TLSOther), "Certificate problem"},
+		{tls(api.SyncOffline, api.TLSPinMismatch), "Certificate changed"},
+		{tls(api.SyncOffline, api.TLSHandshake), "Offline"},
+		{tls(api.SyncOffline, api.TLSStartTLSUnavail), "Offline"},
+		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeTLSError, "x")}, "Offline"},
+		{tls(api.SyncSyncing, api.TLSUntrusted), "Syncing…"},
+		{tls(api.SyncDisabled, api.TLSUntrusted), "Paused"},
+	} {
+		if got := accountStatusText(c.state); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.state, got, c.want)
 		}
 	}
 }

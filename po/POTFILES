@@ -5,6 +5,7 @@ ui/main.go
 ui/internal/accountwizard/linked.go
 ui/internal/accountwizard/oauth.go
 ui/internal/accountwizard/results.go
+ui/internal/accountwizard/trust.go
 ui/internal/accountwizard/wizard.go
 ui/internal/background/background.go
 ui/internal/compose/compose.go

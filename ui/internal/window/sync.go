@@ -13,18 +13,19 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settingspanel"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
-// Sync status line, refresh and the sign-in banner.
+// Sync status line, refresh, the sign-in banner and the certificate banner.
 //
 // The daemon owns the sync state; this file only mirrors the last
-// sync.status / notify.syncState per account into the sidebar's status line
-// and the auth_banner. Folder and account names shown here come from the
-// server and are set as plain text.
+// sync.status / notify.syncState per account into the sidebar's status line,
+// the auth_banner and the cert_banner. Folder and account names shown here
+// come from the server and are set as plain text.
 
 // syncFallbackSeconds is how long the spinner started by triggerSync stays
 // on when no notify.syncState follows (daemon without a syncer, dropped
@@ -66,6 +67,7 @@ func (w *Window) applySyncState(s api.SyncState) {
 	prev := w.syncStates[s.AccountID]
 	w.syncStates[s.AccountID] = s
 	w.refreshSyncLabel()
+	w.refreshCertBanner()
 	if s.AccountID == w.authBannerAccount && s.Status != api.SyncAuthRequired {
 		w.hideAuthBanner()
 	}
@@ -95,7 +97,8 @@ func (w *Window) refreshSyncLabel() {
 // enabled accounts count; an account missing from states uses the state
 // embedded in its account.list entry. The most pressing state wins:
 // syncing (with the folder or account name and the progress when known),
-// then sign-in required, sending (the pending outbox messages of every
+// then sign-in required, a changed server certificate, a refused one
+// (certtrust.FromSyncState), sending (the pending outbox messages of every
 // account added up; sending is not a sync status, so it shows while the
 // status is idle), error, offline, and finally "Up to date". With no
 // enabled account the line is empty. folderName returns the display name of
@@ -105,6 +108,8 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		syncing      *api.SyncState
 		syncingName  string
 		authRequired bool
+		certProblem  bool
+		certChanged  bool
 		syncError    bool
 		offline      bool
 		enabled      int
@@ -139,6 +144,13 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		case api.SyncOffline:
 			offline = true
 		}
+		if p, ok := certtrust.FromSyncState(s); ok {
+			if p.Category() == certtrust.Changed {
+				certChanged = true
+			} else {
+				certProblem = true
+			}
+		}
 	}
 	switch {
 	case enabled == 0:
@@ -152,6 +164,10 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		return fmt.Sprintf(i18n.T("Syncing %s…"), syncingName), true
 	case authRequired:
 		return i18n.T("Sign-in required"), false
+	case certChanged:
+		return certStatusText(certtrust.Changed), false
+	case certProblem:
+		return certStatusText(certtrust.Certificate), false
 	case pending > 0:
 		// TRANSLATORS: %d is the number of messages waiting in the outbox.
 		return fmt.Sprintf(i18n.N("Sending %d message…", "Sending %d messages…", pending), pending), true
@@ -161,6 +177,74 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		return i18n.T("Offline, retrying"), false
 	}
 	return i18n.T("Up to date"), false
+}
+
+// certStatusText is the short status of an account whose server
+// certificate was refused (Settings → Accounts, the sidebar line).
+func certStatusText(c certtrust.Category) string {
+	if c == certtrust.Changed {
+		// TRANSLATORS: account status (sidebar, Settings → Accounts)
+		return i18n.T("Certificate changed")
+	}
+	// TRANSLATORS: account status (sidebar, Settings → Accounts)
+	return i18n.T("Certificate problem")
+}
+
+// refreshCertBanner reveals cert_banner for the first enabled account whose
+// server certificate was refused or has changed and hides it when there is
+// none; the banner's button edits that account (the connection test there
+// offers to trust the certificate).
+func (w *Window) refreshCertBanner() {
+	a, p, ok := certProblemAccount(w.syncStates, w.model.accounts)
+	if !ok {
+		w.certBannerAccount = ""
+		w.certBanner.SetRevealed(false)
+		return
+	}
+	w.certBannerAccount = a.ID
+	w.certBanner.SetUseMarkup(false)
+	w.certBanner.SetTitle(certBannerText(p.Category(), accountRowTitle(a)))
+	w.certBanner.SetRevealed(true)
+}
+
+// certProblemAccount is the first enabled account, in account order, whose
+// state is a certificate problem (certtrust.FromSyncState); an account
+// missing from states uses the state of its account.list entry, as the
+// status line does.
+func certProblemAccount(states map[api.AccountID]api.SyncState, accounts []api.Account) (api.Account, certtrust.Problem, bool) {
+	for _, a := range accounts {
+		if !a.Enabled {
+			continue
+		}
+		s, ok := states[a.ID]
+		if !ok {
+			s = a.State
+		}
+		if p, ok := certtrust.FromSyncState(s); ok {
+			return a, p, true
+		}
+	}
+	return api.Account{}, certtrust.Problem{}, false
+}
+
+// certBannerText is the cert_banner sentence; account is the account's
+// display name.
+func certBannerText(c certtrust.Category, account string) string {
+	if c == certtrust.Changed {
+		// TRANSLATORS: banner; %s is an account name.
+		return fmt.Sprintf(i18n.T("The certificate of %s has changed"), account)
+	}
+	// TRANSLATORS: banner; %s is an account name.
+	return fmt.Sprintf(i18n.T("The certificate of %s is not trusted"), account)
+}
+
+// onCertBannerButton opens the settings of the banner's account.
+func (w *Window) onCertBannerButton() {
+	a, ok := w.model.account(w.certBannerAccount)
+	if !ok {
+		return
+	}
+	accountwizard.NewEdit(w.client, w.log, a).Present(w)
 }
 
 // triggerSync runs sync.trigger for the selected folder, or for every

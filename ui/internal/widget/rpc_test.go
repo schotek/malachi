@@ -53,3 +53,39 @@ func TestEndpointErrorText(t *testing.T) {
 		t.Errorf("tls: %q", got)
 	}
 }
+
+func TestTLSErrorTexts(t *testing.T) {
+	cert := &api.CertificateInfo{SHA256: strings.Repeat("ab", 32), Subject: "127.0.0.1"}
+	tlsErr := func(reason api.TLSErrorReason) *api.Error {
+		return &api.Error{Code: api.CodeTLSError, Message: "x509", Data: api.TLSErrorData{Reason: reason, Certificate: cert}}
+	}
+	for reason, want := range map[api.TLSErrorReason]string{
+		api.TLSUntrusted:        "The server's certificate is not from a trusted authority",
+		api.TLSHostnameMismatch: "The server's certificate is for another name",
+		api.TLSExpired:          "The server's certificate has expired",
+		api.TLSNotYetValid:      "The server's certificate is not valid yet",
+		api.TLSInvalid:          "The server's certificate is not valid",
+		api.TLSOther:            "The system does not accept the server's certificate",
+		"brandNew":              "The system does not accept the server's certificate",
+		api.TLSPinMismatch:      "The server presented a different certificate than the one you trust",
+		api.TLSStartTLSUnavail:  "The server does not offer STARTTLS",
+		api.TLSRequired:         "The server requires TLS before signing in",
+	} {
+		if got := EndpointErrorText(tlsErr(reason)); got != want {
+			t.Errorf("endpoint %s: %q", reason, got)
+		}
+		if got := RPCErrorText("Sending", tlsErr(reason)); got != want {
+			t.Errorf("rpc %s: %q", reason, got)
+		}
+	}
+	// A handshake failure and a tlsError without details keep the general
+	// sentence.
+	for _, e := range []*api.Error{tlsErr(api.TLSHandshake), api.NewError(api.CodeTLSError, "x")} {
+		if got := EndpointErrorText(e); got != "The secure connection could not be established" {
+			t.Errorf("endpoint %+v: %q", e.Data, got)
+		}
+		if got := RPCErrorText("Sending", e); got != "Sending failed: the secure connection could not be established" {
+			t.Errorf("rpc %+v: %q", e.Data, got)
+		}
+	}
+}

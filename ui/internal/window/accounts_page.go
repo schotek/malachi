@@ -13,6 +13,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
+	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -189,7 +190,7 @@ func (r *accountRow) apply(a api.Account) {
 	r.reverting = true
 	r.toggle.SetActive(a.Enabled)
 	r.reverting = false
-	text := accountStatusText(a.State.Status)
+	text := accountStatusText(a.State)
 	r.status.SetText(text)
 	r.status.SetVisible(text != "")
 	r.signIn.SetVisible(signin.NeedsBrowserSignIn(a))
@@ -291,9 +292,13 @@ func accountRowTitle(a api.Account) string {
 }
 
 // accountStatusText is the short status shown next to the switch; empty
-// for the unremarkable idle state.
-func accountStatusText(s api.SyncStatus) string {
-	switch s {
+// for the unremarkable idle state. A refused or changed server certificate
+// (certtrust.FromSyncState) is named instead of "Offline".
+func accountStatusText(s api.SyncState) string {
+	if p, ok := certtrust.FromSyncState(s); ok {
+		return certStatusText(p.Category())
+	}
+	switch s.Status {
 	case api.SyncDisabled:
 		return i18n.T("Paused")
 	case api.SyncSyncing:

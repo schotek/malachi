@@ -13,6 +13,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
 )
@@ -60,6 +61,11 @@ func RPCErrorText(what string, err error) string {
 		case api.CodeServerError:
 			return fmt.Sprintf(i18n.T("%s failed: the server returned an error"), what)
 		case api.CodeTLSError:
+			// A refused certificate says why on its own (the outbox
+			// banner of a failed message shows it).
+			if text := tlsReasonText(e); text != "" {
+				return text
+			}
 			return fmt.Sprintf(i18n.T("%s failed: the secure connection could not be established"), what)
 		case api.CodeServerTimeout:
 			return fmt.Sprintf(i18n.T("%s failed: the server did not respond in time"), what)
@@ -82,6 +88,9 @@ func EndpointErrorText(e *api.Error) string {
 	case api.CodeServerError:
 		return i18n.T("The server returned an error")
 	case api.CodeTLSError:
+		if text := tlsReasonText(e); text != "" {
+			return text
+		}
 		return i18n.T("The secure connection could not be established")
 	case api.CodeServerTimeout:
 		return i18n.T("The server did not respond in time")
@@ -97,6 +106,41 @@ func EndpointErrorText(e *api.Error) string {
 	}
 	// TRANSLATORS: %s is a technical message from the mail backend.
 	return fmt.Sprintf(i18n.T("Failed: %s"), e.Message)
+}
+
+// tlsReasonText is the sentence for the reason of a tlsError's details
+// (docs/api.md §2); "" when the error carries none, or for a handshake
+// failure, which the callers' general sentence describes. certtrust
+// reports a reason this client does not know as "other".
+func tlsReasonText(e *api.Error) string {
+	p, ok := certtrust.Details(e)
+	if !ok {
+		return ""
+	}
+	switch p.Reason {
+	case api.TLSUntrusted:
+		return i18n.T("The server's certificate is not from a trusted authority")
+	case api.TLSHostnameMismatch:
+		return i18n.T("The server's certificate is for another name")
+	case api.TLSExpired:
+		return i18n.T("The server's certificate has expired")
+	case api.TLSNotYetValid:
+		return i18n.T("The server's certificate is not valid yet")
+	case api.TLSInvalid:
+		return i18n.T("The server's certificate is not valid")
+	case api.TLSPinMismatch:
+		return i18n.T("The server presented a different certificate than the one you trust")
+	case api.TLSStartTLSUnavail:
+		return i18n.T("The server does not offer STARTTLS")
+	case api.TLSRequired:
+		return i18n.T("The server requires TLS before signing in")
+	case api.TLSHandshake:
+		return ""
+	}
+	// TRANSLATORS: the system's certificate check refused the server's
+	// certificate for a reason it does not name (e.g. "not standards
+	// compliant" on macOS).
+	return i18n.T("The system does not accept the server's certificate")
 }
 
 // PlainToast builds a toast whose title is plain text. Toast titles are

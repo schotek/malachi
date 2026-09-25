@@ -107,6 +107,8 @@ func (w *Window) loadAccounts() {
 			w.model.folders = make(map[api.AccountID][]api.Folder, len(res.Accounts))
 			w.model.folderErr = make(map[api.AccountID]error)
 			w.hasAccounts = len(res.Accounts) > 0
+			// sync.status may have answered before the accounts were known.
+			w.refreshCertBanner()
 			if w.messageList.SelectedRow() == nil {
 				w.messageStack.SetVisibleChildName(w.emptyPageName())
 			}

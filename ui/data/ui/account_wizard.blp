@@ -167,6 +167,24 @@ Adw.Dialog account_wizard {
               Adw.EntryRow imap_user_row {
                 title: _("User Name");
               }
+
+              // Shown from Go while the endpoint pins a certificate
+              // (certificateSha256); the subtitle is its fingerprint.
+              Adw.ActionRow imap_pin_row {
+                // TRANSLATORS: row title on the Servers page
+                title: _("Pinned Certificate");
+                use-markup: false;
+                subtitle-selectable: true;
+                visible: false;
+
+                [suffix]
+                Button imap_pin_forget_button {
+                  // TRANSLATORS: button: stop trusting the pinned certificate
+                  label: _("_Forget");
+                  use-underline: true;
+                  valign: center;
+                }
+              }
             }
 
             Adw.PreferencesGroup {
@@ -201,6 +219,24 @@ Adw.Dialog account_wizard {
 
               Adw.EntryRow smtp_user_row {
                 title: _("User Name");
+              }
+
+              // Shown from Go while the endpoint pins a certificate
+              // (certificateSha256); the subtitle is its fingerprint.
+              Adw.ActionRow smtp_pin_row {
+                // TRANSLATORS: row title on the Servers page
+                title: _("Pinned Certificate");
+                use-markup: false;
+                subtitle-selectable: true;
+                visible: false;
+
+                [suffix]
+                Button smtp_pin_forget_button {
+                  // TRANSLATORS: button: stop trusting the pinned certificate
+                  label: _("_Forget");
+                  use-underline: true;
+                  valign: center;
+                }
               }
             }
           };
@@ -425,6 +461,17 @@ Adw.Dialog account_wizard {
 
                       [prefix]
                       Image imap_result_icon {}
+
+                      // Shown from Go when the server's certificate can
+                      // be trusted (certtrust.Trustable).
+                      [suffix]
+                      Button imap_trust_button {
+                        // TRANSLATORS: button in a test result row
+                        label: _("_Trust Certificate…");
+                        use-underline: true;
+                        valign: center;
+                        visible: false;
+                      }
                     }
 
                     Adw.ActionRow smtp_result_row {
@@ -433,6 +480,17 @@ Adw.Dialog account_wizard {
 
                       [prefix]
                       Image smtp_result_icon {}
+
+                      // Shown from Go when the server's certificate can
+                      // be trusted (certtrust.Trustable).
+                      [suffix]
+                      Button smtp_trust_button {
+                        // TRANSLATORS: button in a test result row
+                        label: _("_Trust Certificate…");
+                        use-underline: true;
+                        valign: center;
+                        visible: false;
+                      }
                     }
 
                     Adw.ActionRow graph_result_row {
