@@ -31,12 +31,12 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 ## What works today
 
 - **Accounts.** IMAP/SMTP with a setup assistant that finds the server
-  settings for most providers; Microsoft 365 / Outlook.com and Gmail /
-  Google Workspace through GNOME Online Accounts, or, without them (macOS,
-  other desktops), through a sign-in in your browser once an OAuth client
-  id is configured ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365));
-  Gmail also with an app password. Passwords and tokens live in the system
-  keyring.
+  settings for most providers. Microsoft 365 / Outlook.com and Gmail /
+  Google Workspace through GNOME Online Accounts; without them (macOS,
+  other desktops) Microsoft 365 and Outlook.com sign in in your browser
+  out of the box, and Gmail uses an app password or a Google client of
+  your own ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)).
+  Passwords and tokens live in the system keyring.
 - **Reading offline.** Folders and messages are synchronised into a local
   store within a configurable retention window; new mail arrives as the
   server announces it (IMAP IDLE). Flags, moves and deletions are queued
@@ -255,11 +255,11 @@ application over the same daemon and the same contract, mirroring the GTK
 UI screen for screen. It reads, writes and sends mail, renders HTML in a
 locked-down WebKit view, keeps passwords in the login keychain through a
 bundled helper, and carries the Czech translation generated from `po/`.
-Gmail and Microsoft 365 are added through the daemon's own sign-in in
-the browser, which needs an OAuth client id in `config.toml`
-([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)); Gmail also
-works with an app password. Needs macOS 14, Xcode with a Swift 6 toolchain
-and Go for the daemon:
+Microsoft 365 and Outlook.com are added natively through the browser
+sign-in with the client Malachi Mail ships; Gmail through an app password,
+or the browser sign-in with a Google client of your own
+([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)). Needs
+macOS 14, Xcode with a Swift 6 toolchain and Go for the daemon:
 
 ```sh
 make macos          # build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside
