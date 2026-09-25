@@ -7,55 +7,21 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gdk/v4"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
-	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/signin"
 )
 
-// Providers whose sign-in belongs to GNOME Online Accounts, as
-// account.linked names them (docs/api.md §4.1). An account of theirs has
-// no password to ask for and no servers of the user's to edit; the
-// sign-in problems of such an account are fixed in Settings → Online
-// Accounts, not here.
-const (
-	ProviderMicrosoft365 = "microsoft365"
-	ProviderGoogle       = "google"
-)
-
-// AccountProvider says which Online Accounts provider an account signs
-// in through: Microsoft 365 for a Graph account, the oauth2 provider for
-// an IMAP account with a GOA token, "" for a password account.
-func AccountProvider(cfg api.AccountConfig) string {
-	switch {
-	case cfg.Protocol() == api.AccountGraph:
-		return ProviderMicrosoft365
-	case cfg.OAuth2 != nil && cfg.OAuth2.Source == api.OAuth2SourceGOA:
-		return cfg.OAuth2.Provider
-	}
-	return ""
-}
-
-// GOAOwned reports an account whose sign-in lives in GNOME Online
-// Accounts.
-func GOAOwned(cfg api.AccountConfig) bool { return AccountProvider(cfg) != "" }
-
-// ProviderName is the provider's name as shown to the user. These are
-// brand names and are not translated.
-func ProviderName(provider string) string {
-	switch provider {
-	case ProviderMicrosoft365:
-		return "Microsoft 365"
-	case ProviderGoogle:
-		return "Google"
-	}
-	return ""
-}
+// Which provider an account signs in with, and whether that sign-in lives
+// in GNOME Online Accounts, in the backend's own browser sign-in or is a
+// password, is package signin's call (signin.Provider, signin.KindOf);
+// this file only picks the icon.
 
 // providerIconName is the icon GNOME Online Accounts installs for the
 // provider, "" for an unknown one.
 func providerIconName(provider string) string {
 	switch provider {
-	case ProviderMicrosoft365:
+	case signin.ProviderMicrosoft365:
 		return "goa-account-ms365-symbolic"
-	case ProviderGoogle:
+	case signin.ProviderGoogle:
 		return "goa-account-google-symbolic"
 	}
 	return ""

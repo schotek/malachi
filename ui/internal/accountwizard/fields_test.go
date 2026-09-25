@@ -119,11 +119,8 @@ func TestLinkedConfigAndMatch(t *testing.T) {
 	google := api.AccountConfig{Name: "Work", Email: "me@gmail.example",
 		IMAP: &api.ServerConfig{AuthMethod: api.AuthOAuth2}, SMTP: &api.ServerConfig{AuthMethod: api.AuthOAuth2},
 		OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle, GOAAccountID: "account_2_0"}}
-	hint := api.AccountConfig{Email: "me@gmail.example", OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle}}
-	if linkedAccountID(graph) != "account_1_0" || linkedAccountID(google) != "account_2_0" || linkedAccountID(hint) != "" ||
-		linkedAccountID(api.AccountConfig{}) != "" {
-		t.Fatal("linkedAccountID")
-	}
+	// Whether a config is complete or the sign-in hint is package
+	// signin's (ClassifyDiscovery).
 	// The identity page adds the display name; a name the daemon left at
 	// the address becomes the suggested one, a chosen name stays.
 	cfg := withIdentity(graph, Identity{DisplayName: " Me ", Email: " Me@Contoso.example ", Password: "ignored"})

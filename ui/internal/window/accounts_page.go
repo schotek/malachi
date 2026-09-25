@@ -15,18 +15,21 @@ import (
 	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // accountRow is one account in the Accounts page: name, address, a status
-// label, the pause switch and the remove button. Everything shown comes
-// from the daemon, so nothing is markup.
+// label, the sign-in button of an account waiting for the browser sign-in,
+// the pause switch and the remove button. Everything shown comes from the
+// daemon, so nothing is markup.
 type accountRow struct {
 	*adw.ActionRow
 
 	account   api.Account
 	handle    *gtk.Image // drag handle; the whole row is the drop target
 	status    *gtk.Label
+	signIn    *gtk.Button
 	toggle    *gtk.Switch
 	edit      *gtk.Button
 	remove    *gtk.Button
@@ -143,6 +146,10 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 	row.status.AddCSSClass("dim-label")
 	row.AddSuffix(row.status)
 
+	row.signIn = gtk.NewButtonWithLabel(i18n.T("Sign In…"))
+	row.signIn.SetVAlign(gtk.AlignCenter)
+	row.AddSuffix(row.signIn)
+
 	row.toggle = gtk.NewSwitch()
 	row.toggle.SetVAlign(gtk.AlignCenter)
 	row.toggle.SetTooltipText(i18n.T("Enabled"))
@@ -169,6 +176,7 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 		}
 		d.setAccountEnabled(c, row, row.toggle.Active())
 	})
+	row.signIn.ConnectClicked(func() { d.signInAccount(c, row) })
 	row.edit.ConnectClicked(func() { d.editAccount(c, row) })
 	row.remove.ConnectClicked(func() { d.removeAccount(c, row) })
 	d.addRowReorder(c, row)
@@ -184,6 +192,7 @@ func (r *accountRow) apply(a api.Account) {
 	text := accountStatusText(a.State.Status)
 	r.status.SetText(text)
 	r.status.SetVisible(text != "")
+	r.signIn.SetVisible(signin.NeedsBrowserSignIn(a))
 }
 
 // setAccountEnabled pauses or resumes through account.setEnabled; on
@@ -222,7 +231,17 @@ func (d *PreferencesDialog) setAccountEnabled(c *client.Client, row *accountRow,
 
 // editAccount opens the wizard prefilled with the row's account.
 func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
-	wz := accountwizard.NewEdit(c, d.log, row.account)
+	d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
+}
+
+// signInAccount opens the browser sign-in of the row's account (the
+// backend's own sign-in, refused or lost).
+func (d *PreferencesDialog) signInAccount(c *client.Client, row *accountRow) {
+	d.presentEdit(c, accountwizard.NewEditSignIn(c, d.log, row.account))
+}
+
+// presentEdit shows an editing wizard; the page reloads once it saved.
+func (d *PreferencesDialog) presentEdit(c *client.Client, wz *accountwizard.Wizard) {
 	wz.OnDone = func(_ api.AccountID, cfg api.AccountConfig) {
 		d.loadAccounts(c)
 		// TRANSLATORS: %s is the edited account's e-mail address.
@@ -290,8 +309,8 @@ func accountStatusText(s api.SyncStatus) string {
 }
 
 // accountIcon is the row icon by account kind: the provider's icon of
-// GNOME Online Accounts when the account signs in there and the theme
-// has it, the generic mail icon otherwise.
+// GNOME Online Accounts when the account signs in with a provider and the
+// theme has it, the generic mail icon otherwise.
 func accountIcon(a api.Account) string {
-	return widget.ProviderIcon(widget.AccountProvider(a.Config))
+	return widget.ProviderIcon(signin.Provider(a.Config))
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/sound"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -103,9 +104,13 @@ type Window struct {
 	// authBannerAccount is the account auth_banner is shown for, empty when
 	// the banner is hidden.
 	authBannerAccount api.AccountID
-	// authBannerGOA says the banner's account signs in through GNOME
-	// Online Accounts (the button opens that panel).
-	authBannerGOA bool
+	// authBannerKind says where the banner's account signs in, and so what
+	// the button does: the preferences (a password), Settings → Online
+	// Accounts, or the browser (the backend's own sign-in).
+	authBannerKind signin.Kind
+	// authBannerURL is the notification's authUrl: the sign-in page to
+	// open when the daemon cannot start a fresh one.
+	authBannerURL string
 
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction

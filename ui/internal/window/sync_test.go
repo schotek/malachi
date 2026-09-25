@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/signin"
 )
 
 func TestSyncStatusText(t *testing.T) {
@@ -88,6 +89,30 @@ func TestAuthBannerText(t *testing.T) {
 	for reason, want := range cases {
 		if got := authBannerText(reason, "Work"); got != want {
 			t.Errorf("authBannerText(%d) = %q, want %q", reason, got, want)
+		}
+	}
+}
+
+func TestAuthBannerTitleByKind(t *testing.T) {
+	for _, c := range []struct {
+		kind   signin.Kind
+		reason api.ErrorCode
+		title  string
+		button string
+	}{
+		{signin.Password, api.CodeAuthFailed, "Sign in to Work again", "Open Preferences"},
+		{signin.GOA, api.CodeAuthRequired, "Sign in to Work again in Settings → Online Accounts", "Open Online Accounts"},
+		{signin.GOA, api.CodeUnavailable, "GNOME Online Accounts is not available; Work cannot sign in", "Open Online Accounts"},
+		{signin.OAuth, api.CodeAuthRequired, "Sign in to Work again in your browser", "Sign In"},
+		{signin.OAuth, api.CodeAuthFailed, "Sign in to Work again in your browser", "Sign In"},
+		{signin.OAuth, api.CodeNetworkError, "Sign in to Work again in your browser", "Sign In"},
+		{signin.OAuth, api.CodeKeyringError, "The system keyring is unavailable; Work cannot sign in", "Sign In"},
+	} {
+		if got := authBannerTitle(c.kind, c.reason, "Work"); got != c.title {
+			t.Errorf("authBannerTitle(%d, %d) = %q, want %q", c.kind, c.reason, got, c.title)
+		}
+		if got := authBannerButton(c.kind); got != c.button {
+			t.Errorf("authBannerButton(%d) = %q, want %q", c.kind, got, c.button)
 		}
 	}
 }

@@ -5,13 +5,17 @@ package window
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settingspanel"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -26,6 +30,10 @@ import (
 // on when no notify.syncState follows (daemon without a syncer, dropped
 // notification, …).
 const syncFallbackSeconds = 30
+
+// signInStartTimeout bounds account.oauthStart: the daemon only opens a
+// listener and builds the provider's URL.
+const signInStartTimeout = 10 * time.Second
 
 // loadSyncStatus runs sync.status after connecting and applies every
 // account's state.
@@ -190,50 +198,129 @@ func (w *Window) triggerSync() {
 // showAuthRequired reveals auth_banner for the affected account. The
 // banner's button opens the preferences (wired in New), where the account
 // can be edited; for an account whose sign-in lives in GNOME Online
-// Accounts (Microsoft 365, Google) the button opens that panel instead.
-// An OAuth2 authUrl is only logged for now: the OpenURI portal flow is a
-// later phase.
+// Accounts (Microsoft 365, Google) it opens that panel, and for an account
+// of the backend's own sign-in the sign-in page in the browser (the
+// notification's authUrl is kept as the fallback).
 func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	name := string(n.AccountID)
-	goa := false
+	kind := signin.Password
 	if a, ok := w.model.account(n.AccountID); ok {
 		name = accountRowTitle(a)
-		goa = widget.GOAOwned(a.Config)
+		kind = signin.KindOf(a.Config)
+	} else if n.AuthURL != "" {
+		// Not listed yet, but only the backend's own sign-in has a URL.
+		kind = signin.OAuth
 	}
-	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL, "goa", goa)
+	// The authUrl carries the session's state: only its presence is logged.
+	w.log.Debug("auth required", "account", n.AccountID, "reason", n.Reason, "authUrl", n.AuthURL != "", "kind", kind)
 	w.authBannerAccount = n.AccountID
-	w.authBannerGOA = goa
+	w.authBannerKind = kind
+	w.authBannerURL = n.AuthURL
 	w.authBanner.SetUseMarkup(false)
-	if goa {
-		w.authBanner.SetTitle(goaAuthBannerText(n.Reason, name))
-		w.authBanner.SetButtonLabel(i18n.T("Open Online Accounts"))
-	} else {
-		w.authBanner.SetTitle(authBannerText(n.Reason, name))
-		w.authBanner.SetButtonLabel(i18n.T("Open Preferences"))
-	}
+	w.authBanner.SetTitle(authBannerTitle(kind, n.Reason, name))
+	w.authBanner.SetButtonLabel(authBannerButton(kind))
 	w.authBanner.SetRevealed(true)
 }
 
 // hideAuthBanner hides auth_banner and forgets its account.
 func (w *Window) hideAuthBanner() {
 	w.authBannerAccount = ""
-	w.authBannerGOA = false
+	w.authBannerKind = signin.Password
+	w.authBannerURL = ""
 	w.authBanner.SetRevealed(false)
 }
 
 // onAuthBannerButton is the banner button: GNOME Settings for an account
-// signed in through Online Accounts, the preferences otherwise.
+// signed in through Online Accounts, the browser for the backend's own
+// sign-in, the preferences otherwise.
 func (w *Window) onAuthBannerButton() {
-	if !w.authBannerGOA {
+	switch w.authBannerKind {
+	case signin.OAuth:
+		w.signInInBrowser(w.authBannerAccount, w.authBannerURL)
+	case signin.GOA:
+		settingspanel.OpenOnlineAccounts(func(err error) {
+			if err != nil {
+				w.log.Warn("open online accounts", "err", err)
+				w.Toast(i18n.T("Could not open Online Accounts; open GNOME Settings yourself"))
+			}
+		})
+	default:
 		w.app.ActivateAction("preferences", nil)
-		return
 	}
-	settingspanel.OpenOnlineAccounts(func(err error) {
-		if err != nil {
-			w.log.Warn("open online accounts", "err", err)
-			w.Toast(i18n.T("Could not open Online Accounts; open GNOME Settings yourself"))
-		}
-	})
+}
+
+// signInInBrowser opens the sign-in page of an account of the backend's
+// own sign-in: a fresh one from account.oauthStart (the daemon hands back
+// the session it is already waiting on), or fallback, the notification's
+// authUrl, when the daemon cannot answer. The daemon completes the sign-in
+// by itself; the banner goes away with the next notify.syncState.
+func (w *Window) signInInBrowser(id api.AccountID, fallback string) {
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), signInStartTimeout)
+		defer cancel()
+		var res api.AccountOAuthStartResult
+		err := w.client.Call(ctx, api.MethodAccountOAuthStart,
+			api.AccountOAuthStartParams{AccountID: id, BrowserPage: accountwizard.BrowserPage()}, &res)
+		glib.IdleAdd(func() {
+			uri := res.AuthURL
+			if err != nil {
+				w.log.Warn("account.oauthStart", "account", id, "err", err)
+				uri = fallback
+			}
+			switch {
+			case uri == "":
+				w.Toast(widget.RPCErrorText(i18n.T("Starting the sign-in"), err))
+				return
+			case !signin.BrowserURL(uri):
+				w.log.Warn("sign-in address refused: not https", "account", id)
+				w.Toast(widget.LaunchErrorText(errors.New("not an https address")))
+				return
+			}
+			widget.LaunchURI(&w.ApplicationWindow.Window, uri, func(err error) {
+				if err != nil {
+					w.log.Warn("open sign-in page", "err", err)
+					w.Toast(widget.LaunchErrorText(err))
+				}
+			})
+		})
+	}()
+}
+
+// authBannerTitle is the banner sentence for an account that signs in the
+// given way; account is the account's display name.
+func authBannerTitle(kind signin.Kind, reason api.ErrorCode, account string) string {
+	switch kind {
+	case signin.GOA:
+		return goaAuthBannerText(reason, account)
+	case signin.OAuth:
+		return oauthAuthBannerText(reason, account)
+	}
+	return authBannerText(reason, account)
+}
+
+// authBannerButton is the banner button's label for an account that signs
+// in the given way.
+func authBannerButton(kind signin.Kind) string {
+	switch kind {
+	case signin.GOA:
+		return i18n.T("Open Online Accounts")
+	case signin.OAuth:
+		// TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
+		return i18n.C("button", "Sign In")
+	}
+	return i18n.T("Open Preferences")
+}
+
+// oauthAuthBannerText is authBannerText for an account of the backend's
+// own sign-in: whatever the provider refused, signing in again in the
+// browser is the repair, unless the keyring that keeps the sign-in is
+// what failed.
+func oauthAuthBannerText(reason api.ErrorCode, account string) string {
+	if reason == api.CodeKeyringError {
+		return authBannerText(reason, account)
+	}
+	// TRANSLATORS: %s is an account name.
+	return fmt.Sprintf(i18n.T("Sign in to %s again in your browser"), account)
 }
 
 // goaAuthBannerText is authBannerText for an account whose sign-in

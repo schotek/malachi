@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
-	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
@@ -283,15 +282,12 @@ func linkTextFor(uri string, links []api.Link) string {
 	return ""
 }
 
-// launchURI opens uri with the desktop's handler through the OpenURI
-// portal (gtk.URILauncher), never xdg-open directly.
+// launchURI opens uri with the desktop's handler (widget.LaunchURI).
 func (w *Window) launchURI(parent *gtk.Window, uri string) {
-	l := gtk.NewURILauncher(uri)
-	l.Launch(context.Background(), parent, func(res gio.AsyncResulter) {
-		if err := l.LaunchFinish(res); err != nil {
+	widget.LaunchURI(parent, uri, func(err error) {
+		if err != nil {
 			w.log.Warn("open link", "err", err)
-			// TRANSLATORS: %s is a technical error message.
-			w.Toast(fmt.Sprintf(i18n.T("The link could not be opened: %s"), err))
+			w.Toast(widget.LaunchErrorText(err))
 		}
 	})
 }

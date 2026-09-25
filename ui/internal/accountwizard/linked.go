@@ -15,20 +15,9 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settingspanel"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
-
-// linkedAccountID is the GNOME Online Accounts id an account signs in
-// with, "" when it has none yet (the sign-in hint of account.discover).
-func linkedAccountID(cfg api.AccountConfig) string {
-	switch {
-	case cfg.Graph != nil:
-		return cfg.Graph.GOAAccountID
-	case cfg.OAuth2 != nil && cfg.OAuth2.Source == api.OAuth2SourceGOA:
-		return cfg.OAuth2.GOAAccountID
-	}
-	return ""
-}
 
 // withIdentity is the daemon-built account of a linked sign-in with what
 // the identity page adds: the display name, and an account name derived
@@ -135,6 +124,8 @@ func (w *Wizard) useLinked(l api.LinkedAccount) {
 // startLinked switches the wizard to an account whose sign-in belongs to
 // GNOME Online Accounts (no password, no servers to edit) and tests it.
 func (w *Wizard) startLinked(cfg api.AccountConfig) {
+	w.cancelSession()
+	w.appPassword = nil
 	cfg = withIdentity(cfg, w.readIdentity())
 	w.linkedCfg = &cfg
 	w.password.SetText("")
@@ -143,14 +134,34 @@ func (w *Wizard) startLinked(cfg api.AccountConfig) {
 }
 
 // showGOAHint opens the "sign in through GNOME Settings" page for an
-// address of the named provider that the desktop is not signed in to yet.
-func (w *Wizard) showGOAHint(providerName string) {
-	if providerName == "" {
-		providerName = widget.ProviderName(widget.ProviderMicrosoft365)
+// address of the discovered provider that the desktop is not signed in to
+// yet, with the browser sign-in as the way around when the daemon offers
+// it. providerName is the daemon's untrusted name, used only for a
+// provider the UI has no name of; the description is Pango markup, so the
+// sentence is escaped whole.
+func (w *Wizard) showGOAHint(d signin.Discovery, providerName string) {
+	w.goaDiscovery = d
+	name := signin.ProviderName(d.Provider)
+	if name == "" {
+		name = providerName
+	}
+	if name == "" {
+		name = signin.ProviderName(signin.ProviderMicrosoft365)
 	}
 	// TRANSLATORS: %s is a provider such as "Microsoft 365" or "Google".
-	w.goaHint.SetDescription(fmt.Sprintf(i18n.T("This address belongs to a %s account. Add it under Settings → Online Accounts, then come back here."), providerName))
+	w.goaHint.SetDescription(glib.MarkupEscapeText(fmt.Sprintf(i18n.T("This address belongs to a %s account. Add it under Settings → Online Accounts, then come back here."), name)))
+	w.goaBrowser.SetVisible(d.OAuthAlt != nil)
 	w.nav.PushByTag(tagGOA)
+}
+
+// onGOABrowser leaves the GNOME Online Accounts hint for the backend's
+// own sign-in in the browser.
+func (w *Wizard) onGOABrowser() {
+	alt := w.goaDiscovery.OAuthAlt
+	if alt == nil {
+		return
+	}
+	w.showOAuthPrompt(signin.Provider(*alt), alt, w.goaDiscovery.PasswordAlt)
 }
 
 // onGOAOpen launches the Online Accounts panel of GNOME Settings.

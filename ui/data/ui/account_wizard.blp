@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 using Gtk 4.0;
 using Adw 1;
-// "Add Account" wizard: identity → (account.discover) → server settings →
-// account.test → account.add. Object IDs are looked up from
+// "Add Account" wizard: identity → (account.discover) → server settings,
+// GNOME Online Accounts hint or browser sign-in → account.test →
+// account.add. Object IDs are looked up from
 // ui/internal/accountwizard/wizard.go; keep them in sync. The daemon
 // discovers, tests and validates; this dialog only checks field syntax and
 // fills port defaults.
@@ -46,7 +47,7 @@ Adw.Dialog account_wizard {
                   margin-end: 24;
 
                   Label {
-                    label: _("Enter your e-mail address and password. Malachi Mail will look up the server settings for you.");
+                    label: _("Enter your e-mail address and, unless the account signs in through your browser, its password. Malachi Mail will look up the server settings for you.");
                     wrap: true;
                     xalign: 0;
 
@@ -261,7 +262,123 @@ Adw.Dialog account_wizard {
                   "pill",
                 ]
               }
+
+              // Shown from Go when account.discover offers the backend's
+              // own sign-in as an alternative.
+              Button goa_browser_button {
+                // TRANSLATORS: button on the GNOME Online Accounts hint page
+                label: _("Use the Browser Instead");
+                visible: false;
+
+                styles [
+                  "pill",
+                ]
+              }
             };
+          };
+        };
+      }
+
+      // The backend's own sign-in (account.oauthStart): a Google or
+      // Microsoft 365 address signs in in the user's browser and the daemon
+      // receives the redirect. prompt → waiting (account.oauthWait) → the
+      // connection test; unavailable when no OAuth client is configured.
+      // The prompt's description, the sign-in button's label and the
+      // unavailable description name the provider and are set from Go.
+      Adw.NavigationPage oauth_page {
+        tag: "oauth";
+        title: _("Sign In");
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {}
+
+          content: Stack oauth_stack {
+            transition-type: crossfade;
+
+            StackPage {
+              name: "prompt";
+
+              child: Adw.StatusPage oauth_prompt {
+                icon-name: "web-browser-symbolic";
+                title: _("Sign In Through Your Browser");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  Button oauth_signin_button {
+                    use-underline: true;
+
+                    styles [
+                      "pill",
+                      "suggested-action",
+                    ]
+                  }
+                };
+              };
+            }
+
+            StackPage {
+              name: "waiting";
+
+              // The spinner paintable is set from Go, as on testing_progress.
+              child: Adw.StatusPage oauth_waiting {
+                title: _("Waiting for the sign-in in your browser…");
+                description: _("Finish signing in there; this page continues by itself.");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  Button oauth_reopen_button {
+                    label: _("Open the Browser Again");
+
+                    styles [
+                      "pill",
+                    ]
+                  }
+
+                  Button oauth_cancel_button {
+                    label: _("_Cancel");
+                    use-underline: true;
+
+                    styles [
+                      "pill",
+                    ]
+                  }
+                };
+              };
+            }
+
+            StackPage {
+              name: "unavailable";
+
+              child: Adw.StatusPage oauth_unavailable {
+                icon-name: "dialog-warning-symbolic";
+                title: _("No Sign-In Client Configured");
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  halign: center;
+
+                  // Shown from Go when the provider has an app-password
+                  // alternative (Google).
+                  Button oauth_password_button {
+                    label: _("Use an App Password Instead");
+                    visible: false;
+
+                    styles [
+                      "pill",
+                      "suggested-action",
+                    ]
+                  }
+                };
+              };
+            }
           };
         };
       }

@@ -22,15 +22,15 @@ msgstr ""
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:101
+#: ui/internal/accountwizard/linked.go:90
 msgid "Use"
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:104
+#: ui/internal/accountwizard/linked.go:93
 msgid "Added"
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:125
+#: ui/internal/accountwizard/linked.go:114
 msgid ""
 "The mail service does not describe this account; update it and try again"
 msgstr ""
@@ -43,12 +43,89 @@ msgid ""
 "Accounts, then come back here."
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:166 ui/internal/window/sync.go:234
+#: ui/internal/accountwizard/linked.go:177 ui/internal/window/sync.go:244
 msgid "Could not open Online Accounts; open GNOME Settings yourself"
 msgstr ""
 
-#: ui/internal/accountwizard/linked.go:182
+#: ui/internal/accountwizard/linked.go:193
 msgid "This address is not signed in yet"
+msgstr ""
+
+#. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
+#: ui/internal/accountwizard/oauth.go:74
+#, c-format
+msgid ""
+"Your browser will open so you can sign in to %s. Malachi Mail never sees "
+"your password; it only receives permission to read and send your mail."
+msgstr ""
+
+#. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
+#: ui/internal/accountwizard/oauth.go:76
+#, c-format
+msgid "_Sign In with %s"
+msgstr ""
+
+#. TRANSLATORS: progressive form for the RPC error text
+#: ui/internal/accountwizard/oauth.go:140 ui/internal/window/sync.go:272
+msgid "Starting the sign-in"
+msgstr ""
+
+#. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
+#: ui/internal/accountwizard/oauth.go:288
+#, c-format
+msgid ""
+"No OAuth client is configured for %s on this computer. Add a client ID to "
+"the mail backend's configuration and try again."
+msgstr ""
+
+#: ui/internal/accountwizard/oauth.go:318
+#: ui/internal/accountwizard/wizard.go:417
+msgid "Enter the app password for this account"
+msgstr ""
+
+#. TRANSLATORS: title of the page the browser shows
+#: ui/internal/accountwizard/oauth.go:341
+msgid "Signed in"
+msgstr ""
+
+#. TRANSLATORS: page the browser shows
+#: ui/internal/accountwizard/oauth.go:343
+msgid "You can close this tab and return to Malachi Mail."
+msgstr ""
+
+#. TRANSLATORS: title of the page the browser shows
+#: ui/internal/accountwizard/oauth.go:345
+msgid "Sign-in failed"
+msgstr ""
+
+#. TRANSLATORS: page the browser shows
+#: ui/internal/accountwizard/oauth.go:347
+msgid "Return to Malachi Mail and try again."
+msgstr ""
+
+#: ui/internal/accountwizard/oauth.go:357
+msgid "The sign-in was cancelled"
+msgstr ""
+
+#. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
+#: ui/internal/accountwizard/oauth.go:360
+#, c-format
+msgid "The sign-in with %s was refused"
+msgstr ""
+
+#: ui/internal/accountwizard/oauth.go:362
+msgid "The sign-in took too long; try again"
+msgstr ""
+
+#. TRANSLATORS: %s is an e-mail address.
+#: ui/internal/accountwizard/oauth.go:365
+#, c-format
+msgid "The browser signed in to %s, not to this address"
+msgstr ""
+
+#. TRANSLATORS: progressive form for the RPC error text
+#: ui/internal/accountwizard/oauth.go:368
+msgid "Signing in"
 msgstr ""
 
 #: ui/internal/accountwizard/results.go:61
@@ -61,80 +138,99 @@ msgstr ""
 msgid "Connected in %d ms"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:181
-#: ui/internal/accountwizard/wizard.go:182
-#: ui/internal/window/accounts_page.go:155
+#: ui/internal/accountwizard/wizard.go:222
+#: ui/internal/accountwizard/wizard.go:223
+#: ui/internal/window/accounts_page.go:162
 msgid "Edit Account"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:183
+#: ui/internal/accountwizard/wizard.go:224
 msgid "New Password (leave empty to keep)"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:184
+#: ui/internal/accountwizard/wizard.go:225
 msgid "_Save"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:185
+#: ui/internal/accountwizard/wizard.go:226
 msgid "Save _Anyway"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:195 ui/data/ui/account_wizard.ui:245
+#: ui/internal/accountwizard/wizard.go:238 ui/data/ui/account_wizard.ui:245
 msgid "_Test Connection"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:298
+#: ui/internal/accountwizard/wizard.go:258 ui/data/ui/account_wizard.ui:261
+#: ui/data/ui/account_wizard.ui:313
+msgid "Sign In"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:459
 msgid "Enter the password for this account"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:409 ui/data/ui/account_wizard.ui:318
+#: ui/internal/accountwizard/wizard.go:511 ui/data/ui/account_wizard.ui:435
 msgid "Testing Connection…"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:446
+#: ui/internal/accountwizard/wizard.go:547
 msgid "Testing the connection"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:472
+#: ui/internal/accountwizard/wizard.go:576
+msgid ""
+"The server refused the sign-in. Sign in again and make sure access to mail "
+"is allowed."
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:581
 msgid ""
 "The server refused the sign-in. Sign in to the account again in Settings → "
 "Online Accounts and make sure access to mail is allowed."
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:480
+#: ui/internal/accountwizard/wizard.go:584
+msgid "_Sign In Again"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:586 ui/data/ui/account_wizard.ui:503
+msgid "_Edit Servers"
+msgstr ""
+
+#: ui/internal/accountwizard/wizard.go:594
 msgid "Ready to Save"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:482
+#: ui/internal/accountwizard/wizard.go:596
 msgid "Ready to Add"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:486
-#: ui/internal/accountwizard/wizard.go:494
+#: ui/internal/accountwizard/wizard.go:600
+#: ui/internal/accountwizard/wizard.go:608
 msgid "Connection Failed"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:489 ui/internal/widget/rpc.go:79
+#: ui/internal/accountwizard/wizard.go:603 ui/internal/widget/rpc.go:79
 msgid "The server rejected the user name or password"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:510
+#: ui/internal/accountwizard/wizard.go:631
 msgid "Saving Account…"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:512
+#: ui/internal/accountwizard/wizard.go:633
 msgid "Adding Account…"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:554
+#: ui/internal/accountwizard/wizard.go:677
 msgid "An account with this e-mail address already exists"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:557
+#: ui/internal/accountwizard/wizard.go:680
 msgid "Saving the account"
 msgstr ""
 
-#: ui/internal/accountwizard/wizard.go:559
+#: ui/internal/accountwizard/wizard.go:682
 msgid "Adding the account"
 msgstr ""
 
@@ -255,7 +351,7 @@ msgid "Save changes to this draft?"
 msgstr ""
 
 #: ui/internal/compose/draft.go:329 ui/internal/widget/rpc.go:128
-#: ui/internal/window/remote.go:261
+#: ui/internal/window/remote.go:260 ui/data/ui/account_wizard.ui:371
 msgid "_Cancel"
 msgstr ""
 
@@ -517,82 +613,92 @@ msgstr ""
 msgid "Failed: %s"
 msgstr ""
 
+#. TRANSLATORS: %s is a technical error message.
+#: ui/internal/widget/uri.go:34
+#, c-format
+msgid "The link could not be opened: %s"
+msgstr ""
+
 #. TRANSLATORS: %s is the new account's e-mail address.
-#: ui/internal/window/accounts_page.go:80
+#: ui/internal/window/accounts_page.go:83
 #, c-format
 msgid "Added %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:99
+#: ui/internal/window/accounts_page.go:102
 msgid "Loading accounts"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:134
+#: ui/internal/window/accounts_page.go:137
 msgid "Drag to reorder, or press Ctrl+Up and Ctrl+Down"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:148
+#: ui/internal/window/accounts_page.go:149
+msgid "Sign In…"
+msgstr ""
+
+#: ui/internal/window/accounts_page.go:155
 msgid "Enabled"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:161
+#: ui/internal/window/accounts_page.go:168
 msgid "Remove Account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:193
+#: ui/internal/window/accounts_page.go:202
 msgid "Pausing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:195
+#: ui/internal/window/accounts_page.go:204
 msgid "Resuming the account"
 msgstr ""
 
 #. TRANSLATORS: %s is the edited account's e-mail address.
-#: ui/internal/window/accounts_page.go:229
+#: ui/internal/window/accounts_page.go:248
 #, c-format
 msgid "Saved %s"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:237
+#: ui/internal/window/accounts_page.go:256
 msgid "Also delete _drafts and downloaded data"
 msgstr ""
 
 #. TRANSLATORS: %s is the account's e-mail address.
-#: ui/internal/window/accounts_page.go:240
+#: ui/internal/window/accounts_page.go:259
 #, c-format
 msgid ""
 "%s will be removed from Malachi Mail. Mail on the server is not affected."
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:241
+#: ui/internal/window/accounts_page.go:260
 msgid "Remove this account?"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:241
+#: ui/internal/window/accounts_page.go:260
 msgid "_Remove"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:257
+#: ui/internal/window/accounts_page.go:276
 msgid "Removing the account"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:279
+#: ui/internal/window/accounts_page.go:298
 msgid "Paused"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:281
+#: ui/internal/window/accounts_page.go:300
 msgid "Syncing…"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:283
+#: ui/internal/window/accounts_page.go:302
 msgid "Offline"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:285 ui/internal/window/sync.go:146
+#: ui/internal/window/accounts_page.go:304 ui/internal/window/sync.go:154
 msgid "Sign-in required"
 msgstr ""
 
-#: ui/internal/window/accounts_page.go:287
+#: ui/internal/window/accounts_page.go:306
 msgid "Error"
 msgstr ""
 
@@ -831,7 +937,7 @@ msgstr ""
 msgid "Attached to “%s”"
 msgstr ""
 
-#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:140
+#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:139
 msgid "Loading the images"
 msgstr ""
 
@@ -1062,174 +1168,180 @@ msgstr ""
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:194
+#: ui/internal/window/preferences.go:197
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:217
+#: ui/internal/window/preferences.go:220
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:318
+#: ui/internal/window/preferences.go:321
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:321
+#: ui/internal/window/preferences.go:324
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:324
+#: ui/internal/window/preferences.go:327
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:348
+#: ui/internal/window/preferences.go:352
 msgid "Not available in the Flatpak build"
 msgstr ""
 
+#: ui/internal/window/preferences.go:358
+msgid "The MCP bridge (malachi-mcp) was not found"
+msgstr ""
+
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:369
+#: ui/internal/window/preferences.go:373
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:353
-msgid "The MCP bridge (malachi-mcp) was not found"
-msgstr ""
-
-#: ui/internal/window/preferences.go:404
+#: ui/internal/window/preferences.go:409
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:407
+#: ui/internal/window/preferences.go:412
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:410
+#: ui/internal/window/preferences.go:415
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
 
-#: ui/internal/window/remote.go:67
+#: ui/internal/window/remote.go:66
 msgid "Loading remote images…"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:70
+#: ui/internal/window/remote.go:69
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/remote.go:202
+#: ui/internal/window/remote.go:201
 msgid "Trusting the sender"
 msgstr ""
 
-#: ui/internal/window/remote.go:225
+#: ui/internal/window/remote.go:224
 msgid "Changing the remote content preference"
 msgstr ""
 
-#: ui/internal/window/remote.go:256
+#: ui/internal/window/remote.go:255
 msgid "Open This Link?"
 msgstr ""
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:258
+#: ui/internal/window/remote.go:257
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr ""
 
-#: ui/internal/window/remote.go:262
+#: ui/internal/window/remote.go:261
 msgid "_Open Link"
 msgstr ""
 
-#. TRANSLATORS: %s is a technical error message.
-#: ui/internal/window/remote.go:294
-#, c-format
-msgid "The link could not be opened: %s"
-msgstr ""
-
-#: ui/internal/window/sync.go:44
+#: ui/internal/window/sync.go:52
 msgid "Not syncing"
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name, %d the progress in percent.
-#: ui/internal/window/sync.go:141
+#: ui/internal/window/sync.go:149
 #, c-format
 msgid "Syncing %s… %d %%"
 msgstr ""
 
 #. TRANSLATORS: %s is a folder or account name.
-#: ui/internal/window/sync.go:144
+#: ui/internal/window/sync.go:152
 #, c-format
 msgid "Syncing %s…"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages waiting in the outbox.
-#: ui/internal/window/sync.go:149
+#: ui/internal/window/sync.go:157
 #, c-format
 msgid "Sending %d message…"
 msgid_plural "Sending %d messages…"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/sync.go:151
+#: ui/internal/window/sync.go:159
 msgid "Sync error"
 msgstr ""
 
-#: ui/internal/window/sync.go:153
+#: ui/internal/window/sync.go:161
 msgid "Offline, retrying"
 msgstr ""
 
-#: ui/internal/window/sync.go:155
+#: ui/internal/window/sync.go:163
 msgid "Up to date"
 msgstr ""
 
-#: ui/internal/window/sync.go:169
+#: ui/internal/window/sync.go:177
 msgid "Checking for new mail…"
 msgstr ""
 
-#: ui/internal/window/sync.go:185
+#: ui/internal/window/sync.go:193
 msgid "Checking for new mail"
 msgstr ""
 
-#: ui/internal/window/sync.go:209 ui/data/ui/account_wizard.ui:278
+#: ui/internal/window/sync.go:306 ui/data/ui/account_wizard.ui:278
 msgid "Open Online Accounts"
 msgstr ""
 
-#: ui/internal/window/sync.go:212 ui/data/ui/window.ui:193
+#. TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
+#: ui/internal/window/sync.go:309
+msgctxt "button"
+msgid "Sign In"
+msgstr ""
+
+#: ui/internal/window/sync.go:311 ui/data/ui/window.ui:193
 msgid "Open Preferences"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:244
+#: ui/internal/window/sync.go:323
+#, c-format
+msgid "Sign in to %s again in your browser"
+msgstr ""
+
+#. TRANSLATORS: %s is an account name.
+#: ui/internal/window/sync.go:331
 #, c-format
 msgid "GNOME Online Accounts is not available; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:247
+#: ui/internal/window/sync.go:334
 #, c-format
 msgid "Sign in to %s again in Settings → Online Accounts"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:256
+#: ui/internal/window/sync.go:343
 #, c-format
 msgid "Sign in to %s again"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:259
+#: ui/internal/window/sync.go:346
 #, c-format
 msgid "The system keyring is unavailable; %s cannot sign in"
 msgstr ""
 
 #. TRANSLATORS: %s is an account name.
-#: ui/internal/window/sync.go:262
+#: ui/internal/window/sync.go:349
 #, c-format
 msgid "%s needs attention"
 msgstr ""
@@ -1238,32 +1350,32 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:460
+#: ui/internal/window/window.go:465
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:488
+#: ui/internal/window/window.go:493
 msgid "Connecting to backend…"
 msgstr ""
 
-#: ui/internal/window/window.go:491
+#: ui/internal/window/window.go:496
 msgid "Connected"
 msgstr ""
 
-#: ui/internal/window/window.go:498
+#: ui/internal/window/window.go:503
 msgid "Backend unavailable"
 msgstr ""
 
-#: ui/internal/window/window.go:541
+#: ui/internal/window/window.go:546
 msgid "Connected, but system.info failed"
 msgstr ""
 
-#: ui/internal/window/window.go:546
+#: ui/internal/window/window.go:551
 #, c-format
 msgid "Protocol mismatch: UI %d, backend %d"
 msgstr ""
 
-#: ui/internal/window/window.go:550
+#: ui/internal/window/window.go:555
 #, c-format
 msgid "Connected to malachid %s (pid %d)"
 msgstr ""
@@ -1275,8 +1387,8 @@ msgstr ""
 
 #: ui/data/ui/account_wizard.ui:52
 msgid ""
-"Enter your e-mail address and password. Malachi Mail will look up the server "
-"settings for you."
+"Enter your e-mail address and, unless the account signs in through your "
+"browser, its password. Malachi Mail will look up the server settings for you."
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:62
@@ -1351,10 +1463,6 @@ msgstr ""
 msgid "Outgoing Mail (SMTP)"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:261
-msgid "Sign In"
-msgstr ""
-
 #: ui/data/ui/account_wizard.ui:270
 msgid "Sign In Through GNOME Settings"
 msgstr ""
@@ -1363,39 +1471,63 @@ msgstr ""
 msgid "Check Again"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:304
-msgid "Connection Test"
+#: ui/data/ui/account_wizard.ui:295
+msgid "Use the Browser Instead"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:319
-msgid "This can take a moment."
+#: ui/data/ui/account_wizard.ui:328
+msgid "Sign In Through Your Browser"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:340
-msgid "Incoming (IMAP)"
+#: ui/data/ui/account_wizard.ui:354
+msgid "Waiting for the sign-in in your browser…"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:349
-msgid "Outgoing (SMTP)"
+#: ui/data/ui/account_wizard.ui:355
+msgid "Finish signing in there; this page continues by itself."
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:358
-msgid "Microsoft 365"
+#: ui/data/ui/account_wizard.ui:363
+msgid "Open the Browser Again"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:386
-msgid "_Edit Servers"
-msgstr ""
-
-#: ui/data/ui/account_wizard.ui:392
-msgid "_Retry"
+#: ui/data/ui/account_wizard.ui:390
+msgid "No Sign-In Client Configured"
 msgstr ""
 
 #: ui/data/ui/account_wizard.ui:398
+msgid "Use an App Password Instead"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:421
+msgid "Connection Test"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:436
+msgid "This can take a moment."
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:457
+msgid "Incoming (IMAP)"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:466
+msgid "Outgoing (SMTP)"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:475
+msgid "Microsoft 365"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:509
+msgid "_Retry"
+msgstr ""
+
+#: ui/data/ui/account_wizard.ui:515
 msgid "Add _Anyway"
 msgstr ""
 
-#: ui/data/ui/account_wizard.ui:404
+#: ui/data/ui/account_wizard.ui:521
 msgid "_Add Account"
 msgstr ""
 

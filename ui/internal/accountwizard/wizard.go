@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -17,15 +18,21 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // RPC budgets. account.test probes two endpoints for up to 20 s each in
-// parallel; account.add may wait for a keyring unlock dialog.
+// parallel; account.add may wait for a keyring unlock dialog. The daemon
+// answers account.oauthWait with "pending" after at most 60 s, so one call
+// gets a little more than that; the page calls again until the browser has
+// come back.
 const (
-	discoverTimeout = 15 * time.Second
-	testTimeout     = 45 * time.Second
-	addTimeout      = 30 * time.Second
+	discoverTimeout      = 15 * time.Second
+	testTimeout          = 45 * time.Second
+	addTimeout           = 30 * time.Second
+	oauthStartTimeout    = 10 * time.Second
+	oauthWaitCallTimeout = 75 * time.Second
 )
 
 // Navigation page tags, as in account_wizard.blp.
@@ -33,6 +40,7 @@ const (
 	tagIdentity = "identity"
 	tagServers  = "servers"
 	tagGOA      = "goa"
+	tagOAuth    = "oauth"
 	tagTesting  = "testing"
 )
 
@@ -63,7 +71,12 @@ type Wizard struct {
 	linkedGroup    *adw.PreferencesGroup
 	linkedRows     *gtk.ListBox
 
-	goaOpen, goaRecheck *gtk.Button
+	goaOpen, goaRecheck, goaBrowser *gtk.Button
+
+	oauthPage                                            *adw.NavigationPage
+	oauthStack                                           *gtk.Stack
+	oauthPrompt, oauthWaiting, oauthUnavailable          *adw.StatusPage
+	oauthSignIn, oauthReopen, oauthCancel, oauthPassword *gtk.Button
 
 	serversPrefs *adw.PreferencesPage
 	accountName  *adw.EntryRow
@@ -82,11 +95,28 @@ type Wizard struct {
 
 	// linkedCfg is set for an account whose sign-in lives in GNOME Online
 	// Accounts (Microsoft 365 through Graph, Google over IMAP with a
-	// token): the daemon built it, there is no password and the servers
-	// are not the user's to edit. nil is the password path.
+	// token) or in the backend's own browser sign-in: the daemon built
+	// it, there is no password and the servers are not the user's to
+	// edit. nil is the password path.
 	linkedCfg *api.AccountConfig
 	goaHint   *adw.StatusPage
 	linked    []api.LinkedAccount
+
+	// goaDiscovery is the account.discover answer the GNOME Online
+	// Accounts hint page shows, with the alternatives it offers.
+	goaDiscovery signin.Discovery
+	// oauth is the browser sign-in of the oauth page (oauth.go).
+	oauth oauthState
+	// appPassword is the app-password account the user chose instead of
+	// the browser sign-in; Next continues with it while the address stays
+	// the same.
+	appPassword *api.AccountConfig
+	// signInOnly is the dialog of NewEditSignIn: the browser sign-in and
+	// the test of an existing account, without the identity page.
+	signInOnly bool
+	// signInAgain says the last test of a browser sign-in account was
+	// refused: the results page's first button signs in again.
+	signInAgain bool
 
 	closed      bool
 	op          int  // bumped per RPC so stale callbacks bail out
@@ -114,25 +144,35 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 	button := func(id string) *gtk.Button { return b.GetObject(id).Cast().(*gtk.Button) }
 
 	w := &Wizard{
-		Dialog:         b.GetObject("account_wizard").Cast().(*adw.Dialog),
-		client:         c,
-		log:            log.With("component", "accountwizard"),
-		nav:            b.GetObject("wizard_nav").Cast().(*adw.NavigationView),
-		toasts:         b.GetObject("wizard_toasts").Cast().(*adw.ToastOverlay),
-		identityPage:   b.GetObject("identity_page").Cast().(*adw.NavigationPage),
-		identityBanner: b.GetObject("identity_banner").Cast().(*adw.Banner),
-		identityRows:   b.GetObject("identity_rows").Cast().(*gtk.ListBox),
-		displayName:    entry("display_name_row"),
-		email:          entry("email_row"),
-		password:       b.GetObject("password_row").Cast().(*adw.PasswordEntryRow),
-		next:           button("identity_next_button"),
-		linkedGroup:    b.GetObject("linked_group").Cast().(*adw.PreferencesGroup),
-		linkedRows:     b.GetObject("linked_rows").Cast().(*gtk.ListBox),
-		goaOpen:        button("goa_open_button"),
-		goaRecheck:     button("goa_recheck_button"),
-		goaHint:        b.GetObject("goa_hint").Cast().(*adw.StatusPage),
-		serversPrefs:   b.GetObject("servers_prefs").Cast().(*adw.PreferencesPage),
-		accountName:    entry("account_name_row"),
+		Dialog:           b.GetObject("account_wizard").Cast().(*adw.Dialog),
+		client:           c,
+		log:              log.With("component", "accountwizard"),
+		nav:              b.GetObject("wizard_nav").Cast().(*adw.NavigationView),
+		toasts:           b.GetObject("wizard_toasts").Cast().(*adw.ToastOverlay),
+		identityPage:     b.GetObject("identity_page").Cast().(*adw.NavigationPage),
+		identityBanner:   b.GetObject("identity_banner").Cast().(*adw.Banner),
+		identityRows:     b.GetObject("identity_rows").Cast().(*gtk.ListBox),
+		displayName:      entry("display_name_row"),
+		email:            entry("email_row"),
+		password:         b.GetObject("password_row").Cast().(*adw.PasswordEntryRow),
+		next:             button("identity_next_button"),
+		linkedGroup:      b.GetObject("linked_group").Cast().(*adw.PreferencesGroup),
+		linkedRows:       b.GetObject("linked_rows").Cast().(*gtk.ListBox),
+		goaOpen:          button("goa_open_button"),
+		goaRecheck:       button("goa_recheck_button"),
+		goaBrowser:       button("goa_browser_button"),
+		goaHint:          b.GetObject("goa_hint").Cast().(*adw.StatusPage),
+		oauthPage:        b.GetObject("oauth_page").Cast().(*adw.NavigationPage),
+		oauthStack:       b.GetObject("oauth_stack").Cast().(*gtk.Stack),
+		oauthPrompt:      b.GetObject("oauth_prompt").Cast().(*adw.StatusPage),
+		oauthWaiting:     b.GetObject("oauth_waiting").Cast().(*adw.StatusPage),
+		oauthUnavailable: b.GetObject("oauth_unavailable").Cast().(*adw.StatusPage),
+		oauthSignIn:      button("oauth_signin_button"),
+		oauthReopen:      button("oauth_reopen_button"),
+		oauthCancel:      button("oauth_cancel_button"),
+		oauthPassword:    button("oauth_password_button"),
+		serversPrefs:     b.GetObject("servers_prefs").Cast().(*adw.PreferencesPage),
+		accountName:      entry("account_name_row"),
 		imap: serverRows{
 			kind:     EndpointIMAP,
 			host:     entry("imap_host_row"),
@@ -166,6 +206,7 @@ func New(c *client.Client, log *slog.Logger) *Wizard {
 	// From Go rather than the Blueprint: GtkBuilder takes an inline object
 	// in a paintable property for a file name ("Could not load image").
 	w.progress.SetPaintable(adw.NewSpinnerPaintable(w.progress))
+	w.oauthWaiting.SetPaintable(adw.NewSpinnerPaintable(w.oauthWaiting))
 	w.wire()
 	w.loadLinked(nil)
 	return w
@@ -185,9 +226,11 @@ func NewEdit(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
 	w.addAnyway.SetLabel(i18n.T("Save _Anyway"))
 	w.displayName.SetText(a.Config.DisplayName)
 	w.email.SetText(a.Config.Email)
-	if widget.GOAOwned(a.Config) {
-		// The address and the sign-in belong to GNOME Online Accounts; only
-		// the name can change here, and the test re-checks the sign-in.
+	if signin.KindOf(a.Config) != signin.Password {
+		// The address and the sign-in belong to GNOME Online Accounts or to
+		// the backend's own browser sign-in; only the name can change here,
+		// and the test re-checks the stored sign-in (a refused browser
+		// sign-in is renewed from the results page).
 		cfg := a.Config
 		w.linkedCfg = &cfg
 		w.email.SetSensitive(false)
@@ -198,6 +241,22 @@ func NewEdit(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
 	}
 	w.applyConfig(a.Config)
 	w.nav.ReplaceWithTags([]string{tagIdentity, tagServers})
+	return w
+}
+
+// NewEditSignIn builds the dialog that signs an account of the backend's
+// own sign-in in again (the Accounts page's "Sign In…"): it opens on the
+// browser page, tests the account once the browser has come back and ends
+// in account.update with the new sign-in. Any other account gets the plain
+// NewEdit dialog.
+func NewEditSignIn(c *client.Client, log *slog.Logger, a api.Account) *Wizard {
+	w := NewEdit(c, log, a)
+	if signin.KindOf(a.Config) != signin.OAuth {
+		return w
+	}
+	w.signInOnly = true
+	w.SetTitle(i18n.T("Sign In"))
+	w.showOAuthPrompt(signin.Provider(a.Config), nil, nil)
 	return w
 }
 
@@ -229,13 +288,22 @@ func (w *Wizard) wire() {
 	}
 	w.test.ConnectClicked(w.onTest)
 	w.retry.ConnectClicked(w.runTest)
-	w.edit.ConnectClicked(func() { w.nav.PopToTag(tagServers) })
+	w.edit.ConnectClicked(w.onEdit)
 	w.add.ConnectClicked(w.onAdd)
 	w.addAnyway.ConnectClicked(w.onAdd)
 	w.goaOpen.ConnectClicked(w.onGOAOpen)
 	w.goaRecheck.ConnectClicked(w.onGOARecheck)
+	w.goaBrowser.ConnectClicked(w.onGOABrowser)
+	w.oauthSignIn.ConnectClicked(w.onOAuthSignIn)
+	w.oauthReopen.ConnectClicked(w.onOAuthReopen)
+	w.oauthCancel.ConnectClicked(w.onOAuthCancel)
+	w.oauthPassword.ConnectClicked(w.onOAuthPassword)
 
-	w.ConnectClosed(func() { w.closed = true })
+	w.ConnectClosed(func() {
+		w.closed = true
+		// A sign-in still waiting in the daemon is no longer anyone's.
+		w.cancelSession()
+	})
 }
 
 // Present shows the dialog over parent.
@@ -289,24 +357,39 @@ func (w *Wizard) assembleConfig() api.AccountConfig {
 }
 
 // requirePassword flags the empty password row once discovery has shown
-// the account needs one (a Microsoft 365 account does not).
-func (w *Wizard) requirePassword() bool {
+// the account needs one (a Microsoft 365 account does not); banner says
+// which password.
+func (w *Wizard) requirePassword(banner string) bool {
 	if w.editing != nil || w.password.Text() != "" {
 		return true
 	}
 	w.password.AddCSSClass("error")
-	w.identityBanner.SetTitle(i18n.T("Enter the password for this account"))
+	w.identityBanner.SetTitle(banner)
 	w.identityBanner.SetRevealed(true)
 	w.password.GrabFocus()
 	return false
 }
 
+// credentials are what account.test, account.add and account.update
+// receive: the completed browser sign-in; nothing for GNOME Online
+// Accounts (its token source holds the sign-in) or for a browser sign-in
+// account tested with its stored sign-in; the typed password otherwise.
+func (w *Wizard) credentials() api.Credentials {
+	if w.linkedCfg == nil {
+		return credentialsFor(w.readIdentity())
+	}
+	if signin.KindOf(*w.linkedCfg) == signin.OAuth && w.oauth.complete && w.oauth.session != "" {
+		return api.Credentials{OAuthSession: w.oauth.session}
+	}
+	return api.Credentials{}
+}
+
 // onNext validates the identity page and asks the daemon for server
-// settings. A Microsoft 365 address goes to the connection test (signed in
-// through GNOME Online Accounts) or to the sign-in hint; an IMAP hit goes
-// to the connection test; a miss opens the Servers page with guessed
-// defaults. The password is asked for only once the account turns out to
-// need one.
+// settings. A Google or Microsoft 365 address goes to the connection test
+// (signed in through GNOME Online Accounts), to the sign-in hint or to the
+// browser sign-in; an IMAP hit goes to the connection test; a miss opens
+// the Servers page with guessed defaults. The password is asked for only
+// once the account turns out to need one.
 func (w *Wizard) onNext() {
 	id := w.readIdentity()
 	if p := ValidateIdentity(id, false); p.Any() {
@@ -325,6 +408,19 @@ func (w *Wizard) onNext() {
 		w.nav.PushByTag(tagServers)
 		return
 	}
+	// A new account's way is decided afresh: a sign-in of an earlier
+	// attempt is dropped.
+	w.linkedCfg = nil
+	w.cancelSession()
+	if w.appPassword != nil {
+		if strings.EqualFold(w.appPassword.Email, id.Email) {
+			if w.requirePassword(i18n.T("Enter the app password for this account")) {
+				w.useAppPassword()
+			}
+			return
+		}
+		w.appPassword = nil
+	}
 	if l, ok := LinkedMatch(w.linked, id.Email); ok && !l.Configured {
 		w.useLinked(l)
 		return
@@ -342,29 +438,35 @@ func (w *Wizard) onNext() {
 				return
 			}
 			w.setBusy(false)
-			if err == nil && res.Config != nil && widget.GOAOwned(*res.Config) {
+			d := signin.ClassifyDiscovery(res, err)
+			switch d.Path {
+			case signin.PathGOA:
 				// Signed in through GNOME Online Accounts: the daemon's
-				// account is complete; otherwise it is the hint that the
-				// sign-in must happen there first.
+				// account is complete.
 				w.log.Info("account discovered", "source", res.Source)
-				if linkedAccountID(*res.Config) != "" {
-					w.startLinked(*res.Config)
-					return
-				}
-				w.showGOAHint(res.ProviderName)
+				w.startLinked(*d.Config)
+				return
+			case signin.PathGOAHint:
+				// GNOME Online Accounts could sign it in, but has not yet.
+				w.log.Info("account discovered", "source", res.Source, "browser", d.OAuthAlt != nil)
+				w.showGOAHint(d, res.ProviderName)
+				return
+			case signin.PathOAuth:
+				w.log.Info("account discovered", "source", res.Source, "appPassword", d.PasswordAlt != nil)
+				w.showOAuthPrompt(d.Provider, d.Config, d.PasswordAlt)
 				return
 			}
-			if !w.requirePassword() {
+			if !w.requirePassword(i18n.T("Enter the password for this account")) {
 				return
 			}
-			if err != nil || res.Config == nil {
+			if d.Config == nil {
 				w.log.Debug("account.discover", "err", err, "source", res.Source)
 				w.applyConfig(MergeIdentity(GuessConfig(id.Email), id))
 				w.nav.PushByTag(tagServers)
 				return
 			}
 			w.log.Info("account discovered", "source", res.Source)
-			w.applyConfig(MergeIdentity(*res.Config, id))
+			w.applyConfig(MergeIdentity(*d.Config, id))
 			w.nav.ReplaceWithTags([]string{tagIdentity, tagServers, tagTesting})
 			w.runTest()
 		})
@@ -392,7 +494,7 @@ func (w *Wizard) onTest() {
 }
 
 func (w *Wizard) showButtons(o Outcome) {
-	w.edit.SetVisible(w.linkedCfg == nil)
+	w.edit.SetVisible(w.linkedCfg == nil || w.signInAgain)
 	w.retry.SetVisible(o == OutcomeFailed)
 	w.addAnyway.SetVisible(o == OutcomeFailed)
 	w.add.SetVisible(o == OutcomeOK)
@@ -409,12 +511,10 @@ func (w *Wizard) runTest() {
 	w.progress.SetTitle(i18n.T("Testing Connection…"))
 	w.testingStack.SetVisibleChildName("progress")
 	w.hideButtons()
-	params := api.AccountTestParams{Config: w.assembleConfig()}
-	if w.linkedCfg == nil {
-		params.Credentials = credentialsFor(w.readIdentity())
-	}
+	params := api.AccountTestParams{Config: w.assembleConfig(), Credentials: w.credentials()}
 	if w.editing != nil {
-		params.AccountID = w.editing.ID // an empty password means "use the stored one"
+		// Empty credentials mean "use the stored password or sign-in".
+		params.AccountID = w.editing.ID
 	}
 	w.op++
 	op := w.op
@@ -436,6 +536,7 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 	// A Graph account has one endpoint, the mailbox; a Google account is
 	// tested like any IMAP one, only without a password to correct.
 	linked := w.linkedCfg != nil
+	browser := linked && signin.KindOf(*w.linkedCfg) == signin.OAuth
 	graph := linked && w.linkedCfg.Protocol() == api.AccountGraph
 	w.graphRow.SetVisible(graph)
 	w.imapRow.SetVisible(!graph)
@@ -465,11 +566,24 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 		w.smtpRow.SetSubtitle(text)
 		outcome = Classify(res)
 	}
-	if linked && outcome == OutcomeAuthFailed {
+	w.signInAgain = false
+	switch {
+	case browser && (outcome == OutcomeAuthFailed || signin.TestNeedsSignIn(res, err)):
+		// No password to correct either: the browser sign-in, or the
+		// permissions granted in it, must be renewed.
+		outcome = OutcomeFailed
+		w.signInAgain = true
+		w.results.SetDescription(i18n.T("The server refused the sign-in. Sign in again and make sure access to mail is allowed."))
+	case linked && outcome == OutcomeAuthFailed:
 		// There is no password to correct here: the sign-in, or the
 		// permissions it was granted, live in GNOME Online Accounts.
 		outcome = OutcomeFailed
 		w.results.SetDescription(i18n.T("The server refused the sign-in. Sign in to the account again in Settings → Online Accounts and make sure access to mail is allowed."))
+	}
+	if w.signInAgain {
+		w.edit.SetLabel(i18n.T("_Sign In Again"))
+	} else {
+		w.edit.SetLabel(i18n.T("_Edit Servers"))
 	}
 	w.lastOutcome = outcome
 
@@ -497,14 +611,21 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 	w.testingStack.SetVisibleChildName("results")
 }
 
+// onEdit is the results page's first button: back to the Servers page,
+// or, when the browser sign-in was refused, to the browser page.
+func (w *Wizard) onEdit() {
+	if w.signInAgain {
+		w.onSignInAgain()
+		return
+	}
+	w.nav.PopToTag(tagServers)
+}
+
 // onAdd stores the account (account.add, or account.update when editing)
 // and closes on success.
 func (w *Wizard) onAdd() {
 	cfg := w.assembleConfig()
-	var creds api.Credentials
-	if w.linkedCfg == nil {
-		creds = credentialsFor(w.readIdentity())
-	}
+	creds := w.credentials()
 	editing := w.editing
 	if editing != nil {
 		w.progress.SetTitle(i18n.T("Saving Account…"))
@@ -540,6 +661,8 @@ func (w *Wizard) onAdd() {
 				return
 			}
 			w.log.Info("account saved", "id", id, "edit", editing != nil)
+			// The daemon consumed the sign-in: closing must not cancel it.
+			w.oauth = oauthState{}
 			if w.OnDone != nil {
 				w.OnDone(id, cfg)
 			}
