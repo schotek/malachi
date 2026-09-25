@@ -4,6 +4,7 @@
 package core
 
 import (
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -165,6 +166,38 @@ func TestCoalescerStatusChangeIsImmediate(t *testing.T) {
 	}
 	if states[2].LastSync == nil || states[4].PendingOutbox != 1 {
 		t.Fatalf("lastSync/pendingOutbox changes not delivered: %+v", states)
+	}
+}
+
+// A server presenting another certificate is news even though the error
+// code (and its text) stay the same.
+func TestCoalescerTLSCertificateChange(t *testing.T) {
+	c, r, _ := newTestCoalescer(t)
+	offline := func(reason api.TLSErrorReason, sha string) api.SyncStateNotification {
+		e := api.NewError(api.CodeTLSError, "tls: failed to verify certificate")
+		e.Data = api.TLSErrorData{Reason: reason, Certificate: &api.CertificateInfo{SHA256: sha}}
+		return api.SyncStateNotification{State: api.SyncState{AccountID: "a", Status: api.SyncOffline, Progress: -1, Error: e}}
+	}
+	a, b := strings.Repeat("a", 64), strings.Repeat("b", 64)
+	steps := []api.SyncStateNotification{
+		offline(api.TLSUntrusted, a),
+		offline(api.TLSUntrusted, a), // the same again: nothing new
+		offline(api.TLSUntrusted, b), // another certificate
+		offline(api.TLSExpired, b),   // another verdict
+	}
+	for _, n := range steps {
+		c.SyncState(n)
+		settle()
+	}
+	states, _ := r.snapshot()
+	if len(states) != 3 {
+		t.Fatalf("delivered %d states: %+v", len(states), states)
+	}
+	if d, _ := api.TLSErrorDataOf(states[1].Error); d.Certificate.SHA256 != b {
+		t.Fatalf("second = %+v", d)
+	}
+	if !syncStateChanged(steps[0].State, api.SyncState{AccountID: "a", Status: api.SyncOffline, Progress: -1, Error: api.NewError(api.CodeTLSError, "x")}) {
+		t.Fatal("details dropped unnoticed")
 	}
 }
 

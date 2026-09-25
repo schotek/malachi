@@ -242,6 +242,20 @@ func TestSameStateAndTriggerCoalescing(t *testing.T) {
 	if sameState(a, b) {
 		t.Fatal("error change unnoticed")
 	}
+	// The same tlsError text for another certificate is news.
+	tlsErr := func(sha string) *api.Error {
+		e := api.NewError(api.CodeTLSError, "tls: failed to verify certificate")
+		e.Data = api.TLSErrorData{Reason: api.TLSOther, Certificate: &api.CertificateInfo{SHA256: sha}}
+		return e
+	}
+	a.Error, b.Error = tlsErr(strings.Repeat("a", 64)), tlsErr(strings.Repeat("a", 64))
+	if !sameState(a, b) {
+		t.Fatal("identical tls errors differ")
+	}
+	b.Error = tlsErr(strings.Repeat("b", 64))
+	if sameState(a, b) {
+		t.Fatal("certificate change unnoticed")
+	}
 
 	s := NewSyncer(store.Account{ID: "acc"}, Deps{})
 	s.Trigger("f1", false)

@@ -456,18 +456,39 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `security: none` is accepted only for `localhost` (or a loopback IP) and
   is meant for tests; `account.add` validation enforces it.
 - System CA store; certificate errors are fatal for the connection, with a
-  clear `tlsError` in `notify.syncState`. No "ignore certificate" option in
-  phase 1; if one is ever added it is per-account, per-fingerprint, and
-  loud.
-- Minimum TLS 1.2.
+  clear `tlsError` in `notify.syncState`. There is no "ignore certificate"
+  option. The one exception is a pinned certificate
+  (`ServerConfig.certificateSha256`): per account and per endpoint, by the
+  SHA-256 of the whole DER certificate, set only by an explicit act of
+  the user: confirming that exact certificate in the UI (fingerprint
+  first, then subject, issuer and validity; a changed certificate gets a
+  confirmation of its own that warns of interception and shows the
+  previously trusted fingerprint), or writing `certificate_sha256` into
+  their own `config.toml`; and only for a password endpoint over TLS or
+  STARTTLS — never for `security: none`, never for OAuth2 endpoints (a
+  provider's token goes to the provider's servers only) and never for
+  Graph or the HTTP clients (discovery, sign-in, remote images), which
+  have no such setting. A pinned endpoint accepts exactly that certificate
+  and checks neither issuer, name nor validity (a server with its own
+  certificate, e.g. a mail bridge reached over a private network, has none
+  worth checking); any other certificate fails with `tlsError` reason
+  `pinMismatch`, which the UI shows as a changed certificate, and a new
+  pin takes the same explicit confirmation. Validation stores the pin as
+  64 lowercase hex digits; forgetting it is an `account.update` without it.
+- Minimum TLS 1.2, pinned or not.
 - Server-supplied strings (capabilities, folder names, error text) are
   treated as untrusted display data.
 - Every outbound connection goes through `internal/transport`: one
   `TLSConfig` (TLS 1.2+, system roots, host name verified, no insecure
-  knob), a context-aware dial, and one error classifier. Timeouts: 10 s to
-  connect, 10 s per command, 20 s for a whole endpoint probe; the socket is
-  closed when the deadline passes because the protocol libraries have no
-  context support. PREAUTH greetings on a STARTTLS connection are refused.
+  knob) and, for IMAP/SMTP endpoints, `EndpointTLSConfig`, which is
+  `TLSConfig` unless the endpoint pins a certificate — the only place
+  that sets `InsecureSkipVerify`, always together with a
+  `VerifyConnection` that compares the leaf's SHA-256 with the pin in
+  constant time; a context-aware dial; and one error classifier.
+  Timeouts: 10 s to connect, 10 s per command, 20 s for a whole endpoint
+  probe; the socket is closed when the deadline passes because the
+  protocol libraries have no context support. PREAUTH greetings on a
+  STARTTLS connection are refused.
   The libraries' debug writers are never set: they would log credentials.
 - Discovery (`account.discover`), what leaves the machine: the domain to
   Mozilla's ISPDB over HTTPS; the full address to the provider's own
@@ -478,11 +499,22 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   256 KiB and parsed with Go's strict decoder (no entity expansion);
   redirects are followed only to https and at most three times.
 - Error mapping for `account.test` and later sync: certificate/handshake
-  failures and a missing or refused STARTTLS → `tlsError`; DNS, refused and
-  dropped connections → `networkError`; deadlines → `serverTimeout`; IMAP
-  `NO` on login and SMTP 535/534/5.7.8/5.7.9 → `authFailed`; anything else
-  the server said → `serverError`. Messages forwarded to clients are
-  control-stripped and capped at 200 bytes.
+  failures, a missing or refused STARTTLS and a server demanding TLS
+  before login (SMTP 530/538, IMAP `LOGINDISABLED` on a plaintext
+  connection) → `tlsError`; DNS, refused and dropped connections →
+  `networkError`; deadlines → `serverTimeout`; IMAP `NO` on login and SMTP
+  535/534/5.7.8/5.7.9 → `authFailed`; anything else the server said →
+  `serverError`. Messages forwarded to clients are control-stripped and
+  capped at 200 bytes. A `tlsError` carries `error.data` (docs/api.md §2):
+  the reason and the server's leaf certificate as the verifier saw it —
+  fingerprint, subject, issuer, names, validity, self-signed — built from
+  the handshake error, never from a second connection; every string from
+  the certificate is untrusted text (control, format and line/paragraph
+  separator characters removed, ≤ 128 bytes, ≤ 8 names of each kind),
+  cleaned again by the UIs. A verdict on a certificate gets a fixed
+  `error.message` (stage, reason, fingerprint) instead of the library's
+  text, which quotes the certificate's names and issuer: that message
+  reaches the logs and, through `sync_status`, agents on the MCP bridge.
 
 ### 7.1 Outgoing mail
 
@@ -666,7 +698,12 @@ Advisories) rather than a public issue. No bug bounty.
       `internal/sanitize`, including outgoing drafts?
 - [ ] New `finish-args` entry: is there a portal instead?
 - [ ] New outbound connection: does it use `transport.TLSConfig` /
-      `transport.DialContext` and classify errors through `transport`?
+      `transport.EndpointTLSConfig` / `transport.DialContext` and classify
+      errors through `transport`?
+- [ ] Does anything skip certificate verification outside the pinned path
+      of `transport.EndpointTLSConfig`, or let a pin reach an OAuth2,
+      Graph or HTTP connection or be set without the user's confirmation
+      of that certificate?
 - [ ] New MCP tool or output field: is every mail-derived string cleaned
       and inside the nonce fence, is the tool behind the right flag, are
       its annotations set, and is its output capped?

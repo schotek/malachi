@@ -105,6 +105,19 @@ func TestAccountValidation(t *testing.T) {
 			c.IMAP.AuthMethod = api.AuthOAuth2
 			c.OAuth2 = &api.OAuth2Config{Provider: "office365", Scopes: []string{"a b"}}
 		}, false},
+		{"pin", func(c *api.AccountConfig) { c.IMAP.CertificateSHA256 = strings.Repeat("ab", 32) }, true},
+		{"pin on starttls", func(c *api.AccountConfig) { c.SMTP.CertificateSHA256 = strings.Repeat("AB:", 31) + "AB" }, true},
+		{"pin too short", func(c *api.AccountConfig) { c.IMAP.CertificateSHA256 = strings.Repeat("ab", 31) }, false},
+		{"pin not hex", func(c *api.AccountConfig) { c.IMAP.CertificateSHA256 = strings.Repeat("zz", 32) }, false},
+		{"pin with security none", func(c *api.AccountConfig) {
+			c.IMAP.Host, c.IMAP.Security = "127.0.0.1", api.SecurityNone
+			c.IMAP.CertificateSHA256 = strings.Repeat("ab", 32)
+		}, false},
+		{"pin with oauth2", func(c *api.AccountConfig) {
+			c.IMAP.AuthMethod = api.AuthOAuth2
+			c.OAuth2 = &api.OAuth2Config{Provider: "office365"}
+			c.IMAP.CertificateSHA256 = strings.Repeat("ab", 32)
+		}, false},
 		{"interval too small", func(c *api.AccountConfig) { c.SyncInterval = 30 }, false},
 		{"interval ok", func(c *api.AccountConfig) { c.SyncInterval = 600 }, true},
 	}
@@ -125,6 +138,36 @@ func TestAccountValidation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A pin in any accepted spelling is stored as 64 lowercase hex digits; a
+// blank one is no pin.
+func TestAccountPinNormalised(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	c := validConfig()
+	pin := strings.Repeat("0a", 32)
+	c.IMAP.CertificateSHA256 = " " + strings.ToUpper(strings.Repeat("0a:", 31)+"0a") + "\n"
+	c.SMTP.CertificateSHA256 = "  "
+	res, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, _ := b.Accounts().List(ctx, api.AccountListParams{})
+	if got := list.Accounts[0].Config; got.IMAP.CertificateSHA256 != pin || got.SMTP.CertificateSHA256 != "" {
+		t.Fatalf("stored imap %q smtp %q", got.IMAP.CertificateSHA256, got.SMTP.CertificateSHA256)
+	}
+
+	// Forgetting the pin is an update without it.
+	c = list.Accounts[0].Config
+	c.IMAP.CertificateSHA256 = ""
+	if _, err := b.Accounts().Update(ctx, api.AccountUpdateParams{AccountID: res.AccountID, Config: c}); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = b.Accounts().List(ctx, api.AccountListParams{})
+	if list.Accounts[0].Config.IMAP.CertificateSHA256 != "" {
+		t.Fatalf("pin kept: %+v", list.Accounts[0].Config.IMAP)
 	}
 }
 
@@ -286,6 +329,7 @@ func TestImportConfigAccounts(t *testing.T) {
 		},
 		{Name: "Broken", Email: "nope"},
 	}
+	cfg.Accounts[1].IMAP.CertificateSHA256 = strings.ToUpper(strings.Repeat("0a:", 31) + "0a")
 	b := newTestBackend(t, cfg)
 
 	if err := b.ImportConfigAccounts(ctx); err != nil {
@@ -298,7 +342,8 @@ func TestImportConfigAccounts(t *testing.T) {
 	if list.Accounts[0].Config.Name != "Work" || !list.Accounts[0].Enabled {
 		t.Fatalf("first = %+v", list.Accounts[0])
 	}
-	if list.Accounts[1].ID != "acc_home" || list.Accounts[1].Enabled || list.Accounts[1].Config.SyncInterval != 600 {
+	if list.Accounts[1].ID != "acc_home" || list.Accounts[1].Enabled || list.Accounts[1].Config.SyncInterval != 600 ||
+		list.Accounts[1].Config.IMAP.CertificateSHA256 != strings.Repeat("0a", 32) {
 		t.Fatalf("second = %+v", list.Accounts[1])
 	}
 

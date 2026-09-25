@@ -82,7 +82,7 @@ func classify(ctx context.Context, stage transport.Stage, err error) error {
 		text := transport.CleanMessage(ie.Text)
 		switch {
 		case stage == transport.StageTLS:
-			return api.NewError(api.CodeTLSError, "STARTTLS refused: %s", text)
+			return transport.NewTLSError(api.TLSStartTLSUnavail, "STARTTLS refused: %s", text)
 		case stage == transport.StageAuth && ie.Type == imap.StatusResponseTypeNo:
 			return api.NewError(api.CodeAuthFailed, "authentication rejected: %s", text)
 		default:

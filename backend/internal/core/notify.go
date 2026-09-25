@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -68,10 +69,11 @@ type accountState struct {
 // client and a stalled client would otherwise stall a syncer.
 //
 // NewMessage, AuthRequired and AccountsChanged pass through in order.
-// SyncState is delivered at once when status, folderId, error code,
-// lastSync or pendingOutbox differ from the last delivered state of that
-// account; a progress-only change is delivered at most every
-// syncStateInterval, with a trailing timer that delivers the newest value.
+// SyncState is delivered at once when status, folderId, error code (or a
+// tlsError's reason and certificate), lastSync or pendingOutbox differ
+// from the last delivered state of that account; a progress-only change
+// is delivered at most every syncStateInterval, with a trailing timer that
+// delivers the newest value.
 type coalescingNotifier struct {
 	inner    api.Notifier
 	log      *slog.Logger
@@ -243,12 +245,13 @@ func (c *coalescingNotifier) deliver(ev event) {
 }
 
 // syncStateChanged reports whether cur differs from prev in anything but
-// progress.
+// progress. Of the error, the code counts and, for a tlsError, the reason
+// and the certificate (a server presenting another one is news).
 func syncStateChanged(prev, cur api.SyncState) bool {
 	if prev.Status != cur.Status || prev.FolderID != cur.FolderID || prev.PendingOutbox != cur.PendingOutbox {
 		return true
 	}
-	if errorCode(prev.Error) != errorCode(cur.Error) {
+	if errorCode(prev.Error) != errorCode(cur.Error) || !transport.SameTLSDetails(prev.Error, cur.Error) {
 		return true
 	}
 	switch {

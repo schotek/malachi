@@ -34,8 +34,10 @@ const (
 // Classify maps a transport or library error to the contract error. It
 // never returns nil for a non-nil err, and the message never carries
 // credentials: it is built from the stage and the error's own text,
-// control-stripped and capped. Protocol-specific errors (IMAP NO/BAD, SMTP
-// reply codes) are handled by the protocol packages before they get here.
+// control-stripped and capped. A tlsError carries api.TLSErrorData (the
+// reason and the server's certificate, when the error has one) in Data.
+// Protocol-specific errors (IMAP NO/BAD, SMTP reply codes) are handled by
+// the protocol packages before they get here.
 func Classify(ctx context.Context, stage Stage, err error) *api.Error {
 	if err == nil {
 		return nil
@@ -53,14 +55,14 @@ func Classify(ctx context.Context, stage Stage, err error) *api.Error {
 		errors.Is(ctx.Err(), context.DeadlineExceeded), isTimeout(err):
 		return api.NewError(api.CodeServerTimeout, "%s", msg)
 	case isTLSError(err):
-		return api.NewError(api.CodeTLSError, "%s", msg)
+		return tlsError(stage, msg, err)
 	}
 
 	switch stage {
 	case StageDial:
 		return api.NewError(api.CodeNetworkError, "%s", msg)
 	case StageTLS:
-		return api.NewError(api.CodeTLSError, "%s", msg)
+		return tlsError(stage, msg, err)
 	}
 	if isConnectionLost(err) {
 		return api.NewError(api.CodeNetworkError, "%s", msg)
@@ -79,6 +81,7 @@ func isTimeout(err error) bool {
 
 func isTLSError(err error) bool {
 	var (
+		pin  *PinMismatchError
 		cve  *tls.CertificateVerificationError
 		ua   x509.UnknownAuthorityError
 		hn   x509.HostnameError
@@ -86,7 +89,7 @@ func isTLSError(err error) bool {
 		rh   tls.RecordHeaderError
 		alrt tls.AlertError
 	)
-	return errors.As(err, &cve) || errors.As(err, &ua) || errors.As(err, &hn) ||
+	return errors.As(err, &pin) || errors.As(err, &cve) || errors.As(err, &ua) || errors.As(err, &hn) ||
 		errors.As(err, &ci) || errors.As(err, &rh) || errors.As(err, &alrt)
 }
 

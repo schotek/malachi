@@ -43,11 +43,12 @@ func (c *Conn) Close() error {
 	return c.Client.Close()
 }
 
-// Connect dials, secures the connection according to cfg.Security and
-// completes EHLO. It never authenticates and never logs traffic.
+// Connect dials, secures the connection according to cfg.Security (with
+// the endpoint's TLS policy, its pinned certificate if any) and completes
+// EHLO. It never authenticates and never logs traffic.
 func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, error) {
 	start := time.Now()
-	raw, err := transport.DialContext(ctx, cfg.Host, cfg.Port, cfg.Security)
+	raw, err := transport.DialContext(ctx, cfg)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -55,7 +56,7 @@ func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, e
 
 	var c *smtp.Client
 	if cfg.Security == api.SecuritySTARTTLS {
-		c, err = smtp.NewClientStartTLS(raw, transport.TLSConfig(cfg.Host))
+		c, err = smtp.NewClientStartTLS(raw, transport.EndpointTLSConfig(cfg))
 		if err != nil {
 			stop()
 			return nil, 0, classify(ctx, transport.StageTLS, err)
@@ -67,9 +68,15 @@ func Connect(ctx context.Context, cfg api.ServerConfig) (*Conn, time.Duration, e
 	// After STARTTLS the library forgets the plaintext EHLO, so this sends
 	// a fresh one over TLS.
 	if err := c.Hello("localhost"); err != nil {
+		stage := transport.StageGreeting
+		if st, isTLS := c.TLSConnectionState(); isTLS && !st.HandshakeComplete {
+			// The library upgrades lazily: the STARTTLS handshake runs on
+			// this first write, and that is what failed.
+			stage = transport.StageTLS
+		}
 		c.Close()
 		stop()
-		return nil, 0, classify(ctx, transport.StageGreeting, err)
+		return nil, 0, classify(ctx, stage, err)
 	}
 	return &Conn{Client: c, stop: stop}, time.Since(start), nil
 }
@@ -176,7 +183,7 @@ func Verify(ctx context.Context, cfg api.ServerConfig) error {
 // classify handles SMTP reply codes before the generic rules.
 func classify(ctx context.Context, stage transport.Stage, err error) error {
 	if stage == transport.StageTLS && strings.Contains(err.Error(), "doesn't support STARTTLS") {
-		return api.NewError(api.CodeTLSError, "server does not offer STARTTLS")
+		return transport.NewTLSError(api.TLSStartTLSUnavail, "server does not offer STARTTLS")
 	}
 	var se *smtp.SMTPError
 	if errors.As(err, &se) {
@@ -186,7 +193,11 @@ func classify(ctx context.Context, stage transport.Stage, err error) error {
 			se.EnhancedCode == smtp.EnhancedCode{5, 7, 8} || se.EnhancedCode == smtp.EnhancedCode{5, 7, 9}):
 			return api.NewError(api.CodeAuthFailed, "authentication rejected: %d %s", se.Code, text)
 		case stage == transport.StageAuth && (se.Code == 530 || se.Code == 538):
-			return api.NewError(api.CodeTLSError, "server requires TLS before authentication: %d %s", se.Code, text)
+			return transport.NewTLSError(api.TLSRequired, "server requires TLS before authentication: %d %s", se.Code, text)
+		case stage == transport.StageTLS && se.Code == 454:
+			// The reply to STARTTLS itself (RFC 3207 §4); a refused
+			// greeting or EHLO has other codes.
+			return transport.NewTLSError(api.TLSStartTLSUnavail, "STARTTLS refused: %d %s", se.Code, text)
 		default:
 			return api.NewError(api.CodeServerError, "%s: server said %d %s", stage, se.Code, text)
 		}

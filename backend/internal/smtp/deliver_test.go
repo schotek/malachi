@@ -15,6 +15,7 @@ import (
 
 	"github.com/emersion/go-smtp"
 
+	"github.com/schotek/malachi/backend/internal/transport/transporttest"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -171,6 +172,35 @@ func TestDeliverStartTLSNotOffered(t *testing.T) {
 	msg := testMessage(t)
 	err := Deliver(context.Background(), cfg(ts.port, api.SecuritySTARTTLS), password, sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg)))
 	expectSend(t, err, StageConnect, api.CodeTLSError, false)
+}
+
+// A delivery to a pinned endpoint presenting another certificate keeps
+// the TLS details: the outbox and the UI show the same as account.test.
+func TestDeliverPinMismatch(t *testing.T) {
+	srvTLS, cert := transporttest.SelfSigned(t)
+	ts := startServerWith(t, serverOpts{tls: srvTLS, auth: true})
+	c := cfg(ts.port, api.SecuritySTARTTLS)
+	c.CertificateSHA256 = transporttest.Fingerprint(cert)
+	msg := testMessage(t)
+	if err := Deliver(context.Background(), c, password, sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg))); err != nil {
+		t.Fatalf("pinned: %v", err)
+	}
+	c.CertificateSHA256 = strings.Repeat("ab", 32)
+	err := Deliver(context.Background(), c, password, sender, []string{alice.Address}, bytes.NewReader(msg), int64(len(msg)))
+	se := expectSend(t, err, StageConnect, api.CodeTLSError, false)
+	if d, ok := api.TLSErrorDataOf(se.Err); !ok || d.Reason != api.TLSPinMismatch || d.Certificate == nil {
+		t.Fatalf("data = %+v", se.Err.Data)
+	}
+}
+
+// redact copies the error; the copy keeps its details.
+func TestRedactKeepsData(t *testing.T) {
+	d := api.TLSErrorData{Reason: api.TLSRequired}
+	orig := &api.Error{Code: api.CodeTLSError, Message: "530 no " + password, Data: d}
+	se := redact(&SendError{Err: orig, Stage: StageAuth}, password)
+	if se.Err == orig || strings.Contains(se.Err.Message, password) || se.Err.Data != any(d) || !strings.Contains(orig.Message, password) {
+		t.Fatalf("redacted = %+v (orig %+v)", se.Err, orig)
+	}
 }
 
 func TestDeliverSizeTooSmall(t *testing.T) {

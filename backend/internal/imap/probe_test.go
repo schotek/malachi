@@ -27,6 +27,25 @@ const password = "hunter2-secret"
 // user. tlsCfg enables STARTTLS; insecure allows LOGIN without TLS.
 func startServer(t *testing.T, tlsCfg *tls.Config, insecure bool) int {
 	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serve(t, ln, tlsCfg, insecure)
+}
+
+// startImplicitTLSServer is startServer speaking TLS from the first byte.
+func startImplicitTLSServer(t *testing.T, tlsCfg *tls.Config) int {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return serve(t, ln, nil, false)
+}
+
+func serve(t *testing.T, ln net.Listener, tlsCfg *tls.Config, insecure bool) int {
+	t.Helper()
 	mem := imapmemserver.New()
 	mem.AddUser(imapmemserver.NewUser("me", password))
 	srv := imapserver.New(&imapserver.Options{
@@ -38,10 +57,6 @@ func startServer(t *testing.T, tlsCfg *tls.Config, insecure bool) int {
 		InsecureAuth: insecure,
 		Logger:       discardLogger{},
 	})
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
 	go srv.Serve(ln)
 	t.Cleanup(func() { srv.Close() })
 	return ln.Addr().(*net.TCPAddr).Port
@@ -98,47 +113,64 @@ func TestProbeWrongPassword(t *testing.T) {
 func TestProbeLoginDisabled(t *testing.T) {
 	port := startServer(t, nil, false) // no TLS, no insecure auth → LOGINDISABLED
 	_, err := Probe(context.Background(), cfg(port, api.SecurityNone), password)
-	if c := code(t, err); c != api.CodeServerError && c != api.CodeAuthFailed {
-		t.Fatalf("login disabled: %v", err)
+	if d := tlsData(t, err); d.Reason != api.TLSRequired || d.Certificate != nil {
+		t.Fatalf("login disabled: %+v", d)
 	}
 }
 
 func TestProbeStartTLSNotOffered(t *testing.T) {
 	port := startServer(t, nil, true)
 	_, err := Probe(context.Background(), cfg(port, api.SecuritySTARTTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("no STARTTLS: %v", err)
+	if d := tlsData(t, err); d.Reason != api.TLSStartTLSUnavail || d.Certificate != nil {
+		t.Fatalf("no STARTTLS: %+v", d)
 	}
 }
 
 func TestProbeStartTLSSelfSigned(t *testing.T) {
-	srvTLS, _ := transporttest.SelfSigned(t)
+	srvTLS, cert := transporttest.SelfSigned(t)
 	port := startServer(t, srvTLS, false)
 	_, err := Probe(context.Background(), cfg(port, api.SecuritySTARTTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("self-signed STARTTLS: %v", err)
+	if d := tlsData(t, err); !certReason(d.Reason) || d.Certificate == nil || d.Certificate.SHA256 != transporttest.Fingerprint(cert) {
+		t.Fatalf("self-signed STARTTLS: %+v", d)
+	}
+}
+
+// A pinned certificate is accepted on both kinds of TLS and nothing else
+// is; the error describes what the server presented.
+func TestProbePinned(t *testing.T) {
+	srvTLS, cert := transporttest.SelfSigned(t)
+	ports := map[api.Security]int{
+		api.SecurityTLS:      startImplicitTLSServer(t, srvTLS),
+		api.SecuritySTARTTLS: startServer(t, srvTLS, false),
+	}
+	wrong := strings.Repeat("0f", 32)
+	for sec, port := range ports {
+		t.Run(string(sec), func(t *testing.T) {
+			c := cfg(port, sec)
+			c.CertificateSHA256 = transporttest.Fingerprint(cert)
+			if _, err := Probe(context.Background(), c, password); err != nil {
+				t.Fatalf("pinned: %v", err)
+			}
+			if _, err := Probe(context.Background(), c, "wrong"); code(t, err) != api.CodeAuthFailed {
+				t.Fatalf("pinned, wrong password: %v", err)
+			}
+			c.CertificateSHA256 = wrong
+			_, err := Probe(context.Background(), c, password)
+			d := tlsData(t, err)
+			if d.Reason != api.TLSPinMismatch || d.ExpectedSHA256 != wrong || d.Certificate == nil ||
+				d.Certificate.SHA256 != transporttest.Fingerprint(cert) || !d.Certificate.SelfSigned {
+				t.Fatalf("wrong pin: %+v", d)
+			}
+		})
 	}
 }
 
 func TestProbeImplicitTLSSelfSigned(t *testing.T) {
-	srvTLS, _ := transporttest.SelfSigned(t)
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", srvTLS)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			c.Close()
-		}
-	}()
-	_, err = Probe(context.Background(), cfg(ln.Addr().(*net.TCPAddr).Port, api.SecurityTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("self-signed TLS: %v", err)
+	srvTLS, cert := transporttest.SelfSigned(t)
+	port := startImplicitTLSServer(t, srvTLS)
+	_, err := Probe(context.Background(), cfg(port, api.SecurityTLS), password)
+	if d := tlsData(t, err); !certReason(d.Reason) || d.Certificate == nil || d.Certificate.SHA256 != transporttest.Fingerprint(cert) {
+		t.Fatalf("self-signed TLS: %+v", d)
 	}
 }
 
@@ -205,6 +237,30 @@ func TestProbeOAuth2WithoutMechanism(t *testing.T) {
 	if code(t, err) != api.CodeServerError || strings.Contains(err.Error(), "ya29") {
 		t.Fatalf("oauth2: %v", err)
 	}
+}
+
+// tlsData asserts err is a tlsError with details and returns them.
+func tlsData(t *testing.T, err error) api.TLSErrorData {
+	t.Helper()
+	var e *api.Error
+	if code(t, err) != api.CodeTLSError || !errors.As(err, &e) {
+		t.Fatalf("expected tlsError: %v", err)
+	}
+	d, ok := api.TLSErrorDataOf(e)
+	if !ok {
+		t.Fatalf("tlsError without details: %v", err)
+	}
+	return d
+}
+
+// certReason: a verdict on the certificate; which one depends on the
+// platform's verifier (these tests use the system trust store).
+func certReason(r api.TLSErrorReason) bool {
+	switch r {
+	case api.TLSUntrusted, api.TLSHostnameMismatch, api.TLSExpired, api.TLSNotYetValid, api.TLSInvalid, api.TLSOther:
+		return true
+	}
+	return false
 }
 
 func TestVerify(t *testing.T) {

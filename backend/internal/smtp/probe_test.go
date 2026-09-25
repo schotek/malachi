@@ -4,6 +4,7 @@
 package smtp
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -28,6 +29,7 @@ const password = "hunter2-secret"
 // server without AUTH that accepts every envelope and message.
 type serverOpts struct {
 	tls      *tls.Config
+	implicit bool  // speak TLS (tls) from the first byte instead of offering STARTTLS
 	insecure bool  // AllowInsecureAuth
 	auth     bool  // advertise AUTH PLAIN for user "me" / password
 	utf8     bool  // advertise SMTPUTF8
@@ -187,6 +189,10 @@ func startServerWith(t *testing.T, opts serverOpts) *testServer {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if opts.implicit {
+		srv.TLSConfig = nil
+		ln = tls.NewListener(ln, opts.tls)
+	}
 	go srv.Serve(ln)
 	t.Cleanup(func() { close(ts.done); srv.Close() })
 	ts.port = ln.Addr().(*net.TCPAddr).Port
@@ -269,85 +275,142 @@ func TestProbeNoAuth(t *testing.T) {
 func TestProbeStartTLSNotOffered(t *testing.T) {
 	port := startServer(t, nil, true, true)
 	_, err := Probe(context.Background(), cfg(port, api.SecuritySTARTTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("no STARTTLS: %v", err)
+	if d := tlsData(t, err); d.Reason != api.TLSStartTLSUnavail || d.Certificate != nil {
+		t.Fatalf("no STARTTLS: %+v", d)
 	}
 }
 
 func TestProbeStartTLSSelfSigned(t *testing.T) {
-	srvTLS, _ := transporttest.SelfSigned(t)
+	srvTLS, cert := transporttest.SelfSigned(t)
 	port := startServer(t, srvTLS, false, true)
 	_, err := Probe(context.Background(), cfg(port, api.SecuritySTARTTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("self-signed STARTTLS: %v", err)
+	if d := tlsData(t, err); !certReason(d.Reason) || d.Certificate == nil || d.Certificate.SHA256 != transporttest.Fingerprint(cert) {
+		t.Fatalf("self-signed STARTTLS: %+v", d)
 	}
 }
 
 func TestProbeImplicitTLSSelfSigned(t *testing.T) {
-	srvTLS, _ := transporttest.SelfSigned(t)
-	ln, err := tls.Listen("tcp", "127.0.0.1:0", srvTLS)
+	srvTLS, cert := transporttest.SelfSigned(t)
+	ts := startServerWith(t, serverOpts{tls: srvTLS, implicit: true, auth: true})
+	_, err := Probe(context.Background(), cfg(ts.port, api.SecurityTLS), password)
+	if d := tlsData(t, err); !certReason(d.Reason) || d.Certificate == nil || d.Certificate.SHA256 != transporttest.Fingerprint(cert) {
+		t.Fatalf("self-signed TLS: %+v", d)
+	}
+}
+
+// A pinned certificate is accepted on both kinds of TLS and nothing else
+// is; the error describes what the server presented. STARTTLS upgrades
+// lazily, so the mismatch surfaces on the first EHLO over TLS.
+func TestProbePinned(t *testing.T) {
+	srvTLS, cert := transporttest.SelfSigned(t)
+	ports := map[api.Security]int{
+		api.SecurityTLS:      startServerWith(t, serverOpts{tls: srvTLS, implicit: true, auth: true}).port,
+		api.SecuritySTARTTLS: startServer(t, srvTLS, false, true),
+	}
+	wrong := strings.Repeat("0f", 32)
+	for sec, port := range ports {
+		t.Run(string(sec), func(t *testing.T) {
+			c := cfg(port, sec)
+			c.CertificateSHA256 = transporttest.Fingerprint(cert)
+			if _, err := Probe(context.Background(), c, password); err != nil {
+				t.Fatalf("pinned: %v", err)
+			}
+			if _, err := Probe(context.Background(), c, "wrong"); code(t, err) != api.CodeAuthFailed {
+				t.Fatalf("pinned, wrong password: %v", err)
+			}
+			c.CertificateSHA256 = wrong
+			_, err := Probe(context.Background(), c, password)
+			d := tlsData(t, err)
+			if d.Reason != api.TLSPinMismatch || d.ExpectedSHA256 != wrong || d.Certificate == nil ||
+				d.Certificate.SHA256 != transporttest.Fingerprint(cert) || !d.Certificate.SelfSigned {
+				t.Fatalf("wrong pin: %+v", d)
+			}
+		})
+	}
+}
+
+// scriptedServer answers every connection with a 220 greeting, EHLO with
+// ehlo (the lines after the first), and any other command by its verb from
+// replies (500 for the rest).
+func scriptedServer(t *testing.T, ehlo string, replies map[string]string) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	t.Cleanup(func() { ln.Close() })
 	go func() {
 		for {
 			c, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			c.Close()
+			go func() {
+				defer c.Close()
+				r := bufio.NewReader(c)
+				io.WriteString(c, "220 localhost ESMTP\r\n")
+				for {
+					line, err := r.ReadString('\n')
+					if err != nil {
+						return
+					}
+					verb, _, _ := strings.Cut(strings.ToUpper(strings.TrimSpace(line)), " ")
+					switch reply, ok := replies[verb]; {
+					case verb == "EHLO":
+						io.WriteString(c, "250-localhost\r\n"+ehlo)
+					case verb == "QUIT":
+						io.WriteString(c, "221 bye\r\n")
+						return
+					case ok:
+						io.WriteString(c, reply)
+					default:
+						io.WriteString(c, "500 what\r\n")
+					}
+				}
+			}()
 		}
 	}()
-	_, err = Probe(context.Background(), cfg(ln.Addr().(*net.TCPAddr).Port, api.SecurityTLS), password)
-	if code(t, err) != api.CodeTLSError {
-		t.Fatalf("self-signed TLS: %v", err)
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+// A server that answers AUTH with 530 wants STARTTLS first; one that
+// answers STARTTLS with 454 cannot do it now.
+func TestProbeTLSRequiredAndRefused(t *testing.T) {
+	port := scriptedServer(t, "250 AUTH PLAIN\r\n", map[string]string{"AUTH": "530 5.7.0 Must issue a STARTTLS command first\r\n"})
+	_, err := Probe(context.Background(), cfg(port, api.SecurityNone), password)
+	if d := tlsData(t, err); d.Reason != api.TLSRequired || d.Certificate != nil {
+		t.Fatalf("530: %+v", d)
+	}
+
+	port = scriptedServer(t, "250-STARTTLS\r\n250 AUTH PLAIN\r\n", map[string]string{"STARTTLS": "454 4.7.0 TLS not available due to temporary reason\r\n"})
+	_, err = Probe(context.Background(), cfg(port, api.SecuritySTARTTLS), password)
+	if d := tlsData(t, err); d.Reason != api.TLSStartTLSUnavail || d.Certificate != nil {
+		t.Fatalf("454: %+v", d)
 	}
 }
 
-func TestProbeRefusedAndSilent(t *testing.T) {
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	port := ln.Addr().(*net.TCPAddr).Port
-	ln.Close()
-	if _, err := Probe(context.Background(), cfg(port, api.SecurityNone), password); code(t, err) != api.CodeNetworkError {
-		t.Fatalf("refused: %v", err)
+// tlsData asserts err is a tlsError with details and returns them.
+func tlsData(t *testing.T, err error) api.TLSErrorData {
+	t.Helper()
+	var e *api.Error
+	if code(t, err) != api.CodeTLSError || !errors.As(err, &e) {
+		t.Fatalf("expected tlsError: %v", err)
 	}
-
-	ln, _ = net.Listen("tcp", "127.0.0.1:0")
-	defer ln.Close()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			defer c.Close()
-		}
-	}()
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-	if _, err := Probe(ctx, cfg(ln.Addr().(*net.TCPAddr).Port, api.SecurityNone), password); code(t, err) != api.CodeServerTimeout {
-		t.Fatalf("silent: %v", err)
+	d, ok := api.TLSErrorDataOf(e)
+	if !ok {
+		t.Fatalf("tlsError without details: %v", err)
 	}
+	return d
 }
 
-func TestProbeGreetingRejected(t *testing.T) {
-	ln, _ := net.Listen("tcp", "127.0.0.1:0")
-	defer ln.Close()
-	go func() {
-		for {
-			c, err := ln.Accept()
-			if err != nil {
-				return
-			}
-			c.Write([]byte("554 go away\r\n"))
-			c.Close()
-		}
-	}()
-	_, err := Probe(context.Background(), cfg(ln.Addr().(*net.TCPAddr).Port, api.SecurityNone), password)
-	if code(t, err) != api.CodeServerError {
-		t.Fatalf("554 greeting: %v", err)
+// certReason: a verdict on the certificate; which one depends on the
+// platform's verifier (these tests use the system trust store).
+func certReason(r api.TLSErrorReason) bool {
+	switch r {
+	case api.TLSUntrusted, api.TLSHostnameMismatch, api.TLSExpired, api.TLSNotYetValid, api.TLSInvalid, api.TLSOther:
+		return true
 	}
+	return false
 }
 
 func TestVerify(t *testing.T) {

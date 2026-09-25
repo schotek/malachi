@@ -44,7 +44,7 @@ func TestDialTLSVerifies(t *testing.T) {
 	}()
 	addr := ln.Addr().(*net.TCPAddr)
 
-	_, err = DialContext(context.Background(), "127.0.0.1", addr.Port, api.SecurityTLS)
+	_, err = DialContext(context.Background(), endpoint(addr.Port, api.SecurityTLS))
 	if code(t, err) != api.CodeTLSError {
 		t.Fatalf("self-signed: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestDialTLSVerifies(t *testing.T) {
 	pool.AddCert(cert)
 	rootCAs = pool
 	defer func() { rootCAs = nil }()
-	conn, err := DialContext(context.Background(), "127.0.0.1", addr.Port, api.SecurityTLS)
+	conn, err := DialContext(context.Background(), endpoint(addr.Port, api.SecurityTLS))
 	if err != nil {
 		t.Fatalf("trusted: %v", err)
 	}
@@ -67,14 +67,14 @@ func TestDialErrors(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := ln.Addr().(*net.TCPAddr).Port
 	ln.Close()
-	_, err := DialContext(context.Background(), "127.0.0.1", port, api.SecurityNone)
+	_, err := DialContext(context.Background(), endpoint(port, api.SecurityNone))
 	if code(t, err) != api.CodeNetworkError {
 		t.Fatalf("refused: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err = DialContext(ctx, "127.0.0.1", port, api.SecurityNone)
+	_, err = DialContext(ctx, endpoint(port, api.SecurityNone))
 	if code(t, err) != api.CodeCancelled {
 		t.Fatalf("cancelled: %v", err)
 	}
@@ -172,6 +172,10 @@ func TestValidHost(t *testing.T) {
 	if !IsLoopbackHost("LocalHost") || !IsLoopbackHost("127.0.0.1") || !IsLoopbackHost("::1") || IsLoopbackHost("imap.example.org") {
 		t.Fatal("loopback detection")
 	}
+}
+
+func endpoint(port int, sec api.Security) api.ServerConfig {
+	return api.ServerConfig{Host: "127.0.0.1", Port: port, Security: sec, Username: "me", AuthMethod: api.AuthPassword}
 }
 
 func code(t *testing.T, err error) api.ErrorCode {

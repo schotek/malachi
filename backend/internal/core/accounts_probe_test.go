@@ -5,13 +5,18 @@ package core
 
 import (
 	"context"
+	"crypto/tls"
+	"encoding/json"
 	"errors"
+	"net"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/smtp"
+	"github.com/schotek/malachi/backend/internal/transport/transporttest"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -79,6 +84,53 @@ func TestAccountTest(t *testing.T) {
 		if res.IMAP.Error == nil || res.IMAP.Error.Code != api.CodeNotImplemented ||
 			res.SMTP.Error == nil || res.SMTP.Error.Code != api.CodeNotImplemented || probed {
 			t.Fatalf("res = %+v probed %v", res, probed)
+		}
+	})
+
+	// The real probes against a server whose certificate is not the
+	// pinned one: both endpoints say so with the details, and the details
+	// survive the wire (a client decodes them from a map).
+	t.Run("tls details", func(t *testing.T) {
+		b := newTestBackend(t, config.Default())
+		srvTLS, cert := transporttest.SelfSigned(t)
+		ln, err := tls.Listen("tcp", "127.0.0.1:0", srvTLS)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ln.Close()
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				go func() { c.(*tls.Conn).Handshake(); c.Close() }()
+			}
+		}()
+		port := ln.Addr().(*net.TCPAddr).Port
+		wrong := strings.Repeat("ab", 32)
+		c := validConfig()
+		for _, sc := range []*api.ServerConfig{c.IMAP, c.SMTP} {
+			sc.Host, sc.Port, sc.Security, sc.CertificateSHA256 = "127.0.0.1", port, api.SecurityTLS, strings.ToUpper(wrong)
+		}
+		res, err := b.Accounts().Test(ctx, api.AccountTestParams{Config: c, Credentials: api.Credentials{Password: "x"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(res)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var wire api.AccountTestResult
+		if err := json.Unmarshal(raw, &wire); err != nil {
+			t.Fatal(err)
+		}
+		for name, r := range map[string]*api.EndpointTestResult{"imap": res.IMAP, "smtp": res.SMTP, "imap wire": wire.IMAP, "smtp wire": wire.SMTP} {
+			d, ok := api.TLSErrorDataOf(r.Error)
+			if r.OK || !ok || d.Reason != api.TLSPinMismatch || d.ExpectedSHA256 != wrong ||
+				d.Certificate == nil || d.Certificate.SHA256 != transporttest.Fingerprint(cert) || d.Certificate.Subject != "localhost" {
+				t.Fatalf("%s: %+v data %+v", name, r, r.Error)
+			}
 		}
 	})
 

@@ -9,8 +9,11 @@ package transport
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"net"
 	"regexp"
 	"strconv"
@@ -42,7 +45,8 @@ var rootCAs *x509.CertPool
 
 // TLSConfig is the policy for every outbound TLS connection: TLS 1.2 or
 // newer, the system trust store, the host name verified. There is no
-// insecure option by design.
+// insecure option; the one exception, a certificate the user pinned for
+// an IMAP/SMTP endpoint, is EndpointTLSConfig's.
 func TLSConfig(host string) *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS12,
@@ -51,19 +55,71 @@ func TLSConfig(host string) *tls.Config {
 	}
 }
 
-// DialContext connects to host:port. For SecurityTLS the returned conn is a
-// verified *tls.Conn; for STARTTLS and None it is the raw TCP connection
-// (the protocol layer upgrades it). Errors are already classified.
-func DialContext(ctx context.Context, host string, port int, sec api.Security) (net.Conn, error) {
+// EndpointTLSConfig is the policy of an IMAP or SMTP endpoint: exactly
+// TLSConfig(sc.Host) unless the endpoint pins a certificate
+// (sc.CertificateSHA256, docs/security.md §7). A pinned endpoint accepts
+// exactly the certificate whose DER encoding has that SHA-256, whatever
+// its issuer, names or validity, and fails the handshake with a
+// *PinMismatchError for any other; TLS 1.2 minimum and SNI stay. A pin
+// that is not a fingerprint (validation normalises it, so only a bug gets
+// here) matches no certificate. This is the only place that turns chain
+// verification off.
+func EndpointTLSConfig(sc api.ServerConfig) *tls.Config {
+	cfg := TLSConfig(sc.Host)
+	if sc.CertificateSHA256 == "" {
+		return cfg
+	}
+	pin, _ := api.NormalizeCertificateSHA256(sc.CertificateSHA256)
+	want, err := hex.DecodeString(pin)
+	if err != nil || len(want) != sha256.Size {
+		want = nil
+	}
+	// Replaced by VerifyConnection, which runs on every handshake
+	// (resumed ones too) and whose error fails it.
+	cfg.InsecureSkipVerify = true
+	cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return &PinMismatchError{Expected: pin}
+		}
+		leaf := cs.PeerCertificates[0]
+		got := sha256.Sum256(leaf.Raw)
+		if want != nil && subtle.ConstantTimeCompare(got[:], want) == 1 {
+			return nil
+		}
+		return &PinMismatchError{Expected: pin, Cert: leaf}
+	}
+	return cfg
+}
+
+// PinMismatchError fails the handshake of an endpoint that pins a
+// certificate when the server presents another one (or none).
+type PinMismatchError struct {
+	Expected string            // the pinned fingerprint, 64 lowercase hex digits ("" if the pin was malformed)
+	Cert     *x509.Certificate // the server's leaf certificate; nil when it sent none
+}
+
+func (e *PinMismatchError) Error() string {
+	if e.Cert == nil {
+		return "tls: server presented no certificate, a pinned one was expected"
+	}
+	sum := sha256.Sum256(e.Cert.Raw)
+	return "tls: server certificate sha256 " + hex.EncodeToString(sum[:]) + " is not the pinned certificate"
+}
+
+// DialContext connects to the endpoint sc. For SecurityTLS the returned
+// conn is a *tls.Conn verified by EndpointTLSConfig; for STARTTLS and None
+// it is the raw TCP connection (the protocol layer upgrades it with
+// EndpointTLSConfig). Errors are already classified.
+func DialContext(ctx context.Context, sc api.ServerConfig) (net.Conn, error) {
 	d := net.Dialer{Timeout: DialTimeout}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(sc.Host, strconv.Itoa(sc.Port)))
 	if err != nil {
 		return nil, Classify(ctx, StageDial, err)
 	}
-	if sec != api.SecurityTLS {
+	if sc.Security != api.SecurityTLS {
 		return conn, nil
 	}
-	tc := tls.Client(conn, TLSConfig(host))
+	tc := tls.Client(conn, EndpointTLSConfig(sc))
 	hctx, cancel := context.WithTimeout(ctx, DialTimeout)
 	defer cancel()
 	if err := tc.HandshakeContext(hctx); err != nil {

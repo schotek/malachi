@@ -73,12 +73,12 @@ func (c *Conn) Close() error {
 
 // connect dials, secures the connection according to cfg.Security and reads
 // the greeting; opts (nil allowed) are the client options, TLSConfig is
-// always the transport policy. It never authenticates and never logs
-// traffic. Errors are *api.Error. The caller must Close the result while
-// ctx is still alive.
+// always the transport policy of the endpoint (its pinned certificate, if
+// any). It never authenticates and never logs traffic. Errors are
+// *api.Error. The caller must Close the result while ctx is still alive.
 func connect(ctx context.Context, cfg api.ServerConfig, opts *imapclient.Options) (*Conn, time.Duration, error) {
 	start := time.Now()
-	raw, err := transport.DialContext(ctx, cfg.Host, cfg.Port, cfg.Security)
+	raw, err := transport.DialContext(ctx, cfg)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -88,7 +88,7 @@ func connect(ctx context.Context, cfg api.ServerConfig, opts *imapclient.Options
 	if opts == nil {
 		opts = &imapclient.Options{}
 	}
-	opts.TLSConfig = transport.TLSConfig(cfg.Host)
+	opts.TLSConfig = transport.EndpointTLSConfig(cfg)
 
 	var c *imapclient.Client
 	if cfg.Security == api.SecuritySTARTTLS {
@@ -127,6 +127,9 @@ func login(ctx context.Context, c *Conn, cfg api.ServerConfig, secret string) er
 			err = c.Authenticate(sasl.NewPlainClient("", cfg.Username, secret))
 		case !caps.Has(imap.CapLoginDisabled):
 			err = c.Login(cfg.Username, secret).Wait()
+		case cfg.Security == api.SecurityNone:
+			// LOGINDISABLED on a plaintext connection: TLS first (RFC 9051 §6.2.3).
+			return transport.NewTLSError(api.TLSRequired, "server requires TLS before login (LOGINDISABLED)")
 		default:
 			return api.NewError(api.CodeServerError, "server offers no usable authentication mechanism")
 		}

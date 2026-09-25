@@ -845,6 +845,22 @@ func validateServer(which string, sc *api.ServerConfig) error {
 	default:
 		return bad("authMethod must be password or oauth2")
 	}
+	// A pinned certificate replaces the verification of the chain and the
+	// name (docs/security.md §7): only over TLS, and never for a token of
+	// a provider, which must reach nobody but the provider's servers.
+	sc.CertificateSHA256 = strings.TrimSpace(sc.CertificateSHA256)
+	if sc.CertificateSHA256 != "" {
+		pin, ok := api.NormalizeCertificateSHA256(sc.CertificateSHA256)
+		switch {
+		case !ok:
+			return bad("certificateSha256 must be a SHA-256 fingerprint of 64 hex digits")
+		case sc.Security == api.SecurityNone:
+			return bad("certificateSha256 needs security tls or starttls")
+		case sc.AuthMethod != api.AuthPassword:
+			return bad("certificateSha256 needs authMethod password")
+		}
+		sc.CertificateSHA256 = pin
+	}
 	return nil
 }
 

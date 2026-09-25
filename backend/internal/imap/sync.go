@@ -210,7 +210,8 @@ func sameState(a, b api.SyncState) bool {
 	if (a.Error == nil) != (b.Error == nil) {
 		return false
 	}
-	return a.Error == nil || (a.Error.Code == b.Error.Code && a.Error.Message == b.Error.Message)
+	return a.Error == nil || (a.Error.Code == b.Error.Code && a.Error.Message == b.Error.Message &&
+		transport.SameTLSDetails(a.Error, b.Error))
 }
 
 func (s *Syncer) setProgress(pct int) {

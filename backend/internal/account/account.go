@@ -39,6 +39,9 @@ type Server struct {
 	Security   string `toml:"security"` // tls | starttls | none
 	Username   string `toml:"username"`
 	AuthMethod string `toml:"auth_method"` // password | oauth2
+	// CertificateSHA256 pins the server's certificate (64 hex digits,
+	// colons allowed); password endpoints over TLS only.
+	CertificateSHA256 string `toml:"certificate_sha256"`
 }
 
 // OAuth2 mirrors api.OAuth2Config with TOML tags. A GNOME Online
@@ -96,10 +99,11 @@ func (c Config) ToAPI() api.AccountConfig {
 
 func (s Server) toAPI() api.ServerConfig {
 	return api.ServerConfig{
-		Host:       s.Host,
-		Port:       s.Port,
-		Security:   api.Security(s.Security),
-		Username:   s.Username,
-		AuthMethod: api.AuthMethod(s.AuthMethod),
+		Host:              s.Host,
+		Port:              s.Port,
+		Security:          api.Security(s.Security),
+		Username:          s.Username,
+		AuthMethod:        api.AuthMethod(s.AuthMethod),
+		CertificateSHA256: s.CertificateSHA256,
 	}
 }
