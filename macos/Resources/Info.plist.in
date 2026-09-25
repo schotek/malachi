@@ -13,6 +13,8 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 	<string>en</string>
 	<key>CFBundleIdentifier</key>
 	<string>@BUNDLE_ID@</string>
+	<key>CFBundleIconFile</key>
+	<string>Malachi</string>
 	<key>CFBundleName</key>
 	<string>Malachi Mail</string>
 	<key>CFBundleDisplayName</key>

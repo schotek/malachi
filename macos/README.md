@@ -40,9 +40,10 @@ From the repository root:
 
 ```sh
 make macos        # builds build/malachid and build/malachi-mcp, then the Swift package,
-                  # generates the .lproj catalogues from po/ and assembles
-                  # "build/Malachi Mail.app" with malachid, malachi-mcp and
-                  # malachi-keychain inside
+                  # generates the .lproj catalogues from po/, renders the icon
+                  # (docs/malachi_icon.png → Malachi.icns with sips and iconutil)
+                  # and assembles "build/Malachi Mail.app" with malachid,
+                  # malachi-mcp and malachi-keychain inside
 make run-macos    # runs the bundled executable from the terminal: the app's and the
                   # daemon's logs stay visible, Ctrl+C reaches both
 make test-macos   # generates the catalogues, then swift test (the Czech cases need them)
