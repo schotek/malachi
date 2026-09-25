@@ -350,6 +350,15 @@ auth_method = "password"
 Passwords never go into this file; they are asked for and kept in the
 keyring.
 
+A server with its own certificate, such as Proton Mail Bridge reached
+over the network, is refused by default. The account assistant shows why
+and offers *Trust Certificate…*: after an explicit confirmation it pins
+that certificate's SHA-256 fingerprint to the endpoint, and nothing else
+is accepted there. In `config.toml` the same pin is
+`certificate_sha256 = "…"` (64 hex digits) in `[accounts.imap]` or
+`[accounts.smtp]`; it is refused with `security = "none"` and with
+`auth_method = "oauth2"`.
+
 ### OAuth clients for Gmail and Microsoft 365
 
 On GNOME, Gmail and Microsoft 365 sign in through GNOME Online Accounts

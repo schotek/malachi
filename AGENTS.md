@@ -238,6 +238,20 @@ roční CASA), Gmail mimo GOA přes app password nebo vlastního klienta. Gmail 
 (discover ji nabízí jako alternativu). Poskytovatel `custom` zůstává
 `notImplemented`.
 
+Certifikáty: IMAP/SMTP endpoint může připnout SHA-256 otisk listového
+certifikátu (`ServerConfig.certificateSha256`, TOML `certificate_sha256`;
+zakázáno se `security: none` a `authMethod: oauth2`, Graph ani HTTP
+klienti pin nikdy nemají). S pinem `transport.EndpointTLSConfig` přijme
+právě ten certifikát (jediné `InsecureSkipVerify` v backendu, porovnání
+ve `VerifyConnection`). `tlsError` nese `error.data` (`api.TLSErrorData`:
+důvod, vyčištěné údaje certifikátu, `expectedSha256` u `pinMismatch`).
+Průvodce v obou UI nabízí „Důvěřovat certifikátu…“ až po výslovném
+potvrzení s otiskem (pravidla v `ui/internal/certtrust`, zrcadlo
+`MalachiCore/Wizard/CertTrust.swift`), změna hosta nebo portu pin zahodí,
+stránka Servery ho ukáže se Zapomenout, účet s odmítnutým nebo změněným
+certifikátem má stav a banner s „Upravit účet…“. Žádné obecné
+„ignorovat certifikát“ (`docs/security.md` §7).
+
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
 knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
 
