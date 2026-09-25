@@ -105,6 +105,14 @@ func (w *Window) refreshStars(id api.MessageID, on bool) {
 	}
 }
 
+// refreshSeen shows the seen state of id in the actions of its message
+// window; the main window's follow from refreshMessageActions.
+func (w *Window) refreshSeen(id api.MessageID, seen bool) {
+	if mw, ok := w.openMessages[id]; ok {
+		mw.setSeen(seen)
+	}
+}
+
 // refreshMessageActions re-evaluates the per-message actions for the
 // selected row (after its flags changed).
 func (w *Window) refreshMessageActions() {
@@ -162,6 +170,9 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 			return
 		}
 		w.refreshRows(changed)
+		for _, id := range changed {
+			w.refreshSeen(id, on)
+		}
 		delta := len(changed) // marking unread raises the unread count
 		if on {
 			delta = -delta

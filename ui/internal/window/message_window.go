@@ -22,7 +22,12 @@ import (
 type MessageWindow struct {
 	*adw.Window
 
-	id api.MessageID
+	id     api.MessageID
+	outbox bool
+
+	// markRead and markUnread follow the seen flag (setSeen), as in the
+	// main window.
+	markRead, markUnread *gio.SimpleAction
 
 	// closed is set from close-request so late fetch replies are dropped.
 	closed bool
@@ -74,15 +79,18 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	// message takes no flags or moves (the daemon refuses them); its trash
 	// button cancels the send.
 	outbox := w.model.inOutbox(s)
+	mw.outbox = outbox
 	g := gio.NewSimpleActionGroup()
-	add := func(name string, enabled bool, fn func()) {
+	add := func(name string, enabled bool, fn func()) *gio.SimpleAction {
 		a := gio.NewSimpleAction(name, nil)
 		a.SetEnabled(enabled)
 		a.ConnectActivate(func(*glib.Variant) { fn() })
 		g.AddAction(a)
+		return a
 	}
-	add("mark-read", !outbox, func() { w.markRead(id) })
-	add("mark-unread", !outbox, func() { w.markUnread(id) })
+	mw.markRead = add("mark-read", false, func() { w.markRead(id) })
+	mw.markUnread = add("mark-unread", false, func() { w.markUnread(id) })
+	mw.setSeen(hasFlag(s.Flags, api.FlagSeen))
 	add("toggle-flag", !outbox, func() { w.toggleFlagged(id) })
 	add("trash", true, func() { w.trashFrom(mw, id) })
 	add("archive", !outbox && w.canMoveToRole(s, api.RoleArchive), func() { w.archive(id) })
@@ -118,6 +126,14 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 
 	mw.show(s, w.loaded[id])
 	return mw
+}
+
+// setSeen enables Mark as Read or Mark as Unread by the seen flag, by the
+// main window's rules (setMessageActionsSensitive); an outbox message
+// takes neither.
+func (mw *MessageWindow) setSeen(seen bool) {
+	mw.markRead.SetEnabled(!mw.outbox && !seen)
+	mw.markUnread.SetEnabled(!mw.outbox && seen)
 }
 
 // show displays the summary headers and, when lm is not nil, the full
