@@ -34,6 +34,7 @@ func wizardSymbolName(_ gtkName: String) -> String {
     case "dialog-warning-symbolic": return "exclamationmark.triangle"
     case "dialog-question-symbolic": return "questionmark.circle"
     case "system-users-symbolic": return "person.2"
+    case "web-browser-symbolic": return "globe"
     case "mail-unread-symbolic", "goa-account-ms365-symbolic", "goa-account-google-symbolic": return "envelope"
     default: return "questionmark.circle"
     }

@@ -36,6 +36,25 @@ private func state(_ acc: AccountID, _ status: SyncStatus, folder: FolderID? = n
     SyncState(accountId: acc, status: status, folderId: folder, progress: progress, pendingOutbox: pending)
 }
 
+/// Counts a handler's calls.
+private actor CallCount {
+    var n = 0
+
+    func next() -> Int {
+        n += 1
+        return n
+    }
+}
+
+/// The params of the last call a handler saw.
+private actor ParamsBox {
+    var value: Data?
+
+    func set(_ data: Data) {
+        value = data
+    }
+}
+
 private let twoAccounts = [
     testAccount("a1", name: "Work", email: "w@example.invalid"),
     testAccount("a2", email: "home@example.invalid"),
@@ -123,6 +142,13 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         goa.config.oauth2 = OAuth2Config(source: .goa, goaAccountId: "goa_1", provider: .google)
         var graph = testAccount("a3", name: "Office", email: "o@example.invalid")
         graph.config.kind = .graph
+        graph.config.graph = GraphConfig(source: .goa, goaAccountId: "goa_2")
+        var browser = testAccount("a4", name: "Mail", email: "m@example.invalid")
+        browser.config.oauth2 = OAuth2Config(source: .daemon, provider: .google)
+        var browserGraph = testAccount("a5", name: "Contoso", email: "c@example.invalid")
+        browserGraph.config.kind = .graph
+        browserGraph.config.graph = GraphConfig(source: .daemon)
+        browserGraph.config.oauth2 = OAuth2Config(source: .daemon, provider: .office365)
 
         func n(_ acc: AccountID, _ reason: ErrorCode) -> AuthRequiredNotification {
             AuthRequiredNotification(accountId: acc, reason: reason, message: "detail")
@@ -133,8 +159,109 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         #expect(sc.authBanner(for: n("a2", .authRequired), account: goa) == ("Sign in to Cloud again in Settings → Online Accounts", "Open Online Accounts"))
         #expect(sc.authBanner(for: n("a2", .unavailable), account: goa) == ("GNOME Online Accounts is not available; Cloud cannot sign in", "Open Online Accounts"))
         #expect(sc.authBanner(for: n("a3", .authRequired), account: graph) == ("Sign in to Office again in Settings → Online Accounts", "Open Online Accounts"))
+        // The browser sign-in: signing in again is the repair, unless the
+        // keyring failed.
+        #expect(sc.authBanner(for: n("a4", .authRequired), account: browser) == ("Sign in to Mail again in your browser", "Sign In"))
+        #expect(sc.authBanner(for: n("a4", .networkError), account: browser) == ("Sign in to Mail again in your browser", "Sign In"))
+        #expect(sc.authBanner(for: n("a4", .keyringError), account: browser) == ("The system keyring is unavailable; Mail cannot sign in", "Sign In"))
+        #expect(sc.authBanner(for: n("a5", .authFailed), account: browserGraph) == ("Sign in to Contoso again in your browser", "Sign In"))
         // An unknown account is named by its id.
         #expect(sc.authBanner(for: n("acc_zz", .authFailed), account: nil) == ("Sign in to acc_zz again", "Open Preferences"))
+    }
+
+    @Test func authBannerActions() {
+        let (sc, log) = makeController()
+        let password = testAccount("a1", name: "Work", email: "w@example.invalid")
+        var goa = testAccount("a2", name: "Cloud", email: "c@example.invalid")
+        goa.config.oauth2 = OAuth2Config(source: .goa, goaAccountId: "goa_1", provider: .google)
+        var browser = testAccount("a4", name: "Mail", email: "m@example.invalid")
+        browser.config.oauth2 = OAuth2Config(source: .daemon, provider: .google)
+
+        let plain = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x")
+        let withURL = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x", authUrl: "https://accounts.google.com/o/oauth2/v2/auth?s=1")
+        let emptyURL = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x", authUrl: "")
+        #expect(sc.authBannerAction(for: plain, account: password) == .openPreferences)
+        #expect(sc.authBannerAction(for: plain, account: nil) == .openPreferences)
+        #expect(sc.authBannerAction(for: plain, account: goa) == .openOnlineAccounts)
+        #expect(sc.authBannerAction(for: plain, account: browser) == .signInAgain("a4", fallbackURL: nil))
+        #expect(sc.authBannerAction(for: emptyURL, account: browser) == .signInAgain("a4", fallbackURL: nil))
+        #expect(sc.authBannerAction(for: withURL, account: browser) == .signInAgain("a4", fallbackURL: "https://accounts.google.com/o/oauth2/v2/auth?s=1"))
+        // Not listed yet, but only the daemon's own sign-in has a URL.
+        #expect(sc.authBannerAction(for: withURL, account: nil) == .signInAgain("a4", fallbackURL: "https://accounts.google.com/o/oauth2/v2/auth?s=1"))
+        #expect(sc.authBanner(for: withURL, account: nil) == ("Sign in to a4 again in your browser", "Sign In"))
+        #expect(sc.authBannerAction(for: emptyURL, account: nil) == .openPreferences)
+
+        // The shown banner keeps its action until it hides.
+        #expect(sc.authBannerAction == nil)
+        sc.showAuthRequired(withURL, account: browser)
+        #expect(sc.authBannerAction == .signInAgain("a4", fallbackURL: "https://accounts.google.com/o/oauth2/v2/auth?s=1"))
+        #expect(log.banners.last?.title == "Sign in to Mail again in your browser")
+        #expect(log.banners.last?.button == "Sign In")
+        sc.apply(state("a4", .idle))
+        #expect(sc.authBannerAction == nil && sc.authBannerAccount == nil)
+        sc.showAuthRequired(plain, account: password)
+        #expect(sc.authBannerAction == .openPreferences)
+        sc.hideAuthBanner()
+        #expect(sc.authBannerAction == nil)
+    }
+
+    @Test func requestSignInURLStartsASessionForTheAccount() async throws {
+        let fake = try FakeDaemon()
+        let seen = ParamsBox()
+        await fake.on(API.AccountOAuthStart.name) { p in
+            await seen.set(p)
+            return json(#"{"sessionId":"s_9","authUrl":"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?x=1","expiresAt":"2026-09-25T10:10:00Z"}"#)
+        }
+        try await fake.start()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+
+        let (sc, _) = makeController()
+        let outcome = await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "https://stale.example/x")
+        #expect(outcome == .open("https://login.microsoftonline.com/common/oauth2/v2.0/authorize?x=1"))
+        let params = try #require(await seen.value)
+        let sent = try JSONCoding.decoder().decode(AccountOAuthStartParams.self, from: params)
+        #expect(sent.accountId == "a5" && sent.config == nil)
+        #expect(sent.browserPage?.successTitle == "Signed in")
+        await client.close()
+    }
+
+    @Test func requestSignInURLFallsBackToTheNotificationsPage() async throws {
+        let fake = try FakeDaemon()
+        await fake.on(API.AccountOAuthStart.name) { _ in throw RPCError(code: .unavailable, message: "too many") }
+        try await fake.start()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+
+        let (sc, _) = makeController()
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "https://login.example/x") == .open("https://login.example/x"))
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: nil) == .failed("Starting the sign-in failed"))
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "") == .failed("Starting the sign-in failed"))
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "http://login.example/x")
+                == .failed("The link could not be opened: not an https address"))
+        await client.close()
+    }
+
+    @Test func requestSignInURLRefusesWhatIsNotABrowserAddress() async throws {
+        let fake = try FakeDaemon()
+        let answers = ["", "file:///tmp/x"]
+        let calls = CallCount()
+        await fake.on(API.AccountOAuthStart.name) { _ in
+            let url = answers[min(await calls.next(), answers.count) - 1]
+            return json(#"{"sessionId":"s_1","authUrl":"\#(url)","expiresAt":"2026-09-25T10:10:00Z"}"#)
+        }
+        try await fake.start()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+
+        let (sc, _) = makeController()
+        // An empty answer is a failed start; the fallback is for failed calls only.
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "https://login.example/x") == .failed("Starting the sign-in failed"))
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: nil) == .failed("The link could not be opened: not an https address"))
+        await client.close()
     }
 
     @Test func loadSyncStatusFailureSaysNotSyncing() async throws {

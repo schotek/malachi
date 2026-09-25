@@ -18,6 +18,59 @@ private let discoveredJSON = [
 private let testOKJSON = #"{"imap":{"ok":true,"latencyMs":12},"smtp":{"ok":true,"latencyMs":5}}"#
 private let testAuthFailedJSON = #"{"imap":{"ok":false,"error":{"code":1201,"message":"bad"},"latencyMs":0},"smtp":{"ok":true,"latencyMs":5}}"#
 
+// The browser sign-in (oauth.go): a Google address without GNOME Online
+// Accounts, discovered as the daemon's own sign-in with the app password as
+// the alternative, and a Microsoft 365 one without any.
+private let gmailOAuthConfigJSON = [
+    #"{"name":"me@gmail.com","email":"me@gmail.com","#,
+    #""imap":{"host":"imap.gmail.com","port":993,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},"#,
+    #""smtp":{"host":"smtp.gmail.com","port":465,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},"#,
+    #""oauth2":{"source":"daemon","provider":"google"}}"#,
+].joined()
+private let gmailPasswordConfigJSON = [
+    #"{"name":"me@gmail.com","email":"me@gmail.com","#,
+    #""imap":{"host":"imap.gmail.com","port":993,"security":"tls","username":"me@gmail.com","authMethod":"password"},"#,
+    #""smtp":{"host":"smtp.gmail.com","port":465,"security":"tls","username":"me@gmail.com","authMethod":"password"}}"#,
+].joined()
+private let gmailDiscoveredJSON = #"{"source":"provider","providerName":"Google","config":\#(gmailOAuthConfigJSON),"alternatives":[\#(gmailPasswordConfigJSON)]}"#
+private let graphOAuthConfigJSON = #"{"name":"me@contoso.com","email":"me@contoso.com","kind":"graph","graph":{"source":"daemon"},"oauth2":{"source":"daemon","provider":"office365"}}"#
+private let graphDiscoveredJSON = #"{"source":"provider","providerName":"Microsoft 365","config":\#(graphOAuthConfigJSON)}"#
+private let authURL = "https://accounts.google.com/o/oauth2/v2/auth?state=x"
+private let oauthStartJSON = #"{"sessionId":"s_1","authUrl":"https://accounts.google.com/o/oauth2/v2/auth?state=x","expiresAt":"2026-09-25T10:10:00Z"}"#
+private let oauthCompleteJSON = #"{"status":"complete","config":\#(gmailOAuthConfigJSON)}"#
+
+private let googlePrompt = WizardController.OAuthView.prompt(
+    description: "Your browser will open so you can sign in to Google. Malachi Mail never sees your password; it only receives permission to read and send your mail.",
+    signInLabel: "Sign In with Google")
+private let microsoftPrompt = WizardController.OAuthView.prompt(
+    description: "Your browser will open so you can sign in to Microsoft 365. Malachi Mail never sees your password; it only receives permission to read and send your mail.",
+    signInLabel: "Sign In with Microsoft 365")
+
+/// Counts calls, for handlers that answer differently the second time.
+private actor Counter {
+    var n = 0
+
+    func next() -> Int {
+        n += 1
+        return n
+    }
+}
+
+/// An account of the browser sign-in, as account.list returns it.
+private func oauthAccount(id: AccountID = "acc-9", status: SyncStatus = .authRequired) -> Account {
+    let oauth = ServerConfig(host: "imap.gmail.com", port: 993, security: .tls, username: "me@gmail.com", authMethod: .oauth2)
+    let smtp = ServerConfig(host: "smtp.gmail.com", port: 465, security: .tls, username: "me@gmail.com", authMethod: .oauth2)
+    return Account(
+        id: id,
+        config: AccountConfig(
+            name: "Gmail", email: "me@gmail.com", displayName: "Me", imap: oauth, smtp: smtp,
+            oauth2: OAuth2Config(source: .daemon, provider: .google)
+        ),
+        enabled: true,
+        state: SyncState(accountId: id, status: status)
+    )
+}
+
 /// Records the parameters each method was called with.
 private actor ParamsLog {
     var byMethod: [String: [Data]] = [:]
@@ -44,6 +97,10 @@ private final class Recorder {
     var applied: [AccountConfig] = []
     var linked: [[LinkedAccount]] = []
     var goaHints: [String] = []
+    var goaHintBrowser: [Bool] = []
+    var oauth: [WizardController.OAuthView] = []
+    var starting: [Bool] = []
+    var opened: [String] = []
     var testing: [WizardController.TestingView] = []
     var focus: [WizardController.IdentityField] = []
     var toasts: [String] = []
@@ -61,7 +118,13 @@ private final class Recorder {
         w.onIdentity = { [unowned self] in self.identities.append($0) }
         w.onApplyConfig = { [unowned self] in self.applied.append($0) }
         w.onLinked = { [unowned self] in self.linked.append($0) }
-        w.onGOAHint = { [unowned self] in self.goaHints.append($0) }
+        w.onGOAHint = { [unowned self] text, browser in
+            self.goaHints.append(text)
+            self.goaHintBrowser.append(browser)
+        }
+        w.onOAuth = { [unowned self] in self.oauth.append($0) }
+        w.onOAuthStarting = { [unowned self] in self.starting.append($0) }
+        w.onOpenURL = { [unowned self] in self.opened.append($0) }
         w.onTesting = { [unowned self] in self.testing.append($0) }
         w.onFocus = { [unowned self] in self.focus.append($0) }
         w.onToast = { [unowned self] in self.toasts.append($0) }
@@ -104,9 +167,9 @@ private func connect(_ fake: FakeDaemon) async throws -> RPCClient {
 
 /// A started wizard whose linked accounts have loaded.
 @MainActor
-private func startWizard(_ fake: FakeDaemon, editing: Account? = nil) async throws -> (WizardController, Recorder) {
+private func startWizard(_ fake: FakeDaemon, editing: Account? = nil, signIn: Bool = false) async throws -> (WizardController, Recorder) {
     let client = try await connect(fake)
-    let w = WizardController(client: client, editing: editing)
+    let w = WizardController(client: client, editing: editing, signIn: signIn)
     let rec = Recorder()
     rec.attach(w)
     w.start()
@@ -430,6 +493,7 @@ private func imapAccount(id: AccountID = "acc-9") -> Account {
         w.next()
         try await waitUntil { rec.pages.last == [.identity, .goa] }
         #expect(rec.goaHints == ["This address belongs to a Microsoft 365 account. Add it under Settings → Online Accounts, then come back here."])
+        #expect(rec.goaHintBrowser == [false], "no browser sign-in offered")
         #expect(rec.identityProblems.isEmpty)
         #expect(w.linkedCfg == nil)
         #expect(await !fake.calls.contains(API.AccountTest.name))
@@ -564,4 +628,530 @@ private func imapAccount(id: AccountID = "acc-9") -> Account {
         #expect(saveErrorText(RPCError(code: .keyringError, message: "x"), editing: true) == "Saving the account failed: the system keyring is unavailable")
         #expect(saveErrorText(RPCClient.ClientError.disconnected, editing: true) == "Saving the account needs a running mail backend")
     }
+
+    // MARK: Browser sign-in (oauth.go)
+
+    @Test func daemonDiscoveryShowsTheBrowserPrompt() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "Me", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        #expect(rec.oauth == [googlePrompt])
+        #expect(rec.identityProblems.isEmpty, "no password is asked for")
+        #expect(w.oauth?.provider == .google && w.oauth?.name == "Google")
+        #expect(w.oauth?.config?.oauth2?.source == .daemon)
+        #expect(w.oauth?.passwordAlt?.imap?.authMethod == .password)
+        #expect(w.canGoBack)
+        #expect(await !fake.calls.contains(API.AccountTest.name))
+    }
+
+    @Test func browserSignInTestsAndAddsWithTheSession() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        let waits = Counter()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { p in
+            await params.record(API.AccountOAuthStart.name, p)
+            return json(oauthStartJSON)
+        }
+        await fake.on(API.AccountOAuthWait.name) { p in
+            await params.record(API.AccountOAuthWait.name, p)
+            // The browser comes back on the second call.
+            return json(await waits.next() == 1 ? #"{"status":"pending"}"# : oauthCompleteJSON)
+        }
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(testOKJSON)
+        }
+        await fake.on(API.AccountAdd.name) { p in
+            await params.record(API.AccountAdd.name, p)
+            return json(#"{"accountId":"acc-7"}"#)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "Me", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { rec.lastResults != nil }
+
+        #expect(rec.opened == [authURL])
+        #expect(rec.oauth == [googlePrompt, .waiting, googlePrompt])
+        #expect(rec.pages.last == [.identity, .oauth, .testing])
+        #expect(await waits.n == 2)
+        let started = try #require(try await params.last(API.AccountOAuthStart.name, as: AccountOAuthStartParams.self))
+        #expect(started.accountId == nil)
+        #expect(started.config?.oauth2 == OAuth2Config(source: .daemon, provider: .google))
+        #expect(started.config?.displayName == "Me" && started.config?.name == "gmail.com", "the identity is added at the start")
+        #expect(started.browserPage == browserPage())
+        #expect(try await params.last(API.AccountOAuthWait.name, as: AccountOAuthWaitParams.self)?.sessionId == "s_1")
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.credentials == Credentials(oauthSession: "s_1"))
+        #expect(tested.accountId == nil)
+        #expect(tested.config.oauth2?.source == .daemon && tested.config.displayName == "Me")
+        let v = try #require(rec.lastResults)
+        #expect(v.title == "Ready to Add")
+        #expect(v.buttons == WizardController.WizardButtons(edit: false, add: true))
+        #expect(w.editLabel == "Edit Servers", "Sign In Again only after a refused sign-in")
+
+        w.add()
+        try await waitUntil { !rec.done.isEmpty }
+        #expect(rec.done == ["acc-7"])
+        let added = try #require(try await params.last(API.AccountAdd.name, as: AccountAddParams.self))
+        #expect(added.credentials == Credentials(oauthSession: "s_1"))
+        #expect(added.config.oauth2?.source == .daemon)
+        // The daemon consumed the session: closing does not cancel it.
+        w.close()
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await !fake.calls.contains(API.AccountOAuthCancel.name))
+    }
+
+    @Test func waitErrorReturnsToThePromptWithTheReason() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let waits = Counter()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in json(oauthStartJSON) }
+        await fake.on(API.AccountOAuthWait.name) { _ in
+            if await waits.next() == 1 {
+                throw RPCError(code: .authFailed, message: "invalid_grant")
+            }
+            throw RPCError(code: .invalidArgument, message: "other mailbox", data: .object(["signedInAs": .string("other@gmail.com")]))
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { !rec.toasts.isEmpty }
+        #expect(rec.toasts == ["The sign-in with Google was refused"])
+        #expect(rec.oauth == [googlePrompt, .waiting, googlePrompt])
+        #expect(rec.pages.last == [.identity, .oauth])
+        #expect(w.oauth?.sessionId == nil && w.canGoBack)
+        #expect(w.linkedCfg == nil)
+        // A session the daemon may still hold is let go.
+        try await waitUntil { await fake.calls.contains(API.AccountOAuthCancel.name) }
+
+        // Another mailbox in the browser.
+        w.signInWithProvider()
+        try await waitUntil { rec.toasts.count == 2 }
+        #expect(rec.toasts.last == "The browser signed in to other@gmail.com, not to this address")
+        #expect(rec.oauth.last == googlePrompt)
+        #expect(await !fake.calls.contains(API.AccountTest.name))
+    }
+
+    @Test func startErrorStaysOnThePrompt() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in throw RPCError(code: .unavailable, message: "too many") }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { !rec.toasts.isEmpty }
+        #expect(rec.toasts == ["Starting the sign-in failed"])
+        #expect(rec.oauth == [googlePrompt])
+        #expect(rec.opened.isEmpty)
+        #expect(rec.busy == [true, false], "only the discovery kept the pages busy")
+        #expect(rec.starting == [true, false])
+        #expect(await !fake.calls.contains(API.AccountOAuthWait.name))
+    }
+
+    @Test func onlyTheSignInButtonWaitsForTheStart() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in
+            try? await Task.sleep(for: .milliseconds(300))
+            return json(oauthStartJSON)
+        }
+        await fake.on(API.AccountOAuthWait.name) { _ in
+            try? await Task.sleep(for: .seconds(10))
+            return json(#"{"status":"pending"}"#)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        #expect(rec.busy == [true, false])
+        w.signInWithProvider()
+        #expect(w.oauthStarting && !w.busy)
+        #expect(rec.starting == [true])
+        #expect(rec.busy == [true, false], "the identity and server pages stay usable")
+        #expect(w.canGoBack, "Back stays while the sign-in starts")
+        // A second click while it starts is ignored.
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.last == .waiting }
+        #expect(rec.starting == [true, false])
+        #expect(!w.oauthStarting)
+        #expect(await fake.calls.filter { $0 == API.AccountOAuthStart.name }.count == 1)
+        w.close()
+    }
+
+    @Test func backDuringTheStartDropsItsAnswer() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        let starts = Counter()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in
+            try? await Task.sleep(for: .milliseconds(200))
+            // The first start fails, the second opens a session.
+            if await starts.next() == 1 {
+                throw RPCError(code: .oauthClientMissing, message: "no client")
+            }
+            return json(oauthStartJSON)
+        }
+        await fake.on(API.AccountOAuthCancel.name) { p in
+            await params.record(API.AccountOAuthCancel.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+
+        // A failure after Back: neither the notice nor a toast.
+        w.signInWithProvider()
+        w.back()
+        #expect(rec.pages.last == [.identity])
+        try await waitUntil { rec.starting == [true, false] }
+        #expect(rec.oauth == [googlePrompt], "the page does not switch to the missing client")
+        #expect(rec.toasts.isEmpty)
+        #expect(rec.pages.last == [.identity])
+
+        // A session opened after Back is let go, never opened or waited on.
+        w.next()
+        try await waitUntil { rec.oauth.count == 2 && rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        w.back()
+        try await waitUntil { await fake.calls.contains(API.AccountOAuthCancel.name) }
+        #expect(try await params.last(API.AccountOAuthCancel.name, as: AccountOAuthCancelParams.self)?.sessionId == "s_1")
+        #expect(rec.starting == [true, false, true, false])
+        #expect(rec.oauth == [googlePrompt, googlePrompt])
+        #expect(rec.opened.isEmpty && rec.toasts.isEmpty)
+        #expect(rec.pages.last == [.identity])
+        #expect(w.oauth?.sessionId == nil)
+        #expect(rec.busy == [true, false, true, false], "only the discoveries kept the pages busy")
+        #expect(await !fake.calls.contains(API.AccountOAuthWait.name))
+    }
+
+    @Test func cancelWhileWaitingCancelsTheSession() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in json(oauthStartJSON) }
+        await fake.on(API.AccountOAuthWait.name) { _ in
+            try? await Task.sleep(for: .seconds(10))
+            return json(#"{"status":"pending"}"#)
+        }
+        await fake.on(API.AccountOAuthCancel.name) { p in
+            await params.record(API.AccountOAuthCancel.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.last == .waiting }
+        #expect(!w.canGoBack, "no Back while the browser is out")
+        w.back()
+        #expect(rec.pages.last == [.identity, .oauth])
+        w.reopenBrowser()
+        #expect(rec.opened == [authURL, authURL])
+
+        w.cancelOAuth()
+        #expect(rec.oauth.last == googlePrompt)
+        #expect(w.oauth?.sessionId == nil && w.canGoBack)
+        try await waitUntil { await fake.calls.contains(API.AccountOAuthCancel.name) }
+        #expect(try await params.last(API.AccountOAuthCancel.name, as: AccountOAuthCancelParams.self)?.sessionId == "s_1")
+        #expect(rec.toasts.isEmpty, "the user's own cancel says nothing")
+        // Reopening is for the wait only.
+        w.reopenBrowser()
+        #expect(rec.opened.count == 2)
+    }
+
+    @Test func closingWhileWaitingCancelsTheSession() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in json(oauthStartJSON) }
+        await fake.on(API.AccountOAuthWait.name) { _ in
+            try? await Task.sleep(for: .seconds(10))
+            return json(#"{"status":"pending"}"#)
+        }
+        await fake.on(API.AccountOAuthCancel.name) { _ in json("{}") }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.last == .waiting }
+        w.close()
+        try await waitUntil { await fake.calls.contains(API.AccountOAuthCancel.name) }
+        #expect(w.closed)
+    }
+
+    @Test func missingClientOffersTheAppPasswordForGoogle() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in throw RPCError(code: .oauthClientMissing, message: "no client") }
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            try? await Task.sleep(for: .seconds(10))
+            return json(testOKJSON)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "Me", email: "me@gmail.com", password: "app-pw")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.count == 2 }
+        #expect(rec.oauth.last == .unavailable(
+            description: "No OAuth client is configured for Google on this computer. Add a client ID to the mail backend's configuration and try again.",
+            passwordAlternative: true))
+        #expect(rec.toasts.isEmpty)
+
+        w.useAppPassword()
+        #expect(rec.pages.last == [.identity, .servers, .testing])
+        #expect(w.linkedCfg == nil && w.oauth == nil)
+        let cfg = try #require(rec.applied.last)
+        #expect(cfg.imap?.host == "imap.gmail.com" && cfg.imap?.authMethod == .password)
+        #expect(cfg.smtp?.port == 465 && cfg.displayName == "Me")
+        #expect(w.imap.host == "imap.gmail.com")
+        try await waitUntil { await fake.calls.contains(API.AccountTest.name) }
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.credentials == Credentials(password: "app-pw"))
+        #expect(tested.config.imap?.authMethod == .password && tested.config.oauth2 == nil)
+        #expect(w.editLabel == "Edit Servers")
+    }
+
+    @Test func appPasswordWithoutAPasswordAsksForItAndSkipsDiscovery() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in throw RPCError(code: .oauthClientMissing, message: "no client") }
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(testOKJSON)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.count == 2 }
+        w.useAppPassword()
+        #expect(rec.pages.last == [.identity])
+        #expect(rec.identityProblems.last == IdentityProblems(password: true))
+        #expect(rec.banners.last == "Enter the app password for this account")
+        #expect(rec.focus.last == .password)
+
+        // Next with the password goes the password way without asking again.
+        w.setIdentity(name: "", email: "me@gmail.com", password: "app-pw")
+        w.next()
+        #expect(rec.pages.last == [.identity, .servers, .testing])
+        try await waitUntil { rec.lastResults != nil }
+        #expect(await fake.calls.filter { $0 == API.AccountDiscover.name }.count == 1)
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.credentials == Credentials(password: "app-pw"))
+        #expect(tested.config.imap?.host == "imap.gmail.com")
+        #expect(rec.lastResults?.title == "Ready to Add")
+
+        // Another address forgets the choice and discovers again.
+        w.back()
+        w.back()
+        w.setIdentity(name: "", email: "you@gmail.com", password: "pw")
+        w.next()
+        try await waitUntil { await fake.calls.filter { $0 == API.AccountDiscover.name }.count == 2 }
+    }
+
+    @Test func missingClientForMicrosoftOffersNoPassword() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in json(graphDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in throw RPCError(code: .oauthClientMissing, message: "no client") }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@contoso.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        #expect(rec.oauth == [microsoftPrompt])
+        w.signInWithProvider()
+        try await waitUntil { rec.oauth.count == 2 }
+        #expect(rec.oauth.last == .unavailable(
+            description: "No OAuth client is configured for Microsoft 365 on this computer. Add a client ID to the mail backend's configuration and try again.",
+            passwordAlternative: false))
+        w.useAppPassword()
+        #expect(rec.pages.last == [.identity, .oauth], "nothing to fall back to")
+        #expect(w.canGoBack)
+        w.back()
+        #expect(rec.pages.last == [.identity])
+    }
+
+    @Test func goaHintOffersTheBrowser() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountDiscover.name) { _ in
+            json(#"{"config":{"name":"me@contoso.com","email":"me@contoso.com","kind":"graph","graph":{"source":"goa"}},"source":"provider","providerName":"Microsoft 365","alternatives":[\#(graphOAuthConfigJSON)]}"#)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@contoso.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .goa] }
+        #expect(rec.goaHintBrowser == [true])
+        w.useBrowser()
+        #expect(rec.pages.last == [.identity, .oauth])
+        #expect(rec.oauth == [microsoftPrompt])
+        #expect(w.oauth?.config?.graph?.source == .daemon)
+        #expect(w.oauth?.passwordAlt == nil)
+    }
+
+    @Test func signInModeStartsOnTheBrowserAndUpdates() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        let account = oauthAccount()
+        await fake.on(API.AccountOAuthStart.name) { p in
+            await params.record(API.AccountOAuthStart.name, p)
+            return json(oauthStartJSON)
+        }
+        await fake.on(API.AccountOAuthWait.name) { _ in json(oauthCompleteJSON) }
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(testOKJSON)
+        }
+        await fake.on(API.AccountUpdate.name) { p in
+            await params.record(API.AccountUpdate.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake, editing: account, signIn: true)
+        #expect(w.signInMode && w.isEditing)
+        #expect(w.title == "Sign In")
+        #expect(w.oauth?.config == nil && w.oauth?.name == "Google")
+        #expect(rec.pages == [[.oauth]])
+        #expect(rec.oauth == [googlePrompt])
+        #expect(!w.canGoBack)
+        #expect(!w.emailEditable && !w.passwordVisible)
+
+        w.signInWithProvider()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.pages.last == [.oauth, .testing])
+        #expect(w.canGoBack)
+        let started = try #require(try await params.last(API.AccountOAuthStart.name, as: AccountOAuthStartParams.self))
+        #expect(started.accountId == "acc-9" && started.config == nil)
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.accountId == "acc-9")
+        #expect(tested.credentials == Credentials(oauthSession: "s_1"))
+        #expect(rec.lastResults?.title == "Ready to Save")
+
+        w.add()
+        try await waitUntil { !rec.done.isEmpty }
+        #expect(rec.done == ["acc-9"])
+        let updated = try #require(try await params.last(API.AccountUpdate.name, as: AccountUpdateParams.self))
+        #expect(updated.accountId == "acc-9")
+        #expect(updated.credentials == Credentials(oauthSession: "s_1"))
+        #expect(updated.config.displayName == "Me")
+        #expect(await !fake.calls.contains(API.AccountAdd.name))
+        #expect(await !fake.calls.contains(API.AccountDiscover.name))
+    }
+
+    @Test func signInIsIgnoredForAPasswordAccount() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let (w, rec) = try await startWizard(fake, editing: imapAccount(), signIn: true)
+        #expect(!w.signInMode)
+        #expect(rec.pages == [[.identity, .servers]])
+        #expect(rec.oauth.isEmpty)
+    }
+
+    @Test func editingABrowserAccountOffersSignInAgain() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(#"{"imap":{"ok":false,"error":{"code":1200,"message":"sign in"},"latencyMs":0},"smtp":{"ok":false,"error":{"code":1200,"message":"sign in"},"latencyMs":0}}"#)
+        }
+        let (w, rec) = try await startWizard(fake, editing: oauthAccount())
+        #expect(!w.signInMode)
+        #expect(rec.pages == [[.identity]])
+        #expect(w.nextLabel == "Test Connection")
+        #expect(!w.emailEditable && !w.passwordVisible)
+        #expect(w.title == "Edit Account")
+        #expect(w.editLabel == "Edit Servers")
+
+        w.next()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.pages.last == [.identity, .testing])
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.accountId == "acc-9")
+        #expect(tested.credentials == Credentials(), "the stored sign-in is tested")
+        let v = try #require(rec.lastResults)
+        #expect(v.title == "Connection Failed")
+        #expect(v.description == "The server refused the sign-in. Sign in again and make sure access to mail is allowed.")
+        #expect(v.buttons == WizardController.WizardButtons(edit: true, retry: true, addAnyway: true))
+        #expect(w.editLabel == "Sign In Again")
+        #expect(w.lastOutcome == .failed)
+        #expect(rec.identityProblems.isEmpty)
+
+        // Sign In Again: the prompt, then a sign-in by the account's id.
+        w.edit()
+        #expect(rec.pages.last == [.identity, .oauth])
+        #expect(rec.oauth == [googlePrompt])
+        #expect(w.oauth?.config == nil && w.oauth?.provider == .google)
+    }
+
+    @Test func aStartWithoutAnHTTPSAddressIsNotOpened() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountDiscover.name) { _ in json(gmailDiscoveredJSON) }
+        await fake.on(API.AccountOAuthStart.name) { _ in
+            json(#"{"sessionId":"s_1","authUrl":"http://accounts.google.com/x","expiresAt":"2026-09-25T10:10:00Z"}"#)
+        }
+        await fake.on(API.AccountOAuthCancel.name) { p in
+            await params.record(API.AccountOAuthCancel.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.pages.last == [.identity, .oauth] }
+        w.signInWithProvider()
+        try await waitUntil { !rec.toasts.isEmpty }
+        #expect(rec.toasts == ["The link could not be opened: not an https address"])
+        #expect(rec.opened.isEmpty)
+        #expect(rec.oauth == [googlePrompt], "the prompt stays: nothing could come back from the browser")
+        #expect(rec.starting == [true, false])
+        #expect(w.oauth?.sessionId == nil && w.oauth?.authUrl == nil && w.canGoBack)
+        // The session is let go, and nothing waits on it.
+        try await waitUntil { await fake.calls.contains(API.AccountOAuthCancel.name) }
+        #expect(try await params.last(API.AccountOAuthCancel.name, as: AccountOAuthCancelParams.self)?.sessionId == "s_1")
+        #expect(await !fake.calls.contains(API.AccountOAuthWait.name))
+    }
+
+    @Test func browserAccountWithoutASignInProblemHidesEdit() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountTest.name) { _ in
+            json(#"{"imap":{"ok":false,"error":{"code":1301,"message":"no route"},"latencyMs":0},"smtp":{"ok":true,"latencyMs":5}}"#)
+        }
+        let (w, rec) = try await startWizard(fake, editing: oauthAccount(status: .idle))
+        w.next()
+        try await waitUntil { rec.lastResults != nil }
+        let v = try #require(rec.lastResults)
+        #expect(v.description == nil)
+        #expect(v.buttons == WizardController.WizardButtons(edit: false, retry: true, addAnyway: true))
+    }
+
 }

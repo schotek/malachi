@@ -286,7 +286,7 @@ private func loadedController(_ bridge: FakeBridge, timeout: Duration = .seconds
         try await Task.sleep(for: .milliseconds(50))
         #expect(!c.isEnabled)
         #expect(rec.enabled == [false])
-        #expect(rec.toasts == ["The MCP bridge (malachi-mcp) was not found next to the application"])
+        #expect(rec.toasts == ["The MCP bridge (malachi-mcp) was not found"])
         // A flip that somehow got through goes back, without a second toast.
         c.set(registered: true)
         #expect(rec.registered == [false])

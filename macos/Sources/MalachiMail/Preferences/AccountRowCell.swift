@@ -14,9 +14,10 @@ private final class PrefsPassThroughImageView: NSImageView {
 }
 
 /// One account of the Accounts page (accounts_page.go `accountRow`): the
-/// drag handle, the provider icon, name and address, the status, the
-/// pause switch and the edit and remove buttons. Everything shown comes
-/// from the daemon, so nothing is markup.
+/// drag handle, the provider icon, name and address, the status, "Sign
+/// In…" for an account of the browser sign-in that needs it, the pause
+/// switch, and the edit and remove buttons. Everything shown comes from
+/// the daemon, so nothing is markup.
 @MainActor
 final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AccountRowCell")
@@ -27,6 +28,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let statusLabel = NSTextField(labelWithString: "")
     private let toggle = NSSwitch()
+    private let signInButton: NSButton
     private let editButton: NSButton
     private let removeButton: NSButton
     private var reverting = false
@@ -35,12 +37,14 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
 
     var onToggle: ((Bool) -> Void)?
     var onEdit: (() -> Void)?
+    var onSignIn: (() -> Void)?
     var onRemove: (() -> Void)?
 
     /// The handle's frame in the cell's coordinates, for the drag test.
     var handleFrame: NSRect { handle.frame.insetBy(dx: -8, dy: -12) }
 
     override init(frame: NSRect) {
+        signInButton = NSButton(title: L10n.T("Sign In…"), target: nil, action: nil)
         editButton = NSButton(image: wizardSymbol("pencil", pointSize: 14), target: nil, action: nil)
         removeButton = NSButton(image: wizardSymbol("trash", pointSize: 14), target: nil, action: nil)
         super.init(frame: frame)
@@ -67,6 +71,11 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         toggle.toolTip = L10n.T("Enabled")
         toggle.target = self
         toggle.action = #selector(toggled(_:))
+        signInButton.bezelStyle = .rounded
+        signInButton.controlSize = .regular
+        signInButton.isHidden = true
+        signInButton.target = self
+        signInButton.action = #selector(signInClicked(_:))
         editButton.isBordered = false
         editButton.toolTip = L10n.T("Edit Account")
         editButton.target = self
@@ -91,15 +100,16 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
             label.setContentHuggingPriority(.defaultLow, for: .horizontal)
             label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
-        for v in [handle, icon, statusLabel, toggle, editButton, removeButton] as [NSView] {
+        for v in [handle, icon, statusLabel, toggle, signInButton, editButton, removeButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             v.setContentHuggingPriority(.required, for: .horizontal)
             v.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
 
-        // Status, switch and the two buttons, packed at the trailing edge;
-        // a hidden status label leaves the layout.
-        let cluster = NSStackView(views: [statusLabel, toggle, editButton, removeButton])
+        // Status, Sign In…, switch and the two buttons, packed at the
+        // trailing edge (the order of the GTK row's suffixes); a hidden
+        // status label or Sign In… leaves the layout.
+        let cluster = NSStackView(views: [statusLabel, signInButton, toggle, editButton, removeButton])
         cluster.orientation = .horizontal
         cluster.alignment = .centerY
         cluster.spacing = 12
@@ -140,6 +150,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         let status = accountStatusText(a.state.status)
         statusLabel.stringValue = status
         statusLabel.isHidden = status.isEmpty
+        signInButton.isHidden = !accountRowOffersSignIn(a)
         toolTip = a.config.email
     }
 
@@ -157,6 +168,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
     private func applyEnabled() {
         let on = rowEnabled && groupEnabled
         toggle.isEnabled = on
+        signInButton.isEnabled = on
         editButton.isEnabled = on
         removeButton.isEnabled = on
         alphaValue = on ? 1 : 0.5
@@ -169,6 +181,10 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
 
     @objc private func editClicked(_ sender: Any?) {
         onEdit?()
+    }
+
+    @objc private func signInClicked(_ sender: Any?) {
+        onSignIn?()
     }
 
     @objc private func removeClicked(_ sender: Any?) {

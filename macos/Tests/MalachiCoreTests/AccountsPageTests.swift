@@ -29,6 +29,33 @@ import Testing
         }
     }
 
+    @Test func accountRowOffersSignInTest() {
+        let oauth = ServerConfig(host: "imap.gmail.com", port: 993, security: .tls, username: "me@gmail.com", authMethod: .oauth2)
+        func account(_ cfg: AccountConfig, _ status: SyncStatus) -> Account {
+            Account(id: "a", config: cfg, enabled: true, state: SyncState(accountId: "a", status: status))
+        }
+        let daemon = AccountConfig(
+            name: "Gmail", email: "me@gmail.com", imap: oauth, smtp: oauth, oauth2: OAuth2Config(source: .daemon, provider: .google))
+        let graph = AccountConfig(
+            name: "Work", email: "me@contoso.com", kind: .graph, oauth2: OAuth2Config(source: .daemon, provider: .office365),
+            graph: GraphConfig(source: .daemon))
+        let goa = AccountConfig(
+            name: "Gmail", email: "me@gmail.com", imap: oauth, smtp: oauth,
+            oauth2: OAuth2Config(source: .goa, goaAccountId: "account_1", provider: .google))
+        let password = testAccount("p", name: "Home", email: "me@example.invalid").config
+        let cases: [(String, AccountConfig, SyncStatus, Bool)] = [
+            ("browser sign-in needs a sign-in", daemon, .authRequired, true),
+            ("graph through the daemon", graph, .authRequired, true),
+            ("browser sign-in, idle", daemon, .idle, false),
+            ("browser sign-in, error", daemon, .error, false),
+            ("GNOME Online Accounts", goa, .authRequired, false),
+            ("password", password, .authRequired, false),
+        ]
+        for (name, cfg, status, want) in cases {
+            #expect(accountRowOffersSignIn(account(cfg, status)) == want, Comment(rawValue: name))
+        }
+    }
+
     @Test func insertIndexTest() {
         // A list a b c d: the index the dragged row ends up at, once it is taken
         // out of the list. from == result means "no change".

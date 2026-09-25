@@ -314,6 +314,62 @@ import Testing
         """#)
         #expect(provider.source == .provider && provider.providerName == "Google")
         #expect(provider.config?.oauth2 == OAuth2Config(provider: .google))
+        #expect(provider.alternatives.isEmpty, "absent alternatives read as empty")
+
+        // Without GNOME Online Accounts: the daemon's own sign-in first, the
+        // app password as the alternative.
+        let own = try decode(AccountDiscoverResult.self, #"""
+        {"source":"provider","providerName":"Google",
+         "config":{"name":"me@gmail.com","email":"me@gmail.com",
+                   "imap":{"host":"imap.gmail.com","port":993,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},
+                   "smtp":{"host":"smtp.gmail.com","port":465,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},
+                   "oauth2":{"source":"daemon","provider":"google"}},
+         "alternatives":[{"name":"me@gmail.com","email":"me@gmail.com",
+                   "imap":{"host":"imap.gmail.com","port":993,"security":"tls","username":"me@gmail.com","authMethod":"password"},
+                   "smtp":{"host":"smtp.gmail.com","port":465,"security":"tls","username":"me@gmail.com","authMethod":"password"}}]}
+        """#)
+        #expect(own.config?.oauth2 == OAuth2Config(source: .daemon, provider: .google))
+        #expect(own.alternatives.count == 1 && own.alternatives[0].imap?.authMethod == .password)
+        #expect(try decode(AccountDiscoverResult.self, #"{"source":"none","alternatives":null}"#).alternatives.isEmpty)
+
+        let graph = try decode(AccountDiscoverResult.self, #"""
+        {"source":"provider","providerName":"Microsoft 365",
+         "config":{"name":"me@contoso.com","email":"me@contoso.com","kind":"graph","graph":{"source":"daemon"},
+                   "oauth2":{"source":"daemon","provider":"office365","tenantId":"common"}}}
+        """#)
+        #expect(graph.config?.graph == GraphConfig(source: .daemon))
+        #expect(graph.config?.oauth2 == OAuth2Config(source: .daemon, provider: .office365, tenantId: "common"))
+    }
+
+    @Test func accountOAuthExamples() throws {
+        let start = try decode(AccountOAuthStartResult.self, #"""
+        {"sessionId":"s_1","authUrl":"https://accounts.google.com/o/oauth2/v2/auth?x=1","expiresAt":"2026-09-25T10:10:00Z"}
+        """#)
+        #expect(start.sessionId == "s_1" && start.authUrl.hasPrefix("https://accounts.google.com/"))
+        #expect(start.expiresAt == RFC3339.parse("2026-09-25T10:10:00Z"))
+
+        let pending = try decode(AccountOAuthWaitResult.self, #"{"status":"pending"}"#)
+        #expect(pending == AccountOAuthWaitResult(status: .pending))
+        let complete = try decode(AccountOAuthWaitResult.self, #"""
+        {"status":"complete","config":{"name":"Gmail","email":"me@gmail.com",
+          "imap":{"host":"imap.gmail.com","port":993,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},
+          "smtp":{"host":"smtp.gmail.com","port":465,"security":"tls","username":"me@gmail.com","authMethod":"oauth2"},
+          "oauth2":{"source":"daemon","provider":"google"}}}
+        """#)
+        #expect(complete.status == .complete && complete.config?.oauth2?.source == .daemon)
+        #expect(try decode(AccountOAuthWaitResult.self, #"{"status":"expired"}"#).status == "expired", "an unknown status decodes")
+
+        let byConfig = try encodeObject(AccountOAuthStartParams(
+            config: AccountConfig(name: "Gmail", email: "me@gmail.com", oauth2: OAuth2Config(source: .daemon, provider: .google)),
+            browserPage: OAuthBrowserPage(successTitle: "Signed in", failureTitle: "Sign-in failed")))
+        #expect(byConfig["accountId"] == nil)
+        #expect(((byConfig["config"] as? [String: Any])?["oauth2"] as? [String: Any])?["source"] as? String == "daemon")
+        let page = try #require(byConfig["browserPage"] as? [String: Any])
+        #expect(page.keys.sorted() == ["failureTitle", "successTitle"], "omitted texts are left out")
+        let byID = try encodeObject(AccountOAuthStartParams(accountId: "acc_1"))
+        #expect(byID.keys.sorted() == ["accountId"])
+        #expect(try encodeObject(AccountOAuthWaitParams(sessionId: "s_1"))["sessionId"] as? String == "s_1")
+        #expect(try encodeObject(AccountOAuthCancelParams(sessionId: "s_1"))["sessionId"] as? String == "s_1")
     }
 
     @Test func syncStatusExample() throws {
@@ -468,7 +524,7 @@ import Testing
     }
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 30 && Set(ErrorCode.all).count == 30)
+        #expect(ErrorCode.all.count == 31 && Set(ErrorCode.all).count == 31)
         for code in ErrorCode.all {
             #expect(!code.name.hasPrefix("unknown"), "\(code.rawValue) has no name")
         }
@@ -476,6 +532,8 @@ import Testing
         #expect(ErrorCode.parseError.rawValue == -32700 && ErrorCode.parseError.name == "parseError")
         #expect(ErrorCode(rawValue: 1234).name == "unknown(1234)")
         #expect("\(ErrorCode.keyringError)" == "keyringError")
+        #expect(ErrorCode.oauthClientMissing.rawValue == 1203 && ErrorCode.oauthClientMissing.name == "oauthClientMissing")
+        #expect(ErrorCode(rawValue: 1203) == .oauthClientMissing)
         let code: ErrorCode = 1102
         #expect(code == .messageNotFound)
     }
@@ -507,6 +565,14 @@ import Testing
                                   smtp: ServerConfig(host: "smtp.example.org", port: 587, security: .starttls, username: "me", authMethod: .password)),
             credentials: Credentials(password: "secret")))
         #expect((add["credentials"] as? [String: Any])?["password"] as? String == "secret")
+        #expect((add["credentials"] as? [String: Any])?["oauthSession"] == nil)
+        let session = try encodeObject(AccountAddParams(
+            config: AccountConfig(name: "Gmail", email: "me@gmail.com"), credentials: Credentials(oauthSession: "s_1")))
+        #expect((session["credentials"] as? [String: Any])?.keys.sorted() == ["oauthSession"])
+        #expect((session["credentials"] as? [String: Any])?["oauthSession"] as? String == "s_1")
+        let update = try encodeObject(AccountUpdateParams(
+            accountId: "acc_1", config: AccountConfig(name: "Gmail", email: "me@gmail.com"), credentials: Credentials(oauthSession: "s_2")))
+        #expect((update["credentials"] as? [String: Any])?["oauthSession"] as? String == "s_2")
         let cfg = try #require(add["config"] as? [String: Any])
         #expect(cfg["kind"] == nil && (cfg["imap"] as? [String: Any])?["security"] as? String == "tls")
 
@@ -524,7 +590,7 @@ import Testing
         "system.info",
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
-        "account.reorder",
+        "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.flag", "message.move", "message.delete",
@@ -541,8 +607,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 40)
-        #expect(Set(API.allMethods).count == 40, "no duplicates")
+        #expect(API.allMethods.count == 43)
+        #expect(Set(API.allMethods).count == 43, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -556,9 +622,13 @@ import Testing
         #expect(API.AccountAdd.timeout == .seconds(30) && API.AccountUpdate.timeout == .seconds(30))
         #expect(API.AccountDiscover.timeout == .seconds(15) && API.AccountTest.timeout == .seconds(45))
         #expect(API.MessageBody.timeout == .seconds(5) && API.MessageList.timeout == .seconds(5) && API.SenderAdd.timeout == .seconds(5))
+        #expect(API.AccountOAuthStart.timeout == .seconds(10) && API.AccountOAuthWait.timeout == .seconds(75))
+        #expect(RPCTimeouts.oauthStart == .seconds(10) && RPCTimeouts.oauthWaitCall == .seconds(75))
+        #expect(API.AccountOAuthCancel.timeout == .seconds(5))
         #expect(RPCTimeouts.default == .seconds(5) && RPCTimeouts.remote == .seconds(30))
         let special: Set<String> = ["system.info", "message.part", "attachment.get", "message.embedded", "draft.create",
-                                    "account.add", "account.update", "account.discover", "account.test"]
+                                    "account.add", "account.update", "account.discover", "account.test",
+                                    "account.oauthStart", "account.oauthWait"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

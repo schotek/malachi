@@ -44,6 +44,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let authFailed: ErrorCode = 1201
     /// Secret storage unavailable.
     public static let keyringError: ErrorCode = 1202
+    /// The daemon's own sign-in needs an OAuth client id for the provider
+    /// and none is configured.
+    public static let oauthClientMissing: ErrorCode = 1203
 
     // 1300–1399: network and remote servers.
     public static let offline: ErrorCode = 1300
@@ -77,7 +80,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .parseError, .invalidRequest, .methodNotFound, .invalidParams, .internalError,
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
-        .authRequired, .authFailed, .keyringError,
+        .authRequired, .authFailed, .keyringError, .oauthClientMissing,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout,
         .storageError, .migrationFailed,
         .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound,
@@ -103,6 +106,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .authRequired: "authRequired",
         .authFailed: "authFailed",
         .keyringError: "keyringError",
+        .oauthClientMissing: "oauthClientMissing",
         .offline: "offline",
         .networkError: "networkError",
         .serverError: "serverError",

@@ -134,9 +134,14 @@ final class WizardStatusPageView: NSView {
             stack.setCustomSpacing(24, after: descriptionLabel)
             child.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24).isActive = true
         }
+        // The labels take the page's width up to 400 pt; without the
+        // (active) equality a wrapping label settles on the width of its
+        // first layout, which on a page not yet sized is a narrow column.
         for label in [titleLabel, descriptionLabel] {
             label.widthAnchor.constraint(lessThanOrEqualToConstant: 400).isActive = true
-            label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24).priority = .defaultHigh
+            let fill = label.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -24)
+            fill.priority = .defaultHigh
+            fill.isActive = true
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)

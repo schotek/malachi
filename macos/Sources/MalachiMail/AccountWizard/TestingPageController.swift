@@ -62,7 +62,7 @@ final class TestingPageController: NSViewController {
         }
         results.isHidden = true
 
-        editButton.title = wizardLabel("_Edit Servers")
+        editButton.title = wizard.editLabel
         retryButton.title = wizardLabel("_Retry")
         addAnywayButton.title = wizard.addAnywayLabel
         addButton.title = wizard.addLabel
@@ -113,6 +113,8 @@ final class TestingPageController: NSViewController {
             apply(v.imap, to: imapRow, icon: imapIcon)
             apply(v.smtp, to: smtpRow, icon: smtpIcon)
             apply(v.graph, to: graphRow, icon: graphIcon)
+            // Edit Servers, or Sign In Again for a browser sign-in.
+            editButton.title = wizard.editLabel
             showButtons(v.buttons)
             progress.setSpinning(false)
             progress.isHidden = true

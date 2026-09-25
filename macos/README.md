@@ -11,7 +11,8 @@ is built and how it stays in step with the GTK UI is in
 [docs/macos-port.md](../docs/macos-port.md).
 
 **Status: the full mail UI of the GTK application.** Accounts (the setup
-assistant with autodetection, editing, pausing, reordering, removing), the
+assistant with autodetection and the browser sign-in for Gmail and
+Microsoft 365, editing, signing in again, pausing, reordering, removing), the
 folder sidebar with favourites and folding, the message list (flat and
 grouped by conversation, with the All / Unread / Flagged filter), the
 reader with a locked-down WebKit view, attachments, message actions,
@@ -117,7 +118,9 @@ macos/
   Sources/MalachiMail/          AppKit: App/ (delegate, menu bar, alerts, login item),
                                 MainWindow/, Sidebar/, MessageList/, MessageView/, Windows/,
                                 Actions/, Attachments/, Compose/, WebViews/, Preferences/,
-                                AccountWizard/, Notifications/, Appearance/, Shared/
+                                AccountWizard/ (the pages of the assistant; the browser
+                                sign-in is OAuthPageController), Notifications/,
+                                Appearance/, Shared/
   Sources/MalachiKeychain/      malachi-keychain, the daemon's keyring helper
   Tests/MalachiCoreTests/       the Go UI tests ported 1:1 plus the transport, controller
                                 and localisation tests; Fixtures/ holds FakeDaemon and
@@ -178,7 +181,7 @@ go test ./internal/auth/helper -run TestRealHelper` from `backend/`.
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
 | Attachments being opened | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
 | Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys plus `command-r` |
-| Passwords | login keychain, service `io.github.schotek.Malachi` |
+| Passwords, sign-ins | login keychain, service `io.github.schotek.Malachi` (`password`, or `oauth2.refresh_token` for a browser sign-in) |
 | MCP bridge | `Contents/MacOS/malachi-mcp` in the bundle, `build/malachi-mcp` in a checkout |
 | Keyring helper | `Contents/MacOS/malachi-keychain` |
 
@@ -210,7 +213,7 @@ defaults delete io.github.schotek.Malachi AppleLanguages    # back to the system
 ```
 
 Strings that exist only on macOS (the standard menus, the Keyboard
-settings group, the sign-in notice) stay English; they are marked
+settings group) stay English; they are marked
 `// macOS-only string` in the sources. A new language needs only its
 `po/<lang>.po`, plus its plural categories in `po2strings.py` if the script
 does not know the language yet (it refuses to guess).
@@ -236,7 +239,7 @@ the strings and the confirmation dialogs.
 | The *Keyboard Shortcuts* item is left out of the primary menu | Present | It never worked in the GTK UI either |
 | The message list uses the system selection highlight | Rounded, themed rows | `NSTableView` |
 | One WebKit view per pane, reused between messages | A view per message | Without network nothing persists; the document is replaced |
-| The sign-in page of the assistant is a static notice | *Open Settings* / *Check Again* for GNOME Online Accounts | There is nothing to open on macOS (see below) |
+| The assistant's GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again*, and the identity page never shows *Signed In on This Computer*; the sign-in banner's *Open Online Accounts* for an account of GNOME Online Accounts opens *Settings* | Both, for accounts of GNOME Online Accounts; the banner's button opens *Online Accounts* in GNOME Settings | GNOME Online Accounts does not exist on macOS; without it the daemon offers its own browser sign-in instead, so the page is normally not reached; the Settings are where such an account is edited or removed |
 | The compose window ignores the editor's `changed` that its own save produces (the flush reports what is being saved) | The draft is marked dirty again after every save | A GTK bug: the draft never settles as saved |
 | Files dropped onto the compose editor are attached | No drop handler | WebKit would otherwise navigate to the file; attaching is what the user meant |
 | In *Settings → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch (`SetActivatableWidget`) | ⌥⌘↑ / ⌥⌘↓ reorder the selected row, so a click must select |
@@ -245,7 +248,7 @@ the strings and the confirmation dialogs.
 | WebKitGTK's feature switches of `html_view.blp` (smooth scrolling, media, WebGL, WebAudio, page cache, DNS prefetch, hyperlink auditing) have no `WKWebView` equivalent | Each switched off in the Blueprint | Covered by the CSP, the content rule list and the non-persistent data store: the document has no script, no network and nothing to store |
 | The pane widths are kept in the app's own defaults keys (`main-sidebar-width`, `main-list-width`), written from a visible window with nothing collapsed | `Adw.NavigationSplitView` fractions in GSettings | `NSSplitView`'s autosave restores before the window has its frame and records the panes at their minimums |
 | The message header keeps 12 pt above the subject, the same as below the date | `margin-top: 24` above the subject, 12 below the date | Equal margins were asked for; the pane already sits below the toolbar |
-| The account wizard's sheet has a Cancel button at the bottom left of every page (Escape) and no close control in its header | Close button in the header bar | macOS sheets carry no window controls; Cancel is the convention |
+| The account wizard's sheet has a Cancel button at the bottom left of every page (Escape) and no close control in its header; while the browser sign-in waits, the page's own *Cancel* stands alone (Escape still closes the sheet and cancels the sign-in) | Close button in the header bar | macOS sheets carry no window controls; Cancel is the convention, and two Cancel buttons on one page would be ambiguous |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked
@@ -254,13 +257,18 @@ deviations.
 
 ## Not on macOS, not yet
 
-- **Gmail and Microsoft 365 / Outlook.com cannot be added.** Both sign in
-  through GNOME Online Accounts (Microsoft Graph tokens, Gmail's XOAUTH2
-  tokens), which does not exist on macOS, and the daemon deliberately has
-  no OAuth2 flow of its own (docs/macos-port.md §12 explains the cost). The
-  assistant recognises such an address and shows a notice instead of a
-  server page. What works: IMAP/SMTP accounts with a password, which the
-  assistant finds the servers for.
+- **Microsoft 365 / Outlook.com** are added through the daemon's own
+  sign-in in the browser (Graph) with the client Malachi Mail ships;
+  organisations that restrict consent approve the app once.
+- **Gmail needs an app password or an OAuth client of your own.** No
+  Google client is shipped (docs/macos-port.md §12 says why): the
+  assistant offers an app password (IMAP/SMTP), or signs in through the
+  browser once a client ID is in
+  `~/Library/Application Support/Malachi Mail/config.toml`
+  (`[oauth2.google]`; how to register one is in the
+  [root README](../README.md#oauth-clients-for-gmail-and-microsoft-365)). A sign-in the provider revokes shows
+  the banner *Sign in to … again in your browser*, and *Settings →
+  Accounts* offers *Sign In…* on the account.
 - **Recipient completion** comes from the addresses you have written to
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon

@@ -26,4 +26,9 @@ public enum RPCTimeouts {
     public static let test: Duration = .seconds(45)
     /// `account.add`, `account.update`: the keyring may prompt.
     public static let save: Duration = .seconds(30)
+    /// `account.oauthStart`: the daemon opens a listener and builds the URL.
+    public static let oauthStart: Duration = .seconds(10)
+    /// One `account.oauthWait` call: the daemon blocks up to 60 s before it
+    /// answers `pending`.
+    public static let oauthWaitCall: Duration = .seconds(75)
 }

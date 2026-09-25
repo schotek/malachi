@@ -3,33 +3,57 @@
 
 import Foundation
 
-// Providers whose sign-in belongs to GNOME Online Accounts
-// (ui/internal/widget/provider.go), as account.linked names them
-// (`LinkedProvider`). An account of theirs has no password to ask for and
-// no servers of the user's to edit. Such accounts cannot be added on macOS,
-// but a profile may carry one, so the classification is kept.
+// Providers whose accounts sign in with OAuth2 (ui/internal/signin and
+// ui/internal/widget/provider.go), as account.linked names them
+// (`LinkedProvider`): through GNOME Online Accounts, or through the
+// daemon's own sign-in in the browser. An account of theirs has no
+// password to ask for and no servers of the user's to edit. GNOME Online
+// Accounts does not exist on macOS, but a profile may carry such an
+// account, so the classification is kept.
 
-/// Which Online Accounts provider an account signs in through (provider.go
-/// `AccountProvider`): Microsoft 365 for a Graph account, the oauth2
-/// provider for an IMAP account with a GOA token, nil for a password
-/// account or the daemon's own (reserved) OAuth2 flow.
+/// Where an account's sign-in lives, and so where it is repaired
+/// (signin.Kind, ui/internal/signin).
+public enum SignInKind: Sendable, Hashable {
+    /// A password (or app password) the user types; the servers are the
+    /// user's to edit.
+    case password
+    /// GNOME Online Accounts holds the sign-in; it is fixed there.
+    case goa
+    /// The daemon's own sign-in in the browser (source daemon); it is fixed
+    /// by signing in again.
+    case oauth
+}
+
+/// signin.KindOf: a Graph account signs in through GNOME Online Accounts
+/// when `graph.source` is goa and through the daemon's own sign-in
+/// otherwise; an account with an `oauth2` block likewise by its source;
+/// anything else with a password.
+public func signInKind(_ cfg: AccountConfig) -> SignInKind {
+    if cfg.protocolKind == .graph {
+        return cfg.graph?.source == .goa ? .goa : .oauth
+    }
+    if let oauth2 = cfg.oauth2 {
+        return oauth2.source == .goa ? .goa : .oauth
+    }
+    return .password
+}
+
+/// Which provider an account signs in with (signin.Provider, formerly
+/// provider.go `AccountProvider`): Microsoft 365 for a Graph account, the
+/// `oauth2` provider otherwise (`office365` is Microsoft 365), nil for a
+/// password account or a provider this client does not know.
 public func accountProvider(_ cfg: AccountConfig) -> LinkedProvider? {
     if cfg.protocolKind == .graph {
         return .microsoft365
     }
-    if let oauth2 = cfg.oauth2, oauth2.source == .goa {
-        return LinkedProvider(rawValue: oauth2.provider.rawValue)
+    switch cfg.oauth2?.provider {
+    case .google?: return .google
+    case .office365?: return .microsoft365
+    default: return nil
     }
-    return nil
 }
 
-/// An account whose sign-in lives in GNOME Online Accounts (provider.go
-/// `GOAOwned`).
-public func goaOwned(_ cfg: AccountConfig) -> Bool {
-    accountProvider(cfg) != nil
-}
-
-/// The provider's name as shown to the user (provider.go `ProviderName`).
+/// The provider's name as shown to the user (signin.ProviderName).
 /// These are brand names and are not translated.
 public func providerName(_ provider: LinkedProvider?) -> String {
     switch provider {

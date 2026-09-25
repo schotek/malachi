@@ -65,9 +65,12 @@ public struct ServerConfig: Codable, Sendable, Equatable {
     }
 }
 
-/// api.OAuth2Config: present only when an endpoint uses `oauth2`. With
-/// `source` goa only `provider` and `goaAccountId` are set; the other fields
-/// describe the daemon's own flow, which is reserved and not implemented.
+/// api.OAuth2Config: present when an endpoint uses `oauth2`, or on a Graph
+/// account whose token comes from the daemon's own sign-in. With `source`
+/// goa only `provider` and `goaAccountId` are set; with `source` daemon
+/// `provider` (google on IMAP, office365 on Graph) and optionally
+/// `clientId`/`tenantId`. Without `source` (provider custom) it is reserved
+/// and not implemented.
 public struct OAuth2Config: Codable, Sendable, Equatable {
     public var source: OAuth2Source?
     public var goaAccountId: String?
@@ -94,7 +97,8 @@ public struct OAuth2Config: Codable, Sendable, Equatable {
     }
 }
 
-/// api.GraphConfig: present only for a `graph` account.
+/// api.GraphConfig: present only for a `graph` account. `goaAccountId`
+/// only with source goa; a daemon account carries an `oauth2` block too.
 public struct GraphConfig: Codable, Sendable, Equatable {
     public var source: GraphSource
     public var goaAccountId: String?
@@ -145,18 +149,24 @@ public struct AccountConfig: Codable, Sendable, Equatable {
 }
 
 /// api.Credentials: secrets for `account.add`, `account.update` and
-/// `account.test`. Write-only; a Graph account has none. Printing one (a
-/// log line, an assertion, a debugger) shows whether a password is set,
-/// never the password.
+/// `account.test`. Write-only: a password for password endpoints, the id of
+/// a completed `account.oauthStart` session for a daemon sign-in (its tokens
+/// never leave the daemon), nothing for a GNOME Online Accounts account.
+/// Printing one (a log line, an assertion, a debugger) shows whether a
+/// field is set, never its value.
 public struct Credentials: Codable, Sendable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
     public var password: String?
+    /// Consumed by `account.add` / `account.update`; `account.test` only
+    /// reads it.
+    public var oauthSession: String?
 
-    public init(password: String? = nil) {
+    public init(password: String? = nil, oauthSession: String? = nil) {
         self.password = password
+        self.oauthSession = oauthSession
     }
 
     public var description: String {
-        "Credentials(password: \(password == nil ? "nil" : "<redacted>"))"
+        "Credentials(password: \(password == nil ? "nil" : "<redacted>"), oauthSession: \(oauthSession == nil ? "nil" : "<set>"))"
     }
 
     public var debugDescription: String { description }
@@ -250,18 +260,28 @@ public struct AccountDiscoverParams: Codable, Sendable, Equatable {
 }
 
 /// api.AccountDiscoverResult: a suggestion only; nothing is stored or
-/// authenticated. `config` is absent for source `none`; with `provider` it
-/// lacks `goaAccountId` and does not pass `account.add`.
+/// authenticated. `config` is absent for source `none`. With `provider` it
+/// is the primary way to add the address: the GNOME Online Accounts hint
+/// (without `goaAccountId`, does not pass `account.add`) where GNOME Online
+/// Accounts runs, the daemon's own sign-in (source daemon) elsewhere.
+/// `alternatives` are further ways, in the daemon's order of preference:
+/// the own sign-in when it is not `config`, and for Google an IMAP/SMTP
+/// account with an app password.
 public struct AccountDiscoverResult: Codable, Sendable, Equatable {
     public var config: AccountConfig?
     public var source: DiscoverSource
     /// Display-only, untrusted text.
     public var providerName: String?
+    @NullAsEmpty public var alternatives: [AccountConfig]
 
-    public init(config: AccountConfig? = nil, source: DiscoverSource, providerName: String? = nil) {
+    public init(
+        config: AccountConfig? = nil, source: DiscoverSource, providerName: String? = nil,
+        alternatives: [AccountConfig] = []
+    ) {
         self.config = config
         self.source = source
         self.providerName = providerName
+        self.alternatives = alternatives
     }
 }
 
@@ -303,6 +323,83 @@ public struct AccountLinkedResult: Codable, Sendable, Equatable {
     }
 }
 
+/// api.OAuthBrowserPage: the texts of the page the browser shows after the
+/// provider redirects back to the daemon, in the user's language. Plain
+/// text, at most 200 characters each, escaped by the daemon.
+public struct OAuthBrowserPage: Codable, Sendable, Equatable {
+    public var successTitle: String?
+    public var successText: String?
+    public var failureTitle: String?
+    public var failureText: String?
+
+    public init(successTitle: String? = nil, successText: String? = nil, failureTitle: String? = nil, failureText: String? = nil) {
+        self.successTitle = successTitle
+        self.successText = successText
+        self.failureTitle = failureTitle
+        self.failureText = failureText
+    }
+}
+
+/// api.AccountOAuthStartParams: the daemon's own sign-in for a new account
+/// (`config`, source daemon) or to sign an existing daemon account in again
+/// (`accountId`); exactly one is set.
+public struct AccountOAuthStartParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID?
+    public var config: AccountConfig?
+    public var browserPage: OAuthBrowserPage?
+
+    public init(accountId: AccountID? = nil, config: AccountConfig? = nil, browserPage: OAuthBrowserPage? = nil) {
+        self.accountId = accountId
+        self.config = config
+        self.browserPage = browserPage
+    }
+}
+
+/// api.AccountOAuthStartResult: the UI opens `authUrl` in the browser; the
+/// daemon listens for the redirect on 127.0.0.1 until `expiresAt`.
+public struct AccountOAuthStartResult: Codable, Sendable, Equatable {
+    public var sessionId: String
+    public var authUrl: String
+    public var expiresAt: Date
+
+    public init(sessionId: String, authUrl: String, expiresAt: Date) {
+        self.sessionId = sessionId
+        self.authUrl = authUrl
+        self.expiresAt = expiresAt
+    }
+}
+
+/// api.AccountOAuthWaitParams.
+public struct AccountOAuthWaitParams: Codable, Sendable, Equatable {
+    public var sessionId: String
+
+    public init(sessionId: String) {
+        self.sessionId = sessionId
+    }
+}
+
+/// api.AccountOAuthWaitResult: with `complete`, `config` is the account to
+/// pass to account.test / account.add with `credentials.oauthSession` (for
+/// a re-sign-in, the account's own).
+public struct AccountOAuthWaitResult: Codable, Sendable, Equatable {
+    public var status: OAuthSessionStatus
+    public var config: AccountConfig?
+
+    public init(status: OAuthSessionStatus, config: AccountConfig? = nil) {
+        self.status = status
+        self.config = config
+    }
+}
+
+/// api.AccountOAuthCancelParams.
+public struct AccountOAuthCancelParams: Codable, Sendable, Equatable {
+    public var sessionId: String
+
+    public init(sessionId: String) {
+        self.sessionId = sessionId
+    }
+}
+
 /// api.AccountUpdateParams: replaces the configuration; an empty password
 /// keeps the stored one; `enabled` is not touched.
 public struct AccountUpdateParams: Codable, Sendable, Equatable {
@@ -318,7 +415,9 @@ public struct AccountUpdateParams: Codable, Sendable, Equatable {
 }
 
 /// api.AccountTestParams: with `accountId` and no password, the stored
-/// password of that account is used.
+/// password of that account is used; for a daemon sign-in the token of
+/// `credentials.oauthSession` (read, not consumed) or, with `accountId`,
+/// the stored sign-in.
 public struct AccountTestParams: Codable, Sendable, Equatable {
     public var accountId: AccountID?
     public var config: AccountConfig

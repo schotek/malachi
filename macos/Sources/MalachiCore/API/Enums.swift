@@ -40,6 +40,9 @@ public struct OAuth2Source: WireEnum {
 
     /// GNOME Online Accounts; not available on macOS.
     public static let goa: OAuth2Source = "goa"
+    /// The daemon's own sign-in (authorization code with PKCE,
+    /// `account.oauthStart`); the refresh token is in the keyring.
+    public static let daemon: OAuth2Source = "daemon"
 }
 
 /// api.OAuth2Provider* constants: whose OAuth2 account an endpoint uses.
@@ -69,6 +72,9 @@ public struct GraphSource: WireEnum {
     public init(rawValue: String) { self.rawValue = rawValue }
 
     public static let goa: GraphSource = "goa"
+    /// The daemon's own sign-in; the account's `oauth2` block says
+    /// `{source: daemon, provider: office365}`.
+    public static let daemon: GraphSource = "daemon"
 }
 
 /// api.DiscoverSource: where an `account.discover` suggestion came from,
@@ -81,7 +87,8 @@ public struct DiscoverSource: WireEnum {
     public static let ispdb: DiscoverSource = "ispdb"
     public static let autoconfig: DiscoverSource = "autoconfig"
     public static let srv: DiscoverSource = "srv"
-    /// A known provider that signs in through GNOME Online Accounts.
+    /// A known provider that signs in with OAuth2 (GNOME Online Accounts
+    /// or the daemon's own sign-in).
     public static let provider: DiscoverSource = "provider"
     public static let guess: DiscoverSource = "guess"
     /// Nothing found; `config` is absent.
@@ -95,6 +102,17 @@ public struct LinkedProvider: WireEnum {
 
     public static let microsoft365: LinkedProvider = "microsoft365"
     public static let google: LinkedProvider = "google"
+}
+
+/// api.OAuthSessionStatus: what `account.oauthWait` reports of a sign-in.
+public struct OAuthSessionStatus: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// The browser has not come back yet; call again.
+    public static let pending: OAuthSessionStatus = "pending"
+    /// Signed in; the result carries the config.
+    public static let complete: OAuthSessionStatus = "complete"
 }
 
 /// api.FolderRole: the special-use classification of a folder.

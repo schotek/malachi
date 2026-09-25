@@ -7,7 +7,8 @@ import MalachiCore
 /// The wizard's first page (account_wizard.blp `identity_page`): the
 /// description, the rows Your Name / E-mail Address / Password and the Next
 /// button. The "Signed In on This Computer" group of the GTK page is never
-/// shown: GNOME Online Accounts does not exist on macOS (deviation D12).
+/// shown: GNOME Online Accounts does not exist on macOS (a deviation in the
+/// table of macos/README.md).
 @MainActor
 final class IdentityPageController: NSViewController, NSTextFieldDelegate {
     private let wizard: WizardController
@@ -36,7 +37,7 @@ final class IdentityPageController: NSViewController, NSTextFieldDelegate {
 
     override func loadView() {
         let description = PrefsWrappingLabel(
-            L10n.T("Enter your e-mail address and password. Malachi Mail will look up the server settings for you."),
+            L10n.T("Enter your e-mail address and, unless the account signs in through your browser, its password. Malachi Mail will look up the server settings for you."),
             color: .secondaryLabelColor
         )
 

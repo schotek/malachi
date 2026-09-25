@@ -105,3 +105,15 @@ public func goaAuthBannerText(_ reason: ErrorCode, _ account: String) -> String 
     // TRANSLATORS: %s is an account name.
     return L10n.T("Sign in to %s again in Settings → Online Accounts", account)
 }
+
+/// `authBannerText` for an account of the daemon's own sign-in (sync.go
+/// `oauthAuthBannerText`): whatever the provider refused, signing in again
+/// in the browser is the repair, unless the keyring that keeps the sign-in
+/// is what failed.
+public func oauthAuthBannerText(_ reason: ErrorCode, _ account: String) -> String {
+    if reason == .keyringError {
+        return authBannerText(reason, account)
+    }
+    // TRANSLATORS: %s is an account name.
+    return L10n.T("Sign in to %s again in your browser", account)
+}

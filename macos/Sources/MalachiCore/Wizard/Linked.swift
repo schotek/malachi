@@ -7,11 +7,11 @@
 
 import Foundation
 
-/// accountwizard.linkedAccountID: the GNOME Online Accounts id an account
-/// signs in with, nil when it has none yet (the sign-in hint of
-/// account.discover).
+/// signin.goaAccountID (formerly accountwizard.linkedAccountID): the GNOME
+/// Online Accounts id an account signs in with, nil when it has none yet
+/// (the sign-in hint of account.discover).
 public func linkedAccountID(_ cfg: AccountConfig) -> String? {
-    if let graph = cfg.graph {
+    if let graph = cfg.graph, graph.source == .goa {
         return nonEmpty(graph.goaAccountId)
     }
     if let oauth2 = cfg.oauth2, oauth2.source == .goa {

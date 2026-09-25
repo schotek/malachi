@@ -158,10 +158,12 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
         }
     }
 
-    /// Opens the wizard prefilled with the account (accounts_page.go `editAccount`).
-    private func editAccount(_ id: AccountID) {
+    /// Opens the wizard prefilled with the account (accounts_page.go
+    /// `editAccount`); with `signIn` only the browser sign-in again
+    /// (accounts_page.go `signInAccount`, NewEditSignIn).
+    private func editAccount(_ id: AccountID, signIn: Bool = false) {
         guard let window = view.window, let i = index(of: id) else { return }
-        AccountWizardController.present(from: window, client: client, editing: accounts[i]) { [weak self] _, cfg in
+        AccountWizardController.present(from: window, client: client, editing: accounts[i], signIn: signIn) { [weak self] _, cfg in
             guard let self else { return }
             self.loadAccounts()
             // TRANSLATORS: %s is the edited account's e-mail address.
@@ -321,6 +323,7 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
         let id = account.id
         cell.onToggle = { [weak self] want in self?.setAccountEnabled(id, want) }
         cell.onEdit = { [weak self] in self?.editAccount(id) }
+        cell.onSignIn = { [weak self] in self?.editAccount(id, signIn: true) }
         cell.onRemove = { [weak self] in self?.removeAccount(id) }
         return cell
     }

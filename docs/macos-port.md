@@ -83,7 +83,8 @@ check), `MailboxController` (accounts, folders, the list and its threads),
 trash, archive, junk, outbox retry, remote images, trusted senders,
 reply/forward through `draft.create`), `ComposeController` and
 `ComposeDraftController` (recipients, autosave, send, discard),
-`WizardController` (discover → test → add/update),
+`WizardController` (discover → the browser sign-in or a password →
+test → add/update),
 `MailPreferencesController` (`config.get`/`config.set`),
 `MCPRegistrationController` (runs the bundled `malachi-mcp status` /
 `install` / `uninstall --json` through `BridgeRunner` for Settings → AI).
@@ -157,7 +158,9 @@ Rules that keep it honest against a daemon it did not ship with:
   default, 3 s for `system.info`, 60 s for `message.part` and
   `attachment.get`, 30 s for `message.body` under `allow`,
   `message.embedded`, `draft.create`, `account.add`/`update`, 15 s for
-  `account.discover`, 45 s for `account.test`.
+  `account.discover`, 45 s for `account.test`, 10 s for
+  `account.oauthStart` and 75 s for each `account.oauthWait` (the daemon
+  answers `pending` after a minute and the wizard asks again).
 
 `docs/api.md` and `backend/pkg/api` are not changed from here. A feature
 that needs a new method is added to the daemon and the document first
@@ -292,7 +295,8 @@ format in one place for both clients.
   `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
   `BlockedSummaryTests`, `HTMLLinksTests`, `CIDRegistryTests`,
   `EditorBridgeTests`, `WizardFieldsTests`, `WizardResultsTests`,
-  `FormatTests`, `RPCErrorTextTests`, `ProviderTests`), the transport
+  `SignInTests`, `FormatTests`, `RPCErrorTextTests`, `ProviderTests`), the
+  transport
   (`FramingTests`, `JSONRPCTests`, `RPCClientTests`, `SupervisorTests`),
   the API coding (`APICodingTests`, `NotificationDecodeTests`), the
   settings and i18n (`SettingsTests`, `LocalizationTests`,
@@ -384,23 +388,39 @@ and macOS answers `text/plain` (a content-type table of our own would fix
 that on every platform), and the timing-sensitive
 `TestWorkerAuthFailureDefersQueue`.
 
-**GNOME Online Accounts is the real limit, and it is not a programming
-problem.** It holds the OAuth tokens for Microsoft Graph, supplies XOAUTH2
-tokens for Gmail and enumerates accounts for the wizard
-(`account.linked`); macOS has no equivalent, and the daemon deliberately
-has no OAuth2 flow of its own (`OAuth2Config` without `source: goa` is
-reserved and `notImplemented`, [architecture.md §7](architecture.md#7-open-decisions)).
-Registering own client ids would reverse the reason for going through
-GOA: Google's IMAP/SMTP scope is restricted and requires an annual
-third-party security assessment (CASA) before the app can be published
-to users outside a test list; Microsoft needs an app registration,
-publisher verification and consent review to reach organisational
-tenants. So the macOS client speaks plain IMAP/SMTP with a password, the
-assistant shows a notice for a Google or Microsoft 365 address, and the
-open question of the original exploration remains open: whether that is
-worth shipping to a wider audience, and who would own the assessment.
-The constraint is not macOS-specific; a Linux desktop without GOA has it
-too.
+**GNOME Online Accounts is no longer the limit; distribution is.** At
+first Gmail and Microsoft 365 could not be added here: their tokens came
+only from GNOME Online Accounts (Graph tokens, Gmail's XOAUTH2 tokens,
+the accounts `account.linked` lists), and macOS has no equivalent. Since
+2026-09-25 the daemon runs the sign-in itself (source `daemon`,
+[api.md §4.1](api.md#41-account), [security.md §6](security.md#6-credentials)):
+authorization code with PKCE, a one-shot listener on `127.0.0.1`, the
+refresh token in the keyring, which on macOS is the helper keyring of §1
+(key `oauth2.refresh_token`). Without GNOME Online Accounts,
+`account.discover` answers a Google or Microsoft 365 address with that
+sign-in as the primary config, and the assistant takes the same way as
+the GTK one on a desktop without GNOME: *Sign In with Google* opens the
+provider's page in the browser (`NSWorkspace`, https only), the wizard
+waits on `account.oauthWait`, tests the account with the session and adds
+it (`OAuthPageController` over `WizardController`). A revoked sign-in is
+the banner *Sign in to … again in your browser* and *Sign In…* in
+*Settings → Accounts*; for Gmail an app password over IMAP/SMTP remains
+the fallback. The flow needed no build tag: it is platform-neutral in the
+daemon, and GNOME Online Accounts stays the preferred source where it
+runs.
+
+What remains is not code but distribution. The daemon ships the
+project's Microsoft registration, so Microsoft 365 and Outlook.com sign in
+out of the box; it is not publisher-verified, so organisations that
+restrict user consent approve it once. For Gmail no client is shipped: it
+would need Google's OAuth verification and, for the restricted mail scope,
+an annual third-party security assessment (CASA) before users outside a
+test list can sign in. Gmail on macOS therefore uses an app password or a
+client of the user's own in
+`~/Library/Application Support/Malachi Mail/config.toml` (see the
+[README](../README.md#oauth-clients-for-gmail-and-microsoft-365)). Who would own that is the open question
+of the original exploration, and it is the same on a Linux desktop
+without GNOME Online Accounts.
 
 **Distribution is still ahead.** The bundle is ad-hoc signed for the
 machine it was built on. Not done: Apple Developer Program membership,

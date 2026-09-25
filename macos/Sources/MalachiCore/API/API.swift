@@ -101,6 +101,27 @@ public enum API {
         public static let name = "account.reorder"
     }
 
+    public enum AccountOAuthStart: RPCMethod {
+        public typealias Params = AccountOAuthStartParams
+        public typealias Result = AccountOAuthStartResult
+        public static let name = "account.oauthStart"
+        public static let timeout = RPCTimeouts.oauthStart
+    }
+
+    /// Blocks up to 60 s in the daemon and answers `pending`; call again.
+    public enum AccountOAuthWait: RPCMethod {
+        public typealias Params = AccountOAuthWaitParams
+        public typealias Result = AccountOAuthWaitResult
+        public static let name = "account.oauthWait"
+        public static let timeout = RPCTimeouts.oauthWaitCall
+    }
+
+    public enum AccountOAuthCancel: RPCMethod {
+        public typealias Params = AccountOAuthCancelParams
+        public typealias Result = EmptyResult
+        public static let name = "account.oauthCancel"
+    }
+
     // MARK: Folders
 
     public enum FolderList: RPCMethod {
@@ -317,7 +338,7 @@ public enum API {
         SystemInfo.self,
         AccountList.self, AccountAdd.self, AccountRemove.self, AccountSetEnabled.self,
         AccountUpdate.self, AccountDiscover.self, AccountTest.self, AccountLinked.self,
-        AccountReorder.self,
+        AccountReorder.self, AccountOAuthStart.self, AccountOAuthWait.self, AccountOAuthCancel.self,
         FolderList.self, FolderSubscribe.self,
         MessageList.self, MessageGet.self, MessageBody.self, MessagePart.self,
         MessageEmbedded.self, MessageFlag.self, MessageMove.self, MessageDelete.self,

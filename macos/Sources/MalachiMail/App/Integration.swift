@@ -32,6 +32,8 @@ final class Integration {
     let compose: ComposeManager
 
     private weak var mainWindow: MainWindowController?
+    /// Toasts over the main window's message pane (window.go `Toast`).
+    private let mainToast: @MainActor (String) -> Void
     private var tokens: [NotificationHub.Token] = []
     /// Whether the message pane shows the "No Accounts" page (window.blp
     /// `no-accounts`) instead of the reader.
@@ -51,6 +53,7 @@ final class Integration {
                 toasts.show(text)
             }
         }
+        self.mainToast = mainToast
         sync = SyncController()
         mailbox = MailboxController(client: state.client, settings: state.settings, sync: sync, toast: mainToast)
         sidebar = FolderSidebarViewController(mailbox: mailbox, sync: sync, connection: state.connection)
@@ -115,7 +118,8 @@ final class Integration {
     }
 
     /// window.go: the selection drives the reader, activation opens a
-    /// window, the auth banner's button opens the settings, and an outbox
+    /// window, the auth banner's button opens the settings or signs the
+    /// account in again, and an outbox
     /// change re-fetches every view showing a message of that account
     /// (outbox.go `refreshOutboxViews`).
     private func wireReading() {
@@ -131,7 +135,7 @@ final class Integration {
             self?.windows.openMessage(summary)
         }
         listView.onAuthBannerButton = { [weak self] in
-            self?.state.hooks.openPreferences?()
+            self?.authBannerButton()
         }
         list.onOutboxRefreshed = { [weak self] account in
             guard let self else { return }
@@ -139,6 +143,27 @@ final class Integration {
                 guard let current = view.current, current.accountId == account,
                       self.mailbox.model.inOutbox(current) else { continue }
                 self.cache.refetch(current) { _ in }
+            }
+        }
+    }
+
+    /// The sign-in banner's button (sync.go `onAuthBannerButton`): an
+    /// account of the browser sign-in gets a fresh session and its page in
+    /// the browser; any other opens the preferences (also for GNOME Online
+    /// Accounts, whose panel does not exist on macOS).
+    private func authBannerButton() {
+        guard case .signInAgain(let id, let fallback)? = sync.authBannerAction else {
+            state.hooks.openPreferences?()
+            return
+        }
+        let client = state.client
+        Task { [weak self] in
+            guard let self else { return }
+            switch await self.sync.requestSignInURL(client: client, accountId: id, fallbackURL: fallback) {
+            case .open(let url):
+                openInBrowser(url) { [weak self] text in self?.mainToast(text) }
+            case .failed(let text):
+                self.mainToast(text)
             }
         }
     }

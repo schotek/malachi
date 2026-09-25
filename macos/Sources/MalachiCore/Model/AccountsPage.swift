@@ -29,6 +29,12 @@ public func accountStatusText(_ s: SyncStatus) -> String {
     }
 }
 
+/// The row offers "Sign In…" (accounts_page.go `accountRow`): an account
+/// of the browser sign-in that needs one.
+public func accountRowOffersSignIn(_ a: Account) -> Bool {
+    a.state.status == .authRequired && signInKind(a.config) == .oauth
+}
+
 /// The slot a row dragged from `from` takes when it is dropped on the row
 /// at `target` (accounts_reorder.go `insertIndex`): before that row when the
 /// pointer is in its upper half, after it otherwise. The result is an index

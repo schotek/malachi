@@ -79,5 +79,8 @@ import Testing
         }
         #expect(goaAuthBannerText(.unavailable, "Work") == "GNOME Online Accounts is not available; Work cannot sign in")
         #expect(goaAuthBannerText(.authRequired, "Work") == "Sign in to Work again in Settings → Online Accounts")
+        #expect(oauthAuthBannerText(.authRequired, "Work") == "Sign in to Work again in your browser")
+        #expect(oauthAuthBannerText(.authFailed, "Work") == "Sign in to Work again in your browser")
+        #expect(oauthAuthBannerText(.keyringError, "Work") == "The system keyring is unavailable; Work cannot sign in")
     }
 }

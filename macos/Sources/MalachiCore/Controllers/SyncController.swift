@@ -28,6 +28,27 @@ public final class SyncController {
         }
     }
 
+    /// What the sign-in banner's button does (window.go
+    /// `onAuthBannerButton`), by how the banner's account signs in.
+    public enum AuthBannerAction: Sendable, Equatable {
+        /// A password account: the preferences, where it can be edited.
+        case openPreferences
+        /// GNOME Online Accounts holds the sign-in: its panel (there is none
+        /// on macOS; the shell opens the preferences).
+        case openOnlineAccounts
+        /// The browser sign-in: a fresh session for the account
+        /// (`requestSignInURL`), the notification's page when that fails.
+        case signInAgain(AccountID, fallbackURL: String?)
+    }
+
+    /// The outcome of `requestSignInURL`.
+    public enum SignInURL: Sendable, Equatable {
+        /// Open this page in the browser.
+        case open(String)
+        /// Nothing to open; the toast.
+        case failed(String)
+    }
+
     /// How long the spinner started by `beginChecking` stays on when no
     /// notify.syncState follows (sync.go `syncFallbackSeconds`).
     public static let fallbackDelay: Duration = .seconds(30)
@@ -41,8 +62,8 @@ public final class SyncController {
     public private(set) var footer = FooterState(text: "", spinning: false)
     /// The account the sign-in banner is up for, nil while hidden.
     public private(set) var authBannerAccount: AccountID?
-    /// The banner's account signs in through GNOME Online Accounts.
-    public private(set) var authBannerGOA = false
+    /// What the banner's button does; nil while hidden.
+    public private(set) var authBannerAction: AuthBannerAction?
 
     /// Called after every change of the footer line.
     public var onFooter: (@MainActor (FooterState) -> Void)?
@@ -170,27 +191,53 @@ public final class SyncController {
     /// when known; without it the id stands in for the name. For an account
     /// whose sign-in lives in GNOME Online Accounts the button opens that
     /// panel instead of the preferences (never the case on macOS, kept for
-    /// the text table's parity).
+    /// the text table's parity); an account of the browser sign-in is
+    /// signed in again from the button.
     public func authBanner(for n: AuthRequiredNotification, account: Account?) -> (title: String, button: String) {
-        var name = n.accountId.rawValue
-        var goa = false
-        if let account {
-            name = accountRowTitle(account)
-            goa = goaOwned(account.config)
-        }
-        if goa {
+        let name = account.map(accountRowTitle) ?? n.accountId.rawValue
+        switch authBannerKind(n, account) {
+        case .goa:
             return (goaAuthBannerText(n.reason, name), L10n.T("Open Online Accounts"))
+        case .oauth:
+            // TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
+            return (oauthAuthBannerText(n.reason, name), L10n.C("button", "Sign In"))
+        case .password:
+            return (authBannerText(n.reason, name), L10n.T("Open Preferences"))
         }
-        return (authBannerText(n.reason, name), L10n.T("Open Preferences"))
     }
 
-    /// Reveals the banner for the notified account. An OAuth2 authUrl is
-    /// only logged, as in the GTK UI.
+    /// The button's action for the notified account (sync.go
+    /// `showAuthRequired`'s kind).
+    public func authBannerAction(for n: AuthRequiredNotification, account: Account?) -> AuthBannerAction {
+        switch authBannerKind(n, account) {
+        case .goa:
+            return .openOnlineAccounts
+        case .oauth:
+            let url = n.authUrl ?? ""
+            return .signInAgain(n.accountId, fallbackURL: url.isEmpty ? nil : url)
+        case .password:
+            return .openPreferences
+        }
+    }
+
+    /// How the notified account signs in: by its config, or, for an account
+    /// not listed yet, the daemon's own sign-in when the notification
+    /// carries a URL (only that sign-in has one).
+    private func authBannerKind(_ n: AuthRequiredNotification, _ account: Account?) -> SignInKind {
+        if let account {
+            return signInKind(account.config)
+        }
+        return (n.authUrl ?? "").isEmpty ? .password : .oauth
+    }
+
+    /// Reveals the banner for the notified account. The authUrl of an
+    /// account of the browser sign-in is kept as the fallback of its
+    /// button; it is never logged.
     public func showAuthRequired(_ n: AuthRequiredNotification, account: Account?) {
-        let goa = account.map { goaOwned($0.config) } ?? false
-        log.debug("auth required: account \(n.accountId.rawValue, privacy: .public) reason \(n.reason.name, privacy: .public) goa \(goa)")
+        let action = authBannerAction(for: n, account: account)
+        log.debug("auth required: account \(n.accountId.rawValue, privacy: .public) reason \(n.reason.name, privacy: .public) authUrl \(n.authUrl != nil)")
         authBannerAccount = n.accountId
-        authBannerGOA = goa
+        authBannerAction = action
         let (title, button) = authBanner(for: n, account: account)
         onAuthBanner?(n.accountId, title, button)
     }
@@ -199,10 +246,39 @@ public final class SyncController {
     public func hideAuthBanner() {
         let wasShown = authBannerAccount != nil
         authBannerAccount = nil
-        authBannerGOA = false
+        authBannerAction = nil
         if wasShown {
             onAuthBanner?(nil, nil, nil)
         }
+    }
+
+    /// The banner's Sign In for an account of the browser sign-in (sync.go
+    /// `signInInBrowser`): a fresh page from account.oauthStart with the
+    /// account's id (the daemon hands back the session it is already
+    /// waiting on), or the notification's authUrl when the daemon cannot
+    /// answer; only an https address is opened. The daemon completes the
+    /// sign-in by itself and the banner goes with the next notify.syncState.
+    public func requestSignInURL(client: RPCClient, accountId: AccountID, fallbackURL: String?) async -> SignInURL {
+        var url = ""
+        var failure: (any Error)?
+        do {
+            url = try await client.call(
+                API.AccountOAuthStart.self, AccountOAuthStartParams(accountId: accountId, browserPage: browserPage()),
+                timeout: RPCTimeouts.oauthStart
+            ).authUrl
+        } catch {
+            log.warning("account.oauthStart for \(accountId.rawValue, privacy: .public): \(String(describing: error), privacy: .public)")
+            failure = error
+            url = fallbackURL ?? ""
+        }
+        if url.isEmpty {
+            return .failed(rpcErrorText(L10n.T("Starting the sign-in"), failure))
+        }
+        guard isBrowserURL(url) else {
+            log.warning("sign-in address refused: not https")
+            return .failed(refusedBrowserURLText())
+        }
+        return .open(url)
     }
 }
 

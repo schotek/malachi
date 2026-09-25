@@ -5,20 +5,46 @@ import AppKit
 import MalachiCore
 
 /// The wizard's page for an address of a provider whose sign-in belongs to
-/// GNOME Online Accounts (account_wizard.blp `goa_hint_page`). GNOME
-/// Online Accounts does not exist on macOS, so the page is a static notice
-/// without the Open / Check Again buttons (deviation D12); the hint text
-/// the controller delivers is not shown.
+/// GNOME Online Accounts (account_wizard.blp `goa_hint_page`): the hint the
+/// controller delivers and "Use the Browser Instead" when the daemon offers
+/// its own sign-in. GNOME Online Accounts does not exist on macOS, so the
+/// Open Online Accounts / Check Again buttons are left out (a deviation in
+/// the table of macos/README.md); the page itself is normally unreachable
+/// here, because a daemon without GNOME Online Accounts answers
+/// account.discover with its own sign-in as the primary config.
 @MainActor
 final class SignInHintPageController: NSViewController {
+    private let wizard: WizardController
+    private let page: WizardStatusPageView
+    private let browserButton = NSButton(title: "", target: nil, action: nil)
     let cancelButton = WizardCancelButton()
 
-    override func loadView() {
-        let page = WizardStatusPageView(
-            illustration: .symbol("person.2"),
-            title: "Sign-in not available", // macOS-only string
-            description: "Gmail and Microsoft 365 accounts sign in through GNOME Online Accounts, which macOS does not have. They cannot be added here yet." // macOS-only string
+    init(wizard: WizardController) {
+        self.wizard = wizard
+        browserButton.title = L10n.T("Use the Browser Instead")
+        browserButton.isHidden = true
+        let column = NSStackView(views: [browserButton])
+        column.orientation = .vertical
+        column.alignment = .centerX
+        column.spacing = 12
+        column.translatesAutoresizingMaskIntoConstraints = false
+        page = WizardStatusPageView(
+            illustration: .symbol(wizardSymbolName("system-users-symbolic")),
+            title: L10n.T("Sign In Through GNOME Settings"), description: nil, child: column
         )
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override func loadView() {
+        browserButton.bezelStyle = .rounded
+        browserButton.controlSize = .large
+        browserButton.target = self
+        browserButton.action = #selector(browserClicked(_:))
         let root = WizardPageView()
         let stack = prefsColumn(spacing: 0)
         prefsAddFilling(page, to: stack)
@@ -31,5 +57,20 @@ final class SignInHintPageController: NSViewController {
             stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
         ])
         view = root
+    }
+
+    // MARK: Inputs from the controller
+
+    /// The hint text (linked.go `showGOAHint`) and whether the browser
+    /// sign-in is offered instead.
+    func show(hint: String, browser: Bool) {
+        page.descriptionText = hint
+        browserButton.isHidden = !browser
+    }
+
+    // MARK: Outputs to the controller
+
+    @objc private func browserClicked(_ sender: Any?) {
+        wizard.useBrowser()
     }
 }

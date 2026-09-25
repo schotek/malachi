@@ -14,15 +14,30 @@ import Testing
             name: "", email: "", imap: oauth, smtp: oauth,
             oauth2: OAuth2Config(source: .goa, goaAccountId: "account_2_0", provider: .google)
         )
+        let daemonGoogle = AccountConfig(
+            name: "", email: "", imap: oauth, smtp: oauth, oauth2: OAuth2Config(source: .daemon, provider: .google))
+        let daemonGraph = AccountConfig(
+            name: "", email: "", kind: .graph, oauth2: OAuth2Config(source: .daemon, provider: .office365),
+            graph: GraphConfig(source: .daemon))
+        let bareGraph = AccountConfig(name: "", email: "", kind: .graph)
+        let daemonOffice = AccountConfig(
+            name: "", email: "", imap: oauth, smtp: oauth, oauth2: OAuth2Config(source: .daemon, provider: .office365))
         let own = AccountConfig(name: "", email: "", imap: oauth, oauth2: OAuth2Config(provider: .office365))
         let password = AccountConfig(
             name: "", email: "", imap: ServerConfig(host: "", port: 0, security: .tls, username: "", authMethod: .password))
-        let cases: [(String, AccountConfig, LinkedProvider?)] = [
-            ("graph", graph, .microsoft365), ("google", google, .google), ("own flow", own, nil), ("password", password, nil),
+        let cases: [(String, AccountConfig, LinkedProvider?, SignInKind)] = [
+            ("graph", graph, .microsoft365, .goa),
+            ("google", google, .google, .goa),
+            ("daemon google", daemonGoogle, .google, .oauth),
+            ("daemon graph", daemonGraph, .microsoft365, .oauth),
+            ("graph without a source", bareGraph, .microsoft365, .oauth),
+            ("daemon office365 over imap", daemonOffice, .microsoft365, .oauth),
+            ("oauth2 block without a source", own, .microsoft365, .oauth),
+            ("password", password, nil, .password),
         ]
-        for (name, cfg, provider) in cases {
+        for (name, cfg, provider, kind) in cases {
             #expect(accountProvider(cfg) == provider, Comment(rawValue: name))
-            #expect(goaOwned(cfg) == (provider != nil), Comment(rawValue: name))
+            #expect(signInKind(cfg) == kind, Comment(rawValue: name))
         }
         #expect(providerName(.microsoft365) == "Microsoft 365")
         #expect(providerName(.google) == "Google")

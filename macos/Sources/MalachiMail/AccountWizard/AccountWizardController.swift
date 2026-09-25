@@ -21,13 +21,15 @@ final class AccountWizardController: NSWindowController {
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "accountwizard")
 
     /// Opens the wizard as a sheet on `parent`. `editing` changes an
-    /// existing account (opens on the Servers page). `onDone` runs after
-    /// account.add / account.update succeeded, before the sheet closes.
+    /// existing account (opens on the Servers page); with `signIn` an
+    /// account of the browser sign-in is only signed in again (opens on the
+    /// sign-in, NewEditSignIn). `onDone` runs after account.add /
+    /// account.update succeeded, before the sheet closes.
     static func present(
-        from parent: NSWindow, client: RPCClient, editing: Account? = nil,
+        from parent: NSWindow, client: RPCClient, editing: Account? = nil, signIn: Bool = false,
         onDone: @escaping @MainActor (AccountID, AccountConfig) -> Void
     ) {
-        let c = AccountWizardController(client: client, editing: editing)
+        let c = AccountWizardController(client: client, editing: editing, signIn: signIn)
         c.onDone = onDone
         guard let sheet = c.window else { return }
         active[ObjectIdentifier(c)] = c
@@ -40,8 +42,8 @@ final class AccountWizardController: NSWindowController {
         c.wizard.start()
     }
 
-    private init(client: RPCClient, editing: Account?) {
-        let wizard = WizardController(client: client, editing: editing)
+    private init(client: RPCClient, editing: Account?, signIn: Bool) {
+        let wizard = WizardController(client: client, editing: editing, signIn: signIn)
         self.wizard = wizard
         root = WizardRootViewController(wizard: wizard)
         let window = WizardSheetWindow(
@@ -105,7 +107,8 @@ final class WizardRootViewController: NSViewController {
     let wizard: WizardController
     let identity: IdentityPageController
     let servers: ServersPageController
-    let signIn = SignInHintPageController()
+    let signIn: SignInHintPageController
+    let oauth: OAuthPageController
     let testing: TestingPageController
 
     private let backButton = NSButton(image: wizardSymbol("chevron.left", pointSize: 14, weight: .semibold), target: nil, action: nil)
@@ -113,17 +116,22 @@ final class WizardRootViewController: NSViewController {
     private let pagesHost = NSView()
     private let toasts = WizardToastPresenter()
     private var visible: WizardController.WizardPage = .identity
-    private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "accountwizard")
 
     /// A page's Cancel button or Escape.
     var onClose: (() -> Void)?
 
-    var initialFirstResponder: NSView { identity.initialFirstResponder }
+    /// The e-mail row, or nothing in particular when the wizard opens on
+    /// the sign-in (the prompt's button is the default button).
+    var initialFirstResponder: NSView? {
+        wizard.pages.last == .identity ? identity.initialFirstResponder : nil
+    }
 
     init(wizard: WizardController) {
         self.wizard = wizard
         identity = IdentityPageController(wizard: wizard)
         servers = ServersPageController(wizard: wizard)
+        signIn = SignInHintPageController(wizard: wizard)
+        oauth = OAuthPageController(wizard: wizard)
         testing = TestingPageController(wizard: wizard)
         super.init(nibName: nil, bundle: nil)
         wire()
@@ -186,7 +194,7 @@ final class WizardRootViewController: NSViewController {
             pagesHost.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         view = root
-        for page in [identity, servers, signIn, testing] as [NSViewController] {
+        for page in [identity, servers, signIn, oauth, testing] as [NSViewController] {
             addChild(page)
         }
         // The pages are laid out by frame inside the host so that
@@ -214,6 +222,7 @@ final class WizardRootViewController: NSViewController {
         case .identity: return identity
         case .servers: return servers
         case .goa: return signIn
+        case .oauth: return oauth
         case .testing: return testing
         }
     }
@@ -222,7 +231,7 @@ final class WizardRootViewController: NSViewController {
         switch page {
         case .identity: return wizard.title
         case .servers: return L10n.T("Server Settings")
-        case .goa: return L10n.T("Sign In")
+        case .goa, .oauth: return L10n.T("Sign In")
         case .testing: return L10n.T("Connection Test")
         }
     }
@@ -230,7 +239,7 @@ final class WizardRootViewController: NSViewController {
     // MARK: Wiring
 
     private func wire() {
-        for button in [identity.cancelButton, servers.cancelButton, signIn.cancelButton, testing.cancelButton] {
+        for button in [identity.cancelButton, servers.cancelButton, signIn.cancelButton, oauth.cancelButton, testing.cancelButton] {
             button.onCancel = { [weak self] in self?.onClose?() }
         }
         wizard.onPages = { [weak self] pages in self?.showStack(pages) }
@@ -238,6 +247,8 @@ final class WizardRootViewController: NSViewController {
             self?.identity.setBusy(busy)
             self?.servers.setBusy(busy)
         }
+        // Only the prompt's Sign In waits for account.oauthStart.
+        wizard.onOAuthStarting = { [weak self] starting in self?.oauth.setStarting(starting) }
         wizard.onIdentityProblems = { [weak self] p, banner in self?.identity.showProblems(p, banner: banner) }
         wizard.onServerProblems = { [weak self] p in self?.servers.showProblems(p) }
         wizard.onIdentity = { [weak self] id in self?.identity.setIdentity(id) }
@@ -245,8 +256,17 @@ final class WizardRootViewController: NSViewController {
         wizard.onLinked = { _ in
             // GNOME Online Accounts does not exist on macOS; the group stays hidden.
         }
-        wizard.onGOAHint = { [weak self] _ in
-            self?.log.debug("sign-in hint page shown")
+        wizard.onGOAHint = { [weak self] hint, browser in
+            self?.signIn.show(hint: hint, browser: browser)
+        }
+        wizard.onOAuth = { [weak self] content in
+            guard let self else { return }
+            self.oauth.show(content)
+            // No Back while the browser is out (`can-pop: false`).
+            self.applyHeader(self.wizard.pages)
+        }
+        wizard.onOpenURL = { [weak self] url in
+            openInBrowser(url) { text in self?.toasts.show(text) }
         }
         wizard.onTesting = { [weak self] content in self?.testing.show(content) }
         wizard.onFocus = { [weak self] field in self?.identity.focus(field) }
@@ -276,7 +296,7 @@ final class WizardRootViewController: NSViewController {
     }
 
     private func applyHeader(_ pages: [WizardController.WizardPage]) {
-        backButton.isHidden = pages.count <= 1
+        backButton.isHidden = !wizard.canGoBack
         titleLabel.stringValue = title(for: pages.last ?? .identity)
     }
 
