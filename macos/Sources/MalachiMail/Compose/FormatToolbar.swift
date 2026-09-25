@@ -113,6 +113,9 @@ final class FormatToolbar: NSStackView {
         linkApply.action = #selector(insertLink(_:))
         let linkRow = NSStackView(views: [linkEntry, linkApply])
         linkRow.orientation = .horizontal
+        linkRow.distribution = .fill
+        linkApply.setContentHuggingPriority(.required, for: .horizontal)
+        linkEntry.setContentHuggingPriority(.defaultLow, for: .horizontal)
         linkRow.spacing = 6
         linkRow.edgeInsets = NSEdgeInsets(top: 6, left: 6, bottom: 6, right: 6)
         linkRow.translatesAutoresizingMaskIntoConstraints = false

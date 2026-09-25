@@ -332,6 +332,9 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         let cell = NSTableCellView()
         let row = NSStackView(views: [icon, text])
         row.orientation = .horizontal
+        row.distribution = .fill
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        text.setHuggingPriority(.defaultLow, for: .horizontal)
         row.alignment = .centerY
         row.spacing = 8
         row.edgeInsets = Self.padding

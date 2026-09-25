@@ -63,6 +63,10 @@ final class RemoteBarView: NSView {
 
         let stack = NSStackView(views: [spinner, label, loadButton, trustButton])
         stack.orientation = .horizontal
+        stack.distribution = .fill
+        label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        spinner.setContentHuggingPriority(.required, for: .horizontal)
         stack.alignment = .centerY
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)

@@ -118,6 +118,10 @@ final class MessageCellView: NSTableCellView {
 
         let lead = NSStackView(views: [expander, spinner, avatar])
         lead.orientation = .horizontal
+        // A stack view sizes itself by its own hugging priority, not by
+        // setContentHuggingPriority: the lead must never take the width
+        // that belongs to the text column (its last edge is only ">= 0").
+        lead.setHuggingPriority(.required, for: .horizontal)
         lead.alignment = .centerY
         lead.spacing = RowMetrics.leadSpacing
         lead.setContentHuggingPriority(.required, for: .horizontal)
@@ -162,6 +166,8 @@ final class MessageCellView: NSTableCellView {
 
         let line = NSStackView(views: [from, badge, attachment, star, date, unreadDot])
         line.orientation = .horizontal
+        line.distribution = .fill
+        line.setHuggingPriority(.defaultLow, for: .horizontal)
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
@@ -173,6 +179,7 @@ final class MessageCellView: NSTableCellView {
         content.addArrangedSubview(lead)
         content.addArrangedSubview(column)
         content.orientation = .horizontal
+        content.distribution = .fill
         content.alignment = .top
         content.spacing = RowMetrics.contentSpacing
         content.translatesAutoresizingMaskIntoConstraints = false

@@ -56,6 +56,7 @@ final class BannerView: NSView {
 
         let stack = NSStackView(views: [titleLabel, button])
         stack.orientation = .horizontal
+        stack.distribution = .fill
         stack.alignment = .centerY
         stack.spacing = 12
         stack.edgeInsets = NSEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)

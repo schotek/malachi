@@ -66,6 +66,9 @@ final class ComposeHeaderView: NSBox {
 
         let toLine = NSStackView(views: [toContainer, ccBccButton])
         toLine.orientation = .horizontal
+        toLine.distribution = .fill
+        ccBccButton.setContentHuggingPriority(.required, for: .horizontal)
+        ccBccButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         toLine.spacing = 12
         toLine.alignment = .centerY
         toLine.translatesAutoresizingMaskIntoConstraints = false

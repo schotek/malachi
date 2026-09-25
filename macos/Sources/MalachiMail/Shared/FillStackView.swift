@@ -12,12 +12,16 @@ import AppKit
 @MainActor
 final class FillStackView: NSStackView {
     private var trailingConstraints: [ObjectIdentifier: NSLayoutConstraint] = [:]
+    private var leadingConstraints: [ObjectIdentifier: NSLayoutConstraint] = [:]
 
     init(fillingViews views: [NSView] = []) {
         super.init(frame: .zero)
         orientation = .vertical
         alignment = .leading
         distribution = .fill
+        // Takes the width its parent offers (a sibling stack with the
+        // default hugging would otherwise compete for it).
+        setHuggingPriority(.defaultLow, for: .horizontal)
         translatesAutoresizingMaskIntoConstraints = false
         for v in views {
             addArrangedSubview(v)
@@ -33,6 +37,9 @@ final class FillStackView: NSStackView {
         didSet {
             for c in trailingConstraints.values {
                 c.constant = -edgeInsets.right
+            }
+            for c in leadingConstraints.values {
+                c.constant = edgeInsets.left
             }
         }
     }
@@ -51,18 +58,23 @@ final class FillStackView: NSStackView {
         if let c = trailingConstraints.removeValue(forKey: ObjectIdentifier(view)) {
             c.isActive = false
         }
+        if let c = leadingConstraints.removeValue(forKey: ObjectIdentifier(view)) {
+            c.isActive = false
+        }
         super.removeArrangedSubview(view)
     }
 
-    /// The leading edge comes from the `.leading` alignment; the trailing
-    /// one is added here (the alignment's own trailing constraint is only
-    /// `≤`, which is what leaves the width open).
+    /// Both edges are pinned at required priority: the `.leading`
+    /// alignment's own leading constraint has priority 260 and its trailing
+    /// one is only `≤`, which is what leaves the width open.
     private func pin(_ view: NSView) {
         let key = ObjectIdentifier(view)
         guard trailingConstraints[key] == nil else { return }
         view.translatesAutoresizingMaskIntoConstraints = false
-        let c = view.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -edgeInsets.right)
-        c.isActive = true
-        trailingConstraints[key] = c
+        let trailing = view.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -edgeInsets.right)
+        let leading = view.leadingAnchor.constraint(equalTo: leadingAnchor, constant: edgeInsets.left)
+        NSLayoutConstraint.activate([leading, trailing])
+        trailingConstraints[key] = trailing
+        leadingConstraints[key] = leading
     }
 }

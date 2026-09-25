@@ -40,6 +40,7 @@ final class SidebarFooterView: NSView {
         let connectionLine = NSStackView(views: [connectionIcon, connectionLabel])
         for line in [syncLine, connectionLine] {
             line.orientation = .horizontal
+            line.distribution = .fill
             line.alignment = .centerY
             line.spacing = SidebarMetrics.footerLineSpacing
         }

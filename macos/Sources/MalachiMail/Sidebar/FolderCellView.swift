@@ -86,6 +86,11 @@ final class FolderCellView: NSTableCellView {
 
         let row = NSStackView(views: [icon, text, badge, star])
         row.orientation = .horizontal
+        row.distribution = .fill
+        text.setHuggingPriority(.defaultLow, for: .horizontal)
+        text.setClippingResistancePriority(.defaultLow, for: .horizontal)
+        icon.setContentHuggingPriority(.required, for: .horizontal)
+        star.setContentHuggingPriority(.required, for: .horizontal)
         row.alignment = .centerY
         row.spacing = SidebarMetrics.cellSpacing
         row.translatesAutoresizingMaskIntoConstraints = false
