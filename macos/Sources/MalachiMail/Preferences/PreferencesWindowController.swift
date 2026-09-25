@@ -5,9 +5,10 @@ import AppKit
 import MalachiCore
 
 /// The settings window (preferences.blp `preferences_dialog`): a
-/// toolbar-style tab view with the Accounts, General and Appearance pages,
-/// 600 pt wide, titled "Settings" as macOS calls it. One instance at a
-/// time; `show` brings it to the front. There is no search (deviation D9).
+/// toolbar-style tab view with the Accounts, General, Appearance and AI
+/// pages, 600 pt wide, titled "Settings" as macOS calls it. One instance
+/// at a time; `show` brings it to the front. There is no search (deviation
+/// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     private static var shared: PreferencesWindowController?
@@ -15,27 +16,33 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     let accountsPane: AccountsPaneViewController
     let generalPane = GeneralPaneViewController()
     let appearancePane = AppearancePaneViewController()
+    let aiPane = AIPaneViewController()
     let settings: Settings
     private let tabs = PrefsTabViewController()
     private let toasts = WizardToastPresenter()
 
     /// Opens the settings, or brings the open window to the front.
+    /// `bridge` is the path of the bundled `malachi-mcp` for the AI page
+    /// (`Paths.mcpBridge`; nil when there is none beside the application).
     /// `confirmRemoval` renders the "Remove this account?" alert.
     @discardableResult
-    static func show(client: RPCClient, settings: Settings, confirmRemoval: @escaping PrefsConfirmRemoval) -> PreferencesWindowController {
+    static func show(
+        client: RPCClient, settings: Settings, bridge: String? = Paths.resolve().mcpBridge?.path,
+        confirmRemoval: @escaping PrefsConfirmRemoval
+    ) -> PreferencesWindowController {
         if let open = shared {
             open.showWindow(nil)
             open.window?.makeKeyAndOrderFront(nil)
             return open
         }
-        let c = PreferencesWindowController(client: client, settings: settings, confirmRemoval: confirmRemoval)
+        let c = PreferencesWindowController(client: client, settings: settings, bridge: bridge, confirmRemoval: confirmRemoval)
         shared = c
         c.showWindow(nil)
         c.window?.makeKeyAndOrderFront(nil)
         return c
     }
 
-    private init(client: RPCClient, settings: Settings, confirmRemoval: @escaping PrefsConfirmRemoval) {
+    private init(client: RPCClient, settings: Settings, bridge: String?, confirmRemoval: @escaping PrefsConfirmRemoval) {
         self.settings = settings
         let toasts = toasts
         accountsPane = AccountsPaneViewController(client: client, confirmRemoval: confirmRemoval) { text in toasts.show(text) }
@@ -59,8 +66,10 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         // The General and Appearance pages bind their controls once they
         // know the settings and the daemon; GTK builds every page at once,
         // so General loads config.get now rather than on its first visit.
+        // The AI page asks the bridge for its status whenever it comes up.
         generalPane.configure(settings: settings, client: client) { text in toasts.show(text) }
         appearancePane.configure(settings: settings)
+        aiPane.configure(bridge: bridge) { text in toasts.show(text) }
         _ = generalPane.view
 
         tabs.tabStyle = .toolbar
@@ -69,6 +78,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             (accountsPane, L10n.T("Accounts"), "person.2"),
             (generalPane, L10n.T("General"), "gearshape"),
             (appearancePane, L10n.T("Appearance"), "paintpalette"),
+            (aiPane, L10n.T("AI"), "sparkles"),
         ]
         for (controller, label, symbol) in pages {
             let item = NSTabViewItem(viewController: controller)
@@ -93,6 +103,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         accountsPane.closed = true
         generalPane.closed = true
         appearancePane.closed = true
+        aiPane.closed = true
         if PreferencesWindowController.shared === self {
             PreferencesWindowController.shared = nil
         }

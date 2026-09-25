@@ -10,7 +10,9 @@ using Adw 1;
 // The other pages are bound to GSettings (ui/internal/settings), except the
 // "Mail" group, which is owned by the daemon and goes through config.get /
 // config.set, and "Launch at Login", whose state is decided by the
-// Background portal (ui/internal/background).
+// Background portal (ui/internal/background). The "AI" page has no setting
+// of its own: the switch shows what malachi-mcp reports about the Claude
+// configuration files (ui/internal/mcpsetup).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
@@ -221,6 +223,22 @@ Adw.PreferencesDialog preferences_dialog {
           step-increment: 10;
           value: 100;
         };
+      }
+    }
+  }
+
+  Adw.PreferencesPage ai_page {
+    name: "ai";
+    title: _("AI");
+    icon-name: "applications-science-symbolic";
+
+    Adw.PreferencesGroup mcp_group {
+      title: _("MCP");
+      description: _("Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.");
+
+      Adw.SwitchRow mcp_switch {
+        title: _("Register with Claude");
+        subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
       }
     }
   }

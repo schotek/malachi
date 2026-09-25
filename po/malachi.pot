@@ -1062,24 +1062,44 @@ msgstr ""
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:188
+#: ui/internal/window/preferences.go:194
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:211
+#: ui/internal/window/preferences.go:217
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:312
+#: ui/internal/window/preferences.go:318
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:315
+#: ui/internal/window/preferences.go:321
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:318
+#: ui/internal/window/preferences.go:324
 msgid "Autostart was not granted"
+msgstr ""
+
+#: ui/internal/window/preferences.go:353
+msgid "The MCP bridge (malachi-mcp) was not found next to the application"
+msgstr ""
+
+#: ui/internal/window/preferences.go:404
+msgid "No Claude app was found on this computer"
+msgstr ""
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:407
+#, c-format
+msgid "The MCP bridge could not be registered: %s"
+msgstr ""
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:410
+#, c-format
+msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
 
 #: ui/internal/window/remote.go:67
@@ -1785,6 +1805,30 @@ msgstr ""
 
 #: ui/data/ui/preferences.ui:243
 msgid "Percent"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:261
+msgid "AI"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:265
+msgid "MCP"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:266
+msgid ""
+"Lets AI assistants read your mail and prepare drafts through the Model "
+"Context Protocol."
+msgstr ""
+
+#: ui/data/ui/preferences.ui:269
+msgid "Register with Claude"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:270
+msgid ""
+"Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
+"computer"
 msgstr ""
 
 #: ui/data/ui/window.ui:35

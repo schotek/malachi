@@ -17,9 +17,16 @@ works. It is not a daemon and it does not listen on a port.
 make build            # builds build/malachi-mcp along with the daemon and the UI
 make mcp              # only the bridge
 build/malachi-mcp -version
+build/malachi-mcp -h  # the server flags and the setup subcommands
 ```
 
-Flags and environment:
+Without a subcommand the binary is the stdio server. A first argument that
+does not start with `-` is one of the setup subcommands `status`, `install`
+and `uninstall`, which register the binary with the Claude apps and exit
+(see [Claude Desktop and Claude Code](#claude-desktop-and-claude-code-status-install-uninstall)
+below).
+
+Flags and environment of the server:
 
 | Flag / variable | Meaning |
 |---|---|
@@ -304,6 +311,81 @@ The repository root carries a project-scoped `.mcp.json`:
   if a different command line is wanted.
 - On a machine without the daemon (macOS, a checkout that was never built)
   the server simply fails to connect; that is harmless.
+
+### Claude Desktop and Claude Code: `status`, `install`, `uninstall`
+
+The bridge can register itself in the user-level configuration of the two
+Claude apps, so that nobody has to edit JSON by hand. The desktop apps'
+**Settings → AI → MCP** switch ("Register with Claude") calls exactly
+these subcommands and nothing else; the UIs hold no copy of the logic.
+
+```sh
+malachi-mcp status [--json]      # what is installed and what is registered
+malachi-mcp install [--json]     # register with every Claude app found
+malachi-mcp uninstall [--json]   # remove the registration
+```
+
+The clients, in the order the report lists them:
+
+| `id` | `name` | file | `present` when |
+|---|---|---|---|
+| `claude-desktop` | Claude Desktop | `<UserConfigDir>/Claude/claude_desktop_config.json` (macOS `~/Library/Application Support/Claude/…`, Linux `~/.config/Claude/…` or `$XDG_CONFIG_HOME`) | the `Claude` directory exists |
+| `claude-code` | Claude Code | `~/.claude.json` (Claude Code's user scope) | that file exists or `~/.claude/` exists |
+
+- `command` is this binary's own absolute path (`os.Executable`, symlinks
+  resolved). It is what gets written and what `registered` compares
+  against.
+- `registered` is true when the file exists, parses as a JSON object and
+  holds `mcpServers.malachi` whose `command` equals `command`. An entry
+  that names another command is *not* registered; the report carries it
+  (`other` in JSON, "registered elsewhere: …" in text) and `install`
+  replaces it.
+- `install` sets `mcpServers.malachi` to
+  `{"type": "stdio", "command": "<command>", "args": []}` in every present
+  client, creating the file when only the directory exists; it never
+  creates `~/.claude/` or the `Claude` directory, so an app that is not
+  installed is reported rather than configured. Every other key of the
+  file is kept, numbers are written back exactly as read, the file is
+  indented with two spaces and replaced atomically (temporary file in the
+  same directory, then rename), keeping its mode (a new file is 0600). An
+  entry that already says exactly this leaves the file untouched.
+- The entry is the read-only + drafts tier: `args` is empty and no
+  `--allow-*` flag is ever written. Anyone who wants the modify or send
+  tier for an agent edits the entry by hand (and `install` resets it).
+- `uninstall` deletes `mcpServers.malachi`, and `mcpServers` itself once it
+  is empty, wherever it is found; a missing file or entry is not an error.
+- Both then print the same report as `status`. Exit status is 0 on
+  success and 1, with one line on stderr and nothing on stdout, when
+  `install` finds no Claude app at all (`no Claude app found (Claude
+  Desktop or Claude Code)`), when a present client's file cannot be parsed
+  or written (the message names the file; nothing is written to any file
+  in that case, and `status` refuses the same file rather than calling it
+  "not registered"), or on an unknown subcommand.
+
+`--json` prints one object; the field names are a contract with the
+desktop UIs (`other` appears only when it is set):
+
+```json
+{
+  "command": "/abs/path/to/malachi-mcp",
+  "clients": [
+    {"id": "claude-desktop", "name": "Claude Desktop", "present": true, "registered": true,
+     "path": "/Users/x/Library/Application Support/Claude/claude_desktop_config.json"},
+    {"id": "claude-code", "name": "Claude Code", "present": true, "registered": false,
+     "path": "/Users/x/.claude.json", "other": "/somewhere/else/malachi-mcp"}
+  ]
+}
+```
+
+Without `--json` the same is printed as `command: …` followed by one
+`<name>: <state> (<path>)` line per client, the state being `registered`,
+`not registered`, `registered elsewhere: <cmd>` or `not installed`.
+
+Claude Desktop reads its file at start: restart it after `install` or
+`uninstall`. Claude Code picks the user-scope entry up on its next start
+and shows it under `/mcp`. Inside this repository the project-scoped
+`.mcp.json` above has the same server name and, being a narrower scope,
+wins over the user-scope entry; elsewhere the registered binary is used.
 
 ### Any other stdio client
 

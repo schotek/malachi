@@ -181,7 +181,9 @@ final class Integration {
         }
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
-            PreferencesWindowController.show(client: state.client, settings: state.settings) { window, c in
+            PreferencesWindowController.show(
+                client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path
+            ) { window, c in
                 let answer = await state.alerts.confirmDestructiveExtra(
                     on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
                     extraLabel: c.extraLabel, extraDefault: c.extraDefault)

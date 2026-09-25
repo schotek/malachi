@@ -177,7 +177,10 @@ Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
 `draft.create`), `--allow-modify` / `--allow-send` přes
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
-obsah pošty v ohradě s nonce; viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
+obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
+--json` zapisují registraci do konfigurace Claude Desktop a Claude Code a
+Předvolby → AI → MCP je v obou UI jen přepínač nad nimi (GTK
+`ui/internal/mcpsetup`, macOS `MCPRegistrationController`); viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
 GPL-3.0-or-later): plné zrcadlo GTK UI — průvodce účtem, sidebar,
 seznam (plochý i vlákna), čtení s uzamčeným WKWebView (JS vypnutý,
 stejná CSP, scheme handler `malachi-cid:`, síť odříznutá proxy i content

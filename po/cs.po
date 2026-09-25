@@ -1088,25 +1088,45 @@ msgstr "Zrušit odeslání"
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
-#: ui/internal/window/preferences.go:188
+#: ui/internal/window/preferences.go:194
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:211
+#: ui/internal/window/preferences.go:217
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:312
+#: ui/internal/window/preferences.go:318
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:315
+#: ui/internal/window/preferences.go:321
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:318
+#: ui/internal/window/preferences.go:324
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
+
+#: ui/internal/window/preferences.go:353
+msgid "The MCP bridge (malachi-mcp) was not found next to the application"
+msgstr "Most MCP (malachi-mcp) nebyl nalezen vedle aplikace"
+
+#: ui/internal/window/preferences.go:404
+msgid "No Claude app was found on this computer"
+msgstr "Na tomto počítači nebyla nalezena žádná aplikace Claude"
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:407
+#, c-format
+msgid "The MCP bridge could not be registered: %s"
+msgstr "Most MCP se nepodařilo zaregistrovat: %s"
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:410
+#, c-format
+msgid "The MCP bridge could not be unregistered: %s"
+msgstr "Most MCP se nepodařilo odregistrovat: %s"
 
 #: ui/internal/window/remote.go:67
 msgid "Loading remote images…"
@@ -1820,6 +1840,33 @@ msgstr "Přiblížení textu"
 #: ui/data/ui/preferences.ui:243
 msgid "Percent"
 msgstr "Procenta"
+
+#: ui/data/ui/preferences.ui:261
+msgid "AI"
+msgstr "AI"
+
+#: ui/data/ui/preferences.ui:265
+msgid "MCP"
+msgstr "MCP"
+
+#: ui/data/ui/preferences.ui:266
+msgid ""
+"Lets AI assistants read your mail and prepare drafts through the Model "
+"Context Protocol."
+msgstr ""
+"Umožňuje asistentům AI číst vaši poštu a připravovat koncepty přes Model "
+"Context Protocol."
+
+#: ui/data/ui/preferences.ui:269
+msgid "Register with Claude"
+msgstr "Registrovat v Claude"
+
+#: ui/data/ui/preferences.ui:270
+msgid ""
+"Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
+"computer"
+msgstr ""
+"Přidá most malachi-mcp do Claude Desktop a Claude Code na tomto počítači"
 
 #: ui/data/ui/window.ui:35
 msgid "Folders"

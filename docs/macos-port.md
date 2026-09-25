@@ -84,9 +84,12 @@ trash, archive, junk, outbox retry, remote images, trusted senders,
 reply/forward through `draft.create`), `ComposeController` and
 `ComposeDraftController` (recipients, autosave, send, discard),
 `WizardController` (discover → test → add/update),
-`MailPreferencesController` (`config.get`/`config.set`). Each is a
-`@MainActor` class over an injected `RPCClient` and a `toast` sink, tested
-against a scripted daemon (§9), with no view in sight.
+`MailPreferencesController` (`config.get`/`config.set`),
+`MCPRegistrationController` (runs the bundled `malachi-mcp status` /
+`install` / `uninstall --json` through `BridgeRunner` for Settings → AI).
+Each is a `@MainActor` class over an injected `RPCClient` (or a process
+runner) and a `toast` sink, tested against a scripted daemon or a fake
+bridge script (§9), with no view in sight.
 
 `MalachiMail/App/Contracts.swift` and `Integration.swift` are the seams:
 the protocols the shell offers (`Toasts`, `Alerts`, `MessageActions`,
@@ -297,7 +300,8 @@ format in one place for both clients.
   controllers (`ConnectionControllerTests`, `MailboxControllerFoldersTests`,
   `MailboxControllerListTests`, `MessageCacheTests`, `SyncControllerTests`,
   `ActionsControllerTests`, `ComposeControllerTests`, `DraftStateTests`,
-  `WizardControllerTests`, `MailPreferencesTests`).
+  `WizardControllerTests`, `MailPreferencesTests`, `MCPRegistrationTests`
+  with a `#!/bin/sh` fake bridge).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
   `malachid` on a real unix socket speaking the same newline-delimited
   JSON-RPC, with per-method handlers; `MailFixture` scripts it with

@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -17,6 +18,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -25,7 +27,7 @@ import (
 // data/ui/preferences.blp. UI-only rows are bound to the settings store;
 // "Launch at Login" goes through the Background portal; the Mail group and
 // the Accounts page are owned by the daemon (config.get / config.set,
-// account.*).
+// account.*); the AI page shows what the malachi-mcp bridge reports.
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
 
@@ -56,6 +58,8 @@ type PreferencesDialog struct {
 	monochrome          *adw.SwitchRow
 	monospace           *adw.SwitchRow
 	textZoom            *adw.SpinRow
+
+	mcpSwitch *adw.SwitchRow
 
 	closed bool
 }
@@ -110,6 +114,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		monochrome:           b.GetObject("monochrome_avatars").Cast().(*adw.SwitchRow),
 		monospace:            b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
 		textZoom:             b.GetObject("text_zoom").Cast().(*adw.SpinRow),
+		mcpSwitch:            b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -131,6 +136,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		d.bindLaunchAtLogin(s),
 		d.bindMail(c),
 		d.bindAccounts(c),
+		d.bindMCP(),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true
@@ -318,6 +324,98 @@ func (d *PreferencesDialog) bindLaunchAtLogin(s *settings.Store) (unbind func())
 				d.AddToast(widget.PlainToast(i18n.T("Autostart was not granted")))
 			}
 		})
+	})
+	return func() { row.HandlerDisconnect(handle) }
+}
+
+// bindMCP drives the "Register with Claude" switch through the malachi-mcp
+// bridge (status / install / uninstall). The Claude configuration files
+// are the only state: the switch shows what the bridge reports, stays
+// insensitive while a call runs and reverts when the change fails.
+func (d *PreferencesDialog) bindMCP() (unbind func()) {
+	row := d.mcpSwitch
+	var syncing bool // set while the switch is updated programmatically
+	set := func(v bool) {
+		syncing = true
+		row.SetActive(v)
+		syncing = false
+	}
+	row.SetSensitive(false)
+
+	bridge, err := mcpsetup.Locate()
+	if err != nil {
+		d.log.Warn("locating the MCP bridge", "err", err)
+		// From an idle callback, so the toast lands on the presented dialog.
+		glib.IdleAdd(func() {
+			if d.closed {
+				return
+			}
+			d.AddToast(widget.PlainToast(i18n.T("The MCP bridge (malachi-mcp) was not found next to the application")))
+		})
+		return func() {}
+	}
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
+		defer cancel()
+		st, err := mcpsetup.Query(ctx, bridge)
+		glib.IdleAdd(func() {
+			if d.closed {
+				return
+			}
+			if err != nil {
+				// No sentence of its own: the row simply stays insensitive.
+				d.log.Warn("malachi-mcp status", "err", err)
+				return
+			}
+			set(st.Registered())
+			row.SetSensitive(true)
+		})
+	}()
+
+	handle := row.NotifyProperty("active", func() {
+		if syncing {
+			return
+		}
+		want := row.Active()
+		row.SetSensitive(false)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
+			defer cancel()
+			var (
+				st  mcpsetup.Status
+				err error
+			)
+			if want {
+				st, err = mcpsetup.Install(ctx, bridge)
+			} else {
+				st, err = mcpsetup.Uninstall(ctx, bridge)
+			}
+			glib.IdleAdd(func() {
+				if d.closed {
+					return
+				}
+				row.SetSensitive(true)
+				if err != nil {
+					d.log.Warn("changing the MCP registration", "register", want, "err", err)
+					set(!want)
+					switch {
+					case errors.Is(err, mcpsetup.ErrNoClient):
+						d.AddToast(widget.PlainToast(i18n.T("No Claude app was found on this computer")))
+					case want:
+						// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+						d.AddToast(widget.PlainToast(fmt.Sprintf(i18n.T("The MCP bridge could not be registered: %s"), err)))
+					default:
+						// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+						d.AddToast(widget.PlainToast(fmt.Sprintf(i18n.T("The MCP bridge could not be unregistered: %s"), err)))
+					}
+					return
+				}
+				// The bridge's report is authoritative; it may differ from
+				// what was asked for (e.g. one client left registered).
+				set(st.Registered())
+			})
+		}()
 	})
 	return func() { row.HandlerDisconnect(handle) }
 }

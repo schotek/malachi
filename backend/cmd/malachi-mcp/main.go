@@ -10,7 +10,9 @@
 // --allow-modify or --allow-send. See docs/mcp.md.
 //
 // stdout carries the MCP frames. Everything else (logs, errors) goes to
-// stderr; the only other write to stdout is -version.
+// stderr; the only other writes to stdout are -version and the reports of
+// the setup subcommands (status, install, uninstall; setup.go), which
+// register the binary with the Claude apps and exit.
 package main
 
 import (
@@ -54,9 +56,28 @@ type config struct {
 	allowSend   bool
 }
 
+// usageText heads the -h output, before the server flags.
+const usageText = `Usage:
+  malachi-mcp [flags]              serve MCP over stdio to the client that spawned it
+  malachi-mcp status [--json]      report whether Claude Desktop and Claude Code have this binary registered
+  malachi-mcp install [--json]     register this binary (read-only + drafts) with every Claude app found
+  malachi-mcp uninstall [--json]   remove that registration
+
+Flags:
+`
+
 func run(args []string, stdout, stderr io.Writer) error {
+	// A first argument that is not a flag is a setup subcommand; the
+	// server keeps every other command line it accepted so far.
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		return runSetup(args[0], args[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("malachi-mcp", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	fs.Usage = func() {
+		fmt.Fprint(stderr, usageText)
+		fs.PrintDefaults()
+	}
 	var cfg config
 	fs.StringVar(&cfg.socket, "socket", defaultSocketPath(), "malachid JSON-RPC unix socket")
 	fs.BoolVar(&cfg.allowModify, "allow-modify", false, "offer the tools that flag, move and delete messages")

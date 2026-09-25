@@ -303,3 +303,12 @@ While the app runs, the repository's `.mcp.json` works unchanged: Claude
 Code spawns `build/malachi-mcp`, which connects to the same socket. Another
 MCP client points at `Contents/MacOS/malachi-mcp` in the bundle. Tools,
 flags and the security model are in [docs/mcp.md](../docs/mcp.md).
+
+*Settings → AI → Register with Claude* puts the bundled bridge into the
+MCP configuration of Claude Desktop and Claude Code on this Mac, or takes
+it out again: the switch runs `malachi-mcp status`, `install` and
+`uninstall` and shows what the bridge reports, so the app never edits
+those files itself. The AI page exists in both UIs with the same strings,
+so it is not a deviation. Outside the bundle (`swift run`) there is no
+bridge beside the executable; the row is then insensitive and a toast
+says so.
