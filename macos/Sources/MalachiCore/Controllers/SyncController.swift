@@ -4,10 +4,10 @@
 import Foundation
 import os
 
-/// The sync status line and the sign-in banner of the main window
-/// (ui/internal/window/sync.go), minus the widgets: the daemon owns the sync
-/// state, this only mirrors the last sync.status / notify.syncState per
-/// account into a footer line and a banner text.
+/// The sync status line, the sign-in banner and the certificate banner of
+/// the main window (ui/internal/window/sync.go), minus the widgets: the
+/// daemon owns the sync state, this only mirrors the last sync.status /
+/// notify.syncState per account into a footer line and banner texts.
 ///
 /// `apply` records one state and refreshes the footer; who called it decides
 /// what else follows (`MailboxController.handleSyncState` reloads folders and
@@ -64,12 +64,20 @@ public final class SyncController {
     public private(set) var authBannerAccount: AccountID?
     /// What the banner's button does; nil while hidden.
     public private(set) var authBannerAction: AuthBannerAction?
+    /// The account the certificate banner is up for, nil while hidden.
+    public private(set) var certBannerAccount: AccountID?
+    /// The certificate banner's title last emitted.
+    private var certBannerTitle: String?
 
     /// Called after every change of the footer line.
     public var onFooter: (@MainActor (FooterState) -> Void)?
     /// Called to show the sign-in banner (account, title, button label) or
     /// to hide it (all nil).
     public var onAuthBanner: (@MainActor (AccountID?, String?, String?) -> Void)?
+    /// Called to show the certificate banner (account, title, button label
+    /// without its mnemonic) or to hide it (all nil). Its button edits the
+    /// account (the wizard in edit mode).
+    public var onCertBanner: (@MainActor (AccountID?, String?, String?) -> Void)?
 
     /// The accounts the footer counts (account.list order); the mailbox
     /// controller supplies its model's.
@@ -153,13 +161,15 @@ public final class SyncController {
     }
 
     /// Recomputes the footer from the cached states (sync.go
-    /// `refreshSyncLabel`) and emits it. Enabled accounts without a cached
-    /// state fall back to the state account.list reported, so the line is
-    /// right before sync.status answered.
+    /// `refreshSyncLabel`) and emits it, and with it the certificate
+    /// banner. Enabled accounts without a cached state fall back to the
+    /// state account.list reported, so the line is right before sync.status
+    /// answered.
     public func refreshFooter() {
         let accounts = accounts()
         let lookup = folderName
         setFooter(footerState(accounts: accounts, folderName: { lookup($0, $1) }))
+        refreshCertBanner(accounts)
     }
 
     /// The footer of a refresh the user asked for (sync.go `triggerSync`):
@@ -182,6 +192,30 @@ public final class SyncController {
         guard !closed else { return }
         footer = f
         onFooter?(f)
+    }
+
+    // MARK: Certificate banner
+
+    /// The certificate banner (sync.go `refreshCertBanner`): up for the
+    /// first enabled account, in account order, whose server's certificate
+    /// was refused or has changed (`certProblemAccount`), hidden when there
+    /// is none. Emits only a change.
+    private func refreshCertBanner(_ accounts: [Account]) {
+        guard !closed else { return }
+        guard let found = certProblemAccount(states, accounts) else {
+            guard certBannerAccount != nil else { return }
+            certBannerAccount = nil
+            certBannerTitle = nil
+            onCertBanner?(nil, nil, nil)
+            return
+        }
+        let a = found.account
+        let title = certBannerText(found.problem.category, accountRowTitle(a))
+        guard certBannerAccount != a.id || certBannerTitle != title else { return }
+        certBannerAccount = a.id
+        certBannerTitle = title
+        // TRANSLATORS: banner button
+        onCertBanner?(a.id, title, withoutMnemonic(L10n.T("_Edit Account…")))
     }
 
     // MARK: Sign-in banner

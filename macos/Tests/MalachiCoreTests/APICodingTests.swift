@@ -544,6 +544,67 @@ import Testing
         #expect(RPCError(code: 1502, message: "x") == RPCError(code: .attachmentTooBig, message: "x", data: nil))
     }
 
+    /// ServerConfig.certificateSha256 survives a decode and an encode (an
+    /// edit must never drop the pin) and is left out when unset.
+    @Test func serverConfigCarriesTheCertificatePin() throws {
+        let pin = String(repeating: "ab", count: 32)
+        let sc = try decode(ServerConfig.self, #"{"host":"100.64.0.1","port":1143,"security":"starttls","username":"me","authMethod":"password","certificateSha256":"\#(pin)"}"#)
+        #expect(sc.certificateSha256 == pin)
+        #expect(try encodeObject(sc)["certificateSha256"] as? String == pin)
+        let update = try encodeObject(AccountUpdateParams(accountId: "a", config: AccountConfig(name: "B", email: "me@x.org", imap: sc)))
+        let imap = (update["config"] as? [String: Any])?["imap"] as? [String: Any]
+        #expect(imap?["certificateSha256"] as? String == pin)
+        let plain = try decode(ServerConfig.self, #"{"host":"h","port":993,"security":"tls","username":"u","authMethod":"password"}"#)
+        let encoded = try encodeObject(plain)
+        #expect(plain.certificateSha256 == nil && encoded["certificateSha256"] == nil)
+    }
+
+    /// docs/api.md §2: the data of a tlsError from an IMAP/SMTP endpoint,
+    /// in an account.test result and in a SyncState.
+    @Test func tlsErrorDataExample() throws {
+        let sum = String(repeating: "0f", count: 32)
+        let r = try decode(AccountTestResult.self, #"""
+        {"imap":{"ok":false,"latencyMs":40,"error":{"code":1303,"message":"x509: certificate is not standards compliant",
+          "data":{"reason":"other","certificate":{"sha256":"\#(sum)","subject":"127.0.0.1","issuer":"127.0.0.1",
+            "ipAddresses":["127.0.0.1"],"notBefore":"2024-01-02T03:04:05Z","notAfter":"2044-01-02T03:04:05Z","selfSigned":true}}}},
+         "smtp":{"ok":false,"latencyMs":1,"error":{"code":1303,"message":"handshake","data":{"reason":"handshake"}}}}
+        """#)
+        let d = try #require(tlsErrorData(r.imap?.error))
+        #expect(d.reason == .other && d.expectedSha256 == nil)
+        let c = try #require(d.certificate)
+        #expect(c.sha256 == sum && c.subject == "127.0.0.1" && c.ipAddresses == ["127.0.0.1"] && c.dnsNames.isEmpty && c.selfSigned)
+        #expect(c.notBefore == RFC3339.parse("2024-01-02T03:04:05Z") && c.notAfter == RFC3339.parse("2044-01-02T03:04:05Z"))
+        #expect(tlsErrorData(r.smtp?.error) == TLSErrorData(reason: .handshake))
+
+        let state = try decode(SyncState.self, #"""
+        {"accountId":"acc_1","status":"offline","progress":-1,"pendingOutbox":0,
+         "error":{"code":1303,"message":"pinned certificate mismatch","data":{"reason":"pinMismatch","expectedSha256":"\#(sum)",
+           "certificate":{"sha256":"\#(String(repeating: "ab", count: 32))","notBefore":"2026-01-01T00:00:00Z","notAfter":"2027-01-01T00:00:00Z","selfSigned":false}}}}
+        """#)
+        let p = try #require(tlsErrorData(state.error))
+        #expect(p.reason == .pinMismatch && p.expectedSha256 == sum && p.certificate?.subject == nil)
+
+        // Not a tlsError, no data, or data of another shape: nothing.
+        #expect(tlsErrorData(RPCError(code: .networkError, message: "x", data: state.error?.data)) == nil)
+        #expect(tlsErrorData(RPCError(code: .tlsError, message: "x")) == nil)
+        #expect(tlsErrorData(RPCError(code: .tlsError, message: "x", data: .array([]))) == nil)
+        #expect(tlsErrorData(nil) == nil)
+        // A reason of a newer daemon decodes as itself.
+        let newer = try decode(RPCError.self, #"{"code":1303,"message":"x","data":{"reason":"quantum"}}"#)
+        #expect(tlsErrorData(newer)?.reason == TLSErrorReason("quantum"))
+    }
+
+    @Test func certificateFingerprintsNormalize() {
+        let sum = String(repeating: "ab", count: 32)
+        #expect(normalizeCertificateSHA256(sum) == sum)
+        #expect(normalizeCertificateSHA256(sum.uppercased()) == sum)
+        #expect(normalizeCertificateSHA256(stride(from: 0, to: 64, by: 2).map { _ in "AB" }.joined(separator: ":")) == sum)
+        #expect(normalizeCertificateSHA256(stride(from: 0, to: 64, by: 2).map { _ in "ab" }.joined(separator: " ")) == sum)
+        for bad in ["", "abc", sum + "0", String(repeating: "g", count: 64), String(sum.dropLast()) + "\u{0660}", "-" + sum] {
+            #expect(normalizeCertificateSHA256(bad) == nil, "\(bad)")
+        }
+    }
+
     @Test func errorCodesAreNamed() {
         #expect(ErrorCode.all.count == 31 && Set(ErrorCode.all).count == 31)
         for code in ErrorCode.all {

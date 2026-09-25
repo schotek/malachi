@@ -48,20 +48,30 @@ public struct SystemInfoResult: Codable, Sendable, Equatable {
 /// The name the skeleton used for the `system.info` result.
 public typealias SystemInfo = SystemInfoResult
 
-/// api.ServerConfig: one endpoint (IMAP or SMTP).
+/// api.ServerConfig: one endpoint (IMAP or SMTP). `certificateSha256`
+/// pins the server's certificate (64 lowercase hex digits of the SHA-256
+/// of its DER encoding): the endpoint then accepts exactly that
+/// certificate instead of verifying the chain and the name. Not allowed
+/// with security `none` or authMethod `oauth2`. It must survive every
+/// round trip through the wizard, or an edit would silently drop it.
 public struct ServerConfig: Codable, Sendable, Equatable {
     public var host: String
     public var port: Int
     public var security: Security
     public var username: String
     public var authMethod: AuthMethod
+    public var certificateSha256: String?
 
-    public init(host: String, port: Int, security: Security, username: String, authMethod: AuthMethod) {
+    public init(
+        host: String, port: Int, security: Security, username: String, authMethod: AuthMethod,
+        certificateSha256: String? = nil
+    ) {
         self.host = host
         self.port = port
         self.security = security
         self.username = username
         self.authMethod = authMethod
+        self.certificateSha256 = certificateSha256
     }
 }
 

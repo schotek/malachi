@@ -42,6 +42,11 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
         }
     }
 
+    /// Lets the subtitle be selected and copied (`subtitle-selectable`).
+    func setSubtitleSelectable() {
+        subtitleLabel.isSelectable = true
+    }
+
     /// The row's own sensitivity.
     var isEnabled: Bool {
         get { rowEnabled }
@@ -107,6 +112,14 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
             } else {
                 trailing.setContentHuggingPriority(.required, for: .horizontal)
                 trailing.setContentCompressionResistancePriority(.required, for: .horizontal)
+                // A stack view has no intrinsic width for the hugging to
+                // act on: once its only control is hidden it kept the
+                // control's width and squeezed the text (the Trust
+                // Certificate… slot of a test result row). It shrinks to
+                // what it shows, ahead of the text's own hugging.
+                let shrink = trailing.widthAnchor.constraint(equalToConstant: 0)
+                shrink.priority = NSLayoutConstraint.Priority(NSLayoutConstraint.Priority.defaultLow.rawValue + 1)
+                constraints.append(shrink)
             }
             constraints += [
                 trailing.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
@@ -121,6 +134,12 @@ final class PreferenceRowView: NSView, PrefsGroupMember {
 
         let h = heightAnchor.constraint(greaterThanOrEqualToConstant: (subtitle ?? "").isEmpty ? PreferenceRowView.minHeight : PreferenceRowView.minHeightWithSubtitle)
         constraints.append(h)
+        // The natural height of an action row: without it the height is
+        // only bounded below, and a row that once held a longer text kept
+        // the spare height of a stretched page.
+        let hug = heightAnchor.constraint(equalToConstant: 0)
+        hug.priority = NSLayoutConstraint.Priority(1)
+        constraints.append(hug)
         NSLayoutConstraint.activate(constraints)
         heightConstraint = h
     }

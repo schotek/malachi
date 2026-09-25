@@ -14,6 +14,7 @@ import os
 final class AccountsPaneViewController: PreferencesPaneViewController, NSTableViewDataSource, NSTableViewDelegate {
     private let client: RPCClient
     private let confirmRemoval: PrefsConfirmRemoval
+    private let confirmTrust: WizardConfirmTrust
     private let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "preferences")
 
@@ -30,9 +31,13 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     /// The window closed: late replies are dropped.
     var closed = false
 
-    init(client: RPCClient, confirmRemoval: @escaping PrefsConfirmRemoval, toast: @escaping @MainActor (String) -> Void) {
+    init(
+        client: RPCClient, confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust,
+        toast: @escaping @MainActor (String) -> Void
+    ) {
         self.client = client
         self.confirmRemoval = confirmRemoval
+        self.confirmTrust = confirmTrust
         self.toast = toast
         addButton = NSButton(image: wizardSymbol("plus", pointSize: 14, weight: .medium), target: nil, action: nil)
         addButton.isBordered = false
@@ -121,7 +126,7 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
 
     @objc private func addClicked(_ sender: Any?) {
         guard let window = view.window else { return }
-        AccountWizardController.present(from: window, client: client) { [weak self] _, cfg in
+        AccountWizardController.present(from: window, client: client, confirmTrust: confirmTrust) { [weak self] _, cfg in
             guard let self else { return }
             self.loadAccounts()
             // TRANSLATORS: %s is the new account's e-mail address.
@@ -163,7 +168,9 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     /// (accounts_page.go `signInAccount`, NewEditSignIn).
     private func editAccount(_ id: AccountID, signIn: Bool = false) {
         guard let window = view.window, let i = index(of: id) else { return }
-        AccountWizardController.present(from: window, client: client, editing: accounts[i], signIn: signIn) { [weak self] _, cfg in
+        AccountWizardController.present(
+            from: window, client: client, editing: accounts[i], signIn: signIn, confirmTrust: confirmTrust
+        ) { [weak self] _, cfg in
             guard let self else { return }
             self.loadAccounts()
             // TRANSLATORS: %s is the edited account's e-mail address.

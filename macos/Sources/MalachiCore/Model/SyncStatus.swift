@@ -11,17 +11,21 @@ import Foundation
 /// Only enabled accounts count; an account missing from `states` uses the
 /// state embedded in its account.list entry. The most pressing state wins:
 /// syncing (with the folder or account name and the progress when known),
-/// then sign-in required, sending (the pending outbox messages of every
-/// account added up; sending is not a sync status, so it shows while the
-/// status is idle), error, offline, and finally "Up to date". With no
-/// enabled account the line is empty. `folderName` returns the display name
-/// of a folder or "" when unknown.
+/// then sign-in required, a changed certificate, a certificate problem
+/// (`CertTrust.fromSyncState`: an offline or failed account whose server's
+/// certificate was refused, instead of "Offline"), sending (the pending
+/// outbox messages of every account added up; sending is not a sync
+/// status, so it shows while the status is idle), error, offline, and
+/// finally "Up to date". With no enabled account the line is empty.
+/// `folderName` returns the display name of a folder or "" when unknown.
 public func syncStatusText(
     _ states: [AccountID: SyncState], _ accounts: [Account], folderName: ((AccountID, FolderID) -> String)?
 ) -> (text: String, spinning: Bool) {
     var syncing: SyncState?
     var syncingName = ""
     var authRequired = false
+    var certChanged = false
+    var certProblem = false
     var syncError = false
     var offline = false
     var enabled = 0
@@ -30,6 +34,13 @@ public func syncStatusText(
         enabled += 1
         let s = states[a.id] ?? a.state
         pending += s.pendingOutbox
+        if let p = CertTrust.fromSyncState(s) {
+            if p.category == .changed {
+                certChanged = true
+            } else {
+                certProblem = true
+            }
+        }
         switch s.status {
         case .syncing:
             if syncing == nil {
@@ -64,6 +75,12 @@ public func syncStatusText(
     }
     if authRequired {
         return (L10n.T("Sign-in required"), false)
+    }
+    if certChanged {
+        return (certStatusText(.changed), false)
+    }
+    if certProblem {
+        return (certStatusText(.certificate), false)
     }
     if pending > 0 {
         // TRANSLATORS: %d is the number of messages waiting in the outbox.
@@ -116,4 +133,42 @@ public func oauthAuthBannerText(_ reason: ErrorCode, _ account: String) -> Strin
     }
     // TRANSLATORS: %s is an account name.
     return L10n.T("Sign in to %s again in your browser", account)
+}
+
+/// The short status of an account whose server's certificate was refused
+/// (sync.go `certStatusText`; Settings → Accounts, the sidebar line).
+public func certStatusText(_ c: CertTrust.Category) -> String {
+    if c == .changed {
+        // TRANSLATORS: account status (sidebar, Settings → Accounts)
+        return L10n.T("Certificate changed")
+    }
+    // TRANSLATORS: account status (sidebar, Settings → Accounts)
+    return L10n.T("Certificate problem")
+}
+
+/// The first enabled account, in account order, whose state is a
+/// certificate problem (sync.go `certProblemAccount`,
+/// `CertTrust.fromSyncState`); an account missing from `states` uses the
+/// state of its account.list entry, as the status line does.
+public func certProblemAccount(
+    _ states: [AccountID: SyncState], _ accounts: [Account]
+) -> (account: Account, problem: CertTrust.Problem)? {
+    for a in accounts where a.enabled {
+        if let p = CertTrust.fromSyncState(states[a.id] ?? a.state) {
+            return (a, p)
+        }
+    }
+    return nil
+}
+
+/// The certificate banner's sentence (sync.go `certBannerText`): changed
+/// when the account pins another certificate, not trusted otherwise;
+/// `account` is the account's display name.
+public func certBannerText(_ c: CertTrust.Category, _ account: String) -> String {
+    if c == .changed {
+        // TRANSLATORS: banner; %s is an account name
+        return L10n.T("The certificate of %s has changed", account)
+    }
+    // TRANSLATORS: banner; %s is an account name
+    return L10n.T("The certificate of %s is not trusted", account)
 }

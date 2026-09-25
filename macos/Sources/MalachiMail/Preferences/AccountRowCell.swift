@@ -147,7 +147,7 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         reverting = true
         toggle.state = a.enabled ? .on : .off
         reverting = false
-        let status = accountStatusText(a.state.status)
+        let status = accountStatusText(a.state)
         statusLabel.stringValue = status
         statusLabel.isHidden = status.isEmpty
         signInButton.isHidden = !accountRowOffersSignIn(a)

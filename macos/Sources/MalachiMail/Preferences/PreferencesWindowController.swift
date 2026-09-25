@@ -24,28 +24,35 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     /// Opens the settings, or brings the open window to the front.
     /// `bridge` is the path of the bundled `malachi-mcp` for the AI page
     /// (`Paths.mcpBridge`; nil when there is none beside the application).
-    /// `confirmRemoval` renders the "Remove this account?" alert.
+    /// `confirmRemoval` renders the "Remove this account?" alert,
+    /// `confirmTrust` the account wizard's "Trust This Certificate?".
     @discardableResult
     static func show(
         client: RPCClient, settings: Settings, bridge: String? = Paths.resolve().mcpBridge?.path,
-        confirmRemoval: @escaping PrefsConfirmRemoval
+        confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
     ) -> PreferencesWindowController {
         if let open = shared {
             open.showWindow(nil)
             open.window?.makeKeyAndOrderFront(nil)
             return open
         }
-        let c = PreferencesWindowController(client: client, settings: settings, bridge: bridge, confirmRemoval: confirmRemoval)
+        let c = PreferencesWindowController(
+            client: client, settings: settings, bridge: bridge, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust)
         shared = c
         c.showWindow(nil)
         c.window?.makeKeyAndOrderFront(nil)
         return c
     }
 
-    private init(client: RPCClient, settings: Settings, bridge: String?, confirmRemoval: @escaping PrefsConfirmRemoval) {
+    private init(
+        client: RPCClient, settings: Settings, bridge: String?, confirmRemoval: @escaping PrefsConfirmRemoval,
+        confirmTrust: @escaping WizardConfirmTrust
+    ) {
         self.settings = settings
         let toasts = toasts
-        accountsPane = AccountsPaneViewController(client: client, confirmRemoval: confirmRemoval) { text in toasts.show(text) }
+        accountsPane = AccountsPaneViewController(client: client, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust) { text in
+            toasts.show(text)
+        }
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: PreferencesPaneViewController.paneWidth, height: PreferencesPaneViewController.paneHeight),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],

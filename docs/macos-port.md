@@ -84,7 +84,9 @@ trash, archive, junk, outbox retry, remote images, trusted senders,
 reply/forward through `draft.create`), `ComposeController` and
 `ComposeDraftController` (recipients, autosave, send, discard),
 `WizardController` (discover → the browser sign-in or a password →
-test → add/update),
+test → add/update; a refused server certificate offers trust through
+`CertTrust`, the port of `ui/internal/certtrust`, and the pin rides along
+in the endpoint fields until the host or port changes),
 `MailPreferencesController` (`config.get`/`config.set`),
 `MCPRegistrationController` (runs the bundled `malachi-mcp status` /
 `install` / `uninstall --json` through `BridgeRunner` for Settings → AI).
@@ -93,7 +95,8 @@ runner) and a `toast` sink, tested against a scripted daemon or a fake
 bridge script (§9), with no view in sight.
 
 `MalachiMail/App/Contracts.swift` and `Integration.swift` are the seams:
-the protocols the shell offers (`Toasts`, `Alerts`, `MessageActions`,
+the protocols the shell offers (`Toasts`, `Alerts` with its
+confirmations, `confirmTrustCertificate` among them, `MessageActions`,
 `EditorView`) and the one place where the sidebar, list, reader, actions,
 compose, wizard and notifications are wired to the main window and the
 app state.

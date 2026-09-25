@@ -29,6 +29,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// The sign-in banner's button (window.go `onAuthBannerButton`: the
     /// preferences, or the online accounts panel).
     var onAuthBannerButton: (@MainActor () -> Void)?
+    /// The certificate banner's "Edit Account…" (window.go
+    /// `onCertBannerButton`).
+    var onCertBannerButton: (@MainActor () -> Void)?
 
     /// The row behind the selection, if any.
     var selectedRow: ListRow? {
@@ -39,6 +42,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         title: L10n.T("The mail backend (malachid) is not running."), buttonTitle: L10n.T("Retry")
     )
     private let authBanner = BannerView(title: "", buttonTitle: L10n.T("Open Preferences"))
+    /// window.blp `cert_banner`: the first account whose server's
+    /// certificate was refused or has changed.
+    private let certBanner = BannerView(title: "", buttonTitle: mn(L10n.T("_Edit Account…")))
     private let filter = NSSegmentedControl()
     private let scroll = NSScrollView()
     private let table = MessageListTableView()
@@ -86,6 +92,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     override func loadView() {
         backendBanner.onButton = { [weak self] in self?.connection.reconnectNow() }
         authBanner.onButton = { [weak self] in self?.onAuthBannerButton?() }
+        certBanner.onButton = { [weak self] in self?.onCertBannerButton?() }
 
         // The filter: three short words, small and regular, centred
         // (style.go `toggle-group.message-filter`).
@@ -198,7 +205,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             statusPage.trailingAnchor.constraint(equalTo: pages.trailingAnchor),
         ])
 
-        let root = FillStackView(fillingViews: [backendBanner, authBanner, filterBar, pages])
+        let root = FillStackView(fillingViews: [backendBanner, authBanner, certBanner, filterBar, pages])
         root.spacing = 0
         // Below the unified toolbar (fullSizeContentView): the banners and
         // the filter bar must not run under it; the scroll view alone
@@ -242,6 +249,16 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
                 self.showAuthBanner(title: title, button: button ?? L10n.T("Open Preferences"))
             } else {
                 self.hideAuthBanner()
+            }
+        }
+        mailbox.sync.onCertBanner = { [weak self] _, title, button in
+            guard let self else { return }
+            if let title {
+                self.certBanner.title = title
+                self.certBanner.buttonTitle = button ?? mn(L10n.T("_Edit Account…"))
+                self.certBanner.reveal(true)
+            } else {
+                self.certBanner.reveal(false)
             }
         }
         // Density, preview and avatars re-lay the rows out; grouping is a

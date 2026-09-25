@@ -122,6 +122,15 @@ struct WizardFieldsTests {
         #expect(cfg.smtp?.authMethod == .password)
         #expect(cfg.oauth2 == nil)
         #expect(cfg.graph == nil)
+        #expect(cfg.imap?.certificateSha256 == nil && cfg.smtp?.certificateSha256 == nil, "no pin without one")
+        // A trusted certificate travels with its endpoint only.
+        let pin = String(repeating: "ab", count: 32)
+        let bridge = buildConfig(
+            identity: Identity(email: "me@x.org"), name: "Bridge",
+            imap: ServerFields(host: "100.64.0.1", port: 1143, security: .starttls, username: "me", certificateSha256: pin),
+            smtp: ServerFields(host: "100.64.0.1", port: 1025, security: .starttls, username: "me")
+        )
+        #expect(bridge.imap?.certificateSha256 == pin && bridge.smtp?.certificateSha256 == nil)
         #expect(credentialsFor(Identity(password: "p")).password == "p")
         #expect(credentialsFor(Identity()).password == nil)
     }

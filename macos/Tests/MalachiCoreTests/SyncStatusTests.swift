@@ -66,6 +66,65 @@ import Testing
         #expect(noNames.text == "Syncing Work…")
     }
 
+    /// A refused certificate (certtrust.FromSyncState): syncing >
+    /// authRequired > certificate changed > certificate problem > sending >
+    /// error > offline.
+    @Test func certificateStatuses() throws {
+        let accounts = [
+            testAccount("a1", name: "Work", email: "w@example.invalid"),
+            testAccount("a2", email: "home@example.invalid"),
+            testAccount("a3", enabled: false, name: "Paused"),
+        ]
+        func tls(_ acc: AccountID, _ reason: TLSErrorReason, status: SyncStatus = .offline) throws -> SyncState {
+            SyncState(accountId: acc, status: status, error: try tlsError(TLSErrorData(reason: reason)))
+        }
+        func st(_ states: SyncState...) -> [AccountID: SyncState] {
+            Dictionary(uniqueKeysWithValues: states.map { ($0.accountId, $0) })
+        }
+        let idle = SyncState(accountId: "a2", status: .idle)
+        let cases: [(String, [AccountID: SyncState], String, Bool)] = [
+            ("untrusted instead of offline", st(try tls("a1", .untrusted), idle), "Certificate problem", false),
+            ("error status too", st(try tls("a1", .expired, status: .error), idle), "Certificate problem", false),
+            ("changed", st(try tls("a1", .pinMismatch), idle), "Certificate changed", false),
+            ("changed beats problem", st(try tls("a1", .untrusted), try tls("a2", .pinMismatch)), "Certificate changed", false),
+            ("handshake stays offline", st(try tls("a1", .handshake), idle), "Offline, retrying", false),
+            ("starttls stays offline", st(try tls("a1", .starttlsUnavailable), idle), "Offline, retrying", false),
+            ("no details stays offline", st(SyncState(accountId: "a1", status: .offline, error: tlsError(nil)), idle), "Offline, retrying", false),
+            ("authRequired beats changed", st(try tls("a1", .pinMismatch), SyncState(accountId: "a2", status: .authRequired)), "Sign-in required", false),
+            ("syncing beats the certificate", st(try tls("a1", .untrusted), SyncState(accountId: "a2", status: .syncing)), "Syncing home@example.invalid…", true),
+            ("certificate beats sending", st(try tls("a1", .untrusted), SyncState(accountId: "a2", status: .idle, pendingOutbox: 1)), "Certificate problem", false),
+            ("certificate beats error", st(try tls("a1", .untrusted), SyncState(accountId: "a2", status: .error)), "Certificate problem", false),
+            ("disabled account ignored", st(try tls("a3", .pinMismatch), idle), "Up to date", false),
+        ]
+        for (name, states, want, spinning) in cases {
+            let got = syncStatusText(states, accounts, folderName: nil)
+            #expect(got.text == want && got.spinning == spinning, "\(name): got \(got.text)/\(got.spinning)")
+        }
+    }
+
+    @Test func certTextsTest() {
+        #expect(certBannerText(.certificate, "Work") == "The certificate of Work is not trusted")
+        #expect(certBannerText(.changed, "Work") == "The certificate of Work has changed")
+        #expect(certStatusText(.certificate) == "Certificate problem")
+        #expect(certStatusText(.changed) == "Certificate changed")
+    }
+
+    @Test func certProblemAccountTest() throws {
+        let bad = SyncState(accountId: "a2", status: .offline, error: try tlsError(TLSErrorData(reason: .pinMismatch)))
+        let accounts = [
+            testAccount("a0", enabled: false, state: SyncState(accountId: "a0", status: .offline, error: bad.error)),
+            testAccount("a1"),
+            testAccount("a2"),
+            testAccount("a3", state: SyncState(accountId: "a3", status: .offline, error: try tlsError(TLSErrorData(reason: .expired)))),
+        ]
+        // The first enabled account in account order; the cached state
+        // wins over account.list's.
+        let got = certProblemAccount(["a2": bad], accounts)
+        #expect(got?.account.id == "a2" && got?.problem.category == .changed)
+        #expect(certProblemAccount([:], accounts)?.account.id == "a3", "account.list state when uncached")
+        #expect(certProblemAccount(["a3": SyncState(accountId: "a3", status: .idle)], accounts) == nil)
+    }
+
     @Test func authBannerTextTest() {
         let cases: [ErrorCode: String] = [
             .authRequired: "Sign in to Work again",

@@ -17,9 +17,13 @@ public func accountRowTitle(_ a: Account) -> String {
 }
 
 /// The short status shown next to the switch; empty for the unremarkable
-/// idle state (accounts_page.go `accountStatusText`).
-public func accountStatusText(_ s: SyncStatus) -> String {
-    switch s {
+/// idle state (accounts_page.go `accountStatusText`). A refused server
+/// certificate (`CertTrust.fromSyncState`) says so instead of "Offline".
+public func accountStatusText(_ state: SyncState) -> String {
+    if let p = CertTrust.fromSyncState(state) {
+        return certStatusText(p.category)
+    }
+    switch state.status {
     case .disabled: return L10n.T("Paused")
     case .syncing: return L10n.T("Syncing…")
     case .offline: return L10n.T("Offline")

@@ -106,6 +106,10 @@ private final class Recorder {
     var toasts: [String] = []
     var done: [AccountID] = []
     var doneConfigs: [AccountConfig] = []
+    var pins: [[String]] = []
+    var prompts: [TrustPrompt] = []
+    /// What the trust confirmation answers.
+    var trustAnswer = true
 
     func attach(_ w: WizardController) {
         w.onPages = { [unowned self] in self.pages.append($0) }
@@ -131,6 +135,11 @@ private final class Recorder {
         w.onDone = { [unowned self] id, cfg in
             self.done.append(id)
             self.doneConfigs.append(cfg)
+        }
+        w.onPins = { [unowned self] imap, smtp in self.pins.append([imap, smtp]) }
+        w.onConfirmTrust = { [unowned self] prompt in
+            self.prompts.append(prompt)
+            return self.trustAnswer
         }
     }
 
@@ -188,6 +197,34 @@ private func imapAccount(id: AccountID = "acc-9") -> Account {
         enabled: true,
         state: SyncState(accountId: id, status: .idle)
     )
+}
+
+// A server with its own certificate (a mail bridge): account.test refuses
+// it with the certificate in the details (docs/api.md §2).
+private let certA = String(repeating: "ab", count: 32)
+private let certB = String(repeating: "0f", count: 32)
+private let fingerprintA = Array(repeating: "ABAB", count: 16).joined(separator: " ")
+private let fingerprintB = Array(repeating: "0F0F", count: 16).joined(separator: " ")
+
+private func refusedJSON(_ sha: String, reason: String = "untrusted", expected: String? = nil) -> String {
+    let expectedMember = expected.map { #""expectedSha256":"\#($0)","# } ?? ""
+    return [
+        #"{"ok":false,"latencyMs":3,"error":{"code":1303,"message":"x509: certificate signed by unknown authority","#,
+        #""data":{"reason":"\#(reason)",\#(expectedMember)"certificate":{"sha256":"\#(sha)","subject":"127.0.0.1","issuer":"127.0.0.1","#,
+        #""ipAddresses":["127.0.0.1"],"notBefore":"2024-01-02T03:04:05Z","notAfter":"2044-01-02T03:04:05Z","selfSigned":true}}}}"#,
+    ].joined()
+}
+
+private func testRefusedJSON(imap: String?, smtp: String?) -> String {
+    let ok = #"{"ok":true,"latencyMs":5}"#
+    return #"{"imap":\#(imap.map { refusedJSON($0) } ?? ok),"smtp":\#(smtp.map { refusedJSON($0) } ?? ok)}"#
+}
+
+/// A password account whose IMAP endpoint pins `certA`.
+private func pinnedAccount(id: AccountID = "acc-9") -> Account {
+    var a = imapAccount(id: id)
+    a.config.imap?.certificateSha256 = certA
+    return a
 }
 
 @MainActor
@@ -1154,4 +1191,224 @@ private func imapAccount(id: AccountID = "acc-9") -> Account {
         #expect(v.buttons == WizardController.WizardButtons(edit: false, retry: true, addAnyway: true))
     }
 
+
+    // MARK: Trusting a certificate (trust.go)
+
+    /// A discovered account whose test answers `first`, then OK; the
+    /// params of every account.test and account.add are recorded.
+    private func startRefused(_ first: String) async throws -> (WizardController, Recorder, FakeDaemon, ParamsLog) {
+        let fake = try await makeFake()
+        let params = ParamsLog()
+        let counter = Counter()
+        await fake.on(API.AccountDiscover.name) { _ in json(discoveredJSON) }
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(await counter.next() == 1 ? first : testOKJSON)
+        }
+        await fake.on(API.AccountAdd.name) { p in
+            await params.record(API.AccountAdd.name, p)
+            return json(#"{"accountId":"acc-1"}"#)
+        }
+        let (w, rec) = try await startWizard(fake)
+        w.setIdentity(name: "Me", email: "me@example.com", password: "pw")
+        w.next()
+        try await waitUntil { rec.lastResults != nil }
+        return (w, rec, fake, params)
+    }
+
+    @Test func oneConfirmationTrustsTheSameCertificateOnBothEndpoints() async throws {
+        let (w, rec, fake, params) = try await startRefused(testRefusedJSON(imap: certA, smtp: certA))
+        defer { Task { await fake.stop() } }
+        let v = try #require(rec.lastResults)
+        #expect(v.title == "Connection Failed")
+        #expect(v.imap == WizardController.EndpointRow(
+            icon: "dialog-error-symbolic", text: "The server's certificate is not from a trusted authority", trust: true))
+        #expect(v.smtp?.trust == true)
+        #expect(v.buttons == WizardController.WizardButtons(edit: true, retry: true, addAnyway: true))
+        #expect(w.pinnedFingerprints.imap.isEmpty && w.pinnedFingerprints.smtp.isEmpty && rec.pins == [["", ""]])
+
+        w.trustCertificate(.smtp)
+        try await waitUntil { rec.lastResults?.title == "Ready to Add" }
+        #expect(rec.prompts.count == 1)
+        let prompt = try #require(rec.prompts.first)
+        #expect(prompt.heading == "Trust This Certificate?" && prompt.confirmLabel == "_Trust")
+        #expect(prompt.body.contains("for imap.example.com:993 and smtp.example.com:587 and no other"), "IMAP first")
+        #expect(prompt.details.first == CertificateDetail(label: "SHA-256 fingerprint", value: fingerprintA, monospaced: true))
+        #expect(prompt.details.dropFirst().first == CertificateDetail(label: "Issued to", value: "127.0.0.1"))
+        #expect(!prompt.details.contains { $0.label == "Previously trusted" })
+        #expect(rec.pins.last == [fingerprintA, fingerprintA])
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.config.imap?.certificateSha256 == certA && tested.config.smtp?.certificateSha256 == certA)
+        #expect(tested.credentials.password == "pw")
+
+        w.add()
+        try await waitUntil { !rec.done.isEmpty }
+        let added = try #require(try await params.last(API.AccountAdd.name, as: AccountAddParams.self))
+        #expect(added.config.imap?.certificateSha256 == certA && added.config.smtp?.certificateSha256 == certA)
+    }
+
+    @Test func differentCertificatesTrustOnlyTheClickedEndpoint() async throws {
+        let (w, rec, fake, params) = try await startRefused(testRefusedJSON(imap: certA, smtp: certB))
+        defer { Task { await fake.stop() } }
+        #expect(rec.lastResults?.imap?.trust == true && rec.lastResults?.smtp?.trust == true)
+        w.trustCertificate(.smtp)
+        try await waitUntil { rec.lastResults?.title == "Ready to Add" }
+        let prompt = try #require(rec.prompts.last)
+        #expect(prompt.body.contains("for smtp.example.com:587 and no other"))
+        #expect(prompt.details.first?.value == fingerprintB)
+        #expect(rec.pins.last == ["", fingerprintB])
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.config.imap?.certificateSha256 == nil && tested.config.smtp?.certificateSha256 == certB)
+    }
+
+    @Test func declinedConfirmationChangesNothing() async throws {
+        let (w, rec, fake, _) = try await startRefused(testRefusedJSON(imap: certA, smtp: nil))
+        defer { Task { await fake.stop() } }
+        #expect(rec.lastResults?.imap?.trust == true)
+        #expect(rec.lastResults?.smtp == WizardController.EndpointRow(icon: "emblem-ok-symbolic", text: "Connected in 5 ms"))
+        rec.trustAnswer = false
+        let testing = rec.testing.count
+        w.trustCertificate(.imap)
+        try await waitUntil { rec.prompts.count == 1 }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(rec.testing.count == testing, "no new test")
+        #expect(rec.pins == [["", ""]])
+        #expect(w.imap.certificateSha256.isEmpty)
+        #expect(await fake.calls.filter { $0 == API.AccountTest.name }.count == 1)
+        // A row without an offer asks nothing.
+        w.trustCertificate(.smtp)
+        #expect(rec.prompts.count == 1)
+    }
+
+    @Test func connectionFailuresOfferNoTrust() async throws {
+        let handshake = #"{"imap":{"ok":false,"latencyMs":1,"error":{"code":1303,"message":"eof","data":{"reason":"handshake"}}},"#
+            + #""smtp":\#(refusedJSON(certA, reason: "starttlsUnavailable"))}"#
+        let (w, rec, fake, _) = try await startRefused(handshake)
+        defer { Task { await fake.stop() } }
+        #expect(rec.lastResults?.imap == WizardController.EndpointRow(
+            icon: "dialog-error-symbolic", text: "The secure connection could not be established"))
+        #expect(rec.lastResults?.smtp == WizardController.EndpointRow(icon: "dialog-error-symbolic", text: "The server does not offer STARTTLS"))
+        w.trustCertificate(.imap)
+        w.trustCertificate(.smtp)
+        #expect(rec.prompts.isEmpty)
+    }
+
+    @Test func aChangedCertificateOffersTheNewOne() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        let counter = Counter()
+        let changed = #"{"imap":\#(refusedJSON(certB, reason: "pinMismatch", expected: certA)),"smtp":{"ok":true,"latencyMs":5}}"#
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(await counter.next() == 1 ? changed : testOKJSON)
+        }
+        let (w, rec) = try await startWizard(fake, editing: pinnedAccount())
+        w.testServers()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.lastResults?.imap?.text == "The server presented a different certificate than the one you trust")
+        #expect(rec.lastResults?.imap?.trust == true)
+        w.trustCertificate(.imap)
+        try await waitUntil { rec.lastResults?.title == "Ready to Save" }
+        // Its own warning, with the fingerprint trusted before.
+        let prompt = try #require(rec.prompts.first)
+        #expect(prompt.heading == "Trust the New Certificate?" && prompt.confirmLabel == "_Trust")
+        #expect(prompt.body.hasPrefix("The certificate of imap.example.com:993 has changed since you trusted it."))
+        #expect(prompt.details.prefix(2) == [
+            CertificateDetail(label: "SHA-256 fingerprint", value: fingerprintB, monospaced: true),
+            CertificateDetail(label: "Previously trusted", value: fingerprintA, monospaced: true),
+        ])
+        #expect(rec.pins.last == [fingerprintB, ""])
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.config.imap?.certificateSha256 == certB && tested.accountId == "acc-9")
+    }
+
+    @Test func editingKeepsThePinWhileTheServerStays() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(testOKJSON)
+        }
+        await fake.on(API.AccountUpdate.name) { p in
+            await params.record(API.AccountUpdate.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake, editing: pinnedAccount())
+        #expect(rec.pins == [[fingerprintA, ""]])
+        #expect(w.imap.certificateSha256 == certA)
+
+        // The Servers page reads its rows without the pin: another user
+        // name and the host in another case keep it.
+        w.setServers(name: "Work", imap: ServerFields(host: " IMAP.example.com", port: 993, security: .tls, username: "me2"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256 == certA && rec.pins.count == 1)
+        w.testServers()
+        try await waitUntil { rec.lastResults != nil }
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.config.imap?.certificateSha256 == certA && tested.config.smtp?.certificateSha256 == nil)
+
+        // Another host drops it; the host it was trusted for restores it.
+        w.setServers(name: "Work", imap: ServerFields(host: "imap2.example.com", port: 993, security: .tls, username: "me"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256.isEmpty && rec.pins.last == ["", ""])
+        w.setServers(name: "Work", imap: ServerFields(host: "imap.example.com", port: 143, security: .starttls, username: "me"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256.isEmpty, "another port")
+        w.setServers(name: "Work", imap: ServerFields(host: "imap.example.com", port: 993, security: .none, username: "me"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256.isEmpty, "no pin without TLS")
+        w.setServers(name: "Work", imap: ServerFields(host: "imap.example.com", port: 993, security: .tls, username: "me"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256 == certA && rec.pins.last == [fingerprintA, ""])
+
+        w.add()
+        try await waitUntil { !rec.done.isEmpty }
+        let updated = try #require(try await params.last(API.AccountUpdate.name, as: AccountUpdateParams.self))
+        #expect(updated.config.imap?.certificateSha256 == certA && updated.config.smtp?.certificateSha256 == nil)
+        #expect(rec.doneConfigs.last?.imap?.certificateSha256 == certA)
+    }
+
+    @Test func forgetDropsThePin() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let params = ParamsLog()
+        await fake.on(API.AccountTest.name) { p in
+            await params.record(API.AccountTest.name, p)
+            return json(testOKJSON)
+        }
+        await fake.on(API.AccountUpdate.name) { p in
+            await params.record(API.AccountUpdate.name, p)
+            return json("{}")
+        }
+        let (w, rec) = try await startWizard(fake, editing: pinnedAccount())
+        w.forgetPin(.imap)
+        #expect(rec.pins.last == ["", ""] && w.imap.certificateSha256.isEmpty)
+        // For good: the same server does not bring it back.
+        w.setServers(name: "Work", imap: ServerFields(host: "imap.example.com", port: 993, security: .tls, username: "me"),
+                     smtp: ServerFields(host: "smtp.example.com", port: 465, security: .tls, username: "me"))
+        #expect(w.imap.certificateSha256.isEmpty)
+        w.testServers()
+        try await waitUntil { rec.lastResults != nil }
+        let tested = try #require(try await params.last(API.AccountTest.name, as: AccountTestParams.self))
+        #expect(tested.config.imap?.certificateSha256 == nil)
+        w.add()
+        try await waitUntil { !rec.done.isEmpty }
+        let updated = try #require(try await params.last(API.AccountUpdate.name, as: AccountUpdateParams.self))
+        #expect(updated.config.imap?.certificateSha256 == nil)
+    }
+
+    @Test func aBrowserAccountIsNeverOfferedTrust() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountTest.name) { _ in json(testRefusedJSON(imap: certA, smtp: certA)) }
+        let (w, rec) = try await startWizard(fake, editing: oauthAccount(status: .idle))
+        w.setIdentity(name: "Me", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.lastResults?.imap?.trust == false && rec.lastResults?.smtp?.trust == false)
+        w.trustCertificate(.imap)
+        #expect(rec.prompts.isEmpty)
+    }
 }

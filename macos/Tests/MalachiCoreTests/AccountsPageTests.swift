@@ -14,7 +14,7 @@ import Testing
         #expect(accountRowTitle(a) == "me@example.invalid")
     }
 
-    @Test func accountStatusTextTest() {
+    @Test func accountStatusTextTest() throws {
         let cases: [SyncStatus: String] = [
             .idle: "",
             .disabled: "Paused",
@@ -25,8 +25,22 @@ import Testing
             "unknown": "",
         ]
         for (status, want) in cases {
-            #expect(accountStatusText(status) == want, "\(status)")
+            #expect(accountStatusText(SyncState(accountId: "a", status: status)) == want, "\(status)")
         }
+        // A refused certificate says so instead of "Offline" or "Error"; a
+        // handshake failure stays "Offline".
+        func tls(_ status: SyncStatus, _ reason: TLSErrorReason) throws -> SyncState {
+            SyncState(accountId: "a", status: status, error: try tlsError(TLSErrorData(reason: reason)))
+        }
+        #expect(accountStatusText(try tls(.offline, .untrusted)) == "Certificate problem")
+        #expect(accountStatusText(try tls(.error, .hostnameMismatch)) == "Certificate problem")
+        #expect(accountStatusText(try tls(.offline, .pinMismatch)) == "Certificate changed")
+        #expect(accountStatusText(try tls(.offline, .expired)) == "Certificate problem")
+        #expect(accountStatusText(try tls(.offline, .handshake)) == "Offline")
+        #expect(accountStatusText(try tls(.offline, .starttlsUnavailable)) == "Offline")
+        #expect(accountStatusText(try tls(.disabled, .untrusted)) == "Paused")
+        #expect(accountStatusText(try tls(.syncing, .untrusted)) == "Syncing…")
+        #expect(accountStatusText(SyncState(accountId: "a", status: .offline, error: tlsError(nil))) == "Offline")
     }
 
     @Test func accountRowOffersSignInTest() {

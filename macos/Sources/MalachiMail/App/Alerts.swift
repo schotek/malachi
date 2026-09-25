@@ -67,7 +67,60 @@ final class AppAlerts: Alerts {
         return await run(alert, on: window) == .alertSecondButtonReturn
     }
 
+    func confirmTrustCertificate(
+        on window: NSWindow?, heading: String, body: String, details: [CertificateDetail], confirmLabel: String
+    ) async -> Bool {
+        let (alert, cancel) = destructiveAlert(heading: heading, body: body, confirmLabel: confirmLabel)
+        alert.accessoryView = certificateDetailsView(details)
+        return await run(alert, on: window, escape: cancel) == .alertSecondButtonReturn
+    }
+
     // MARK: Internals
+
+    /// The width of a value in the details under an alert's text, where
+    /// it wraps (the fingerprint takes two lines).
+    private static let detailValueWidth: CGFloat = 220
+
+    /// The certificate's details as a two-column grid (accountwizard
+    /// trust.go `certificateDetails`): dim keys, values as selectable,
+    /// wrapping plain text (the server's text is never interpreted), the
+    /// fingerprints monospaced; a line without a value ("Self-signed")
+    /// spans both columns in the normal label colour.
+    private func certificateDetailsView(_ details: [CertificateDetail]) -> NSView {
+        let grid = NSGridView()
+        grid.rowSpacing = 6
+        grid.columnSpacing = 12
+        grid.translatesAutoresizingMaskIntoConstraints = true
+        for d in details {
+            let key = NSTextField(labelWithString: d.label)
+            key.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+            key.textColor = .secondaryLabelColor
+            guard !d.value.isEmpty else {
+                key.textColor = .labelColor
+                let row = grid.addRow(with: [key, NSGridCell.emptyContentView])
+                row.cell(at: 0).xPlacement = .leading
+                row.mergeCells(in: NSRange(location: 0, length: 2))
+                continue
+            }
+            let value = NSTextField(wrappingLabelWithString: d.value)
+            value.isSelectable = true
+            value.allowsEditingTextAttributes = false
+            value.font = d.monospaced
+                ? .monospacedSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular)
+                : .systemFont(ofSize: NSFont.smallSystemFontSize)
+            value.preferredMaxLayoutWidth = Self.detailValueWidth
+            grid.addRow(with: [key, value])
+        }
+        if grid.numberOfColumns == 2 {
+            grid.column(at: 0).xPlacement = .leading
+            grid.column(at: 1).xPlacement = .leading
+            grid.column(at: 1).width = Self.detailValueWidth
+        }
+        grid.rowAlignment = .firstBaseline
+        grid.layoutSubtreeIfNeeded()
+        grid.setFrameSize(grid.fittingSize)
+        return grid
+    }
 
     /// The alert and its Cancel button (the default; Escape is added by
     /// `run(_:on:escape:)`).

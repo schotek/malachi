@@ -144,6 +144,10 @@ final class WizardStatusPageView: NSView {
             fill.isActive = true
         }
         stack.translatesAutoresizingMaskIntoConstraints = false
+        // An AdwStatusPage centres its content at its natural height; the
+        // stack hugs its views (setHuggingPriority is the stack's own
+        // hugging, setContentHuggingPriority does not reach it).
+        stack.setHuggingPriority(.defaultHigh, for: .vertical)
         addSubview(stack)
         let centre = stack.centerYAnchor.constraint(equalTo: centerYAnchor)
         centre.priority = .defaultLow

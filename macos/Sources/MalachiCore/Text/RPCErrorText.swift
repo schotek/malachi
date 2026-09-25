@@ -55,6 +55,11 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
         case .serverError:
             return L10n.T("%s failed: the server returned an error", what)
         case .tlsError:
+            // A refused certificate says why on its own (the outbox banner
+            // of a failed message shows it).
+            if let text = tlsReasonText(e) {
+                return text
+            }
             return L10n.T("%s failed: the secure connection could not be established", what)
         case .serverTimeout:
             return L10n.T("%s failed: the server did not respond in time", what)
@@ -79,6 +84,9 @@ public func endpointErrorText(_ e: RPCError?) -> String {
     case .serverError:
         return L10n.T("The server returned an error")
     case .tlsError:
+        if let text = tlsReasonText(e) {
+            return text
+        }
         return L10n.T("The secure connection could not be established")
     case .serverTimeout:
         return L10n.T("The server did not respond in time")
@@ -94,5 +102,38 @@ public func endpointErrorText(_ e: RPCError?) -> String {
     default:
         // TRANSLATORS: %s is a technical message from the mail backend.
         return L10n.T("Failed: %s", e.message)
+    }
+}
+
+/// The sentence for the reason of a `tlsError`'s details (rpc.go
+/// `tlsReasonText`, docs/api.md §2); nil when the error carries none, or
+/// for a handshake failure, which the callers' general sentence describes.
+public func tlsReasonText(_ e: RPCError) -> String? {
+    guard let p = CertTrust.details(e) else { return nil }
+    switch p.reason {
+    case .untrusted:
+        return L10n.T("The server's certificate is not from a trusted authority")
+    case .hostnameMismatch:
+        return L10n.T("The server's certificate is for another name")
+    case .expired:
+        return L10n.T("The server's certificate has expired")
+    case .notYetValid:
+        return L10n.T("The server's certificate is not valid yet")
+    case .invalid:
+        return L10n.T("The server's certificate is not valid")
+    case .pinMismatch:
+        return L10n.T("The server presented a different certificate than the one you trust")
+    case .starttlsUnavailable:
+        return L10n.T("The server does not offer STARTTLS")
+    case .tlsRequired:
+        return L10n.T("The server requires TLS before signing in")
+    case .handshake:
+        return nil
+    default:
+        // CertTrust turned every unknown reason into "other".
+        // TRANSLATORS: the system's certificate check refused the server's
+        // certificate for a reason it does not name (e.g. "not standards
+        // compliant" on macOS).
+        return L10n.T("The system does not accept the server's certificate")
     }
 }

@@ -6,7 +6,8 @@ import MalachiCore
 
 /// The wizard's Connection Test page (account_wizard.blp `testing_page`):
 /// a progress status page while a call runs, then the results with one row
-/// per endpoint and the buttons the outcome allows.
+/// per endpoint ("Trust Certificate…" at the end of an IMAP or SMTP row
+/// whose certificate may be trusted) and the buttons the outcome allows.
 @MainActor
 final class TestingPageController: NSViewController {
     private let wizard: WizardController
@@ -19,6 +20,8 @@ final class TestingPageController: NSViewController {
     private let imapRow: PreferenceRowView
     private let smtpRow: PreferenceRowView
     private let graphRow: PreferenceRowView
+    private let imapTrust = NSButton(title: "", target: nil, action: nil)
+    private let smtpTrust = NSButton(title: "", target: nil, action: nil)
     private let editButton = NSButton(title: "", target: nil, action: nil)
     private let retryButton = NSButton(title: "", target: nil, action: nil)
     private let addAnywayButton = NSButton(title: "", target: nil, action: nil)
@@ -33,8 +36,16 @@ final class TestingPageController: NSViewController {
             icon.contentTintColor = .secondaryLabelColor
             icon.widthAnchor.constraint(equalToConstant: 20).isActive = true
         }
-        imapRow = PreferenceRowView(title: L10n.T("Incoming (IMAP)"), subtitle: " ", prefix: imapIcon)
-        smtpRow = PreferenceRowView(title: L10n.T("Outgoing (SMTP)"), subtitle: " ", prefix: smtpIcon)
+        for button in [imapTrust, smtpTrust] {
+            // TRANSLATORS: button in a test result row
+            button.title = wizardLabel("_Trust Certificate…")
+            button.bezelStyle = .rounded
+            button.isHidden = true
+        }
+        // The buttons sit in stacks, so a hidden one takes no width from
+        // the row's text.
+        imapRow = PreferenceRowView(title: L10n.T("Incoming (IMAP)"), subtitle: " ", prefix: imapIcon, trailing: NSStackView(views: [imapTrust]))
+        smtpRow = PreferenceRowView(title: L10n.T("Outgoing (SMTP)"), subtitle: " ", prefix: smtpIcon, trailing: NSStackView(views: [smtpTrust]))
         graphRow = PreferenceRowView(title: L10n.T("Microsoft 365"), subtitle: " ", prefix: graphIcon)
         resultsGroup.setRows([imapRow, smtpRow, graphRow])
         let clamp = PrefsClampView(maximum: 480, child: resultsGroup)
@@ -62,6 +73,10 @@ final class TestingPageController: NSViewController {
         }
         results.isHidden = true
 
+        imapTrust.target = self
+        imapTrust.action = #selector(trustClicked(_:))
+        smtpTrust.target = self
+        smtpTrust.action = #selector(trustClicked(_:))
         editButton.title = wizard.editLabel
         retryButton.title = wizardLabel("_Retry")
         addAnywayButton.title = wizard.addAnywayLabel
@@ -112,6 +127,8 @@ final class TestingPageController: NSViewController {
             results.descriptionText = v.description ?? ""
             apply(v.imap, to: imapRow, icon: imapIcon)
             apply(v.smtp, to: smtpRow, icon: smtpIcon)
+            imapTrust.isHidden = !(v.imap?.trust ?? false)
+            smtpTrust.isHidden = !(v.smtp?.trust ?? false)
             apply(v.graph, to: graphRow, icon: graphIcon)
             // Edit Servers, or Sign In Again for a browser sign-in.
             editButton.title = wizard.editLabel
@@ -140,6 +157,10 @@ final class TestingPageController: NSViewController {
     }
 
     // MARK: Outputs to the controller
+
+    @objc private func trustClicked(_ sender: NSButton) {
+        wizard.trustCertificate(sender === imapTrust ? .imap : .smtp)
+    }
 
     @objc private func editClicked(_ sender: Any?) { wizard.edit() }
     @objc private func retryClicked(_ sender: Any?) { wizard.retry() }

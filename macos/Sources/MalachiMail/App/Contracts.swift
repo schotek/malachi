@@ -48,6 +48,15 @@ protocol Alerts: AnyObject {
     /// target is another (`text` is the visible text, `href` the target).
     /// True when the user wants it opened.
     func openLinkQuestion(on window: NSWindow?, text: String, href: String) async -> Bool
+
+    /// "Trust This Certificate?" (accountwizard trust.go,
+    /// `ConfirmDestructiveExtra` with the certificate's details): Cancel /
+    /// `confirmLabel` (destructive), the details between the body and the
+    /// buttons as selectable plain text, the fingerprint monospaced. True
+    /// when confirmed.
+    func confirmTrustCertificate(
+        on window: NSWindow?, heading: String, body: String, details: [CertificateDetail], confirmLabel: String
+    ) async -> Bool
 }
 
 /// The per-message actions of the main window, acting on the current

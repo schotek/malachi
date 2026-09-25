@@ -26,18 +26,22 @@ public struct Identity: Sendable, Equatable {
     }
 }
 
-/// accountwizard.ServerFields: the rows of one endpoint on the Servers page.
+/// accountwizard.ServerFields: the rows of one endpoint on the Servers page,
+/// and the certificate pinned to it (not a row: the wizard sets it from the
+/// pin trusted for this host and port, `CertTrust.keepPin`). "" is no pin.
 public struct ServerFields: Sendable, Equatable {
     public var host: String
     public var port: Int
     public var security: Security
     public var username: String
+    public var certificateSha256: String
 
-    public init(host: String = "", port: Int = 0, security: Security = .tls, username: String = "") {
+    public init(host: String = "", port: Int = 0, security: Security = .tls, username: String = "", certificateSha256: String = "") {
         self.host = host
         self.port = port
         self.security = security
         self.username = username
+        self.certificateSha256 = certificateSha256
     }
 }
 
@@ -206,7 +210,8 @@ public func validateServers(imap: ServerFields, smtp: ServerFields) -> ServerPro
 }
 
 /// accountwizard.BuildConfig: assembles the wire configuration from the
-/// rows. It is the one place that sets the authentication method.
+/// rows and their pins. It is the one place that sets the authentication
+/// method.
 public func buildConfig(identity id: Identity, name: String, imap: ServerFields, smtp: ServerFields) -> AccountConfig {
     let email = id.email.trimmingCharacters(in: .whitespacesAndNewlines)
     var accountName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -229,7 +234,8 @@ private func serverConfig(_ f: ServerFields) -> ServerConfig {
         port: f.port,
         security: f.security,
         username: f.username.trimmingCharacters(in: .whitespacesAndNewlines),
-        authMethod: .password
+        authMethod: .password,
+        certificateSha256: nonEmpty(f.certificateSha256)
     )
 }
 

@@ -5,8 +5,9 @@ import AppKit
 import MalachiCore
 
 /// The wizard's Servers page (account_wizard.blp `servers_page`): the
-/// account name, the IMAP and SMTP endpoints and the Test Connection
-/// button. The port follows the security choice through
+/// account name, the IMAP and SMTP endpoints, each with a "Pinned
+/// Certificate" row and Forget while a certificate is pinned to it, and the
+/// Test Connection button. The port follows the security choice through
 /// `portForSecurityChange` unless the rows are being filled by the
 /// controller.
 @MainActor
@@ -19,6 +20,10 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
         let port: PrefsSpinControl
         let security = NSPopUpButton(frame: .zero, pullsDown: false)
         let user = WizardEntryField()
+        /// The pinned certificate's fingerprint with Forget; hidden
+        /// without a pin.
+        let pinRow: PreferenceRowView
+        let forget = NSButton(title: "", target: nil, action: nil)
         var lastSecurity: Security
 
         init(kind: Endpoint, port defaultPort: Int, security: Security) {
@@ -27,6 +32,12 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
             lastSecurity = security
             self.security.addItems(withTitles: [L10n.T("TLS"), L10n.T("STARTTLS"), L10n.T("None")])
             self.security.selectItem(at: indexOfSecurity(security))
+            // TRANSLATORS: button: stop trusting the pinned certificate
+            forget.title = wizardLabel("_Forget")
+            forget.bezelStyle = .rounded
+            // TRANSLATORS: row title on the Servers page
+            pinRow = PreferenceRowView(title: L10n.T("Pinned Certificate"), subtitle: " ", trailing: forget)
+            pinRow.setSubtitleSelectable()
         }
 
         func read() -> ServerFields {
@@ -49,6 +60,7 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
                 port.isEnabled = newValue
                 security.isEnabled = newValue
                 user.isEnabled = newValue
+                forget.isEnabled = newValue
             }
         }
     }
@@ -57,6 +69,10 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
     private let nameEntry = WizardEntryField()
     private let imap = EndpointRows(kind: .imap, port: 993, security: .tls)
     private let smtp = EndpointRows(kind: .smtp, port: 587, security: .starttls)
+    private let imapGroup = PreferencesGroupView(title: L10n.T("Incoming Mail (IMAP)"))
+    private let smtpGroup = PreferencesGroupView(title: L10n.T("Outgoing Mail (SMTP)"))
+    /// The fingerprints pinned now ("" for none), shown once the view loads.
+    private var pins: (imap: String, smtp: String) = ("", "")
     private let testButton = NSButton(title: "", target: nil, action: nil)
     let cancelButton = WizardCancelButton()
     private let pageView = WizardPageView()
@@ -76,10 +92,13 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
     override func loadView() {
         let accountGroup = PreferencesGroupView(title: L10n.T("Account"))
         accountGroup.setRows([PreferenceRowView(title: L10n.T("Account Name"), trailing: nameEntry, trailingFills: true)])
-        let imapGroup = PreferencesGroupView(title: L10n.T("Incoming Mail (IMAP)"))
         imapGroup.setRows(rows(for: imap))
-        let smtpGroup = PreferencesGroupView(title: L10n.T("Outgoing Mail (SMTP)"))
         smtpGroup.setRows(rows(for: smtp))
+        imap.forget.target = self
+        imap.forget.action = #selector(forgetClicked(_:))
+        smtp.forget.target = self
+        smtp.forget.action = #selector(forgetClicked(_:))
+        showPins(imap: pins.imap, smtp: pins.smtp)
 
         nameEntry.field.delegate = self
         for rows in [imap, smtp] {
@@ -129,6 +148,7 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
             PreferenceRowView(title: L10n.T("Port"), trailing: rows.port),
             PreferenceRowView(title: L10n.T("Security"), trailing: rows.security),
             PreferenceRowView(title: L10n.T("User Name"), trailing: rows.user, trailingFills: true),
+            rows.pinRow,
         ]
     }
 
@@ -141,6 +161,18 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
         imap.apply(cfg.imap)
         smtp.apply(cfg.smtp)
         applying = false
+    }
+
+    /// The certificates pinned to the endpoints (`WizardController.onPins`):
+    /// a "Pinned Certificate" row with the fingerprint per pin.
+    func showPins(imap imapPin: String, smtp smtpPin: String) {
+        pins = (imapPin, smtpPin)
+        // Before loadView the groups have no rows yet and this is a no-op;
+        // loadView shows the pins again.
+        for (rows, group, pin) in [(imap, imapGroup, imapPin), (smtp, smtpGroup, smtpPin)] {
+            rows.pinRow.subtitle = pin.isEmpty ? " " : pin
+            group.setRow(rows.pinRow, hidden: pin.isEmpty)
+        }
     }
 
     func showProblems(_ p: ServerProblems) {
@@ -166,6 +198,10 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
     @objc private func testClicked(_ sender: Any?) {
         sync()
         wizard.testServers()
+    }
+
+    @objc private func forgetClicked(_ sender: NSButton) {
+        wizard.forgetPin(sender === imap.forget ? .imap : .smtp)
     }
 
     @objc private func securityChanged(_ sender: NSPopUpButton) {

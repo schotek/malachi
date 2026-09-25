@@ -62,14 +62,17 @@ public final class WizardController {
     }
 
     /// One endpoint row of the results: a GTK icon name (mapped to a
-    /// symbol by the UI) and the subtitle.
+    /// symbol by the UI), the subtitle and whether the row offers "Trust
+    /// Certificate…" (`trustCertificate`).
     public struct EndpointRow: Sendable, Equatable {
         public var icon: String
         public var text: String
+        public var trust: Bool
 
-        public init(icon: String, text: String) {
+        public init(icon: String, text: String, trust: Bool = false) {
             self.icon = icon
             self.text = text
+            self.trust = trust
         }
     }
 
@@ -188,6 +191,13 @@ public final class WizardController {
     public var onToast: (@MainActor (String) -> Void)?
     /// The account was stored; the UI closes the wizard.
     public var onDone: (@MainActor (AccountID, AccountConfig) -> Void)?
+    /// The certificates pinned to the endpoints changed: their fingerprints
+    /// as shown (`CertTrust.formatFingerprint`), "" for none. The Servers
+    /// page shows a "Pinned Certificate" row per pin.
+    public var onPins: (@MainActor (_ imap: String, _ smtp: String) -> Void)?
+    /// Asks "Trust This Certificate?"; true when the user confirmed. Without
+    /// it nothing is ever pinned.
+    public var onConfirmTrust: (@MainActor (TrustPrompt) async -> Bool)?
 
     // MARK: State
 
@@ -222,6 +232,15 @@ public final class WizardController {
     public private(set) var oauthStarting = false
 
     private var lastResults: ResultsView?
+    /// The endpoint configuration each pin was set for (certtrust
+    /// `pinned`): the fields carry its pin while their host and port match
+    /// (`CertTrust.keepPin`); Forget drops it.
+    private var pinned: [Endpoint: ServerConfig] = [:]
+    /// The pins last reported through `onPins`.
+    private var shownPins: (imap: String, smtp: String) = ("", "")
+    /// What the last results offer to trust, per endpoint: the tested
+    /// configuration and the problem with its certificate.
+    private var trustOffers: [Endpoint: (server: ServerConfig, problem: CertTrust.Problem)] = [:]
     /// The last test of a browser sign-in account found a sign-in problem
     /// (results offer "Sign In Again").
     private var lastSignInProblem = false
@@ -334,6 +353,7 @@ public final class WizardController {
         if let a = editing, linkedCfg == nil {
             onApplyConfig?(a.config)
         }
+        onPins?(shownPins.imap, shownPins.smtp)
         if let oauthView {
             onOAuth?(oauthView)
         }
@@ -361,11 +381,13 @@ public final class WizardController {
         }
     }
 
-    /// The Servers page rows as typed.
+    /// The Servers page rows as typed. The rows know nothing of pins: each
+    /// endpoint gets the pin trusted for its host and port, if any.
     public func setServers(name: String, imap: ServerFields, smtp: ServerFields) {
         accountName = name
         self.imap = imap
         self.smtp = smtp
+        applyPins()
     }
 
     /// The identity page's Next button (wizard.go `onNext`): validate, then
@@ -596,14 +618,88 @@ public final class WizardController {
         onIdentityProblems?(p, banner)
     }
 
-    /// Stores the endpoint rows of a configuration (wizard.go `serverRows.apply`).
+    /// Stores the endpoint rows of a configuration (wizard.go
+    /// `serverRows.apply`): its pin, if any, becomes the endpoint's pinned
+    /// certificate and any earlier one is dropped.
     private func setFields(from cfg: AccountConfig) {
         accountName = cfg.name
         if let s = cfg.imap {
             imap = ServerFields(host: s.host, port: s.port, security: s.security, username: s.username)
+            pinned[.imap] = (s.certificateSha256 ?? "").isEmpty ? nil : s
         }
         if let s = cfg.smtp {
             smtp = ServerFields(host: s.host, port: s.port, security: s.security, username: s.username)
+            pinned[.smtp] = (s.certificateSha256 ?? "").isEmpty ? nil : s
+        }
+        applyPins()
+    }
+
+    // MARK: Pinned certificates (certtrust)
+
+    /// Gives each endpoint the pin trusted for its host and port
+    /// (`CertTrust.keepPin`) and reports a change.
+    private func applyPins() {
+        imap.certificateSha256 = pinned[.imap].map { CertTrust.keepPin($0, fieldsConfig(imap)) } ?? ""
+        smtp.certificateSha256 = pinned[.smtp].map { CertTrust.keepPin($0, fieldsConfig(smtp)) } ?? ""
+        let now = (CertTrust.formatFingerprint(imap.certificateSha256), CertTrust.formatFingerprint(smtp.certificateSha256))
+        guard now != shownPins else { return }
+        shownPins = now
+        onPins?(now.0, now.1)
+    }
+
+    /// The configuration the rows of one endpoint stand for (without a
+    /// pin: `keepPin` decides it).
+    private func fieldsConfig(_ f: ServerFields) -> ServerConfig {
+        ServerConfig(host: f.host, port: f.port, security: f.security, username: f.username, authMethod: .password)
+    }
+
+    /// The fingerprints pinned now, as shown ("" for none).
+    public var pinnedFingerprints: (imap: String, smtp: String) { shownPins }
+
+    /// The Servers page's Forget (certtrust: Forget clears `pinned`): the
+    /// endpoint verifies the server's certificate again; the next test
+    /// shows whether it passes.
+    public func forgetPin(_ endpoint: Endpoint) {
+        pinned[endpoint] = nil
+        applyPins()
+    }
+
+    /// A results row's "Trust Certificate…" (trust.go `onTrust`): asks for
+    /// the confirmation with the certificate's details and, once
+    /// confirmed, pins it to the endpoint it was tested with and tests
+    /// again. When the other endpoint presented the same certificate (a
+    /// mail bridge serving IMAP and SMTP), one confirmation names and pins
+    /// both. Nothing is pinned without `onConfirmTrust` answering true, and
+    /// a confirmation that arrives after anything else started is dropped.
+    public func trustCertificate(_ endpoint: Endpoint) {
+        guard !closed, let offer = trustOffers[endpoint], let cert = offer.problem.cert, let confirm = onConfirmTrust else {
+            return
+        }
+        var targets: [Endpoint] = [endpoint]
+        let other: Endpoint = endpoint == .imap ? .smtp : .imap
+        if let o = trustOffers[other], CertTrust.sameCertificate(cert, o.problem.cert) {
+            targets = [.imap, .smtp]
+        }
+        let servers = targets.compactMap { trustOffers[$0].map { CertTrust.serverName($0.server) } }
+        // A pinned certificate that changed gets its own warning, with the
+        // fingerprint trusted before.
+        let problems = targets.compactMap { trustOffers[$0]?.problem }
+        let changed = problems.contains { $0.category == .changed }
+        let previous = changed ? (problems.first { !$0.expected.isEmpty }?.expected ?? "") : ""
+        let prompt = trustPrompt(cert, servers: servers, changed: changed, previous: previous)
+        let op = self.op
+        Task { [weak self] in
+            let confirmed = await confirm(prompt)
+            guard confirmed, let self, !self.closed, op == self.op else { return }
+            for t in targets {
+                guard let o = self.trustOffers[t], let c = o.problem.cert else { continue }
+                var sc = o.server
+                sc.certificateSha256 = c.sha256
+                self.pinned[t] = sc
+            }
+            self.log.info("certificate trusted, endpoints \(targets.count, privacy: .public)")
+            self.applyPins()
+            self.runTest()
         }
     }
 
@@ -954,6 +1050,7 @@ public final class WizardController {
     /// Calls account.test with the current settings (wizard.go `runTest`).
     private func runTest() {
         onTesting?(.progress(title: L10n.T("Testing Connection…")))
+        trustOffers = [:]
         var params = AccountTestParams(config: assembleConfig(), credentials: credentials())
         if let editing {
             params.accountId = editing.id // an empty password means "use the stored one"
@@ -969,11 +1066,11 @@ public final class WizardController {
                 outcome = .failure(error)
             }
             guard let self, !self.closed, op == self.op else { return }
-            self.showResults(outcome)
+            self.showResults(outcome, tested: params.config)
         }
     }
 
-    private func showResults(_ outcome: Result<AccountTestResult, any Error>) {
+    private func showResults(_ outcome: Result<AccountTestResult, any Error>, tested: AccountConfig) {
         // A Graph account has one endpoint, the mailbox; a Google account is
         // tested like any IMAP one, only without a password to correct.
         let linked = linkedCfg != nil
@@ -996,10 +1093,22 @@ public final class WizardController {
             view.graph = EndpointRow(icon: icon, text: text)
             result = classify(res)
         case .success(let res):
+            // A certificate the user may trust (trust.go `offerFor`) puts
+            // "Trust Certificate…" into its row; never for an account the
+            // daemon built.
+            trustOffers = [:]
+            if !linked {
+                if let sc = tested.imap, let p = CertTrust.trustable(res.imap, sc) {
+                    trustOffers[.imap] = (sc, p)
+                }
+                if let sc = tested.smtp, let p = CertTrust.trustable(res.smtp, sc) {
+                    trustOffers[.smtp] = (sc, p)
+                }
+            }
             let (imapIcon, imapText) = endpointSummary(res.imap)
-            view.imap = EndpointRow(icon: imapIcon, text: imapText)
+            view.imap = EndpointRow(icon: imapIcon, text: imapText, trust: trustOffers[.imap] != nil)
             let (smtpIcon, smtpText) = endpointSummary(res.smtp)
-            view.smtp = EndpointRow(icon: smtpIcon, text: smtpText)
+            view.smtp = EndpointRow(icon: smtpIcon, text: smtpText, trust: trustOffers[.smtp] != nil)
             result = classify(res)
         }
         lastSignInProblem = false
@@ -1106,7 +1215,7 @@ public func saveErrorText(_ error: any Error, editing: Bool) -> String {
 }
 
 /// A GTK label with its mnemonic marker removed: `_Next` → `Next`, `__` → `_`.
-private func withoutMnemonic(_ s: String) -> String {
+func withoutMnemonic(_ s: String) -> String {
     var out = ""
     var iterator = s.makeIterator()
     while let c = iterator.next() {

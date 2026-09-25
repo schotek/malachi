@@ -25,10 +25,12 @@ private func waitUntil(_ timeout: Duration = .seconds(5), _ cond: () -> Bool) as
 private final class Log {
     var footers: [SyncController.FooterState] = []
     var banners: [(account: AccountID?, title: String?, button: String?)] = []
+    var certBanners: [(account: AccountID?, title: String?, button: String?)] = []
 
     func attach(_ sc: SyncController) {
         sc.onFooter = { [weak self] f in self?.footers.append(f) }
         sc.onAuthBanner = { [weak self] acc, title, button in self?.banners.append((acc, title, button)) }
+        sc.onCertBanner = { [weak self] acc, title, button in self?.certBanners.append((acc, title, button)) }
     }
 }
 
@@ -133,6 +135,50 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         #expect(log.banners.last?.title == nil)
         sc.hideAuthBanner()
         #expect(log.banners.count == 2, "hiding a hidden banner emits nothing")
+    }
+
+    /// sync.go `refreshCertBanner`: the first enabled account, in account
+    /// order, whose server's certificate was refused; hidden when none.
+    @Test func certificateBanner() throws {
+        let accounts = twoAccounts + [testAccount("a3", enabled: false, name: "Paused")]
+        let (sc, log) = makeController(accounts: accounts)
+        func tls(_ acc: AccountID, _ reason: TLSErrorReason, status: SyncStatus = .offline) throws -> SyncState {
+            SyncState(accountId: acc, status: status, error: try tlsError(TLSErrorData(reason: reason)))
+        }
+        // A paused account and a handshake failure raise nothing.
+        sc.apply(try tls("a3", .untrusted, status: .disabled))
+        sc.apply(try tls("a1", .handshake))
+        #expect(sc.certBannerAccount == nil && log.certBanners.isEmpty)
+        #expect(sc.footer.text == "Offline, retrying")
+
+        sc.apply(try tls("a2", .untrusted))
+        #expect(sc.certBannerAccount == "a2")
+        #expect(sc.footer.text == "Certificate problem")
+        #expect(log.certBanners.count == 1)
+        #expect(log.certBanners.last?.title == "The certificate of home@example.invalid is not trusted")
+        #expect(log.certBanners.last?.button == "Edit Account…")
+        // The first account in account order wins.
+        sc.apply(try tls("a1", .pinMismatch))
+        #expect(sc.certBannerAccount == "a1")
+        #expect(log.certBanners.last?.title == "The certificate of Work has changed")
+        #expect(sc.footer.text == "Certificate changed")
+        // Unchanged: nothing emitted.
+        let emitted = log.certBanners.count
+        sc.apply(try tls("a1", .pinMismatch))
+        sc.refreshFooter()
+        #expect(log.certBanners.count == emitted)
+        // Fixed: the next account with a problem.
+        sc.apply(state("a1", .syncing))
+        #expect(sc.certBannerAccount == "a2")
+        #expect(log.certBanners.last?.title == "The certificate of home@example.invalid is not trusted")
+        // A pass that runs while the error still holds the last failure no
+        // longer counts; neither does idle.
+        sc.apply(SyncState(accountId: "a2", status: .syncing, error: try tlsError(TLSErrorData(reason: .untrusted))))
+        #expect(sc.certBannerAccount == nil)
+        #expect(log.certBanners.last?.account == nil && log.certBanners.last?.title == nil)
+        let hidden = log.certBanners.count
+        sc.apply(state("a2", .idle))
+        #expect(log.certBanners.count == hidden, "hiding a hidden banner emits nothing")
     }
 
     @Test func authBannerTexts() {

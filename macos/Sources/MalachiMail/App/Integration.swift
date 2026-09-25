@@ -140,6 +140,9 @@ final class Integration {
         listView.onAuthBannerButton = { [weak self] in
             self?.authBannerButton()
         }
+        listView.onCertBannerButton = { [weak self] in
+            self?.certBannerButton()
+        }
         list.onOutboxRefreshed = { [weak self] account in
             guard let self else { return }
             for view in self.windows.views {
@@ -168,6 +171,29 @@ final class Integration {
             case .failed(let text):
                 self.mainToast(text)
             }
+        }
+    }
+
+    /// The certificate banner's "Edit Account…" (sync.go
+    /// `onCertBannerButton`): the wizard in edit mode for the banner's
+    /// account, as a sheet on the main window, where the connection test
+    /// shows the certificate and offers to trust it. The sidebar and the
+    /// banner follow notify.accountsChanged and notify.syncState after the
+    /// save.
+    private func certBannerButton() {
+        guard let id = sync.certBannerAccount, let account = mailbox.model.account(id),
+              let parent = mainWindow?.window else { return }
+        AccountWizardController.present(
+            from: parent, client: state.client, editing: account, confirmTrust: Self.confirmTrust(state.alerts)
+        ) { _, _ in }
+    }
+
+    /// The account wizard's "Trust This Certificate?" through the shell's
+    /// alerts.
+    static func confirmTrust(_ alerts: any Alerts) -> WizardConfirmTrust {
+        { window, p in
+            await alerts.confirmTrustCertificate(
+                on: window, heading: p.heading, body: p.body, details: p.details, confirmLabel: p.confirmLabel)
         }
     }
 
@@ -210,18 +236,22 @@ final class Integration {
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
             PreferencesWindowController.show(
-                client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path
-            ) { window, c in
-                let answer = await state.alerts.confirmDestructiveExtra(
-                    on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
-                    extraLabel: c.extraLabel, extraDefault: c.extraDefault)
-                return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
-            }
+                client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
+                confirmRemoval: { window, c in
+                    let answer = await state.alerts.confirmDestructiveExtra(
+                        on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
+                        extraLabel: c.extraLabel, extraDefault: c.extraDefault)
+                    return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
+                },
+                confirmTrust: Integration.confirmTrust(state.alerts)
+            )
         }
         state.hooks.addAccount = { [weak self] window in
             guard let self, let parent = window ?? self.mainWindow?.window else { return }
             // The sidebar reloads on notify.accountsChanged; nothing to do here.
-            AccountWizardController.present(from: parent, client: self.state.client) { _, _ in }
+            AccountWizardController.present(
+                from: parent, client: self.state.client, confirmTrust: Self.confirmTrust(self.state.alerts)
+            ) { _, _ in }
         }
     }
 
