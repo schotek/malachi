@@ -129,7 +129,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.editor.OnChanged = w.editorChanged
 	w.editor.OnDropFiles = w.attachGioFiles
 	w.editor.OnReady = func() {
-		if p.Kind != KindNew {
+		if p.Kind != KindNew && p.Kind != KindEdit {
 			w.editor.FocusStart()
 		}
 	}
@@ -150,6 +150,10 @@ func newWindow(m *Manager, p Params) *Window {
 	w.setCcBccVisible(len(p.CC) > 0, len(p.BCC) > 0)
 	w.updateTitle()
 	w.draft.inReplyTo, w.draft.forwarding = p.InReplyTo, p.Forwarding
+	// A draft opened from the Drafts folder is the user's already: its
+	// id and version make the saves updates, and closing never deletes it.
+	w.draft.draftID, w.draft.version, w.draft.replaces = p.DraftID, p.Version, p.Replaces
+	w.draft.explicitSave = p.Kind == KindEdit
 	w.editor.Load(p.BodyHTML)
 	w.setAccounts(m.Accounts(), m.Placeholder())
 	// What the backend imported for the template (a quoted original's

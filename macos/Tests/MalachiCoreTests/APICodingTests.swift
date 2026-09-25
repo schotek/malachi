@@ -270,6 +270,27 @@ import Testing
         #expect(draft["updatedAt"] as? String == "0001-01-01T00:00:00Z")
     }
 
+    @Test func draftOpenExample() throws {
+        let r = try decode(DraftOpenResult.self, #"""
+        {"draft":{"accountId":"acc_1","version":0,"to":[{"address":"alice@example.org"}],
+                  "bcc":[{"name":"Hidden","address":"hidden@example.org"}],"subject":"Re: Plans",
+                  "textBody":"x","htmlBody":"<p>x</p>","replaces":"m_9","updatedAt":"0001-01-01T00:00:00Z"},
+         "blocked":{"remoteImages":0,"remoteStyles":0,"remoteFonts":0,"scripts":0,"forms":0,"eventHandlers":0,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":0}}
+        """#)
+        #expect(r.draft.id == nil && r.draft.replaces == "m_9" && r.draft.bcc?.first?.address == "hidden@example.org")
+        #expect(r.skipped == nil)
+
+        // replaces goes back to draft.save as it came, and is omitted when nil.
+        let obj = try encodeObject(DraftSaveParams(draft: r.draft))
+        let draft = try #require(obj["draft"] as? [String: Any])
+        #expect(draft["replaces"] as? String == "m_9")
+        let plain = try encodeObject(DraftSaveParams(draft: Draft(accountId: "a")))
+        #expect((plain["draft"] as? [String: Any])?["replaces"] == nil)
+
+        let params = try encodeObject(DraftOpenParams(accountId: "a", messageId: "m_1"))
+        #expect(params["accountId"] as? String == "a" && params["messageId"] as? String == "m_1")
+    }
+
     @Test func attachmentImportExample() throws {
         let r = try decode(AttachmentImportResult.self, #"{"attachment":{"id":"att_1","filename":"safe-name.pdf","contentType":"application/pdf","size":12345,"inline":false,"contentId":"x@malachi.local"}}"#)
         #expect(r.attachment.id == "att_1" && r.attachment.size == 12345 && r.attachment.contentId == "x@malachi.local")
@@ -597,7 +618,7 @@ import Testing
         "message.send",
         "outbox.retry",
         "thread.list", "thread.get",
-        "draft.save", "draft.list", "draft.delete", "draft.create",
+        "draft.save", "draft.list", "draft.delete", "draft.create", "draft.open",
         "attachment.import", "attachment.remove", "attachment.get",
         "search.query",
         "sync.status", "sync.trigger",
@@ -607,8 +628,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 43)
-        #expect(Set(API.allMethods).count == 43, "no duplicates")
+        #expect(API.allMethods.count == 44)
+        #expect(Set(API.allMethods).count == 44, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -619,6 +640,7 @@ import Testing
         #expect(API.SystemInfo.timeout == .seconds(3))
         #expect(API.MessagePart.timeout == .seconds(60) && API.AttachmentGet.timeout == .seconds(60))
         #expect(API.MessageEmbedded.timeout == .seconds(30) && API.DraftCreate.timeout == .seconds(30))
+        #expect(API.DraftOpen.timeout == .seconds(30))
         #expect(API.AccountAdd.timeout == .seconds(30) && API.AccountUpdate.timeout == .seconds(30))
         #expect(API.AccountDiscover.timeout == .seconds(15) && API.AccountTest.timeout == .seconds(45))
         #expect(API.MessageBody.timeout == .seconds(5) && API.MessageList.timeout == .seconds(5) && API.SenderAdd.timeout == .seconds(5))
@@ -626,7 +648,7 @@ import Testing
         #expect(RPCTimeouts.oauthStart == .seconds(10) && RPCTimeouts.oauthWaitCall == .seconds(75))
         #expect(API.AccountOAuthCancel.timeout == .seconds(5))
         #expect(RPCTimeouts.default == .seconds(5) && RPCTimeouts.remote == .seconds(30))
-        let special: Set<String> = ["system.info", "message.part", "attachment.get", "message.embedded", "draft.create",
+        let special: Set<String> = ["system.info", "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait"]
         for m in API.methods where !special.contains(m.name) {

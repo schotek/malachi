@@ -196,6 +196,10 @@ type harnessOptions struct {
 	token string
 	// rawLimit caps the bodies the syncer downloads (Deps.MaxRawMessageBytes).
 	rawLimit int64
+	// buildDraft is Deps.BuildDraft (DraftQuiet stays 0); nil = none.
+	buildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
+	// gmail makes the syncer see Gmail's X-GM-EXT-1 capability.
+	gmail bool
 }
 
 // harness is a memserver behind a proxy, a temporary store with one
@@ -297,11 +301,17 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 		Now:                o.now,
 		Backoff:            func(int) time.Duration { return backoff },
 		MaxRawMessageBytes: o.rawLimit,
+		BuildDraft:         o.buildDraft,
 	}
-	if o.noIdle {
+	if o.noIdle || o.gmail {
 		deps.CapFilter = func(c imap.CapSet) imap.CapSet {
 			out := c.Copy()
-			delete(out, imap.CapIdle)
+			if o.noIdle {
+				delete(out, imap.CapIdle)
+			}
+			if o.gmail {
+				out[capGmail] = struct{}{}
+			}
 			return out
 		}
 	}

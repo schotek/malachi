@@ -151,7 +151,15 @@ adresáti, `Re:`/`Fwd:`, originál citovaný jako sanitizované HTML v compose
 režimu (první `draft.save` je identita), jeho `cid:` obrázky zkopírované do
 úložiště příloh pod novými id (`attachment.get` je vrací editoru); UI dodá
 jen lokalizovanou hlavičku citace (`attribution`), `compose.Prefill` je
-fallback bez démona. Doplňování příjemců: `contact.search` slévá
+fallback bez démona. Koncepty na serveru: uložený koncept po 30 s klidu
+nahraje syncer do složky Koncepty (IMAP `APPEND` s `\Draft`, Graph
+`POST me/messages`), každá verze s novým Message-ID, předchozí kopie jde
+přes `OpDelete` (`store/draft_sync.go`, `core/draft_sync.go`, migrace 0012);
+odeslání, `draft.delete` a koš/přesun kopie mažou druhou stranu;
+`draft.open` otevře zprávu ze složky Koncepty jako koncept (vlastní, nebo
+převzatý od jiného klienta přes `replaces` jen bez ztráty); obě UI ji
+otevírají dvojklikem a pruhem „Upravit“. Trvalé smazání na Gmailu jde přes
+Koš. Doplňování příjemců: `contact.search` slévá
 sebrané adresy (`collected_addresses`, plní outbox worker po doručení a
 jednorázový backfill ze složek Odeslané, nikdy z příchozího `From`)
 s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`

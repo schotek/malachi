@@ -51,6 +51,13 @@ type Deps struct {
 	// Backoff overrides the reconnect delay for the given attempt (0-based);
 	// nil = 5 s doubling to 5 min with ±20 % jitter.
 	Backoff func(attempt int) time.Duration
+	// BuildDraft writes the server copy of a draft (pushDrafts): an error
+	// matching store.ErrNotFound means the draft is gone, an *api.Error
+	// with CodeStorageError ends the pass, anything else is that draft's
+	// failure. nil = drafts stay local.
+	BuildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
+	// DraftQuiet is how long a draft rests after a save before its upload.
+	DraftQuiet time.Duration
 }
 
 // request is one queued pass.
@@ -330,6 +337,18 @@ func (s *Syncer) cycle(ctx context.Context, sess *session, req request) error {
 	appended, err := s.appendSent(ctx, sess)
 	if err != nil {
 		return err
+	}
+	// Drafts likewise: the Drafts folder's pass stores the new copy's UID
+	// in this cycle, so the next version finds the copy it replaces.
+	drafted, err := s.pushDrafts(ctx, sess)
+	if err != nil {
+		return err
+	}
+	if len(drafted) > 0 && appended == nil {
+		appended = map[string]bool{}
+	}
+	for mailbox := range drafted {
+		appended[mailbox] = true
 	}
 	for mailbox := range appended {
 		delete(disc.status, mailbox)

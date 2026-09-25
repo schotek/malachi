@@ -886,7 +886,8 @@ moved message keeps its `id` (it is a local id, not the IMAP UID) — except
 into a folder with `synced: false`: the server gets the move as usual,
 but locally the message is gone at once, the way an archived message
 leaves a Gmail inbox; it is not listed again until the server returns it
-to a synchronised folder.
+to a synchronised folder. Moving a message out of the Drafts folder
+deletes the draft it is the copy of (§4.5).
 
 #### `message.delete`
 - params: `{ "accountId", "messageIds": [..], "permanent": bool (opt) }`
@@ -898,6 +899,10 @@ With `permanent: false` (default) messages not already in the Trash role
 folder are moved there (same rules as `message.move`); messages already in
 Trash, or any message with `permanent: true`, are removed from the store at
 once and expunged on the server by the syncer. All-or-nothing per call.
+On Gmail, where an expunge only removes a label and the message stays in
+All Mail, a message outside the Trash and Spam is moved to the Trash and
+expunged there. Deleting (or moving) a message of the Drafts folder
+deletes the draft it is the copy of (§4.5).
 
 #### `message.send`
 Builds the message from a saved draft and queues it into the outbox.
@@ -934,8 +939,10 @@ always the account's `displayName <email>`, `To` and `Cc` from the draft,
 never `Bcc` (Bcc recipients exist only in the SMTP envelope), `Subject`,
 `Date`, a generated `Message-ID` under the account's domain, `MIME-Version`,
 `User-Agent`, and `In-Reply-To`/`References` when the draft's `inReplyTo`
-names a stored message. Every header value is stripped of control
-characters before it is written.
+names a stored message (or, when that message has left the store, from the
+headers the draft kept when it was saved or taken over with `replaces`).
+Every header value is stripped of control characters before it is
+written. The draft's copy in the Drafts folder (§4.5) is deleted with it.
 
 Delivery: one SMTP session per attempt through the account's `smtp`
 endpoint with the stored password. Transient failures (network, TLS,
@@ -1057,10 +1064,10 @@ showing conversations merges the arrival into the thread row it shows.
 
 ### 4.5 draft
 
-Drafts are local until sent; they are not synchronised to the IMAP Drafts
-folder in this phase. The backend owns every derived field: it sanitises
-`htmlBody` on the way **in**, derives `textBody` from it, assigns attachment
-metadata and sets `updatedAt`.
+Drafts live in the store and, once saved, get a copy in the account's
+folder with role `drafts` (below). The backend owns every derived field: it
+sanitises `htmlBody` on the way **in**, derives `textBody` from it, assigns
+attachment metadata and sets `updatedAt`.
 
 ```jsonc
 Draft { "id": "d_1" (absent on first save), "accountId", "version": 1,
@@ -1070,6 +1077,7 @@ Draft { "id": "d_1" (absent on first save), "accountId", "version": 1,
         "htmlBody": "<p>…</p>" (opt; rich text),
         "inReplyTo": "m_123" (opt, local id), "forwarding": "m_124" (opt),
         "attachments": [DraftAttachment] (opt),
+        "replaces": "m_125" (opt; draft.open → draft.save only),
         "updatedAt": Time }
 DraftAttachment { "id": "att_…", "filename": "safe-name.pdf", "contentType": "application/pdf",
                   "size": 12345, "inline": false, "contentId": "…@malachi.local" (opt) }
@@ -1126,6 +1134,36 @@ with sanitizeFailed and leaves the draft unchanged; unlike `message.body`
 there is no text to fall back on, because the text alternative is derived
 from the sanitised HTML.
 
+**The copy in the Drafts folder.** A draft whose newest version has
+rested for 30 seconds (no `draft.save` since) is stored in the account's
+folder with role `drafts` by the syncer: over IMAP an `APPEND` with
+`\Draft` and `\Seen`, over Microsoft Graph `POST me/messages` with the
+MIME message. The message is the one `message.send` would build, plus a
+`Bcc` header, under a **fresh `Message-ID` for every upload**; the copy it
+replaces is then deleted like a `message.delete` with `permanent: true`,
+so every version ends up as exactly one message and the Drafts folder
+shows the draft to every client. A copy that Microsoft Graph reports as
+changed after the upload (Outlook edits drafts in place) is not deleted;
+both stay. Uploads are retried with backoff; after 8 refused attempts a
+draft waits for its next save. Without a Drafts folder a draft stays
+local. `version` is never touched by the upload. `draft.delete` and
+`message.send` delete the copy too; a `message.move` or `message.delete`
+of the copy (Trash included) deletes the draft it belongs to, whose
+attachments are released rather than deleted, so that a compose window
+still editing it saves it again as a new draft (its next `draft.save`
+answers draftNotFound). Drafts saved by a daemon older than this
+behaviour are not uploaded until they are saved again.
+
+A message of the Drafts folder is opened for editing with `draft.open`.
+`draft.save` with `replaces` (the id of such a message, only ever set by
+`draft.open`) links the draft to it: the draft's first upload replaces
+that message instead of leaving a second copy. A draft that already holds
+the message is deleted in the same transaction when everything it has is
+on the server (its attachments released); when it still has changes to
+upload, `replaces` is ignored and both are kept. `replaces` naming a
+message outside a Drafts folder of the account is invalidArgument, an
+unknown one messageNotFound.
+
 #### `draft.list`
 - params: `{ "accountId", "page": Page }`
 - result: `{ "drafts": [Draft], "page": PageInfo }` (newest `updatedAt` first; full bodies)
@@ -1133,7 +1171,8 @@ from the sanitised HTML.
 #### `draft.delete`
 - params: `{ "accountId", "draftId" }`
 - result: `{}` (deleting an unknown draft is not an error). Bound
-  attachments are deleted with it.
+  attachments are deleted with it, and its copy in the Drafts folder is
+  removed from the store at once and deleted on the server by the syncer.
 
 #### `draft.create`
 Returns an **unsaved** template (`id` empty, `version` 0) with everything a
@@ -1210,6 +1249,40 @@ inside the same cite block (`quoted: "text"`); should the sanitiser refuse
 even that, the draft is plain text with `> ` lines and no `htmlBody`
 (still `"text"`). A body that was never downloaded, and mode `new`, quote
 nothing (`"none"`). `sanitizeFailed` is never returned by this call.
+
+#### `draft.open`
+Opens a message of the account's Drafts folder as a draft to edit.
+Nothing is persisted but the attachments it imports.
+
+- params: `{ "accountId", "messageId" }`
+- result: `{ "draft": Draft, "blocked": BlockedContent, "skipped": [Attachment] (opt) }`
+- errors: invalidArgument (the message is not in a folder with role
+  `drafts`, or its content is not stored: `tooBig`, `failed`),
+  accountNotFound, messageNotFound, unavailable (the body is not
+  downloaded yet; retry later), storageError
+
+When the message is the copy of a saved draft (its `Message-ID`, or its
+server identity, is the one the draft's last upload got), the saved draft
+is returned as `draft.list` has it (`id`, `version`; `blocked` empty).
+The same holds for an older copy, and for any copy while the draft has
+changes the server has not seen yet.
+
+Otherwise — a draft another client wrote, or a newer copy of a saved draft
+that another client stored after Malachi's last upload — the draft is built
+from the message like a `draft.create` forward, but without a quote around
+it: `to`, `cc`, `bcc` and `subject` from its header, its HTML sanitised in
+compose mode with its pictures copied into the attachment store under new
+`contentId`s and every other part imported as an attachment (the caps and
+`skipped` of `draft.create`), or its text when there is no usable HTML;
+`inReplyTo` names the stored message its `In-Reply-To` identifies, when
+there is one (the header itself is kept for sending either way). The draft
+is unsaved (`id` empty, `version` 0) and its attachments unbound — except
+for the newer copy of a saved draft, which carries that draft's `id` and
+`version`, so that its first `draft.save` goes through the version check.
+`replaces` is set to `messageId` **only when nothing was lost**: nothing
+`skipped`, nothing `blocked`, the message parsed completely and its HTML
+kept. Without it, saving the draft leaves the message where it is next to
+the new copy.
 
 ### 4.6 search
 
@@ -1612,3 +1685,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `account.oauthStart`, `account.oauthWait`, `account.oauthCancel`; new
   error code 1203 `oauthClientMissing`; `notify.authRequired` now carries
   `authUrl` for `daemon` accounts.
+- **1** (2026-09-26, compatible addition, drafts on the server): saved
+  drafts get a copy in the account's Drafts folder, replaced on every
+  upload and deleted with `draft.delete` and `message.send`; a move or
+  delete of such a copy deletes its draft. New `draft.open`; new
+  `Draft.replaces`. A permanent delete on Gmail goes through the Trash.

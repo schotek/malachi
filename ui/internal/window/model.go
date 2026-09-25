@@ -351,6 +351,12 @@ func (m *mailModel) inOutbox(s api.MessageSummary) bool {
 	return s.Outbox != nil || m.folderRole(folderKey{Account: s.AccountID, Folder: s.FolderID}) == api.RoleOutbox
 }
 
+// inDrafts reports whether s lies in its account's Drafts folder: such a
+// message opens in the compose window (draft.open) rather than as mail.
+func (m *mailModel) inDrafts(s api.MessageSummary) bool {
+	return m.folderRole(folderKey{Account: s.AccountID, Folder: s.FolderID}) == api.RoleDrafts
+}
+
 // visibleFolders drops the folders the sidebar does not list: an empty
 // outbox (the folder exists from the first send on; it only earns a row
 // while something is in it). m.folders keeps the full list so folderByRole

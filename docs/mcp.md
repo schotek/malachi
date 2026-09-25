@@ -70,9 +70,11 @@ registered at all, so it never appears in the client's tool list.
 | modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages` |
 | send | `-allow-send` | `send_message` |
 
-A draft is inert: it lives in the daemon's store, is not synchronised to the
-server, and is sent only by the user from Malachi Mail or by `send_message`
-under its flag. That is why creating one needs no flag.
+A draft is inert: it lives in the daemon's store and, once it has rested
+for 30 seconds, as a copy in the account's Drafts folder, where the user
+finds it in Malachi Mail and in every other client; it is sent only by the
+user or by `send_message` under its flag. That is why creating one needs no
+flag.
 
 ## Tool reference
 

@@ -105,6 +105,9 @@ type harness struct {
 	tokens   int           // Token calls
 	offset   time.Duration // added to the syncer's clock
 
+	// buildDraft is the syncer's Deps.BuildDraft (set before newSyncer).
+	buildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
+
 	syncer *Syncer
 	cancel context.CancelFunc
 	done   chan error
@@ -150,11 +153,12 @@ func (h *harness) newSyncer() {
 			defer h.mu.Unlock()
 			return h.prefs
 		},
-		Log:     slog.New(slog.DiscardHandler),
-		BaseURL: h.fake.srv.URL,
-		Backoff: func(int) time.Duration { return 50 * time.Millisecond },
-		Sleep:   func(context.Context, time.Duration) error { return nil },
-		Now:     h.clock,
+		Log:        slog.New(slog.DiscardHandler),
+		BaseURL:    h.fake.srv.URL,
+		Backoff:    func(int) time.Duration { return 50 * time.Millisecond },
+		Sleep:      func(context.Context, time.Duration) error { return nil },
+		Now:        h.clock,
+		BuildDraft: h.buildDraft,
 	})
 }
 

@@ -73,6 +73,17 @@ func (m *Manager) SelfAddress() api.Address {
 	return api.Address{Name: a.Config.DisplayName, Address: a.Config.Email}
 }
 
+// FindDraft is the open window that edits d: the same saved draft, or the
+// same Drafts message taken over (d from draft.open). nil when none.
+func (m *Manager) FindDraft(d api.Draft) *Window {
+	for _, w := range m.windows {
+		if (d.ID != "" && w.draft.draftID == d.ID) || (d.Replaces != "" && w.params.Replaces == d.Replaces) {
+			return w
+		}
+	}
+	return nil
+}
+
 func (m *Manager) remove(w *Window) {
 	for i, x := range m.windows {
 		if x == w {

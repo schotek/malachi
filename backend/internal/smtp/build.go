@@ -167,6 +167,30 @@ func BuildMessage(w io.Writer, in BuildInput) error {
 	return err
 }
 
+// BuildDraftMessage writes the copy of a draft kept in the Drafts folder:
+// what BuildMessage writes plus a Bcc header, so that the blind recipients
+// survive the round trip through the server, as every client keeps them in
+// a draft's copy. Its output is stored, never handed to Deliver.
+func BuildDraftMessage(w io.Writer, in BuildInput, bcc []api.Address) error {
+	h, err := buildHeader(in)
+	if err != nil {
+		return err
+	}
+	blind, err := formatAddresses(bcc)
+	if err != nil {
+		return err
+	}
+	if len(blind) > 0 {
+		h.SetAddressList("Bcc", blind)
+	}
+	ew := &errWriter{w: w}
+	err = writeBody(ew, h, in)
+	if ew.err != nil {
+		return ew.err
+	}
+	return err
+}
+
 func buildHeader(in BuildInput) (mail.Header, error) {
 	var h mail.Header
 

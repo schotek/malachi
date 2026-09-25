@@ -147,10 +147,7 @@ func (s *Syncer) pushGroup(ctx context.Context, sess *session, g *opGroup) error
 			err = s.storeFlags(ctx, sess, set, imap.StoreFlagsDel, del)
 		}
 	case store.OpDelete:
-		err = s.storeFlags(ctx, sess, set, imap.StoreFlagsAdd, []imap.Flag{imap.FlagDeleted})
-		if err == nil {
-			err = s.expunge(ctx, sess, set)
-		}
+		err = s.deleteGroup(ctx, sess, folder, set)
 	case store.OpMove:
 		err = s.moveGroup(ctx, sess, g, set, target.Mailbox)
 	default:
@@ -246,6 +243,55 @@ func (s *Syncer) assignCopied(ctx context.Context, g *opGroup, src, dst imap.UID
 		}
 	}
 	return nil
+}
+
+// deleteGroup deletes the messages of the selected folder for good:
+// \Deleted and (UID) EXPUNGE. On Gmail that only removes a label, and a
+// message expunged from its last folder is archived to All Mail (by the
+// account's default setting), so a message outside the Trash and Spam is
+// moved to the Trash first and expunged there, which is how Gmail deletes
+// permanently. Without a Trash folder the plain expunge is all there is.
+func (s *Syncer) deleteGroup(ctx context.Context, sess *session, folder store.Folder, set imap.UIDSet) error {
+	if sess.caps.Has(capGmail) && folder.Role != api.RoleTrash && folder.Role != api.RoleJunk {
+		trash, err := s.deps.Store.FolderByRole(ctx, s.account.ID, api.RoleTrash)
+		switch {
+		case err == nil && trash.ID != folder.ID:
+			return s.purgeViaTrash(ctx, sess, set, trash.Mailbox)
+		case err != nil && !errors.Is(err, store.ErrNotFound):
+			return storageError(err)
+		}
+	}
+	if err := s.storeFlags(ctx, sess, set, imap.StoreFlagsAdd, []imap.Flag{imap.FlagDeleted}); err != nil {
+		return err
+	}
+	return s.expunge(ctx, sess, set)
+}
+
+// purgeViaTrash moves set out of the selected folder into trash and
+// expunges the copies there (Gmail). Without COPYUID the copies cannot be
+// told apart and stay in the Trash, which empties itself.
+func (s *Syncer) purgeViaTrash(ctx context.Context, sess *session, set imap.UIDSet, trash string) error {
+	var dst imap.UIDSet
+	err := sess.do(ctx, commandTimeout, func() error {
+		data, err := sess.Move(set, trash).Wait()
+		if err != nil {
+			return err
+		}
+		if data != nil {
+			dst, _ = data.DestUIDs.(imap.UIDSet)
+		}
+		return nil
+	})
+	if err != nil || len(dst) == 0 {
+		return err
+	}
+	if _, err := sess.selectMailbox(ctx, trash); err != nil {
+		return err
+	}
+	if err := s.storeFlags(ctx, sess, dst, imap.StoreFlagsAdd, []imap.Flag{imap.FlagDeleted}); err != nil {
+		return err
+	}
+	return s.expunge(ctx, sess, dst)
 }
 
 func (s *Syncer) storeFlags(ctx context.Context, sess *session, set imap.UIDSet, op imap.StoreFlagsOp, flags []imap.Flag) error {

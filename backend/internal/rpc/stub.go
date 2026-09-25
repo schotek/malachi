@@ -164,6 +164,9 @@ func (stubDrafts) Delete(context.Context, api.DraftDeleteParams) (*api.DraftDele
 func (stubDrafts) Create(context.Context, api.DraftCreateParams) (*api.DraftCreateResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubDrafts) Open(context.Context, api.DraftOpenParams) (*api.DraftOpenResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubAttachments struct{}
 

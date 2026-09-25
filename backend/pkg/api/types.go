@@ -915,7 +915,13 @@ type Draft struct {
 	InReplyTo   MessageID         `json:"inReplyTo,omitempty"`  // local ID; backend resolves headers
 	Forwarding  MessageID         `json:"forwarding,omitempty"` // mutually exclusive with InReplyTo
 	Attachments []DraftAttachment `json:"attachments,omitempty"`
-	UpdatedAt   time.Time         `json:"updatedAt"` // server-set; ignored in params
+	// Replaces names a message of the account's Drafts folder that this
+	// draft takes over: draft.save links the draft to it, and the upload of
+	// the draft replaces that message on the server. Set by draft.open when
+	// it built the draft from a message without loss; clients send it back
+	// unchanged. Never returned by draft.save or draft.list.
+	Replaces  MessageID `json:"replaces,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"` // server-set; ignored in params
 }
 
 // DraftAttachment is a file in the backend's attachment store, created by
@@ -1022,6 +1028,28 @@ type DraftCreateResult struct {
 	Blocked BlockedContent `json:"blocked"`
 	// Skipped lists the parts of the original that were not imported
 	// (over a cap, unreadable, or of a kind the store does not take).
+	Skipped []Attachment `json:"skipped,omitempty"`
+}
+
+// DraftOpenParams asks for a message of the account's Drafts folder as a
+// draft to edit.
+type DraftOpenParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+}
+
+// DraftOpenResult.Draft is either the saved draft whose server copy the
+// message is (ID and Version set, nothing imported), or a draft built from
+// the message: unsaved, its attachments imported but unbound as with
+// draft.create, Replaces set when nothing was lost on the way. A draft
+// built from a newer copy of a saved draft carries that draft's ID and
+// Version, so its first draft.save goes through the version check.
+// Nothing is persisted by draft.open.
+type DraftOpenResult struct {
+	Draft Draft `json:"draft"`
+	// Blocked counts what the sanitiser removed from the message's HTML.
+	Blocked BlockedContent `json:"blocked"`
+	// Skipped lists the parts of the message that were not imported.
 	Skipped []Attachment `json:"skipped,omitempty"`
 }
 

@@ -627,13 +627,15 @@ func (b *Backend) reauthURL(n api.AuthRequiredNotification) string {
 	return ""
 }
 
-// Close ends every sign-in session and closes their listeners. malachid
-// calls it on shutdown; a second call does nothing.
+// Close ends every sign-in session and closes their listeners, and
+// cancels the armed draft-upload wake-ups. malachid calls it on shutdown;
+// a second call does nothing.
 func (b *Backend) Close() {
 	b.closeOnce.Do(func() {
 		if b.OAuth != nil {
 			b.OAuth.Close()
 		}
+		b.stopDraftTimers()
 	})
 }
 

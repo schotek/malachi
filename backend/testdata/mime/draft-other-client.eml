@@ -1,0 +1,38 @@
+From: Me <me@example.invalid>
+To: Alice <alice@example.invalid>
+Cc: Bob <bob@example.invalid>
+Bcc: Hidden <hidden@example.invalid>
+Subject: Re: Plans
+Date: Tue, 8 Sep 2026 08:00:00 +0200
+Message-ID: <webmail-draft-1@example.invalid>
+In-Reply-To: <one@example.invalid>
+References: <zero@example.invalid> <one@example.invalid>
+X-Mozilla-Draft-Info: internal/draft; vcard=0
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: multipart/related; boundary="rel"; type="text/html"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Draft with a <b>picture</b>: <img src="cid:chart@example.invalid" alt="chart"></p></body></html>
+
+--rel
+Content-Type: image/png
+Content-ID: <chart@example.invalid>
+Content-Disposition: inline; filename="chart.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--rel--
+--mix
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="plan.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+
+--mix--

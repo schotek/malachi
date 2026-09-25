@@ -41,6 +41,14 @@ type draftState struct {
 
 	inReplyTo  api.MessageID
 	forwarding api.MessageID
+	// replaces is the Drafts message the first save takes over
+	// (draft.open); cleared once a save went through.
+	replaces api.MessageID
+	// explicitSave is set once the draft is the user's to keep: saved
+	// with Ctrl+S, the menu or the close dialog, or opened from the Drafts
+	// folder. Until then Discard in the close dialog deletes what the
+	// autosave stored, which would otherwise live on in the Drafts folder.
+	explicitSave bool
 
 	dirty   bool // edits not yet persisted
 	saving  bool // draft.save in flight
@@ -160,6 +168,7 @@ func (w *Window) build() api.Draft {
 		TextBody:   w.editor.Text(),
 		InReplyTo:  w.draft.inReplyTo,
 		Forwarding: w.draft.forwarding,
+		Replaces:   w.draft.replaces,
 	}
 	if richText {
 		d.HTMLBody = w.editor.HTML()
@@ -210,6 +219,8 @@ func (w *Window) save(reason saveReason, done func(err error)) {
 			} else {
 				res := v.(api.DraftSaveResult)
 				d.draftID, d.version = res.DraftID, res.Version
+				d.replaces = ""
+				d.explicitSave = d.explicitSave || reason == saveExplicit
 				d.lastSaved = time.Now()
 				d.lastError = ""
 				if len(res.Attachments) != len(w.attachments) {
@@ -235,11 +246,28 @@ func (w *Window) save(reason saveReason, done func(err error)) {
 func (w *Window) saveFailed(reason saveReason, err error) {
 	d := &w.draft
 	var e *api.Error
-	if errors.As(err, &e) && e.Code == api.CodeConflict {
-		// Local wins: the next save creates a fresh draft with our text.
-		d.draftID, d.version = "", 0
-		w.toast(i18n.T("This draft was changed elsewhere; your text will be saved as a new draft"))
-		return
+	if errors.As(err, &e) {
+		switch e.Code {
+		case api.CodeConflict:
+			// Local wins: the next save creates a fresh draft with our text.
+			d.draftID, d.version, d.replaces = "", 0, ""
+			w.toast(i18n.T("This draft was changed elsewhere; your text will be saved as a new draft"))
+			return
+		case api.CodeDraftNotFound:
+			// Deleted meanwhile (its copy went to the Trash): the text
+			// survives as a new draft, its attachments with it.
+			d.draftID, d.version, d.replaces = "", 0, ""
+			w.toast(i18n.T("This draft was removed elsewhere; your text will be saved as a new draft"))
+			return
+		case api.CodeMessageNotFound:
+			if d.replaces != "" {
+				// The Drafts message it was to take over is gone: save
+				// without it.
+				d.replaces = ""
+				w.markDirty()
+				return
+			}
+		}
 	}
 	text := widget.RPCErrorText(i18n.T("Saving the draft"), err)
 	if reason == saveAutosave {
@@ -311,6 +339,20 @@ func (w *Window) send() {
 	})
 }
 
+// deleteDraft deletes the stored draft (and with it its copy in the
+// Drafts folder); the window is closing, so a failure is only logged.
+func (w *Window) deleteDraft() {
+	accountID, id := w.account().ID, w.draft.draftID
+	w.rpc(func() (any, error) {
+		return nil, w.m.client.Call(w.ctx(), api.MethodDraftDelete,
+			api.DraftDeleteParams{AccountID: accountID, DraftID: id}, &api.DraftDeleteResult{})
+	}, func(_ any, err error) {
+		if err != nil {
+			w.log.Debug("draft.delete", "err", err)
+		}
+	})
+}
+
 // discard drops the draft (after confirmation when the setting is on). A
 // draft never saved has no id, but may hold attachments the backend
 // imported for it (the template's pictures and files); those are released
@@ -318,15 +360,8 @@ func (w *Window) send() {
 func (w *Window) discard() {
 	proceed := func() {
 		accountID := w.account().ID
-		if id := w.draft.draftID; id != "" {
-			w.rpc(func() (any, error) {
-				return nil, w.m.client.Call(w.ctx(), api.MethodDraftDelete,
-					api.DraftDeleteParams{AccountID: accountID, DraftID: id}, &api.DraftDeleteResult{})
-			}, func(_ any, err error) {
-				if err != nil {
-					w.log.Debug("draft.delete", "err", err)
-				}
-			})
+		if w.draft.draftID != "" {
+			w.deleteDraft()
 		} else {
 			for _, a := range w.attachments {
 				attID := a.ID
@@ -370,6 +405,9 @@ func (w *Window) closeRequest() bool {
 		switch response {
 		case "discard":
 			d.discard = true
+			if !d.explicitSave && d.draftID != "" {
+				w.deleteDraft()
+			}
 			w.Close()
 		case "save":
 			w.save(saveExplicit, func(err error) {

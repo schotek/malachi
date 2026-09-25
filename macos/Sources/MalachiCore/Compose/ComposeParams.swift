@@ -13,11 +13,13 @@ public enum ComposeKind: Sendable, Hashable, CaseIterable {
     case reply
     case replyAll
     case forward
+    /// A draft opened from the Drafts folder (draft.open).
+    case edit
 
     /// compose.Kind.Mode: the draft.create mode of the kind.
     public var mode: ComposeMode {
         switch self {
-        case .new: return .new
+        case .new, .edit: return .new
         case .reply: return .reply
         case .replyAll: return .replyAll
         case .forward: return .forward
@@ -79,11 +81,18 @@ public struct ComposeParams: Sendable, Equatable {
     /// What the backend's sanitiser removed from the quoted original; the
     /// window says so once.
     public var blocked: BlockedContent
+    /// The saved draft the window edits (`.edit` from draft.open); nil for
+    /// a new one. `replaces` is the Drafts message the first save takes
+    /// over (draft.open sets it).
+    public var draftID: DraftID?
+    public var version: Int
+    public var replaces: MessageID?
 
     public init(
         kind: ComposeKind = .new, accountID: AccountID? = nil, to: [Address] = [], cc: [Address] = [],
         bcc: [Address] = [], subject: String = "", bodyHTML: String = "", inReplyTo: MessageID? = nil,
-        forwarding: MessageID? = nil, attachments: [DraftAttachment] = [], blocked: BlockedContent = BlockedContent()
+        forwarding: MessageID? = nil, attachments: [DraftAttachment] = [], blocked: BlockedContent = BlockedContent(),
+        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil
     ) {
         self.kind = kind
         self.accountID = accountID
@@ -96,5 +105,8 @@ public struct ComposeParams: Sendable, Equatable {
         self.forwarding = forwarding
         self.attachments = attachments
         self.blocked = blocked
+        self.draftID = draftID
+        self.version = version
+        self.replaces = replaces
     }
 }

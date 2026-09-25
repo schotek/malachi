@@ -1,0 +1,13 @@
+From: Me <me@example.invalid>
+To: =?utf-8?q?Alice=0D=0ABcc:_evil@example.org?= <alice@example.invalid>, not an address
+Bcc: =?utf-8?q?Eve=0D=0AX-Injected:_yes?= <eve@example.invalid>, <evil@example.org>
+Subject: =?utf-8?q?Draft=0D=0AX-Injected:_yes?=
+Date: Tue, 8 Sep 2026 08:00:00 +0200
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<html><body onload="steal()"><p>Hi</p><script>steal()</script>
+<img src="https://tracker.invalid/p.png" width="1" height="1">
+<img src="cid:missing@example.invalid" alt="gone">
+<form action="https://evil.invalid/"><input name="x"></form>
+<a href="javascript:steal()">click</a></body></html>

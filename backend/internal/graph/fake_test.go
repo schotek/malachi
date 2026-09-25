@@ -4,12 +4,14 @@
 package graph
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/mail"
 	"net/url"
 	"sort"
 	"strconv"
@@ -57,6 +59,7 @@ type fakeMsg struct {
 	isRead, flagged, isDraft                           bool
 	mime                                               string
 	version                                            int
+	modified                                           time.Time // lastModifiedDateTime
 }
 
 type removal struct {
@@ -119,6 +122,28 @@ func (f *fakeGraph) move(id, folder string) {
 	f.removed = append(f.removed, removal{folder: m.folder, id: id, seq: f.bump()})
 	m.folder = folder
 	m.version = f.bump()
+}
+
+// drafts lists the messages of the Drafts folder, oldest first.
+func (f *fakeGraph) drafts() []fakeMsg {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []fakeMsg
+	for _, m := range f.messages {
+		if m.folder == "F-DRAFTS" {
+			out = append(out, *m)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].version < out[j].version })
+	return out
+}
+
+// edit marks a message changed in place by another client (Outlook
+// edits drafts that way).
+func (f *fakeGraph) edit(id string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.messages[id].modified = time.Now().Add(time.Hour)
 }
 
 func (f *fakeGraph) remove(id string) {
@@ -212,6 +237,38 @@ func (f *fakeGraph) handle(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "message/rfc822")
 		io.WriteString(w, m.mime)
+	case r.Method == "GET" && strings.HasPrefix(p, "/messages/"):
+		m, ok := f.messages[strings.TrimPrefix(p, "/messages/")]
+		if !ok {
+			f.fail(w, http.StatusNotFound, "ErrorItemNotFound", "gone")
+			return
+		}
+		f.reply(w, map[string]any{"id": m.id, "lastModifiedDateTime": m.modified.UTC().Format(time.RFC3339)})
+	case r.Method == "POST" && p == "/messages":
+		// A draft created from MIME lands in the Drafts folder.
+		if r.Header.Get("Content-Type") != "text/plain" {
+			f.fail(w, http.StatusBadRequest, "ErrorMimeContentInvalid", "not MIME")
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		decoded, err := base64.StdEncoding.DecodeString(string(raw))
+		if err != nil {
+			f.fail(w, http.StatusBadRequest, "ErrorMimeContentInvalidBase64String", "Invalid base64 string for MIME content.")
+			return
+		}
+		msg, err := mail.ReadMessage(bytes.NewReader(decoded))
+		if err != nil {
+			f.fail(w, http.StatusBadRequest, "ErrorMimeContentInvalid", "unparsable")
+			return
+		}
+		now := time.Now()
+		m := &fakeMsg{id: fmt.Sprintf("AAd%03d", f.bump()), folder: "F-DRAFTS", subject: msg.Header.Get("Subject"),
+			from: f.me, messageID: msg.Header.Get("Message-ID"), conversation: "conv-draft", received: now,
+			isRead: true, isDraft: true, mime: string(decoded), modified: now}
+		m.version = f.bump()
+		f.messages[m.id] = m
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{"id": m.id, "isDraft": true})
 	case r.Method == "PATCH" && strings.HasPrefix(p, "/messages/"):
 		m, ok := f.messages[strings.TrimPrefix(p, "/messages/")]
 		if !ok {

@@ -16,8 +16,9 @@ Microsoft 365, editing, signing in again, pausing, reordering, removing), the
 folder sidebar with favourites and folding, the message list (flat and
 grouped by conversation, with the All / Unread / Flagged filter), the
 reader with a locked-down WebKit view, attachments, message actions,
-notifications with sound, compose with the rich-text editor, drafts,
-reply and forward with the quoted original, `mailto:` links, the settings
+notifications with sound, compose with the rich-text editor, drafts
+(kept in the Drafts folder and opened from it for editing), reply and
+forward with the quoted original, `mailto:` links, the settings
 window, launch at login, running in the background, and the Czech
 translation generated from `po/` at build time. What is missing is listed
 under [Not on macOS, not yet](#not-on-macos-not-yet).

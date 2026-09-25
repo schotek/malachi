@@ -28,6 +28,9 @@ type SupervisorDeps struct {
 	// BaseURL and HTTP override the Graph endpoint (tests).
 	BaseURL string
 	HTTP    *http.Client
+	// BuildDraft and DraftQuiet: see Deps; nil = drafts stay local.
+	BuildDraft func(ctx context.Context, accountID, draftID string) (store.DraftUpload, error)
+	DraftQuiet time.Duration
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -117,13 +120,19 @@ func (sv *Supervisor) Start(a store.Account) {
 	}
 	id := a.ID
 	deps := Deps{
-		Store:    sv.deps.Store,
-		Token:    func(ctx context.Context) (string, error) { return sv.deps.Token(ctx, id) },
-		Notifier: sv.deps.Notifier,
-		Prefs:    sv.deps.Prefs,
-		Log:      sv.deps.Log,
-		BaseURL:  sv.deps.BaseURL,
-		HTTP:     sv.deps.HTTP,
+		Store:      sv.deps.Store,
+		Token:      func(ctx context.Context) (string, error) { return sv.deps.Token(ctx, id) },
+		Notifier:   sv.deps.Notifier,
+		Prefs:      sv.deps.Prefs,
+		Log:        sv.deps.Log,
+		BaseURL:    sv.deps.BaseURL,
+		HTTP:       sv.deps.HTTP,
+		DraftQuiet: sv.deps.DraftQuiet,
+	}
+	if sv.deps.BuildDraft != nil {
+		deps.BuildDraft = func(ctx context.Context, draftID string) (store.DraftUpload, error) {
+			return sv.deps.BuildDraft(ctx, id, draftID)
+		}
 	}
 	if sv.deps.Invalidate != nil {
 		deps.Invalidate = func() { sv.deps.Invalidate(id) }

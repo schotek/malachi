@@ -8,8 +8,9 @@ import os
 /// The AppKit side of ui/internal/compose/manager.go: owns the
 /// `ComposeController`, makes the windows it asks for, and plugs the
 /// compose entry points into the application (`hooks.composeNew`,
-/// `hooks.openMailto`, `hooks.openCompose`, notify.accountsChanged). Every
-/// `open` is a new window, as in GTK.
+/// `hooks.openMailto`, `hooks.openCompose`, `hooks.raiseDraft`,
+/// notify.accountsChanged). Every `open` is a new window, as in GTK; a
+/// draft already being edited raises its window instead.
 @MainActor
 final class ComposeManager {
     let state: AppState
@@ -54,6 +55,11 @@ final class ComposeManager {
         }
         state.hooks.openCompose = { [weak self] p in
             self?.open(p)
+        }
+        state.hooks.raiseDraft = { [weak self] draft in
+            guard let w = self?.controller.findDraft(draft) else { return false }
+            w.present()
+            return true
         }
         token = state.notifications.addAccountsChanged { [weak self] in
             self?.controller.invalidate()

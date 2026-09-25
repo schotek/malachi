@@ -122,6 +122,11 @@ type Backend struct {
 	// a completed re-sign-in); see lockSecrets.
 	secretLocks map[string]*secretLock
 	closeOnce   sync.Once
+
+	// draftTimers are the armed wake-ups of the syncers for their next
+	// draft upload (scheduleDraftSync), per account, under draftMu.
+	draftMu     sync.Mutex
+	draftTimers map[string]*time.Timer
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -155,6 +160,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Directory:         eds.New(log),
 		OAuthClients:      &oauth2flow.Registry{Configured: oauthClientsFrom(cfg)},
 		tokenSources:      map[string]*oauth2flow.TokenSource{},
+		draftTimers:       map[string]*time.Timer{},
 		oauthSessions:     map[string]oauthSession{},
 	}
 	b.OAuth = oauth2flow.NewManager(oauth2flow.Options{
@@ -179,7 +185,9 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 			interval, days := b.SyncPrefs()
 			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
 		},
-		Log: log,
+		Log:        log,
+		BuildDraft: b.buildDraft,
+		DraftQuiet: draftSyncQuiet,
 	})
 	graphSync := graph.NewSupervisor(graph.SupervisorDeps{
 		Store:      st,
@@ -190,7 +198,9 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 			interval, days := b.SyncPrefs()
 			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
 		},
-		Log: log,
+		Log:        log,
+		BuildDraft: b.buildDraft,
+		DraftQuiet: draftSyncQuiet,
 	})
 	b.Supervisor = newKindSupervisor(imapSync, graphSync)
 	// Through b.Supervisor, not the values above: tests swap it.
@@ -392,6 +402,7 @@ func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 		if a.Enabled {
 			b.Supervisor.Start(a)
 			b.Delivery.Start(a)
+			b.scheduleDraftSync(a.ID)
 			started++
 		}
 	}

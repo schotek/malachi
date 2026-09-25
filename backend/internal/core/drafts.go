@@ -82,6 +82,22 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 		InReplyTo:  string(d.InReplyTo),
 		Forwarding: string(d.Forwarding),
 	}
+	// The threading headers are kept with the draft, for a parent that
+	// leaves the local store before the draft is sent.
+	if d.InReplyTo != "" {
+		row.ReplyRFCID, row.References = s.b.threadingHeaders(ctx, string(d.AccountID), string(d.InReplyTo))
+	}
+	if d.Replaces != "" {
+		m, f, err := s.b.draftsMessage(ctx, string(d.AccountID), string(d.Replaces))
+		if err != nil {
+			return nil, err
+		}
+		c := store.CopyOf(m, f)
+		row.Adopt = &c
+		if row.ReplyRFCID == "" && m.InReplyTo != "" {
+			row.ReplyRFCID, row.References = m.InReplyTo, m.References
+		}
+	}
 	switch err := s.b.store.SaveDraft(ctx, &row, ids); {
 	case errors.Is(err, store.ErrNotFound):
 		return nil, api.NewError(api.CodeDraftNotFound, "draft %s not found", d.ID)
@@ -92,6 +108,7 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	s.b.scheduleDraftSync(row.AccountID)
 	return &api.DraftSaveResult{
 		DraftID:     api.DraftID(row.ID),
 		Version:     row.Version,
@@ -127,13 +144,22 @@ func (s *draftService) List(ctx context.Context, p api.DraftListParams) (*api.Dr
 	return &api.DraftListResult{Drafts: out, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
 }
 
-// Delete removes the draft and its attachments; unknown ids are ignored.
+// Delete removes the draft and its attachments, and its copy in the
+// Drafts folder through a queued delete that the syncer is woken for;
+// unknown ids are ignored.
 func (s *draftService) Delete(ctx context.Context, p api.DraftDeleteParams) (*api.DraftDeleteResult, error) {
 	if p.AccountID == "" || p.DraftID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and draftId are required")
 	}
+	d, err := s.b.store.GetDraft(ctx, string(p.AccountID), string(p.DraftID))
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
 	if err := s.b.store.DeleteDraft(ctx, string(p.AccountID), string(p.DraftID)); err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if !d.Copy.IsZero() {
+		s.b.triggerDrafts(string(p.AccountID))
 	}
 	return &api.DraftDeleteResult{}, nil
 }

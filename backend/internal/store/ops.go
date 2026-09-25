@@ -123,6 +123,9 @@ func (s *Store) MoveMessages(ctx context.Context, accountID string, ids []string
 		if err := rejectOutbox(locs); err != nil {
 			return nil, err
 		}
+		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+			return nil, err
+		}
 		unsynced, err := folderUnsynced(ctx, tx, targetFolderID)
 		if err != nil {
 			return nil, err
@@ -174,6 +177,9 @@ func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []strin
 		if err := rejectSendingOutbox(locs); err != nil {
 			return nil, err
 		}
+		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
+			return nil, err
+		}
 		now := nowStamp()
 		var files []messageFile
 		for _, loc := range locs {
@@ -207,6 +213,9 @@ func (s *Store) TrashMessages(ctx context.Context, accountID string, ids []strin
 func (s *Store) DeleteMessages(ctx context.Context, accountID string, ids []string) error {
 	return s.mutate(ctx, accountID, ids, func(ctx context.Context, tx *sql.Tx, locs []messageLoc, _ string) ([]messageFile, error) {
 		if err := rejectSendingOutbox(locs); err != nil {
+			return nil, err
+		}
+		if err := dropDraftsOfMessagesTx(ctx, tx, accountID, locs); err != nil {
 			return nil, err
 		}
 		now := nowStamp()

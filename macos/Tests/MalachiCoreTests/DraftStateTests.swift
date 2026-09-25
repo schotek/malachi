@@ -301,6 +301,72 @@ private final class Harness {
         #expect(h.draft.draft.draftID == "d1")
     }
 
+    /// A draft opened from the Drafts folder: `replaces` goes with the
+    /// first save only, a draft deleted meanwhile starts over as a new one,
+    /// and a Drafts message gone meanwhile is dropped from the next save
+    /// (draft.go `saveFailed`).
+    @Test func openedDraftSavesAndStartsOver() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        h.draft.setOpened(draftID: nil, version: 0, replaces: "m9", fromDrafts: true)
+        #expect(h.draft.draft.explicitSave)
+        #expect(await h.saveNow() == nil)
+        #expect(await h.script.saves.last?.draft.replaces == "m9")
+        #expect(h.draft.draft.replaces == nil)
+        #expect(await h.saveNow() == nil)
+        #expect(await h.script.saves.last?.draft.replaces == nil)
+
+        await h.script.set(saveError: RPCError(code: .draftNotFound, message: "gone"))
+        _ = await h.saveNow()
+        #expect(h.draft.draft.draftID == nil && h.draft.draft.version == 0)
+        #expect(h.form.toasts == ["This draft was removed elsewhere; your text will be saved as a new draft"])
+
+        let g = try await Harness(autosaveDelay: .seconds(30))
+        defer { Task { await g.stop() } }
+        g.draft.setOpened(draftID: "d7", version: 2, replaces: "m7", fromDrafts: true)
+        await g.script.set(saveError: RPCError(code: .messageNotFound, message: "gone"))
+        _ = await g.saveNow()
+        let last = await g.script.saves.last?.draft
+        #expect(last?.id == "d7" && last?.version == 2)
+        #expect(g.draft.draft.replaces == nil)
+        #expect(g.draft.autosaveArmed, "saved again without the message")
+        #expect(g.form.toasts.isEmpty)
+    }
+
+    /// Discard in the close dialog deletes what only the autosave stored,
+    /// and keeps a draft the user saved or opened from the Drafts folder.
+    @Test func closeDiscardDeletesOnlyAnAutosavedDraft() async throws {
+        let auto = try await Harness(autosaveDelay: .milliseconds(30))
+        defer { Task { await auto.stop() } }
+        auto.draft.saveDraftQuestion = { .discard }
+        auto.draft.markDirty()
+        try await waitUntil { await auto.script.saves.count == 1 && !auto.draft.draft.saving }
+        #expect(!auto.draft.draft.explicitSave)
+        auto.draft.markDirty()
+        #expect(await auto.draft.closeRequest())
+        try await waitUntil { await auto.script.deletes.count == 1 }
+        #expect(await auto.script.deletes == [DraftDeleteParams(accountId: "acc1", draftId: "d1")])
+
+        let saved = try await Harness(autosaveDelay: .seconds(30))
+        defer { Task { await saved.stop() } }
+        saved.draft.saveDraftQuestion = { .discard }
+        #expect(await saved.saveNow() == nil)
+        #expect(saved.draft.draft.explicitSave)
+        saved.draft.markDirty()
+        #expect(await saved.draft.closeRequest())
+
+        let opened = try await Harness(autosaveDelay: .seconds(30))
+        defer { Task { await opened.stop() } }
+        opened.draft.saveDraftQuestion = { .discard }
+        opened.draft.setOpened(draftID: "d7", version: 2, replaces: nil, fromDrafts: true)
+        opened.draft.markDirty()
+        #expect(await opened.draft.closeRequest())
+
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await saved.script.deletes.isEmpty)
+        #expect(await opened.script.deletes.isEmpty)
+    }
+
     @Test func repeatedAutosaveFailureToastsOnceExplicitSaveAlways() async throws {
         let h = try await Harness(autosaveDelay: .milliseconds(30))
         defer { Task { await h.stop() } }

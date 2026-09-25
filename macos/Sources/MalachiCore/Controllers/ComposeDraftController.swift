@@ -37,6 +37,14 @@ public struct DraftState: Sendable, Equatable {
 
     public var inReplyTo: MessageID?
     public var forwarding: MessageID?
+    /// The Drafts message the first save takes over (draft.open); cleared
+    /// once a save went through.
+    public var replaces: MessageID?
+    /// The draft is the user's to keep: saved with ⌘S, the menu or the
+    /// close dialog, or opened from the Drafts folder. Until then Discard
+    /// in the close dialog deletes what the autosave stored, which would
+    /// otherwise live on in the Drafts folder.
+    public var explicitSave = false
 
     /// Edits not yet persisted.
     public var dirty = false
@@ -153,6 +161,17 @@ public final class ComposeDraftController {
         draft.forwarding = forwarding
     }
 
+    /// The saved draft the window edits (compose.go `newWindow`:
+    /// `Params.DraftID`, `Version`, `Replaces`): its id and version make
+    /// the saves updates, and a draft opened from the Drafts folder is
+    /// never deleted by closing the window.
+    public func setOpened(draftID: DraftID?, version: Int, replaces: MessageID?, fromDrafts: Bool) {
+        draft.draftID = draftID
+        draft.version = version
+        draft.replaces = replaces
+        draft.explicitSave = fromDrafts
+    }
+
     /// closeRequest's first branch: the window may go without a question.
     public var canCloseWithoutAsking: Bool {
         draft.discard || (!draft.dirty && !draft.saving)
@@ -221,7 +240,8 @@ public final class ComposeDraftController {
             subject: form.subject,
             textBody: form.editorText(),
             inReplyTo: draft.inReplyTo,
-            forwarding: draft.forwarding
+            forwarding: draft.forwarding,
+            replaces: draft.replaces
         )
         if composeRichText {
             d.htmlBody = form.editorHTML()
@@ -275,6 +295,8 @@ public final class ComposeDraftController {
         case .success(let res):
             draft.draftID = res.draftId
             draft.version = res.version
+            draft.replaces = nil
+            draft.explicitSave = draft.explicitSave || reason == .explicit
             draft.lastSaved = now()
             draft.lastError = ""
             if let form {
@@ -299,15 +321,37 @@ public final class ComposeDraftController {
         }
     }
 
-    /// saveFailed: a conflict starts over with a fresh draft (local wins);
-    /// an autosave does not nag with the same failure every 30 s.
+    /// saveFailed: a conflict, or a draft deleted meanwhile, starts over
+    /// with a fresh draft (local wins); a Drafts message to take over that
+    /// is gone is dropped from the next save; an autosave does not nag with
+    /// the same failure every 30 s.
     public func saveFailed(_ reason: SaveReason, _ error: any Error) {
-        if let e = error as? RPCError, e.code == .conflict {
-            // Local wins: the next save creates a fresh draft with our text.
-            draft.draftID = nil
-            draft.version = 0
-            form?.toast(L10n.T("This draft was changed elsewhere; your text will be saved as a new draft"))
-            return
+        if let e = error as? RPCError {
+            switch e.code {
+            case .conflict:
+                // Local wins: the next save creates a fresh draft with our text.
+                draft.draftID = nil
+                draft.version = 0
+                draft.replaces = nil
+                form?.toast(L10n.T("This draft was changed elsewhere; your text will be saved as a new draft"))
+                return
+            case .draftNotFound:
+                // Deleted meanwhile (its copy went to the Trash): the text
+                // survives as a new draft, its attachments with it.
+                draft.draftID = nil
+                draft.version = 0
+                draft.replaces = nil
+                form?.toast(L10n.T("This draft was removed elsewhere; your text will be saved as a new draft"))
+                return
+            case .messageNotFound where draft.replaces != nil:
+                // The Drafts message it was to take over is gone: save
+                // without it.
+                draft.replaces = nil
+                markDirty()
+                return
+            default:
+                break
+            }
         }
         let text = rpcErrorText(L10n.T("Saving the draft"), error)
         if reason == .autosave {
@@ -406,19 +450,29 @@ public final class ComposeDraftController {
         }
     }
 
+    /// deleteDraft deletes the stored draft (and with it its copy in the
+    /// Drafts folder); the window is closing, so a failure is only logged.
+    private func deleteDraft() {
+        guard let form, let id = draft.draftID else { return }
+        let accountID = form.account.id
+        let client = client
+        let log = log
+        Task {
+            do {
+                _ = try await client.call(API.DraftDelete.self, DraftDeleteParams(accountId: accountID, draftId: id))
+            } catch {
+                log.debug("draft.delete: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
     private func discardNow() {
         guard let form else { return }
         let accountID = form.account.id
         let client = client
         let log = log
-        if let id = draft.draftID {
-            Task {
-                do {
-                    _ = try await client.call(API.DraftDelete.self, DraftDeleteParams(accountId: accountID, draftId: id))
-                } catch {
-                    log.debug("draft.delete: \(String(describing: error), privacy: .public)")
-                }
-            }
+        if draft.draftID != nil {
+            deleteDraft()
         } else {
             for a in form.attachments {
                 let attID = a.id
@@ -447,6 +501,9 @@ public final class ComposeDraftController {
         switch await saveDraftQuestion() {
         case .discard:
             draft.discard = true
+            if !draft.explicitSave, draft.draftID != nil {
+                deleteDraft()
+            }
             cleanup()
             return true
         case .save:

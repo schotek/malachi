@@ -24,6 +24,8 @@ const (
 	KindReply
 	KindReplyAll
 	KindForward
+	// KindEdit is a draft opened from the Drafts folder (draft.open).
+	KindEdit
 )
 
 // Mode is the draft.create mode of the kind.
@@ -72,10 +74,17 @@ type Params struct {
 	// Blocked is what the backend's sanitiser removed from the quoted
 	// original; the window says so once.
 	Blocked api.BlockedContent
+	// DraftID and Version are the saved draft the window edits (KindEdit
+	// from draft.open); empty for a new one. Replaces is the message of
+	// the Drafts folder the first save takes over (draft.open sets it).
+	DraftID  api.DraftID
+	Version  int
+	Replaces api.MessageID
 }
 
-// FromDraft turns a draft.create result into window parameters. A draft
-// without HTML (the backend could not quote formatted) shows its text.
+// FromDraft turns a draft.create or draft.open result into window
+// parameters. A draft without HTML (the backend could not quote formatted,
+// or it is plain text) shows its text.
 func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 	p := Params{
 		Kind:        kind,
@@ -89,6 +98,9 @@ func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 		Forwarding:  d.Forwarding,
 		Attachments: d.Attachments,
 		Blocked:     blocked,
+		DraftID:     d.ID,
+		Version:     d.Version,
+		Replaces:    d.Replaces,
 	}
 	if p.BodyHTML == "" {
 		p.BodyHTML = escapeText(d.TextBody)

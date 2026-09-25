@@ -134,6 +134,9 @@ final class Integration {
         listView.onActivateMessage = { [weak self] summary in
             self?.windows.openMessage(summary)
         }
+        list.onActivateDraft = { [weak self] summary in
+            self?.actions.openDraft(summary.id)
+        }
         listView.onAuthBannerButton = { [weak self] in
             self?.authBannerButton()
         }

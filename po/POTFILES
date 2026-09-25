@@ -21,6 +21,7 @@ ui/internal/window/accounts_reorder.go
 ui/internal/window/actions.go
 ui/internal/window/attachments.go
 ui/internal/window/compose_open.go
+ui/internal/window/drafts.go
 ui/internal/window/embedded.go
 ui/internal/window/favourites.go
 ui/internal/window/folders.go

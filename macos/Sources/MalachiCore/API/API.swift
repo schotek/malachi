@@ -245,6 +245,13 @@ public enum API {
         public static let timeout = RPCTimeouts.compose
     }
 
+    public enum DraftOpen: RPCMethod {
+        public typealias Params = DraftOpenParams
+        public typealias Result = DraftOpenResult
+        public static let name = "draft.open"
+        public static let timeout = RPCTimeouts.compose
+    }
+
     // MARK: Attachments
 
     public enum AttachmentImport: RPCMethod {
@@ -345,7 +352,7 @@ public enum API {
         MessageSend.self,
         OutboxRetry.self,
         ThreadList.self, ThreadGet.self,
-        DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self,
+        DraftSave.self, DraftList.self, DraftDelete.self, DraftCreate.self, DraftOpen.self,
         AttachmentImport.self, AttachmentRemove.self, AttachmentGet.self,
         SearchQuery.self,
         SyncStatus.self, SyncTrigger.self,

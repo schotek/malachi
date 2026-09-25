@@ -63,6 +63,7 @@ type DraftService interface {
 	List(ctx context.Context, p DraftListParams) (*DraftListResult, error)
 	Delete(ctx context.Context, p DraftDeleteParams) (*DraftDeleteResult, error)
 	Create(ctx context.Context, p DraftCreateParams) (*DraftCreateResult, error)
+	Open(ctx context.Context, p DraftOpenParams) (*DraftOpenResult, error)
 }
 
 type AttachmentService interface {

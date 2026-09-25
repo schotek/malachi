@@ -77,6 +77,9 @@ final class MessageViewController: NSViewController {
     let header = MessageHeaderView()
 
     private let banner = BannerView()
+    /// A message of the Drafts folder (window.blp `draft_banner`; the pane
+    /// only): the button opens it in the compose window.
+    private let draftBanner = BannerView(title: L10n.T("This message is a draft"), buttonTitle: L10n.T("Edit"))
     private let remoteBar: RemoteBarView
     private let textScroll = NSScrollView()
     private let textClamp: ClampView
@@ -169,6 +172,10 @@ final class MessageViewController: NSViewController {
             guard let self, let id = self.current?.id else { return }
             self.delegate?.retryOutbox(id)
         }
+        draftBanner.onButton = { [weak self] in
+            guard let self, let id = self.current?.id else { return }
+            self.delegate?.editDraft(id)
+        }
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
         remoteBar.onTrust = { [weak self] in
             guard let self, let id = self.current?.id else { return }
@@ -179,6 +186,9 @@ final class MessageViewController: NSViewController {
         root.spacing = 0
         if mode != .embedded {
             root.addArrangedSubview(banner)
+        }
+        if mode == .pane {
+            root.addArrangedSubview(draftBanner)
         }
         root.addArrangedSubview(remoteBar)
         root.addArrangedSubview(pages)
@@ -235,6 +245,9 @@ final class MessageViewController: NSViewController {
         }
         current = s
         setPage(message: true)
+        if mode == .pane {
+            draftBanner.reveal(delegate?.isDraft(s) == true)
+        }
         if let lm = cache.loaded(s.id), lm.complete {
             render(s, lm)
             return
@@ -260,6 +273,7 @@ final class MessageViewController: NSViewController {
         scrollToTopPending = true
         cancelSpinner()
         banner.reveal(false)
+        draftBanner.reveal(false)
         setBarVisible(false)
         webView?.clear() // drop the pictures of the message before
         setPage(message: false)

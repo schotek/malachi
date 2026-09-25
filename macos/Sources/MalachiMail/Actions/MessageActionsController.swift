@@ -59,6 +59,12 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
             guard let self, let open = self.state.hooks.openCompose else { return }
             open(params)
         }
+        actions.raiseDraft = { [weak self] draft in
+            self?.state.hooks.raiseDraft?(draft) ?? false
+        }
+        actions.openMessageWindow = { [weak self] summary in
+            self?.windows.openMessage(summary)
+        }
         actions.onWindowsClose = { [weak self] id in
             self?.windows.closeMessageWindow(id)
         }
@@ -202,6 +208,14 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func retryOutbox(_ id: MessageID) {
         actions.retryOutbox(id)
+    }
+
+    func isDraft(_ summary: MessageSummary) -> Bool {
+        actions.mailbox.model.inDrafts(summary)
+    }
+
+    func editDraft(_ id: MessageID) {
+        actions.openDraft(id)
     }
 
     // MARK: Links (remote.go `openLink`)

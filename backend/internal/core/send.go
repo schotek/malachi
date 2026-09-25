@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/mime"
@@ -68,29 +67,19 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 
 	now := time.Now()
 	from := api.Address{Name: a.Config.DisplayName, Address: a.Config.Email}
-	inReplyTo, references := s.b.threadingHeaders(ctx, a.ID, d.InReplyTo)
+	inReplyTo, references := s.b.draftThreading(ctx, d)
 	in := smtp.BuildInput{
-		From:       from,
-		To:         d.To,
-		CC:         d.CC,
-		Subject:    d.Subject,
-		Text:       d.TextBody,
-		HTML:       d.HTMLBody, // the sanitiser's output, stored by draft.save
-		InReplyTo:  inReplyTo,
-		References: references,
-		Date:       now,
-		MessageID:  smtp.NewMessageID(a.Config.Email),
-	}
-	for _, att := range d.Attachments {
-		path := s.b.store.AttachmentPath(att.ID)
-		in.Attachments = append(in.Attachments, smtp.Attachment{
-			Filename:    att.Filename,
-			ContentType: att.ContentType,
-			Size:        att.Size,
-			Inline:      att.Inline,
-			ContentID:   att.ContentID,
-			Open:        func() (io.ReadCloser, error) { return os.Open(path) },
-		})
+		From:        from,
+		To:          d.To,
+		CC:          d.CC,
+		Subject:     d.Subject,
+		Text:        d.TextBody,
+		HTML:        d.HTMLBody, // the sanitiser's output, stored by draft.save
+		InReplyTo:   inReplyTo,
+		References:  references,
+		Date:        now,
+		MessageID:   smtp.NewMessageID(a.Config.Email),
+		Attachments: s.b.smtpAttachments(d.Attachments),
 	}
 	// The stored copy lists the parts as the built message numbers them.
 	ids := smtp.PartIDs(in)
@@ -156,6 +145,10 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 	s.b.log.Info("message queued", "account", a.ID, "message", m.ID, "recipients", len(recipients), "size", m.Size)
 	s.b.Delivery.Wake(a.ID)
 	s.b.outboxChanged(a.ID)
+	if !d.Copy.IsZero() {
+		// The draft's copy in the Drafts folder is a queued delete now.
+		s.b.triggerDrafts(a.ID)
+	}
 	return &api.MessageSendResult{OutboxID: api.MessageID(m.ID)}, nil
 }
 

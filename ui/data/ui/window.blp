@@ -376,6 +376,16 @@ Adw.ApplicationWindow main_window {
               revealed: false;
             }
 
+            // A message of the Drafts folder: the button opens it in the
+            // compose window (window/drafts.go); double-click does too.
+            [top]
+            Adw.Banner draft_banner {
+              title: _("This message is a draft");
+              button-label: _("Edit");
+              use-markup: false;
+              revealed: false;
+            }
+
             // Remote images the sanitiser removed from an HTML message
             // (window/remote.go): the count, a button that loads them
             // through the daemon for this message, and one that trusts the

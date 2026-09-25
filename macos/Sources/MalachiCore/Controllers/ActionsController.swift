@@ -48,6 +48,12 @@ public final class ActionsController {
     /// Opens a compose window with the prepared parameters
     /// (compose/manager.go `Open`).
     public var openCompose: (@MainActor (ComposeParams) -> Void)?
+    /// Raises the compose window already editing the draft, if any
+    /// (compose/manager.go `FindDraft`); true when there was one.
+    public var raiseDraft: (@MainActor (Draft) -> Bool)?
+    /// Opens a message in its own window (message_view.go
+    /// `openMessageWindow`): a draft, when the daemon cannot open drafts.
+    public var openMessageWindow: (@MainActor (MessageSummary) -> Void)?
     /// A message left its folder: close its window (message_view.go
     /// `closeMessageWindow`).
     public var onWindowsClose: (@MainActor (MessageID) -> Void)?
@@ -60,8 +66,9 @@ public final class ActionsController {
 
     private let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "actions")
-    /// The messages a draft.create is being prepared for (compose_open.go
-    /// `composing`): a second click while it runs does nothing.
+    /// The messages a draft.create or draft.open is being prepared for
+    /// (compose_open.go `composing`): a second click while it runs does
+    /// nothing.
     private var composing: Set<MessageID> = []
 
     /// - Parameters:
@@ -572,6 +579,37 @@ public final class ActionsController {
                 var p = fromDraft(kind: kind, draft: res.draft, blocked: res.blocked)
                 p.accountID = s.accountId
                 self.openCompose?(p)
+            }
+        }
+    }
+
+    /// Opens message `id` of a Drafts folder in the compose window, or
+    /// raises the window already editing it (drafts.go `openDraft`). A
+    /// second request while the first is on its way does nothing; a daemon
+    /// without draft.open shows the message instead.
+    public func openDraft(_ id: MessageID) {
+        guard let s = summary(id), !composing.contains(id) else { return }
+        composing.insert(id)
+        let params = DraftOpenParams(accountId: s.accountId, messageId: id)
+        mailbox.perform(API.DraftOpen.self, params, timeout: RPCTimeouts.compose) { [weak self] outcome in
+            guard let self else { return }
+            self.composing.remove(id)
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("draft.open: \(String(describing: err), privacy: .public)")
+                if draftOpenUnsupported(err) {
+                    self.openMessageWindow?(s)
+                    return
+                }
+                self.toast(draftOpenErrorText(err))
+            case .success(let res):
+                if self.raiseDraft?(res.draft) == true {
+                    return
+                }
+                self.openCompose?(fromDraft(kind: .edit, draft: res.draft, blocked: res.blocked))
+                if let n = res.skipped?.count, n > 0 {
+                    self.toast(draftSkippedText(n))
+                }
             }
         }
     }

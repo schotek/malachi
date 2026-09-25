@@ -152,6 +152,7 @@ type Window struct {
 	replyAllButton *gtk.Button
 	forwardButton  *gtk.Button
 	outboxBanner   *adw.Banner
+	draftBanner    *adw.Banner // a message of the Drafts folder (drafts.go)
 }
 
 // Starter brings the daemon up before the window dials its socket
@@ -221,6 +222,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		replyAllButton: b.GetObject("reply_all_button").Cast().(*gtk.Button),
 		forwardButton:  b.GetObject("forward_button").Cast().(*gtk.Button),
 		outboxBanner:   b.GetObject("outbox_banner").Cast().(*adw.Banner),
+		draftBanner:    b.GetObject("draft_banner").Cast().(*adw.Banner),
 	}
 	w.SetApplication(&app.Application)
 	w.pane = newMessageView(w, &w.ApplicationWindow.Window, b)
@@ -313,12 +315,16 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		}
 	})
 	// Fires on double-click or Enter (activate-on-single-click is off): a
-	// conversation row folds or unfolds, a message opens in a window.
+	// conversation row folds or unfolds, a message opens in a window — a
+	// draft in the compose window.
 	w.messageList.ConnectRowActivated(func(row *gtk.ListBoxRow) {
 		if r, ok := w.model.rowAt(row.Index()); ok {
-			if r.Thread {
+			switch {
+			case r.Thread:
 				w.toggleThread(r.Key.Thread)
-			} else {
+			case w.model.inDrafts(r.Message):
+				w.openDraft(r.Message.ID)
+			default:
 				w.openMessageWindow(r.Message.ID)
 			}
 		}
@@ -363,6 +369,11 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			w.retryOutbox(s.ID)
 		}
 	})
+	w.draftBanner.ConnectButtonClicked(func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.openDraft(s.ID)
+		}
+	})
 
 	// Client callbacks arrive on a background goroutine; hop to the main loop.
 	c.OnStateChange = func(s client.State, err error) {
@@ -390,6 +401,7 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 	if row == nil {
 		w.messageStack.SetVisibleChildName(w.emptyPageName())
 		w.outboxBanner.SetRevealed(false)
+		w.draftBanner.SetRevealed(false)
 		w.setMessageActionsSensitive(false)
 		w.scheduleMarkRead("")
 		return

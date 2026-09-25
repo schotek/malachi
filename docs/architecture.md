@@ -540,6 +540,33 @@ quote (`compose.Attribution`) and shows what the sanitiser removed as a
 toast. `compose.Prefill`, the UI's own plain-text quote, is the fallback
 for a daemon that cannot answer.
 
+Drafts on the server: every saved draft gets a copy in the account's
+Drafts folder (api.md §4.5). The syncers upload it once it has rested for
+30 seconds (`store.DueDraftUploads`; core arms a wake-up for the syncer,
+`core/draft_sync.go`), over IMAP with `APPEND` and `\Draft`, over Graph
+with `POST me/messages` and the MIME message; `core.buildDraft` writes it
+like `message.send` does, plus `Bcc`, under a fresh `Message-ID` for every
+upload (Gmail may drop an `APPEND` whose `Message-ID` it knows).
+`store.MarkDraftSynced` then records the new copy on the draft
+(`drafts.rfc_message_id`, `server_*`, migration 0012) and deletes the
+previous one like a permanent delete, through an ordinary `message_ops`
+entry: its local row goes at once, the server copy with the next push. A
+draft's copy and a message of the Drafts folder are the same when their
+`Message-ID` or server identity match (`store.DraftForMessage`);
+`draft.open` returns the draft for such a message, or builds one from a
+message another client left (`core/draft_open.go`, the quoter of
+`draft.create` without the quote), and `replaces` lets its first save
+take the message over — only when nothing was lost on the way. Sending,
+`draft.delete` and a trash, move or delete of the copy delete the other
+half. On Gmail a permanent delete moves the message to the Trash and
+expunges it there, since an expunge elsewhere only drops a label. Known
+limits: a draft whose copy another client deleted stays in the store
+(invisible; the local rows may simply have left the retention window, so
+their absence proves nothing), and a copy Outlook changed in place is kept
+next to the new upload rather than overwritten (Graph's delta reports only
+its flags). In both UIs a message of the Drafts folder opens in the
+compose window (double-click, Enter, or the pane's *Edit* banner).
+
 The *General* page: *Run in Background* makes the main window hide instead
 of close (a hidden window keeps the application alive; `app.show` and
 activation bring it back); *Launch at Login* asks the Background portal

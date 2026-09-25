@@ -107,6 +107,10 @@ public final class ListController {
     /// window (window.go, the row-activated handler). A conversation row
     /// folds or unfolds instead and never reaches this.
     public var onActivateMessage: (@MainActor (MessageSummary) -> Void)?
+    /// A message row of a Drafts folder was activated: open it in the
+    /// compose window (window.go, the row-activated handler; drafts.go
+    /// `openDraft`).
+    public var onActivateDraft: (@MainActor (MessageSummary) -> Void)?
     /// The per-message actions changed with the selection or its flags.
     public var onActionFlagsChanged: (@MainActor (ActionFlags) -> Void)?
     /// The mark-as-read timer fired for the selected message (actions.go
@@ -517,11 +521,13 @@ public final class ListController {
 
     /// Double-click or Return on a row (window.go, the row-activated
     /// handler): a conversation row folds or unfolds, a message opens in a
-    /// window.
+    /// window — a draft in the compose window.
     public func activate(key: ListKey) {
         guard let r = row(for: key) else { return }
         if r.thread, let tid = r.key.thread {
             toggleThread(tid)
+        } else if mailbox.model.inDrafts(r.message) {
+            onActivateDraft?(r.message)
         } else {
             onActivateMessage?(r.message)
         }

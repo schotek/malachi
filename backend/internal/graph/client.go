@@ -215,6 +215,11 @@ func (c *Client) PostRaw(ctx context.Context, u string, body func() (io.Reader, 
 	return c.request(ctx, http.MethodPost, u, body, contentType, length, nil, bodyTimeout, nil)
 }
 
+// PostRawInto is PostRaw that decodes the JSON answer into out.
+func (c *Client) PostRawInto(ctx context.Context, u string, body func() (io.Reader, error), contentType string, length int64, out any) error {
+	return c.request(ctx, http.MethodPost, u, body, contentType, length, out, bodyTimeout, nil)
+}
+
 // GetRaw streams a non-JSON response ($value); the caller must close it.
 // The download is bounded by the context and the client's timeout.
 func (c *Client) GetRaw(ctx context.Context, u string) (io.ReadCloser, error) {

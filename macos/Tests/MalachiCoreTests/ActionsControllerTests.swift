@@ -39,6 +39,11 @@ private final class ActionLog {
     /// What the next confirmation answers.
     var answer = true
     var composed: [ComposeParams] = []
+    /// The drafts `raiseDraft` was asked about, and what it answers.
+    var raised: [Draft] = []
+    var raise = false
+    var messageWindows: [MessageID] = []
+    var activatedDrafts: [MessageID] = []
     var closedWindows: [MessageID] = []
     /// "id:flagged" per star change.
     var stars: [String] = []
@@ -52,8 +57,10 @@ private actor Recorder {
     var senders: [String] = []
     var preferences: [Preferences] = []
     var drafts: [DraftCreateParams] = []
+    var opens: [DraftOpenParams] = []
 
     func addSender(_ a: String) { senders.append(a) }
+    func addOpen(_ p: DraftOpenParams) { opens.append(p) }
     func addPreferences(_ p: Preferences) { preferences.append(p) }
     func addDraft(_ d: DraftCreateParams) { drafts.append(d) }
 }
@@ -64,6 +71,7 @@ private let trash = FolderKey(account: "a", folder: "trash")
 private let archive = FolderKey(account: "a", folder: "arch")
 private let junk = FolderKey(account: "a", folder: "junk")
 private let outbox = FolderKey(account: "a", folder: "out")
+private let drafts = FolderKey(account: "a", folder: "dr")
 /// 2026-09-01T10:00:00Z.
 private let base = Date(timeIntervalSince1970: 1_788_256_800)
 
@@ -169,6 +177,11 @@ private final class Harness {
             return log.answer
         }
         actions.openCompose = { log.composed.append($0) }
+        actions.raiseDraft = { d in
+            log.raised.append(d)
+            return log.raise
+        }
+        actions.openMessageWindow = { log.messageWindows.append($0.id) }
         actions.onWindowsClose = { log.closedWindows.append($0) }
         actions.onStarChanged = { id, on in log.stars.append("\(id.rawValue):\(on)") }
         actions.onOutboxStateChanged = { log.outboxStates.append($0) }
@@ -775,5 +788,63 @@ private final class Harness {
         #expect(await h.fixture.deleteRequests.isEmpty)
         #expect(await h.fixture.moveRequests.isEmpty)
         #expect(h.log.toasts.isEmpty)
+    }
+
+    /// drafts.go `openDraft`: draft.open's draft opens in an edit window
+    /// (once, however often asked while it runs), a window already editing
+    /// it comes to the front instead, an old daemon shows the message, and
+    /// a failure is said.
+    @Test func draftOpensForEditing() async throws {
+        var d1 = msg("d1", 1, .seen)
+        d1.folderId = drafts.folder
+        let h = try await Harness(folders: testFolders() + [testFolder("dr", path: "Drafts", role: .drafts)], messages: [drafts: [d1]])
+        defer { Task { await h.stop() } }
+        h.select(drafts)
+        try await h.loaded(drafts)
+        let saved = Draft(id: "d_1", accountId: "a", version: 3, subject: "s-d1", textBody: "x",
+                          attachments: [DraftAttachment(id: "att_1", filename: "a.pdf", contentType: "application/pdf", size: 1, inline: false)])
+        let opened = try encode(DraftOpenResult(draft: saved, skipped: [Attachment(partId: "3", filename: "big.iso", contentType: "application/octet-stream", size: 1, inline: false)]))
+        let rec = Recorder()
+        await h.fixture.on(API.DraftOpen.name) { params in
+            await rec.addOpen(try decode(DraftOpenParams.self, params))
+            try await Task.sleep(for: .milliseconds(50))
+            return opened
+        }
+
+        // Activation reaches the hook as a draft, not as a message window.
+        let log = h.log
+        h.list.onActivateDraft = { log.activatedDrafts.append($0.id) }
+        h.list.activate(key: ListKey(message: "d1"))
+        #expect(h.log.activatedDrafts == ["d1"])
+
+        h.actions.openDraft("d1")
+        h.actions.openDraft("d1")
+        try await waitUntil { h.log.composed.count == 1 }
+        let p = h.log.composed[0]
+        #expect(p.kind == .edit && p.draftID == "d_1" && p.version == 3 && p.subject == "s-d1" && p.attachments.count == 1)
+        #expect(h.log.raised.count == 1)
+        #expect(h.log.toasts == ["1 attachment of the draft could not be opened"])
+        let requests = await rec.opens
+        #expect(requests == [DraftOpenParams(accountId: "a", messageId: "d1")])
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(h.log.composed.count == 1)
+
+        // A window already editing it is raised instead.
+        h.log.raise = true
+        h.actions.openDraft("d1")
+        try await waitUntil { h.log.raised.count == 2 }
+        #expect(h.log.composed.count == 1)
+
+        // A daemon without draft.open shows the message.
+        await h.fixture.on(API.DraftOpen.name) { _ in throw RPCError(code: .methodNotFound, message: "no") }
+        h.actions.openDraft("d1")
+        try await waitUntil { h.log.messageWindows == ["d1"] }
+
+        // Not downloaded yet: said, nothing opens.
+        await h.fixture.on(API.DraftOpen.name) { _ in throw RPCError(code: .unavailable, message: "later") }
+        h.actions.openDraft("d1")
+        try await waitUntil { h.log.toasts.count == 2 }
+        #expect(h.log.toasts.last == "The draft has not been downloaded yet; try again in a moment")
+        #expect(h.log.composed.count == 1)
     }
 }

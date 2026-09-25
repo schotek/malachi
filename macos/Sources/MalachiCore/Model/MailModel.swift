@@ -326,6 +326,13 @@ public struct MailModel: Sendable {
         s.outbox != nil || folderRole(FolderKey(account: s.accountId, folder: s.folderId)) == .outbox
     }
 
+    /// Whether `s` lies in its account's Drafts folder: such a message
+    /// opens in the compose window (draft.open) rather than as mail
+    /// (model.go `inDrafts`).
+    public func inDrafts(_ s: MessageSummary) -> Bool {
+        folderRole(FolderKey(account: s.accountId, folder: s.folderId)) == .drafts
+    }
+
     /// Whether `s` can go to its account's role folder: the folder exists
     /// and `s` is not in it (actions.go `canMoveToRole`).
     public func canMoveToRole(_ s: MessageSummary, _ role: FolderRole) -> Bool {

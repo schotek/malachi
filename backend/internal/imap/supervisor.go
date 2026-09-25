@@ -24,6 +24,9 @@ type SupervisorDeps struct {
 	Notifier   api.Notifier
 	Prefs      func() SyncPrefs
 	Log        *slog.Logger
+	// BuildDraft and DraftQuiet: see Deps; nil = drafts stay local.
+	BuildDraft func(ctx context.Context, accountID, draftID string) (store.DraftUpload, error)
+	DraftQuiet time.Duration
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -120,9 +123,11 @@ func (sv *Supervisor) Start(a store.Account) {
 				sv.deps.AuthFailed(id)
 			}
 		},
-		Notifier: sv.deps.Notifier,
-		Prefs:    sv.deps.Prefs,
-		Log:      sv.deps.Log,
+		Notifier:   sv.deps.Notifier,
+		Prefs:      sv.deps.Prefs,
+		Log:        sv.deps.Log,
+		BuildDraft: sv.buildDraftFor(id),
+		DraftQuiet: sv.deps.DraftQuiet,
 	})
 	ctx, cancel := context.WithCancel(sv.ctx)
 	sv.seq++
@@ -208,4 +213,14 @@ func (sv *Supervisor) snapshot() []*entry {
 	sv.mu.Unlock()
 	sort.Slice(entries, func(i, j int) bool { return entries[i].seq < entries[j].seq })
 	return entries
+}
+
+// buildDraftFor binds SupervisorDeps.BuildDraft to one account.
+func (sv *Supervisor) buildDraftFor(accountID string) func(ctx context.Context, draftID string) (store.DraftUpload, error) {
+	if sv.deps.BuildDraft == nil {
+		return nil
+	}
+	return func(ctx context.Context, draftID string) (store.DraftUpload, error) {
+		return sv.deps.BuildDraft(ctx, accountID, draftID)
+	}
 }

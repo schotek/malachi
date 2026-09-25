@@ -71,6 +71,13 @@ type Deps struct {
 	Backoff func(attempt int) time.Duration
 	// Sleep is the client's Retry-After wait (tests).
 	Sleep func(ctx context.Context, d time.Duration) error
+	// BuildDraft writes the server copy of a draft (pushDrafts): an error
+	// matching store.ErrNotFound means the draft is gone, an *api.Error
+	// with CodeStorageError ends the pass, anything else is that draft's
+	// failure. nil = drafts stay local.
+	BuildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
+	// DraftQuiet is how long a draft rests after a save before its upload.
+	DraftQuiet time.Duration
 }
 
 // request is one queued pass.
@@ -337,10 +344,19 @@ func (s *Syncer) cycle(ctx context.Context, req request) error {
 	if err != nil {
 		return err
 	}
+	// A new draft copy is fetched back in this pass whatever was asked
+	// for, so the next version finds the copy it replaces.
+	drafted, err := s.pushDrafts(ctx, byMailbox)
+	if err != nil {
+		return err
+	}
+	for id := range drafted {
+		opFolders[id] = true
+	}
 
 	var targets []store.Folder
 	for _, f := range stored {
-		if req.folder != "" && api.FolderID(f.ID) != req.folder {
+		if req.folder != "" && api.FolderID(f.ID) != req.folder && !drafted[f.ID] {
 			continue
 		}
 		targets = append(targets, f)

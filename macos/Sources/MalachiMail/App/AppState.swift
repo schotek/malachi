@@ -29,6 +29,10 @@ final class AppState {
         /// a mailto: link inside a message); the compose manager wires it
         /// (compose/manager.go `Open`).
         var openCompose: (@MainActor (ComposeParams) -> Void)?
+        /// Brings the compose window editing a draft (from draft.open) to
+        /// the front; false when none edits it (compose/manager.go
+        /// `FindDraft`).
+        var raiseDraft: (@MainActor (Draft) -> Bool)?
     }
 
     let client: RPCClient

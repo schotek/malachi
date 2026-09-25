@@ -8,9 +8,9 @@
 
 import Foundation
 
-/// compose.FromDraft: turns a draft.create result into window parameters.
-/// A draft without HTML (the backend could not quote formatted) shows its
-/// text.
+/// compose.FromDraft: turns a draft.create or draft.open result into
+/// window parameters. A draft without HTML (the backend could not quote
+/// formatted, or it is plain text) shows its text.
 public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent) -> ComposeParams {
     var p = ComposeParams(
         kind: kind,
@@ -23,7 +23,10 @@ public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent
         inReplyTo: d.inReplyTo,
         forwarding: d.forwarding,
         attachments: d.attachments ?? [],
-        blocked: blocked
+        blocked: blocked,
+        draftID: d.id,
+        version: d.version,
+        replaces: d.replaces
     )
     if p.bodyHTML.isEmpty {
         p.bodyHTML = escapeText(d.textBody)
@@ -54,7 +57,7 @@ public func prefill(kind: ComposeKind, source src: ComposeSource, self selfAddre
         p.subject = forwardSubject(src.subject)
         p.bodyHTML = forwardHTML(kind: kind, source: src)
         p.forwarding = nonEmptyID(src.id)
-    case .new:
+    case .new, .edit:
         break
     }
     return p
@@ -93,7 +96,7 @@ public func attribution(kind: ComposeKind, source src: ComposeSource) -> String 
             lines.append(L10n.T("To: %s", formatAll(src.to)))
         }
         s = lines.joined(separator: "\n")
-    case .new:
+    case .new, .edit:
         return ""
     }
     // The backend's cap; a message to hundreds of people has a To: line

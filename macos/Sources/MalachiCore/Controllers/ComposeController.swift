@@ -10,11 +10,22 @@ import os
 // layer) and reached through `ComposeWindowHandle`.
 
 /// What the manager pushes to an open compose window: the refreshed
-/// account list (compose.go `setAccounts`) and a toast.
+/// account list (compose.go `setAccounts`) and a toast; and what it asks:
+/// whether the window edits a draft, and to come to the front.
 @MainActor
 public protocol ComposeWindowHandle: AnyObject {
     func setAccounts(_ accounts: [Account], placeholder: Bool)
     func toast(_ text: String)
+    /// Whether the window edits `draft`: the same saved draft, or the same
+    /// Drafts message taken over (manager.go `FindDraft`).
+    func edits(_ draft: Draft) -> Bool
+    /// Brings the window to the front.
+    func present()
+}
+
+extension ComposeWindowHandle {
+    public func edits(_ draft: Draft) -> Bool { false }
+    public func present() {}
 }
 
 /// compose.Manager: opens compose windows and keeps what they share.
@@ -89,6 +100,12 @@ public final class ComposeController {
             // scripts; said once, as after a save.
             w.toast(msg)
         }
+    }
+
+    /// Manager.FindDraft: the open window that edits `draft` (from
+    /// draft.open), nil when none.
+    public func findDraft(_ draft: Draft) -> (any ComposeWindowHandle)? {
+        windows.first { $0.edits(draft) }
     }
 
     /// Manager.remove: the window closed.

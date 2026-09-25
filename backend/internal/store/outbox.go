@@ -129,7 +129,8 @@ func outboxFolderTx(ctx context.Context, tx *sql.Tx, accountID string) (Folder, 
 // other version → ErrVersionConflict), the outbox folder ensured, the
 // messages row inserted there (uid 0, flags ["seen"], body fetched with
 // in.Text, size = bytes written), the outbox row inserted as queued, the
-// draft deleted (its attachment rows cascade) and the folder recounted.
+// draft deleted (its attachment rows cascade) together with its copy in the
+// Drafts folder (dropCopyTx), and the folders recounted.
 // The attachment files go after the commit. On any failure nothing is left
 // behind, the raw file included. The stored message is returned.
 func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, error) {
@@ -154,7 +155,7 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 	if err != nil {
 		return Message{}, fmt.Errorf("enqueue outbox: %w", err)
 	}
-	m, attachments, err := s.enqueueOutboxTx(ctx, in, id, size)
+	m, attachments, gone, err := s.enqueueOutboxTx(ctx, in, id, size)
 	if err != nil {
 		s.removeMessageFiles([]messageFile{{accountID: accountID, id: id}})
 		return Message{}, err
@@ -162,6 +163,7 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 	for _, aid := range attachments {
 		s.removeAttachmentFile(aid)
 	}
+	s.removeMessageFiles(gone)
 	return m, nil
 }
 
@@ -179,20 +181,20 @@ func (s *Store) checkDraftVersion(ctx context.Context, q execQuerier, accountID,
 	return nil
 }
 
-func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string, size int64) (Message, []string, error) {
+func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string, size int64) (Message, []string, []messageFile, error) {
 	accountID := in.Message.AccountID
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return Message{}, nil, fmt.Errorf("enqueue outbox: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("enqueue outbox: %w", err)
 	}
 	defer tx.Rollback()
 
 	if err := s.checkDraftVersion(ctx, tx, accountID, in.DraftID, in.DraftVersion); err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 	folder, err := outboxFolderTx(ctx, tx, accountID)
 	if err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 
 	m := in.Message
@@ -205,7 +207,7 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 	m.Size, m.BodyState, m.ThreadID = size, BodyFetched, newID(thread.IDPrefix)
 	enc, err := encodeMessage(&m)
 	if err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 	now := nowStamp()
 	if _, err := tx.ExecContext(ctx, `
@@ -218,63 +220,76 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 		enc.from, enc.to, enc.cc, enc.bcc, enc.replyTo, m.Subject, stamp(m.Date), optStamp(m.InternalDate),
 		m.RFCMessageID, m.InReplyTo, enc.references, size, m.Snippet, boolInt(m.HasAttachments),
 		enc.attachments, enc.headers, in.Text, string(BodyFetched), m.ThreadID, now, now); err != nil {
-		return Message{}, nil, fmt.Errorf("insert outbox message: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("insert outbox message: %w", err)
 	}
 	if err := insertRefsTx(ctx, tx, id, accountID, m.InReplyTo, m.References); err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 	if _, err := linkMessageTx(ctx, tx, linkRow{id: id, accountID: accountID, threadID: m.ThreadID,
 		rfcID: m.RFCMessageID, inReplyTo: m.InReplyTo, references: m.References}); err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 	recipients, err := encodeJSON(dedupeStrings(in.Recipients), "[]")
 	if err != nil {
-		return Message{}, nil, fmt.Errorf("encode recipients: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("encode recipients: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO outbox (message_id, account_id, envelope_from, recipients_json, state, attempts,
 		                    next_attempt_at, last_error_code, last_error, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, 0, '', 0, '', ?, ?)`,
 		id, accountID, in.EnvelopeFrom, recipients, string(OutboxQueued), now, now); err != nil {
-		return Message{}, nil, fmt.Errorf("insert outbox entry: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("insert outbox entry: %w", err)
 	}
 
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM attachments WHERE draft_id = ?`, in.DraftID)
 	if err != nil {
-		return Message{}, nil, fmt.Errorf("list draft attachments: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
 	}
 	var attachments []string
 	for rows.Next() {
 		var aid string
 		if err := rows.Scan(&aid); err != nil {
 			rows.Close()
-			return Message{}, nil, fmt.Errorf("scan attachment: %w", err)
+			return Message{}, nil, nil, fmt.Errorf("scan attachment: %w", err)
 		}
 		attachments = append(attachments, aid)
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
-		return Message{}, nil, fmt.Errorf("list draft attachments: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("list draft attachments: %w", err)
+	}
+	// The draft's copy in the Drafts folder goes with it.
+	var draftCopy DraftCopy
+	var uidValidity, uid int64
+	if err := tx.QueryRowContext(ctx, `SELECT rfc_message_id, server_folder_id, server_uidvalidity, server_uid, server_remote_id
+		FROM drafts WHERE id = ? AND account_id = ?`, in.DraftID, accountID).Scan(
+		&draftCopy.RFCMessageID, &draftCopy.FolderID, &uidValidity, &uid, &draftCopy.RemoteID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return Message{}, nil, nil, fmt.Errorf("load draft copy: %w", err)
+	}
+	draftCopy.UIDValidity, draftCopy.UID = uint32(uidValidity), uint32(uid)
+	gone, err := dropCopyTx(ctx, tx, accountID, draftCopy)
+	if err != nil {
+		return Message{}, nil, nil, err
 	}
 	res, err := tx.ExecContext(ctx, `DELETE FROM drafts WHERE id = ? AND account_id = ? AND version = ?`,
 		in.DraftID, accountID, in.DraftVersion)
 	if err != nil {
-		return Message{}, nil, fmt.Errorf("delete draft: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("delete draft: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return Message{}, nil, ErrVersionConflict
+		return Message{}, nil, nil, ErrVersionConflict
 	}
 	if _, _, err := recountFolderTx(ctx, tx, folder.ID); err != nil {
-		return Message{}, nil, err
+		return Message{}, nil, nil, err
 	}
 	stored, err := scanMessage(tx.QueryRowContext(ctx, `SELECT `+messageColumns+` FROM messages WHERE id = ?`, id))
 	if err != nil {
-		return Message{}, nil, fmt.Errorf("read outbox message: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("read outbox message: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return Message{}, nil, fmt.Errorf("enqueue outbox: %w", err)
+		return Message{}, nil, nil, fmt.Errorf("enqueue outbox: %w", err)
 	}
-	return stored, attachments, nil
+	return stored, attachments, gone, nil
 }
 
 // GetOutbox returns the delivery state of one outbox message of the

@@ -113,6 +113,10 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.setCcBccVisible(cc: !params.cc.isEmpty, bcc: !params.bcc.isEmpty)
         updateTitle()
         draft.setOriginal(inReplyTo: params.inReplyTo, forwarding: params.forwarding)
+        // A draft opened from the Drafts folder is the user's already: its
+        // id and version make the saves updates, and closing never deletes it.
+        draft.setOpened(draftID: params.draftID, version: params.version, replaces: params.replaces,
+                        fromDrafts: params.kind == .edit)
         editor.load(bodyHTML: params.bodyHTML)
         setAccounts(controller.accounts, placeholder: controller.placeholder)
         // What the backend imported for the template (a quoted original's
@@ -229,7 +233,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
             self.draft.markDirty()
         }
         editor.onReady = { [weak self] in
-            guard let self, self.params.kind != .new else { return }
+            guard let self, self.params.kind != .new, self.params.kind != .edit else { return }
             self.editor.focusStart()
         }
         editor.onCrashed = { [weak self] in
@@ -473,6 +477,24 @@ extension ComposeWindowController: ComposeForm {
 // MARK: - ComposeWindowHandle
 
 extension ComposeWindowController: ComposeWindowHandle {
+    /// manager.go `FindDraft`: the same saved draft, or the same Drafts
+    /// message taken over.
+    func edits(_ d: Draft) -> Bool {
+        if let id = d.id, draft.draft.draftID == id {
+            return true
+        }
+        if let replaces = d.replaces, params.replaces == replaces {
+            return true
+        }
+        return false
+    }
+
+    func present() {
+        showWindow(nil)
+        window?.makeKeyAndOrderFront(nil)
+        NSApp.activate()
+    }
+
     /// compose.go `setAccounts`: fills the From row, keeping the selected
     /// identity when it is still listed; before any choice was made the
     /// account the window was opened for is preselected. The row is only

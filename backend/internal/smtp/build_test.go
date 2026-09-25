@@ -459,3 +459,48 @@ func TestNewMessageID(t *testing.T) {
 		t.Fatal("ids repeat")
 	}
 }
+
+// A draft's server copy keeps its blind recipients in a Bcc header; the
+// message for delivery never has one.
+func TestBuildDraftMessageKeepsBcc(t *testing.T) {
+	in := BuildInput{From: jiri, To: []api.Address{alice}, Subject: "s", Text: "body", MessageID: "d1@example.cz"}
+	var buf bytes.Buffer
+	if err := BuildDraftMessage(&buf, in, []api.Address{bob, carol}); err != nil {
+		t.Fatal(err)
+	}
+	h, _, _ := readParts(t, buf.Bytes())
+	bcc, err := h.AddressList("Bcc")
+	if err != nil || len(bcc) != 2 || bcc[0].Address != bob.Address || bcc[1].Address != carol.Address {
+		t.Fatalf("Bcc = %v %v", bcc, err)
+	}
+	if id, _ := h.MessageID(); id != "d1@example.cz" {
+		t.Errorf("Message-ID = %q", id)
+	}
+	if n := headerCount(t, build(t, in), "Bcc"); n != 0 {
+		t.Errorf("BuildMessage wrote Bcc %d times", n)
+	}
+
+	// No Bcc, no header.
+	buf.Reset()
+	if err := BuildDraftMessage(&buf, in, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := headerCount(t, buf.Bytes(), "Bcc"); n != 0 {
+		t.Errorf("empty Bcc written %d times", n)
+	}
+
+	// A blind recipient is checked like any other: no header smuggled in.
+	buf.Reset()
+	evil := api.Address{Name: "x\r\nX-Evil: 1", Address: "a@example.org\r\nX-Evil: 1"}
+	if err := BuildDraftMessage(&buf, in, []api.Address{evil}); err == nil {
+		t.Fatalf("injected Bcc accepted: %q", buf.String())
+	}
+	buf.Reset()
+	named := api.Address{Name: "Eve\r\nX-Evil: 1", Address: "eve@example.org"}
+	if err := BuildDraftMessage(&buf, in, []api.Address{named}); err != nil {
+		t.Fatal(err)
+	}
+	if n := headerCount(t, buf.Bytes(), "X-Evil"); n != 0 {
+		t.Fatalf("header smuggled through a Bcc name: %q", buf.String())
+	}
+}

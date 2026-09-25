@@ -102,6 +102,11 @@ protocol MessageActionDelegate: AnyObject {
     func trustSender(_ id: MessageID)
     /// outbox.go `retryOutbox`.
     func retryOutbox(_ id: MessageID)
+    /// model.go `inDrafts`: the message lies in its account's Drafts folder
+    /// (the pane shows the draft banner).
+    func isDraft(_ summary: MessageSummary) -> Bool
+    /// drafts.go `openDraft`: the draft banner's Edit button.
+    func editDraft(_ id: MessageID)
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)

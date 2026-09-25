@@ -56,6 +56,12 @@ private final class FakeHandle: ComposeWindowHandle {
     func toast(_ text: String) {
         toasts.append(text)
     }
+
+    /// As the window does: the saved draft it was opened with, or the
+    /// Drafts message it takes over.
+    func edits(_ d: Draft) -> Bool {
+        (d.id != nil && params.draftID == d.id) || (d.replaces != nil && params.replaces == d.replaces)
+    }
 }
 
 @MainActor
@@ -186,6 +192,20 @@ private final class Harness {
         #expect(h.handles[0].toasts == ["1 unsafe element was removed from the message"])
         h.compose.open(ComposeParams(kind: .reply))
         #expect(h.handles[1].toasts.isEmpty)
+    }
+
+    /// Manager.FindDraft: the window editing the draft draft.open
+    /// answered with, by its id or by the Drafts message it takes over.
+    @Test func findDraftByIdOrReplacedMessage() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        h.compose.open(ComposeParams(kind: .new))
+        h.compose.open(ComposeParams(kind: .edit, draftID: "d_1", version: 2))
+        h.compose.open(ComposeParams(kind: .edit, replaces: "m_9"))
+        #expect(h.compose.findDraft(Draft(id: "d_1", accountId: "a")) === h.handles[1])
+        #expect(h.compose.findDraft(Draft(accountId: "a", replaces: "m_9")) === h.handles[2])
+        #expect(h.compose.findDraft(Draft(id: "d_2", accountId: "a")) == nil)
+        #expect(h.compose.findDraft(Draft(accountId: "a")) == nil, "a new window edits nothing")
     }
 
     @Test func openWithoutAFactoryDoesNothing() async throws {

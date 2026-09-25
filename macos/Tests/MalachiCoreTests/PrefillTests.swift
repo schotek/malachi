@@ -121,7 +121,7 @@ struct PrefillTests {
     }
 
     @Test func kindMode() {
-        let want: [ComposeKind: ComposeMode] = [.new: .new, .reply: .reply, .replyAll: .replyAll, .forward: .forward]
+        let want: [ComposeKind: ComposeMode] = [.new: .new, .reply: .reply, .replyAll: .replyAll, .forward: .forward, .edit: .new]
         for (kind, mode) in want {
             #expect(kind.mode == mode)
         }
@@ -154,6 +154,17 @@ struct PrefillTests {
         #expect(plain.bodyHTML == "a &lt;b&gt;<br>c")
         #expect(plain.forwarding == "m_2")
         #expect(plain.accountID == nil)
+    }
+
+    /// FromDraft keeps what makes the window edit a saved draft
+    /// (prefill_test.go TestFromDraftKeepsDraftIdentity).
+    @Test func fromDraftKeepsDraftIdentity() {
+        let d = Draft(id: "d_1", accountId: "a", version: 4, subject: "s", textBody: "a < b", replaces: "m_9")
+        let p = fromDraft(kind: .edit, draft: d, blocked: BlockedContent())
+        #expect(p.kind == .edit && p.draftID == "d_1" && p.version == 4 && p.replaces == "m_9" && p.accountID == "a")
+        #expect(p.bodyHTML == "a &lt; b")
+        let template = fromDraft(kind: .reply, draft: Draft(accountId: "a"), blocked: BlockedContent())
+        #expect(template.draftID == nil && template.version == 0 && template.replaces == nil)
     }
 
     @Test func escapeTextEscapesLikeHTMLEscapeString() {

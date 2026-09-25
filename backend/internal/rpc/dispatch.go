@@ -75,6 +75,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodDraftList] = wrap(drf.List)
 	s.handlers[api.MethodDraftDelete] = wrap(drf.Delete)
 	s.handlers[api.MethodDraftCreate] = wrap(drf.Create)
+	s.handlers[api.MethodDraftOpen] = wrap(drf.Open)
 
 	s.handlers[api.MethodAttachmentImport] = wrap(att.Import)
 	s.handlers[api.MethodAttachmentRemove] = wrap(att.Remove)

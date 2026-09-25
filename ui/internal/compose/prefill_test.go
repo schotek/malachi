@@ -151,3 +151,18 @@ func TestFromDraft(t *testing.T) {
 		t.Errorf("plain params = %+v", plain)
 	}
 }
+
+// FromDraft keeps what makes the window edit a saved draft (draft.open).
+func TestFromDraftKeepsDraftIdentity(t *testing.T) {
+	d := api.Draft{ID: "d_1", AccountID: "a", Version: 4, Replaces: "m_9", Subject: "s", TextBody: "a < b"}
+	p := FromDraft(KindEdit, d, api.BlockedContent{})
+	if p.Kind != KindEdit || p.DraftID != "d_1" || p.Version != 4 || p.Replaces != "m_9" || p.AccountID != "a" {
+		t.Fatalf("params = %+v", p)
+	}
+	if p.BodyHTML != "a &lt; b" {
+		t.Errorf("plain text draft body = %q", p.BodyHTML)
+	}
+	if p := FromDraft(KindReply, api.Draft{AccountID: "a"}, api.BlockedContent{}); p.DraftID != "" || p.Version != 0 || p.Replaces != "" {
+		t.Errorf("template params = %+v", p)
+	}
+}

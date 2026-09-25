@@ -33,6 +33,25 @@ type Draft struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 
+	// ReplyRFCID and References are the threading headers of a reply, kept
+	// for when InReplyTo names no stored message. SaveDraft writes them
+	// only when ReplyRFCID is set, so a save that cannot resolve the
+	// parent keeps what an earlier one stored.
+	ReplyRFCID string
+	References []string
+
+	// Copy is the draft's copy in the Drafts folder (zero: none yet), and
+	// SyncedVersion the version it holds; SaveDraft never writes either.
+	Copy          DraftCopy
+	SyncedVersion int
+	SyncedAt      time.Time
+	SyncAttempts  int
+
+	// Adopt links the draft to a message of the Drafts folder on this
+	// save (draft.save with replaces): the draft's upload then replaces
+	// that message. Read by SaveDraft only; see there.
+	Adopt *DraftCopy
+
 	Attachments []Attachment // in position order
 }
 
@@ -43,10 +62,20 @@ type Draft struct {
 // attachment must belong to the same account and be unbound or bound to
 // this draft (ErrNotFound / ErrAttachmentBound otherwise). d.ID, d.Version,
 // d.UpdatedAt and d.Attachments are filled in on success.
+//
+// Every save restarts a stopped upload (the retry state is cleared). With
+// d.Adopt set the draft takes over that copy: another draft holding it is
+// deleted when it is fully uploaded (its attachments released, not
+// deleted), and when it still has changes to upload the adoption is
+// dropped and d.Adopt cleared, so both survive.
 func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string) error {
 	to, cc, bcc, err := encodeRecipients(d)
 	if err != nil {
 		return err
+	}
+	refs, err := encodeJSON(d.References, "[]")
+	if err != nil {
+		return fmt.Errorf("encode references: %w", err)
 	}
 	now := nowStamp()
 
@@ -64,18 +93,23 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 		version = 1
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO drafts (id, account_id, version, subject, to_json, cc_json, bcc_json,
-			                    text_body, html_body, in_reply_to, forwarding, created_at, updated_at)
-			VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			                    text_body, html_body, in_reply_to, forwarding, reply_rfc_id, references_json,
+			                    created_at, updated_at)
+			VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			draftID, d.AccountID, d.Subject, to, cc, bcc, d.TextBody, d.HTMLBody,
-			d.InReplyTo, d.Forwarding, now, now); err != nil {
+			d.InReplyTo, d.Forwarding, d.ReplyRFCID, refs, now, now); err != nil {
 			return fmt.Errorf("insert draft: %w", err)
 		}
 	} else {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE drafts SET version = version + 1, subject = ?, to_json = ?, cc_json = ?, bcc_json = ?,
-			       text_body = ?, html_body = ?, in_reply_to = ?, forwarding = ?, updated_at = ?
+			       text_body = ?, html_body = ?, in_reply_to = ?, forwarding = ?,
+			       reply_rfc_id = CASE WHEN ? != '' THEN ? ELSE reply_rfc_id END,
+			       references_json = CASE WHEN ? != '' THEN ? ELSE references_json END,
+			       sync_attempts = 0, sync_next_at = '', sync_error = '', updated_at = ?
 			WHERE id = ? AND account_id = ? AND version = ?`,
-			d.Subject, to, cc, bcc, d.TextBody, d.HTMLBody, d.InReplyTo, d.Forwarding, now,
+			d.Subject, to, cc, bcc, d.TextBody, d.HTMLBody, d.InReplyTo, d.Forwarding,
+			d.ReplyRFCID, d.ReplyRFCID, d.ReplyRFCID, refs, now,
 			draftID, d.AccountID, version)
 		if err != nil {
 			return fmt.Errorf("update draft: %w", err)
@@ -130,6 +164,18 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 		return fmt.Errorf("release attachments: %w", err)
 	}
 
+	var gone []messageFile
+	if d.Adopt != nil {
+		adopted, files, err := adoptCopyTx(ctx, tx, d.AccountID, draftID, *d.Adopt)
+		if err != nil {
+			return err
+		}
+		if !adopted {
+			d.Adopt = nil
+		}
+		gone = files
+	}
+
 	atts, err := attachmentsForDraft(ctx, tx, draftID)
 	if err != nil {
 		return err
@@ -137,6 +183,7 @@ func (s *Store) SaveDraft(ctx context.Context, d *Draft, attachmentIDs []string)
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
+	s.removeMessageFiles(gone)
 	d.ID, d.Version = draftID, version
 	d.UpdatedAt = parseStamp(now)
 	if d.CreatedAt.IsZero() {
@@ -215,34 +262,68 @@ func (s *Store) ListDrafts(ctx context.Context, accountID, cursor string, limit 
 }
 
 // DeleteDraft removes the draft, its attachment rows (cascade) and their
-// files. Deleting an unknown draft is not an error.
+// files, and in the same transaction its copy in the Drafts folder
+// (dropCopyTx). Deleting an unknown draft is not an error.
 func (s *Store) DeleteDraft(ctx context.Context, accountID, id string) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT id FROM attachments WHERE draft_id = ? AND account_id = ?`, id, accountID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("list draft attachments: %w", err)
+		return fmt.Errorf("begin: %w", err)
 	}
-	var files []string
-	for rows.Next() {
-		var aid string
-		if err := rows.Scan(&aid); err != nil {
-			rows.Close()
-			return err
-		}
-		files = append(files, aid)
-	}
-	rows.Close()
+	defer tx.Rollback()
 
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM drafts WHERE id = ? AND account_id = ?`, id, accountID); err != nil {
+	d, err := scanDraft(tx.QueryRowContext(ctx, `SELECT `+draftColumns+` FROM drafts WHERE id = ? AND account_id = ?`, id, accountID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load draft: %w", err)
+	}
+	gone, err := dropCopyTx(ctx, tx, accountID, d.Copy)
+	if err != nil {
+		return err
+	}
+	files, err := draftAttachmentIDs(ctx, tx, accountID, id)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM drafts WHERE id = ? AND account_id = ?`, id, accountID); err != nil {
 		return fmt.Errorf("delete draft: %w", err)
 	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	s.removeMessageFiles(gone)
 	for _, aid := range files {
 		s.removeAttachmentFile(aid)
 	}
 	return nil
 }
 
+// draftAttachmentIDs lists the attachments bound to a draft.
+func draftAttachmentIDs(ctx context.Context, q querier, accountID, draftID string) ([]string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id FROM attachments WHERE draft_id = ? AND account_id = ?`, draftID, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("list draft attachments: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var aid string
+		if err := rows.Scan(&aid); err != nil {
+			return nil, fmt.Errorf("scan attachment: %w", err)
+		}
+		out = append(out, aid)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list draft attachments: %w", err)
+	}
+	return out, nil
+}
+
 const draftColumns = `id, account_id, version, subject, to_json, cc_json, bcc_json,
-	text_body, html_body, in_reply_to, forwarding, created_at, updated_at`
+	text_body, html_body, in_reply_to, forwarding, created_at, updated_at,
+	reply_rfc_id, references_json, rfc_message_id, server_folder_id, server_uidvalidity, server_uid,
+	server_remote_id, synced_version, synced_at, sync_attempts`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -253,10 +334,18 @@ func scanDraft(row scanner) (Draft, error) {
 
 func scanDraftStamp(row scanner) (Draft, string, error) {
 	var d Draft
-	var to, cc, bcc, created, updated string
+	var to, cc, bcc, created, updated, refs, synced string
+	var uidValidity, uid int64
 	if err := row.Scan(&d.ID, &d.AccountID, &d.Version, &d.Subject, &to, &cc, &bcc,
-		&d.TextBody, &d.HTMLBody, &d.InReplyTo, &d.Forwarding, &created, &updated); err != nil {
+		&d.TextBody, &d.HTMLBody, &d.InReplyTo, &d.Forwarding, &created, &updated,
+		&d.ReplyRFCID, &refs, &d.Copy.RFCMessageID, &d.Copy.FolderID, &uidValidity, &uid,
+		&d.Copy.RemoteID, &d.SyncedVersion, &synced, &d.SyncAttempts); err != nil {
 		return Draft{}, "", err
+	}
+	d.Copy.UIDValidity, d.Copy.UID = uint32(uidValidity), uint32(uid)
+	d.SyncedAt = parseStamp(synced)
+	if err := json.Unmarshal([]byte(refs), &d.References); err != nil {
+		return Draft{}, "", fmt.Errorf("decode references of %s: %w", d.ID, err)
 	}
 	for _, p := range []struct {
 		raw string

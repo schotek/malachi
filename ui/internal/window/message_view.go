@@ -382,6 +382,7 @@ func (w *Window) showMessage(id api.MessageID) {
 	labels := w.paneLabels()
 	labels.render(s, nil)
 	w.outboxBanner.SetRevealed(false)
+	w.draftBanner.SetRevealed(w.model.inDrafts(s))
 	w.messageStack.SetVisibleChildName("message")
 	w.fetchMessage(s.AccountID, id, func(lm *loadedMessage) {
 		if gen != w.model.bodyGen {

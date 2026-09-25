@@ -36,7 +36,9 @@ public struct DraftAttachment: Codable, Sendable, Equatable {
 /// `version` is optimistic concurrency (`conflict` when it differs from the
 /// stored one). `htmlBody` in params is the editor's HTML, treated as
 /// hostile and sanitised in compose mode; `textBody` is then derived.
-/// `inReplyTo` and `forwarding` are mutually exclusive.
+/// `inReplyTo` and `forwarding` are mutually exclusive. `replaces` is the
+/// Drafts message `draft.open` built the draft from; `draft.save` takes it
+/// over (clients send it back unchanged).
 public struct Draft: Codable, Sendable, Equatable {
     public var id: DraftID?
     public var accountId: AccountID
@@ -51,6 +53,7 @@ public struct Draft: Codable, Sendable, Equatable {
     public var inReplyTo: MessageID?
     public var forwarding: MessageID?
     public var attachments: [DraftAttachment]?
+    public var replaces: MessageID?
     /// Daemon-set; ignored in params (`Date.goZero` in a `draft.create` result).
     public var updatedAt: Date
 
@@ -58,7 +61,7 @@ public struct Draft: Codable, Sendable, Equatable {
         id: DraftID? = nil, accountId: AccountID, version: Int = 0, to: [Address] = [], cc: [Address]? = nil,
         bcc: [Address]? = nil, subject: String = "", textBody: String = "", htmlBody: String? = nil,
         inReplyTo: MessageID? = nil, forwarding: MessageID? = nil, attachments: [DraftAttachment]? = nil,
-        updatedAt: Date = .goZero
+        replaces: MessageID? = nil, updatedAt: Date = .goZero
     ) {
         self.id = id
         self.accountId = accountId
@@ -72,6 +75,7 @@ public struct Draft: Codable, Sendable, Equatable {
         self.inReplyTo = inReplyTo
         self.forwarding = forwarding
         self.attachments = attachments
+        self.replaces = replaces
         self.updatedAt = updatedAt
     }
 }
@@ -181,6 +185,36 @@ public struct DraftCreateResult: Codable, Sendable, Equatable {
     public init(draft: Draft, quoted: QuoteForm, blocked: BlockedContent = BlockedContent(), skipped: [Attachment]? = nil) {
         self.draft = draft
         self.quoted = quoted
+        self.blocked = blocked
+        self.skipped = skipped
+    }
+}
+
+/// api.DraftOpenParams: a message of the account's Drafts folder to edit.
+public struct DraftOpenParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var messageId: MessageID
+
+    public init(accountId: AccountID, messageId: MessageID) {
+        self.accountId = accountId
+        self.messageId = messageId
+    }
+}
+
+/// api.DraftOpenResult: the saved draft the message is the copy of (`id`
+/// and `version` set), or a draft built from the message — unsaved, its
+/// attachments imported but unbound, `replaces` set when nothing was lost;
+/// a newer copy of a saved draft carries that draft's `id` and `version`.
+/// Nothing is persisted by `draft.open`.
+public struct DraftOpenResult: Codable, Sendable, Equatable {
+    public var draft: Draft
+    /// What the sanitiser removed from the message's HTML.
+    public var blocked: BlockedContent
+    /// Parts of the message that were not imported.
+    public var skipped: [Attachment]?
+
+    public init(draft: Draft, blocked: BlockedContent = BlockedContent(), skipped: [Attachment]? = nil) {
+        self.draft = draft
         self.blocked = blocked
         self.skipped = skipped
     }
