@@ -316,7 +316,8 @@ The repository root carries a project-scoped `.mcp.json`:
 
 The bridge can register itself in the user-level configuration of the two
 Claude apps, so that nobody has to edit JSON by hand. The desktop apps'
-**Settings → AI → MCP** switch ("Register with Claude") calls exactly
+**Preferences → AI → MCP** switch ("Register with Claude"; *Settings* on
+macOS) calls exactly
 these subcommands and nothing else; the UIs hold no copy of the logic.
 
 ```sh
@@ -402,5 +403,8 @@ stderr, and needs the daemon socket to be reachable under the same user.
 - structured tool output (`structuredContent`); the results are text;
 - notifications (new mail as an MCP resource change);
 - the recipient policy above;
-- packaging: the binary is built and used from the source tree; native
-  packages will install it next to `malachid`.
+- Flatpak: inside the sandbox the bridge can neither see the Claude apps'
+  files nor be started by them, so the Preferences page marks the switch
+  unavailable there; the native packages install `malachi-mcp` next to
+  `malachi` (`scripts/build.sh`), where the desktop app finds it (next to
+  its own executable, then on `PATH`).

@@ -191,7 +191,7 @@ public final class MCPRegistrationController {
         guard !reportedMissing else { return }
         reportedMissing = true
         onEnabled?(false)
-        onToast?(L10n.T("The MCP bridge (malachi-mcp) was not found next to the application"))
+        onToast?(L10n.T("The MCP bridge (malachi-mcp) was not found"))
     }
 
     private func setEnabled(_ on: Bool) {

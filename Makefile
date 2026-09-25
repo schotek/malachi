@@ -177,7 +177,7 @@ run-backend: backend
 	./$(BUILD_DIR)/malachid $(ARGS)
 
 ## run-frontend: build and start the UI (connects to a running malachid, or starts build/malachid itself; MALACHI_DAEMON=none to only show the banner)
-run-frontend: ui schemas locale
+run-frontend: ui mcp schemas locale
 	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
 
 ## test: run Go tests for both modules

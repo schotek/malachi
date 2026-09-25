@@ -1108,9 +1108,19 @@ msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
+#: ui/internal/window/preferences.go:348
+msgid "Not available in the Flatpak build"
+msgstr "V sestavení Flatpak není k dispozici"
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:369
+#, c-format
+msgid "The MCP bridge did not answer: %s"
+msgstr "Most MCP neodpověděl: %s"
+
 #: ui/internal/window/preferences.go:353
-msgid "The MCP bridge (malachi-mcp) was not found next to the application"
-msgstr "Most MCP (malachi-mcp) nebyl nalezen vedle aplikace"
+msgid "The MCP bridge (malachi-mcp) was not found"
+msgstr "Most MCP (malachi-mcp) nebyl nalezen"
 
 #: ui/internal/window/preferences.go:404
 msgid "No Claude app was found on this computer"

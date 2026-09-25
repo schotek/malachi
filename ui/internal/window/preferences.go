@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -46,6 +47,7 @@ type PreferencesDialog struct {
 	notificationSound    *adw.SwitchRow
 
 	mailGroup     *adw.PreferencesGroup
+	mcpGroup      *adw.PreferencesGroup
 	checkInterval *adw.ComboRow
 	remoteImages  *adw.ComboRow
 	offlineDays   *adw.ComboRow
@@ -115,6 +117,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		monospace:            b.GetObject("monospace_plain_text").Cast().(*adw.SwitchRow),
 		textZoom:             b.GetObject("text_zoom").Cast().(*adw.SpinRow),
 		mcpSwitch:            b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
+		mcpGroup:             b.GetObject("mcp_group").Cast().(*adw.PreferencesGroup),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -342,16 +345,17 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 	}
 	row.SetSensitive(false)
 
+	// Inside the Flatpak sandbox the bridge could neither see the Claude
+	// apps' files nor be started by them; the group says so (bindMail
+	// reports its failures in the same place).
+	if os.Getenv("FLATPAK_ID") != "" {
+		d.mcpGroup.SetDescription(i18n.T("Not available in the Flatpak build"))
+		return func() {}
+	}
 	bridge, err := mcpsetup.Locate()
 	if err != nil {
 		d.log.Warn("locating the MCP bridge", "err", err)
-		// From an idle callback, so the toast lands on the presented dialog.
-		glib.IdleAdd(func() {
-			if d.closed {
-				return
-			}
-			d.AddToast(widget.PlainToast(i18n.T("The MCP bridge (malachi-mcp) was not found next to the application")))
-		})
+		d.mcpGroup.SetDescription(i18n.T("The MCP bridge (malachi-mcp) was not found"))
 		return func() {}
 	}
 
@@ -364,8 +368,9 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 				return
 			}
 			if err != nil {
-				// No sentence of its own: the row simply stays insensitive.
 				d.log.Warn("malachi-mcp status", "err", err)
+				// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+				d.mcpGroup.SetDescription(fmt.Sprintf(i18n.T("The MCP bridge did not answer: %s"), err))
 				return
 			}
 			set(st.Registered())

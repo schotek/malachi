@@ -1082,8 +1082,18 @@ msgstr ""
 msgid "Autostart was not granted"
 msgstr ""
 
+#: ui/internal/window/preferences.go:348
+msgid "Not available in the Flatpak build"
+msgstr ""
+
+#. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+#: ui/internal/window/preferences.go:369
+#, c-format
+msgid "The MCP bridge did not answer: %s"
+msgstr ""
+
 #: ui/internal/window/preferences.go:353
-msgid "The MCP bridge (malachi-mcp) was not found next to the application"
+msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #: ui/internal/window/preferences.go:404

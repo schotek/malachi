@@ -149,7 +149,7 @@ func TestExitWithoutReason(t *testing.T) {
 	if err == nil {
 		t.Fatal("Query succeeded on exit 3")
 	}
-	if !strings.Contains(err.Error(), "status 3") || !strings.Contains(err.Error(), "status") {
+	if !strings.Contains(err.Error(), "status 3") {
 		t.Errorf("Error() = %q, want the exit status", err.Error())
 	}
 	if errors.Is(err, ErrNoClient) {
