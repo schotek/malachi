@@ -9,15 +9,18 @@ const (
 	MethodSystemInfo = "system.info"
 
 	// Accounts.
-	MethodAccountList       = "account.list"
-	MethodAccountAdd        = "account.add"
-	MethodAccountRemove     = "account.remove"
-	MethodAccountSetEnabled = "account.setEnabled"
-	MethodAccountUpdate     = "account.update"
-	MethodAccountDiscover   = "account.discover"
-	MethodAccountTest       = "account.test"
-	MethodAccountLinked     = "account.linked"
-	MethodAccountReorder    = "account.reorder"
+	MethodAccountList        = "account.list"
+	MethodAccountAdd         = "account.add"
+	MethodAccountRemove      = "account.remove"
+	MethodAccountSetEnabled  = "account.setEnabled"
+	MethodAccountUpdate      = "account.update"
+	MethodAccountDiscover    = "account.discover"
+	MethodAccountTest        = "account.test"
+	MethodAccountLinked      = "account.linked"
+	MethodAccountReorder     = "account.reorder"
+	MethodAccountOAuthStart  = "account.oauthStart"
+	MethodAccountOAuthWait   = "account.oauthWait"
+	MethodAccountOAuthCancel = "account.oauthCancel"
 
 	// Folders.
 	MethodFolderList      = "folder.list"
@@ -86,7 +89,7 @@ var AllMethods = []string{
 	MethodSystemInfo,
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
-	MethodAccountReorder,
+	MethodAccountReorder, MethodAccountOAuthStart, MethodAccountOAuthWait, MethodAccountOAuthCancel,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
 	MethodMessageEmbedded, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,

@@ -27,6 +27,9 @@ type AccountService interface {
 	Test(ctx context.Context, p AccountTestParams) (*AccountTestResult, error)
 	Linked(ctx context.Context, p AccountLinkedParams) (*AccountLinkedResult, error)
 	Reorder(ctx context.Context, p AccountReorderParams) (*AccountReorderResult, error)
+	OAuthStart(ctx context.Context, p AccountOAuthStartParams) (*AccountOAuthStartResult, error)
+	OAuthWait(ctx context.Context, p AccountOAuthWaitParams) (*AccountOAuthWaitResult, error)
+	OAuthCancel(ctx context.Context, p AccountOAuthCancelParams) (*AccountOAuthCancelResult, error)
 }
 
 type FolderService interface {

@@ -91,6 +91,7 @@ No `id`; the client must not reply.
 | 1200 | authRequired | user interaction needed; a `notify.authRequired` was/will be sent |
 | 1201 | authFailed | server rejected credentials |
 | 1202 | keyringError | secret service unavailable |
+| 1203 | oauthClientMissing | the backend's own sign-in needs an OAuth client id for the provider and none is configured (§4.1) |
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
@@ -223,16 +224,16 @@ AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
   "kind": "imap|graph" (opt, default imap),
   "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
-  "oauth2": OAuth2Config (opt, imap only),
+  "oauth2": OAuth2Config (opt; imap, or graph with source daemon),
   "graph": GraphConfig (graph only),
   "syncIntervalSeconds": 300 (opt)
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
                "username": "me@example.org", "authMethod": "password|oauth2" }
-OAuth2Config { "source": "goa" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
+OAuth2Config { "source": "goa|daemon" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
                "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
-GraphConfig  { "source": "goa", "goaAccountId": "account_1788512854_0" }
+GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa) }
 ```
 
 `kind` selects the protocol behind the account. `imap` (the default when
@@ -250,19 +251,37 @@ server offers). With `oauth2.source: "goa"` the token comes from GNOME
 Online Accounts exactly as for a Graph account, and `provider` says whose
 account it is — today `google`: Gmail and Google Workspace, with the
 servers GNOME Online Accounts names (`account.linked` and
-`account.discover` build the whole config). Without `source` the `oauth2`
-block describes the backend's own authorisation flow, which is reserved
-for desktops without GNOME Online Accounts and reports `notImplemented`.
+`account.discover` build the whole config).
+
+With `source: "daemon"` the backend runs the sign-in itself, for desktops
+without GNOME Online Accounts or addresses not signed in there: an
+authorization-code flow with PKCE started by `account.oauthStart`, the
+user signing in in their browser, the refresh token kept in the system
+keyring (`oauth2.refresh_token`) and access tokens in memory only.
+`provider` is `google` on an `imap` account (Gmail through IMAP/SMTP with
+SASL XOAUTH2; the servers are pinned to `imap.gmail.com` /
+`smtp.gmail.com`, because the token, scoped for all of Gmail, goes to
+whichever server the account names) or `office365` on a
+`graph` account (Microsoft 365 and Outlook.com through Graph, the
+`graph.source` being `daemon` too). The OAuth client is the one the
+daemon is configured with (`config.toml` `[oauth2.google]` /
+`[oauth2.microsoft]`, see the README); `clientId` and, for `office365`,
+`tenantId` override it for one account. Without any client id the flow
+cannot start and `oauthClientMissing` is returned. An `oauth2` block
+without `source` (provider `custom` with `authUrl`, `tokenUrl`, `scopes`)
+is reserved and reports `notImplemented`.
 
 Secrets are **never** part of `AccountConfig` and never returned.
 `credentials.password` is write-only: it goes to the keyring and is never
-logged, echoed or stored in the SQLite store. A `graph` account takes no
-credentials at all.
+logged, echoed or stored in the SQLite store. `credentials.oauthSession`
+names a completed `account.oauthStart` session whose tokens never leave
+the backend. A `goa` account takes no credentials at all.
 
 #### `account.add`
-- params: `{ "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
+- params: `{ "config": AccountConfig, "credentials": { "password": "…" (opt), "oauthSession": "s_…" (opt) } }`
 - result: `{ "accountId": "acc_2" }`
-- errors: invalidArgument, keyringError, conflict (same e-mail already configured, case-insensitive)
+- errors: invalidArgument, keyringError, conflict (same e-mail already configured, case-insensitive),
+  oauthClientMissing (source `daemon` and no client id for the provider)
 
 Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
@@ -277,15 +296,31 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
 - for `imap`: `oauth2` present exactly when an endpoint uses `oauth2`.
   With `source: "goa"`: `provider` `google`, a `goaAccountId` (letters,
   digits and `_`, ≤ 128 bytes), both endpoints `oauth2`, and none of
-  `clientId`, `tenantId`, `authUrl`, `tokenUrl`, `scopes`. Without
+  `clientId`, `tenantId`, `authUrl`, `tokenUrl`, `scopes`. With
+  `source: "daemon"`: `provider` `google`, both endpoints `oauth2`, `imap`
+  exactly `imap.gmail.com` port 993 `tls`, `smtp` exactly
+  `smtp.gmail.com` with port 465 `tls` or 587 `starttls` (host names
+  compared case-insensitively and stored lower-case), `username` on both
+  the account's `email` (case-insensitively), no
+  `goaAccountId`, `authUrl`, `tokenUrl`, `scopes`, `tenantId`; `clientId`
+  optional (printable ASCII without spaces, ≤ 256 bytes). Without
   `source`: `provider` `office365|custom`, `custom` needs `https`
   `authUrl` and `tokenUrl`, at most 32 scopes without whitespace, no
   `goaAccountId`;
-- for `graph`: `graph` required with `source: "goa"` and a `goaAccountId`
-  (letters, digits and `_`, ≤ 128 bytes); `imap`, `smtp` and `oauth2`
-  absent;
+- for `graph`: `imap` and `smtp` absent; with `graph.source: "goa"` a
+  `goaAccountId` (letters, digits and `_`, ≤ 128 bytes) and no `oauth2`;
+  with `graph.source: "daemon"` no `goaAccountId` and an `oauth2` block
+  `{source: "daemon", provider: "office365"}` with optional `clientId`
+  and `tenantId` (letters, digits, `.` and `-`, not starting with `.`,
+  ≤ 64 bytes; default `common`);
 - `syncIntervalSeconds` 0 or ≥ 60;
-- `credentials.password` only when an endpoint uses `password`.
+- `credentials.password` only when an endpoint uses `password`;
+  `credentials.oauthSession` only with source `daemon`, and it must name a
+  completed session whose verified mailbox is the account's address (a
+  sign-in that named no mailbox is refused), for the same provider and
+  the client (id and tenant) the account resolves to now; a re-sign-in
+  session (`account.oauthStart` with `accountId`) is accepted only by
+  `account.update` / `account.test` of that same `accountId`.
 
 The password is optional (an account without one ends in `authRequired`
 once syncing exists). It is written to the system keyring
@@ -296,9 +331,18 @@ runs with `MALACHI_KEYRING=none`. For `oauth2` no credentials are passed.
 A `graph` account, and an `oauth2` account with `source: "goa"`, need no
 keyring: adding them works with `MALACHI_KEYRING=none`, and a sign-in that
 GNOME Online Accounts has lost surfaces as `authRequired` until the user
-signs in again in the desktop's account settings. An `oauth2` account
-without `source` would start the backend's own flow here; it is not
-implemented.
+signs in again in the desktop's account settings.
+
+An account with source `daemon` takes `credentials.oauthSession`: the
+refresh token of that completed session is written to the keyring and the
+session is consumed; if the keyring refuses, nothing is kept and
+`keyringError` is returned. Added without a session — e.g. imported from
+`config.toml` — the account starts in `authRequired` and the backend
+opens a sign-in session for it at once (`notify.authRequired` with
+`authUrl`, §5). Under `MALACHI_KEYRING=none` such an account can exist
+(added without a session) but never signs in: its completed re-sign-in
+fails with `keyringError`, the account stays in `authRequired`, and
+`notify.authRequired` reports reason `keyringError` without a URL.
 
 #### `account.remove`
 - params: `{ "accountId", "deleteLocalData": bool }`
@@ -311,6 +355,7 @@ removed with the account; the syncer is stopped first.
 (rows and files); `false` keeps them, orphaned, until a later phase defines
 what happens to local data of a removed account. Keyring secrets are
 deleted best-effort: an unavailable keyring never keeps the account alive.
+A waiting `account.oauthStart` sign-in of the account is cancelled.
 
 #### `account.setEnabled`
 - params: `{ "accountId", "enabled": bool }`
@@ -336,16 +381,27 @@ themselves changes — this is not an account update — but the reorder is
 persistent and is followed by `notify.accountsChanged`.
 
 #### `account.update`
-- params: `{ "accountId", "config": AccountConfig, "credentials": { "password": "…" (opt) } }`
+- params: `{ "accountId", "config": AccountConfig, "credentials": { "password": "…" (opt), "oauthSession": "s_…" (opt) } }`
 - result: `{}`
 - errors: invalidArgument (same rules as `account.add`), accountNotFound,
   conflict (another account already uses the e-mail), keyringError,
-  storageError
+  oauthClientMissing, storageError
 
 Replaces the whole configuration; `enabled` is not touched. An empty
 password keeps the stored one; a given password replaces it in the
 keyring, and if the keyring refuses, the configuration is reverted so the
-row and the keyring never disagree. Emits `notify.accountsChanged`.
+row and the keyring never disagree. `credentials.oauthSession` replaces
+the stored refresh token the same way; if the keyring refuses, the session
+is kept so the UI can retry. A configuration that leaves source `daemon`
+deletes the stored refresh token (best effort); a given session or such a
+change cancels a waiting re-sign-in of the account. Without a session, a
+`daemon` account whose normalised address, provider or effective client
+(`clientId` / `tenantId` against the configured one; no tenant counts as
+`common`) changes loses its stored sign-in the same way: the refresh
+token is deleted, a waiting re-sign-in is cancelled and a new one opened
+for the new configuration, so the engines' `notify.authRequired` carries
+its `authUrl` (§5); moving an account to source `daemon` without a
+session opens one likewise. Emits `notify.accountsChanged`.
 
 #### `account.discover`
 Suggests server settings for an address. Nothing is stored and nothing is
@@ -353,7 +409,7 @@ authenticated; the UI still asks for the password and should run
 `account.test`.
 
 - params: `{ "email": "me@example.org" }`
-- result: `{ "config": AccountConfig (opt), "source": "goa|ispdb|autoconfig|srv|provider|guess|none", "providerName": "…" (opt) }`
+- result: `{ "config": AccountConfig (opt), "source": "goa|ispdb|autoconfig|srv|provider|guess|none", "providerName": "…" (opt), "alternatives": [AccountConfig] (opt) }`
 - errors: invalidArgument (not a bare address)
 
 Sources, from most to least trustworthy, each consulted only for what the
@@ -374,17 +430,24 @@ previous ones left open:
    receive the address, as the provider already knows it.
 3. `srv`: RFC 6186 / RFC 8314 DNS records `_imaps`, `_imap`,
    `_submissions`, `_submission` (`_tcp`). The domain goes to the resolver.
-4. `provider`: the domain is hosted by a provider whose sign-in belongs
-   to GNOME Online Accounts. Microsoft 365 is recognised by an MX record
-   under `mail.protection.outlook.com` or by Microsoft hosts in an
-   autoconfig answer; Google by the `gmail.com` / `googlemail.com`
-   domains, an MX record under `google.com`, or Google hosts in an
-   autoconfig answer — and for Google this answer wins even over a
-   password entry in the ISPDB, which would need an app password.
-   `config` is then the account **without** `goaAccountId` (a `graph`
-   account, or an `imap` one with `oauth2` endpoints): it does not pass
-   `account.add`; the UI must have the user add the account in GNOME
-   Online Accounts first and re-run discovery (or use `account.linked`).
+4. `provider`: the domain is hosted by a provider that signs in with
+   OAuth2. Microsoft 365 is recognised by an MX record under
+   `mail.protection.outlook.com` or by Microsoft hosts in an autoconfig
+   answer; Google by the `gmail.com` / `googlemail.com` domains, an MX
+   record under `google.com`, or Google hosts in an autoconfig answer —
+   and for Google this answer wins even over a password entry in the
+   ISPDB. When GNOME Online Accounts is running, `config` is the account
+   **without** `goaAccountId` (a `graph` account, or an `imap` one with
+   `oauth2` endpoints): it does not pass `account.add`; the UI may have
+   the user add the account in GNOME Online Accounts and re-run discovery
+   (or use `account.linked`). Without GNOME Online Accounts `config` is
+   the backend's own sign-in (source `daemon`, see `account.oauthStart`).
+   `alternatives` then lists, in this order, the own sign-in (when it is
+   not `config` already) and, for Google, the IMAP/SMTP account with
+   `authMethod: "password"` for an app password (`imap.gmail.com:993`,
+   `smtp.gmail.com:465`, username the address). The own sign-in is listed
+   even when no OAuth client is configured; `account.oauthStart` then
+   answers `oauthClientMissing`.
 5. `guess`: `imap.`/`mail.<domain>` on 993 (TLS) and 143 (STARTTLS),
    `smtp.`/`mail.<domain>` on 587 (STARTTLS) and 465 (TLS), verified by
    opening the connection under the transport policy without logging in.
@@ -408,11 +471,14 @@ without a `password` endpoint), then probes the endpoints of the account
 kind: `imap` and `smtp` concurrently, or the `graph` mailbox.
 
 - params: same as `account.add`, plus `"accountId"` (opt): with it and an
-  empty `credentials.password`, the stored password of that account is used
+  empty `credentials.password`, the stored password of that account is
+  used; for source `daemon` the token of `credentials.oauthSession`
+  (read, not consumed) or, with `accountId`, the stored sign-in
 - result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph) }`
 - errors: invalidArgument; with `accountId` and `password` endpoints:
   accountNotFound, authRequired (no stored password), keyringError. Each
-  endpoint reports its own outcome
+  endpoint reports its own outcome; for source `daemon` an unknown
+  `accountId` is reported per endpoint as `accountNotFound`
 
 ```jsonc
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
@@ -430,7 +496,10 @@ OAUTHBEARER). For `oauth2` endpoints with `source: "goa"` the access
 token stands in for the password; a token problem is both endpoints'
 outcome before anything is dialled: `authRequired` (sign in again in GNOME
 Online Accounts), `unavailable` (no session bus or no GNOME Online
-Accounts). An `oauth2` block without `source` reports `notImplemented`.
+Accounts). With `source: "daemon"` the token comes from the session or
+the stored refresh token: `authRequired` when there is neither (or the
+provider revoked it), `oauthClientMissing` when no client is configured.
+An `oauth2` block without `source` reports `notImplemented`.
 `capabilities` are the server's post-login IMAP CAPABILITY
 list or the EHLO keywords the backend knows about, scrubbed to printable
 ASCII, ≤ 64 entries; `latencyMs` is dial → ready (greeting read, STARTTLS
@@ -439,8 +508,9 @@ for the connections only and never logged.
 
 A Graph probe fetches a token from the account's source and opens the
 mailbox. `error.code` is `authRequired` when the source has no valid
-sign-in (sign in again in GNOME Online Accounts), `unavailable` when there
-is no session bus or no GNOME Online Accounts, `invalidArgument` when the
+sign-in (sign in again in GNOME Online Accounts, or through
+`account.oauthStart` for source `daemon`), `unavailable` when there is no
+session bus or no GNOME Online Accounts, `invalidArgument` when the
 signed-in mailbox is not `config.email`, otherwise the network/server
 codes above; `capabilities` is `["graph"]`.
 
@@ -473,6 +543,79 @@ switched off there, or that names no IMAP/SMTP servers, is not listed).
 user to sign in again; adding the account still works, syncing will report
 `authRequired` until then. `name` and `email` are untrusted text from the
 service; `email` is always a bare valid address.
+
+#### `account.oauthStart`
+Begins the backend's own sign-in (source `daemon`): for a new account
+(`config`, e.g. an entry of `account.discover`) or to sign an existing
+`daemon` account in again (`accountId`). The backend creates a PKCE
+verifier and a random `state`, opens a listener on `127.0.0.1` on a free
+port and returns the provider's authorisation URL. **The UI opens
+`authUrl` in the user's browser**; the backend never launches one. When
+the provider redirects back, the backend exchanges the code, checks that
+the signed-in mailbox is `config.email` (Google: the `email` of the ID
+token, which must carry `email_verified: true`; Microsoft: Graph `/me`'s
+`mail`, else its `userPrincipalName`), answers the browser with a short
+page and closes the listener.
+
+- params: `{ "config": AccountConfig (opt), "accountId": "acc_1" (opt), "browserPage": OAuthBrowserPage (opt) }` — exactly one of `config` and `accountId`
+- result: `{ "sessionId": "s_…", "authUrl": "https://accounts.google.com/…", "expiresAt": "2026-09-25T10:10:00Z" }`
+- errors: invalidArgument (neither or both of `config`/`accountId`, a
+  config that is not source `daemon` or fails `account.add` validation,
+  an `accountId` whose account does not use the own sign-in),
+  accountNotFound, oauthClientMissing, unavailable (too many sign-ins
+  under way, at most 8)
+
+```jsonc
+OAuthBrowserPage { "successTitle": "Signed in" (opt), "successText": "You can close this tab." (opt),
+                   "failureTitle": "Sign-in failed" (opt), "failureText": "Return to Malachi Mail." (opt) }
+```
+
+The page texts come from the UI in the user's language: plain text, at
+most 200 characters each, escaped by the backend (no markup, no script,
+`Cache-Control: no-store`); omitted texts leave a page with a symbol and,
+on failure, the provider's technical error name only. A session lives
+10 minutes (`expiresAt`); the listener accepts one callback with the
+expected `state` and nothing else (requests naming another `Host` than
+`127.0.0.1:<port>`, or a wrong `state`, are refused without ending the
+session). For `accountId` at most one session exists per account: a
+second call returns the pending one (with the new page texts, if any are
+given) while it is still for the account's provider, client and address,
+and replaces it otherwise. A completed re-sign-in stores the new refresh
+token, restarts the account's syncer and sender, and is followed by
+`notify.syncState`; if the account was changed to another address or
+client, or removed, meanwhile, nothing is stored and the session fails.
+
+#### `account.oauthWait`
+Waits for a session to finish.
+
+- params: `{ "sessionId": "s_…" }`
+- result: `{ "status": "pending|complete", "config": AccountConfig (with complete) }`
+- errors: invalidArgument (unknown session), cancelled (the user denied
+  access in the browser, or `account.oauthCancel`), serverTimeout (the
+  session expired), authFailed (the provider refused the code or the
+  callback was malformed), invalidArgument with `data.signedInAs` (the
+  browser signed in to another mailbox), networkError, tlsError,
+  serverError; for a re-sign-in also keyringError (the keyring can never
+  hold the token, `MALACHI_KEYRING=none`), invalidArgument (the account
+  changed during the sign-in) and accountNotFound (it was removed)
+
+Blocks at most 60 s and answers `pending` when the browser has not come
+back yet; the UI calls again. `complete` carries the config to pass to
+`account.test` and `account.add` together with `credentials.oauthSession`
+(for a re-sign-in the backend has stored the token already and `config`
+is the account's). A finished session's outcome stays readable until the
+session expires or is consumed.
+
+#### `account.oauthCancel`
+- params: `{ "sessionId": "s_…" }`
+- result: `{}`
+- errors: none (an unknown session is ignored)
+
+A pending session: closes the listener and ends a waiting
+`account.oauthWait` with `cancelled`. A completed session is discarded:
+its tokens leave the backend's memory and it can no longer be passed as
+`credentials.oauthSession` (a re-sign-in's token is stored already). A
+failed, cancelled or expired session is left as it is.
 
 ### 4.2 folder
 
@@ -1289,9 +1432,23 @@ instead of listing again.
 changes at most every 500 ms per account (the last value is always
 delivered). Clients must not assume every intermediate `progress` value.
 
-`notify.authRequired` with `authUrl` means an OAuth2 flow is waiting. The UI
-opens the URL through the OpenURI portal; the backend's loopback listener
-completes the flow and follows up with `notify.syncState`.
+`notify.authRequired` with `authUrl` means an OAuth2 flow is waiting: an
+account with source `daemon` whose refresh token the provider no longer
+accepts (or that has none, or lost it because `account.update` changed
+its address or client). The backend opened the sign-in session itself;
+the UI opens the URL in the user's browser (the GTK UI through
+`gtk.URILauncher`: the OpenURI portal inside Flatpak, the desktop's
+default handler otherwise; the macOS UI through `NSWorkspace`), the
+backend's loopback listener completes the flow and follows up with
+`notify.syncState`. The URL is valid for 10 minutes; a UI acting on it
+later calls `account.oauthStart` with the `accountId` for a fresh one.
+With reason `authFailed` the URL is included only when such a session is
+already waiting. Reason `keyringError` never carries a URL: for a
+`daemon` account it also follows a completed re-sign-in whose token the
+keyring refused — kept in memory until the daemon stops when the keyring
+failed this time (the account works now; the next `notify.syncState` may
+follow), or not kept at all under `MALACHI_KEYRING=none` (the account
+stays in `authRequired`).
 
 Notifications are best-effort: a slow client that cannot keep up may miss
 some. Clients must be able to resynchronise their view via `sync.status`,
@@ -1446,3 +1603,12 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `<blockquote>` with `> ` on every line; the HTML is unchanged, so the
   sanitiser version stays `"1"`. Only `folder.subscribe` and
   `search.query` remain `notImplemented`.
+- **1** (2026-09-25, compatible addition, own OAuth2 flow): new source
+  value `daemon` for `OAuth2Config.source` (Google IMAP/SMTP) and
+  `GraphConfig.source` (Microsoft 365 Graph, with an `oauth2` block);
+  `credentials.oauthSession`; `account.discover` `alternatives` (the own
+  sign-in and, for Google, an app-password IMAP/SMTP account) and a
+  `daemon` primary `config` without GNOME Online Accounts; new
+  `account.oauthStart`, `account.oauthWait`, `account.oauthCancel`; new
+  error code 1203 `oauthClientMissing`; `notify.authRequired` now carries
+  `authUrl` for `daemon` accounts.

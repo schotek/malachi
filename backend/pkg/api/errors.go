@@ -41,6 +41,10 @@ const (
 	CodeAuthRequired ErrorCode = 1200 // credentials missing or token expired; see notify.authRequired
 	CodeAuthFailed   ErrorCode = 1201 // server rejected the credentials
 	CodeKeyringError ErrorCode = 1202 // secret storage unavailable
+	// CodeOAuthClientMissing: the backend's own sign-in needs an OAuth
+	// client id for the provider and none is configured (config.toml
+	// [oauth2.*], the account's clientId, or a built-in one).
+	CodeOAuthClientMissing ErrorCode = 1203
 
 	// 1300–1399: network and remote servers.
 	CodeOffline       ErrorCode = 1300
@@ -92,6 +96,7 @@ var codeNames = map[ErrorCode]string{
 	CodeAuthRequired:       "authRequired",
 	CodeAuthFailed:         "authFailed",
 	CodeKeyringError:       "keyringError",
+	CodeOAuthClientMissing: "oauthClientMissing",
 	CodeOffline:            "offline",
 	CodeNetworkError:       "networkError",
 	CodeServerError:        "serverError",

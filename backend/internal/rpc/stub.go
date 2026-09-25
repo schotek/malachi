@@ -84,6 +84,15 @@ func (stubAccounts) Linked(context.Context, api.AccountLinkedParams) (*api.Accou
 func (stubAccounts) Reorder(context.Context, api.AccountReorderParams) (*api.AccountReorderResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAccounts) OAuthStart(context.Context, api.AccountOAuthStartParams) (*api.AccountOAuthStartResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) OAuthWait(context.Context, api.AccountOAuthWaitParams) (*api.AccountOAuthWaitResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) OAuthCancel(context.Context, api.AccountOAuthCancelParams) (*api.AccountOAuthCancelResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubFolders struct{}
 

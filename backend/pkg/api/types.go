@@ -101,19 +101,30 @@ const (
 	// and authenticates with SASL XOAUTH2. GOAAccountID is the GOA account
 	// id ("account_…"). This is how Google accounts are used.
 	OAuth2SourceGOA OAuth2Source = "goa"
+
+	// OAuth2SourceDaemon: the backend runs the sign-in itself
+	// (authorization code with PKCE, account.oauthStart) and keeps the
+	// refresh token in the keyring. Provider is "google" for an IMAP
+	// account (SASL XOAUTH2) or "office365" for a Graph account.
+	// ClientID/TenantID optionally override the client the backend is
+	// configured with; AuthURL, TokenURL and Scopes stay empty (the
+	// backend's provider table owns them).
+	OAuth2SourceDaemon OAuth2Source = "daemon"
 )
 
 // OAuth2 providers.
 const (
-	OAuth2ProviderGoogle    = "google"    // with OAuth2SourceGOA
-	OAuth2ProviderOffice365 = "office365" // the backend's own flow; reserved
-	OAuth2ProviderCustom    = "custom"    // the backend's own flow; reserved
+	OAuth2ProviderGoogle    = "google"    // IMAP accounts, with OAuth2SourceGOA or OAuth2SourceDaemon
+	OAuth2ProviderOffice365 = "office365" // Graph accounts with OAuth2SourceDaemon
+	OAuth2ProviderCustom    = "custom"    // reserved: any other authorisation server; not implemented
 )
 
-// OAuth2Config is present only when an endpoint uses AuthOAuth2. With
-// Source "goa" only Provider and GOAAccountID are set. The remaining
-// fields describe the backend's own authorisation flow, reserved for
-// desktops without GNOME Online Accounts and not implemented.
+// OAuth2Config is present only when an endpoint uses AuthOAuth2, or on a
+// Graph account whose token comes from the backend's own flow. With Source
+// "goa" only Provider and GOAAccountID are set; with Source "daemon"
+// Provider and optionally ClientID/TenantID. An empty Source (Provider
+// "custom" with AuthURL, TokenURL and Scopes) is reserved and not
+// implemented.
 type OAuth2Config struct {
 	Source       OAuth2Source `json:"source,omitempty"`
 	GOAAccountID string       `json:"goaAccountId,omitempty"`
@@ -145,6 +156,11 @@ const (
 	// token; the backend asks it for access tokens. GOAAccountID is the GOA
 	// account id ("account_…").
 	GraphSourceGOA GraphSource = "goa"
+
+	// GraphSourceDaemon: the backend's own sign-in (account.oauthStart);
+	// the account's OAuth2 block says {source: "daemon", provider:
+	// "office365"} and the refresh token is in the keyring.
+	GraphSourceDaemon GraphSource = "daemon"
 )
 
 // GraphConfig is present only when Kind == AccountGraph.
@@ -179,13 +195,20 @@ func (c AccountConfig) Protocol() AccountKind {
 	return c.Kind
 }
 
-// Credentials carries secrets for account.add / account.test. Exactly the
-// fields relevant to the AuthMethod are set; a Graph account has none (the
-// token source holds them).
+// Credentials carries secrets for account.add / account.update /
+// account.test. Exactly the fields relevant to the account are set: a
+// password for password endpoints, OAuthSession for an account whose
+// OAuth2/Graph source is "daemon", nothing for a GNOME Online Accounts
+// account (the token source holds it).
 type Credentials struct {
 	Password string `json:"password,omitempty"`
-	// For OAuth2 the backend drives the flow itself and emits
-	// notify.authRequired; nothing is passed here.
+	// OAuthSession is the id of a complete account.oauthStart session: the
+	// tokens it obtained stay in the backend. account.add and
+	// account.update consume it (the refresh token goes to the keyring);
+	// account.test only reads it. Its verified mailbox, provider and
+	// client must be the account's; a re-sign-in session (oauthStart with
+	// accountId) serves only that account's update and test.
+	OAuthSession string `json:"oauthSession,omitempty"`
 }
 
 // Account is what account.list returns: config plus derived state.
@@ -270,10 +293,18 @@ const (
 // it tells the UI the address belongs to a provider that signs in through
 // GNOME Online Accounts (ProviderName says which) and must be added there
 // first.
+//
+// Alternatives lists further ways to add the same address, in the
+// backend's order of preference, each a config that passes account.add
+// validation: for a Google or Microsoft 365 address not signed in through
+// GNOME Online Accounts, the backend's own sign-in (source "daemon"; the
+// primary Config when GNOME Online Accounts is not running) and, for
+// Google, IMAP/SMTP with an app password.
 type AccountDiscoverResult struct {
-	Config       *AccountConfig `json:"config,omitempty"`
-	Source       DiscoverSource `json:"source"`
-	ProviderName string         `json:"providerName,omitempty"` // display-only, untrusted text
+	Config       *AccountConfig  `json:"config,omitempty"`
+	Source       DiscoverSource  `json:"source"`
+	ProviderName string          `json:"providerName,omitempty"` // display-only, untrusted text
+	Alternatives []AccountConfig `json:"alternatives,omitempty"`
 }
 
 // LinkedAccount is an account another desktop service is signed in to and
@@ -298,6 +329,65 @@ type AccountLinkedParams struct{}
 type AccountLinkedResult struct {
 	Accounts []LinkedAccount `json:"accounts"`
 }
+
+// OAuthBrowserPage holds the texts of the page the browser shows after the
+// provider redirects back to the backend. They come from the UI, which
+// knows the user's language; plain text, at most 200 characters each,
+// escaped by the backend. Omitted texts leave a page without sentences.
+type OAuthBrowserPage struct {
+	SuccessTitle string `json:"successTitle,omitempty"`
+	SuccessText  string `json:"successText,omitempty"`
+	FailureTitle string `json:"failureTitle,omitempty"`
+	FailureText  string `json:"failureText,omitempty"`
+}
+
+// AccountOAuthStartParams begins the backend's own sign-in: either for a
+// new account (Config, source "daemon", e.g. from account.discover) or to
+// sign an existing "daemon" account in again (AccountID). Exactly one is
+// set.
+type AccountOAuthStartParams struct {
+	AccountID   AccountID         `json:"accountId,omitempty"`
+	Config      *AccountConfig    `json:"config,omitempty"`
+	BrowserPage *OAuthBrowserPage `json:"browserPage,omitempty"`
+}
+
+// AccountOAuthStartResult: the UI opens AuthURL in the user's browser; the
+// backend listens for the redirect on 127.0.0.1 until ExpiresAt.
+type AccountOAuthStartResult struct {
+	SessionID string    `json:"sessionId"`
+	AuthURL   string    `json:"authUrl"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// OAuthSessionStatus is the state account.oauthWait reports.
+type OAuthSessionStatus string
+
+const (
+	OAuthSessionPending  OAuthSessionStatus = "pending"  // the browser has not come back yet; call again
+	OAuthSessionComplete OAuthSessionStatus = "complete" // signed in; Config is set
+)
+
+type AccountOAuthWaitParams struct {
+	SessionID string `json:"sessionId"`
+}
+
+// AccountOAuthWaitResult: with Status "complete" Config is the account to
+// pass to account.test / account.add together with
+// credentials.oauthSession (for a re-sign-in of an existing account the
+// backend has already stored the token and Config is the account's).
+type AccountOAuthWaitResult struct {
+	Status OAuthSessionStatus `json:"status"`
+	Config *AccountConfig     `json:"config,omitempty"`
+}
+
+// AccountOAuthCancelParams: a pending session ends with cancelled, a
+// completed one is discarded (its tokens leave the backend's memory); an
+// unknown one is ignored.
+type AccountOAuthCancelParams struct {
+	SessionID string `json:"sessionId"`
+}
+
+type AccountOAuthCancelResult struct{}
 
 // AccountUpdateParams replaces the configuration of an existing account.
 // The password is optional: empty keeps the stored one. Enabled is not
@@ -1225,8 +1315,11 @@ type AuthRequiredNotification struct {
 	AccountID AccountID `json:"accountId"`
 	Reason    ErrorCode `json:"reason"` // CodeAuthRequired, CodeAuthFailed, CodeKeyringError
 	Message   string    `json:"message"`
-	// AuthURL is set for OAuth2: the UI must open it through the OpenURI
-	// portal. The backend completes the flow on its loopback redirect listener.
+	// AuthURL is set for the backend's own OAuth2 sign-in (never with
+	// reason keyringError): the UI opens it in the user's browser (GTK
+	// through gtk.URILauncher, i.e. the OpenURI portal inside Flatpak and
+	// the desktop's default handler otherwise; macOS through NSWorkspace).
+	// The backend completes the flow on its loopback redirect listener.
 	AuthURL string `json:"authUrl,omitempty"`
 }
 
