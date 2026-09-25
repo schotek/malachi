@@ -95,7 +95,7 @@ No `id`; the client must not reply.
 | 1300 | offline | daemon is in offline mode |
 | 1301 | networkError | connection failed |
 | 1302 | serverError | IMAP/SMTP server returned an error |
-| 1303 | tlsError | certificate or handshake problem |
+| 1303 | tlsError | certificate or handshake problem; for IMAP/SMTP endpoints `data` = `TLSErrorData` (below) |
 | 1304 | serverTimeout | |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
@@ -103,6 +103,36 @@ No `id`; the client must not reply.
 | 1501 | sanitizeFailed | sanitiser refused the body; **body is withheld**, never returned raw |
 | 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
 | 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
+
+`tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
+`SyncState`) carries:
+
+```jsonc
+TLSErrorData {
+  "reason": "untrusted|hostnameMismatch|expired|notYetValid|invalid|other|handshake|starttlsUnavailable|tlsRequired|pinMismatch",
+  "certificate": CertificateInfo (opt),   // when the server presented one
+  "expectedSha256": "…" (opt)             // pinMismatch only: the pinned fingerprint
+}
+CertificateInfo { "sha256": "64 lowercase hex digits of the DER certificate",
+                  "subject": "…" (opt), "issuer": "…" (opt), "dnsNames": [] (opt),
+                  "ipAddresses": [] (opt), "notBefore": time, "notAfter": time,
+                  "selfSigned": bool }
+```
+
+`untrusted`: the issuer is not in the system trust store (a self-signed or
+private certificate). `hostnameMismatch`: issued for another name.
+`expired` / `notYetValid`: outside its validity. `invalid`: otherwise
+unusable for a server. `other`: refused by the system verifier for a
+reason it does not classify (e.g. macOS "not standards compliant").
+`handshake`: the TLS protocol failed before a certificate was judged (no
+`certificate`). `starttlsUnavailable`: STARTTLS is configured but not
+offered or refused. `tlsRequired`: the server demands TLS before login.
+`pinMismatch`: the endpoint pins a certificate
+(`ServerConfig.certificateSha256`) and the server presented another one.
+Every string of `certificate` is untrusted text from the server (control,
+format and line/paragraph separator characters removed, ≤ 128 bytes;
+lists ≤ 8 entries). Unknown
+`reason` values are to be treated as `other`.
 
 Codes are never renumbered; new ones are appended within their group.
 
@@ -174,7 +204,8 @@ bidi-control characters, length-capped).
 
 - `status`: `idle` (connected or between passes, no work), `syncing` (a pass
   is running; `folderId`/`progress` describe it), `offline` (the last attempt
-  failed for a network reason; `error` set; retrying with backoff),
+  failed for a network or TLS reason; `error` set, for `tlsError` with
+  `TLSErrorData` in `error.data` (§2); retrying with backoff),
   `authRequired` (missing or refused credentials; a `notify.authRequired`
   was sent; nothing is retried until the account is updated), `error`
   (server or storage error; `error` set), `disabled` (paused, or no syncer).
@@ -229,7 +260,8 @@ AccountConfig {
   "syncIntervalSeconds": 300 (opt)
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
-               "username": "me@example.org", "authMethod": "password|oauth2" }
+               "username": "me@example.org", "authMethod": "password|oauth2",
+               "certificateSha256": "64 hex digits" (opt) }
 OAuth2Config { "source": "goa|daemon" (opt), "goaAccountId": "account_1788683507_0" (with source goa),
                "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
@@ -292,7 +324,11 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
   literal or hostname of DNS labels (≤ 253 bytes), `port` 1–65535,
   `security` one of `tls|starttls|none` where `none` is accepted only for
   `localhost` or a loopback IP, `username` required (≤ 256 bytes, no
-  control characters), `authMethod` one of `password|oauth2`;
+  control characters), `authMethod` one of `password|oauth2`,
+  `certificateSha256` optional: a SHA-256 fingerprint (64 hex digits;
+  colons, spaces and upper case are accepted and stored as 64 lowercase
+  hex digits; an empty or blank value means no pin), only with
+  `security` `tls|starttls` and `authMethod` `password`;
 - for `imap`: `oauth2` present exactly when an endpoint uses `oauth2`.
   With `source: "goa"`: `provider` `google`, a `goaAccountId` (letters,
   digits and `_`, ≤ 128 bytes), both endpoints `oauth2`, and none of
@@ -484,11 +520,16 @@ kind: `imap` and `smtp` concurrently, or the `graph` mailbox.
 EndpointTestResult { "ok": true, "error": Error (opt), "capabilities": ["IDLE","CONDSTORE"] (opt), "latencyMs": 120 }
 ```
 
-An IMAP/SMTP probe dials, secures the connection (TLS 1.2+, system trust
-store, no override; STARTTLS is mandatory when configured), authenticates
-with the password and disconnects. Per-endpoint `error.code` is one of
+An IMAP/SMTP probe dials, secures the connection (TLS 1.2+; STARTTLS is
+mandatory when configured) and verifies the server's certificate against
+the system trust store and the host name — or, when the endpoint pins one
+(`certificateSha256`), accepts exactly that certificate and nothing else,
+whatever its issuer, name or validity — authenticates with the password
+and disconnects. Per-endpoint `error.code` is one of
 `authFailed` (credentials rejected), `tlsError` (certificate, handshake,
-STARTTLS not offered, or the server demanding TLS before login),
+STARTTLS not offered, or the server demanding TLS before login; `data`
+says which and describes the certificate, §2, so a UI can show it and let
+the user pin it after an explicit confirmation),
 `networkError` (unresolvable, refused, connection dropped), `serverTimeout`
 (no answer in time), `serverError` (protocol error or no usable
 authentication mechanism — for an `oauth2` endpoint, no XOAUTH2 and no
@@ -1690,3 +1731,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   upload and deleted with `draft.delete` and `message.send`; a move or
   delete of such a copy deletes its draft. New `draft.open`; new
   `Draft.replaces`. A permanent delete on Gmail goes through the Trash.
+- **1** (2026-09-26, compatible addition, pinned server certificates):
+  `ServerConfig.certificateSha256` (an IMAP/SMTP endpoint accepts exactly
+  that certificate; not with `security: none` or `authMethod: oauth2`);
+  `tlsError` from IMAP/SMTP endpoints carries `TLSErrorData` (`reason`,
+  `certificate`, `expectedSha256`) in `error.data`, in `account.test`
+  results and in `SyncState.error`.

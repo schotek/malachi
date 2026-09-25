@@ -47,9 +47,11 @@ const (
 	CodeOAuthClientMissing ErrorCode = 1203
 
 	// 1300–1399: network and remote servers.
-	CodeOffline       ErrorCode = 1300
-	CodeNetworkError  ErrorCode = 1301
-	CodeServerError   ErrorCode = 1302 // IMAP/SMTP server returned an error
+	CodeOffline      ErrorCode = 1300
+	CodeNetworkError ErrorCode = 1301
+	CodeServerError  ErrorCode = 1302 // IMAP/SMTP server returned an error
+	// CodeTLSError: certificate, handshake or STARTTLS problem; for IMAP/SMTP
+	// endpoints Error.Data is a TLSErrorData (reason, the certificate).
 	CodeTLSError      ErrorCode = 1303
 	CodeServerTimeout ErrorCode = 1304
 

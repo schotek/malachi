@@ -90,6 +90,14 @@ type ServerConfig struct {
 	Security   Security   `json:"security"`
 	Username   string     `json:"username"`
 	AuthMethod AuthMethod `json:"authMethod"`
+	// CertificateSHA256 pins the server's certificate: 64 lowercase hex
+	// digits of the SHA-256 of its DER encoding (NormalizeCertificateSHA256
+	// accepts other spellings). When set, the endpoint accepts exactly this
+	// certificate instead of verifying the chain and the host name (for a
+	// server with its own certificate, e.g. a mail bridge reached over a
+	// private network); a different certificate fails with tlsError reason
+	// "pinMismatch". Not allowed with security "none" or authMethod "oauth2".
+	CertificateSHA256 string `json:"certificateSha256,omitempty"`
 }
 
 // OAuth2Source says who holds the sign-in of an oauth2 endpoint.
