@@ -127,6 +127,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.editorSlot.Append(w.editor)
 	w.editor.OnState = w.applyState
 	w.editor.OnChanged = w.editorChanged
+	w.editor.OnDropFiles = w.attachGioFiles
 	w.editor.OnReady = func() {
 		if p.Kind != KindNew {
 			w.editor.FocusStart()
@@ -462,16 +463,28 @@ func (w *Window) attachFiles() {
 		if err != nil || w.draft.closed {
 			return // cancelled
 		}
+		list := make([]*gio.File, 0, files.NItems())
 		for i := uint(0); i < files.NItems(); i++ {
-			f := files.Item(i).Cast().(*gio.File)
-			path := f.Path()
-			if path == "" {
-				w.toast(i18n.T("Only local files can be attached"))
-				continue
-			}
-			w.importFile(path, f.Basename(), false, nil)
+			list = append(list, files.Item(i).Cast().(*gio.File))
 		}
+		w.attachGioFiles(list)
 	})
+}
+
+// attachGioFiles imports files chosen in the dialog or dropped onto the
+// editor as attachments; only local files can be.
+func (w *Window) attachGioFiles(files []*gio.File) {
+	if w.draft.closed {
+		return
+	}
+	for _, f := range files {
+		path := f.Path()
+		if path == "" {
+			w.toast(i18n.T("Only local files can be attached"))
+			continue
+		}
+		w.importFile(path, f.Basename(), false, nil)
+	}
 }
 
 func (w *Window) insertImage() {

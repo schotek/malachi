@@ -238,60 +238,60 @@ msgstr ""
 msgid "Check for new mail and show notifications in the background"
 msgstr ""
 
-#: ui/internal/compose/compose.go:139
+#: ui/internal/compose/compose.go:140
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/compose.go:235 ui/internal/compose/draft.go:142
+#: ui/internal/compose/compose.go:236 ui/internal/compose/draft.go:142
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/compose.go:300 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:301 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr ""
 
-#: ui/internal/compose/compose.go:427 ui/data/ui/compose.ui:283
+#: ui/internal/compose/compose.go:428 ui/data/ui/compose.ui:283
 #: ui/data/ui/compose.ui:476
 msgid "Paragraph"
 msgstr ""
 
-#: ui/internal/compose/compose.go:430
+#: ui/internal/compose/compose.go:431
 #, c-format
 msgid "Heading %s"
 msgstr ""
 
-#: ui/internal/compose/compose.go:459 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:460 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr ""
 
-#: ui/internal/compose/compose.go:469
+#: ui/internal/compose/compose.go:483
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/compose.go:479 ui/data/ui/compose.ui:376
+#: ui/internal/compose/compose.go:492 ui/data/ui/compose.ui:376
 msgid "Insert Image"
 msgstr ""
 
-#: ui/internal/compose/compose.go:481
+#: ui/internal/compose/compose.go:494
 msgid "Images"
 msgstr ""
 
-#: ui/internal/compose/compose.go:495
+#: ui/internal/compose/compose.go:508
 msgid "Only local images can be inserted"
 msgstr ""
 
-#: ui/internal/compose/compose.go:509
+#: ui/internal/compose/compose.go:522
 #, c-format
 msgid "Attaching %s…"
 msgstr ""
 
-#: ui/internal/compose/compose.go:518
+#: ui/internal/compose/compose.go:531
 #, c-format
 msgid "Attaching %s"
 msgstr ""
 
-#: ui/internal/compose/compose.go:550
+#: ui/internal/compose/compose.go:563
 msgid "Remove"
 msgstr ""
 

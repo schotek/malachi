@@ -15,6 +15,10 @@ import (
 
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/javascriptcore/v6"
 	"github.com/diamondburned/gotk4-webkitgtk/pkg/webkit/v6"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gdk/v4"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/ui/data"
 	_ "github.com/schotek/malachi/ui/internal/webkitenv" // renderer switch before the first view
@@ -42,6 +46,9 @@ type Editor struct {
 	// OnCrashed fires when the web process died; the view is blank until
 	// Load is called again.
 	OnCrashed func()
+	// OnDropFiles receives files dropped onto the view; WebKit never sees
+	// them. Other drops (text, a picture from a page) are WebKit's editing.
+	OnDropFiles func(files []*gio.File)
 }
 
 // New builds an editor from data/ui/editor.blp. Call Load to show content.
@@ -77,6 +84,25 @@ func New(log *slog.Logger) *Editor {
 			e.OnCrashed()
 		}
 	})
+
+	// A file drop is the caller's business (attachments): WebKit would
+	// insert or navigate to the file: URL. Capture phase, so this target
+	// decides before WebKit's own; it takes file lists only.
+	drop := gtk.NewDropTarget(gdk.GTypeFileList, gdk.ActionCopy)
+	drop.SetPropagationPhase(gtk.PhaseCapture)
+	drop.ConnectDrop(func(value *coreglib.Value, _, _ float64) bool {
+		list, ok := value.GoValue().(*gdk.FileList)
+		if !ok || e.OnDropFiles == nil {
+			return false
+		}
+		files := list.Files()
+		if len(files) == 0 {
+			return false
+		}
+		e.OnDropFiles(files)
+		return true
+	})
+	e.AddController(drop)
 	return e
 }
 
