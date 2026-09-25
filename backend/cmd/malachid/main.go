@@ -67,7 +67,9 @@ func run() error {
 		return err
 	}
 	if found {
-		log.Info("configuration loaded", "path", *flagConfig, "accounts", len(cfg.Accounts))
+		log.Info("configuration loaded", "path", *flagConfig, "accounts", len(cfg.Accounts),
+			"oauthClients", oauthClients(cfg))
+		config.WarnExposedSecret(log, *flagConfig, cfg)
 	} else {
 		log.Info("no configuration file, using defaults", "path", *flagConfig)
 	}
@@ -84,6 +86,7 @@ func run() error {
 	log.Info("store ready", "path", st.Path())
 
 	backend := core.New(version, st, cfg, log)
+	defer backend.Close() // idempotent; also on the early returns below
 	switch v := strings.ToLower(os.Getenv("MALACHI_KEYRING")); v {
 	case "", "secretservice":
 		ks := secretservice.New(log)
@@ -97,7 +100,7 @@ func run() error {
 		log.Info("keyring: external helper", "path", os.Getenv(helper.PathEnv))
 		backend.Keyring = ks
 	case "none":
-		log.Warn("MALACHI_KEYRING=none: passwords cannot be stored; adding an account with a password fails with keyringError")
+		log.Warn("MALACHI_KEYRING=none: passwords and sign-ins cannot be stored; adding an account with a password or the backend's own OAuth2 sign-in fails with keyringError")
 		backend.Keyring = auth.UnavailableKeyring{}
 	default:
 		return fmt.Errorf("unknown MALACHI_KEYRING %q (secretservice|helper|none)", v)
@@ -115,7 +118,8 @@ func run() error {
 
 	err = srv.Serve(ctx)
 	log.Info("shutting down", "reason", ctxReason(ctx))
-	srv.Close() // idempotent; closes connections and unlinks the socket
+	srv.Close()     // idempotent; closes connections and unlinks the socket
+	backend.Close() // ends waiting sign-ins and closes their listeners
 
 	// Let the syncers log out and finish their current store writes before
 	// the deferred store close; a hung connection must not hold the exit.
@@ -125,6 +129,19 @@ func run() error {
 		log.Warn("sync supervisor did not stop in time", "timeout", syncStopTimeout)
 	}
 	return err
+}
+
+// oauthClients names the providers config.toml has an OAuth client for
+// (the ids themselves are not logged).
+func oauthClients(cfg config.Config) []string {
+	var out []string
+	if cfg.OAuth2.Google.ClientID != "" {
+		out = append(out, "google")
+	}
+	if cfg.OAuth2.Microsoft.ClientID != "" {
+		out = append(out, "microsoft")
+	}
+	return out
 }
 
 // syncStopTimeout caps how long shutdown waits for the sync supervisor.

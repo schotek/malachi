@@ -17,6 +17,7 @@ import (
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
+	"github.com/schotek/malachi/backend/internal/auth/oauth2flow"
 	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/contacts"
 	"github.com/schotek/malachi/backend/internal/contacts/eds"
@@ -71,6 +72,19 @@ type Backend struct {
 	// every call reports unavailable. Tests substitute a fake.
 	GOA GOAClient
 
+	// OAuth runs the sign-in sessions of the backend's own OAuth2 flow
+	// (account.oauthStart, and the re-sign-in of an account whose refresh
+	// token was lost); OAuthClients resolves the client registration of a
+	// source "daemon" account (the account's clientId, config.toml
+	// [oauth2.*], a built-in one). New builds both from the configuration;
+	// tests substitute ones that talk to a fake provider.
+	OAuth        *oauth2flow.Manager
+	OAuthClients *oauth2flow.Registry
+	// TokenSourceDefaults is the template of every account's token source
+	// (HTTP client, endpoints, clock); zero fields take oauth2flow's
+	// defaults. Tests point it at a fake provider.
+	TokenSourceDefaults oauth2flow.TokenSourceOptions
+
 	// Directory is the system address-book client behind contact.search:
 	// Evolution Data Server over D-Bus. It connects lazily; nil, no session
 	// bus or no service leave the address-book part of a search simply
@@ -94,6 +108,20 @@ type Backend struct {
 
 	mu       sync.RWMutex
 	notifier api.Notifier // nil until SetNotifier
+
+	// oauthMu guards the token sources of source "daemon" accounts (made
+	// on demand, dropped when the account changes or goes), what the
+	// backend remembers about its sign-in sessions, and the per-account
+	// secret locks. It is never held while calling into OAuth, a token
+	// source or the keyring.
+	oauthMu       sync.Mutex
+	tokenSources  map[string]*oauth2flow.TokenSource
+	oauthSessions map[string]oauthSession
+	// secretLocks serialise, per account, the backend's keyring writes and
+	// the configuration they belong to (account.add / update / remove and
+	// a completed re-sign-in); see lockSecrets.
+	secretLocks map[string]*secretLock
+	closeOnce   sync.Once
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -125,9 +153,17 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		ProbeGraph:        graph.Probe,
 		GOA:               goa.New(log),
 		Directory:         eds.New(log),
+		OAuthClients:      &oauth2flow.Registry{Configured: oauthClientsFrom(cfg)},
+		tokenSources:      map[string]*oauth2flow.TokenSource{},
+		oauthSessions:     map[string]oauthSession{},
 	}
+	b.OAuth = oauth2flow.NewManager(oauth2flow.Options{
+		Log:      log,
+		Identity: map[oauth2flow.Provider]oauth2flow.IdentityFunc{oauth2flow.Microsoft: b.graphIdentity},
+	})
 	disc := discover.New(log)
 	disc.GOA = b.goaAccountFor
+	disc.GOAAvailable = b.goaAvailable
 	b.Discover = disc.Discover
 	b.syncNotifier = newCoalescingNotifier(forwardingNotifier{b}, b.log, nil)
 	notifier := outboxAwareNotifier{b: b, inner: b.syncNotifier}
@@ -206,27 +242,34 @@ func (b *Backend) invalidateGraphTokenFor(accountID string) {
 	if err != nil {
 		return
 	}
-	b.InvalidateGraphToken(a.Config)
+	b.InvalidateGraphToken(accountID, a.Config)
 }
 
 // GraphTokenFor returns an access token for a Graph account's mailbox from
 // the account's token source. Errors are *api.Error: authRequired when the
-// user must sign in again in the desktop's account settings, unavailable
-// without a session bus, accountNotFound / invalidArgument for a bad
-// account. The token is never logged.
+// user must sign in again (in the desktop's account settings, or through
+// the backend's own flow, which then has a session waiting), unavailable
+// without a session bus, oauthClientMissing without a client for the own
+// flow, accountNotFound / invalidArgument for a bad account. The token is
+// never logged.
 func (b *Backend) GraphTokenFor(ctx context.Context, accountID string) (string, error) {
 	a, err := b.requireAccount(ctx, accountID)
 	if err != nil {
 		return "", err
 	}
-	return b.graphToken(ctx, a.Config)
+	return b.graphToken(ctx, accountID, a.Config)
 }
 
-func (b *Backend) graphToken(ctx context.Context, cfg api.AccountConfig) (string, error) {
+// graphToken fetches the token of a Graph account: from GNOME Online
+// Accounts, or from the token source of the stored account accountID
+// with the backend's own sign-in ("" = not stored: authRequired).
+func (b *Backend) graphToken(ctx context.Context, accountID string, cfg api.AccountConfig) (string, error) {
 	if cfg.Protocol() != api.AccountGraph || cfg.Graph == nil {
 		return "", api.NewError(api.CodeInvalidArgument, "not a Microsoft Graph account")
 	}
 	switch cfg.Graph.Source {
+	case api.GraphSourceDaemon:
+		return b.daemonToken(ctx, accountID, cfg)
 	case api.GraphSourceGOA:
 		if b.GOA == nil {
 			return "", api.NewError(api.CodeUnavailable, "GNOME Online Accounts is not available")
@@ -247,9 +290,17 @@ func (b *Backend) graphToken(ctx context.Context, cfg api.AccountConfig) (string
 
 // InvalidateGraphToken drops the cached token of a Graph account after the
 // service rejected it, so the next request asks the token source again.
-func (b *Backend) InvalidateGraphToken(cfg api.AccountConfig) {
-	if cfg.Graph != nil && cfg.Graph.Source == api.GraphSourceGOA && b.GOA != nil {
-		b.GOA.Invalidate(cfg.Graph.GOAAccountID)
+func (b *Backend) InvalidateGraphToken(accountID string, cfg api.AccountConfig) {
+	if cfg.Graph == nil {
+		return
+	}
+	switch cfg.Graph.Source {
+	case api.GraphSourceGOA:
+		if b.GOA != nil {
+			b.GOA.Invalidate(cfg.Graph.GOAAccountID)
+		}
+	case api.GraphSourceDaemon:
+		b.invalidateTokenSource(accountID)
 	}
 }
 

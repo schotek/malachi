@@ -32,8 +32,11 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 
 - **Accounts.** IMAP/SMTP with a setup assistant that finds the server
   settings for most providers; Microsoft 365 / Outlook.com and Gmail /
-  Google Workspace through GNOME Online Accounts, with no separate
-  sign-in. Passwords and tokens live in the system keyring.
+  Google Workspace through GNOME Online Accounts, or, without them (macOS,
+  other desktops), through a sign-in in your browser once an OAuth client
+  id is configured ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365));
+  Gmail also with an app password. Passwords and tokens live in the system
+  keyring.
 - **Reading offline.** Folders and messages are synchronised into a local
   store within a configurable retention window; new mail arrives as the
   server announces it (IMAP IDLE). Flags, moves and deletions are queued
@@ -252,10 +255,11 @@ application over the same daemon and the same contract, mirroring the GTK
 UI screen for screen. It reads, writes and sends mail, renders HTML in a
 locked-down WebKit view, keeps passwords in the login keychain through a
 bundled helper, and carries the Czech translation generated from `po/`.
-What it cannot do follows from the daemon: Gmail and Microsoft 365 sign
-in through GNOME Online Accounts, which macOS does not have, so only
-IMAP/SMTP accounts with a password can be added. Needs macOS 14, Xcode
-with a Swift 6 toolchain and Go for the daemon:
+Gmail and Microsoft 365 are added through the daemon's own sign-in in
+the browser, which needs an OAuth client id in `config.toml`
+([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)); Gmail also
+works with an app password. Needs macOS 14, Xcode with a Swift 6 toolchain
+and Go for the daemon:
 
 ```sh
 make macos          # build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside
@@ -346,6 +350,79 @@ auth_method = "password"
 Passwords never go into this file; they are asked for and kept in the
 keyring.
 
+### OAuth clients for Gmail and Microsoft 365
+
+On GNOME, Gmail and Microsoft 365 sign in through GNOME Online Accounts
+and need nothing here. Elsewhere — macOS, KDE, any desktop without GNOME
+Online Accounts, or an address not signed in there — the daemon signs in
+itself: the assistant opens your browser, you sign in with the provider,
+and the refresh token goes to the keyring. That needs an OAuth client
+registration:
+
+- **Microsoft 365 / Outlook.com** works out of the box: Malachi Mail ships
+  its own registration. It is not publisher-verified (that needs a
+  verified organisation), so personal Microsoft accounts sign in directly,
+  while an organisation that restricts user consent asks its
+  administrator to approve *Malachi Mail* once for everybody.
+- **Gmail / Google Workspace** has no shipped client: Google's mail scope
+  needs an app verification with a yearly paid security assessment
+  (CASA). Use an app password (the assistant offers it), or register your
+  own client below.
+
+A client of your own, for either provider, goes into `config.toml` —
+`~/.config/malachi/config.toml` on Linux (`$XDG_CONFIG_HOME`),
+`~/Library/Application Support/Malachi Mail/config.toml` on macOS — and
+takes precedence over the shipped one:
+
+```toml
+[oauth2.google]
+client_id = "1234567890-abc.apps.googleusercontent.com"
+client_secret = "GOCSPX-…"
+
+[oauth2.microsoft]
+client_id = "00000000-0000-0000-0000-000000000000"
+tenant = "common"          # optional; your tenant id or domain for a single-organisation app
+```
+
+Restart the daemon afterwards (quit the application, or `make run-dev`
+again). Without a Google client id the assistant says so and offers an app
+password instead. Keep the file private (`chmod 600`): Google's
+desktop-app secret is not confidential by Google's own definition, but the
+daemon warns when a file holding one is readable by others.
+
+**Google** (Google Cloud console):
+
+1. Create a project; under *Google Auth Platform* (the OAuth consent
+   screen) choose the *External* audience and leave the app in *Testing*,
+   with your own Google account added as a test user. An app in testing
+   needs no verification; its refresh tokens expire after seven days, and
+   the daemon then asks you to sign in again.
+2. Under *Clients*, create an OAuth client of type **Desktop app** and copy
+   its client ID and client secret. No redirect URI is needed: desktop
+   clients accept the daemon's `http://127.0.0.1:<port>/`.
+
+**Microsoft** (Microsoft Entra admin center, *App registrations*):
+
+1. *New registration*, supported account types **Accounts in any
+   organizational directory and personal Microsoft accounts** (so
+   Outlook.com works too).
+2. *Authentication* → *Add a platform* → **Mobile and desktop
+   applications**, custom redirect URI `http://127.0.0.1/` (the daemon
+   sends `http://127.0.0.1:<port>/` with a port chosen per sign-in; Entra
+   ignores the port of a loopback redirect). If the portal accepts only
+   `http://localhost`, add `http://127.0.0.1/` and `http://127.0.0.1` in
+   the app's *Manifest* (the Microsoft Graph format) under
+   `publicClient.redirectUris`.
+3. *API permissions* → *Microsoft Graph* → *Delegated*: `Mail.ReadWrite`,
+   `Mail.Send`, `User.Read`, `offline_access`.
+4. Copy the *Application (client) ID*; there is no secret.
+
+An account can also name its own client (`clientId`, and `tenantId` for
+Microsoft) instead of the configured one. A seeded account in
+`config.toml` uses this sign-in with `[accounts.oauth2]` `source =
+"daemon"` and `provider = "google"` (both endpoints `auth_method =
+"oauth2"`); it asks for the browser sign-in once the daemon runs.
+
 ## AI agents (MCP)
 
 `make build` also produces `build/malachi-mcp`, a **Model Context Protocol**
@@ -388,8 +465,10 @@ Tools, arguments, limits and the threat model: [docs/mcp.md](docs/mcp.md).
 | Generic IMAP/SMTP with password | ✅ reading and sending |
 | Microsoft 365 / Outlook.com via GNOME Online Accounts (Microsoft Graph) | ✅ reading and sending; sign in under Settings → Online Accounts first |
 | Gmail / Google Workspace via GNOME Online Accounts (IMAP/SMTP with XOAUTH2) | ✅ reading and sending (on `main`, not in 0.1.0); sign in under Settings → Online Accounts first. All Mail is the archive target and is not downloaded |
-| Gmail with an app password | ✗ not offered |
-| OAuth2 without GNOME Online Accounts | ✗ reserved for desktops without GOA, not implemented |
+| Microsoft 365 / Outlook.com without GNOME Online Accounts (Microsoft Graph, the daemon's own sign-in) | ✅ reading and sending (on `main`, not in 0.1.0); you sign in in the browser with the shipped client. Organisations that restrict consent approve the app once, see [OAuth clients](#oauth-clients-for-gmail-and-microsoft-365) |
+| Gmail / Google Workspace without GNOME Online Accounts (IMAP/SMTP with XOAUTH2, the daemon's own sign-in) | ✅ reading and sending (on `main`, not in 0.1.0); you sign in in the browser. Needs an OAuth client id and secret in `config.toml` |
+| Gmail with an app password | ✅ as the fallback when no sign-in is available (accounts with 2-Step Verification; on `main`, not in 0.1.0) |
+| Other OAuth2 providers | ✗ not implemented |
 
 ## Contributing
 

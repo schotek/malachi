@@ -56,8 +56,10 @@ func TestOAuth2GOAValidation(t *testing.T) {
 		{"graph given", func(c *api.AccountConfig) {
 			c.Graph = &api.GraphConfig{Source: api.GraphSourceGOA, GOAAccountID: goaID}
 		}, false},
-		// The own flow stays what it was: no source, its own provider.
-		{"own flow office365", func(c *api.AccountConfig) {
+		// An oauth2 block without source is the reserved custom flow; it
+		// still validates (and reports notImplemented at token time). The
+		// source daemon rules are in TestDaemonAccountValidation.
+		{"no source office365", func(c *api.AccountConfig) {
 			c.OAuth2 = &api.OAuth2Config{Provider: api.OAuth2ProviderOffice365}
 		}, true},
 	}
@@ -154,7 +156,8 @@ func TestCredentialFor(t *testing.T) {
 		t.Fatalf("unknown account: %v", err)
 	}
 
-	// The own OAuth2 flow is reserved.
+	// An oauth2 block without source is reserved (the backend's own flow
+	// is source daemon, see oauth_sessions_test.go).
 	own := gmailConfig()
 	own.Email = "own@example.invalid"
 	own.OAuth2 = &api.OAuth2Config{Provider: api.OAuth2ProviderOffice365}
@@ -163,7 +166,7 @@ func TestCredentialFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := b.credentialFor(ctx, string(res.AccountID)); errCode(t, err) != api.CodeNotImplemented {
-		t.Fatalf("own flow: %v", err)
+		t.Fatalf("no source: %v", err)
 	}
 }
 

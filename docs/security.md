@@ -278,11 +278,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `org.freedesktop.secrets` (libsecret). **Never** to `config.toml`, the
   SQLite store, logs, or crash reports.
 - Access tokens are held in memory only.
-- Microsoft 365 accounts (`kind: graph`) have no secret of their own: the
-  sign-in and the refresh token live in GNOME Online Accounts, and the
-  daemon asks `org.gnome.OnlineAccounts` (`internal/auth/goa`) for access
-  tokens over the session bus, the same trust domain as the Secret Service
-  below. A token is cached in memory until shortly before the expiry GOA
+- Microsoft 365 accounts (`kind: graph`) with `graph.source: goa` have no
+  secret of their own: the sign-in and the refresh token live in GNOME
+  Online Accounts, and the daemon asks `org.gnome.OnlineAccounts`
+  (`internal/auth/goa`) for access tokens over the session bus, the same
+  trust domain as the Secret Service below. With `graph.source: daemon`
+  (the backend's own sign-in, below) the account keeps a refresh token in
+  the keyring like any other `daemon` account. A token is cached in memory until shortly before the expiry GOA
   reports, dropped when the service rejects it, and scrubbed from any error
   text the service echoes. Revoking the sign-in in GNOME Settings cuts the
   daemon off at the next token request.
@@ -293,10 +295,116 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   redaction scrubs it from error text, and a server refusing it drops it
   from the cache at once (`AuthFailed` hooks) so the next attempt asks
   GNOME Online Accounts again.
-- The planned own OAuth2 flow (authorization code with PKCE; a redirect
-  listener on `127.0.0.1`, one callback with the expected `state`; the UI
-  opening the URL via the OpenURI portal, the backend never launching a
-  browser) is deferred and not implemented.
+- The backend's own OAuth2 sign-in (`source: daemon`,
+  `internal/auth/oauth2flow`) serves Gmail and Microsoft 365 where GNOME
+  Online Accounts does not run (macOS, KDE, …) or does not hold the
+  address. It is the authorization-code flow with PKCE (S256, a fresh
+  verifier per session) and a 32-byte random `state` compared in constant
+  time. Each session (`account.oauthStart`) opens its own listener on
+  `127.0.0.1` on an ephemeral port (the redirect is
+  `http://127.0.0.1:<port>/`, a loopback literal, never `localhost`) that
+  answers `GET /` only, with header/read/write timeouts, 16 KiB of
+  headers, no keep-alive, a closing connection and at most 4 connections
+  served at once (more wait in the accept queue); every other path or
+  method is a 404. A request whose `Host` is not exactly
+  `127.0.0.1:<port>` (DNS rebinding: a page on a name that resolves to
+  the loopback address) is refused before anything is looked at. The
+  first request with the expected `state` closes the listener (one
+  callback, nothing after it); requests with a wrong or missing `state`
+  get a 400 and change nothing, so a stray or forged request cannot end
+  the session the browser is about to complete. A session lives
+  10 minutes, at most 8 run at once, and the backend closes all of them
+  on shutdown. The UI opens the authorisation URL — the GTK UI through
+  `gtk.URILauncher` (the OpenURI portal inside Flatpak, the desktop's
+  default handler otherwise), the macOS UI through `NSWorkspace`; the
+  backend never launches a browser.
+- The code goes to the provider's token endpoint through a hardened
+  client: TLS 1.2+ with the system trust store (the transport policy),
+  30 s per request, no redirects followed, no keep-alive. Before anything
+  is kept, the signed-in mailbox must be the account's address (trimmed,
+  case-insensitive). Google's is the `email` of the ID token: issuer and
+  audience are checked (with an array audience, `azp` must be the client
+  id too, and a present `azp` always must), `exp` against the clock with
+  two minutes of leeway, and `email_verified` must be present and true;
+  the token came straight from the token endpoint over TLS, so its
+  signature need not be. Microsoft's is Graph `/me` read with the new
+  access token — `mail`, else `userPrincipalName` — which the tenant's
+  administrators control rather than a verified-address claim; that is
+  acceptable because the user performs the sign-in in their own browser,
+  so the identity only guards against signing in to the wrong mailbox by
+  mistake. An identity with control or Unicode format characters (bidi
+  overrides, zero-width characters) is refused, not repaired. Another
+  mailbox fails the session (`invalidArgument` with `signedInAs`); its
+  tokens are dropped from memory, not revoked at the provider.
+- A completed session is bound to what it was started for. Its grant
+  records the client (id and Microsoft tenant) the tokens were issued to;
+  `credentials.oauthSession` is accepted only for an account whose
+  address is the verified mailbox (a grant naming no mailbox never is),
+  with the same provider and the client the account resolves to now, and
+  a re-sign-in session (`account.oauthStart {accountId}`) only by
+  `account.update` / `account.test` of that account. A pending re-sign-in
+  is handed out again only while it is for the account's current
+  provider, client and address; otherwise it is cancelled and a new one
+  opened. `account.oauthCancel` on a completed session discards it and
+  its tokens at once instead of at the end of its 10 minutes.
+- For Gmail the token carries the `https://mail.google.com/` scope and
+  SASL XOAUTH2 hands it to whichever server the account names, so the
+  servers are part of the token's audience (RFC 9700 §4.10): a `daemon`
+  Google account must name `imap.gmail.com:993` with TLS and
+  `smtp.gmail.com` with 465/TLS or 587/STARTTLS, the address as the user
+  name on both — enforced by `account.add`, `account.update`,
+  `account.test`, `account.oauthStart` and the `config.toml` import.
+  Microsoft tokens go only to Graph, whose URL is built in.
+- The refresh token lives **only** in the keyring (key
+  `oauth2.refresh_token`), written by `account.add` / `account.update`
+  when they consume the completed session, by the completion hook of a
+  re-sign-in, and rewritten whenever a refresh rotates it (Microsoft
+  does). Access tokens stay in memory, cached until 60 s before expiry and
+  dropped when a server refuses them; one refresh runs at a time per
+  account. A keyring that refuses the token fails `account.add` /
+  `account.update` with `keyringError` and keeps nothing. A re-sign-in
+  whose token the keyring refuses this time (locked, prompt dismissed)
+  stays in memory until the daemon stops; under `MALACHI_KEYRING=none`
+  (which can never store it) the re-sign-in fails with `keyringError`
+  and the account stays in `authRequired` — such an account can exist
+  (added without a session, e.g. from `config.toml`) but never signs in.
+  Both cases are logged and reported as `notify.authRequired` with
+  reason `keyringError` (no URL). A refresh token the provider rejects
+  (`invalid_grant`), or none stored, puts the account in `authRequired`
+  and the backend opens a re-sign-in session by itself
+  (`notify.authRequired` carries its `authUrl`). Token-endpoint errors
+  reach logs and replies only cleaned and with every token, code and
+  client secret redacted.
+- A stored sign-in belongs to the address, provider and client it was
+  made for. `account.update` of a `daemon` account that changes any of
+  them (the effective `clientId` / `tenantId` included) without a new
+  session deletes the refresh token, cancels a waiting re-sign-in and
+  opens a new one for the new configuration; leaving source `daemon`
+  deletes it too. When an account changes or goes, its token source is
+  retired before the keyring is touched: a refresh still in flight can no
+  longer write its rotated refresh token back. The backend's own keyring
+  writes of an account (add, update, remove, a completed re-sign-in) are
+  serialised per account together with the account row they belong to,
+  and a re-sign-in that completes after its account was removed deletes
+  what it stored.
+- Sign-in sessions share the RPC socket's trust model: the socket is the
+  user's own, so any client on it may start a re-sign-in for an account,
+  replace the page texts of the one waiting (they are escaped either
+  way) or cancel it; none of that reveals a token, and the grant of a
+  session reaches an account only through the binding checks above.
+- The page the browser shows after the redirect carries the UI's texts
+  escaped by `html/template`, runs no script and loads nothing
+  (`Content-Security-Policy: default-src 'none'; style-src
+  'unsafe-inline'; frame-ancestors 'none'; form-action 'none'; base-uri
+  'none'`, `Cache-Control: no-store`, `Referrer-Policy: no-referrer`,
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`).
+- The OAuth client registrations are configuration, not user secrets:
+  `config.toml` `[oauth2.google]` / `[oauth2.microsoft]` (none is built
+  in). Google's Desktop-app `client_secret` is an installed-app secret,
+  which Google documents as not confidential; it may sit in
+  `config.toml`, and the daemon warns at start when that file is
+  readable by group or others. Microsoft's registration is a public
+  client without a secret.
 - Log lines are scrubbed: authentication commands are logged as
   `AUTHENTICATE <redacted>`.
 - `account.list` never returns secrets; `Credentials` is write-only.

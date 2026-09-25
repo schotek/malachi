@@ -7,10 +7,12 @@
 // Mozilla ISPDB (only the domain is sent), the provider's own autoconfig
 // document (the address is sent to the provider itself), RFC 6186 DNS SRV
 // records, a known provider recognised by DNS MX or autoconfig hosts
-// (Microsoft 365, which needs a sign-in in GNOME Online Accounts first),
-// and finally common host names verified by opening a TLS connection
-// without authenticating. Nothing is stored; the caller validates the
-// result like an account.add request.
+// (Microsoft 365 and Google, which sign in with OAuth2: through GNOME
+// Online Accounts where it runs, else through the backend's own flow,
+// with an app password as Google's last resort), and finally common host
+// names verified by opening a TLS connection without authenticating.
+// Nothing is stored; the caller validates the result like an account.add
+// request.
 //
 // Every document and DNS answer is hostile input: sizes are capped, hosts
 // and ports are validated, plaintext socket types are refused.
@@ -81,14 +83,22 @@ type Discoverer struct {
 	// Online Accounts and answers with the complete account it would be
 	// added as and the provider's display name; nil = no such lookup.
 	GOA func(ctx context.Context, email string) (cfg *api.AccountConfig, providerName string, ok bool)
-	Log *slog.Logger
+	// GOAAvailable reports whether GNOME Online Accounts runs on this
+	// desktop, so that a provider address not signed in there can be
+	// pointed at it; nil = it does not, and such an address is answered
+	// with the backend's own sign-in.
+	GOAAvailable func(ctx context.Context) bool
+	Log          *slog.Logger
 }
 
 // Result is the suggestion. Source is DiscoverNone when Config is nil.
+// Alternatives are further ways to add the address, in order of
+// preference (only for a provider answer).
 type Result struct {
 	Config       *api.AccountConfig
 	Source       api.DiscoverSource
 	ProviderName string
+	Alternatives []api.AccountConfig
 }
 
 // New returns a Discoverer with the production defaults.
@@ -199,12 +209,12 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 		return none, err
 	}
 
-	// A Google mailbox: the only way in is a sign-in through GNOME Online
-	// Accounts, so the answer is that hint even when the ISPDB has a
-	// password entry (which works with an app password at best).
+	// A Google mailbox signs in with OAuth2, so the answer is the
+	// provider's even when the ISPDB has a password entry (which works
+	// with an app password at best, and that is the last alternative).
 	if googleDomain(domain) || ispdb.google || googleMX {
 		d.Log.Debug("google domain", "domain", domain, "ispdb", ispdb.google, "mx", googleMX)
-		return Result{Config: googleConfig(email, domain), Source: api.DiscoverProvider, ProviderName: GoogleProviderName}, nil
+		return d.providerResult(ctx, email, domain, true), nil
 	}
 
 	var in, out endpoint
@@ -223,7 +233,7 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	// answer is a Graph account that still needs its sign-in.
 	if (in.cfg == nil || out.cfg == nil) && (ispdb.microsoft || microsoftMX) {
 		d.Log.Debug("microsoft 365 domain", "domain", domain, "ispdb", ispdb.microsoft, "mx", microsoftMX)
-		return Result{Config: microsoftConfig(email, domain), Source: api.DiscoverProvider, ProviderName: MicrosoftProviderName}, nil
+		return d.providerResult(ctx, email, domain, false), nil
 	}
 
 	// Phase 2: the provider's own document, then DNS, then guesses.
@@ -266,6 +276,33 @@ func (d *Discoverer) Discover(ctx context.Context, email string) (Result, error)
 	return Result{Config: cfg, Source: weakest(in.source, out.source), ProviderName: providerName}, nil
 }
 
+// providerResult is the answer for an address of a provider that signs in
+// with OAuth2 (Google, or Microsoft 365 through Graph) and that GNOME
+// Online Accounts is not signed in to. Where GOA runs, Config is its hint
+// (the account without a GOA id: add it there first) and the backend's
+// own sign-in the first alternative; elsewhere the own sign-in is Config.
+// Google adds IMAP/SMTP with an app password as the last alternative. The
+// own sign-in is offered whether or not an OAuth client is configured
+// (account.oauthStart reports oauthClientMissing).
+func (d *Discoverer) providerResult(ctx context.Context, email, domain string, google bool) Result {
+	res := Result{Source: api.DiscoverProvider, ProviderName: MicrosoftProviderName}
+	hint, own := microsoftConfig(email, domain), microsoftDaemonConfig(email, domain)
+	if google {
+		res.ProviderName = GoogleProviderName
+		hint, own = googleConfig(email, domain), googleDaemonConfig(email, domain)
+	}
+	if d.GOAAvailable != nil && d.GOAAvailable(ctx) {
+		res.Config = hint
+		res.Alternatives = append(res.Alternatives, *own)
+	} else {
+		res.Config = own
+	}
+	if google {
+		res.Alternatives = append(res.Alternatives, *googlePasswordConfig(email, domain))
+	}
+	return res
+}
+
 // microsoftConfig is the Graph account for a Microsoft 365 address
 // without its GOA account id: the hint that the address must be signed
 // in through GNOME Online Accounts first.
@@ -276,15 +313,45 @@ func microsoftConfig(email, domain string) *api.AccountConfig {
 	}
 }
 
+// microsoftDaemonConfig is the Graph account signed in through the
+// backend's own flow; complete, it passes account.add validation.
+func microsoftDaemonConfig(email, domain string) *api.AccountConfig {
+	return &api.AccountConfig{
+		Name: domain, Email: email, Kind: api.AccountGraph,
+		Graph:  &api.GraphConfig{Source: api.GraphSourceDaemon},
+		OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceDaemon, Provider: api.OAuth2ProviderOffice365},
+	}
+}
+
 // googleConfig is the IMAP account of a Google address without its GOA
 // account id: Gmail's servers with oauth2 on both, the same hint as
 // microsoftConfig. With a sign-in, GOA names the servers itself.
 func googleConfig(email, domain string) *api.AccountConfig {
+	cfg := gmailServers(email, domain, api.AuthOAuth2)
+	cfg.OAuth2 = &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle}
+	return cfg
+}
+
+// googleDaemonConfig is Gmail through the backend's own sign-in.
+func googleDaemonConfig(email, domain string) *api.AccountConfig {
+	cfg := gmailServers(email, domain, api.AuthOAuth2)
+	cfg.OAuth2 = &api.OAuth2Config{Source: api.OAuth2SourceDaemon, Provider: api.OAuth2ProviderGoogle}
+	return cfg
+}
+
+// googlePasswordConfig is Gmail with an app password (accounts with
+// 2-Step Verification): the same servers, password authentication.
+func googlePasswordConfig(email, domain string) *api.AccountConfig {
+	return gmailServers(email, domain, api.AuthPassword)
+}
+
+// gmailServers is the IMAP account on Gmail's servers, implicit TLS on
+// both, the address as the user name.
+func gmailServers(email, domain string, auth api.AuthMethod) *api.AccountConfig {
 	return &api.AccountConfig{
 		Name: domain, Email: email, Kind: api.AccountIMAP,
-		IMAP:   &api.ServerConfig{Host: "imap.gmail.com", Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthOAuth2},
-		SMTP:   &api.ServerConfig{Host: "smtp.gmail.com", Port: 465, Security: api.SecurityTLS, Username: email, AuthMethod: api.AuthOAuth2},
-		OAuth2: &api.OAuth2Config{Source: api.OAuth2SourceGOA, Provider: api.OAuth2ProviderGoogle},
+		IMAP: &api.ServerConfig{Host: "imap.gmail.com", Port: 993, Security: api.SecurityTLS, Username: email, AuthMethod: auth},
+		SMTP: &api.ServerConfig{Host: "smtp.gmail.com", Port: 465, Security: api.SecurityTLS, Username: email, AuthMethod: auth},
 	}
 }
 

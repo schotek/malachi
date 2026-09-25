@@ -4,12 +4,12 @@
 // Package auth handles credentials: the keyring abstraction (libsecret
 // through the org.freedesktop.secrets D-Bus API lives in the secretservice
 // subpackage), and the SASL XOAUTH2 mechanism with which an OAuth2 access
-// token signs in to IMAP and SMTP. The tokens themselves come from GNOME
-// Online Accounts (the goa subpackage): it owns the sign-in, the refresh
-// token and the OAuth client id, which is why Gmail needs no Google
-// verification of an own client. An own authorisation-code flow for
-// desktops without GNOME Online Accounts is reserved in the API
-// (api.OAuth2Config) and not implemented.
+// token signs in to IMAP and SMTP. The tokens come from GNOME Online
+// Accounts (the goa subpackage), which owns the sign-in, the refresh token
+// and the OAuth client id, or from the backend's own authorisation-code
+// flow with PKCE (the oauth2flow subpackage, api.OAuth2SourceDaemon), which
+// keeps the refresh token in the keyring under KeyRefreshToken and uses
+// the OAuth client the daemon is configured with.
 //
 // Rules (docs/security.md):
 //   - secrets, tokens included, are never written to config.toml, the

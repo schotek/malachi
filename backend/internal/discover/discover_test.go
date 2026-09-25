@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -312,6 +313,9 @@ func TestDiscoverMicrosoftByMX(t *testing.T) {
 	verified := 0
 	d.VerifyIMAP = func(context.Context, api.ServerConfig) error { verified++; return nil }
 	d.VerifySMTP = d.VerifyIMAP
+
+	// GNOME Online Accounts runs: its hint first, the own sign-in next.
+	d.GOAAvailable = func(context.Context) bool { return true }
 	res, err := d.Discover(context.Background(), "me@contoso.example")
 	if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != MicrosoftProviderName {
 		t.Fatalf("res = %+v err = %v", res, err)
@@ -320,9 +324,39 @@ func TestDiscoverMicrosoftByMX(t *testing.T) {
 	if c == nil || c.Kind != api.AccountGraph || c.Graph == nil || c.Graph.Source != api.GraphSourceGOA || c.Graph.GOAAccountID != "" || c.IMAP != nil {
 		t.Fatalf("config = %+v", c)
 	}
+	if len(res.Alternatives) != 1 || !microsoftDaemon(res.Alternatives[0], "me@contoso.example") {
+		t.Fatalf("alternatives = %+v", res.Alternatives)
+	}
+
+	// Without it the own sign-in is the answer, with nothing else to offer.
+	d.GOAAvailable = func(context.Context) bool { return false }
+	res, err = d.Discover(context.Background(), "me@contoso.example")
+	if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != MicrosoftProviderName ||
+		res.Config == nil || !microsoftDaemon(*res.Config, "me@contoso.example") || len(res.Alternatives) != 0 {
+		t.Fatalf("without GOA: %+v err = %v", res, err)
+	}
+	d.GOAAvailable = nil
+	if res, _ = d.Discover(context.Background(), "me@contoso.example"); res.Config == nil || res.Config.Graph.Source != api.GraphSourceDaemon {
+		t.Fatalf("nil hook: %+v", res)
+	}
 	if verified != 0 {
 		t.Fatalf("guesses verified for a Microsoft domain: %d", verified)
 	}
+}
+
+func microsoftDaemon(c api.AccountConfig, email string) bool {
+	return c.Kind == api.AccountGraph && c.Email == email && c.Name == "contoso.example" && c.IMAP == nil && c.SMTP == nil &&
+		c.Graph != nil && c.Graph.Source == api.GraphSourceDaemon && c.Graph.GOAAccountID == "" &&
+		reflect.DeepEqual(c.OAuth2, &api.OAuth2Config{Source: api.OAuth2SourceDaemon, Provider: api.OAuth2ProviderOffice365})
+}
+
+// gmailAccount checks Gmail's servers with auth on both endpoints.
+func gmailAccount(c api.AccountConfig, email string, auth api.AuthMethod) bool {
+	want := func(host string, port int) api.ServerConfig {
+		return api.ServerConfig{Host: host, Port: port, Security: api.SecurityTLS, Username: email, AuthMethod: auth}
+	}
+	return c.Kind == api.AccountIMAP && c.Email == email && c.Graph == nil && c.IMAP != nil && c.SMTP != nil &&
+		*c.IMAP == want("imap.gmail.com", 993) && *c.SMTP == want("smtp.gmail.com", 465)
 }
 
 // A Google address is the sign-in hint even though the ISPDB has a
@@ -333,18 +367,42 @@ func TestDiscoverGoogleDomain(t *testing.T) {
 	verified := 0
 	d.VerifyIMAP = func(context.Context, api.ServerConfig) error { verified++; return nil }
 	d.VerifySMTP = d.VerifyIMAP
+	d.GOAAvailable = func(context.Context) bool { return true }
 	for _, email := range []string{"me@gmail.com", "me@GoogleMail.com"} {
 		res, err := d.Discover(context.Background(), email)
 		if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != GoogleProviderName {
 			t.Fatalf("%s: res = %+v err = %v", email, res, err)
 		}
 		c := res.Config
-		if c == nil || c.Kind != api.AccountIMAP || c.IMAP == nil || c.SMTP == nil || c.OAuth2 == nil ||
-			c.IMAP.Host != "imap.gmail.com" || c.IMAP.AuthMethod != api.AuthOAuth2 || c.SMTP.AuthMethod != api.AuthOAuth2 ||
-			c.OAuth2.Source != api.OAuth2SourceGOA || c.OAuth2.Provider != api.OAuth2ProviderGoogle || c.OAuth2.GOAAccountID != "" ||
-			c.Email != email {
+		if c == nil || !gmailAccount(*c, email, api.AuthOAuth2) || c.OAuth2 == nil ||
+			c.OAuth2.Source != api.OAuth2SourceGOA || c.OAuth2.Provider != api.OAuth2ProviderGoogle || c.OAuth2.GOAAccountID != "" {
 			t.Fatalf("%s: config = %+v", email, c)
 		}
+		// Then the own sign-in, then an app password.
+		alt := res.Alternatives
+		if len(alt) != 2 || !gmailAccount(alt[0], email, api.AuthOAuth2) ||
+			!reflect.DeepEqual(alt[0].OAuth2, &api.OAuth2Config{Source: api.OAuth2SourceDaemon, Provider: api.OAuth2ProviderGoogle}) ||
+			!gmailAccount(alt[1], email, api.AuthPassword) || alt[1].OAuth2 != nil {
+			t.Fatalf("%s: alternatives = %+v", email, alt)
+		}
+	}
+
+	// Without GNOME Online Accounts the own sign-in is the answer and the
+	// app password the only alternative.
+	d.GOAAvailable = func(context.Context) bool { return false }
+	res, err := d.Discover(context.Background(), "me@gmail.com")
+	if err != nil || res.Source != api.DiscoverProvider || res.ProviderName != GoogleProviderName || res.Config == nil ||
+		!gmailAccount(*res.Config, "me@gmail.com", api.AuthOAuth2) || res.Config.OAuth2 == nil ||
+		res.Config.OAuth2.Source != api.OAuth2SourceDaemon || res.Config.Name != "gmail.com" {
+		t.Fatalf("without GOA: %+v err = %v", res, err)
+	}
+	if len(res.Alternatives) != 1 || !gmailAccount(res.Alternatives[0], "me@gmail.com", api.AuthPassword) {
+		t.Fatalf("without GOA: alternatives = %+v", res.Alternatives)
+	}
+	// Every config is its own value: changing one leaves the others.
+	res.Config.IMAP.Host = "changed.invalid"
+	if res.Alternatives[0].IMAP.Host != "imap.gmail.com" {
+		t.Fatal("configs share servers")
 	}
 	if verified != 0 {
 		t.Fatalf("guesses verified for a Google domain: %d", verified)
@@ -355,8 +413,8 @@ func TestDiscoverGoogleDomain(t *testing.T) {
 	d.GOA = func(context.Context, string) (*api.AccountConfig, string, bool) {
 		return linked, GoogleProviderName, true
 	}
-	res, err := d.Discover(context.Background(), "me@gmail.com")
-	if err != nil || res.Source != api.DiscoverGOA || res.Config != linked {
+	res, err = d.Discover(context.Background(), "me@gmail.com")
+	if err != nil || res.Source != api.DiscoverGOA || res.Config != linked || len(res.Alternatives) != 0 {
 		t.Fatalf("with GOA: %+v err = %v", res, err)
 	}
 }

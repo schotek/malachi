@@ -55,12 +55,14 @@ func TestAccountTest(t *testing.T) {
 		}
 	})
 
-	t.Run("own oauth2 flow not implemented", func(t *testing.T) {
+	t.Run("oauth2 without source not implemented", func(t *testing.T) {
 		b := newTestBackend(t, config.Default())
 		c := validConfig()
 		c.IMAP.AuthMethod = api.AuthOAuth2
 		c.OAuth2 = &api.OAuth2Config{Provider: "office365"}
-		// No token source yet: nothing is dialled, both endpoints say so.
+		// The reserved flow without a source has no token source: nothing
+		// is dialled, both endpoints say so. (Source daemon: see
+		// oauth_sessions_test.go.)
 		probed := false
 		b.ProbeIMAP = func(context.Context, api.ServerConfig, string) (imap.ProbeResult, error) {
 			probed = true

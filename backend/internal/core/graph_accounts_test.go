@@ -247,7 +247,7 @@ func TestGraphTokenFor(t *testing.T) {
 	if _, err := b.GraphTokenFor(ctx, string(imapAdded.AccountID)); errCode(t, err) != api.CodeInvalidArgument {
 		t.Fatalf("imap account: %v", err)
 	}
-	b.InvalidateGraphToken(graphConfig())
+	b.InvalidateGraphToken(string(added.AccountID), graphConfig())
 	if fmt.Sprint(fg.invalidated) != "["+goaID+"]" {
 		t.Fatalf("invalidate: %v", fg.invalidated)
 	}

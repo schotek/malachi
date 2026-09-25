@@ -28,7 +28,7 @@ type Config struct {
 
 // Graph mirrors api.GraphConfig with TOML tags.
 type Graph struct {
-	Source       string `toml:"source"` // goa
+	Source       string `toml:"source"` // goa | daemon
 	GOAAccountID string `toml:"goa_account_id"`
 }
 
@@ -41,9 +41,13 @@ type Server struct {
 	AuthMethod string `toml:"auth_method"` // password | oauth2
 }
 
-// OAuth2 mirrors api.OAuth2Config with TOML tags.
+// OAuth2 mirrors api.OAuth2Config with TOML tags. A GNOME Online
+// Accounts id is machine-specific and has no TOML form; source "daemon"
+// (the backend's own sign-in) is how a bootstrap Gmail or Microsoft 365
+// account is written.
 type OAuth2 struct {
-	Provider string   `toml:"provider"` // office365 | custom
+	Source   string   `toml:"source"`   // daemon | "" (reserved)
+	Provider string   `toml:"provider"` // google | office365 | custom
 	ClientID string   `toml:"client_id"`
 	TenantID string   `toml:"tenant_id"`
 	AuthURL  string   `toml:"auth_url"`
@@ -78,6 +82,7 @@ func (c Config) ToAPI() api.AccountConfig {
 	}
 	if c.OAuth2 != nil {
 		out.OAuth2 = &api.OAuth2Config{
+			Source:   api.OAuth2Source(c.OAuth2.Source),
 			Provider: c.OAuth2.Provider,
 			ClientID: c.OAuth2.ClientID,
 			TenantID: c.OAuth2.TenantID,

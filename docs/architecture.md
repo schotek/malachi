@@ -113,13 +113,19 @@ backend/
   internal/account    config.toml form of an account (bootstrap import)
   internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
                       org.freedesktop.secrets client, auth/goa the GNOME Online
-                      Accounts client (Microsoft Graph tokens), auth/helper the
+                      Accounts client (Microsoft Graph and Gmail tokens),
+                      auth/oauth2flow the backend's own sign-in (authorization
+                      code + PKCE on a 127.0.0.1 redirect listener, the
+                      provider table, client registry, keyring-backed token
+                      source; account.oauthStart), auth/helper the
                       platform-neutral keyring over an external program
                       (MALACHI_KEYRING=helper; the macOS app supplies
                       malachi-keychain over the login keychain)
   internal/transport  TLS policy, dialling, timeouts, error classification
   internal/discover   account.discover: GNOME Online Accounts, ISPDB, provider
-                      autoconfig, SRV, Microsoft 365 hint (MX), guesses
+                      autoconfig, SRV, Microsoft 365 / Google provider answer
+                      (MX, autoconfig hosts, gmail.com) with alternatives (the
+                      own sign-in, Gmail with an app password), guesses
   internal/core       composes services, owns the supervisor lifecycle (one
                       dispatcher per account kind) and the notification coalescer
   internal/graph      Microsoft Graph client + sync supervisor for Microsoft 365
@@ -239,6 +245,10 @@ and the notifications above are the same. What differs:
   expiry and never stores it. A rejected or revoked sign-in is
   `authRequired`, retried every five minutes (the user fixes it in GNOME
   Settings, which nothing wakes the daemon for); no session bus is `error`.
+  With `source: "daemon"` the token comes from the backend's own sign-in
+  instead (`internal/auth/oauth2flow`, refresh token in the keyring, §7),
+  and a revoked sign-in opens a re-sign-in the UI completes in the
+  browser.
 - **Identity.** Messages are keyed by Graph's immutable id
   (`messages.remote_id`, requested with `Prefer: IdType="ImmutableId"`),
   which survives a move; folders by the Graph folder id (`folders.mailbox`).
@@ -630,7 +640,8 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   Online (October 2026) and was never an option. Deferred: an own PKCE
   flow (`api.OAuth2Config`, `internal/auth` refresh-token storage) for
   desktops without GNOME Online Accounts; the API types stay reserved for
-  it.
+  it. *Superseded 2026-09-25 by "Own OAuth2 sign-in" below; Graph stays
+  the only Microsoft path.*
 - Gmail: **decided** (2026-09-06) — IMAP and SMTP with SASL XOAUTH2, the
   token from GNOME Online Accounts (`internal/auth/goa`, `internal/auth`
   `XOAuth2Client`). The objection above does not carry over: GNOME Online
@@ -649,7 +660,47 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   account skips the APPEND like a Graph one. Rejected: an own OAuth
   client (the CASA assessment), an app-password path (dead end once Google
   finishes retiring basic authentication), the Gmail REST API (nothing it
-  adds over IMAP is needed).
+  adds over IMAP is needed). *Partly superseded 2026-09-25: the own
+  sign-in and the app password below are now offered where GNOME Online
+  Accounts is not; the REST API stays rejected.*
+- Own OAuth2 sign-in: **decided** (2026-09-25) — the backend runs the
+  authorization-code flow with PKCE itself (`source: daemon`,
+  `internal/auth/oauth2flow`, `account.oauthStart` / `oauthWait` /
+  `oauthCancel`) for Gmail (IMAP/SMTP with XOAUTH2, as through GNOME
+  Online Accounts) and Microsoft 365 / Outlook.com (Graph, as through GNOME
+  Online Accounts), so macOS and desktops without GNOME Online Accounts
+  can add them. The redirect is a one-shot listener on `127.0.0.1`; the UI
+  opens the browser, the backend never does; the refresh token lives in
+  the keyring only (docs/security.md §6). The OAuth clients are
+  configurable — `config.toml` `[oauth2.google]` / `[oauth2.microsoft]`,
+  or an account's own `clientId` / `tenantId` — over a built-in table
+  (`oauth2flow.builtinClients`, one Go map, no API change to fill it).
+  Without a client the flow answers `oauthClientMissing`.
+  Built-in clients, **decided** (2026-09-25): Microsoft ships the
+  project's own Entra registration (multitenant + personal accounts,
+  public client with PKCE, loopback redirect). It is not
+  publisher-verified — that needs a verified organisation in Microsoft
+  Partner Center and the project is run by an individual — so personal
+  accounts sign in directly and organisations that restrict consent
+  approve the app once through their administrator. Google ships none:
+  its restricted mail scope needs an app verification with a yearly paid
+  CASA assessment; Gmail uses GNOME Online Accounts, an app password, or a
+  client of the user's own. Revisit both when an organisation (a foundation
+  or fiscal host) can own the registrations. GNOME Online Accounts
+  stays preferred on Linux: where it runs, `account.discover` answers an
+  address not signed in there with its hint first and the own sign-in as
+  the alternative; a sign-in it holds is used as before. A lost refresh
+  token (`invalid_grant`) opens a re-sign-in by itself
+  (`notify.authRequired` with `authUrl`). Not included: Microsoft over
+  IMAP/SMTP with XOAUTH2, the `custom` provider (stays `notImplemented`),
+  client fields in the Settings (`config.set`).
+- Gmail app password: **decided** (2026-09-25) — allowed as the fallback
+  `account.discover` lists last for a Google address (IMAP/SMTP with
+  `authMethod: password`, `imap.gmail.com:993` / `smtp.gmail.com:465`),
+  for accounts with 2-Step Verification when neither GNOME Online Accounts
+  nor an own OAuth client is available. It reverses the rejection of
+  2026-09-06 as an emergency path only: Google may end it with basic
+  authentication, and it comes after the OAuth paths in `alternatives`.
 - Internationalised e-mail domains in `account.discover`: not handled
   (IDNA encoding of the domain before the ISPDB/DNS lookups).
 - Daemon lifecycle: **decided** (2026-09-07) — the UI starts `malachid`

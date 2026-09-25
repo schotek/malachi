@@ -131,11 +131,28 @@ func (b *Backend) goaAccountFor(ctx context.Context, email string) (*api.Account
 	return nil, "", false
 }
 
+// goaAvailable reports whether GNOME Online Accounts answers on this
+// desktop, for account.discover: the same test account.linked applies
+// (no client, no session bus or no service is unavailable; any other
+// answer means the service runs).
+func (b *Backend) goaAvailable(ctx context.Context) bool {
+	if b.GOA == nil {
+		return false
+	}
+	_, err := b.GOA.Accounts(ctx)
+	var apiErr *api.Error
+	if err != nil && errors.As(err, &apiErr) && apiErr.Code == api.CodeUnavailable {
+		return false
+	}
+	return true
+}
+
 // credentialFor is what the IMAP syncer and the outbox worker sign in
 // with: the stored password, or — for an account whose endpoints use
-// oauth2 through GNOME Online Accounts — an access token from GOA, which
-// the clients present as SASL XOAUTH2. An own OAuth2 flow is reserved
-// and reports notImplemented.
+// oauth2 — an access token, which the clients present as SASL XOAUTH2:
+// from GNOME Online Accounts, or from the backend's own sign-in (source
+// "daemon"). An oauth2 block without a source is reserved and reports
+// notImplemented.
 func (b *Backend) credentialFor(ctx context.Context, accountID string) (string, error) {
 	a, err := b.requireAccount(ctx, accountID)
 	if err != nil {
@@ -144,15 +161,20 @@ func (b *Backend) credentialFor(ctx context.Context, accountID string) (string, 
 	if !usesAuth(a.Config, api.AuthOAuth2) {
 		return b.PasswordFor(ctx, accountID)
 	}
-	return b.oauth2Token(ctx, a.Config)
+	return b.oauth2Token(ctx, accountID, a.Config)
 }
 
 // oauth2Token fetches the access token of an account whose oauth2
-// endpoints sign in through GNOME Online Accounts. No GOA is unavailable;
-// a lost sign-in comes back from GOA as authRequired.
-func (b *Backend) oauth2Token(ctx context.Context, cfg api.AccountConfig) (string, error) {
+// endpoints sign in through GNOME Online Accounts or the backend's own
+// flow (accountID is the stored account whose token source holds the
+// sign-in; "" = not stored, authRequired). No GOA is unavailable; a lost
+// sign-in is authRequired.
+func (b *Backend) oauth2Token(ctx context.Context, accountID string, cfg api.AccountConfig) (string, error) {
 	o := cfg.OAuth2
-	if o == nil || o.Source != api.OAuth2SourceGOA {
+	switch {
+	case o != nil && o.Source == api.OAuth2SourceDaemon:
+		return b.daemonToken(ctx, accountID, cfg)
+	case o == nil || o.Source != api.OAuth2SourceGOA:
 		return "", api.ErrNotImplemented
 	}
 	if b.GOA == nil {
@@ -171,15 +193,20 @@ func (b *Backend) oauth2Token(ctx context.Context, cfg api.AccountConfig) (strin
 
 // invalidateCredentialsFor drops the cached access token of an account
 // after a server refused it, so the next attempt asks GNOME Online
-// Accounts again (which refreshes on its side). A password has nothing to
-// drop.
+// Accounts again (which refreshes on its side) or refreshes through the
+// backend's own sign-in. A password has nothing to drop.
 func (b *Backend) invalidateCredentialsFor(accountID string) {
 	a, err := b.store.GetAccount(context.Background(), accountID)
 	if err != nil {
 		return
 	}
-	if o := a.Config.OAuth2; o != nil && o.Source == api.OAuth2SourceGOA && b.GOA != nil {
+	o := a.Config.OAuth2
+	switch {
+	case o == nil:
+	case o.Source == api.OAuth2SourceGOA && b.GOA != nil:
 		b.GOA.Invalidate(o.GOAAccountID)
+	case o.Source == api.OAuth2SourceDaemon:
+		b.invalidateTokenSource(accountID)
 	}
 }
 

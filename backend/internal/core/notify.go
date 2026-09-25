@@ -271,7 +271,10 @@ func errorCode(e *api.Error) api.ErrorCode {
 // outboxAwareNotifier completes every notify.syncState with the account's
 // pendingOutbox count before it reaches the coalescer, so the sync engine
 // (which knows nothing about the outbox) and the outbox worker report one
-// consistent state. Other events pass through.
+// consistent state. It also completes notify.authRequired of an account
+// with the backend's own sign-in with the authUrl of the session waiting
+// for it (opening one if needed): the engines know nothing about sign-in
+// sessions either. Other events pass through.
 type outboxAwareNotifier struct {
 	b     *Backend
 	inner api.Notifier
@@ -281,6 +284,9 @@ var _ api.Notifier = outboxAwareNotifier{}
 
 func (n outboxAwareNotifier) NewMessage(ev api.NewMessageNotification) { n.inner.NewMessage(ev) }
 func (n outboxAwareNotifier) AuthRequired(ev api.AuthRequiredNotification) {
+	if ev.AuthURL == "" {
+		ev.AuthURL = n.b.reauthURL(ev)
+	}
 	n.inner.AuthRequired(ev)
 }
 func (n outboxAwareNotifier) AccountsChanged(ev api.AccountsChangedNotification) {

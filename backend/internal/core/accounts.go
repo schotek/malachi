@@ -16,6 +16,8 @@ import (
 
 	"github.com/schotek/malachi/backend/internal/auth"
 	"github.com/schotek/malachi/backend/internal/auth/goa"
+	"github.com/schotek/malachi/backend/internal/auth/oauth2flow"
+	"github.com/schotek/malachi/backend/internal/config"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -31,6 +33,7 @@ const (
 	maxAccountNameBytes = 256
 	maxUsernameBytes    = 256
 	maxOAuth2Scopes     = 32
+	maxClientIDBytes    = 256
 )
 
 type accountService struct{ b *Backend }
@@ -49,14 +52,32 @@ func (s *accountService) List(ctx context.Context, _ api.AccountListParams) (*ap
 
 // Add validates the configuration, stores it and forwards the password to
 // the keyring. The password never reaches the store or the log; when the
-// keyring refuses it the account row is removed again. A successfully
-// added account starts synchronising at once.
+// keyring refuses it the account row is removed again. An account with the
+// backend's own sign-in takes the refresh token of a completed session the
+// same way (the session is consumed); without one it gets a sign-in
+// session at once (notify.authRequired with authUrl). A successfully added
+// account starts synchronising at once.
 func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.AccountAddResult, error) {
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
-	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
-		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	if err := checkCredentials(p.Config, p.Credentials); err != nil {
+		return nil, err
+	}
+	_, daemon := daemonOAuth(p.Config)
+	var grant oauth2flow.Grant
+	if daemon {
+		// Before the row exists, so a missing client leaves nothing.
+		if _, _, err := s.b.resolveClient(p.Config.OAuth2); err != nil {
+			return nil, err
+		}
+		if p.Credentials.OAuthSession != "" {
+			g, err := s.b.sessionGrant(p.Credentials.OAuthSession, "", p.Config)
+			if err != nil {
+				return nil, err
+			}
+			grant = g
+		}
 	}
 
 	a := store.Account{Name: p.Config.Name, Enabled: true, Config: p.Config}
@@ -68,6 +89,8 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 	}
 	id := api.AccountID(a.ID)
 
+	unlock := s.b.lockSecrets(a.ID)
+	defer unlock()
 	if p.Credentials.Password != "" {
 		if err := s.b.Keyring.Set(ctx, id, auth.KeyPassword, p.Credentials.Password); err != nil {
 			if derr := s.b.store.DeleteAccount(ctx, a.ID, true); derr != nil {
@@ -80,13 +103,46 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 			return nil, api.NewError(api.CodeKeyringError, "%v", err)
 		}
 	}
-	s.b.log.Info("account added", "id", a.ID)
+	if p.Credentials.OAuthSession != "" {
+		ts, err := s.b.tokenSourceFor(a.ID, a.Config)
+		if err == nil {
+			err = ts.Seed(ctx, grant)
+		}
+		if err != nil {
+			s.b.dropTokenSource(a.ID)
+			if derr := s.b.store.DeleteAccount(ctx, a.ID, true); derr != nil {
+				s.b.log.Warn("roll back account after keyring failure", "id", a.ID, "err", derr)
+			}
+			return nil, keyringErr(err)
+		}
+		s.b.consumeSession(p.Credentials.OAuthSession)
+	}
+	unlock()
+	s.b.log.Info("account added", "id", a.ID, "signedIn", p.Credentials.OAuthSession != "")
+	if daemon && p.Credentials.OAuthSession == "" {
+		// No sign-in yet: open one now, so the syncer's authRequired
+		// carries its URL.
+		s.b.ensureReauthSession(a.ID)
+	}
 	if a.Enabled {
 		s.b.Supervisor.Start(a)
 		s.b.Delivery.Start(a)
 	}
 	s.b.accountsChanged()
 	return &api.AccountAddResult{AccountID: id}, nil
+}
+
+// checkCredentials applies the credential rules shared by add, update and
+// test: a password only for password endpoints, a sign-in session only for
+// an account with the backend's own sign-in.
+func checkCredentials(c api.AccountConfig, cr api.Credentials) error {
+	if cr.Password != "" && !usesAuth(c, api.AuthPassword) {
+		return api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	}
+	if _, daemon := daemonOAuth(c); cr.OAuthSession != "" && !daemon {
+		return api.NewError(api.CodeInvalidArgument, "oauthSession given but the account does not sign in through the backend (source daemon)")
+	}
+	return nil
 }
 
 // Remove stops the account's syncer, then deletes the account and, on
@@ -108,11 +164,15 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	unlock := s.b.lockSecrets(string(p.AccountID))
+	s.b.cancelReauth(string(p.AccountID))
+	s.b.dropTokenSource(string(p.AccountID))
 	for _, key := range []string{auth.KeyPassword, auth.KeyRefreshToken} {
 		if err := s.b.Keyring.Delete(ctx, p.AccountID, key); err != nil && !errors.Is(err, api.ErrNotImplemented) {
 			s.b.log.Warn("delete account secret", "id", p.AccountID, "key", key, "err", err)
 		}
 	}
+	unlock()
 	s.b.log.Info("account removed", "id", p.AccountID, "deleteLocalData", p.DeleteLocalData)
 	s.b.accountsChanged()
 	return &api.AccountRemoveResult{}, nil
@@ -170,7 +230,11 @@ func (s *accountService) Reorder(ctx context.Context, p api.AccountReorderParams
 
 // Update replaces an account's configuration and, when a password is given,
 // its keyring entry. The row is written first and reverted if the keyring
-// refuses the new password, so both stay consistent.
+// refuses the new password, so both stay consistent. An account with the
+// backend's own sign-in keeps its refresh token only while the token
+// still belongs to it: a new address, provider or client without a new
+// sign-in deletes the token and opens a re-sign-in session
+// (notify.authRequired with its authUrl follows from the engines).
 func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) (*api.AccountUpdateResult, error) {
 	if p.AccountID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId is required")
@@ -178,9 +242,11 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
-	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
-		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	if err := checkCredentials(p.Config, p.Credentials); err != nil {
+		return nil, err
 	}
+	unlock := s.b.lockSecrets(string(p.AccountID))
+	defer unlock()
 	existing, err := s.b.store.GetAccount(ctx, string(p.AccountID))
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -188,6 +254,24 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	_, daemon := daemonOAuth(p.Config)
+	_, wasDaemon := daemonOAuth(existing.Config)
+	var grant oauth2flow.Grant
+	if daemon {
+		if _, _, err := s.b.resolveClient(p.Config.OAuth2); err != nil {
+			return nil, err
+		}
+		if p.Credentials.OAuthSession != "" {
+			g, err := s.b.sessionGrant(p.Credentials.OAuthSession, string(p.AccountID), p.Config)
+			if err != nil {
+				return nil, err
+			}
+			grant = g
+		}
+	}
+	// The stored sign-in no longer belongs to the account: its token must
+	// not be refreshed (or sent) for the new configuration.
+	rebound := wasDaemon && daemon && p.Credentials.OAuthSession == "" && s.b.signInRebound(existing.Config, p.Config)
 
 	updated := existing
 	updated.Name = p.Config.Name
@@ -203,20 +287,51 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 
+	// The token source belongs to the old configuration.
+	s.b.dropTokenSource(updated.ID)
+	revert := func() {
+		old := existing
+		if rerr := s.b.store.UpdateAccount(ctx, &old); rerr != nil {
+			s.b.log.Warn("revert account after keyring failure", "id", p.AccountID, "err", rerr)
+		}
+		s.b.dropTokenSource(updated.ID)
+	}
 	if p.Credentials.Password != "" {
 		if err := s.b.Keyring.Set(ctx, p.AccountID, auth.KeyPassword, p.Credentials.Password); err != nil {
-			revert := existing
-			if rerr := s.b.store.UpdateAccount(ctx, &revert); rerr != nil {
-				s.b.log.Warn("revert account after keyring failure", "id", p.AccountID, "err", rerr)
-			}
-			var apiErr *api.Error
-			if errors.As(err, &apiErr) {
-				return nil, apiErr
-			}
-			return nil, api.NewError(api.CodeKeyringError, "%v", err)
+			revert()
+			return nil, keyringErr(err)
 		}
 	}
-	s.b.log.Info("account updated", "id", p.AccountID, "passwordChanged", p.Credentials.Password != "")
+	if p.Credentials.OAuthSession != "" {
+		ts, err := s.b.tokenSourceFor(updated.ID, updated.Config)
+		if err == nil {
+			err = ts.Seed(ctx, grant)
+		}
+		if err != nil {
+			revert()
+			return nil, keyringErr(err)
+		}
+		s.b.consumeSession(p.Credentials.OAuthSession)
+	}
+	if !daemon || p.Credentials.OAuthSession != "" || rebound {
+		// A waiting re-sign-in is moot: signed in now, no longer the
+		// backend's to do, or for what the account was before.
+		s.b.cancelReauth(updated.ID)
+	}
+	switch {
+	case wasDaemon && !daemon:
+		s.b.deleteRefreshToken(ctx, updated.ID, "the account left the backend's sign-in")
+	case rebound:
+		s.b.deleteRefreshToken(ctx, updated.ID, "the account's address, provider or client changed")
+	}
+	unlock()
+	if daemon && p.Credentials.OAuthSession == "" && (!wasDaemon || rebound) {
+		// Signed out now: a session waits at once, so the engines'
+		// authRequired carries its URL.
+		s.b.ensureReauthSession(updated.ID)
+	}
+	s.b.log.Info("account updated", "id", p.AccountID, "passwordChanged", p.Credentials.Password != "",
+		"signedIn", p.Credentials.OAuthSession != "", "signInReset", rebound)
 	if updated.Enabled {
 		s.b.Supervisor.Restart(updated)
 		s.b.Delivery.Restart(updated)
@@ -241,8 +356,9 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 		s.b.log.Warn("account discovery", "err", err)
 		return &api.AccountDiscoverResult{Source: api.DiscoverNone}, nil
 	}
-	// A "provider" answer is a deliberately incomplete Graph account (the
-	// sign-in is still missing); every other suggestion must pass Add.
+	// A "provider" answer may be deliberately incomplete (the GNOME Online
+	// Accounts hint: the sign-in is still missing); every other suggestion,
+	// and every alternative, must pass Add.
 	if res.Config != nil && res.Source != api.DiscoverProvider {
 		if err := validateAccountConfig(res.Config); err != nil {
 			s.b.log.Warn("discovered configuration rejected", "source", res.Source, "err", err)
@@ -252,31 +368,54 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 	if res.Config == nil {
 		res.Source = api.DiscoverNone
 	}
-	s.b.log.Info("account discovery", "source", res.Source)
-	return &api.AccountDiscoverResult{Config: res.Config, Source: res.Source, ProviderName: res.ProviderName}, nil
+	var alternatives []api.AccountConfig
+	for i := range res.Alternatives {
+		if res.Config == nil {
+			break
+		}
+		alt := res.Alternatives[i]
+		if err := validateAccountConfig(&alt); err != nil {
+			s.b.log.Warn("discovered alternative rejected", "source", res.Source, "err", err)
+			continue
+		}
+		alternatives = append(alternatives, alt)
+	}
+	s.b.log.Info("account discovery", "source", res.Source, "alternatives", len(alternatives))
+	return &api.AccountDiscoverResult{Config: res.Config, Source: res.Source, ProviderName: res.ProviderName, Alternatives: alternatives}, nil
 }
 
 // Test validates like Add, then probes the endpoints of the account kind
 // (IMAP and SMTP concurrently, or the Graph mailbox). Each endpoint reports
 // its own outcome; the call itself fails only for an invalid configuration.
-// The password is used for the connections and never logged.
+// The password is used for the connections and never logged; so is a
+// token, which comes from GNOME Online Accounts, from the session named by
+// credentials.oauthSession (not consumed) or from the stored sign-in of
+// accountId.
 func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*api.AccountTestResult, error) {
 	if err := validateAccountConfig(&p.Config); err != nil {
 		return nil, err
 	}
-	if p.Credentials.Password != "" && !usesAuth(p.Config, api.AuthPassword) {
-		return nil, api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
+	if err := checkCredentials(p.Config, p.Credentials); err != nil {
+		return nil, err
+	}
+	var grant *oauth2flow.Grant
+	if p.Credentials.OAuthSession != "" {
+		g, err := s.b.sessionGrant(p.Credentials.OAuthSession, string(p.AccountID), p.Config)
+		if err != nil {
+			return nil, err
+		}
+		grant = &g
 	}
 	if p.Config.Protocol() == api.AccountGraph {
-		return &api.AccountTestResult{Graph: s.testGraph(ctx, p.Config)}, nil
+		return &api.AccountTestResult{Graph: s.testGraph(ctx, p, grant)}, nil
 	}
 	password := p.Credentials.Password
 	switch {
 	case usesAuth(p.Config, api.AuthOAuth2):
 		// The token stands in for the password. A token problem (sign-in
-		// lost, no GNOME Online Accounts) is both endpoints' outcome, as a
-		// refused password would be.
-		token, err := s.b.oauth2Token(ctx, p.Config)
+		// lost, no GNOME Online Accounts, no client) is both endpoints'
+		// outcome, as a refused password would be.
+		token, err := s.testToken(ctx, p, grant)
 		if err != nil {
 			s.b.log.Info("account test", "kind", "oauth2", "ok", false, "err", err)
 			return &api.AccountTestResult{IMAP: endpointResult(nil, 0, err), SMTP: endpointResult(nil, 0, err)}, nil
@@ -309,12 +448,41 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	return &res, nil
 }
 
+// testToken is the access token account.test signs in with for an oauth2
+// account or a Graph account: the session's (grant), else the stored
+// sign-in of accountId for the backend's own flow, else GNOME Online
+// Accounts'. Errors are the endpoints' outcome.
+func (s *accountService) testToken(ctx context.Context, p api.AccountTestParams, grant *oauth2flow.Grant) (string, error) {
+	cfg := p.Config
+	if _, daemon := daemonOAuth(cfg); daemon {
+		if grant != nil {
+			return grant.AccessToken, nil
+		}
+		if p.AccountID == "" {
+			return "", api.NewError(api.CodeAuthRequired, "not signed in: sign in with account.oauthStart")
+		}
+		a, err := s.b.requireAccount(ctx, string(p.AccountID))
+		if err != nil {
+			return "", err
+		}
+		if _, stored := daemonOAuth(a.Config); !stored {
+			return "", api.NewError(api.CodeAuthRequired, "account %q has no sign-in of the backend yet", p.AccountID)
+		}
+		return s.b.daemonToken(ctx, a.ID, a.Config)
+	}
+	if cfg.Protocol() == api.AccountGraph {
+		return s.b.graphToken(ctx, string(p.AccountID), cfg)
+	}
+	return s.b.oauth2Token(ctx, string(p.AccountID), cfg)
+}
+
 // testGraph fetches a token from the account's source and opens the
 // mailbox. A token problem (sign-in revoked, no GNOME Online Accounts) is
 // the endpoint's error, like a refused password on IMAP. The mailbox must
 // belong to the configured address.
-func (s *accountService) testGraph(ctx context.Context, cfg api.AccountConfig) *api.EndpointTestResult {
-	token, err := s.b.graphToken(ctx, cfg)
+func (s *accountService) testGraph(ctx context.Context, p api.AccountTestParams, grant *oauth2flow.Grant) *api.EndpointTestResult {
+	cfg := p.Config
+	token, err := s.testToken(ctx, p, grant)
 	if err != nil {
 		r := endpointResult(nil, 0, err)
 		s.b.log.Info("account test", "kind", "graph", "ok", false, "code", r.Error.Code)
@@ -552,25 +720,51 @@ func validateAccountConfig(c *api.AccountConfig) error {
 			if err := validateOAuth2(c.OAuth2); err != nil {
 				return err
 			}
-			// One sign-in for both: a GOA account has no password to
-			// give the other endpoint.
-			if c.OAuth2.Source == api.OAuth2SourceGOA && (c.IMAP.AuthMethod != api.AuthOAuth2 || c.SMTP.AuthMethod != api.AuthOAuth2) {
-				return bad("oauth2: both endpoints must use oauth2 with source goa")
+			if c.OAuth2.Source == api.OAuth2SourceDaemon && c.OAuth2.Provider != api.OAuth2ProviderGoogle {
+				return bad("oauth2: provider must be google with source daemon on an imap account")
+			}
+			// One sign-in for both: a GOA or daemon account has no
+			// password to give the other endpoint.
+			if c.OAuth2.Source != "" && (c.IMAP.AuthMethod != api.AuthOAuth2 || c.SMTP.AuthMethod != api.AuthOAuth2) {
+				return bad("oauth2: both endpoints must use oauth2 with source %s", c.OAuth2.Source)
+			}
+			if c.OAuth2.Source == api.OAuth2SourceDaemon {
+				if err := validateGmailEndpoints(c); err != nil {
+					return err
+				}
 			}
 		}
 	case api.AccountGraph:
-		if c.IMAP != nil || c.SMTP != nil || c.OAuth2 != nil {
-			return bad("imap, smtp and oauth2 settings do not apply to a graph account")
+		if c.IMAP != nil || c.SMTP != nil {
+			return bad("imap and smtp settings do not apply to a graph account")
 		}
 		if c.Graph == nil {
 			return bad("graph settings are required")
 		}
-		if c.Graph.Source != api.GraphSourceGOA {
-			return bad("graph: source must be goa")
-		}
 		c.Graph.GOAAccountID = strings.TrimSpace(c.Graph.GOAAccountID)
-		if !goa.ValidID(c.Graph.GOAAccountID) {
-			return bad("graph: goaAccountId is required")
+		switch c.Graph.Source {
+		case api.GraphSourceGOA:
+			if c.OAuth2 != nil {
+				return bad("oauth2 settings do not apply to a graph account with source goa")
+			}
+			if !goa.ValidID(c.Graph.GOAAccountID) {
+				return bad("graph: goaAccountId is required")
+			}
+		case api.GraphSourceDaemon:
+			if c.Graph.GOAAccountID != "" {
+				return bad("graph: goaAccountId needs source goa")
+			}
+			if c.OAuth2 == nil {
+				return bad("oauth2 settings are required with graph source daemon")
+			}
+			if c.OAuth2.Source != api.OAuth2SourceDaemon || c.OAuth2.Provider != api.OAuth2ProviderOffice365 {
+				return bad("oauth2: source daemon and provider office365 are required with graph source daemon")
+			}
+			if err := validateOAuth2(c.OAuth2); err != nil {
+				return err
+			}
+		default:
+			return bad("graph: source must be goa or daemon")
 		}
 	default:
 		return bad("kind must be imap or graph")
@@ -579,6 +773,40 @@ func validateAccountConfig(c *api.AccountConfig) error {
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {
 		return bad("syncIntervalSeconds must be 0 or at least %d", api.SyncIntervalMin)
 	}
+	return nil
+}
+
+// Gmail's servers: the only ones a Google token of the backend's own
+// sign-in is sent to.
+const (
+	gmailIMAPHost = "imap.gmail.com"
+	gmailSMTPHost = "smtp.gmail.com"
+)
+
+// validateGmailEndpoints pins an IMAP account with the backend's own
+// Google sign-in to Gmail's servers. The token carries the
+// https://mail.google.com/ scope and XOAUTH2 hands it to whatever server
+// the account names, so the servers are part of the token's audience
+// (RFC 9700 §4.10): IMAP imap.gmail.com:993 with tls, SMTP smtp.gmail.com
+// with 465/tls or 587/starttls, and the address as the user name on both.
+// Host names are stored lower-case.
+func validateGmailEndpoints(c *api.AccountConfig) error {
+	bad := func(format string, args ...any) error {
+		return api.NewError(api.CodeInvalidArgument, "oauth2: "+format, args...)
+	}
+	im, sm := c.IMAP, c.SMTP
+	if !strings.EqualFold(im.Host, gmailIMAPHost) || im.Port != 993 || im.Security != api.SecurityTLS {
+		return bad("with source daemon and provider google the imap server must be %s, port 993, tls", gmailIMAPHost)
+	}
+	smtpOK := strings.EqualFold(sm.Host, gmailSMTPHost) &&
+		(sm.Port == 465 && sm.Security == api.SecurityTLS || sm.Port == 587 && sm.Security == api.SecuritySTARTTLS)
+	if !smtpOK {
+		return bad("with source daemon and provider google the smtp server must be %s, port 465 with tls or 587 with starttls", gmailSMTPHost)
+	}
+	if !strings.EqualFold(im.Username, c.Email) || !strings.EqualFold(sm.Username, c.Email) {
+		return bad("with source daemon and provider google both user names must be the address")
+	}
+	im.Host, sm.Host = gmailIMAPHost, gmailSMTPHost
 	return nil
 }
 
@@ -620,6 +848,8 @@ func validateServer(which string, sc *api.ServerConfig) error {
 	return nil
 }
 
+// validateOAuth2 checks an oauth2 block on its own; the caller checks it
+// fits the account (its kind, its endpoints).
 func validateOAuth2(o *api.OAuth2Config) error {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, "oauth2: "+format, args...)
@@ -639,12 +869,38 @@ func validateOAuth2(o *api.OAuth2Config) error {
 			return bad("clientId, tenantId, authUrl, tokenUrl and scopes do not apply with source goa")
 		}
 		return nil
+	case api.OAuth2SourceDaemon:
+		// The backend's own sign-in: its provider table owns the
+		// endpoints and scopes; only the client may be overridden.
+		// Google on an IMAP account, Microsoft 365 on a Graph account.
+		if o.Provider != api.OAuth2ProviderGoogle && o.Provider != api.OAuth2ProviderOffice365 {
+			return bad("provider must be google or office365 with source daemon")
+		}
+		if o.GOAAccountID != "" {
+			return bad("goaAccountId needs source goa")
+		}
+		if o.AuthURL != "" || o.TokenURL != "" || len(o.Scopes) > 0 {
+			return bad("authUrl, tokenUrl and scopes do not apply with source daemon")
+		}
+		o.ClientID = strings.TrimSpace(o.ClientID)
+		if !config.PrintableToken(o.ClientID, maxClientIDBytes) {
+			return bad("clientId must be printable ASCII without spaces (limit %d bytes)", maxClientIDBytes)
+		}
+		o.TenantID = strings.TrimSpace(o.TenantID)
+		switch {
+		case o.TenantID == "":
+		case o.Provider != api.OAuth2ProviderOffice365:
+			return bad("tenantId applies to office365 only")
+		case !config.ValidTenant(o.TenantID):
+			return bad("tenantId must be letters, digits, '.' and '-', not starting with '.' (limit 64 bytes)")
+		}
+		return nil
 	case "":
 		if o.GOAAccountID != "" {
 			return bad("goaAccountId needs source goa")
 		}
 	default:
-		return bad("source must be goa or absent")
+		return bad("source must be goa, daemon or absent")
 	}
 	switch o.Provider {
 	case api.OAuth2ProviderOffice365:
