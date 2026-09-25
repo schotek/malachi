@@ -3,221 +3,415 @@ SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Exploration: a native macOS client
+# The macOS client
 
-**Status: in progress.** Since 2026-09-24 a native macOS client is part of
-the project's direction (README, *Goals*): one core, a native UI per
-platform, the GTK UI as the template the others mirror. [CLAUDE.md](../CLAUDE.md)
-rule 4 says how it is done: a separate Swift/AppKit client over the
-daemon's API, never a branch of the GTK code. The skeleton exists in
-`macos/` (see `macos/README.md`): it starts the daemon from the bundle,
-shows the connection and carries the MCP bridge; layer one of §2 (the
-Keychain keyring above all) and the UI of §4 are still ahead. This document
-records what that takes, measured against the tree as it stood on
-2026-09-07, so that the question does not have to be re-researched.
+How the Swift/AppKit client in `macos/` is built, for people (and agents)
+who change it. What it does and how to build it is in
+[macos/README.md](../macos/README.md); why there is a native client per
+platform at all is in [architecture.md §6](architecture.md#6-platform).
+§12 keeps what the port was measured to take and what is still open.
 
-The question asked: can there be a macOS variant of the finished GTK client
-using native macOS UI, and what would it involve?
+The one sentence that governs everything below: **the GTK UI is the
+template, and the daemon is the only place logic lives.** The macOS client
+is a mirror of `ui/`, not a second design, and it holds no mail knowledge
+the GTK client does not hold either.
 
-Short answer: **yes, and the architecture is built for it — but it is three
-projects of very different difficulty, and the hardest one is not code.**
-
-## 1. Measured starting point
-
-The backend was compiled and its test suite run on macOS 26.6.2,
-darwin/arm64, Go 1.26.2, with no source changes and no build tags:
+## 1. Process model
 
 ```
-go build ./...      → OK
-go test ./...       → 24 of 25 packages pass
+┌──────────────────────────────┐                     ┌────────────────────┐
+│  Malachi Mail.app            │                     │  malachid (Go)     │
+│  Contents/MacOS/MalachiMail  │ ◄── JSON-RPC 2.0 ─► │  all the logic     │
+│                              │     unix socket     │                    │
+│  starts ──► Contents/MacOS/malachid ───────────────┤  --config --store  │
+│             --socket --config --store              │  MALACHI_KEYRING=  │
+│             MALACHI_KEYRING=helper                 │    helper          │
+│             MALACHI_KEYRING_HELPER=…/malachi-keychain                   │
+│                                                    └────────┬───────────┘
+│  Contents/MacOS/malachi-keychain ◄── one process per get/set/delete ────┘
+│      (login keychain, Security.framework)
+│  Contents/MacOS/malachi-mcp  ◄── spawned by an MCP client, same socket
+└──────────────────────────────┘
 ```
 
-The single failure:
+The app does what the GTK UI does (`ui/internal/daemon`,
+[architecture.md §2](architecture.md#2-transport)): it looks for
+`malachid` (`MALACHI_DAEMON`, then beside its executable, then `PATH`),
+probes the socket, starts the daemon when nothing answers, waits for the
+socket, restarts it after an exit with a backoff, and stops the daemon it
+started when the application quits. The daemon gets macOS paths for the
+configuration and the store (`~/Library/Application Support/Malachi
+Mail/`) as flags and keeps its own default socket path, so `malachi-mcp`
+and `.mcp.json` work unchanged (`MalachiCore/Daemon/Paths.swift`,
+`DaemonSupervisor.swift`).
 
-```
---- FAIL: TestAttachmentImportMetadata
-    attachments_test.go:108: "a\x00b\n.md": got text/plain, want text/markdown
-```
+The daemon's keyring on macOS is the helper keyring
+(`backend/internal/auth/helper`, [security.md §6](security.md#6-credentials)):
+`MALACHI_KEYRING=helper` and `MALACHI_KEYRING_HELPER` pointing at the
+bundled `malachi-keychain`, set by `DaemonSupervisor.environment` unless
+`MALACHI_KEYRING` is already in the environment. The helper is a separate
+executable target (`MalachiKeychain`) with no dependency on the rest of
+the package: `Request.swift` is the protocol (parsed and validated without
+touching the Keychain, so it is testable without prompts),
+`Keychain.swift` the Security-framework half, `main.swift` the glue. It
+prints only the protocol: the value on stdout as the answer to `get`, a
+diagnostic on stderr, never data.
 
-[`internal/core/attachments.go:143`](../backend/internal/core/attachments.go#L143)
-calls `mime.TypeByExtension`, which consults the host MIME database. macOS
-maps `.md` differently than a Fedora host does.
+## 2. Package and module boundaries
 
-This is worth fixing regardless of any port: the same test fails on any
-Linux host whose MIME database lacks `.md`, including a minimal Flatpak
-runtime without `shared-mime-info`. Attachment content types should come
-from a table we control, not from the host.
+`macos/Package.swift` (tools 6.0, strict concurrency, macOS 14, no SwiftPM
+resources) has three targets and their tests:
 
-That the backend is otherwise clean is not luck. It follows from the socket
-boundary and from the platform-specific pieces already sitting behind
-interfaces. `backend/go.mod` pulls in no GUI toolkit; the only
-Linux-implying dependency is `godbus/dbus`, and it compiles on darwin.
-
-## 2. Layer one — backend adaptation (small, well bounded)
-
-Linux is reachable from exactly three places, each already behind an
-interface, so each is an added implementation and not a fork:
-
-| Concern | Interface | macOS replacement | Size |
-|---|---|---|---|
-| Secret storage | `auth.Keyring`, 3 methods ([auth.go:30](../backend/internal/auth/auth.go#L30)), selected by `MALACHI_KEYRING` in [main.go:86](../backend/cmd/malachid/main.go#L86) | Keychain via Security.framework | ~200 lines |
-| Address books | `contacts.Directory`, 2 methods ([contacts.go:38](../backend/internal/contacts/contacts.go#L38)) | Contacts.framework, or return empty (it already degrades silently) | small |
-| XDG paths | [config.go:88-95](../backend/internal/config/config.go#L88-L95) | `~/Library/Application Support`, `~/Library/Caches` | trivial |
-| GNOME Online Accounts | `core.GOAClient` ([backend.go:101](../backend/internal/core/backend.go#L101)) | **none exists** | see §3 |
-
-The keyring is the model to follow for the rest: a narrow interface, a
-runtime switch, and a refusing implementation (`auth.UnavailableKeyring`)
-for when the platform cannot serve it. Nothing about that shape is
-Linux-specific, and generalising the token source the same way would be an
-improvement to the backend on its own terms.
-
-The RPC socket needs no work. `XDG_RUNTIME_DIR` is absent on macOS, and the
-existing fallback to the cache directory already covers that case.
-
-Estimated: **2-4 weeks**, excluding §3.
-
-## 3. Layer two — GNOME Online Accounts is the real blocker
-
-GOA currently does three jobs at once: it holds OAuth tokens for Microsoft
-Graph, supplies XOAUTH2 access tokens for Gmail IMAP/SMTP, and enumerates
-accounts for the wizard (`account.linked`). macOS has no equivalent, and no
-part of that is replaceable by a local API.
-
-An own OAuth2 flow is deliberately unimplemented today —
-[`goa_accounts.go:154`](../backend/internal/core/goa_accounts.go#L154)
-returns `notImplemented` for any `OAuth2Config` without
-`source: goa` — and CLAUDE.md states the reason: going through GOA means
-using GNOME's registered client ID, "proto žádný CASA audit".
-
-Registering our own client IDs reverses that:
-
-- **Google.** IMAP/SMTP access is a restricted scope. Restricted scopes
-  require an annual third-party security assessment (CASA) before the app
-  can be published to users outside a test list. Real money, and months of
-  process, renewed yearly.
-- **Microsoft.** Lighter, but still an app registration, publisher
-  verification, and consent review to reach organisational tenants.
-
-**This is the most expensive part of the whole idea and none of it is
-programming.** The alternative is a macOS client that only speaks plain
-IMAP/SMTP with a password — which excludes Gmail and Microsoft 365, and
-therefore most prospective users. That trade-off must be decided before any
-UI work starts, because it determines whether the result is worth shipping.
-
-Note that the constraint is not macOS-specific in principle. It applies to
-any Linux desktop without GOA too, which is why `OAuth2Config` without a
-`source` exists as a reserved shape rather than a missing feature.
-
-## 4. Layer three — the UI is a rewrite, not a port
-
-Present size of the GTK UI:
-
-- **14 578 lines of Go** across 81 files (3 059 of them tests)
-- **2 449 lines of Blueprint** across 9 `.blp` files
-
-Effectively none of it transfers. AppKit and GTK share no widget model, no
-layout model, and no lifecycle. What has to be built again:
-
-| Package | Non-test lines | What it is |
+| Target | May import | Holds |
 |---|---|---|
-| `window` | 5 937 | folder sidebar, message list, reader, actions, attachments |
-| `compose` | 1 773 | address entry, drafts, `mailto:`, recipient completion |
-| `accountwizard` | 1 037 | account setup and autodetection |
-| `widget`, `style`, `settingspanel` | 669 | shared widgets and styling |
+| `MalachiCore` | Foundation, Network, UniformTypeIdentifiers, os | The typed API, the transport, the daemon supervisor, the pure logic ported from the Go UI (models, threads, folding, favourites, address parsing, quoting, wizard fields, HTML documents, formatting, error texts), the `@MainActor` controllers, settings, i18n, the open directory. **No AppKit, no WebKit.** Everything here is covered by `swift test`. |
+| `MalachiMail` | AppKit, WebKit, UserNotifications, ServiceManagement, `MalachiCore` | Windows, views, the menu bar, the toolbar, the WebKit wrappers, the platform services. Thin: it renders what a controller holds and sends clicks back. |
+| `MalachiKeychain` | Foundation, Security | `malachi-keychain`, the keyring helper. Independent of the other two. |
 
-What maps across better than expected, because both sides are WebKit:
+The dependency direction is `MalachiMail → MalachiCore`, never back, and
+nothing imports the Go modules: the API types are re-declared in
+`MalachiCore/API/` from `docs/api.md`. That is the same rule as for the GTK
+UI ("UI smí z `backend/` importovat pouze `pkg/api`"), one step further
+out: the contract is the socket and the document, not a Go package.
 
-- [`ui/internal/htmlview`](../ui/internal/htmlview/) → **WKWebView**. JavaScript
-  off, a strict content policy and a severed network are all expressible;
-  the `malachi-cid:` scheme becomes a `WKURLSchemeHandler`. The security
-  properties in [security.md §3.2](security.md) must be re-established and
-  re-reviewed on the new renderer — they are not inherited.
-- [`ui/internal/editor`](../ui/internal/editor/) → the same `contenteditable`
-  approach in a `WKWebView`. The cgo shim in `evaluate.go` becomes
-  unnecessary; WKWebView has async evaluation natively.
+Within `MalachiCore`, `Controllers/` is the layer that talks to the
+daemon: `ConnectionController` (the reconnect loop and the protocol
+check), `MailboxController` (accounts, folders, the list and its threads),
+`SyncController` (the footer's status line from `sync.status` and
+`notify.syncState`), `MessageCache` (`message.get`/`message.body`/
+`message.part` with a bounded cache), `ActionsController` (flags, moves,
+trash, archive, junk, outbox retry, remote images, trusted senders,
+reply/forward through `draft.create`), `ComposeController` and
+`ComposeDraftController` (recipients, autosave, send, discard),
+`WizardController` (discover → test → add/update),
+`MailPreferencesController` (`config.get`/`config.set`). Each is a
+`@MainActor` class over an injected `RPCClient` and a `toast` sink, tested
+against a scripted daemon (§9), with no view in sight.
 
-Platform services map one-to-one:
+`MalachiMail/App/Contracts.swift` and `Integration.swift` are the seams:
+the protocols the shell offers (`Toasts`, `Alerts`, `MessageActions`,
+`EditorView`) and the one place where the sidebar, list, reader, actions,
+compose, wizard and notifications are wired to the main window and the
+app state.
 
-| GTK / freedesktop | macOS |
-|---|---|
-| GSettings | `NSUserDefaults` |
-| gettext (`i18n.T`, `_()`) | `.strings` / String Catalog |
-| gsound | `NSSound` |
-| XDG Background portal ([background.go](../ui/internal/background/background.go)) | `SMAppService` |
-| `malachid` started by the UI | LaunchAgent |
+## 3. The parity principle
 
-### Language choice
+The reference for every screen is its Blueprint in `ui/data/ui/*.blp` and
+the Go file behind it (`ui/internal/window`, `compose`, `accountwizard`,
+`widget`, `editor`, `htmlview`). "Mirror" means:
 
-**Swift is the recommendation.** Go with AppKit bindings reproduces exactly
-the generated-binding problems the project already carries with gotk4
-(CLAUDE.md: "v některých částech API se vyskytují memory leaky a pády"),
-without gotk4's community, and still ends in hand-written Objective-C.
+- every element of the Blueprint has a counterpart in the same order and
+  the same place; sizes and margins from the Blueprints and
+  `ui/internal/style` become Auto Layout constants; the source files name
+  the Blueprint and the Go function they port in their header comment;
+- every behaviour of the Go UI (actions, confirmations, optimistic changes
+  with revert, timeouts, error texts, generation counters, `closed`/`op`
+  guards, the mark-as-read delay, the autosave delay) is ported 1:1, with
+  the same names where the Go names are meaningful, so a reader can diff
+  the two;
+- every user-visible string goes through `L10n.T/N/C` with the **GTK
+  msgid as the key**, so `po/` translates both clients at once (§8); a
+  string with no GTK counterpart is marked `// macOS-only string` and
+  stays English;
+- the pure-logic Go tests (`*_test.go` of `window`, `widget`, `compose`,
+  `accountwizard`, `editor`, `htmlview`) are ported 1:1 to Swift Testing
+  suites of the same shape (§9);
+- mail data is hostile input here as there: only `stringValue` /
+  `NSTextView.string`, never `NSAttributedString(html:)` or RTF over
+  anything from a message; HTML only in the WebKit views of §5.
 
-The cost of Swift is that `pkg/api` types must be re-declared. That cost is
-bounded and known: 43 method and notification names, documented in
-[api.md](api.md) (1 257 lines), with `TestDocsCoverAllMethods` guaranteeing
-the document stays complete. Newline-delimited JSON-RPC over a unix socket
-is straightforward from Swift. Nothing security-relevant — sanitisation,
-MIME parsing, threading, credential handling — is duplicated. That is the
-entire point of the boundary, and this is the case it was designed for.
+Where macOS conventions win, the deviation is deliberate, small and
+listed in the table in [macos/README.md](../macos/README.md#differences-from-the-gtk-ui)
+(the unified toolbar, pane folding without back navigation, Settings
+without search, ⌥⌘↑/↓ for reordering, the ⌘R setting, `NSAlert` button
+order, the quarantine attribute on attachments, the *Glass* sound). A new
+deviation goes into that table, not silently into the code.
 
-## 5. Distribution
+## 4. The API layer
 
-New and non-trivial, separate from writing the client:
+`MalachiCore/API/` re-declares `backend/pkg/api` (`API.swift` is the
+method table of `methods.go`; the other files follow `types.go` by area).
+Rules that keep it honest against a daemon it did not ship with:
 
-- the build is a SwiftPM package in `macos/` and `make macos` assembles the
-  bundle (`build/Malachi Mail.app`, ad-hoc signed, with `malachid` and
-  `malachi-mcp` inside `Contents/MacOS/`); no `.xcodeproj` is kept in git,
-  Xcode opens `Package.swift` directly — done with the skeleton
-- Apple Developer Program membership, code signing, notarisation
-- App Sandbox entitlements for outgoing network and Keychain access (note:
-  a sandbox moves the data into the app container and the socket with it,
-  which the MCP bridge's default path does not survive)
-- `malachid` managed as a LaunchAgent (the skeleton starts it from the app
-  and stops it on quit, like the GTK UI)
-- an update mechanism (Sparkle, or the App Store, which reopens the licence
-  question below)
+- every method is a type conforming to `RPCMethod` (`Params`, `Result`,
+  `name`, a default `timeout`), and `RPCClient.call(API.MessageList.self,
+  params)` is the only way to call one, so a typo in a method name cannot
+  compile; stubs the daemon answers with `notImplemented` (`search.query`)
+  are declared too, so the table is the whole contract;
+- property names are the JSON names verbatim (no `CodingKeys`); Go
+  `omitempty` is `Optional`; a Go nil slice arrives as `null` and is
+  wrapped `@NullAsEmpty` so a missing or null array is `[]`, never a
+  decoding error;
+- wire enums (`FolderRole`, `Flag`, `SyncStatus`, …) are extensible
+  structs, so a value from a newer daemon decodes instead of failing the
+  whole result; `ErrorCode` is `RawRepresentable<Int>` with the documented
+  constants and a `name`, and `RPCError.data` survives (for
+  `attachmentTooBig`'s `limit`/`size`);
+- `API.protocolVersion` is checked against `system.info` on every
+  connection (`ConnectionController`); a mismatch is a state the window
+  shows, not something to work around;
+- timeouts are the GTK UI's (`Platform/RPCTimeouts.swift`): 5 s by
+  default, 3 s for `system.info`, 60 s for `message.part` and
+  `attachment.get`, 30 s for `message.body` under `allow`,
+  `message.embedded`, `draft.create`, `account.add`/`update`, 15 s for
+  `account.discover`, 45 s for `account.test`.
 
-## 6. Repository and licence
+`docs/api.md` and `backend/pkg/api` are not changed from here. A feature
+that needs a new method is added to the daemon and the document first
+(CLAUDE.md rule 5), then to the GTK UI, then here.
 
-**Where it lives — decided 2026-09-24: in this repository, under `macos/`.**
-Rule 4 was reworded the same day: the daemon and the GTK UI stay Linux code
-without build tags or platform abstractions, and other platforms are
-separate clients of the daemon's API in their own tree. The core repo still
-needs no `//go:build darwin` anywhere — only platform-neutral extension
-points (a keyring provider, a token provider), which are an improvement in
-their own right. This is precisely the scenario that "Why two processes and
-not one binary with a clean package boundary?" in
-[architecture.md](architecture.md) uses to justify the socket — reason 2,
-"replaceable UI". The alternative, a separate repository, was considered and
-rejected: the API contract and the clients move together, in one commit.
+## 5. The WebKit security layer
 
-**Licence — decided: GPL-3.0-or-later**, like everything outside `backend/`.
-`backend/` is AGPL-3.0-only. A separate macOS client talking to `malachid`
-over a socket is the boundary case [LICENSING.md](../LICENSING.md) already
-anticipates with the commercial core licence; App Store distribution, if it
-ever matters, reopens this.
+HTML from a message is rendered by `WebViews/MessageWebView.swift`, HTML
+being composed by `WebViews/ComposeWebView.swift`. Both are **layer 2** of
+[security.md §3.2](security.md#32-defences) and §3.3, re-established for
+WebKit on macOS, since none of WebKitGTK's settings carry over. The
+backend's sanitiser (layer 1) is what makes the content safe; these views
+are what keep a sanitiser bug from becoming a compromise, and they are
+never a reason to relax layer 1. The header comment of each file walks
+through §3.2 / §3.3 bullet by bullet with the property that implements it;
+in short:
 
-## 7. Estimates
+| Property | Viewer (`MessageWebView`) | Editor (`ComposeWebView`) |
+|---|---|---|
+| Content JavaScript | off (`allowsContentJavaScript = false`) | off; the bridge is a `WKUserScript`, which runs anyway and the CSP does not govern |
+| Storage | `WKWebsiteDataStore.nonPersistent()` | same |
+| CSP | `default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'` as a `<meta>` in the document (`HTML/ViewerDocument.swift`), identical to GTK; a WKWebView has no default policy, so the document is the only carrier | `default-src 'none'; style-src 'unsafe-inline'; img-src cid: data:` (`HTML/EditorDocument.swift`) |
+| Network | a proxy nothing answers on (`127.0.0.1:1`) for whatever might slip past the CSP, **plus a content rule list** that blocks every load except `malachi-cid:`, `data:` and `about:blank`; no body is loaded before the list is compiled and installed, and none at all when it cannot be compiled (`ContentRules`: two stores tried, a failure is never cached, the reader falls back to the plain text with the hint) | same, allowing `cid:` instead of `malachi-cid:`; the editor reports a failure instead of loading |
+| Navigation | only the initial `about:blank` load of the main frame (the document is loaded with `baseURL: nil`); a link activation is cancelled and handed to `onLink` when `allowedLink` accepts it (the actions layer confirms a masked link); everything else cancelled; `createWebViewWith` returns nil; drops refused | only the initial load; every other navigation, including a clicked link in a quoted original, cancelled; file drops taken away from WebKit and handed to attachment import |
+| Pictures | `PartSchemeHandler` for `malachi-cid:<account>/<message>/<part>`: stateless, `parsePartPath` then `message.part`, images only, never SVG | `CIDSchemeHandler` for `cid:<id>`: only ids the window registered in `CIDRegistry` (files it picked, the backend's copies through `attachment.get`), every picture through `checkInline` (never SVG, within the cap) |
+| Context menu | Copy and Copy Link only | none |
+| Hover | the link under the pointer in a status label, from a user script | — |
 
-| Phase | Effort |
-|---|---|
-| Backend on macOS (keyring, paths, contacts, MIME fix) | 2-4 weeks |
-| Own OAuth2 flow | 2-3 weeks of code, **months** of audit and process |
-| macOS UI to parity with the GTK client | 4-8 months, one person |
+The content rule list is the one thing layer 2 has here that the GTK
+viewer does not: a `<link rel="preconnect">` opens a TCP connection
+without a request, which neither the CSP nor the proxy setting catches
+(found by a network canary during the port). The identifiers
+(`io.github.schotek.Malachi.viewer.1`, `.editor.1`) are bumped with the
+rules, since the store keeps the compiled list by them.
 
-## 8. Open questions
+The two schemes are different on purpose: a displayed message can never
+address compose attachments, and a composed draft cannot name a received
+message's parts. One view per pane is reused between messages (without
+network nothing persists, and the document is replaced whole).
 
-1. Is a macOS client without Gmail and Microsoft 365 worth shipping? If not,
-   §3 is a prerequisite, not a later phase.
-2. Who pays for and owns the CASA assessment, and does that change the
-   answer for Linux desktops without GOA as well?
-3. ~~Separate repository (recommended) or a rule 4 revision?~~ Decided:
-   `macos/` in this repository, rule 4 reworded (§6).
-4. ~~Proprietary or GPL macOS UI, and does App Store distribution matter?~~
-   Decided: GPL-3.0-or-later (§6).
-5. Should the token source be generalised behind an interface now, the way
-   `auth.Keyring` already is, independently of any port?
+The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
+applies to changes in `WebViews/`, `MessageView/`, `Compose/`,
+`Attachments/`, `MalachiKeychain` and `backend/internal/auth/helper`.
 
-Question 5 is the only one that is worth acting on regardless of how far
-the port gets.
+## 6. Concurrency
+
+- `RPCClient` is an actor over `NWConnection`: it owns the connection,
+  matches responses by id, and publishes `notifications` and `states` as
+  `AsyncStream`s in the daemon's order (a `newMessage` never overtakes
+  the `syncState` that follows it). Each stream has one consumer, the
+  `ConnectionController`, which forwards on the main actor.
+- Everything that touches a view or a model is `@MainActor`: the
+  controllers in `MalachiCore/Controllers/`, every AppKit class, the
+  WebKit delegates (main-actor isolated in the Swift overlay). An RPC is a
+  `Task` started on the main actor, so the continuation after `await` is
+  on the main actor too, and the generation counters of the Go UI
+  (`listGen`, `bodyGen`, `foldersGen`) work without locks: a late answer
+  compares its generation and is dropped.
+- Optimistic changes are applied, their inverse kept, and reverted in the
+  error path with a toast, as in `actions.go`. Windows keep `closed` flags
+  and cancel their tasks when they close, so nothing renders into a
+  window that is gone.
+- The keyring helper, the attachment writes and the file reads that could
+  block run off the main actor (`Task.detached`, `nonisolated` helpers);
+  the daemon itself is where anything slow belongs.
+- Swift 6 strict concurrency is on and the build is expected to be free
+  of warnings; `@preconcurrency` imports need a reason in a comment.
+
+## 7. Settings
+
+`MalachiCore/Settings/Settings.swift` is `UserDefaults.standard` (domain
+`io.github.schotek.Malachi`) behind typed properties. The keys and defaults
+are those of `data/io.github.schotek.Malachi.gschema.xml`
+(`launch-at-login`, `run-in-background`, `mark-read-delay`,
+`confirm-delete`, `desktop-notifications`, `notification-sound`,
+`color-scheme`, `message-list-density`, `show-preview-line`,
+`group-by-conversation`, `show-avatars`, `monochrome-avatars`,
+`monospace-plain-text`, `text-zoom`, `collapsed-folders`,
+`collapsed-accounts`, `favourite-folders`) plus one macOS-only key,
+`command-r` (`reply`, the default, or `refresh`; §3). Numeric keys are
+clamped to the schema's ranges, bad enum strings fall back to the default,
+and a change fires its handlers through KVO on `UserDefaults`, so a
+`defaults write` from outside reaches the running app exactly as a second
+GTK window sharing the profile would. `launch-at-login` only mirrors
+`SMAppService`, which is authoritative. As in GTK, only presentation
+options live here; anything that affects mail handling (check interval,
+remote content, retention) is the daemon's, through `config.get`/`config.set`.
+
+The window frames (`Main`, `Settings`) and the two pane widths
+(`main-sidebar-width`, `main-list-width`) are AppKit state in the same
+domain, not settings.
+
+## 8. Localisation
+
+`macos/scripts/po2strings.py` (stdlib Python, run by `make macos` and
+`make test-macos`) turns `po/malachi.pot` into `en.lproj` and each
+`po/<lang>.po` into `<lang>.lproj`, with `Localizable.strings` for
+singular entries and `Localizable.stringsdict` for plurals, under
+`build/macos/locale/`; the Makefile copies them into
+`Contents/Resources`. Keys are msgids verbatim; a context entry is keyed
+`<ctxt>\u{4}<msgid>` (gettext's convention); a plural entry is keyed by its
+singular msgid; printf formats become Foundation's (`%s` → `%@`, `%d` →
+`%ld`, positional forms likewise) unless the entry is `no-c-format` (the
+strftime date patterns); fuzzy, obsolete and untranslated entries are left
+out so the runtime falls back to the msgid. The plural categories per
+language are a table in the script (`PLURAL_CATEGORIES`) that
+`I18n/PluralRules.swift` mirrors; an unknown language is an error, not a
+guess.
+
+`I18n/Localization.swift` is the gettext shim: `L10n.T(msgid)`,
+`T(msgid, args…)`, `N(singular, plural, n)`, `C(context, msgid)`. The
+`Catalogue` is loaded once at start from the first root that has any
+`.lproj`: `Bundle.main.resourceURL`, then `MALACHI_LOCALE_DIR`, else
+English; the language is `Bundle.preferredLocalizations`, which honours
+the per-app language in System Settings. The plural form is picked by
+`PluralRules`, not by Foundation, so no resource bundle is needed and
+`Bundle.module` is never used (a hand-assembled `.app` cannot carry it).
+`I18n/Strftime.swift` maps the strftime msgids of `widget/format.go` to
+`DateFormatter` patterns at run time, so a translator changes a date
+format in one place for both clients.
+
+## 9. Tests
+
+`make test-macos` runs both test targets with the generated catalogues in
+`MALACHI_LOCALE_DIR`, so the Czech cases run.
+
+- `Tests/MalachiCoreTests/` (Swift Testing): the ports of the Go UI tests
+  (`MailModelTests`, `ThreadModelTests`, `CollapseStateTests`,
+  `FavouriteStateTests`, `FolderTreeTests`, `ActionHelpersTests`,
+  `AttachmentsTests`, `AccountsPageTests`, `NotificationTextTests`,
+  `OutboxTests`, `SyncStatusTests`, `ComposeSourceTests`,
+  `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
+  `BlockedSummaryTests`, `HTMLLinksTests`, `CIDRegistryTests`,
+  `EditorBridgeTests`, `WizardFieldsTests`, `WizardResultsTests`,
+  `FormatTests`, `RPCErrorTextTests`, `ProviderTests`), the transport
+  (`FramingTests`, `JSONRPCTests`, `RPCClientTests`, `SupervisorTests`),
+  the API coding (`APICodingTests`, `NotificationDecodeTests`), the
+  settings and i18n (`SettingsTests`, `LocalizationTests`,
+  `GettextFormatTests`, `PluralRulesTests`, `StrftimeTests`) and the
+  controllers (`ConnectionControllerTests`, `MailboxControllerFoldersTests`,
+  `MailboxControllerListTests`, `MessageCacheTests`, `SyncControllerTests`,
+  `ActionsControllerTests`, `ComposeControllerTests`, `DraftStateTests`,
+  `WizardControllerTests`, `MailPreferencesTests`).
+- `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
+  `malachid` on a real unix socket speaking the same newline-delimited
+  JSON-RPC, with per-method handlers; `MailFixture` scripts it with
+  accounts, folders, messages, threads, bodies and parts, records what was
+  asked, and fails, delays or pushes notifications on request. Controller
+  tests run against it, never against a real daemon.
+- `Tests/MalachiKeychainTests/`: the helper protocol (parsing, exit
+  statuses, the identifier rule) without the Keychain; a real round trip
+  through the login keychain only with `MALACHI_KEYCHAIN_TEST=1`, because
+  it can prompt. On the Go side `backend/internal/auth/helper` tests the
+  daemon's half against a fake helper (the test binary itself), and
+  `MALACHI_TEST_REAL_HELPER=<path>` drives the built `malachi-keychain`.
+- `python3 -m unittest macos/scripts/test_po2strings.py` covers the
+  catalogue generator against the real `po/malachi.pot`.
+
+There is no `MalachiMailTests` target: the AppKit classes are thin and the
+logic they would test lives in `Controllers/`.
+
+## 10. Adding a feature, keeping the parity
+
+1. **Backend first.** If the daemon has to learn something, that lands in
+   `backend/` with `docs/api.md` in the same commit (CLAUDE.md rule 5).
+   Nothing in `macos/` may work around a missing method.
+2. **GTK second.** The Blueprint and the Go code are the template: change
+   `ui/` and its tests, and add every new string to `po/` (`make po`).
+3. **Mirror third.** Port the Blueprint change to the AppKit view and the
+   Go change to the controller or model port, with the same msgids, the
+   same behaviour and the ported test. Name the Go file and function in
+   the header comment, as the existing files do.
+4. **If macOS has to differ**, add the row to the deviation table in
+   `macos/README.md` and say why in the code.
+5. **Before handing over**: `make macos` (release, no warnings),
+   `make test-macos`, the Go tests of `internal/auth/helper` when the
+   helper changed, an SPDX header on every new file (GPL-3.0-or-later in
+   `macos/`, AGPL-3.0-only in `backend/`), no `print` of mail data, no
+   `try!` or `!` on decoded data, no `Bundle.module`, no
+   `NSAttributedString(html:)`. Anything that touches content handling
+   goes through the [security checklist](security.md#12-review-checklist-for-prs-touching-content-handling).
+
+For an agent, the reading list of a change is the `.blp` file and the Go
+file it names, `docs/api.md` for every method it calls, and
+[security.md](security.md) §3 for anything near HTML or attachments. The
+`.blp` files are the reference: when the Swift view and the Blueprint
+disagree and no deviation explains it, the Swift view is wrong.
+
+## 11. Build
+
+`make macos` at the root builds `build/malachid` and `build/malachi-mcp`
+(the Go targets) and delegates to `macos/Makefile` with `BUILD_DIR`,
+`VERSION` and `APP_ID`; `make run-macos` and `make test-macos` delegate
+likewise. In `macos/Makefile`, `build` is `swift build -c release`,
+`locale` runs the catalogue generator, and `app` assembles `build/Malachi
+Mail.app`: `MalachiMail` and `malachi-keychain` from SwiftPM's bin path,
+`malachid` and `malachi-mcp` from `build/`, the `.lproj` directories,
+`Info.plist` rendered from `Resources/Info.plist.in` (version, bundle id,
+`CFBundleLocalizations`, the `mailto:` URL type) and checked with
+`plutil`, then `codesign` of each binary and of the bundle with `SIGN`
+(ad hoc by default; the README says what that costs at the Keychain and
+how a self-signed identity avoids it). No `.xcodeproj` is kept; Xcode
+opens `Package.swift`.
+
+## 12. What the port took, and what is still open
+
+This document began as the exploration of whether a native macOS client
+was feasible, measured against the tree of 2026-09-07. The conclusions
+that still matter, updated to what was built:
+
+**The backend needed one extension point, not a fork.** The daemon and
+its tests already compiled on macOS with no build tags; the only
+Linux-bound pieces sat behind interfaces. Of the three, the keyring
+(`auth.Keyring`) got its platform-neutral implementation, the helper
+keyring of §1; the XDG paths are handed to the daemon as flags by the
+app; the address books (`contacts.Directory`, Evolution Data Server) are
+absent and the daemon degrades silently, so recipient completion runs on
+the collected addresses alone. No `//go:build darwin` exists anywhere,
+which is what CLAUDE.md rule 4 asks for. Two Go tests still fail on macOS
+and are unrelated to the client: `TestAttachmentImportMetadata`, because
+`internal/core/attachments.go` asks the host MIME database about `.md`
+and macOS answers `text/plain` (a content-type table of our own would fix
+that on every platform), and the timing-sensitive
+`TestWorkerAuthFailureDefersQueue`.
+
+**GNOME Online Accounts is the real limit, and it is not a programming
+problem.** It holds the OAuth tokens for Microsoft Graph, supplies XOAUTH2
+tokens for Gmail and enumerates accounts for the wizard
+(`account.linked`); macOS has no equivalent, and the daemon deliberately
+has no OAuth2 flow of its own (`OAuth2Config` without `source: goa` is
+reserved and `notImplemented`, [architecture.md §7](architecture.md#7-open-decisions)).
+Registering own client ids would reverse the reason for going through
+GOA: Google's IMAP/SMTP scope is restricted and requires an annual
+third-party security assessment (CASA) before the app can be published
+to users outside a test list; Microsoft needs an app registration,
+publisher verification and consent review to reach organisational
+tenants. So the macOS client speaks plain IMAP/SMTP with a password, the
+assistant shows a notice for a Google or Microsoft 365 address, and the
+open question of the original exploration remains open: whether that is
+worth shipping to a wider audience, and who would own the assessment.
+The constraint is not macOS-specific; a Linux desktop without GOA has it
+too.
+
+**Distribution is still ahead.** The bundle is ad-hoc signed for the
+machine it was built on. Not done: Apple Developer Program membership,
+Developer ID signing and notarisation; App Sandbox entitlements (note
+that a sandbox moves the data into the app container and the socket with
+it, which the MCP bridge's default path does not survive); `malachid` as
+a LaunchAgent (today the app starts and stops it, like the GTK UI); an
+update mechanism (Sparkle, or the App Store, which reopens the licence
+question).
+
+**Repository and licence, decided 2026-09-24.** The client lives in this
+repository under `macos/`, so the API contract and the clients move
+together in one commit; rule 4 was reworded the same day so that other
+platforms are separate clients of the daemon's API rather than branches
+of the GTK code. The client is GPL-3.0-or-later like everything outside
+`backend/`; `backend/` stays AGPL-3.0-only, the boundary case
+[LICENSING.md](../LICENSING.md) anticipates with the commercial core
+licence. App Store distribution, if it ever matters, reopens this.

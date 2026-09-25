@@ -4,7 +4,7 @@
 
 <h1 align="center">Malachi Mail</h1>
 
-<p align="center">A native email client: one Go core with all the logic, a native UI for each platform. Linux today, macOS and Windows to follow.</p>
+<p align="center">A native email client: one Go core with all the logic, a native UI for each platform. Linux and macOS today, Windows to follow.</p>
 
 Built because the existing options are either showing their age or do not
 work reliably anymore, and on Linux that is worse than anywhere else.
@@ -72,9 +72,9 @@ Not yet: search. The RPC contract already defines it; the daemon answers
   compilation.
 - **A native UI on every platform, no web technology for the chrome.**
   GTK 4 / libadwaita on Linux is the primary UI and the template the
-  others mirror feature for feature; a Swift/AppKit UI for macOS and a
-  WinUI 3 UI for Windows are planned. What the macOS one takes is written
-  down in [docs/macos-port.md](docs/macos-port.md).
+  others mirror feature for feature; the Swift/AppKit UI for macOS mirrors
+  it today (see [docs/macos-port.md](docs/macos-port.md)) and a WinUI 3 UI
+  for Windows is planned.
 - **Linux first.** GNOME desktop conventions, portals for everything that
   leaves the sandbox, Flatpak and native packages.
 - **Lean.** A native toolkit and one small daemon: a mail client should
@@ -99,8 +99,8 @@ store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
 synchronises, sanitises HTML, manages credentials and threads
 conversations; search will live there too. `malachi` is the GTK 4
 application for Linux: it connects to the daemon over a local unix socket
-and displays what it is given. The macOS and Windows applications will do
-the same over the same socket and the same contract.
+and displays what it is given. The macOS application does the same over
+the same socket and the same contract, and the Windows one will.
 
 ```
 ┌──────────────────┐
@@ -227,7 +227,12 @@ on (they need `dpkg-dev` and `rpm-build` respectively).
 Set `MALACHI_LOG_LEVEL=debug` to see every RPC call. Passwords go to the
 system keyring over D-Bus; in a container without a Secret Service set
 `MALACHI_KEYRING=none` to get a clean `keyringError` instead of a timeout
-(accounts without a stored password still work).
+(accounts without a stored password still work). `MALACHI_KEYRING=helper`
+hands secrets to an external program instead, named by an absolute path in
+`MALACHI_KEYRING_HELPER`: one process per operation, git-credential style,
+the request as a JSON line on stdin, the value on stdout (the protocol is
+documented in `backend/internal/auth/helper`). The macOS app uses it for
+its bundled `malachi-keychain`.
 
 UI preferences are stored in GSettings. `make build` compiles the schema
 into `build/glib-2.0/schemas`, and `make run-dev` / `make run-frontend`
@@ -242,20 +247,29 @@ desktop file or in the Flatpak.
 
 ### macOS
 
-The macOS client lives in [macos/](macos/): Swift/AppKit over the same
-daemon and the same contract, built with SwiftPM and assembled into an app
-bundle by make (needs Xcode 27; the daemon and the MCP bridge go inside the
-bundle):
+The macOS client lives in [macos/](macos/): a native Swift/AppKit
+application over the same daemon and the same contract, mirroring the GTK
+UI screen for screen. It reads, writes and sends mail, renders HTML in a
+locked-down WebKit view, keeps passwords in the login keychain through a
+bundled helper, and carries the Czech translation generated from `po/`.
+What it cannot do follows from the daemon: Gmail and Microsoft 365 sign
+in through GNOME Online Accounts, which macOS does not have, so only
+IMAP/SMTP accounts with a password can be added. Needs macOS 14, Xcode
+with a Swift 6 toolchain and Go for the daemon:
 
 ```sh
-make macos          # build/Malachi Mail.app with malachid and malachi-mcp inside
+make macos          # build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside
 make run-macos      # run it from the terminal so the daemon log stays visible
-make test-macos     # swift test
+make test-macos     # swift test, with the generated string catalogues
 ```
 
-It is a skeleton for now: it starts the daemon, shows the connection and
-the daemon's version, and carries the MCP bridge. Details, paths and what is
-missing: [macos/README.md](macos/README.md).
+The bundle is ad-hoc signed, which is enough for the machine it was built
+on; a rebuild makes the Keychain ask once whether the helper may read the
+stored passwords (`make macos SIGN='…'` with a self-signed identity avoids
+that). Paths, the keyring, localisation, the deliberate differences from
+the GTK UI and what is still missing: [macos/README.md](macos/README.md);
+how the client is put together and kept in step with the GTK UI:
+[docs/macos-port.md](docs/macos-port.md).
 
 ### Flatpak
 
@@ -300,7 +314,7 @@ committed template matches the sources.
 | Mail store | `~/.local/share/malachi/store.db` |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |
-| macOS | config and store in `~/Library/Application Support/Malachi Mail/`, the socket as above (see [macos/README.md](macos/README.md)) |
+| macOS | config and store in `~/Library/Application Support/Malachi Mail/`, the socket as above, attachments being opened in `~/Library/Caches/Malachi Mail/open/`, passwords in the login keychain (see [macos/README.md](macos/README.md)) |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.

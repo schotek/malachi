@@ -36,7 +36,7 @@ private func tempSocket() -> String {
             try DaemonSupervisor.locate(besides: nil, environment: ["PATH": "/nonexistent"])
         }
         // A directory named malachid does not count.
-        let trap = try FileManager.default.temporaryDirectory.appendingPathComponent("malachi-trap-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        let trap = FileManager.default.temporaryDirectory.appendingPathComponent("malachi-trap-\(UUID().uuidString.prefix(8))", isDirectory: true)
         try FileManager.default.createDirectory(at: trap.appendingPathComponent("malachid"), withIntermediateDirectories: true)
         #expect(throws: DaemonSupervisor.SupervisorError.self) {
             try DaemonSupervisor.locate(besides: trap.appendingPathComponent("x"), environment: ["PATH": ""])
@@ -128,5 +128,56 @@ private func tempSocket() -> String {
         #expect(p.config.hasSuffix("/Malachi Mail/config.toml"))
         #expect(p.store.hasSuffix("/Malachi Mail/store.db"))
         #expect(p.mcpBridge == nil)
+        #expect(p.keychainHelper == nil)
+    }
+
+    @Test func pathsFindTheKeychainHelperBesideTheExecutable() throws {
+        let helper = try script(named: "malachi-keychain", "#!/bin/sh\nexit 0\n")
+        let dir = helper.deletingLastPathComponent()
+        let exe = dir.appendingPathComponent("MalachiMail")
+        #expect(Paths.resolve(environment: ["HOME": "/Users/u"], executable: exe).keychainHelper?.path == helper.path)
+
+        // Not executable: not a helper.
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: helper.path)
+        #expect(Paths.resolve(environment: ["HOME": "/Users/u"], executable: exe).keychainHelper == nil)
+
+        // A directory of that name does not count either.
+        let trap = FileManager.default.temporaryDirectory.appendingPathComponent("malachi-trap-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        try FileManager.default.createDirectory(at: trap.appendingPathComponent("malachi-keychain"), withIntermediateDirectories: true)
+        #expect(Paths.resolve(environment: ["HOME": "/Users/u"], executable: trap.appendingPathComponent("MalachiMail")).keychainHelper == nil)
+    }
+
+    @Test func environmentSelectsTheBundledHelper() throws {
+        let helper = try script(named: "malachi-keychain", "#!/bin/sh\nexit 0\n")
+        let daemon = helper.deletingLastPathComponent().appendingPathComponent("malachid")
+        let base = ["HOME": "/Users/u", "PATH": "/usr/bin"]
+
+        let withHelper = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d", keychainHelper: helper)
+        var env = DaemonSupervisor.environment(base: base, launch: withHelper)
+        #expect(env["MALACHI_KEYRING"] == "helper")
+        #expect(env["MALACHI_KEYRING_HELPER"] == helper.path)
+        #expect(env["HOME"] == "/Users/u" && env["PATH"] == "/usr/bin", "the app's environment is kept")
+
+        let without = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d")
+        env = DaemonSupervisor.environment(base: base, launch: without)
+        #expect(env["MALACHI_KEYRING"] == "none")
+        #expect(env["MALACHI_KEYRING_HELPER"] == nil)
+
+        // A helper that is not there (a broken bundle) falls back to none
+        // rather than a daemon that refuses to start.
+        let gone = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d",
+                                           keychainHelper: helper.deletingLastPathComponent().appendingPathComponent("missing"))
+        env = DaemonSupervisor.environment(base: base, launch: gone)
+        #expect(env["MALACHI_KEYRING"] == "none")
+        #expect(env["MALACHI_KEYRING_HELPER"] == nil)
+
+        // A preset MALACHI_KEYRING wins, helper or not.
+        for preset in ["none", "secretservice", "helper"] {
+            var presetBase = base
+            presetBase["MALACHI_KEYRING"] = preset
+            env = DaemonSupervisor.environment(base: presetBase, launch: withHelper)
+            #expect(env["MALACHI_KEYRING"] == preset)
+            #expect(env["MALACHI_KEYRING_HELPER"] == nil)
+        }
     }
 }

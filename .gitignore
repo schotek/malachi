@@ -68,3 +68,4 @@ config.local.toml
 
 # Compiled translations (built into build/locale)
 /po/*.mo
+__pycache__/

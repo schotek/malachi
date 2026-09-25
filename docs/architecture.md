@@ -45,6 +45,12 @@ over the Model Context Protocol. Like the UI it holds no mail logic; unlike
 the UI it returns text only and offers the tools that change or send mail
 only when started with a flag.
 
+A third client, the macOS application (`macos/`, Swift/AppKit, §6 and
+[macos-port.md](macos-port.md)), speaks the same protocol over the same socket and
+mirrors the GTK UI screen for screen. It needed one addition to the
+daemon, the platform-neutral helper keyring (`internal/auth/helper`, §3),
+and no change to the contract.
+
 ### Why two processes and not one binary with a clean package boundary?
 
 1. **The boundary is enforced, not merely agreed.** A package boundary
@@ -107,7 +113,10 @@ backend/
   internal/account    config.toml form of an account (bootstrap import)
   internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
                       org.freedesktop.secrets client, auth/goa the GNOME Online
-                      Accounts client (Microsoft Graph tokens)
+                      Accounts client (Microsoft Graph tokens), auth/helper the
+                      platform-neutral keyring over an external program
+                      (MALACHI_KEYRING=helper; the macOS app supplies
+                      malachi-keychain over the login keychain)
   internal/transport  TLS policy, dialling, timeouts, error classification
   internal/discover   account.discover: GNOME Online Accounts, ISPDB, provider
                       autoconfig, SRV, Microsoft 365 hint (MX), guesses
@@ -543,21 +552,49 @@ are Linux code: no Windows/macOS code paths, build tags or "just in case"
 abstractions in either. Other platforms get their own native UI as a
 separate client of the daemon's API (Swift/AppKit on macOS, WinUI 3 on
 Windows); the GTK UI is the template they mirror feature for feature, and
-[macos-port.md](macos-port.md) records what the macOS one takes.
+[macos-port.md](macos-port.md) describes how the macOS one is built and
+kept in step.
 Portability of the *architecture* is provided by the socket boundary, not
 by conditional compilation.
 
-The macOS client is `macos/`, a SwiftPM package: `Sources/MalachiCore` is
-the transport and the daemon supervision (the counterparts of
-`ui/internal/client` and `ui/internal/daemon`: an actor over
-`NWConnection` with the same newline framing, and an actor over
-`Foundation.Process` with the same locate → probe → spawn → poll → SIGTERM
-sequence), `Sources/MalachiMail` the AppKit application. `make macos`
-assembles `build/Malachi Mail.app` with `malachid` and `malachi-mcp` inside
-`Contents/MacOS/`; the app hands the daemon macOS paths for the config and
-the store (`~/Library/Application Support/Malachi Mail/`) and keeps the
+The macOS client is `macos/`, a SwiftPM package with three targets
+([macos-port.md](macos-port.md)). `MalachiCore` has no AppKit in it: the transport
+and the daemon supervision (the counterparts of `ui/internal/client` and
+`ui/internal/daemon`: an actor over `NWConnection` with the same newline
+framing, and an actor over `Foundation.Process` with the same locate →
+probe → spawn → poll → SIGTERM sequence), the API types re-declared from
+`docs/api.md`, the pure logic of the Go UI ported function for function
+(the window model, threads, folding, favourites, address parsing,
+quoting, the wizard's fields and results, the viewer and editor
+documents) with the Go tests ported alongside, the `@MainActor`
+controllers that call the daemon, the settings over `UserDefaults` with
+the GSettings keys, and the gettext shim whose keys are the GTK msgids, so
+`po/` translates both clients (`macos/scripts/po2strings.py` generates the
+`.lproj` catalogues at build time). `MalachiMail` is the AppKit shell:
+the three panes under one unified toolbar, the message list, the reader
+with a WKWebView that re-establishes layer 2 of [security.md
+§3.2](security.md#32-defences) (JavaScript off, the same CSP, a
+`malachi-cid:` scheme handler, no network, plus a content rule list), the
+compose window with the same contenteditable editor and bridge script,
+the settings window, the account assistant, notifications, the login
+item. `MalachiKeychain` is `malachi-keychain`, the daemon's keyring helper
+over the login keychain (`MALACHI_KEYRING=helper`, §3). `make macos`
+assembles `build/Malachi Mail.app` with `malachid`, `malachi-mcp` and
+`malachi-keychain` inside `Contents/MacOS/`; the app hands the daemon
+macOS paths for the config and the store (`~/Library/Application
+Support/Malachi Mail/`), the helper as its keyring, and keeps the
 daemon's default socket path so the MCP bridge needs no configuration.
-See `macos/README.md`.
+
+What macOS cannot have follows from the daemon, not from the client:
+Gmail and Microsoft 365 sign in through GNOME Online Accounts (§7), so
+without it only IMAP/SMTP accounts with a password can be added, and
+recipient completion runs on the collected addresses alone because there
+is no Evolution Data Server. The deliberate deviations from the GTK UI
+(one toolbar, pane folding instead of back navigation, ⌥⌘↑/↓ for
+reordering, a ⌘R setting, `NSAlert` button order, the quarantine
+attribute on attachments, the system new-mail sound) are listed in
+`macos/README.md`; everything else is meant to match, and the `.blp`
+files are the reference when it does not.
 
 Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
 (`make deb` / `make rpm`). No Snap.

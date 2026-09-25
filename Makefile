@@ -255,7 +255,7 @@ rpm:
 # these targets only delegate to macos/Makefile and exist on Darwin alone.
 UNAME_S := $(shell uname -s)
 
-## macos: build the macOS app bundle build/Malachi Mail.app with malachid and malachi-mcp inside (macOS only)
+## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
 ## test-macos: run the Swift tests of the macOS client (macOS only)
 ifeq ($(UNAME_S),Darwin)

@@ -113,6 +113,53 @@ Layer 2 — **the UI webview** (WebKitGTK 6.0):
 Layer 2 exists so a sanitiser bug is not automatically a compromise; it is
 not a reason to relax layer 1.
 
+Layer 2 on macOS (`macos/Sources/MalachiMail/WebViews/MessageWebView.swift`,
+[macos-port.md §5](macos-port.md#5-the-webkit-security-layer)) is re-established
+for WKWebView, since nothing of the WebKitGTK configuration carries over:
+
+- content JavaScript off (`allowsContentJavaScript = false`), no
+  JavaScript-opened windows, a non-persistent data store, media only on
+  user action, no link previews or magnification;
+- the same Content-Security-Policy as a `<meta>` in the document
+  (`viewerDocument`), which is the only carrier because a WKWebView has no
+  default policy of its own; the document is always built from the
+  sanitiser's output and loaded with `baseURL: nil`;
+- `PartSchemeHandler` for `malachi-cid:` through `message.part`, images
+  only, never SVG, stateless and cancelled with the request; network
+  otherwise denied by a proxy nothing answers on (`127.0.0.1:1`) **and a
+  content rule list** that blocks every load except `malachi-cid:`,
+  `data:` and `about:blank`, since a `<link rel="preconnect">` opens a
+  connection without a request that neither the CSP nor the proxy
+  setting sees; no body is loaded before the list is installed, and none
+  at all when it cannot be: the list is compiled once per process
+  (`WebViews/ContentRules.swift`, the default store first, then a store
+  in a temporary directory), a failure is never cached and is a fault in
+  the log, and a view without the list drops the body and reports it, so
+  the reader shows the plain text with the "could not be shown safely"
+  hint instead, as for HTML the daemon withheld;
+- navigation: only the initial `about:blank` load is allowed. A click on
+  a link is taken by the view's own script before WebKit navigates: it
+  cancels the click and reports the `href` attribute *as written*, which
+  is the string the daemon lists in `links[]`, beside the URL WebKit
+  resolved it to; the actions layer matches the attribute against the
+  list exactly and confirms a masked link with its text and real target.
+  WebKit's resolved URL (host lower-cased, IDN in punycode, a slash
+  added) never compares equal to the list, so it is not what is matched.
+  Stricter than GTK: an http(s) link the list does not hold, which is
+  what a link activation reaching the navigation policy without a click
+  amounts to, is confirmed with its destination shown, never opened
+  silently. Every other navigation cancelled, no new windows, drops
+  refused; the context menu keeps Copy and Copy Link only;
+- the view's script and its message handlers live in a content world of
+  their own (`WKContentWorld.defaultClient`), so nothing of the document
+  could reach them even if content JavaScript were ever on;
+- the plain-text body and the selectable header labels keep the system's
+  text services out (a context menu of Copy and Select All only, no
+  Services requestor, no Look Up preview), so a selection of mail text is
+  never handed to another program by a path around the link handling;
+- WebKit's separate content process; one view per pane, reused between
+  messages with the document replaced whole.
+
 ### 3.3 Composed HTML
 
 HTML written in the compose editor is hostile too: a paste from a web page
@@ -130,7 +177,18 @@ HTML and escaped fallback quotes, under the layer-2 rules: no page
 JavaScript, a CSP without network access, navigation denied, and a `cid:`
 handler that serves only ids the window registered — files the user
 picked, and the backend's copies fetched through `attachment.get`, which
-are served only when they are pictures (never SVG) within the cap.
+are served only when they are pictures (never SVG) within the cap. The
+macOS editor (`WebViews/ComposeWebView.swift`, `CIDSchemeHandler.swift`)
+keeps the same rules on WKWebView: content JavaScript off with the
+bridge as a user script in a content world of its own (`window.malachi`
+and its message handler do not exist in the page's world), the same CSP
+`<meta>`, the proxy and a content rule list that allows only `cid:` and
+`data:` pictures and without which no document is loaded (the editor
+then reports a failure and the compose window shows its editor-failure
+toast; the text it was given stays saveable), every navigation after the
+initial load cancelled, no context menu, dropped files taken away from
+WebKit and handed to attachment import so a `file:` URL never reaches
+the page.
 
 ## 4. Message parsing (MIME)
 
@@ -157,7 +215,19 @@ are served only when they are pictures (never SVG) within the cap.
   leading dots, over-long names) and shown with their detected type, not
   only the claimed one. Executable types are never opened directly: the UI
   offers only "Save As" for them, judged by the last extension and the
-  claimed content type (`ui/internal/window/attachments.go`).
+  claimed content type (`ui/internal/window/attachments.go`). The macOS
+  client adds what that platform runs, installs or follows on a double
+  click (Terminal scripts, `.app`, `.pkg`, configuration profiles, Java
+  Web Start, AppleScript and Automator documents, bundles, `.webloc` and
+  the other location files, Mach-O and installer media types;
+  `MalachiCore/Model/AttachmentChips.swift`) and asks the type system
+  whether the claimed name or type conforms to an executable, script,
+  application, bundle or package (`Attachments/AttachmentActions.swift`);
+  the check runs on what the message lists before the fetch and again
+  on the name and type `message.part` served, which are what the file
+  gets. The client repeats the name sanitiser on every name it writes
+  (`safeFileName`: last path component, no control or bidi characters,
+  no leading dots, 255 bytes, and `:` to `_`).
 - An attached message (`message/rfc822`, or a part named `.eml`) is never
   parsed during sync. `message.embedded` renders it only when the user
   opens it, from the part's bytes, through the same parser, limits and
@@ -245,6 +315,30 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   Unlock prompts are the desktop's own dialogs; a dismissed prompt is a
   `keyringError`. `MALACHI_KEYRING=none` disables the keyring for
   development and makes every secret operation fail the same way.
+- The helper keyring (`MALACHI_KEYRING=helper`, `internal/auth/helper`) is
+  the platform-neutral alternative for desktops without a Secret Service:
+  the daemon runs the program named by `MALACHI_KEYRING_HELPER` in its
+  environment, as the same user, once per operation, git-credential style.
+  The request crosses a pipe as one JSON line on stdin and the value comes
+  back on stdout; a value is never in argv, a file, the environment or a
+  log line, and the helper's stderr reaches an error message only with
+  control characters removed, the value redacted and 200 bytes at most. On
+  macOS the app sets it to its bundled `malachi-keychain`, which keeps one
+  generic-password item per account id and key in the login keychain under
+  the service `io.github.schotek.Malachi`; the first read after a rebuild of
+  an ad-hoc signed helper is the Keychain's own access prompt. The trust
+  model equals the Secret Service's: a process running as the same user
+  could already read `store.db` and the RPC socket, so being able to run
+  the helper gives it nothing new. On the daemon's side the helper path
+  must be absolute and name an executable regular file, one call is
+  bounded by 30 s (a Keychain prompt waits for the user), stdout and
+  stderr are capped, exit 2 is "no such item" and exit 3 a request the
+  helper refused. `malachi-keychain` itself accepts only account ids and
+  keys matching `[A-Za-z0-9._-]{1,128}` before anything reaches a
+  Keychain attribute, refuses more than 1 MiB on stdin, files the items as
+  `<accountId>/<key>` with a label naming the same, and prints the value
+  only as the answer to `get`. The app sets the two variables only when
+  `MALACHI_KEYRING` is not already in its environment.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 
@@ -320,7 +414,18 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   and handed to the OpenURI portal / the default application. The viewer
   may read it lazily, so the file is not removed at once: the directory is
   emptied when the UI starts and exits, and entries older than an hour are
-  swept whenever the next attachment is opened.
+  swept whenever the next attachment is opened. On macOS the directory is
+  `~/Library/Caches/Malachi Mail/open` (there is no runtime dir of the
+  XDG kind), each file goes into a fresh `mkdtemp` subdirectory and is
+  created `O_EXCL` with mode `0600`, and every file the client writes out
+  of a message, whether opened or saved, carries the quarantine attribute
+  (type e-mail attachment, agent Malachi Mail), so Gatekeeper and the
+  opening application treat it as a download. The attribute is read back
+  after it is set: a file written for opening on which it did not stick
+  is not opened (the toast says the attachment could not be opened); a
+  file the user saved is theirs regardless. Log lines about these files
+  carry an error's domain and code in the open and its description, which
+  names the file, as private.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.

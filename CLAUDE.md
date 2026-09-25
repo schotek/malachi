@@ -75,9 +75,13 @@ nepřečíslovávají, jen přidávají. Nekompatibilní změna = bump `Protocol
   Nový Go soubor s texty přidej do `po/POTFILES`; `make po` aktualizuje šablonu i `.po`,
   `make lint` hlídá, že `po/malachi.pot` odpovídá zdrojům. Prefixy `Re:`/`Fwd:` se
   nepřekládají.
+- macOS klient: texty přes `L10n.T/N/C` s klíčem = GTK msgid (nic do
+  `po/POTFILES`, katalogy vznikají z `po/` při buildu); řetězce jen pro macOS
+  zůstávají anglicky s komentářem `// macOS-only string`; `.blp` a Go UI jsou
+  reference parity, `docs/screenshots` nikdy.
 - Licence: `backend/` je AGPL-3.0-only (duálně licencované jádro, viz
   `LICENSING.md`), vše ostatní GPL-3.0-or-later. Každý nový zdrojový soubor
-  (`.go`, `.blp`, `.sql`, `.sh`) začíná hlavičkou `SPDX-FileCopyrightText`
+  (`.go`, `.swift`, `.py`, `.blp`, `.sql`, `.sh`) začíná hlavičkou `SPDX-FileCopyrightText`
   a `SPDX-License-Identifier` podle toho, ve které části leží. Do `backend/`
   nepřidávej závislosti pod copyleftem silnějším než MPL/LGPL, jinak by
   komerční licence jádra nebyla udělitelná
@@ -173,12 +177,33 @@ Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
 `draft.create`), `--allow-modify` / `--allow-send` přes
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
-obsah pošty v ohradě s nonce; viz `docs/mcp.md`). macOS klient (`macos/`,
-Swift/AppKit, SwiftPM, GPL-3.0-or-later): kostra — spustí `malachid` z bundlu
-s `--config`/`--store` v `~/Library/Application Support/Malachi Mail/` a
-`MALACHI_KEYRING=none`, socket na výchozí cestě démona, okno ukazuje stav
-spojení a `system.info`, `malachi-mcp` je v bundlu; žádná pošta, viz
-`macos/README.md`. `make macos` / `run-macos` / `test-macos` jsou jen na Darwinu.
+obsah pošty v ohradě s nonce; viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
+GPL-3.0-or-later): plné zrcadlo GTK UI — průvodce účtem, sidebar,
+seznam (plochý i vlákna), čtení s uzamčeným WKWebView (JS vypnutý,
+stejná CSP, scheme handler `malachi-cid:`, síť odříznutá proxy i content
+rule listem), přílohy, akce, compose s contenteditable editorem a
+bridge skriptem, koncepty, `draft.create`, `mailto:`, Settings,
+notifikace, login item, čeština. Tři targety: `MalachiCore` (bez
+AppKit: API typy přepsané z `docs/api.md`, transport, supervisor,
+1:1 porty čisté logiky Go UI i jejích testů, `@MainActor` kontrolery,
+`UserDefaults` s klíči GSettings + `command-r`, gettext shim s klíči =
+GTK msgid; `scripts/po2strings.py` generuje `.lproj` z `po/` při
+buildu), `MalachiMail` (AppKit), `MalachiKeychain` (`malachi-keychain`,
+helper keyringu démona nad login keychain). Démon dostal jediné
+rozšíření: `MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER`
+(`internal/auth/helper`, styl git-credential, platformně neutrální);
+app spouští `malachid` z bundlu s `--config`/`--store` v
+`~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
+démona, `malachi-mcp` je v bundlu. Bez GOA nelze přidat Gmail ani
+Microsoft 365 (průvodce ukáže statickou stránku), doplňování příjemců
+jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
+v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
+Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
+funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
+rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
+Kontributorský popis `docs/macos-port.md`. `make macos` / `run-macos` /
+`test-macos` jsou jen na Darwinu.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo
