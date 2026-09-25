@@ -53,6 +53,8 @@ final class AccountWizardController: NSWindowController {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        // Programmatic windows do not compute the Tab order by themselves.
+        window.autorecalculatesKeyViewLoop = true
         window.contentViewController = root
         window.initialFirstResponder = root.initialFirstResponder
         super.init(window: window)
@@ -107,14 +109,13 @@ final class WizardRootViewController: NSViewController {
     let testing: TestingPageController
 
     private let backButton = NSButton(image: wizardSymbol("chevron.left", pointSize: 14, weight: .semibold), target: nil, action: nil)
-    private let closeButton = NSButton(image: wizardSymbol("xmark", pointSize: 13, weight: .semibold), target: nil, action: nil)
     private let titleLabel = NSTextField(labelWithString: "")
     private let pagesHost = NSView()
     private let toasts = WizardToastPresenter()
     private var visible: WizardController.WizardPage = .identity
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "accountwizard")
 
-    /// The close button or Escape.
+    /// A page's Cancel button or Escape.
     var onClose: (() -> Void)?
 
     var initialFirstResponder: NSView { identity.initialFirstResponder }
@@ -144,7 +145,7 @@ final class WizardRootViewController: NSViewController {
         titleLabel.alignment = .center
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        for button in [backButton, closeButton] {
+        for button in [backButton] {
             button.isBordered = false
             button.bezelStyle = .accessoryBarAction
             button.imagePosition = .imageOnly
@@ -155,11 +156,8 @@ final class WizardRootViewController: NSViewController {
         }
         backButton.action = #selector(backClicked(_:))
         backButton.toolTip = "Back" // macOS-only string (libadwaita's own in GTK)
-        closeButton.action = #selector(closeClicked(_:))
-        closeButton.toolTip = "Close" // macOS-only string (libadwaita's own in GTK)
         header.addSubview(backButton)
         header.addSubview(titleLabel)
-        header.addSubview(closeButton)
         let divider = PrefsDivider()
         header.addSubview(divider)
 
@@ -175,14 +173,10 @@ final class WizardRootViewController: NSViewController {
             backButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             backButton.widthAnchor.constraint(equalToConstant: 28),
             backButton.heightAnchor.constraint(equalToConstant: 28),
-            closeButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -8),
-            closeButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            closeButton.widthAnchor.constraint(equalToConstant: 28),
-            closeButton.heightAnchor.constraint(equalToConstant: 28),
             titleLabel.centerXAnchor.constraint(equalTo: header.centerXAnchor),
             titleLabel.centerYAnchor.constraint(equalTo: header.centerYAnchor),
             titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: backButton.trailingAnchor, constant: 8),
-            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: closeButton.leadingAnchor, constant: -8),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor, constant: -44),
             divider.leadingAnchor.constraint(equalTo: header.leadingAnchor),
             divider.trailingAnchor.constraint(equalTo: header.trailingAnchor),
             divider.bottomAnchor.constraint(equalTo: header.bottomAnchor),
@@ -202,6 +196,11 @@ final class WizardRootViewController: NSViewController {
         visible = wizard.pages.last ?? .identity
         applyHeader(wizard.pages)
         toasts.attach(to: root)
+    }
+
+    override func viewDidAppear() {
+        super.viewDidAppear()
+        view.window?.recalculateKeyViewLoop()
     }
 
     private func install(_ page: NSViewController) {
@@ -231,6 +230,9 @@ final class WizardRootViewController: NSViewController {
     // MARK: Wiring
 
     private func wire() {
+        for button in [identity.cancelButton, servers.cancelButton, signIn.cancelButton, testing.cancelButton] {
+            button.onCancel = { [weak self] in self?.onClose?() }
+        }
         wizard.onPages = { [weak self] pages in self?.showStack(pages) }
         wizard.onBusy = { [weak self] busy in
             self?.identity.setBusy(busy)
@@ -262,7 +264,12 @@ final class WizardRootViewController: NSViewController {
         visible = top
         to.view.frame = pagesHost.bounds
         to.view.autoresizingMask = [.width, .height]
-        transition(from: from, to: to, options: forward ? .slideForward : .slideBackward, completionHandler: nil)
+        transition(from: from, to: to, options: forward ? .slideForward : .slideBackward) {
+            // The completion runs on the main thread (AppKit), unannotated.
+            MainActor.assumeIsolated { [weak self] in
+                self?.view.window?.recalculateKeyViewLoop()
+            }
+        }
         if top == .identity {
             view.window?.makeFirstResponder(identity.initialFirstResponder)
         }
@@ -275,10 +282,6 @@ final class WizardRootViewController: NSViewController {
 
     @objc private func backClicked(_ sender: Any?) {
         wizard.back()
-    }
-
-    @objc private func closeClicked(_ sender: Any?) {
-        onClose?()
     }
 
     override func cancelOperation(_ sender: Any?) {

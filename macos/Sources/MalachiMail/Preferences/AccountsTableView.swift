@@ -19,13 +19,13 @@ final class AccountsTableView: NSTableView, PrefsGroupMember {
 
     init() {
         super.init(frame: .zero)
+        // As the message list's table: the table sizes itself to the clip
+        // view and the one column to the table (an explicit autoresizing
+        // mask on top of that widened the rows past the group's box).
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("account"))
         column.resizingMask = .autoresizingMask
-        column.width = 560
         addTableColumn(column)
-        columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
-        // Follow the clip view's width; the one column follows the table's.
-        autoresizingMask = [.width]
+        columnAutoresizingStyle = .uniformColumnAutoresizingStyle
         headerView = nil
         rowHeight = AccountsTableView.rowHeight
         intercellSpacing = .zero

@@ -23,6 +23,7 @@ final class TestingPageController: NSViewController {
     private let retryButton = NSButton(title: "", target: nil, action: nil)
     private let addAnywayButton = NSButton(title: "", target: nil, action: nil)
     private let addButton = NSButton(title: "", target: nil, action: nil)
+    let cancelButton = WizardCancelButton()
 
     init(wizard: WizardController) {
         self.wizard = wizard
@@ -83,7 +84,7 @@ final class TestingPageController: NSViewController {
         pages.setContentHuggingPriority(.defaultLow, for: .vertical)
         let stack = prefsColumn(spacing: 0)
         prefsAddFilling(pages, to: stack)
-        prefsAddFilling(wizardButtonBar([editButton, retryButton, addAnywayButton, addButton]), to: stack)
+        prefsAddFilling(wizardButtonBar([editButton, retryButton, addAnywayButton, addButton], cancel: cancelButton), to: stack)
         let root = WizardPageView()
         root.addSubview(stack)
         NSLayoutConstraint.activate([

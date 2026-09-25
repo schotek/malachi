@@ -362,16 +362,48 @@ final class WizardPageView: NSView {
     }
 }
 
-/// A button-bar row at the bottom of a page: right-aligned buttons with
-/// the Blueprint's margins (12) and spacing (8).
+/// The sheet's Cancel button (macOS convention: a sheet has no close
+/// control in its header; Cancel sits at the bottom left and takes
+/// Escape). GTK's wizard has the header bar's close button instead.
 @MainActor
-func wizardButtonBar(_ buttons: [NSButton]) -> NSStackView {
+final class WizardCancelButton: NSButton {
+    var onCancel: (() -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        title = wizardLabel("_Cancel")
+        bezelStyle = .rounded
+        controlSize = .large
+        keyEquivalent = "\u{1b}"
+        target = self
+        action = #selector(clicked(_:))
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    @objc private func clicked(_ sender: Any?) {
+        onCancel?()
+    }
+}
+
+/// A button-bar row at the bottom of a page: right-aligned buttons with
+/// the Blueprint's margins (12) and spacing (8); `cancel` sits at the
+/// leading end.
+@MainActor
+func wizardButtonBar(_ buttons: [NSButton], cancel: NSButton? = nil) -> NSStackView {
     let bar = NSStackView()
     bar.orientation = .horizontal
     bar.alignment = .centerY
     bar.spacing = 8
     bar.edgeInsets = NSEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
     bar.setHuggingPriority(.required, for: .vertical)
+    if let cancel {
+        bar.addView(cancel, in: .leading)
+    }
     // The trailing gravity area packs the buttons at the end (`halign: end`).
     for button in buttons {
         bar.addView(button, in: .trailing)

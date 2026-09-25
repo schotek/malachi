@@ -96,6 +96,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         w.contentView = buildContent()
         w.setFrame(NSRect(origin: .zero, size: Self.defaultSize), display: false)
         w.initialFirstResponder = header.toField
+        w.autorecalculatesKeyViewLoop = true
         chips.onRemove = { [weak self] id in
             self?.removeAttachment(id)
         }

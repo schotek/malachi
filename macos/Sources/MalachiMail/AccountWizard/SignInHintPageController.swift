@@ -11,6 +11,8 @@ import MalachiCore
 /// the controller delivers is not shown.
 @MainActor
 final class SignInHintPageController: NSViewController {
+    let cancelButton = WizardCancelButton()
+
     override func loadView() {
         let page = WizardStatusPageView(
             illustration: .symbol("person.2"),
@@ -18,12 +20,15 @@ final class SignInHintPageController: NSViewController {
             description: "Gmail and Microsoft 365 accounts sign in through GNOME Online Accounts, which macOS does not have. They cannot be added here yet." // macOS-only string
         )
         let root = WizardPageView()
-        root.addSubview(page)
+        let stack = prefsColumn(spacing: 0)
+        prefsAddFilling(page, to: stack)
+        prefsAddFilling(wizardButtonBar([], cancel: cancelButton), to: stack)
+        root.addSubview(stack)
         NSLayoutConstraint.activate([
-            page.topAnchor.constraint(equalTo: root.topAnchor),
-            page.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            page.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            page.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: root.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
         ])
         view = root
     }

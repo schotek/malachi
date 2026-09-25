@@ -18,6 +18,7 @@ final class IdentityPageController: NSViewController, NSTextFieldDelegate {
     private let group = PreferencesGroupView()
     private var passwordRow: PreferenceRowView?
     private let nextButton = NSButton(title: "", target: nil, action: nil)
+    let cancelButton = WizardCancelButton()
     private let pageView = WizardPageView()
 
     init(wizard: WizardController) {
@@ -67,7 +68,7 @@ final class IdentityPageController: NSViewController, NSTextFieldDelegate {
         let stack = prefsColumn(spacing: 0)
         prefsAddFilling(banner, to: stack)
         prefsAddFilling(scroll, to: stack)
-        prefsAddFilling(wizardButtonBar([nextButton]), to: stack)
+        prefsAddFilling(wizardButtonBar([nextButton], cancel: cancelButton), to: stack)
         pageView.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: pageView.topAnchor),

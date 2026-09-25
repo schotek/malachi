@@ -54,6 +54,7 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         window.title = PrefsTabViewController.windowTitle
         window.toolbarStyle = .preference
         window.isReleasedWhenClosed = false
+        window.autorecalculatesKeyViewLoop = true
         // Never restored by the system at launch; it opens on Accounts.
         window.isRestorable = false
         // Fixed width, free height, as macOS settings windows are.

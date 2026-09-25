@@ -58,6 +58,7 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
     private let imap = EndpointRows(kind: .imap, port: 993, security: .tls)
     private let smtp = EndpointRows(kind: .smtp, port: 587, security: .starttls)
     private let testButton = NSButton(title: "", target: nil, action: nil)
+    let cancelButton = WizardCancelButton()
     private let pageView = WizardPageView()
     /// The rows are being set programmatically: no port logic.
     private var applying = false
@@ -105,7 +106,7 @@ final class ServersPageController: NSViewController, NSTextFieldDelegate {
 
         let stack = prefsColumn(spacing: 0)
         prefsAddFilling(scroll, to: stack)
-        prefsAddFilling(wizardButtonBar([testButton]), to: stack)
+        prefsAddFilling(wizardButtonBar([testButton], cancel: cancelButton), to: stack)
         pageView.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: pageView.topAnchor),
