@@ -98,7 +98,10 @@ final class MessageHeaderView: NSView {
 
         let stack = FillStackView(fillingViews: [subjectLabel, fromLabel, recipientsLabel, dateLabel, chips, hintLabel, separator])
         stack.spacing = Self.spacing
-        stack.edgeInsets = NSEdgeInsets(top: Self.inset, left: Self.inset, bottom: 0, right: Self.inset)
+        // GTK keeps 24 above the subject (window.blp `margin-top: 24`) and
+        // the row spacing below the date; here the top matches the bottom
+        // (the user's choice, listed in macos/README.md).
+        stack.edgeInsets = NSEdgeInsets(top: Self.spacing, left: Self.inset, bottom: 0, right: Self.inset)
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([

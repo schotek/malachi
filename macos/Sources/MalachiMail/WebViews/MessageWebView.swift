@@ -146,6 +146,10 @@ final class MessageWebView: NSView {
         status.lineBreakMode = .byTruncatingMiddle
         status.maximumNumberOfLines = 1
         status.isSelectable = false
+        // Below the split view's holding priorities (250–260): a long
+        // target is cut in the middle, it never widens the pane.
+        status.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(240), for: .horizontal)
+        status.setContentHuggingPriority(.defaultLow, for: .horizontal)
         status.translatesAutoresizingMaskIntoConstraints = false
         statusBox.translatesAutoresizingMaskIntoConstraints = false
         statusBox.wantsLayer = true
