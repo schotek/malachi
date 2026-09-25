@@ -128,11 +128,11 @@ parser (`internal/mime`), odesílání (`internal/smtp` builder + SMTP doručen�
 `message.send` / `outbox.retry`) a UI se skutečnými složkami, zprávami a
 oknem Nová zpráva. Microsoft 365 / Outlook.com jde přes Microsoft Graph
 (`kind: graph`, `internal/graph`: delta dotazy, immutable ID, polling
-inboxu po minutě, `sendMail`), token výhradně z GNOME Online Accounts
-(`internal/auth/goa`, D-Bus), žádné vlastní client ID ani PKCE flow;
-core rozděluje účty podle `kind` na IMAP a Graph supervisor
+inboxu po minutě, `sendMail`), token z GNOME Online Accounts
+(`internal/auth/goa`, D-Bus) nebo z vlastního přihlášení démona (viz
+níže); core rozděluje účty podle `kind` na IMAP a Graph supervisor
 (`internal/core/dispatch.go`); průvodce nabízí účty z GOA (`account.linked`)
-a pro M365 adresy bez přihlášení odkazuje do Nastavení → Účty online.
+a pro nepřihlášené adresy GOA stránku s volbou „Použít místo toho prohlížeč“.
 HTML pošta: sanitizér (`internal/sanitize`, vlastní nad `x/net/html`,
 verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
 `message.body` vrací `html`, `blocked`, `links`, `inlineParts`, případně
@@ -197,9 +197,9 @@ rozšíření: `MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER`
 (`internal/auth/helper`, styl git-credential, platformně neutrální);
 app spouští `malachid` z bundlu s `--config`/`--store` v
 `~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
-démona, `malachi-mcp` je v bundlu. Bez GOA nelze přidat Gmail ani
-Microsoft 365 (průvodce ukáže statickou stránku), doplňování příjemců
-jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
+démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
+vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
+doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
@@ -219,13 +219,24 @@ Pořadí prací:
 5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
 6. Vyhledávání
 
-Gmail jde přes GNOME Online Accounts: token s IMAP/SMTP scopem drží GOA
-(i registrované klient ID GNOME, proto žádný CASA audit), backend se
-přihlašuje SASL XOAUTH2 (`internal/auth/xoauth2.go`) stávajícím IMAP
-enginem a SMTP; `OAuth2Config{source: goa, provider: google}`. Heslový
-(app password) Gmail se nenabízí. Vlastní OAuth2 flow (`OAuth2Config` bez
-`source`) je rezervovaný pro desktopy bez GOA a `notImplemented`;
-neimplementuj bez zadání.
+Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
+Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
+`OAuth2Config{source: goa}` / `GraphConfig{source: goa}`). Jinak vlastní
+přihlášení démona (`source: daemon`, `internal/auth/oauth2flow`:
+authorization code + PKCE, jednorázový listener na `127.0.0.1`, prohlížeč
+otevírá UI, refresh token jen v keyringu pod `oauth2.refresh_token`,
+Gmail přes IMAP/SMTP XOAUTH2 připnutý na `imap.gmail.com`/`smtp.gmail.com`,
+Microsoft přes Graph); metody `account.oauthStart/oauthWait/oauthCancel`,
+`credentials.oauthSession`, `account.discover` `alternatives`, chyba
+`oauthClientMissing`. Klienti: per-účet `clientId` > `config.toml`
+`[oauth2.google] client_id/client_secret`, `[oauth2.microsoft]
+client_id/tenant` > `oauth2flow.builtinClients`. Vestavěný je jen
+Microsoft (registrace projektu v Entra, multitenant + osobní účty, veřejný
+klient, bez publisher verification — firmy s omezeným souhlasem ho
+schvalují přes správce); Google žádný (restricted scope = verification +
+roční CASA), Gmail mimo GOA přes app password nebo vlastního klienta. Gmail s app password je nouzová cesta
+(discover ji nabízí jako alternativu). Poskytovatel `custom` zůstává
+`notImplemented`.
 
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
 knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
