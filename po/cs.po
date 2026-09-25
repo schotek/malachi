@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-08 22:03+0200\n"
+"POT-Creation-Date: 2026-09-25 21:05+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -75,7 +75,7 @@ msgid "Starting the sign-in"
 msgstr "Zahájení přihlášení"
 
 #. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
-#: ui/internal/accountwizard/oauth.go:288
+#: ui/internal/accountwizard/oauth.go:289
 #, c-format
 msgid ""
 "No OAuth client is configured for %s on this computer. Add a client ID to "
@@ -84,53 +84,53 @@ msgstr ""
 "Pro %s není na tomto počítači nastaven žádný klient OAuth. Přidejte ID "
 "klienta do nastavení poštovního backendu a zkuste to znovu."
 
-#: ui/internal/accountwizard/oauth.go:318
+#: ui/internal/accountwizard/oauth.go:319
 #: ui/internal/accountwizard/wizard.go:417
 msgid "Enter the app password for this account"
 msgstr "Zadejte heslo aplikace pro tento účet"
 
 #. TRANSLATORS: title of the page the browser shows
-#: ui/internal/accountwizard/oauth.go:341
+#: ui/internal/accountwizard/oauth.go:342
 msgid "Signed in"
 msgstr "Přihlášeno"
 
 #. TRANSLATORS: page the browser shows
-#: ui/internal/accountwizard/oauth.go:343
+#: ui/internal/accountwizard/oauth.go:344
 msgid "You can close this tab and return to Malachi Mail."
 msgstr "Tuto kartu můžete zavřít a vrátit se do Malachi Mail."
 
 #. TRANSLATORS: title of the page the browser shows
-#: ui/internal/accountwizard/oauth.go:345
+#: ui/internal/accountwizard/oauth.go:346
 msgid "Sign-in failed"
 msgstr "Přihlášení selhalo"
 
 #. TRANSLATORS: page the browser shows
-#: ui/internal/accountwizard/oauth.go:347
+#: ui/internal/accountwizard/oauth.go:348
 msgid "Return to Malachi Mail and try again."
 msgstr "Vraťte se do Malachi Mail a zkuste to znovu."
 
-#: ui/internal/accountwizard/oauth.go:357
+#: ui/internal/accountwizard/oauth.go:358
 msgid "The sign-in was cancelled"
 msgstr "Přihlášení bylo zrušeno"
 
 #. TRANSLATORS: %s is a provider such as "Google" or "Microsoft 365".
-#: ui/internal/accountwizard/oauth.go:360
+#: ui/internal/accountwizard/oauth.go:361
 #, c-format
 msgid "The sign-in with %s was refused"
 msgstr "Přihlášení přes %s bylo odmítnuto"
 
-#: ui/internal/accountwizard/oauth.go:362
+#: ui/internal/accountwizard/oauth.go:363
 msgid "The sign-in took too long; try again"
 msgstr "Přihlášení trvalo příliš dlouho, zkuste to znovu"
 
 #. TRANSLATORS: %s is an e-mail address.
-#: ui/internal/accountwizard/oauth.go:365
+#: ui/internal/accountwizard/oauth.go:366
 #, c-format
 msgid "The browser signed in to %s, not to this address"
 msgstr "Prohlížeč se přihlásil k účtu %s, ne k této adrese"
 
 #. TRANSLATORS: progressive form for the RPC error text
-#: ui/internal/accountwizard/oauth.go:368
+#: ui/internal/accountwizard/oauth.go:369
 msgid "Signing in"
 msgstr "Přihlašování"
 
@@ -252,7 +252,7 @@ msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:235 ui/internal/compose/draft.go:111
+#: ui/internal/compose/compose.go:235 ui/internal/compose/draft.go:142
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
@@ -305,71 +305,71 @@ msgstr "Přiložení souboru %s"
 msgid "Remove"
 msgstr "Odebrat"
 
-#: ui/internal/compose/draft.go:103 ui/internal/window/outbox.go:63
+#: ui/internal/compose/draft.go:134 ui/internal/window/outbox.go:63
 msgid "Sending…"
 msgstr "Odesílá se…"
 
-#: ui/internal/compose/draft.go:105
+#: ui/internal/compose/draft.go:136
 msgid "Saving draft…"
 msgstr "Ukládá se koncept…"
 
-#: ui/internal/compose/draft.go:107
+#: ui/internal/compose/draft.go:138
 msgid "Unsaved changes"
 msgstr "Neuložené změny"
 
-#: ui/internal/compose/draft.go:109
+#: ui/internal/compose/draft.go:140
 #, c-format
 msgid "Draft saved %s"
 msgstr "Koncept uložen v %s"
 
-#: ui/internal/compose/draft.go:208
+#: ui/internal/compose/draft.go:241
 msgid ""
 "This draft was changed elsewhere; your text will be saved as a new draft"
 msgstr "Tento koncept byl změněn jinde; váš text bude uložen jako nový koncept"
 
-#: ui/internal/compose/draft.go:211
+#: ui/internal/compose/draft.go:244
 msgid "Saving the draft"
 msgstr "Uložení konceptu"
 
-#: ui/internal/compose/draft.go:235
+#: ui/internal/compose/draft.go:268
 msgid "Fix the highlighted recipients"
 msgstr "Opravte zvýrazněné adresáty"
 
-#: ui/internal/compose/draft.go:239
+#: ui/internal/compose/draft.go:272
 msgid "Add at least one recipient"
 msgstr "Přidejte alespoň jednoho adresáta"
 
-#: ui/internal/compose/draft.go:268
+#: ui/internal/compose/draft.go:301
 msgid "Sending"
 msgstr "Odeslání"
 
-#: ui/internal/compose/draft.go:274
+#: ui/internal/compose/draft.go:307
 msgid "Message queued for sending"
 msgstr "Zpráva byla zařazena k odeslání"
 
-#: ui/internal/compose/draft.go:317
+#: ui/internal/compose/draft.go:350
 msgid "Discard this message?"
 msgstr "Zahodit tuto zprávu?"
 
-#: ui/internal/compose/draft.go:317 ui/internal/compose/draft.go:330
+#: ui/internal/compose/draft.go:350 ui/internal/compose/draft.go:363
 #: ui/data/ui/compose.ui:469
 msgid "_Discard"
 msgstr "Za_hodit"
 
-#: ui/internal/compose/draft.go:328
+#: ui/internal/compose/draft.go:361
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:329 ui/internal/widget/rpc.go:128
+#: ui/internal/compose/draft.go:362 ui/internal/widget/rpc.go:128
 #: ui/internal/window/remote.go:260 ui/data/ui/account_wizard.ui:371
 msgid "_Cancel"
 msgstr "_Zrušit"
 
-#: ui/internal/compose/draft.go:331 ui/data/ui/compose.ui:455
+#: ui/internal/compose/draft.go:364 ui/data/ui/compose.ui:455
 msgid "_Save Draft"
 msgstr "_Uložit koncept"
 
-#: ui/internal/compose/draft.go:381
+#: ui/internal/compose/draft.go:414
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -749,11 +749,11 @@ msgstr "Odebrat hvězdičku"
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
-#: ui/internal/window/actions.go:179
+#: ui/internal/window/actions.go:190
 msgid "Marking the message as read"
 msgstr "Označení zprávy jako přečtené"
 
-#: ui/internal/window/actions.go:181
+#: ui/internal/window/actions.go:192
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
@@ -761,11 +761,11 @@ msgstr[0] "Označení %d zprávy jako přečtené"
 msgstr[1] "Označení %d zpráv jako přečtených"
 msgstr[2] "Označení %d zpráv jako přečtených"
 
-#: ui/internal/window/actions.go:183
+#: ui/internal/window/actions.go:194
 msgid "Marking the message as unread"
 msgstr "Označení zprávy jako nepřečtené"
 
-#: ui/internal/window/actions.go:185
+#: ui/internal/window/actions.go:196
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
@@ -773,11 +773,11 @@ msgstr[0] "Označení %d zprávy jako nepřečtené"
 msgstr[1] "Označení %d zpráv jako nepřečtených"
 msgstr[2] "Označení %d zpráv jako nepřečtených"
 
-#: ui/internal/window/actions.go:233
+#: ui/internal/window/actions.go:244
 msgid "Starring the message"
 msgstr "Označení zprávy hvězdičkou"
 
-#: ui/internal/window/actions.go:235
+#: ui/internal/window/actions.go:246
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
@@ -785,11 +785,11 @@ msgstr[0] "Označení %d zprávy hvězdičkou"
 msgstr[1] "Označení %d zpráv hvězdičkou"
 msgstr[2] "Označení %d zpráv hvězdičkou"
 
-#: ui/internal/window/actions.go:237
+#: ui/internal/window/actions.go:248
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
-#: ui/internal/window/actions.go:239
+#: ui/internal/window/actions.go:250
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
@@ -797,11 +797,11 @@ msgstr[0] "Odebrání hvězdičky %d zprávě"
 msgstr[1] "Odebrání hvězdičky %d zprávám"
 msgstr[2] "Odebrání hvězdičky %d zprávám"
 
-#: ui/internal/window/actions.go:289
+#: ui/internal/window/actions.go:300
 msgid "Moving the message to Trash"
 msgstr "Přesunutí zprávy do koše"
 
-#: ui/internal/window/actions.go:291
+#: ui/internal/window/actions.go:302
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
@@ -809,11 +809,11 @@ msgstr[0] "Přesunutí %d zprávy do koše"
 msgstr[1] "Přesunutí %d zpráv do koše"
 msgstr[2] "Přesunutí %d zpráv do koše"
 
-#: ui/internal/window/actions.go:340
+#: ui/internal/window/actions.go:351
 msgid "Archiving the message"
 msgstr "Archivace zprávy"
 
-#: ui/internal/window/actions.go:342
+#: ui/internal/window/actions.go:353
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
@@ -821,20 +821,20 @@ msgstr[0] "Archivace %d zprávy"
 msgstr[1] "Archivace %d zpráv"
 msgstr[2] "Archivace %d zpráv"
 
-#: ui/internal/window/actions.go:343
+#: ui/internal/window/actions.go:354
 msgid "This account has no archive folder"
 msgstr "Tento účet nemá složku Archiv"
 
-#: ui/internal/window/actions.go:369 ui/internal/window/actions.go:383
+#: ui/internal/window/actions.go:380 ui/internal/window/actions.go:394
 msgid "This account has no junk folder"
 msgstr "Tento účet nemá složku pro nevyžádanou poštu"
 
-#: ui/internal/window/actions.go:372
+#: ui/internal/window/actions.go:383
 msgid "Mark as junk?"
 msgstr "Označit jako nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:375
+#: ui/internal/window/actions.go:386
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
@@ -842,15 +842,15 @@ msgstr[0] "Označit %d zprávu jako nevyžádanou?"
 msgstr[1] "Označit %d zprávy jako nevyžádané?"
 msgstr[2] "Označit %d zpráv jako nevyžádané?"
 
-#: ui/internal/window/actions.go:377
+#: ui/internal/window/actions.go:388
 msgid "Mark as _Junk"
 msgstr "Označit jako _nevyžádanou"
 
-#: ui/internal/window/actions.go:380
+#: ui/internal/window/actions.go:391
 msgid "Marking the message as junk"
 msgstr "Označení zprávy jako nevyžádané"
 
-#: ui/internal/window/actions.go:382
+#: ui/internal/window/actions.go:393
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"

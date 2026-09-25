@@ -20,3 +20,29 @@ func TestBlockedSummary(t *testing.T) {
 		t.Errorf("singular: got %q", got)
 	}
 }
+
+func TestFlushEcho(t *testing.T) {
+	var f flushEcho
+	if f.echo("") {
+		t.Fatal("nothing recorded: an empty body is an edit, not an echo")
+	}
+
+	f.record("")
+	if !f.echo("") {
+		t.Error("an empty body flushed: its changed is the echo")
+	}
+
+	f.record("<p>a</p>")
+	if !f.echo("<p>a</p>") {
+		t.Error("the flush's own changed must be an echo")
+	}
+	if !f.echo("<p>a</p>") {
+		t.Error("a late debounced changed with the same content must stay an echo")
+	}
+	if f.echo("<p>ab</p>") {
+		t.Error("new content is an edit")
+	}
+	if f.echo("<p>a</p>") {
+		t.Error("an edit forgets the record: going back to the saved text is an edit too")
+	}
+}

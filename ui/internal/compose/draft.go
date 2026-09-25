@@ -51,9 +51,31 @@ type draftState struct {
 	autosave  glib.SourceHandle // 0 when not armed
 	lastSaved time.Time
 	lastError string // last autosave error shown as a toast
+	flushed   flushEcho
 
 	closed  bool // window is gone; drop late callbacks
 	discard bool // close without asking
+}
+
+// flushEcho remembers the content a save's flush reported: the editor's
+// "changed" carrying the same HTML is that report, not an edit. Without it
+// every save marked the draft dirty again and armed the next autosave.
+type flushEcho struct {
+	html string
+	set  bool
+}
+
+// record notes the HTML the flush reported.
+func (f *flushEcho) record(html string) { f.html, f.set = html, true }
+
+// echo reports whether html is what the last flush reported; any other
+// content is an edit and forgets the record.
+func (f *flushEcho) echo(html string) bool {
+	if f.set && f.html == html {
+		return true
+	}
+	f.html, f.set = "", false
+	return false
 }
 
 func (w *Window) ctx() context.Context {
@@ -78,6 +100,15 @@ func (w *Window) rpc(call func() (any, error), then func(v any, err error)) {
 			then(v, err)
 		})
 	}()
+}
+
+// editorChanged is the editor's "changed": the one a save's flush produces
+// reports what is being saved; only other content is an edit.
+func (w *Window) editorChanged() {
+	if w.draft.flushed.echo(w.editor.HTML()) {
+		return
+	}
+	w.markDirty()
 }
 
 // markDirty records an edit and arms the autosave timer.
@@ -161,6 +192,8 @@ func (w *Window) save(reason saveReason, done func(err error)) {
 	w.refreshStatus()
 
 	w.editor.Flush(func() {
+		// Runs before OnChanged of the same message (editor.onMessage).
+		d.flushed.record(w.editor.HTML())
 		if d.closed {
 			return
 		}

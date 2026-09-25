@@ -126,7 +126,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.editor.SetDebug(m.log.Enabled(nil, slog.LevelDebug))
 	w.editorSlot.Append(w.editor)
 	w.editor.OnState = w.applyState
-	w.editor.OnChanged = w.markDirty
+	w.editor.OnChanged = w.editorChanged
 	w.editor.OnReady = func() {
 		if p.Kind != KindNew {
 			w.editor.FocusStart()
