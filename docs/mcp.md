@@ -66,7 +66,7 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
 | modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages` |
 | send | `-allow-send` | `send_message` |
 
@@ -105,6 +105,23 @@ destructive, only `send_message` open-world.
 - output: a trusted header (count, total, next cursor), then a fenced JSON
   array of `{id, date, from, to, subject, snippet, flags, hasAttachments,
   size, outbox?}`
+
+### search_messages
+
+- input: `query`; optional `accountId`, `folderId` (needs `accountId`),
+  `limit` (1–100, default 20), `cursor`
+- calls `search.query` (docs/api.md §4.6): the locally stored mail only
+  (the `offlineDays` window). `folderId` searches that folder, `accountId`
+  alone every folder of the account except Trash and Junk, neither every
+  enabled account the same way; `in:` in the query reaches Trash and Junk.
+  Every word matches as a prefix, ignoring case and diacritics; the syntax
+  (phrases, `from:`, `to:`, `subject:`, `has:attachment`, `is:unread`,
+  `is:flagged`, `before:`, `after:`, `in:`) is in the tool description.
+- output: a trusted header (count, total or "more than 1000", next
+  cursor) that never repeats the query, then a fenced JSON array of the
+  `list_messages` records plus `accountId`, `folderId` and the folder's
+  `folder` path; `snippet` is the excerpt around the match, cleaned like
+  any snippet (the match ranges are dropped).
 
 ### read_message
 
@@ -402,8 +419,7 @@ stderr, and needs the daemon socket to be reachable under the same user.
 
 ## Not in this version
 
-- search (`search.query` is not implemented in the daemon yet), threads,
-  attached messages (`message.embedded`), draft listing and deletion, the
+- threads, attached messages (`message.embedded`), draft listing and deletion, the
   agent's own attachments on drafts (only what `draft.create` imports from
   the original travels);
 - structured tool output (`structuredContent`); the results are text;

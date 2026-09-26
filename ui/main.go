@@ -207,18 +207,11 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	app.AddAction(quit)
 	app.SetAccelsForAction("app.quit", []string{"<Control>q"})
 
-	// Per-message actions of the main window (window.registerActions).
-	// Single-letter accelerators are safe: the main window has no text
-	// entry that could want the key. A message window mirrors them for its
-	// msg.* group (window.messageShortcuts).
-	for action, accel := range map[string]string{
-		"win.trash":       "Delete",
-		"win.archive":     "a",
-		"win.junk":        "j",
-		"win.mark-unread": "u",
-		"win.toggle-flag": "s",
-		"win.refresh":     "<Control>r",
-	} {
+	// Actions of the main window (window.registerActions). The window
+	// lifts the single-key ones while its search entry has the keyboard. A
+	// message window mirrors them for its msg.* group
+	// (window.messageShortcuts).
+	for action, accel := range window.MessageAccels {
 		app.SetAccelsForAction(action, []string{accel})
 	}
 }

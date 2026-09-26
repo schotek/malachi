@@ -209,9 +209,52 @@ Adw.ApplicationWindow main_window {
               ToggleButton search_button {
                 icon-name: "edit-find-symbolic";
                 tooltip-text: _("Search");
-                // Hidden until search.* exists in the backend.
-                visible: false;
               }
+            }
+
+            // Search over the local store (window/search.go): the entry
+            // and where it looks. The list below shows the results while
+            // the bar is open. No key-capture-widget: typing into the list
+            // must keep reaching the single-key shortcuts.
+            [top]
+            SearchBar search_bar {
+              search-mode-enabled: bind search_button.active bidirectional;
+
+              child: Box {
+                orientation: vertical;
+                spacing: 6;
+
+                SearchEntry search_entry {
+                  placeholder-text: _("Search Mail");
+                  search-delay: 300;
+                  hexpand: true;
+                }
+
+                Adw.ToggleGroup search_scope {
+                  halign: center;
+                  homogeneous: true;
+
+                  Adw.Toggle {
+                    name: "folder";
+                    label: C_("search scope", "Folder");
+                  }
+
+                  Adw.Toggle {
+                    name: "account";
+                    label: C_("search scope", "Account");
+                  }
+
+                  Adw.Toggle {
+                    name: "all";
+                    label: C_("search scope", "All Accounts");
+                  }
+
+                  styles [
+                    "flat",
+                    "message-filter",
+                  ]
+                }
+              };
             }
 
             content: Box {
@@ -329,6 +372,22 @@ Adw.ApplicationWindow main_window {
                       Adw.Spinner load_more_spinner {
                         visible: false;
                       }
+                    }
+
+                    // Under the last page of search results: how far back
+                    // the local store reaches (window/search.go).
+                    Label search_note {
+                      visible: false;
+                      wrap: true;
+                      justify: center;
+                      margin-start: 12;
+                      margin-end: 12;
+                      margin-bottom: 6;
+
+                      styles [
+                        "caption",
+                        "dim-label",
+                      ]
                     }
                   };
                 }

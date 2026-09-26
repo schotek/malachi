@@ -12,8 +12,8 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 > **Project status: early, usable with care.** Version 0.1.0 reads, writes
 > and sends mail over IMAP/SMTP and Microsoft 365, renders HTML after
 > sanitising it, and keeps mail available offline; Gmail support landed
-> on `main` since, and so have conversation threading and an [MCP
-> bridge](#ai-agents-mcp) for AI agents. Search is not there yet.
+> on `main` since, and so have conversation threading, search and an
+> [MCP bridge](#ai-agents-mcp) for AI agents.
 >
 > It is young, and a bug in the sync engine can still touch messages on the
 > server. Keep a second mail program for anything that matters.
@@ -56,13 +56,15 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **Conversations.** The daemon threads mail by its headers as it
   arrives; *Group by Conversation* in the preferences turns the message
   list into one row per conversation, expandable to its messages.
+- **Search.** Ctrl+F searches the mail stored on this computer (the
+  retention window) in the folder, its account or every account, while
+  you type: every word as a prefix, case and diacritics ignored ("priloh"
+  finds "Přílohy"), plus `from:`, `to:`, `subject:`, `is:unread`,
+  `has:attachment`, dates and `in:` a folder.
 - **AI agents, on a leash.** An optional MCP bridge lets an agent read and
   draft mail through the daemon. Read-only unless you say otherwise;
   marking, moving, deleting and sending each need a separate flag.
 - **Czech translation**, and the machinery to add more.
-
-Not yet: search. The RPC contract already defines it; the daemon answers
-`notImplemented`.
 
 ## Goals
 
@@ -86,8 +88,8 @@ Not yet: search. The RPC contract already defines it; the daemon answers
 - **Safe HTML mail.** Messages are sanitised in the backend before the UI
   ever sees them; remote content is blocked until you allow it; the
   renderer runs with JavaScript off and a strict content policy.
-- **Offline first.** Mail lives in a local SQLite store; full-text search
-  will run over it. The network is an optimisation.
+- **Offline first.** Mail lives in a local SQLite store, and full-text
+  search runs over it. The network is an optimisation.
 
 ## Non-goals
 
@@ -100,7 +102,7 @@ Not yet: search. The RPC contract already defines it; the daemon answers
 Malachi Mail is two processes. `malachid` is a Go daemon that owns the mail
 store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
 synchronises, sanitises HTML, manages credentials and threads
-conversations; search will live there too. `malachi` is the GTK 4
+conversations, and searches the store. `malachi` is the GTK 4
 application for Linux: it connects to the daemon over a local unix socket
 and displays what it is given. The macOS application does the same over
 the same socket and the same contract, and the Windows one will.

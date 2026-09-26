@@ -148,6 +148,10 @@ type Window struct {
 
 	refreshButton   *gtk.Button
 	searchButton    *gtk.ToggleButton
+	searchBar       *gtk.SearchBar
+	searchEntry     *gtk.SearchEntry
+	searchScope     *adw.ToggleGroup
+	searchNote      *gtk.Label
 	banner          *adw.Banner
 	authBanner      *adw.Banner
 	certBanner      *adw.Banner
@@ -370,6 +374,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.messageFilter.NotifyProperty("active-name", func() {
 		w.setListFilter(api.MessageFilter(w.messageFilter.ActiveName()))
 	})
+	w.setupSearch(b)
 
 	// "clicked" fires for user clicks only, not for SetActive from Go. On a
 	// conversation row the star acts on every member (flagTarget).
@@ -462,6 +467,20 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 	}
 }
 
+// MessageAccels are the keyboard shortcuts of the main window's win.*
+// actions, which main.go registers with the application. The single-key
+// ones (no modifier) are lifted while the search entry has the keyboard
+// (search.go): typing an "a" there must not archive the selected message.
+var MessageAccels = map[string]string{
+	"win.trash":       "Delete",
+	"win.archive":     "a",
+	"win.junk":        "j",
+	"win.mark-unread": "u",
+	"win.toggle-flag": "s",
+	"win.refresh":     "<Control>r",
+	"win.search":      "<Control>f",
+}
+
 // registerActions adds the win.* actions. All but refresh start disabled;
 // setMessageActionsSensitive enables them while a message is selected.
 // Accelerators are assigned in main.go.
@@ -479,6 +498,7 @@ func (w *Window) registerActions() {
 		return func() { w.selectedIDs(fn) }
 	}
 	w.addAction("refresh", true, w.triggerSync)
+	w.addAction("search", true, w.startSearch)
 	w.addAction("trash", false, forRows(func(row listRow, ids []api.MessageID) { w.trashIDs(w, ids, rowSubject(row)) }))
 	w.addAction("archive", false, forRows(func(_ listRow, ids []api.MessageID) { w.archiveIDs(ids) }))
 	w.addAction("junk", false, forRows(func(row listRow, ids []api.MessageID) { w.junkIDs(w, ids, rowSubject(row)) }))
@@ -578,6 +598,14 @@ func (w *Window) showConnectionState(s client.State, err error) {
 // collapsed. Called wherever the selection or the cached counts change:
 // selectFolder, updateFolderRow and rebuildFolderList.
 func (w *Window) refreshListTitle() {
+	if w.model.search.active {
+		w.refreshSearchScope()
+		title := i18n.T("Search")
+		w.listPage.SetTitle(title)
+		w.listTitle.SetTitle(title)
+		w.listTitle.SetSubtitle(searchTotalText(w.model.total, w.model.search.shown))
+		return
+	}
 	title, subtitle := i18n.T("Messages"), ""
 	if f, ok := w.model.folder(w.model.selected); ok {
 		title, subtitle = folderTitle(f), folderCountsText(f)

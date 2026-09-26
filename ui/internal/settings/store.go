@@ -49,6 +49,9 @@ const (
 	// KeyGroupByConversation switches the message list to one row per
 	// conversation (thread.list) instead of one per message.
 	KeyGroupByConversation = "group-by-conversation"
+	// KeySearchScope is where a search looks, as last chosen in the
+	// search bar.
+	KeySearchScope = "search-scope"
 )
 
 // Keys of the sidebar state: which parts of the folder tree the user folded
@@ -67,6 +70,9 @@ type ColorScheme string
 // Density is the nick of the Density enum in the gschema.
 type Density string
 
+// SearchScope is the nick of the SearchScope enum in the gschema.
+type SearchScope string
+
 const (
 	ColorSchemeSystem ColorScheme = "system"
 	ColorSchemeLight  ColorScheme = "light"
@@ -74,6 +80,10 @@ const (
 
 	DensityComfortable Density = "comfortable"
 	DensityCompact     Density = "compact"
+
+	SearchFolder  SearchScope = "folder"
+	SearchAccount SearchScope = "account"
+	SearchAll     SearchScope = "all"
 
 	// Text zoom bounds in percent; must match the <range> in the gschema.
 	TextZoomMin  = 50
@@ -98,6 +108,7 @@ var defaults = map[string]any{
 	KeyMonospacePlainText:  false,
 	KeyTextZoom:            100,
 	KeyGroupByConversation: false,
+	KeySearchScope:         string(SearchFolder),
 
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
@@ -198,6 +209,16 @@ func (s *Store) SetDensity(v Density) {
 	switch v {
 	case DensityComfortable, DensityCompact:
 		s.set(KeyDensity, string(v))
+	}
+}
+
+func (s *Store) SearchScope() SearchScope { return SearchScope(s.str(KeySearchScope)) }
+
+// SetSearchScope ignores values outside the enum.
+func (s *Store) SetSearchScope(v SearchScope) {
+	switch v {
+	case SearchFolder, SearchAccount, SearchAll:
+		s.set(KeySearchScope, string(v))
 	}
 }
 

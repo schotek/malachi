@@ -17,6 +17,9 @@ import (
 )
 
 // Message is what a MessageRow displays; a projection of api.MessageSummary.
+// A search result adds where it lies (Origin, with the full path and
+// account as OriginTooltip) and the matched words of Snippet (Highlights,
+// byte ranges into it).
 type Message struct {
 	From           []api.Address
 	Subject        string
@@ -25,6 +28,10 @@ type Message struct {
 	Unread         bool
 	Flagged        bool
 	HasAttachments bool
+
+	Origin        string
+	OriginTooltip string
+	Highlights    []api.MatchRange
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -76,6 +83,7 @@ type MessageRow struct {
 	avatar     *adw.Avatar
 	from       *gtk.Label
 	date       *gtk.Label
+	origin     *gtk.Label
 	subject    *gtk.Label
 	preview    *gtk.Label
 	unreadDot  *gtk.Box
@@ -105,6 +113,7 @@ func NewMessageRow() *MessageRow {
 		avatar:     b.GetObject("avatar").Cast().(*adw.Avatar),
 		from:       b.GetObject("from_label").Cast().(*gtk.Label),
 		date:       b.GetObject("date_label").Cast().(*gtk.Label),
+		origin:     b.GetObject("origin_label").Cast().(*gtk.Label),
 		subject:    b.GetObject("subject_label").Cast().(*gtk.Label),
 		preview:    b.GetObject("preview_label").Cast().(*gtk.Label),
 		unreadDot:  b.GetObject("unread_dot").Cast().(*gtk.Box),
@@ -131,6 +140,10 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.from.SetText(name)
 	r.from.SetTooltipText(FormatAddress(from))
 	r.fill(m.Subject, m.Snippet, m.Date, m.Unread, m.Flagged, m.HasAttachments)
+	r.preview.SetAttributes(highlightAttrs(m.Snippet, m.Highlights))
+	r.origin.SetText(m.Origin)
+	r.origin.SetTooltipText(m.OriginTooltip)
+	r.origin.SetVisible(m.Origin != "")
 	r.badge.SetVisible(false)
 	r.RemoveCSSClass("thread-row")
 	r.RemoveCSSClass("thread-expanded")
@@ -154,6 +167,8 @@ func (r *MessageRow) SetThread(t Thread) {
 	}
 	r.from.SetTooltipText(strings.Join(lines, "\n"))
 	r.fill(t.Subject, t.Snippet, t.Date, t.Unread > 0, t.Flagged, t.HasAttachments)
+	r.preview.SetAttributes(nil)
+	r.origin.SetVisible(false)
 	r.badge.SetText(ThreadCountText(t.Count))
 	// TRANSLATORS: tooltip of the member count of a conversation row.
 	r.badge.SetTooltipText(fmt.Sprintf(i18n.N("%d message", "%d messages", t.Count), t.Count))

@@ -34,6 +34,16 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 		Annotations: annRead(),
 	}, b.listMessages)
 	mcp.AddTool(srv, &mcp.Tool{
+		Name: "search_messages",
+		Description: "Search the mail stored locally: the last offlineDays of every folder (older mail is on the server only and is not searched). " +
+			"Scope: folderId (needs accountId) searches that folder; accountId alone every folder of the account except Trash and Junk; neither, every enabled account the same way. " +
+			"Every word matches as a prefix, ignoring case and diacritics, and all words must match. " +
+			`Syntax: "quoted phrase", from:, to: (To, Cc, Bcc), subject:, has:attachment, is:unread, is:flagged, before:YYYY-MM-DD, after:YYYY-MM-DD, ` +
+			"in:<folder path, or inbox, sent, drafts, trash, junk, archive, outbox> (reaches Trash and Junk too). " +
+			"Results are newest first, one page and a cursor; snippet is the text around the first match. Use read_message for a body." + untrustedNote,
+		Annotations: annRead(),
+	}, b.searchMessages)
+	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "read_message",
 		Description: "Read one message: headers, attachment list and the plain-text body (never HTML). Long bodies are paged with offset and maxChars. Reading never marks the message as seen." + untrustedNote,
 		Annotations: annRead(),
@@ -203,6 +213,91 @@ func (b *bridge) listMessages(ctx context.Context, _ *mcp.CallToolRequest, in li
 		head += "\nlast page"
 	}
 	return textResult(head + "\n" + fenced(newNonce(), body)), nil, nil
+}
+
+// --- search_messages -------------------------------------------------------
+
+type searchMessagesIn struct {
+	Query     string `json:"query" jsonschema:"what to search for, in the syntax of the tool description"`
+	AccountID string `json:"accountId,omitempty" jsonschema:"account id from list_accounts; empty searches every enabled account"`
+	FolderID  string `json:"folderId,omitempty" jsonschema:"folder id from list_folders; needs accountId"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"results per page, 1-100, default 20"`
+	Cursor    string `json:"cursor,omitempty" jsonschema:"nextCursor of the previous page, with the same query and scope"`
+}
+
+// searchResultOut is a list_messages record plus where the message lies,
+// since a search spans folders and accounts.
+type searchResultOut struct {
+	messageOut
+	AccountID string `json:"accountId"`
+	FolderID  string `json:"folderId"`
+	Folder    string `json:"folder,omitempty"`
+}
+
+func (b *bridge) searchMessages(ctx context.Context, _ *mcp.CallToolRequest, in searchMessagesIn) (*mcp.CallToolResult, any, error) {
+	if strings.TrimSpace(in.Query) == "" {
+		return toolErrorf("query is required"), nil, nil
+	}
+	if in.FolderID != "" && in.AccountID == "" {
+		return toolErrorf("folderId needs accountId"), nil, nil
+	}
+	ctx, cancel := b.callCtx(ctx)
+	defer cancel()
+	res, err := callRPC[api.SearchQueryResult](ctx, b.rpc, api.MethodSearchQuery, api.SearchQueryParams{
+		AccountID: api.AccountID(in.AccountID),
+		FolderID:  api.FolderID(in.FolderID),
+		Query:     in.Query,
+		Page:      api.Page{Cursor: in.Cursor, Limit: clampLimit(in.Limit, defaultListLimit, maxListLimit)},
+	})
+	if err != nil {
+		return toolError(err), nil, nil
+	}
+	paths := b.folderPaths(ctx, res.Results)
+	out := make([]searchResultOut, 0, len(res.Results))
+	for _, r := range res.Results {
+		m := summaryOut(r.Message)
+		m.Snippet = oneLine(r.Snippet) // the excerpt; its match ranges mean nothing to a model
+		out = append(out, searchResultOut{messageOut: m, AccountID: string(r.Message.AccountID),
+			FolderID: string(r.Message.FolderID), Folder: paths[r.Message.FolderID]})
+	}
+	body, err := marshalIndent(out)
+	if err != nil {
+		return toolErrorf("internal error: %v", err), nil, nil
+	}
+	// The header is trusted text: it never repeats the query.
+	total := fmt.Sprint(res.Page.Total)
+	if res.Page.Total < 0 {
+		total = fmt.Sprintf("more than %d", api.MaxSearchTotal)
+	}
+	head := fmt.Sprintf("search of the locally stored mail: %d results on this page, %s in all", len(out), total)
+	if res.Page.NextCursor != "" {
+		head += "\nnext page: call again with the same query and cursor=" + res.Page.NextCursor
+	} else {
+		head += "\nlast page"
+	}
+	return textResult(head + "\n" + fenced(newNonce(), body)), nil, nil
+}
+
+// folderPaths looks up the path of the folders the results lie in, one
+// folder.list per account; an account whose list fails just goes without.
+func (b *bridge) folderPaths(ctx context.Context, results []api.SearchResult) map[api.FolderID]string {
+	paths := map[api.FolderID]string{}
+	seen := map[api.AccountID]bool{}
+	for _, r := range results {
+		acc := r.Message.AccountID
+		if seen[acc] {
+			continue
+		}
+		seen[acc] = true
+		res, err := callRPC[api.FolderListResult](ctx, b.rpc, api.MethodFolderList, api.FolderListParams{AccountID: acc})
+		if err != nil {
+			continue
+		}
+		for _, f := range res.Folders {
+			paths[f.ID] = oneLine(f.Path)
+		}
+	}
+	return paths
 }
 
 func summaryOut(m api.MessageSummary) messageOut {

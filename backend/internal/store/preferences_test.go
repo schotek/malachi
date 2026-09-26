@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-func openTestStore(t *testing.T) *Store {
+func openTestStore(t testing.TB) *Store {
 	t.Helper()
 	s, err := Open(context.Background(), filepath.Join(t.TempDir(), "store.db"), slog.New(slog.DiscardHandler))
 	if err != nil {

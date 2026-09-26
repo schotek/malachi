@@ -24,6 +24,12 @@ import (
 // until the reply, so the list never flickers through the loading state
 // and the selection survives (by key).
 func (w *Window) loadMessages() {
+	if w.model.search.active {
+		// The list shows search results; a reload of the folder (a sync,
+		// a selection) is a new search only if it changes the scope.
+		w.runSearch(false)
+		return
+	}
 	k := w.model.selected
 	gen := w.model.bumpList()
 	w.model.loadingMore = false
@@ -117,6 +123,10 @@ func (w *Window) loadMore() {
 	gen := m.listGen
 	m.loadingMore = true
 	w.showLoadMore()
+	if m.search.active {
+		w.loadMoreSearch(gen)
+		return
+	}
 	if m.grouped {
 		w.loadMoreThreads(k, gen)
 		return
@@ -198,7 +208,7 @@ func (w *Window) rebuildMessageRows() {
 // newMessageRow builds a row for s with the current appearance settings.
 func (w *Window) newMessageRow(s api.MessageSummary) *widget.MessageRow {
 	r := widget.NewMessageRow()
-	r.SetMessage(summaryMessage(s))
+	r.SetMessage(w.model.rowMessage(s))
 	w.applyRowAppearance(r)
 	return r
 }
@@ -210,6 +220,10 @@ func (w *Window) showListState() {
 	if m.rowCount() > 0 {
 		w.listStack.SetVisibleChildName("messages")
 		w.showLoadMore()
+		return
+	}
+	if m.search.active {
+		w.showSearchState()
 		return
 	}
 	retry := false
@@ -252,6 +266,12 @@ func (w *Window) showLoadMore() {
 	m := &w.model
 	w.loadMoreSpinner.SetVisible(m.loadingMore)
 	w.loadMoreButton.SetVisible(!m.loadingMore && m.nextCursor != "" && m.listErr == nil)
+	// Under the last page of results: how far back search reaches.
+	note := m.search.active && m.search.shown && m.nextCursor == "" && !m.loadingMore && m.rowCount() > 0
+	if note {
+		w.searchNote.SetLabel(searchRetentionText(m.search.offlineDays, m.search.offlineKnown))
+	}
+	w.searchNote.SetVisible(note)
 }
 
 // selectedMessage is the summary behind the selected row, if any: on a
@@ -353,6 +373,7 @@ func (w *Window) applyListAppearance() {
 // applyRowAppearance pushes the current list settings to one row.
 func (w *Window) applyRowAppearance(r *widget.MessageRow) {
 	r.SetCompact(w.settings.Density() == settings.DensityCompact)
-	r.SetShowPreview(w.settings.ShowPreviewLine())
+	// A search result's excerpt shows why it was found: always there.
+	r.SetShowPreview(w.settings.ShowPreviewLine() || w.model.search.active)
 	r.SetShowAvatar(w.settings.ShowAvatars())
 }

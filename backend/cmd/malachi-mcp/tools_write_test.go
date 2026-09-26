@@ -12,7 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "read_message", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "read_message", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
@@ -54,7 +54,8 @@ func TestAnnotations(t *testing.T) {
 	want := map[string]ann{
 		"list_accounts": {true, false, true, false}, "list_folders": {true, false, true, false},
 		"list_messages": {true, false, true, false}, "read_message": {true, false, true, false},
-		"get_attachment": {true, false, true, false}, "sync_status": {true, false, true, false},
+		"search_messages": {true, false, true, false},
+		"get_attachment":  {true, false, true, false}, "sync_status": {true, false, true, false},
 		"trigger_sync":  {false, false, true, false},
 		"create_draft":  {false, false, false, false},
 		"mark_messages": {false, false, true, false}, "move_messages": {false, false, true, false},

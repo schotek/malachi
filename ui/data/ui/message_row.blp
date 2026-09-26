@@ -98,6 +98,20 @@ ListBoxRow message_row {
           ]
         }
 
+        // Where a search result lies: its folder, and the account when
+        // the search spans several (window/search_model.go); hidden
+        // outside search.
+        Label origin_label {
+          visible: false;
+          ellipsize: end;
+          max-width-chars: 16;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
         Label date_label {
           xalign: 1;
 

@@ -1336,19 +1336,66 @@ the new copy.
 ### 4.6 search
 
 #### `search.query`
-- params: `{ "accountId" (opt, empty = all accounts), "folderId" (opt), "query": "…", "page": Page }`
+- params: `{ "accountId" (opt), "folderId" (opt, needs accountId), "query": "…", "page": Page }`
 - result: `{ "results": [SearchResult], "page": PageInfo }`
+- errors: invalidArgument (empty or blank `query`, longer than
+  `api.MaxSearchQueryBytes` = 1024 bytes, more than `api.MaxSearchTerms` =
+  32 terms and filters, `folderId` without `accountId`, bad cursor),
+  accountNotFound, folderNotFound, storageError
 
 ```jsonc
-SearchResult { "message": MessageSummary, "snippet": "plain text excerpt",
-               "ranges": [ { "start": 12, "end": 18 } ], "score": 0.83 }
+SearchResult { "message": MessageSummary, "snippet": "…posílám přílohy k faktuře…",
+               "ranges": [ { "start": 13, "end": 22 } ], "score": 0 }
 ```
 
-Query syntax (parsed by the backend, compiled to parameterised FTS5):
-free words (AND), `"quoted phrase"`, `from:`, `to:`, `subject:`,
-`has:attachment`, `is:unread`, `is:flagged`, `before:YYYY-MM-DD`,
-`after:YYYY-MM-DD`, `in:<folder path>`. Unknown prefixes are treated as
-plain words. Snippets are plain text with byte ranges; never HTML.
+Searches the local store: only messages within the `offlineDays` window
+exist there (§4.8), and a message's text becomes searchable once its body
+has been downloaded (before that its headers are; a `tooBig` message only
+ever by its headers). Rows stored before the index existed are indexed in
+the background after the upgrade.
+
+Scope: `folderId` searches that folder; `accountId` alone every folder of
+the account except the Trash and Junk roles; neither, every **enabled**
+account the same way (a paused account is searched only when named). An
+`in:` filter names the folders itself and reaches Trash and Junk too.
+
+Query syntax (parsed by the backend, compiled to a parameterised FTS5
+expression; nothing typed is ever operator syntax):
+
+- free words, all of which must match (AND). Every word matches as a
+  **prefix**, and case and diacritics are ignored: `priloh` finds
+  "Přílohy". A word the tokenizer splits (`e-mail`, `jan@firma`) matches
+  its parts in order. Words without a letter or digit are ignored;
+- `"quoted phrase"` (also `„…“` and `“…”`): whole words in that order;
+- `from:`, `to:` (To, Cc and Bcc), `subject:` restrict the next word or
+  quoted phrase to that part; free words also match the attachment names
+  and the body;
+- `has:attachment`, `is:unread`, `is:flagged`;
+- `before:YYYY-MM-DD` (exclusive), `after:YYYY-MM-DD` (inclusive), days in
+  the daemon's local time;
+- `in:<folder>`: a role keyword (`inbox`, `sent`, `drafts`, `trash`,
+  `junk` or `spam`, `archive`, `outbox`) or a folder's path or name,
+  case-insensitive; several `in:` mean any of them.
+
+Anything else (an unknown prefix, `has:x`, a date that does not exist, a
+prefix without a value) is searched as plain words; a query of nothing
+but ignored words returns no results.
+
+Results are ordered by `date`, then `id`, newest first; the cursor
+belongs to `search.query` and does not encode the query, so a client
+restarts from the first page when the query or scope changes.
+`page.total` is the exact number of matches up to `api.MaxSearchTotal`
+(1000), and -1 beyond it. A message stored in several folders (Gmail
+labels) is one result per copy. `score` is reserved and always 0.
+
+`snippet` is plain text, never HTML: up to 200 characters of the body
+around the first match of the free words and phrases, whitespace
+collapsed, control and invisible formatting characters (bidi overrides,
+zero-width spaces) removed, `…` where it was cut; `ranges` are the byte
+ranges of the matched words in it, sorted, not overlapping, on UTF-8
+boundaries. When the body has no such match (the query matched the
+subject or the people only) `snippet` is the message's summary snippet
+and `ranges` is absent. `message` carries `outbox` as in `message.list`.
 
 ### 4.7 sync
 
@@ -1751,3 +1798,9 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `failed` (they never counted in `pendingOutbox`), in `sync.status`,
   `account.list` and `notify.syncState`; a change of it alone sends
   `notify.syncState` immediately (§5).
+- **1** (2026-09-26, compatible addition, search): `search.query` is
+  implemented over a full-text index of the local store: scopes, Trash and
+  Junk left out of account-wide searches, prefix matching without
+  diacritics, date order, the `errors` line, the limits
+  `api.MaxSearchQueryBytes`, `api.MaxSearchTerms` and `api.MaxSearchTotal`
+  (§4.6). Only `folder.subscribe` remains `notImplemented`.

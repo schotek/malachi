@@ -420,17 +420,22 @@ func (b *Backend) Attachments() api.AttachmentService { return &attachmentServic
 func (b *Backend) Folders() api.FolderService         { return &folderService{b} }
 func (b *Backend) Messages() api.MessageService       { return &messageService{b} }
 func (b *Backend) Threads() api.ThreadService         { return &threadService{b} }
+func (b *Backend) Search() api.SearchService          { return &searchService{b} }
 func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
-// seeding of recipient completion, then the orphan attachment sweep at
-// start and hourly.
+// seeding of recipient completion, the upgrade passes that link and index
+// the messages stored before threading and search existed, then the
+// orphan attachment sweep at start and hourly.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
 	}
 	if err := b.backfillThreads(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill conversations", "err", err)
+	}
+	if err := b.backfillSearch(ctx); err != nil && !isCancelled(err) {
+		b.log.Warn("backfill search index", "err", err)
 	}
 	sweep := func() {
 		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)

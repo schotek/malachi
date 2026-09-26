@@ -189,7 +189,18 @@ Předvolby → Seznam zpráv → Seskupovat podle konverzací (GSettings
 (`ui/internal/window/thread_model.go` čistý model, `threads.go` zrcadlení
 do ListBoxu podle klíčů), rozbalení volá `thread.get {folderId}`, akce na
 sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
-Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
+Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
+`offlineDays`), contentless FTS5 `messages_fts` s prefixy 2 a 3 a
+`search_docs` (migrace 0013, triggery na `messages`, backfill v
+`core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
+syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
+rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
+`search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
+výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
+se při psaní do pole vypínají; MCP nástroj `search_messages`; macOS zatím
+nemá. MCP most pro AI agenty
 (`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
 `pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
@@ -236,7 +247,7 @@ Pořadí prací:
    (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
    démonem, multipart/alternative)
 5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
-6. Vyhledávání
+6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP; macOS zbývá)
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;

@@ -292,3 +292,46 @@ func TestSyncStatusAndTrigger(t *testing.T) {
 		t.Errorf("trigger params: %+v", tr)
 	}
 }
+
+func TestSearchMessages(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	h.fail(t, "search_messages", map[string]any{"query": "  "}, "query is required")
+	h.fail(t, "search_messages", map[string]any{"query": "x", "folderId": "f_in"}, "folderId needs accountId")
+
+	out := h.ok(t, "search_messages", map[string]any{"query": "zzquery", "accountId": "a1"})
+	mustContain(t, out, "3 results on this page, 3 in all", "last page",
+		`"id": "m1"`, `"accountId": "a1"`, `"folderId": "f_in"`, `"folder": "Inbox"`, `"folder": "Trash"`,
+		`"snippet": "Hello Bob, numbers attached."`)
+	if head := out[:strings.Index(out, "--- BEGIN")]; strings.Contains(head, "zzquery") {
+		t.Errorf("the header repeats the query: %q", head)
+	}
+	mustNotContain(t, out, `"ranges"`, `"start"`)
+
+	// A snippet cannot close the fence.
+	nonce := fenceNonce(t, out)
+	if got := strings.Count(out, fenceClose(nonce)); got != 1 {
+		t.Errorf("real END line appears %d times", got)
+	}
+	if strings.Index(out, fxFakeEnd) > strings.Index(out, fenceClose(nonce)) {
+		t.Error("forged END line lies outside the fence")
+	}
+
+	h.ok(t, "search_messages", map[string]any{"query": "x", "limit": 1000, "cursor": "abc"})
+	out = h.ok(t, "search_messages", map[string]any{"query": "x", "limit": 1})
+	mustContain(t, out, "1 results on this page, 3 in all", "next page: call again with the same query and cursor=next")
+	out = h.ok(t, "search_messages", map[string]any{"query": "many"})
+	mustContain(t, out, "more than 1000 in all")
+
+	h.fb.mu.Lock()
+	calls := append([]api.SearchQueryParams(nil), h.fb.searchCalls...)
+	h.fb.mu.Unlock()
+	if len(calls) != 4 || calls[0].Page.Limit != defaultListLimit || calls[0].AccountID != "a1" || calls[0].Query != "zzquery" {
+		t.Fatalf("calls %+v", calls)
+	}
+	if calls[1].Page.Limit != maxListLimit || calls[1].Page.Cursor != "abc" || calls[1].AccountID != "" {
+		t.Errorf("clamped call %+v", calls[1])
+	}
+
+	h.fb.setFail(api.MethodSearchQuery, api.NewError(api.CodeInvalidArgument, "query is longer than 1024 bytes"))
+	h.fail(t, "search_messages", map[string]any{"query": "x"}, "invalidArgument (1001): query is longer than 1024 bytes")
+}

@@ -68,6 +68,9 @@ type fakeBackend struct {
 	sends             []api.MessageSendParams
 	triggers          []api.SyncTriggerParams
 	nextDraft         int
+
+	searchResults []api.SearchResult // what every search.query answers
+	searchCalls   []api.SearchQueryParams
 }
 
 var _ api.Backend = (*fakeBackend)(nil)
@@ -108,7 +111,32 @@ func (f *fakeBackend) Drafts() api.DraftService     { return fakeDrafts{f.StubBa
 func (f *fakeBackend) Attachments() api.AttachmentService {
 	return fakeAttachments{f.StubBackend.Attachments(), f}
 }
-func (f *fakeBackend) Sync() api.SyncService { return fakeSync{f.StubBackend.Sync(), f} }
+func (f *fakeBackend) Sync() api.SyncService     { return fakeSync{f.StubBackend.Sync(), f} }
+func (f *fakeBackend) Search() api.SearchService { return fakeSearch{f.StubBackend.Search(), f} }
+
+type fakeSearch struct {
+	api.SearchService
+	f *fakeBackend
+}
+
+// Query answers the canned results whatever the query; a limit below
+// their number cuts the page and returns the cursor "next", and the query
+// "many" reports a total beyond api.MaxSearchTotal.
+func (s fakeSearch) Query(_ context.Context, p api.SearchQueryParams) (*api.SearchQueryResult, error) {
+	s.f.record(func() { s.f.searchCalls = append(s.f.searchCalls, p) })
+	if err := s.f.gate(api.MethodSearchQuery); err != nil {
+		return nil, err
+	}
+	res := &api.SearchQueryResult{Results: s.f.searchResults, Page: api.PageInfo{Total: len(s.f.searchResults)}}
+	if p.Page.Limit > 0 && p.Page.Limit < len(res.Results) {
+		res.Results = res.Results[:p.Page.Limit]
+		res.Page.NextCursor = "next"
+	}
+	if p.Query == "many" {
+		res.Page.Total = -1
+	}
+	return res, nil
+}
 
 type fakeSystem struct {
 	api.SystemService
@@ -505,6 +533,11 @@ func newFixture() *fakeBackend {
 			fxOutbox: {m5.MessageSummary},
 		},
 		messages: map[api.MessageID]api.Message{"m1": m1, "m2": m2, "m3": m3, "m4": m4, "m5": m5, "m6": m6},
+		searchResults: []api.SearchResult{
+			{Message: m1.MessageSummary, Snippet: "Hello Bob,\nnumbers attached.", Ranges: []api.MatchRange{{Start: 11, End: 18}}},
+			{Message: m3.MessageSummary, Snippet: fxFakeEnd + " numbers"},
+			{Message: m4.MessageSummary, Snippet: "trash"},
+		},
 		bodies: map[api.MessageID]api.MessageBodyResult{
 			"m1": body("m1", api.BodyFetched, "Hello Bob,\nnumbers attached.\n"),
 			"m2": {MessageID: "m2", BodyState: api.BodyPending, RemoteContent: api.RemoteBlock},

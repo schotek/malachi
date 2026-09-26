@@ -183,7 +183,8 @@ their own: `messages.thread_id` (never empty since 0011) plus the indexes
 let a listing group a folder by conversation at query time; `message_refs`
 (0011) is the derived index of the identifiers each message points at
 (`In-Reply-To` and `References`), so a parent arriving after its replies
-finds them (§3.4). Planned: `messages_fts` (external-content FTS5).
+finds them (§3.4). `messages_fts` (0013) is the full-text index behind
+search, with `search_docs` mapping its rowids to message ids (§3.5).
 
 ### 3.2 Sync model (implemented)
 
@@ -360,6 +361,39 @@ per message. The IMAP header fetch asks for the `References` field next
 to the envelope (`BODY.PEEK[HEADER.FIELDS (REFERENCES)]`), so a reply is
 linked before its body arrives.
 
+### 3.5 Search (implemented)
+
+`search.query` (docs/api.md §4.6) searches the local store only: what the
+`offlineDays` window holds, bodies once downloaded. The index is a
+contentless FTS5 table (`messages_fts`, migration 0013): it keeps tokens,
+never a second copy of the text, with columns for the subject, the sender,
+the recipients (To, Cc, Bcc), the attachment names and the plain-text
+body. The `unicode61` tokenizer removes diacritics and case, and the
+query side turns every word into a prefix query, so "priloh" finds
+"Přílohy"; the index keeps 2- and 3-character prefixes because search
+runs while the user types (on 50,000 messages "pr" took 295 ms without
+them and 10 ms with them, for about 70 % more index). `messages.id` is a
+TEXT key whose implicit rowid VACUUM may renumber, so `search_docs` gives
+every message a rowid of its own. Triggers on `messages` keep the index
+current on insert, on a change of an indexed column (the body arrives
+after the envelope) and on every deletion, cascades included; the rows of
+a store from before search are indexed in batches by `core.Maintain`
+(`meta` key `search.indexed`, resumable), a few megabytes of text per
+write transaction so sync is never held up.
+
+`internal/search` is pure: it parses the documented syntax (never failing:
+anything unknown is plain words), compiles the words and phrases into an
+FTS5 expression in which every value is quoted, so nothing typed is
+operator syntax, and cuts the excerpt around the first match with the same
+folding. The expression is bound as an SQL parameter; the filters
+(`is:`, `has:`, `before:`/`after:`, `in:`, the scope) are SQL. The store
+sorts the matches by date as narrow (id, date) rows and joins only the
+page, and counts at most `api.MaxSearchTotal` of them: sorting whole rows,
+or counting every match of a two-letter prefix, made a search of a large
+store several times slower. Folder and account are joined at query time,
+so a move needs no reindexing; Trash and Junk are left out unless a folder
+is named. The query is never logged.
+
 ## 4. Security boundary: HTML
 
 HTML in mail is hostile input. It is sanitised **in the backend**
@@ -424,6 +458,22 @@ star) applies to every member in the folder, which the `message.*`
 methods take as a list. Left and Right fold and unfold, Enter toggles a
 conversation row and opens a member. A notified arrival is folded into
 its row from `threadId`; the outbox folder is never grouped.
+
+The search bar over the list (Ctrl+F; `window/search.go`, the plain-Go
+side in `window/search_model.go`) turns the list pane into
+`search.query` results while it is open: from the second character,
+300 ms after typing pauses, in the scope chosen under the entry (the
+selected folder, its account, or every account; GSettings `search-scope`
+remembers the choice). Results are a flat list whatever the grouping; a
+row names the folder, and the account when every account is searched,
+and shows the excerpt with the matched words in bold (Pango attributes
+from the daemon's byte ranges, never markup). The results are a snapshot:
+new mail and syncs leave them alone, a change of the text, the scope or
+the selected folder (in the narrower scopes) asks again. Every action
+works on a result as on any row, since each summary carries its account
+and folder. While the entry has the keyboard the single-key shortcuts
+(a, j, s, u, Delete) are lifted from the application, which would
+otherwise take the keys before the entry sees them.
 
 The sidebar is one `gtk.ListBox` for every enabled account: a
 non-selectable header row per account (only when there are at least two),

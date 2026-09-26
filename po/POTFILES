@@ -34,6 +34,8 @@ ui/internal/window/notify.go
 ui/internal/window/outbox.go
 ui/internal/window/preferences.go
 ui/internal/window/remote.go
+ui/internal/window/search.go
+ui/internal/window/search_model.go
 ui/internal/window/status.go
 ui/internal/window/sync.go
 ui/internal/window/threads.go

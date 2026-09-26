@@ -1135,14 +1135,23 @@ type AttachmentGetResult struct {
 // Search
 // ---------------------------------------------------------------------------
 
+// Search limits (docs/api.md, search.query): a longer query or one with
+// more terms and filters is invalidArgument, and page.total is the exact
+// number of matches only up to MaxSearchTotal, -1 beyond.
+const (
+	MaxSearchQueryBytes = 1024
+	MaxSearchTerms      = 32
+	MaxSearchTotal      = 1000
+)
+
+// SearchQueryParams scopes a search: a folder (FolderID, which needs
+// AccountID), an account (AccountID alone) or every enabled account
+// (neither). Query is what the user typed, in the syntax of docs/api.md.
 type SearchQueryParams struct {
-	// AccountID empty = search all accounts.
 	AccountID AccountID `json:"accountId,omitempty"`
 	FolderID  FolderID  `json:"folderId,omitempty"`
-	// Query is the user-typed string. Syntax (FTS5 subset, field prefixes such
-	// as from:, subject:, has:attachment) is defined in docs/api.md.
-	Query string `json:"query"`
-	Page  Page   `json:"page"`
+	Query     string    `json:"query"`
+	Page      Page      `json:"page"`
 }
 
 type SearchResult struct {
@@ -1150,7 +1159,8 @@ type SearchResult struct {
 	// Snippet is a plain-text excerpt with match ranges; never HTML.
 	Snippet string       `json:"snippet"`
 	Ranges  []MatchRange `json:"ranges,omitempty"`
-	Score   float64      `json:"score"`
+	// Score is reserved: results are ordered by date and it is always 0.
+	Score float64 `json:"score"`
 }
 
 // MatchRange is a byte range within SearchResult.Snippet.

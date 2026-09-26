@@ -84,6 +84,18 @@ func TestMemoryValidation(t *testing.T) {
 	if got := s.Density(); got != DensityComfortable {
 		t.Errorf("invalid density accepted: %q", got)
 	}
+
+	if got := s.SearchScope(); got != SearchFolder {
+		t.Errorf("SearchScope default = %q, want folder", got)
+	}
+	s.SetSearchScope("everywhere")
+	if got := s.SearchScope(); got != SearchFolder {
+		t.Errorf("invalid scope accepted: %q", got)
+	}
+	s.SetSearchScope(SearchAll)
+	if got := s.SearchScope(); got != SearchAll {
+		t.Errorf("SearchScope = %q, want all", got)
+	}
 }
 
 func TestHandlerMayRemoveItself(t *testing.T) {

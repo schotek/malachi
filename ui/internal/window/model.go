@@ -99,6 +99,9 @@ type mailModel struct {
 	rows     []listRow
 	rowIdx   map[listKey]int
 
+	// search is the search bar's side of the list (search_model.go).
+	search searchState
+
 	listGen, bodyGen, foldersGen uint64
 	loading, loadingMore         bool
 }

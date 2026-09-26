@@ -579,6 +579,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.
+- The search index (`messages_fts`, migration 0013) lives in `store.db`
+  with everything else. It is contentless: it holds the tokens of the
+  subject, the people, the attachment names and the plain-text body, not a
+  second copy of the text, and a deleted message's entry goes with its
+  row (triggers). The search query is what the user typed: the daemon and
+  the UI never log it, and an error from the full-text engine, which could
+  quote it, is replaced by a fixed text.
 - `collected_addresses` holds the recipients of mail the user sent (To, Cc
   and Bcc, with the display name the draft carried) for recipient
   completion. It is never fed from incoming `From` headers: a suggestion
@@ -655,7 +662,9 @@ Defences:
   mutating tools, and a tool that is not allowed is not registered;
 - only the daemon's plain `text` is returned, never HTML; `message.body`
   is always called with `remoteContent: "block"`, so reading never causes
-  a network request;
+  a network request; `search_messages` is read-only, returns the excerpt
+  as cleaned text like any snippet and never repeats the query in its
+  trusted header;
 - every mail-derived string is cleaned (valid UTF-8, no control or Unicode
   format characters) and placed inside a fence whose delimiter carries a
   per-call random nonce, with trusted fields outside; links and extra

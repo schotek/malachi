@@ -15,8 +15,8 @@
       engine so that the engine can be reused.
     </p>
     <p>
-      This is an early version. Mail can be read, written and sent, but
-      search and conversation threading are still missing.
+      This is an early version. Mail can be read, written, sent and
+      searched, but keep a second mail program for anything that matters.
     </p>
   </description>
 

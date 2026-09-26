@@ -75,7 +75,7 @@ func (w *Window) refreshRow(id api.MessageID) {
 		return
 	}
 	if r := w.rowFor(id); r != nil {
-		r.SetMessage(summaryMessage(s))
+		r.SetMessage(w.model.rowMessage(s))
 	}
 }
 
