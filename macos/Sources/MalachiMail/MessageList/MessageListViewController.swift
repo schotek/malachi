@@ -60,6 +60,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     private let retryButton = NSButton(title: L10n.T("Try Again"), target: nil, action: nil)
     private let loadMoreButton = NSButton(title: L10n.T("Load More"), target: nil, action: nil)
     private let loadMoreSpinner = Spinner(size: 16)
+    /// The foot under the list with the spinner and the retry button;
+    /// hidden while it has neither, so the rows reach the pane's bottom.
+    private let loadMoreBox = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
     private var keys: [ListKey] = []
@@ -73,6 +76,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// one arrival at the bottom asks for one page (Gtk.ScrolledWindow
     /// `edge-reached`).
     private var atBottom = false
+    /// The row count when this view last asked for the next page, until
+    /// the answer; nil when no request is open.
+    private var requestedAt: Int?
 
     static let filterWidth: CGFloat = 72
     static let filterMargin: CGFloat = 4
@@ -166,14 +172,19 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             self, selector: #selector(clipBoundsChanged(_:)), name: NSView.boundsDidChangeNotification, object: scroll.contentView
         )
 
-        // Load More (window.blp): a flat button and a spinner, centred.
-        loadMoreButton.isBordered = false
-        loadMoreButton.contentTintColor = Tint.accent
+        // Load More (window.blp) the Mac's way: the list pages itself, as
+        // Mail's does (the scroll edge, or rows too few to fill the pane),
+        // the footer shows a small spinner while a page loads, and the
+        // button, a standard small one, appears only to retry a page that
+        // failed (a deviation, macos/README.md).
+        loadMoreButton.bezelStyle = .push
+        loadMoreButton.controlSize = .small
+        loadMoreButton.font = NSFont.systemFont(ofSize: NSFont.systemFontSize(for: .small))
         loadMoreButton.target = self
         loadMoreButton.action = #selector(loadMoreClicked(_:))
         loadMoreButton.isHidden = true
         loadMoreSpinner.isHidden = true
-        let loadMoreBox = NSStackView()
+        loadMoreBox.isHidden = true
         loadMoreBox.orientation = .horizontal
         loadMoreBox.alignment = .centerY
         loadMoreBox.spacing = Self.loadMoreSpacing
@@ -320,6 +331,12 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// controller's `selectedKey`. A list replaced whole (another folder)
     /// is reloaded without animation.
     private func apply(rows: [ListRow], hint: SelectionHint) {
+        if hint == .clear {
+            // Another listing: a page asked for the one before is moot.
+            requestedAt = nil
+            loadMoreButton.isHidden = true
+            updateLoadMoreBox()
+        }
         let newKeys = rows.map(\.key)
         var newByKey: [ListKey: ListRow] = [:]
         newByKey.reserveCapacity(rows.count)
@@ -464,13 +481,45 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func showLoadMore(_ state: LoadMoreState) {
-        loadMoreButton.isHidden = !state.button
         loadMoreSpinner.isHidden = !state.spinner
         if state.spinner {
             loadMoreSpinner.start()
         } else {
             loadMoreSpinner.stop()
         }
+        // A page this view asked for is back: rows came, or it failed (the
+        // controller toasts why) and the button offers the retry.
+        var failed = false
+        if state.button, let at = requestedAt {
+            requestedAt = nil
+            failed = keys.count == at
+        }
+        loadMoreButton.isHidden = !failed
+        updateLoadMoreBox()
+        if state.button, !failed {
+            DispatchQueue.main.async { [weak self] in self?.fillPane() }
+        }
+    }
+
+    private func updateLoadMoreBox() {
+        loadMoreBox.isHidden = loadMoreSpinner.isHidden && loadMoreButton.isHidden
+    }
+
+    /// Asks for the next page, noting the rows it had then.
+    private func requestMore() {
+        requestedAt = keys.count
+        list.loadMore()
+    }
+
+    /// Rows too few to fill the pane have no edge to scroll to: the list
+    /// asks for the next page itself (GTK shows its Load More button
+    /// then), unless a request is open or the last one failed.
+    private func fillPane() {
+        guard list.loadMoreState.button, requestedAt == nil, loadMoreButton.isHidden else { return }
+        let rows = table.numberOfRows
+        let height = rows > 0 ? table.rect(ofRow: rows - 1).maxY : 0
+        guard height <= scroll.contentView.bounds.height else { return }
+        requestMore()
     }
 
     // MARK: Actions
@@ -490,7 +539,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     @objc private func loadMoreClicked(_ sender: Any?) {
-        list.loadMore()
+        loadMoreButton.isHidden = true
+        updateLoadMoreBox()
+        requestMore()
     }
 
     @objc private func rowDoubleClicked(_ sender: Any?) {
@@ -501,16 +552,19 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
 
     /// The scroll edge (window.go `ConnectEdgeReached`): the bottom asks
     /// for the next page once per arrival. Rows that do not fill the
-    /// viewport have no edge to reach: the Load More button is the way
-    /// then, as in GTK.
+    /// viewport have no edge to reach: `fillPane` asks then, also when the
+    /// pane grows.
     @objc private func clipBoundsChanged(_ note: Notification) {
         let clip = scroll.contentView
         let scrollable = table.bounds.height > clip.bounds.height
         let bottom = scrollable && clip.bounds.maxY >= table.bounds.height - 1
-        if bottom, !atBottom {
-            list.loadMore()
+        if bottom, !atBottom, loadMoreButton.isHidden {
+            requestMore()
         }
         atBottom = bottom
+        if !scrollable {
+            fillPane()
+        }
     }
 
     private func activateSelected() -> Bool {

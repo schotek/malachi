@@ -217,7 +217,7 @@ vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
 doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
-hlavní nabídky (je v menu baru), bannery jako karty se symbolem, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
