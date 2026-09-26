@@ -133,7 +133,6 @@ enum Icon {
     // Named accessors of the shell.
 
     static var newMessage: NSImage { image("mail-message-new", size: .toolbar) }
-    static var mainMenu: NSImage { image("open-menu", size: .toolbar) }
     static var refresh: NSImage { image("view-refresh", size: .toolbar) }
     static var reply: NSImage { image("mail-reply-sender", size: .toolbar) }
     static var replyAll: NSImage { image("mail-reply-all", size: .toolbar) }

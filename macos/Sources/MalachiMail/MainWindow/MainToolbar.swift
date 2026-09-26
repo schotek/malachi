@@ -14,7 +14,6 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     enum ID {
         static let toolbar = NSToolbar.Identifier("main")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
-        static let primaryMenu = NSToolbarItem.Identifier("primaryMenu")
         static let refresh = NSToolbarItem.Identifier("refresh")
         static let search = NSToolbarItem.Identifier("search")
         static let listSeparator = NSToolbarItem.Identifier("listSeparator")
@@ -36,10 +35,16 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// the list; a custom `NSTrackingSeparatorToolbarItem` on divider 0
     /// keeps the title in the sidebar section, which then cannot shrink to
     /// the sidebar. The list/message separator is a custom one on divider 1.
+    /// GTK's primary menu has no button here: its items (New Message,
+    /// Settings…, About) are in the menu bar, the Mac's main menu. New
+    /// Message opens the list section, before the folder's name: a
+    /// navigational item, which the system places ahead of the title. The
+    /// sidebar toggle sits at the sidebar section's trailing end, by the
+    /// divider it folds.
     static let defaultItems: [NSToolbarItem.Identifier] = [
-        .toggleSidebar, ID.newMessage, .flexibleSpace, ID.primaryMenu,
+        .flexibleSpace, .toggleSidebar,
         .sidebarTrackingSeparator,
-        ID.refresh, .flexibleSpace,
+        ID.newMessage, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
         ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions,
@@ -114,15 +119,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         case ID.newMessage:
             let it = button(id, image: Icon.newMessage, label: mn(L10n.T("_New Message")), action: Action.newMessage)
             it.toolTip = mn(L10n.T("_New Message")) + " (⌘N)"
-            return it
-        case ID.primaryMenu:
-            let it = NSMenuToolbarItem(itemIdentifier: id)
-            it.image = Icon.mainMenu
-            it.label = L10n.T("Main Menu")
-            it.toolTip = L10n.T("Main Menu")
-            it.showsIndicator = false
-            it.isBordered = true
-            it.menu = primaryMenu()
+            // Ahead of the window title (the folder's name), like Finder's
+            // back and forward buttons.
+            it.isNavigational = true
             return it
         case ID.listSeparator:
             guard let splitView else { return nil }
@@ -176,15 +175,6 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
 
     /// The hamburger of the folder header bar (window.blp `primary_menu`),
     /// minus Keyboard Shortcuts, which the GTK UI never implemented.
-    private func primaryMenu() -> NSMenu {
-        let m = NSMenu()
-        m.addItem(withTitle: mn(L10n.T("_New Message")), action: Action.newMessage, keyEquivalent: "")
-        m.addItem(.separator())
-        m.addItem(withTitle: "Settings…", action: Action.showPreferences, keyEquivalent: "") // macOS-only string
-        m.addItem(withTitle: mn(L10n.T("_About Malachi Mail")), action: Action.showAbout, keyEquivalent: "")
-        return m
-    }
-
     /// The More Actions menu (window.blp `message_menu_model`).
     private func messageMenu() -> NSMenu {
         let m = NSMenu()
