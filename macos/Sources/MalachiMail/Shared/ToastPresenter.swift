@@ -27,20 +27,16 @@ final class ToastPresenter: NSView, Toasts {
     private var current: Toast?
     private var dismissal: DispatchWorkItem?
 
-    private let capsule = NSVisualEffectView()
+    private let capsule: NSView
     private let label = NSTextField(labelWithString: "")
 
     init() {
+        let content = NSView()
+        content.translatesAutoresizingMaskIntoConstraints = false
+        capsule = Self.makeCapsule(content: content)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        capsule.material = .hudWindow
-        capsule.blendingMode = .withinWindow
-        capsule.state = .active
-        capsule.appearance = NSAppearance(named: .darkAqua)
-        capsule.wantsLayer = true
-        capsule.layer?.cornerRadius = Self.capsuleHeight / 2
-        capsule.layer?.masksToBounds = true
         capsule.translatesAutoresizingMaskIntoConstraints = false
         capsule.alphaValue = 0
         capsule.isHidden = true
@@ -51,7 +47,7 @@ final class ToastPresenter: NSView, Toasts {
         label.maximumNumberOfLines = 1
         label.isSelectable = false
         label.translatesAutoresizingMaskIntoConstraints = false
-        capsule.addSubview(label)
+        content.addSubview(label)
         addSubview(capsule)
 
         NSLayoutConstraint.activate([
@@ -59,9 +55,13 @@ final class ToastPresenter: NSView, Toasts {
             capsule.centerXAnchor.constraint(equalTo: centerXAnchor),
             capsule.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Self.bottomMargin),
             capsule.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -24),
-            label.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 18),
-            capsule.trailingAnchor.constraint(equalTo: label.trailingAnchor, constant: 18),
-            label.centerYAnchor.constraint(equalTo: capsule.centerYAnchor),
+            content.topAnchor.constraint(equalTo: capsule.topAnchor),
+            content.bottomAnchor.constraint(equalTo: capsule.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: capsule.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: capsule.trailingAnchor),
+            label.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 18),
+            content.trailingAnchor.constraint(equalTo: label.trailingAnchor, constant: 18),
+            label.centerYAnchor.constraint(equalTo: content.centerYAnchor),
         ])
 
         let click = NSClickGestureRecognizer(target: self, action: #selector(capsuleClicked(_:)))
@@ -71,6 +71,29 @@ final class ToastPresenter: NSView, Toasts {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
+    }
+
+    /// The capsule around `content`: Liquid Glass from macOS 26, as the
+    /// system's own floating controls over content, following the
+    /// appearance; before that a dark HUD material, the look of an
+    /// Adw.Toast.
+    private static func makeCapsule(content: NSView) -> NSView {
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = capsuleHeight / 2
+            glass.contentView = content
+            return glass
+        }
+        let hud = NSVisualEffectView()
+        hud.material = .hudWindow
+        hud.blendingMode = .withinWindow
+        hud.state = .active
+        hud.appearance = NSAppearance(named: .darkAqua)
+        hud.wantsLayer = true
+        hud.layer?.cornerRadius = capsuleHeight / 2
+        hud.layer?.masksToBounds = true
+        hud.addSubview(content)
+        return hud
     }
 
     /// Adds the presenter as the topmost subview of `container`, filling it.

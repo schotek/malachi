@@ -65,15 +65,6 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         panel.isMovableByWindowBackground = false
         panel.animationBehavior = .none
 
-        let backdrop = NSVisualEffectView()
-        backdrop.material = .popover
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
-        backdrop.wantsLayer = true
-        backdrop.layer?.cornerRadius = 8
-        backdrop.layer?.masksToBounds = true
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("suggestion"))
         column.resizingMask = .autoresizingMask
         table.addTableColumn(column)
@@ -99,7 +90,7 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         scroll.autohidesScrollers = true
         scroll.translatesAutoresizingMaskIntoConstraints = false
 
-        backdrop.addSubview(scroll)
+        let backdrop = Self.makeBackdrop(content: scroll)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: backdrop.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
@@ -108,6 +99,26 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         ])
         panel.contentView = backdrop
         field.delegate = self
+    }
+
+    /// The panel's background around `content`: Liquid Glass from macOS 26,
+    /// like the system's menus and popovers; the popover material before.
+    private static func makeBackdrop(content: NSView) -> NSView {
+        if #available(macOS 26, *) {
+            let glass = NSGlassEffectView()
+            glass.cornerRadius = 12
+            glass.contentView = content
+            return glass
+        }
+        let backdrop = NSVisualEffectView()
+        backdrop.material = .popover
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
+        backdrop.wantsLayer = true
+        backdrop.layer?.cornerRadius = 8
+        backdrop.layer?.masksToBounds = true
+        backdrop.addSubview(content)
+        return backdrop
     }
 
     /// Whether the panel is showing (the window's Escape must not close
