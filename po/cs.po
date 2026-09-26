@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-25 23:33+0200\n"
+"POT-Creation-Date: 2026-09-26 08:57+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -463,7 +463,7 @@ msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
 #: ui/internal/compose/draft.go:397 ui/internal/widget/rpc.go:183
-#: ui/internal/window/remote.go:260 ui/data/ui/account_wizard.ui:401
+#: ui/internal/window/remote.go:261 ui/data/ui/account_wizard.ui:401
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -510,8 +510,7 @@ msgstr "Datum: %s"
 msgid "Subject: %s"
 msgstr "Předmět: %s"
 
-#. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:165 ui/internal/window/message_view.go:344
+#: ui/internal/compose/prefill.go:165
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -590,7 +589,7 @@ msgstr[0] "%d zpráva"
 msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
-#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:336
+#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:330
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -1033,6 +1032,28 @@ msgstr[0] "Označení %d zprávy jako nevyžádané"
 msgstr[1] "Označení %d zpráv jako nevyžádaných"
 msgstr[2] "Označení %d zpráv jako nevyžádaných"
 
+#: ui/internal/window/addresses.go:150
+msgid "Address copied"
+msgstr "Adresa zkopírována"
+
+#: ui/internal/window/addresses.go:177
+msgid "_Copy Address"
+msgstr "_Kopírovat adresu"
+
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:736
+msgid "_New Message"
+msgstr "_Nová zpráva"
+
+#. TRANSLATORS: the chip after the first few recipients of a message;
+#. %d is how many more there are. Clicking it lists them all.
+#: ui/internal/window/addresses.go:221
+#, c-format
+msgid "+%d more"
+msgid_plural "+%d more"
+msgstr[0] "+%d další"
+msgstr[1] "+%d další"
+msgstr[2] "+%d dalších"
+
 #: ui/internal/window/attachments.go:72
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
@@ -1069,11 +1090,11 @@ msgstr "Uložit _vše"
 msgid "This message has not been downloaded yet."
 msgstr "Tato zpráva ještě nebyla stažena."
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:362
+#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:342
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:364
+#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:344
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
@@ -1156,7 +1177,7 @@ msgstr "Otevírání přiložené zprávy"
 msgid "Attached to “%s”"
 msgstr "Přiloženo ke zprávě „%s“"
 
-#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:139
+#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:140
 msgid "Loading the images"
 msgstr "Načtení obrázků"
 
@@ -1259,7 +1280,7 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:147
+#: ui/internal/window/message_view.go:148
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -1267,22 +1288,16 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/message_view.go:271
+#: ui/internal/window/message_view.go:265
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
-#. TRANSLATORS: message header line; %s is a list of recipients.
+#: ui/internal/window/message_view.go:336
 #: ui/internal/window/message_view.go:348
-#, c-format
-msgid "Cc: %s"
-msgstr "Kopie: %s"
-
-#: ui/internal/window/message_view.go:356
-#: ui/internal/window/message_view.go:368
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:360
+#: ui/internal/window/message_view.go:340
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -1448,12 +1463,12 @@ msgstr "Most MCP se nepodařilo zaregistrovat: %s"
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr "Most MCP se nepodařilo odregistrovat: %s"
 
-#: ui/internal/window/remote.go:66
+#: ui/internal/window/remote.go:67
 msgid "Loading remote images…"
 msgstr "Načítají se vzdálené obrázky…"
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:69
+#: ui/internal/window/remote.go:70
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
@@ -1461,25 +1476,25 @@ msgstr[0] "%d vzdálený obrázek byl blokován"
 msgstr[1] "%d vzdálené obrázky byly blokovány"
 msgstr[2] "%d vzdálených obrázků bylo blokováno"
 
-#: ui/internal/window/remote.go:201
+#: ui/internal/window/remote.go:202
 msgid "Trusting the sender"
 msgstr "Přidání odesílatele mezi známé"
 
-#: ui/internal/window/remote.go:224
+#: ui/internal/window/remote.go:225
 msgid "Changing the remote content preference"
 msgstr "Změna předvolby vzdáleného obsahu"
 
-#: ui/internal/window/remote.go:255
+#: ui/internal/window/remote.go:256
 msgid "Open This Link?"
 msgstr "Otevřít tento odkaz?"
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:257
+#: ui/internal/window/remote.go:258
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr "Odkaz se zobrazuje jako „%s“, ale vede na %s."
 
-#: ui/internal/window/remote.go:261
+#: ui/internal/window/remote.go:262
 msgid "_Open Link"
 msgstr "_Otevřít odkaz"
 
@@ -1871,11 +1886,13 @@ msgstr "_Odeslat"
 msgid "Draft Menu"
 msgstr "Nabídka konceptu"
 
-#: ui/data/ui/compose.ui:105
+#: ui/data/ui/compose.ui:105 ui/data/ui/embedded_window.ui:104
+#: ui/data/ui/message_window.ui:160 ui/data/ui/window.ui:534
 msgid "From"
 msgstr "Od"
 
-#: ui/data/ui/compose.ui:133
+#: ui/data/ui/compose.ui:133 ui/data/ui/embedded_window.ui:130
+#: ui/data/ui/message_window.ui:186 ui/data/ui/window.ui:560
 msgid "To"
 msgstr "Komu"
 
@@ -1883,7 +1900,8 @@ msgstr "Komu"
 msgid "Cc/Bcc"
 msgstr "Kopie/Skrytá"
 
-#: ui/data/ui/compose.ui:171
+#: ui/data/ui/compose.ui:171 ui/data/ui/embedded_window.ui:158
+#: ui/data/ui/message_window.ui:214 ui/data/ui/window.ui:588
 msgid "Cc"
 msgstr "Kopie"
 
@@ -1984,13 +2002,13 @@ msgid "Attached Message"
 msgstr "Přiložená zpráva"
 
 #: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:115
-#: ui/data/ui/message_window.ui:294 ui/data/ui/window.ui:447
-#: ui/data/ui/window.ui:701
+#: ui/data/ui/message_window.ui:361 ui/data/ui/window.ui:447
+#: ui/data/ui/window.ui:768
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/data/ui/embedded_window.ui:200 ui/data/ui/message_window.ui:256
-#: ui/data/ui/window.ui:629
+#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:323
+#: ui/data/ui/window.ui:696
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -2027,15 +2045,15 @@ msgstr "Vždy od tohoto _odesílatele"
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
-#: ui/data/ui/message_window.ui:284 ui/data/ui/window.ui:691
+#: ui/data/ui/message_window.ui:351 ui/data/ui/window.ui:758
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/data/ui/message_window.ui:288 ui/data/ui/window.ui:695
+#: ui/data/ui/message_window.ui:355 ui/data/ui/window.ui:762
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/data/ui/message_window.ui:298 ui/data/ui/window.ui:705
+#: ui/data/ui/message_window.ui:365 ui/data/ui/window.ui:772
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -2370,19 +2388,15 @@ msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:669
-msgid "_New Message"
-msgstr "_Nová zpráva"
-
-#: ui/data/ui/window.ui:675
+#: ui/data/ui/window.ui:742
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:679
+#: ui/data/ui/window.ui:746
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:683
+#: ui/data/ui/window.ui:750
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 
@@ -2528,6 +2542,10 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
+
+#, c-format
+#~ msgid "Cc: %s"
+#~ msgstr "Kopie: %s"
 
 #, c-format
 #~ msgid "Sign in to %s again"

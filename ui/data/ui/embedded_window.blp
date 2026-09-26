@@ -96,26 +96,96 @@ Adw.Window embedded_window {
               ]
             }
 
-            Label message_from {
-              xalign: 0;
-              wrap: true;
-              selectable: true;
+            // Sender and recipients as chips, built from Go
+            // (window/addresses.go); a row without addresses is hidden.
+            Grid message_addresses {
+              column-spacing: 12;
+              row-spacing: 6;
 
-              styles [
-                "dim-label",
-              ]
-            }
+              Label message_from_label {
+                label: _("From");
+                xalign: 0;
+                valign: start;
 
-            // To / Cc line; hidden without recipients.
-            Label message_recipients {
-              xalign: 0;
-              wrap: true;
-              selectable: true;
-              visible: false;
+                layout {
+                  column: 0;
+                  row: 0;
+                }
 
-              styles [
-                "dim-label",
-              ]
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_from {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+
+                layout {
+                  column: 1;
+                  row: 0;
+                }
+              }
+
+              Label message_to_label {
+                label: _("To");
+                xalign: 0;
+                valign: start;
+                visible: false;
+
+                layout {
+                  column: 0;
+                  row: 1;
+                }
+
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_to {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+                visible: false;
+
+                layout {
+                  column: 1;
+                  row: 1;
+                }
+              }
+
+              Label message_cc_label {
+                label: _("Cc");
+                xalign: 0;
+                valign: start;
+                visible: false;
+
+                layout {
+                  column: 0;
+                  row: 2;
+                }
+
+                styles [
+                  "dim-label",
+                  "address-label",
+                ]
+              }
+
+              Adw.WrapBox message_cc {
+                child-spacing: 4;
+                line-spacing: 4;
+                hexpand: true;
+                visible: false;
+
+                layout {
+                  column: 1;
+                  row: 2;
+                }
+              }
             }
 
             Label message_date {

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-25 23:33+0200\n"
+"POT-Creation-Date: 2026-09-26 08:57+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -445,7 +445,7 @@ msgid "Save changes to this draft?"
 msgstr ""
 
 #: ui/internal/compose/draft.go:397 ui/internal/widget/rpc.go:183
-#: ui/internal/window/remote.go:260 ui/data/ui/account_wizard.ui:401
+#: ui/internal/window/remote.go:261 ui/data/ui/account_wizard.ui:401
 msgid "_Cancel"
 msgstr ""
 
@@ -491,8 +491,7 @@ msgstr ""
 msgid "Subject: %s"
 msgstr ""
 
-#. TRANSLATORS: message header line; %s is a list of recipients.
-#: ui/internal/compose/prefill.go:165 ui/internal/window/message_view.go:344
+#: ui/internal/compose/prefill.go:165
 #, c-format
 msgid "To: %s"
 msgstr ""
@@ -570,7 +569,7 @@ msgid_plural "%d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:336
+#: ui/internal/widget/message_row.go:180 ui/internal/window/message_view.go:330
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr ""
@@ -999,6 +998,27 @@ msgid_plural "Marking %d messages as junk"
 msgstr[0] ""
 msgstr[1] ""
 
+#: ui/internal/window/addresses.go:150
+msgid "Address copied"
+msgstr ""
+
+#: ui/internal/window/addresses.go:177
+msgid "_Copy Address"
+msgstr ""
+
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:736
+msgid "_New Message"
+msgstr ""
+
+#. TRANSLATORS: the chip after the first few recipients of a message;
+#. %d is how many more there are. Clicking it lists them all.
+#: ui/internal/window/addresses.go:221
+#, c-format
+msgid "+%d more"
+msgid_plural "+%d more"
+msgstr[0] ""
+msgstr[1] ""
+
 #: ui/internal/window/attachments.go:72
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
@@ -1034,11 +1054,11 @@ msgstr ""
 msgid "This message has not been downloaded yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:362
+#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:342
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:364
+#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:344
 msgid "This message could not be read."
 msgstr ""
 
@@ -1119,7 +1139,7 @@ msgstr ""
 msgid "Attached to “%s”"
 msgstr ""
 
-#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:139
+#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:140
 msgid "Loading the images"
 msgstr ""
 
@@ -1221,28 +1241,22 @@ msgstr ""
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
-#: ui/internal/window/message_view.go:147
+#: ui/internal/window/message_view.go:148
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
 msgstr ""
 
-#: ui/internal/window/message_view.go:271
+#: ui/internal/window/message_view.go:265
 msgid "Loading the message"
 msgstr ""
 
-#. TRANSLATORS: message header line; %s is a list of recipients.
+#: ui/internal/window/message_view.go:336
 #: ui/internal/window/message_view.go:348
-#, c-format
-msgid "Cc: %s"
-msgstr ""
-
-#: ui/internal/window/message_view.go:356
-#: ui/internal/window/message_view.go:368
 msgid "(Empty message)"
 msgstr ""
 
-#: ui/internal/window/message_view.go:360
+#: ui/internal/window/message_view.go:340
 msgid "Downloading…"
 msgstr ""
 
@@ -1406,37 +1420,37 @@ msgstr ""
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
 
-#: ui/internal/window/remote.go:66
+#: ui/internal/window/remote.go:67
 msgid "Loading remote images…"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:69
+#: ui/internal/window/remote.go:70
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/remote.go:201
+#: ui/internal/window/remote.go:202
 msgid "Trusting the sender"
 msgstr ""
 
-#: ui/internal/window/remote.go:224
+#: ui/internal/window/remote.go:225
 msgid "Changing the remote content preference"
 msgstr ""
 
-#: ui/internal/window/remote.go:255
+#: ui/internal/window/remote.go:256
 msgid "Open This Link?"
 msgstr ""
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:257
+#: ui/internal/window/remote.go:258
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr ""
 
-#: ui/internal/window/remote.go:261
+#: ui/internal/window/remote.go:262
 msgid "_Open Link"
 msgstr ""
 
@@ -1822,11 +1836,13 @@ msgstr ""
 msgid "Draft Menu"
 msgstr ""
 
-#: ui/data/ui/compose.ui:105
+#: ui/data/ui/compose.ui:105 ui/data/ui/embedded_window.ui:104
+#: ui/data/ui/message_window.ui:160 ui/data/ui/window.ui:534
 msgid "From"
 msgstr ""
 
-#: ui/data/ui/compose.ui:133
+#: ui/data/ui/compose.ui:133 ui/data/ui/embedded_window.ui:130
+#: ui/data/ui/message_window.ui:186 ui/data/ui/window.ui:560
 msgid "To"
 msgstr ""
 
@@ -1834,7 +1850,8 @@ msgstr ""
 msgid "Cc/Bcc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:171
+#: ui/data/ui/compose.ui:171 ui/data/ui/embedded_window.ui:158
+#: ui/data/ui/message_window.ui:214 ui/data/ui/window.ui:588
 msgid "Cc"
 msgstr ""
 
@@ -1935,13 +1952,13 @@ msgid "Attached Message"
 msgstr ""
 
 #: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:115
-#: ui/data/ui/message_window.ui:294 ui/data/ui/window.ui:447
-#: ui/data/ui/window.ui:701
+#: ui/data/ui/message_window.ui:361 ui/data/ui/window.ui:447
+#: ui/data/ui/window.ui:768
 msgid "Load _Images"
 msgstr ""
 
-#: ui/data/ui/embedded_window.ui:200 ui/data/ui/message_window.ui:256
-#: ui/data/ui/window.ui:629
+#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:323
+#: ui/data/ui/window.ui:696
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -1978,15 +1995,15 @@ msgstr ""
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:284 ui/data/ui/window.ui:691
+#: ui/data/ui/message_window.ui:351 ui/data/ui/window.ui:758
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:288 ui/data/ui/window.ui:695
+#: ui/data/ui/message_window.ui:355 ui/data/ui/window.ui:762
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:298 ui/data/ui/window.ui:705
+#: ui/data/ui/message_window.ui:365 ui/data/ui/window.ui:772
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -2316,19 +2333,15 @@ msgstr ""
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:669
-msgid "_New Message"
-msgstr ""
-
-#: ui/data/ui/window.ui:675
+#: ui/data/ui/window.ui:742
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:679
+#: ui/data/ui/window.ui:746
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:683
+#: ui/data/ui/window.ui:750
 msgid "_About Malachi Mail"
 msgstr ""
 

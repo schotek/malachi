@@ -4,14 +4,14 @@
 import AppKit
 import MalachiCore
 
-/// The headers above the body (window.blp lines 465–539): subject, sender,
-/// recipients, date, the attachment chips, the hint that only the plain
-/// text is shown, and a separator. Everything is server data shown as plain
-/// text; the labels are selectable but never take the focus by themselves
-/// (a focused selectable label selects all of its text, see
-/// message_window.blp), and they select through `PlainFieldEditor`, so
-/// the selection can be copied and nothing else (no Look Up, Services or
-/// Share on a sender's name or a subject).
+/// The headers above the body (window.blp lines 465–539): subject, the
+/// sender and recipient chips (`AddressHeaderView`), date, the attachment
+/// chips, the hint that only the plain text is shown, and a separator.
+/// Everything is server data shown as plain text; the labels are
+/// selectable but never take the focus by themselves (a focused selectable
+/// label selects all of its text, see message_window.blp), and they select
+/// through `PlainFieldEditor`, so the selection can be copied and nothing
+/// else (no Look Up, Services or Share on a sender's name or a subject).
 @MainActor
 final class MessageHeaderView: NSView {
     static let spacing: CGFloat = 12
@@ -22,19 +22,8 @@ final class MessageHeaderView: NSView {
         set { subjectLabel.stringValue = newValue }
     }
 
-    var from: String {
-        get { fromLabel.stringValue }
-        set { fromLabel.stringValue = newValue }
-    }
-
-    /// The To / Cc block; hidden when empty.
-    var recipients: String {
-        get { recipientsLabel.stringValue }
-        set {
-            recipientsLabel.stringValue = newValue
-            recipientsLabel.isHidden = newValue.isEmpty
-        }
-    }
+    /// The From, To and Cc rows (`message_addresses`).
+    let addresses = AddressHeaderView()
 
     var date: String {
         get { dateLabel.stringValue }
@@ -56,8 +45,6 @@ final class MessageHeaderView: NSView {
     }
 
     private let subjectLabel = PlainLabel(wrappingLabelWithString: "")
-    private let fromLabel = PlainLabel(wrappingLabelWithString: "")
-    private let recipientsLabel = PlainLabel(wrappingLabelWithString: "")
     private let dateLabel = PlainLabel(labelWithString: "")
     private let hintLabel = PlainLabel(wrappingLabelWithString: "")
 
@@ -65,7 +52,7 @@ final class MessageHeaderView: NSView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        for l in [subjectLabel, fromLabel, recipientsLabel, hintLabel] {
+        for l in [subjectLabel, hintLabel] {
             l.isSelectable = true
             l.isEditable = false
             l.allowsEditingTextAttributes = false
@@ -75,11 +62,6 @@ final class MessageHeaderView: NSView {
             l.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
         subjectLabel.font = Typo.title2Bold
-        fromLabel.font = Typo.body
-        fromLabel.textColor = Tint.secondary
-        recipientsLabel.font = Typo.body
-        recipientsLabel.textColor = Tint.secondary
-        recipientsLabel.isHidden = true
         dateLabel.font = Typo.caption
         dateLabel.textColor = Tint.secondary
         dateLabel.isSelectable = false
@@ -96,7 +78,7 @@ final class MessageHeaderView: NSView {
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = FillStackView(fillingViews: [subjectLabel, fromLabel, recipientsLabel, dateLabel, chips, hintLabel, separator])
+        let stack = FillStackView(fillingViews: [subjectLabel, addresses, dateLabel, chips, hintLabel, separator])
         stack.spacing = Self.spacing
         // GTK keeps 24 above the subject (window.blp `margin-top: 24`) and
         // the row spacing below the date; here the top matches the bottom

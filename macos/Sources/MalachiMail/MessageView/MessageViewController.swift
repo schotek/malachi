@@ -181,6 +181,10 @@ final class MessageViewController: NSViewController {
             self.delegate?.editDraft(id)
         }
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
+        header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
+        header.addresses.onWrite = { [weak self] address, account in
+            self?.delegate?.newMessage(to: address, account: account)
+        }
         remoteBar.onTrust = { [weak self] in
             guard let self, let id = self.current?.id else { return }
             self.delegate?.trustSender(id)
@@ -341,8 +345,7 @@ final class MessageViewController: NSViewController {
             subject = m.summary.subject
         }
         header.subject = subjectText(subject)
-        header.from = from.first.map(formatAddress) ?? ""
-        header.recipients = recipientsText(to: to, cc: cc)
+        header.addresses.show(s.id, account: s.accountId, from: from, to: to, cc: cc)
         header.date = date.isGoZero ? "" : formatDateTime(date)
     }
 
@@ -543,6 +546,19 @@ final class MessageViewController: NSViewController {
     /// resolved URL instead, which the delegate then treats as unlisted.
     private func openLink(_ link: ActivatedLink) {
         delegate?.openLink(link.href, links: links, from: view.window)
+    }
+
+    // MARK: Address chips
+
+    /// A chip's Copy Address (addresses.go `chip`): the bare address on
+    /// the general pasteboard, and a toast that says so.
+    private func copyAddress(_ a: Address) {
+        let addr = a.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !addr.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(addr, forType: .string)
+        windowToast(L10n.T("Address copied"), in: view.window, or: state.toasts)
     }
 
     // MARK: Attachment chips

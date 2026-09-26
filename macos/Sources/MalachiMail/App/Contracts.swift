@@ -119,6 +119,9 @@ protocol MessageActionDelegate: AnyObject {
     /// remote.go `openLink`: allow-list, mailto → compose, masked-link
     /// alert on `window`, then the browser.
     func openLink(_ href: String, links: [Link], from window: NSWindow?)
+    /// addresses.go: an address chip's New Message, written from
+    /// `account` (that of the message the chip sits on).
+    func newMessage(to address: Address, account: AccountID)
     /// attachments.go: Open (never for executables), Save As…, Save All.
     func openAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)
     func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)

@@ -290,6 +290,13 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         open(params)
     }
 
+    /// An address chip's New Message (addresses.go `chip`): a new message
+    /// to that address, from the account of the message it sits on.
+    func newMessage(to address: Address, account: AccountID) {
+        guard let open = state.hooks.openCompose else { return }
+        open(ComposeParams(kind: .new, accountID: account, to: [address]))
+    }
+
     /// Opens `href` with the desktop's handler (remote.go `launchURI`).
     private func launch(_ href: String, from window: NSWindow?) {
         guard let url = URL(string: href) else {

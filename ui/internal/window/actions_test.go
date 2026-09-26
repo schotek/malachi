@@ -23,22 +23,6 @@ func TestSubjectText(t *testing.T) {
 	}
 }
 
-func TestRecipientsText(t *testing.T) {
-	to := []api.Address{{Name: "A", Address: "a@example.invalid"}, {Address: "b@example.invalid"}}
-	cc := []api.Address{{Name: "C, Inc", Address: "c@example.invalid"}}
-	got := recipientsText(to, cc)
-	want := "To: A <a@example.invalid>, b@example.invalid\nCc: \"C, Inc\" <c@example.invalid>"
-	if got != want {
-		t.Errorf("recipientsText:\n got %q\nwant %q", got, want)
-	}
-	if got := recipientsText(nil, nil); got != "" {
-		t.Errorf("no recipients: got %q", got)
-	}
-	if got := recipientsText(nil, cc); !strings.HasPrefix(got, "Cc: ") || strings.Contains(got, "\n") {
-		t.Errorf("cc only: got %q", got)
-	}
-}
-
 func TestBodyText(t *testing.T) {
 	tests := []struct {
 		name string

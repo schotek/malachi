@@ -27,17 +27,6 @@ private func body(
         #expect(subjectText(" \t") == "(No subject)")
     }
 
-    @Test func recipientsTextTest() {
-        let to = [Address(name: "A", address: "a@example.invalid"), Address(address: "b@example.invalid")]
-        let cc = [Address(name: "C, Inc", address: "c@example.invalid")]
-        let got = recipientsText(to: to, cc: cc)
-        #expect(got == "To: A <a@example.invalid>, b@example.invalid\nCc: \"C, Inc\" <c@example.invalid>")
-        #expect(recipientsText(to: nil, cc: nil) == "")
-        let ccOnly = recipientsText(to: nil, cc: cc)
-        #expect(ccOnly.hasPrefix("Cc: "))
-        #expect(!ccOnly.contains("\n"))
-    }
-
     @Test func bodyTextTest() {
         let cases: [(String, MessageBodyResult?, String)] = [
             ("nil", nil, "(Empty message)"),

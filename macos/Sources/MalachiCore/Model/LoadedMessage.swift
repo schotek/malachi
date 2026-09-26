@@ -142,21 +142,6 @@ public func subjectText(_ subject: String) -> String {
     return L10n.T("(No subject)")
 }
 
-/// The To / Cc block, one line each, empty without any (message_view.go
-/// `recipientsText`).
-public func recipientsText(to: [Address]?, cc: [Address]?) -> String {
-    var lines: [String] = []
-    if let to, !to.isEmpty {
-        // TRANSLATORS: message header line; %s is a list of recipients.
-        lines.append(L10n.T("To: %s", AddressList.format(to)))
-    }
-    if let cc, !cc.isEmpty {
-        // TRANSLATORS: message header line; %s is a list of recipients.
-        lines.append(L10n.T("Cc: %s", AddressList.format(cc)))
-    }
-    return lines.joined(separator: "\n")
-}
-
 /// What the body label shows for a message.body result (message_view.go
 /// `bodyText`).
 public func bodyText(_ b: MessageBodyResult?) -> String {

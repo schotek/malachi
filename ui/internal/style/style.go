@@ -130,6 +130,20 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
 	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
 	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
+	// Sender and recipients above a message (window/addresses.go): pills on
+	// a faint tint, a size down and without the bold weight Adwaita gives
+	// buttons, since a row of bold names reads as shouting. "+N more" is a
+	// flat pill that only tints under the pointer. The row labels share the
+	// chips' height, so From, To and Cc sit level with the first line of
+	// chips however many lines follow.
+	b.WriteString("menubutton.address-chip > button, button.address-more { min-height: 24px; padding: 0 10px; border-radius: 99px; font-weight: normal; font-size: 90%; }\n")
+	b.WriteString("menubutton.address-chip > button { background-color: alpha(@window_fg_color, 0.07); }\n")
+	b.WriteString("menubutton.address-chip > button:hover { background-color: alpha(@window_fg_color, 0.12); }\n")
+	b.WriteString("menubutton.address-chip > button:active, menubutton.address-chip > button:checked { background-color: alpha(@window_fg_color, 0.18); }\n")
+	b.WriteString("button.address-more { color: alpha(@window_fg_color, 0.7); }\n")
+	b.WriteString("label.address-label { min-height: 24px; font-size: 90%; }\n")
+	// The name and address on top of a chip's menu, inset like its items.
+	b.WriteString("box.address-card { padding: 6px 12px; }\n")
 	// The All / Unread / Flagged switch above the message list: it is a
 	// filter, not the column's heading, so it stays out of the way. The
 	// toggles lose the height and the roomy padding a stand-alone button

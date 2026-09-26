@@ -5,7 +5,6 @@ package window
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -13,7 +12,6 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
-	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -88,11 +86,14 @@ type messageView struct {
 	win    *Window
 	parent *gtk.Window // for dialogs the view opens
 
-	subject, from, recipients, date, body *gtk.Label
-	hint                                  *gtk.Label // why only text is shown
-	stack                                 *gtk.Stack // "text" | "loading" | "html"
-	slot                                  *gtk.Box   // hosts html
-	html                                  *htmlview.View
+	subject, date, body *gtk.Label
+	hint                *gtk.Label // why only text is shown
+	stack               *gtk.Stack // "text" | "loading" | "html"
+	slot                *gtk.Box   // hosts html
+	html                *htmlview.View
+
+	// The From, To and Cc chips (addresses.go).
+	addresses *addressHeader
 
 	// The attachment chips (attachments.go) and what is in the box now.
 	attachments *adw.WrapBox
@@ -123,14 +124,13 @@ type messageView struct {
 }
 
 // newMessageView binds the widgets of one message display from a builder;
-// the object IDs are the same in window.blp and message_window.blp.
+// the object IDs are the same in window.blp, message_window.blp and
+// embedded_window.blp.
 func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView {
 	v := &messageView{
 		win:         w,
 		parent:      parent,
 		subject:     b.GetObject("message_subject").Cast().(*gtk.Label),
-		from:        b.GetObject("message_from").Cast().(*gtk.Label),
-		recipients:  b.GetObject("message_recipients").Cast().(*gtk.Label),
 		date:        b.GetObject("message_date").Cast().(*gtk.Label),
 		attachments: b.GetObject("message_attachments").Cast().(*adw.WrapBox),
 		body:        b.GetObject("message_body").Cast().(*gtk.Label),
@@ -143,6 +143,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		loadButton:  b.GetObject("remote_load").Cast().(*gtk.Button),
 		trustButton: b.GetObject("remote_trust").Cast().(*gtk.Button),
 	}
+	v.addresses = newAddressHeader(v, b)
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
 	load, trust := v.loadButton, v.trustButton
@@ -198,7 +199,7 @@ func (w *Window) paneLabels() *messageView { return w.pane }
 
 // plain switches markup off on every label (CLAUDE.md rule 3).
 func (v *messageView) plain() {
-	for _, lb := range []*gtk.Label{v.subject, v.from, v.recipients, v.date, v.body, v.hint, v.barLabel} {
+	for _, lb := range []*gtk.Label{v.subject, v.date, v.body, v.hint, v.barLabel} {
 		lb.SetUseMarkup(false)
 	}
 }
@@ -242,14 +243,7 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 		s.Subject = m.Subject
 	}
 	v.subject.SetLabel(subjectText(s.Subject))
-	var first api.Address
-	if len(from) > 0 {
-		first = from[0]
-	}
-	v.from.SetLabel(widget.FormatAddress(first))
-	r := recipientsText(to, cc)
-	v.recipients.SetLabel(r)
-	v.recipients.SetVisible(r != "")
+	v.addresses.show(s.ID, s.AccountID, from, to, cc)
 	if date.IsZero() {
 		v.date.SetLabel("")
 	} else {
@@ -334,20 +328,6 @@ func subjectText(subject string) string {
 		return s
 	}
 	return i18n.T("(No subject)")
-}
-
-// recipientsText is the To / Cc block, one line each, empty without any.
-func recipientsText(to, cc []api.Address) string {
-	var lines []string
-	if len(to) > 0 {
-		// TRANSLATORS: message header line; %s is a list of recipients.
-		lines = append(lines, fmt.Sprintf(i18n.T("To: %s"), compose.FormatAddressList(to)))
-	}
-	if len(cc) > 0 {
-		// TRANSLATORS: message header line; %s is a list of recipients.
-		lines = append(lines, fmt.Sprintf(i18n.T("Cc: %s"), compose.FormatAddressList(cc)))
-	}
-	return strings.Join(lines, "\n")
 }
 
 // bodyText is what the body label shows for a message.body result.
