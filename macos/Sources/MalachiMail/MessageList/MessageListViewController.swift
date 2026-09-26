@@ -5,9 +5,9 @@ import AppKit
 import MalachiCore
 
 /// The message list pane (window.blp lines 151–301): the backend and
-/// sign-in banners, the All / Unread / Flagged filter, the table of rows
-/// with its Load More footer, and the status page that replaces the rows
-/// while there are none.
+/// sign-in banners, the table of rows with its Load More footer, and the
+/// status page that replaces the rows while there are none. The All /
+/// Unread / Flagged filter is a toolbar menu, as in Mail (MainToolbar).
 ///
 /// The list controller owns every decision; this view mirrors its rows by
 /// key (`apply(rows:hint:)`) and sends the clicks and keys back. It
@@ -52,7 +52,6 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         title: "", buttonTitle: mn(L10n.T("_Edit Account…")),
         symbol: "lock.trianglebadge.exclamationmark", severity: .warning
     )
-    private let filter = NSSegmentedControl()
     private let scroll = NSScrollView()
     private let table = MessageListTableView()
     private let messagesPage = FillStackView()
@@ -80,8 +79,6 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// the answer; nil when no request is open.
     private var requestedAt: Int?
 
-    static let filterWidth: CGFloat = 72
-    static let filterMargin: CGFloat = 4
     static let loadMoreSpacing: CGFloat = 6
     static let loadMoreMargin: CGFloat = 6
 
@@ -106,40 +103,6 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         backendBanner.onButton = { [weak self] in self?.connection.reconnectNow() }
         authBanner.onButton = { [weak self] in self?.onAuthBannerButton?() }
         certBanner.onButton = { [weak self] in self?.onCertBannerButton?() }
-
-        // The filter: three short words, small and regular, centred
-        // (style.go `toggle-group.message-filter`).
-        filter.segmentCount = 3
-        filter.setLabel(L10n.T("All"), forSegment: 0)
-        // TRANSLATORS: a filter over the message list, not an action: show
-        // only the messages that are unread.
-        filter.setLabel(L10n.T("Unread"), forSegment: 1)
-        // TRANSLATORS: a filter over the message list, not an action: show
-        // only the messages carrying the flagged (starred, follow-up) mark.
-        filter.setLabel(L10n.T("Flagged"), forSegment: 2)
-        for i in 0..<3 {
-            filter.setWidth(Self.filterWidth, forSegment: i)
-        }
-        filter.trackingMode = .selectOne
-        filter.segmentStyle = .rounded
-        filter.controlSize = .small
-        filter.font = Typo.filter
-        filter.selectedSegment = 0
-        filter.target = self
-        filter.action = #selector(filterChanged(_:))
-        filter.translatesAutoresizingMaskIntoConstraints = false
-        // The same background as the list below it (window.blp puts the
-        // filter inside the list's `view` styled box), not the window's.
-        let filterBar = ContentBackgroundView()
-        filterBar.translatesAutoresizingMaskIntoConstraints = false
-        filterBar.addSubview(filter)
-        NSLayoutConstraint.activate([
-            filter.centerXAnchor.constraint(equalTo: filterBar.centerXAnchor),
-            filter.topAnchor.constraint(equalTo: filterBar.topAnchor, constant: Self.filterMargin),
-            filterBar.bottomAnchor.constraint(equalTo: filter.bottomAnchor, constant: Self.filterMargin),
-            filter.leadingAnchor.constraint(greaterThanOrEqualTo: filterBar.leadingAnchor, constant: Self.filterMargin),
-            filterBar.trailingAnchor.constraint(greaterThanOrEqualTo: filter.trailingAnchor, constant: Self.filterMargin),
-        ])
 
         // The table (window.blp `message_list`).
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("message"))
@@ -223,10 +186,10 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             statusPage.trailingAnchor.constraint(equalTo: pages.trailingAnchor),
         ])
 
-        let root = FillStackView(fillingViews: [backendBanner, authBanner, certBanner, filterBar, pages])
+        let root = FillStackView(fillingViews: [backendBanner, authBanner, certBanner, pages])
         root.spacing = 0
-        // Below the unified toolbar (fullSizeContentView): the banners and
-        // the filter bar must not run under it; the scroll view alone
+        // Below the unified toolbar (fullSizeContentView): the banners
+        // must not run under it; the scroll view alone
         // would inset itself. The whole column is painted like the list
         // (window.blp: the list pane is a `view` styled box), status pages
         // included.
@@ -523,16 +486,6 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     // MARK: Actions
-
-    @objc private func filterChanged(_ sender: Any?) {
-        let f: MessageFilter
-        switch filter.selectedSegment {
-        case 1: f = .unread
-        case 2: f = .flagged
-        default: f = .all
-        }
-        list.setListFilter(f)
-    }
 
     @objc private func retryClicked(_ sender: Any?) {
         list.retry()

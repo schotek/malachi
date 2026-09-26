@@ -25,8 +25,6 @@ enum Typo {
     }
     /// The name in an attachment chip (90 %).
     static var chip: NSFont { .systemFont(ofSize: 11.5) }
-    /// The All / Unread / Flagged filter (90 %, regular weight).
-    static var filter: NSFont { .systemFont(ofSize: 11) }
 
     /// The plain-text body of a message at the text-zoom setting, in the
     /// monospaced face when the user asked for it (`.message-body`).

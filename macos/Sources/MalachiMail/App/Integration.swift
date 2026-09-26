@@ -326,6 +326,12 @@ final class Integration {
         state.hooks.checkForNewMail = { [weak self] in
             self?.mailbox.triggerSync()
         }
+        state.hooks.setMessageFilter = { [weak self] f in
+            self?.list.setListFilter(f)
+        }
+        state.hooks.messageFilter = { [weak self] in
+            self?.list.listFilter ?? .all
+        }
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
             PreferencesWindowController.show(

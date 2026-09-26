@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import MalachiCore
 
 /// The application's own actions, as selectors on the responder chain. The
 /// menu bar and the toolbars send them with a nil target; whichever
@@ -26,6 +27,8 @@ import AppKit
 
     // Main window (window/actions.go `registerActions`).
     @objc optional func checkForNewMail(_ sender: Any?)
+    /// The list's filter; the sender's tag is the filter (FilterTag).
+    @objc optional func setMessageFilter(_ sender: Any?)
     @objc optional func toggleMessageList(_ sender: Any?)
     @objc optional func reply(_ sender: Any?)
     @objc optional func replyAll(_ sender: Any?)
@@ -68,6 +71,7 @@ import AppKit
 /// `validateUserInterfaceItem` switches.
 enum Action {
     static let newMessage = #selector(MalachiActions.newMessage(_:))
+    static let setMessageFilter = #selector(MalachiActions.setMessageFilter(_:))
     static let addAccount = #selector(MalachiActions.addAccount(_:))
     static let showPreferences = #selector(MalachiActions.showPreferences(_:))
     static let showAbout = #selector(MalachiActions.showAbout(_:))
@@ -146,4 +150,28 @@ func mn(_ s: String) -> String {
         i = next
     }
     return out
+}
+
+/// The message list's filters as menu items (window.blp `message_filter`,
+/// in the Mac's form: a toolbar menu and the View menu, as in Mail). An
+/// item's tag is the filter's index; validation checks the current one.
+@MainActor
+enum FilterMenu {
+    static let filters: [MessageFilter] = [.all, .unread, .flagged]
+
+    static func tag(_ f: MessageFilter) -> Int { filters.firstIndex(of: f) ?? 0 }
+
+    static func filter(tag: Int) -> MessageFilter { filters.indices.contains(tag) ? filters[tag] : .all }
+
+    /// All, Unread, Flagged, sent through the responder chain.
+    static func items() -> [NSMenuItem] {
+        // Unread and Flagged are filters, not actions: show only the
+        // unread messages, only the flagged ones (the GTK msgids' notes).
+        let titles = [L10n.T("All"), L10n.T("Unread"), L10n.T("Flagged")]
+        return titles.enumerated().map { i, title in
+            let item = NSMenuItem(title: title, action: Action.setMessageFilter, keyEquivalent: "")
+            item.tag = i
+            return item
+        }
+    }
 }

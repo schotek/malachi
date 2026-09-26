@@ -258,6 +258,9 @@ public final class ListController {
     /// the rows and the cursor of the previous filter are dropped and the
     /// folder is paged again from the start. A no-op on an unchanged
     /// filter, as the toggle group also fires for its own write-back.
+    /// The filter the list shows (All until changed; not persisted).
+    public var listFilter: MessageFilter { mailbox.model.listFilter }
+
     public func setListFilter(_ filter: MessageFilter) {
         var f = filter
         if f.rawValue.isEmpty {

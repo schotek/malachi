@@ -25,6 +25,9 @@ final class AppState {
         var openMailto: (@MainActor (URL) -> Void)?
         /// Asks the daemon to synchronise now (`win.refresh`).
         var checkForNewMail: (@MainActor () -> Void)?
+        /// The message list's filter (window.go `message_filter`): set and read.
+        var setMessageFilter: (@MainActor (MessageFilter) -> Void)?
+        var messageFilter: (@MainActor () -> MessageFilter)?
         /// Opens a compose window prepared by the actions (reply, forward,
         /// a mailto: link inside a message); the compose manager wires it
         /// (compose/manager.go `Open`).

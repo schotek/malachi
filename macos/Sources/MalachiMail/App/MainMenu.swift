@@ -177,6 +177,9 @@ enum MainMenu {
         m.addItem(item("Hide Sidebar", Action.toggleSidebar, key: "s", mods: [.command, .control])) // macOS-only string
         m.addItem(item("Hide Message List", Action.toggleMessageList, key: "l", mods: [.command, .option])) // macOS-only string
         m.addItem(.separator())
+        // The list's filter, the toolbar's filter menu too.
+        FilterMenu.items().forEach { m.addItem($0) }
+        m.addItem(.separator())
         m.addItem(item(mn(L10n.T("Load _Images")), Action.loadImages))
         m.addItem(item(mn(L10n.T("Always Load Images From This _Sender")), Action.trustSender))
         return m

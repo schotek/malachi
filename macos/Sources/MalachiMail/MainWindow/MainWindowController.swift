@@ -191,6 +191,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         state.hooks.checkForNewMail?()
     }
 
+    /// A filter from the toolbar's menu or the View menu (the item's tag).
+    @objc func setMessageFilter(_ sender: Any?) {
+        guard let tag = (sender as? NSMenuItem)?.tag else { return }
+        let f = FilterMenu.filter(tag: tag)
+        state.hooks.setMessageFilter?(f)
+        toolbarDelegate.setFilter(active: f != .all)
+    }
+
     @objc func reply(_ sender: Any?) {
         messageActions?.reply()
     }
@@ -242,6 +250,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private func allows(_ action: Selector, _ f: ActionFlags) -> Bool? {
         switch action {
         case Action.checkForNewMail: return state.hooks.checkForNewMail != nil
+        case Action.setMessageFilter: return state.hooks.setMessageFilter != nil
         case Action.reply: return f.reply
         case Action.replyAll: return f.replyAll
         case Action.forward: return f.forward
@@ -276,6 +285,9 @@ extension MainWindowController: NSUserInterfaceValidations {
             switch action {
             case Action.toggleFlag: menuItem.title = starTitle(f)
             case Action.moveToTrash: menuItem.title = trashTitle(f)
+            case Action.setMessageFilter:
+                let current = state.hooks.messageFilter?() ?? .all
+                menuItem.state = FilterMenu.tag(current) == menuItem.tag ? .on : .off
             default: break
             }
             if Action.bareKeyActions.contains(action), isTyping {

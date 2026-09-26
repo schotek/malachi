@@ -15,6 +15,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         static let toolbar = NSToolbar.Identifier("main")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
         static let refresh = NSToolbarItem.Identifier("refresh")
+        static let filter = NSToolbarItem.Identifier("filter")
         static let search = NSToolbarItem.Identifier("search")
         static let listSeparator = NSToolbarItem.Identifier("listSeparator")
         static let reply = NSToolbarItem.Identifier("reply")
@@ -44,7 +45,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     static let defaultItems: [NSToolbarItem.Identifier] = [
         .flexibleSpace, .toggleSidebar,
         .sidebarTrackingSeparator,
-        ID.newMessage, ID.refresh, .flexibleSpace,
+        ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
         ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions,
@@ -73,6 +74,19 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         tb.allowsUserCustomization = false
         tb.autosavesConfiguration = false
         return tb
+    }
+
+    /// Shows whether the list is filtered: the filter icon filled in the
+    /// accent colour while it is, outlined for All.
+    func setFilter(active: Bool) {
+        items[ID.filter]?.image = Self.filterImage(active: active)
+    }
+
+    private static func filterImage(active: Bool) -> NSImage {
+        guard active else { return Icon.symbol("line.3.horizontal.decrease.circle", size: .toolbar) }
+        let img = Icon.symbol("line.3.horizontal.decrease.circle.fill", size: .toolbar)
+        let accent = NSImage.SymbolConfiguration(paletteColors: [.controlAccentColor])
+        return img.withSymbolConfiguration(img.symbolConfiguration.applying(accent)) ?? img
     }
 
     /// Puts the list/message separator into `toolbar` or takes it out. A
@@ -122,6 +136,20 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
             // Ahead of the window title (the folder's name), like Finder's
             // back and forward buttons.
             it.isNavigational = true
+            return it
+        case ID.filter:
+            // Mail's filter button: All, Unread, Flagged in its menu, the
+            // icon filled while the list is narrowed (window.blp
+            // `message_filter`, a toggle group above the list in GTK).
+            let it = NSMenuToolbarItem(itemIdentifier: id)
+            it.image = Self.filterImage(active: false)
+            it.label = "Filter" // macOS-only string
+            it.toolTip = "Filter" // macOS-only string
+            it.showsIndicator = false
+            it.isBordered = true
+            let menu = NSMenu()
+            FilterMenu.items().forEach { menu.addItem($0) }
+            it.menu = menu
             return it
         case ID.listSeparator:
             guard let splitView else { return nil }
