@@ -4,6 +4,7 @@
 package accountwizard
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -65,4 +66,24 @@ func EndpointSummary(r *api.EndpointTestResult) (icon, text string) {
 		return "emblem-ok-symbolic", fmt.Sprintf(i18n.T("Connected in %d ms"), r.LatencyMS)
 	}
 	return "dialog-error-symbolic", widget.EndpointErrorText(r.Error)
+}
+
+// PasswordMissing reports an account.test that failed as a whole with
+// authRequired for an account that signs in with a password (linked is
+// false): no password is stored and none was typed. The assistant asks for
+// it on the identity page, like for a refused one.
+func PasswordMissing(err error, linked bool) bool {
+	var e *api.Error
+	return !linked && errors.As(err, &e) && e.Code == api.CodeAuthRequired
+}
+
+// passwordBannerText is the identity page's banner when the password is
+// what to fix: reason authRequired means none is stored, anything else
+// (authFailed) that the server refused it.
+func passwordBannerText(reason api.ErrorCode) string {
+	if reason == api.CodeAuthRequired {
+		// TRANSLATORS: banner on the identity page of the account assistant
+		return i18n.T("No password is stored for this account. Enter it to continue.")
+	}
+	return i18n.T("The server rejected the user name or password")
 }

@@ -386,12 +386,14 @@ func (w *Window) startSync(params api.SyncTriggerParams) {
 	}()
 }
 
-// showAuthRequired reveals auth_banner for the affected account. The
-// banner's button opens the preferences (wired in New), where the account
-// can be edited; for an account whose sign-in lives in GNOME Online
-// Accounts (Microsoft 365, Google) it opens that panel, and for an account
-// of the backend's own sign-in the sign-in page in the browser (the
-// notification's authUrl is kept as the fallback).
+// showAuthRequired reveals auth_banner for the affected account. For a
+// password account whose password is missing or refused the banner's
+// button asks for it in the account's edit dialog, otherwise it opens the
+// preferences (wired in New), where the account can be edited; for an
+// account whose sign-in lives in GNOME Online Accounts (Microsoft 365,
+// Google) it opens that panel, and for an account of the backend's own
+// sign-in the sign-in page in the browser (the notification's authUrl is
+// kept as the fallback).
 func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	name := string(n.AccountID)
 	kind := signin.Password
@@ -407,9 +409,10 @@ func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	w.authBannerAccount = n.AccountID
 	w.authBannerKind = kind
 	w.authBannerURL = n.AuthURL
+	w.authBannerReason = n.Reason
 	w.authBanner.SetUseMarkup(false)
 	w.authBanner.SetTitle(authBannerTitle(kind, n.Reason, name))
-	w.authBanner.SetButtonLabel(authBannerButton(kind))
+	w.authBanner.SetButtonLabel(authBannerButton(kind, n.Reason))
 	w.authBanner.SetRevealed(true)
 }
 
@@ -418,21 +421,33 @@ func (w *Window) hideAuthBanner() {
 	w.authBannerAccount = ""
 	w.authBannerKind = signin.Password
 	w.authBannerURL = ""
+	w.authBannerReason = 0
 	w.authBanner.SetRevealed(false)
 }
 
 // onAuthBannerButton is the banner button (signInAgain for the banner's
-// account).
+// account and its reason).
 func (w *Window) onAuthBannerButton() {
-	w.signInAgain(w.authBannerKind, w.authBannerAccount, w.authBannerURL)
+	w.signInAgain(w.authBannerKind, w.authBannerReason, w.authBannerAccount, w.authBannerURL)
 }
 
 // signInAgain repairs the sign-in of account id, which signs in the given
-// way: GNOME Settings for an account signed in through Online Accounts,
-// the browser for the backend's own sign-in (fallback is the sign-in page
-// to open when the daemon cannot start a fresh one, "" for none), the
-// preferences otherwise.
-func (w *Window) signInAgain(kind signin.Kind, id api.AccountID, fallback string) {
+// way after a failure with reason (notify.authRequired's reason, or the
+// code of the error of the account's authRequired state; 0 when unknown):
+// the account's edit dialog asking for the password when it is missing or
+// refused (editsPassword), GNOME Settings for an account signed in through
+// Online Accounts, the browser for the backend's own sign-in (fallback is
+// the sign-in page to open when the daemon cannot start a fresh one, ""
+// for none), the preferences otherwise.
+func (w *Window) signInAgain(kind signin.Kind, reason api.ErrorCode, id api.AccountID, fallback string) {
+	if editsPassword(kind, reason) {
+		if a, ok := w.model.account(id); ok {
+			wz := accountwizard.NewEdit(w.client, w.log, a)
+			wz.RequestPassword(reason)
+			wz.Present(w)
+			return
+		}
+	}
 	switch kind {
 	case signin.OAuth:
 		w.signInInBrowser(id, fallback)
@@ -498,16 +513,27 @@ func authBannerTitle(kind signin.Kind, reason api.ErrorCode, account string) str
 }
 
 // authBannerButton is the banner button's label for an account that signs
-// in the given way.
-func authBannerButton(kind signin.Kind) string {
-	switch kind {
-	case signin.GOA:
+// in the given way, after a notify.authRequired with reason.
+func authBannerButton(kind signin.Kind, reason api.ErrorCode) string {
+	switch {
+	case kind == signin.GOA:
 		return i18n.T("Open Online Accounts")
-	case signin.OAuth:
+	case kind == signin.OAuth:
 		// TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
 		return i18n.C("button", "Sign In")
+	case editsPassword(kind, reason):
+		// TRANSLATORS: banner button
+		return i18n.T("_Edit Account…")
 	}
 	return i18n.T("Open Preferences")
+}
+
+// editsPassword reports a sign-in banner whose button asks for the
+// password in the account's edit dialog (Wizard.RequestPassword): a
+// password account whose password is missing (authRequired) or refused
+// (authFailed). A keyring failure is not the password's fault.
+func editsPassword(kind signin.Kind, reason api.ErrorCode) bool {
+	return kind == signin.Password && (reason == api.CodeAuthRequired || reason == api.CodeAuthFailed)
 }
 
 // oauthAuthBannerText is authBannerText for an account of the backend's
@@ -533,13 +559,16 @@ func goaAuthBannerText(reason api.ErrorCode, account string) string {
 	return fmt.Sprintf(i18n.T("Sign in to %s again in Settings → Online Accounts"), account)
 }
 
-// authBannerText is the banner sentence for a notify.authRequired reason;
-// account is the account's display name.
+// authBannerText is the banner sentence of a password account for a
+// notify.authRequired reason; account is the account's display name.
 func authBannerText(reason api.ErrorCode, account string) string {
 	switch reason {
-	case api.CodeAuthRequired, api.CodeAuthFailed:
-		// TRANSLATORS: %s is an account name.
-		return fmt.Sprintf(i18n.T("Sign in to %s again"), account)
+	case api.CodeAuthRequired:
+		// TRANSLATORS: banner; %s is an account name.
+		return fmt.Sprintf(i18n.T("No password is stored for %s"), account)
+	case api.CodeAuthFailed:
+		// TRANSLATORS: banner; %s is an account name.
+		return fmt.Sprintf(i18n.T("The server rejected the password of %s"), account)
 	case api.CodeKeyringError:
 		// TRANSLATORS: %s is an account name.
 		return fmt.Sprintf(i18n.T("The system keyring is unavailable; %s cannot sign in"), account)

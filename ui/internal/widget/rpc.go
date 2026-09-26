@@ -56,6 +56,9 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s failed: the system keyring is unavailable"), what)
 		case api.CodeAuthFailed:
 			return fmt.Sprintf(i18n.T("%s failed: the server rejected the user name or password"), what)
+		case api.CodeAuthRequired:
+			// TRANSLATORS: %s is an action such as "Testing the connection".
+			return fmt.Sprintf(i18n.T("%s failed: sign-in required"), what)
 		case api.CodeNetworkError:
 			return fmt.Sprintf(i18n.T("%s failed: the server could not be reached"), what)
 		case api.CodeServerError:
@@ -74,8 +77,10 @@ func RPCErrorText(what string, err error) string {
 	return fmt.Sprintf(i18n.T("%s failed"), what)
 }
 
-// EndpointErrorText is the sentence for one endpoint of account.test. The
-// backend's message is technical English and only ever a trailing detail.
+// EndpointErrorText is the sentence for one endpoint of account.test, and
+// for why an account is offline or in error (the status line's tooltip,
+// Settings → Accounts). The backend's message is technical English and
+// only ever a trailing detail.
 func EndpointErrorText(e *api.Error) string {
 	if e == nil {
 		return i18n.T("Failed")
@@ -100,6 +105,12 @@ func EndpointErrorText(e *api.Error) string {
 		return i18n.T("Sign in to this account again")
 	case api.CodeUnavailable:
 		return i18n.T("The sign-in service is not available")
+	case api.CodeKeyringError:
+		// TRANSLATORS: why an endpoint or an account failed
+		return i18n.T("The system keyring is unavailable")
+	case api.CodeOffline:
+		// TRANSLATORS: why an endpoint or an account failed
+		return i18n.T("No network connection")
 	case api.CodeInvalidArgument:
 		// TRANSLATORS: %s is a technical message from the mail backend.
 		return fmt.Sprintf(i18n.T("Rejected: %s"), e.Message)

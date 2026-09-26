@@ -48,11 +48,31 @@ func TestAccountStatusText(t *testing.T) {
 		{tls(api.SyncOffline, api.TLSExpired), "Certificate problem"},
 		{tls(api.SyncError, api.TLSOther), "Certificate problem"},
 		{tls(api.SyncOffline, api.TLSPinMismatch), "Certificate changed"},
-		{tls(api.SyncOffline, api.TLSHandshake), "Offline"},
-		{tls(api.SyncOffline, api.TLSStartTLSUnavail), "Offline"},
-		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeTLSError, "x")}, "Offline"},
+		{tls(api.SyncOffline, api.TLSHandshake), "Offline: The secure connection could not be established"},
+		{tls(api.SyncOffline, api.TLSStartTLSUnavail), "Offline: The server does not offer STARTTLS"},
+		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeTLSError, "x")}, "Offline: The secure connection could not be established"},
 		{tls(api.SyncSyncing, api.TLSUntrusted), "Syncing…"},
 		{tls(api.SyncDisabled, api.TLSUntrusted), "Paused"},
+	} {
+		if got := accountStatusText(c.state); got != c.want {
+			t.Errorf("%+v: got %q, want %q", c.state, got, c.want)
+		}
+	}
+
+	// Offline and failed accounts say why when the state carries an error.
+	for _, c := range []struct {
+		state api.SyncState
+		want  string
+	}{
+		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeNetworkError, "dial")}, "Offline: The server could not be reached"},
+		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeOffline, "x")}, "Offline: No network connection"},
+		{api.SyncState{Status: api.SyncOffline, Error: api.NewError(api.CodeServerTimeout, "x")}, "Offline: The server did not respond in time"},
+		{api.SyncState{Status: api.SyncError, Error: api.NewError(api.CodeKeyringError, "locked")}, "Error: The system keyring is unavailable"},
+		{api.SyncState{Status: api.SyncError, Error: api.NewError(api.CodeServerError, "x")}, "Error: The server returned an error"},
+		{api.SyncState{Status: api.SyncError, Error: api.NewError(9999, "odd")}, "Error: Failed: odd"},
+		{api.SyncState{Status: api.SyncAuthRequired, Error: api.NewError(api.CodeAuthFailed, "x")}, "Sign-in required"},
+		{api.SyncState{Status: api.SyncSyncing, Error: api.NewError(api.CodeNetworkError, "x")}, "Syncing…"},
+		{api.SyncState{Status: api.SyncIdle, Error: api.NewError(api.CodeNetworkError, "x")}, ""},
 	} {
 		if got := accountStatusText(c.state); got != c.want {
 			t.Errorf("%+v: got %q, want %q", c.state, got, c.want)

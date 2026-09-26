@@ -4,6 +4,8 @@
 package accountwizard
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -56,5 +58,35 @@ func TestClassifyGraph(t *testing.T) {
 	}
 	if icon, text := EndpointSummary(nil); icon != "dialog-question-symbolic" || text != "Not tested" {
 		t.Errorf("nil endpoint: %q %q", icon, text)
+	}
+}
+
+func TestPasswordMissing(t *testing.T) {
+	authRequired := api.NewError(api.CodeAuthRequired, "no stored password")
+	for _, c := range []struct {
+		name   string
+		err    error
+		linked bool
+		want   bool
+	}{
+		{"password account without a stored password", authRequired, false, true},
+		{"wrapped", fmt.Errorf("account.test: %w", authRequired), false, true},
+		{"linked account", authRequired, true, false},
+		{"refused password", api.NewError(api.CodeAuthFailed, "x"), false, false},
+		{"other error", api.NewError(api.CodeNetworkError, "x"), false, false},
+		{"not an api error", errors.New("boom"), false, false},
+		{"no error", nil, false, false},
+	} {
+		if got := PasswordMissing(c.err, c.linked); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+	if got := passwordBannerText(api.CodeAuthRequired); got != "No password is stored for this account. Enter it to continue." {
+		t.Errorf("authRequired banner: %q", got)
+	}
+	for _, reason := range []api.ErrorCode{api.CodeAuthFailed, api.CodeKeyringError, 0} {
+		if got := passwordBannerText(reason); got != "The server rejected the user name or password" {
+			t.Errorf("banner for %d: %q", reason, got)
+		}
 	}
 }

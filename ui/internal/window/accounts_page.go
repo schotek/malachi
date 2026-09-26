@@ -10,6 +10,7 @@ import (
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
+	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/accountwizard"
@@ -145,6 +146,9 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 	row.status = gtk.NewLabel("")
 	row.status.AddCSSClass("caption")
 	row.status.AddCSSClass("dim-label")
+	// The status may say why the account is offline: long, so it gives way
+	// to the name and shows whole in the tooltip.
+	row.status.SetEllipsize(pango.EllipsizeEnd)
 	row.AddSuffix(row.status)
 
 	row.signIn = gtk.NewButtonWithLabel(i18n.T("Sign In…"))
@@ -192,6 +196,7 @@ func (r *accountRow) apply(a api.Account) {
 	r.reverting = false
 	text := accountStatusText(a.State)
 	r.status.SetText(text)
+	r.status.SetTooltipText(text)
 	r.status.SetVisible(text != "")
 	r.signIn.SetVisible(signin.NeedsBrowserSignIn(a))
 }
@@ -293,7 +298,8 @@ func accountRowTitle(a api.Account) string {
 
 // accountStatusText is the short status shown next to the switch; empty
 // for the unremarkable idle state. A refused or changed server certificate
-// (certtrust.FromSyncState) is named instead of "Offline".
+// (certtrust.FromSyncState) is named instead of "Offline"; otherwise an
+// offline or failed account says why when the state carries an error.
 func accountStatusText(s api.SyncState) string {
 	if p, ok := certtrust.FromSyncState(s); ok {
 		return certStatusText(p.Category())
@@ -304,10 +310,18 @@ func accountStatusText(s api.SyncState) string {
 	case api.SyncSyncing:
 		return i18n.T("Syncing…")
 	case api.SyncOffline:
+		if s.Error != nil {
+			// TRANSLATORS: account status in Settings → Accounts; %s says why.
+			return fmt.Sprintf(i18n.T("Offline: %s"), widget.EndpointErrorText(s.Error))
+		}
 		return i18n.T("Offline")
 	case api.SyncAuthRequired:
 		return i18n.T("Sign-in required")
 	case api.SyncError:
+		if s.Error != nil {
+			// TRANSLATORS: account status in Settings → Accounts; %s says why.
+			return fmt.Sprintf(i18n.T("Error: %s"), widget.EndpointErrorText(s.Error))
+		}
 		return i18n.T("Error")
 	}
 	return ""

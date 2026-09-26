@@ -110,6 +110,10 @@ type Window struct {
 	// authBannerURL is the notification's authUrl: the sign-in page to
 	// open when the daemon cannot start a fresh one.
 	authBannerURL string
+	// authBannerReason is the notification's reason; with a password
+	// account it decides whether the button asks for the password
+	// (editsPassword).
+	authBannerReason api.ErrorCode
 	// certBannerAccount is the account cert_banner is shown for, empty
 	// when the banner is hidden.
 	certBannerAccount api.AccountID

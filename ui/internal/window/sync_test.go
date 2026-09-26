@@ -186,8 +186,8 @@ func TestCertBanner(t *testing.T) {
 
 func TestAuthBannerText(t *testing.T) {
 	cases := map[api.ErrorCode]string{
-		api.CodeAuthRequired: "Sign in to Work again",
-		api.CodeAuthFailed:   "Sign in to Work again",
+		api.CodeAuthRequired: "No password is stored for Work",
+		api.CodeAuthFailed:   "The server rejected the password of Work",
 		api.CodeKeyringError: "The system keyring is unavailable; Work cannot sign in",
 		api.CodeNetworkError: "Work needs attention",
 		0:                    "Work needs attention",
@@ -206,7 +206,10 @@ func TestAuthBannerTitleByKind(t *testing.T) {
 		title  string
 		button string
 	}{
-		{signin.Password, api.CodeAuthFailed, "Sign in to Work again", "Open Preferences"},
+		{signin.Password, api.CodeAuthRequired, "No password is stored for Work", "_Edit Account…"},
+		{signin.Password, api.CodeAuthFailed, "The server rejected the password of Work", "_Edit Account…"},
+		{signin.Password, api.CodeKeyringError, "The system keyring is unavailable; Work cannot sign in", "Open Preferences"},
+		{signin.Password, api.CodeNetworkError, "Work needs attention", "Open Preferences"},
 		{signin.GOA, api.CodeAuthRequired, "Sign in to Work again in Settings → Online Accounts", "Open Online Accounts"},
 		{signin.GOA, api.CodeUnavailable, "GNOME Online Accounts is not available; Work cannot sign in", "Open Online Accounts"},
 		{signin.OAuth, api.CodeAuthRequired, "Sign in to Work again in your browser", "Sign In"},
@@ -217,8 +220,11 @@ func TestAuthBannerTitleByKind(t *testing.T) {
 		if got := authBannerTitle(c.kind, c.reason, "Work"); got != c.title {
 			t.Errorf("authBannerTitle(%d, %d) = %q, want %q", c.kind, c.reason, got, c.title)
 		}
-		if got := authBannerButton(c.kind); got != c.button {
-			t.Errorf("authBannerButton(%d) = %q, want %q", c.kind, got, c.button)
+		if got := authBannerButton(c.kind, c.reason); got != c.button {
+			t.Errorf("authBannerButton(%d, %d) = %q, want %q", c.kind, c.reason, got, c.button)
+		}
+		if got, want := editsPassword(c.kind, c.reason), c.button == "_Edit Account…"; got != want {
+			t.Errorf("editsPassword(%d, %d) = %v", c.kind, c.reason, got)
 		}
 	}
 }

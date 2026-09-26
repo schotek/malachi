@@ -15,6 +15,7 @@ import (
 func TestRPCErrorText(t *testing.T) {
 	cases := map[api.ErrorCode]string{
 		api.CodeAuthFailed:    "rejected the user name or password",
+		api.CodeAuthRequired:  "sign-in required",
 		api.CodeNetworkError:  "could not be reached",
 		api.CodeServerError:   "returned an error",
 		api.CodeTLSError:      "secure connection",
@@ -51,6 +52,15 @@ func TestEndpointErrorText(t *testing.T) {
 	}
 	if got := EndpointErrorText(api.NewError(api.CodeTLSError, "x")); !strings.Contains(got, "secure connection") {
 		t.Errorf("tls: %q", got)
+	}
+	if got := EndpointErrorText(api.NewError(api.CodeKeyringError, "locked")); got != "The system keyring is unavailable" {
+		t.Errorf("keyring: %q", got)
+	}
+	if got := EndpointErrorText(api.NewError(api.CodeOffline, "x")); got != "No network connection" {
+		t.Errorf("offline: %q", got)
+	}
+	if got := RPCErrorText("Testing the connection", api.NewError(api.CodeAuthRequired, "no stored password")); got != "Testing the connection failed: sign-in required" {
+		t.Errorf("authRequired: %q", got)
 	}
 }
 

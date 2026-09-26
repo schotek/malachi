@@ -122,6 +122,9 @@ type Wizard struct {
 	// tested is the configuration the last account.test ran with; a
 	// certificate trusted on the results page is pinned to its endpoint.
 	tested api.AccountConfig
+	// focusPassword asks Present to focus the password field
+	// (RequestPassword): focus needs the dialog in a window.
+	focusPassword bool
 
 	closed      bool
 	op          int  // bumped per RPC so stale callbacks bail out
@@ -340,7 +343,38 @@ func (w *Wizard) wire() {
 }
 
 // Present shows the dialog over parent.
-func (w *Wizard) Present(parent gtk.Widgetter) { w.Dialog.Present(parent) }
+func (w *Wizard) Present(parent gtk.Widgetter) {
+	w.Dialog.Present(parent)
+	if w.focusPassword {
+		w.focusPassword = false
+		w.password.GrabFocus()
+	}
+}
+
+// RequestPassword turns the dialog of NewEdit into a request for the
+// account's password (the main window's sign-in banner): it opens on the
+// identity page with the password field marked and focused and a banner
+// saying why, reason authRequired (no password is stored) or authFailed
+// (the server refused it; any other reason reads the same). Call it after
+// NewEdit and before Present. An account that does not sign in with a
+// password is left as it is.
+func (w *Wizard) RequestPassword(reason api.ErrorCode) {
+	if w.editing == nil || w.linkedCfg != nil {
+		return
+	}
+	w.nav.ReplaceWithTags([]string{tagIdentity})
+	w.askPassword(reason)
+	w.focusPassword = true
+}
+
+// askPassword marks the identity page's password field as the thing to
+// fix and says why in its banner; typing clears both (wire).
+func (w *Wizard) askPassword(reason api.ErrorCode) {
+	w.password.AddCSSClass("error")
+	w.identityBanner.SetTitle(passwordBannerText(reason))
+	w.identityBanner.SetRevealed(true)
+	w.password.GrabFocus()
+}
 
 func (w *Wizard) toast(text string) { w.toasts.AddToast(widget.PlainToast(text)) }
 
@@ -601,6 +635,11 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 			icon.SetFromIconName("dialog-warning-symbolic")
 		}
 		outcome = OutcomeFailed
+		if PasswordMissing(err, linked) {
+			// No password stored and none typed: ask for it like for a
+			// refused one, and offer no "Save Anyway" without it.
+			outcome = OutcomeAuthFailed
+		}
 	} else if graph {
 		icon, text := EndpointSummary(res.Graph)
 		w.graphIcon.SetFromIconName(icon)
@@ -652,10 +691,11 @@ func (w *Wizard) showResults(res api.AccountTestResult, err error) {
 		w.results.SetIconName("dialog-warning-symbolic")
 		w.results.SetTitle(i18n.T("Connection Failed"))
 		w.nav.PopToTag(tagIdentity)
-		w.password.AddCSSClass("error")
-		w.identityBanner.SetTitle(i18n.T("The server rejected the user name or password"))
-		w.identityBanner.SetRevealed(true)
-		w.password.GrabFocus()
+		reason := api.CodeAuthFailed
+		if PasswordMissing(err, linked) {
+			reason = api.CodeAuthRequired
+		}
+		w.askPassword(reason)
 	default:
 		w.results.SetIconName("dialog-warning-symbolic")
 		w.results.SetTitle(i18n.T("Connection Failed"))

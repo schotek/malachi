@@ -38,6 +38,7 @@ func TestAccountStatuses(t *testing.T) {
 		{"syncing an unknown folder", api.SyncState{Status: api.SyncSyncing, FolderID: "f_gone", Progress: 30}, "Syncing…", statusActionCheck, 0},
 		{"syncing beats sign-in", api.SyncState{Status: api.SyncSyncing, Progress: -1, PendingOutbox: 1}, "Syncing…", statusActionCheck, 0},
 		{"sign-in required", api.SyncState{Status: api.SyncAuthRequired, PendingOutbox: 1}, "Sign-in required", statusActionSignIn, 0},
+		{"sign-in required, password refused", api.SyncState{Status: api.SyncAuthRequired, Error: api.NewError(api.CodeAuthFailed, "x")}, "Sign-in required", statusActionSignIn, 0},
 		// A refused or changed certificate says why and leads to the
 		// account's settings, where it can be trusted.
 		{"refused certificate", tlsState("a1", api.SyncOffline, api.TLSUntrusted), "The server's certificate is not from a trusted authority", statusActionEdit, 0},
@@ -95,6 +96,8 @@ func TestAccountStatusesAccounts(t *testing.T) {
 			State: api.SyncState{AccountID: "a3", Status: api.SyncDisabled, FailedOutbox: 5}},
 		{ID: "a4", Config: api.AccountConfig{Name: "Graph", Kind: api.AccountGraph}, Enabled: true},
 		{ID: "a5", Config: api.AccountConfig{Name: "GOA", Kind: api.AccountGraph, Graph: &api.GraphConfig{Source: api.GraphSourceGOA}}, Enabled: true},
+		{ID: "a6", Config: api.AccountConfig{Name: "Home"}, Enabled: true},
+		{ID: "a7", Config: api.AccountConfig{Name: "Away"}, Enabled: true},
 	}
 	states := map[api.AccountID]api.SyncState{
 		// a1 has no cached state: account.list's is used.
@@ -105,6 +108,11 @@ func TestAccountStatusesAccounts(t *testing.T) {
 		"a3": {AccountID: "a3", Status: api.SyncDisabled, FailedOutbox: 0},
 		"a4": {AccountID: "a4", Status: api.SyncAuthRequired},
 		"a5": {AccountID: "a5", Status: api.SyncAuthRequired},
+		// A password account whose password was refused: the reason goes
+		// with the sign-in action.
+		"a6": {AccountID: "a6", Status: api.SyncAuthRequired, Error: api.NewError(api.CodeAuthFailed, "x")},
+		// The reason is only kept for the sign-in action.
+		"a7": {AccountID: "a7", Status: api.SyncOffline, Error: api.NewError(api.CodeNetworkError, "x")},
 		// A state for an account that is not listed makes no row.
 		"zzz": {AccountID: "zzz", Status: api.SyncError},
 	}
@@ -115,6 +123,8 @@ func TestAccountStatusesAccounts(t *testing.T) {
 		{Account: "a3", Title: "Paused, fresh", Detail: "Paused", Action: statusActionNone, SignIn: signin.Password, Failed: 0},
 		{Account: "a4", Title: "Graph", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.OAuth},
 		{Account: "a5", Title: "GOA", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.GOA},
+		{Account: "a6", Title: "Home", Detail: "Sign-in required", Action: statusActionSignIn, SignIn: signin.Password, Reason: api.CodeAuthFailed},
+		{Account: "a7", Title: "Away", Detail: "The server could not be reached", Action: statusActionRetry, SignIn: signin.Password},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d rows, want %d: %+v", len(got), len(want), got)
@@ -141,9 +151,19 @@ func TestStatusButtonLabel(t *testing.T) {
 		{accountStatus{Action: statusActionSignIn, SignIn: signin.Password}, "Open Preferences"},
 		{accountStatus{Action: statusActionSignIn, SignIn: signin.GOA}, "Open Online Accounts"},
 		{accountStatus{Action: statusActionSignIn, SignIn: signin.OAuth}, "Sign In"},
+		// A password account whose password is missing or refused asks for
+		// it in the edit dialog, as the sign-in banner does.
+		{accountStatus{Action: statusActionSignIn, SignIn: signin.Password, Reason: api.CodeAuthRequired}, "_Edit Account…"},
+		{accountStatus{Action: statusActionSignIn, SignIn: signin.Password, Reason: api.CodeAuthFailed}, "_Edit Account…"},
+		{accountStatus{Action: statusActionSignIn, SignIn: signin.Password, Reason: api.CodeKeyringError}, "Open Preferences"},
+		{accountStatus{Action: statusActionSignIn, SignIn: signin.OAuth, Reason: api.CodeAuthFailed}, "Sign In"},
+		{accountStatus{Action: statusActionSignIn, SignIn: signin.GOA, Reason: api.CodeAuthRequired}, "Open Online Accounts"},
 	} {
 		if got := statusButtonLabel(c.st); got != c.want {
 			t.Errorf("statusButtonLabel(%+v) = %q, want %q", c.st, got, c.want)
+		}
+		if got, want := statusButtonMnemonic(c.st), c.want == "_Edit Account…"; got != want {
+			t.Errorf("statusButtonMnemonic(%+v) = %v", c.st, got)
 		}
 	}
 }

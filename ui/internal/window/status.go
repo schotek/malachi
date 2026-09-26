@@ -37,7 +37,7 @@ const (
 	statusActionNone   statusAction = iota
 	statusActionCheck               // sync.trigger for the account (an icon)
 	statusActionRetry               // sync.trigger for the account ("Try Again")
-	statusActionSignIn              // signInAgain, labelled by authBannerButton
+	statusActionSignIn              // signInAgain, labelled by authBannerButton (the edit dialog asking for the password, editsPassword)
 	statusActionEdit                // editAccount ("Edit Account…")
 )
 
@@ -48,7 +48,12 @@ type accountStatus struct {
 	Detail  string // one whole sentence, never pieced together
 	Action  statusAction
 	SignIn  signin.Kind // where the account signs in: the label and route of statusActionSignIn
-	Failed  int         // FailedOutbox; above zero the row links to the outbox
+	// Reason is why statusActionSignIn is needed: the code of the error
+	// of the account's authRequired state, 0 when it has none. With a
+	// password account, authRequired or authFailed lead to the edit dialog
+	// asking for the password (editsPassword), as the sign-in banner does.
+	Reason api.ErrorCode
+	Failed int // FailedOutbox; above zero the row links to the outbox
 }
 
 // accountStatuses is the status popover's content: one entry per account,
@@ -77,6 +82,9 @@ func accountStatuses(states map[api.AccountID]api.SyncState, accounts []api.Acco
 			s = a.State
 		}
 		st.Detail, st.Action = accountDetail(a.ID, s, folderName, now)
+		if st.Action == statusActionSignIn && s.Error != nil {
+			st.Reason = s.Error.Code
+		}
 		st.Failed = s.FailedOutbox
 		out = append(out, st)
 	}
@@ -285,11 +293,11 @@ func (w *Window) newStatusRow(id api.AccountID) *statusRow {
 func (r *statusRow) apply(st accountStatus, outbox bool) {
 	r.row.SetTitle(st.Title)
 	r.row.SetSubtitle(st.Detail)
-	if !r.set || st.Action != r.status.Action || st.SignIn != r.status.SignIn {
+	if !r.set || st.Action != r.status.Action || st.SignIn != r.status.SignIn || st.Reason != r.status.Reason {
 		r.check.SetVisible(st.Action == statusActionCheck)
 		label := statusButtonLabel(st)
 		if label != "" {
-			r.button.SetUseUnderline(st.Action == statusActionEdit)
+			r.button.SetUseUnderline(statusButtonMnemonic(st))
 			r.button.SetLabel(label)
 		}
 		r.button.SetVisible(label != "")
@@ -306,17 +314,23 @@ func (r *statusRow) apply(st accountStatus, outbox bool) {
 
 // statusButtonLabel is the label of the button that repairs an account:
 // "" when there is nothing to repair (checking for new mail is an icon of
-// its own). "_Edit Account…" carries a mnemonic.
+// its own). "_Edit Account…" carries a mnemonic (statusButtonMnemonic).
 func statusButtonLabel(st accountStatus) string {
 	switch st.Action {
 	case statusActionRetry:
 		return i18n.T("Try Again")
 	case statusActionSignIn:
-		return authBannerButton(st.SignIn)
+		return authBannerButton(st.SignIn, st.Reason)
 	case statusActionEdit:
 		return i18n.T("_Edit Account…")
 	}
 	return ""
+}
+
+// statusButtonMnemonic reports a statusButtonLabel with a mnemonic: the
+// label "_Edit Account…", for a certificate or a password to fix.
+func statusButtonMnemonic(st accountStatus) bool {
+	return st.Action == statusActionEdit || (st.Action == statusActionSignIn && editsPassword(st.SignIn, st.Reason))
 }
 
 // onStatusAction runs the action of account id's row, after closing the
@@ -337,7 +351,7 @@ func (w *Window) onStatusAction(id api.AccountID) {
 		if id == w.authBannerAccount {
 			fallback = w.authBannerURL
 		}
-		w.signInAgain(st.SignIn, id, fallback)
+		w.signInAgain(st.SignIn, st.Reason, id, fallback)
 	case statusActionEdit:
 		w.editAccount(id)
 	}
