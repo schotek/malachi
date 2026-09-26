@@ -118,9 +118,9 @@ type Window struct {
 	// when the banner is hidden.
 	certBannerAccount api.AccountID
 
-	// conn is what the status line knows of the daemon connection
-	// (status.go statusLineFor).
-	conn connView
+	// conn is what the status line knows of the connection (statusLineFor).
+	conn       connView
+	connWarned map[string]bool // handshake refusals already logged at Warn (logConnection)
 	// statusRows are the status popover's rows by account, and statusOrder
 	// the accounts they were built for, in order: the rows are updated in
 	// place and only rebuilt when the accounts change (status.go).
@@ -540,9 +540,12 @@ func (w *Window) reconnect() {
 // showConnectionState runs on the main loop. The state is kept for the
 // status line (refreshSyncLabel), which names it while there is no
 // connection; what system.info and sync.status said is forgotten with
-// every change and asked again on connecting.
+// every change and asked again on connecting. A protocol mismatch stays
+// until an attempt ends otherwise (nextConnView); how the attempts end is
+// logged (logConnection).
 func (w *Window) showConnectionState(s client.State, err error) {
-	w.conn = connView{State: s}
+	w.conn = nextConnView(w.conn, s, err)
+	w.logConnection(s, err)
 	defer w.refreshSyncLabel()
 	switch s {
 	case client.Connecting:
@@ -553,7 +556,9 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		w.loadAccounts()
 		w.loadSyncStatus()
 	default:
-		w.banner.SetRevealed(true)
+		// A daemon of another protocol version does run (the status line
+		// names it): the banner saying that none does would be wrong.
+		w.banner.SetRevealed(w.conn.Mismatch == 0)
 		// Late replies of in-flight calls are dropped; what is shown stays
 		// until the reconnect reloads it. A conversation waiting for its
 		// members folds back, so no spinner outlives its reply.
@@ -563,11 +568,6 @@ func (w *Window) showConnectionState(s client.State, err error) {
 			w.syncRows()
 		}
 		w.showLoadMore()
-		if err != nil {
-			// Repeated dial failures while the daemon is down are expected;
-			// keep them at debug so the log stays readable.
-			w.log.Debug("backend unavailable", "err", err)
-		}
 	}
 }
 

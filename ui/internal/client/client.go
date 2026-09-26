@@ -3,9 +3,10 @@
 
 // Package client is the JSON-RPC 2.0 client for the malachid unix socket.
 //
-// It is transport only: it sends requests, matches responses by ID and
-// forwards server notifications. It contains no mail logic; everything it
-// knows about the protocol comes from backend/pkg/api.
+// It is transport only: it authenticates every connection it makes
+// (api.ClientHandshake, docs/api.md §1.4), sends requests, matches
+// responses by ID and forwards server notifications. It contains no mail
+// logic; everything it knows about the protocol comes from backend/pkg/api.
 package client
 
 import (
@@ -55,8 +56,15 @@ type Client struct {
 
 	// OnNotification receives every server notification.
 	OnNotification func(method string, params json.RawMessage)
-	// OnStateChange is called whenever the connection state changes.
+	// OnStateChange is called whenever the connection state changes. The
+	// error of Disconnected says why: the dial's, the handshake's (an
+	// *api.HandshakeError for a daemon it refused), or what ended the
+	// connection.
 	OnStateChange func(State, error)
+
+	// handshakeTimeout bounds the handshake of each Connect; 0 means
+	// api.HandshakeTimeout. Tests shorten it.
+	handshakeTimeout time.Duration
 
 	nextID  atomic.Int64
 	mu      sync.Mutex
@@ -96,8 +104,14 @@ func (c *Client) State() State {
 	return c.state
 }
 
-// Connect dials the socket and starts the reader. It returns quickly; a
-// failure is reported both as the error and through OnStateChange.
+// Connect dials the socket, authenticates the connection (docs/api.md
+// §1.4) and starts the reader; it does nothing unless disconnected. It
+// returns within the dial and handshake timeouts, and the connection is
+// used for calls only once the handshake succeeded. A failure is reported
+// both as the error and through OnStateChange: a daemon the handshake
+// refused is an *api.HandshakeError (DaemonProtocol names a daemon of
+// another protocol version). The key file is read afresh on every call,
+// since a restarted daemon has a new key.
 func (c *Client) Connect() error {
 	c.mu.Lock()
 	if c.state != Disconnected {
@@ -110,10 +124,22 @@ func (c *Client) Connect() error {
 
 	conn, err := net.DialTimeout("unix", c.Socket, 2*time.Second)
 	if err != nil {
-		c.mu.Lock()
-		c.state = Disconnected
-		c.mu.Unlock()
-		c.emit(Disconnected, err)
+		c.fail(err)
+		return err
+	}
+	// The handshake and then readLoop read through r: whatever the daemon
+	// sent right after the handshake's last answer is already in it.
+	r := bufio.NewReaderSize(conn, 64<<10)
+	timeout := c.handshakeTimeout
+	if timeout <= 0 {
+		timeout = api.HandshakeTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	err = api.ClientHandshake(ctx, conn, r, api.KeyPath(c.Socket))
+	cancel()
+	if err != nil {
+		conn.Close()
+		c.fail(err)
 		return err
 	}
 
@@ -123,8 +149,29 @@ func (c *Client) Connect() error {
 	c.mu.Unlock()
 	c.emit(Connected, nil)
 
-	go c.readLoop(conn)
+	go c.readLoop(conn, r)
 	return nil
+}
+
+// fail ends a connection attempt that did not connect: the state goes
+// back to Disconnected and err is reported as it is.
+func (c *Client) fail(err error) {
+	c.mu.Lock()
+	c.state = Disconnected
+	c.mu.Unlock()
+	c.emit(Disconnected, err)
+}
+
+// DaemonProtocol returns the protocol version of the daemon when err is,
+// or wraps, the handshake's report that the daemon speaks another one
+// (api.HandshakeProtocolMismatch; 1 for a daemon older than the
+// handshake), and 0 for any other error and for nil.
+func DaemonProtocol(err error) int {
+	var he *api.HandshakeError
+	if errors.As(err, &he) && he.Reason == api.HandshakeProtocolMismatch {
+		return he.Daemon
+	}
+	return 0
 }
 
 // Close drops the connection. Pending calls fail with ErrDisconnected.
@@ -206,8 +253,9 @@ func (c *Client) emit(s State, err error) {
 	}
 }
 
-func (c *Client) readLoop(conn net.Conn) {
-	r := bufio.NewReaderSize(conn, 64<<10)
+// readLoop reads the connection through r, the reader the handshake used,
+// until it ends.
+func (c *Client) readLoop(conn net.Conn, r *bufio.Reader) {
 	var readErr error
 	for {
 		line, err := r.ReadBytes('\n')
