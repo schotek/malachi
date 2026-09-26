@@ -4,6 +4,7 @@
 import AppKit
 import MalachiCore
 import os
+import Quartz
 
 /// The main three-pane window (window.blp, window/window.go): the split
 /// view with the status bar under it (`MainContentViewController`), the
@@ -174,6 +175,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             return target
         }
         return super.supplementalTarget(forAction: action, sender: sender)
+    }
+
+    // MARK: Quick Look
+
+    // An attachment chip's preview (AttachmentPreview): the panel asks the
+    // key window's responder chain for a controller, and a chip never
+    // becomes first responder, so this controller answers for it.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+        MainActor.assumeIsolated { AttachmentPreview.shared.accepts }
+    }
+
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.begin(panel) }
+    }
+
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.end(panel) }
     }
 
     /// True while an editable text view (a field editor) has the keyboard:

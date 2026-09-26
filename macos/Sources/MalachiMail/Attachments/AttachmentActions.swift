@@ -39,54 +39,76 @@ final class AttachmentActions {
     // MARK: Open
 
     /// Writes the part to a private file and hands it to the default
-    /// application (attachments.go `openAttachment`). An executable is
-    /// saved instead: the chip routes those to Save As… already, this is
-    /// the second look, and a third follows the fetch on the name and type
-    /// the daemon served, which are what the file gets.
+    /// application (attachments.go `openAttachment`): the chip menu's Open.
+    /// An executable is saved instead: the chip keeps Open disabled for
+    /// those already, this is the second look, and a third follows the
+    /// fetch on the name and type the daemon served, which are what the
+    /// file gets.
     func open(_ a: Attachment, of s: MessageSummary, from window: NSWindow?) {
         if Self.mustNotOpen(filename: a.filename, contentType: a.contentType) {
             saveAs(a, of: s, from: window)
             return
         }
-        let cache = cache
-        let dir = openDir
         Task { @MainActor [weak self] in
-            let res: MessagePartResult
-            do {
-                res = try await cache.fetchAttachment(accountID: s.accountId, messageID: s.id, partID: a.partId)
-            } catch {
-                guard let self else { return }
-                self.log.warning("message.part \(a.partId, privacy: .public): \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
-                self.toast(rpcErrorText(L10n.T("Opening the attachment"), error), in: window)
-                return
-            }
-            guard let self else { return }
+            guard let self, let res = await self.fetchForViewing(a, of: s, from: window) else { return }
             let name = fileName(res, a)
             if Self.mustNotOpen(filename: name, contentType: res.contentType) {
                 self.log.info("attachment \(a.partId, privacy: .public) turned out executable after the fetch; saving instead")
                 self.saveAs(a, of: s, from: window)
                 return
             }
-            let data = res.data
-            let url: URL
-            do {
-                url = try await Task.detached(priority: .userInitiated) {
-                    let written = try dir.write(name: name, data: data)
-                    try quarantine(written)
-                    return written
-                }.value
-            } catch {
-                // The error may name the file, hence the attachment: private.
-                self.log.warning("writing an attachment for opening: \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
-                self.toast(L10n.T("The attachment could not be opened"), in: window)
-                return
-            }
+            guard let url = await self.writeForViewing(name: name, data: res.data, from: window) else { return }
             do {
                 _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
             } catch {
                 self.log.warning("opening an attachment: \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
                 self.toast(L10n.T("The attachment could not be opened"), in: window)
             }
+        }
+    }
+
+    /// Writes the part to a private file and shows it in Quick Look
+    /// (attachments.go `previewAttachment`): a click on the chip. Quick
+    /// Look only renders, so a program or script is previewed like any
+    /// file; it carries the quarantine attribute all the same. `source` is
+    /// the chip, which the panel zooms out of.
+    func preview(_ a: Attachment, of s: MessageSummary, from window: NSWindow?, source: NSView?) {
+        Task { @MainActor [weak self, weak source] in
+            guard let self, let res = await self.fetchForViewing(a, of: s, from: window) else { return }
+            let name = fileName(res, a)
+            guard let url = await self.writeForViewing(name: name, data: res.data, from: window) else { return }
+            AttachmentPreview.shared.show(url: url, source: source)
+        }
+    }
+
+    /// message.part for the attachment being opened or previewed; nil
+    /// after a failure, which has had its toast.
+    private func fetchForViewing(_ a: Attachment, of s: MessageSummary, from window: NSWindow?) async -> MessagePartResult? {
+        do {
+            return try await cache.fetchAttachment(accountID: s.accountId, messageID: s.id, partID: a.partId)
+        } catch {
+            log.warning("message.part \(a.partId, privacy: .public): \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
+            toast(rpcErrorText(L10n.T("Opening the attachment"), error), in: window)
+            return nil
+        }
+    }
+
+    /// Writes `data` as `name` into the open directory and quarantines it,
+    /// off the main actor; nil after a failure, which has had its toast. A
+    /// file whose attribute did not stick is not shown (`quarantine`).
+    private func writeForViewing(name: String, data: Data, from window: NSWindow?) async -> URL? {
+        let dir = openDir
+        do {
+            return try await Task.detached(priority: .userInitiated) {
+                let written = try dir.write(name: name, data: data)
+                try quarantine(written)
+                return written
+            }.value
+        } catch {
+            // The error may name the file, hence the attachment: private.
+            log.warning("writing an attachment for opening: \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
+            toast(L10n.T("The attachment could not be opened"), in: window)
+            return nil
         }
     }
 

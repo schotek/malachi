@@ -46,6 +46,12 @@ finish-args:
   - --talk-name=org.gnome.evolution.dataserver.Sources5
   - --talk-name=org.gnome.evolution.dataserver.AddressBook10
   - --talk-name=org.gnome.evolution.dataserver.Subprocess.Backend.*
+  # Previewing an attachment on click: Sushi, the previewer Files uses
+  # (org.gnome.NautilusPreviewer2.ShowFile; no portal exists for it). It
+  # runs on the host and reads the file from $XDG_RUNTIME_DIR/app/<app-id>/
+  # (ui/internal/window/attachments.go openDir); it renders and never runs
+  # anything. Without Sushi the UI opens the file through OpenURI instead.
+  - --talk-name=org.gnome.NautilusPreviewer
   # The UI starts malachid itself (ui/internal/daemon), so both processes
   # run inside the same sandbox instance. The unix socket sits in
   # $XDG_RUNTIME_DIR/app/<app-id>/ (api.SocketBase), which flatpak shares

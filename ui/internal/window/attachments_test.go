@@ -184,6 +184,26 @@ func TestSaveAllSummary(t *testing.T) {
 	}
 }
 
+func TestOpenDirFor(t *testing.T) {
+	tests := []struct {
+		name                      string
+		runtime, cache, flatpakID string
+		want                      string
+	}{
+		{"runtime dir", "/run/user/1000", "/home/u/.cache", "", "/run/user/1000/malachi/open"},
+		{"no runtime dir", "", "/home/u/.cache", "", "/home/u/.cache/malachi/open"},
+		// The one part of the sandbox's runtime dir the host previewer can read.
+		{"flatpak", "/run/user/1000", "/home/u/.var/app/io.github.schotek.Malachi/cache", "io.github.schotek.Malachi",
+			"/run/user/1000/app/io.github.schotek.Malachi/malachi/open"},
+		{"flatpak, no runtime dir", "", "/home/u/.var/app/x/cache", "x", "/home/u/.var/app/x/cache/malachi/open"},
+	}
+	for _, tc := range tests {
+		if got := openDirFor(tc.runtime, tc.cache, tc.flatpakID); got != tc.want {
+			t.Errorf("%s: got %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestSweepOpenDir(t *testing.T) {
 	dir := t.TempDir()
 	old := filepath.Join(dir, "old")

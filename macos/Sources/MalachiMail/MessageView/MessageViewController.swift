@@ -606,6 +606,10 @@ final class MessageViewController: NSViewController {
     /// the attachment and the message it belongs to.
     private func buildChip(_ s: MessageSummary, _ a: Attachment, available: Bool, why: String) -> NSView {
         let chip = AttachmentChipView(attachment: a, available: available, why: why)
+        chip.onPreview = { [weak self, weak chip] in
+            guard let self else { return }
+            self.delegate?.previewAttachment(a, of: s, from: chip?.window ?? self.view.window, source: chip)
+        }
         chip.onOpen = { [weak self, weak chip] in
             guard let self else { return }
             self.delegate?.openAttachment(a, of: s, from: chip?.window ?? self.view.window)

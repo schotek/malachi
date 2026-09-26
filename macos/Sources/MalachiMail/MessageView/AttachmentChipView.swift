@@ -7,13 +7,14 @@ import UniformTypeIdentifiers
 
 /// One attachment under the headers (attachments.go `buildChip`): a
 /// two-segment control, the first with the type icon, the name and the size
-/// (a click opens the attachment), the second with an arrow that offers
-/// View (an attached message only), Open and Save As…. The actions close
-/// over the attachment they were built for, so a chip never acts on a
-/// message other than its own. An unavailable part leaves the chip
-/// disabled with the reason as its tooltip; an attached message is viewed
-/// in its own window on click; an executable keeps Open disabled and saves
-/// on click instead (docs/security.md §4). Names and types are server data
+/// (a click previews the attachment in Quick Look), the second with an
+/// arrow that offers View (an attached message only), Open in the default
+/// application and Save As…. The actions close over the attachment they
+/// were built for, so a chip never acts on a message other than its own.
+/// An unavailable part leaves the chip disabled with the reason as its
+/// tooltip; an attached message is viewed in its own window on click; an
+/// executable is previewed like any file but keeps Open disabled
+/// (docs/security.md §4). Names and types are server data
 /// and are shown as plain text; the name's middle is elided so the
 /// extension stays visible, the whole name is the tooltip.
 @MainActor
@@ -23,6 +24,7 @@ final class AttachmentChipView: NSSegmentedControl {
     let nested: Bool
     let executable: Bool
 
+    var onPreview: (@MainActor () -> Void)?
     var onOpen: (@MainActor () -> Void)?
     var onSave: (@MainActor () -> Void)?
     var onView: (@MainActor () -> Void)?
@@ -108,15 +110,14 @@ final class AttachmentChipView: NSSegmentedControl {
         }
     }
 
-    /// The first segment's click: view an attached message, save an
-    /// executable, open anything else.
+    /// The first segment's click: view an attached message in its own
+    /// window, preview anything else, executables included (Quick Look
+    /// never runs them).
     private func primary() {
         if nested {
             onView?()
-        } else if executable {
-            onSave?()
         } else {
-            onOpen?()
+            onPreview?()
         }
     }
 

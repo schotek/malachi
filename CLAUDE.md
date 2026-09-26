@@ -148,7 +148,10 @@ verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
 části zprávy pro schéma `malachi-cid:`; `message.embedded` vykreslí
 přiloženou zprávu (`message/rfc822`, `.eml`) jen pro čtení a jen na
 vyžádání, obrázky vloží jako `data:`, parser nerekurzuje, nic se neukládá
-(UI ji otevře z chipu přílohy v samostatném okně). UI je vykresluje ve WebKitGTK 6.0
+(UI ji otevře z chipu přílohy v samostatném okně); klik na jinou přílohu
+ji ukáže v náhledu (GNOME Sushi přes `ui/internal/preview`, bez Sushi
+výchozí aplikace; na macOS Quick Look), Otevřít a Uložit jako jsou v menu
+chipu. UI je vykresluje ve WebKitGTK 6.0
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`

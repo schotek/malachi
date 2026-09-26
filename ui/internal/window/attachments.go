@@ -20,16 +20,19 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/preview"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
 // The attachment chips under the headers of a message (message_attachments
-// in both .blp files): one per attachment with its icon, name and size. A
-// click opens the attachment, the arrow offers Open and Save As…, and Save
-// All appears with two or more. Names and types are server data and are
-// shown as plain text (CLAUDE.md rule 3); programs and scripts are never
-// opened directly (docs/security.md §4); the content comes through
-// message.part, so a part over api.MaxAttachmentDataBytes is out of reach.
+// in the .blp files): one per attachment with its icon, name and size. A
+// click shows the attachment in the desktop's previewer (Sushi, see
+// ui/internal/preview), the arrow offers Open in the default application
+// and Save As…, and Save All appears with two or more. Names and types are
+// server data and are shown as plain text (CLAUDE.md rule 3); programs and
+// scripts are previewed but never opened directly (docs/security.md §4);
+// the content comes through message.part, so a part over
+// api.MaxAttachmentDataBytes is out of reach.
 
 // partTimeout bounds one message.part call: the part may be 16 MiB of
 // base64 on the socket, far more than rpcTimeout allows for.
@@ -93,14 +96,14 @@ func (v *messageView) say(text string) {
 	}
 }
 
-// buildChip is one attachment: a button (icon, name, size) that opens it,
-// linked to an arrow with the Open / Save As… menu. The actions live in a
-// group on the chip itself and close over the attachment, so a chip never
+// buildChip is one attachment: a button (icon, name, size) that previews
+// it, linked to an arrow with the Open / Save As… menu. The actions live in
+// a group on the chip itself and close over the attachment, so a chip never
 // acts on a message other than the one it was built for. An unavailable
 // part (ok false) leaves the chip insensitive with why as its tooltip; an
 // attached message is viewed in its own window on click (embedded.go), the
-// menu adding View; an executable keeps Open disabled and saves on click
-// instead.
+// menu adding View; an executable is previewed like any file but keeps
+// Open disabled.
 func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attachment, ok bool, why string) gtk.Widgetter {
 	name := chipName(a)
 	exe := executableAttachment(a.Filename, a.ContentType)
@@ -137,6 +140,7 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	box.Append(arrow)
 
 	open := func() { v.openAttachment(acc, id, a) }
+	showPreview := func() { v.previewAttachment(acc, id, a) }
 	save := func() { v.saveAttachment(acc, id, a) }
 	view := func() { v.openEmbeddedWindow(acc, id, a) }
 	g := gio.NewSimpleActionGroup()
@@ -165,11 +169,12 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 		button.SetTooltipText(name)
 		button.ConnectClicked(view)
 	case exe:
+		// The preview never runs it; Open stays disabled in the menu.
 		button.SetTooltipText(i18n.T("Programs and scripts are not opened directly; save the file and decide yourself."))
-		button.ConnectClicked(save)
+		button.ConnectClicked(showPreview)
 	default:
 		button.SetTooltipText(name)
-		button.ConnectClicked(open)
+		button.ConnectClicked(showPreview)
 	}
 	return box
 }
@@ -386,9 +391,46 @@ func (w *Window) fetchAttachment(ctx context.Context, acc api.AccountID, id api.
 }
 
 // openAttachment writes the part to a private file and hands it to the
-// default application (the OpenURI portal under Flatpak).
+// default application (the OpenURI portal under Flatpak): the menu's Open.
+// A part the server names as a program or script is refused here too, so
+// the check does not rest on the listed name alone.
 func (v *messageView) openAttachment(acc api.AccountID, id api.MessageID, a api.Attachment) {
-	parent, w := v.parent, v.win
+	v.writeAttachment(acc, id, a, func(path string, exe bool) {
+		if exe {
+			v.say(i18n.T("Programs and scripts are not opened directly; save the file and decide yourself."))
+			return
+		}
+		v.launchFile(path)
+	})
+}
+
+// previewAttachment writes the part to a private file and shows it in the
+// desktop's previewer: a click on the chip. The previewer only renders.
+// Where there is none (no Sushi, another desktop), the default application
+// opens the file instead, as Open would, except a program or script,
+// which is never opened (docs/security.md §4).
+func (v *messageView) previewAttachment(acc api.AccountID, id api.MessageID, a api.Attachment) {
+	v.writeAttachment(acc, id, a, func(path string, exe bool) {
+		preview.Show(gio.NewFileForPath(path).URI(), func(err error) {
+			if err == nil {
+				return
+			}
+			v.win.log.Info("previewing an attachment", "err", err)
+			if exe {
+				v.say(i18n.T("The attachment could not be opened"))
+				return
+			}
+			v.launchFile(path)
+		})
+	})
+}
+
+// writeAttachment fetches the part and writes it to a private file
+// (writeOpenFile), then calls then on the main loop with its path and
+// whether the listed or the served name and type make it a program or
+// script. A failure is a toast and then never runs.
+func (v *messageView) writeAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, then func(path string, exe bool)) {
+	w := v.win
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
 		defer cancel()
@@ -398,22 +440,27 @@ func (v *messageView) openAttachment(acc api.AccountID, id api.MessageID, a api.
 			glib.IdleAdd(func() { v.say(widget.RPCErrorText(i18n.T("Opening the attachment"), err)) })
 			return
 		}
-		path, err := writeOpenFile(fileName(res, a), res.Data)
+		name := fileName(res, a)
+		exe := executableAttachment(a.Filename, a.ContentType) || executableAttachment(name, res.ContentType)
+		path, err := writeOpenFile(name, res.Data)
 		if err != nil {
 			w.log.Warn("writing an attachment for opening", "err", err)
 			glib.IdleAdd(func() { v.say(i18n.T("The attachment could not be opened")) })
 			return
 		}
-		glib.IdleAdd(func() {
-			l := gtk.NewFileLauncher(gio.NewFileForPath(path))
-			l.Launch(context.Background(), parent, func(r gio.AsyncResulter) {
-				if err := l.LaunchFinish(r); err != nil && !dialogDismissed(err) {
-					w.log.Warn("opening an attachment", "err", err)
-					v.say(i18n.T("The attachment could not be opened"))
-				}
-			})
-		})
+		glib.IdleAdd(func() { then(path, exe) })
 	}()
+}
+
+// launchFile hands a written attachment to the default application.
+func (v *messageView) launchFile(path string) {
+	l := gtk.NewFileLauncher(gio.NewFileForPath(path))
+	l.Launch(context.Background(), v.parent, func(r gio.AsyncResulter) {
+		if err := l.LaunchFinish(r); err != nil && !dialogDismissed(err) {
+			v.win.log.Warn("opening an attachment", "err", err)
+			v.say(i18n.T("The attachment could not be opened"))
+		}
+	})
 }
 
 // saveAttachment asks where to put the part (the FileChooser portal under
@@ -536,13 +583,21 @@ func dialogDismissed(err error) bool {
 	return g.ErrorCode() == int(gtk.DialogErrorDismissed) || g.ErrorCode() == int(gtk.DialogErrorCancelled)
 }
 
-// openDir is where attachments being opened are written
-// (docs/security.md §8): under the runtime dir, or the cache dir without
-// one.
+// openDir is where attachments being opened or previewed are written
+// (docs/security.md §8).
 func openDir() string {
-	base := glib.GetUserRuntimeDir()
+	return openDirFor(glib.GetUserRuntimeDir(), glib.GetUserCacheDir(), os.Getenv("FLATPAK_ID"))
+}
+
+// openDirFor is openDir for the given directories: under the runtime dir,
+// or the cache dir without one. Inside Flatpak the runtime dir is private
+// to the sandbox except $XDG_RUNTIME_DIR/app/<app-id>, which the host sees
+// at the same path (api.SocketBase); the previewer runs on the host and
+// has to read the file.
+func openDirFor(runtimeDir, cacheDir, flatpakID string) string {
+	base := api.SocketBase(runtimeDir, flatpakID)
 	if base == "" {
-		base = glib.GetUserCacheDir()
+		base = cacheDir
 	}
 	return filepath.Join(base, "malachi", "open")
 }

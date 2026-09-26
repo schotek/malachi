@@ -180,7 +180,7 @@ go test ./internal/auth/helper -run TestRealHelper` from `backend/`.
 | Configuration | `~/Library/Application Support/Malachi Mail/config.toml` |
 | Mail store | `~/Library/Application Support/Malachi Mail/store.db` |
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
-| Attachments being opened | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
+| Attachments being opened or previewed | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
 | Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys plus `command-r` |
 | Passwords, sign-ins | login keychain, service `io.github.schotek.Malachi` (`password`, or `oauth2.refresh_token` for a browser sign-in) |
 | MCP bridge | `Contents/MacOS/malachi-mcp` in the bundle, `build/malachi-mcp` in a checkout |
@@ -240,7 +240,7 @@ the strings and the confirmation dialogs.
 | Accounts are reordered by dragging the handle or with ⌥⌘↑ / ⌥⌘↓ | ⌃↑ / ⌃↓ | ⌃↑ / ⌃↓ are Mission Control |
 | ⌘R is a setting (*Settings → General → Keyboard*): *Reply* as in Mail (⌘R Reply, ⇧⌘R Reply All, ⇧⌘F Forward, ⇧⌘N Check for New Mail), or *Check for New Mail* as on Linux (⌘R refresh, ⌥⌘R / ⌥⇧⌘R / ⌥⇧⌘F for the replies) | Ctrl+R refreshes | Decided: a choice, default Mail's |
 | Alerts follow `NSAlert`: *Cancel* on the right is the default (Return) and takes Escape, the destructive button has no shortcut; "Save changes to this draft?" keeps *Save Draft* on Return | GTK button order, suggested/destructive styling; the same default and close responses | AppKit convention |
-| Files opened or saved from a message get the quarantine attribute (type e-mail attachment, agent Malachi Mail) | No attribute | Gatekeeper and the opening application treat them as downloads; a gain |
+| Files opened, previewed or saved from a message get the quarantine attribute (type e-mail attachment, agent Malachi Mail) | No attribute | Gatekeeper and the opening application treat them as downloads; a gain |
 | The new-mail sound is the system *Glass* sound | The sound theme's `message-new-email` | macOS has no such event |
 | The *Keyboard Shortcuts* item is left out of the primary menu | Present | It never worked in the GTK UI either |
 | The message list uses the system selection highlight | Rounded, themed rows | `NSTableView` |

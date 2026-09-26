@@ -122,7 +122,10 @@ protocol MessageActionDelegate: AnyObject {
     /// addresses.go: an address chip's New Message, written from
     /// `account` (that of the message the chip sits on).
     func newMessage(to address: Address, account: AccountID)
-    /// attachments.go: Open (never for executables), Save As…, Save All.
+    /// attachments.go: Preview (a click on the chip; `source` is the chip
+    /// the panel zooms out of), Open (never for executables), Save As…,
+    /// Save All.
+    func previewAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?, source: NSView?)
     func openAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)
     func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)
     /// Save All reports its end through `done`, so the button that

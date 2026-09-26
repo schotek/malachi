@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-26 08:57+0200\n"
+"POT-Creation-Date: 2026-09-26 10:14+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1019,61 +1019,61 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/attachments.go:72
+#: ui/internal/window/attachments.go:75
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:130 ui/data/ui/message_window.ui:56
+#: ui/internal/window/attachments.go:133 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:376
 msgid "More Actions"
 msgstr ""
 
-#: ui/internal/window/attachments.go:168
+#: ui/internal/window/attachments.go:173 ui/internal/window/attachments.go:400
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 
-#: ui/internal/window/attachments.go:182
+#: ui/internal/window/attachments.go:187
 msgid "_View"
 msgstr ""
 
-#: ui/internal/window/attachments.go:184
+#: ui/internal/window/attachments.go:189
 msgid "_Open"
 msgstr ""
 
-#: ui/internal/window/attachments.go:185
+#: ui/internal/window/attachments.go:190
 msgid "Save _As…"
 msgstr ""
 
-#: ui/internal/window/attachments.go:197
+#: ui/internal/window/attachments.go:202
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:238
+#: ui/internal/window/attachments.go:243
 msgid "This message has not been downloaded yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:240 ui/internal/window/message_view.go:342
+#: ui/internal/window/attachments.go:245 ui/internal/window/message_view.go:342
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:242 ui/internal/window/message_view.go:344
+#: ui/internal/window/attachments.go:247 ui/internal/window/message_view.go:344
 msgid "This message could not be read."
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:248
+#: ui/internal/window/attachments.go:253
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:315
+#: ui/internal/window/attachments.go:320
 msgid "Attachment"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:372
+#: ui/internal/window/attachments.go:377
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -1081,28 +1081,29 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:375
+#: ui/internal/window/attachments.go:380
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr ""
 
-#: ui/internal/window/attachments.go:398
-msgid "Opening the attachment"
-msgstr ""
-
-#: ui/internal/window/attachments.go:404 ui/internal/window/attachments.go:412
+#: ui/internal/window/attachments.go:420 ui/internal/window/attachments.go:448
+#: ui/internal/window/attachments.go:461
 msgid "The attachment could not be opened"
 msgstr ""
 
-#: ui/internal/window/attachments.go:425
+#: ui/internal/window/attachments.go:440
+msgid "Opening the attachment"
+msgstr ""
+
+#: ui/internal/window/attachments.go:472
 msgid "Save Attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:441
+#: ui/internal/window/attachments.go:488
 msgid "Saving the attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:454
+#: ui/internal/window/attachments.go:501
 msgid "Save Attachments"
 msgstr ""
 

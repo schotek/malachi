@@ -3,6 +3,7 @@
 
 import AppKit
 import MalachiCore
+import Quartz
 
 /// A window controller that carries a toast overlay of its own
 /// (message_window.blp and embedded_window.blp `toast_overlay`), so a
@@ -208,6 +209,23 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
 
     private func starTitle(_ f: ActionFlags) -> String {
         f.flagged ? L10n.T("Unstar") : L10n.T("Star")
+    }
+
+    // MARK: Quick Look
+
+    // An attachment chip's preview (AttachmentPreview): the panel asks the
+    // key window's responder chain for a controller, and a chip never
+    // becomes first responder, so this controller answers for it.
+    nonisolated override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
+        MainActor.assumeIsolated { AttachmentPreview.shared.accepts }
+    }
+
+    nonisolated override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.begin(panel) }
+    }
+
+    nonisolated override func endPreviewPanelControl(_ panel: QLPreviewPanel!) {
+        MainActor.assumeIsolated { AttachmentPreview.shared.end(panel) }
     }
 }
 

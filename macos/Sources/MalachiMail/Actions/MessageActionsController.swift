@@ -321,6 +321,10 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     // MARK: Attachments (attachments.go)
 
+    func previewAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?, source: NSView?) {
+        attachments.preview(attachment, of: summary, from: window, source: source)
+    }
+
     func openAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?) {
         attachments.open(attachment, of: summary, from: window)
     }

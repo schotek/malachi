@@ -213,9 +213,15 @@ the page.
 - Attachment filenames are sanitised (no `/`, `\`, control chars, bidi
   controls such as U+202E that would make the displayed extension lie,
   leading dots, over-long names) and shown with their detected type, not
-  only the claimed one. Executable types are never opened directly: the UI
-  offers only "Save As" for them, judged by the last extension and the
-  claimed content type (`ui/internal/window/attachments.go`). The macOS
+  only the claimed one. A click on an attachment previews it: GNOME's
+  Sushi (`org.gnome.NautilusPreviewer`, `ui/internal/preview`) or Quick
+  Look on macOS, which render the file and never run it; opening it in the
+  default application is a separate item in the chip's menu. Where Sushi
+  is missing the click opens the file the same way, except an executable.
+  Executable types are previewed but never opened directly: Open stays
+  disabled for them and "Save As" is offered, judged by the last extension
+  and the claimed content type, and in the GTK UI again by the name and
+  type `message.part` served (`ui/internal/window/attachments.go`). The macOS
   client adds what that platform runs, installs or follows on a double
   click (Terminal scripts, `.app`, `.pkg`, configuration profiles, Java
   Web Start, AppleScript and Automator documents, bundles, `.webloc` and
@@ -548,21 +554,25 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - The RPC socket is `0600`; any process running as the user can talk to the
   daemon. That is the same trust level as reading `store.db` directly, so
   no additional authentication is layered on the socket.
-- An attachment being opened is written by the UI to a private `0700`
-  directory under `$XDG_RUNTIME_DIR/malachi/open` (or
+- An attachment being opened or previewed is written by the UI to a
+  private `0700` directory under `$XDG_RUNTIME_DIR/malachi/open` (or
   `$XDG_CACHE_HOME/malachi/open` without a runtime dir) as a `0600` file
-  and handed to the OpenURI portal / the default application. The viewer
-  may read it lazily, so the file is not removed at once: the directory is
+  and handed to the previewer, or to the OpenURI portal / the default
+  application. Inside Flatpak the directory is
+  `$XDG_RUNTIME_DIR/app/<app-id>/malachi/open`: the rest of the sandbox's
+  runtime dir is private to it, and the previewer runs on the host. The
+  viewer may read it lazily, so the file is not removed at once: the directory is
   emptied when the UI starts and exits, and entries older than an hour are
   swept whenever the next attachment is opened. On macOS the directory is
   `~/Library/Caches/Malachi Mail/open` (there is no runtime dir of the
   XDG kind), each file goes into a fresh `mkdtemp` subdirectory and is
   created `O_EXCL` with mode `0600`, and every file the client writes out
-  of a message, whether opened or saved, carries the quarantine attribute
+  of a message, whether opened, previewed or saved, carries the quarantine attribute
   (type e-mail attachment, agent Malachi Mail), so Gatekeeper and the
   opening application treat it as a download. The attribute is read back
-  after it is set: a file written for opening on which it did not stick
-  is not opened (the toast says the attachment could not be opened); a
+  after it is set: a file written for opening or previewing on which it
+  did not stick is not shown (the toast says the attachment could not be
+  opened); a
   file the user saved is theirs regardless. Log lines about these files
   carry an error's domain and code in the open and its description, which
   names the file, as private.
@@ -586,7 +596,8 @@ Gives:
   us read `~/.ssh`;
 - no direct D-Bus access except the names listed in `finish-args`
   (`org.freedesktop.secrets`, `org.freedesktop.Notifications`,
-  `org.gnome.OnlineAccounts`, the Evolution Data Server names);
+  `org.gnome.OnlineAccounts`, `org.gnome.Settings`,
+  `org.gnome.NautilusPreviewer`, the Evolution Data Server names);
 - WebKitGTK's own process sandbox (bubblewrap) works inside Flatpak;
 - a defined runtime, so library versions are known.
 
