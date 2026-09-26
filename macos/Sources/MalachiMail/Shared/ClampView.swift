@@ -18,6 +18,12 @@ final class ClampView: NSView {
     ///   - maximum: `maximum-size`.
     ///   - tight: `tightening-threshold`; the child is as wide as the clamp
     ///     up to here.
+    /// Top-left origin, like GTK. As a scroll view's document (the plain
+    /// text body) an unflipped clamp shorter than the visible area sat at
+    /// its bottom, and scrolling to the origin went to the end; the layout
+    /// is all constraints, so nothing else changes.
+    override var isFlipped: Bool { true }
+
     init(maximum: CGFloat, tight: CGFloat, child: NSView? = nil) {
         self.maximum = maximum
         self.tight = min(tight, maximum)
