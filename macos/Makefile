@@ -25,6 +25,17 @@ endif
 # keeps the identity stable across rebuilds.
 SIGN          ?= -
 
+# The SDK the app records as linked against: AppKit picks the design by it
+# (Liquid Glass from 26 on). SwiftPM's default build system records the
+# deployment target instead, so without this the app got the macOS 14 look
+# on any newer system. MACOS_MIN is Package.swift's `platforms` minimum.
+# Only the app gets it: malachi-keychain has no UI, and a changed binary is
+# a new code identity the Keychain would ask about again for every stored
+# password, so the helper links exactly as before.
+MACOS_MIN     := 14.0
+SDK_VERSION   := $(shell xcrun --show-sdk-version 2>/dev/null)
+LINK_SDK      := $(if $(SDK_VERSION),-Xlinker -platform_version -Xlinker macos -Xlinker $(MACOS_MIN) -Xlinker $(SDK_VERSION))
+
 # Localisation: the GTK catalogue in po/ is the single source of truth; the
 # generated .lproj directories are copied into Contents/Resources and read by
 # MalachiCore's L10n (never Bundle.module, which a hand-made .app cannot carry).
@@ -51,7 +62,8 @@ CONTENTS      := $(APP)/Contents
 
 ## build: compile the Swift package (release); a warning fails the build
 build:
-	swift build -c release -Xswiftc -warnings-as-errors
+	swift build -c release -Xswiftc -warnings-as-errors --product $(HELPER)
+	swift build -c release -Xswiftc -warnings-as-errors --product $(EXE) $(LINK_SDK)
 
 ## locale: generate .lproj directories from po/malachi.pot and po/*.po
 locale:
