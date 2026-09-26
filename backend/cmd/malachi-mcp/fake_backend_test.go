@@ -41,19 +41,18 @@ const (
 type fakeBackend struct {
 	rpc.StubBackend
 
-	mu              sync.Mutex
-	protocolVersion int // 0 = api.ProtocolVersion
-	accounts        []api.Account
-	folders         map[api.AccountID][]api.Folder
-	lists           map[api.FolderID][]api.MessageSummary
-	messages        map[api.MessageID]api.Message
-	bodies          map[api.MessageID]api.MessageBodyResult
-	parts           map[string]api.MessagePartResult // "messageID/partID"
-	states          []api.SyncState
-	fail            map[string]*api.Error           // method → forced error
-	delay           map[string]time.Duration        // method → sleep before answering
-	quoteForm       map[api.MessageID]api.QuoteForm // draft.create's quoted form; default from the body state
-	attMeta         map[string]api.DraftAttachment  // attachments draft.create imported, by id
+	mu        sync.Mutex
+	accounts  []api.Account
+	folders   map[api.AccountID][]api.Folder
+	lists     map[api.FolderID][]api.MessageSummary
+	messages  map[api.MessageID]api.Message
+	bodies    map[api.MessageID]api.MessageBodyResult
+	parts     map[string]api.MessagePartResult // "messageID/partID"
+	states    []api.SyncState
+	fail      map[string]*api.Error           // method → forced error
+	delay     map[string]time.Duration        // method → sleep before answering
+	quoteForm map[api.MessageID]api.QuoteForm // draft.create's quoted form; default from the body state
+	attMeta   map[string]api.DraftAttachment  // attachments draft.create imported, by id
 
 	getCalls          int
 	listCalls         []api.MessageListParams
@@ -100,7 +99,6 @@ func (f *fakeBackend) setFail(method string, err *api.Error) {
 	f.fail[method] = err
 }
 
-func (f *fakeBackend) System() api.SystemService    { return fakeSystem{f.StubBackend.System(), f} }
 func (f *fakeBackend) Accounts() api.AccountService { return fakeAccounts{f.StubBackend.Accounts(), f} }
 func (f *fakeBackend) Folders() api.FolderService   { return fakeFolders{f.StubBackend.Folders(), f} }
 func (f *fakeBackend) Messages() api.MessageService { return fakeMessages{f.StubBackend.Messages(), f} }
@@ -109,19 +107,6 @@ func (f *fakeBackend) Attachments() api.AttachmentService {
 	return fakeAttachments{f.StubBackend.Attachments(), f}
 }
 func (f *fakeBackend) Sync() api.SyncService { return fakeSync{f.StubBackend.Sync(), f} }
-
-type fakeSystem struct {
-	api.SystemService
-	f *fakeBackend
-}
-
-func (s fakeSystem) Info(context.Context, api.SystemInfoParams) (*api.SystemInfoResult, error) {
-	pv := s.f.protocolVersion
-	if pv == 0 {
-		pv = api.ProtocolVersion
-	}
-	return &api.SystemInfoResult{Version: "fake", ProtocolVersion: pv, PID: 1}, nil
-}
 
 type fakeAccounts struct {
 	api.AccountService

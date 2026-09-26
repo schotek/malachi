@@ -20,9 +20,24 @@ defend against. Code that touches mail content must be reviewed against it.
   on-path attacker if TLS is misconfigured. Controls every protocol byte.
 - **Local unprivileged process** (limited scope): another app in the same
   user session. Flatpak reduces, but does not remove, this.
+- **Peer on the RPC socket**: a process that can connect to the daemon's
+  socket but cannot read the key file beside it, or one that sits on the
+  socket's path to pose as the daemon.
 
 Out of scope: a compromised user account on the machine, a compromised OS,
 physical access to an unlocked session, and endpoint malware.
+
+What the connection handshake ([api.md §1.4](api.md#14-handshake), §8)
+does about the local attackers:
+
+| Attacker | What the handshake does |
+|---|---|
+| Reaches the socket but not the key file beside it: a `socat` or `ssh -R` forward, a container or a Flatpak app given the socket file alone (a bind mount or `--filesystem` grant of its directory exposes the key file as well); on Windows, where Go can neither set nor check a socket's permissions, a peer that reaches it that way | Keeps it out: without the key it cannot authenticate, and anything else closes the connection (a request gets error 1005 first); no backend code runs for it and no notification reaches it |
+| Sits on the socket's path without the key | Gets no request: a client sends nothing after `system.hello` until the daemon has proved the key, so an `account.add` password never reaches it |
+| Holds the key of an earlier run, or a recorded handshake | Gains nothing: every start makes a new key, every connection new nonces |
+| Opens many connections | Bounded: before authentication 4 KiB and 10 s per connection and at most 32 at a time, which cannot stall authenticated clients; while it holds all 32, or floods the socket so that the system refuses connections, new clients cannot get in, and on Windows and macOS a daemon starting meanwhile can take the socket over from the live one (§8) |
+| Relays between a client and the daemon, which takes write access to the socket's directory | Not detected: the proofs are not bound to the connection, and the traffic after them is neither encrypted nor protected against change |
+| Can read the key file: runs as the user (a container or Flatpak app given the socket's directory included), or as administrator, root or SYSTEM | Nothing: it reads the key as it reads `store.db` and can use the whole API |
 
 ## 3. HTML mail
 
@@ -393,8 +408,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   serialised per account together with the account row they belong to,
   and a re-sign-in that completes after its account was removed deletes
   what it stored.
-- Sign-in sessions share the RPC socket's trust model: the socket is the
-  user's own, so any client on it may start a re-sign-in for an account,
+- Sign-in sessions share the RPC connections' trust model (§8): every
+  client has proved that it holds the daemon's per-run key, which is the
+  user's own, so any client may start a re-sign-in for an account,
   replace the page texts of the one waiting (they are escaped either
   way) or cancel it; none of that reveals a token, and the grant of a
   session reaches an account only through the binding checks above.
@@ -423,7 +439,7 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `key` (`password` / `oauth2.refresh_token`); the label names the account
   id and key only. The session is `plain`: the session bus is per-user and
   a process able to eavesdrop on it runs as the same user and can already
-  read `store.db` and the RPC socket, so the encrypted
+  read `store.db` and the RPC key (§8), so the encrypted
   `dh-ietf1024-sha256-aes128-cbc-pkcs7` session would not change the threat
   model. It is the upgrade path if a sandbox ever filters bus traffic.
   Unlock prompts are the desktop's own dialogs; a dismissed prompt is a
@@ -442,7 +458,7 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   the service `io.github.schotek.Malachi`; the first read after a rebuild of
   an ad-hoc signed helper is the Keychain's own access prompt. The trust
   model equals the Secret Service's: a process running as the same user
-  could already read `store.db` and the RPC socket, so being able to run
+  could already read `store.db` and the RPC key, so being able to run
   the helper gives it nothing new. On the daemon's side the helper path
   must be absolute and name an executable regular file, one call is
   bounded by 30 s (a Keychain prompt waits for the user), stdout and
@@ -551,9 +567,54 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 - `store.db` is `0600` in a `0700` directory. Mail is stored unencrypted at
   rest; full-disk encryption is the user's responsibility and is stated in
   the README.
-- The RPC socket is `0600`; any process running as the user can talk to the
-  daemon. That is the same trust level as reading `store.db` directly, so
-  no additional authentication is layered on the socket.
+- The RPC socket is `0600` in a `0700` directory where the platform has
+  file modes, but reaching it is not enough: every connection starts with
+  a handshake in which the daemon, then the client, proves with
+  HMAC-SHA256 over two fresh nonces that it holds the key the daemon made
+  at its start ([api.md §1.4](api.md#14-handshake)), and nothing else is
+  served before it. Whoever can read the key can use the daemon, which is
+  the same trust level as reading `store.db` directly.
+- The key (32 random bytes) is the file `<socket>.key` beside the socket,
+  `rpc.sock.key` by default: `0600` where the platform has file modes, on
+  Windows as private as the directory it inherits its permissions from,
+  which for the default path lies in the user's profile. The daemon
+  writes a new one at every start before it accepts a connection and
+  never logs or sends it; a clean exit removes it while it still holds
+  that run's key, and after a crash or a kill it stays until the next
+  start replaces it. Clients read it afresh for every connection, only
+  after the daemon has answered `system.hello`, and accept only a regular
+  file of the exact format; the macOS client also requires the user as
+  its owner and no group or other permission bits (`macos/README.md`), a
+  check the Go clients cannot make without platform-specific code.
+- The table in §2 lists, attacker by attacker, what the handshake
+  protects against: a peer that reaches the socket but not the key file
+  beside it is refused, a process on the socket's path that cannot prove
+  the key never receives a request, an unauthenticated connection runs no
+  backend code, gets no notification and cannot stall clients that are
+  already authenticated, and the key of an earlier run is worthless. The
+  MCP bridge relies on it instead of checking the socket's owner and
+  mode, on every platform alike (§10).
+- What it does not protect against: the user's own processes, which can
+  read the key as they can read `store.db` (so can a container or Flatpak
+  app running as the user that was given the socket's directory rather
+  than the socket file alone), and administrators, root or SYSTEM. It is
+  not encryption and gives the messages after it no integrity of their
+  own; nor are its proofs bound to the connection, so a relay that can
+  put its own socket at the daemon's path (which takes write access to
+  the socket's directory) passes both proofs on and can read and change
+  everything after them. It guarantees no availability: whoever can
+  connect can occupy the 32 handshake slots, and on Windows and macOS a
+  flood of connections can make a starting daemon's check of the socket
+  fail outright, so that it takes the socket over from a live daemon,
+  which keeps running on the same store: two daemons then sync it, and
+  the second one's outbox reset can send a message the first was sending
+  again (there is no single-instance lock on the store yet). Every
+  authenticated client has the same rights; nothing is authorised per
+  client. A socket moved into a directory other users can read or write
+  (`--socket` or `MALACHI_SOCKET` pointing into `/tmp`, or on Windows
+  outside the user's profile) is not supported: whoever can write there
+  can put a socket and a key of their own in place, and on Windows
+  whoever can read there can read the key.
 - An attachment being opened or previewed is written by the UI to a
   private `0700` directory under `$XDG_RUNTIME_DIR/malachi/open` (or
   `$XDG_CACHE_HOME/malachi/open` without a runtime dir) as a `0600` file
@@ -632,8 +693,8 @@ Does not give:
 
 `malachi-mcp` ([mcp.md](mcp.md)) puts mail in front of a language model
 that holds tools. The model is a new target for the mail sender, and the
-bridge is a client of the daemon like the UI: nothing here changes what
-the daemon guarantees.
+bridge is a client of the daemon like the UI, authenticated by the same
+handshake (§8): nothing here changes what the daemon guarantees.
 
 Assets, in addition to §1: the agent session itself (its other tools, its
 context) and the user's Drafts list.
@@ -673,14 +734,21 @@ Defences:
   Trash or in the Outbox; `send_message` accepts only drafts created by
   the same process, at the recorded version;
 - no account management, no configuration, no credentials or server
-  settings in any output; the socket must be the user's own 0600 socket;
-  the bridge never runs as root; nothing content-bearing is logged.
+  settings in any output; the bridge makes no call before the daemon has
+  proved the per-run key (§8), on every platform alike, so a process
+  squatting the socket without being able to write the key file beside it
+  gets nothing beyond `system.hello` (in a shared directory it could plant
+  both, which is why such a directory is not supported, §8); the bridge
+  never runs as root; nothing content-bearing is logged, nor the key, a
+  nonce or a proof.
 
 Explicitly not defended: the model following instructions in mail with the
 tools it has (fencing and descriptions reduce, they do not prevent);
 exfiltration through the host's own tools once content is in context; the
 user sending an agent-made draft without reading it; an agent editing
-`.mcp.json` to grant itself flags; a sender's `Reply-To` steering a reply's
+`.mcp.json` to grant itself flags; an agent able to run programs as the
+user reading `rpc.sock.key` and using the whole API directly, around the
+bridge and its flags; a sender's `Reply-To` steering a reply's
 recipients, and the quoted original (its pictures, a forward's files)
 travelling in an agent-made draft (both are shown in the result). A
 recipient allow-list for
@@ -718,3 +786,15 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] New MCP tool or output field: is every mail-derived string cleaned
       and inside the nonce fence, is the tool behind the right flag, are
       its annotations set, and is its output capped?
+- [ ] New RPC method or notification: is it served, or sent, only on a
+      connection that completed the handshake?
+- [ ] Change to the daemon's handling of a connection before it has
+      authenticated: is nothing exposed beyond the `system.hello` answer,
+      within the limits of [api.md §1.4](api.md#14-handshake) — no
+      backend call, no notification, and no key, nonce, proof or string
+      from the peer in a log line?
+- [ ] New client of the socket: does it authenticate through
+      `api.ClientHandshake`, or a port checked against the test vectors
+      of api.md §1.4, read the key only after the `system.hello` answer
+      and afresh for every connection, and send nothing before
+      `system.authenticate` is answered?

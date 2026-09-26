@@ -50,12 +50,13 @@ func toolError(err error) *mcp.CallToolResult {
 // control-stripped and capped; the stable part is the code name.
 func errorText(err error) string {
 	var (
-		apiErr   *api.Error
-		down     *daemonDownError
-		mismatch *protocolMismatchError
-		sock     *socketError
+		hs     *api.HandshakeError
+		apiErr *api.Error
+		down   *daemonDownError
 	)
 	switch {
+	case errors.As(err, &hs):
+		return handshakeText(hs)
 	case errors.As(err, &apiErr):
 		msg := fmt.Sprintf("%s (%d): %s", apiErr.Code, int(apiErr.Code),
 			truncateBytes(oneLine(apiErr.Message), maxErrorMessageBytes))
@@ -72,15 +73,30 @@ func errorText(err error) string {
 		return msg
 	case errors.As(err, &down):
 		return down.Error()
-	case errors.As(err, &mismatch):
-		return mismatch.Error()
-	case errors.As(err, &sock):
-		return sock.Error()
 	case errors.Is(err, context.DeadlineExceeded):
 		return fmt.Sprintf("malachid did not answer within %s; the daemon may be busy syncing, try again", rpcTimeout)
 	case errors.Is(err, errDisconnected):
 		return "connection to malachid was lost; retry the call"
 	default:
 		return "internal error: " + err.Error()
+	}
+}
+
+// handshakeText is the text for a connection whose handshake failed
+// (docs/api.md §1.4), with what the user can do about it. The texts of
+// api.HandshakeError never contain the key, a nonce or a proof.
+func handshakeText(hs *api.HandshakeError) string {
+	switch hs.Reason {
+	case api.HandshakeProtocolMismatch:
+		return fmt.Sprintf("malachid speaks protocol version %d but this bridge expects %d; rebuild both with make build",
+			hs.Daemon, api.ProtocolVersion)
+	case api.HandshakeKeyUnavailable:
+		return hs.Error() + "; the running daemon writes it next to its socket: start or restart malachid as this user"
+	case api.HandshakeDaemonUnproven:
+		return "refusing to use the socket: " + hs.Error() + "; is MALACHI_SOCKET pointing at another daemon?"
+	case api.HandshakeTimedOut:
+		return fmt.Sprintf("malachid did not complete the connection handshake within %s; retry the call", api.HandshakeTimeout)
+	default: // rejected, malformed
+		return hs.Error() + "; retry the call, or restart malachid"
 	}
 }

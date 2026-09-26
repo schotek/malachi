@@ -26,6 +26,11 @@ const (
 	CodeConflict        ErrorCode = 1002 // optimistic-concurrency conflict (drafts)
 	CodeCancelled       ErrorCode = 1003
 	CodeUnavailable     ErrorCode = 1004 // backend busy / shutting down
+	// CodeUnauthenticated: the RPC connection has not completed the
+	// handshake (docs/api.md §1.4), or the handshake failed; the daemon
+	// closes the connection after this answer. It is not about mail
+	// accounts, whose sign-in problems are the 1200s.
+	CodeUnauthenticated ErrorCode = 1005
 
 	// 1100–1199: not found.
 	CodeAccountNotFound ErrorCode = 1100
@@ -89,6 +94,7 @@ var codeNames = map[ErrorCode]string{
 	CodeConflict:           "conflict",
 	CodeCancelled:          "cancelled",
 	CodeUnavailable:        "unavailable",
+	CodeUnauthenticated:    "unauthenticated",
 	CodeAccountNotFound:    "accountNotFound",
 	CodeFolderNotFound:     "folderNotFound",
 	CodeMessageNotFound:    "messageNotFound",

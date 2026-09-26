@@ -3,9 +3,10 @@
 `malachi-mcp` lets an AI agent (Claude Code, Gemini CLI, Cursor, Zed or any
 other Model Context Protocol client) read and act on the user's mail through
 a running `malachid`. It is a second client of the daemon's JSON-RPC socket,
-exactly like the desktop UI: it imports only `backend/pkg/api`, holds no mail
-logic, and everything it can do is a subset of [api.md](api.md). Nothing in
-the daemon or the contract changed for it.
+exactly like the desktop UI: it imports only `backend/pkg/api`, authenticates
+every connection with the daemon's per-run key as every client does, holds no
+mail logic, and everything it can do is a subset of [api.md](api.md). Nothing
+in the daemon or the contract changed for it.
 
 It is an MCP server over **stdio**: the agent's client spawns it as a child
 process and talks JSON-RPC on its stdin/stdout, as every local MCP server
@@ -30,7 +31,7 @@ Flags and environment of the server:
 
 | Flag / variable | Meaning |
 |---|---|
-| `-socket PATH` | the daemon socket; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
+| `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
 | `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
@@ -46,17 +47,27 @@ registered at all, so it never appears in the client's tool list.
   tool returns the error `malachid is not running; start it with make
   run-dev (socket: …)` and the process stays alive, so `make run-dev` can
   come later without restarting the agent.
-- **Checks before dialling.** The path must be a unix socket owned by the
-  current user with no group or other permission bits, or the tool refuses
-  (`refusing to use …: mode 0660 lets other users reach it`).
-- **Protocol check.** Every new connection calls `system.info`; a daemon with
-  another `protocolVersion` is refused with a message naming both numbers,
-  and the connection is dropped so a rebuilt daemon is picked up at once.
+- **Authentication.** Every new connection starts with the handshake of
+  [api.md §1.4](api.md#14-handshake) (`api.ClientHandshake`) and carries no
+  call before it completes: the bridge sends `system.hello`, compares the
+  daemon's `protocolVersion`, reads the key file beside the socket (afresh
+  for every connection, so a restarted daemon's new key is used at once),
+  verifies the daemon's proof and only then proves its own. A process on
+  the socket that cannot prove the key gets nothing beyond `system.hello`.
+  A failed handshake is a tool error naming the reason: a daemon with
+  another `protocolVersion` (the message names both numbers), a key file
+  that is missing, unreadable or not a key file, a daemon that did not prove
+  the key, a daemon that refused the bridge's proof, a malformed answer,
+  or no answer in time. No error text contains the key, a nonce or a
+  proof. The connection is dropped, so a rebuilt or restarted daemon is
+  picked up by the next call.
 - **Reconnect.** A lost connection fails the calls in flight
   (`connection to malachid was lost; retry the call`); the next call dials
   again. A request that could not be written at all is retried once; a
   request that reached the socket never is, so a send cannot be duplicated.
-- **Timeout.** 30 s per daemon call (`malachid did not answer within 30s`).
+- **Timeouts.** 2 s to connect, 5 s for the handshake
+  (`api.HandshakeTimeout`), 30 s per daemon call (`malachid did not answer
+  within 30s`).
 - **Errors from the daemon** reach the model as tool errors (never
   protocol errors, so the model can react): `<codeName> (<code>): <message>`
   with the message control-stripped and capped at 200 bytes, plus a hint for
@@ -251,7 +262,8 @@ in front of a model that holds tools, so:
 - **Nothing content-bearing is logged.** Logs carry tool and method names,
   durations, error code names, counts and opaque ids; never subjects,
   addresses, bodies, attachment names, folder names, draft content or the
-  daemon's error messages.
+  daemon's error messages, and never the daemon's key or a nonce or proof
+  of the handshake.
 
 ## Security model
 
@@ -262,10 +274,11 @@ attacker@example" inside a body is the confused-deputy case.
 What the bridge enforces: which tools exist (the flags, set by the human
 who starts the client), what they accept (allow-lists, caps, session-scoped
 drafts, no permanent delete, no config or credential surface, no account
-management), and that the daemon's 0600 socket is the only thing it talks
-to. What it can only mitigate: whether the model follows instructions it
-reads. The fence, the cleaning and the fixed instructions in every tool
-description lower that risk; they do not remove it.
+management), and that it talks only to a daemon that proved the per-run
+key ([api.md §1.4](api.md#14-handshake)). What it can only mitigate:
+whether the model follows instructions it reads. The fence, the cleaning
+and the fixed instructions in every tool description lower that risk;
+they do not remove it.
 
 Not defended, on purpose and stated plainly:
 
@@ -277,6 +290,9 @@ Not defended, on purpose and stated plainly:
   it;
 - an agent that can edit files granting itself the flags in `.mcp.json`
   and reconnecting (keep the flags off unless the session is supervised);
+- an agent that can run programs as the user reading the daemon's key
+  (`rpc.sock.key`) and calling the whole API directly, around the bridge
+  and its flags;
 - a sender's `Reply-To` steering the recipients of a reply draft (they are
   shown in the tool result for that reason).
 
@@ -398,7 +414,8 @@ wins over the user-scope entry; elsewhere the registered binary is used.
 
 Register the command `build/malachi-mcp` with the flags you want. The
 bridge speaks MCP over newline-delimited JSON-RPC on stdin/stdout, logs to
-stderr, and needs the daemon socket to be reachable under the same user.
+stderr, and needs to reach the daemon socket and read the key file beside
+it (`rpc.sock.key`) as the same user.
 
 ## Not in this version
 

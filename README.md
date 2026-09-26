@@ -317,6 +317,7 @@ committed template matches the sources.
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
+| RPC key | beside the socket, its path plus `.key` (`rpc.sock.key`): the daemon's connection key for the current run, `0600`, replaced at every start and removed on a clean exit (after a crash it stays until the next start replaces it); every client reads it when it connects |
 | MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |
 | macOS | config and store in `~/Library/Application Support/Malachi Mail/`, the socket as above, attachments being opened in `~/Library/Caches/Malachi Mail/open/`, passwords in the login keychain (see [macos/README.md](macos/README.md)) |
 | Secrets | system keyring (libsecret), never on disk in the clear |
@@ -462,8 +463,9 @@ the agent's tool list at all:
 Drafting needs no flag because a draft is inert: it stays in the local store,
 is never synchronised to the server, and goes out only when you send it
 yourself or when `send_message` is explicitly allowed. The bridge refuses to
-run as root, refuses a socket other users can reach, and checks the daemon's
-protocol version on every connection.
+run as root and authenticates every connection with the daemon's per-run
+key, only after the daemon has proved that it holds the key; the protocol
+version is checked in the same handshake.
 
 Tools, arguments, limits and the threat model: [docs/mcp.md](docs/mcp.md).
 

@@ -79,13 +79,26 @@ the user never sees the second process.
 ## 2. Transport
 
 JSON-RPC 2.0, newline-delimited, over a unix socket owned by the user
-(`0600`). Bidirectional: the daemon pushes notifications (new message, sync
-state, authentication needed) on the same connection. Multiple clients may
-connect; notifications are broadcast. Details: [api.md §1](api.md#1-transport).
+(`0600` where the platform has file modes). A connection starts with a
+mutual proof of a key the daemon makes at every start and writes beside
+the socket (`rpc.sock.key`): the daemon proves that it holds the key, then
+the client does, before any other request and before any notification
+([api.md §1.4](api.md#14-handshake); what it protects against is in
+[security.md §8](security.md#8-local-storage)). Bidirectional: the daemon
+pushes notifications (new message, sync state, a mail account that needs
+signing in) on the same connection. Multiple clients may connect, each
+authenticating on its own; notifications are broadcast to the
+authenticated ones. Details: [api.md §1](api.md#1-transport).
 
 Startup ordering is not assumed: the UI keeps retrying the socket and shows
 its state; the daemon replaces a stale socket after a crash and refuses to
-start twice.
+start twice while the first one answers on the socket (a flood that makes
+that check fail can defeat it, see [security.md §8](security.md#8-local-storage);
+there is no single-instance lock yet). The daemon writes its key before it
+accepts a connection, and a client reads the key only once the daemon has
+answered `system.hello`, afresh for every connection, so a socket that
+answers still means a daemon that is ready, and a restarted daemon's new
+key is picked up by the next connection.
 
 Nothing on the desktop runs the daemon (the Flatpak has one command, the
 autostart entry is the UI, there is no systemd unit), so the UI does:
@@ -96,7 +109,9 @@ the socket, waits for the socket before the first dial, restarts it after
 an exit with an exponential backoff, and sends it SIGTERM when the
 application quits. A daemon that already answers (`make run-backend`, a
 debugger, one left behind by a UI crash) is used as is and never stopped.
-The supervisor is process management only; it never speaks the protocol.
+The supervisor is process management only; it never speaks the protocol:
+its probe connects and closes again without sending a line, which the
+daemon takes quietly before authentication.
 Inside Flatpak the socket sits in `$XDG_RUNTIME_DIR/app/<app-id>`, the one
 directory shared between sandbox instances (`api.SocketBase`); anywhere
 else a later UI instance could not find the daemon and would start a
@@ -108,7 +123,10 @@ second one over the same store.
 backend/
   cmd/malachid        process lifecycle: flags, logging, signals, wiring
   pkg/api             the contract (types, method names, error codes, interfaces)
-  internal/rpc        socket server, framing, dispatch, notification fan-out
+                      and the client side of the connection handshake
+  internal/rpc        socket server, key file and connection handshake (no
+                      backend code before it), framing, dispatch,
+                      notification fan-out
   internal/config     config.toml + XDG paths
   internal/account    config.toml form of an account (bootstrap import)
   internal/auth       keyring interface, OAuth2, SASL; auth/secretservice is the
@@ -150,8 +168,9 @@ flow out through the `api.Notifier` interface that `rpc` implements.
 `cmd/malachi-mcp` imports only `pkg/api` (and the MCP SDK): it is a client
 of the daemon that happens to live in the same module.
 
-`pkg/api` is the only importable package. The UI imports it for types and
-constants; nothing else from `backend/` is reachable.
+`pkg/api` is the only importable package. The UI imports it for types,
+constants and the handshake (`api.ClientHandshake`); nothing else from
+`backend/` is reachable.
 
 ### 3.1 Store
 
@@ -781,3 +800,20 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   is not cached at all, and a Flatpak hole into `~/.cache`). The D-Bus
   interface of EDS is formally private and versioned in its bus names;
   a bump means one constant here and one line in the Flatpak manifest.
+- RPC socket authentication: **decided** (2026-09-26) — every connection
+  proves, in both directions and with HMAC-SHA256 over two fresh nonces,
+  knowledge of a key the daemon makes at every start and writes beside
+  the socket (`<socket>.key`): protocol 2,
+  [api.md §1.4](api.md#14-handshake); what it protects against and what
+  not is in [security.md §8](security.md#8-local-storage). Before, the
+  socket's mode was the only gate, and Go can neither set nor check the
+  permissions of an AF_UNIX socket on Windows; the MCP bridge's check of
+  the socket's owner and mode (`syscall.Stat_t`) did not even compile
+  there. A key file works the same on every platform without build tags
+  (§6, CLAUDE.md rule 4). Rejected: checking owner and mode only where
+  the OS reports them (no protection on Windows); kernel peer credentials
+  (`SO_PEERCRED`, `LOCAL_PEERCRED`, `SIO_AF_UNIX_GETPEERPID`: code per
+  platform); named pipes on Windows (a second transport); TCP on loopback
+  with a token (a socket every local user can reach). Complementary,
+  later: a native Windows client that creates the socket's directory with
+  an ACL for the user alone.

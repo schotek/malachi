@@ -79,7 +79,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 		fs.PrintDefaults()
 	}
 	var cfg config
-	fs.StringVar(&cfg.socket, "socket", defaultSocketPath(), "malachid JSON-RPC unix socket")
+	fs.StringVar(&cfg.socket, "socket", defaultSocketPath(), "malachid JSON-RPC unix socket; its connection key is read from beside it as PATH.key")
 	fs.BoolVar(&cfg.allowModify, "allow-modify", false, "offer the tools that flag, move and delete messages")
 	fs.BoolVar(&cfg.allowSend, "allow-send", false, "offer the tool that sends a draft")
 	showVersion := fs.Bool("version", false, "print version and exit")

@@ -6,7 +6,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -37,39 +39,61 @@ func TestDaemonDownThenRecovers(t *testing.T) {
 	}
 }
 
+// A daemon of another protocol version is refused at its system.hello
+// answer: the key file is not read, nothing else is sent, and the
+// connection is not kept.
 func TestProtocolVersionMismatch(t *testing.T) {
-	fb := newFixture()
-	fb.protocolVersion = 99
-	h := newHarness(t, fb, false, false)
-	h.fail(t, "list_accounts", nil, "malachid speaks protocol version 99 but this bridge expects 1")
-	h.b.rpc.mu.Lock()
-	conn := h.b.rpc.conn
-	h.b.rpc.mu.Unlock()
-	if conn != nil {
-		t.Error("connection kept after a protocol mismatch")
+	cases := []struct {
+		name   string
+		opts   scriptOpts
+		daemon int // the version the error names
+	}{
+		// A daemon of protocol 1 does not know system.hello, and broadcasts
+		// notifications to every connection.
+		{"protocol 1", scriptOpts{old: true, notifyFirst: 2}, 1},
+		{"newer protocol", scriptOpts{version: api.ProtocolVersion + 1}, api.ProtocolVersion + 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			sock := tempSocket(t)
+			d := startScriptedDaemon(t, sock, tc.opts)
+			cs, logs, b := connectBridge(t, sock, false, false)
+
+			text, isErr := callTool(t, cs, "list_accounts", nil)
+			want := fmt.Sprintf("malachid speaks protocol version %d but this bridge expects %d; rebuild both with make build",
+				tc.daemon, api.ProtocolVersion)
+			if !isErr || strings.TrimSuffix(text, "\n") != want {
+				t.Fatalf("got err=%v %q, want %q", isErr, text, want)
+			}
+			if liveConn(b.rpc) != nil {
+				t.Error("connection kept after a protocol mismatch")
+			}
+			d.waitAllEnded(t)
+			if got := d.received(); !reflect.DeepEqual(got, [][]string{{api.MethodSystemHello}}) {
+				t.Errorf("the daemon received %q, want only system.hello", got)
+			}
+			mustContain(t, logs.String(), "reason=protocolMismatch", fmt.Sprintf("daemonProtocol=%d", tc.daemon))
+		})
 	}
 }
 
-func TestSocketPermissionCheck(t *testing.T) {
+// Whatever is at the socket path, only a daemon answers there: a regular
+// file fails the dial like a missing socket, and is left as it is.
+func TestSocketPathIsARegularFile(t *testing.T) {
 	sock := tempSocket(t)
 	if err := os.WriteFile(sock, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	cs, _, _ := connectBridge(t, sock, false, false)
+	cs, _, b := connectBridge(t, sock, false, false)
 	text, isErr := callTool(t, cs, "list_accounts", nil)
-	if !isErr || !strings.Contains(text, "not a unix socket") {
+	if !isErr || !strings.Contains(text, "malachid is not running; start it with make run-dev") || !strings.Contains(text, sock) {
 		t.Fatalf("regular file: err=%v %q", isErr, text)
 	}
-
-	sock2 := tempSocket(t)
-	startFakeDaemon(t, newFixture(), sock2)
-	if err := os.Chmod(sock2, 0o660); err != nil {
-		t.Fatal(err)
+	if liveConn(b.rpc) != nil {
+		t.Error("a connection was kept")
 	}
-	cs2, _, _ := connectBridge(t, sock2, false, false)
-	text, isErr = callTool(t, cs2, "list_accounts", nil)
-	if !isErr || !strings.Contains(text, "mode 0660 lets other users reach it") {
-		t.Fatalf("group-writable socket: err=%v %q", isErr, text)
+	if got, err := os.ReadFile(sock); err != nil || string(got) != "x" {
+		t.Errorf("the file changed: %q, %v", got, err)
 	}
 }
 
@@ -129,6 +153,7 @@ func TestRPCClientDisconnectFailsPending(t *testing.T) {
 	stop := startFakeDaemon(t, fb, sock)
 	c := newRPCClient(sock, nil)
 	defer c.close()
+	oldKey := daemonKeyHex(t, sock)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -146,8 +171,13 @@ func TestRPCClientDisconnectFailsPending(t *testing.T) {
 		t.Fatal("pending call did not fail when the daemon went away")
 	}
 
+	// The daemon's next run has a new key: the next call dials and passes
+	// the handshake only because the key file is read for every connection.
 	fb2 := newFixture()
 	startFakeDaemon(t, fb2, sock)
+	if daemonKeyHex(t, sock) == oldKey {
+		t.Fatal("the restarted daemon has the same key")
+	}
 	if _, err := callRPC[api.AccountListResult](context.Background(), c, api.MethodAccountList, api.AccountListParams{}); err != nil {
 		t.Fatalf("call after the daemon came back: %v", err)
 	}
@@ -169,9 +199,11 @@ func TestLogsContainNoContent(t *testing.T) {
 	if !strings.Contains(logs, "method=message.body") || !strings.Contains(logs, "method=draft.create") || !strings.Contains(logs, "method=attachment.remove") {
 		t.Fatalf("debug log does not even record calls:\n%s", logs)
 	}
+	mustContain(t, logs, "connected to malachid", fmt.Sprintf("protocol=%d", api.ProtocolVersion))
 	mustNotContain(t, logs,
 		"alice@example.org", "Alice", "Quarterly", "Hello Bob", "notes.txt", "hello, notes", "example.org/x",
-		"logo.png", "report.pdf", "SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML)
+		"logo.png", "report.pdf", "SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML,
+		daemonKeyHex(t, h.sock))
 }
 
 func TestVersionFlag(t *testing.T) {

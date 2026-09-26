@@ -4,7 +4,7 @@ This document is the contract between the backend daemon (`malachid`) and any
 user interface. The Go types in `backend/pkg/api/` are the machine-readable
 form of the same contract; **both change together, in one commit.**
 
-Protocol version: **1** (`api.ProtocolVersion`). Bump on any incompatible
+Protocol version: **2** (`api.ProtocolVersion`). Bump on any incompatible
 change and describe the change in the changelog section at the end.
 
 ## 1. Transport
@@ -12,30 +12,42 @@ change and describe the change in the changelog section at the end.
 | Aspect | Value |
 |---|---|
 | Protocol | JSON-RPC 2.0 |
-| Socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock` (mode 0600, directory 0700) |
+| Socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock` (mode 0600, directory 0700 where the platform has file modes) |
 | Inside Flatpak (`FLATPAK_ID` set) | `$XDG_RUNTIME_DIR/app/$FLATPAK_ID/malachi/rpc.sock` (`api.SocketBase`) |
 | Fallback without `XDG_RUNTIME_DIR` | `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
 | Override | `malachid --socket PATH`; UI honours `MALACHI_SOCKET` |
+| Key | `<socket>.key` beside the socket (`api.KeyPath`), a new random key at every daemon start (§1.4) |
 | Framing | newline-delimited JSON: one JSON object per line, terminated by `\n`. No `Content-Length` header. |
-| Max message size | 32 MiB per line (server side) |
+| Max message size | 32 MiB per line (server side) after authentication; before it 4 KiB in total (§1.4) |
 | Direction | bidirectional on one connection: client → server *requests*, server → client *responses* and *notifications* |
 | Parameters | always by name (a JSON object), never positional |
-| Concurrency | the server may process requests from one connection concurrently and answer out of order; match by `id` |
-| Multiple clients | allowed; notifications are broadcast to all |
+| Concurrency | after authentication the server may process requests from one connection concurrently and answer out of order; match by `id`. The two handshake requests are answered in order, one at a time |
+| Multiple clients | allowed; each connection authenticates on its own; notifications go only to authenticated connections, to all of them |
 
-Authentication: none beyond filesystem permissions. The socket is only
-reachable by the owning user. Inside Flatpak the socket lives in the
-application's own runtime dir, `$XDG_RUNTIME_DIR/app/<app-id>`: the rest of
-the sandbox's runtime dir is a private tmpfs per instance, and that
-directory is the one part every instance (and the host) sees, so a UI
-started later still finds a daemon an earlier instance left running.
+Authentication: every connection proves, in both directions, knowledge of
+a key the daemon makes at every start (§1.4). Whoever can read the key can
+use the daemon; reaching the socket is not enough. The key file is
+protected like the socket: mode 0600 in the 0700 directory where the
+platform has file modes; on Windows, by the permissions it inherits from
+its directory, which for the default path lies in the user's profile. Inside
+Flatpak the socket lives in the application's own runtime dir,
+`$XDG_RUNTIME_DIR/app/<app-id>`: the rest of the sandbox's runtime dir is a
+private tmpfs per instance, and that directory is the one part every
+instance (and the host) sees, so a UI started later still finds a daemon an
+earlier instance left running.
 
 Startup: the daemon replaces a stale socket file left by a crash after
-checking that nothing answers on it. If another daemon is alive it exits with
-an error rather than stealing the socket. Nothing on the desktop starts the
-daemon; the UI does (`ui/internal/daemon`), passing `--socket` so both
-resolve the same path, and stops the one it started when it quits. A client
-that is not the UI has to run `malachid` itself.
+checking that nothing answers on it. If another daemon is alive, or a
+connection attempt to the socket times out (0.5 s), it exits with an error
+rather than stealing the socket (a flood of connections that makes that
+check fail can defeat it, `docs/security.md` §8); anything at the path
+that is not a socket is never removed. The daemon writes the key file
+after binding the socket and before it accepts any connection, and
+clients read the key only after the `system.hello` answer (§1.4), so "the
+socket answers" stays a valid test that the daemon is ready. Nothing on
+the desktop starts the daemon; the UI does (`ui/internal/daemon`), passing
+`--socket` so both resolve the same path, and stops the one it started
+when it quits. A client that is not the UI has to run `malachid` itself.
 
 ### 1.1 Request
 
@@ -45,7 +57,8 @@ that is not the UI has to run `malachid` itself.
 
 `id` may be a number or string; it is echoed back unchanged. A request
 without `id` is a client notification; the contract defines none, the
-server ignores them.
+server ignores them (before authentication the connection is closed
+instead, §1.4).
 
 ### 1.2 Response
 
@@ -63,6 +76,123 @@ Exactly one of `result` / `error` is present.
 ```
 
 No `id`; the client must not reply.
+
+### 1.4 Handshake
+
+Every connection starts with a handshake in which both ends prove that
+they hold the daemon's connection key; nothing else is served before it
+completes. The client speaks first and waits for each answer:
+
+```jsonc
+// client → daemon
+{"jsonrpc":"2.0","id":1,"method":"system.hello","params":{"clientNonce":"<64 hex digits>"}}
+// daemon → client
+{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":2,"daemonNonce":"<64 hex digits>","daemonProof":"<64 hex digits>"}}
+// client → daemon
+{"jsonrpc":"2.0","id":2,"method":"system.authenticate","params":{"clientProof":"<64 hex digits>"}}
+// daemon → client
+{"jsonrpc":"2.0","id":2,"result":{}}
+```
+
+The connection is usable only after the last line. A nonce is 32 bytes
+from a cryptographic random source, new for every connection and each
+side; nonces and proofs travel as 64 lowercase hex digits.
+
+**The key file.** At every start the daemon makes a key of 32 random bytes
+and writes it to `<socket>.key` (`api.KeyPath`): exactly 65 bytes, the key
+as 64 lowercase hex digits and `\n`. It writes the file atomically after
+binding the socket and setting its mode, and before it accepts a
+connection. It replaces only a missing file or a key-shaped regular file
+(at most 65 bytes, each of them `0`–`9`, `a`–`f` or `\n`) and exits with an
+error when anything else is in the way. Before it answers each
+`system.hello` it writes the file again, under the same rule, when it is
+missing or holds another key; something else in the way then is left
+alone and logged, and the client fails with `keyUnavailable`. At shutdown
+it removes the file, only while the file still holds its own key, before
+it closes the listener. The key is never logged and never sent over the
+socket.
+
+**Proofs.** A proof is HMAC-SHA256 under the key of a 91-byte message:
+
+`proof = HMAC-SHA256(key, "malachi-rpc-auth-v1" ‖ 0x00 ‖ role ‖ 0x00 ‖ clientNonce ‖ daemonNonce)`
+
+The label and the role are ASCII, `‖` concatenates, the role is `"daemon"`
+for `daemonProof` and `"client"` for `clientProof`, and the nonces are
+their 32 raw bytes, not their hex. The role keeps a proof from being
+reflected to the side that sent it.
+
+**The client**, in this order:
+
+1. sends `system.hello` as the first line of the connection;
+2. compares `protocolVersion` with its own and stops on a difference,
+   without reading the key;
+3. reads the key file only after the `system.hello` answer, afresh for
+   every connection (a restarted daemon has a new key), and accepts only a
+   regular file — no link, directory, pipe or device — of exactly 65 bytes
+   in the format above;
+4. verifies `daemonProof` in constant time;
+5. sends `system.authenticate` with its `clientProof`, and nothing else
+   until that is answered.
+
+It waits for each answer before it sends the next line, and on any failure
+closes the connection without sending anything more.
+
+**The daemon** answers the handshake in the transport, synchronously in the
+connection's read loop; no backend code runs before authentication.
+
+| State | The client sends | The daemon |
+|---|---|---|
+| new | `system.hello` with a valid `clientNonce` | answers with its nonce and proof; the state becomes *hello answered* |
+| hello answered | `system.authenticate` with the right `clientProof` | answers `{}`; the state becomes *authenticated* |
+| new, hello answered | any other JSON object whose `id` is not `null`: another method, a second `system.hello`, a malformed nonce, a wrong or malformed proof | answers error 1005 `unauthenticated` with that `id`, then closes the connection |
+| new, hello answered | anything else: not JSON, a JSON array or another non-object, an object without `id` or with `"id": null` | closes the connection without an answer |
+| authenticated | any request | answers as §4 says; `system.hello` and `system.authenticate` get `invalidRequest` ("already authenticated") and the connection stays usable |
+
+Empty lines are skipped, before authentication as after it. Before
+authentication a connection may send at most 4 KiB
+(`api.MaxHandshakeBytes`), all lines together and empty ones included, and
+must complete the handshake within 10 s of being accepted, or it is
+closed. At most 32
+connections are in the handshake at a time; further ones are accepted and
+closed at once. No notification is sent to a connection before the
+`system.authenticate` answer. Connecting and closing without sending a line
+(a test whether a daemon is alive) is fine and not logged as an error.
+
+**Protocol 1.** A daemon of protocol 1 does not know `system.hello` and
+answers `methodNotFound`, possibly after notifications it broadcasts to
+every connection (a client skips a few; the Go helper up to 8). The client
+reports that the daemon speaks protocol 1 and never falls back to using
+the connection unauthenticated. A client of protocol 1 gets
+`unauthenticated` for its first call and is disconnected.
+
+**Go clients** (the GTK UI, `malachi-mcp`) call
+`api.ClientHandshake(ctx, conn, reader, keyPath)` right after connecting.
+It bounds the exchange by `api.HandshakeTimeout` (5 s) and the context,
+leaves whatever the daemon sent after the last answer in the caller's
+reader, and fails with an `*api.HandshakeError` whose reason is
+`protocolMismatch` (with the daemon's version), `keyUnavailable`,
+`daemonUnproven`, `rejected` (with the error code), `malformed` or
+`timedOut` (also when the context's deadline comes first), with the
+context's error when the context is cancelled, or with a plain error when
+the connection broke.
+
+Test vectors (key, nonces and proofs are 32 bytes):
+
+| Value | Hex |
+|---|---|
+| key | `000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f` |
+| `clientNonce` | `202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f` |
+| `daemonNonce` | `404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f` |
+| label `"malachi-rpc-auth-v1"` | `6d616c616368692d7270632d617574682d7631` |
+| role `"daemon"` | `6461656d6f6e` |
+| role `"client"` | `636c69656e74` |
+| `daemonProof` | `04abc851d52b40dc687920756f15f42f44da2635331732bf02be0a0b01de2a1f` |
+| `clientProof` | `024f86a00c241237f4556a27e83f8e41b13053bbcfd2980e029c300a5a2e84b2` |
+
+`docs/security.md` §8 says what the handshake protects and what it does
+not: it is not encryption, gives the messages after it no integrity of
+their own, and does not protect against the user's own processes, which
+can read the key file.
 
 ## 2. Errors
 
@@ -82,6 +212,7 @@ No `id`; the client must not reply.
 | 1002 | conflict | optimistic-concurrency failure (`draft.save`, `message.send`) |
 | 1003 | cancelled | request cancelled by shutdown |
 | 1004 | unavailable | daemon busy / shutting down; retry later |
+| 1005 | unauthenticated | the connection has not completed the handshake (§1.4), or it failed; the daemon closes the connection after this answer |
 | 1100 | accountNotFound | |
 | 1101 | folderNotFound | |
 | 1102 | messageNotFound | |
@@ -229,11 +360,37 @@ be omitted. All methods that touch data take `accountId`.
 
 ### 4.0 system
 
+#### `system.hello`
+The first line of every connection (§1.4). The transport answers it, not
+the backend.
+
+- params: `{ "clientNonce": "64 lowercase hex digits" }`
+- result: `{ "protocolVersion": 2, "daemonNonce": "64 lowercase hex digits", "daemonProof": "64 lowercase hex digits" }`
+- errors: unauthenticated (not the connection's first non-empty line, or
+  a malformed `clientNonce`; then the connection is closed),
+  invalidRequest (after authentication)
+
+`protocolVersion` is in this result in every protocol version, and the
+method keeps its name and `clientNonce`, so a client can always tell which
+protocol a daemon speaks before it reads the key. A daemon of protocol 1
+answers `methodNotFound`.
+
+#### `system.authenticate`
+The second line of every connection (§1.4); once it is answered, the
+connection is usable. The transport answers it, not the backend.
+
+- params: `{ "clientProof": "64 lowercase hex digits" }`
+- result: `{}`
+- errors: unauthenticated (not right after an answered `system.hello`, or
+  a wrong or malformed `clientProof`; then the connection is closed),
+  invalidRequest (after authentication)
+
 #### `system.info`
-Health check and version negotiation. The first call a UI makes.
+Health check and daemon details: usually a client's first call after the
+handshake (§1.4); `protocolVersion` equals hello's.
 
 - params: `{}`
-- result: `{ "version": "0.1.0", "protocolVersion": 1, "pid": 4242, "storePath": "/home/u/.local/share/malachi/store.db" }`
+- result: `{ "version": "0.1.0", "protocolVersion": 2, "pid": 4242, "storePath": "/home/u/.local/share/malachi/store.db" }`
 
 ### 4.1 account
 
@@ -1534,6 +1691,9 @@ character; clients wait for two before asking.
 | `notify.authRequired` | `{ "accountId", "reason": 1200\|1201\|1202, "message": "…", "authUrl": "https://…" (opt) }` |
 | `notify.accountsChanged` | `{}` |
 
+Notifications are sent only to connections that completed the handshake
+(§1.4).
+
 `notify.accountsChanged` is sent after `account.add`, `account.remove`,
 `account.setEnabled` and `account.update` to every client, including the
 caller; it carries no payload and clients re-run `account.list`.
@@ -1585,11 +1745,18 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   incompatible; bump `protocolVersion`, update the client, document below.
 - Servers ignore unknown request fields; clients ignore unknown response
   fields.
+- The handshake (§1.4) is part of the contract: the key file, the proofs
+  and the rules before authentication change only with `protocolVersion`.
+  `system.hello` keeps its name, its `clientNonce` and the
+  `protocolVersion` member of its result in every version, so every
+  client can read every daemon's version; `methodNotFound` for
+  `system.hello` means protocol 1.
 - `protocolVersion` has nothing to do with the application's release
   version (`system.info` reports both, and `docs/releasing.md` explains
   which is which). The two ship together in one Flatpak, so a mismatch
   means someone is running a daemon left over from an older install; the
-  client compares `protocolVersion`, never the release version.
+  client compares the `protocolVersion` of the `system.hello` result,
+  before it authenticates, never the release version.
 
 ## 7. Changelog
 
@@ -1751,3 +1918,16 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `failed` (they never counted in `pendingOutbox`), in `sync.status`,
   `account.list` and `notify.syncState`; a change of it alone sends
   `notify.syncState` immediately (§5).
+- **2** (2026-09-27, incompatible change, authenticated connections):
+  every connection must complete a handshake before anything else (§1.4):
+  new `system.hello` and `system.authenticate` prove on both sides, with
+  HMAC-SHA256 over two nonces, knowledge of the 32-byte key the daemon
+  writes for each run to `<socket>.key`. New error code 1005
+  `unauthenticated`, sent before the daemon closes a connection that did
+  anything else. Before authentication a connection may send at most
+  4 KiB within 10 s, at most 32 such connections are served at a time,
+  and none gets notifications; afterwards `system.hello` and
+  `system.authenticate` answer `invalidRequest`. `protocolVersion` is also
+  in the `system.hello` result, which a daemon of protocol 1 answers with
+  `methodNotFound`; a client of protocol 1 gets `unauthenticated` on its
+  first call.

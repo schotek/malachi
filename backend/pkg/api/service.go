@@ -96,7 +96,10 @@ type ContactService interface {
 	Search(ctx context.Context, p ContactSearchParams) (*ContactSearchResult, error)
 }
 
-// Backend is the complete server-side surface.
+// Backend is the complete server-side surface. The connection handshake
+// (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
+// the transport (internal/rpc) answers the handshake before any call of a
+// connection reaches the backend.
 type Backend interface {
 	System() SystemService
 	Accounts() AccountService

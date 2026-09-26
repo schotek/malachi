@@ -62,6 +62,27 @@ type SystemInfoResult struct {
 	StorePath       string `json:"storePath"`
 }
 
+// SystemHelloParams opens the connection handshake (docs/api.md §1.4).
+// The method name, this parameter and SystemHelloResult.ProtocolVersion
+// never change, so that every client can tell every daemon's protocol.
+type SystemHelloParams struct {
+	ClientNonce string `json:"clientNonce"` // 64 lowercase hex digits (AuthNonce.Hex)
+}
+
+type SystemHelloResult struct {
+	ProtocolVersion int    `json:"protocolVersion"` // see ProtocolVersion; compared before anything else
+	DaemonNonce     string `json:"daemonNonce"`     // 64 lowercase hex digits
+	DaemonProof     string `json:"daemonProof"`     // DaemonProof as 64 lowercase hex digits
+}
+
+type SystemAuthenticateParams struct {
+	ClientProof string `json:"clientProof"` // ClientProof as 64 lowercase hex digits
+}
+
+// SystemAuthenticateResult is empty: the answer itself says that the
+// connection is usable.
+type SystemAuthenticateResult struct{}
+
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------

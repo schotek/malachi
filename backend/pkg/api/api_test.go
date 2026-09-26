@@ -4,29 +4,38 @@
 package api
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// docs/api.md and this package are the same contract in two forms. Every
-// method and notification name must appear in the document.
-func TestDocsCoverAllMethods(t *testing.T) {
+// readAPIDoc returns docs/api.md with CRLF line ends made LF (a Windows
+// checkout), or skips the test when the file is not there.
+func readAPIDoc(t *testing.T) string {
+	t.Helper()
 	path := filepath.Join("..", "..", "..", "docs", "api.md")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Skipf("docs/api.md not found at %s: %v", path, err)
 	}
-	doc := string(raw)
+	return strings.ReplaceAll(string(raw), "\r", "")
+}
+
+// docs/api.md and this package are the same contract in two forms. Every
+// method and notification name must appear in the document, and every
+// error code as a row of the table in §2.
+func TestDocsCoverAllMethods(t *testing.T) {
+	doc := readAPIDoc(t)
 	for _, name := range append(append([]string{}, AllMethods...), AllNotifications...) {
 		if !strings.Contains(doc, "`"+name+"`") {
 			t.Errorf("%s is not documented in docs/api.md", name)
 		}
 	}
 	for code, name := range codeNames {
-		if !strings.Contains(doc, name) {
-			t.Errorf("error code %d (%s) is not documented in docs/api.md", code, name)
+		if row := fmt.Sprintf("| %d | %s |", code, name); !strings.Contains(doc, row) {
+			t.Errorf("error code %d (%s) has no row %q in the table of docs/api.md §2", code, name, row)
 		}
 	}
 }

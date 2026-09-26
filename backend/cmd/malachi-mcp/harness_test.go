@@ -7,28 +7,70 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/schotek/malachi/backend/internal/rpc"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-// tempSocket returns a short socket path: sun_path is 108 bytes and
-// t.TempDir() can be longer than that.
+// tempSocket returns a short socket path: sun_path is 108 bytes (104 on
+// macOS) and t.TempDir() can be longer than that. /tmp gives the shortest
+// path; where no directory can be made there (no /tmp at all), the
+// system's temporary directory is used instead.
 func tempSocket(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("/tmp", "malachi-mcp-")
+	if err != nil {
+		dir, err = os.MkdirTemp("", "malachi-mcp-")
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return filepath.Join(dir, "rpc.sock")
+}
+
+// daemonKeyHex returns the key the daemon on sock has written beside it
+// (api.KeyPath), as the 64 hex digits of the file: the tests look for it
+// where it must never appear.
+func daemonKeyHex(t *testing.T, sock string) string {
+	t.Helper()
+	b, err := os.ReadFile(api.KeyPath(sock))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := api.ParseKeyFile(b); err != nil {
+		t.Fatalf("the daemon's key file: %v", err)
+	}
+	return strings.TrimSuffix(string(b), "\n")
+}
+
+// liveConn returns the connection c has published for calls, nil for none.
+func liveConn(c *rpcClient) net.Conn {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.conn
+}
+
+// waitFor polls cond until it holds, for at most 5 s.
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 // startFakeDaemon serves fb over the real rpc server on sock.
