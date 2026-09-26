@@ -4,7 +4,7 @@
 // The string enumerations of backend/pkg/api/types.go as extensible structs:
 // a value a newer daemon adds decodes as itself instead of failing the whole
 // result (docs/api.md §6: clients ignore what they do not know). The named
-// constants are the values of protocol version 1.
+// constants are the values of the contract (protocol version 2).
 
 import Foundation
 

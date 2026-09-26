@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Search (docs/api.md §4.6; types.go "Search"). `search.query` is
-// notImplemented in protocol version 1; the types are here for the
+// Search (docs/api.md §4.6; types.go "Search"). The daemon answers
+// `search.query` with notImplemented so far; the types are here for the
 // contract's completeness.
 
 import Foundation

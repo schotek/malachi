@@ -26,8 +26,11 @@ public struct EmptyResult: Codable, Sendable, Equatable {
 }
 
 public enum API {
-    /// api.ProtocolVersion. A daemon with another value is refused.
-    public static let protocolVersion = 1
+    /// api.ProtocolVersion. A daemon whose system.hello answer carries
+    /// another value is refused before the key is read
+    /// (`RPCClient.HandshakeError.protocolMismatch`); system.info reports
+    /// the same value.
+    public static let protocolVersion = 2
 
     /// The name of `system.info`, for the string-based `RPCClient.call`.
     public static let systemInfo = "system.info"
@@ -39,6 +42,26 @@ public enum API {
         public typealias Result = SystemInfoResult
         public static let name = "system.info"
         public static let timeout = RPCTimeouts.systemInfo
+    }
+
+    /// The first line of every connection (docs/api.md §1.4). `RPCClient`
+    /// sends it itself in `connect()`, never through `call`, which refuses
+    /// until the handshake is done.
+    public enum SystemHello: RPCMethod {
+        public typealias Params = SystemHelloParams
+        public typealias Result = SystemHelloResult
+        public static let name = "system.hello"
+        public static let timeout = RPCTimeouts.handshake
+    }
+
+    /// The second line of every connection (docs/api.md §1.4), sent by
+    /// `RPCClient.connect()` as well; once it is answered the connection is
+    /// usable.
+    public enum SystemAuthenticate: RPCMethod {
+        public typealias Params = SystemAuthenticateParams
+        public typealias Result = EmptyResult
+        public static let name = "system.authenticate"
+        public static let timeout = RPCTimeouts.handshake
     }
 
     // MARK: Accounts
@@ -130,7 +153,7 @@ public enum API {
         public static let name = "folder.list"
     }
 
-    /// notImplemented in protocol version 1.
+    /// The daemon answers notImplemented so far.
     public enum FolderSubscribe: RPCMethod {
         public typealias Params = FolderSubscribeParams
         public typealias Result = EmptyResult
@@ -277,7 +300,7 @@ public enum API {
 
     // MARK: Search
 
-    /// notImplemented in protocol version 1.
+    /// The daemon answers notImplemented so far.
     public enum SearchQuery: RPCMethod {
         public typealias Params = SearchQueryParams
         public typealias Result = SearchQueryResult
@@ -344,7 +367,7 @@ public enum API {
 
     /// Every method type, in the order of methods.go.
     public static let methods: [any RPCMethod.Type] = [
-        SystemInfo.self,
+        SystemInfo.self, SystemHello.self, SystemAuthenticate.self,
         AccountList.self, AccountAdd.self, AccountRemove.self, AccountSetEnabled.self,
         AccountUpdate.self, AccountDiscover.self, AccountTest.self, AccountLinked.self,
         AccountReorder.self, AccountOAuthStart.self, AccountOAuthWait.self, AccountOAuthCancel.self,

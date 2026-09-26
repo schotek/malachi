@@ -764,6 +764,33 @@ private final class Harness {
         try await waitUntil { h.list.rows.count == 6 }
         #expect(await h.fixture.threadGetRequests.count == 2)
     }
+
+    /// A daemon of another protocol version leaves no connection either: the
+    /// list folds back and stops its spinners as for a lost backend, and
+    /// nothing is listed anew.
+    @Test func protocolMismatchFoldsAConversationWaitingForMembers() async throws {
+        let h = try await Harness(messages: [inbox: threadedMessages()], grouped: true)
+        defer { Task { await h.stop() } }
+        try await h.settled()
+        h.mailbox.model.nextCursor = "50"
+        h.list.showLoadMore()
+        h.list.loadMore()
+        #expect(h.list.loadMoreState.spinner)
+        await h.fixture.delay(API.ThreadGet.name, .milliseconds(200))
+        h.list.toggleThread("t1")
+        #expect(h.list.rows[2].loading)
+
+        let accountLists = await h.fixture.callCount(API.AccountList.name)
+        h.mailbox.handleConnection(.protocolMismatch(daemon: 1))
+        h.list.handleConnection(.protocolMismatch(daemon: 1))
+        #expect(!h.list.rows[2].expanded && !h.list.rows[2].loading)
+        #expect(!h.mailbox.model.loadingMore)
+        #expect(!h.list.loadMoreState.spinner)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(h.list.rows.count == 3)
+        #expect(h.log.toasts.isEmpty)
+        #expect(await h.fixture.callCount(API.AccountList.name) == accountLists, "nothing is loaded anew")
+    }
 }
 
 extension ListState {

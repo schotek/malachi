@@ -45,6 +45,23 @@ Mail/`) as flags and keeps its own default socket path, so `malachi-mcp`
 and `.mcp.json` work unchanged (`MalachiCore/Daemon/Paths.swift`,
 `DaemonSupervisor.swift`).
 
+Every connection to the socket is authenticated before it is used
+([api.md §1.4](api.md#14-handshake)), by `RPCClient.connect()` itself,
+the Swift port of `api.ClientHandshake`: between Network.framework's
+`.ready` and `.connected` it sends `system.hello`, compares the protocol
+version before it reads anything else, reads the key file
+`<socket>.key` afresh (a restarted daemon has a new key), checks the
+daemon's proof in constant time (CryptoKit's HMAC-SHA256), and sends
+`system.authenticate`; only its answer makes the connection `.connected`.
+The key is never cached, logged or kept in the actor's state. The key file
+is read by `Transport/DaemonKey.swift`, which is stricter than the Go
+clients on purpose: besides a regular file (no link, pipe or device) of
+exactly 65 bytes in the key format, it must belong to the user and grant
+nothing to group or others, which is how the daemon writes it (0600). The
+Go clients cannot check owner and mode the same way on every platform
+they build for (CLAUDE.md rule 4); here it costs nothing, so it is a
+listed deviation ([macos/README.md](../macos/README.md#differences-from-the-gtk-ui)).
+
 The daemon's keyring on macOS is the helper keyring
 (`backend/internal/auth/helper`, [security.md §6](security.md#6-credentials)):
 `MALACHI_KEYRING=helper` and `MALACHI_KEYRING_HELPER` pointing at the
@@ -64,7 +81,7 @@ resources) has three targets and their tests:
 
 | Target | May import | Holds |
 |---|---|---|
-| `MalachiCore` | Foundation, Network, UniformTypeIdentifiers, os | The typed API, the transport, the daemon supervisor, the pure logic ported from the Go UI (models, threads, folding, favourites, address parsing, quoting, wizard fields, HTML documents, formatting, error texts), the `@MainActor` controllers, settings, i18n, the open directory. **No AppKit, no WebKit.** Everything here is covered by `swift test`. |
+| `MalachiCore` | Foundation, Network, CryptoKit (the handshake's HMAC-SHA256), Darwin (the socket probe, the key file, the supervisor's signals), UniformTypeIdentifiers, os | The typed API, the transport with its handshake, the daemon supervisor, the pure logic ported from the Go UI (models, threads, folding, favourites, address parsing, quoting, wizard fields, HTML documents, formatting, error texts), the `@MainActor` controllers, settings, i18n, the open directory. **No AppKit, no WebKit.** Everything here is covered by `swift test`. |
 | `MalachiMail` | AppKit, WebKit, UserNotifications, ServiceManagement, `MalachiCore` | Windows, views, the menu bar, the toolbar, the WebKit wrappers, the platform services. Thin: it renders what a controller holds and sends clicks back. |
 | `MalachiKeychain` | Foundation, Security | `malachi-keychain`, the keyring helper. Independent of the other two. |
 
@@ -134,8 +151,8 @@ listed in the table in [macos/README.md](../macos/README.md#differences-from-the
 folding without back navigation, the status bar across the bottom of the
 window, Settings without search, ⌥⌘↑/↓ for reordering, the ⌘R setting,
 `NSAlert` button order, the quarantine attribute on attachments, the
-*Glass* sound). A new deviation goes into that table, not silently into
-the code.
+*Glass* sound, the owner and mode checks on the daemon's key file). A new
+deviation goes into that table, not silently into the code.
 
 ## 4. The API layer
 
@@ -157,11 +174,27 @@ Rules that keep it honest against a daemon it did not ship with:
   whole result; `ErrorCode` is `RawRepresentable<Int>` with the documented
   constants and a `name`, and `RPCError.data` survives (for
   `attachmentTooBig`'s `limit`/`size`);
-- `API.protocolVersion` is checked against `system.info` on every
-  connection (`ConnectionController`); a mismatch is a state the window
-  shows, not something to work around;
+- `API.protocolVersion` is compared with the `system.hello` answer of
+  every connection, in the handshake and before the key file is read
+  (`RPCClient`; a daemon of protocol 1 answers `methodNotFound`, which is
+  a mismatch with 1), and again with `system.info` as a defence
+  (`ConnectionController`). A mismatch is a state the window shows, not
+  something to work around: the status line names both versions and is no
+  button, the backend banner stays hidden (a daemon runs), nothing is
+  loaded, and the 5 s retry loop keeps the state up instead of flashing
+  *Connecting…* until an attempt ends otherwise; a connection ends it at
+  once (*Connecting…* until `system.info` answers, as GTK drops it at
+  Connected). Every other refused
+  handshake is *Backend unavailable* with the banner, logged at error
+  level once per distinct reason until the next connection. No new
+  strings: both are the GTK msgids;
+- `system.hello` and `system.authenticate` are in the method table like
+  every method (46, in the order of `api.AllMethods`), but only
+  `RPCClient.connect()` sends them; `ErrorCode.unauthenticated` (1005) is
+  what the daemon answers anything else before the handshake;
 - timeouts are the GTK UI's (`Platform/RPCTimeouts.swift`): 5 s by
-  default, 3 s for `system.info`, 60 s for `message.part` and
+  default, 5 s for the whole handshake (`handshake`, api.HandshakeTimeout),
+  3 s for `system.info`, 60 s for `message.part` and
   `attachment.get`, 30 s for `message.body` under `allow`,
   `message.embedded`, `draft.create`, `account.add`/`update`, 15 s for
   `account.discover`, 45 s for `account.test`, 10 s for
@@ -218,6 +251,23 @@ applies to changes in `WebViews/`, `MessageView/`, `Compose/`,
   `AsyncStream`s in the daemon's order (a `newMessage` never overtakes
   the `syncState` that follows it). Each stream has one consumer, the
   `ConnectionController`, which forwards on the main actor.
+- The handshake runs inside `connect()` while `state` is still
+  `.connecting`, so `call` refuses with `.notConnected` until it is done;
+  its two requests take a private path that checks the connection and its
+  generation. The actor is reentrant: `close()`, a failed connection or a
+  second `connect()` can run at any `await`, so the generation is compared
+  after every one of them and nothing is sent on a connection that was
+  torn down. Until the `system.authenticate` answer the bytes go to the
+  handshake alone, read line by line (at most 64 KiB a line): up to 8
+  notifications before the `system.hello` answer are dropped, one between
+  the two answers breaks the handshake, and whatever came after the last
+  answer is held and handed to the framer right after `.connected`, so
+  those notifications arrive after it and in order. The whole exchange is
+  bounded by `RPCTimeouts.handshake` (injectable for tests): past it no
+  more bytes are taken and nothing more is sent, as on a Go connection
+  past its deadline. A refusal is a `HandshakeError`, kept apart from
+  `ClientError`, and tears the connection down; a connection that breaks
+  during the handshake is a plain `ClientError`, like any other.
 - Everything that touches a view or a model is `@MainActor`: the
   controllers in `MalachiCore/Controllers/`, every AppKit class, the
   WebKit delegates (main-actor isolated in the Swift overlay). An RPC is a
@@ -303,7 +353,11 @@ format in one place for both clients.
   `EditorBridgeTests`, `WizardFieldsTests`, `WizardResultsTests`,
   `SignInTests`, `FormatTests`, `RPCErrorTextTests`, `ProviderTests`), the
   transport
-  (`FramingTests`, `JSONRPCTests`, `RPCClientTests`, `SupervisorTests`),
+  (`FramingTests`, `JSONRPCTests`, `RPCClientTests`, `SupervisorTests`,
+  `AuthTests` with the test vectors of api.md §1.4 and `DaemonKeyTests`,
+  and `HandshakeTests`, the failure table of
+  `backend/pkg/api/handshake_test.go` with Go's outcomes, the check that
+  no failure text shows a key, a nonce or a proof, and Go's error texts),
   the API coding (`APICodingTests`, `NotificationDecodeTests`), the
   settings and i18n (`SettingsTests`, `LocalizationTests`,
   `GettextFormatTests`, `PluralRulesTests`, `StrftimeTests`) and the
@@ -314,7 +368,21 @@ format in one place for both clients.
   with a `#!/bin/sh` fake bridge).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
   `malachid` on a real unix socket speaking the same newline-delimited
-  JSON-RPC, with per-method handlers; `MailFixture` scripts it with
+  JSON-RPC, with per-method handlers. It plays the daemon's side of the
+  handshake: `start()` writes a fresh key beside the socket (0600), it
+  answers `system.hello` and `system.authenticate` itself, in order, and
+  records them in `handshakes`, never in `calls` (so a count of calls
+  sees only what came after); before a connection is authenticated it
+  refuses anything else with 1005 and closes, and it notifies
+  authenticated connections only. `setHandshake(_:)` makes it another
+  daemon (`oldDaemon`, `protocolVersion(n)`, `wrongProof`,
+  `rejectClient`, `silent`, `malformedProof`) or a script (`raw`, the
+  exact bytes to write for each answer, or none, and whether to close
+  after it, as the Go test's scripted daemon); a connection keeps the
+  mode it was accepted in. Two more knobs send notifications before the
+  `system.hello` answer or with the `system.authenticate` answer,
+  `restart()` / `rotateKey()` give it a new key, and `secrets` lists every
+  key, nonce and proof it used. `MailFixture` scripts it with
   accounts, folders, messages, threads, bodies and parts, records what was
   asked, and fails, delays or pushes notifications on request. Controller
   tests run against it, never against a real daemon.

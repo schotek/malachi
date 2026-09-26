@@ -36,7 +36,7 @@ public struct TLSErrorReason: WireEnum {
     /// Not the certificate pinned in `ServerConfig.certificateSha256`.
     public static let pinMismatch: TLSErrorReason = "pinMismatch"
 
-    /// Every reason of protocol version 1.
+    /// Every reason of the contract (protocol version 2).
     public static let all: [TLSErrorReason] = [
         .untrusted, .hostnameMismatch, .expired, .notYetValid, .invalid, .other,
         .handshake, .starttlsUnavailable, .tlsRequired, .pinMismatch,

@@ -27,6 +27,11 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let cancelled: ErrorCode = 1003
     /// Daemon busy or shutting down.
     public static let unavailable: ErrorCode = 1004
+    /// The RPC connection has not completed the handshake (docs/api.md
+    /// §1.4), or the handshake failed; the daemon closes the connection
+    /// after this answer. Not about mail accounts, whose sign-in problems
+    /// are the 1200s.
+    public static let unauthenticated: ErrorCode = 1005
 
     // 1100–1199: not found.
     public static let accountNotFound: ErrorCode = 1100
@@ -75,10 +80,11 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
 
     public var description: String { name }
 
-    /// Every code of protocol version 1, in the order of errors.go.
+    /// Every code of the contract (protocol version 2), in the order of
+    /// errors.go.
     public static let all: [ErrorCode] = [
         .parseError, .invalidRequest, .methodNotFound, .invalidParams, .internalError,
-        .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable,
+        .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing,
         .offline, .networkError, .serverError, .tlsError, .serverTimeout,
@@ -97,6 +103,7 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .conflict: "conflict",
         .cancelled: "cancelled",
         .unavailable: "unavailable",
+        .unauthenticated: "unauthenticated",
         .accountNotFound: "accountNotFound",
         .folderNotFound: "folderNotFound",
         .messageNotFound: "messageNotFound",

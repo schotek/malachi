@@ -605,15 +605,16 @@ public final class ListController {
     /// replies and cleared the loading flags, so the Load More footer is
     /// redrawn from it (the spinner stops) and a conversation waiting for
     /// its members folds back. The folder half's `collapseLoading` hook
-    /// does the latter as well; both are idempotent.
+    /// does the latter as well; both are idempotent. A protocol mismatch
+    /// leaves no connection either.
     public func handleConnection(_ state: ConnectionController.ConnectionState) {
         switch state {
-        case .unavailable, .stopping:
+        case .unavailable, .protocolMismatch, .stopping:
             if mailbox.model.grouped {
                 collapseLoadingRows()
             }
             showLoadMore()
-        case .connecting, .connected, .protocolMismatch, .infoFailed:
+        case .connecting, .connected, .infoFailed:
             break
         }
     }

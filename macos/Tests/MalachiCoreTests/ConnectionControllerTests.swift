@@ -45,6 +45,20 @@ private func waitUntil(_ timeout: Duration = .seconds(5), _ cond: () -> Bool) as
 }
 
 @MainActor
+private func waitUntilAsync(_ timeout: Duration = .seconds(5), _ cond: @MainActor () async -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while true {
+        if await cond() {
+            return
+        }
+        if ContinuousClock.now > deadline {
+            throw Timeout()
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+@MainActor
 private func isConnected(_ s: ConnectionController.ConnectionState) -> Bool {
     if case .connected = s { return true } else { return false }
 }
@@ -92,12 +106,181 @@ private func isUnavailable(_ s: ConnectionController.ConnectionState) -> Bool {
         #expect(UnixSocketProbe.answers(fake.path))
     }
 
+    /// The handshake agreed, system.info does not: still a mismatch, as a
+    /// defence.
     @Test func protocolMismatchIsReported() async throws {
         let fake = try await makeFake(protocolVersion: 99)
         defer { Task { await fake.stop() } }
         let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
         cc.start()
         try await waitUntil { cc.state == .protocolMismatch(daemon: 99) }
+        await cc.stop()
+    }
+
+    /// A daemon of another protocol version fails the handshake's check:
+    /// the mismatch is reported and nothing is called, and the retry loop
+    /// keeps it up instead of saying "Connecting…" on every attempt, until
+    /// an attempt ends otherwise.
+    @Test func anotherProtocolIsAStickyMismatch() async throws {
+        let cases: [(FakeDaemon.HandshakeMode, Int)] = [(.protocolVersion(99), 99), (.oldDaemon, 1)]
+        for (mode, daemon) in cases {
+            let fake = try await makeFake()
+            await fake.setHandshake(mode)
+            let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
+            let log = Log()
+            log.attach(cc)
+            cc.start()
+            try await waitUntil { cc.state == .protocolMismatch(daemon: daemon) }
+            try await waitUntilAsync { await fake.handshakes.count >= 3 }
+            #expect(log.states == [.connecting, .protocolMismatch(daemon: daemon)], "no Connecting… between the attempts")
+            #expect(await fake.calls.isEmpty, "nothing is called on a daemon of another protocol")
+            #expect(cc.loggedRefusals == [RPCClient.HandshakeError.protocolMismatch(daemon: daemon).description], "logged once")
+
+            // A daemon of this protocol takes over: the connection ends the
+            // mismatch, "Connecting…" until system.info answers.
+            await fake.setHandshake(.normal)
+            try await waitUntil { isConnected(cc.state) }
+            #expect(log.states == [.connecting, .protocolMismatch(daemon: daemon), .connecting, .connected(fakeInfo)])
+            #expect(cc.loggedRefusals.isEmpty, "a connection starts the log afresh")
+            await cc.stop()
+            await fake.stop()
+        }
+    }
+
+    /// GTK drops the mismatch at Connected: here too, as soon as the client
+    /// is connected, while system.info is still on its way.
+    @Test func aConnectionEndsTheMismatchBeforeSystemInfoAnswers() async throws {
+        // system.info answers only once the gate is opened.
+        let (gate, open) = AsyncStream<Void>.makeStream()
+        let fake = try FakeDaemon()
+        await fake.on(API.systemInfo) { _ in
+            for await _ in gate {
+                break
+            }
+            return infoJSON(protocolVersion: API.protocolVersion)
+        }
+        await fake.setHandshake(.oldDaemon)
+        try await fake.start()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        let cc = ConnectionController(client: client, supervisor: nil, reconnectInterval: .milliseconds(100))
+        let log = Log()
+        log.attach(cc)
+        cc.start()
+        try await waitUntil { cc.state == .protocolMismatch(daemon: 1) }
+
+        await fake.setHandshake(.normal)
+        try await waitUntil { cc.state == .connecting }
+        #expect(await client.state == .connected)
+        #expect(!log.states.contains(where: isConnected), "system.info has not answered yet")
+        open.yield(())
+        open.finish()
+        try await waitUntil { isConnected(cc.state) }
+        #expect(log.states == [.connecting, .protocolMismatch(daemon: 1), .connecting, .connected(fakeInfo)])
+        await cc.stop()
+    }
+
+    /// The mismatch stays up only while the attempts end in one: an attempt
+    /// that ends otherwise replaces it, and the next says "Connecting…".
+    @Test func aMismatchGivesWayWhenAnAttemptEndsOtherwise() async throws {
+        let fake = try await makeFake()
+        await fake.setHandshake(.oldDaemon)
+        let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
+        let log = Log()
+        log.attach(cc)
+        cc.start()
+        try await waitUntil { cc.state == .protocolMismatch(daemon: 1) }
+        await fake.stop() // nothing answers on the socket any more
+        try await waitUntil { log.states.count >= 4 }
+        #expect(log.states.prefix(4).map(\.kind) == ["connecting", "protocolMismatch", "unavailable", "connecting"])
+        await cc.stop()
+    }
+
+    /// A connection that breaks during the handshake is routine, as when the
+    /// daemon went away: unavailable, logged at debug level, not a refusal.
+    @Test func aBrokenHandshakeIsUnavailableNotARefusal() async throws {
+        let fake = try await makeFake()
+        await fake.setHandshake(.raw(.init(hello: { _ in nil }, closeAfterHello: true)))
+        defer { Task { await fake.stop() } }
+        let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
+        let log = Log()
+        log.attach(cc)
+        cc.start()
+        // The retry loop keeps moving: what was reported, not the state now.
+        try await waitUntil { log.states.contains(where: isUnavailable) }
+        try await waitUntilAsync { await fake.handshakes.count >= 2 }
+        #expect(cc.loggedRefusals.isEmpty, "a broken connection is no refusal")
+        #expect(await fake.calls.isEmpty)
+        await cc.stop()
+    }
+
+    /// The peer on the socket chooses the error codes of its refusals, and
+    /// so their texts: what the log remembers starts afresh after 16.
+    @Test func loggedRefusalsAreCapped() async throws {
+        let attempts = Counter()
+        let fake = try await makeFake()
+        await fake.setHandshake(.raw(.init(hello: { _ in
+            let refusal = RPCError(code: ErrorCode(rawValue: 2000 + attempts.next()), message: "no")
+            return String(decoding: FakeDaemon.response(id: 1, error: refusal), as: UTF8.self)
+        })))
+        defer { Task { await fake.stop() } }
+        // The attempts are driven by hand, one at a time: the retry loop
+        // never moves in between.
+        let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .seconds(60))
+        let refused = { (n: Int) in RPCClient.HandshakeError.rejected(ErrorCode(rawValue: 2000 + n)).description }
+        cc.start()
+        for n in 1...17 {
+            if n > 1 {
+                cc.reconnectNow()
+            }
+            try await waitUntil { cc.state == .unavailable(refused(n)) }
+            if n == 16 {
+                #expect(cc.loggedRefusals == (1...16).map(refused), "16 distinct refusals are remembered")
+            }
+        }
+        #expect(cc.loggedRefusals == [refused(17)], "the 17th starts afresh")
+        await cc.stop()
+    }
+
+    /// Something on the socket that does not hold the key is no daemon to
+    /// use: unavailable, retried, and logged at error level only once.
+    @Test func anUnprovenDaemonIsUnavailableAndLoggedOnce() async throws {
+        let fake = try await makeFake()
+        await fake.setHandshake(.wrongProof)
+        defer { Task { await fake.stop() } }
+        let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
+        let log = Log()
+        log.attach(cc)
+        cc.start()
+        let refused = RPCClient.HandshakeError.daemonUnproven.description
+        // The retry loop keeps moving: what was reported, not the state now.
+        try await waitUntil { log.states.contains(.unavailable(refused)) }
+        try await waitUntilAsync { await fake.handshakes.count >= 3 }
+        #expect(cc.loggedRefusals == [refused], "logged once, the repeats at debug level")
+        #expect(!log.states.contains(where: isConnected))
+        let seen = await fake.handshakes
+        #expect(seen.allSatisfy { $0 == API.SystemHello.name }, "system.authenticate was never sent")
+        #expect(await fake.calls.isEmpty)
+        await cc.stop()
+    }
+
+    /// A restarted daemon has a new key: the connection drops, and the next
+    /// attempt reads the new key and connects.
+    @Test func aRestartedDaemonIsReconnectedWithItsNewKey() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let cc = ConnectionController(client: RPCClient(socketPath: fake.path), supervisor: nil, reconnectInterval: .milliseconds(100))
+        let log = Log()
+        log.attach(cc)
+        cc.start()
+        try await waitUntil { isConnected(cc.state) }
+        try await fake.restart()
+        try await waitUntil { log.states.count >= 5 && isConnected(cc.state) }
+        #expect(log.states.map(\.kind) == ["connecting", "connected", "unavailable", "connecting", "connected"])
+        #expect(await fake.handshakes == [
+            API.SystemHello.name, API.SystemAuthenticate.name, API.SystemHello.name, API.SystemAuthenticate.name,
+        ])
+        #expect(cc.loggedRefusals.isEmpty)
         await cc.stop()
     }
 
@@ -196,6 +379,19 @@ private func isUnavailable(_ s: ConnectionController.ConnectionState) -> Bool {
         #expect(log.states == [.connecting, .connected(fakeInfo)])
         #expect(await fake.accepted == 1)
         await cc.stop()
+    }
+}
+
+/// Counts calls from any thread (a scripted daemon's attempts).
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var n = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        n += 1
+        return n
     }
 }
 

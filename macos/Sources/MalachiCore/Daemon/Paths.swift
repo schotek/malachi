@@ -12,7 +12,10 @@ import Foundation
 public struct Paths: Sendable {
     /// `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock`, else
     /// `${XDG_CACHE_HOME:-~/.cache}/malachi/run/rpc.sock` — exactly the
-    /// daemon's, the GTK client's and the MCP bridge's resolution.
+    /// daemon's, the GTK client's and the MCP bridge's resolution. The
+    /// daemon's connection key lies beside it, the same path with `.key`
+    /// appended (`RPCAuth.keyPath`, docs/api.md §1.4), and is read by
+    /// `RPCClient` on every connection.
     public let socket: String
     /// `~/Library/Application Support/Malachi Mail`
     public let dataDir: URL

@@ -100,13 +100,15 @@ macos/
   Resources/Info.plist.in       template; make substitutes version, bundle id, languages
   scripts/po2strings.py         po/malachi.pot + po/*.po → <lang>.lproj (stdlib python3)
   Sources/MalachiCore/          no AppKit; everything here is covered by swift test
-    Transport/                  RPCClient (actor over NWConnection), JSONRPC, LineFramer,
-                                UnixSocketProbe: the ui/internal/client of macOS
+    Transport/                  RPCClient (actor over NWConnection, the connection handshake
+                                in connect()), JSONRPC, LineFramer, UnixSocketProbe,
+                                DaemonKey (the key file): the ui/internal/client of macOS
     Daemon/                     DaemonSupervisor (actor over Foundation.Process), Paths,
                                 Version: the ui/internal/daemon of macOS
     API/                        backend/pkg/api re-declared: every method of docs/api.md
                                 with its params, result and default timeout, the
-                                notifications, the enums, the error codes
+                                notifications, the enums, the error codes, the
+                                handshake's types and proofs (Auth.swift)
     Model/, Compose/, Wizard/,  the pure logic of the GTK UI ported 1:1 (window model,
     HTML/, Text/                threads, folding, favourites, address parsing, mailto:,
                                 quoting, wizard fields and results, the viewer and editor
@@ -180,6 +182,7 @@ go test ./internal/auth/helper -run TestRealHelper` from `backend/`.
 | Configuration | `~/Library/Application Support/Malachi Mail/config.toml` |
 | Mail store | `~/Library/Application Support/Malachi Mail/store.db` |
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
+| RPC key | beside the socket, its path plus `.key` (`~/.cache/malachi/run/rpc.sock.key`): a new key at every daemon start, mode 0600, removed when the daemon stops cleanly; the app reads it for every connection and keeps nothing ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Attachments being opened or previewed | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
 | Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys plus `command-r` |
 | Passwords, sign-ins | login keychain, service `io.github.schotek.Malachi` (`password`, or `oauth2.refresh_token` for a browser sign-in) |
@@ -252,6 +255,7 @@ the strings and the confirmation dialogs.
 | The pane widths are kept in the app's own defaults keys (`main-sidebar-width`, `main-list-width`), written from a visible window with nothing collapsed | `Adw.NavigationSplitView` fractions in GSettings | `NSSplitView`'s autosave restores before the window has its frame and records the panes at their minimums |
 | The message header keeps 12 pt above the subject, the same as below the date | `margin-top: 24` above the subject, 12 below the date | Equal margins were asked for; the pane already sits below the toolbar |
 | The account wizard's sheet has a Cancel button at the bottom left of every page (Escape) and no close control in its header; while the browser sign-in waits, the page's own *Cancel* stands alone (Escape still closes the sheet and cancels the sign-in) | Close button in the header bar | macOS sheets carry no window controls; Cancel is the convention, and two Cancel buttons on one page would be ambiguous |
+| The daemon's key file (`rpc.sock.key`) is used only when it belongs to the user and grants nothing to group or others, besides being a regular file, not a link, of 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log) | The Go clients (the GTK UI, `malachi-mcp`, `api.ReadKeyFile`) check the file's type, size and format, not its owner and mode | Defence in depth: the daemon writes the file 0600 in its private directory, so a key another user owns or could read was not written by it or has been exposed. The Go clients cannot check owner and mode the same way on every platform they build for (CLAUDE.md rule 4); on macOS it costs nothing |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked
@@ -299,6 +303,19 @@ deviations.
 - **The daemon should not be started by the app.** `MALACHI_DAEMON=none`;
   the window then shows the connection state until something answers on
   the socket (`make run-backend` in another terminal).
+- **The status line says "Protocol mismatch: UI 2, backend 1".** An older
+  `malachid` still answers on the socket, one from before the
+  authenticated connections: typically `make run-backend` in another
+  terminal from an older checkout, or a daemon left running by an older
+  build. The app uses a running daemon and never stops somebody else's, so
+  stop that one (Ctrl+C in its terminal, or `pkill -x malachid`); the app
+  then starts its own at its next attempt, a few seconds later. A backend
+  number higher than the UI's means the app is the older one: rebuild it.
+- **"Backend unavailable" although malachid runs.** The connection was
+  refused in the handshake; the log says why once (`make run-macos`
+  shows it), for example that `rpc.sock.key` belongs to another user or
+  grants group or others any access, or that the process on the socket
+  did not prove it holds the key (a socket that is not your daemon's).
 - **A different socket.** `MALACHI_SOCKET=/path/rpc.sock` for the app and
   the daemon it starts; `malachi-mcp` reads the same variable. Keep it
   under 103 bytes.

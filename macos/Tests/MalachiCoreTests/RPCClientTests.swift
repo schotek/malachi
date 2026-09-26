@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import MalachiCore
 
-private let systemInfoJSON = #"{"version":"fake","protocolVersion":1,"pid":42,"storePath":"/tmp/store.db"}"#
+private let systemInfoJSON = #"{"version":"fake","protocolVersion":2,"pid":42,"storePath":"/tmp/store.db"}"#
 
 /// A handler answering system.info and a few test methods.
 private let standardHandler: FakeDaemon.Handler = { method, _ in
@@ -41,7 +41,7 @@ private struct Which: Decodable, Sendable, Equatable { let which: String }
         try await client.connect()
         #expect(await client.state == .connected)
         let info: SystemInfo = try await client.call(API.systemInfo, EmptyParams())
-        #expect(info == SystemInfo(version: "fake", protocolVersion: 1, pid: 42, storePath: "/tmp/store.db"))
+        #expect(info == SystemInfo(version: "fake", protocolVersion: 2, pid: 42, storePath: "/tmp/store.db"))
         #expect(UnixSocketProbe.answers(fake.path))
         await client.close()
         #expect(await client.state == .disconnected(reason: nil))
@@ -88,8 +88,8 @@ private struct Which: Decodable, Sendable, Equatable { let which: String }
         defer { Task { await fake.stop() } }
         let client = RPCClient(socketPath: fake.path)
         try await client.connect()
-        // One round trip first: the fake registers an accepted connection
-        // asynchronously, and a notification pushed before that goes nowhere.
+        // The fake notifies authenticated connections only, and a connected
+        // client is one it has authenticated; a round trip first all the same.
         let _: SystemInfo = try await client.call(API.systemInfo, EmptyParams())
         let received: RPCNotification = try await withCheckedThrowingContinuation { cont in
             Task {
@@ -223,6 +223,254 @@ private struct Which: Decodable, Sendable, Equatable { let which: String }
         #expect(ContinuousClock.now - start < .seconds(3), "a refused unix connect must not hang")
         #expect(!UnixSocketProbe.answers(path))
         if case .disconnected = await client.state {} else { Issue.record("expected disconnected") }
+    }
+
+    // MARK: Handshake (docs/api.md §1.4; api handshake_test.go)
+
+    @Test func handshakePrecedesTheFirstCall() async throws {
+        let fake = try await startFake()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+        #expect(await client.state == .connected)
+        #expect(await fake.handshakes == [API.SystemHello.name, API.SystemAuthenticate.name])
+        let _: SystemInfo = try await client.call(API.systemInfo, EmptyParams())
+        #expect(await fake.received == [API.SystemHello.name, API.SystemAuthenticate.name, API.systemInfo])
+        #expect(await fake.calls == [API.systemInfo], "the handshake is not a call")
+        await client.close()
+    }
+
+    @Test func callsWaitForTheHandshake() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.silent)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path, handshakeTimeout: .seconds(10))
+        let dial = Task { try await client.connect() }
+        try await eventually { await fake.handshakes == [API.SystemHello.name] }
+        #expect(await client.state == .connecting, "connecting until the handshake is done")
+        await #expect(throws: RPCClient.ClientError.notConnected) {
+            let _: SystemInfo = try await client.call(API.systemInfo, EmptyParams())
+        }
+        await client.close()
+        await #expect(throws: RPCClient.ClientError.disconnected) { try await dial.value }
+        #expect(await fake.calls.isEmpty)
+        #expect(await fake.received == [API.SystemHello.name])
+    }
+
+    @Test func notificationsBeforeTheHelloAnswerAreDropped() async throws {
+        let fake = try await startFake()
+        await fake.setNotificationsBeforeHello(8)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+        await fake.pushNotification(method: "notify.late", paramsJSON: "{}")
+        var first: String?
+        for await n in client.notifications {
+            first = n.method
+            break
+        }
+        #expect(first == "notify.late", "the eight notify.early before the answer never reach the consumer")
+        await client.close()
+    }
+
+    @Test func aNinthNotificationBeforeTheHelloAnswerIsMalformed() async throws {
+        let fake = try await startFake()
+        await fake.setNotificationsBeforeHello(9)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        #expect(await refusal(client) == .malformed("an unexpected notification"))
+        #expect(await fake.handshakes == [API.SystemHello.name])
+    }
+
+    /// The system.authenticate answer and a notification in one write: the
+    /// notification is held and delivered right after .connected.
+    @Test func aNotificationWithTheAuthenticateAnswerFollowsConnected() async throws {
+        let fake = try await startFake()
+        await fake.setNotificationWithAuthenticateAnswer("notify.first")
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        let events = Events()
+        await client.setStateHandler { s in events.add(.state(s)) }
+        await client.setNotificationHandler { n in events.add(.notification(n.method)) }
+        try await client.connect()
+        try await eventually { events.all.count >= 3 }
+        #expect(events.all == [.state(.connecting), .state(.connected), .notification("notify.first")])
+        await client.close()
+    }
+
+    @Test func aDaemonOfProtocolOneIsAMismatch() async throws {
+        for early in [0, RPCAuth.maxSkippedNotifications] {
+            let fake = try await startFake()
+            await fake.setHandshake(.oldDaemon)
+            await fake.setNotificationsBeforeHello(early)
+            let client = RPCClient(socketPath: fake.path)
+            // Both ways a consumer gets notifications: the handler and the stream.
+            let events = Events()
+            await client.setNotificationHandler { n in events.add(.notification(n.method)) }
+            let reader = Task {
+                for await n in client.notifications {
+                    events.add(.notification(n.method))
+                }
+            }
+            let refused = await refusal(client)
+            #expect(refused == .protocolMismatch(daemon: 1), "\(early) notifications first")
+            #expect(await client.state == .disconnected(reason: refused?.description))
+            // Nothing after system.hello: no falling back to an
+            // unauthenticated connection.
+            try await Task.sleep(for: .milliseconds(100))
+            #expect(await fake.received == [API.SystemHello.name])
+            // The notifications before the answer never reach the consumer.
+            reader.cancel()
+            #expect(events.all.isEmpty, "\(early) notifications first: \(events.all)")
+            await fake.stop()
+        }
+    }
+
+    @Test func aDaemonOfALaterProtocolIsAMismatchBeforeTheKeyIsRead() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.protocolVersion(99))
+        defer { Task { await fake.stop() } }
+        // No key file at all: the version is compared before it is read.
+        try FileManager.default.removeItem(atPath: fake.keyPath)
+        let client = RPCClient(socketPath: fake.path)
+        #expect(await refusal(client) == .protocolMismatch(daemon: 99))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await fake.received == [API.SystemHello.name])
+    }
+
+    @Test func aProcessWithoutTheKeyIsNeverAuthenticatedTo() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.wrongProof)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        #expect(await refusal(client) == .daemonUnproven)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await fake.handshakes == [API.SystemHello.name], "system.authenticate was never sent")
+        #expect(await fake.received == [API.SystemHello.name])
+    }
+
+    @Test func aRefusedProofIsRejected() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.rejectClient)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        #expect(await refusal(client) == .rejected(.unauthenticated))
+        #expect(await fake.handshakes == [API.SystemHello.name, API.SystemAuthenticate.name])
+        #expect(await fake.calls.isEmpty)
+    }
+
+    @Test func aMissingKeyFileIsKeyUnavailable() async throws {
+        let fake = try await startFake()
+        defer { Task { await fake.stop() } }
+        try FileManager.default.removeItem(atPath: fake.keyPath)
+        let client = RPCClient(socketPath: fake.path)
+        guard case .keyUnavailable(let reason)? = await refusal(client) else {
+            Issue.record("expected keyUnavailable")
+            return
+        }
+        #expect(reason == "\(fake.keyPath) does not exist")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await fake.received == [API.SystemHello.name], "nothing was sent after system.hello")
+    }
+
+    @Test func aMalformedProofIsMalformed() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.malformedProof)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        #expect(await refusal(client) == .malformed("daemonProof is not 64 lowercase hex digits"))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await fake.received == [API.SystemHello.name])
+    }
+
+    @Test func aSilentDaemonTimesOut() async throws {
+        let fake = try await startFake()
+        await fake.setHandshake(.silent)
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path, handshakeTimeout: .milliseconds(200))
+        let start = ContinuousClock.now
+        #expect(await refusal(client) == .timedOut)
+        #expect(ContinuousClock.now - start < .seconds(3))
+        #expect(await client.state == .disconnected(reason: RPCClient.HandshakeError.timedOut.description))
+    }
+
+    /// A restarted daemon has a new key: the client reads the key file
+    /// afresh for every connection and never keeps one.
+    @Test func aRestartedDaemonIsAuthenticatedWithItsNewKey() async throws {
+        let fake = try await startFake()
+        defer { Task { await fake.stop() } }
+        let client = RPCClient(socketPath: fake.path)
+        try await client.connect()
+        let before = try Data(contentsOf: URL(fileURLWithPath: fake.keyPath))
+        try await fake.restart()
+        try await eventually {
+            if case .disconnected = await client.state {
+                return true
+            }
+            return false
+        }
+        #expect(try Data(contentsOf: URL(fileURLWithPath: fake.keyPath)) != before, "a new key")
+        try await client.connect()
+        let info: SystemInfo = try await client.call(API.systemInfo, EmptyParams())
+        #expect(info.pid == 42)
+        #expect(await fake.handshakes == [
+            API.SystemHello.name, API.SystemAuthenticate.name, API.SystemHello.name, API.SystemAuthenticate.name,
+        ])
+        await client.close()
+    }
+}
+
+private struct TimedOut: Error {}
+
+/// Polls `cond` until it holds, for at most `timeout`.
+private func eventually(_ timeout: Duration = .seconds(5), _ cond: () async -> Bool) async throws {
+    let deadline = ContinuousClock.now + timeout
+    while true {
+        if await cond() {
+            return
+        }
+        if ContinuousClock.now > deadline {
+            throw TimedOut()
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+/// What `connect()` threw as a handshake refusal; nil, with an issue
+/// recorded, when it connected or threw anything else.
+private func refusal(_ client: RPCClient) async -> RPCClient.HandshakeError? {
+    do {
+        try await client.connect()
+        Issue.record("connect() succeeded")
+    } catch let e as RPCClient.HandshakeError {
+        return e
+    } catch {
+        Issue.record("connect() threw \(error)")
+    }
+    return nil
+}
+
+/// What a client reported through its handlers, in the order it happened:
+/// they run on the client's actor, one after the other.
+private final class Events: @unchecked Sendable {
+    enum Event: Equatable {
+        case state(RPCClient.State)
+        case notification(String)
+    }
+
+    private let lock = NSLock()
+    private var list: [Event] = []
+
+    func add(_ e: Event) {
+        lock.lock()
+        list.append(e)
+        lock.unlock()
+    }
+
+    var all: [Event] {
+        lock.lock()
+        defer { lock.unlock() }
+        return list
     }
 }
 

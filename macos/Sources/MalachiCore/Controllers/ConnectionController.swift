@@ -8,16 +8,28 @@ import os
 /// loop and connection status of ui/internal/window/window.go.
 ///
 /// Owns the `RPCClient` and the `DaemonSupervisor`: on `start()` it brings
-/// the daemon up (or adopts a running one), dials, checks `system.info` and
-/// the protocol version, and while the socket is dead retries every
+/// the daemon up (or adopts a running one), dials (the client authenticates
+/// the connection and compares the protocol version in the handshake),
+/// checks `system.info`, and while there is no connection retries every
 /// `reconnectInterval`. Notifications and state changes are consumed from
 /// the client's streams and handed to `onNotification`/`onState` on the
 /// main actor; decoding a notification is the consumer's job.
+///
+/// An attempt ends connected, as a protocol mismatch or as unavailable. A
+/// mismatch stays up across the retries (no "Connecting…" every few
+/// seconds) until an attempt ends otherwise; a connection ends it at once.
+/// A refused handshake is logged at error level once per distinct reason
+/// until the next connection; the routine failures while the daemon is
+/// down stay at debug level.
 @MainActor
 public final class ConnectionController {
     public enum ConnectionState: Sendable, Equatable {
         case connecting
         case connected(SystemInfo)
+        /// The daemon speaks another protocol version (1 for one without a
+        /// handshake): the handshake refused it, so there is no connection
+        /// and nothing is loaded; `system.info` disagreeing on an
+        /// authenticated connection ends here too, as a defence.
         case protocolMismatch(daemon: Int)
         case infoFailed(String)
         case unavailable(String)
@@ -51,6 +63,10 @@ public final class ConnectionController {
     private var generation = 0
     private var started = false
     private var stopping = false
+    /// The handshake refusals logged at error level since the last
+    /// connection, in order: the retry loop meets the same refusal every few
+    /// seconds, and the log names each one once (the repeats go to debug).
+    private(set) var loggedRefusals: [String] = []
 
     /// - Parameters:
     ///   - client: the transport; its streams are consumed here, so nobody
@@ -99,9 +115,13 @@ public final class ConnectionController {
     public func reconnectNow() {
         guard !stopping, attempt == nil, !clientConnected else { return }
         // Every attempt announces itself, as the GTK client's Connect does,
-        // even when the previous state was already `.connecting`.
-        state = .connecting
-        onState?(.connecting)
+        // even when the previous state was already `.connecting`; a
+        // protocol mismatch stays up instead until an attempt ends
+        // otherwise, so the line does not flip every few seconds.
+        if !showsMismatch {
+            state = .connecting
+            onState?(.connecting)
+        }
         attempt = Task { [weak self] in
             await self?.connectOnce()
             self?.attempt = nil
@@ -130,7 +150,11 @@ public final class ConnectionController {
     // MARK: Internals
 
     /// One attempt: daemon up, then dial. Failures are routine while the
-    /// daemon is down or backing off, so they are logged at debug level.
+    /// daemon is down or backing off, so they are logged at debug level; a
+    /// daemon that answers but refuses the handshake, or is refused by it,
+    /// is not, and is logged once (`logRefusal`). A daemon of another
+    /// protocol is the mismatch, anything else the client refused is
+    /// unavailable.
     private func connectOnce() async {
         if let supervisor {
             do {
@@ -144,11 +168,47 @@ public final class ConnectionController {
         }
         do {
             try await client.connect()
+        } catch let refusal as RPCClient.HandshakeError {
+            logRefusal(refusal.description)
+            if case .protocolMismatch(let daemon) = refusal {
+                report(.protocolMismatch(daemon: daemon))
+            } else {
+                report(.unavailable(refusal.description))
+            }
         } catch {
             let reason = describe(error)
             log.debug("backend unavailable: \(reason, privacy: .public)")
             report(.unavailable(reason))
         }
+    }
+
+    /// How many refusals `loggedRefusals` remembers before it starts afresh
+    /// (window/connection.go `maxConnWarned`): the peer on the socket
+    /// chooses the error codes of its refusals, and so their texts.
+    private static let maxLoggedRefusals = 16
+
+    /// Logs a refused handshake at error level the first time since the
+    /// last connection, at debug level when the retry loop meets it again.
+    /// The descriptions carry no key, nonce or proof.
+    private func logRefusal(_ description: String) {
+        if loggedRefusals.contains(description) {
+            log.debug("backend refused: \(description, privacy: .public)")
+            return
+        }
+        if loggedRefusals.count >= Self.maxLoggedRefusals {
+            loggedRefusals.removeAll()
+        }
+        loggedRefusals.append(description)
+        log.error("backend refused: \(description, privacy: .public)")
+    }
+
+    /// Whether the state is a protocol mismatch, which `reconnectNow`
+    /// keeps up and a connection ends.
+    private var showsMismatch: Bool {
+        if case .protocolMismatch = state {
+            return true
+        }
+        return false
     }
 
     private func clientStateChanged(_ s: RPCClient.State) {
@@ -158,6 +218,13 @@ public final class ConnectionController {
         case .connected:
             clientConnected = true
             generation += 1
+            loggedRefusals.removeAll()
+            // A connection ends a mismatch kept up through the attempts at
+            // once, as GTK drops it at Connected: "Connecting…" until
+            // system.info answers.
+            if showsMismatch {
+                report(.connecting)
+            }
             checkSystemInfo()
         case .disconnected(let reason):
             // A dial that never got through is reported by the attempt
@@ -176,6 +243,8 @@ public final class ConnectionController {
             let outcome: ConnectionState
             do {
                 let info = try await client.call(API.SystemInfo.self, EmptyParams(), timeout: ConnectionController.infoTimeout)
+                // The handshake compared the version already; an answer
+                // that disagrees with it is still a mismatch, as a defence.
                 outcome = info.protocolVersion == API.protocolVersion
                     ? .connected(info)
                     : .protocolMismatch(daemon: info.protocolVersion)
@@ -208,6 +277,8 @@ private func describe(_ error: any Error) -> String {
     case let e as DaemonSupervisor.SupervisorError:
         return e.description
     case let e as RPCClient.ClientError:
+        return e.description
+    case let e as RPCClient.HandshakeError:
         return e.description
     case let e as RPCError:
         return e.description

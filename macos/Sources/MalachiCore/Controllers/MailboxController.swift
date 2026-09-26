@@ -690,16 +690,18 @@ public final class MailboxController {
     /// while there is none, and forgets what sync.status said); on a
     /// connection the accounts and the sync states are loaded; when the
     /// backend went away every in-flight reply is dropped and what is shown
-    /// stays until the reconnect reloads it. A connection with a failed or
-    /// mismatching system.info still loads, as the GTK window does (it loads
-    /// on the socket, not on the answer).
+    /// stays until the reconnect reloads it. A connection with a failed
+    /// system.info still loads, as the GTK window does (it loads on the
+    /// socket, not on the answer). A daemon of another protocol version is
+    /// no connection at all (the handshake refused it): nothing loads, as
+    /// when the backend went away.
     public func handleConnection(_ state: ConnectionController.ConnectionState) {
         sync.setConnection(state)
         switch state {
-        case .connected, .protocolMismatch, .infoFailed:
+        case .connected, .infoFailed:
             loadAccounts()
             loadSyncStatus()
-        case .unavailable, .stopping:
+        case .unavailable, .protocolMismatch, .stopping:
             model.bumpAll()
             if model.grouped {
                 collapseLoading?()
