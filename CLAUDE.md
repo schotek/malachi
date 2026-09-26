@@ -53,16 +53,18 @@ zajištěná hranicí na API, ne podmíněnou kompilací.
 
 ### 5. Neměň API kontrakt bez aktualizace docs/api.md
 Kontrakt (`backend/pkg/api/`) a dokumentace (`docs/api.md`) se mění současně,
-v jednom commitu. Test `TestDocsCoverAllMethods` hlídá, že každá metoda,
-notifikace a chybový kód je v dokumentu zmíněn. Chybové kódy se nikdy
-nepřečíslovávají, jen přidávají. Nekompatibilní změna = bump `ProtocolVersion`.
+v jednom commitu. Test `TestDocsCoverAllMethods` hlídá, že každá metoda a
+notifikace je v dokumentu zmíněna a každý chybový kód má řádek v tabulce §2
+(`| kód | jméno |`). Chybové kódy se nikdy nepřečíslovávají, jen přidávají.
+Nekompatibilní změna = bump `ProtocolVersion`.
 
 ## Konvence
 
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
 - Struktura balíčků: `internal/` pro implementaci, `pkg/api/` pro veřejný kontrakt
 - MCP most (`backend/cmd/malachi-mcp`) je klient démona jako UI: z `backend/`
-  importuje jen `pkg/api`, nikdy nevrací HTML, každý řetězec z pošty prochází
+  importuje jen `pkg/api`, žádné volání nepošle před dokončeným handshakem
+  (`api.ClientHandshake`), nikdy nevrací HTML, každý řetězec z pošty prochází
   `clean()` a ohradou s nonce, mutující nástroje jen za přepínačem (`docs/mcp.md`)
 - Dva Go moduly (`backend/`, `ui/`) + `go.work` v kořeni; `ui/go.mod` má
   `replace` na `../backend`, aby offline build fungoval i bez workspace
@@ -271,6 +273,19 @@ stránka Servery ho ukáže se Zapomenout, účet s odmítnutým nebo změněný
 certifikátem má stav a banner s „Upravit účet…“. Žádné obecné
 „ignorovat certifikát“ (`docs/security.md` §7).
 
+Spojení s démonem (protokol 2, `docs/api.md` §1.4): démon při každém startu
+vygeneruje náhodný klíč a zapíše ho vedle socketu do `<socket>.key`
+(`api.KeyPath`, výchozí `rpc.sock.key`, 0600; při čistém ukončení ho smaže,
+po pádu zůstane do dalšího startu). Každé spojení začíná `system.hello`
+(klient porovná `protocolVersion`, teprve pak přečte klíč a ověří důkaz
+démona, HMAC-SHA256 přes dvě nonce) a `system.authenticate` s důkazem
+klienta; do té doby démon nespustí kód backendu, nepošle notifikaci a na
+jiný požadavek odpoví 1005 `unauthenticated` a spojení zavře (4 KiB, 10 s,
+nejvýš 32 takových spojení). Go klienti (GTK UI, MCP most) volají
+`api.ClientHandshake`, Swift `RPCClient` dělá totéž a navíc kontroluje
+vlastníka a práva souboru s klíčem. Co to chrání a co ne:
+`docs/security.md` §8.
+
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
 knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
 
@@ -284,9 +299,22 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
   používají `~/.cache/malachi/run/rpc.sock`. `MALACHI_SOCKET` přebíjí obojí.
   Ve Flatpaku (`FLATPAK_ID`) leží socket v `$XDG_RUNTIME_DIR/app/<app-id>/`,
   jediné části runtime dir sdílené mezi instancemi sandboxu (`api.SocketBase`).
+- Vedle socketu leží klíč spojení `<socket>.key` (`rpc.sock.key`, 0600): démon
+  ho při každém startu zapíše nový a při čistém ukončení smaže (po pádu zůstane
+  do dalšího startu), klienti ho čtou při každém připojení znovu, až po odpovědi
+  na `system.hello`; nikdy se neloguje. Se starým démonem (protokol 1) ukáže UI
+  stálé „Protocol mismatch: UI 2, backend 1“ (ukonči ho, UI pak spustí nový).
+  Ruční komunikace se socketem (`socat`, skript) vyžaduje handshake
+  z `docs/api.md` §1.4, jinak přijde 1005 `unauthenticated` a zavřené spojení;
+  pouhé připojení a zavření je v pořádku.
 - Démona nespouští nic na desktopu: UI si ho spustí samo (`ui/internal/daemon`,
   hledá `malachid` vedle vlastní binárky, `MALACHI_DAEMON=none` vypne) a při
   ukončení aplikace ho zastaví. Běžícího démona (`make run-backend`) použije
   a nechá být.
 - `make build` musí proběhnout před `scripts/dev-run.sh`; skript binárky nestaví.
   `make run-dev` / `run-backend` / `run-frontend` build zajistí samy.
+- Úprava Go souboru z `po/POTFILES`, která posune řádky s texty, posune i odkazy
+  `#: soubor:řádek` v `po/malachi.pot` a `make lint` selže („po/malachi.pot is
+  out of date“), dokud neproběhne `make po` (v Toolbxu). Kde to nejde, nech
+  řádky s texty na stejných číslech (nový kód pod poslední text nebo do nového
+  souboru bez textů).
