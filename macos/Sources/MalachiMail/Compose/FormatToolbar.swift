@@ -65,7 +65,10 @@ final class FormatToolbar: NSStackView {
         orientation = .horizontal
         alignment = .centerY
         spacing = 2
-        edgeInsets = NSEdgeInsets(top: 0, left: 6, bottom: 0, right: 6)
+        // The card of header fields above sits 12 pt in: GTK's 6 suits its
+        // flat buttons, whose glyph starts further in, but a bordered
+        // button's edge shows, so the bar lines up with the card instead.
+        edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: 0, right: 12)
         heightAnchor.constraint(equalToConstant: Self.height).isActive = true
 
         // Paragraph style: a pull-down whose first item is the label.
@@ -134,6 +137,9 @@ final class FormatToolbar: NSStackView {
         linkPopover.behavior = .transient
 
         colorWell.controlSize = .small
+        // GTK's ColorDialogButton starts at opaque black; the well's own
+        // default is white, which showed as an empty capsule.
+        colorWell.color = .black
         colorWell.supportsAlpha = false
         colorWell.refusesFirstResponder = true
         colorWell.toolTip = L10n.T("Text Colour")
@@ -325,7 +331,7 @@ final class FormatToolbar: NSStackView {
     }
 
     private static func toggle(_ icon: String, tooltip: String) -> NSButton {
-        let b = NSButton(image: Icon.image(icon, size: .regular), target: nil, action: nil)
+        let b = NSButton(image: glyph(icon), target: nil, action: nil)
         b.setButtonType(.pushOnPushOff)
         b.bezelStyle = .toolbar
         b.imagePosition = .imageOnly
@@ -337,7 +343,7 @@ final class FormatToolbar: NSStackView {
     }
 
     private static func push(_ icon: String, tooltip: String) -> NSButton {
-        let b = NSButton(image: Icon.image(icon, size: .regular), target: nil, action: nil)
+        let b = NSButton(image: glyph(icon), target: nil, action: nil)
         b.setButtonType(.momentaryPushIn)
         b.bezelStyle = .toolbar
         b.imagePosition = .imageOnly
@@ -346,6 +352,18 @@ final class FormatToolbar: NSStackView {
         b.toolTip = tooltip
         b.setAccessibilityLabel(tooltip)
         return b
+    }
+
+    /// The bar's glyph for `icon`, drawn in the label colour. A template
+    /// image in a toolbar-style button inside a window is drawn in the
+    /// accent colour from macOS 26 whenever the button is off (neither
+    /// tintProminence nor contentTintColor changes that); a glyph that
+    /// carries its own colour stays like the pop-ups beside it and GTK's
+    /// flat buttons. The colour is dynamic, so the dark appearance works.
+    private static func glyph(_ icon: String) -> NSImage {
+        let img = Icon.image(icon, size: .regular)
+        let label = NSImage.SymbolConfiguration(paletteColors: [.labelColor])
+        return img.withSymbolConfiguration(img.symbolConfiguration.applying(label)) ?? img
     }
 
     private static func separator() -> NSBox {
