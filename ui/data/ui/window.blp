@@ -527,7 +527,9 @@ Adw.ApplicationWindow main_window {
 
                     Adw.Clamp {
                       maximum-size: 900;
-                      tightening-threshold: 700;
+                      // Equal to the maximum: min(width, 900), the width htmlview's
+                      // baseCSS gives an HTML body, so its text lines up with these.
+                      tightening-threshold: 900;
 
                       child: Box {
                         orientation: vertical;
@@ -615,7 +617,7 @@ Adw.ApplicationWindow main_window {
 
                           child: Adw.Clamp {
                             maximum-size: 900;
-                            tightening-threshold: 700;
+                            tightening-threshold: 900;
 
                             child: Label message_body {
                               xalign: 0;

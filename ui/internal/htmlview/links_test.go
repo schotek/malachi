@@ -77,7 +77,9 @@ func TestImageType(t *testing.T) {
 
 func TestDocument(t *testing.T) {
 	doc := Document(`<p>a &amp; b</p>`)
-	for _, want := range []string{CSP, `<meta charset="utf-8">`, `<body><p>a &amp; b</p></body>`, "img { max-width: 100%; }"} {
+	for _, want := range []string{CSP, `<meta charset="utf-8">`, `<body><div id="malachi-column"><p>a &amp; b</p></div></body>`, "img { max-width: 100%; }",
+		// The column of the headers (window.blp's message clamps).
+		"#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important;"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("document lacks %q:\n%s", want, doc)
 		}

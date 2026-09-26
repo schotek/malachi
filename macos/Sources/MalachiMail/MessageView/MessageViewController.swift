@@ -103,7 +103,9 @@ final class MessageViewController: NSViewController {
         self.cache = cache
         self.mode = mode
         remoteBar = RemoteBarView(showsTrust: mode != .embedded)
-        textClamp = ClampView(maximum: 900, tight: 700, child: bodyTextView)
+        // tight = maximum: min(width, 900), the width viewerBaseCSS gives
+        // an HTML body, so its text lines up with the headers (window.blp).
+        textClamp = ClampView(maximum: 900, tight: 900, child: bodyTextView)
         toasts = mode == .pane ? nil : ToastPresenter()
         showingMessage = mode != .pane
         super.init(nibName: nil, bundle: nil)
@@ -120,7 +122,7 @@ final class MessageViewController: NSViewController {
         // The headers stay put at the top; the body below scrolls on its
         // own, because a web view scrolls itself and would have no height
         // inside a scroll view.
-        let headerClamp = ClampView(maximum: 900, tight: 700, child: header)
+        let headerClamp = ClampView(maximum: 900, tight: 900, child: header)
         headerClamp.setContentHuggingPriority(.required, for: .vertical)
 
         textScroll.documentView = textClamp

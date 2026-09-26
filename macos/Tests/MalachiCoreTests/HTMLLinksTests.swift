@@ -66,7 +66,9 @@ struct HTMLLinksTests {
 
     @Test func document() {
         let doc = viewerDocument(body: "<p>a &amp; b</p>")
-        for want in [viewerCSP, "<meta charset=\"utf-8\">", "<body><p>a &amp; b</p></body>", "img { max-width: 100%; }"] {
+        for want in [viewerCSP, "<meta charset=\"utf-8\">", "<body><div id=\"malachi-column\"><p>a &amp; b</p></div></body>", "img { max-width: 100%; }",
+                     // The column of the headers (MessageViewController's clamps).
+                     "#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important;"] {
             #expect(doc.contains(want), "document lacks \(want)")
         }
         #expect(doc.hasPrefix("<!DOCTYPE html>"))
