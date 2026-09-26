@@ -176,9 +176,14 @@ private func connect(_ fake: FakeDaemon) async throws -> RPCClient {
 
 /// A started wizard whose linked accounts have loaded.
 @MainActor
-private func startWizard(_ fake: FakeDaemon, editing: Account? = nil, signIn: Bool = false) async throws -> (WizardController, Recorder) {
+private func startWizard(
+    _ fake: FakeDaemon, editing: Account? = nil, signIn: Bool = false, requestPassword: ErrorCode? = nil
+) async throws -> (WizardController, Recorder) {
     let client = try await connect(fake)
     let w = WizardController(client: client, editing: editing, signIn: signIn)
+    if let requestPassword {
+        w.requestPassword(reason: requestPassword)
+    }
     let rec = Recorder()
     rec.attach(w)
     w.start()
@@ -1411,4 +1416,75 @@ private func pinnedAccount(id: AccountID = "acc-9") -> Account {
         w.trustCertificate(.imap)
         #expect(rec.prompts.isEmpty)
     }
+
+    // MARK: A missing or refused password (wizard.go RequestPassword)
+
+    @Test func aMissingPasswordReturnsToTheIdentity() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountTest.name) { _ in throw RPCError(code: .authRequired, message: "no stored password") }
+        let (w, rec) = try await startWizard(fake, editing: imapAccount())
+        w.testServers()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.pages.last == [.identity])
+        #expect(rec.identityProblems.last == IdentityProblems(password: true))
+        #expect(rec.banners.last == "No password is stored for this account. Enter it to continue.")
+        #expect(rec.focus.last == .password)
+        let v = try #require(rec.lastResults)
+        #expect(v.title == "Connection Failed")
+        #expect(v.imap?.text == "Testing the connection failed: sign-in required" && v.smtp == v.imap)
+        // No Save Anyway: it would store the account without a password again.
+        #expect(v.buttons == WizardController.WizardButtons(edit: true))
+        #expect(w.lastOutcome == .authFailed)
+        // Typing the password takes the banner away.
+        w.setIdentity(name: "Me", email: "me@example.com", password: "p")
+        #expect(rec.banners.last == .some(nil))
+    }
+
+    @Test func aBrowserAccountWithoutASignInIsNotAskedForAPassword() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        await fake.on(API.AccountTest.name) { _ in throw RPCError(code: .authRequired, message: "sign in") }
+        let (w, rec) = try await startWizard(fake, editing: oauthAccount())
+        w.setIdentity(name: "Me", email: "me@gmail.com", password: "")
+        w.next()
+        try await waitUntil { rec.lastResults != nil }
+        #expect(rec.identityProblems.isEmpty)
+        #expect(rec.lastResults?.description == "The server refused the sign-in. Sign in again and make sure access to mail is allowed.")
+        #expect(w.lastOutcome == .failed)
+    }
+
+    @Test func requestPasswordOpensOnTheIdentity() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let (w, rec) = try await startWizard(fake, editing: imapAccount(), requestPassword: .authRequired)
+        #expect(w.pages == [.identity] && rec.pages == [[.identity]])
+        #expect(rec.identityProblems == [IdentityProblems(password: true)])
+        #expect(rec.banners == ["No password is stored for this account. Enter it to continue."])
+        #expect(rec.focus == [.password])
+        #expect(w.title == "Edit Account")
+        // The password typed, Next goes on to the servers as when editing.
+        w.setIdentity(name: "Me", email: "me@example.com", password: "secret")
+        #expect(rec.banners.last == .some(nil))
+        w.next()
+        #expect(rec.pages.last == [.identity, .servers])
+
+        let (_, refused) = try await startWizard(fake, editing: imapAccount(), requestPassword: .authFailed)
+        #expect(refused.banners == ["The server rejected the user name or password"])
+        #expect(refused.focus == [.password])
+    }
+
+    @Test func requestPasswordIsIgnoredWithoutAPasswordAccount() async throws {
+        let fake = try await makeFake()
+        defer { Task { await fake.stop() } }
+        let (browser, rec) = try await startWizard(fake, editing: oauthAccount(), requestPassword: .authRequired)
+        #expect(rec.identityProblems.isEmpty && rec.focus.isEmpty)
+        #expect(browser.pages == [.identity])
+        let (added, addRec) = try await startWizard(fake, requestPassword: .authRequired)
+        #expect(addRec.identityProblems.isEmpty && added.pages == [.identity])
+        // Without the request the edit wizard opens on the servers.
+        let (plain, _) = try await startWizard(fake, editing: imapAccount())
+        #expect(plain.pages == [.identity, .servers])
+    }
+
 }

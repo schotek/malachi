@@ -164,14 +164,41 @@ final class Integration {
         }
     }
 
-    /// The sign-in banner's button (sync.go `onAuthBannerButton`): an
-    /// account of the browser sign-in is signed in again (`signIn`); any
-    /// other opens the preferences (also for GNOME Online Accounts, whose
-    /// panel does not exist on macOS).
+    /// The sign-in banner's button (sync.go `onAuthBannerButton`):
+    /// `signInAgain` for the banner's account and its reason; the
+    /// preferences for an account the banner has no route for (GNOME Online
+    /// Accounts, whose panel does not exist on macOS, a keyring failure).
     private func authBannerButton() {
-        guard case .signInAgain(let id, let fallback)? = sync.authBannerAction else {
+        switch sync.authBannerAction {
+        case .editAccount(let id, let reason)?:
+            signInAgain(.password, reason: reason, accountId: id)
+        case .signInAgain(let id, _)?:
+            signInAgain(.oauth, reason: 0, accountId: id)
+        default:
+            state.hooks.openPreferences?()
+        }
+    }
+
+    /// Repairs the sign-in of account `id` the way it signs in, after a
+    /// failure with `reason` (the banner's notify.authRequired reason, or
+    /// the code of the error of the account's authRequired state; 0 when
+    /// unknown) (sync.go `signInAgain`): the account's edit wizard asking
+    /// for the password when it is missing or refused (`editsPassword`),
+    /// the browser for the daemon's own sign-in (the sign-in banner's page
+    /// as the fallback when it is up for this account), the preferences
+    /// otherwise (GNOME Online Accounts has no panel here).
+    private func signInAgain(_ kind: SignInKind, reason: ErrorCode, accountId id: AccountID) {
+        if editsPassword(kind, reason), mailbox.model.account(id) != nil {
+            editAccount(id, requestPassword: reason)
+            return
+        }
+        guard kind == .oauth else {
             state.hooks.openPreferences?()
             return
+        }
+        var fallback: String?
+        if case .signInAgain(let banner, let url)? = sync.authBannerAction, banner == id {
+            fallback = url
         }
         signIn(accountId: id, fallback: fallback)
     }
@@ -201,14 +228,17 @@ final class Integration {
     }
 
     /// The wizard in edit mode for account `id` (sync.go `editAccount`: the
-    /// certificate banner, an account's row in the status popover), as a
-    /// sheet on the main window, where the connection test shows a refused
-    /// certificate and offers to trust it. The sidebar and the banners
-    /// follow notify.accountsChanged and notify.syncState after the save.
-    private func editAccount(_ id: AccountID) {
+    /// banners, an account's row in the status popover), as a sheet on the
+    /// main window, where the connection test shows a refused certificate
+    /// and offers to trust it. With `requestPassword` it opens on the
+    /// identity page asking for the password (`WizardController
+    /// .requestPassword`). The sidebar and the banners follow
+    /// notify.accountsChanged and notify.syncState after the save.
+    private func editAccount(_ id: AccountID, requestPassword: ErrorCode? = nil) {
         guard let account = mailbox.model.account(id), let parent = mainWindow?.window else { return }
         AccountWizardController.present(
-            from: parent, client: state.client, editing: account, confirmTrust: Self.confirmTrust(state.alerts)
+            from: parent, client: state.client, editing: account, requestPassword: requestPassword,
+            confirmTrust: Self.confirmTrust(state.alerts)
         ) { _, _ in }
     }
 
@@ -231,25 +261,16 @@ final class Integration {
     }
 
     /// Runs the action of an account's row in the status popover (status.go
-    /// `onStatusAction`): check or try again, sign in (the way the account
-    /// signs in; only the sign-in banner's account has the notification's
-    /// page as the fallback), or the account assistant.
+    /// `onStatusAction`): check or try again, sign in (`signInAgain`, as the
+    /// banner does: the edit wizard asking for a missing or refused
+    /// password, the browser, or the preferences), or the account
+    /// assistant.
     private func statusAction(_ st: AccountStatus) {
         switch st.action {
         case .check, .retry:
             mailbox.triggerSync(accountId: st.account)
         case .signIn:
-            guard st.signIn == .oauth else {
-                // A password account is edited in the preferences; GNOME
-                // Online Accounts has no panel here (as for the banner).
-                state.hooks.openPreferences?()
-                return
-            }
-            var fallback: String?
-            if case .signInAgain(let id, let url)? = sync.authBannerAction, id == st.account {
-                fallback = url
-            }
-            signIn(accountId: st.account, fallback: fallback)
+            signInAgain(st.signIn, reason: st.reason, accountId: st.account)
         case .edit:
             editAccount(st.account)
         case .noAction:

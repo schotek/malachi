@@ -252,6 +252,9 @@ public final class WizardController {
     /// stays the same.
     private var appPassword: AccountConfig?
     private var identityProblemsShown = false
+    /// `requestPassword`'s reason, asked by `start()`.
+    private var passwordRequest: ErrorCode?
+    private var started = false
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "accountwizard")
 
     /// `editing` prefills the pages, skips discovery, keeps the stored
@@ -358,7 +361,40 @@ public final class WizardController {
             onOAuth?(oauthView)
         }
         onPages?(pages)
+        started = true
+        showPasswordRequest()
         loadLinked(then: nil)
+    }
+
+    /// wizard.go `RequestPassword`: the edit wizard of a password account
+    /// whose password is missing (`authRequired`) or was refused
+    /// (`authFailed`, and any other reason) opens on the identity page with
+    /// the password row flagged and focused and the banner saying why; the
+    /// banner goes as the password is typed. Ignored for an account the
+    /// daemon signs in (GNOME Online Accounts, the browser sign-in) and when
+    /// adding one. Call before `start()`.
+    public func requestPassword(reason: ErrorCode) {
+        guard editing != nil, linkedCfg == nil, !signInMode else { return }
+        pages = [.identity]
+        passwordRequest = reason
+        if started {
+            onPages?(pages)
+            showPasswordRequest()
+        }
+    }
+
+    private func showPasswordRequest() {
+        guard let reason = passwordRequest else { return }
+        passwordRequest = nil
+        askPassword(reason)
+    }
+
+    /// wizard.go `askPassword`: flags the identity page's password row as
+    /// the thing to fix, says why in its banner (`passwordBannerText`) and
+    /// focuses it; typing clears both (`setIdentity`).
+    private func askPassword(_ reason: ErrorCode) {
+        showIdentityProblems(IdentityProblems(password: true), banner: passwordBannerText(reason))
+        onFocus?(.password)
     }
 
     /// The wizard went away: a sign-in under way is cancelled and every late
@@ -1078,6 +1114,8 @@ public final class WizardController {
         let graph = linked && linkedCfg?.protocolKind == .graph
         var view = ResultsView(icon: "dialog-warning-symbolic", title: L10n.T("Connection Failed"), buttons: .none)
         var result: Outcome
+        // A password account with no password stored and none typed.
+        var missingPassword = false
         switch outcome {
         case .failure(let error):
             let row = EndpointRow(icon: "dialog-warning-symbolic", text: rpcErrorText(L10n.T("Testing the connection"), error))
@@ -1088,6 +1126,12 @@ public final class WizardController {
                 view.smtp = row
             }
             result = .failed
+            if passwordMissing(error, linked: linked) {
+                // No password stored and none typed: ask for it like for a
+                // refused one, and offer no "Save Anyway" without it.
+                result = .authFailed
+                missingPassword = true
+            }
         case .success(let res) where graph:
             let (icon, text) = endpointSummary(res.graph)
             view.graph = EndpointRow(icon: icon, text: text)
@@ -1134,8 +1178,7 @@ public final class WizardController {
             view.title = isEditing ? L10n.T("Ready to Save") : L10n.T("Ready to Add")
         case .authFailed:
             popTo(.identity)
-            showIdentityProblems(IdentityProblems(password: true), banner: L10n.T("The server rejected the user name or password"))
-            onFocus?(.password)
+            askPassword(missingPassword ? .authRequired : .authFailed)
         case .failed:
             break
         }

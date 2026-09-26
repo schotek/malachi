@@ -166,12 +166,12 @@ private final class StatusRowViews: NSObject {
     func apply(_ st: AccountStatus, outbox: Bool) {
         row.title = st.title
         row.subtitle = st.detail
-        if status == nil || st.action != status?.action || st.signIn != status?.signIn {
+        if status == nil || st.action != status?.action || st.signIn != status?.signIn || st.reason != status?.reason {
             check.isHidden = st.action != .check
             let label = statusButtonLabel(st)
             if !label.isEmpty {
                 // Only "_Edit Account…" carries a mnemonic.
-                button.title = st.action == .edit ? mn(label) : label
+                button.title = statusButtonMnemonic(st) ? mn(label) : label
             }
             button.isHidden = label.isEmpty
         }

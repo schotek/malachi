@@ -48,6 +48,9 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
             return L10n.T("%s failed: unknown account", what)
         case .keyringError:
             return L10n.T("%s failed: the system keyring is unavailable", what)
+        case .authRequired:
+            // TRANSLATORS: %s is an action such as "Testing the connection"
+            return L10n.T("%s failed: sign-in required", what)
         case .authFailed:
             return L10n.T("%s failed: the server rejected the user name or password", what)
         case .networkError:
@@ -96,6 +99,12 @@ public func endpointErrorText(_ e: RPCError?) -> String {
         return L10n.T("Sign in to this account again")
     case .unavailable:
         return L10n.T("The sign-in service is not available")
+    case .keyringError:
+        // TRANSLATORS: endpoint/account problem
+        return L10n.T("The system keyring is unavailable")
+    case .offline:
+        // TRANSLATORS: endpoint/account problem
+        return L10n.T("No network connection")
     case .invalidArgument:
         // TRANSLATORS: %s is a technical message from the mail backend.
         return L10n.T("Rejected: %s", e.message)

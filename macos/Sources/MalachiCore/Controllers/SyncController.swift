@@ -42,6 +42,10 @@ public final class SyncController {
     public enum AuthBannerAction: Sendable, Equatable {
         /// A password account: the preferences, where it can be edited.
         case openPreferences
+        /// A password account whose password is missing or was refused:
+        /// its edit wizard, asking for the password (`reason` is the
+        /// notification's, for the wizard's banner).
+        case editAccount(AccountID, reason: ErrorCode)
         /// GNOME Online Accounts holds the sign-in: its panel (there is none
         /// on macOS; the shell opens the preferences).
         case openOnlineAccounts
@@ -304,17 +308,20 @@ public final class SyncController {
     /// whose sign-in lives in GNOME Online Accounts the button opens that
     /// panel instead of the preferences (never the case on macOS, kept for
     /// the text table's parity); an account of the browser sign-in is
-    /// signed in again from the button.
+    /// signed in again from the button; a password account whose password
+    /// is missing or was refused says so and edits the account.
     public func authBanner(for n: AuthRequiredNotification, account: Account?) -> (title: String, button: String) {
         let name = account.map(accountRowTitle) ?? n.accountId.rawValue
         let kind = authBannerKind(n, account)
+        // The banner's button shows no mnemonic.
+        let button = withoutMnemonic(authBannerButton(kind, n.reason))
         switch kind {
         case .goa:
-            return (goaAuthBannerText(n.reason, name), authBannerButton(kind))
+            return (goaAuthBannerText(n.reason, name), button)
         case .oauth:
-            return (oauthAuthBannerText(n.reason, name), authBannerButton(kind))
+            return (oauthAuthBannerText(n.reason, name), button)
         case .password:
-            return (authBannerText(n.reason, name), authBannerButton(kind))
+            return (authBannerText(n.reason, name), button)
         }
     }
 
@@ -328,6 +335,9 @@ public final class SyncController {
             let url = n.authUrl ?? ""
             return .signInAgain(n.accountId, fallbackURL: url.isEmpty ? nil : url)
         case .password:
+            if editsPassword(.password, n.reason) {
+                return .editAccount(n.accountId, reason: n.reason)
+            }
             return .openPreferences
         }
     }

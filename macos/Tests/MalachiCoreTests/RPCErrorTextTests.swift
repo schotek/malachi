@@ -31,6 +31,8 @@ import Testing
         #expect(rpcErrorText("Testing", RPCError(code: .invalidArgument, message: "port 0")) == "Testing was rejected: port 0")
         #expect(rpcErrorText("Testing", RPCError(code: .notImplemented, message: "")) == "Testing is not available yet")
         #expect(rpcErrorText("Testing", RPCError(code: .draftNotFound, message: "")) == "The draft no longer exists")
+        #expect(rpcErrorText("Testing the connection", RPCError(code: .authRequired, message: "no stored password"))
+            == "Testing the connection failed: sign-in required")
     }
 
     @Test func tlsErrorTexts() throws {
@@ -69,5 +71,7 @@ import Testing
         #expect(endpointErrorText(RPCError(code: .tlsError, message: "x")).contains("secure connection"))
         #expect(endpointErrorText(RPCError(code: .authRequired, message: "x")) == "Sign in to this account again")
         #expect(endpointErrorText(RPCError(code: .unavailable, message: "x")) == "The sign-in service is not available")
+        #expect(endpointErrorText(RPCError(code: .keyringError, message: "x")) == "The system keyring is unavailable")
+        #expect(endpointErrorText(RPCError(code: .offline, message: "x")) == "No network connection")
     }
 }

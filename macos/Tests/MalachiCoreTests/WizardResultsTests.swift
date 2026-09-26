@@ -51,4 +51,25 @@ struct WizardResultsTests {
         #expect(icon == "dialog-question-symbolic")
         #expect(text == "Not tested")
     }
+
+    /// results_test.go `TestPasswordMissing`.
+    @Test func passwordMissingTest() {
+        struct Boom: Error {}
+        let authRequired = RPCError(code: .authRequired, message: "no stored password")
+        let cases: [(String, (any Error)?, Bool, Bool)] = [
+            ("password account without a stored password", authRequired, false, true),
+            ("linked account", authRequired, true, false),
+            ("refused password", RPCError(code: .authFailed, message: "x"), false, false),
+            ("other error", RPCError(code: .networkError, message: "x"), false, false),
+            ("not an api error", Boom(), false, false),
+            ("no error", nil, false, false),
+        ]
+        for (name, error, linked, want) in cases {
+            #expect(passwordMissing(error, linked: linked) == want, "\(name)")
+        }
+        #expect(passwordBannerText(.authRequired) == "No password is stored for this account. Enter it to continue.")
+        for reason: ErrorCode in [.authFailed, .keyringError, 0] {
+            #expect(passwordBannerText(reason) == "The server rejected the user name or password", "\(reason)")
+        }
+    }
 }

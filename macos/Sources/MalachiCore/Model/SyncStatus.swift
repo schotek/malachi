@@ -161,7 +161,8 @@ public enum StatusAction: Sendable, Equatable {
     case check
     /// sync.trigger for the account ("Try Again").
     case retry
-    /// Signing in again, labelled by `authBannerButton`.
+    /// Signing in again, labelled by `authBannerButton` (the edit wizard
+    /// asking for the password, `editsPassword`).
     case signIn
     /// The account assistant ("Edit Account…").
     case edit
@@ -177,18 +178,24 @@ public struct AccountStatus: Sendable, Equatable {
     public var action: StatusAction
     /// Where the account signs in: the label and route of `.signIn`.
     public var signIn: SignInKind
+    /// Why `.signIn` is needed: the code of the error of the account's
+    /// authRequired state, 0 when it has none. With a password account,
+    /// authRequired or authFailed lead to the edit wizard asking for the
+    /// password (`editsPassword`), as the sign-in banner does.
+    public var reason: ErrorCode
     /// `failedOutbox`; above zero the popover links to the outbox.
     public var failed: Int
 
     public init(
         account: AccountID, title: String, detail: String, action: StatusAction = .noAction,
-        signIn: SignInKind = .password, failed: Int = 0
+        signIn: SignInKind = .password, reason: ErrorCode = 0, failed: Int = 0
     ) {
         self.account = account
         self.title = title
         self.detail = detail
         self.action = action
         self.signIn = signIn
+        self.reason = reason
         self.failed = failed
     }
 }
@@ -224,6 +231,9 @@ public func accountStatuses(
         let d = accountDetail(a.id, s, folderName: folderName, now: now)
         st.detail = d.detail
         st.action = d.action
+        if st.action == .signIn, let e = s.error {
+            st.reason = e.code
+        }
         st.failed = s.failedOutbox
         out.append(st)
     }
@@ -293,18 +303,26 @@ public func accountDetail(
 
 /// The label of the button that repairs an account (status.go
 /// `statusButtonLabel`): "" when there is nothing to repair (checking for
-/// new mail is an icon of its own). "_Edit Account…" carries a mnemonic.
+/// new mail is an icon of its own). "_Edit Account…" carries a mnemonic
+/// (`statusButtonMnemonic`).
 public func statusButtonLabel(_ st: AccountStatus) -> String {
     switch st.action {
     case .retry:
         return L10n.T("Try Again")
     case .signIn:
-        return authBannerButton(st.signIn)
+        return authBannerButton(st.signIn, st.reason)
     case .edit:
         return L10n.T("_Edit Account…")
     case .noAction, .check:
         return ""
     }
+}
+
+/// `statusButtonLabel` carries a mnemonic (status.go
+/// `statusButtonMnemonic`): the label "_Edit Account…", for a certificate or
+/// a password to fix.
+public func statusButtonMnemonic(_ st: AccountStatus) -> Bool {
+    st.action == .edit || (st.action == .signIn && editsPassword(st.signIn, st.reason))
 }
 
 /// Whether the popover's rows, built for the accounts in `order`, still fit
@@ -314,9 +332,11 @@ public func sameAccounts(_ order: [AccountID], _ list: [AccountStatus]) -> Bool 
 }
 
 /// The label of the button that repairs a sign-in (sync.go
-/// `authBannerButton`), by how the account signs in: the Online Accounts
-/// panel, the browser, or the preferences.
-public func authBannerButton(_ kind: SignInKind) -> String {
+/// `authBannerButton`), by how the account signs in and why, after a
+/// notify.authRequired with `reason`: the Online Accounts panel, the
+/// browser, the edit wizard asking for a missing or refused password
+/// ("_Edit Account…", with its mnemonic), or the preferences.
+public func authBannerButton(_ kind: SignInKind, _ reason: ErrorCode) -> String {
     switch kind {
     case .goa:
         return L10n.T("Open Online Accounts")
@@ -324,17 +344,27 @@ public func authBannerButton(_ kind: SignInKind) -> String {
         // TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
         return L10n.C("button", "Sign In")
     case .password:
+        if editsPassword(kind, reason) {
+            // TRANSLATORS: banner button
+            return L10n.T("_Edit Account…")
+        }
         return L10n.T("Open Preferences")
     }
 }
 
-/// The banner sentence for a notify.authRequired reason (sync.go
-/// `authBannerText`); `account` is the account's display name.
+/// The banner sentence of a password account for a notify.authRequired
+/// reason (sync.go `authBannerText`): a missing password and a refused one
+/// are named, since the password is what the user enters again (the
+/// button edits the account, `editsPassword`); `account` is the account's
+/// display name.
 public func authBannerText(_ reason: ErrorCode, _ account: String) -> String {
     switch reason {
-    case .authRequired, .authFailed:
-        // TRANSLATORS: %s is an account name.
-        return L10n.T("Sign in to %s again", account)
+    case .authRequired:
+        // TRANSLATORS: banner; %s is an account name
+        return L10n.T("No password is stored for %s", account)
+    case .authFailed:
+        // TRANSLATORS: banner; %s is an account name
+        return L10n.T("The server rejected the password of %s", account)
     case .keyringError:
         // TRANSLATORS: %s is an account name.
         return L10n.T("The system keyring is unavailable; %s cannot sign in", account)
@@ -342,6 +372,15 @@ public func authBannerText(_ reason: ErrorCode, _ account: String) -> String {
         // TRANSLATORS: %s is an account name.
         return L10n.T("%s needs attention", account)
     }
+}
+
+/// The sign-in banner's button asks for the password in the account's
+/// edit wizard (`WizardController.requestPassword`) instead of opening the
+/// preferences (sync.go `editsPassword`): a password account whose
+/// password is missing (`authRequired`) or refused (`authFailed`). A
+/// keyring failure is not the password's fault.
+public func editsPassword(_ kind: SignInKind, _ reason: ErrorCode) -> Bool {
+    kind == .password && (reason == .authRequired || reason == .authFailed)
 }
 
 /// `authBannerText` for an account whose sign-in belongs to GNOME Online

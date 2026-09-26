@@ -136,8 +136,8 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         sc.showAuthRequired(n, account: twoAccounts[0])
         #expect(sc.authBannerAccount == "a1")
         #expect(log.banners.count == 1)
-        #expect(log.banners.last?.title == "Sign in to Work again")
-        #expect(log.banners.last?.button == "Open Preferences")
+        #expect(log.banners.last?.title == "The server rejected the password of Work")
+        #expect(log.banners.last?.button == "Edit Account…")
         // Another account's state, or the same account still failing, keeps it.
         sc.apply(state("a2", .idle))
         sc.apply(state("a1", .authRequired))
@@ -215,7 +215,10 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         func n(_ acc: AccountID, _ reason: ErrorCode) -> AuthRequiredNotification {
             AuthRequiredNotification(accountId: acc, reason: reason, message: "detail")
         }
-        #expect(sc.authBanner(for: n("a1", .authRequired), account: password) == ("Sign in to Work again", "Open Preferences"))
+        // A password account: a missing or refused password is named and
+        // the button edits the account.
+        #expect(sc.authBanner(for: n("a1", .authRequired), account: password) == ("No password is stored for Work", "Edit Account…"))
+        #expect(sc.authBanner(for: n("a1", .authFailed), account: password) == ("The server rejected the password of Work", "Edit Account…"))
         #expect(sc.authBanner(for: n("a1", .keyringError), account: password) == ("The system keyring is unavailable; Work cannot sign in", "Open Preferences"))
         #expect(sc.authBanner(for: n("a1", .networkError), account: password) == ("Work needs attention", "Open Preferences"))
         #expect(sc.authBanner(for: n("a2", .authRequired), account: goa) == ("Sign in to Cloud again in Settings → Online Accounts", "Open Online Accounts"))
@@ -228,7 +231,8 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         #expect(sc.authBanner(for: n("a4", .keyringError), account: browser) == ("The system keyring is unavailable; Mail cannot sign in", "Sign In"))
         #expect(sc.authBanner(for: n("a5", .authFailed), account: browserGraph) == ("Sign in to Contoso again in your browser", "Sign In"))
         // An unknown account is named by its id.
-        #expect(sc.authBanner(for: n("acc_zz", .authFailed), account: nil) == ("Sign in to acc_zz again", "Open Preferences"))
+        #expect(sc.authBanner(for: n("acc_zz", .authFailed), account: nil) == ("The server rejected the password of acc_zz", "Edit Account…"))
+        #expect(sc.authBanner(for: n("acc_zz", .keyringError), account: nil) == ("The system keyring is unavailable; acc_zz cannot sign in", "Open Preferences"))
     }
 
     @Test func authBannerActions() {
@@ -242,8 +246,13 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         let plain = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x")
         let withURL = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x", authUrl: "https://accounts.google.com/o/oauth2/v2/auth?s=1")
         let emptyURL = AuthRequiredNotification(accountId: "a4", reason: .authRequired, message: "x", authUrl: "")
-        #expect(sc.authBannerAction(for: plain, account: password) == .openPreferences)
-        #expect(sc.authBannerAction(for: plain, account: nil) == .openPreferences)
+        let keyring = AuthRequiredNotification(accountId: "a1", reason: .keyringError, message: "x")
+        let refused = AuthRequiredNotification(accountId: "a1", reason: .authFailed, message: "x")
+        #expect(sc.authBannerAction(for: plain, account: password) == .editAccount("a4", reason: .authRequired))
+        #expect(sc.authBannerAction(for: refused, account: password) == .editAccount("a1", reason: .authFailed))
+        #expect(sc.authBannerAction(for: keyring, account: password) == .openPreferences)
+        #expect(sc.authBannerAction(for: plain, account: nil) == .editAccount("a4", reason: .authRequired))
+        #expect(sc.authBannerAction(for: keyring, account: goa) == .openOnlineAccounts)
         #expect(sc.authBannerAction(for: plain, account: goa) == .openOnlineAccounts)
         #expect(sc.authBannerAction(for: plain, account: browser) == .signInAgain("a4", fallbackURL: nil))
         #expect(sc.authBannerAction(for: emptyURL, account: browser) == .signInAgain("a4", fallbackURL: nil))
@@ -251,7 +260,7 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         // Not listed yet, but only the daemon's own sign-in has a URL.
         #expect(sc.authBannerAction(for: withURL, account: nil) == .signInAgain("a4", fallbackURL: "https://accounts.google.com/o/oauth2/v2/auth?s=1"))
         #expect(sc.authBanner(for: withURL, account: nil) == ("Sign in to a4 again in your browser", "Sign In"))
-        #expect(sc.authBannerAction(for: emptyURL, account: nil) == .openPreferences)
+        #expect(sc.authBannerAction(for: emptyURL, account: nil) == .editAccount("a4", reason: .authRequired))
 
         // The shown banner keeps its action until it hides.
         #expect(sc.authBannerAction == nil)
@@ -261,7 +270,16 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
         #expect(log.banners.last?.button == "Sign In")
         sc.apply(state("a4", .idle))
         #expect(sc.authBannerAction == nil && sc.authBannerAccount == nil)
-        sc.showAuthRequired(plain, account: password)
+        sc.showAuthRequired(refused, account: password)
+        #expect(sc.authBannerAction == .editAccount("a1", reason: .authFailed))
+        #expect(log.banners.last?.title == "The server rejected the password of Work")
+        #expect(log.banners.last?.button == "Edit Account…")
+        // Hidden by the next state of that account that is not authRequired.
+        sc.apply(state("a1", .authRequired))
+        #expect(sc.authBannerAccount == "a1")
+        sc.apply(state("a1", .idle))
+        #expect(sc.authBannerAction == nil && sc.authBannerAccount == nil)
+        sc.showAuthRequired(keyring, account: password)
         #expect(sc.authBannerAction == .openPreferences)
         sc.hideAuthBanner()
         #expect(sc.authBannerAction == nil)

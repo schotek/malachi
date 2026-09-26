@@ -28,15 +28,18 @@ final class AccountWizardController: NSWindowController {
     /// Opens the wizard as a sheet on `parent`. `editing` changes an
     /// existing account (opens on the Servers page); with `signIn` an
     /// account of the browser sign-in is only signed in again (opens on the
-    /// sign-in, NewEditSignIn). `confirmTrust` asks before a server's
-    /// certificate is pinned. `onDone` runs after account.add /
+    /// sign-in, NewEditSignIn). With `requestPassword` a password account
+    /// being edited opens on the identity page asking for its password,
+    /// the reason (`authRequired`, `authFailed`) saying why
+    /// (`WizardController.requestPassword`). `confirmTrust` asks before a
+    /// server's certificate is pinned. `onDone` runs after account.add /
     /// account.update succeeded, before the sheet closes.
     static func present(
         from parent: NSWindow, client: RPCClient, editing: Account? = nil, signIn: Bool = false,
-        confirmTrust: @escaping WizardConfirmTrust,
+        requestPassword: ErrorCode? = nil, confirmTrust: @escaping WizardConfirmTrust,
         onDone: @escaping @MainActor (AccountID, AccountConfig) -> Void
     ) {
-        let c = AccountWizardController(client: client, editing: editing, signIn: signIn)
+        let c = AccountWizardController(client: client, editing: editing, signIn: signIn, requestPassword: requestPassword)
         c.onDone = onDone
         c.wizard.onConfirmTrust = { [weak c] prompt in
             await confirmTrust(c?.window, prompt)
@@ -52,8 +55,12 @@ final class AccountWizardController: NSWindowController {
         c.wizard.start()
     }
 
-    private init(client: RPCClient, editing: Account?, signIn: Bool) {
+    private init(client: RPCClient, editing: Account?, signIn: Bool, requestPassword: ErrorCode?) {
         let wizard = WizardController(client: client, editing: editing, signIn: signIn)
+        // Before the pages are built, so the wizard opens on the identity.
+        if let reason = requestPassword {
+            wizard.requestPassword(reason: reason)
+        }
         self.wizard = wizard
         root = WizardRootViewController(wizard: wizard)
         let window = WizardSheetWindow(

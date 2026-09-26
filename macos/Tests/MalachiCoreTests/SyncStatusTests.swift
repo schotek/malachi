@@ -185,6 +185,12 @@ func statusNow() throws -> Date {
         }
     }
 
+    @Test func editsPasswordTest() {
+        #expect(editsPassword(.password, .authRequired) && editsPassword(.password, .authFailed))
+        #expect(!editsPassword(.password, .keyringError) && !editsPassword(.password, .networkError))
+        #expect(!editsPassword(.oauth, .authRequired) && !editsPassword(.goa, .authFailed))
+    }
+
     @Test func certTextsTest() {
         #expect(certBannerText(.certificate, "Work") == "The certificate of Work is not trusted")
         #expect(certBannerText(.changed, "Work") == "The certificate of Work has changed")
@@ -210,8 +216,8 @@ func statusNow() throws -> Date {
 
     @Test func authBannerTextTest() {
         let cases: [ErrorCode: String] = [
-            .authRequired: "Sign in to Work again",
-            .authFailed: "Sign in to Work again",
+            .authRequired: "No password is stored for Work",
+            .authFailed: "The server rejected the password of Work",
             .keyringError: "The system keyring is unavailable; Work cannot sign in",
             .networkError: "Work needs attention",
             0: "Work needs attention",
@@ -224,9 +230,19 @@ func statusNow() throws -> Date {
         #expect(oauthAuthBannerText(.authRequired, "Work") == "Sign in to Work again in your browser")
         #expect(oauthAuthBannerText(.authFailed, "Work") == "Sign in to Work again in your browser")
         #expect(oauthAuthBannerText(.keyringError, "Work") == "The system keyring is unavailable; Work cannot sign in")
-        #expect(authBannerButton(.password) == "Open Preferences")
-        #expect(authBannerButton(.goa) == "Open Online Accounts")
-        #expect(authBannerButton(.oauth) == "Sign In")
+        let buttons: [(SignInKind, ErrorCode, String)] = [
+            (.password, .authRequired, "_Edit Account…"),
+            (.password, .authFailed, "_Edit Account…"),
+            (.password, .keyringError, "Open Preferences"),
+            (.password, .networkError, "Open Preferences"),
+            (.password, 0, "Open Preferences"),
+            (.goa, .authRequired, "Open Online Accounts"),
+            (.oauth, .authFailed, "Sign In"),
+        ]
+        for (kind, reason, want) in buttons {
+            #expect(authBannerButton(kind, reason) == want, "authBannerButton(\(kind), \(reason))")
+            #expect(editsPassword(kind, reason) == (want == "_Edit Account…"), "editsPassword(\(kind), \(reason))")
+        }
     }
 
     // MARK: status_test.go
@@ -264,6 +280,7 @@ func statusNow() throws -> Date {
             ("syncing an unknown folder", state(.syncing, folder: "f_gone", progress: 30), "Syncing…", .check, 0),
             ("syncing beats sign-in", state(.syncing, pending: 1), "Syncing…", .check, 0),
             ("sign-in required", state(.authRequired, pending: 1), "Sign-in required", .signIn, 0),
+            ("sign-in required, password refused", state(.authRequired, error: RPCError(code: .authFailed, message: "x")), "Sign-in required", .signIn, 0),
             // A refused or changed certificate says why and leads to the
             // account's settings, where it can be trusted.
             ("refused certificate", try tlsState("a1", .offline, .untrusted), "The server's certificate is not from a trusted authority", .edit, 0),
@@ -315,6 +332,8 @@ func statusNow() throws -> Date {
                         state: SyncState(accountId: "a3", status: .disabled, failedOutbox: 5)),
             graph,
             goa,
+            testAccount("a6", name: "Home"),
+            testAccount("a7", name: "Away"),
         ]
         let states: [AccountID: SyncState] = [
             // a1 has no cached state: account.list's is used.
@@ -325,6 +344,11 @@ func statusNow() throws -> Date {
             "a3": SyncState(accountId: "a3", status: .disabled, failedOutbox: 0),
             "a4": SyncState(accountId: "a4", status: .authRequired),
             "a5": SyncState(accountId: "a5", status: .authRequired),
+            // A password account whose password was refused: the reason
+            // goes with the sign-in action.
+            "a6": SyncState(accountId: "a6", status: .authRequired, error: RPCError(code: .authFailed, message: "x")),
+            // The reason is only kept for the sign-in action.
+            "a7": SyncState(accountId: "a7", status: .offline, error: RPCError(code: .networkError, message: "x")),
             // A state for an account that is not listed makes no row.
             "zzz": SyncState(accountId: "zzz", status: .error),
         ]
@@ -335,6 +359,8 @@ func statusNow() throws -> Date {
             AccountStatus(account: "a3", title: "Paused, fresh", detail: "Paused", action: .noAction, signIn: .password, failed: 0),
             AccountStatus(account: "a4", title: "Graph", detail: "Sign-in required", action: .signIn, signIn: .oauth),
             AccountStatus(account: "a5", title: "GOA", detail: "Sign-in required", action: .signIn, signIn: .goa),
+            AccountStatus(account: "a6", title: "Home", detail: "Sign-in required", action: .signIn, signIn: .password, reason: .authFailed),
+            AccountStatus(account: "a7", title: "Away", detail: "The server could not be reached", action: .retry, signIn: .password),
         ]
         #expect(got == want)
         #expect(accountStatuses(states, [], folderName: nil, now: now).isEmpty, "no accounts")
@@ -349,9 +375,17 @@ func statusNow() throws -> Date {
             (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .password), "Open Preferences"),
             (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .goa), "Open Online Accounts"),
             (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .oauth), "Sign In"),
+            // A password account whose password is missing or refused asks
+            // for it in the edit wizard, as the sign-in banner does.
+            (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .password, reason: .authRequired), "_Edit Account…"),
+            (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .password, reason: .authFailed), "_Edit Account…"),
+            (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .password, reason: .keyringError), "Open Preferences"),
+            (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .oauth, reason: .authFailed), "Sign In"),
+            (AccountStatus(account: "a", title: "", detail: "", action: .signIn, signIn: .goa, reason: .authRequired), "Open Online Accounts"),
         ]
         for (st, want) in cases {
             #expect(statusButtonLabel(st) == want, "statusButtonLabel(\(st))")
+            #expect(statusButtonMnemonic(st) == (want == "_Edit Account…"), "statusButtonMnemonic(\(st))")
         }
     }
 

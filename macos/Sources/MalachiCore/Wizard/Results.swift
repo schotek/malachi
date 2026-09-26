@@ -37,6 +37,26 @@ public func classify(_ res: AccountTestResult) -> Outcome {
     return ok ? .ok : .failed
 }
 
+/// accountwizard.PasswordMissing: account.test failed as a whole with
+/// authRequired for an account that signs in with a password (`linked`
+/// false): no password is stored and none was typed. The wizard asks for
+/// it on the identity page, as for a refused one.
+public func passwordMissing(_ error: (any Error)?, linked: Bool) -> Bool {
+    guard !linked, let e = error as? RPCError else { return false }
+    return e.code == .authRequired
+}
+
+/// accountwizard.passwordBannerText: the identity page's banner when the
+/// password is what to fix: `authRequired` means none is stored, anything
+/// else (`authFailed`) that the server refused it.
+public func passwordBannerText(_ reason: ErrorCode) -> String {
+    if reason == .authRequired {
+        // TRANSLATORS: wizard banner on the identity page
+        return L10n.T("No password is stored for this account. Enter it to continue.")
+    }
+    return L10n.T("The server rejected the user name or password")
+}
+
 /// accountwizard.EndpointSummary: the row icon (a GTK icon name) and
 /// subtitle for one endpoint; nil is an endpoint the backend did not test.
 /// The server's capabilities are hostile data and deliberately not shown.

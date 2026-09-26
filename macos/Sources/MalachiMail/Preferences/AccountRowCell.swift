@@ -105,6 +105,9 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
             v.setContentHuggingPriority(.required, for: .horizontal)
             v.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
+        // A status that says why the account is offline can be long: it
+        // truncates before the name does (the tooltip shows it whole).
+        statusLabel.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(240), for: .horizontal)
 
         // Status, Sign In…, switch and the two buttons, packed at the
         // trailing edge (the order of the GTK row's suffixes); a hidden
@@ -149,6 +152,9 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
         reverting = false
         let status = accountStatusText(a.state)
         statusLabel.stringValue = status
+        // The status may say why the account is offline: long, so it gives
+        // way to the name and shows whole in the tooltip.
+        statusLabel.toolTip = status.isEmpty ? nil : status
         statusLabel.isHidden = status.isEmpty
         signInButton.isHidden = !accountRowOffersSignIn(a)
         toolTip = a.config.email

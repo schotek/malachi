@@ -36,11 +36,23 @@ import Testing
         #expect(accountStatusText(try tls(.error, .hostnameMismatch)) == "Certificate problem")
         #expect(accountStatusText(try tls(.offline, .pinMismatch)) == "Certificate changed")
         #expect(accountStatusText(try tls(.offline, .expired)) == "Certificate problem")
-        #expect(accountStatusText(try tls(.offline, .handshake)) == "Offline")
-        #expect(accountStatusText(try tls(.offline, .starttlsUnavailable)) == "Offline")
+        #expect(accountStatusText(try tls(.offline, .handshake)) == "Offline: The secure connection could not be established")
+        #expect(accountStatusText(try tls(.offline, .starttlsUnavailable)) == "Offline: The server does not offer STARTTLS")
         #expect(accountStatusText(try tls(.disabled, .untrusted)) == "Paused")
         #expect(accountStatusText(try tls(.syncing, .untrusted)) == "Syncing…")
-        #expect(accountStatusText(SyncState(accountId: "a", status: .offline, error: tlsError(nil))) == "Offline")
+        #expect(accountStatusText(SyncState(accountId: "a", status: .offline, error: tlsError(nil))) == "Offline: The secure connection could not be established")
+        // Any other problem says why too; without an error the bare status.
+        func failed(_ status: SyncStatus, _ code: ErrorCode) -> SyncState {
+            SyncState(accountId: "a", status: status, error: RPCError(code: code, message: "technical detail"))
+        }
+        #expect(accountStatusText(failed(.offline, .networkError)) == "Offline: The server could not be reached")
+        #expect(accountStatusText(failed(.offline, .offline)) == "Offline: No network connection")
+        #expect(accountStatusText(failed(.offline, .keyringError)) == "Offline: The system keyring is unavailable")
+        #expect(accountStatusText(failed(.error, .serverError)) == "Error: The server returned an error")
+        #expect(accountStatusText(failed(.error, .storageError)) == "Error: Failed: technical detail")
+        #expect(accountStatusText(failed(.authRequired, .authRequired)) == "Sign-in required")
+        #expect(accountStatusText(failed(.disabled, .networkError)) == "Paused")
+        #expect(accountStatusText(failed(.syncing, .networkError)) == "Syncing…")
     }
 
     @Test func accountRowOffersSignInTest() {

@@ -277,7 +277,7 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         // The banner is up for an account that is then removed.
         h.mailbox.handleAuthRequired(AuthRequiredNotification(accountId: "acc2", reason: .authRequired, message: "x"))
         #expect(h.log.banners.last?.account == "acc2")
-        #expect(h.log.banners.last?.title == "Sign in to two@example.invalid again")
+        #expect(h.log.banners.last?.title == "No password is stored for two@example.invalid")
 
         await h.fixture.setAccounts([accounts[0]])
         h.mailbox.handleAccountsChanged()
