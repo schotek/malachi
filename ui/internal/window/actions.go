@@ -177,7 +177,7 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 		if on {
 			delta = -delta
 		}
-		w.model.adjustUnread(k, delta)
+		w.model.adjustCounts(k, delta, 0)
 		w.updateFolderRow(k)
 		w.refreshMessageActions()
 	}
@@ -290,7 +290,7 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		}
 		acc := list[0].AccountID
 		// message.delete moves to the Trash role folder; a message already
-		// there is expunged instead (no target badge to credit).
+		// there is expunged instead (no target count to credit).
 		var target folderKey
 		if trash, ok := w.model.folderByRole(acc, api.RoleTrash); ok && trash.ID != list[0].FolderID {
 			target = folderKey{Account: acc, Folder: trash.ID}
@@ -310,30 +310,28 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 	})
 }
 
-// trackMoves adjusts the unread badges for messages leaving their folder
-// for target (a zero target: leaving the store) and returns the reverse,
-// for a failed move. Read messages change no badge.
+// trackMoves adjusts the cached folder counts (the unread badges, the
+// counts under the list title) for messages leaving their folder for
+// target (a zero target: leaving the store) and returns the reverse, for a
+// failed move. Read messages move only the totals; mailModel.moveCounts
+// says where even those stay put.
 func (w *Window) trackMoves(list []api.MessageSummary, target folderKey) (undo func()) {
+	if len(list) == 0 {
+		return func() {}
+	}
 	unread := 0
 	for _, s := range list {
 		if !hasFlag(s.Flags, api.FlagSeen) {
 			unread++
 		}
 	}
-	if unread == 0 || len(list) == 0 {
-		return func() {}
-	}
 	src := folderKey{Account: list[0].AccountID, Folder: list[0].FolderID}
-	shift := func(delta int) {
-		w.model.adjustUnread(src, -delta)
-		w.updateFolderRow(src)
-		if target.Folder != "" {
-			w.model.adjustUnread(target, delta)
-			w.updateFolderRow(target)
-		}
+	shift := func(sign int) {
+		w.model.moveCounts(src, target, sign*unread, sign*len(list))
+		w.updateFolderRow(src) // refreshes every row, the target's too
 	}
-	shift(unread)
-	return func() { shift(-unread) }
+	shift(1)
+	return func() { shift(-1) }
 }
 
 // trackMove is trackMoves for one message.
@@ -399,7 +397,7 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 // role (message.move). what gives the progressive action for the error
 // toast for the number moved, missing is the toast when the account has
 // no such folder. The rows go at once and come back on failure; the
-// unread badges follow unread messages from their folder to the target.
+// folder counts follow the messages to the target (trackMoves).
 func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what func(n int) string, missing string) {
 	var list []api.MessageSummary
 	for _, s := range w.summaries(ids) {

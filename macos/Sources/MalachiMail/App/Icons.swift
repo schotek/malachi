@@ -56,6 +56,7 @@ enum Icon {
         "mail-send": "paperplane",
         "mail-attachment": "paperclip",
         "pan-end": "chevron.right",
+        "go-next": "chevron.right",
         "pan-down": "chevron.down",
         "network-offline": "network.slash",
         "network-idle": "arrow.triangle.2.circlepath",

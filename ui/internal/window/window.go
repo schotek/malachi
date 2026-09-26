@@ -11,7 +11,6 @@ package window
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -115,20 +114,33 @@ type Window struct {
 	// when the banner is hidden.
 	certBannerAccount api.AccountID
 
+	// conn is what the status line knows of the daemon connection
+	// (status.go statusLineFor).
+	conn connView
+	// statusRows are the status popover's rows by account, and statusOrder
+	// the accounts they were built for, in order: the rows are updated in
+	// place and only rebuilt when the accounts change (status.go).
+	statusRows  map[api.AccountID]*statusRow
+	statusOrder []api.AccountID
+
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction
 
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
 	listPage   *adw.NavigationPage
+	listTitle  *adw.WindowTitle
 
 	folderStack      *gtk.Stack
 	folderList       *gtk.ListBox
 	folderStatusPage *adw.StatusPage
+	statusButton     *gtk.MenuButton
+	statusPopover    *gtk.Popover
+	statusAccounts   *gtk.ListBox
+	statusDaemon     *gtk.Label
 	syncSpinner      *adw.Spinner
 	syncLabel        *gtk.Label
 	connIcon         *gtk.Image
-	connStatus       *gtk.Label
 
 	refreshButton   *gtk.Button
 	searchButton    *gtk.ToggleButton
@@ -189,18 +201,25 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		openEmbedded:      make(map[embeddedKey]*EmbeddedWindow),
 		syncStates:        make(map[api.AccountID]api.SyncState),
 		actions:           make(map[string]*gio.SimpleAction),
+		// Until the client reports a state, the first attempt is underway.
+		conn:       connView{State: client.Connecting},
+		statusRows: make(map[api.AccountID]*statusRow),
 
 		outerSplit: b.GetObject("outer_split").Cast().(*adw.NavigationSplitView),
 		innerSplit: b.GetObject("inner_split").Cast().(*adw.NavigationSplitView),
 		listPage:   b.GetObject("list_page").Cast().(*adw.NavigationPage),
+		listTitle:  b.GetObject("list_title").Cast().(*adw.WindowTitle),
 
 		folderStack:      b.GetObject("folder_stack").Cast().(*gtk.Stack),
 		folderList:       b.GetObject("folder_list").Cast().(*gtk.ListBox),
 		folderStatusPage: b.GetObject("folder_status_page").Cast().(*adw.StatusPage),
+		statusButton:     b.GetObject("status_button").Cast().(*gtk.MenuButton),
+		statusPopover:    b.GetObject("status_popover").Cast().(*gtk.Popover),
+		statusAccounts:   b.GetObject("status_accounts").Cast().(*gtk.ListBox),
+		statusDaemon:     b.GetObject("status_daemon").Cast().(*gtk.Label),
 		syncSpinner:      b.GetObject("sync_spinner").Cast().(*adw.Spinner),
 		syncLabel:        b.GetObject("sync_label").Cast().(*gtk.Label),
 		connIcon:         b.GetObject("connection_icon").Cast().(*gtk.Image),
-		connStatus:       b.GetObject("connection_status").Cast().(*gtk.Label),
 
 		refreshButton:   b.GetObject("refresh_button").Cast().(*gtk.Button),
 		searchButton:    b.GetObject("search_button").Cast().(*gtk.ToggleButton),
@@ -381,6 +400,17 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		}
 	})
 
+	// The popover's rows are brought up to date as it opens and, while it
+	// is open, with every refresh of the status line (status.go).
+	w.statusPopover.ConnectShow(w.refreshStatusPopover)
+	// The line names the time of the last check ("Up to date · 15:04"): it
+	// is redrawn every minute so that a day later it shows the date.
+	glib.TimeoutSecondsAdd(statusRefreshSeconds, func() bool {
+		w.refreshSyncLabel()
+		return true // keep the timer
+	})
+	w.refreshSyncLabel()
+
 	// Client callbacks arrive on a background goroutine; hop to the main loop.
 	c.OnStateChange = func(s client.State, err error) {
 		glib.IdleAdd(func() { w.showConnectionState(s, err) })
@@ -503,22 +533,22 @@ func (w *Window) reconnect() {
 	}()
 }
 
-// showConnectionState runs on the main loop.
+// showConnectionState runs on the main loop. The state is kept for the
+// status line (refreshSyncLabel), which names it while there is no
+// connection; what system.info and sync.status said is forgotten with
+// every change and asked again on connecting.
 func (w *Window) showConnectionState(s client.State, err error) {
+	w.conn = connView{State: s}
+	defer w.refreshSyncLabel()
 	switch s {
 	case client.Connecting:
-		w.connIcon.SetFromIconName("network-idle-symbolic")
-		w.connStatus.SetLabel(i18n.T("Connecting to backend…"))
+		// Only the status line tells.
 	case client.Connected:
-		w.connIcon.SetFromIconName("network-transmit-receive-symbolic")
-		w.connStatus.SetLabel(i18n.T("Connected"))
 		w.banner.SetRevealed(false)
 		go w.fetchSystemInfo()
 		w.loadAccounts()
 		w.loadSyncStatus()
 	default:
-		w.connIcon.SetFromIconName("network-offline-symbolic")
-		w.connStatus.SetLabel(i18n.T("Backend unavailable"))
 		w.banner.SetRevealed(true)
 		// Late replies of in-flight calls are dropped; what is shown stays
 		// until the reconnect reloads it. A conversation waiting for its
@@ -535,6 +565,22 @@ func (w *Window) showConnectionState(s client.State, err error) {
 			w.log.Debug("backend unavailable", "err", err)
 		}
 	}
+}
+
+// refreshListTitle shows the selected folder above the message list, with
+// its counts (folderCountsText) under the name, or "Messages" while no
+// folder is selected. The page takes the name as well: it is the back
+// button's tooltip, and the page's accessible name, while the split view is
+// collapsed. Called wherever the selection or the cached counts change:
+// selectFolder, updateFolderRow and rebuildFolderList.
+func (w *Window) refreshListTitle() {
+	title, subtitle := i18n.T("Messages"), ""
+	if f, ok := w.model.folder(w.model.selected); ok {
+		title, subtitle = folderTitle(f), folderCountsText(f)
+	}
+	w.listPage.SetTitle(title)
+	w.listTitle.SetTitle(title)
+	w.listTitle.SetSubtitle(subtitle)
 }
 
 // emptyPageName is the message pane's placeholder: the No Accounts call to
@@ -554,22 +600,24 @@ func (w *Window) checkAccounts() {
 	glib.IdleAdd(w.loadAccounts)
 }
 
+// fetchSystemInfo runs system.info off the main loop and keeps the answer
+// (or its failure) for the status line: a protocol mismatch takes the line
+// over, the daemon's version and pid go to the foot of its popover.
 func (w *Window) fetchSystemInfo() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	var info api.SystemInfoResult
 	err := w.client.Call(ctx, api.MethodSystemInfo, api.SystemInfoParams{}, &info)
 	glib.IdleAdd(func() {
+		if w.conn.State != client.Connected {
+			return // the connection this answer was for is gone
+		}
 		if err != nil {
-			w.connStatus.SetLabel(i18n.T("Connected, but system.info failed"))
 			w.log.Error("system.info", "err", err)
-			return
+			w.conn.InfoFailed = true
+		} else {
+			w.conn.Info = &info
 		}
-		if info.ProtocolVersion != api.ProtocolVersion {
-			w.connStatus.SetLabel(fmt.Sprintf(i18n.T("Protocol mismatch: UI %d, backend %d"),
-				api.ProtocolVersion, info.ProtocolVersion))
-			return
-		}
-		w.connStatus.SetLabel(fmt.Sprintf(i18n.T("Connected to malachid %s (pid %d)"), info.Version, info.PID))
+		w.refreshSyncLabel()
 	})
 }

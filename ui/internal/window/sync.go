@@ -23,9 +23,10 @@ import (
 // Sync status line, refresh, the sign-in banner and the certificate banner.
 //
 // The daemon owns the sync state; this file only mirrors the last
-// sync.status / notify.syncState per account into the sidebar's status line,
-// the auth_banner and the cert_banner. Folder and account names shown here
-// come from the server and are set as plain text.
+// sync.status / notify.syncState per account into the sidebar's status line
+// (one line for all accounts; its popover, one row per account, is in
+// status.go), the auth_banner and the cert_banner. Folder and account names
+// shown here come from the server and are set as plain text.
 
 // syncFallbackSeconds is how long the spinner started by triggerSync stays
 // on when no notify.syncState follows (daemon without a syncer, dropped
@@ -35,6 +36,11 @@ const syncFallbackSeconds = 30
 // signInStartTimeout bounds account.oauthStart: the daemon only opens a
 // listener and builds the provider's URL.
 const signInStartTimeout = 10 * time.Second
+
+// statusRefreshSeconds is how often the status line is redrawn without a
+// state change, so the time of the last check it names becomes a date
+// once the day is over.
+const statusRefreshSeconds = 60
 
 // loadSyncStatus runs sync.status after connecting and applies every
 // account's state.
@@ -47,10 +53,11 @@ func (w *Window) loadSyncStatus() {
 		glib.IdleAdd(func() {
 			if err != nil {
 				// notImplemented is the expected answer until the daemon
-				// grows a syncer; not worth more than a debug line.
+				// grows a syncer; not worth more than a debug line. The
+				// line says "Not syncing" until a state arrives after all.
 				w.log.Debug("sync.status", "err", err)
-				w.syncSpinner.SetVisible(false)
-				w.syncLabel.SetLabel(i18n.T("Not syncing"))
+				w.conn.SyncFailed = true
+				w.refreshSyncLabel()
 				return
 			}
 			for _, s := range res.Accounts {
@@ -62,35 +69,61 @@ func (w *Window) loadSyncStatus() {
 
 // applySyncState records one account's state, updates the status line and
 // calls onSyncFinished when the account left the syncing state and
-// onOutboxChanged when the number of pending outgoing messages moved.
+// onOutboxChanged when the number of pending or failed outgoing messages
+// moved. The first state of an account is no move: loadAccounts fetches
+// the folders anyway, and a failed message would otherwise reload them on
+// every connect, racing that first load.
 func (w *Window) applySyncState(s api.SyncState) {
-	prev := w.syncStates[s.AccountID]
+	prev, known := w.syncStates[s.AccountID]
 	w.syncStates[s.AccountID] = s
+	w.conn.SyncFailed = false
 	w.refreshSyncLabel()
 	w.refreshCertBanner()
 	if s.AccountID == w.authBannerAccount && s.Status != api.SyncAuthRequired {
 		w.hideAuthBanner()
 	}
 	w.onSyncFinished(prev, s)
-	if prev.PendingOutbox != s.PendingOutbox {
+	if known && (prev.PendingOutbox != s.PendingOutbox || prev.FailedOutbox != s.FailedOutbox) {
 		w.onOutboxChanged(s.AccountID)
 	}
 }
 
-// refreshSyncLabel recomputes the sidebar status line from the cached
-// states. Enabled accounts without a cached state fall back to the state
-// account.list reported, so the line is right before sync.status answered.
+// refreshSyncLabel recomputes the sidebar's status line from the cached
+// states and the connection (statusLineFor) and, while its popover is
+// open, the popover's rows. Enabled accounts without a cached state fall
+// back to the state account.list reported, so the line is right before
+// sync.status answered. Without a connection the button cannot be
+// clicked, and an open popover closes.
 func (w *Window) refreshSyncLabel() {
-	text, spinning := syncStatusText(w.syncStates, w.model.accounts, func(acc api.AccountID, id api.FolderID) string {
-		f, ok := w.model.folder(folderKey{Account: acc, Folder: id})
-		if !ok {
-			return ""
-		}
-		return folderTitle(f)
-	})
+	text, spinning := syncStatusText(w.syncStates, w.model.accounts, w.syncFolderName, time.Now())
+	line := statusLineFor(w.conn, text, spinning)
 	w.syncLabel.SetUseMarkup(false)
-	w.syncLabel.SetLabel(text)
-	w.syncSpinner.SetVisible(spinning)
+	w.syncLabel.SetLabel(line.Text)
+	w.syncSpinner.SetVisible(line.Spinning)
+	if line.Icon != "" {
+		w.connIcon.SetFromIconName(line.Icon)
+	}
+	w.connIcon.SetVisible(line.Icon != "")
+	if !line.Active {
+		w.statusButton.Popdown()
+	}
+	w.statusButton.SetSensitive(line.Active)
+	w.statusDaemon.SetUseMarkup(false)
+	w.statusDaemon.SetLabel(line.Daemon)
+	w.statusDaemon.SetVisible(line.Daemon != "")
+	if w.statusPopover.Visible() {
+		w.refreshStatusPopover()
+	}
+}
+
+// syncFolderName is the display name of a folder an account's state names,
+// "" while the folder is unknown (syncStatusText, accountStatuses).
+func (w *Window) syncFolderName(acc api.AccountID, id api.FolderID) string {
+	f, ok := w.model.folder(folderKey{Account: acc, Folder: id})
+	if !ok {
+		return ""
+	}
+	return folderTitle(f)
 }
 
 // syncStatusText is the sidebar status line for the given states. Only
@@ -100,20 +133,29 @@ func (w *Window) refreshSyncLabel() {
 // then sign-in required, a changed server certificate, a refused one
 // (certtrust.FromSyncState), sending (the pending outbox messages of every
 // account added up; sending is not a sync status, so it shows while the
-// status is idle), error, offline, and finally "Up to date". With no
-// enabled account the line is empty. folderName returns the display name of
-// a folder or "" when unknown.
-func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Account, folderName func(api.AccountID, api.FolderID) string) (text string, spinning bool) {
+// status is idle), messages that were not sent (failed, added up the same
+// way), error, offline, and finally "Up to date" with the time of the
+// newest last check. Sign-in required, error and offline name the account
+// when exactly one is in that state and more than one is enabled; with a
+// single account the name would say nothing, with several it could not be
+// one (the popover lists them). The certificate states leave the name to
+// cert_banner. When every account is paused the line says so; with no
+// account at all it is empty. folderName
+// returns the display name of a folder or "" when unknown; now is the
+// moment the time of the last check is shown against.
+func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Account, folderName func(api.AccountID, api.FolderID) string, now time.Time) (text string, spinning bool) {
 	var (
 		syncing      *api.SyncState
 		syncingName  string
-		authRequired bool
+		authRequired []api.Account
 		certProblem  bool
 		certChanged  bool
-		syncError    bool
-		offline      bool
+		syncError    []api.Account
+		offline      []api.Account
 		enabled      int
 		pending      int
+		failed       int
+		lastSync     time.Time
 	)
 	for _, a := range accounts {
 		if !a.Enabled {
@@ -125,6 +167,10 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 			s = a.State
 		}
 		pending += s.PendingOutbox
+		failed += s.FailedOutbox
+		if s.LastSync != nil && s.LastSync.After(lastSync) {
+			lastSync = *s.LastSync
+		}
 		switch s.Status {
 		case api.SyncSyncing:
 			if syncing == nil {
@@ -138,11 +184,11 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 				}
 			}
 		case api.SyncAuthRequired:
-			authRequired = true
+			authRequired = append(authRequired, a)
 		case api.SyncError:
-			syncError = true
+			syncError = append(syncError, a)
 		case api.SyncOffline:
-			offline = true
+			offline = append(offline, a)
 		}
 		if p, ok := certtrust.FromSyncState(s); ok {
 			if p.Category() == certtrust.Changed {
@@ -152,7 +198,16 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 			}
 		}
 	}
+	// named is the one account in a state, when naming it helps.
+	named := func(in []api.Account) (string, bool) {
+		if len(in) != 1 || enabled < 2 {
+			return "", false
+		}
+		return accountRowTitle(in[0]), true
+	}
 	switch {
+	case enabled == 0 && len(accounts) > 0:
+		return i18n.T("Paused"), false
 	case enabled == 0:
 		return "", false
 	case syncing != nil:
@@ -162,21 +217,55 @@ func syncStatusText(states map[api.AccountID]api.SyncState, accounts []api.Accou
 		}
 		// TRANSLATORS: %s is a folder or account name.
 		return fmt.Sprintf(i18n.T("Syncing %s…"), syncingName), true
-	case authRequired:
+	case len(authRequired) > 0:
+		if name, ok := named(authRequired); ok {
+			// TRANSLATORS: status line; %s is an account name.
+			return fmt.Sprintf(i18n.T("Sign-in required: %s"), name), false
+		}
 		return i18n.T("Sign-in required"), false
 	case certChanged:
 		return certStatusText(certtrust.Changed), false
 	case certProblem:
 		return certStatusText(certtrust.Certificate), false
 	case pending > 0:
-		// TRANSLATORS: %d is the number of messages waiting in the outbox.
-		return fmt.Sprintf(i18n.N("Sending %d message…", "Sending %d messages…", pending), pending), true
-	case syncError:
+		return sendingText(pending), true
+	case failed > 0:
+		return notSentText(failed), false
+	case len(syncError) > 0:
+		if name, ok := named(syncError); ok {
+			// TRANSLATORS: status line; %s is an account name.
+			return fmt.Sprintf(i18n.T("Sync error: %s"), name), false
+		}
 		return i18n.T("Sync error"), false
-	case offline:
+	case len(offline) > 0:
+		if name, ok := named(offline); ok {
+			// TRANSLATORS: status line of an account that cannot reach its
+			// server and keeps trying; %s is an account name.
+			return fmt.Sprintf(i18n.T("Offline: %s"), name), false
+		}
 		return i18n.T("Offline, retrying"), false
 	}
+	if !lastSync.IsZero() {
+		// TRANSLATORS: status line; %s is the time of the last check for
+		// new mail, e.g. "15:04", or its date when that was before today.
+		return fmt.Sprintf(i18n.T("Up to date · %s"), widget.FormatDate(lastSync, now)), false
+	}
 	return i18n.T("Up to date"), false
+}
+
+// sendingText is the status of n messages waiting in the outbox (the
+// status line, an account's row in its popover).
+func sendingText(n int) string {
+	// TRANSLATORS: %d is the number of messages waiting in the outbox.
+	return fmt.Sprintf(i18n.N("Sending %d message…", "Sending %d messages…", n), n)
+}
+
+// notSentText is the status of n messages in the outbox whose delivery
+// failed (the status line, the popover's link to the outbox).
+func notSentText(n int) string {
+	// TRANSLATORS: status line; %d is the number of messages in the outbox
+	// whose sending failed.
+	return fmt.Sprintf(i18n.N("%d message not sent", "%d messages not sent", n), n)
 }
 
 // certStatusText is the short status of an account whose server
@@ -240,7 +329,14 @@ func certBannerText(c certtrust.Category, account string) string {
 
 // onCertBannerButton opens the settings of the banner's account.
 func (w *Window) onCertBannerButton() {
-	a, ok := w.model.account(w.certBannerAccount)
+	w.editAccount(w.certBannerAccount)
+}
+
+// editAccount opens the account assistant on account id (the cert banner,
+// an account's row in the status popover); its connection test offers to
+// trust a refused certificate.
+func (w *Window) editAccount(id api.AccountID) {
+	a, ok := w.model.account(id)
 	if !ok {
 		return
 	}
@@ -248,15 +344,26 @@ func (w *Window) onCertBannerButton() {
 }
 
 // triggerSync runs sync.trigger for the selected folder, or for every
-// account when nothing is selected (win.refresh). The spinner starts at
-// once; the daemon's notify.syncState takes over, with a timer as fallback
-// so the spinner never sticks.
+// account when nothing is selected (win.refresh).
 func (w *Window) triggerSync() {
 	params := api.SyncTriggerParams{}
 	if w.model.selected.Folder != "" {
 		params.AccountID = w.model.selected.Account
 		params.FolderID = w.model.selected.Folder
 	}
+	w.startSync(params)
+}
+
+// triggerAccountSync runs sync.trigger for one whole account (Check and
+// Try Again in the status popover).
+func (w *Window) triggerAccountSync(id api.AccountID) {
+	w.startSync(api.SyncTriggerParams{AccountID: id})
+}
+
+// startSync runs sync.trigger with params. The spinner starts at once; the
+// daemon's notify.syncState takes over, with a timer as fallback so the
+// spinner never sticks.
+func (w *Window) startSync(params api.SyncTriggerParams) {
 	w.syncSpinner.SetVisible(true)
 	w.syncLabel.SetLabel(i18n.T("Checking for new mail…"))
 	glib.TimeoutSecondsAdd(syncFallbackSeconds, func() bool {
@@ -314,13 +421,21 @@ func (w *Window) hideAuthBanner() {
 	w.authBanner.SetRevealed(false)
 }
 
-// onAuthBannerButton is the banner button: GNOME Settings for an account
-// signed in through Online Accounts, the browser for the backend's own
-// sign-in, the preferences otherwise.
+// onAuthBannerButton is the banner button (signInAgain for the banner's
+// account).
 func (w *Window) onAuthBannerButton() {
-	switch w.authBannerKind {
+	w.signInAgain(w.authBannerKind, w.authBannerAccount, w.authBannerURL)
+}
+
+// signInAgain repairs the sign-in of account id, which signs in the given
+// way: GNOME Settings for an account signed in through Online Accounts,
+// the browser for the backend's own sign-in (fallback is the sign-in page
+// to open when the daemon cannot start a fresh one, "" for none), the
+// preferences otherwise.
+func (w *Window) signInAgain(kind signin.Kind, id api.AccountID, fallback string) {
+	switch kind {
 	case signin.OAuth:
-		w.signInInBrowser(w.authBannerAccount, w.authBannerURL)
+		w.signInInBrowser(id, fallback)
 	case signin.GOA:
 		settingspanel.OpenOnlineAccounts(func(err error) {
 			if err != nil {

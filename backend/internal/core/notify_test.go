@@ -169,6 +169,33 @@ func TestCoalescerStatusChangeIsImmediate(t *testing.T) {
 	}
 }
 
+// A change of failedOutbox alone is as significant as one of
+// pendingOutbox: deleting a failed message leaves pendingOutbox where it
+// was, and a client must still learn the outbox changed.
+func TestCoalescerFailedOutboxChangeIsImmediate(t *testing.T) {
+	c, r, _ := newTestCoalescer(t)
+	steps := []api.SyncState{
+		{AccountID: "a", Status: api.SyncIdle, Progress: -1, PendingOutbox: 1},
+		{AccountID: "a", Status: api.SyncIdle, Progress: -1, PendingOutbox: 0, FailedOutbox: 1}, // delivery gave up
+		{AccountID: "a", Status: api.SyncIdle, Progress: -1, PendingOutbox: 0, FailedOutbox: 0}, // the failed one deleted
+	}
+	for i, st := range steps {
+		if i > 0 && !syncStateChanged(steps[i-1], st) {
+			t.Fatalf("step %d not a change", i)
+		}
+		// No clock advance: a change held back as progress-only would never
+		// arrive.
+		c.SyncState(api.SyncStateNotification{State: st})
+		waitFor(t, "state delivered", func() bool { s, _ := r.snapshot(); return len(s) >= i+1 })
+	}
+	c.SyncState(api.SyncStateNotification{State: steps[2]})
+	settle()
+	states, _ := r.snapshot()
+	if len(states) != 3 || states[1].FailedOutbox != 1 || states[2].FailedOutbox != 0 || states[2].PendingOutbox != 0 {
+		t.Fatalf("delivered %+v", states)
+	}
+}
+
 // A server presenting another certificate is news even though the error
 // code (and its text) stay the same.
 func TestCoalescerTLSCertificateChange(t *testing.T) {

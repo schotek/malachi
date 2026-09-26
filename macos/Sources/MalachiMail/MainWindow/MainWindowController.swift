@@ -6,10 +6,12 @@ import MalachiCore
 import os
 
 /// The main three-pane window (window.blp, window/window.go): the split
-/// view, the unified toolbar, the per-message actions of the menu bar and
-/// toolbar, and the toast overlay. The panes' content is installed by the
-/// sidebar, list and reader parts (`install(sidebar:)`, `install(list:)`,
-/// `install(message:)`); the message actions by the app (`messageActions`).
+/// view with the status bar under it (`MainContentViewController`), the
+/// unified toolbar, the per-message actions of the menu bar and toolbar,
+/// and the toast overlay. The panes' content is installed by the sidebar,
+/// list and reader parts (`install(sidebar:)`, `install(list:)`,
+/// `install(message:)`), the status bar by the app (`install(statusBar:)`),
+/// and so are the message actions (`messageActions`).
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
 @MainActor
@@ -20,6 +22,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     let state: AppState
     let split: MainSplitViewController
+    /// The window's content: the split view over the status bar.
+    let content: MainContentViewController
     /// The toast overlay of the message pane (window.blp `toast_overlay`).
     let toasts: ToastPresenter
 
@@ -32,13 +36,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         didSet { window?.title = folderTitle.isEmpty ? MainMenu.appName : folderTitle }
     }
 
+    /// The window subtitle: the selected folder's unread and total counts
+    /// (window.go `refreshListTitle`, `folderCountsText`; the subtitle of
+    /// the list's Adw.WindowTitle in GTK), empty for none, as in Mail.
+    var folderSubtitle: String {
+        didSet { window?.subtitle = folderSubtitle }
+    }
+
     private let toolbarDelegate: MainToolbar
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
 
     init(state: AppState) {
         self.state = state
         folderTitle = ""
+        folderSubtitle = ""
         split = MainSplitViewController()
+        content = MainContentViewController(split: split)
         toasts = ToastPresenter()
 
         // fullSizeContentView is what lets the sidebar run the full height
@@ -60,8 +73,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // Setting contentViewController sizes the window to the view's
         // frame, so the default size goes on the view first (not on
         // preferredContentSize, which would override a restored frame).
-        split.view.setFrameSize(Self.defaultSize)
-        w.contentViewController = split
+        content.view.setFrameSize(Self.defaultSize)
+        w.contentViewController = content
         // The toolbar's tracking separators need the split view, so the
         // toolbar comes after the content (the plan's ordering).
         toolbarDelegate = MainToolbar(splitView: split.splitView)
@@ -72,11 +85,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // is set once the toolbar is part of it. With Auto Layout content
         // the window's minimum comes from the content's constraints, so the
         // GTK minimum is stated there; a restored frame cannot go below it.
+        // The status bar is part of the content, as the status line is part
+        // of the GTK window: the window keeps the GTK minimum, and the panes
+        // above the bar keep at least 200 pt.
         w.setFrame(NSRect(origin: .zero, size: Self.defaultSize), display: false)
         let chrome = w.frame.height - w.contentRect(forFrameRect: w.frame).height
         NSLayoutConstraint.activate([
-            split.view.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumSize.width),
-            split.view.heightAnchor.constraint(greaterThanOrEqualToConstant: max(Self.minimumSize.height - chrome, 200)),
+            content.view.widthAnchor.constraint(greaterThanOrEqualToConstant: Self.minimumSize.width),
+            content.view.heightAnchor.constraint(
+                greaterThanOrEqualToConstant: max(Self.minimumSize.height - chrome, 200 + StatusBarViewController.height)),
         ])
         w.center()
         split.onListCollapseChanged = { [weak self] collapsed in
@@ -117,6 +134,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         split.messageContainer.install(vc)
     }
 
+    func install(statusBar vc: NSViewController) {
+        content.install(statusBar: vc)
+    }
+
     private func setListSeparator(visible: Bool) {
         guard let toolbar = window?.toolbar else { return }
         toolbarDelegate.setListSeparator(visible: visible, in: toolbar)
@@ -144,6 +165,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     // MARK: Actions
+
+    /// The split view's actions (⌃⌘S, ⌥⌘L) also while no view of the window
+    /// has the keyboard focus: the responder chain then starts at the window
+    /// and reaches this controller, not the split view controller.
+    override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
+        if let target = MainContentViewController.splitTarget(split, forAction: action) {
+            return target
+        }
+        return super.supplementalTarget(forAction: action, sender: sender)
+    }
 
     /// True while an editable text view (a field editor) has the keyboard:
     /// the bare-letter menu items must not fire then. The read-only body

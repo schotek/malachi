@@ -143,7 +143,10 @@ destructive, only `send_message` open-world.
 ### sync_status, trigger_sync
 
 - `sync_status`: optional `accountId`; JSON of the daemon's `SyncState`
-  per account (`status`, `progress`, `lastSync`, `pendingOutbox`, `error`).
+  per account (`status`, `progress`, `lastSync`, `pendingOutbox`,
+  `failedOutbox`, `error`). `failedOutbox` counts messages whose delivery
+  failed for good; they stay in the outbox until the user retries or
+  deletes them.
 - `trigger_sync`: optional `accountId`, `folderId`, `full`; returns at once.
 
 ### create_draft
@@ -208,7 +211,8 @@ destructive, only `send_message` open-world.
   at the version recorded then; any other id is refused without a daemon
   call. A `conflict` (the draft was edited in Malachi Mail) forgets the
   draft: create a new one. Delivery is asynchronous; `sync_status`
-  reports `pendingOutbox`.
+  reports `pendingOutbox` (still to be delivered) and `failedOutbox`
+  (delivery failed).
 
 ## Content rules
 

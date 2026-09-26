@@ -61,6 +61,9 @@ struct LocalizationTests {
         #expect(en.plural("%d message", "%d messages", 2) == "2 messages")
         #expect(en.plural("%d message", "%d messages", 0) == "0 messages")
         #expect(en.plural("%d message", "%d messages", -1) == "-1 message")
+        // A plural msgid with more than the one %d: n picks, args fill.
+        #expect(en.plural("%d unread of %d", "%d unread of %d", 1, [1, 1234]) == "1 unread of 1234")
+        #expect(en.plural("%d unread of %d", "%d unread of %d", 12, [12, 1234]) == "12 unread of 1234")
     }
 
     @Test func globalShimDefaultsToEnglish() {
@@ -69,6 +72,7 @@ struct LocalizationTests {
         #expect(L10n.T(infoMsgid, "1.2", 42) == "Connected to malachid 1.2 (pid 42)")
         #expect(L10n.N("%d message", "%d messages", 1) == "1 message")
         #expect(L10n.N("%d message", "%d messages", 5) == "5 messages")
+        #expect(L10n.N("%d unread of %d", "%d unread of %d", 3, 3, 40) == "3 unread of 40")
         #expect(L10n.C("folder", "Inbox") == "Inbox")
         #expect(L10n.C("participant list separator", ", ") == ", ")
         #expect(L10n.format("%d of %d attachments could not be saved", [1, 3]) == "1 of 3 attachments could not be saved")
@@ -206,9 +210,9 @@ struct GeneratedLocalizationTests {
     func plainMsgids() {
         let cs = cs
         #expect(cs.language == "cs")
-        #expect(cs.translate("Connected") == "Připojeno")
+        #expect(cs.translate("Backend unavailable") == "Démon není dostupný")
         #expect(cs.translate("Use") == "Použít")
-        #expect(cs.translate("Connecting…") == "Připojování…")
+        #expect(cs.translate("Connecting to backend…") == "Připojování k démonu…")
         // Format arguments arrive converted (%s → %@, %d → %ld) by po2strings.
         #expect(cs.translate("Connected to malachid %s (pid %d)", ["1.2", 42]) == "Připojeno k malachid 1.2 (pid 42)")
         #expect(cs.translate("%d of %d attachments could not be saved", [1, 3]) == "1 z 3 příloh se nepodařilo uložit")
@@ -239,6 +243,10 @@ struct GeneratedLocalizationTests {
         #expect(cs.plural("%d unsafe element was removed from the message",
                           "%d unsafe elements were removed from the message", 3)
             == "3 nebezpečné prvky byly ze zprávy odstraněny")
+        // Two numbers, the form by the first (folders.go `folderCountsText`).
+        #expect(cs.plural("%d unread of %d", "%d unread of %d", 1, [1, 1234]) == "1 nepřečtená z 1234")
+        #expect(cs.plural("%d unread of %d", "%d unread of %d", 3, [3, 1234]) == "3 nepřečtené z 1234")
+        #expect(cs.plural("%d unread of %d", "%d unread of %d", 12, [12, 1234]) == "12 nepřečtených z 1234")
         #expect(en.pluralForms("%d message")?.keys.sorted() == ["one", "other"])
         #expect(en.plural("%d message", "%d messages", 1) == "1 message")
         #expect(en.plural("%d message", "%d messages", 2) == "2 messages")

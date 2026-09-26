@@ -104,7 +104,7 @@ final class ToastRouter: Toasts {
 
 /// Decodes the daemon's notifications and the connection state and fans
 /// them out to every interested view (window/notify.go `handleNotification`
-/// and window.go `showConnectionState`): the sidebar footer, the banners,
+/// and window.go `showConnectionState`): the status bar, the banners,
 /// the list, the desktop notifications all register here.
 @MainActor
 final class NotificationHub {

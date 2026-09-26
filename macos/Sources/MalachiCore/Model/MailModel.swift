@@ -342,24 +342,60 @@ public struct MailModel: Sendable {
         return f.id != s.folderId
     }
 
-    /// Changes the cached unread count of a folder by `delta`, never below
-    /// zero. Both the folders map and the sidebar entries are updated so a
-    /// later rebuild does not undo the change.
-    public mutating func adjustUnread(_ k: FolderKey, _ delta: Int) {
+    /// Changes the cached unread and total counts of a folder by `dUnread`
+    /// and `dTotal`, neither below zero (model.go `adjustCounts`). Both the
+    /// folders map and the sidebar entries are updated so a later rebuild
+    /// does not undo the change; the next folder.list brings the daemon's
+    /// numbers back.
+    public mutating func adjustCounts(_ k: FolderKey, _ dUnread: Int, _ dTotal: Int) {
         guard var list = folders[k.account], let i = list.firstIndex(where: { $0.id == k.folder }) else {
             return
         }
-        list[i].unread = max(list[i].unread + delta, 0)
+        list[i].unread = max(list[i].unread + dUnread, 0)
+        list[i].total = max(list[i].total + dTotal, 0)
         folders[k.account] = list
         for j in entries.indices {
             let e = entries[j]
             if !e.header, e.account?.id == k.account, e.folder?.id == k.folder {
                 entries[j].folder?.unread = list[i].unread
+                entries[j].folder?.total = list[i].total
             }
         }
         // The folder may be hidden under a collapsed ancestor whose badge
         // counts it, so every badge is recomputed, not just this row's.
         refreshBadges()
+    }
+
+    /// Shifts the cached counts for `n` messages, `unread` of them unread,
+    /// leaving `src` for `target` (nil: leaving the store, as when Trash
+    /// expunges or a send is cancelled); negative numbers put them back
+    /// (model.go `moveCounts`). The total is left alone where an optimistic
+    /// change would mislead: in an outbox source, whose row `visibleFolders`
+    /// drops at zero, taking the selection with it on the next rebuild before
+    /// an undo could bring it back (`onOutboxChanged` reloads the outbox
+    /// anyway); and in a target the daemon never downloads (`synced` false,
+    /// Gmail's All Mail), which counts nothing at all and so gets neither
+    /// count.
+    public mutating func moveCounts(_ src: FolderKey, _ target: FolderKey?, _ unread: Int, _ n: Int) {
+        let srcTotal = folderRole(src) == .outbox ? 0 : -n
+        adjustCounts(src, -unread, srcTotal)
+        guard let target else {
+            return
+        }
+        if let f = folder(target), !f.synced {
+            return
+        }
+        adjustCounts(target, unread, n)
+    }
+
+    /// The account's outbox folder while the window can show it (model.go
+    /// `outboxKey`): the account is enabled (only those have their folders
+    /// loaded) and its outbox is known.
+    public func outboxKey(_ acc: AccountID) -> FolderKey? {
+        guard let a = account(acc), a.enabled, let f = folderByRole(acc, .outbox) else {
+            return nil
+        }
+        return FolderKey(account: acc, folder: f.id)
     }
 
     /// Looks an account up by id.

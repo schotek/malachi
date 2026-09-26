@@ -154,7 +154,7 @@ public final class ActionsController {
                 return
             }
             // Marking unread raises the unread count.
-            self.mailbox.adjustUnread(k, on ? -changed.count : changed.count)
+            self.mailbox.adjustCounts(k, on ? -changed.count : changed.count, 0)
         }
         apply(seen)
 
@@ -273,7 +273,7 @@ public final class ActionsController {
     }
 
     /// The confirmed half of `trash`: the rows go at once, the windows
-    /// close, the unread badges follow, message.delete runs and a failure
+    /// close, the folder counts follow, message.delete runs and a failure
     /// puts everything back.
     private func moveToTrash(_ msgs: [MessageSummary]) {
         let ids = msgs.map(\.id)
@@ -283,7 +283,7 @@ public final class ActionsController {
         }
         let acc = msgs[0].accountId
         // message.delete moves to the Trash role folder; a message already
-        // there is expunged instead (no target badge to credit).
+        // there is expunged instead (no target count to credit).
         var target: FolderKey?
         if let trash = mailbox.model.folderByRole(acc, .trash), trash.id != msgs[0].folderId {
             target = FolderKey(account: acc, folder: trash.id)
@@ -299,24 +299,23 @@ public final class ActionsController {
         })
     }
 
-    /// Adjusts the unread badges for messages leaving their folder for
+    /// Adjusts the cached folder counts (the unread badges, the counts
+    /// under the window title) for messages leaving their folder for
     /// `target` (nil: leaving the store) and returns the reverse, for a
-    /// failed move (actions.go `trackMoves`). Read messages change no badge.
+    /// failed move (actions.go `trackMoves`). Read messages move only the
+    /// totals; `MailModel.moveCounts` says where even those stay put.
     func trackMoves(_ msgs: [MessageSummary], target: FolderKey?) -> ListController.Restore {
-        let unread = msgs.filter { !hasFlag($0.flags, .seen) }.count
-        guard unread > 0, let first = msgs.first else {
+        guard let first = msgs.first else {
             return {}
         }
+        let unread = msgs.filter { !hasFlag($0.flags, .seen) }.count
+        let n = msgs.count
         let src = FolderKey(account: first.accountId, folder: first.folderId)
-        let shift: @MainActor (Int) -> Void = { [weak self] delta in
-            guard let self else { return }
-            self.mailbox.adjustUnread(src, -delta)
-            if let target {
-                self.mailbox.adjustUnread(target, delta)
-            }
+        let shift: @MainActor (Int) -> Void = { [weak self] sign in
+            self?.mailbox.moveCounts(src, target, sign * unread, sign * n)
         }
-        shift(unread)
-        return { shift(-unread) }
+        shift(1)
+        return { shift(-1) }
     }
 
     // MARK: Archive and junk
@@ -369,8 +368,8 @@ public final class ActionsController {
     /// (message.move; actions.go `moveIDsToRole`). `what` names the action
     /// in progressive form for the error toast, for the number moved;
     /// `missing` is the toast when the account has no such folder. The rows
-    /// go at once and come back on failure; the unread badges follow unread
-    /// messages from their folder to the target. Outbox messages are left
+    /// go at once and come back on failure; the folder counts follow the
+    /// messages to the target (`trackMoves`). Outbox messages are left
     /// out (the daemon refuses moves on them), and a message already in the
     /// target folder is a no-op.
     func moveToRole(_ ids: [MessageID], _ role: FolderRole, missing: String, what: (Int) -> String) {
@@ -414,21 +413,27 @@ public final class ActionsController {
             let restore = self.list.removeRows([id])
             self.onWindowsClose?(id)
             let undo = self.trackMoves([s], target: nil)
+            // The drop is ours, not a delivery (trackOutbox). It is counted
+            // before the call: removing a queued or failed message moves
+            // pendingOutbox or failedOutbox, and the notify.syncState that
+            // follows reloads the folders, possibly before this reply
+            // arrives.
+            self.mailbox.noteOutboxCancelled(s.accountId)
             self.call(
                 API.MessageDelete.self, MessageDeleteParams(accountId: s.accountId, messageIds: [id]),
                 what: L10n.T("Cancelling the send"),
-                onError: { _ in
+                onError: { [weak self] _ in
+                    // Nothing was dropped after all.
+                    self?.mailbox.noteOutboxCancelFailed(s.accountId)
                     restore()
                     undo()
                 },
                 onOK: { [weak self] _ in
-                    // Removing a failed message changes no pendingOutbox
-                    // count, so no notify.syncState follows: refresh the
-                    // sidebar ourselves (an empty outbox disappears). The
-                    // drop is ours, not a delivery.
-                    guard let self else { return }
-                    self.mailbox.noteOutboxCancelled(s.accountId)
-                    self.mailbox.onOutboxChanged(s.accountId)
+                    // The sidebar is refreshed here as well (an empty
+                    // outbox disappears), for a daemon that sends no
+                    // notify.syncState on the change; a second reload finds
+                    // nothing left to count.
+                    self?.mailbox.onOutboxChanged(s.accountId)
                 }
             )
         }

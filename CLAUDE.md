@@ -209,7 +209,8 @@ démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
 doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
-Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+stavový pruh přes spodek okna místo patičky sidebaru, Settings bez
+hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).

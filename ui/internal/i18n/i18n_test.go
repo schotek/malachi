@@ -52,7 +52,7 @@ func TestCzechCatalogue(t *testing.T) {
 	t.Setenv("LC_ALL", "cs_CZ.UTF-8")
 	t.Setenv("LANGUAGE", "cs")
 	Init(dir)
-	if got := T("Connected"); got != "Připojeno" {
+	if got := T("Backend unavailable"); got != "Démon není dostupný" {
 		t.Skipf("locale cs_CZ.UTF-8 not usable here (got %q)", got)
 	}
 	if got := N("%d unsafe element was removed from the message", "%d unsafe elements were removed from the message", 3); got != "%d nebezpečné prvky byly ze zprávy odstraněny" {

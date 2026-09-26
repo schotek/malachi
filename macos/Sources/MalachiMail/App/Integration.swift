@@ -5,15 +5,19 @@ import AppKit
 import MalachiCore
 
 /// The glue between the shell and the parts that plug into it: the mailbox
-/// controller and its sidebar, the settings window, the account wizard and
-/// the desktop notifications. The counterpart of what window.New wires up
-/// in Go, plus the list, the reader, the actions and compose.
+/// controller and its sidebar, the status bar, the settings window, the
+/// account wizard and the desktop notifications. The counterpart of what
+/// window.New wires up in Go, plus the list, the reader, the actions and
+/// compose.
 @MainActor
 final class Integration {
     let state: AppState
     let sync: SyncController
     let mailbox: MailboxController
     let sidebar: FolderSidebarViewController
+    /// The status line and its popover (window.blp `status_button`, at the
+    /// bottom of the window here).
+    let statusBar: StatusBarViewController
     let notifications: NotificationService
     /// Reading: the message list, the loaded-message cache, the reader
     /// pane and the message windows (window.go's list and pane halves).
@@ -56,7 +60,8 @@ final class Integration {
         self.mainToast = mainToast
         sync = SyncController()
         mailbox = MailboxController(client: state.client, settings: state.settings, sync: sync, toast: mainToast)
-        sidebar = FolderSidebarViewController(mailbox: mailbox, sync: sync, connection: state.connection)
+        sidebar = FolderSidebarViewController(mailbox: mailbox)
+        statusBar = StatusBarViewController(sync: sync, mailbox: mailbox)
         notifications = NotificationService(settings: state.settings) { [weak mainWindow] in
             mainWindow?.window?.isKeyWindow ?? false
         }
@@ -77,9 +82,11 @@ final class Integration {
         mainWindow.install(sidebar: sidebar)
         mainWindow.install(list: listView)
         mainWindow.install(message: reader)
+        mainWindow.install(statusBar: statusBar)
         wireConnection()
         wireNotifications()
         wireMailbox()
+        wireStatusBar()
         wireReading()
         wireActions()
         wireHooks()
@@ -102,14 +109,18 @@ final class Integration {
 
     // MARK: Wiring
 
-    /// window.go `showConnectionState`: the footer line and the mailbox
-    /// (which loads accounts and the sync status once connected).
+    /// window.go `showConnectionState`: the mailbox, which tells the status
+    /// line first and loads accounts and the sync status once connected.
+    /// Until the connection reports anything the line says the first
+    /// attempt is underway; a window made later starts from the state the
+    /// hub knows.
     private func wireConnection() {
         let hub = state.notifications
-        sidebar.showConnectionState(hub.connectionState)
+        sync.setConnection(hub.connectionState)
+        // Every minute, so "Up to date · 15:04" becomes a date the next day.
+        sync.startRefreshing()
         tokens.append(hub.addConnectionState { [weak self] s in
             guard let self else { return }
-            self.sidebar.showConnectionState(s)
             self.mailbox.handleConnection(s)
             // After the mailbox: the list's banner and its own reaction
             // (collapse loading rows, drop late replies) follow the model.
@@ -154,14 +165,22 @@ final class Integration {
     }
 
     /// The sign-in banner's button (sync.go `onAuthBannerButton`): an
-    /// account of the browser sign-in gets a fresh session and its page in
-    /// the browser; any other opens the preferences (also for GNOME Online
-    /// Accounts, whose panel does not exist on macOS).
+    /// account of the browser sign-in is signed in again (`signIn`); any
+    /// other opens the preferences (also for GNOME Online Accounts, whose
+    /// panel does not exist on macOS).
     private func authBannerButton() {
         guard case .signInAgain(let id, let fallback)? = sync.authBannerAction else {
             state.hooks.openPreferences?()
             return
         }
+        signIn(accountId: id, fallback: fallback)
+    }
+
+    /// Signs account `id` of the browser sign-in in again (sync.go
+    /// `signInAgain` / `signInInBrowser`): a fresh session and its page in
+    /// the browser, or `fallback` (the notification's page) when the daemon
+    /// cannot start one. The daemon completes the sign-in by itself.
+    private func signIn(accountId id: AccountID, fallback: String?) {
         let client = state.client
         Task { [weak self] in
             guard let self else { return }
@@ -175,17 +194,67 @@ final class Integration {
     }
 
     /// The certificate banner's "Edit Account…" (sync.go
-    /// `onCertBannerButton`): the wizard in edit mode for the banner's
-    /// account, as a sheet on the main window, where the connection test
-    /// shows the certificate and offers to trust it. The sidebar and the
-    /// banner follow notify.accountsChanged and notify.syncState after the
-    /// save.
+    /// `onCertBannerButton`): `editAccount` for the banner's account.
     private func certBannerButton() {
-        guard let id = sync.certBannerAccount, let account = mailbox.model.account(id),
-              let parent = mainWindow?.window else { return }
+        guard let id = sync.certBannerAccount else { return }
+        editAccount(id)
+    }
+
+    /// The wizard in edit mode for account `id` (sync.go `editAccount`: the
+    /// certificate banner, an account's row in the status popover), as a
+    /// sheet on the main window, where the connection test shows a refused
+    /// certificate and offers to trust it. The sidebar and the banners
+    /// follow notify.accountsChanged and notify.syncState after the save.
+    private func editAccount(_ id: AccountID) {
+        guard let account = mailbox.model.account(id), let parent = mainWindow?.window else { return }
         AccountWizardController.present(
             from: parent, client: state.client, editing: account, confirmTrust: Self.confirmTrust(state.alerts)
         ) { _, _ in }
+    }
+
+    /// The status popover's rows (status.go `onStatusAction`, `showOutbox`):
+    /// the popover has closed already; a dialog, the browser or the list
+    /// takes over.
+    private func wireStatusBar() {
+        statusBar.onAction = { [weak self] st in
+            self?.statusAction(st)
+        }
+        statusBar.onShowOutbox = { [weak self] acc in
+            guard let self, self.mailbox.showOutbox(acc) else { return }
+            // GTK shows the content pane (outerSplit.SetShowContent); here a
+            // list folded by a narrow window unfolds, or only the title
+            // would change.
+            if let split = self.mainWindow?.split, split.isListCollapsed {
+                split.toggleMessageList(nil)
+            }
+        }
+    }
+
+    /// Runs the action of an account's row in the status popover (status.go
+    /// `onStatusAction`): check or try again, sign in (the way the account
+    /// signs in; only the sign-in banner's account has the notification's
+    /// page as the fallback), or the account assistant.
+    private func statusAction(_ st: AccountStatus) {
+        switch st.action {
+        case .check, .retry:
+            mailbox.triggerSync(accountId: st.account)
+        case .signIn:
+            guard st.signIn == .oauth else {
+                // A password account is edited in the preferences; GNOME
+                // Online Accounts has no panel here (as for the banner).
+                state.hooks.openPreferences?()
+                return
+            }
+            var fallback: String?
+            if case .signInAgain(let id, let url)? = sync.authBannerAction, id == st.account {
+                fallback = url
+            }
+            signIn(accountId: st.account, fallback: fallback)
+        case .edit:
+            editAccount(st.account)
+        case .noAction:
+            break
+        }
     }
 
     /// The account wizard's "Trust This Certificate?" through the shell's
@@ -217,10 +286,13 @@ final class Integration {
         })
     }
 
+    /// window.go `refreshListTitle`: the selected folder is the window's
+    /// title and its counts the subtitle.
     private func wireMailbox() {
-        mailbox.onFolderSelected = { [weak self] _, _ in
+        mailbox.onListTitleChanged = { [weak self] title, subtitle in
             guard let self else { return }
-            self.mainWindow?.folderTitle = self.mailbox.selectedFolderTitle
+            self.mainWindow?.folderTitle = title
+            self.mainWindow?.folderSubtitle = subtitle
         }
         mailbox.onAccountsLoaded = { [weak self] accounts in
             self?.showNoAccountsPage(accounts.isEmpty)

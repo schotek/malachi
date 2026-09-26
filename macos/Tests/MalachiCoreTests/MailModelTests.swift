@@ -23,11 +23,11 @@ func summary(_ id: String, flags: [Flag]) -> MessageSummary {
 /// A folder of the tests; the name defaults to the id.
 func testFolder(
     _ id: String, path: String, role: FolderRole = .none, parent: String? = nil, name: String? = nil,
-    selectable: Bool = true, unread: Int = 0, total: Int = 0
+    selectable: Bool = true, synced: Bool = true, unread: Int = 0, total: Int = 0
 ) -> Folder {
     Folder(
         id: FolderID(id), accountId: "", parentId: parent.map { FolderID($0) }, name: name ?? id, path: path,
-        role: role, subscribed: true, selectable: selectable, synced: true, unread: unread, total: total
+        role: role, subscribed: true, selectable: selectable, synced: synced, unread: unread, total: total
     )
 }
 
@@ -297,14 +297,108 @@ let errTest = RPCError(code: .internalError, message: "test")
         #expect(enabled.first?.id == "acc1")
         #expect(enabled.last?.id == "acc2")
 
-        m.adjustUnread(k, -5)
+        m.adjustCounts(k, -5, 0)
         #expect(m.folder(k)?.unread == 0, "floor")
-        m.adjustUnread(k, 3)
+        m.adjustCounts(k, 3, 0)
         #expect(m.folder(k)?.unread == 3)
         for e in m.entries where !e.header && e.folder?.id == "inbox" {
             #expect(e.folder?.unread == 3, "entry not updated")
         }
-        m.adjustUnread(FolderKey(account: "acc1", folder: "nope"), 1) // no crash
+        m.adjustCounts(FolderKey(account: "acc1", folder: "nope"), 1, 1) // no crash
+    }
+
+    /// One account with an inbox, a trash, an outbox and an All Mail the
+    /// daemon never downloads, and a paused one (model_test.go
+    /// `countsModel`).
+    private func countsModel() -> MailModel {
+        let accounts = [
+            testAccount("a", email: "a@example.invalid"),
+            testAccount("p", enabled: false, email: "p@example.invalid"),
+        ]
+        let folders: [AccountID: [Folder]] = [
+            "a": [
+                testFolder("in", path: "INBOX", role: .inbox, unread: 2, total: 10),
+                testFolder("trash", path: "Trash", role: .trash, unread: 0, total: 1),
+                testFolder("out", path: "Outbox", role: .outbox, total: 1),
+                testFolder("all", path: "All Mail", role: .all, synced: false),
+            ],
+            "p": [testFolder("pout", path: "Outbox", role: .outbox, total: 2)],
+        ]
+        var m = MailModel(accounts: accounts, folders: folders)
+        m.rebuildEntries()
+        return m
+    }
+
+    /// The cached unread and total of folder `id` of account "a", and
+    /// whether the sidebar entry agrees (model_test.go `counts`).
+    private func counts(_ m: MailModel, _ id: FolderID) -> (unread: Int, total: Int, entryAgrees: Bool) {
+        let f = m.folder(FolderKey(account: "a", folder: id))
+        var agrees = true
+        for e in m.entries where !e.header && e.account?.id == "a" && e.folder?.id == id {
+            agrees = e.folder?.unread == f?.unread && e.folder?.total == f?.total && e.badge == f?.unread
+        }
+        return (f?.unread ?? -1, f?.total ?? -1, agrees)
+    }
+
+    @Test func adjustCountsTest() {
+        var m = countsModel()
+        let inbox = FolderKey(account: "a", folder: "in")
+        m.adjustCounts(inbox, 1, 1)
+        var c = counts(m, "in")
+        #expect(c.unread == 3 && c.total == 11 && c.entryAgrees, "up: \(c)")
+        // Both counts stop at zero, each on its own.
+        m.adjustCounts(inbox, -5, -1)
+        c = counts(m, "in")
+        #expect(c.unread == 0 && c.total == 10 && c.entryAgrees, "unread floor: \(c)")
+        m.adjustCounts(inbox, 0, -50)
+        c = counts(m, "in")
+        #expect(c.unread == 0 && c.total == 0 && c.entryAgrees, "total floor: \(c)")
+    }
+
+    @Test func moveCountsTest() {
+        let src = FolderKey(account: "a", folder: "in")
+        let trash = FolderKey(account: "a", folder: "trash")
+        let cases: [(String, FolderKey, FolderKey?, Int, Int, Int, Int, FolderID, Int, Int)] = [
+            ("to trash", src, trash, 1, 3, 1, 7, "trash", 1, 4),
+            // Read messages still move the totals.
+            ("read only", src, trash, 0, 2, 2, 8, "trash", 0, 3),
+            // Leaving the store: only the source changes.
+            ("expunged", src, nil, 1, 1, 1, 9, "trash", 0, 1),
+            // All Mail is never downloaded: it counts nothing, before or after.
+            ("to an unsynced folder", src, FolderKey(account: "a", folder: "all"), 2, 2, 0, 8, "all", 0, 0),
+            // The outbox keeps its total (and so its row) until it is reloaded.
+            ("from the outbox", FolderKey(account: "a", folder: "out"), nil, 0, 1, 0, 1, "trash", 0, 1),
+        ]
+        let fresh = countsModel()
+        for (name, from, target, unread, n, srcU, srcN, dstID, dstU, dstN) in cases {
+            var m = countsModel()
+            m.moveCounts(from, target, unread, n)
+            let s = counts(m, from.folder)
+            #expect(s.unread == srcU && s.total == srcN && s.entryAgrees, "\(name): source \(s), want \(srcU)/\(srcN)")
+            let d = counts(m, dstID)
+            #expect(d.unread == dstU && d.total == dstN && d.entryAgrees, "\(name): \(dstID) \(d), want \(dstU)/\(dstN)")
+            // The undo of a failed move puts everything back.
+            m.moveCounts(from, target, -unread, -n)
+            for id: FolderID in ["in", "trash", "out", "all"] {
+                let got = counts(m, id)
+                let want = counts(fresh, id)
+                #expect(got.unread == want.unread && got.total == want.total, "\(name): undo left \(id) at \(got), want \(want)")
+            }
+        }
+        // The outbox row stays listed while the move is pending.
+        var m = countsModel()
+        m.moveCounts(FolderKey(account: "a", folder: "out"), nil, 0, 1)
+        #expect(m.folderListed(FolderKey(account: "a", folder: "out")), "the outbox row went with its last message")
+    }
+
+    @Test func outboxKeyTest() {
+        var m = countsModel()
+        #expect(m.outboxKey("a") == FolderKey(account: "a", folder: "out"), "enabled")
+        // A paused account's folders are not shown (nor, normally, loaded).
+        #expect(m.outboxKey("p") == nil, "paused")
+        #expect(m.outboxKey("zzz") == nil, "unknown account")
+        m.folders["a"] = Array(m.folders["a"]?.prefix(2) ?? [])
+        #expect(m.outboxKey("a") == nil, "no outbox")
     }
 
     @Test func visibleFoldersTest() {

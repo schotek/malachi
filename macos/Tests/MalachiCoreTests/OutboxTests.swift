@@ -78,5 +78,33 @@ import Testing
         #expect(hoisted7 == 0)
         let hoisted8 = t.track("b", total: 0)
         #expect(hoisted8 == 0)
+
+        // A cancel is used up only by a shrink it explains: a reload that
+        // lands before the daemon's delete keeps it for the one that sees
+        // the drop.
+        t.noteCancelled("a")
+        let early = t.track("a", total: 2)
+        #expect(early == 0, "nothing left yet")
+        let dropped = t.track("a", total: 1)
+        #expect(dropped == 0, "the drop is the cancel, not a delivery")
+        let later = t.track("a", total: 0)
+        #expect(later == 1, "the cancel was used up by the drop it explained")
+
+        // A delivery and a cancel in one shrink.
+        _ = t.track("c", total: 3)
+        t.noteCancelled("c")
+        let mixed = t.track("c", total: 1)
+        #expect(mixed == 1, "one of the two was ours")
+
+        // A refused cancel is taken back, never below zero.
+        _ = t.track("d", total: 2)
+        t.noteCancelled("d")
+        t.noteCancelFailed("d")
+        t.noteCancelFailed("d")
+        let delivered = t.track("d", total: 1)
+        #expect(delivered == 1, "the refused cancel explains nothing")
+        t.noteCancelled("d")
+        let cancelled = t.track("d", total: 0)
+        #expect(cancelled == 0, "a note after the refusals still counts once")
     }
 }

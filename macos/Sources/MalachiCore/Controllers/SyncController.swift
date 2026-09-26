@@ -5,19 +5,28 @@ import Foundation
 import os
 
 /// The sync status line, the sign-in banner and the certificate banner of
-/// the main window (ui/internal/window/sync.go), minus the widgets: the
-/// daemon owns the sync state, this only mirrors the last sync.status /
-/// notify.syncState per account into a footer line and banner texts.
+/// the main window (ui/internal/window/sync.go and status.go), minus the
+/// widgets: the daemon owns the sync state, this only mirrors the last
+/// sync.status / notify.syncState per account into a status line, the rows
+/// of its popover (`accountStatuses`) and banner texts.
 ///
-/// `apply` records one state and refreshes the footer; who called it decides
+/// The line comes in two halves, as in GTK's `refreshSyncLabel`: `footer`
+/// is the sync state of every account (`syncStatusText`), and `line` is what
+/// the status bar shows, the footer with the connection to the daemon put
+/// over it (`statusLineFor`).
+///
+/// `apply` records one state and refreshes the line; who called it decides
 /// what else follows (`MailboxController.handleSyncState` reloads folders and
 /// the list, as the GTK `applySyncState` does). The 30 s fallback of
-/// `triggerSync` lives here (`beginChecking`): the footer says "Checking for
+/// `triggerSync` lives here (`beginChecking`): the line says "Checking for
 /// new mail…" at once and the daemon's notify.syncState takes over, with the
-/// timer as the guarantee that the spinner never sticks.
+/// timer as the guarantee that the spinner never sticks. A second timer
+/// (`startRefreshing`) redraws the line every minute, so the time of the
+/// last check it names becomes a date once the day is over.
 @MainActor
 public final class SyncController {
-    /// What the sidebar footer's sync line shows.
+    /// The sync half of the status line (`syncStatusText`, or "Checking for
+    /// new mail…").
     public struct FooterState: Equatable, Sendable {
         public var text: String
         public var spinning: Bool
@@ -56,10 +65,23 @@ public final class SyncController {
     /// The fallback in use; tests shorten it.
     public var fallbackDelay: Duration = SyncController.fallbackDelay
 
+    /// How often `startRefreshing` redraws the line without a state change
+    /// (sync.go `statusRefreshSeconds`).
+    public static let refreshInterval: Duration = .seconds(60)
+
+    /// The moment the time of the last check is shown against; tests pin it.
+    public var now: @MainActor () -> Date = { Date() }
+
     /// The last state per account (sync.go `syncStates`).
     public private(set) var states: [AccountID: SyncState] = [:]
-    /// The footer line last emitted.
+    /// The sync half of the line last emitted.
     public private(set) var footer = FooterState(text: "", spinning: false)
+    /// What the status bar shows, last emitted: `footer` under the
+    /// connection (`statusLineFor`). Until the connection reports anything
+    /// the first attempt is underway: "Connecting to backend…".
+    public private(set) var line = statusLineFor(ConnView(state: .connecting), text: "", spinning: false)
+    /// The connection as the line knows it (status.go `connView`).
+    public private(set) var connection = ConnView(state: .connecting)
     /// The account the sign-in banner is up for, nil while hidden.
     public private(set) var authBannerAccount: AccountID?
     /// What the banner's button does; nil while hidden.
@@ -71,6 +93,10 @@ public final class SyncController {
 
     /// Called after every change of the footer line.
     public var onFooter: (@MainActor (FooterState) -> Void)?
+    /// Called after every change of the status line, and whenever the rows
+    /// of the popover may have changed with it (sync.go `refreshSyncLabel`
+    /// refreshes an open popover from the same place).
+    public var onStatusLine: (@MainActor (StatusLine) -> Void)?
     /// Called to show the sign-in banner (account, title, button label) or
     /// to hide it (all nil).
     public var onAuthBanner: (@MainActor (AccountID?, String?, String?) -> Void)?
@@ -79,8 +105,8 @@ public final class SyncController {
     /// account (the wizard in edit mode).
     public var onCertBanner: (@MainActor (AccountID?, String?, String?) -> Void)?
 
-    /// The accounts the footer counts (account.list order); the mailbox
-    /// controller supplies its model's.
+    /// The accounts the line counts and the popover lists (account.list
+    /// order); the mailbox controller supplies its model's.
     public var accounts: @MainActor () -> [Account] = { [] }
     /// The display name of a folder, "" when unknown (sync.go
     /// `refreshSyncLabel`'s lookup).
@@ -88,27 +114,47 @@ public final class SyncController {
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "sync")
     private var fallback: Task<Void, Never>?
+    private var refresher: Task<Void, Never>?
     private var closed = false
 
     public init() {}
 
-    /// Stops the fallback timer; nothing is emitted afterwards.
+    /// Stops the timers; nothing is emitted afterwards.
     public func close() {
         closed = true
         fallback?.cancel()
         fallback = nil
+        refresher?.cancel()
+        refresher = nil
+    }
+
+    /// Redraws the line every `interval` without a state change (window.go
+    /// `New`, the `statusRefreshSeconds` timeout): it names the time of the
+    /// last check ("Up to date · 15:04"), which a day later has to be a
+    /// date. Calling it again restarts the timer.
+    public func startRefreshing(every interval: Duration = SyncController.refreshInterval) {
+        refresher?.cancel()
+        refresher = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: interval)
+                guard let self, !Task.isCancelled, !self.closed else { return }
+                self.refreshFooter()
+            }
+        }
     }
 
     // MARK: States
 
-    /// Records one account's state and refreshes the footer (the first half
-    /// of sync.go `applySyncState`): the banner hides when its account left
-    /// the sign-in state. Returns the state it replaced (nil for the first)
-    /// and the new one, for the caller's `onSyncFinished` / `onOutboxChanged`.
+    /// Records one account's state and refreshes the line (the first half
+    /// of sync.go `applySyncState`): a failed sync.status no longer holds
+    /// the line, and the banner hides when its account left the sign-in
+    /// state. Returns the state it replaced (nil for the first) and the new
+    /// one, for the caller's `onSyncFinished` / `onOutboxChanged`.
     @discardableResult
     public func apply(_ s: SyncState) -> (prev: SyncState?, cur: SyncState) {
         let prev = states[s.accountId]
         states[s.accountId] = s
+        connection.syncFailed = false
         refreshFooter()
         if s.accountId == authBannerAccount, s.status != .authRequired {
             hideAuthBanner()
@@ -124,8 +170,9 @@ public final class SyncController {
     /// Runs sync.status and hands every state to `apply` (sync.go
     /// `loadSyncStatus`); `each` replaces that step for a caller that does
     /// more per state (`MailboxController.handleSyncState`). notImplemented
-    /// is the expected answer from a daemon without a syncer: the footer
-    /// says "Not syncing" and nothing else happens.
+    /// is the expected answer from a daemon without a syncer: the line says
+    /// "Not syncing" until a state arrives after all (`statusLineFor`), and
+    /// nothing else happens.
     public func loadSyncStatus(client: RPCClient, each: (@MainActor (SyncState) -> Void)? = nil) {
         Task { [weak self] in
             let outcome: Result<SyncStatusResult, any Error>
@@ -138,7 +185,8 @@ public final class SyncController {
             switch outcome {
             case .failure(let err):
                 self.log.debug("sync.status: \(String(describing: err), privacy: .public)")
-                self.setFooter(FooterState(text: L10n.T("Not syncing"), spinning: false))
+                self.connection.syncFailed = true
+                self.refreshFooter()
             case .success(let res):
                 for s in res.accounts {
                     if let each {
@@ -151,33 +199,57 @@ public final class SyncController {
         }
     }
 
-    // MARK: Footer
+    // MARK: Status line
 
     /// The footer line for the given states over `accounts` (sync.go
-    /// `syncStatusText`, see `MalachiCore.syncStatusText`).
+    /// `syncStatusText`, see `MalachiCore.syncStatusText`), against `now`.
     public func footerState(accounts: [Account], folderName: ((AccountID, FolderID) -> String)?) -> FooterState {
-        let (text, spinning) = syncStatusText(states, accounts, folderName: folderName)
+        let (text, spinning) = syncStatusText(states, accounts, folderName: folderName, now: now())
         return FooterState(text: text, spinning: spinning)
     }
 
-    /// Recomputes the footer from the cached states (sync.go
-    /// `refreshSyncLabel`) and emits it, and with it the certificate
-    /// banner. Enabled accounts without a cached state fall back to the
-    /// state account.list reported, so the line is right before sync.status
-    /// answered.
+    /// Recomputes the line from the cached states and the connection
+    /// (sync.go `refreshSyncLabel`) and emits it, and with it the
+    /// certificate banner. Enabled accounts without a cached state fall
+    /// back to the state account.list reported, so the line is right before
+    /// sync.status answered.
     public func refreshFooter() {
         let accounts = accounts()
         let lookup = folderName
-        setFooter(footerState(accounts: accounts, folderName: { lookup($0, $1) }))
+        let f = footerState(accounts: accounts, folderName: { lookup($0, $1) })
+        setFooter(f)
+        setLine(statusLineFor(connection, text: f.text, spinning: f.spinning))
         refreshCertBanner(accounts)
     }
 
-    /// The footer of a refresh the user asked for (sync.go `triggerSync`):
+    /// The connection changed (window.go `showConnectionState`): what
+    /// sync.status said is forgotten with it, and the line follows.
+    public func setConnection(_ state: ConnectionController.ConnectionState) {
+        connection = ConnView(state: state)
+        refreshFooter()
+    }
+
+    /// The popover's rows for the cached states (status.go
+    /// `refreshStatusPopover`'s `accountStatuses`), over `accounts` and
+    /// against `now`.
+    public func accountStatuses() -> [AccountStatus] {
+        let lookup = folderName
+        return MalachiCore.accountStatuses(states, accounts(), folderName: { lookup($0, $1) }, now: now())
+    }
+
+    /// The line of a refresh the user asked for (sync.go `startSync`):
     /// "Checking for new mail…" with the spinner at once, and a fallback
     /// timer that recomputes the line after `fallbackDelay` in case no
-    /// notify.syncState follows. Calling it again restarts the timer.
+    /// notify.syncState follows. Calling it again restarts the timer. As in
+    /// GTK only the text and the spinner change: the connection's icon and
+    /// the rest of the line stay as they are.
     public func beginChecking() {
-        setFooter(FooterState(text: L10n.T("Checking for new mail…"), spinning: true))
+        let text = L10n.T("Checking for new mail…")
+        setFooter(FooterState(text: text, spinning: true))
+        var l = line
+        l.text = text
+        l.spinning = true
+        setLine(l)
         fallback?.cancel()
         let delay = fallbackDelay
         fallback = Task { [weak self] in
@@ -192,6 +264,12 @@ public final class SyncController {
         guard !closed else { return }
         footer = f
         onFooter?(f)
+    }
+
+    private func setLine(_ l: StatusLine) {
+        guard !closed else { return }
+        line = l
+        onStatusLine?(l)
     }
 
     // MARK: Certificate banner
@@ -229,14 +307,14 @@ public final class SyncController {
     /// signed in again from the button.
     public func authBanner(for n: AuthRequiredNotification, account: Account?) -> (title: String, button: String) {
         let name = account.map(accountRowTitle) ?? n.accountId.rawValue
-        switch authBannerKind(n, account) {
+        let kind = authBannerKind(n, account)
+        switch kind {
         case .goa:
-            return (goaAuthBannerText(n.reason, name), L10n.T("Open Online Accounts"))
+            return (goaAuthBannerText(n.reason, name), authBannerButton(kind))
         case .oauth:
-            // TRANSLATORS: a button that signs in; the plain "Sign In" is a page title
-            return (oauthAuthBannerText(n.reason, name), L10n.C("button", "Sign In"))
+            return (oauthAuthBannerText(n.reason, name), authBannerButton(kind))
         case .password:
-            return (authBannerText(n.reason, name), L10n.T("Open Preferences"))
+            return (authBannerText(n.reason, name), authBannerButton(kind))
         }
     }
 
@@ -316,13 +394,12 @@ public final class SyncController {
     }
 }
 
-/// The sidebar's connection line for a connection state (window.go
-/// `showConnectionState` and `fetchSystemInfo`): the GTK icon name, which
-/// the AppKit layer maps to a symbol, and the text. The controller reports a
-/// connection only once system.info answered, so the plain "Connected" of
-/// the GTK UI has no moment of its own here; the detailed line takes its
-/// place at once. Stopping shows as unavailable: the window is on its way
-/// out.
+/// The connection's sentence for a connection state (window.go
+/// `showConnectionState` and `fetchSystemInfo`, the texts of status.go
+/// `statusLineFor`): the GTK icon name, which the AppKit layer maps to a
+/// symbol, and the text. Without a connection the status line says it;
+/// once connected the sentence is the foot of the status popover. Stopping
+/// shows as unavailable: the window is on its way out.
 public func connectionStatusLine(_ state: ConnectionController.ConnectionState) -> (icon: String, text: String) {
     switch state {
     case .connecting:
@@ -335,5 +412,70 @@ public func connectionStatusLine(_ state: ConnectionController.ConnectionState) 
         return ("network-transmit-receive-symbolic", L10n.T("Connected, but system.info failed"))
     case .unavailable, .stopping:
         return ("network-offline-symbolic", L10n.T("Backend unavailable"))
+    }
+}
+
+/// What the status line knows of the daemon connection (status.go
+/// `connView`). The connection controller folds system.info into its state
+/// (connected with the answer, its failure, a mismatching protocol), so
+/// beside it only the failure of sync.status is kept. GTK has one more
+/// moment, connected with system.info still on its way; here the
+/// controller reports the connection only once system.info answered.
+public struct ConnView: Sendable, Equatable {
+    public var state: ConnectionController.ConnectionState
+    /// sync.status failed; the next state from the daemon clears it, and a
+    /// change of the connection forgets it.
+    public var syncFailed: Bool
+
+    public init(state: ConnectionController.ConnectionState, syncFailed: Bool = false) {
+        self.state = state
+        self.syncFailed = syncFailed
+    }
+}
+
+/// What the status bar shows (status.go `statusLine`): the line, whether
+/// the spinner turns, the connection icon (a GTK name, "" for none),
+/// whether the line can be clicked, and the foot of its popover ("" for
+/// none).
+public struct StatusLine: Sendable, Equatable {
+    public var text: String
+    public var spinning: Bool
+    public var icon: String
+    public var active: Bool
+    public var daemon: String
+
+    public init(text: String, spinning: Bool = false, icon: String = "", active: Bool = false, daemon: String = "") {
+        self.text = text
+        self.spinning = spinning
+        self.icon = icon
+        self.active = active
+        self.daemon = daemon
+    }
+}
+
+/// Puts the connection over the sync state (status.go `statusLineFor`;
+/// `text` and `spinning` from `syncStatusText`). Without a connection the
+/// line says so, with an icon, and cannot be clicked: there is no account
+/// state to show. A daemon of another protocol version, or a failed
+/// sync.status, takes the line over as well. An empty line (no account at
+/// all) cannot be clicked either. The popover's foot names the daemon
+/// (`connectionStatusLine`), or that system.info failed; it is empty while
+/// the line says the protocols do not match.
+public func statusLineFor(_ c: ConnView, text: String, spinning: Bool) -> StatusLine {
+    switch c.state {
+    case .connecting, .unavailable, .stopping:
+        let conn = connectionStatusLine(c.state)
+        return StatusLine(text: conn.text, icon: conn.icon)
+    case .protocolMismatch:
+        return StatusLine(text: connectionStatusLine(c.state).text, active: true)
+    case .connected, .infoFailed:
+        var line = StatusLine(text: text, spinning: spinning, daemon: connectionStatusLine(c.state).text)
+        if c.syncFailed {
+            line.text = L10n.T("Not syncing")
+            line.spinning = false
+        }
+        // An empty line (no account at all) is no button to tab to.
+        line.active = !line.text.isEmpty
+        return line
     }
 }

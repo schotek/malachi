@@ -199,7 +199,8 @@ bidi-control characters, length-capped).
 
 ```jsonc
 { "accountId": "acc_1", "status": "idle|syncing|offline|authRequired|error|disabled",
-  "folderId": "f_inbox", "progress": 42, "lastSync": Time, "error": Error, "pendingOutbox": 0 }
+  "folderId": "f_inbox", "progress": 42, "lastSync": Time, "error": Error, "pendingOutbox": 0,
+  "failedOutbox": 0 }
 ```
 
 - `status`: `idle` (connected or between passes, no work), `syncing` (a pass
@@ -216,6 +217,10 @@ bidi-control characters, length-capped).
 - `pendingOutbox`: outbox messages in state `queued` or `sending` (§4.3
   `message.send`). Sending is not a `status`: it runs beside the account's
   sync, and a `failed` message does not count.
+- `failedOutbox`: outbox messages in state `failed` — delivery gave up and
+  they wait in the outbox for `outbox.retry` or a delete. They count here,
+  never in `pendingOutbox`; a `sent` message counts in neither. Both counts
+  are filled for every account, a `disabled` one included.
 
 ## 4. Methods
 
@@ -959,8 +964,9 @@ The result only confirms enqueueing. Delivery is asynchronous and runs
 beside the IMAP sync: the queued message is an ordinary message in the
 account's outbox folder (§4.2) with `flags: ["seen"]` and an `outbox`
 field (§3) that carries its state; `notify.syncState` is emitted whenever
-`pendingOutbox` changes. A failed send stays in the outbox with `state:
-"failed"` and the reason in `outbox.error`; it is never silently dropped.
+`pendingOutbox` or `failedOutbox` changes. A failed send stays in the
+outbox with `state: "failed"` and the reason in `outbox.error`, and counts
+in `failedOutbox`; it is never silently dropped.
 Sending from a disabled account only queues; delivery starts when the
 account is enabled.
 
@@ -1542,9 +1548,10 @@ showing conversations (§4.4) merges the arrival into its thread row
 instead of listing again.
 
 `notify.syncState` is sent immediately on every change of `status`,
-`folderId`, `error`, `lastSync` or `pendingOutbox`, and for progress-only
-changes at most every 500 ms per account (the last value is always
-delivered). Clients must not assume every intermediate `progress` value.
+`folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
+progress-only changes at most every 500 ms per account (the last value is
+always delivered). Clients must not assume every intermediate `progress`
+value.
 
 `notify.authRequired` with `authUrl` means an OAuth2 flow is waiting: an
 account with source `daemon` whose refresh token the provider no longer
@@ -1737,3 +1744,8 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   `tlsError` from IMAP/SMTP endpoints carries `TLSErrorData` (`reason`,
   `certificate`, `expectedSha256`) in `error.data`, in `account.test`
   results and in `SyncState.error`.
+- **1** (2026-09-27, compatible addition, status line): new
+  `SyncState.failedOutbox`, the account's outbox messages in state
+  `failed` (they never counted in `pendingOutbox`), in `sync.status`,
+  `account.list` and `notify.syncState`; a change of it alone sends
+  `notify.syncState` immediately (§5).

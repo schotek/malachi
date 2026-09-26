@@ -227,7 +227,8 @@ the strings and the confirmation dialogs.
 
 | On macOS | Instead of (GTK) | Why |
 |---|---|---|
-| One unified toolbar across the three panes, split by tracking separators; the window title is the selected folder's name | Three header bars with pane titles | The macOS window model; the menu bar duplicates every item |
+| One unified toolbar across the three panes, split by tracking separators; the window title is the selected folder's name, the subtitle its counts ("12 unread of 1234"), as in Mail | Three header bars with pane titles; the counts are the subtitle of the list's header bar (`Adw.WindowTitle`) | The macOS window model; the menu bar duplicates every item |
+| The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
 | A narrow window folds the sidebar (< 900 pt) and then the list (< 600 pt); *View → Show Sidebar* (⌃⌘S) and *Show Message List* (⌥⌘L) bring them back, and widening restores what folded by itself | Breakpoints with back navigation between panes | Decided; there is no navigation stack in AppKit's split view |
 | When the list pane is folded, its toolbar items merge into the message section | — | How tracking separators behave |
 | The sidebar is a native source list; account headings fold with the hover *Hide* / *Show* button | Custom rows with a fold arrow | Native look, decided |

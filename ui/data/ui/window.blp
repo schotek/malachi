@@ -84,22 +84,41 @@ Adw.ApplicationWindow main_window {
           }
         };
 
+        // One line for the state of every account (window/sync.go), or of
+        // the connection to the daemon while there is none; the icon shows
+        // only then. The line opens a popover with each account's state and
+        // action, and the daemon at the bottom (window/status.go). A screen
+        // reader reads the line itself, not the tooltip.
         [bottom]
-        Box {
-          orientation: vertical;
-          spacing: 4;
-          margin-start: 12;
-          margin-end: 12;
+        MenuButton status_button {
+          // TRANSLATORS: tooltip of the status line at the bottom of the
+          // folder list, which opens the state of every account.
+          tooltip-text: _("Sync Status");
+          direction: up;
+          margin-start: 6;
+          margin-end: 6;
           margin-top: 6;
           margin-bottom: 6;
-          // Sync progress of the accounts (filled from notify.syncState).
-          Box {
-            orientation: horizontal;
+
+          accessibility {
+            labelled-by: sync_label;
+          }
+
+          styles [
+            "flat",
+            "status-line",
+          ]
+
+          child: Box {
             spacing: 8;
 
             Adw.Spinner sync_spinner {
               visible: false;
               valign: center;
+            }
+
+            Image connection_icon {
+              visible: false;
             }
 
             Label sync_label {
@@ -112,29 +131,46 @@ Adw.ApplicationWindow main_window {
                 "dim-label",
               ]
             }
-          }
+          };
 
-          // Connection to the local daemon.
-          Box {
-            orientation: horizontal;
-            spacing: 8;
+          // Rows are built from Go, one per account (plus one for its
+          // unsent messages); status_daemon names the connected daemon.
+          // The clamp holds the width: a wrapping label asks for the width
+          // of its whole text, and the reasons in the rows are sentences.
+          popover: Popover status_popover {
+            child: Adw.Clamp {
+              maximum-size: 320;
+              tightening-threshold: 320;
 
-            Image connection_icon {
-              icon-name: "network-offline-symbolic";
-            }
+              child: Box {
+                orientation: vertical;
+                spacing: 12;
+                width-request: 320;
+                margin-start: 6;
+                margin-end: 6;
+                margin-top: 6;
+                margin-bottom: 6;
 
-            Label connection_status {
-              label: _("Connecting…");
-              ellipsize: end;
-              xalign: 0;
-              hexpand: true;
+                ListBox status_accounts {
+                  selection-mode: none;
 
-              styles [
-                "dim-label",
-                "caption",
-              ]
-            }
-          }
+                  styles [
+                    "boxed-list",
+                  ]
+                }
+
+                Label status_daemon {
+                  xalign: 0;
+                  wrap: true;
+
+                  styles [
+                    "caption",
+                    "dim-label",
+                  ]
+                }
+              };
+            };
+          };
         }
       };
     };
@@ -155,6 +191,13 @@ Adw.ApplicationWindow main_window {
           child: Adw.ToolbarView {
             [top]
             Adw.HeaderBar {
+              // The selected folder, and under it its unread and total
+              // counts (window/folders.go refreshListTitle); the page's
+              // own title follows for the back button of a collapsed view.
+              title-widget: Adw.WindowTitle list_title {
+                title: _("Inbox");
+              };
+
               [start]
               Button refresh_button {
                 icon-name: "view-refresh-symbolic";

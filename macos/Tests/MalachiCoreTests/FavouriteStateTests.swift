@@ -107,7 +107,7 @@ func pinned(_ keys: FolderKey...) -> FavouriteState {
         let (accounts, folders) = nestedAccount()
         var m = MailModel(accounts: accounts, folders: folders, favourites: pinned(FolderKey(account: "a", folder: "zulu")))
         m.rebuildEntries()
-        m.adjustUnread(FolderKey(account: "a", folder: "zulu"), -6)
+        m.adjustCounts(FolderKey(account: "a", folder: "zulu"), -6, 0)
 
         var rows = 0
         for e in m.entries where !e.header && e.folder?.id == "zulu" {

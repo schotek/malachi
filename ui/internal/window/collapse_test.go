@@ -219,7 +219,7 @@ func TestRefreshBadgesFollowsUnread(t *testing.T) {
 
 	// A new message lands in the hidden grandchild: the visible ancestor's
 	// badge has to move even though the folder itself has no row.
-	m.adjustUnread(folderKey{Account: "a", Folder: "old"}, 1)
+	m.adjustCounts(folderKey{Account: "a", Folder: "old"}, 1, 1)
 	work, _ := entryByID(m.entries, "work")
 	if work.Badge != 15 {
 		t.Errorf("Work badge = %d, want 15 after the hidden grandchild gained one", work.Badge)

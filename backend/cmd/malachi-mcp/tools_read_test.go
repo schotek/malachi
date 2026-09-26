@@ -281,7 +281,7 @@ func TestGetAttachmentTextPaging(t *testing.T) {
 func TestSyncStatusAndTrigger(t *testing.T) {
 	h := newHarness(t, newFixture(), false, false)
 	out := h.ok(t, "sync_status", nil)
-	mustContain(t, out, `"status": "error"`, `"pendingOutbox": 1`, `"error": "networkError: dial failed"`)
+	mustContain(t, out, `"status": "error"`, `"pendingOutbox": 1`, `"failedOutbox": 2`, `"error": "networkError: dial failed"`)
 
 	out = h.ok(t, "trigger_sync", map[string]any{"accountId": "a1", "folderId": "f_in", "full": true})
 	mustContain(t, out, "sync triggered for account a1, folder f_in (full=true)")

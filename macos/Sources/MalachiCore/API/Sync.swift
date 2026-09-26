@@ -20,10 +20,13 @@ public struct SyncState: Codable, Sendable, Equatable {
     public var error: RPCError?
     /// Outbox messages in state queued or sending.
     public var pendingOutbox: Int
+    /// Outbox messages in state failed: delivery gave up and they wait for
+    /// outbox.retry or a delete. They never count in `pendingOutbox`.
+    public var failedOutbox: Int
 
     public init(
         accountId: AccountID, status: SyncStatus, folderId: FolderID? = nil, progress: Int = -1,
-        lastSync: Date? = nil, error: RPCError? = nil, pendingOutbox: Int = 0
+        lastSync: Date? = nil, error: RPCError? = nil, pendingOutbox: Int = 0, failedOutbox: Int = 0
     ) {
         self.accountId = accountId
         self.status = status
@@ -32,6 +35,27 @@ public struct SyncState: Codable, Sendable, Equatable {
         self.lastSync = lastSync
         self.error = error
         self.pendingOutbox = pendingOutbox
+        self.failedOutbox = failedOutbox
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case accountId, status, folderId, progress, lastSync, error, pendingOutbox, failedOutbox
+    }
+
+    /// The synthesised decoding would refuse a state without
+    /// `failedOutbox` (a daemon from before the field); it is 0 then.
+    /// Everything else decodes as before. The encoding stays synthesised
+    /// and always writes the key.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        accountId = try c.decode(AccountID.self, forKey: .accountId)
+        status = try c.decode(SyncStatus.self, forKey: .status)
+        folderId = try c.decodeIfPresent(FolderID.self, forKey: .folderId)
+        progress = try c.decode(Int.self, forKey: .progress)
+        lastSync = try c.decodeIfPresent(Date.self, forKey: .lastSync)
+        error = try c.decodeIfPresent(RPCError.self, forKey: .error)
+        pendingOutbox = try c.decode(Int.self, forKey: .pendingOutbox)
+        failedOutbox = try c.decodeIfPresent(Int.self, forKey: .failedOutbox) ?? 0
     }
 }
 

@@ -301,6 +301,26 @@ public func folderTitle(_ f: Folder) -> String {
     }
 }
 
+/// The counts under the list title, the window's subtitle here (folders.go
+/// `folderCountsText`): the folder's unread and total counts, whatever the
+/// list filter or grouping shows. An empty folder (or one the daemon never
+/// downloads) has none, and a folder with nothing unread, or the outbox,
+/// only its total.
+public func folderCountsText(_ f: Folder) -> String {
+    if f.total <= 0 {
+        return ""
+    }
+    if f.role == .outbox || f.unread <= 0 {
+        // TRANSLATORS: subtitle of the message list; %d is the number of
+        // messages in the folder.
+        return L10n.N("%d message", "%d messages", f.total)
+    }
+    // TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
+    // the first %d is the number of unread messages (the plural follows
+    // it), the second the number of all messages in the folder.
+    return L10n.N("%d unread of %d", "%d unread of %d", f.unread, f.unread, f.total)
+}
+
 /// `initialFolder` over the rows of one section (model.go `firstFolder`):
 /// the Favourites rows when `favourite` is set, the tree rows otherwise. The
 /// first Inbox wins, else the first selectable folder.

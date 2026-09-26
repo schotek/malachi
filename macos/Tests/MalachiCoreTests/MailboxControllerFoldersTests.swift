@@ -35,6 +35,8 @@ private final class Log {
     var outboxRefreshes: [AccountID] = []
     var collapses = 0
     var banners: [(account: AccountID?, title: String?, button: String?)] = []
+    /// [title, subtitle] per onListTitleChanged.
+    var titles: [[String]] = []
 }
 
 /// A fixture, a connected client and a controller over a throwaway
@@ -77,6 +79,7 @@ private final class Harness {
         mailbox.onNewMessageForList = { log.listInserts.append($0) }
         mailbox.refreshOutboxViews = { log.outboxRefreshes.append($0) }
         mailbox.collapseLoading = { log.collapses += 1 }
+        mailbox.onListTitleChanged = { title, subtitle in log.titles.append([title, subtitle]) }
         sync.onAuthBanner = { acc, title, button in log.banners.append((acc, title, button)) }
         if connect {
             try await self.connect()
@@ -153,8 +156,12 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         #expect(await h.fixture.callCount(API.FolderList.name) == 2)
         #expect(await h.fixture.callCount(API.SyncStatus.name) == 1)
         #expect(h.log.toasts.isEmpty)
-        // The footer follows the account.list states (all idle).
+        // The footer follows the account.list states (all idle), and the
+        // line knows the connection.
         #expect(h.sync.footer.text == "Up to date")
+        #expect(h.sync.line == StatusLine(text: "Up to date", active: true, daemon: "Connected to malachid fake (pid 7)"))
+        // The window title: the Inbox, without counts (it has no total).
+        #expect(h.log.titles.last == ["Inbox", ""])
     }
 
     @Test func singleAccountHasNoHeadersUntilAFavourite() async throws {
@@ -519,18 +526,20 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         try await h.settle(rebuilds: 1)
         #expect(entryByID(h.mailbox.model.entries, "inbox")?.badge == 2)
 
-        // For another folder than the listed one: only the badge moves, and
-        // only for an unseen message.
+        // For another folder than the listed one: only the counts move, the
+        // total always, the badge only for an unseen message.
         let zeta = FolderKey(account: "acc1", folder: "zeta")
         var s = summary("m1")
         h.mailbox.handleNewMessage(NewMessageNotification(accountId: "acc1", folderId: "zeta", message: s))
         #expect(entryByID(h.mailbox.model.entries, "zeta")?.badge == 1)
         #expect(h.mailbox.model.folder(zeta)?.unread == 1)
+        #expect(h.mailbox.model.folder(zeta)?.total == 1)
         #expect(h.log.badgeRefreshes == 1)
         #expect(h.log.listInserts.isEmpty)
         h.mailbox.handleNewMessage(NewMessageNotification(accountId: "acc1", folderId: "zeta", message: summary("m2", .seen)))
         #expect(entryByID(h.mailbox.model.entries, "zeta")?.badge == 1)
-        #expect(h.log.badgeRefreshes == 1)
+        #expect(h.mailbox.model.folder(zeta)?.total == 2, "a read message counts in the total")
+        #expect(h.log.badgeRefreshes == 2)
 
         // For the listed folder the list gets it first (with the ids filled
         // in); once it holds the message a second delivery changes nothing.
@@ -547,12 +556,14 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.mailbox.handleNewMessage(NewMessageNotification(accountId: "acc1", folderId: "inbox", message: s))
         #expect(h.log.listInserts.count == 1)
         #expect(entryByID(h.mailbox.model.entries, "inbox")?.badge == 3)
-        #expect(h.log.badgeRefreshes == 2)
-
-        // The list half's own adjustments go through the same refresh.
-        h.mailbox.adjustUnread(inbox1, -3)
-        #expect(entryByID(h.mailbox.model.entries, "inbox")?.badge == 0)
         #expect(h.log.badgeRefreshes == 3)
+        #expect(h.mailbox.model.folder(inbox1)?.total == 1)
+
+        // The actions' own adjustments go through the same refresh.
+        h.mailbox.adjustCounts(inbox1, -3, 0)
+        #expect(entryByID(h.mailbox.model.entries, "inbox")?.badge == 0)
+        #expect(h.log.badgeRefreshes == 4)
+        #expect(h.mailbox.model.folder(inbox1)?.total == 1)
     }
 
     @Test func notificationsArriveThroughTheSocket() async throws {
@@ -589,6 +600,7 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.mailbox.handleConnection(.unavailable("gone"))
         #expect(h.mailbox.model.foldersGen == gen + 1)
         #expect(h.log.collapses == 1)
+        #expect(h.sync.line == StatusLine(text: "Backend unavailable", icon: "network-offline-symbolic"))
         try await Task.sleep(for: .milliseconds(400))
         #expect(h.log.rebuilds == 0, "the folder.list replies of the dead connection were dropped")
         #expect(h.mailbox.model.folders.isEmpty)
@@ -600,5 +612,117 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         h.mailbox.handleConnection(.infoFailed("x"))
         try await h.settle(rebuilds: 1)
         #expect(h.mailbox.model.selected == inbox1)
+    }
+
+    /// window.go `refreshListTitle`: the selected folder's name over its
+    /// counts, from every place the selection or the cached counts change
+    /// (selectFolder in both branches, updateFolderRow, rebuildFolderList).
+    @Test func listTitleFollowsTheSelectionAndTheCounts() async throws {
+        let inbox = testFolder("in", path: "INBOX", role: .inbox, unread: 2, total: 10)
+        let archive = testFolder("arch", path: "Archive", role: .archive, total: 3)
+        let outbox = testFolder("out", path: "Outbox", role: .outbox, total: 1)
+        let h = try await Harness(accounts: [testAccount("a")], folders: ["a": [inbox, archive, outbox]])
+        defer { Task { await h.stop() } }
+        try await h.settle(rebuilds: 1)
+        #expect(h.log.titles.last == ["Inbox", "2 unread of 10"])
+        #expect(h.mailbox.selectedFolderSubtitle == "2 unread of 10")
+
+        let arch = FolderKey(account: "a", folder: "arch")
+        h.mailbox.selectFolder(arch, fav: false)
+        #expect(h.log.titles.last == ["Archive", "3 messages"])
+        // Selecting it again only re-highlights, and says the title again.
+        let said = h.log.titles.count
+        h.mailbox.selectFolder(arch, fav: false)
+        #expect(h.log.titles.count == said + 1)
+        #expect(h.log.titles.last == ["Archive", "3 messages"])
+
+        // A new message, and the actions' bookkeeping.
+        h.mailbox.handleNewMessage(NewMessageNotification(accountId: "a", folderId: "arch", message: summary("n1")))
+        #expect(h.log.titles.last == ["Archive", "1 unread of 4"])
+        h.mailbox.moveCounts(arch, FolderKey(account: "a", folder: "in"), 1, 2)
+        #expect(h.log.titles.last == ["Archive", "2 messages"])
+        #expect(h.mailbox.model.folder(FolderKey(account: "a", folder: "in"))?.total == 12)
+
+        // The outbox counts what is to be sent.
+        h.mailbox.selectFolder(FolderKey(account: "a", folder: "out"), fav: false)
+        #expect(h.log.titles.last == ["Outbox", "1 message"])
+
+        // Nothing selected any more: "Messages" and no counts.
+        await h.fixture.setAccounts([])
+        h.mailbox.handleAccountsChanged()
+        try await h.settle(rebuilds: 2)
+        #expect(h.log.titles.last == ["Messages", ""])
+        #expect(h.mailbox.selectedFolderSubtitle == "")
+    }
+
+    /// sync.go `applySyncState`: a change of failedOutbox reloads the
+    /// outbox as a change of pendingOutbox does; an account's first state
+    /// is no move (its folders came with the accounts).
+    @Test func failedOutboxChangesReloadTheOutbox() async throws {
+        let inbox = testFolder("in", path: "INBOX", role: .inbox)
+        let outbox = testFolder("out", path: "Outbox", role: .outbox, total: 1)
+        let h = try await Harness(accounts: [testAccount("a")], folders: ["a": [inbox, outbox]])
+        defer { Task { await h.stop() } }
+        try await h.settle(rebuilds: 1)
+
+        h.mailbox.handleSyncState(SyncState(accountId: "a", status: .idle, failedOutbox: 1))
+        #expect(h.sync.footer == .init(text: "1 message not sent", spinning: false))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(h.log.outboxRefreshes.isEmpty, "the first state is no move")
+
+        h.mailbox.handleSyncState(SyncState(accountId: "a", status: .idle, failedOutbox: 2))
+        try await waitUntil { h.log.outboxRefreshes == ["a"] }
+        #expect(h.sync.footer.text == "2 messages not sent")
+
+        // Unchanged counts: nothing.
+        h.mailbox.handleSyncState(SyncState(accountId: "a", status: .syncing, failedOutbox: 2))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(h.log.outboxRefreshes == ["a"])
+        // A failed message dropped: pending stays 0, failed moves.
+        h.mailbox.handleSyncState(SyncState(accountId: "a", status: .syncing, failedOutbox: 0))
+        try await waitUntil { h.log.outboxRefreshes == ["a", "a"] }
+    }
+
+    /// sync.go `triggerAccountSync`: Check and Try Again in the status
+    /// popover ask for one whole account.
+    @Test func triggerSyncForOneAccount() async throws {
+        let (accounts, folders) = testAccounts()
+        let h = try await Harness(accounts: accounts, folders: folders)
+        defer { Task { await h.stop() } }
+        try await h.settle(rebuilds: 1)
+
+        h.mailbox.triggerSync(accountId: "acc2")
+        #expect(h.sync.footer == .init(text: "Checking for new mail…", spinning: true))
+        var tries = 0
+        while await h.fixture.triggers.isEmpty, tries < 200 {
+            tries += 1
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await h.fixture.triggers == [SyncTriggerParams(accountId: "acc2")])
+    }
+
+    /// status.go `showOutbox`: the popover's link to unsent messages
+    /// selects the account's outbox like a click on its tree row; a paused
+    /// account's outbox, or a missing one, is not shown.
+    @Test func showOutboxSelectsTheOutbox() async throws {
+        let inbox = testFolder("in", path: "INBOX", role: .inbox)
+        let outbox = testFolder("out", path: "Outbox", role: .outbox, total: 1)
+        let accounts = [testAccount("a"), testAccount("p", enabled: false), testAccount("n")]
+        let h = try await Harness(
+            accounts: accounts, folders: ["a": [inbox, outbox], "p": [outbox], "n": [testFolder("in2", path: "INBOX", role: .inbox)]])
+        defer { Task { await h.stop() } }
+        try await h.settle(rebuilds: 1)
+        #expect(h.mailbox.model.selected == FolderKey(account: "a", folder: "in"))
+        h.mailbox.selectFolder(FolderKey(account: "a", folder: "in"), fav: true)
+
+        #expect(h.mailbox.showOutbox("a"))
+        #expect(h.mailbox.model.selected == FolderKey(account: "a", folder: "out"))
+        #expect(!h.mailbox.model.selectedFav, "the tree's row, not a pinned one")
+        #expect(h.log.reloads == 2)
+
+        #expect(!h.mailbox.showOutbox("p"), "paused")
+        #expect(!h.mailbox.showOutbox("n"), "no outbox")
+        #expect(!h.mailbox.showOutbox("zzz"), "unknown account")
+        #expect(h.mailbox.model.selected == FolderKey(account: "a", folder: "out"))
     }
 }

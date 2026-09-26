@@ -176,7 +176,7 @@ final class ScratchSettings {
 
         // A new message lands in the hidden grandchild: the visible ancestor's
         // badge has to move even though the folder itself has no row.
-        m.adjustUnread(FolderKey(account: "a", folder: "old"), 1)
+        m.adjustCounts(FolderKey(account: "a", folder: "old"), 1, 1)
         #expect(entryByID(m.entries, "work")?.badge == 15, "Work badge after the hidden grandchild gained one")
     }
 

@@ -74,6 +74,12 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	// Every icon of the sidebar at once: the folder icons, the fold arrows of
 	// rows and headings alike, and the stars.
 	b.WriteString("list.folder-list image { -gtk-icon-size: 14px; }\n")
+	// The status line at the bottom of the sidebar (window.blp) is a menu
+	// button that opens the accounts' states, but it reads as a line of
+	// text: the button loses the height and padding a stand-alone one
+	// claims and the bold weight Adwaita gives buttons, and its label keeps
+	// to the left over the full width (hexpand and xalign in window.blp).
+	b.WriteString("menubutton.status-line > button { min-height: 0; padding: 4px 6px; font-weight: normal; }\n")
 	// The fold arrow and the pin star of a sidebar row. A default button
 	// would push the row past the height above, so both are squeezed to the
 	// size of their icon.

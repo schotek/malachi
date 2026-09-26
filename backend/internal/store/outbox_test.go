@@ -630,6 +630,87 @@ func TestOutboxListOrderDeferReset(t *testing.T) {
 	}
 }
 
+// OutboxCounts follows every transition: pending is CountOutbox, failed
+// counts the entries delivery gave up on until a retry or a delete, and a
+// sent entry counts as neither.
+func TestOutboxCounts(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	trash := seedFolder(t, s, "acc", "Trash", api.RoleTrash)
+	counts := func(what string, account string, wantPending, wantFailed int) {
+		t.Helper()
+		pending, failed, err := s.OutboxCounts(ctx, account)
+		if err != nil || pending != wantPending || failed != wantFailed {
+			t.Errorf("%s: counts = %d pending, %d failed, %v; want %d, %d", what, pending, failed, err, wantPending, wantFailed)
+		}
+		if n, _ := s.CountOutbox(ctx, account); n != pending {
+			t.Errorf("%s: CountOutbox = %d, OutboxCounts pending = %d", what, n, pending)
+		}
+	}
+	fail := func(id string) {
+		t.Helper()
+		if err := s.MarkOutboxSending(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.MarkOutboxFailed(ctx, id, api.CodeServerError, "550 no"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	counts("empty", "acc", 0, 0)
+	one, _ := seedOutbox(t, s, "acc")
+	two, _ := seedOutbox(t, s, "acc")
+	three, _ := seedOutbox(t, s, "acc")
+	seedOutbox(t, s, "other")
+	counts("queued", "acc", 3, 0)
+	counts("other account", "other", 1, 0)
+	counts("unknown account", "nobody", 0, 0)
+
+	if err := s.MarkOutboxSending(ctx, one.ID); err != nil {
+		t.Fatal(err)
+	}
+	counts("sending", "acc", 3, 0)
+	if err := s.MarkOutboxFailed(ctx, one.ID, api.CodeServerError, "550 no"); err != nil {
+		t.Fatal(err)
+	}
+	counts("one failed", "acc", 2, 1)
+	fail(two.ID)
+	counts("two failed", "acc", 1, 2)
+	counts("other account untouched", "other", 1, 0)
+
+	// A retry moves it back to pending.
+	if err := s.RetryOutbox(ctx, "acc", one.ID); err != nil {
+		t.Fatal(err)
+	}
+	counts("after retry", "acc", 2, 1)
+
+	// A delivered entry is neither.
+	if err := s.MarkOutboxSending(ctx, three.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkOutboxSent(ctx, three.ID); err != nil {
+		t.Fatal(err)
+	}
+	counts("after sent", "acc", 1, 1)
+
+	// Deleting a failed entry (message.delete, permanent or through the
+	// Trash) takes it off the count; so does the worker's clean-up.
+	if err := s.DeleteMessages(ctx, "acc", []string{two.ID}); err != nil {
+		t.Fatal(err)
+	}
+	counts("failed deleted", "acc", 1, 0)
+	fail(one.ID)
+	counts("failed again", "acc", 0, 1)
+	if err := s.TrashMessages(ctx, "acc", []string{one.ID}, trash.ID); err != nil {
+		t.Fatal(err)
+	}
+	counts("failed trashed", "acc", 0, 0)
+	if err := s.DeleteOutboxMessage(ctx, "acc", three.ID); err != nil {
+		t.Fatal(err)
+	}
+	counts("sent cleaned up", "acc", 0, 0)
+}
+
 func mustList(t *testing.T, s *Store, account string) []OutboxEntry {
 	t.Helper()
 	list, err := s.ListOutbox(context.Background(), account, OutboxQueued, time.Now())

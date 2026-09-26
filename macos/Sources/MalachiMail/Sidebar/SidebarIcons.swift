@@ -4,9 +4,8 @@
 import AppKit
 
 /// The GTK icon names the sidebar receives from the core (`roleIcon`, the
-/// status pages, the connection line) mapped to SF Symbols, per the plan's
-/// icon table. Private to the sidebar; the app shell's shared `Icons` may
-/// replace it once it exists.
+/// status pages) mapped to SF Symbols, per the plan's icon table. Private
+/// to the sidebar; the app shell's shared `Icons` may replace it.
 enum SidebarIcons {
     /// The symbol for a GTK icon name; nil for an empty name (no icon) or
     /// one the sidebar never shows.
@@ -21,9 +20,6 @@ enum SidebarIcons {
         case "folder-symbolic": return "folder"
         case "system-users-symbolic": return "person.2"
         case "dialog-warning-symbolic": return "exclamationmark.triangle"
-        case "network-idle-symbolic": return "arrow.triangle.2.circlepath"
-        case "network-transmit-receive-symbolic": return "network"
-        case "network-offline-symbolic": return "network.slash"
         case "non-starred-symbolic": return "star"
         case "starred-symbolic": return "star.fill"
         default: return nil
@@ -67,10 +63,4 @@ enum SidebarMetrics {
     static let cellSpacing: CGFloat = 6
     /// `transition: opacity 150ms` of the star.
     static let starFade: TimeInterval = 0.15
-    /// The footer (window.blp): spacing 4, margins 12/12/6/6, 8 between icon
-    /// and label, 16 px spinner and icon.
-    static let footerSpacing: CGFloat = 4
-    static let footerLineSpacing: CGFloat = 8
-    static let footerInsets = NSEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
-    static let footerIconSize: CGFloat = 16
 }

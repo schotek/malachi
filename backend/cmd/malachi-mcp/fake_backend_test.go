@@ -524,7 +524,7 @@ func newFixture() *fakeBackend {
 			"m1/13": {PartID: "13", ContentType: "image/png", Filename: "svgbytes.png", Size: 60, Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`)},
 		},
 		states: []api.SyncState{{
-			AccountID: fxAccount, Status: api.SyncError, Progress: -1, PendingOutbox: 1,
+			AccountID: fxAccount, Status: api.SyncError, Progress: -1, PendingOutbox: 1, FailedOutbox: 2,
 			Error: api.NewError(api.CodeNetworkError, "dial failed"),
 		}},
 		quoteForm: map[api.MessageID]api.QuoteForm{},

@@ -174,3 +174,27 @@ func TestSortFoldersIgnoresFoldersOfUnknownAccounts(t *testing.T) {
 		t.Errorf("got %v", got)
 	}
 }
+
+func TestFolderCountsText(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		f    api.Folder
+		want string
+	}{
+		{"empty", api.Folder{Role: api.RoleInbox}, ""},
+		{"unsynced", api.Folder{Role: api.RoleAll, Synced: false}, ""},
+		{"inconsistent unread without total", api.Folder{Unread: 3}, ""},
+		{"one read message", api.Folder{Total: 1}, "1 message"},
+		{"only read messages", api.Folder{Total: 1234}, "1234 messages"},
+		{"one unread", api.Folder{Unread: 1, Total: 1234}, "1 unread of 1234"},
+		{"several unread", api.Folder{Unread: 12, Total: 1234}, "12 unread of 1234"},
+		{"all unread", api.Folder{Unread: 2, Total: 2}, "2 unread of 2"},
+		// The outbox holds what is to be sent, not mail to read.
+		{"outbox", api.Folder{Role: api.RoleOutbox, Unread: 1, Total: 2}, "2 messages"},
+		{"outbox of one", api.Folder{Role: api.RoleOutbox, Total: 1}, "1 message"},
+	} {
+		if got := folderCountsText(c.f); got != c.want {
+			t.Errorf("%s: folderCountsText = %q, want %q", c.name, got, c.want)
+		}
+	}
+}

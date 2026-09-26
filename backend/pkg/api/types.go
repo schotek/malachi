@@ -1064,7 +1064,8 @@ type DraftOpenResult struct {
 // MessageSendParams queues a saved draft for delivery. Delivery is
 // asynchronous: the result only confirms enqueueing. The queued message
 // lives in the account's outbox folder; SyncState.PendingOutbox counts it
-// and MessageSummary.Outbox carries its state and last error.
+// (SyncState.FailedOutbox once delivery gave up) and MessageSummary.Outbox
+// carries its state and last error.
 type MessageSendParams struct {
 	AccountID AccountID `json:"accountId"`
 	DraftID   DraftID   `json:"draftId"`
@@ -1190,6 +1191,9 @@ type SyncState struct {
 	Error    *Error     `json:"error,omitempty"`
 	// PendingOutbox counts outbox messages in state queued or sending.
 	PendingOutbox int `json:"pendingOutbox"`
+	// FailedOutbox counts outbox messages in state failed: delivery gave
+	// up and waits for outbox.retry or a delete.
+	FailedOutbox int `json:"failedOutbox"`
 }
 
 type SyncStatusParams struct {

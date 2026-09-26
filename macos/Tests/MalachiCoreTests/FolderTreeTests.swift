@@ -132,4 +132,23 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         ]
         #expect(ids(sortFolders(accounts, folders, CollapseState(), FavouriteState())) == ["in@0"])
     }
+
+    @Test func folderCountsTextTest() {
+        let cases: [(String, Folder, String)] = [
+            ("empty", testFolder("in", path: "INBOX", role: .inbox), ""),
+            ("unsynced", testFolder("all", path: "All Mail", role: .all, synced: false), ""),
+            ("inconsistent unread without total", testFolder("f", path: "f", unread: 3), ""),
+            ("one read message", testFolder("f", path: "f", total: 1), "1 message"),
+            ("only read messages", testFolder("f", path: "f", total: 1234), "1234 messages"),
+            ("one unread", testFolder("f", path: "f", unread: 1, total: 1234), "1 unread of 1234"),
+            ("several unread", testFolder("f", path: "f", unread: 12, total: 1234), "12 unread of 1234"),
+            ("all unread", testFolder("f", path: "f", unread: 2, total: 2), "2 unread of 2"),
+            // The outbox holds what is to be sent, not mail to read.
+            ("outbox", testFolder("out", path: "Outbox", role: .outbox, unread: 1, total: 2), "2 messages"),
+            ("outbox of one", testFolder("out", path: "Outbox", role: .outbox, total: 1), "1 message"),
+        ]
+        for (name, f, want) in cases {
+            #expect(folderCountsText(f) == want, "\(name): folderCountsText = \(folderCountsText(f))")
+        }
+    }
 }

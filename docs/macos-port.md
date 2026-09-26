@@ -77,8 +77,9 @@ out: the contract is the socket and the document, not a Go package.
 Within `MalachiCore`, `Controllers/` is the layer that talks to the
 daemon: `ConnectionController` (the reconnect loop and the protocol
 check), `MailboxController` (accounts, folders, the list and its threads),
-`SyncController` (the footer's status line from `sync.status` and
-`notify.syncState`), `MessageCache` (`message.get`/`message.body`/
+`SyncController` (the status line from `sync.status`, `notify.syncState`
+and the connection, the rows of its popover, the sign-in and certificate
+banners), `MessageCache` (`message.get`/`message.body`/
 `message.part` with a bounded cache), `ActionsController` (flags, moves,
 trash, archive, junk, outbox retry, remote images, trusted senders,
 reply/forward through `draft.create`), `ComposeController` and
@@ -129,10 +130,12 @@ the Go file behind it (`ui/internal/window`, `compose`, `accountwizard`,
 
 Where macOS conventions win, the deviation is deliberate, small and
 listed in the table in [macos/README.md](../macos/README.md#differences-from-the-gtk-ui)
-(the unified toolbar, pane folding without back navigation, Settings
-without search, ⌥⌘↑/↓ for reordering, the ⌘R setting, `NSAlert` button
-order, the quarantine attribute on attachments, the *Glass* sound). A new
-deviation goes into that table, not silently into the code.
+(the unified toolbar with the folder's counts as the window subtitle, pane
+folding without back navigation, the status bar across the bottom of the
+window, Settings without search, ⌥⌘↑/↓ for reordering, the ⌘R setting,
+`NSAlert` button order, the quarantine attribute on attachments, the
+*Glass* sound). A new deviation goes into that table, not silently into
+the code.
 
 ## 4. The API layer
 

@@ -13,7 +13,7 @@ import MalachiCore
 /// key (`apply(rows:hint:)`) and sends the clicks and keys back. It
 /// installs the view-facing callbacks of the list controller and the sync
 /// controller's `onAuthBanner`; the connection state is pushed in by the
-/// app through `showConnectionState`, as for the sidebar.
+/// app through `showConnectionState`.
 @MainActor
 final class MessageListViewController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     let list: ListController

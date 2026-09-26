@@ -201,7 +201,8 @@ func (s *Syncer) setState(mut func(st *api.SyncState)) {
 }
 
 func sameState(a, b api.SyncState) bool {
-	if a.Status != b.Status || a.FolderID != b.FolderID || a.Progress != b.Progress || a.PendingOutbox != b.PendingOutbox {
+	if a.Status != b.Status || a.FolderID != b.FolderID || a.Progress != b.Progress ||
+		a.PendingOutbox != b.PendingOutbox || a.FailedOutbox != b.FailedOutbox {
 		return false
 	}
 	if (a.LastSync == nil) != (b.LastSync == nil) || (a.LastSync != nil && !a.LastSync.Equal(*b.LastSync)) {

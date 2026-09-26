@@ -523,7 +523,7 @@ func (b *bridge) registerSendTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "send_message",
 		Description: "Queue a draft created by create_draft in this session for sending. Other drafts are refused. " +
-			"Delivery is asynchronous; watch sync_status.pendingOutbox. Send only what the user asked to send in this conversation, after showing them the recipients.",
+			"Delivery is asynchronous; watch sync_status.pendingOutbox (still to be delivered) and failedOutbox (delivery failed). Send only what the user asked to send in this conversation, after showing them the recipients.",
 		Annotations: annSend(),
 	}, b.sendMessage)
 }
@@ -554,6 +554,6 @@ func (b *bridge) sendMessage(ctx context.Context, _ *mcp.CallToolRequest, in sen
 		return toolError(err), nil, nil
 	}
 	b.drafts.remove(id)
-	return textResult(fmt.Sprintf("queued as outbox message %s in account %s; delivery is asynchronous, watch sync_status.pendingOutbox or list_messages on the folder with role outbox",
+	return textResult(fmt.Sprintf("queued as outbox message %s in account %s; delivery is asynchronous, watch sync_status.pendingOutbox and failedOutbox or list_messages on the folder with role outbox",
 		res.OutboxID, d.accountID)), nil, nil
 }

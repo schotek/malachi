@@ -306,11 +306,11 @@ func TestModelFolders(t *testing.T) {
 		t.Errorf("enabledAccounts: %+v", got)
 	}
 
-	m.adjustUnread(k, -5)
+	m.adjustCounts(k, -5, 0)
 	if f, _ := m.folder(k); f.Unread != 0 {
 		t.Errorf("floor: %d", f.Unread)
 	}
-	m.adjustUnread(k, 3)
+	m.adjustCounts(k, 3, 0)
 	if f, _ := m.folder(k); f.Unread != 3 {
 		t.Errorf("adjust: %d", f.Unread)
 	}
@@ -319,7 +319,128 @@ func TestModelFolders(t *testing.T) {
 			t.Errorf("entry not updated: %d", e.Folder.Unread)
 		}
 	}
-	m.adjustUnread(folderKey{Account: "acc1", Folder: "nope"}, 1) // no panic
+	m.adjustCounts(folderKey{Account: "acc1", Folder: "nope"}, 1, 1) // no panic
+}
+
+// countsModel is one account with an inbox, a trash, an outbox and an
+// All Mail the daemon never downloads.
+func countsModel() *mailModel {
+	accounts := []api.Account{
+		{ID: "a", Enabled: true, Config: api.AccountConfig{Email: "a@example.invalid"}},
+		{ID: "p", Enabled: false, Config: api.AccountConfig{Email: "p@example.invalid"}},
+	}
+	folders := map[api.AccountID][]api.Folder{
+		"a": {
+			{ID: "in", Path: "INBOX", Role: api.RoleInbox, Selectable: true, Synced: true, Unread: 2, Total: 10},
+			{ID: "trash", Path: "Trash", Role: api.RoleTrash, Selectable: true, Synced: true, Unread: 0, Total: 1},
+			{ID: "out", Path: "Outbox", Role: api.RoleOutbox, Selectable: true, Synced: true, Total: 1},
+			{ID: "all", Path: "All Mail", Role: api.RoleAll, Selectable: true, Synced: false},
+		},
+		"p": {
+			{ID: "pout", Path: "Outbox", Role: api.RoleOutbox, Selectable: true, Synced: true, Total: 2},
+		},
+	}
+	m := &mailModel{accounts: accounts, folders: folders, collapsed: newCollapseState(), favourites: newFavouriteState()}
+	m.rebuildEntries()
+	return m
+}
+
+// counts is the cached unread and total of folder id of account "a", and
+// whether the sidebar entry agrees.
+func counts(m *mailModel, id api.FolderID) (unread, total int, entryAgrees bool) {
+	f, _ := m.folder(folderKey{Account: "a", Folder: id})
+	entryAgrees = true
+	for _, e := range m.entries {
+		if !e.Header && e.Account.ID == "a" && e.Folder.ID == id {
+			entryAgrees = e.Folder.Unread == f.Unread && e.Folder.Total == f.Total && e.Badge == f.Unread
+		}
+	}
+	return f.Unread, f.Total, entryAgrees
+}
+
+func TestAdjustCounts(t *testing.T) {
+	m := countsModel()
+	in := folderKey{Account: "a", Folder: "in"}
+	m.adjustCounts(in, 1, 1)
+	if u, n, ok := counts(m, "in"); u != 3 || n != 11 || !ok {
+		t.Errorf("up: %d/%d entry %v", u, n, ok)
+	}
+	// Both counts stop at zero, each on its own.
+	m.adjustCounts(in, -5, -1)
+	if u, n, ok := counts(m, "in"); u != 0 || n != 10 || !ok {
+		t.Errorf("unread floor: %d/%d entry %v", u, n, ok)
+	}
+	m.adjustCounts(in, 0, -50)
+	if u, n, ok := counts(m, "in"); u != 0 || n != 0 || !ok {
+		t.Errorf("total floor: %d/%d entry %v", u, n, ok)
+	}
+}
+
+func TestMoveCounts(t *testing.T) {
+	src := folderKey{Account: "a", Folder: "in"}
+	trash := folderKey{Account: "a", Folder: "trash"}
+	cases := []struct {
+		name        string
+		src, target folderKey
+		unread, n   int
+		srcU, srcN  int
+		dstID       api.FolderID
+		dstU, dstN  int
+	}{
+		{"to trash", src, trash, 1, 3, 1, 7, "trash", 1, 4},
+		// Read messages still move the totals.
+		{"read only", src, trash, 0, 2, 2, 8, "trash", 0, 3},
+		// Leaving the store: only the source changes.
+		{"expunged", src, folderKey{}, 1, 1, 1, 9, "trash", 0, 1},
+		// All Mail is never downloaded: it counts nothing, before or after.
+		{"to an unsynced folder", src, folderKey{Account: "a", Folder: "all"}, 2, 2, 0, 8, "all", 0, 0},
+		// The outbox keeps its total (and so its row) until it is reloaded.
+		{"from the outbox", folderKey{Account: "a", Folder: "out"}, folderKey{}, 0, 1, 0, 1, "trash", 0, 1},
+	}
+	for _, c := range cases {
+		m := countsModel()
+		m.moveCounts(c.src, c.target, c.unread, c.n)
+		if u, n, ok := counts(m, c.src.Folder); u != c.srcU || n != c.srcN || !ok {
+			t.Errorf("%s: source %d/%d entry %v, want %d/%d", c.name, u, n, ok, c.srcU, c.srcN)
+		}
+		if u, n, ok := counts(m, c.dstID); u != c.dstU || n != c.dstN || !ok {
+			t.Errorf("%s: %s %d/%d entry %v, want %d/%d", c.name, c.dstID, u, n, ok, c.dstU, c.dstN)
+		}
+		// The undo of a failed move puts everything back.
+		m.moveCounts(c.src, c.target, -c.unread, -c.n)
+		fresh := countsModel()
+		for _, id := range []api.FolderID{"in", "trash", "out", "all"} {
+			u, n, _ := counts(m, id)
+			wu, wn, _ := counts(fresh, id)
+			if u != wu || n != wn {
+				t.Errorf("%s: undo left %s at %d/%d, want %d/%d", c.name, id, u, n, wu, wn)
+			}
+		}
+	}
+	// The outbox row stays listed while the move is pending.
+	m := countsModel()
+	m.moveCounts(folderKey{Account: "a", Folder: "out"}, folderKey{}, 0, 1)
+	if !m.folderListed(folderKey{Account: "a", Folder: "out"}) {
+		t.Error("the outbox row went with its last message")
+	}
+}
+
+func TestOutboxKey(t *testing.T) {
+	m := countsModel()
+	if k, ok := m.outboxKey("a"); !ok || k != (folderKey{Account: "a", Folder: "out"}) {
+		t.Errorf("enabled: %+v %v", k, ok)
+	}
+	// A paused account's folders are not shown (nor, normally, loaded).
+	if k, ok := m.outboxKey("p"); ok {
+		t.Errorf("paused: %+v", k)
+	}
+	if _, ok := m.outboxKey("zzz"); ok {
+		t.Error("unknown account")
+	}
+	m.folders["a"] = m.folders["a"][:2]
+	if _, ok := m.outboxKey("a"); ok {
+		t.Error("no outbox")
+	}
 }
 
 func TestVisibleFolders(t *testing.T) {

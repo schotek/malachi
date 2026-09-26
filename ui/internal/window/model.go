@@ -372,23 +372,24 @@ func visibleFolders(list []api.Folder) []api.Folder {
 	return out
 }
 
-// adjustUnread changes the cached unread count of a folder by delta, never
-// below zero. Both the folders map and the sidebar entries are updated so
-// a later rebuild does not undo the change.
-func (m *mailModel) adjustUnread(k folderKey, delta int) {
+// adjustCounts changes the cached unread and total counts of a folder by
+// dUnread and dTotal, neither below zero. Both the folders map and the
+// sidebar entries are updated so a later rebuild does not undo the change;
+// the next folder.list brings the daemon's numbers back.
+func (m *mailModel) adjustCounts(k folderKey, dUnread, dTotal int) {
 	list := m.folders[k.Account]
 	for i := range list {
 		if list[i].ID != k.Folder {
 			continue
 		}
-		list[i].Unread += delta
-		if list[i].Unread < 0 {
-			list[i].Unread = 0
-		}
+		f := &list[i]
+		f.Unread = max(f.Unread+dUnread, 0)
+		f.Total = max(f.Total+dTotal, 0)
 		for j := range m.entries {
 			e := &m.entries[j]
 			if !e.Header && e.Account.ID == k.Account && e.Folder.ID == k.Folder {
-				e.Folder.Unread = list[i].Unread
+				e.Folder.Unread = f.Unread
+				e.Folder.Total = f.Total
 			}
 		}
 		// The folder may be hidden under a collapsed ancestor whose badge
@@ -396,6 +397,44 @@ func (m *mailModel) adjustUnread(k folderKey, delta int) {
 		m.refreshBadges()
 		return
 	}
+}
+
+// moveCounts shifts the cached counts for n messages, unread of them
+// unread, leaving src for target (a zero target: leaving the store, as
+// when Trash expunges or a send is cancelled); negative numbers put them
+// back. The total is left alone where an optimistic change would mislead:
+// in an outbox source, whose row visibleFolders drops at zero, taking the
+// selection with it on the next rebuild before an undo could bring it back
+// (onOutboxChanged reloads the outbox anyway); and in a target the daemon
+// never downloads (Synced false, Gmail's All Mail), which counts nothing
+// at all and so gets neither count.
+func (m *mailModel) moveCounts(src, target folderKey, unread, n int) {
+	srcTotal := -n
+	if m.folderRole(src) == api.RoleOutbox {
+		srcTotal = 0
+	}
+	m.adjustCounts(src, -unread, srcTotal)
+	if target.Folder == "" {
+		return
+	}
+	if f, ok := m.folder(target); ok && !f.Synced {
+		return
+	}
+	m.adjustCounts(target, unread, n)
+}
+
+// outboxKey is the account's outbox folder while the window can show it:
+// the account is enabled (only those have their folders loaded) and its
+// outbox is known.
+func (m *mailModel) outboxKey(acc api.AccountID) (folderKey, bool) {
+	if a, ok := m.account(acc); !ok || !a.Enabled {
+		return folderKey{}, false
+	}
+	f, ok := m.folderByRole(acc, api.RoleOutbox)
+	if !ok {
+		return folderKey{}, false
+	}
+	return folderKey{Account: acc, Folder: f.ID}, true
 }
 
 // account looks an account up by ID.

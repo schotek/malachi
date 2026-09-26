@@ -242,6 +242,17 @@ func TestSameStateAndTriggerCoalescing(t *testing.T) {
 	if sameState(a, b) {
 		t.Fatal("error change unnoticed")
 	}
+	b = a
+	b.PendingOutbox = 1
+	if sameState(a, b) {
+		t.Fatal("pendingOutbox change unnoticed")
+	}
+	b = a
+	b.FailedOutbox = 1
+	if sameState(a, b) {
+		t.Fatal("failedOutbox change unnoticed")
+	}
+	b = a
 	// The same tlsError text for another certificate is news.
 	tlsErr := func(sha string) *api.Error {
 		e := api.NewError(api.CodeTLSError, "tls: failed to verify certificate")

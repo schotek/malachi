@@ -167,25 +167,27 @@ func (b *Backend) stateFor(a store.Account) api.SyncState {
 		st = live
 		st.AccountID = id
 	}
-	st.PendingOutbox = b.pendingOutbox(a.ID)
+	st.PendingOutbox, st.FailedOutbox = b.outboxCounts(a.ID)
 	return st
 }
 
-// pendingOutbox is SyncState.pendingOutbox: the account's outbox messages
-// still to be delivered. A store failure is logged and reads as 0 rather
-// than failing the caller (a status report or a notification).
-func (b *Backend) pendingOutbox(accountID string) int {
-	n, err := b.store.CountOutbox(context.Background(), accountID)
+// outboxCounts is SyncState.pendingOutbox and failedOutbox: the account's
+// outbox messages still to be delivered, and those delivery gave up on. A
+// store failure is logged and reads as 0 for both rather than failing the
+// caller (a status report or a notification).
+func (b *Backend) outboxCounts(accountID string) (pending, failed int) {
+	pending, failed, err := b.store.OutboxCounts(context.Background(), accountID)
 	if err != nil {
 		b.log.Warn("count outbox", "account", accountID, "err", err)
-		return 0
+		return 0, 0
 	}
-	return n
+	return pending, failed
 }
 
 // outboxChanged re-emits the account's SyncState after an outbox change
-// (a message queued, delivered, failed or deleted). The coalescer drops
-// it unless pendingOutbox (or anything else) actually changed.
+// (a message queued, delivered, failed, re-queued or deleted). The
+// coalescer drops it unless pendingOutbox, failedOutbox (or anything else)
+// actually changed.
 func (b *Backend) outboxChanged(accountID string) {
 	a, err := b.store.GetAccount(context.Background(), accountID)
 	if err != nil {

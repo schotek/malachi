@@ -123,7 +123,7 @@ func TestFavouriteBadgesFollowUnread(t *testing.T) {
 	m := &mailModel{accounts: accounts, folders: folders, collapsed: newCollapseState(),
 		favourites: pinned(folderKey{Account: "a", Folder: "zulu"})}
 	m.rebuildEntries()
-	m.adjustUnread(folderKey{Account: "a", Folder: "zulu"}, -6)
+	m.adjustCounts(folderKey{Account: "a", Folder: "zulu"}, -6, 0)
 
 	rows := 0
 	for _, e := range m.entries {

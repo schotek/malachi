@@ -406,6 +406,21 @@ func (s *Store) CountOutbox(ctx context.Context, accountID string) (int, error) 
 	return n, nil
 }
 
+// OutboxCounts returns SyncState's two outbox counts of the account in one
+// query: pending (queued or sending, as CountOutbox) and failed (delivery
+// gave up; the entry waits for a retry or a delete).
+func (s *Store) OutboxCounts(ctx context.Context, accountID string) (pending, failed int, err error) {
+	err = s.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(CASE WHEN state IN (?, ?) THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN state = ? THEN 1 ELSE 0 END), 0)
+		FROM outbox WHERE account_id = ?`,
+		string(OutboxQueued), string(OutboxSending), string(OutboxFailed), accountID).Scan(&pending, &failed)
+	if err != nil {
+		return 0, 0, fmt.Errorf("outbox counts: %w", err)
+	}
+	return pending, failed, nil
+}
+
 // MarkOutboxSending starts an attempt: queued → sending. ErrNotFound when
 // the entry is not queued.
 func (s *Store) MarkOutboxSending(ctx context.Context, id string) error {

@@ -330,10 +330,10 @@ func (b *Backend) getNotifier() api.Notifier {
 }
 
 // SyncNotifier is the api.Notifier the sync supervisor should emit into:
-// it completes notify.syncState with pendingOutbox, coalesces it
-// (docs/api.md §5), delivers from its own goroutine so a slow RPC client
-// never stalls a syncer, and forwards to the notifier installed by
-// SetNotifier (dropping events before that).
+// it completes notify.syncState with pendingOutbox and failedOutbox,
+// coalesces it (docs/api.md §5), delivers from its own goroutine so a slow
+// RPC client never stalls a syncer, and forwards to the notifier installed
+// by SetNotifier (dropping events before that).
 func (b *Backend) SyncNotifier() api.Notifier {
 	return outboxAwareNotifier{b: b, inner: b.syncNotifier}
 }

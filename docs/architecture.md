@@ -306,9 +306,10 @@ syncer, which owns the connection, uploads the raw file to the `sent` role
 folder with `APPEND` (`\Seen`) in its next cycle, deletes the local copy and
 re-syncs that folder so the message comes back under a server UID. Outbox
 messages never get operation-log entries: flagging and moving them is
-refused and deleting them cancels the send. `SyncState.pendingOutbox` is
-filled in by `internal/core` from the store on every emitted state and on
-every outbox change.
+refused and deleting them cancels the send. `SyncState.pendingOutbox`
+(queued or sending) and `SyncState.failedOutbox` (given up, waiting for
+`outbox.retry` or a delete) are filled in by `internal/core` from the store
+on every emitted state and on every outbox change.
 
 A Graph account has its own outbox supervisor behind the same dispatcher:
 the worker submits the very same RFC 5322 file through `sendMail` (base64
@@ -455,11 +456,15 @@ an error. Actions are `win.*` (`mark-read`, `mark-unread`, `toggle-flag`,
 s and Ctrl+R; flag changes and moves are applied optimistically and
 reverted with a toast when the daemon refuses.
 
-The bottom of the sidebar carries the sync line — an `adw.Spinner` and a
-caption computed from `sync.status` and `notify.syncState` across the
-enabled accounts: "Syncing *folder*… 42 %", then sign-in required, sync
-error, offline, otherwise "Up to date" — above the daemon connection
-status. Ctrl+R and the refresh button send `sync.trigger` for the
+The bottom of the sidebar carries the status line, a menu button with an
+`adw.Spinner` and a caption computed from `sync.status` and
+`notify.syncState` across the enabled accounts: "Syncing *folder*…
+42 %", then sign-in required, certificate problems, sending, messages
+not sent, sync error, offline, otherwise "Up to date · *time of the last
+check*"; the account is named when exactly one of several is in trouble.
+While the daemon is not connected the line says so instead. Its popover
+lists every account with its state and action and names the daemon
+(`ui/internal/window/status.go`). Ctrl+R and the refresh button send `sync.trigger` for the
 selected folder (or for everything when nothing is selected); the
 spinner starts immediately and a 30 s timer clears it if no state
 notification follows. `notify.authRequired` reveals an `Adw.Banner` above
@@ -530,8 +535,14 @@ inline pictures in a `multipart/related`. (`richText` in `compose/draft.go`
 is the switch back to a plain-text build.) After a send the message shows
 up in the local Outbox folder (visible only while non-empty) with a banner
 for its delivery state; a failed send offers Retry (`outbox.retry`) and the
-trash button cancels the send (`message.delete`). The status line shows
-"Sending N messages…" from `SyncState.pendingOutbox`. Reply, Reply All
+trash button cancels the send (`message.delete`). The status line at the
+bottom of the sidebar (on macOS a bar along the bottom of the window) shows
+"Sending N messages…" from `SyncState.pendingOutbox` and "N messages not
+sent" from `SyncState.failedOutbox`; clicked, it opens a popover with each
+account's state, last sync and action (sign in, edit, try again, check),
+a link to the Outbox for unsent messages and the daemon's version
+(`ui/internal/window/status.go`). The message list's header shows the
+selected folder's counts as its subtitle. Reply, Reply All
 and Forward ask the backend for the template (`draft.create`,
 `ui/internal/window/compose_open.go`): recipients, subject and the
 original quoted as sanitised HTML with its pictures copied into the

@@ -60,8 +60,13 @@ public final class MailboxController {
     // MARK: Callbacks (the rest of the window)
 
     /// The selected folder changed (nil: nothing selected any more), with
-    /// the Favourites flag; the window title follows it (`selectedFolderTitle`).
+    /// the Favourites flag.
     public var onFolderSelected: (@MainActor (FolderKey?, Bool) -> Void)?
+    /// The title over the message list and the counts under it, the
+    /// window's title and subtitle here (window.go `refreshListTitle`):
+    /// called wherever the selection or the cached counts change, with
+    /// `selectedFolderTitle` and `selectedFolderSubtitle`.
+    public var onListTitleChanged: (@MainActor (String, String) -> Void)?
     /// account.list answered.
     public var onAccountsLoaded: (@MainActor ([Account]) -> Void)?
     /// The list's `loadMessages` (messages.go), installed by the list
@@ -197,11 +202,9 @@ public final class MailboxController {
                 self.model.folderErr = [:]
                 self.hasAccounts = !res.accounts.isEmpty
                 self.onAccountsLoaded?(res.accounts)
-                // The footer counts enabled accounts and falls back to the
-                // state account.list embeds: recompute it now rather than
-                // wait for the next notify.syncState (the GTK window only
-                // refreshes it from applySyncState, so a sync.status that
-                // answered before account.list leaves it empty there).
+                // sync.status may have answered before the accounts were
+                // known, and the status line and its popover follow the
+                // account set (added, removed, paused, renamed).
                 self.sync.refreshFooter()
 
                 let enabled = self.model.enabledAccounts
@@ -263,10 +266,19 @@ public final class MailboxController {
 
     /// Notes that the user removed one outbox message of `acc` (cancel
     /// sending), so the next shrink of the outbox is not toasted as a
-    /// delivery (outbox.go `cancelSendFrom`). The list half calls it before
-    /// `onOutboxChanged`.
+    /// delivery (outbox.go `cancelSendFrom`). The actions call it before
+    /// message.delete: removing a queued or failed message moves
+    /// pendingOutbox or failedOutbox, and the notify.syncState that follows
+    /// reloads the folders, possibly before the reply arrives.
     public func noteOutboxCancelled(_ acc: AccountID) {
         outbox.noteCancelled(acc)
+    }
+
+    /// Takes a `noteOutboxCancelled` back after the daemon refused the
+    /// removal (outbox.go `cancelSendFrom`'s error path); a folder reload in
+    /// between may have used it up already.
+    public func noteOutboxCancelFailed(_ acc: AccountID) {
+        outbox.noteCancelFailed(acc)
     }
 
     /// Recreates the sidebar entries from the model (folders.go
@@ -276,6 +288,9 @@ public final class MailboxController {
     /// reload the message list, so existence is decided against the model
     /// (`folderListed`) and not against the rows on screen.
     public func rebuildFolderList() {
+        // The list title follows on every way out: the reload that led here
+        // may have brought new counts, or taken the selected folder away.
+        defer { refreshListTitle() }
         model.rebuildEntries()
         onEntriesChanged?()
 
@@ -363,13 +378,17 @@ public final class MailboxController {
 
     /// Makes `k` the current folder (folders.go `selectFolder`): highlights
     /// its row, announces it and loads its messages. Idempotent for the
-    /// already selected and listed folder, which only re-highlights the row.
+    /// already selected and listed folder, which only re-highlights the row
+    /// and refreshes the title, whose counts a folder reload may have
+    /// changed.
     private func select(_ k: FolderKey) {
         if k == model.selected, k == model.listFolder {
             onSelectionChanged?(k, model.selectedFav)
+            refreshListTitle()
             return
         }
         model.selected = k
+        refreshListTitle()
         onFolderSelected?(k, model.selectedFav)
         onSelectionChanged?(k, model.selectedFav)
         requestReloadMessages()
@@ -388,14 +407,30 @@ public final class MailboxController {
         reloadMessages?()
     }
 
-    /// The title of the list page for the selected folder (folders.go
-    /// `selectFolder`): the folder's display name, or "Messages" when none
-    /// is selected. The window title follows it (the plan's D1).
+    /// The title of the list page for the selected folder (window.go
+    /// `refreshListTitle`): the folder's display name, or "Messages" when
+    /// none is selected. The window title follows it (the plan's D1).
     public var selectedFolderTitle: String {
         if let k = model.selected, let f = model.folder(k) {
             return folderTitle(f)
         }
         return L10n.T("Messages")
+    }
+
+    /// The counts under the title (window.go `refreshListTitle`,
+    /// `folderCountsText`): "" while no folder is selected.
+    public var selectedFolderSubtitle: String {
+        if let k = model.selected, let f = model.folder(k) {
+            return folderCountsText(f)
+        }
+        return ""
+    }
+
+    /// Announces the title and the counts of the selected folder (window.go
+    /// `refreshListTitle`). Called wherever the selection or the cached
+    /// counts change: `select`, `updateFolderRow` and `rebuildFolderList`.
+    func refreshListTitle() {
+        onListTitleChanged?(selectedFolderTitle, selectedFolderSubtitle)
     }
 
     // MARK: Folds and pins
@@ -474,25 +509,36 @@ public final class MailboxController {
         rebuildFolderList()
     }
 
-    // MARK: Badges
+    // MARK: Counts
 
-    /// Changes the cached unread count of a folder and refreshes the badges
-    /// (the list half's mark-read / mark-unread bookkeeping).
-    public func adjustUnread(_ k: FolderKey, _ delta: Int) {
-        model.adjustUnread(k, delta)
+    /// Changes the cached unread and total counts of a folder and refreshes
+    /// the badges and the title (the mark-read / mark-unread bookkeeping of
+    /// actions.go `setSeenIDs`).
+    public func adjustCounts(_ k: FolderKey, _ dUnread: Int, _ dTotal: Int) {
+        model.adjustCounts(k, dUnread, dTotal)
         updateFolderRow(k)
     }
 
-    /// Refreshes the unread badges after the count of `k` moved (folders.go
-    /// `updateFolderRow`). Every row is refreshed, not just k's: a collapsed
-    /// ancestor's badge counts the folders it hides, k itself may be one of
-    /// them, and a pinned folder has a second row in the Favourites section.
+    /// Shifts the cached counts for messages leaving `src` for `target`
+    /// (nil: leaving the store; `MailModel.moveCounts`) and refreshes the
+    /// badges and the title (actions.go `trackMoves`' shift).
+    public func moveCounts(_ src: FolderKey, _ target: FolderKey?, _ unread: Int, _ n: Int) {
+        model.moveCounts(src, target, unread, n)
+        updateFolderRow(src) // refreshes every row, the target's too
+    }
+
+    /// Refreshes the unread badges and the list title's counts after the
+    /// counts of `k` moved (folders.go `updateFolderRow`). Every row is
+    /// refreshed, not just k's: a collapsed ancestor's badge counts the
+    /// folders it hides, k itself may be one of them, and a pinned folder
+    /// has a second row in the Favourites section.
     public func updateFolderRow(_ k: FolderKey) {
         if let onBadgesChanged {
             onBadgesChanged()
         } else {
             onEntriesChanged?()
         }
+        refreshListTitle()
     }
 
     // MARK: Notifications and connection
@@ -530,10 +576,10 @@ public final class MailboxController {
     }
 
     /// notify.newMessage, the sidebar's share (folders.go `onNewMessage`):
-    /// the folder's unread count moves for an unseen message; a message for
-    /// the listed folder goes to the list through `onNewMessageForList`
-    /// first, unless the list holds it already (delivered twice: the badge
-    /// was adjusted the first time).
+    /// the folder's counts move, the total always, the unread count for an
+    /// unseen message; a message for the listed folder goes to the list
+    /// through `onNewMessageForList` first, unless the list holds it already
+    /// (delivered twice: the counts were adjusted the first time).
     public func handleNewMessage(_ n: NewMessageNotification) {
         let k = FolderKey(account: n.accountId, folder: n.folderId)
         var s = n.message
@@ -549,20 +595,20 @@ public final class MailboxController {
             }
             onNewMessageForList?(NewMessageNotification(accountId: n.accountId, folderId: n.folderId, message: s))
         }
-        if !hasFlag(s.flags, .seen) {
-            model.adjustUnread(k, 1)
-            updateFolderRow(k)
-        }
+        let unread = hasFlag(s.flags, .seen) ? 0 : 1
+        model.adjustCounts(k, unread, 1)
+        updateFolderRow(k)
     }
 
     /// notify.syncState and every state of sync.status (sync.go
     /// `applySyncState`): records the state, then reloads folders when the
     /// account left the syncing state and refreshes the outbox views when
-    /// its number of pending outgoing messages moved.
+    /// its number of pending or failed outgoing messages moved. An account's
+    /// first state is no move: its folders are loaded with the accounts.
     public func handleSyncState(_ s: SyncState) {
         let (prev, cur) = sync.apply(s)
         onSyncFinished(prev, cur)
-        if (prev?.pendingOutbox ?? 0) != cur.pendingOutbox {
+        if let prev, prev.pendingOutbox != cur.pendingOutbox || prev.failedOutbox != cur.failedOutbox {
             onOutboxChanged(cur.accountId)
         }
     }
@@ -578,11 +624,12 @@ public final class MailboxController {
         }
     }
 
-    /// Runs when the account's number of pending outgoing messages moved
-    /// (folders.go `onOutboxChanged`): the folders are reloaded, so the
-    /// outbox row appears or goes with its contents, and the views showing
-    /// the outbox are refreshed. When the selected folder was the outbox and
-    /// it emptied, `rebuildFolderList` falls back to the initial folder.
+    /// Runs when the account's number of pending or failed outgoing
+    /// messages moved (folders.go `onOutboxChanged`): the folders are
+    /// reloaded, so the outbox row appears or goes with its contents, and
+    /// the views showing the outbox are refreshed. When the selected folder
+    /// was the outbox and it emptied, `rebuildFolderList` falls back to the
+    /// initial folder.
     public func onOutboxChanged(_ acc: AccountID) {
         fetchFolders(acc, model.foldersGen) { [weak self] in
             guard let self else { return }
@@ -592,15 +639,27 @@ public final class MailboxController {
     }
 
     /// Runs sync.trigger for the selected folder, or for every account when
-    /// nothing is selected (sync.go `triggerSync`). The footer's spinner
-    /// starts at once; the daemon's notify.syncState takes over, with the
-    /// sync controller's fallback timer so the spinner never sticks.
+    /// nothing is selected (sync.go `triggerSync`; win.refresh).
     public func triggerSync() {
         var params = SyncTriggerParams()
         if let sel = model.selected {
             params.accountId = sel.account
             params.folderId = sel.folder
         }
+        startSync(params)
+    }
+
+    /// Runs sync.trigger for one whole account (sync.go
+    /// `triggerAccountSync`: Check and Try Again in the status popover).
+    public func triggerSync(accountId: AccountID) {
+        startSync(SyncTriggerParams(accountId: accountId))
+    }
+
+    /// Runs sync.trigger with `params` (sync.go `startSync`). The line's
+    /// spinner starts at once; the daemon's notify.syncState takes over,
+    /// with the sync controller's fallback timer so the spinner never
+    /// sticks.
+    private func startSync(_ params: SyncTriggerParams) {
         sync.beginChecking()
         perform(API.SyncTrigger.self, params) { [weak self] outcome in
             guard let self, case .failure(let err) = outcome else { return }
@@ -615,13 +674,27 @@ public final class MailboxController {
         sync.loadSyncStatus(client: client) { [weak self] s in self?.handleSyncState(s) }
     }
 
+    /// Selects the account's outbox, as a click on its row in the account's
+    /// tree would (status.go `showOutbox`: the status popover's link to
+    /// unsent messages). False when the outbox cannot be shown: the account
+    /// is paused or has no outbox folder (`MailModel.outboxKey`).
+    @discardableResult
+    public func showOutbox(_ acc: AccountID) -> Bool {
+        guard let k = model.outboxKey(acc) else { return false }
+        selectFolder(k, fav: false)
+        return true
+    }
+
     /// The connection state changed (window.go `showConnectionState`, the
-    /// data side): on a connection the accounts and the sync states are
-    /// loaded; when the backend went away every in-flight reply is dropped
-    /// and what is shown stays until the reconnect reloads it. A connection
-    /// with a failed or mismatching system.info still loads, as the GTK
-    /// window does (it loads on the socket, not on the answer).
+    /// data side): the status line learns it first (it names the connection
+    /// while there is none, and forgets what sync.status said); on a
+    /// connection the accounts and the sync states are loaded; when the
+    /// backend went away every in-flight reply is dropped and what is shown
+    /// stays until the reconnect reloads it. A connection with a failed or
+    /// mismatching system.info still loads, as the GTK window does (it loads
+    /// on the socket, not on the answer).
     public func handleConnection(_ state: ConnectionController.ConnectionState) {
+        sync.setConnection(state)
         switch state {
         case .connected, .protocolMismatch, .infoFailed:
             loadAccounts()

@@ -1010,3 +1010,30 @@ func TestRolesNotResolvedAgainAfterRestart(t *testing.T) {
 		t.Errorf("full pass did not re-resolve the roles: %d requests, want more than %d", n, first)
 	}
 }
+
+// sameState decides whether setState emits: every observable field
+// counts, the outbox counts included (as in the IMAP syncer).
+func TestSameState(t *testing.T) {
+	now := time.Now()
+	a := api.SyncState{AccountID: "acc", Status: api.SyncIdle, Progress: -1, LastSync: &now}
+	if !sameState(a, a) {
+		t.Fatal("identical states differ")
+	}
+	later := now.Add(time.Second)
+	for what, mut := range map[string]func(*api.SyncState){
+		"status":        func(s *api.SyncState) { s.Status = api.SyncSyncing },
+		"folderId":      func(s *api.SyncState) { s.FolderID = "f_1" },
+		"progress":      func(s *api.SyncState) { s.Progress = 3 },
+		"lastSync":      func(s *api.SyncState) { s.LastSync = &later },
+		"no lastSync":   func(s *api.SyncState) { s.LastSync = nil },
+		"error":         func(s *api.SyncState) { s.Error = api.NewError(api.CodeNetworkError, "x") },
+		"pendingOutbox": func(s *api.SyncState) { s.PendingOutbox = 1 },
+		"failedOutbox":  func(s *api.SyncState) { s.FailedOutbox = 1 },
+	} {
+		b := a
+		mut(&b)
+		if sameState(a, b) {
+			t.Errorf("%s change unnoticed", what)
+		}
+	}
+}

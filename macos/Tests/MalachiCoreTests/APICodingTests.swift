@@ -405,6 +405,27 @@ import Testing
         #expect(r.accounts[1].status == .offline && r.accounts[1].error?.code == .networkError && r.accounts[1].pendingOutbox == 2)
     }
 
+    /// SyncState.failedOutbox (docs/api.md §3, protocol 1 changelog): read
+    /// when present, 0 from a daemon that predates it; always written.
+    @Test func syncStateFailedOutbox() throws {
+        let s = try decode(SyncState.self, #"{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":1,"failedOutbox":2}"#)
+        #expect(s.pendingOutbox == 1 && s.failedOutbox == 2)
+        let old = try decode(SyncState.self, #"{"accountId":"a","status":"offline","folderId":"f","progress":3,"lastSync":"2026-09-02T10:00:00Z","error":{"code":1301,"message":"x"},"pendingOutbox":0}"#)
+        #expect(old == SyncState(accountId: "a", status: .offline, folderId: "f", progress: 3,
+                                 lastSync: RFC3339.parse("2026-09-02T10:00:00Z"),
+                                 error: RPCError(code: .networkError, message: "x"), pendingOutbox: 0, failedOutbox: 0))
+        #expect(throws: (any Error).self) {
+            try decode(SyncState.self, #"{"accountId":"a","status":"idle","progress":-1}"#)
+        }
+        let obj = try encodeObject(SyncState(accountId: "a", status: .idle))
+        #expect(obj["failedOutbox"] as? Int == 0 && obj["pendingOutbox"] as? Int == 0)
+        #expect(obj.keys.sorted() == ["accountId", "failedOutbox", "pendingOutbox", "progress", "status"])
+        // A round trip keeps it.
+        let back = try JSONCoding.decoder().decode(
+            SyncState.self, from: JSONCoding.encoder().encode(SyncState(accountId: "a", status: .idle, failedOutbox: 4)))
+        #expect(back.failedOutbox == 4)
+    }
+
     @Test func configGetExample() throws {
         let r = try decode(ConfigGetResult.self, #"{"preferences":{"syncIntervalSeconds":300,"remoteContent":"knownSenders","offlineDays":30}}"#)
         #expect(r.preferences == Preferences(syncIntervalSeconds: 300, remoteContent: .knownSenders, offlineDays: 30))

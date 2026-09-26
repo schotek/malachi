@@ -70,7 +70,8 @@ type Deps struct {
 	// delivery, so the Sent copy is appended (or fetched) at once.
 	Trigger func(accountID string, folder api.FolderID, full bool) bool
 	// Changed is called after every change of an outbox row; core re-emits
-	// the account's SyncState with the new pendingOutbox count.
+	// the account's SyncState with the new pendingOutbox and failedOutbox
+	// counts.
 	Changed func(accountID string)
 
 	Log *slog.Logger

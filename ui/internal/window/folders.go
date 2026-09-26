@@ -5,6 +5,7 @@ package window
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -107,8 +108,11 @@ func (w *Window) loadAccounts() {
 			w.model.folders = make(map[api.AccountID][]api.Folder, len(res.Accounts))
 			w.model.folderErr = make(map[api.AccountID]error)
 			w.hasAccounts = len(res.Accounts) > 0
-			// sync.status may have answered before the accounts were known.
+			// sync.status may have answered before the accounts were known,
+			// and the status line and its popover follow the account set
+			// (added, removed, paused, renamed).
 			w.refreshCertBanner()
+			w.refreshSyncLabel()
 			if w.messageList.SelectedRow() == nil {
 				w.messageStack.SetVisibleChildName(w.emptyPageName())
 			}
@@ -181,6 +185,9 @@ func (w *Window) fetchFolders(acc api.AccountID, gen uint64, done func()) {
 // selection or reload the message list, so existence is decided against the
 // model and not against the rows that happen to be on screen.
 func (w *Window) rebuildFolderList() {
+	// The list title follows on every way out: the reload that led here
+	// may have brought new counts, or taken the selected folder away.
+	defer w.refreshListTitle()
 	w.model.rebuildEntries()
 
 	// With several accounts a pinned "Inbox" says whose it is.
@@ -299,6 +306,25 @@ func folderTitle(f api.Folder) string {
 	return f.Name
 }
 
+// folderCountsText is the subtitle under the list title: the folder's
+// unread and total counts, whatever the list filter or grouping shows. An
+// empty folder (or one the daemon never downloads) has none, and a folder
+// with nothing unread, or the outbox, only its total.
+func folderCountsText(f api.Folder) string {
+	switch {
+	case f.Total <= 0:
+		return ""
+	case f.Role == api.RoleOutbox || f.Unread <= 0:
+		// TRANSLATORS: subtitle of the message list; %d is the number of
+		// messages in the folder.
+		return fmt.Sprintf(i18n.N("%d message", "%d messages", f.Total), f.Total)
+	}
+	// TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
+	// the first %d is the number of unread messages (the plural follows
+	// it), the second the number of all messages in the folder.
+	return fmt.Sprintf(i18n.N("%d unread of %d", "%d unread of %d", f.Unread), f.Unread, f.Total)
+}
+
 // newFolderRow builds the row for one folder entry; subtitle, when given,
 // goes under the name (the account of a pinned folder). The folder name and
 // the account's are hostile input and are shown as plain text.
@@ -396,18 +422,16 @@ func setStatusPage(p *adw.StatusPage, icon, title, description string) {
 // selectFolder makes k the current folder: highlights its row, updates the
 // list page title and loads its messages. It is idempotent for the already
 // selected folder (the sidebar's row-selected handler and rebuildFolderList
-// both call it), so a re-entry only re-highlights the row.
+// both call it), so a re-entry only re-highlights the row and refreshes
+// the title, whose counts a folder reload may have changed.
 func (w *Window) selectFolder(k folderKey) {
 	if k == w.model.selected && k == w.model.listFolder {
 		w.highlightFolderRow(k)
+		w.refreshListTitle()
 		return
 	}
 	w.model.selected = k
-	if f, ok := w.model.folder(k); ok {
-		w.listPage.SetTitle(folderTitle(f))
-	} else {
-		w.listPage.SetTitle(i18n.T("Messages"))
-	}
+	w.refreshListTitle()
 	w.highlightFolderRow(k)
 	w.loadMessages()
 }
@@ -433,10 +457,11 @@ func (w *Window) highlightFolderRow(k folderKey) {
 	w.reselecting = false
 }
 
-// updateFolderRow refreshes the unread badges after the count of k moved.
-// Every row is refreshed, not just k's: a collapsed ancestor's badge counts
-// the folders it hides, k itself may be one of them, and a pinned folder
-// has a second row in the Favourites section.
+// updateFolderRow refreshes the unread badges and the list title's counts
+// after the counts of k moved. Every row is refreshed, not just k's: a
+// collapsed ancestor's badge counts the folders it hides, k itself may be
+// one of them, and a pinned folder has a second row in the Favourites
+// section.
 func (w *Window) updateFolderRow(k folderKey) {
 	for _, e := range w.model.entries {
 		if e.Header {
@@ -447,6 +472,7 @@ func (w *Window) updateFolderRow(k folderKey) {
 			r.setUnread(e.Badge)
 		}
 	}
+	w.refreshListTitle()
 }
 
 // onSyncFinished runs when an account leaves the syncing state: folders
@@ -477,8 +503,9 @@ func (w *Window) onOutboxChanged(acc api.AccountID) {
 }
 
 // onNewMessage inserts a notified message at the top of the list when it
-// belongs to the selected folder, and adjusts the folder's unread count.
-// Called by handleNotification (notify.go).
+// belongs to the selected folder, and adjusts the folder's counts: the
+// total always, the unread count for an unread message. Called by
+// handleNotification (notify.go).
 func (w *Window) onNewMessage(n api.NewMessageNotification) {
 	k := folderKey{Account: n.AccountID, Folder: n.FolderID}
 	s := n.Message
@@ -513,8 +540,10 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			w.showListState()
 		}
 	}
+	unread := 0
 	if !hasFlag(s.Flags, api.FlagSeen) {
-		w.model.adjustUnread(k, 1)
-		w.updateFolderRow(k)
+		unread = 1
 	}
+	w.model.adjustCounts(k, unread, 1)
+	w.updateFolderRow(k)
 }

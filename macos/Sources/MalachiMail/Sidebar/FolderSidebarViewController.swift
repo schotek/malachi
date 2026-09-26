@@ -4,26 +4,23 @@
 import AppKit
 import MalachiCore
 
-/// The folder sidebar (window.blp lines 36–140): the outline of accounts,
-/// pinned folders and folders with their badges and stars, the status page
-/// that replaces it while there is nothing to list, and the footer with the
-/// sync and connection lines. A native source list, as decided in the plan:
-/// headings are group rows that fold with the hover button, folders fold
-/// with the disclosure triangle, Left/Right are the outline's own.
+/// The folder sidebar (window.blp lines 36–86): the outline of accounts,
+/// pinned folders and folders with their badges and stars, and the status
+/// page that replaces it while there is nothing to list. A native source
+/// list, as decided in the plan: headings are group rows that fold with the
+/// hover button, folders fold with the disclosure triangle, Left/Right are
+/// the outline's own. The status line GTK has at the bottom of the sidebar
+/// is the window's status bar here (`StatusBarViewController`), so the
+/// outline runs to the bottom.
 ///
 /// The controller owns every decision; this view mirrors `model.entries`
 /// and sends clicks back. It installs the sidebar-facing callbacks of the
-/// mailbox and sync controllers (`onEntriesChanged`, `onBadgesChanged`,
-/// `onFolderStatus`, `onSelectionChanged`, `onFooter`); the connection
-/// state is pushed in by the app through `showConnectionState`, since the
-/// connection controller's single `onState` belongs to the app shell.
+/// mailbox controller (`onEntriesChanged`, `onBadgesChanged`,
+/// `onFolderStatus`, `onSelectionChanged`).
 @MainActor
 final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate {
     let mailbox: MailboxController
-    let sync: SyncController
-    let connection: ConnectionController
 
-    let footer = SidebarFooterView()
     private let outline = NSOutlineView()
     private let scroll = NSScrollView()
     private let statusView = SidebarStatusView()
@@ -35,10 +32,8 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
     /// folding something.
     private var isApplyingExpansion = false
 
-    init(mailbox: MailboxController, sync: SyncController, connection: ConnectionController) {
+    init(mailbox: MailboxController) {
         self.mailbox = mailbox
-        self.sync = sync
-        self.connection = connection
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -78,24 +73,19 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 
         statusView.translatesAutoresizingMaskIntoConstraints = false
         statusView.isHidden = true
-        footer.translatesAutoresizingMaskIntoConstraints = false
 
         let container = NSView()
         container.addSubview(scroll)
         container.addSubview(statusView)
-        container.addSubview(footer)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: container.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             statusView.topAnchor.constraint(equalTo: scroll.topAnchor),
             statusView.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
             statusView.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
             statusView.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            footer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            footer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            footer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         view = container
     }
@@ -106,21 +96,12 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
         mailbox.onBadgesChanged = { [weak self] in self?.refreshBadges() }
         mailbox.onFolderStatus = { [weak self] status in self?.show(status) }
         mailbox.onSelectionChanged = { [weak self] key, fav in self?.highlightFolderRow(key, fav: fav) }
-        sync.onFooter = { [weak self] state in self?.footer.show(state) }
-        // What the controllers hold already, for a sidebar attached late.
+        // What the controller holds already, for a sidebar attached late.
         rebuildRows()
         show(mailbox.sidebarStatus)
         if let sel = mailbox.model.selected {
             highlightFolderRow(sel, fav: mailbox.model.selectedFav)
         }
-        footer.show(sync.footer)
-        footer.show(connection: connection.state)
-    }
-
-    /// The connection line of the footer; the app calls it from its
-    /// `ConnectionController.onState` fan-out.
-    func showConnectionState(_ state: ConnectionController.ConnectionState) {
-        footer.show(connection: state)
     }
 
     // MARK: Rows

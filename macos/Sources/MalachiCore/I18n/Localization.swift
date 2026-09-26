@@ -40,6 +40,14 @@ public enum L10n {
         catalogue.plural(singular, plural, n)
     }
 
+    /// `N` for a plural msgid with more than the one `%d`: the form is
+    /// chosen for `n` and formatted with `args`, which name every
+    /// directive, `n` included where it appears
+    /// (`fmt.Sprintf(N(singular, plural, n), args...)`).
+    public static func N(_ singular: String, _ plural: String, _ n: Int, _ args: any CVarArg...) -> String {
+        catalogue.plural(singular, plural, n, args)
+    }
+
     /// Translates `msgid` disambiguated by `context` (pgettext).
     public static func C(_ context: String, _ msgid: String) -> String {
         catalogue.context(context, msgid)
@@ -108,6 +116,19 @@ public struct Catalogue: Sendable {
         }
         let fallback = abs(n) == 1 ? singular : plural
         return String(format: GettextFormat.toFoundation(fallback), arguments: [n])
+    }
+
+    /// `plural` formatted with `args` instead of `n` alone, for a msgid
+    /// with several directives ("%d unread of %d"); `n` only picks the form.
+    public func plural(_ singular: String, _ plural: String, _ n: Int, _ args: [any CVarArg]) -> String {
+        if let forms = plurals[singular] {
+            let category = PluralRules.category(language: language, n: n)
+            if let pattern = forms[category] ?? forms["other"] {
+                return String(format: pattern, arguments: args)
+            }
+        }
+        let fallback = abs(n) == 1 ? singular : plural
+        return String(format: GettextFormat.toFoundation(fallback), arguments: args)
     }
 
     public func context(_ context: String, _ msgid: String) -> String {

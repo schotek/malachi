@@ -7,11 +7,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/outbox"
+	"github.com/schotek/malachi/backend/internal/smtp"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -57,6 +60,41 @@ func pendingOutboxOf(t *testing.T, b *Backend, acc api.AccountID) int {
 		t.Fatal(err)
 	}
 	return res.Accounts[0].PendingOutbox
+}
+
+// outboxStateOf checks that sync.status and account.list agree on the
+// account's state and returns it.
+func outboxStateOf(t *testing.T, b *Backend, acc api.AccountID) api.SyncState {
+	t.Helper()
+	res, err := b.Sync().Status(context.Background(), api.SyncStatusParams{AccountID: acc})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := b.Accounts().List(context.Background(), api.AccountListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range list.Accounts {
+		if a.ID == acc && a.State != res.Accounts[0] {
+			t.Fatalf("account.list state %+v, sync.status %+v", a.State, res.Accounts[0])
+		}
+	}
+	return res.Accounts[0]
+}
+
+// waitOutboxNotification waits until the newest notify.syncState of acc
+// has the given status and outbox counts.
+func waitOutboxNotification(t *testing.T, rec *recorder, acc api.AccountID, status api.SyncStatus, pending, failed int) {
+	t.Helper()
+	waitFor(t, fmt.Sprintf("syncState %s, pendingOutbox %d, failedOutbox %d", status, pending, failed), func() bool {
+		states, _ := rec.snapshot()
+		for i := len(states) - 1; i >= 0; i-- {
+			if st := states[i]; st.AccountID == acc {
+				return st.Status == status && st.PendingOutbox == pending && st.FailedOutbox == failed
+			}
+		}
+		return false
+	})
 }
 
 func TestSendValidation(t *testing.T) {
@@ -440,8 +478,8 @@ func TestOutboxRetryAndBusyMessages(t *testing.T) {
 	if err := b.store.MarkOutboxFailed(ctx, string(mid), api.CodeServerError, "550 no"); err != nil {
 		t.Fatal(err)
 	}
-	if pendingOutboxOf(t, b, acc) != 0 {
-		t.Fatal("a failed message counts as pending")
+	if st := outboxStateOf(t, b, acc); st.PendingOutbox != 0 || st.FailedOutbox != 1 {
+		t.Fatalf("a failed message: %+v", st)
 	}
 	got, _ = b.Messages().Get(ctx, api.MessageGetParams{AccountID: acc, MessageID: mid})
 	if ob := got.Message.Outbox; ob.State != api.OutboxFailed || ob.NextAttemptAt != nil || ob.Error == nil || ob.Error.Code != api.CodeServerError {
@@ -450,8 +488,8 @@ func TestOutboxRetryAndBusyMessages(t *testing.T) {
 	if _, err := svc.Retry(ctx, api.OutboxRetryParams{AccountID: acc, MessageID: mid}); err != nil {
 		t.Fatal(err)
 	}
-	if pendingOutboxOf(t, b, acc) != 1 {
-		t.Fatal("re-queued message not pending")
+	if st := outboxStateOf(t, b, acc); st.PendingOutbox != 1 || st.FailedOutbox != 0 {
+		t.Fatalf("re-queued message: %+v", st)
 	}
 
 	// Sent: nothing to retry, and a delete is fine.
@@ -473,5 +511,88 @@ func TestOutboxRetryAndBusyMessages(t *testing.T) {
 	}
 	if _, err := svc.Retry(ctx, api.OutboxRetryParams{AccountID: acc, MessageID: mid}); errCode(t, err) != api.CodeMessageNotFound {
 		t.Fatalf("retry after delete: %v", err)
+	}
+}
+
+// failedOutbox follows every outbox change that reaches a failed message
+// — the worker giving up, outbox.retry, message.delete — in sync.status,
+// account.list and notify.syncState alike, paused accounts included.
+func TestFailedOutboxReported(t *testing.T) {
+	b, _ := newSyncBackend(t)
+	ctx := context.Background()
+	acc := api.AccountID(seedAccount(t, b, "me@example.invalid"))
+	rec := &recorder{}
+	b.SetNotifier(rec)
+
+	var ids []api.MessageID
+	for i := range 3 {
+		id, version := saveDraft(t, b, api.Draft{AccountID: acc, To: []api.Address{{Address: "to@example.invalid"}}, Subject: fmt.Sprint("s", i), TextBody: "t"})
+		res, err := b.Messages().Send(ctx, api.MessageSendParams{AccountID: acc, DraftID: id, Version: version})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, res.OutboxID)
+	}
+	waitOutboxNotification(t, rec, acc, api.SyncIdle, 3, 0)
+
+	// A real worker, wired as the backend wires it, whose server refuses
+	// every message for good.
+	a, err := b.store.GetAccount(ctx, string(acc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := outbox.NewWorker(a, outbox.Deps{
+		Store:    b.store,
+		Password: func(context.Context) (string, error) { return "pw", nil },
+		Deliver: func(context.Context, api.ServerConfig, string, string, []string, io.Reader, int64) error {
+			return &smtp.SendError{Err: api.NewError(api.CodeServerError, "550 no such user"), Stage: smtp.StageData, Permanent: true}
+		},
+		Changed: b.outboxChanged,
+	})
+	runCtx, stop := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.Run(runCtx)
+	}()
+	waitOutboxNotification(t, rec, acc, api.SyncIdle, 0, 3)
+	stop()
+	<-done
+	if st := outboxStateOf(t, b, acc); st.Status != api.SyncIdle || st.PendingOutbox != 0 || st.FailedOutbox != 3 {
+		t.Fatalf("after the worker gave up: %+v", st)
+	}
+
+	// outbox.retry re-queues one.
+	if _, err := b.Outbox().Retry(ctx, api.OutboxRetryParams{AccountID: acc, MessageID: ids[0]}); err != nil {
+		t.Fatal(err)
+	}
+	waitOutboxNotification(t, rec, acc, api.SyncIdle, 1, 2)
+
+	// Deleting a failed one changes failedOutbox alone.
+	if _, err := b.Messages().Delete(ctx, api.MessageDeleteParams{AccountID: acc, MessageIDs: []api.MessageID{ids[1]}}); err != nil {
+		t.Fatal(err)
+	}
+	waitOutboxNotification(t, rec, acc, api.SyncIdle, 1, 1)
+	if st := outboxStateOf(t, b, acc); st.PendingOutbox != 1 || st.FailedOutbox != 1 {
+		t.Fatalf("after delete: %+v", st)
+	}
+
+	// A paused account reports its outbox too.
+	if _, err := b.Accounts().SetEnabled(ctx, api.AccountSetEnabledParams{AccountID: acc, Enabled: false}); err != nil {
+		t.Fatal(err)
+	}
+	if st := outboxStateOf(t, b, acc); st.Status != api.SyncDisabled || st.PendingOutbox != 1 || st.FailedOutbox != 1 {
+		t.Fatalf("paused: %+v", st)
+	}
+	if _, err := b.Messages().Delete(ctx, api.MessageDeleteParams{AccountID: acc, MessageIDs: []api.MessageID{ids[0]}}); err != nil {
+		t.Fatal(err)
+	}
+	waitOutboxNotification(t, rec, acc, api.SyncDisabled, 0, 1)
+	if _, err := b.Messages().Delete(ctx, api.MessageDeleteParams{AccountID: acc, MessageIDs: []api.MessageID{ids[2]}}); err != nil {
+		t.Fatal(err)
+	}
+	waitOutboxNotification(t, rec, acc, api.SyncDisabled, 0, 0)
+	if st := outboxStateOf(t, b, acc); st.PendingOutbox != 0 || st.FailedOutbox != 0 {
+		t.Fatalf("paused, emptied: %+v", st)
 	}
 }

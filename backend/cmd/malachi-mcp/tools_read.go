@@ -45,7 +45,7 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 	}, b.getAttachment)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "sync_status",
-		Description: "Report the synchronisation state of one or every account: status, progress, last successful sync, pending outbox count and the last error.",
+		Description: "Report the synchronisation state of one or every account: status, progress, last successful sync, the outbox counts (pendingOutbox: messages still to be delivered; failedOutbox: messages whose delivery failed for good and wait in the outbox for the user) and the last error.",
 		Annotations: annRead(),
 	}, b.syncStatus)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -501,6 +501,7 @@ type syncStateOut struct {
 	Progress      int    `json:"progress"`
 	LastSync      string `json:"lastSync,omitempty"`
 	PendingOutbox int    `json:"pendingOutbox"`
+	FailedOutbox  int    `json:"failedOutbox"`
 	Error         string `json:"error,omitempty"`
 }
 
@@ -518,6 +519,7 @@ func (b *bridge) syncStatus(ctx context.Context, _ *mcp.CallToolRequest, in sync
 		o := syncStateOut{
 			AccountID: string(s.AccountID), Status: string(s.Status), FolderID: string(s.FolderID),
 			Progress: s.Progress, LastSync: formatTimePtr(s.LastSync), PendingOutbox: s.PendingOutbox,
+			FailedOutbox: s.FailedOutbox,
 		}
 		if s.Error != nil {
 			o.Error = s.Error.Code.String() + ": " + truncateBytes(oneLine(s.Error.Message), maxErrorMessageBytes)

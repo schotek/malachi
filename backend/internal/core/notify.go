@@ -70,10 +70,10 @@ type accountState struct {
 //
 // NewMessage, AuthRequired and AccountsChanged pass through in order.
 // SyncState is delivered at once when status, folderId, error code (or a
-// tlsError's reason and certificate), lastSync or pendingOutbox differ
-// from the last delivered state of that account; a progress-only change
-// is delivered at most every syncStateInterval, with a trailing timer that
-// delivers the newest value.
+// tlsError's reason and certificate), lastSync, pendingOutbox or
+// failedOutbox differ from the last delivered state of that account; a
+// progress-only change is delivered at most every syncStateInterval, with
+// a trailing timer that delivers the newest value.
 type coalescingNotifier struct {
 	inner    api.Notifier
 	log      *slog.Logger
@@ -248,7 +248,8 @@ func (c *coalescingNotifier) deliver(ev event) {
 // progress. Of the error, the code counts and, for a tlsError, the reason
 // and the certificate (a server presenting another one is news).
 func syncStateChanged(prev, cur api.SyncState) bool {
-	if prev.Status != cur.Status || prev.FolderID != cur.FolderID || prev.PendingOutbox != cur.PendingOutbox {
+	if prev.Status != cur.Status || prev.FolderID != cur.FolderID ||
+		prev.PendingOutbox != cur.PendingOutbox || prev.FailedOutbox != cur.FailedOutbox {
 		return true
 	}
 	if errorCode(prev.Error) != errorCode(cur.Error) || !transport.SameTLSDetails(prev.Error, cur.Error) {
@@ -272,12 +273,13 @@ func errorCode(e *api.Error) api.ErrorCode {
 }
 
 // outboxAwareNotifier completes every notify.syncState with the account's
-// pendingOutbox count before it reaches the coalescer, so the sync engine
-// (which knows nothing about the outbox) and the outbox worker report one
-// consistent state. It also completes notify.authRequired of an account
-// with the backend's own sign-in with the authUrl of the session waiting
-// for it (opening one if needed): the engines know nothing about sign-in
-// sessions either. Other events pass through.
+// pendingOutbox and failedOutbox counts before it reaches the coalescer,
+// so the sync engine (which knows nothing about the outbox) and the outbox
+// worker report one consistent state. It also completes
+// notify.authRequired of an account with the backend's own sign-in with
+// the authUrl of the session waiting for it (opening one if needed): the
+// engines know nothing about sign-in sessions either. Other events pass
+// through.
 type outboxAwareNotifier struct {
 	b     *Backend
 	inner api.Notifier
@@ -296,7 +298,7 @@ func (n outboxAwareNotifier) AccountsChanged(ev api.AccountsChangedNotification)
 	n.inner.AccountsChanged(ev)
 }
 func (n outboxAwareNotifier) SyncState(ev api.SyncStateNotification) {
-	ev.State.PendingOutbox = n.b.pendingOutbox(string(ev.State.AccountID))
+	ev.State.PendingOutbox, ev.State.FailedOutbox = n.b.outboxCounts(string(ev.State.AccountID))
 	n.inner.SyncState(ev)
 }
 

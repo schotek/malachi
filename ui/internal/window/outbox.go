@@ -16,17 +16,21 @@ import (
 
 // The outbox: messages queued for sending live in the account's outbox
 // folder, carry their delivery state in MessageSummary.Outbox and are
-// counted by SyncState.PendingOutbox. The UI shows the state on a banner
-// above the message, offers outbox.retry for a failed one and turns Trash
-// into "cancel sending" (message.delete drops the message for good; the
-// backend refuses flags and moves on outbox messages). The daemon owns the
-// queue: nothing here decides when or whether a message goes out.
+// counted by SyncState.PendingOutbox (queued or sending) and FailedOutbox.
+// The UI shows the state on a banner above the message and the failed
+// ones in the sidebar's status line and its popover (status.go), offers
+// outbox.retry for a failed one and turns Trash into "cancel sending"
+// (message.delete drops the message for good; the backend refuses flags
+// and moves on outbox messages). The daemon owns the queue: nothing here
+// decides when or whether a message goes out.
 
 // trackOutbox runs after every folder.list of acc: a shrink of the outbox
 // folder that the user did not cause by cancelling means messages were
 // delivered and their copy filed in Sent (the daemon removes an outbox
 // message only then, or right after delivery when the account has no Sent
-// folder; a failed send keeps it). Those get a toast.
+// folder; a failed send keeps it). Those get a toast. A cancel is used up
+// only by a shrink it explains: a reload that lands between counting it
+// and the daemon's delete leaves it for the reload that sees the drop.
 func (w *Window) trackOutbox(acc api.AccountID) {
 	if w.outboxSeen == nil {
 		w.outboxSeen = make(map[api.AccountID]int)
@@ -41,9 +45,10 @@ func (w *Window) trackOutbox(acc api.AccountID) {
 	if !known {
 		return
 	}
-	sent := seen - total - w.outboxCancelled[acc]
-	w.outboxCancelled[acc] = 0
-	if sent > 0 {
+	shrink := max(seen-total, 0)
+	cancelled := min(w.outboxCancelled[acc], shrink)
+	w.outboxCancelled[acc] -= cancelled
+	if sent := shrink - cancelled; sent > 0 {
 		// TRANSLATORS: toast after delivery; %d is the number of messages.
 		w.Toast(fmt.Sprintf(i18n.N("%d message sent", "%d messages sent", sent), sent))
 	}
@@ -201,19 +206,28 @@ func (w *Window) cancelSendFrom(parent gtk.Widgetter, id api.MessageID) {
 		restore := w.removeMessageRow(id)
 		w.closeMessageWindow(id)
 		undo := w.trackMove(s, folderKey{})
+		// The drop is ours, not a delivery (trackOutbox). It is counted
+		// before the call: removing a queued or failed message moves
+		// pendingOutbox or failedOutbox, and the notify.syncState that
+		// follows reloads the folders, possibly before this reply arrives.
+		if w.outboxCancelled == nil {
+			w.outboxCancelled = make(map[api.AccountID]int)
+		}
+		w.outboxCancelled[s.AccountID]++
 		w.callThen(i18n.T("Cancelling the send"), api.MethodMessageDelete, api.MessageDeleteParams{
 			AccountID: s.AccountID, MessageIDs: []api.MessageID{id},
 		}, func() {
+			// Nothing was dropped after all. A folder reload in between
+			// may have used the count up already.
+			if w.outboxCancelled[s.AccountID] > 0 {
+				w.outboxCancelled[s.AccountID]--
+			}
 			restore()
 			undo()
 		}, func() {
-			// Removing a failed message changes no pendingOutbox count, so
-			// no notify.syncState follows: refresh the sidebar ourselves
-			// (an empty outbox disappears). The drop is ours, not a delivery.
-			if w.outboxCancelled == nil {
-				w.outboxCancelled = make(map[api.AccountID]int)
-			}
-			w.outboxCancelled[s.AccountID]++
+			// The sidebar is refreshed here as well (an empty outbox
+			// disappears), for a daemon that sends no notify.syncState on
+			// the change; a second reload finds nothing left to count.
 			w.onOutboxChanged(s.AccountID)
 		})
 	})
