@@ -4,8 +4,11 @@ Instrukce pro AI asistenty pracující na tomto repozitáři.
 
 ## Co je tento projekt
 
-**Malachi Mail** — desktopový emailový klient pro Linux. Backend v Go, UI v GTK4.
-Dva samostatné procesy komunikující přes JSON-RPC na unix socketu.
+**Malachi Mail** — desktopový emailový klient: jedno jádro v Go s veškerou
+logikou (démon `malachid` v `backend/`) a nativní UI pro každou platformu,
+dnes GTK4 pro Linux (`ui/`) a Swift/AppKit pro macOS (`macos/`), Windows
+(WinUI 3) přijde. UI a démon jsou dva samostatné procesy komunikující přes
+JSON-RPC na unix socketu.
 
 ### Názvosloví — dodržuj důsledně
 
@@ -37,8 +40,12 @@ patologické případy (do `backend/testdata/mime`), ne jen šťastnou cestu.
 V UI: `SetUseMarkup(false)` na všem, co zobrazuje data ze serveru.
 
 ### 4. Jeden kód na platformu, žádné větvení
-Jádro i GTK UI v tomto stromu jsou linuxový kód: nepřidávej do nich build
-tagy, podmíněnou kompilaci ani abstrakce „pro jistotu“ pro Windows a macOS.
+Jádro (`backend/`) je platformně neutrální Go: týž strom se beze změny
+staví pro Linux i do macOS aplikace, linuxové služby přes D-Bus jsou jen
+volitelné za běhu. GTK UI je linuxový kód. Do žádného z nich nepřidávej
+build tagy, podmíněnou kompilaci ani abstrakce „pro jistotu“ pro Windows
+a macOS; co se jinde liší, řeší démon neutrálním bodem rozšíření voleným
+za běhu (jako `MALACHI_KEYRING=helper`), ne platformním kódem ve stromu.
 Jiné platformy dostanou vlastní nativní UI (Swift/AppKit pro macOS, WinUI 3
 pro Windows) jako samostatné klienty nad API démona, přičemž GTK UI je
 mustr, který zrcadlí; nikdy větvení tohoto kódu. Přenositelnost je
