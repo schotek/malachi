@@ -156,7 +156,7 @@ extension MailModel {
         }
         if let a = account(s.accountId) {
             tooltip += "\n" + accountLabel(a)
-            if search.effective == .all, enabledAccounts(accounts).count > 1 {
+            if search.effective == .all, enabledAccounts.count > 1 {
                 // TRANSLATORS: where a search result lies, shown in its row:
                 // the folder, then the account.
                 label = L10n.format(L10n.C("search result origin", "%s · %s"), [label, accountLabel(a)])
