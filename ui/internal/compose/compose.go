@@ -69,9 +69,15 @@ type Window struct {
 	alignAction *gio.SimpleAction
 	syncing     bool // toolbar being updated from the page, not by the user
 
-	accounts    []api.Account
-	attachments []api.DraftAttachment
-	chips       map[string]gtk.Widgetter
+	accounts []api.Account
+	// chosenAccount is the identity the user picked in From; until they
+	// do, params.AccountID is what From shows (also after the account
+	// list arrives, replacing the placeholder). settingFrom marks the
+	// window's own changes of the row, which are no choice.
+	chosenAccount api.AccountID
+	settingFrom   bool
+	attachments   []api.DraftAttachment
+	chips         map[string]gtk.Widgetter
 	// suggest is the recipient completion of the To, Cc and Bcc rows.
 	suggest []*suggestions
 
@@ -216,12 +222,13 @@ func fromFactory() *gtk.SignalListItemFactory {
 // with a choice.
 func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
 	selectedID := w.params.AccountID
-	if len(w.accounts) > 0 {
-		selectedID = w.account().ID
+	if w.chosenAccount != "" {
+		selectedID = w.chosenAccount
 	}
 	w.accounts = accounts
 	labels := make([]string, 0, len(accounts))
 	selected := uint(0)
+	found := false
 	for i, a := range accounts {
 		name := a.Config.DisplayName
 		if name == "" {
@@ -230,15 +237,27 @@ func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
 		labels = append(labels, widget.FormatAddress(api.Address{Name: name, Address: a.Config.Email}))
 		if a.ID == selectedID {
 			selected = uint(i)
+			found = true
 		}
 	}
+	w.settingFrom = true
 	w.from.SetFactory(&fromFactory().ListItemFactory)
 	w.from.SetModel(gtk.NewStringList(labels))
 	w.from.SetSelected(selected)
-	w.from.SetSensitive(len(accounts) > 1)
+	w.settingFrom = false
+	// A reply or a forward goes out from the account the original is in:
+	// its quoted pictures and forwarded files were copied into that
+	// account, and the reply belongs to that mailbox's conversation.
+	w.from.SetSensitive(len(accounts) > 1 && !(w.fromLocked() && found))
 	if placeholder {
 		w.setStatus(i18n.T("Using placeholder account"))
 	}
+}
+
+// fromLocked reports whether From is fixed to params.AccountID: for a
+// reply or a forward (a draft reopened from Drafts included).
+func (w *Window) fromLocked() bool {
+	return w.params.InReplyTo != "" || w.params.Forwarding != ""
 }
 
 // account is the selected identity.
@@ -270,6 +289,10 @@ func (w *Window) wireRows() {
 		w.markDirty()
 	})
 	w.from.NotifyProperty("selected", func() {
+		if w.settingFrom {
+			return
+		}
+		w.chosenAccount = w.account().ID
 		w.markDirty()
 		// Another identity means other address books: what is shown was
 		// asked on behalf of the previous one.

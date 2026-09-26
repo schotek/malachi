@@ -39,6 +39,10 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     /// The identities of the From row (`accounts`).
     private(set) var accounts: [Account] = []
+    /// The identity the user picked in From (`chosenAccount`); until they
+    /// do, `params.accountID` is what From shows, also after the account
+    /// list arrives in place of the placeholder.
+    private var chosenAccountID: AccountID?
     /// The attachments listed under the editor (`attachments`).
     var attachments: [DraftAttachment] = []
     /// The completion of the To, Cc and Bcc rows (`suggest`).
@@ -266,6 +270,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.subjectField.delegate = self
         header.onFromChanged = { [weak self] in
             guard let self else { return }
+            self.chosenAccountID = self.account.id
             self.draft.markDirty()
             // Another identity means other address books: what is shown
             // was asked on behalf of the previous one.
@@ -495,15 +500,16 @@ extension ComposeWindowController: ComposeWindowHandle {
         NSApp.activate()
     }
 
+    /// compose.go `fromLocked`: From is fixed to `params.accountID` for a
+    /// reply or a forward (a draft reopened from Drafts included).
+    var fromLocked: Bool { params.inReplyTo != nil || params.forwarding != nil }
+
     /// compose.go `setAccounts`: fills the From row, keeping the selected
-    /// identity when it is still listed; before any choice was made the
-    /// account the window was opened for is preselected. The row is only
-    /// enabled with a choice.
+    /// identity the user picked when it is still listed; until they pick,
+    /// the account the window was opened for. The row is only enabled with
+    /// a choice, and never for a reply or a forward.
     func setAccounts(_ list: [Account], placeholder: Bool) {
-        var selectedID = params.accountID
-        if !accounts.isEmpty {
-            selectedID = account.id
-        }
+        let selectedID = chosenAccountID ?? params.accountID
         accounts = list
         let labels = list.map { a -> String in
             var name = (a.config.displayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -513,8 +519,11 @@ extension ComposeWindowController: ComposeWindowHandle {
             // The account's own text, elided and shown as plain text.
             return Self.tailEllipsis(formatAddress(Address(name: name, address: a.config.email)), max: Self.fromLabelChars)
         }
-        let selected = list.firstIndex { $0.id == selectedID } ?? 0
-        header.setAccounts(labels: labels, selected: selected, enabled: list.count > 1)
+        let found = list.firstIndex { $0.id == selectedID }
+        // A reply or a forward goes out from the account the original is
+        // in (compose.go `fromLocked`): its quoted pictures and forwarded
+        // files were copied into that account.
+        header.setAccounts(labels: labels, selected: found ?? 0, enabled: list.count > 1 && !(fromLocked && found != nil))
         if placeholder {
             setStatus(L10n.T("Using placeholder account"))
         }
