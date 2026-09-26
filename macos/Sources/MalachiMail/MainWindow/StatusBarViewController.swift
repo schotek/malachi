@@ -193,8 +193,20 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
         refreshStatusPopover()
         // Above the line, as the GTK menu button opens upwards. The edge is
         // in the button's coordinates, and a flipped view's top is minY.
-        popover.show(relativeTo: statusButton.bounds, of: statusButton,
+        popover.show(relativeTo: statusTextRect, of: statusButton,
                      preferredEdge: statusButton.isFlipped ? .minY : .maxY)
+    }
+
+    /// The part of the line its text covers. The button spans the whole
+    /// bar, and a popover is centred on its anchor: anchored to the button
+    /// it opened in the middle of the window, not above the status at the
+    /// bar's leading end, where GTK's menu button (the sidebar's width)
+    /// opens it.
+    private var statusTextRect: NSRect {
+        let bounds = statusButton.bounds
+        let text = statusButton.cell?.cellSize.width ?? bounds.width
+        return NSRect(x: bounds.minX, y: bounds.minY,
+                      width: min(bounds.width, max(text, 1)), height: bounds.height)
     }
 
     /// A transient popover closes on the mouse-down of any click outside
@@ -217,6 +229,9 @@ final class StatusBarViewController: NSViewController, NSPopoverDelegate {
 private final class StatusBarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
+        // Only the view's own area: since macOS 14 a view does not clip
+        // to its bounds by default and dirtyRect can reach past them, so
+        // filling it painted over the views beside and below this one.
+        dirtyRect.intersection(bounds).fill()
     }
 }

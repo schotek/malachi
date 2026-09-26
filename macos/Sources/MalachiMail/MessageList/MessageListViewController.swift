@@ -117,7 +117,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         filter.translatesAutoresizingMaskIntoConstraints = false
         // The same background as the list below it (window.blp puts the
         // filter inside the list's `view` styled box), not the window's.
-        let filterBar = ListBackgroundView()
+        let filterBar = ContentBackgroundView()
         filterBar.translatesAutoresizingMaskIntoConstraints = false
         filterBar.addSubview(filter)
         NSLayoutConstraint.activate([
@@ -212,7 +212,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         // would inset itself. The whole column is painted like the list
         // (window.blp: the list pane is a `view` styled box), status pages
         // included.
-        let container = ListBackgroundView()
+        let container = ContentBackgroundView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(root)
         NSLayoutConstraint.activate([
@@ -552,26 +552,5 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         guard !isReselecting else { return }
         let row = table.selectedRow
         list.select(key: row >= 0 && row < keys.count ? keys[row] : nil)
-    }
-}
-
-/// A view painted in the list's background colour, following the
-/// appearance (a layer colour set once would stay light in dark mode).
-@MainActor
-private final class ListBackgroundView: NSView {
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    override var wantsUpdateLayer: Bool { true }
-
-    override func updateLayer() {
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
     }
 }

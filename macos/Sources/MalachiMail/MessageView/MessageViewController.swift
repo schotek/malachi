@@ -194,8 +194,10 @@ final class MessageViewController: NSViewController {
         root.addArrangedSubview(pages)
         // In the main window the pane runs under the unified toolbar
         // (fullSizeContentView); the content starts below it, at the safe
-        // area, like the GTK pane below its header bar.
-        let container = NSView()
+        // area, like the GTK pane below its header bar. The pane is white
+        // like the list beside it (the header over the window's grey read
+        // as a separate bar).
+        let container = ContentBackgroundView()
         container.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(root)
         NSLayoutConstraint.activate([

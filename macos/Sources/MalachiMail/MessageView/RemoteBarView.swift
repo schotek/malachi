@@ -87,7 +87,10 @@ final class RemoteBarView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         Tint.remoteBar.setFill()
-        dirtyRect.fill()
+        // Only the view's own area: since macOS 14 a view does not clip
+        // to its bounds by default and dirtyRect can reach past them, so
+        // filling it painted over the views beside and below this one.
+        dirtyRect.intersection(bounds).fill()
     }
 
     /// Switches between offering the images and showing that they are on
