@@ -19,8 +19,6 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     static let defaultSize = NSSize(width: 760, height: 640)
     static let minimumSize = NSSize(width: 360, height: 420)
     static let toolbarIdentifier = NSToolbar.Identifier("compose")
-    /// The From titles are elided at this many characters (fromFactory).
-    static let fromLabelChars = 30
 
     let state: AppState
     unowned let manager: ComposeManager
@@ -360,14 +358,6 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         return nil
     }
 
-    /// Cuts `s` to `max` characters with a trailing ellipsis (the From
-    /// factory's `max-width-chars`).
-    static func tailEllipsis(_ s: String, max: Int) -> String {
-        let chars = Array(s)
-        guard max >= 2, chars.count > max else { return s }
-        return String(chars[..<(max - 1)]) + "\u{2026}"
-    }
-
     // MARK: NSWindowDelegate
 
     /// closeRequest: the window goes at once when nothing is at stake;
@@ -516,8 +506,10 @@ extension ComposeWindowController: ComposeWindowHandle {
             if name.isEmpty {
                 name = a.config.name
             }
-            // The account's own text, elided and shown as plain text.
-            return Self.tailEllipsis(formatAddress(Address(name: name, address: a.config.email)), max: Self.fromLabelChars)
+            // The account's own text, as plain text. GTK elides it at 30
+            // characters (fromFactory's max-width-chars); the pop-up here
+            // truncates to the width the row gives it (lineBreakMode).
+            return formatAddress(Address(name: name, address: a.config.email))
         }
         let found = list.firstIndex { $0.id == selectedID }
         // A reply or a forward goes out from the account the original is
