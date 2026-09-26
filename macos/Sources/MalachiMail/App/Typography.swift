@@ -48,11 +48,4 @@ enum Tint {
     /// `card`, `boxed-list`, `view`.
     static var cardFill: NSColor { .controlBackgroundColor }
     static var cardBorder: NSColor { .separatorColor }
-    /// The background of an Adw.Banner: the accent, mostly faded into the
-    /// window background so the bold title stays readable in both schemes.
-    static var banner: NSColor {
-        NSColor.controlAccentColor.blended(withFraction: 0.7, of: .windowBackgroundColor) ?? .controlAccentColor
-    }
-    /// The remote-image bar (`box.remote-bar`).
-    static var remoteBar: NSColor { fg(alpha: 0.06) }
 }

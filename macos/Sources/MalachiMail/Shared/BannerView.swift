@@ -3,9 +3,10 @@
 
 import AppKit
 
-/// Adw.Banner: a tinted strip with a bold title and at most one button,
-/// revealed and hidden with a short animation. Meant for a vertical
-/// `NSStackView`, whose animator hides arranged views smoothly.
+/// Adw.Banner in the Mac's own form: a `CalloutCard` with an SF Symbol,
+/// the title in the regular weight and at most one button, revealed and
+/// hidden with a short animation. Meant for a vertical `NSStackView`,
+/// whose animator hides arranged views smoothly.
 @MainActor
 final class BannerView: NSView {
     static let revealDuration: TimeInterval = 0.2
@@ -31,15 +32,21 @@ final class BannerView: NSView {
     /// Whether the banner is shown (`revealed`).
     private(set) var isRevealed = false
 
+    private let symbolView = CalloutCard.symbolView()
     private let titleLabel = NSTextField(wrappingLabelWithString: "")
     private let button = NSButton(title: "", target: nil, action: nil)
 
-    init(title: String = "", buttonTitle: String? = nil) {
+    /// - Parameters:
+    ///   - symbol: the SF Symbol at the start, `severity` its colour; a
+    ///     banner whose meaning changes sets them with `setSymbol`.
+    init(title: String = "", buttonTitle: String? = nil, symbol: String = "info.circle",
+         severity: CalloutSeverity = .info) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isHidden = true
+        setSymbol(symbol, severity)
 
-        titleLabel.font = Typo.heading
+        titleLabel.font = Typo.body
         titleLabel.isSelectable = false
         titleLabel.stringValue = title
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -54,33 +61,22 @@ final class BannerView: NSView {
         button.setContentCompressionResistancePriority(.required, for: .horizontal)
         defer { self.buttonTitle = buttonTitle }
 
-        let stack = NSStackView(views: [titleLabel, button])
+        let stack = NSStackView(views: [symbolView, titleLabel, button])
         stack.orientation = .horizontal
         stack.distribution = .fill
         stack.alignment = .centerY
-        stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
+        stack.spacing = CalloutCard.spacing
+        CalloutCard.install(stack, in: self)
+    }
+
+    /// The symbol at the start and its colour.
+    func setSymbol(_ name: String, _ severity: CalloutSeverity) {
+        CalloutCard.show(name, severity, in: symbolView)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        Tint.banner.setFill()
-        // Only the view's own area: since macOS 14 a view does not clip
-        // to its bounds by default and dirtyRect can reach past them, so
-        // filling it painted over the views beside and below this one.
-        dirtyRect.intersection(bounds).fill()
     }
 
     /// Shows or hides the banner, animated over `revealDuration` unless

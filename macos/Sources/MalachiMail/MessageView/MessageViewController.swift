@@ -79,7 +79,9 @@ final class MessageViewController: NSViewController {
     private let banner = BannerView()
     /// A message of the Drafts folder (window.blp `draft_banner`; the pane
     /// only): the button opens it in the compose window.
-    private let draftBanner = BannerView(title: L10n.T("This message is a draft"), buttonTitle: L10n.T("Edit"))
+    private let draftBanner = BannerView(
+        title: L10n.T("This message is a draft"), buttonTitle: L10n.T("Edit"), symbol: "square.and.pencil"
+    )
     private let remoteBar: RemoteBarView
     private let textScroll = NSScrollView()
     private let textClamp: ClampView
@@ -463,6 +465,11 @@ final class MessageViewController: NSViewController {
     func renderOutboxBanner(_ m: Message?) {
         guard mode != .embedded else { return }
         let text = outboxBannerText(m?.summary.outbox)
+        if m?.summary.outbox?.state == .failed {
+            banner.setSymbol("exclamationmark.triangle.fill", .warning)
+        } else {
+            banner.setSymbol("paperplane", .info)
+        }
         banner.title = text.title
         banner.buttonTitle = text.button
         banner.reveal(text.shown)

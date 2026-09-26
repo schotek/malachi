@@ -39,12 +39,19 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private let backendBanner = BannerView(
-        title: L10n.T("The mail backend (malachid) is not running."), buttonTitle: L10n.T("Retry")
+        title: L10n.T("The mail backend (malachid) is not running."), buttonTitle: L10n.T("Retry"),
+        symbol: "exclamationmark.triangle.fill", severity: .warning
     )
-    private let authBanner = BannerView(title: "", buttonTitle: L10n.T("Open Preferences"))
+    private let authBanner = BannerView(
+        title: "", buttonTitle: L10n.T("Open Preferences"),
+        symbol: "person.crop.circle.badge.exclamationmark", severity: .warning
+    )
     /// window.blp `cert_banner`: the first account whose server's
     /// certificate was refused or has changed.
-    private let certBanner = BannerView(title: "", buttonTitle: mn(L10n.T("_Edit Account…")))
+    private let certBanner = BannerView(
+        title: "", buttonTitle: mn(L10n.T("_Edit Account…")),
+        symbol: "lock.trianglebadge.exclamationmark", severity: .warning
+    )
     private let filter = NSSegmentedControl()
     private let scroll = NSScrollView()
     private let table = MessageListTableView()

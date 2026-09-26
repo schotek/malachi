@@ -10,6 +10,8 @@ import MalachiCore
 /// trusts the sender, and the spinner that stands in for the buttons while
 /// the images are on their way. Adw.Banner has room for one button, hence a
 /// bar of its own. The buttons are small bordered ones (D6 of the plan).
+/// Like the banners it is a `CalloutCard`, with a photo symbol; the spinner
+/// takes the buttons' place at the end.
 @MainActor
 final class RemoteBarView: NSView {
     /// Load Images was clicked.
@@ -26,6 +28,7 @@ final class RemoteBarView: NSView {
         set { label.stringValue = newValue }
     }
 
+    private let symbolView = CalloutCard.symbolView()
     private let spinner = Spinner(size: 16)
     private let label = NSTextField(wrappingLabelWithString: "")
     private let loadButton: NSButton
@@ -61,36 +64,21 @@ final class RemoteBarView: NSView {
         trustButton.isHidden = !showsTrust
         spinner.isHidden = true
 
-        let stack = NSStackView(views: [spinner, label, loadButton, trustButton])
+        CalloutCard.show("photo", .info, in: symbolView)
+        let stack = NSStackView(views: [symbolView, label, spinner, loadButton, trustButton])
         stack.orientation = .horizontal
         stack.distribution = .fill
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         spinner.setContentHuggingPriority(.required, for: .horizontal)
         stack.alignment = .centerY
-        stack.spacing = 12
-        stack.edgeInsets = NSEdgeInsets(top: 6, left: 12, bottom: 6, right: 12)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
+        stack.spacing = CalloutCard.spacing
+        CalloutCard.install(stack, in: self)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        Tint.remoteBar.setFill()
-        // Only the view's own area: since macOS 14 a view does not clip
-        // to its bounds by default and dirtyRect can reach past them, so
-        // filling it painted over the views beside and below this one.
-        dirtyRect.intersection(bounds).fill()
     }
 
     /// Switches between offering the images and showing that they are on

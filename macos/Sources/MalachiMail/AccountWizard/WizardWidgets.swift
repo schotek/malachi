@@ -7,10 +7,13 @@ import AppKit
 // an entry with an error underline, and the page root that routes Return.
 // They stand in for the shell's shared views and may be swapped for them.
 
-/// `AdwBanner` without a button: a tinted strip with a bold title.
+/// `AdwBanner` without a button, in the Mac's form: a `CalloutCard` with a
+/// warning symbol and the text in the regular weight (what the identity
+/// page shows is always a problem to fix).
 @MainActor
 final class WizardBannerView: NSView {
     private let label: PrefsWrappingLabel
+    private let symbolView = CalloutCard.symbolView()
 
     var title: String {
         get { label.stringValue }
@@ -18,29 +21,22 @@ final class WizardBannerView: NSView {
     }
 
     init() {
-        label = PrefsWrappingLabel("", weight: .bold)
+        label = PrefsWrappingLabel("")
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.required, for: .vertical)
-        wantsLayer = true
-        label.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-        ])
+        CalloutCard.show("exclamationmark.triangle.fill", .warning, in: symbolView)
+        let stack = NSStackView(views: [symbolView, label])
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = CalloutCard.spacing
+        CalloutCard.install(stack, in: self)
         isHidden = true
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
-    }
-
-    override func updateLayer() {
-        layer?.backgroundColor = NSColor.controlAccentColor.blended(withFraction: 0.7, of: .windowBackgroundColor)?.cgColor
     }
 
     /// Shows the banner with `text`, or hides it for nil.
