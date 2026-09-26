@@ -428,7 +428,8 @@ func (w *Window) fetchMessage(acc api.AccountID, id api.MessageID, done func(*lo
 		lm.fetching = true
 		lm.err = nil // a retry after a failure
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+			// The stored policy may let the daemon fetch remote images first.
+			ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 			defer cancel()
 			var res api.MessageBodyResult
 			err := w.client.Call(ctx, api.MethodMessageBody, api.MessageBodyParams{AccountID: acc, MessageID: id}, &res)

@@ -725,12 +725,13 @@ import Testing
         #expect(API.DraftOpen.timeout == .seconds(30))
         #expect(API.AccountAdd.timeout == .seconds(30) && API.AccountUpdate.timeout == .seconds(30))
         #expect(API.AccountDiscover.timeout == .seconds(15) && API.AccountTest.timeout == .seconds(45))
-        #expect(API.MessageBody.timeout == .seconds(5) && API.MessageList.timeout == .seconds(5) && API.SenderAdd.timeout == .seconds(5))
+        #expect(API.MessageBody.timeout == .seconds(30))
+        #expect(API.MessageList.timeout == .seconds(5) && API.SenderAdd.timeout == .seconds(5))
         #expect(API.AccountOAuthStart.timeout == .seconds(10) && API.AccountOAuthWait.timeout == .seconds(75))
         #expect(RPCTimeouts.oauthStart == .seconds(10) && RPCTimeouts.oauthWaitCall == .seconds(75))
         #expect(API.AccountOAuthCancel.timeout == .seconds(5))
         #expect(RPCTimeouts.default == .seconds(5) && RPCTimeouts.remote == .seconds(30))
-        let special: Set<String> = ["system.info", "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
+        let special: Set<String> = ["system.info", "message.body", "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait"]
         for m in API.methods where !special.contains(m.name) {

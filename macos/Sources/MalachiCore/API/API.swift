@@ -151,11 +151,13 @@ public enum API {
         public static let name = "message.get"
     }
 
-    /// Under `remoteContent: .allow` pass `RPCTimeouts.remote` explicitly.
+    /// `remote` even without an override: a stored `allow` or a known
+    /// sender lets the daemon fetch the images before it answers.
     public enum MessageBody: RPCMethod {
         public typealias Params = MessageBodyParams
         public typealias Result = MessageBodyResult
         public static let name = "message.body"
+        public static let timeout = RPCTimeouts.remote
     }
 
     public enum MessagePart: RPCMethod {

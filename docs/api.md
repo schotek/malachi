@@ -850,7 +850,9 @@ content is always `block`, whatever the policy (see `docs/security.md` §5).
 
 A call under `allow` may take several seconds while the daemon fetches the
 images; a client should allow for that (30 s is a reasonable timeout) rather
-than use its usual short one.
+than use its usual short one. That includes a call without `remoteContent`:
+the stored preference or a known sender may resolve it to `allow`, and the
+client cannot tell in advance.
 
 #### `message.part`
 - params: `{ "accountId", "messageId", "partId" }`

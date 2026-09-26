@@ -5,9 +5,8 @@ import Foundation
 
 /// How long the client waits for each kind of call, as the GTK UI does
 /// (ui/internal/window, ui/internal/compose, ui/internal/accountwizard).
-/// Every `API` method carries one of these as its default; a caller passes
-/// another explicitly when a call is known to be slow (`message.body` under
-/// `allow` takes `remote`).
+/// Every `API` method carries one of these as its default; a caller may
+/// pass another explicitly.
 public enum RPCTimeouts {
     /// Everything not named below.
     public static let `default`: Duration = .seconds(5)
@@ -15,8 +14,8 @@ public enum RPCTimeouts {
     public static let systemInfo: Duration = .seconds(3)
     /// `message.part`, `attachment.get`: payloads up to 16 MiB.
     public static let part: Duration = .seconds(60)
-    /// `message.body` with `remoteContent: "allow"`, `message.embedded`: the
-    /// daemon may fetch images for up to 10 s.
+    /// `message.body` (any call the policy may resolve to `allow`),
+    /// `message.embedded`: the daemon may fetch images for up to 10 s.
     public static let remote: Duration = .seconds(30)
     /// `draft.create`: quoting copies parts into the attachment store.
     public static let compose: Duration = .seconds(30)

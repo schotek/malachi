@@ -124,7 +124,7 @@ public final class MessageCache {
                 let outcome: Result<MessageBodyResult, any Error>
                 do {
                     outcome = .success(try await client.call(
-                        API.MessageBody.self, MessageBodyParams(accountId: s.accountId, messageId: id), timeout: RPCTimeouts.default))
+                        API.MessageBody.self, MessageBodyParams(accountId: s.accountId, messageId: id)))
                 } catch {
                     outcome = .failure(error)
                 }
@@ -221,8 +221,7 @@ public final class MessageCache {
             do {
                 outcome = .success(try await client.call(
                     API.MessageBody.self,
-                    MessageBodyParams(accountId: s.accountId, messageId: id, remoteContent: .allow),
-                    timeout: RPCTimeouts.remote))
+                    MessageBodyParams(accountId: s.accountId, messageId: id, remoteContent: .allow)))
             } catch {
                 outcome = .failure(error)
             }

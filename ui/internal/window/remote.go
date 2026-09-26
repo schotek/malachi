@@ -28,7 +28,8 @@ import (
 
 // remoteTimeout bounds a message.body call that lets the daemon fetch
 // remote images: several seconds is normal, the usual rpcTimeout is not
-// enough.
+// enough. That is every call without a "block" override, since a stored
+// "allow" or a known sender resolves to it inside the daemon.
 const remoteTimeout = 30 * time.Second
 
 // remoteBarState is what the bar shows: nothing, how many remote images
