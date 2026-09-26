@@ -15,14 +15,18 @@ public enum ListState: Equatable, Sendable {
 }
 
 /// The Load More footer under the rows (messages.go `showLoadMore`): the
-/// button while a further page exists, the spinner while it is fetched.
+/// button while a further page exists, the spinner while it is fetched,
+/// and under the last page of search results how far back search reaches
+/// (window.blp `search_note`; empty otherwise).
 public struct LoadMoreState: Equatable, Sendable {
     public var spinner: Bool
     public var button: Bool
+    public var note: String
 
-    public init(spinner: Bool = false, button: Bool = false) {
+    public init(spinner: Bool = false, button: Bool = false, note: String = "") {
         self.spinner = spinner
         self.button = button
+        self.note = note
     }
 }
 
@@ -96,6 +100,12 @@ public final class ListController {
     /// Flat mode: the rows with these keys changed in place (a flag);
     /// `row(for:)` has the new content. Grouped mode goes through `onRows`.
     public var onRowsRefreshed: (@MainActor ([ListKey]) -> Void)?
+    /// The scope bar of a search (search.go `refreshSearchScope`); nil
+    /// hides it, as the search ended.
+    public var onSearchBar: (@MainActor (SearchBarState?) -> Void)?
+    /// Select this row and give the list the keyboard (Return in the
+    /// search field: search.go `selectFirstResult`).
+    public var onFocusRow: (@MainActor (ListKey) -> Void)?
 
     // MARK: Callbacks (the rest of the window)
 
@@ -169,6 +179,14 @@ public final class ListController {
     /// folder keeps the rows until the reply, so the list never flickers
     /// through the loading state and the selection survives (by key).
     public func loadMessages() {
+        if mailbox.model.search.active {
+            // The list shows search results; a reload of the folder (a
+            // sync, a selection) is a new search only if it changes the
+            // scope (search.go).
+            publishSearchBar()
+            runSearch(force: false)
+            return
+        }
         let k = mailbox.model.selected
         let gen = mailbox.model.bumpList()
         mailbox.model.loadingMore = false
@@ -278,8 +296,15 @@ public final class ListController {
     /// the last page is shown.
     public func loadMore() {
         let m = mailbox.model
-        guard !m.loading, !m.loadingMore, let cursor = m.nextCursor, !cursor.isEmpty, m.listErr == nil,
-              let k = m.listFolder else { return }
+        guard !m.loading, !m.loadingMore, let cursor = m.nextCursor, !cursor.isEmpty, m.listErr == nil else { return }
+        if m.search.active {
+            let gen = m.listGen
+            mailbox.model.loadingMore = true
+            showLoadMore()
+            loadMoreSearch(gen, cursor: cursor)
+            return
+        }
+        guard let k = m.listFolder else { return }
         let gen = m.listGen
         mailbox.model.loadingMore = true
         showLoadMore()
@@ -334,6 +359,10 @@ public final class ListController {
             showLoadMore()
             return
         }
+        if m.search.active {
+            setListState(searchListState())
+            return
+        }
         let state: ListState
         if m.selected == nil {
             state = .status(
@@ -377,13 +406,17 @@ public final class ListController {
     public func showLoadMore() {
         let m = mailbox.model
         let cursor = m.nextCursor ?? ""
-        let state = LoadMoreState(spinner: m.loadingMore, button: !m.loadingMore && !cursor.isEmpty && m.listErr == nil)
+        // Under the last page of results: how far back search reaches.
+        let st = m.search
+        let note = st.active && st.shown && cursor.isEmpty && !m.loadingMore && m.rowCount > 0
+            ? searchRetentionText(days: st.offlineDays, known: st.offlineKnown) : ""
+        let state = LoadMoreState(spinner: m.loadingMore, button: !m.loadingMore && !cursor.isEmpty && m.listErr == nil, note: note)
         guard state != loadMoreState else { return }
         loadMoreState = state
         onLoadMore?(state)
     }
 
-    private func setListState(_ s: ListState) {
+    func setListState(_ s: ListState) {
         guard s != listState else { return }
         listState = s
         onListState?(s)
@@ -455,7 +488,7 @@ public final class ListController {
     /// (threads.go `reconcileRows`, messages.go `rebuildMessageRows`). The
     /// index of the selected row is read off the rows as they were before
     /// the model moved on, as the GTK code reads it off the widgets.
-    private func reconcile(_ hint: SelectionHint) {
+    func reconcile(_ hint: SelectionHint) {
         let prevKey = selectedKey
         let prevIdx = prevKey.flatMap { k in rows.firstIndex { $0.key == k } } ?? -1
         rows = currentRows()

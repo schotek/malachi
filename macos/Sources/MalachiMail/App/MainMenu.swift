@@ -137,8 +137,9 @@ enum MainMenu {
         m.addItem(item("Delete", #selector(NSText.delete(_:))))
         m.addItem(item("Select All", #selector(NSText.selectAll(_:)), key: "a"))
         m.addItem(.separator())
-        // No action: disabled until the daemon has search.query.
-        m.addItem(item("Find…", nil, key: "f"))
+        // The main window's search field (MainToolbar `focusSearch`);
+        // disabled where no window has one.
+        m.addItem(item("Find…", Action.findMessages, key: "f"))
         m.addItem(.separator())
 
         let spelling = NSMenu()

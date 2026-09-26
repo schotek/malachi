@@ -774,3 +774,145 @@ extension ListState {
         return false
     }
 }
+
+// MARK: - Search (ui/internal/window/search.go)
+
+/// What the list sent as search.query, and what it was told to focus.
+private actor SearchCalls {
+    var params: [SearchQueryParams] = []
+
+    func add(_ p: SearchQueryParams) {
+        params.append(p)
+    }
+}
+
+@MainActor
+private final class FocusLog {
+    var keys: [ListKey] = []
+}
+
+/// Serves search.query with `results` whatever is asked, recording the
+/// params.
+private func serveSearch(_ h: Harness, _ results: [SearchResult], _ calls: SearchCalls) async throws {
+    let data = try JSONCoding.encoder().encode(SearchQueryResult(results: results, page: PageInfo(total: results.count)))
+    await h.fixture.on(API.SearchQuery.name) { params in
+        let p = try JSONCoding.decoder().decode(SearchQueryParams.self, from: params)
+        await calls.add(p)
+        return data
+    }
+}
+
+private func statusTitle(_ s: ListState) -> String? {
+    if case .status(_, let title, _, _) = s {
+        return title
+    }
+    return nil
+}
+
+@MainActor
+@Suite(.serialized) struct ListSearchTests {
+    @Test func searchReplacesTheListAndEndsBackInTheFolder() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2)]])
+        defer { Task { await h.stop() } }
+        let calls = SearchCalls()
+        let hit = MatchRange(start: 3, end: 11)
+        try await serveSearch(h, [SearchResult(message: msg("m2", 2), snippet: "…nalezeno", ranges: [hit], score: 0)], calls)
+        h.select(inbox)
+        try await h.loaded(inbox)
+        try await h.settled()
+
+        // One character: the prompt, no request.
+        h.list.setSearchText("n")
+        #expect(h.list.searchActive)
+        #expect(h.mailbox.model.listFolder == nil)
+        #expect(statusTitle(h.list.listState) == "Search Mail")
+
+        h.list.setSearchText("nalez")
+        try await waitUntil { h.list.rows.map(\.message.id) == ["m2"] && h.list.listState == .messages }
+        let first = await calls.params.last
+        #expect(first?.accountId == account && first?.folderId == inbox.folder && first?.query == "nalez")
+        #expect(h.list.rowMessage(h.list.rows[0].message).highlights == [hit])
+        #expect(h.list.rowMessage(h.list.rows[0].message).snippet == "…nalezeno")
+
+        // The same text again asks nothing; a new mail leaves the results be.
+        h.list.setSearchText("nalez")
+        h.list.applyNewMessage(NewMessageNotification(accountId: account, folderId: inbox.folder, message: msg("m9", 9)))
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await calls.params.count == 1)
+        #expect(h.list.rows.map(\.message.id) == ["m2"])
+
+        // Another scope asks again and is remembered.
+        h.list.setSearchScope(.all)
+        try await waitUntil { await calls.params.count == 2 }
+        #expect(await calls.params.last?.accountId == nil)
+        #expect(h.scratch.settings.searchScope == .all)
+
+        // Emptying the field lists the folder again.
+        h.list.setSearchText("")
+        #expect(!h.list.searchActive)
+        try await h.loaded(inbox)
+        try await waitUntil { h.list.rows.map(\.message.id) == ["m2", "m1"] }
+    }
+
+    @Test func aFailedSearchOffersARetry() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)]])
+        defer { Task { await h.stop() } }
+        await h.fixture.on(API.SearchQuery.name) { _ in throw RPCError(code: .invalidArgument, message: "no") }
+        h.select(inbox)
+        try await h.loaded(inbox)
+        h.list.setSearchText("abc")
+        try await waitUntil { statusTitle(h.list.listState) == "Search Failed" }
+        if case .status(_, _, _, let retry) = h.list.listState {
+            #expect(retry)
+        }
+        let calls = SearchCalls()
+        try await serveSearch(h, [SearchResult(message: msg("m1", 1), snippet: "abc", score: 0)], calls)
+        h.list.retry()
+        try await waitUntil { h.list.rows.map(\.message.id) == ["m1"] }
+    }
+
+    @Test func noResultsAndPaging() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1), msg("m2", 2)]])
+        defer { Task { await h.stop() } }
+        let calls = SearchCalls()
+        try await serveSearch(h, [], calls)
+        h.select(inbox)
+        try await h.loaded(inbox)
+        h.list.setSearchText("nothing")
+        try await waitUntil { statusTitle(h.list.listState) == "No Results" }
+
+        let r1 = SearchResult(message: msg("m2", 2), snippet: "x", score: 0)
+        let r2 = SearchResult(message: msg("m1", 1), snippet: "y", score: 0)
+        await h.fixture.on(API.SearchQuery.name) { params in
+            let p = try JSONCoding.decoder().decode(SearchQueryParams.self, from: params)
+            let page = p.page.cursor == nil
+                ? SearchQueryResult(results: [r1], page: PageInfo(nextCursor: "c", total: 2))
+                : SearchQueryResult(results: [r2], page: PageInfo(total: 2))
+            return try JSONCoding.encoder().encode(page)
+        }
+        h.list.setSearchText("something")
+        try await waitUntil { h.list.rows.map(\.message.id) == ["m2"] }
+        #expect(h.list.loadMoreState.button && h.list.loadMoreState.note.isEmpty)
+        h.list.loadMore()
+        try await waitUntil { h.list.rows.map(\.message.id) == ["m2", "m1"] }
+        // The last page carries the note on how far back search reaches.
+        try await waitUntil { !h.list.loadMoreState.note.isEmpty }
+    }
+
+    @Test func returnFocusesTheFirstResult() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1)]])
+        defer { Task { await h.stop() } }
+        let calls = SearchCalls()
+        try await serveSearch(h, [SearchResult(message: msg("m1", 1), snippet: "abc", score: 0)], calls)
+        let focus = FocusLog()
+        h.list.onFocusRow = { focus.keys.append($0) }
+        h.select(inbox)
+        try await h.loaded(inbox)
+        h.list.activateSearch("abc")
+        try await waitUntil { focus.keys == [ListKey(message: "m1")] }
+        // Results on show already: at once, without asking again.
+        h.list.activateSearch("abc")
+        #expect(focus.keys.count == 2)
+        #expect(await calls.params.count == 1)
+    }
+}

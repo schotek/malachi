@@ -277,7 +277,6 @@ public enum API {
 
     // MARK: Search
 
-    /// notImplemented in protocol version 1.
     public enum SearchQuery: RPCMethod {
         public typealias Params = SearchQueryParams
         public typealias Result = SearchQueryResult
@@ -409,6 +408,11 @@ public enum API {
         public static let defaultContactLimit = 10
         public static let maxContactLimit = 50
         public static let maxContactQueryBytes = 256
+        /// search.query: the query's length, its terms and filters, and the
+        /// matches `page.total` counts exactly (-1 beyond).
+        public static let maxSearchQueryBytes = 1024
+        public static let maxSearchTerms = 32
+        public static let maxSearchTotal = 1000
     }
 }
 

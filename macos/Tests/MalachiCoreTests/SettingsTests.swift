@@ -47,7 +47,8 @@ private final class Scratch {
         #expect(s.favouriteFolders.isEmpty)
         s.markReadDelay = 999
         #expect(s.markReadDelay == Settings.markReadDelayMax)
-        #expect(Settings.Key.allCases.count == 18)
+        #expect(s.searchScope == .folder)
+        #expect(Settings.Key.allCases.count == 19)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -91,6 +92,10 @@ private final class Scratch {
         #expect(s.density == .comfortable)
         s.density = .compact
         #expect(s.density == .compact)
+        scratch.defaults.set("everywhere", forKey: "search-scope")
+        #expect(s.searchScope == .folder)
+        s.searchScope = .all
+        #expect(s.searchScope == .all)
 
         scratch.defaults.set("dance", forKey: "command-r")
         #expect(s.commandR == .reply)

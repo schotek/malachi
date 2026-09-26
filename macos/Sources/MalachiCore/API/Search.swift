@@ -1,9 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Search (docs/api.md §4.6; types.go "Search"). `search.query` is
-// notImplemented in protocol version 1; the types are here for the
-// contract's completeness.
+// Search (docs/api.md §4.6; types.go "Search"): the daemon searches its
+// local store, newest first; `ranges` are byte ranges into `snippet`.
 
 import Foundation
 

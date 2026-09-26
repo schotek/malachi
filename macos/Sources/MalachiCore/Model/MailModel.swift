@@ -4,7 +4,9 @@
 import Foundation
 
 /// What a message row displays (ui/internal/widget/message_row.go
-/// `Message`), a projection of a list summary.
+/// `Message`), a projection of a list summary. A search result adds where
+/// it lies (`origin`, with the full path and account as `originTooltip`)
+/// and the matched words of `snippet` (`highlights`, byte ranges into it).
 public struct RowMessage: Sendable, Equatable {
     public var from: [Address]
     public var subject: String
@@ -13,10 +15,13 @@ public struct RowMessage: Sendable, Equatable {
     public var unread: Bool
     public var flagged: Bool
     public var hasAttachments: Bool
+    public var origin: String
+    public var originTooltip: String
+    public var highlights: [MatchRange]
 
     public init(
         from: [Address], subject: String, snippet: String, date: Date, unread: Bool, flagged: Bool,
-        hasAttachments: Bool
+        hasAttachments: Bool, origin: String = "", originTooltip: String = "", highlights: [MatchRange] = []
     ) {
         self.from = from
         self.subject = subject
@@ -25,6 +30,9 @@ public struct RowMessage: Sendable, Equatable {
         self.unread = unread
         self.flagged = flagged
         self.hasAttachments = hasAttachments
+        self.origin = origin
+        self.originTooltip = originTooltip
+        self.highlights = highlights
     }
 }
 
@@ -86,6 +94,9 @@ public struct MailModel: Sendable {
     public var rows: [ListRow]
     public var rowIdx: [ListKey: Int]
 
+    /// The search's side of the list (SearchModel.swift).
+    public var search: SearchState
+
     public var listGen: UInt64
     public var bodyGen: UInt64
     public var foldersGen: UInt64
@@ -120,6 +131,7 @@ public struct MailModel: Sendable {
         self.expanded = []
         self.rows = []
         self.rowIdx = [:]
+        self.search = SearchState()
         self.listGen = 0
         self.bodyGen = 0
         self.foldersGen = 0

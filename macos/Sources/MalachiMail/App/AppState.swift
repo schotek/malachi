@@ -28,6 +28,8 @@ final class AppState {
         /// The message list's filter (window.go `message_filter`): set and read.
         var setMessageFilter: (@MainActor (MessageFilter) -> Void)?
         var messageFilter: (@MainActor () -> MessageFilter)?
+        /// Whether the list shows search results (the filter is off then).
+        var searchActive: (@MainActor () -> Bool)?
         /// Opens a compose window prepared by the actions (reply, forward,
         /// a mailto: link inside a message); the compose manager wires it
         /// (compose/manager.go `Open`).

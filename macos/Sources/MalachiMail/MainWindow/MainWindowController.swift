@@ -209,6 +209,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         state.hooks.checkForNewMail?()
     }
 
+    /// The toolbar search field's text (after the typing pause; "" when
+    /// cleared) and Return in it; the app hands both to the list.
+    var onSearchText: (@MainActor (String) -> Void)? {
+        get { toolbarDelegate.onSearchText }
+        set { toolbarDelegate.onSearchText = newValue }
+    }
+
+    var onSearchReturn: (@MainActor (String) -> Void)? {
+        get { toolbarDelegate.onSearchReturn }
+        set { toolbarDelegate.onSearchReturn = newValue }
+    }
+
+    /// Edit → Find… (⌘F; window.go `win.search`): the search field takes
+    /// the keyboard.
+    @objc func findMessages(_ sender: Any?) {
+        toolbarDelegate.focusSearch()
+    }
+
     /// A filter from the toolbar's menu or the View menu (the item's tag).
     @objc func setMessageFilter(_ sender: Any?) {
         guard let tag = (sender as? NSMenuItem)?.tag else { return }
@@ -268,7 +286,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private func allows(_ action: Selector, _ f: ActionFlags) -> Bool? {
         switch action {
         case Action.checkForNewMail: return state.hooks.checkForNewMail != nil
-        case Action.setMessageFilter: return state.hooks.setMessageFilter != nil
+        // The filter narrows a folder's listing; search results have none
+        // (GTK hides the toggle group while searching).
+        case Action.setMessageFilter: return state.hooks.setMessageFilter != nil && !(state.hooks.searchActive?() ?? false)
         case Action.reply: return f.reply
         case Action.replyAll: return f.replyAll
         case Action.forward: return f.forward

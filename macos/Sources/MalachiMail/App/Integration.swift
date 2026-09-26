@@ -332,6 +332,16 @@ final class Integration {
         state.hooks.messageFilter = { [weak self] in
             self?.list.listFilter ?? .all
         }
+        // The toolbar search field drives the list's search (search.go).
+        state.hooks.searchActive = { [weak self] in
+            self?.list.searchActive ?? false
+        }
+        mainWindow?.onSearchText = { [weak self] text in
+            self?.list.setSearchText(text)
+        }
+        mainWindow?.onSearchReturn = { [weak self] text in
+            self?.list.activateSearch(text)
+        }
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
             PreferencesWindowController.show(

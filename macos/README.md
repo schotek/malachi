@@ -108,7 +108,7 @@ macos/
                                 with its params, result and default timeout, the
                                 notifications, the enums, the error codes
     Model/, Compose/, Wizard/,  the pure logic of the GTK UI ported 1:1 (window model,
-    HTML/, Text/                threads, folding, favourites, address parsing, mailto:,
+    HTML/, Text/                threads, folding, favourites, search, address parsing, mailto:,
                                 quoting, wizard fields and results, the viewer and editor
                                 documents, formatting, error texts)
     Controllers/                @MainActor view models over the RPC client, tested against
@@ -237,6 +237,7 @@ the strings and the confirmation dialogs.
 | No main menu button in the toolbar: New Message, Settings… and About are in the menu bar, and New Message opens the list's section, before the folder's name | The primary menu button in the sidebar's header bar, New Message at its start | The menu bar is the Mac's main menu |
 | The sidebar is a native source list; account headings fold with the hover *Hide* / *Show* button | Custom rows with a fold arrow | Native look, decided |
 | *Settings* (⌘,) has no search field | `Adw.PreferencesDialog` with search | Decided |
+| Mail search is the search field at the toolbar's trailing end (*Edit → Find…*, ⌘F): a search is on while it holds text, and the Folder / Account / All Accounts scope bar appears over the list, as in Mail; the single-key shortcuts are refused by menu validation while the field has the keyboard | A search bar over the list (Ctrl+F, the search button) with the entry and the scope toggles; the shortcuts are lifted while the entry has the keyboard | The Mac's search, as Mail's |
 | Accounts are reordered by dragging the handle or with ⌥⌘↑ / ⌥⌘↓ | ⌃↑ / ⌃↓ | ⌃↑ / ⌃↓ are Mission Control |
 | ⌘R is a setting (*Settings → General → Keyboard*): *Reply* as in Mail (⌘R Reply, ⇧⌘R Reply All, ⇧⌘F Forward, ⇧⌘N Check for New Mail), or *Check for New Mail* as on Linux (⌘R refresh, ⌥⌘R / ⌥⇧⌘R / ⌥⇧⌘F for the replies) | Ctrl+R refreshes | Decided: a choice, default Mail's |
 | Alerts follow `NSAlert`: *Cancel* on the right is the default (Return) and takes Escape, the destructive button has no shortcut; "Save changes to this draft?" keeps *Save Draft* on Return | GTK button order, suggested/destructive styling; the same default and close responses | AppKit convention |
@@ -276,9 +277,6 @@ deviations.
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon
   degrades silently.
-- **Search** is not implemented anywhere yet: the daemon answers
-  `notImplemented`, so *Edit → Find…* is disabled and the toolbar's search
-  item stays out of the default set.
 - **Distribution**: Developer ID signing and notarisation, an App
   Sandbox, a LaunchAgent for the daemon and an update mechanism are not
   there; the bundle is built for the machine it was built on

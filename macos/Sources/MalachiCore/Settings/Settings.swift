@@ -25,6 +25,7 @@ public final class Settings {
         case density = "message-list-density"
         case showPreviewLine = "show-preview-line"
         case groupByConversation = "group-by-conversation"
+        case searchScope = "search-scope"
         case showAvatars = "show-avatars"
         case monochromeAvatars = "monochrome-avatars"
         case monospacePlainText = "monospace-plain-text"
@@ -42,6 +43,12 @@ public final class Settings {
 
     public enum Density: String, Sendable, CaseIterable {
         case comfortable, compact
+    }
+
+    /// Where a search looks: the selected folder, its account, or every
+    /// account (the gschema's SearchScope).
+    public enum SearchScope: String, Sendable, CaseIterable {
+        case folder, account, all
     }
 
     /// `reply` follows Mail.app (⌘R replies, ⇧⌘N checks for mail);
@@ -69,6 +76,7 @@ public final class Settings {
             Key.density.rawValue: Density.comfortable.rawValue,
             Key.showPreviewLine.rawValue: true,
             Key.groupByConversation.rawValue: false,
+            Key.searchScope.rawValue: SearchScope.folder.rawValue,
             Key.showAvatars.rawValue: true,
             Key.monochromeAvatars.rawValue: false,
             Key.monospacePlainText.rawValue: false,
@@ -183,6 +191,12 @@ public final class Settings {
     public var groupByConversation: Bool {
         get { bool(.groupByConversation) }
         set { set(.groupByConversation, newValue) }
+    }
+
+    /// The last scope chosen for a search.
+    public var searchScope: SearchScope {
+        get { SearchScope(rawValue: string(.searchScope)) ?? .folder }
+        set { set(.searchScope, newValue.rawValue) }
     }
 
     public var showAvatars: Bool {

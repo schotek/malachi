@@ -48,12 +48,18 @@ enum RowMetrics {
     static let unreadDotSize: CGFloat = 8
     /// `label.thread-count { padding: 0 6px }`.
     static let badgePadding: CGFloat = 6
+    /// The widest a search result's folder label gets (message_row.blp
+    /// `origin_label` `max-width-chars: 16`).
+    static let originMaxWidth: CGFloat = 120
 }
 
 /// One row of the message list (message_row.blp, widget/message_row.go): the
 /// fold arrow or spinner and the avatar in front, then the sender line with
 /// the badge, the icons, the date and the unread dot, the subject and the
-/// preview. Every string from the mail goes through `stringValue` only.
+/// preview; a search result also names its folder, and its preview is the
+/// excerpt with the matched words in bold. Every string from the mail is
+/// plain text: through `stringValue`, or an attributed string built from
+/// it with fonts and colours only.
 @MainActor
 final class MessageCellView: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("MessageCell")
@@ -68,6 +74,7 @@ final class MessageCellView: NSTableCellView {
     private let badge = PillLabel()
     private let attachment = NSImageView()
     private let star = NSImageView()
+    private let origin = NSTextField(labelWithString: "")
     private let date = NSTextField(labelWithString: "")
     private let unreadDot = DotView()
     private let subject = NSTextField(labelWithString: "")
@@ -89,6 +96,10 @@ final class MessageCellView: NSTableCellView {
     private var member = false
     private var showAvatar = true
     private var avatarSize = RowMetrics.avatarComfortable
+    /// The preview's text and its matched words (UTF-16 ranges), redrawn
+    /// in the colour the selection asks for (`renderPreview`).
+    private var previewText = ""
+    private var previewHighlights: [NSRange] = []
 
     init() {
         super.init(frame: .zero)
@@ -156,6 +167,19 @@ final class MessageCellView: NSTableCellView {
             icon.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
 
+        // Where a search result lies (message_row.blp `origin_label`).
+        origin.font = Typo.caption
+        origin.textColor = Tint.secondary
+        origin.lineBreakMode = .byTruncatingTail
+        origin.maximumNumberOfLines = 1
+        origin.isSelectable = false
+        origin.isHidden = true
+        origin.setContentHuggingPriority(.required, for: .horizontal)
+        // Shrinks before the sender does: the name is what a row is read by.
+        origin.setContentCompressionResistancePriority(
+            NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1), for: .horizontal)
+        origin.widthAnchor.constraint(lessThanOrEqualToConstant: RowMetrics.originMaxWidth).isActive = true
+
         date.font = Typo.caption
         date.textColor = Tint.secondary
         date.alignment = .right
@@ -164,7 +188,7 @@ final class MessageCellView: NSTableCellView {
         date.setContentCompressionResistancePriority(.required, for: .horizontal)
         unreadDot.isHidden = true
 
-        let line = NSStackView(views: [from, badge, attachment, star, date, unreadDot])
+        let line = NSStackView(views: [from, badge, attachment, star, origin, date, unreadDot])
         line.orientation = .horizontal
         line.distribution = .fill
         line.setHuggingPriority(.defaultLow, for: .horizontal)
@@ -200,13 +224,15 @@ final class MessageCellView: NSTableCellView {
     /// Shows `row` with the current settings (threads.go `renderRow`,
     /// messages.go `newMessageRow`): a conversation row with its arrow and
     /// badge, or a message; in a grouped list a plain row keeps the arrow's
-    /// place so the avatars line up.
-    func configure(_ row: ListRow, reserveExpander: Bool, appearance: RowAppearance) {
+    /// place so the avatars line up. `message` is what a message row
+    /// shows (`ListController.rowMessage`: the summary, or in search the
+    /// excerpt and the folder).
+    func configure(_ row: ListRow, message: RowMessage, reserveExpander: Bool, appearance: RowAppearance) {
         applyAppearance(appearance)
         if row.thread, let summary = row.summary {
             setThread(summaryThread(summary, expanded: row.expanded, loading: row.loading))
         } else {
-            setMessage(summaryMessage(row.message))
+            setMessage(message)
             reserve = reserveExpander
             applyLead()
         }
@@ -222,6 +248,10 @@ final class MessageCellView: NSTableCellView {
         from.stringValue = name
         from.toolTip = formatAddress(sender)
         fill(subject: m.subject, snippet: m.snippet, date: m.date, unread: m.unread, flagged: m.flagged, attachments: m.hasAttachments)
+        setPreview(m.snippet, highlights: highlightRanges(m.snippet, m.highlights))
+        origin.stringValue = m.origin
+        origin.toolTip = m.originTooltip.isEmpty ? nil : m.originTooltip
+        origin.isHidden = m.origin.isEmpty
         badge.isHidden = true
         thread = false
         loading = false
@@ -237,6 +267,7 @@ final class MessageCellView: NSTableCellView {
         from.stringValue = formatParticipants(t.participants)
         from.toolTip = t.participants.map(formatAddress).joined(separator: "\n")
         fill(subject: t.subject, snippet: t.snippet, date: t.date, unread: t.unread > 0, flagged: t.flagged, attachments: t.hasAttachments)
+        origin.isHidden = true
         badge.stringValue = threadCountText(t.count)
         // TRANSLATORS: tooltip of the member count of a conversation row.
         badge.toolTip = L10n.N("%d message", "%d messages", t.count)
@@ -253,13 +284,40 @@ final class MessageCellView: NSTableCellView {
     private func fill(subject text: String, snippet: String, date when: Date, unread: Bool, flagged: Bool, attachments: Bool) {
         date.stringValue = formatDate(when, now: Date())
         subject.stringValue = subjectText(text)
-        preview.stringValue = snippet
+        setPreview(snippet, highlights: [])
         attachment.isHidden = !attachments
         star.isHidden = !flagged
         unreadDot.isHidden = !unread
         let font = unread ? Typo.heading : Typo.body
         from.font = font
         subject.font = font
+    }
+
+    private func setPreview(_ text: String, highlights: [NSRange]) {
+        previewText = text
+        previewHighlights = highlights
+        renderPreview()
+    }
+
+    /// The preview line: plain text, with the matched words of a search
+    /// result in bold (message_row.go `highlightAttrs`), in the colour the
+    /// selection asks for. The attributed string carries fonts and colours
+    /// only; nothing in the text is interpreted.
+    private func renderPreview() {
+        guard !previewHighlights.isEmpty else {
+            preview.stringValue = previewText
+            return
+        }
+        let style = NSMutableParagraphStyle()
+        style.lineBreakMode = .byTruncatingTail
+        let text = NSMutableAttributedString(string: previewText, attributes: [
+            .font: Typo.caption, .foregroundColor: preview.textColor ?? Tint.secondary, .paragraphStyle: style,
+        ])
+        let bold = NSFontManager.shared.convert(Typo.caption, toHaveTrait: .boldFontMask)
+        for r in previewHighlights where NSMaxRange(r) <= text.length {
+            text.addAttribute(.font, value: bold, range: r)
+        }
+        preview.attributedStringValue = text
     }
 
     /// Turns the fold arrow of a conversation row (message_row.go
@@ -332,7 +390,9 @@ final class MessageCellView: NSTableCellView {
             from.textColor = primary
             subject.textColor = primary
             date.textColor = secondary
+            origin.textColor = secondary
             preview.textColor = secondary
+            renderPreview()
             attachment.contentTintColor = secondary
             star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
             unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent

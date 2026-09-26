@@ -430,6 +430,12 @@ public final class MailboxController {
     /// `refreshListTitle`). Called wherever the selection or the cached
     /// counts change: `select`, `updateFolderRow` and `rebuildFolderList`.
     func refreshListTitle() {
+        if model.search.active {
+            // While searching: "Search" and the number of results
+            // (window.go `refreshListTitle`).
+            onListTitleChanged?(L10n.T("Search"), searchTotalText(total: model.total, shown: model.search.shown))
+            return
+        }
         onListTitleChanged?(selectedFolderTitle, selectedFolderSubtitle)
     }
 

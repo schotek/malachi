@@ -199,8 +199,10 @@ vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
 GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
 `search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
 výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
-se při psaní do pole vypínají; MCP nástroj `search_messages`; macOS zatím
-nemá. MCP most pro AI agenty
+se při psaní do pole vypínají; MCP nástroj `search_messages`; macOS:
+hledací pole v toolbaru (⌘F), pruh rozsahu nad seznamem jako v Mailu,
+logika v `MalachiCore` (`SearchModel.swift`,
+`MailboxController+Search.swift`). MCP most pro AI agenty
 (`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
 `pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
@@ -228,10 +230,10 @@ app spouští `malachid` z bundlu s `--config`/`--store` v
 `~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
-doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
+doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
-hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
@@ -247,7 +249,7 @@ Pořadí prací:
    (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
    démonem, multipart/alternative)
 5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
-6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP; macOS zbývá)
+6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS)
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;

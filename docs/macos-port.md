@@ -146,8 +146,9 @@ Rules that keep it honest against a daemon it did not ship with:
 - every method is a type conforming to `RPCMethod` (`Params`, `Result`,
   `name`, a default `timeout`), and `RPCClient.call(API.MessageList.self,
   params)` is the only way to call one, so a typo in a method name cannot
-  compile; stubs the daemon answers with `notImplemented` (`search.query`)
-  are declared too, so the table is the whole contract;
+  compile; stubs the daemon answers with `notImplemented`
+  (`folder.subscribe`) are declared too, so the table is the whole
+  contract;
 - property names are the JSON names verbatim (no `CodingKeys`); Go
   `omitempty` is `Optional`; a Go nil slice arrives as `null` and is
   wrapped `@NullAsEmpty` so a missing or null array is `[]`, never a

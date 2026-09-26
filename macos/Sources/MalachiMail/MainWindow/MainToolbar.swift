@@ -8,9 +8,10 @@ import MalachiCore
 /// (window.blp) as one `NSToolbar`, cut into the panes' sections by two
 /// `NSTrackingSeparatorToolbarItem`s on the split view's dividers. Items
 /// act through the responder chain and are validated by whichever
-/// responder owns the action (the window controller).
+/// responder owns the action (the window controller). The search field
+/// reports to the window, which hands the text to the list.
 @MainActor
-final class MainToolbar: NSObject, NSToolbarDelegate {
+final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     enum ID {
         static let toolbar = NSToolbar.Identifier("main")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
@@ -41,14 +42,15 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     /// Message opens the list section, before the folder's name: a
     /// navigational item, which the system places ahead of the title. The
     /// sidebar toggle sits at the sidebar section's trailing end, by the
-    /// divider it folds.
+    /// divider it folds. The search field closes the message section, at
+    /// the toolbar's trailing end, where Mail has it.
     static let defaultItems: [NSToolbarItem.Identifier] = [
         .flexibleSpace, .toggleSidebar,
         .sidebarTrackingSeparator,
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions,
+        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions, ID.search,
     ]
 
     /// The items of the message section, for the message window's toolbar.
@@ -59,6 +61,16 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
 
     private weak var splitView: NSSplitView?
     private var items: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
+
+    /// The search field's text once typing pauses, "" at once when it is
+    /// cleared (search.go `onSearchChanged`); Return in the field
+    /// (`onSearchActivate`). The window installs both.
+    var onSearchText: (@MainActor (String) -> Void)?
+    var onSearchReturn: (@MainActor (String) -> Void)?
+    private var searchWork: DispatchWorkItem?
+    /// How long typing pauses before the text is searched (window.blp
+    /// `search-delay: 300`).
+    static let searchDelay: TimeInterval = 0.3
 
     /// - Parameter splitView: the split view whose dividers 0 and 1 the
     ///   tracking separators follow; nil for a toolbar without sections.
@@ -112,7 +124,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar) + [ID.search]
+        toolbarDefaultItemIdentifiers(toolbar)
     }
 
     func toolbar(
@@ -157,9 +169,18 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         case ID.refresh:
             return button(id, image: Icon.refresh, label: L10n.T("Check for New Mail"), action: Action.checkForNewMail)
         case ID.search:
-            // Reserved until the daemon implements search.query.
+            // Mail's search field (window.blp `search_bar`, a bar over the
+            // list in GTK): a search is on while it holds text, and the
+            // scope bar appears over the list (a deviation, macos/README.md).
+            // The field reports every change; the pause is timed here.
             let it = NSSearchToolbarItem(itemIdentifier: id)
             it.label = L10n.T("Search")
+            it.searchField.placeholderString = L10n.T("Search Mail")
+            it.searchField.sendsSearchStringImmediately = true
+            it.searchField.sendsWholeSearchString = false
+            it.searchField.delegate = self
+            it.searchField.target = self
+            it.searchField.action = #selector(searchFieldChanged(_:))
             return it
         case ID.reply:
             return button(id, image: Icon.reply, label: L10n.T("Reply"), action: Action.reply)
@@ -187,6 +208,51 @@ final class MainToolbar: NSObject, NSToolbarDelegate {
         default:
             return nil
         }
+    }
+
+    // MARK: Search field
+
+    /// ⌘F (Edit → Find…): the search field takes the keyboard.
+    func focusSearch() {
+        (items[ID.search] as? NSSearchToolbarItem)?.beginSearchInteraction()
+    }
+
+    /// Every change of the field's text: an emptied field ends the search
+    /// at once, anything else waits for typing to pause.
+    @objc private func searchFieldChanged(_ sender: NSSearchField) {
+        let text = sender.stringValue
+        searchWork?.cancel()
+        searchWork = nil
+        guard !text.isEmpty else {
+            onSearchText?("")
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.searchWork = nil
+            self.onSearchText?(text)
+        }
+        searchWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.searchDelay, execute: work)
+    }
+
+    /// Return in the field selects the first result, without waiting for
+    /// the pause.
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        guard let field = control as? NSSearchField, commandSelector == #selector(NSResponder.insertNewline(_:)) else {
+            return false
+        }
+        searchWork?.cancel()
+        searchWork = nil
+        onSearchReturn?(field.stringValue)
+        return true
+    }
+
+    /// The field was cleared (its ✕, or Escape).
+    func searchFieldDidEndSearching(_ sender: NSSearchField) {
+        searchWork?.cancel()
+        searchWork = nil
+        onSearchText?("")
     }
 
     private func button(_ id: NSToolbarItem.Identifier, image: NSImage, label: String, action: Selector) -> NSToolbarItem {

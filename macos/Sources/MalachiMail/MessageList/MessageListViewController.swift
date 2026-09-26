@@ -7,7 +7,9 @@ import MalachiCore
 /// The message list pane (window.blp lines 151–301): the backend and
 /// sign-in banners, the table of rows with its Load More footer, and the
 /// status page that replaces the rows while there are none. The All /
-/// Unread / Flagged filter is a toolbar menu, as in Mail (MainToolbar).
+/// Unread / Flagged filter is a toolbar menu, as in Mail (MainToolbar); so
+/// is the search field, whose scope bar (`SearchScopeBar`) sits over the
+/// rows while a search is on.
 ///
 /// The list controller owns every decision; this view mirrors its rows by
 /// key (`apply(rows:hint:)`) and sends the clicks and keys back. It
@@ -62,6 +64,14 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// The foot under the list with the spinner and the retry button;
     /// hidden while it has neither, so the rows reach the pane's bottom.
     private let loadMoreBox = NSStackView()
+    /// Where a search looks (window.blp `search_scope`).
+    private let scopeBar = SearchScopeBar()
+    /// Under the last page of search results: how far back search reaches
+    /// (window.blp `search_note`).
+    private let searchNote = NSTextField(wrappingLabelWithString: "")
+    /// The note with its margins; hidden with it, so no empty strip stays
+    /// under the rows.
+    private let noteBox = NSStackView()
 
     /// The table's rows, by position, and what each key shows.
     private var keys: [ListKey] = []
@@ -156,9 +166,20 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         loadMoreBox.addView(loadMoreSpinner, in: .center)
         loadMoreBox.translatesAutoresizingMaskIntoConstraints = false
 
+        searchNote.font = Typo.caption
+        searchNote.textColor = Tint.secondary
+        searchNote.alignment = .center
+        searchNote.isSelectable = false
+        noteBox.addArrangedSubview(searchNote)
+        noteBox.isHidden = true
+        noteBox.orientation = .vertical
+        noteBox.edgeInsets = NSEdgeInsets(top: 0, left: 12, bottom: Self.loadMoreMargin, right: 12)
+        noteBox.translatesAutoresizingMaskIntoConstraints = false
+
         messagesPage.spacing = 0
         messagesPage.addArrangedSubview(scroll)
         messagesPage.addArrangedSubview(loadMoreBox)
+        messagesPage.addArrangedSubview(noteBox)
 
         // The status page with its Try Again (window.blp `list_status_page`).
         retryButton.bezelStyle = .rounded
@@ -186,7 +207,9 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
             statusPage.trailingAnchor.constraint(equalTo: pages.trailingAnchor),
         ])
 
-        let root = FillStackView(fillingViews: [backendBanner, authBanner, certBanner, pages])
+        scopeBar.onScope = { [weak self] scope in self?.list.setSearchScope(scope) }
+
+        let root = FillStackView(fillingViews: [backendBanner, authBanner, certBanner, scopeBar, pages])
         root.spacing = 0
         // Below the unified toolbar (fullSizeContentView): the banners
         // must not run under it; the scroll view alone
@@ -212,6 +235,8 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         list.onLoadMore = { [weak self] state in self?.showLoadMore(state) }
         list.onRowsRefreshed = { [weak self] keys in self?.refreshRows(keys) }
         list.onSelectionCleared = { [weak self] in self?.syncSelection() }
+        list.onSearchBar = { [weak self] state in self?.scopeBar.show(state) }
+        list.onFocusRow = { [weak self] key in self?.focus(key) }
         // Forwarded to this view's own callbacks; a handler the app put on
         // the controller before the view loaded keeps running too.
         let selected = list.onSelectedMessageChanged
@@ -387,13 +412,33 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     }
 
     private func configure(_ cell: MessageCellView, _ r: ListRow) {
-        cell.configure(r, reserveExpander: mailbox.model.grouped, appearance: appearance)
+        cell.configure(r, message: list.rowMessage(r.message), reserveExpander: mailbox.model.grouped, appearance: rowAppearance)
         let tid = r.key.thread
         cell.onToggle = { [weak self] in
             if let tid {
                 self?.list.toggleThread(tid)
             }
         }
+    }
+
+    /// The rows' look from the settings; a search result always shows its
+    /// excerpt, which says why it was found (search.go).
+    private var rowAppearance: RowAppearance {
+        var a = appearance
+        if list.searchActive {
+            a.showPreview = true
+        }
+        return a
+    }
+
+    /// Return in the search field: the first result is selected and the
+    /// list takes the keyboard (search.go `selectFirstResult`). The table's
+    /// selection change tells the controller.
+    private func focus(_ key: ListKey) {
+        guard let i = keys.firstIndex(of: key) else { return }
+        table.selectRowIndexes(IndexSet(integer: i), byExtendingSelection: false)
+        table.scrollRowToVisible(i)
+        view.window?.makeFirstResponder(table)
     }
 
     /// Selects the controller's `selectedKey` without re-entering
@@ -459,6 +504,8 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         }
         loadMoreButton.isHidden = !failed
         updateLoadMoreBox()
+        searchNote.stringValue = state.note
+        noteBox.isHidden = state.note.isEmpty
         if state.button, !failed {
             DispatchQueue.main.async { [weak self] in self?.fillPane() }
         }

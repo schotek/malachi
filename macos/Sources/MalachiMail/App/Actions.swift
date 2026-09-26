@@ -29,6 +29,7 @@ import MalachiCore
     @objc optional func checkForNewMail(_ sender: Any?)
     /// The list's filter; the sender's tag is the filter (FilterTag).
     @objc optional func setMessageFilter(_ sender: Any?)
+    @objc optional func findMessages(_ sender: Any?)
     @objc optional func toggleMessageList(_ sender: Any?)
     @objc optional func reply(_ sender: Any?)
     @objc optional func replyAll(_ sender: Any?)
@@ -72,6 +73,7 @@ import MalachiCore
 enum Action {
     static let newMessage = #selector(MalachiActions.newMessage(_:))
     static let setMessageFilter = #selector(MalachiActions.setMessageFilter(_:))
+    static let findMessages = #selector(MalachiActions.findMessages(_:))
     static let addAccount = #selector(MalachiActions.addAccount(_:))
     static let showPreferences = #selector(MalachiActions.showPreferences(_:))
     static let showAbout = #selector(MalachiActions.showAbout(_:))
