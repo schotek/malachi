@@ -85,6 +85,10 @@ public sealed class DaemonProcessHostTests
             await supervisor.EnsureAsync(TestContext.Current.CancellationToken);
             Assert.True(Answers(socket));
             Assert.True(directories.IsPrivate(run), "the run directory is private");
+            // The socket accepts as soon as it is bound, before malachid
+            // writes the key beside it (rpc.Server.Listen); it logs
+            // "listening" once the key is in place.
+            await WaitForLineAsync(log, line => line.Contains("msg=listening", StringComparison.Ordinal));
             Assert.True(File.Exists(socket + ".key"), "the daemon wrote its key beside the socket");
             AssertOnlyUserAndSystem(socket + ".key");
 
@@ -334,6 +338,18 @@ public sealed class DaemonProcessHostTests
         using var stream = new FileStream(log.FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         using var reader = new StreamReader(stream, Encoding.UTF8);
         return reader.ReadToEnd().Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(line => line.TrimEnd('\r')).ToArray();
+    }
+
+    // Waits for a line of the log (the daemon's output reaches it through
+    // the pump thread).
+    private static async Task WaitForLineAsync(RotatingLogFile log, Func<string, bool> match)
+    {
+        var clock = Stopwatch.StartNew();
+        while (!(File.Exists(log.FilePath) && LogLines(log).Any(match)))
+        {
+            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), "the line did not come: " + string.Join(" | ", File.Exists(log.FilePath) ? LogLines(log) : []));
+            await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
     }
 
     private static bool Answers(string socket) =>
