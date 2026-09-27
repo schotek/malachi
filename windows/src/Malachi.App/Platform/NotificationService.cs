@@ -23,7 +23,12 @@
 // Windows App SDK 2.5.1 Register() throws 0x8007007E unless the build puts
 // Microsoft.WindowsAppRuntime.Insights.Resource.dll beside the app (the
 // build target of §10); the toasts still show then, but clicks are lost,
-// and the failure is logged.
+// and the failure is logged. Notifications are optional and the platform is
+// fragile, so nothing here throws: CsWinRT turns a failed HRESULT into
+// COMException, UnauthorizedAccessException, ArgumentException,
+// InvalidOperationException, FileNotFoundException and others, and every
+// one of them is logged with its HRESULT and leaves the app without
+// notifications (or without their clicks) instead of stopping it.
 //
 // The toast is plain text only: the title and body are mail data (the
 // sender, the subject), which AppNotificationBuilder escapes into its XML.
@@ -31,7 +36,6 @@
 
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using Malachi.Core;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Notifications;
@@ -107,15 +111,18 @@ internal sealed partial class NotificationService : IDesktopNotifier
             toast.Group = notification.Group;
             AppNotificationManager.Default.Show(toast);
         }
-        catch (Exception e) when (e is COMException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
+#pragma warning disable CA1031 // A notification that cannot be shown is logged; the sound and the list still follow.
+        catch (Exception e)
+#pragma warning restore CA1031
         {
-            LogNotShown(logger, e.HResult);
+            LogNotShown(logger, e.HResult, e);
         }
     }
 
     /// <summary>
     /// Revokes the live registration on the way out (a later click starts
-    /// the app again). Safe to call more than once.
+    /// the app again). Safe to call more than once; never throws (a failure
+    /// is logged).
     /// </summary>
     public void Unregister()
     {
@@ -128,34 +135,41 @@ internal sealed partial class NotificationService : IDesktopNotifier
         {
             AppNotificationManager.Default.Unregister();
         }
-        catch (COMException e)
+#pragma warning disable CA1031 // The way out goes on: the shell still has the daemon to stop.
+        catch (Exception e)
+#pragma warning restore CA1031
         {
-            LogNotUnregistered(logger, e.HResult);
+            LogNotUnregistered(logger, e.HResult, e);
         }
     }
 
+    // Never throws: whatever the platform throws leaves the app without
+    // notifications (IsSupported) or without their clicks (Register).
     private void Register()
     {
         try
         {
             supported = AppNotificationManager.IsSupported();
         }
-        catch (COMException e)
+#pragma warning disable CA1031 // An optional feature: the app starts without it.
+        catch (Exception e)
+#pragma warning restore CA1031
         {
-            LogNotSupported(logger, e.HResult);
+            supported = false;
+            LogNotSupportedError(logger, e.HResult, e);
             return;
         }
         if (!supported)
         {
-            LogNotSupported(logger, 0);
+            LogNotSupported(logger);
             return;
         }
-        var manager = AppNotificationManager.Default;
-        // Before Register(): a handler makes COM register the class for
-        // many activations, so a click reaches this process.
-        manager.NotificationInvoked += OnNotificationInvoked;
         try
         {
+            var manager = AppNotificationManager.Default;
+            // Before Register(): a handler makes COM register the class for
+            // many activations, so a click reaches this process.
+            manager.NotificationInvoked += OnNotificationInvoked;
             if (File.Exists(IconPath))
             {
                 manager.Register(AppIdentity.DisplayName, new Uri(IconPath));
@@ -168,9 +182,11 @@ internal sealed partial class NotificationService : IDesktopNotifier
             }
             registered = true;
         }
-        catch (COMException e)
+#pragma warning disable CA1031 // An optional feature: the app starts without the clicks.
+        catch (Exception e)
+#pragma warning restore CA1031
         {
-            LogNotRegistered(logger, e.HResult);
+            LogNotRegistered(logger, e.HResult, e);
         }
     }
 
@@ -188,20 +204,23 @@ internal sealed partial class NotificationService : IDesktopNotifier
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: not supported here (0x{HResult:X8}); none are shown")]
-    private static partial void LogNotSupported(ILogger logger, int hResult);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: not supported here (an elevated process); none are shown")]
+    private static partial void LogNotSupported(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: IsSupported failed (0x{HResult:X8}); none are shown")]
+    private static partial void LogNotSupportedError(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: Assets\\notification.png is missing; registered under the executable's name")]
     private static partial void LogNoIcon(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "notifications: Register failed (0x{HResult:X8}); clicks will not reach the app")]
-    private static partial void LogNotRegistered(ILogger logger, int hResult);
+    private static partial void LogNotRegistered(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: Unregister failed (0x{HResult:X8})")]
-    private static partial void LogNotUnregistered(ILogger logger, int hResult);
+    private static partial void LogNotUnregistered(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: a notification was not shown (0x{HResult:X8})")]
-    private static partial void LogNotShown(ILogger logger, int hResult);
+    private static partial void LogNotShown(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "notifications: the click handler failed")]
     private static partial void LogHandlerFailed(ILogger logger, Exception error);

@@ -25,9 +25,11 @@
 //   on the way out:     Stop(), on the UI thread (Main's thread after
 //                       Application.Start returned is the same one).
 // LaunchAtLogin, Mailto and OpenDefaultApps are for Preferences.
-// With MALACHI_DATA_DIR set (tests, agents, dev builds run from a temporary
-// folder) Start leaves the user's mailto: registration and Run value alone
-// (Registration/SelfRegistration).
+// InitializeEarly and Stop never throw: notifications are optional, and
+// neither the start nor the shutdown (which still stops the daemon) may
+// depend on them. With MALACHI_DATA_DIR set (tests, agents, dev builds run
+// from a temporary folder) Start leaves the user's mailto: registration and
+// Run value alone (Registration/SelfRegistration).
 
 using System;
 using System.Collections.Generic;
@@ -75,10 +77,13 @@ public static partial class PlatformServices
     /// and the handler has to exist before registering). The handler runs
     /// on the UI thread; clicks that arrive before <see cref="Start"/> are
     /// handed over by it, in order. A click only ever means: show the main
-    /// window. Idempotent.
+    /// window. Idempotent. Never throws but for a null handler: whatever the
+    /// notification platform throws is logged, and the app then starts
+    /// without notifications or without their clicks.
     /// </summary>
     /// <param name="activated">Shows the main window for a click; the activation names the message.</param>
     /// <param name="loggerFactory">Where the services log; nothing when null.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="activated"/> is null.</exception>
     public static void InitializeEarly(Action<NotificationActivation> activated, ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(activated);
@@ -185,20 +190,25 @@ public static partial class PlatformServices
     /// Stops the services on the way out: the icon leaves the notification
     /// area, the hub's handler is removed and the live notification
     /// registration is revoked (a later click starts the app again). Safe to
-    /// call in any state and more than once.
+    /// call in any state and more than once, and never throws (a failure is
+    /// logged), so the shell's later steps on the way out, such as stopping
+    /// the daemon it started, always run.
     /// </summary>
     public static void Stop()
     {
-        tray?.Dispose();
+        var icon = tray;
         tray = null;
-        newMessage?.Cancel();
+        Quietly("the notification-area icon", () => icon?.Dispose());
+        var handler = newMessage;
         newMessage = null;
+        Quietly("the notify.newMessage handler", () => handler?.Cancel());
         NotificationService? service;
         lock (Gate)
         {
             service = notifications;
             dispatcher = null;
         }
+        // Unregister logs its own failures and never throws.
         service?.Unregister();
     }
 
@@ -282,6 +292,21 @@ public static partial class PlatformServices
         });
     }
 
+    // A step on the way out: logged when it fails, so that the next one runs.
+    private static void Quietly(string what, Action step)
+    {
+        try
+        {
+            step();
+        }
+#pragma warning disable CA1031 // Stop never throws: the shell still has the daemon to stop.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            LogStopFailed(logger, what, e);
+        }
+    }
+
     private static void Guard(Action action)
     {
         try
@@ -310,6 +335,9 @@ public static partial class PlatformServices
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: {Variable} is set; the mailto: registration and the Run value are left alone")]
     private static partial void LogNoSelfRegistration(ILogger logger, string variable);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "platform: stopping {What} failed")]
+    private static partial void LogStopFailed(ILogger logger, string what, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "platform: {What}: {Reason}")]
     private static partial void LogRegistryFailed(ILogger logger, string what, string reason);

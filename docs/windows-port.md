@@ -1020,6 +1020,12 @@ Verified outside Claude's process tree: the toast shows the name and icon
 a sender's `<…>` and a subject's markup as plain text, and a click reaches
 the running app on its UI thread and cold-starts an exited one (kind
 `AppNotification`) with the ids intact, `;`, `=` and `%` included.
+Notifications fail open: CsWinRT turns a failed HRESULT into several
+exception types, and whatever `IsSupported`, `Register`, `Show` or
+`Unregister` throws is logged, so `InitializeEarly` and `Stop` never throw
+(verified: without the Insights DLL `Register` throws a `COMException`
+0x8007007E, with an icon Windows cannot read a `FileNotFoundException`
+0x80070002; the app starts either way).
 
 **Background, tray, launch at login.** `DispatcherShutdownMode.OnExplicitShutdown`;
 one main window for the process, hidden on close when *Run in background*
