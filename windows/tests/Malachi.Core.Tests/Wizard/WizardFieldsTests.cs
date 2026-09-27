@@ -217,12 +217,17 @@ public sealed class WizardFieldsTests
         Assert.Contains("Microsoft 365", Linked.GoaHintText(""), StringComparison.Ordinal);
     }
 
-    // Windows: the identity never prints its password.
+    // Windows: the identity never prints a value (§3.1: no addresses or
+    // secrets in logs).
     [Fact]
-    public void IdentityHidesThePassword()
+    public void IdentityHidesItsValues()
     {
         var id = new Identity { DisplayName = "Me", Email = "me@x.org", Password = "hunter2" };
-        Assert.DoesNotContain("hunter2", id.ToString(), StringComparison.Ordinal);
-        Assert.Contains("<redacted>", id.ToString(), StringComparison.Ordinal);
+        foreach (var secret in new[] { "hunter2", "me@x.org", "Me" })
+        {
+            Assert.DoesNotContain(secret, id.ToString(), StringComparison.Ordinal);
+        }
+        Assert.Equal("Identity(displayName: <redacted>, email: <redacted>, password: <redacted>)", id.ToString());
+        Assert.Equal("Identity(displayName: \"\", email: \"\", password: \"\")", new Identity().ToString());
     }
 }

@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Wizard/Fields.swift (Identity); GTK:
 // ui/internal/accountwizard/fields.go (Identity). Printing one (a log line,
-// an assertion) never shows the password.
+// an assertion) never shows a value (docs/windows-port.md §3.1: addresses
+// and secrets are never logged).
 
 using System.Diagnostics;
 
@@ -22,7 +23,9 @@ public sealed record Identity
     /// <summary>The password; "" keeps a stored one when editing.</summary>
     public string Password { get; init => field = value ?? ""; } = "";
 
-    /// <summary>The fields, the password only as whether it is set.</summary>
+    /// <summary>Whether each field is set, never a value: names and addresses are not logged either.</summary>
     public override string ToString() =>
-        "Identity(displayName: " + DisplayName + ", email: " + Email + ", password: " + (Password.Length == 0 ? "\"\"" : "<redacted>") + ")";
+        "Identity(displayName: " + Mark(DisplayName) + ", email: " + Mark(Email) + ", password: " + Mark(Password) + ")";
+
+    private static string Mark(string s) => s.Length == 0 ? "\"\"" : "<redacted>";
 }
