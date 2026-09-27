@@ -679,16 +679,31 @@ of a message, opened or saved, gets the Mark of the Web through
 `IAttachmentExecute` (`SetClientGuid`, `SetLocalPath`, `SetFileName`,
 `Save()` on an STA thread; also the AV scan and policy), the counterpart of
 the macOS quarantine attribute; if the zone cannot be read back, the file is
-not opened (a saved file stays the user's). Never opened, only saved: the
+not opened (a saved file stays the user's), unless an administrator turned
+zone information off (`SaveZoneInformation=1`), whose choice that is. The
+zone is Microsoft's e-mail client guidance: no `SetSource`, so Restricted
+sites (`ZoneId=4`, measured). That zone's policy blocks what
+`AssocIsDangerous` names, and `Save()` then deletes the file (measured), so
+a saved file of such a type gets `SetSource("about:internet")` instead
+(`ZoneId=3`, Chromium's choice): it stays, scanned, and running it goes
+through SmartScreen and the security prompt. Where `Save()` fails without a
+verdict the stream is written directly; a verdict (antivirus, policy) keeps
+the file from being opened. Never opened, only saved: the
 GTK list, the macOS additions, Outlook's Level-1 list, `.rdp`,
 `.appinstaller`, `.msix`, `.searchconnector-ms` and friends, anything
 `AssocIsDangerous` or `CheckPolicy` flags, and disk images (`.iso`, `.img`,
 `.vhd`, `.vhdx`: mounting them has been a Mark-of-the-Web bypass). Opening
-anything else uses `ShellExecuteEx`/`Launcher`. `attachment.import` is only
-ever given local paths the user picked.
+anything else uses `ShellExecuteEx` (through `Process.Start` on an STA
+thread, zone checks on, the shell's dialogs owned by the window) and *Open
+With…* `SHOpenWithDialog` (this once, never the default); only files on a
+local drive, never a share, a link or a stream. `attachment.import` is only
+ever given local paths the user picked. The code: `Malachi.Core.Platform`
+(`DangerousTypes`, `WindowsFileNames`, `OpenDir`, the interfaces) and
+`Malachi.Platform.Windows` `Attachments/`, `Files/`, `Launch/`.
 
 **Sign-in.** The daemon owns the `127.0.0.1` listener; the app opens the
-`https` URL with `Launcher.LaunchUriAsync`, nothing else.
+`https` URL through the launcher (`ILauncher.OpenUrlAsync`: `ShellExecuteEx`,
+https only), nothing else.
 
 **MCP registration** (Preferences → AI): `malachi-mcp.exe status|install|
 uninstall --json` beside the app, 15 s timeout, output capped, the process
