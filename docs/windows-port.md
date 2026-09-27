@@ -32,7 +32,7 @@ the port with the research of the same day; the reports are summarised in
 
 | Topic | Decision |
 |---|---|
-| Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24) |
+| Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24): the component packages `Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences` instead of the metapackage, which adds ~60 MB of AI libraries a mail client never uses (measured; the notification fix of §10 comes with it) |
 | Windows versions | Windows 11 only (`TargetPlatformMinVersion` 10.0.22000.0) |
 | Architectures | x64 and ARM64 (ARM64 is built here, run on real hardware before a release) |
 | Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox |
@@ -105,7 +105,10 @@ Development overrides, as on macOS: `MALACHI_DAEMON` (path, or `none`),
 one Windows-only variable, `MALACHI_DATA_DIR`, which replaces
 `%LOCALAPPDATA%\Malachi Mail` for tests and agents. An agent running inside
 Claude Desktop's process tree must use it: new files under AppData are
-silently redirected into Claude's package store there.
+silently redirected into Claude's package store there, and so are writes to
+HKCU (measured), so an agent that tests settings, `mailto:` registration,
+launch at login or notifications starts the app **outside** that tree
+(for example through WMI `Win32_Process.Create`).
 
 ## 2. Solution and module boundaries
 
@@ -587,10 +590,25 @@ is split into `#1..#n` chunks written first and chunk 0 last, carrying
 (`keyringError`), never a wrong token. The Go side's
 `MALACHI_TEST_REAL_HELPER` round trip runs against it.
 
-**Notifications and sound.** `AppNotificationManager.Register` in `Main`
-before activation handling, guarded by `IsSupported` (the self-contained
-unpackaged `Register` crash of WinAppSDK 2.4–2.5.1 is avoided by the package
-set chosen in phase B). As `notify.go`: nothing while the main window is
+**Notifications and sound.** Measured in phase B on 2.5.1: in a
+self-contained unpackaged app **no package set** makes
+`AppNotificationManager.Register()` work; the metapackage, the WinUI
+packages and WinUI plus the Runtime package all throw `0x8007007E`
+(`Microsoft.WindowsAppRuntime.Insights.Resource.dll` missing; Register
+writes its registry entries first, so toasts show but clicks are lost).
+The fix is a build target that unpacks that one DLL (34 KB, same version)
+from the Runtime package's framework MSIX
+(`tools\MSIX\win10-<arch>\Microsoft.WindowsAppRuntime.2.msix`, fetched with
+a `PackageDownload`) into the output; it goes once a Foundation release
+with WindowsAppSDK PR #6725 ships, and `Register()` is re-tested on every
+WinAppSDK bump. The `NotificationInvoked` handler is attached **before**
+`Register()` (otherwise COM registers single-use and every click starts a
+new process); `Register("Malachi Mail", <icon>)` with no explicit AUMID;
+`Unregister()` on exit (a later click still cold-starts the app). A click
+while running raises `NotificationInvoked`; a cold click starts the app
+with `----AppNotificationActivated: -Embedding`, which the argument parser
+ignores, and arrives through `GetActivatedEventArgs()` as kind
+`AppNotification`. As `notify.go`: nothing while the main window is
 the active window; title the sender's display name or *New message*, body
 the subject or *(No subject)*, both capped at 200 bytes; group = account,
 tag = `message-<id>`; a click shows the main window. The sound is its own
@@ -602,10 +620,22 @@ are muted.
 **Background, tray, launch at login.** `DispatcherShutdownMode.OnExplicitShutdown`;
 one main window for the process, hidden on close when *Run in background*
 is on (otherwise the last visible window quits, the GApplication rule). While
-hidden, a notification-area icon (Shell_NotifyIcon through CsWin32,
-re-added on `TaskbarCreated`) offers Open, New Message, Check for New Mail
-and Quit. Launch at login is the Run value with `--background`, which
-starts hidden.
+hidden, a notification-area icon offers Open, New Message, Check for New
+Mail and Quit: `Shell_NotifyIcon` through CsWin32 on a hidden top-level
+`WS_EX_TOOLWINDOW` window (a message-only window misses the
+`TaskbarCreated` broadcast), `NOTIFYICON_VERSION_4`, the icon taken from the
+exe, re-added unconditionally on `TaskbarCreated`, and a native
+`TrackPopupMenuEx` menu (a WinUI `MenuFlyout` opened from the tray lands
+behind other windows, gets no keyboard and shows nothing while the owner is
+hidden; measured). New icons land in the Windows 11 overflow. Every path
+that shows the main window (tray, notification, redirected launch,
+background start) calls `AppWindow.Show()`, `Activate()` and then
+`SetForegroundWindow(hwnd)`: without the last, the window stays behind
+(measured with `ForegroundLockTimeout` at its maximum); WinAppSDK's
+`RedirectActivationToAsync` already grants the foreground right. Launch at
+login is the Run value with `--background`, which starts hidden; a
+`StartupApproved\Run` value whose first byte is odd means the user disabled
+it in Windows Settings, which is shown as such, never overwritten.
 
 **Single instance and activation.** A custom `Main`
 (`DISABLE_XAML_GENERATED_MAIN`): register notifications, then
@@ -619,6 +649,10 @@ registration at start when it is missing or stale (the app folder can
 move), so it appears in *Settings → Apps → Default apps*; Windows does not
 let an app make itself the default. The *Default apps* button in
 Preferences (decided) opens `ms-settings:defaultapps?registeredAppUser=Malachi%20Mail`.
+The ProgID carries `Application\ApplicationName` = *Malachi Mail* (without
+it Windows lists the exe name), and the registration ends with
+`SHChangeNotify(SHCNE_ASSOCCHANGED)` (verified with
+`SHAssocEnumHandlersForProtocolByApplication`).
 Links are parsed by the port of `compose.ParseMailto`.
 
 **Attachments.** Opened files go to the open directory (a fresh random
@@ -663,7 +697,14 @@ for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
 searching), message (Reply, Reply All, Forward, Trash, Junk, Archive, Star,
 More). The status line runs across the bottom edge (26 px, spinner,
 connection glyph, caption) and opens the per-account flyout. 1200×760,
-minimum 360×294. The caption is *Folder – Malachi Mail*.
+minimum 360×294. The caption is *Folder – Malachi Mail*. The `TitleBar` is
+set with `SetTitleBar`, `PreferredHeightOption=Tall`; the colour scheme sets
+`RequestedTheme` on every window root **and**
+`AppWindow.TitleBar.PreferredTheme` (the caption buttons ignore
+`RequestedTheme`; measured), and a root without Mica gets
+`ApplicationPageBackgroundThemeBrush`. The All/Unread/Flagged filter is the
+in-box `SelectorBar` (the toolkit's `Segmented` items lack the UIA selection
+pattern).
 
 ### 11.2 Sidebar and list
 
