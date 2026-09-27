@@ -63,6 +63,10 @@ const usageText = `Usage:
   malachi-mcp install [--json]     register this binary (read-only + drafts) with every Claude app found
   malachi-mcp uninstall [--json]   remove that registration
 
+The setup subcommands also take --claude-desktop-config PATH and --command PATH,
+for a Claude Desktop file or a command the bridge cannot find by itself
+(malachi-mcp status -h).
+
 Flags:
 `
 

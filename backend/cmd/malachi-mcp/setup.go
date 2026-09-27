@@ -6,10 +6,14 @@ package main
 // The setup subcommands (status, install, uninstall) register this binary
 // in the user-level MCP configuration of the Claude apps, so the desktop
 // clients can offer one "Register with Claude" switch without editing
-// JSON themselves. They touch nothing but the two files named in
-// clientSpecs, never create the apps' directories (an app that is not
-// installed is reported, not configured), and write the read-only tier:
-// no --allow-* flag ever lands in a file. See docs/mcp.md.
+// JSON themselves. They touch nothing but the two files the report names,
+// never create the apps' directories (an app that is not installed is
+// reported, not configured), and write the read-only tier: no --allow-*
+// flag ever lands in a file. Two flags let a desktop client supply what
+// the bridge cannot find by itself (a Claude Desktop packaged where
+// os.UserConfigDir does not lead, a launcher path to register); the
+// knowledge of any platform's packaging stays in that client. See
+// docs/mcp.md.
 
 import (
 	"bytes"
@@ -26,37 +30,74 @@ import (
 // mcpServerName is the key under mcpServers in both apps' files.
 const mcpServerName = "malachi"
 
-// setupEnv is what the subcommands need from the machine: the two base
-// directories the Claude apps use and the path this binary runs from.
+// setupEnv is what the subcommands work with: where the two Claude apps
+// keep their configuration and the command that gets registered.
 type setupEnv struct {
-	home      string // os.UserHomeDir: ~/.claude.json and ~/.claude/
-	configDir string // os.UserConfigDir: <configDir>/Claude/claude_desktop_config.json
-	command   string // this executable, symlinks resolved
+	home          string // ~/.claude.json and ~/.claude/
+	desktopConfig string // Claude Desktop's configuration file
+	command       string // what install writes and status compares against
 }
 
-// locateSetupEnv is a variable so the tests can point the subcommands at
-// a temporary directory instead of the real home.
-var locateSetupEnv = realSetupEnv
+// setupFlags are the flags that replace a lookup; empty means not given.
+type setupFlags struct {
+	desktopConfig string // --claude-desktop-config
+	command       string // --command
+}
 
-func realSetupEnv() (setupEnv, error) {
-	home, err := os.UserHomeDir()
+// setupLookups asks the machine for what no flag gave. It is a variable
+// so the tests can point the subcommands at a temporary directory
+// instead of the real home.
+var setupLookups = struct {
+	homeDir, configDir, executable func() (string, error)
+}{os.UserHomeDir, os.UserConfigDir, os.Executable}
+
+// locateSetupEnv takes what the flags give and looks up the rest: the
+// home directory always (Claude Code has no flag), the user config
+// directory only without --claude-desktop-config and this executable only
+// without --command, so a lookup a flag replaces cannot fail the command.
+func locateSetupEnv(given setupFlags) (setupEnv, error) {
+	home, err := setupLookups.homeDir()
 	if err != nil {
 		return setupEnv{}, fmt.Errorf("home directory: %w", err)
 	}
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return setupEnv{}, fmt.Errorf("config directory: %w", err)
+	env := setupEnv{home: home, desktopConfig: given.desktopConfig, command: given.command}
+	if env.desktopConfig == "" {
+		configDir, err := setupLookups.configDir()
+		if err != nil {
+			return setupEnv{}, fmt.Errorf("config directory: %w", err)
+		}
+		env.desktopConfig = filepath.Join(configDir, "Claude", "claude_desktop_config.json")
 	}
-	exe, err := os.Executable()
-	if err != nil {
-		return setupEnv{}, fmt.Errorf("own executable: %w", err)
+	if env.command == "" {
+		exe, err := setupLookups.executable()
+		if err != nil {
+			return setupEnv{}, fmt.Errorf("own executable: %w", err)
+		}
+		// A symlink (a bin directory pointing into a checkout, say) would
+		// make the registered command differ from what the next run
+		// resolves to. --command is only cleaned, never resolved: a caller
+		// that names a stable launcher (an alias, a current/ directory)
+		// means that path.
+		if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = resolved
+		}
+		env.command = exe
 	}
-	// A symlink (a bin directory pointing into a checkout, say) would make
-	// the registered command differ from what the next run resolves to.
-	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
-		exe = resolved
+	return env, nil
+}
+
+// absPathFlag parses a path flag into dst: an absolute path, cleaned. A
+// relative one is refused rather than resolved: Claude would look for a
+// relative command from its own working directory, and a report is read
+// by an app that does not know where the bridge ran.
+func absPathFlag(dst *string) func(string) error {
+	return func(v string) error {
+		if !filepath.IsAbs(v) {
+			return errors.New("not an absolute path")
+		}
+		*dst = filepath.Clean(v)
+		return nil
 	}
-	return setupEnv{home: home, configDir: configDir, command: exe}, nil
 }
 
 // clientSpec is one Claude app: where its configuration lives and whether
@@ -69,12 +110,11 @@ type clientSpec struct {
 
 // clients lists the apps in the order the report shows them.
 func (e setupEnv) clients() []clientSpec {
-	desktop := filepath.Join(e.configDir, "Claude", "claude_desktop_config.json")
 	code := filepath.Join(e.home, ".claude.json")
 	return []clientSpec{
 		{
-			id: "claude-desktop", name: "Claude Desktop", path: desktop,
-			present: isDir(filepath.Dir(desktop)),
+			id: "claude-desktop", name: "Claude Desktop", path: e.desktopConfig,
+			present: isDir(filepath.Dir(e.desktopConfig)),
 		},
 		{
 			id: "claude-code", name: "Claude Code", path: code,
@@ -143,8 +183,15 @@ func runSetup(sub string, args []string, stdout, stderr io.Writer) error {
 	fs := flag.NewFlagSet("malachi-mcp "+sub, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the report as one JSON object")
+	var given setupFlags
+	fs.Func("claude-desktop-config",
+		"use `PATH` (absolute) as Claude Desktop's configuration file instead of <UserConfigDir>/Claude/claude_desktop_config.json; Claude Desktop is present when its directory exists",
+		absPathFlag(&given.desktopConfig))
+	fs.Func("command",
+		"register `PATH` (absolute, symlinks not resolved) and compare against it instead of this executable",
+		absPathFlag(&given.command))
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: malachi-mcp %s [--json]\n", sub)
+		fmt.Fprintf(stderr, "Usage: malachi-mcp %s [--json] [--claude-desktop-config PATH] [--command PATH]\n", sub)
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -156,7 +203,7 @@ func runSetup(sub string, args []string, stdout, stderr io.Writer) error {
 	if fs.NArg() > 0 {
 		return fmt.Errorf("%s takes no arguments", sub)
 	}
-	env, err := locateSetupEnv()
+	env, err := locateSetupEnv(given)
 	if err != nil {
 		return err
 	}
