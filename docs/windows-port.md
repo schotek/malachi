@@ -586,7 +586,10 @@ Observable state as `INotifyPropertyChanged` properties (CommunityToolkit.Mvvm
 source generators, private setters), imperative outputs as events 1:1 with
 the Swift `onX` callbacks, and lists as snapshots applied to
 `ObservableCollection`s by a keyed diff (`KeyedListSync`) so a `ListView`
-keeps its selection and scroll. `{x:Bind}` only. Dialogs are async hooks
+keeps its containers and scroll. WinUI and UWP have been reported to turn
+a `Move` into a removal and an insertion, which may deselect the moved row:
+a list controller re-applies its selection by key after a sync that moved
+entries, and phase E verifies what WinUI 3 does. `{x:Bind}` only. Dialogs are async hooks
 (`IAlerts`), never a `ContentDialog` created by a controller.
 
 ## 8. Settings

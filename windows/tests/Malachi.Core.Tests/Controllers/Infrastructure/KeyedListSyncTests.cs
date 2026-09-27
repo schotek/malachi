@@ -45,7 +45,7 @@ public sealed class KeyedListSyncTests
         var (target, log) = Watched(Rows("a", "b", "c", "d"));
         var c = target[2];
         Apply(target, Rows("a", "c"));
-        Assert.Equal(["Remove b", "Remove d"], log);
+        Assert.Equal(["Remove d", "Remove b"], log); // from the end
         Assert.Same(c, target[1]);
     }
 
@@ -147,6 +147,53 @@ public sealed class KeyedListSyncTests
         }
     }
 
+    /// <summary>
+    /// A first fill and a whole reversal of a long list look at each key a
+    /// few times, not once per pair of entries: the work of a sync grows with
+    /// the list, the moves aside.
+    /// </summary>
+    [Fact]
+    public void KeysAreLookedAtAFewTimesEach()
+    {
+        const int n = 5000;
+        var keys = Enumerable.Range(0, n).Select(i => $"k{i}").ToArray();
+        var target = new ObservableCollection<View>();
+        var comparer = new CountingComparer();
+        var keyCalls = 0;
+        KeyedListChanges Sync(string[] order) => KeyedListSync.Apply(
+            target,
+            Rows(order),
+            r =>
+            {
+                keyCalls++;
+                return r.Key;
+            },
+            v =>
+            {
+                keyCalls++;
+                return v.Key;
+            },
+            r => new View(r.Key, r.Text),
+            (v, r) => v.Text = r.Text,
+            comparer);
+
+        Assert.Equal(new KeyedListChanges(n, 0, 0, 0), Sync(keys));
+        Assert.Equal(keys, Keys(target));
+        Assert.True(keyCalls <= 3 * n, $"{keyCalls} key calls to fill {n} entries");
+        Assert.True(comparer.Calls <= 3 * n, $"{comparer.Calls} comparisons to fill {n} entries");
+
+        keyCalls = 0;
+        comparer.Calls = 0;
+        var views = target.ToDictionary(v => v.Key);
+        string[] reversed = [.. Enumerable.Reverse(keys)];
+        var changes = Sync(reversed);
+        Assert.Equal(reversed, Keys(target));
+        Assert.Equal(n - 1, changes.Moved);
+        Assert.All(target, v => Assert.Same(views[v.Key], v));
+        Assert.True(keyCalls <= 3 * n, $"{keyCalls} key calls to reverse {n} entries");
+        Assert.True(comparer.Calls <= 3 * n, $"{comparer.Calls} comparisons to reverse {n} entries");
+    }
+
     private static KeyedListChanges Apply(ObservableCollection<View> target, IReadOnlyList<Row> rows) =>
         KeyedListSync.Apply(target, rows, r => r.Key, v => v.Key, r => new View(r.Key, r.Text), (v, r) => v.Text = r.Text);
 
@@ -201,6 +248,20 @@ public sealed class KeyedListSyncTests
     }
 
     private sealed record Row(string Key, string Text);
+
+    /// <summary>Ordinal string keys, counting how often two are compared.</summary>
+    private sealed class CountingComparer : IEqualityComparer<string>
+    {
+        public int Calls { get; set; }
+
+        public bool Equals(string? x, string? y)
+        {
+            Calls++;
+            return string.Equals(x, y, StringComparison.Ordinal);
+        }
+
+        public int GetHashCode(string obj) => StringComparer.Ordinal.GetHashCode(obj);
+    }
 
     /// <summary>A row view model: an object with an identity and a mutable text.</summary>
     private sealed class View(string key, string text)

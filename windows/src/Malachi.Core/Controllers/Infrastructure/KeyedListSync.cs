@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 
 namespace Malachi.Core.Controllers.Infrastructure;
 
@@ -19,11 +20,27 @@ namespace Malachi.Core.Controllers.Infrastructure;
 /// Applies a snapshot of a list to an <see cref="ObservableCollection{T}"/>
 /// by key: entries whose key is gone are removed, new keys inserted, and
 /// entries that stay keep their object, so a <c>ListView</c> keeps their
-/// containers, its selection and its scroll position. Of the entries that
-/// stay, the longest run already in the snapshot's order is not touched at
-/// all; each other one is moved once. Keys must be unique in the snapshot.
-/// Call it on the UI thread.
+/// containers and its scroll position. Of the entries that stay, the longest
+/// run already in the snapshot's order is not touched at all; each other
+/// one is moved once. Keys must be unique in the snapshot. Call it on the UI
+/// thread.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Cost: O(n log n) for the run, plus for each entry that moves a scan of an
+/// int array (vectorised) and the collection's own shifting of its
+/// elements, which a Move costs anyway; a first fill appends. No key is
+/// compared more than a few times.
+/// </para>
+/// <para>
+/// Selection: WinUI and UWP have been reported to turn an
+/// <see cref="ObservableCollection{T}.Move(int, int)"/> into a removal and an
+/// insertion, which may deselect the moved row (not verified for WinUI 3;
+/// phase E checks it). A list controller therefore re-applies its selection
+/// by key after a sync whose <see cref="KeyedListChanges.Moved"/> is not 0,
+/// rather than trusting the <c>ListView</c> to keep it.
+/// </para>
+/// </remarks>
 public static class KeyedListSync
 {
     /// <summary>
@@ -112,76 +129,81 @@ public static class KeyedListSync
             }
         }
 
-        // Keys that are gone, and repeats of a key in the collection.
-        var removed = 0;
+        // Keys that are gone, and repeats of a key in the collection (the
+        // first one stays), removed from the end so that each removal shifts
+        // only what follows it.
         var kept = new HashSet<TKey>(keys);
-        for (var i = 0; i < target.Count;)
-        {
-            var k = viewKey(target[i]);
-            if (wanted.ContainsKey(k) && kept.Add(k))
-            {
-                i++;
-                continue;
-            }
-            target.RemoveAt(i);
-            removed++;
-        }
-
-        // Where each wanted key is now; the longest run already in order stays.
-        var before = new Dictionary<TKey, int>(target.Count, keys);
+        var goes = new bool[target.Count];
         for (var i = 0; i < target.Count; i++)
         {
-            before[viewKey(target[i])] = i;
+            var k = viewKey(target[i]);
+            goes[i] = !(wanted.ContainsKey(k) && kept.Add(k));
         }
-        var positions = new int[snapshot.Count];
-        for (var i = 0; i < snapshot.Count; i++)
+        var removed = 0;
+        for (var i = goes.Length - 1; i >= 0; i--)
         {
-            positions[i] = before.TryGetValue(itemKey(snapshot[i]), out var at) ? at : -1;
+            if (goes[i])
+            {
+                target.RemoveAt(i);
+                removed++;
+            }
+        }
+
+        // The collection as the snapshot indexes of its entries, kept in step
+        // with it: a key is compared once here, and an entry is found again
+        // by a scan of ints. Where each wanted key is now (-1 for a new one);
+        // the longest run already in order stays.
+        var order = new List<int>(snapshot.Count);
+        var positions = new int[snapshot.Count];
+        Array.Fill(positions, -1);
+        for (var p = 0; p < target.Count; p++)
+        {
+            var at = wanted[viewKey(target[p])];
+            order.Add(at);
+            positions[at] = p;
         }
         var stays = LongestIncreasingRun(positions);
 
         // Every other entry goes right behind the one the snapshot puts
         // before it; that one is in its final place relative to the others
-        // already, so the order comes out as the snapshot's.
+        // already, so the order comes out as the snapshot's. Where the step
+        // before put its entry is known; after an entry that stayed, it is
+        // looked up.
         var inserted = 0;
         var moved = 0;
+        int? previousAt = null;
         for (var i = 0; i < snapshot.Count; i++)
         {
             if (stays[i])
             {
+                previousAt = null;
                 continue;
             }
-            var key = itemKey(snapshot[i]);
-            var after = i == 0 ? -1 : IndexOf(target, viewKey, itemKey(snapshot[i - 1]), keys);
+            var after = i == 0 ? -1 : previousAt ?? IndexOf(order, i - 1);
             if (positions[i] < 0)
             {
                 target.Insert(after + 1, create(snapshot[i]));
+                order.Insert(after + 1, i);
                 inserted++;
+                previousAt = after + 1;
                 continue;
             }
-            var from = IndexOf(target, viewKey, key, keys);
+            var from = IndexOf(order, i);
             var to = from <= after ? after : after + 1;
             if (from != to)
             {
                 target.Move(from, to);
+                order.RemoveAt(from);
+                order.Insert(to, i);
                 moved++;
             }
+            previousAt = to;
         }
         Debug.Assert(target.Count == snapshot.Count, "the collection has the snapshot's length");
         return new KeyedListChanges(inserted, removed, moved, 0);
     }
 
-    private static int IndexOf<TKey, TView>(ObservableCollection<TView> target, Func<TView, TKey> viewKey, TKey key, IEqualityComparer<TKey> keys)
-    {
-        for (var i = 0; i < target.Count; i++)
-        {
-            if (keys.Equals(viewKey(target[i]), key))
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
+    private static int IndexOf(List<int> order, int entry) => CollectionsMarshal.AsSpan(order).IndexOf(entry);
 
     /// <summary>
     /// The entries of <paramref name="positions"/> (−1 for none) that form
