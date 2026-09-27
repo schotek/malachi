@@ -85,6 +85,38 @@ public sealed class CidRegistryTests
         Assert.Equal("inline image is not a picture", new InlineImageException(InlineImageError.NotAPicture).Message);
     }
 
+    // Windows: the id a cid: request names (macOS CIDSchemeHandler.id(of:),
+    // GTK serveCID): the URI's path as it stands, else what follows "cid:".
+    [Theory]
+    [InlineData("cid:file@x", "file@x")]
+    [InlineData("CID:file@x", "file@x")]
+    [InlineData("cid:file@x?size=1#top", "file@x")]
+    [InlineData("cid:a%20b@x", "a%20b@x")]
+    [InlineData("cid:../../etc/passwd", "../../etc/passwd")]
+    [InlineData("cid://host/p", "/p")]
+    [InlineData("cid://host", "//host")]
+    [InlineData("cid:?x", "?x")]
+    [InlineData("cid:", "")]
+    [InlineData("file@x", "file@x")]
+    public void IdOfRequest(string uri, string id)
+    {
+        Assert.Equal(id, CidRegistry.IdOf(uri));
+    }
+
+    // Windows: a request resolves only to an id registered exactly so.
+    [Fact]
+    public void RequestsResolveExactly()
+    {
+        var registry = new CidRegistry();
+        registry.Register("file@x", "/tmp/pic.png", "image/png");
+        Assert.NotNull(registry.Lookup(CidRegistry.IdOf("cid:file@x")));
+        Assert.NotNull(registry.Lookup(CidRegistry.IdOf("cid:file@x?v=2")));
+        foreach (var uri in new[] { "cid:../file@x", "cid:FILE@x", "cid:file%40x", "cid://file@x", "cid:" })
+        {
+            Assert.Null(registry.Lookup(CidRegistry.IdOf(uri)));
+        }
+    }
+
     // Go's registry is one per process behind a mutex; so is Shared, which
     // the scheme handler may ask from any thread.
     [Fact]

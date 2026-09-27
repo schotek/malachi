@@ -269,6 +269,30 @@ public sealed class EditorChannelTests
         Assert.True(channel.IsReady);
     }
 
+    // Windows: Exec and FocusStart are ignored until the bridge runs in the
+    // current document, as GTK and macOS ignore them (editor.go Exec,
+    // FocusStart): the view evaluates nothing for a null script.
+    [Fact]
+    public void ExecAndFocusStartWaitForTheBridge()
+    {
+        var channel = new EditorChannel();
+        Assert.Null(channel.ExecScript("bold", null));
+        Assert.Null(channel.FocusStartScript());
+        channel.Receive("""{"type":"ready"}""");
+        Assert.Equal(EditorBridge.ExecScript("formatBlock", "h1"), channel.ExecScript("formatBlock", "h1"));
+        Assert.Equal("window.malachi.exec(\"bold\", null)", channel.ExecScript("bold", ""));
+        Assert.Equal(EditorBridge.FocusStartScript, channel.FocusStartScript());
+        channel.Load("<p>x</p>");
+        Assert.Null(channel.ExecScript("bold", null));
+        Assert.Null(channel.FocusStartScript());
+        channel.Receive("""{"type":"ready"}""");
+        Assert.NotNull(channel.FocusStartScript());
+        channel.Crashed();
+        Assert.Null(channel.ExecScript("bold", null));
+        Assert.Null(channel.FocusStartScript());
+        Assert.Throws<ArgumentNullException>(() => channel.ExecScript(null!, null));
+    }
+
     [Theory]
     [InlineData("3", 3L)]
     [InlineData(" 42 ", 42L)]

@@ -1,16 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiCore/HTML/CIDRegistry.swift; GTK:
+// Port of macos/Sources/MalachiCore/HTML/CIDRegistry.swift and of
+// macos/Sources/MalachiMail/WebViews/CIDSchemeHandler.swift (id(of:)); GTK:
 // ui/internal/editor/cid.go (maxCIDBytes, fetchTimeout, RegisterCID,
-// RegisterCIDFetcher, CIDRegistered, UnregisterCID, lookupCID, checkInline).
+// RegisterCIDFetcher, CIDRegistered, UnregisterCID, lookupCID, checkInline,
+// serveCID's id).
 //
-// The pure part of the cid: scheme of the compose editor: the registry and
-// the gate every served image passes. Serving a request (reading the file,
-// calling the fetcher under the timeout, answering WebResourceRequested) is
-// the WebView2 layer's. Swift keeps the registry on the main actor; Go
-// guards it with a mutex, and so does this one, so the scheme handler may
-// ask from any thread.
+// The pure part of the cid: scheme of the compose editor: the registry, the
+// id a request names and the gate every served image passes. Serving a
+// request (reading the file, calling the fetcher under the timeout,
+// answering WebResourceRequested) is the WebView2 layer's. Swift keeps the
+// registry on the main actor; Go guards it with a mutex, and so does this
+// one, so the scheme handler may ask from any thread.
 
 using System;
 using System.Collections.Generic;
@@ -91,6 +93,51 @@ public sealed class CidRegistry
         {
             return files.GetValueOrDefault(id);
         }
+    }
+
+    /// <summary>
+    /// The id a <c>cid:</c> request names (macOS CIDSchemeHandler.id(of:),
+    /// GTK serveCID): the path of the request's URI as it stands, escapes
+    /// kept (past an authority, without the query and fragment); when it has
+    /// none, everything after <c>cid:</c>. The id is only ever looked up,
+    /// matched exactly as registered, so a hostile one resolves to nothing.
+    /// </summary>
+    public static string IdOf(string requestUri)
+    {
+        ArgumentNullException.ThrowIfNull(requestUri);
+        var path = requestUri.AsSpan(SchemeLength(requestUri));
+        var end = path.IndexOfAny('?', '#');
+        if (end >= 0)
+        {
+            path = path[..end];
+        }
+        if (path.StartsWith("//", StringComparison.Ordinal))
+        {
+            var slash = path[2..].IndexOf('/');
+            path = slash < 0 ? [] : path[(slash + 2)..];
+        }
+        if (!path.IsEmpty)
+        {
+            return path.ToString();
+        }
+        const string prefix = "cid:";
+        return requestUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? requestUri[prefix.Length..] : requestUri;
+    }
+
+    // The length of the URI's scheme with its colon (RFC 3986: a letter,
+    // then letters, digits, "+", "-" and "."); 0 without one.
+    private static int SchemeLength(string uri)
+    {
+        for (var i = 0; i < uri.Length; i++)
+        {
+            var c = uri[i];
+            if (char.IsAsciiLetter(c) || (i > 0 && (char.IsAsciiDigit(c) || c is '+' or '-' or '.')))
+            {
+                continue;
+            }
+            return c == ':' && i > 0 ? i + 1 : 0;
+        }
+        return 0;
     }
 
     /// <summary>

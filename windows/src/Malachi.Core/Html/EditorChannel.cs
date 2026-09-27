@@ -3,8 +3,8 @@
 
 // Port of the bridge half of macos/Sources/MalachiMail/Compose/
 // ComposeEditorView.swift (load, flush, receive, flushed, resolveWaiters,
-// drainWaiters, crashed); GTK: ui/internal/editor/editor.go (Load, Flush,
-// onMessage).
+// drainWaiters, crashed, exec, focusStart); GTK: ui/internal/editor/editor.go
+// (Load, Flush, onMessage, Exec, FocusStart).
 //
 // What the compose editor view does with the bridge, without the WebView2:
 // the last content the page reported, the ready state, and the flush
@@ -175,6 +175,25 @@ public sealed class EditorChannel
         }
         Release();
     }
+
+    /// <summary>
+    /// editor.Exec (macOS <c>exec</c>): the script that runs an editing
+    /// command through the bridge (<see cref="EditorBridge.ExecScript"/>);
+    /// null until the bridge runs in the current document, which ignores the
+    /// command as GTK and macOS do. An empty argument is no argument.
+    /// </summary>
+    public string? ExecScript(string command, string? argument)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return IsReady ? EditorBridge.ExecScript(command, argument) : null;
+    }
+
+    /// <summary>
+    /// editor.FocusStart (macOS <c>focusStart</c>): the script that puts the
+    /// caret at the start of the body (<see cref="EditorBridge.FocusStartScript"/>);
+    /// null until the bridge runs. The view focuses itself either way.
+    /// </summary>
+    public string? FocusStartScript() => IsReady ? EditorBridge.FocusStartScript : null;
 
     /// <summary>
     /// The page's process died, or its document was refused; the view is
