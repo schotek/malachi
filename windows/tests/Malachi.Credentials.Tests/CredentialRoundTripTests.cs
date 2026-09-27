@@ -8,7 +8,10 @@
 // additions. It writes to the user's Credential Manager, only under account
 // ids that begin with malachi-test-, removes everything it wrote, and runs
 // only on request (MALACHI_CREDENTIALS_TEST=1, as MALACHI_KEYCHAIN_TEST=1 on
-// macOS).
+// macOS). Every test holds the helper's session lock while it uses the
+// store, as every helper run does (CredentialLock): Credential Manager
+// loses updates when processes use it at once, the user's own helper runs
+// among them.
 
 using System;
 using System.Globalization;
@@ -19,14 +22,19 @@ using Xunit;
 
 namespace Malachi.Credentials.Tests;
 
+[Collection(CollectionName)]
 public sealed class CredentialRoundTripTests
 {
+    /// <summary>The tests that use Credential Manager, which run one at a time.</summary>
+    internal const string CollectionName = "Credential Manager";
+
     private const string TestAccountPrefix = "malachi-test-";
 
     [Fact]
     public void StoresReadsReplacesAndDeletes()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var store = new CredentialStore(new Win32CredentialManager());
         var request = new Request(TestAccount(), "password");
         try
@@ -51,6 +59,7 @@ public sealed class CredentialRoundTripTests
     public void KeepsTheItemAsDescribed()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var store = new CredentialStore(manager);
         var request = new Request(TestAccount(), "password");
@@ -83,6 +92,7 @@ public sealed class CredentialRoundTripTests
     public void StoresValuesOfEveryLength(int length)
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var store = new CredentialStore(manager);
         var request = new Request(TestAccount(), "oauth2.refresh_token");
@@ -114,6 +124,7 @@ public sealed class CredentialRoundTripTests
     public void ReplacingAChunkedValueWritesTheOtherSlot()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var store = new CredentialStore(manager);
         var request = new Request(TestAccount(), "oauth2.refresh_token");
@@ -138,6 +149,7 @@ public sealed class CredentialRoundTripTests
     public void AnItemWrittenAsUtf16IsCorrupt()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var store = new CredentialStore(manager);
         var request = new Request(TestAccount(), "password");
@@ -171,6 +183,7 @@ public sealed class CredentialRoundTripTests
     public void TakesTheLongestIdentifiers()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var store = new CredentialStore(new Win32CredentialManager());
         var account = TestAccount().PadRight(Request.MaxIdentifier, 'a');
         var request = new Request(account, new string('k', Request.MaxIdentifier));
@@ -191,6 +204,7 @@ public sealed class CredentialRoundTripTests
     public void AnUnknownTargetIsNotFound()
     {
         SkipUnlessEnabled();
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var name = $"{Request.Service}/{TestAccount()}/password";
         Assert.Equal(1168, manager.Read(name, out var item));
@@ -206,6 +220,14 @@ public sealed class CredentialRoundTripTests
             Environment.GetEnvironmentVariable("MALACHI_CREDENTIALS_TEST") == "1",
             "writes to Credential Manager; set MALACHI_CREDENTIALS_TEST=1 to run it");
 
+    /// <summary>Waits for the helper's session lock; the test holds it until it disposes the turn.</summary>
+    internal static CredentialLock.Turn TakeTurn()
+    {
+        var turn = CredentialLock.Session.Take();
+        Assert.NotNull(turn);
+        return turn;
+    }
+
     /// <summary>An account id no real account has: malachi-test- and a GUID.</summary>
     internal static string TestAccount() => TestAccountPrefix + Guid.NewGuid().ToString("N");
 
@@ -213,6 +235,7 @@ public sealed class CredentialRoundTripTests
     internal static void RemoveAll(string account)
     {
         Assert.StartsWith(TestAccountPrefix, account, StringComparison.Ordinal);
+        using var turn = TakeTurn();
         var manager = new Win32CredentialManager();
         var prefix = $"{Request.Service}/{account}/";
         Assert.Equal(0, manager.List(prefix, out var names));

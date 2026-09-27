@@ -618,9 +618,17 @@ every other chunk (found with `CredEnumerateW`), so a `set` that fails or
 is killed leaves the previous value readable, as `SecItemUpdate` does, and
 nothing for good; `delete` removes them all. A value may take at most 16
 chunks (40 KiB) and its `get` answer at most the 64 KiB the daemon keeps;
-a longer one is refused. The value stays bytes and never becomes a
-string, so every buffer that held it is zeroed. The Go side's
-`MALACHI_TEST_REAL_HELPER` round trip runs against it.
+a longer one is refused. Credential Manager loses updates when several
+processes use it at once, even when all but one only read (measured: a
+write that reads back as missing, a deleted item that returns), while the
+calls of one process are consistent; the daemon may run several helpers at
+once, so every run holds the session's named mutex
+`Local\io.github.schotek.Malachi.credentials` (10 s wait) around its store
+operation. Another program using Credential Manager at the same moment can
+still make a `set` or `delete` go missing; the item then reads as its
+previous value or as corrupt, never as a mix. The value stays bytes and
+never becomes a string, so every buffer that held it is zeroed. The Go
+side's `MALACHI_TEST_REAL_HELPER` round trip runs against it.
 
 **Notifications and sound.** Measured in phase B on 2.5.1: in a
 self-contained unpackaged app **no package set** makes
@@ -861,7 +869,8 @@ never hosted in a raw HWND controller.
   backend and its watcher, file-name rules, Mark of the Web round trip.
 - `Malachi.Credentials.Tests`: the protocol without the store; a real
   round trip (4 KiB and chunked values, `cmdkey`'s UTF-16 items) on request
-  (`MALACHI_CREDENTIALS_TEST=1`).
+  (`MALACHI_CREDENTIALS_TEST=1`), one test at a time under the helper's
+  session lock.
 - `Malachi.Conventions.Tests`: strings, msgid and gschema coverage, SPDX
   headers of every file type, the manifest identity.
 - The **network canary**: a test harness renders the `backend/testdata/mime`

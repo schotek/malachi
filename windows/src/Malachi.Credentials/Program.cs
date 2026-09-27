@@ -10,7 +10,8 @@
 // as the answer to get; stderr carries a diagnostic in fixed words, never
 // data. It is a GUI (WinExe) program so that no console window appears,
 // whatever started the daemon; the pipes the daemon passes are its standard
-// handles all the same, read and written as bytes (UTF-8, no BOM).
+// handles all the same, read and written as bytes (UTF-8, no BOM). Runs
+// take turns at the store (CredentialLock).
 
 using System;
 using System.Collections.Generic;
@@ -34,14 +35,20 @@ internal static class Program
         using var input = Console.OpenStandardInput();
         using var output = Console.OpenStandardOutput();
         using var error = Console.OpenStandardError();
-        return (int)Run(args, input, output, error, new CredentialStore(new Win32CredentialManager()));
+        return (int)Run(args, input, output, error, new CredentialStore(new Win32CredentialManager()), CredentialLock.Session);
     }
 
     /// <summary>
     /// One run of the helper over the given streams and store: what
     /// <see cref="Main"/> does, and what the tests drive.
     /// </summary>
-    internal static HelperExit Run(IReadOnlyList<string> args, Stream input, Stream output, Stream error, CredentialStore store)
+    /// <param name="args">The arguments after the program's name.</param>
+    /// <param name="input">stdin.</param>
+    /// <param name="output">stdout.</param>
+    /// <param name="error">stderr.</param>
+    /// <param name="store">The store.</param>
+    /// <param name="turns">The lock a run holds while it uses the store, or null for none.</param>
+    internal static HelperExit Run(IReadOnlyList<string> args, Stream input, Stream output, Stream error, CredentialStore store, CredentialLock? turns = null)
     {
         try
         {
@@ -49,7 +56,7 @@ internal static class Program
             {
                 return Fail(error, HelperExit.BadRequest, $"usage: {Name} get|set|delete (one JSON line on stdin)");
             }
-            return Serve(operation, input, output, error, store);
+            return Serve(operation, input, output, error, store, turns);
         }
 #pragma warning disable CA1031 // The last line of defence: the runtime's report of an exception could quote data.
         catch (Exception e)
@@ -59,7 +66,7 @@ internal static class Program
         }
     }
 
-    private static HelperExit Serve(Operation operation, Stream input, Stream output, Stream error, CredentialStore store)
+    private static HelperExit Serve(Operation operation, Stream input, Stream output, Stream error, CredentialStore store, CredentialLock? turns)
     {
         // One byte more than a request may have tells a request that is too
         // long from one that fits exactly.
@@ -78,6 +85,15 @@ internal static class Program
             }
             // The request holds its own copy of the value now.
             CryptographicOperations.ZeroMemory(buffer.AsSpan(0, length));
+            if (turns is null)
+            {
+                return Perform(operation, request, output, error, store);
+            }
+            using var turn = turns.Take();
+            if (turn is null)
+            {
+                return Fail(error, HelperExit.Failure, $"{operation.RawValue}: another {Name} did not finish in time");
+            }
             return Perform(operation, request, output, error, store);
         }
         finally

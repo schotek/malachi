@@ -178,6 +178,39 @@ public sealed class ProgramTests
     }
 
     [Fact]
+    public void ARunThatDoesNotGetItsTurnIsExitOne()
+    {
+        var turns = CredentialLockTests.Unique(TimeSpan.FromMilliseconds(50));
+        var store = new CredentialStore(manager);
+        using (CredentialLockTests.Holder.Hold(turns))
+        {
+            var output = new MemoryStream();
+            var error = new MemoryStream();
+            var exit = Program.Run(["get"], Input("""{"account":"acc_1","key":"password"}"""), output, error, store, turns);
+            Assert.Equal(HelperExit.Failure, exit);
+            Assert.Empty(output.ToArray());
+            Assert.Equal("malachi-credentials: get: another malachi-credentials did not finish in time\n", Encoding.UTF8.GetString(error.ToArray()));
+            Assert.Empty(manager.Calls);
+        }
+        Assert.Equal(
+            HelperExit.NotFound,
+            Program.Run(["get"], Input("""{"account":"acc_1","key":"password"}"""), new MemoryStream(), new MemoryStream(), store, turns));
+    }
+
+    [Fact]
+    public void AMalformedRequestDoesNotWaitForItsTurn()
+    {
+        var turns = CredentialLockTests.Unique(TimeSpan.FromSeconds(30));
+        using (CredentialLockTests.Holder.Hold(turns))
+        {
+            var error = new MemoryStream();
+            var exit = Program.Run(["get"], Input("not json"), new MemoryStream(), error, new CredentialStore(manager), turns);
+            Assert.Equal(HelperExit.BadRequest, exit);
+            Assert.Equal("malachi-credentials: malformed get request\n", Encoding.UTF8.GetString(error.ToArray()));
+        }
+    }
+
+    [Fact]
     public void TheAnswerIsUtf8WithoutAByteOrderMark()
     {
         Assert.Null(new CredentialStore(manager).Set(new Request("acc_1", "password"), "wörd"u8));

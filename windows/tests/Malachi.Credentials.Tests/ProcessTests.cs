@@ -5,7 +5,8 @@
 // (WinExe) program has no console, yet the pipes it was started with are
 // its standard handles: these tests prove that, and that it reads and
 // writes plain UTF-8 bytes there. The tests that touch Credential Manager
-// run only with MALACHI_CREDENTIALS_TEST=1.
+// run only with MALACHI_CREDENTIALS_TEST=1, one at a time with
+// CredentialRoundTripTests, and every helper run takes the session lock.
 
 using System;
 using System.Diagnostics;
@@ -16,6 +17,7 @@ using Xunit;
 
 namespace Malachi.Credentials.Tests;
 
+[Collection(CredentialRoundTripTests.CollectionName)]
 public sealed class ProcessTests
 {
     private const string Usage = "malachi-credentials: usage: malachi-credentials get|set|delete (one JSON line on stdin)\n";
@@ -119,10 +121,11 @@ public sealed class ProcessTests
 
     private static string Utf8(byte[] bytes) => Encoding.UTF8.GetString(bytes);
 
-    // Stores a generic credential with the system's cmdkey.exe and reads it
-    // back.
+    // Stores a generic credential with the system's cmdkey.exe, holding the
+    // helper's session lock as a helper would, and reads it back.
     private static GenericCredential WriteWithCmdkey(string target, string password)
     {
+        using var turn = CredentialRoundTripTests.TakeTurn();
         var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmdkey.exe"))
         {
             UseShellExecute = false,
