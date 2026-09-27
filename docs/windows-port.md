@@ -882,8 +882,16 @@ stream, both drained at once), the process tree killed on timeout, the
 drains given up 500 ms after the exit (`Malachi.Core.Platform.BridgeRunner`;
 a kill reads as status -1, a crash as its NTSTATUS, `ExitStatus.Describe`);
 the MSIX Claude Desktop's configuration path and the app folder's bridge
-path are passed with the new flags (§14). Failures go into the group
-description as in GTK.
+path are passed with the new flags (§14) on every call: `--command` with
+the bridge's canonical path (absolute, short names expanded, each component
+as the file system spells it, so another spelling of the app folder does
+not read as someone else's registration), `--claude-desktop-config` while
+`%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc` exists
+(`ClaudeDesktopPackage`). A missing bridge and a failed status go into the
+group description as in GTK (a later status that answers puts the page's
+own text back); a failed install or uninstall is a toast. A status ends
+with the page; an install or uninstall runs to its end
+(`McpRegistrationController`).
 
 ## 11. UI
 

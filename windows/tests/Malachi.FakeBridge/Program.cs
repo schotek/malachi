@@ -37,7 +37,7 @@ internal static class Program
             return 0;
         }
         var directory = FakeBridgeScript.DirectoryOf(Environment.ProcessPath);
-        File.AppendAllText(Path.Combine(directory, FakeBridgeScript.CallsFileName), string.Join(' ', args) + "\n", new UTF8Encoding(false));
+        AppendCall(Path.Combine(directory, FakeBridgeScript.CallsFileName), string.Join(' ', args) + "\n");
         if (args.Length < 2 || args[1] != "--json")
         {
             Write(StandardError, "expected --json, got " + (args.Length < 2 ? "" : args[1]) + "\n");
@@ -134,6 +134,28 @@ internal static class Program
         while (Environment.TickCount64 < deadline && File.Exists(holdFile))
         {
             Thread.Sleep(10);
+        }
+    }
+
+    // Appends one line to the calls file. Two invocations may run at once
+    // (an install overtaken by an uninstall), and Windows refuses a second
+    // writer while the first has the file open, where the script's `>>`
+    // appends in turn: so each waits for the other's line.
+    private static void AppendCall(string path, string line)
+    {
+        var bytes = new UTF8Encoding(false).GetBytes(line);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                using var file = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
+                file.Write(bytes);
+                return;
+            }
+            catch (IOException) when (attempt < 400)
+            {
+                Thread.Sleep(5);
+            }
         }
     }
 
