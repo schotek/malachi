@@ -183,8 +183,9 @@ public sealed class Launcher : ILauncher
         {
             s = new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri;
         }
-        catch (UriFormatException)
+        catch (Exception e) when (e is UriFormatException or ArgumentException)
         {
+            // A host .NET parsed but will not rebuild: nothing to launch.
             return null;
         }
         return s.Any(c => c <= ' ' || c == '"' || c >= '\x7F') ? null : s;

@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Platform.Windows.Attachments;
@@ -175,6 +176,23 @@ public sealed class LauncherTests
         await shell.Launcher.OpenLinkAsync(url!, 0, TestContext.Current.CancellationToken);
 
         Assert.Equal(want, Assert.Single(shell.Launches).Target);
+    }
+
+    public static readonly TheoryData<string> HostileLinks = new()
+    {
+        "https://。/", "https://a。。b/", "https://xn--/", "https://xn--zz-zz/", "https://-a-.example/",
+        "https://😀.example/", "https://ß.de/", "https://­/", "https://​​/", "https://[::1%25x]/",
+        "https://a%2eb/", "https://" + new string('a', 300) + ".example/", "https://example.com:99999/",
+        "https://ex ample.com/", "https://example.com/￿\uD800", "https://‮‮/", "http://[::ffff:127.0.0.1]/",
+    };
+
+    [Theory]
+    [MemberData(nameof(HostileLinks))]
+    public void HostileLinksGiveAnAsciiTargetOrNone(string url)
+    {
+        var target = Launcher.WebLinkTarget(url);
+
+        Assert.True(target is null || target.All(c => c > ' ' && c < '\x7F' && c != '"'), target);
     }
 
     [Fact]
