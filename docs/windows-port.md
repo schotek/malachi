@@ -280,13 +280,20 @@ feature that needs a new method goes backend → GTK → macOS → Windows.
 
 ## 5. Transport, handshake, daemon supervisor
 
-**Transport.** `Socket(AddressFamily.Unix, SocketType.Stream,
-ProtocolType.Unspecified)` with `UnixDomainSocketEndPoint`, newline-framed
-JSON-RPC, one reader shared by the handshake and the read loop (the shape
-of Go's `client.go`), a `TaskCompletionSource` per id created with
-`RunContinuationsAsynchronously`, writes serialised, notifications and
-state changes on unbounded channels in the daemon's order. 64 KiB line cap
-during the handshake, 32 MiB after. Measured on this machine: connect plus
+**Transport** (`Malachi.Core/Transport`, `RpcClient`).
+`Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified)`
+with `UnixDomainSocketEndPoint`, newline-framed JSON-RPC, one reader
+shared by the handshake and the read loop (the shape
+of Go's `client.go`; what the handshake read beyond its last answer goes
+to the `LineFramer` once the state is Connected), a `TaskCompletionSource`
+per id created with `RunContinuationsAsynchronously`, writes serialised and
+never cut short, notifications and state changes on unbounded channels in
+the daemon's order (and as events, raised under the client's lock). The
+dial probes first (nothing listening fails at once) and gives up after
+5 s; a call's timeout is its descriptor's, on the `TimeProvider`, and the
+caller's cancellation is an `OperationCanceledException`. 64 KiB line cap
+during the handshake, 32 MiB after (as Swift's framer, the cap bounds what
+waits for its newline). Measured on this machine: connect plus
 handshake 0.4 ms, a `system.info` round trip 0.05 ms.
 
 **Handshake** (api.md §1.4): `system.hello` with a 32-byte client nonce;
@@ -297,21 +304,34 @@ key is never cached, logged or kept. The test vectors of §1.4 and Go's
 failure table (`backend/pkg/api/handshake_test.go`) are ported.
 
 **Key file policy** (a listed deviation, the counterpart of macOS M27):
-besides Go's checks (a regular file, not a reparse point, exactly 65 bytes,
-the key format), the owner must be the current user and the DACL may grant
-access to no one but the user, SYSTEM and Administrators; a NULL DACL is
-refused. Before the first spawn the client creates the run directory
+Go's checks (a regular file, not a reparse point, exactly 65 bytes, the key
+format) are `DaemonKey`'s in Core; `IKeyFilePolicy` adds the platform's.
+`WindowsKeyFilePolicy` opens the file with `FILE_FLAG_OPEN_REPARSE_POINT`
+(a link or junction is refused as itself, never followed), refuses what
+`GetFileType` does not call a disk file (a pipe, `NUL`), requires the
+owner to be the current user (or the token's default owner, which an
+elevated run gives its files), and lets the DACL give the data (read,
+write, append, directly or through generic rights) or `WRITE_DAC` /
+`WRITE_OWNER` to no one but the user, SYSTEM, Administrators and OWNER
+RIGHTS; a NULL DACL is refused. The reasons are macOS's texts. Before the
+first spawn the client creates the run directory
 `%USERPROFILE%\.cache\malachi\run` with a protected DACL (user and SYSTEM).
 The key is read with `FileShare.ReadWrite | FileShare.Delete`: a reader
 without delete sharing makes the daemon's shutdown retry and leave the key
-behind (measured).
+behind (measured); a sharing violation (another process holding the file
+exclusively) is retried four times within about 300 ms on the
+`TimeProvider`. The key lives in a buffer zeroed after use.
 
 **AF_UNIX on Windows** (all measured): the path limit is 107 UTF-8 bytes
 (checked at start with a message naming `MALACHI_SOCKET`); a missing path
 or a stale socket file is `ConnectionRefused`, a missing directory
-`NetworkDown`; a full backlog fails at once with `NoBufferSpaceAvailable`
-(counts as "a listener is there" for the probe); socket files are reparse
-points; after a hard kill the daemon replaces the stale socket itself.
+`NetworkDown`; a non-blocking connect to a listener answers `WouldBlock`
+(in progress), and a full backlog fails at once with
+`NoBufferSpaceAvailable` (both count as "a listener is there" for the
+probe, `UnixSocketProbe`); socket files are reparse points; after a hard
+kill the daemon replaces the stale socket itself. `File.Move` with
+overwrite onto a file that a reader holds, even with delete sharing, is
+refused; deleting it is not.
 
 **Supervisor.** The state machine of `DaemonSupervisor.swift` in Core
 (probe every 100 ms, start timeout 15 s, stop timeout 15 s, backoff 0 then
@@ -510,6 +530,16 @@ starts with `await Task.Yield()`, registers the task with a pending-work
 tracker, passes the controller's lifetime token and drops the result when
 the controller is closed. Tests wait on `IdleAsync()` (the tracker, the
 fake daemon's in-flight count and the drained UI queue), never on sleeps.
+
+In the code (`Malachi.Core/Controllers/Infrastructure`): `ControllerScope`
+holds a controller's (or a group's, the mailbox with its halves) thread
+(`ThreadAffinity`, `VerifyAccess` in debug builds), `IsClosed`,
+`Lifetime` token and `PendingWork`; `Perform` hands an `Outcome<T>` (Swift's
+`Result`) to the UI thread, `Run` starts tracked work, `RunDetached` loops
+and waits on the clock (a tracked wait on a `FakeTimeProvider` would hold
+`IdleAsync` for ever), all yield-first. The tests' side is
+`Fixtures/Quiescence.IdleAsync`, `TestUIContext`, `FakeDaemon` and
+`MailFixture`.
 
 ### 7.3 Time
 
