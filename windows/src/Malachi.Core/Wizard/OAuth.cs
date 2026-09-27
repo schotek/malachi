@@ -9,12 +9,13 @@
 // The texts and rules of the browser sign-in: the prompt, the page without
 // a configured client, the failures of account.oauthStart and
 // account.oauthWait, the page the browser shows, and the addresses that may
-// be opened. The provider is named by SignIn.ProviderName, never by the
+// be opened. The provider is named by Provider.ProviderName, never by the
 // untrusted providerName of account.discover.
 
 using System;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.Model;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Wizard;
@@ -30,7 +31,7 @@ public static class OAuth
     public static string OAuthProviderLabel(LinkedProvider? provider, string email)
     {
         ArgumentNullException.ThrowIfNull(email);
-        var name = SignIn.ProviderName(provider);
+        var name = Provider.ProviderName(provider);
         return name.Length > 0 ? name : Fields.SuggestAccountName(email);
     }
 

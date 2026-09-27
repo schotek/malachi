@@ -9,13 +9,16 @@
 // TestIsClientMissing, TestTestNeedsSignIn, TestBrowserURL of signin; and
 // TestOAuthErrorText, TestBrowserPage, TestProviderLabel of oauth_test.go).
 // A thrown RPCError, Swift's client errors and Go's wrapped errors are
-// RpcErrorTextFailureException and InnerException chains here.
+// RpcErrorTextFailureException and InnerException chains here. signin.Kind,
+// KindOf, Provider and ProviderName are Malachi.Core.Model's SignInKind and
+// Provider, the one implementation the wizard uses (Swift's Provider.swift).
 
 using System;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Malachi.Core.Api;
+using Malachi.Core.Model;
 using Malachi.Core.Tests.Text;
 using Malachi.Core.Wizard;
 using Xunit;
@@ -306,30 +309,30 @@ public sealed class SignInTests
     [Fact]
     public void TestKindAndProvider()
     {
-        (string Name, AccountConfig Cfg, SignIn.Kind Kind, LinkedProvider? Provider)[] cases =
+        (string Name, AccountConfig Cfg, SignInKind Kind, LinkedProvider? Provider)[] cases =
         [
-            ("goa graph", GoGoaGraph, SignIn.Kind.Goa, LinkedProvider.Microsoft365),
-            ("goa graph hint", GoGoaGraphHint, SignIn.Kind.Goa, LinkedProvider.Microsoft365),
-            ("daemon graph", GoDaemonGraph, SignIn.Kind.OAuth, LinkedProvider.Microsoft365),
-            ("graph without block", new AccountConfig { Name = "", Email = "", Kind = AccountKind.Graph }, SignIn.Kind.OAuth, LinkedProvider.Microsoft365),
-            ("goa google", GoGoaGoogle, SignIn.Kind.Goa, LinkedProvider.Google),
-            ("goa google hint", GoGoaGoogleHint, SignIn.Kind.Goa, LinkedProvider.Google),
-            ("daemon google", GoDaemonGoogle, SignIn.Kind.OAuth, LinkedProvider.Google),
+            ("goa graph", GoGoaGraph, SignInKind.Goa, LinkedProvider.Microsoft365),
+            ("goa graph hint", GoGoaGraphHint, SignInKind.Goa, LinkedProvider.Microsoft365),
+            ("daemon graph", GoDaemonGraph, SignInKind.OAuth, LinkedProvider.Microsoft365),
+            ("graph without block", new AccountConfig { Name = "", Email = "", Kind = AccountKind.Graph }, SignInKind.OAuth, LinkedProvider.Microsoft365),
+            ("goa google", GoGoaGoogle, SignInKind.Goa, LinkedProvider.Google),
+            ("goa google hint", GoGoaGoogleHint, SignInKind.Goa, LinkedProvider.Google),
+            ("daemon google", GoDaemonGoogle, SignInKind.OAuth, LinkedProvider.Google),
             ("office365 imap", new AccountConfig { Name = "", Email = "", Imap = GoServer("", AuthMethod.OAuth2), OAuth2 = new OAuth2Config { Provider = OAuth2Provider.Office365 } },
-                SignIn.Kind.OAuth, LinkedProvider.Microsoft365),
-            ("custom", GoCustom, SignIn.Kind.OAuth, null),
-            ("password", GoAppPassword, SignIn.Kind.Password, null),
-            ("empty", new AccountConfig { Name = "", Email = "" }, SignIn.Kind.Password, null),
+                SignInKind.OAuth, LinkedProvider.Microsoft365),
+            ("custom", GoCustom, SignInKind.OAuth, null),
+            ("password", GoAppPassword, SignInKind.Password, null),
+            ("empty", new AccountConfig { Name = "", Email = "" }, SignInKind.Password, null),
         ];
         foreach (var (name, cfg, kind, provider) in cases)
         {
-            Assert.True(SignIn.KindOf(cfg) == kind, name + ": KindOf");
-            Assert.True(SignIn.Provider(cfg) == provider, name + ": Provider");
+            Assert.True(Provider.SignInKindOf(cfg) == kind, name + ": KindOf");
+            Assert.True(Provider.AccountProvider(cfg) == provider, name + ": Provider");
         }
-        Assert.Equal("Microsoft 365", SignIn.ProviderName(LinkedProvider.Microsoft365));
-        Assert.Equal("Google", SignIn.ProviderName(LinkedProvider.Google));
-        Assert.Equal("", SignIn.ProviderName(null));
-        Assert.Equal("", SignIn.ProviderName(new LinkedProvider("yahoo")));
+        Assert.Equal("Microsoft 365", Provider.ProviderName(LinkedProvider.Microsoft365));
+        Assert.Equal("Google", Provider.ProviderName(LinkedProvider.Google));
+        Assert.Equal("", Provider.ProviderName(null));
+        Assert.Equal("", Provider.ProviderName(new LinkedProvider("yahoo")));
     }
 
     [Fact]

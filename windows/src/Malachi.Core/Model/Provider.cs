@@ -7,7 +7,10 @@
 // ui/internal/widget/provider.go (providerIconName, ProviderIcon).
 //
 // Swift's free function signInKind is SignInKindOf here (signin.KindOf):
-// a member cannot share the name of the type it returns.
+// a member cannot share the name of the type it returns. This is the one
+// implementation of signin.KindOf, Provider and ProviderName in the client:
+// Malachi.Core.Wizard.SignIn (the discovery and failure rules of signin.go)
+// and the wizard use it, as Swift's Wizard/SignIn.swift uses Provider.swift.
 
 using System;
 using Malachi.Core.Api;

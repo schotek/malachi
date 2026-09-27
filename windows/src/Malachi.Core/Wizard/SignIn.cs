@@ -3,20 +3,19 @@
 
 // Port of macos/Sources/MalachiCore/Wizard/SignIn.swift (classifyDiscovery)
 // and the rules OAuth.swift takes from signin (signedInAs, isBrowserURL,
-// isSignInProblem); GTK: ui/internal/signin/signin.go (Kind, KindOf,
-// Provider, ProviderName, NeedsBrowserSignIn, Path, ClassifyDiscovery,
-// isPasswordAccount, Failure, ClassifyFailure, signedInAsOf, IsClientMissing,
-// TestNeedsSignIn, BrowserURL).
+// isSignInProblem); GTK: ui/internal/signin/signin.go (NeedsBrowserSignIn,
+// Path, ClassifyDiscovery, isPasswordAccount, Failure, ClassifyFailure,
+// signedInAsOf, IsClientMissing, TestNeedsSignIn, BrowserURL).
 //
-// How an account signs in and which way the wizard takes after
-// account.discover. KindOf, Provider and ProviderName are GTK's signin
-// functions, which macOS moved to Model/Provider.swift (signInKind,
-// accountProvider, providerName) and which Malachi.Core.Model ports as
-// well; the rules are the same. Failed calls are read through
-// RpcErrorText.Classify (the transport's exceptions, a timeout, a
-// cancellation), the counterpart of Go's errors.Is/As and Swift's type
-// checks. The browser's address is judged by the port of Go's url.Parse
-// (UrlSyntax), never by System.Uri.
+// Which way the wizard takes after account.discover, and how a browser
+// sign-in failed. How an account signs in (signin.Kind, KindOf, Provider,
+// ProviderName) is Malachi.Core.Model.Provider with SignInKind, where macOS
+// keeps it (Model/Provider.swift: SignInKind, signInKind, accountProvider,
+// providerName); this file uses that one implementation. Failed calls are
+// read through RpcErrorText.Classify (the transport's exceptions, a
+// timeout, a cancellation), the counterpart of Go's errors.Is/As and
+// Swift's type checks. The browser's address is judged by the port of Go's
+// url.Parse (UrlSyntax), never by System.Uri.
 
 using System;
 using System.Collections.Generic;
@@ -25,28 +24,16 @@ using System.Text;
 using System.Text.Json;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
+using Malachi.Core.Model;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Wizard;
 
-/// <summary>The signin package: how an account signs in, and the way after <c>account.discover</c>.</summary>
+/// <summary>The signin package: the way after <c>account.discover</c>, and why a browser sign-in failed.</summary>
 public static class SignIn
 {
     // signin.maxAddressLen: bounds data.signedInAs (RFC 5321 path limit).
     private const int MaxAddressLen = 254;
-
-    /// <summary>signin.Kind: where an account's sign-in lives, and so where it is repaired.</summary>
-    public enum Kind
-    {
-        /// <summary>A password (or app password) the user types; the servers are the user's to edit.</summary>
-        Password,
-
-        /// <summary>GNOME Online Accounts holds the sign-in; it is fixed there.</summary>
-        Goa,
-
-        /// <summary>The daemon's own sign-in in the browser (source daemon); it is fixed by signing in again.</summary>
-        OAuth,
-    }
 
     /// <summary>signin.Path (Swift <c>Discovery.Path</c>): the page the wizard continues on.</summary>
     public enum Path
@@ -91,68 +78,13 @@ public static class SignIn
     }
 
     /// <summary>
-    /// signin.KindOf (Swift <c>signInKind</c>): a Graph account signs in
-    /// through GNOME Online Accounts when <c>graph.source</c> is goa and
-    /// through the daemon's own sign-in otherwise; an account with an
-    /// <c>oauth2</c> block likewise by its source; anything else with a
-    /// password.
-    /// </summary>
-    public static Kind KindOf(AccountConfig cfg)
-    {
-        ArgumentNullException.ThrowIfNull(cfg);
-        if (cfg.ProtocolKind == AccountKind.Graph)
-        {
-            return cfg.Graph is { } graph && graph.Source == GraphSource.Goa ? Kind.Goa : Kind.OAuth;
-        }
-        if (cfg.OAuth2 is { } oauth2)
-        {
-            return oauth2.Source == OAuth2Source.Goa ? Kind.Goa : Kind.OAuth;
-        }
-        return Kind.Password;
-    }
-
-    /// <summary>
-    /// signin.Provider (Swift <c>accountProvider</c>): Microsoft 365 for a
-    /// Graph account, the <c>oauth2</c> provider otherwise (office365 is
-    /// Microsoft 365), null for a password account or a provider this client
-    /// does not know.
-    /// </summary>
-    public static LinkedProvider? Provider(AccountConfig cfg)
-    {
-        ArgumentNullException.ThrowIfNull(cfg);
-        if (cfg.ProtocolKind == AccountKind.Graph)
-        {
-            return LinkedProvider.Microsoft365;
-        }
-        return cfg.OAuth2?.Provider.Value switch
-        {
-            OAuth2Provider.Google => new LinkedProvider(LinkedProvider.Google),
-            OAuth2Provider.Office365 => new LinkedProvider(LinkedProvider.Microsoft365),
-            _ => (LinkedProvider?)null,
-        };
-    }
-
-    /// <summary>
-    /// signin.ProviderName (Swift <c>providerName</c>): the provider's name as
-    /// shown to the user, "" for an unknown one. Brand names, not translated;
-    /// the daemon's <c>providerName</c> is untrusted text and never used in
-    /// their place.
-    /// </summary>
-    public static string ProviderName(LinkedProvider? provider) => provider?.Value switch
-    {
-        LinkedProvider.Microsoft365 => "Microsoft 365",
-        LinkedProvider.Google => "Google",
-        _ => "",
-    };
-
-    /// <summary>
     /// signin.NeedsBrowserSignIn: an account that waits for the user to sign
     /// in again through the daemon's own sign-in.
     /// </summary>
     public static bool NeedsBrowserSignIn(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        return a.State.Status == SyncStatus.AuthRequired && KindOf(a.Config) == Kind.OAuth;
+        return a.State.Status == SyncStatus.AuthRequired && Provider.SignInKindOf(a.Config) == SignInKind.OAuth;
     }
 
     /// <summary>
@@ -170,10 +102,10 @@ public static class SignIn
         {
             return new Discovery { Path = Path.Password };
         }
-        var provider = Provider(cfg);
-        switch (KindOf(cfg))
+        var provider = Provider.AccountProvider(cfg);
+        switch (Provider.SignInKindOf(cfg))
         {
-            case Kind.Goa:
+            case SignInKind.Goa:
                 if (Linked.LinkedAccountId(cfg) is not null)
                 {
                     return new Discovery { Path = Path.Goa, Config = cfg, Provider = provider };
@@ -182,11 +114,11 @@ public static class SignIn
                 {
                     Path = Path.GoaHint,
                     Config = cfg,
-                    OAuthAlt = First(result.Alternatives, c => KindOf(c) == Kind.OAuth),
+                    OAuthAlt = First(result.Alternatives, c => Provider.SignInKindOf(c) == SignInKind.OAuth),
                     PasswordAlt = First(result.Alternatives, IsPasswordAccount),
                     Provider = provider,
                 };
-            case Kind.OAuth:
+            case SignInKind.OAuth:
                 return new Discovery
                 {
                     Path = Path.OAuth,
@@ -326,7 +258,7 @@ public static class SignIn
     // signin.isPasswordAccount: an IMAP/SMTP account whose endpoints both
     // sign in with a password (Google's app-password alternative).
     private static bool IsPasswordAccount(AccountConfig c) =>
-        KindOf(c) == Kind.Password && c.ProtocolKind == AccountKind.Imap
+        Provider.SignInKindOf(c) == SignInKind.Password && c.ProtocolKind == AccountKind.Imap
         && c.Imap is { } imap && imap.AuthMethod == AuthMethod.Password
         && c.Smtp is { } smtp && smtp.AuthMethod == AuthMethod.Password;
 
