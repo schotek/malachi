@@ -69,6 +69,14 @@ func errorText(err error) string {
 			if apiErr.Data != nil {
 				msg += fmt.Sprintf("; limits: %v", apiErr.Data)
 			}
+		case api.CodePartNotDownloaded:
+			msg += "; the attachment is kept on the mail server only and was not downloaded: call get_attachment again"
+		case api.CodeMessageGone:
+			msg += "; the mail server no longer has this message (another client deleted or moved it); the next sync removes it here"
+		case api.CodeOffline:
+			msg += "; there is no network connection: try again later"
+		case api.CodeUnavailable:
+			msg += "; not possible right now (the account may be paused, or a sync has to run first): try again later"
 		}
 		return msg
 	case errors.As(err, &down):

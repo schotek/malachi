@@ -123,12 +123,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 }
 
 // bridge ties the MCP server to the daemon connection and the per-process
-// state (the drafts this process created).
+// state (the drafts this process created, what it had downloaded).
 type bridge struct {
-	cfg    config
-	rpc    *rpcClient
-	log    *slog.Logger
-	drafts *sessionDrafts
+	cfg       config
+	rpc       *rpcClient
+	log       *slog.Logger
+	drafts    *sessionDrafts
+	downloads *sessionDownloads
 }
 
 func newBridge(cfg config, log *slog.Logger) *bridge {
@@ -136,10 +137,11 @@ func newBridge(cfg config, log *slog.Logger) *bridge {
 		log = slog.New(slog.DiscardHandler)
 	}
 	return &bridge{
-		cfg:    cfg,
-		rpc:    newRPCClient(cfg.socket, log.With("component", "rpc")),
-		log:    log.With("component", "mcp"),
-		drafts: newSessionDrafts(),
+		cfg:       cfg,
+		rpc:       newRPCClient(cfg.socket, log.With("component", "rpc")),
+		log:       log.With("component", "mcp"),
+		drafts:    newSessionDrafts(),
+		downloads: &sessionDownloads{},
 	}
 }
 

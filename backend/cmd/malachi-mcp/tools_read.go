@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -44,13 +45,15 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 		Annotations: annRead(),
 	}, b.searchMessages)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "read_message",
-		Description: "Read one message: headers, attachment list and the plain-text body (never HTML). Long bodies are paged with offset and maxChars. Reading never marks the message as seen." + untrustedNote,
+		Name: "read_message",
+		Description: "Read one message: headers, attachment list and the plain-text body (never HTML). Long bodies are paged with offset and maxChars. Reading never marks the message as seen. " +
+			"An attachment marked remote is kept on the mail server only; get_attachment downloads it." + untrustedNote,
 		Annotations: annRead(),
 	}, b.readMessage)
 	mcp.AddTool(srv, &mcp.Tool{
-		Name:        "get_attachment",
-		Description: "Fetch one attachment of a message by the partId from read_message. Text attachments (text/plain, csv, markdown, calendar, json) come back as text, paged with offset and limit; PNG, JPEG, GIF and WebP images come back as an image; any other type (PDF, Office files, archives, HTML, SVG, attached messages) returns metadata only." + untrustedNote,
+		Name: "get_attachment",
+		Description: "Fetch one attachment of a message by the partId from read_message. Text attachments (text/plain, csv, markdown, calendar, json) come back as text, paged with offset and limit; PNG, JPEG, GIF and WebP images come back as an image; any other type (PDF, Office files, archives, HTML, SVG, attached messages) returns metadata only. " +
+			"An attachment of a type that is returned but kept on the mail server only (remote) is downloaded from the account's own mail server first, which can take up to two minutes." + untrustedNote,
 		Annotations: annRead(),
 	}, b.getAttachment)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -375,6 +378,9 @@ func (b *bridge) readMessage(ctx context.Context, _ *mcp.CallToolRequest, in rea
 	if body.HTMLWithheld {
 		sb.WriteString("html-withheld: true (the HTML part could not be shown safely; the text rendering is shown instead)\n")
 	}
+	if n := remoteCount(m.Attachments); n > 0 {
+		fmt.Fprintf(&sb, "remote-attachments: %d (on the mail server only; get_attachment downloads them first)\n", n)
+	}
 	start := in.Offset
 	if start < 0 {
 		start = 0
@@ -412,6 +418,9 @@ func (b *bridge) readMessage(ctx context.Context, _ *mcp.CallToolRequest, in rea
 			fmt.Fprintf(&u, "  - partId=%s filename=%q type=%s size=%d", a.PartID, oneLine(a.Filename), oneLine(a.ContentType), a.Size)
 			if a.Inline {
 				u.WriteString(" inline")
+			}
+			if a.Remote {
+				u.WriteString(" remote")
 			}
 			u.WriteString("\n")
 		}
@@ -465,6 +474,59 @@ var imageAttachmentTypes = map[string]bool{
 	"image/webp": true,
 }
 
+// attachmentKind decides from the declared type and size alone how an
+// attachment is returned: "text", "image", or "" with the reason it is
+// withheld.
+func attachmentKind(declared string, size int64) (kind, reason string) {
+	switch {
+	case textAttachmentTypes[declared]:
+		if size > maxAttachmentTextBytes {
+			return "", fmt.Sprintf("too big: %d bytes, limit %d", size, maxAttachmentTextBytes)
+		}
+		return "text", ""
+	case imageAttachmentTypes[declared]:
+		if size > maxAttachmentImageBytes {
+			return "", fmt.Sprintf("too big: %d bytes, limit %d", size, maxAttachmentImageBytes)
+		}
+		return "image", ""
+	case declared == "text/html":
+		return "", "HTML attachments are never returned"
+	case declared == "image/svg+xml":
+		return "", "SVG is never returned"
+	}
+	return "", "unsupported type " + declared
+}
+
+// findAttachment returns the attachment with the part id, nil if none.
+func findAttachment(atts []api.Attachment, partID string) *api.Attachment {
+	for i := range atts {
+		if atts[i].PartID == partID {
+			return &atts[i]
+		}
+	}
+	return nil
+}
+
+// remoteCount counts the attachments kept on the mail server only.
+func remoteCount(atts []api.Attachment) int {
+	n := 0
+	for _, a := range atts {
+		if a.Remote {
+			n++
+		}
+	}
+	return n
+}
+
+// codeOf is the daemon's error code of err, 0 for none.
+func codeOf(err error) api.ErrorCode {
+	var e *api.Error
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return 0
+}
+
 // mediaType lower-cases a content type and drops its parameters.
 func mediaType(ct string) string {
 	if i := strings.IndexByte(ct, ';'); i >= 0 {
@@ -477,24 +539,18 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	if in.AccountID == "" || in.MessageID == "" || in.PartID == "" {
 		return toolErrorf("accountId, messageId and partId are required"), nil, nil
 	}
-	ctx, cancel := b.callCtx(ctx)
-	defer cancel()
 	acc, mid := api.AccountID(in.AccountID), api.MessageID(in.MessageID)
 
 	// The part must be one the message lists as an attachment, so that the
 	// decision about fetching it can be taken from the declared type and
-	// size before a byte is read.
-	got, err := callRPC[api.MessageGetResult](ctx, b.rpc, api.MethodMessageGet, api.MessageGetParams{AccountID: acc, MessageID: mid})
+	// size before a byte is read or downloaded.
+	getCtx, cancel := b.callCtx(ctx)
+	got, err := callRPC[api.MessageGetResult](getCtx, b.rpc, api.MethodMessageGet, api.MessageGetParams{AccountID: acc, MessageID: mid})
+	cancel()
 	if err != nil {
 		return toolError(err), nil, nil
 	}
-	var att *api.Attachment
-	for i := range got.Message.Attachments {
-		if got.Message.Attachments[i].PartID == in.PartID {
-			att = &got.Message.Attachments[i]
-			break
-		}
-	}
+	att := findAttachment(got.Message.Attachments, in.PartID)
 	if att == nil {
 		return toolErrorf("no attachment with partId %q on message %s; see the attachment list of read_message", in.PartID, in.MessageID), nil, nil
 	}
@@ -504,32 +560,56 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	withheld := func(reason string) *mcp.CallToolResult {
 		return textResult(meta + "\ncontent not returned: " + reason + "; the user can open it in Malachi Mail")
 	}
-
-	var kind string
-	switch {
-	case textAttachmentTypes[declared]:
-		kind = "text"
-		if att.Size > maxAttachmentTextBytes {
-			return withheld(fmt.Sprintf("too big: %d bytes, limit %d", att.Size, maxAttachmentTextBytes)), nil, nil
-		}
-	case imageAttachmentTypes[declared]:
-		kind = "image"
-		if att.Size > maxAttachmentImageBytes {
-			return withheld(fmt.Sprintf("too big: %d bytes, limit %d", att.Size, maxAttachmentImageBytes)), nil, nil
-		}
-	case declared == "text/html":
-		return withheld("HTML attachments are never returned"), nil, nil
-	case declared == "image/svg+xml":
-		return withheld("SVG is never returned"), nil, nil
-	default:
-		return withheld("unsupported type " + declared), nil, nil
+	kind, reason := attachmentKind(declared, att.Size)
+	if kind == "" {
+		return withheld(reason), nil, nil
 	}
 
-	res, err := callRPC[api.MessagePartResult](ctx, b.rpc, api.MethodMessagePart, api.MessagePartParams{
-		AccountID: acc, MessageID: mid, PartID: in.PartID,
-	})
+	// A part kept on the mail server only is downloaded first; so is one
+	// the daemon reports missing, when the background pass left it on the
+	// server after message.get read the message.
+	downloaded := false
+	fetchFirst := func() *mcp.CallToolResult {
+		m, fail := b.download(ctx, acc, got.Message.MessageSummary)
+		if fail != nil {
+			return toolErrorf("%s", fail.text)
+		}
+		downloaded = true
+		// Microsoft 365 rebuilds a message it serves again: the part must
+		// still be the one the model asked for.
+		now := findAttachment(m.Attachments, in.PartID)
+		if now == nil || now.Filename != att.Filename || mediaType(now.ContentType) != declared {
+			return toolErrorf("the mail server rebuilt message %s when it was downloaded and its part ids changed; call read_message again for the new ones", in.MessageID)
+		}
+		if k, reason := attachmentKind(declared, now.Size); k == "" {
+			return withheld(reason)
+		}
+		return nil
+	}
+	if att.Remote {
+		if res := fetchFirst(); res != nil {
+			return res, nil, nil
+		}
+	}
+	part := func() (*api.MessagePartResult, error) {
+		partCtx, cancel := b.callCtx(ctx)
+		defer cancel()
+		return callRPC[api.MessagePartResult](partCtx, b.rpc, api.MethodMessagePart, api.MessagePartParams{
+			AccountID: acc, MessageID: mid, PartID: in.PartID,
+		})
+	}
+	res, err := part()
+	if codeOf(err) == api.CodePartNotDownloaded && !downloaded {
+		if res := fetchFirst(); res != nil {
+			return res, nil, nil
+		}
+		res, err = part()
+	}
 	if err != nil {
 		return toolError(err), nil, nil
+	}
+	if downloaded {
+		meta += "\ndownloaded: fetched from the mail server first"
 	}
 	// The daemon reports the declared type; the bytes decide here.
 	sniffed := mediaType(http.DetectContentType(res.Data))

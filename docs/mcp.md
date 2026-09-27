@@ -67,11 +67,13 @@ registered at all, so it never appears in the client's tool list.
   request that reached the socket never is, so a send cannot be duplicated.
 - **Timeouts.** 2 s to connect, 5 s for the handshake
   (`api.HandshakeTimeout`), 30 s per daemon call (`malachid did not answer
-  within 30s`).
+  within 30s`), except `message.download`, which may take 2 minutes (see
+  [Attachments on the mail server](#attachments-on-the-mail-server)).
 - **Errors from the daemon** reach the model as tool errors (never
   protocol errors, so the model can react): `<codeName> (<code>): <message>`
   with the message control-stripped and capped at 200 bytes, plus a hint for
-  `notImplemented`, `conflict` and `attachmentTooBig`.
+  `notImplemented`, `conflict`, `attachmentTooBig`, `partNotDownloaded`,
+  `messageGone`, `offline` and `unavailable`.
 
 ## Permission tiers
 
@@ -142,11 +144,15 @@ destructive, only `send_message` open-world.
   reads only the plain `text` of the body. **The sanitised HTML is never
   forwarded**, and reading never flags the message.
 - output: trusted lines (`id`, `account`, `folder`, `date`, `flags`, `size`,
-  `body-state`, `html-withheld`, `body: chars A-B of N (truncated; call
-  again with offset=B)`), then a fence holding `from`, `to`, `cc`, `bcc`,
-  `reply-to`, `subject`, the attachment list (`partId`, `filename`, `type`,
-  `size`, `inline`), the optional `headers` and `links` (at most 50), and
-  the body slice.
+  `body-state`, `html-withheld`, `remote-attachments: N (on the mail server
+  only; get_attachment downloads them first)` when there are any, `body:
+  chars A-B of N (truncated; call again with offset=B)`), then a fence
+  holding `from`, `to`, `cc`, `bcc`, `reply-to`, `subject`, the attachment
+  list (`partId`, `filename`, `type`, `size`, `inline`, `remote`), the
+  optional `headers` and `links` (at most 50), and the body slice. The
+  `remote` marker follows the quoted filename, so a name cannot forge it;
+  the count outside the fence is the one to trust. Reading never downloads
+  anything.
 
 ### get_attachment
 
@@ -160,12 +166,23 @@ destructive, only `send_message` open-world.
     3 MiB;
   - anything else (PDF, Office files, archives, `text/html`,
     `image/svg+xml`, attached messages) returns metadata only.
+- A part of a type that is returned but kept on the mail server only
+  (`remote`) is downloaded first: `message.download` of its message, then
+  `message.part` (see
+  [Attachments on the mail server](#attachments-on-the-mail-server)). A
+  part that `read_message` listed as local but the daemon answers
+  `partNotDownloaded` for (the background pass reduced the message in the
+  meantime) gets one download and one retry. On Microsoft 365 a download
+  may renumber the parts; when the part asked for is no longer the same,
+  the tool says to call `read_message` again rather than return another
+  file.
 - After the fetch the bytes are sniffed (`http.DetectContentType`): an image
   whose bytes do not match the declared type, and "text" that sniffs as
   HTML or binary or contains NUL, is withheld. Text is made valid UTF-8
   (`replacedBytes` reported; more than 10 % replaced is refused as not
   text), cleaned, and paged.
-- output: a trusted metadata line, then either a fenced text block or an
+- output: a trusted metadata line (plus `downloaded: fetched from the mail
+  server first` after a download), then either a fenced text block or an
   MCP image content block with the sniffed MIME type.
 
 ### sync_status, trigger_sync
@@ -192,7 +209,10 @@ destructive, only `send_message` open-world.
   `Re:`/`Fwd:` subject with stacked markers stripped, `inReplyTo` or
   `forwarding` for threading, and the original quoted as the daemon's own
   sanitised HTML with its inline pictures copied into the attachment store;
-  a forward also imports the original's files. The agent's `body` is
+  a forward also imports the original's files, and when the original keeps
+  some on the mail server only (`message.get` lists them `remote`) the
+  bridge has them downloaded first (`message.download`, as for
+  `get_attachment`). The agent's `body` is
   HTML-escaped (one paragraph per blank-line-separated block, `<br/>` per
   line) and placed in the empty paragraph the template starts with, then
   the whole is saved with every attachment the daemon imported, and
@@ -211,13 +231,20 @@ destructive, only `send_message` open-world.
   could not be used; its text is quoted, in a cite block or as `> ` lines)
   and `none` (body not downloaded; nothing quoted) are reported in the
   result. At most 20 drafts per bridge process.
+- When that download fails (offline, timed out, the session's budget
+  spent, the message gone from the server) the draft is still made, without
+  those files: the daemon lists them as skipped with `remote`, and the head
+  says `remote attachments: N not attached, they are on the mail server
+  only (<why>)`, the reason being the bridge's own words and the daemon's
+  error code. The user can forward the message from Malachi Mail.
 - output: a trusted head with `draftId`, `version`, whether `send_message`
-  is available, `mode`, `quoted`, the attachments bound and skipped and
-  any non-zero sanitiser counters from the save; then a fence with the
-  final recipients, subject, `in-reply-to` or `forwarding`, the bound
-  attachments (`id`, name, type, size, inline) and the parts the daemon
-  skipped. A forward has no recipients until the user or a second call
-  adds them.
+  is available, `mode`, `quoted`, the attachments bound and skipped, any
+  non-zero sanitiser counters from the save and the `remote attachments`
+  line; then a fence with the final recipients, subject, `in-reply-to` or
+  `forwarding`, the bound attachments (`id`, name, type, size, inline) and
+  the parts the daemon skipped (`remote` for those on the mail server
+  only). A forward has no recipients until the user or a second call adds
+  them.
 
 ### mark_messages, move_messages, delete_messages (`-allow-modify`)
 
@@ -242,17 +269,52 @@ destructive, only `send_message` open-world.
   reports `pendingOutbox` (still to be delivered) and `failedOutbox`
   (delivery failed).
 
+## Attachments on the mail server
+
+Under `attachmentOfflineDays` ([api.md §4.8](api.md#48-config)) the large
+attachments of older messages stay on the account's mail server and are
+marked `remote` ([api.md §3](api.md#3-common-types)); `message.part` answers
+`partNotDownloaded` for them. Two tools need such a file's bytes and have
+the daemon download its message first (`message.download`): `get_attachment`
+for a type it returns, and `create_draft` forwarding a message. Nothing else
+downloads: not `read_message`, not a type `get_attachment` withholds, not
+a reply.
+
+- The daemon fetches the whole message from the account's own mail server,
+  read-only (IMAP `EXAMINE` and `BODY.PEEK`: nothing is marked read), and
+  never from a URL found in the mail.
+- One call waits at most 2 minutes. The daemon allows itself 4 and finishes
+  a download the bridge stopped waiting for, so the answer is "the daemon
+  keeps going, call again in a few minutes", and the next call finds the
+  message whole.
+- A bridge process may make the daemon download at most 256 MiB, counted
+  by the size of the messages (`MessageSummary.size`); a download the
+  daemon refused or that never reached it does not count, one the bridge
+  stopped waiting for (timed out, or the tool call cancelled) does, since
+  the daemon finishes it. Past the limit the tool says so, and the user
+  can open the attachment in Malachi Mail.
+- A message the server no longer has is `messageGone` (1305); no network
+  is `networkError`; a paused account, or a message whose local move has
+  not reached the server yet, is `unavailable`. `messageGone` and
+  `unavailable` come with a hint.
+- A downloaded message stays whole on the device for 7 days before the
+  daemon's background pass may keep its attachments on the server again.
+
 ## Content rules
 
 Mail is hostile input ([security.md](security.md)) and the bridge puts it
 in front of a model that holds tools, so:
 
 - **Text only.** No tool ever returns HTML, not even the sanitised HTML the
-  webview gets. Remote content is always `block`: the daemon never fetches
-  anything because an agent read a message. The one place HTML travels the
-  other way is `create_draft` with a `mode`: the daemon's own sanitised
-  quote of the original with the agent's text escaped into it, which
-  `draft.save` sanitises again; the agent never supplies markup.
+  webview gets. Remote content is always `block`: reading a message never
+  makes the daemon fetch anything. The only downloads an agent causes are
+  those of `get_attachment` and a forward for an attachment kept on the
+  mail server ([above](#attachments-on-the-mail-server)): the message
+  comes from the account's own mail server, never from a URL in the mail.
+  The one place HTML travels the other way is `create_draft` with a
+  `mode`: the daemon's own sanitised quote of the original with the
+  agent's text escaped into it, which `draft.save` sanitises again; the
+  agent never supplies markup.
 - **Fenced.** Every string that came from a message (names, addresses,
   subjects, snippets, folder paths, attachment names, header values,
   bodies, the recipients, subject and attachment names of a draft built
@@ -268,8 +330,9 @@ in front of a model that holds tools, so:
   for the scripts that need them.
 - **Capped.** Body 16 000 characters per call by default, 64 000 at most;
   text attachments 64 KiB per call, 256 KiB at most; images 3 MiB; lists
-  100 messages; mutations 100 ids; 20 drafts per process. Claude Code
-  warns above 10 000 tokens per tool result and stops at 25 000.
+  100 messages; mutations 100 ids; 20 drafts per process; downloads from
+  the mail server 256 MiB per process. Claude Code warns above 10 000
+  tokens per tool result and stops at 25 000.
 - **Opt-in extras.** Links and extra headers are listed only on request:
   every URL in the context is a potential exfiltration channel through the
   host's own tools, which the bridge cannot gate.
@@ -291,8 +354,10 @@ attacker@example" inside a body is the confused-deputy case.
 What the bridge enforces: which tools exist (the flags, set by the human
 who starts the client), what they accept (allow-lists, caps, session-scoped
 drafts, no permanent delete, no config or credential surface, no account
-management), and that it talks only to a daemon that proved the per-run
-key ([api.md §1.4](api.md#14-handshake)). What it can only mitigate:
+management), what it makes the daemon download (attachments kept on the
+mail server, from the account's own server, within 256 MiB per process),
+and that it talks only to a daemon that proved the per-run key
+([api.md §1.4](api.md#14-handshake)). What it can only mitigate:
 whether the model follows instructions it reads. The fence, the cleaning
 and the fixed instructions in every tool description lower that risk;
 they do not remove it.
