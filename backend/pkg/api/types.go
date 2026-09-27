@@ -62,6 +62,34 @@ type SystemInfoResult struct {
 	StorePath       string `json:"storePath"`
 }
 
+type SystemStorageParams struct{}
+
+// StorageConversion is the state of the background pass that brings stored
+// mail to the current preferences (compressStore, attachmentOfflineDays).
+type StorageConversion string
+
+const (
+	StorageConversionIdle    StorageConversion = "idle"    // nothing left to convert
+	StorageConversionRunning StorageConversion = "running" // converting in the background
+	StorageConversionNoSpace StorageConversion = "noSpace" // stopped: the disk is full; retried after a preference change or a restart
+)
+
+// SystemStorageResult is how much disk the mail store uses. Byte counts are
+// file lengths, not allocated blocks.
+type SystemStorageResult struct {
+	TotalBytes               int64             `json:"totalBytes"`               // databaseBytes + messageBytes + attachmentBytes
+	DatabaseBytes            int64             `json:"databaseBytes"`            // store.db with its -wal and -shm
+	MessageBytes             int64             `json:"messageBytes"`             // stored raw messages, as stored (compressed or not)
+	MessageUncompressedBytes int64             `json:"messageUncompressedBytes"` // their content; equals messageBytes without compression
+	SavedBytes               int64             `json:"savedBytes"`               // what compression saves: messageUncompressedBytes - messageBytes
+	AttachmentBytes          int64             `json:"attachmentBytes"`          // the compose-side attachment store (drafts, attachment.import)
+	RemoteAttachmentBytes    int64             `json:"remoteAttachmentBytes"`    // decoded size of attachments kept on the server only
+	Messages                 int               `json:"messages"`                 // messages with a stored raw file
+	CompressedMessages       int               `json:"compressedMessages"`
+	PartialMessages          int               `json:"partialMessages"` // messages with attachments on the server only
+	Conversion               StorageConversion `json:"conversion"`
+}
+
 // SystemHelloParams opens the connection handshake (docs/api.md §1.4).
 // The method name, this parameter and SystemHelloResult.ProtocolVersion
 // never change, so that every client can tell every daemon's protocol.
@@ -581,8 +609,8 @@ type OutboxInfo struct {
 // base64-encoded, so 25 MiB of files become roughly 34 MiB on the wire.
 const MaxOutgoingMessageBytes = 36 << 20
 
-// Attachment describes a MIME part the user can download. Content is fetched
-// through a separate method in a later phase; only metadata crosses here now.
+// Attachment describes a MIME part of a message. message.part fetches its
+// content; only metadata crosses here.
 type Attachment struct {
 	PartID      string `json:"partId"`
 	Filename    string `json:"filename"` // sanitised: no path separators, no control chars
@@ -590,7 +618,18 @@ type Attachment struct {
 	Size        int64  `json:"size"`
 	Inline      bool   `json:"inline"` // referenced from the HTML body via cid:
 	ContentID   string `json:"contentId,omitempty"`
+	// Remote: the part's data is not stored on this device, only on the
+	// mail server (Preferences.AttachmentOfflineDays); message.download
+	// fetches it. Set only once the body is fetched; name, type and size
+	// are those of the original part.
+	Remote bool `json:"remote,omitempty"`
 }
+
+// LargeAttachmentMinBytes is the decoded size from which an attachment may
+// be kept on the server only (Preferences.AttachmentOfflineDays). Smaller
+// parts, the text and HTML bodies and the pictures the HTML shows are
+// always stored.
+const LargeAttachmentMinBytes = 100 << 10
 
 // Message is the full header view of a message (message.get).
 type Message struct {
@@ -808,6 +847,21 @@ type MessageEmbeddedResult struct {
 	PartID  string            `json:"partId"`
 	Message Message           `json:"message"`
 	Body    MessageBodyResult `json:"body"`
+}
+
+// MessageDownloadParams names a stored message whose missing content
+// (attachments kept on the server, or a body not downloaded yet) the daemon
+// should fetch from the mail server now.
+type MessageDownloadParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"`
+}
+
+// MessageDownloadResult is the message as message.get reports it after the
+// download: no attachment is Remote any more. Part ids may differ from
+// before for Microsoft 365 accounts, whose server rebuilds the MIME.
+type MessageDownloadResult struct {
+	Message Message `json:"message"`
 }
 
 type MessageFlagParams struct {
@@ -1255,6 +1309,13 @@ const SyncIntervalMin = 60
 // OfflineDaysMax bounds Preferences.OfflineDays (0 = keep everything).
 const OfflineDaysMax = 3650
 
+// AttachmentOfflineDaysMax bounds Preferences.AttachmentOfflineDays;
+// AttachmentOfflineNone keeps no large attachment locally.
+const (
+	AttachmentOfflineDaysMax = 3650
+	AttachmentOfflineNone    = -1
+)
+
 // MaxMessageIDsPerCall bounds messageIds in message.flag, message.move and
 // message.delete.
 const MaxMessageIDsPerCall = 1000
@@ -1263,6 +1324,14 @@ const MaxMessageIDsPerCall = 1000
 // handling and therefore live in the backend, not in the UI's own settings.
 // Precedence: value set through config.set, then config.toml, then the
 // built-in default.
+//
+// The pointer fields were added later: in config.set an absent (nil) one
+// means "unchanged", because an older client drops fields it does not
+// know; config.get and the result of config.set always set them. Their
+// defaults come from the environment of the process that starts the
+// daemon (MALACHI_DEFAULT_COMPRESS_STORE, MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS;
+// the macOS app sets them), else off and 0; a default is stored as the
+// preference the first time it applies.
 type Preferences struct {
 	// SyncIntervalSeconds is the periodic sync interval; 0 = manual only.
 	SyncIntervalSeconds int `json:"syncIntervalSeconds"`
@@ -1273,7 +1342,18 @@ type Preferences struct {
 	// newer than this many days are kept; older ones are not stored at all.
 	// 0 keeps everything.
 	OfflineDays int `json:"offlineDays"`
+	// CompressStore stores raw messages zstd-compressed; stored mail is
+	// converted in the background when it changes.
+	CompressStore *bool `json:"compressStore,omitempty"`
+	// AttachmentOfflineDays: 0 keeps every attachment locally; 1..3650 keeps
+	// the large ones (LargeAttachmentMinBytes and up) of messages received
+	// in the last N days, the older ones stay on the server
+	// (Attachment.Remote); AttachmentOfflineNone (-1) keeps no large one.
+	AttachmentOfflineDays *int `json:"attachmentOfflineDays,omitempty"`
 }
+
+// Ptr returns a pointer to v, for the optional Preferences fields.
+func Ptr[T any](v T) *T { return &v }
 
 type ConfigGetParams struct{}
 
@@ -1281,12 +1361,14 @@ type ConfigGetResult struct {
 	Preferences Preferences `json:"preferences"`
 }
 
-// ConfigSetParams replaces the whole preference set (read-modify-write).
+// ConfigSetParams replaces the preference set (read-modify-write); an
+// absent pointer field is left unchanged.
 type ConfigSetParams struct {
 	Preferences Preferences `json:"preferences"`
 }
 
-// ConfigSetResult echoes the effective values after validation.
+// ConfigSetResult is the effective values after validation, every field
+// set.
 type ConfigSetResult struct {
 	Preferences Preferences `json:"preferences"`
 }

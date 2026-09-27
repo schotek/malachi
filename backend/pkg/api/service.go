@@ -15,6 +15,7 @@ import "context"
 
 type SystemService interface {
 	Info(ctx context.Context, p SystemInfoParams) (*SystemInfoResult, error)
+	Storage(ctx context.Context, p SystemStorageParams) (*SystemStorageResult, error)
 }
 
 type AccountService interface {
@@ -43,6 +44,7 @@ type MessageService interface {
 	Body(ctx context.Context, p MessageBodyParams) (*MessageBodyResult, error)
 	Part(ctx context.Context, p MessagePartParams) (*MessagePartResult, error)
 	Embedded(ctx context.Context, p MessageEmbeddedParams) (*MessageEmbeddedResult, error)
+	Download(ctx context.Context, p MessageDownloadParams) (*MessageDownloadResult, error)
 	Flag(ctx context.Context, p MessageFlagParams) (*MessageFlagResult, error)
 	Move(ctx context.Context, p MessageMoveParams) (*MessageMoveResult, error)
 	Delete(ctx context.Context, p MessageDeleteParams) (*MessageDeleteResult, error)

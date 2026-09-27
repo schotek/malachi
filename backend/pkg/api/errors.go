@@ -59,6 +59,10 @@ const (
 	// endpoints Error.Data is a TLSErrorData (reason, the certificate).
 	CodeTLSError      ErrorCode = 1303
 	CodeServerTimeout ErrorCode = 1304
+	// CodeMessageGone: the mail server no longer has the message (another
+	// client deleted or moved it); the local row and its text still exist
+	// until the next sync removes them.
+	CodeMessageGone ErrorCode = 1305
 
 	// 1400–1499: local storage.
 	CodeStorageError    ErrorCode = 1400
@@ -73,6 +77,9 @@ const (
 	// CodePartNotFound: message.part named a MIME part the message does not
 	// have, or the message's content is no longer stored.
 	CodePartNotFound ErrorCode = 1503
+	// CodePartNotDownloaded: the part's data is not stored on this device
+	// (Attachment.Remote); message.download fetches it from the server.
+	CodePartNotDownloaded ErrorCode = 1504
 )
 
 // String returns the stable symbolic name of the code.
@@ -110,12 +117,14 @@ var codeNames = map[ErrorCode]string{
 	CodeServerError:        "serverError",
 	CodeTLSError:           "tlsError",
 	CodeServerTimeout:      "serverTimeout",
+	CodeMessageGone:        "messageGone",
 	CodeStorageError:       "storageError",
 	CodeMigrationFailed:    "migrationFailed",
 	CodeMalformedMessage:   "malformedMessage",
 	CodeSanitizeFailed:     "sanitizeFailed",
 	CodeAttachmentTooBig:   "attachmentTooBig",
 	CodePartNotFound:       "partNotFound",
+	CodePartNotDownloaded:  "partNotDownloaded",
 }
 
 // Error is the JSON-RPC error object. It implements the Go error interface so

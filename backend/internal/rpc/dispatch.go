@@ -54,6 +54,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	con := b.Contacts()
 
 	s.handlers[api.MethodSystemInfo] = wrap(sys.Info)
+	s.handlers[api.MethodSystemStorage] = wrap(sys.Storage)
 
 	s.handlers[api.MethodAccountList] = wrap(acc.List)
 	s.handlers[api.MethodAccountAdd] = wrap(acc.Add)
@@ -76,6 +77,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodMessageBody] = wrap(msg.Body)
 	s.handlers[api.MethodMessagePart] = wrap(msg.Part)
 	s.handlers[api.MethodMessageEmbedded] = wrap(msg.Embedded)
+	s.handlers[api.MethodMessageDownload] = wrap(msg.Download)
 	s.handlers[api.MethodMessageFlag] = wrap(msg.Flag)
 	s.handlers[api.MethodMessageMove] = wrap(msg.Move)
 	s.handlers[api.MethodMessageDelete] = wrap(msg.Delete)
