@@ -21,11 +21,26 @@ import Testing
     // MARK: docs/api.md examples
 
     @Test func systemInfoExample() throws {
-        let r = try decode(SystemInfoResult.self, #"{"version":"0.1.0","protocolVersion":1,"pid":4242,"storePath":"/home/u/.local/share/malachi/store.db"}"#)
-        #expect(r == SystemInfoResult(version: "0.1.0", protocolVersion: 1, pid: 4242, storePath: "/home/u/.local/share/malachi/store.db"))
+        let r = try decode(SystemInfoResult.self, #"{"version":"0.1.0","protocolVersion":2,"pid":4242,"storePath":"/home/u/.local/share/malachi/store.db"}"#)
+        #expect(r == SystemInfoResult(version: "0.1.0", protocolVersion: 2, pid: 4242, storePath: "/home/u/.local/share/malachi/store.db"))
         // The skeleton's name still resolves.
         let legacy: SystemInfo = r
         #expect(legacy.protocolVersion == API.protocolVersion)
+    }
+
+    /// docs/api.md §4.0 and §1.4: system.hello and system.authenticate.
+    @Test func handshakeExamples() throws {
+        let nonce = String(repeating: "0f", count: 32)
+        let proof = String(repeating: "ab", count: 32)
+        let hello = try encodeObject(SystemHelloParams(clientNonce: nonce))
+        #expect(hello.keys.sorted() == ["clientNonce"] && hello["clientNonce"] as? String == nonce)
+        let r = try decode(SystemHelloResult.self, #"{"protocolVersion":2,"daemonNonce":"\#(nonce)","daemonProof":"\#(proof)"}"#)
+        #expect(r == SystemHelloResult(protocolVersion: 2, daemonNonce: nonce, daemonProof: proof))
+        let auth = try encodeObject(SystemAuthenticateParams(clientProof: proof))
+        #expect(auth.keys.sorted() == ["clientProof"] && auth["clientProof"] as? String == proof)
+        #expect(try decode(API.SystemAuthenticate.Result.self, "{}") == EmptyResult())
+        #expect(API.SystemHello.name == "system.hello" && API.SystemAuthenticate.name == "system.authenticate")
+        #expect(API.protocolVersion == 2)
     }
 
     @Test func accountListExample() throws {
@@ -626,11 +641,29 @@ import Testing
         }
     }
 
+    /// api.ErrorCode, copied from backend/pkg/api/errors.go in its order.
+    static let goCodes: [(Int, String)] = [
+        (-32700, "parseError"), (-32600, "invalidRequest"), (-32601, "methodNotFound"), (-32602, "invalidParams"),
+        (-32603, "internalError"),
+        (1000, "notImplemented"), (1001, "invalidArgument"), (1002, "conflict"), (1003, "cancelled"), (1004, "unavailable"),
+        (1005, "unauthenticated"),
+        (1100, "accountNotFound"), (1101, "folderNotFound"), (1102, "messageNotFound"), (1103, "threadNotFound"),
+        (1104, "draftNotFound"), (1105, "attachmentNotFound"),
+        (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
+        (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
+        (1400, "storageError"), (1401, "migrationFailed"),
+        (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
+    ]
+
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 31 && Set(ErrorCode.all).count == 31)
+        #expect(ErrorCode.all.count == 32 && Set(ErrorCode.all).count == 32)
+        #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
+        #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
             #expect(!code.name.hasPrefix("unknown"), "\(code.rawValue) has no name")
         }
+        #expect(ErrorCode.unauthenticated.rawValue == 1005 && ErrorCode.unauthenticated.name == "unauthenticated")
+        #expect(ErrorCode(rawValue: 1005) == .unauthenticated)
         #expect(ErrorCode.attachmentTooBig.name == "attachmentTooBig" && ErrorCode.attachmentTooBig.rawValue == 1502)
         #expect(ErrorCode.parseError.rawValue == -32700 && ErrorCode.parseError.name == "parseError")
         #expect(ErrorCode(rawValue: 1234).name == "unknown(1234)")
@@ -690,7 +723,7 @@ import Testing
 
     /// api.AllMethods, copied from backend/pkg/api/methods.go.
     static let goMethods = [
-        "system.info",
+        "system.info", "system.hello", "system.authenticate",
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
@@ -710,8 +743,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 44)
-        #expect(Set(API.allMethods).count == 44, "no duplicates")
+        #expect(API.allMethods.count == 46)
+        #expect(Set(API.allMethods).count == 46, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -720,6 +753,8 @@ import Testing
 
     @Test func timeoutsFollowThePlan() {
         #expect(API.SystemInfo.timeout == .seconds(3))
+        #expect(RPCTimeouts.handshake == .seconds(5), "api.HandshakeTimeout")
+        #expect(API.SystemHello.timeout == RPCTimeouts.handshake && API.SystemAuthenticate.timeout == RPCTimeouts.handshake)
         #expect(API.MessagePart.timeout == .seconds(60) && API.AttachmentGet.timeout == .seconds(60))
         #expect(API.MessageEmbedded.timeout == .seconds(30) && API.DraftCreate.timeout == .seconds(30))
         #expect(API.DraftOpen.timeout == .seconds(30))
@@ -731,7 +766,8 @@ import Testing
         #expect(RPCTimeouts.oauthStart == .seconds(10) && RPCTimeouts.oauthWaitCall == .seconds(75))
         #expect(API.AccountOAuthCancel.timeout == .seconds(5))
         #expect(RPCTimeouts.default == .seconds(5) && RPCTimeouts.remote == .seconds(30))
-        let special: Set<String> = ["system.info", "message.body", "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
+        let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
+                                    "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait"]
         for m in API.methods where !special.contains(m.name) {

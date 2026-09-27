@@ -12,6 +12,9 @@ public enum RPCTimeouts {
     public static let `default`: Duration = .seconds(5)
     /// `system.info`: the health check must answer at once.
     public static let systemInfo: Duration = .seconds(3)
+    /// The connection handshake, `system.hello` and `system.authenticate`
+    /// together (api.HandshakeTimeout); the daemon allows 10 s from accept.
+    public static let handshake: Duration = .seconds(5)
     /// `message.part`, `attachment.get`: payloads up to 16 MiB.
     public static let part: Duration = .seconds(60)
     /// `message.body` (any call the policy may resolve to `allow`),

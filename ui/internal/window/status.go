@@ -149,7 +149,8 @@ func accountDetail(acc api.AccountID, s api.SyncState, folderName func(api.Accou
 // connView is what the window knows of its daemon connection, and of the
 // one call whose failure the status line reports (sync.status).
 type connView struct {
-	State client.State
+	State    client.State
+	Mismatch int // protocol version of a daemon the handshake refused, 0 for none (nextConnView)
 	// Info is system.info's answer, nil until it arrived or when it
 	// failed (InfoFailed).
 	Info       *api.SystemInfoResult
@@ -171,25 +172,24 @@ type statusLine struct {
 }
 
 // statusLineFor puts the connection over the sync state (text and spinning
-// from syncStatusText). Without a connection the line says so, with an
-// icon, and the button cannot be clicked: there is no account state to
-// show. A daemon of another protocol version, or a failed sync.status,
-// takes the line over as well. The popover's foot names the daemon once
-// system.info answered, or that it failed; it is empty while the line
-// says the protocols do not match.
+// from syncStatusText). Connecting, unavailable (with an icon) and another
+// protocol version (backendProtocol) take the line over with no button to
+// click; a failed sync.status only replaces the text. The popover's foot
+// names the daemon once system.info answered, or that it failed.
 func statusLineFor(c connView, text string, spinning bool) statusLine {
-	switch c.State {
-	case client.Connecting:
+	backend, mismatch := c.backendProtocol()
+	switch {
+	case !mismatch && c.State == client.Connecting:
 		return statusLine{Text: i18n.T("Connecting to backend…"), Icon: "network-idle-symbolic"}
-	case client.Disconnected:
+	case !mismatch && c.State == client.Disconnected:
 		return statusLine{Text: i18n.T("Backend unavailable"), Icon: "network-offline-symbolic"}
-	}
-	if c.Info != nil && c.Info.ProtocolVersion != api.ProtocolVersion {
+	case mismatch:
+		// A daemon runs, but this UI cannot use it.
 		return statusLine{
-			Text:   fmt.Sprintf(i18n.T("Protocol mismatch: UI %d, backend %d"), api.ProtocolVersion, c.Info.ProtocolVersion),
-			Active: true,
+			Text: fmt.Sprintf(i18n.T("Protocol mismatch: UI %d, backend %d"), api.ProtocolVersion, backend),
 		}
 	}
+	// Connected to a daemon this UI can use.
 	line := statusLine{Text: text, Spinning: spinning}
 	if c.SyncFailed {
 		line.Text, line.Spinning = i18n.T("Not syncing"), false

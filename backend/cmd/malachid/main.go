@@ -5,6 +5,10 @@
 //
 // It owns the mail store, talks IMAP/SMTP, and exposes everything to user
 // interfaces through JSON-RPC 2.0 on a unix socket. See docs/architecture.md.
+//
+// Every connection first proves that it holds the key the daemon makes at
+// every start and writes beside the socket, as PATH.key for --socket PATH
+// (docs/api.md §1.4). There is no way to turn this off.
 package main
 
 import (
@@ -46,7 +50,7 @@ func run() error {
 	var (
 		flagConfig  = flag.String("config", paths.ConfigFile(), "configuration file")
 		flagStore   = flag.String("store", paths.StoreFile(), "SQLite database")
-		flagSocket  = flag.String("socket", paths.SocketFile(), "JSON-RPC unix socket")
+		flagSocket  = flag.String("socket", paths.SocketFile(), "JSON-RPC unix socket; its connection key is written beside it as PATH.key")
 		flagVersion = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Parse()
@@ -113,12 +117,24 @@ func run() error {
 	if err := srv.Listen(*flagSocket); err != nil {
 		return err
 	}
+	// Idempotent; removes the key file and the socket on every way out.
+	defer srv.Close()
 	syncDone := backend.StartSync(ctx)
 	go backend.Maintain(ctx)
 
-	err = srv.Serve(ctx)
-	log.Info("shutting down", "reason", ctxReason(ctx))
-	srv.Close()     // idempotent; closes connections and unlinks the socket
+	// Say why the daemon stops before the server logs its own shutdown:
+	// Serve's context ends only after this line.
+	serveCtx, endServe := context.WithCancel(context.WithoutCancel(ctx))
+	stopLog := context.AfterFunc(ctx, func() {
+		log.Info("shutting down", "reason", ctxReason(ctx))
+		endServe()
+	})
+	err = srv.Serve(serveCtx)
+	if stopLog() { // Serve ended although ctx did not
+		log.Info("shutting down", "reason", ctxReason(ctx))
+	}
+	endServe()
+	srv.Close()     // idempotent; removes the key file and the socket, closes connections
 	backend.Close() // ends waiting sign-ins and closes their listeners
 
 	// Let the syncers log out and finish their current store writes before

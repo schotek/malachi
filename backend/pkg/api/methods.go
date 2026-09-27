@@ -5,8 +5,12 @@ package api
 
 // Method names (client → backend). Grouped by service, matching docs/api.md.
 const (
-	// System.
-	MethodSystemInfo = "system.info"
+	// System. system.hello and system.authenticate are the connection
+	// handshake (docs/api.md §1.4): the transport (internal/rpc) answers
+	// them, not Backend.
+	MethodSystemInfo         = "system.info"
+	MethodSystemHello        = "system.hello"
+	MethodSystemAuthenticate = "system.authenticate"
 
 	// Accounts.
 	MethodAccountList        = "account.list"
@@ -87,7 +91,7 @@ const (
 // AllMethods lists every callable method. The RPC server uses it to register
 // stubs and tests use it to check docs/api.md coverage.
 var AllMethods = []string{
-	MethodSystemInfo,
+	MethodSystemInfo, MethodSystemHello, MethodSystemAuthenticate,
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
 	MethodAccountReorder, MethodAccountOAuthStart, MethodAccountOAuthWait, MethodAccountOAuthCancel,

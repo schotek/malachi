@@ -468,10 +468,12 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
              StatusLine(text: "Syncing Inbox…", spinning: true, active: true, daemon: daemon)),
             ("system.info failed", ConnView(state: .infoFailed("x")), "Up to date", false,
              StatusLine(text: "Up to date", active: true, daemon: "Connected, but system.info failed")),
+            // No connection: the handshake refused that daemon, so there is
+            // nothing to click through to.
             ("protocol mismatch", ConnView(state: other), "Syncing Inbox…", true,
-             StatusLine(text: mismatch, active: true)),
+             StatusLine(text: mismatch)),
             ("protocol mismatch beats sync.status", ConnView(state: other, syncFailed: true), "Up to date", false,
-             StatusLine(text: mismatch, active: true)),
+             StatusLine(text: mismatch)),
             ("sync.status failed", ConnView(state: .connected(info), syncFailed: true), "Syncing Inbox…", true,
              StatusLine(text: "Not syncing", active: true, daemon: daemon)),
             // An empty line (no account at all) is no button to tab to.
@@ -484,6 +486,22 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
             let got = statusLineFor(conn, text: text, spinning: spinning)
             #expect(got == want, "\(name): got \(got)")
         }
+    }
+
+    /// A daemon of another protocol version, refused by the handshake: the
+    /// line says so and is no button, whatever the accounts said before;
+    /// the popover has no daemon to name.
+    @Test func protocolMismatchIsNotAButton() {
+        let (sc, log) = makeController()
+        sc.setConnection(.connected(info))
+        sc.apply(state("a1", .idle))
+        #expect(sc.line.active)
+        sc.setConnection(.protocolMismatch(daemon: 1))
+        let want = StatusLine(text: "Protocol mismatch: UI \(API.protocolVersion), backend 1")
+        #expect(sc.line == want)
+        #expect(!sc.line.active && sc.line.icon.isEmpty && sc.line.daemon.isEmpty)
+        #expect(log.lines.last == want)
+        sc.close()
     }
 
     /// window.go `showConnectionState`: the line names the connection until

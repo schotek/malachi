@@ -11,7 +11,12 @@
 //   - method and notification name constants,
 //   - request/response parameter types for every method,
 //   - the numeric error-code enumeration,
-//   - Go interfaces grouping the methods by service.
+//   - Go interfaces grouping the methods by service,
+//   - the connection handshake every connection completes before anything
+//     else (docs/api.md §1.4): both sides prove with HMAC-SHA256 that they
+//     hold the key the daemon writes beside its socket at every start
+//     (KeyPath, ReadKeyFile, DaemonProof, ClientProof); ClientHandshake is
+//     the client side for Go clients.
 //
 // The human-readable specification lives in docs/api.md. The two must be
 // changed together, in the same commit. Anything not documented there is not
@@ -29,8 +34,10 @@
 package api
 
 // ProtocolVersion is bumped on every incompatible change of the contract.
-// Clients compare it against the value returned by system.info.
-const ProtocolVersion = 1
+// Clients compare it with the protocolVersion of the system.hello result
+// before they authenticate (ClientHandshake does); system.info reports the
+// same value.
+const ProtocolVersion = 2
 
 // SocketRelPath is the socket location relative to the runtime base
 // directory that SocketBase returns.

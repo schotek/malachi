@@ -172,6 +172,7 @@ func TestStatusLineFor(t *testing.T) {
 	info := &api.SystemInfoResult{Version: "1.2.3", PID: 42, ProtocolVersion: api.ProtocolVersion}
 	other := &api.SystemInfoResult{Version: "9", PID: 7, ProtocolVersion: api.ProtocolVersion + 1}
 	mismatch := fmt.Sprintf("Protocol mismatch: UI %d, backend %d", api.ProtocolVersion, api.ProtocolVersion+1)
+	protocol1 := fmt.Sprintf("Protocol mismatch: UI %d, backend 1", api.ProtocolVersion)
 	for _, c := range []struct {
 		name     string
 		conn     connView
@@ -186,16 +187,30 @@ func TestStatusLineFor(t *testing.T) {
 		// What the daemon said before it went away does not count.
 		{"unavailable forgets", connView{State: client.Disconnected, Info: info, SyncFailed: true}, "Up to date", false,
 			statusLine{Text: "Backend unavailable", Icon: "network-offline-symbolic"}},
+		{"unavailable forgets a mismatch", connView{State: client.Disconnected, Info: other}, "Up to date", false,
+			statusLine{Text: "Backend unavailable", Icon: "network-offline-symbolic"}},
+		{"connecting forgets a mismatch", connView{State: client.Connecting, Info: other}, "Up to date", false,
+			statusLine{Text: "Connecting to backend…", Icon: "network-idle-symbolic"}},
+		// A daemon the handshake refused for its protocol version runs: the
+		// line names both versions, without an icon or anything to click,
+		// and keeps doing so while the next attempt is underway.
+		{"handshake mismatch", connView{State: client.Disconnected, Mismatch: 1}, "Syncing Inbox…", true,
+			statusLine{Text: protocol1}},
+		{"connecting after a mismatch", connView{State: client.Connecting, Mismatch: 1}, "Up to date", false,
+			statusLine{Text: protocol1}},
+		{"handshake mismatch, later protocol", connView{State: client.Disconnected, Mismatch: api.ProtocolVersion + 1}, "", false,
+			statusLine{Text: mismatch}},
 		{"connected, system.info pending", connView{State: client.Connected}, "Syncing Inbox…", true,
 			statusLine{Text: "Syncing Inbox…", Spinning: true, Active: true}},
 		{"connected", connView{State: client.Connected, Info: info}, "Up to date · 15:04", false,
 			statusLine{Text: "Up to date · 15:04", Active: true, Daemon: "Connected to malachid 1.2.3 (pid 42)"}},
 		{"system.info failed", connView{State: client.Connected, InfoFailed: true}, "Up to date", false,
 			statusLine{Text: "Up to date", Active: true, Daemon: "Connected, but system.info failed"}},
+		// system.info naming another version than the handshake did.
 		{"protocol mismatch", connView{State: client.Connected, Info: other}, "Syncing Inbox…", true,
-			statusLine{Text: mismatch, Active: true}},
+			statusLine{Text: mismatch}},
 		{"protocol mismatch beats sync.status", connView{State: client.Connected, Info: other, SyncFailed: true}, "Up to date", false,
-			statusLine{Text: mismatch, Active: true}},
+			statusLine{Text: mismatch}},
 		{"sync.status failed", connView{State: client.Connected, Info: info, SyncFailed: true}, "Syncing Inbox…", true,
 			statusLine{Text: "Not syncing", Active: true, Daemon: "Connected to malachid 1.2.3 (pid 42)"}},
 		{"no account", connView{State: client.Connected, Info: info}, "", false,

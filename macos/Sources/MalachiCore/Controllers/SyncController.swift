@@ -426,11 +426,12 @@ public func connectionStatusLine(_ state: ConnectionController.ConnectionState) 
 }
 
 /// What the status line knows of the daemon connection (status.go
-/// `connView`). The connection controller folds system.info into its state
-/// (connected with the answer, its failure, a mismatching protocol), so
-/// beside it only the failure of sync.status is kept. GTK has one more
-/// moment, connected with system.info still on its way; here the
-/// controller reports the connection only once system.info answered.
+/// `connView`). The connection controller folds the handshake and
+/// system.info into its state (connected with the answer, its failure, a
+/// mismatching protocol), so beside it only the failure of sync.status is
+/// kept. GTK has one more moment, connected with system.info still on its
+/// way; here the controller reports the connection only once system.info
+/// answered.
 public struct ConnView: Sendable, Equatable {
     public var state: ConnectionController.ConnectionState
     /// sync.status failed; the next state from the daemon clears it, and a
@@ -467,17 +468,19 @@ public struct StatusLine: Sendable, Equatable {
 /// `text` and `spinning` from `syncStatusText`). Without a connection the
 /// line says so, with an icon, and cannot be clicked: there is no account
 /// state to show. A daemon of another protocol version, or a failed
-/// sync.status, takes the line over as well. An empty line (no account at
-/// all) cannot be clicked either. The popover's foot names the daemon
-/// (`connectionStatusLine`), or that system.info failed; it is empty while
-/// the line says the protocols do not match.
+/// sync.status, takes the line over as well; the mismatch cannot be
+/// clicked either, since the handshake refused that daemon and there is no
+/// connection. An empty line (no account at all) cannot be clicked either.
+/// The popover's foot names the daemon (`connectionStatusLine`), or that
+/// system.info failed; it is empty while the line says the protocols do
+/// not match.
 public func statusLineFor(_ c: ConnView, text: String, spinning: Bool) -> StatusLine {
     switch c.state {
     case .connecting, .unavailable, .stopping:
         let conn = connectionStatusLine(c.state)
         return StatusLine(text: conn.text, icon: conn.icon)
     case .protocolMismatch:
-        return StatusLine(text: connectionStatusLine(c.state).text, active: true)
+        return StatusLine(text: connectionStatusLine(c.state).text)
     case .connected, .infoFailed:
         var line = StatusLine(text: text, spinning: spinning, daemon: connectionStatusLine(c.state).text)
         if c.syncFailed {

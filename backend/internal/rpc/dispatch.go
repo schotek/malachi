@@ -29,9 +29,23 @@ func wrap[P any, R any](fn func(context.Context, P) (*R, error)) handler {
 	}
 }
 
-// registerBackend binds every method name from pkg/api to the corresponding
-// service method. Adding a method to the contract without adding it here is
-// caught by TestAllMethodsRegistered.
+// registerTransport binds the handshake methods, which belong to the
+// transport and not to api.Backend (docs/api.md §1.4). Before a connection
+// is authenticated the handshake answers them (handshake.step) and nothing
+// reaches this table; afterwards they answer that it already is, and the
+// connection stays usable.
+func (s *Server) registerTransport() {
+	already := func(context.Context, json.RawMessage) (any, error) {
+		return nil, api.NewError(api.CodeInvalidRequest, "already authenticated")
+	}
+	s.handlers[api.MethodSystemHello] = already
+	s.handlers[api.MethodSystemAuthenticate] = already
+}
+
+// registerBackend binds every other method name from pkg/api to the
+// corresponding service method. Adding a method to the contract without
+// adding it here (or to registerTransport) is caught by
+// TestAllMethodsRegistered.
 func (s *Server) registerBackend(b api.Backend) {
 	sys, acc, fol := b.System(), b.Accounts(), b.Folders()
 	msg, thr, drf := b.Messages(), b.Threads(), b.Drafts()

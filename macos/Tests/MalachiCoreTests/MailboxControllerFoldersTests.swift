@@ -614,6 +614,28 @@ private let inbox1 = FolderKey(account: "acc1", folder: "inbox")
         #expect(h.mailbox.model.selected == inbox1)
     }
 
+    /// A daemon of another protocol version is no connection (the handshake
+    /// refused it): nothing is loaded, late replies are dropped as when the
+    /// backend went away, and the line names the mismatch without being a
+    /// button. The client is connected here all the same, so a load would
+    /// reach the daemon.
+    @Test func protocolMismatchLoadsNothing() async throws {
+        let (accounts, folders) = testAccounts()
+        let h = try await Harness(accounts: accounts, folders: folders, connect: false)
+        defer { Task { await h.stop() } }
+        try await h.client.connect()
+        let gen = h.mailbox.model.foldersGen
+        h.mailbox.model.grouped = true
+        h.mailbox.handleConnection(.protocolMismatch(daemon: 1))
+        #expect(h.mailbox.model.foldersGen == gen + 1)
+        #expect(h.log.collapses == 1)
+        #expect(h.sync.line == StatusLine(text: "Protocol mismatch: UI \(API.protocolVersion), backend 1"))
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(await h.fixture.callCount(API.AccountList.name) == 0, "account.list is not asked")
+        #expect(await h.fixture.callCount(API.SyncStatus.name) == 0, "sync.status is not asked")
+        #expect(h.log.accountsLoaded == 0 && h.log.rebuilds == 0)
+    }
+
     /// window.go `refreshListTitle`: the selected folder's name over its
     /// counts, from every place the selection or the cached counts change
     /// (selectFolder in both branches, updateFolderRow, rebuildFolderList).

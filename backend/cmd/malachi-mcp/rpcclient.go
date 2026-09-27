@@ -9,14 +9,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
+	"io"
 	"log/slog"
 	"net"
-	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -43,24 +41,12 @@ func (e *daemonDownError) Error() string {
 
 func (e *daemonDownError) Unwrap() error { return e.cause }
 
-// protocolMismatchError: the daemon speaks another contract version.
-type protocolMismatchError struct{ got, want int }
-
-func (e *protocolMismatchError) Error() string {
-	return fmt.Sprintf("malachid speaks protocol version %d but this bridge expects %d; rebuild both with make build",
-		e.got, e.want)
-}
-
-// socketError: the path exists but is not the user's private daemon socket.
-type socketError struct{ socket, reason string }
-
-func (e *socketError) Error() string {
-	return fmt.Sprintf("refusing to use %s: %s", e.socket, e.reason)
-}
-
 // rpcClient is a minimal JSON-RPC 2.0 client for the daemon socket: lazy
-// dial, one connection, requests matched to responses by id, notifications
-// ignored. Modelled on ui/internal/client, which is GPL and internal.
+// dial, one connection authenticated before any call (api.ClientHandshake,
+// docs/api.md §1.4), requests matched to responses by id, notifications
+// ignored. Modelled on ui/internal/client, which is GPL and internal. The
+// daemon's key is read by the handshake of every new connection and never
+// kept.
 type rpcClient struct {
 	socket string
 	log    *slog.Logger
@@ -69,7 +55,7 @@ type rpcClient struct {
 	dialMu sync.Mutex // one dial + handshake at a time
 
 	mu      sync.Mutex // guards conn and pending
-	conn    net.Conn
+	conn    net.Conn   // set only once its handshake succeeded
 	pending map[string]chan api.Response
 }
 
@@ -113,10 +99,15 @@ func (c *rpcClient) callOnce(ctx context.Context, method string, params, result 
 // errorCode names an error for the log without its message, which may
 // carry an address or a path.
 func errorCode(err error) string {
-	var apiErr *api.Error
+	var (
+		hs     *api.HandshakeError
+		apiErr *api.Error
+	)
 	switch {
 	case err == nil:
 		return ""
+	case errors.As(err, &hs):
+		return "handshake." + hs.Reason.String()
 	case errors.As(err, &apiErr):
 		return apiErr.Code.String()
 	default:
@@ -124,8 +115,14 @@ func errorCode(err error) string {
 	}
 }
 
-// connect returns the live connection or dials a new one, checking the
-// socket and the daemon's protocol version on the way.
+// connect returns the live connection or dials a new one and authenticates
+// it (api.ClientHandshake, docs/api.md §1.4): the handshake sends
+// system.hello, refuses a daemon of another protocol version, reads the key
+// file beside the socket afresh (a restarted daemon has a new key) and
+// checks the daemon's proof before it proves its own. Only a connection
+// whose handshake succeeded is published for calls, so no request can
+// reach a daemon that has not proved the key, or go out before the
+// handshake's last answer.
 func (c *rpcClient) connect(ctx context.Context) (net.Conn, error) {
 	c.mu.Lock()
 	conn := c.conn
@@ -143,53 +140,48 @@ func (c *rpcClient) connect(ctx context.Context) (net.Conn, error) {
 		return conn, nil
 	}
 
-	if err := checkSocket(c.socket); err != nil {
-		return nil, err
-	}
 	d := net.Dialer{Timeout: dialTimeout}
 	nc, err := d.DialContext(ctx, "unix", c.socket)
 	if err != nil {
 		return nil, &daemonDownError{socket: c.socket, cause: err}
 	}
+	// The handshake and then readLoop read through r: whatever the daemon
+	// sent right after the handshake's last answer is already in it.
+	r := bufio.NewReaderSize(nc, 64<<10)
+	if err := api.ClientHandshake(ctx, nc, r, api.KeyPath(c.socket)); err != nil {
+		// Never published: no call and no readLoop know nc.
+		_ = nc.Close()
+		return nil, c.handshakeFailed(ctx, err)
+	}
 	c.mu.Lock()
 	c.conn = nc
 	c.mu.Unlock()
-	go c.readLoop(nc)
-
-	var info api.SystemInfoResult
-	if err := c.send(ctx, nc, api.MethodSystemInfo, api.SystemInfoParams{}, &info); err != nil {
-		c.drop(nc)
-		return nil, fmt.Errorf("handshake with malachid: %w", err)
-	}
-	if info.ProtocolVersion != api.ProtocolVersion {
-		c.drop(nc)
-		return nil, &protocolMismatchError{got: info.ProtocolVersion, want: api.ProtocolVersion}
-	}
-	c.log.Info("connected to malachid", "version", info.Version, "pid", info.PID, "protocol", info.ProtocolVersion)
+	go c.readLoop(nc, r)
+	c.log.Info("connected to malachid", "protocol", api.ProtocolVersion)
 	return nc, nil
 }
 
-// checkSocket refuses anything that is not the user's own 0600 daemon
-// socket: a MALACHI_SOCKET pointed at somebody else's daemon, a regular
-// file, a socket other users can reach.
-func checkSocket(path string) error {
-	fi, err := os.Stat(path)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return &daemonDownError{socket: path, cause: err}
+// handshakeFailed logs a failed handshake and returns the error for the
+// call. A daemon the handshake refused, or one that refused the bridge, is
+// a warning with the reason; api.HandshakeError texts never contain the
+// key, a nonce or a proof. A connection that broke during the handshake is
+// a lost connection, like one that breaks later.
+func (c *rpcClient) handshakeFailed(ctx context.Context, err error) error {
+	var hs *api.HandshakeError
+	switch {
+	case errors.As(err, &hs):
+		args := []any{"reason", hs.Reason.String()}
+		if hs.Reason == api.HandshakeProtocolMismatch {
+			args = append(args, "daemonProtocol", hs.Daemon, "protocol", api.ProtocolVersion)
 		}
-		return &socketError{socket: path, reason: err.Error()}
+		c.log.Warn("handshake with malachid failed", append(args, "err", hs.Error())...)
+		return err
+	case ctx.Err() != nil:
+		return ctx.Err()
+	default:
+		c.log.Debug("connection to malachid ended during the handshake", "err", err)
+		return fmt.Errorf("%w: %v", errDisconnected, err)
 	}
-	if fi.Mode().Type()&fs.ModeSocket == 0 {
-		return &socketError{socket: path, reason: "not a unix socket"}
-	}
-	if perm := fi.Mode().Perm(); perm&0o077 != 0 {
-		return &socketError{socket: path, reason: fmt.Sprintf("mode %04o lets other users reach it; expected 0600", perm)}
-	}
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok && int(st.Uid) != os.Geteuid() {
-		return &socketError{socket: path, reason: "owned by another user"}
-	}
-	return nil
 }
 
 // send writes one request on conn and waits for its response.
@@ -250,9 +242,11 @@ func (c *rpcClient) forget(id string) {
 	c.mu.Unlock()
 }
 
-// readLoop delivers responses to their waiting calls until conn dies.
-func (c *rpcClient) readLoop(conn net.Conn) {
-	sc := bufio.NewScanner(conn)
+// readLoop delivers responses to their waiting calls until conn dies. It
+// reads conn through r, the reader the handshake read it with, so that
+// nothing the daemon sent right after the handshake is lost.
+func (c *rpcClient) readLoop(conn net.Conn, r io.Reader) {
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 0, 64<<10), maxLineBytes)
 	for sc.Scan() {
 		var env api.Envelope
