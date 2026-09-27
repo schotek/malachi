@@ -19,6 +19,51 @@ AssocIsDangerous
 INET_E_SECURITY_PROBLEM
 // Launch: Open With (Launch/); ShellExecuteEx comes through Process.Start.
 SHOpenWithDialog
+// The notification-area icon (Tray/, docs/windows-port.md §10): a hidden
+// top-level tool window, Shell_NotifyIcon version 4, the native menu.
+// NIN_KEYSELECT and the TPM_* flags are C macros, not in the metadata;
+// Shell_NotifyIcon, Shell_NotifyIconGetRect and their structures differ
+// by architecture, which an Any CPU library cannot generate (PInvoke005):
+// Tray/NotifyIconInterop.cs declares them for 64-bit processes.
+NOTIFYICON_VERSION_4
+NIN_SELECT
+RegisterWindowMessage
+RegisterClassEx
+CreateWindowEx
+DefWindowProc
+DestroyWindow
+GetModuleHandle
+ExtractIconEx
+LoadIcon
+IDI_APPLICATION
+DestroyIcon
+CreatePopupMenu
+AppendMenu
+SetMenuDefaultItem
+TrackPopupMenuEx
+DestroyMenu
+PostMessage
+SendMessage
+SetForegroundWindow
+WM_APP
+WM_NULL
+WM_CONTEXTMENU
+// The tray tests: whether a taskbar runs, whether a window is gone.
+FindWindow
+IsWindow
+// Notifications and sound (Notifications/, Sound/): quiet hours, the
+// new-mail sound.
+SHQueryUserNotificationState
+PlaySound
+// mailto: registration and the default mail app (Registration/), the
+// command line of a launch (Startup/LaunchArguments).
+SHChangeNotify
+AssocQueryString
+SHAssocEnumHandlersForProtocolByApplication
+IEnumAssocHandlers
+IAssocHandler
+CommandLineToArgv
+LocalFree
 // Files: the best-fit look-alikes of the ANSI code page (Files/AnsiLookAlikes).
 WideCharToMultiByte
 GetACP
