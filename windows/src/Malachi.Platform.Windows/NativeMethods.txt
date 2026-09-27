@@ -57,3 +57,19 @@ TerminateProcess
 // The daemon's exit seen on its handle, before its output has drained
 // (Process/DaemonProcess.HasExited).
 WaitForSingleObject
+// Files: the previewer's panel, a type's name and icon by its extension
+// alone (Files/ShellFileTypes; SHGetFileInfo, which CsWin32 generates only
+// for a specific architecture, is in Files/ShellFileInfoInterop).
+AssocQueryString
+SHGetImageList
+Windows.Win32.UI.Controls.IImageList
+IMAGE_LIST_DRAW_STYLE
+SHIL_JUMBO
+SHIL_EXTRALARGE
+DestroyIcon
+DrawIconEx
+CreateCompatibleDC
+CreateDIBSection
+SelectObject
+DeleteObject
+DeleteDC
