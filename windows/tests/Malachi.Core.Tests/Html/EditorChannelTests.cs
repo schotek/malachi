@@ -204,6 +204,71 @@ public sealed class EditorChannelTests
         Assert.Equal(["ready", "changed:x", "state:h1+bold", "key:escape"], events);
     }
 
+    // Windows: a changed with an unpaired surrogate (a plain-text paste that
+    // Chromium keeps in the body, posted escaped by JSON.stringify) is the
+    // draft: it resolves the flush it answers, and the echo check sees the
+    // content the save recorded, U+FFFD included, in either order.
+    [Fact]
+    public void UnpairedSurrogateResolvesTheFlush()
+    {
+        const string posted = """{"type":"changed","seq":1,"html":"<p>a\ud800b</p>","text":"a\udc00b"}""";
+        var w = new Window();
+        w.Ready();
+        var id = w.Save();
+        Assert.NotNull(w.Channel.Receive(posted));
+        w.Channel.Flushed(id, "1");
+        Assert.Equal(["<p>a�b</p>"], w.Saved);
+        Assert.Equal("a�b", w.Channel.Text);
+        Assert.False(w.Dirty, "the flush's own changed marked the saved draft dirty");
+        Assert.Equal(1, w.ChangedCount);
+        // The debounced changed with the same content is still the echo.
+        w.Channel.Receive("""{"type":"changed","seq":2,"html":"<p>a\ud800b</p>"}""");
+        Assert.False(w.Dirty);
+
+        var result = new Window();
+        result.Ready();
+        var again = result.Save();
+        result.Channel.Flushed(again, "1");
+        result.Channel.Receive(posted);
+        Assert.Equal(["<p>a�b</p>"], result.Saved);
+        Assert.False(result.Dirty);
+    }
+
+    // Windows: nothing the page posts makes Receive throw (it runs in the
+    // view's WebMessageReceived handler): every sequence of up to three
+    // pieces of JSON, escapes and lone surrogates, alone and as a changed's
+    // html.
+    [Fact]
+    public void ReceiveNeverThrows()
+    {
+        string[] pieces =
+        [
+            "{", "}", "[", "]", "\"", ":", ",", "\\", "\\u", "\\ud800", "\\udc00", "\\ud83d\\ude00", "\\\\", "\\\"",
+            "type", "changed", "html", "1", "1e999", "null", "true", "\uD800", "\uDC00", "\0", " ",
+            "\"type\":\"changed\"", "\"html\":\"", "\"seq\":", new string('[', 100),
+        ];
+        var channel = new EditorChannel();
+        channel.Receive("""{"type":"ready"}""");
+        var received = 0;
+        foreach (var a in pieces)
+        {
+            foreach (var b in pieces)
+            {
+                foreach (var c in pieces)
+                {
+                    var s = a + b + c;
+                    channel.Receive(s);
+                    if (channel.Receive("{\"type\":\"changed\",\"seq\":1,\"html\":\"" + s + "\"}") is not null)
+                    {
+                        received++;
+                    }
+                }
+            }
+        }
+        Assert.True(received > 0);
+        Assert.True(channel.IsReady);
+    }
+
     [Theory]
     [InlineData("3", 3L)]
     [InlineData(" 42 ", 42L)]

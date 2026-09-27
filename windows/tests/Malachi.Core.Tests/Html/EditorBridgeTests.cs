@@ -87,6 +87,65 @@ public sealed class EditorBridgeTests
         Assert.DoesNotContain("secret", e.Message, StringComparison.Ordinal);
     }
 
+    // Windows: strings decode as encoding/json decodes them (each case checked
+    // against Go's json.Unmarshal): an escaped surrogate that does not pair
+    // with the escape right after it is U+FFFD, the rest of the string as it
+    // is. Chromium keeps an unpaired surrogate a plain-text paste brought in,
+    // and JSON.stringify posts it escaped: the message must decode.
+    [Theory]
+    [InlineData("""{"html":"\ud800"}""", "�")]
+    [InlineData("""{"html":"a\udc00b"}""", "a�b")]
+    [InlineData("""{"html":"a\ud800"}""", "a�")]
+    [InlineData("""{"html":"a\ud800\n"}""", "a�\n")]
+    [InlineData("""{"html":"\ud800𐀀"}""", "�\U00010000")]
+    [InlineData("""{"html":"x\udc00\ud800"}""", "x��")]
+    [InlineData("""{"html":"\ud800\\udc00"}""", "�\\udc00")]
+    [InlineData("""{"html":"\\\ud800\\"}""", "\\�\\")]
+    [InlineData("""{"html":"\ud800A"}""", "�A")]
+    [InlineData("""{"html":"\ud800􏿿"}""", "�\U0010FFFF")]
+    [InlineData("""{"html":"\"\\\/\b\f\n\r\tä\ud800"}""", "\"\\/\b\f\n\r\tä�")]
+    [InlineData("""{"html":"😀"}""", "\U0001F600")]
+    public void DecodeReplacesUnpairedSurrogates(string raw, string html)
+    {
+        Assert.Equal(html, BridgeMessage.Decode(raw).Html);
+    }
+
+    // Windows: the other places a surrogate can hide. In the posted string
+    // itself (not JSON.stringify's output, but a message need not come from
+    // it) it is U+FFFD too, one per UTF-16 unit; in a member name the member
+    // is unknown and ignored, as Go ignores it; in the kind the kind is
+    // unknown.
+    [Fact]
+    public void DecodeSurrogatesElsewhere()
+    {
+        var both = BridgeMessage.Decode("""{"type":"changed","seq":1,"html":"\ud800","text":"a\udc00b"}""");
+        Assert.Equal(("changed", 1L, "�", "a�b"), (both.Type, both.Seq, both.Html, both.Text));
+        var raw = BridgeMessage.Decode("{\"type\":\"changed\",\"html\":\"a" + (char)0xD800 + "b" + (char)0xDC00 + (char)0xDC00 + "\"}");
+        Assert.Equal("a�b��", raw.Html);
+        Assert.Equal(BridgeMessage.Kinds.Ready, BridgeMessage.Decode("""{"\ud800":1,"type":"ready"}""").Type);
+        Assert.Equal(BridgeMessage.Kinds.Ready, BridgeMessage.Decode("{\"" + (char)0xDC00 + "\":[],\"type\":\"ready\"}").Type);
+        Assert.Equal("�", BridgeMessage.Decode("""{"type":"\ud800"}""").Type);
+        // A malformed escape is still no message.
+        Assert.Null(BridgeMessage.TryDecode("""{"html":"\ud800\u"}"""));
+        Assert.Null(BridgeMessage.TryDecode("""{"html":"\ud800\ud8"}"""));
+    }
+
+    // Windows: a message prints its kind and sizes, never the draft or any
+    // other string of the page's (docs/windows-port.md §3.1).
+    [Fact]
+    public void MessagePrintsNoContent()
+    {
+        var changed = BridgeMessage.Decode("""{"type":"changed","seq":3,"html":"<p>secret</p>","text":"secret"}""");
+        Assert.Equal("BridgeMessage(type: changed, seq: 3, html: 13 chars, text: 6 chars, key: 0 chars)", changed.ToString());
+        Assert.Equal(
+            "BridgeMessage(type: <other>, seq: 0, html: 0 chars, text: 0 chars, key: 0 chars)",
+            BridgeMessage.Decode("""{"type":"secret"}""").ToString());
+        Assert.Equal(
+            "BridgeMessage(type: key, seq: 0, html: 0 chars, text: 0 chars, key: 4 chars)",
+            BridgeMessage.Decode("""{"type":"key","key":"link"}""").ToString());
+        Assert.Equal("BridgeMessage(type: \"\", seq: 0, html: 0 chars, text: 0 chars, key: 0 chars)", new BridgeMessage().ToString());
+    }
+
     [Fact]
     public void JsStringLiteral()
     {
