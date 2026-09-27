@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,62 @@ func TestComposeSource(t *testing.T) {
 	lm.body = &api.MessageBodyResult{BodyState: api.BodyFetched, Text: "hello"}
 	if src = composeSource("m_1", s, lm); src.Text != "hello" {
 		t.Errorf("from body: %+v", src)
+	}
+}
+
+// A forward downloads first when the daemon would otherwise leave
+// something of the original behind, or when the cache cannot tell
+// (message.download answers at once when nothing is missing).
+func TestForwardNeedsDownload(t *testing.T) {
+	fetched := &api.MessageBodyResult{BodyState: api.BodyFetched}
+	msg := func(atts ...api.Attachment) *api.Message { return &api.Message{Attachments: atts} }
+	local := api.Attachment{PartID: "2", Filename: "a.pdf"}
+	remote := api.Attachment{PartID: "3", Filename: "b.pdf", Remote: true}
+	cases := []struct {
+		name string
+		lm   *loadedMessage
+		want bool
+	}{
+		{"nothing loaded", nil, true},
+		{"no full message yet", &loadedMessage{body: &api.MessageBodyResult{BodyState: api.BodyPending}}, true},
+		{"message.get failed", &loadedMessage{body: fetched}, true},
+		{"all local", &loadedMessage{msg: msg(local), body: fetched}, false},
+		{"one on the server", &loadedMessage{msg: msg(local, remote), body: fetched}, true},
+		{"on the server, body not loaded here", &loadedMessage{msg: msg(remote)}, true},
+		{"body not downloaded yet", &loadedMessage{msg: msg(), body: &api.MessageBodyResult{BodyState: api.BodyPending}}, true},
+		{"an inline picture is never left behind", &loadedMessage{msg: msg(api.Attachment{PartID: "1.2", Inline: true, Remote: true}), body: fetched}, false},
+		{"too big to download anyway", &loadedMessage{msg: msg(local), body: &api.MessageBodyResult{BodyState: api.BodyTooBig}}, false},
+	}
+	for _, c := range cases {
+		if got := forwardNeedsDownload(c.lm); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+}
+
+// A failed download asks, unless asking would change nothing: no daemon,
+// one that cannot download at all, or a message it can never download.
+func TestAskForwardWithout(t *testing.T) {
+	if askForwardWithout(nil) {
+		t.Error("no error, no question")
+	}
+	for _, err := range []error{
+		api.NewError(api.CodeMethodNotFound, "x"), api.ErrNotImplemented,
+		client.ErrDisconnected, fmt.Errorf("call: %w", client.ErrDisconnected),
+		api.NewError(api.CodeAttachmentTooBig, "over the cap"),
+	} {
+		if askForwardWithout(err) {
+			t.Errorf("%v: should forward at once", err)
+		}
+	}
+	for _, err := range []error{
+		api.NewError(api.CodeOffline, "x"), api.NewError(api.CodeMessageGone, "x"),
+		api.NewError(api.CodeUnavailable, "x"), api.NewError(api.CodeServerTimeout, "x"),
+		api.NewError(api.CodeCancelled, "x"), context.DeadlineExceeded, errors.New("boom"),
+	} {
+		if !askForwardWithout(err) {
+			t.Errorf("%v: should ask", err)
+		}
 	}
 }
 

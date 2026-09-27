@@ -2672,6 +2672,109 @@ msgstr ""
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
 
+#: ui/data/ui/preferences.ui:0
+msgid "Keep Attachments Offline For"
+msgstr "Uchovávat přílohy offline po dobu"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Large attachments of older messages stay on the server and are downloaded when you open them"
+msgstr "Velké přílohy starších zpráv zůstávají na serveru a stáhnou se, až je otevřete"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Small Attachments Only"
+msgstr "Jen malé přílohy"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Compress Stored Mail"
+msgstr "Komprimovat uloženou poštu"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Uses less disk space; stored mail is converted in the background"
+msgstr "Šetří místo na disku; uložená pošta se převede na pozadí"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Disk Space Used"
+msgstr "Obsazené místo na disku"
+
+#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#: ui/internal/window/preferences.go:0
+#, c-format
+msgid "Compression saves %s"
+msgstr "Komprese šetří %s"
+
+#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#: ui/internal/window/preferences.go:0
+#, c-format
+msgid "%s of attachments are on the server only"
+msgstr "%s příloh je jen na serveru"
+
+#: ui/internal/window/preferences.go:0
+msgid "Measuring the disk space"
+msgstr "Zjišťování obsazeného místa"
+
+#. TRANSLATORS: file size in gibibytes.
+#: ui/internal/widget/format.go:0
+#, c-format
+msgid "%.1f GiB"
+msgstr "%.1f GiB"
+
+#. TRANSLATORS: %s is an action such as "Opening the attachment".
+#: ui/internal/widget/rpc.go:0
+#, c-format
+msgid "%s failed: no network connection"
+msgstr "%s selhalo: není připojení k síti"
+
+#: ui/internal/widget/rpc.go:0
+#, c-format
+msgid "%s failed: try again in a moment"
+msgstr "%s selhalo: zkuste to za chvíli znovu"
+
+#: ui/internal/widget/rpc.go:0
+#, c-format
+msgid "%s failed: the attachment is not on this computer"
+msgstr "%s selhalo: příloha není v tomto počítači"
+
+#: ui/internal/widget/rpc.go:0
+#, c-format
+msgid "%s failed: the message is no longer on the server"
+msgstr "%s selhalo: zpráva už na serveru není"
+
+#: ui/internal/window/attachments.go:0
+msgid "On the server only; it is downloaded when you open it"
+msgstr "Jen na serveru; stáhne se, až ji otevřete"
+
+#: ui/internal/window/attachments.go:0
+msgid "Saving the attachments"
+msgstr "Ukládání příloh"
+
+#: ui/internal/window/compose_open.go:0
+msgid "Downloading the attachments"
+msgstr "Stahování příloh"
+
+#: ui/internal/window/compose_open.go:0
+msgid "Forward Without Attachments?"
+msgstr "Přeposlat bez příloh?"
+
+#: ui/internal/window/compose_open.go:0
+msgid "_Forward Without Attachments"
+msgstr "_Přeposlat bez příloh"
+
+#: ui/internal/compose/draft.go:0
+#, c-format
+msgid "%d attachment of the original could not be attached"
+msgid_plural "%d attachments of the original could not be attached"
+msgstr[0] "%d přílohu originálu se nepodařilo připojit"
+msgstr[1] "%d přílohy originálu se nepodařilo připojit"
+msgstr[2] "%d příloh originálu se nepodařilo připojit"
+
+#: ui/internal/window/preferences.go:0
+msgid "Converting the stored mail in the background"
+msgstr "Uložená pošta se převádí na pozadí"
+
+#: ui/internal/window/preferences.go:0
+msgid "Converting stopped: the disk is full"
+msgstr "Převod se zastavil: disk je plný"
+
 #, c-format
 #~ msgid "Cc: %s"
 #~ msgstr "Kopie: %s"

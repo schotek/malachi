@@ -74,6 +74,10 @@ type Params struct {
 	// Blocked is what the backend's sanitiser removed from the quoted
 	// original; the window says so once.
 	Blocked api.BlockedContent
+	// Skipped is how many parts of the original draft.create did not take
+	// along (over a cap, unreadable, or kept on the mail server only); the
+	// window says so once, like Blocked.
+	Skipped int
 	// DraftID and Version are the saved draft the window edits (KindEdit
 	// from draft.open); empty for a new one. Replaces is the message of
 	// the Drafts folder the first save takes over (draft.open sets it).

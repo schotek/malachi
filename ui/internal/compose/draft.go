@@ -452,3 +452,14 @@ func blockedSummary(b api.BlockedContent) string {
 	return fmt.Sprintf(i18n.N("%d unsafe element was removed from the message",
 		"%d unsafe elements were removed from the message", n), n)
 }
+
+// skippedSummary says how many parts of the original a reply or forward
+// went without (draft.create's skipped); nothing when it took them all.
+func skippedSummary(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	// TRANSLATORS: %d is the number of files of the forwarded (or quoted) message that the new one lacks.
+	return fmt.Sprintf(i18n.N("%d attachment of the original could not be attached",
+		"%d attachments of the original could not be attached", n), n)
+}

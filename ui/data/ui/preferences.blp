@@ -10,9 +10,13 @@ using Adw 1;
 // The other pages are bound to GSettings (ui/internal/settings), except the
 // "Mail" group, which is owned by the daemon and goes through config.get /
 // config.set, and "Launch at Login", whose state is decided by the
-// Background portal (ui/internal/background). The "AI" page has no setting
-// of its own: the switch shows what malachi-mcp reports about the Claude
-// configuration files (ui/internal/mcpsetup).
+// Background portal (ui/internal/background). In the "Mail" group,
+// attachment_days and compress_store stay hidden until config.get reports
+// them (a daemon that does not know them never does), and storage_row
+// shows what system.storage says, asked again every few seconds while the
+// dialog is open (hidden for a daemon without it). The "AI" page has no
+// setting of its own: the switch shows what malachi-mcp reports about the
+// Claude configuration files (ui/internal/mcpsetup).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
@@ -146,6 +150,48 @@ Adw.PreferencesDialog preferences_dialog {
             _("Everything"),
           ]
         };
+      }
+
+      // Preferences.attachmentOfflineDays per row (attachmentChoices in
+      // preferences.go): -1, 7, 30, 90, 0.
+      Adw.ComboRow attachment_days {
+        title: _("Keep Attachments Offline For");
+        subtitle: _("Large attachments of older messages stay on the server and are downloaded when you open them");
+        selected: 4;
+        visible: false;
+
+        model: StringList {
+          strings [
+            _("Small Attachments Only"),
+            _("1 week"),
+            _("1 month"),
+            _("3 months"),
+            _("Everything"),
+          ]
+        };
+      }
+
+      Adw.SwitchRow compress_store {
+        title: _("Compress Stored Mail");
+        subtitle: _("Uses less disk space; stored mail is converted in the background");
+        visible: false;
+      }
+
+      // The total as the suffix, what compression saves and what stays on
+      // the server as the subtitle (storageTexts in preferences.go).
+      Adw.ActionRow storage_row {
+        title: _("Disk Space Used");
+        use-markup: false;
+
+        [suffix]
+        Label storage_size {
+          valign: center;
+
+          styles [
+            "dim-label",
+            "numeric",
+          ]
+        }
       }
     }
   }

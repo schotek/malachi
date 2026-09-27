@@ -99,6 +99,12 @@ type messageView struct {
 	attachments *adw.WrapBox
 	chips       []gtk.Widgetter
 
+	// What render was last given: the summary and the cache entry, for
+	// redrawing the chips when the cache no longer holds the message
+	// (refreshChips in download.go).
+	shown       api.MessageSummary
+	shownLoaded *loadedMessage
+
 	// nested is set on the view of an attached message (embedded.go): its
 	// parts have no numbers and message.part cannot serve them, so the
 	// chips only name them.
@@ -282,6 +288,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 // answered, the body once message.body did, and the attachment chips from
 // both. A nil lm shows the summary and the loading placeholder.
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
+	v.shown, v.shownLoaded = s, lm
 	if lm == nil {
 		v.renderHeaders(s, nil)
 		v.loading()

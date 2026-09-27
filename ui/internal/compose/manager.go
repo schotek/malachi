@@ -52,6 +52,10 @@ func (m *Manager) Open(p Params) *Window {
 		// scripts; said once, as after a save.
 		w.toast(msg)
 	}
+	if msg := skippedSummary(p.Skipped); msg != "" {
+		// A forward that went on without some of the original's files.
+		w.toast(msg)
+	}
 	return w
 }
 

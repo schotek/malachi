@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
+	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/client"
@@ -21,22 +22,35 @@ import (
 // recipients, subject, the original quoted formatted with its pictures
 // copied into the attachment store) and the compose window opens with it.
 // Without a backend the window opens at once with the UI's own plain-text
-// quote (compose.Prefill).
+// quote (compose.Prefill). A forward of a message whose attachments are on
+// the mail server only downloads it first (message.download), since the
+// backend never forwards what it does not have.
 
 // composeTimeout bounds draft.create: the backend re-reads the original
 // and copies its pictures, which can take longer than an ordinary call.
 const composeTimeout = 30 * time.Second
 
-// openCompose opens a reply or forward of message id. The template comes
-// from the backend; a second click while it is being prepared does
-// nothing (one window will appear). Only when the backend cannot answer
-// does the window open from what the pane knows.
+// openCompose opens a reply or forward of message id from the main window
+// (openComposeFrom).
 func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
+	w.openComposeFrom(w, kind, id)
+}
+
+// openComposeFrom opens a reply or forward of message id; parent is the
+// window the request came from, for the question below. The template comes
+// from the backend; a second click while it is being prepared does
+// nothing (one window will appear). A forward that needs the original
+// downloaded first (forwardNeedsDownload) waits for message.download; when
+// that fails, the user is asked whether to forward without the
+// attachments (askForwardWithout), and Cancel leaves it there. Only when
+// the backend cannot answer does the window open from what the pane knows.
+func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api.MessageID) {
 	s, ok := w.summary(id)
 	if !ok || w.composing[id] {
 		return
 	}
-	src := composeSource(id, s, w.loaded[id])
+	lm := w.loaded[id]
+	src := composeSource(id, s, lm)
 	self := w.compose.SelfAddress()
 	if acc, ok := w.model.account(s.AccountID); ok {
 		self = selfAddress(acc)
@@ -47,33 +61,107 @@ func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
 		w.compose.Open(p)
 	}
 
-	w.composing[id] = true
 	params := api.DraftCreateParams{
 		AccountID:   s.AccountID,
 		Mode:        kind.Mode(),
 		MessageID:   id,
 		Attribution: compose.Attribution(kind, src),
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), composeTimeout)
-		defer cancel()
-		var res api.DraftCreateResult
-		err := w.client.Call(ctx, api.MethodDraftCreate, params, &res)
-		glib.IdleAdd(func() {
-			delete(w.composing, id)
-			if err != nil {
-				w.log.Warn("draft.create", "mode", params.Mode, "err", err)
-				if text := composeFallbackText(composeWhat(kind), err); text != "" {
-					w.Toast(text)
+	// create runs draft.create and opens the window; w.composing[id] is set.
+	create := func() {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), composeTimeout)
+			defer cancel()
+			var res api.DraftCreateResult
+			err := w.client.Call(ctx, api.MethodDraftCreate, params, &res)
+			glib.IdleAdd(func() {
+				delete(w.composing, id)
+				if err != nil {
+					w.log.Warn("draft.create", "mode", params.Mode, "err", err)
+					if text := composeFallbackText(composeWhat(kind), err); text != "" {
+						w.Toast(text)
+					}
+					fallback()
+					return
 				}
-				fallback()
+				p := compose.FromDraft(kind, res.Draft, res.Blocked)
+				p.AccountID = s.AccountID
+				p.Skipped = len(res.Skipped)
+				w.compose.Open(p)
+			})
+		}()
+	}
+
+	w.composing[id] = true
+	if kind != compose.KindForward || !forwardNeedsDownload(lm) {
+		create()
+		return
+	}
+	go func() {
+		_, err := w.download(s.AccountID, id)
+		glib.IdleAdd(func() {
+			if !askForwardWithout(err) {
+				create()
 				return
 			}
-			p := compose.FromDraft(kind, res.Draft, res.Blocked)
-			p.AccountID = s.AccountID
-			w.compose.Open(p)
+			// The dialog has no answer for Cancel: the request ends here,
+			// and a confirmation starts it again.
+			delete(w.composing, id)
+			if !gtk.BaseWidget(parent).Mapped() {
+				parent = w // its message window was closed meanwhile
+			}
+			widget.ConfirmDestructive(parent, i18n.T("Forward Without Attachments?"),
+				widget.RPCErrorText(i18n.T("Downloading the attachments"), err),
+				i18n.T("_Forward Without Attachments"), func() {
+					if w.composing[id] {
+						return
+					}
+					w.composing[id] = true
+					create()
+				})
 		})
 	}()
+}
+
+// forwardNeedsDownload reports whether a forward of the message lm holds
+// should download it first: an attachment is on the mail server only, or
+// the body has not been downloaded yet (draft.create would forward
+// nothing of it). Without the full message in the cache nothing is known,
+// so it downloads as well: message.download answers at once when nothing
+// is missing.
+func forwardNeedsDownload(lm *loadedMessage) bool {
+	if lm == nil || lm.msg == nil {
+		return true
+	}
+	if lm.body != nil && lm.body.BodyState == api.BodyPending {
+		return true
+	}
+	for _, a := range lm.msg.Attachments {
+		if a.Remote && !a.Inline {
+			return true
+		}
+	}
+	return false
+}
+
+// askForwardWithout reports whether a failed download before a forward is
+// a question for the user (forward without the attachments, or not at
+// all). The forward goes on at once with what the daemon has where asking
+// would change nothing: without a daemon to ask (draft.create fails the
+// same way and the window opens from what the pane knows), for a daemon
+// that cannot download (methodNotFound, notImplemented), as before
+// attachments on demand, and for a message over the daemon's cap, which
+// can never be downloaded (attachmentTooBig; draft.create lists what it
+// could not take).
+func askForwardWithout(err error) bool {
+	var e *api.Error
+	switch {
+	case err == nil, errors.Is(err, client.ErrDisconnected), methodUnsupported(err):
+		return false
+	case errors.As(err, &e) && e.Code == api.CodeAttachmentTooBig:
+		return false
+	}
+	return true
 }
 
 // composeSource is what the pane knows about the message: the summary,

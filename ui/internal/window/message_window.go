@@ -111,7 +111,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 		kind compose.Kind
 	}{{"reply_button", compose.KindReply}, {"reply_all_button", compose.KindReplyAll}, {"forward_button", compose.KindForward}} {
 		r := r
-		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openCompose(r.kind, id) })
+		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openComposeFrom(mw, r.kind, id) })
 	}
 
 	// Single-letter shortcuts are safe here: the window has no text entry,

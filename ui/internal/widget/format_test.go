@@ -46,7 +46,10 @@ func TestFormatAddress(t *testing.T) {
 }
 
 func TestFormatSize(t *testing.T) {
-	cases := map[int64]string{5: "5 B", 2048: "2 KiB", 3 << 20: "3.0 MiB"}
+	cases := map[int64]string{
+		5: "5 B", 2048: "2 KiB", 3 << 20: "3.0 MiB",
+		1<<30 - 1: "1024.0 MiB", 1 << 30: "1.0 GiB", 5<<30 + 512<<20: "5.5 GiB",
+	}
 	for in, want := range cases {
 		if got := FormatSize(in); got != want {
 			t.Errorf("FormatSize(%d) = %q, want %q", in, got, want)

@@ -21,6 +21,20 @@ func TestBlockedSummary(t *testing.T) {
 	}
 }
 
+func TestSkippedSummary(t *testing.T) {
+	for _, n := range []int{0, -1} {
+		if got := skippedSummary(n); got != "" {
+			t.Errorf("skippedSummary(%d) = %q", n, got)
+		}
+	}
+	if got := skippedSummary(1); got != "1 attachment of the original could not be attached" {
+		t.Errorf("singular: got %q", got)
+	}
+	if got := skippedSummary(3); got != "3 attachments of the original could not be attached" {
+		t.Errorf("plural: got %q", got)
+	}
+}
+
 func TestFlushEcho(t *testing.T) {
 	var f flushEcho
 	if f.echo("") {

@@ -62,3 +62,61 @@ func TestIndexOfRetention(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexOfAttachmentDays(t *testing.T) {
+	// Small Attachments Only, 1 week, 1 month, 3 months, Everything; a tie
+	// goes to the shorter.
+	cases := map[int]uint{
+		api.AttachmentOfflineNone: 0, -7: 0,
+		1: 1, 7: 1, 18: 1, 19: 2, 30: 2, 60: 2, 61: 3, 90: 3, 365: 3, api.AttachmentOfflineDaysMax: 3,
+		0: 4,
+	}
+	for in, want := range cases {
+		if got := indexOfAttachmentDays(in); got != want {
+			t.Errorf("indexOfAttachmentDays(%d) = %d, want %d", in, got, want)
+		}
+	}
+	for i, days := range attachmentChoices {
+		if got := indexOfAttachmentDays(days); got != uint(i) {
+			t.Errorf("attachmentChoices[%d]=%d maps back to %d", i, days, got)
+		}
+	}
+}
+
+// A save sends the attachment days as the daemon confirmed them while the
+// row still shows them; only a changed row sends its own value.
+func TestAttachmentDaysToSave(t *testing.T) {
+	cases := []struct {
+		current  int
+		selected uint
+		want     int
+	}{
+		{14, 1, 14}, // shown as 1 week: another row was saved
+		{14, 2, 30}, // changed to 1 month
+		{14, 0, api.AttachmentOfflineNone},
+		{14, 4, 0},
+		{45, 2, 45},   // shown as 1 month
+		{45, 3, 90},   // changed to 3 months
+		{365, 3, 365}, // shown as 3 months
+		{30, 2, 30},
+		{30, 1, 7},
+		{0, 4, 0},
+		{0, 0, api.AttachmentOfflineNone},
+		{api.AttachmentOfflineNone, 0, api.AttachmentOfflineNone},
+		{api.AttachmentOfflineNone, 4, 0},
+		{14, 5, 14},        // out of the table
+		{14, ^uint(0), 14}, // nothing selected (GTK_INVALID_LIST_POSITION)
+		{api.AttachmentOfflineDaysMax, 3, api.AttachmentOfflineDaysMax},
+	}
+	for _, c := range cases {
+		if got := attachmentDaysToSave(c.current, c.selected); got != c.want {
+			t.Errorf("attachmentDaysToSave(%d, %d) = %d, want %d", c.current, c.selected, got, c.want)
+		}
+	}
+	// Every offered value survives a save of another row.
+	for i, days := range attachmentChoices {
+		if got := attachmentDaysToSave(days, uint(i)); got != days {
+			t.Errorf("attachmentChoices[%d]=%d saved as %d", i, days, got)
+		}
+	}
+}

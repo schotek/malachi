@@ -113,9 +113,13 @@ func FormatDateTime(t time.Time) string {
 	return strftime(t, i18n.T("%a, %-d %b %Y at %H:%M"))
 }
 
-// FormatSize renders a byte count for attachment chips: MiB, KiB or B.
+// FormatSize renders a byte count for attachment chips and the disk space
+// in the preferences: GiB, MiB, KiB or B (IEC units).
 func FormatSize(n int64) string {
 	switch {
+	case n >= 1<<30:
+		// TRANSLATORS: file size in gibibytes.
+		return fmt.Sprintf(i18n.T("%.1f GiB"), float64(n)/(1<<30))
 	case n >= 1<<20:
 		// TRANSLATORS: file size in mebibytes.
 		return fmt.Sprintf(i18n.T("%.1f MiB"), float64(n)/(1<<20))
