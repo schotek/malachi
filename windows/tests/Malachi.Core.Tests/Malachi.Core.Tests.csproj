@@ -19,8 +19,9 @@ shape, the transport and the controllers against a fake daemon
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Malachi.Core\Malachi.Core.csproj" />
-    <!-- The stand-in daemon the supervisor tests start; built beside the
-         tests, whose code uses its names. -->
+    <!-- The stand-in daemon and bridge the supervisor and bridge runner
+         tests start; built beside the tests, whose code uses their names. -->
     <ProjectReference Include="..\Malachi.Core.TestDaemon\Malachi.Core.TestDaemon.csproj" />
+    <ProjectReference Include="..\Malachi.FakeBridge\Malachi.FakeBridge.csproj" />
   </ItemGroup>
 </Project>

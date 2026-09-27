@@ -160,6 +160,9 @@
       "malachi.core.testdaemon": {
         "type": "Project"
       },
+      "malachi.fakebridge": {
+        "type": "Project"
+      },
       "CommunityToolkit.Mvvm": {
         "type": "CentralTransitive",
         "requested": "[8.4.2, )",
