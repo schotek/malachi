@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using Xunit;
 
 namespace Malachi.Credentials.Tests;
@@ -98,6 +99,48 @@ public sealed class ProgramTests
     }
 
     [Fact]
+    public void AnItemWrittenByAnotherProgramIsExitOneAndNoValue()
+    {
+        // What `cmdkey /generic:… /pass:abc` leaves: UTF-16LE, no digest.
+        manager.Put("io.github.schotek.Malachi/acc_1/password", Encoding.Unicode.GetBytes("abc"));
+        Expect(
+            Run(["get"], """{"account":"acc_1","key":"password"}"""),
+            HelperExit.Failure,
+            "",
+            "malachi-credentials: get: the stored item is corrupt: the item was not written by malachi-credentials\n");
+
+        // set replaces it.
+        Expect(Run(["set"], """{"account":"acc_1","key":"password","value":"abc"}"""), HelperExit.Ok, "{}\n", "");
+        Expect(Run(["get"], """{"account":"acc_1","key":"password"}"""), HelperExit.Ok, "{\"value\":\"abc\"}\n", "");
+    }
+
+    [Fact]
+    public void AValueWhoseAnswerWouldBeCutIsExitOne()
+    {
+        // 32 KiB of backslashes: 64 KiB and 13 bytes as an answer.
+        var json = $$"""{"account":"acc_1","key":"password","value":"{{new string('\\', 2 * 32 * 1024)}}"}""";
+        Expect(
+            Run(["set"], json),
+            HelperExit.Failure,
+            "",
+            "malachi-credentials: set: the value's get answer would be longer than the 65536 bytes the daemon reads\n");
+        Assert.Empty(manager.Names);
+    }
+
+    [Fact]
+    public void AnAnswerTheDaemonKeepsWhole()
+    {
+        var value = new string('\\', 32761) + "x";
+        var json = Encoding.UTF8.GetString(Request.ValueLine(Encoding.UTF8.GetBytes(value)))[..^2];
+        Expect(Run(["set"], json + ",\"account\":\"acc_1\",\"key\":\"password\"}"), HelperExit.Ok, "{}\n", "");
+        var result = Run(["get"], """{"account":"acc_1","key":"password"}""");
+        Assert.Equal(HelperExit.Ok, result.Exit);
+        Assert.Equal(Request.MaxAnswer, result.StdoutBytes.Length);
+        using var answer = JsonDocument.Parse(result.StdoutBytes);
+        Assert.Equal(value, answer.RootElement.GetProperty("value").GetString());
+    }
+
+    [Fact]
     public void ATooLongValueIsExitOne()
     {
         var json = $$"""{"account":"acc_1","key":"password","value":"{{new string('v', ChunkHeader.MaxLength + 1)}}"}""";
@@ -118,8 +161,10 @@ public sealed class ProgramTests
     }
 
     [Fact]
-    public void AClosedStdoutIsAFailure()
+    public void AStdoutThatThrowsIsAFailure()
     {
+        // The stream Main passes takes a broken pipe as written (the helper
+        // then exits 0 to nobody); a Stream that throws is a failure.
         Assert.Null(new CredentialStore(manager).Set(new Request("acc_1", "password"), "hunter2"u8));
         var error = new MemoryStream();
         var exit = Program.Run(
@@ -167,7 +212,7 @@ public sealed class ProgramTests
     {
         public int Read(string targetName, out GenericCredential? credential) => throw new InvalidOperationException("s3cret");
 
-        public int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob) =>
+        public int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob, ReadOnlySpan<byte> digest) =>
             throw new InvalidOperationException(Encoding.UTF8.GetString(blob));
 
         public int Delete(string targetName) => throw new InvalidOperationException("s3cret");

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiKeychain/Request.swift (Operation's String
-// raw values): Operation(rawValue:) and .rawValue as C# extension members,
-// so the call sites read as they do in Swift.
+// raw values); GTK: none. Operation(rawValue:) and .rawValue as C#
+// extension members, so the call sites read as they do in Swift.
 
 using System;
 

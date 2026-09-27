@@ -17,16 +17,25 @@ namespace Malachi.Credentials;
 
 /// <summary>
 /// The main item of a chunked value: <see cref="Count"/> chunks of
-/// <see cref="ChunkSize"/> bytes (the last one shorter) hold the value's
-/// <see cref="Length"/> bytes, whose SHA-256 is <see cref="Sha256"/>.
+/// <see cref="ChunkSize"/> bytes (the last one shorter) in slot
+/// <see cref="Slot"/> hold the value's <see cref="Length"/> bytes, whose
+/// SHA-256 is <see cref="Sha256"/>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The blob is <see cref="Size"/> bytes: <see cref="Marker"/>,
-/// <see cref="Version"/>, the count (uint16) and the length (uint32), both
-/// little-endian, and the SHA-256. The marker is a byte no UTF-8 text
+/// <see cref="Version"/>, the slot, the count, the length (uint32,
+/// little-endian) and the SHA-256. The marker is a byte no UTF-8 text
 /// begins with, and every stored value is UTF-8, so a header can never be
 /// mistaken for a value of up to <see cref="ChunkSize"/> bytes stored as it
 /// is.
+/// </para>
+/// <para>
+/// The chunks of a value take one of two slots of <see cref="MaxChunks"/>
+/// numbers each: slot 0 is <c>#1..#16</c>, slot 1 <c>#17..#32</c>. A value
+/// replacing a chunked one goes into the slot its header does not name, so
+/// the previous value stays whole until the new header replaces the old one.
+/// </para>
 /// </remarks>
 internal readonly struct ChunkHeader
 {
@@ -35,10 +44,15 @@ internal readonly struct ChunkHeader
 
     /// <summary>
     /// The most chunks a value may take: 40 KiB, twenty times a large
-    /// Microsoft refresh token, and a get answer well inside the 64 KiB the
-    /// daemon reads. It also bounds what a damaged header can make get read.
+    /// Microsoft refresh token. It also bounds what a damaged header can make
+    /// get read. (The get answer of a value without JSON escapes is then well
+    /// inside the 64 KiB the daemon reads; <see cref="CredentialStore.Set"/>
+    /// refuses any value whose answer would not fit.)
     /// </summary>
     public const int MaxChunks = 16;
+
+    /// <summary>The slots chunks alternate between.</summary>
+    public const int Slots = 2;
 
     /// <summary>The longest value the store takes.</summary>
     public const int MaxLength = MaxChunks * ChunkSize;
@@ -52,12 +66,16 @@ internal readonly struct ChunkHeader
     /// <summary>The format of the blob.</summary>
     public const byte Version = 1;
 
-    private ChunkHeader(int count, int length, byte[] sha256)
+    private ChunkHeader(int slot, int count, int length, byte[] sha256)
     {
+        Slot = slot;
         Count = count;
         Length = length;
         Sha256 = sha256;
     }
+
+    /// <summary>Which numbers the chunks have: 0 for <c>#1..</c>, 1 for <c>#17..</c>.</summary>
+    public int Slot { get; }
 
     /// <summary>How many chunks hold the value (2 to <see cref="MaxChunks"/>).</summary>
     public int Count { get; }
@@ -78,14 +96,21 @@ internal readonly struct ChunkHeader
     /// <summary>How many chunks a value of the given length needs; 0 when it fits one item.</summary>
     public static int ChunksFor(int length) => length <= ChunkSize ? 0 : (length + ChunkSize - 1) / ChunkSize;
 
-    /// <summary>The header of a value longer than <see cref="ChunkSize"/> and at most <see cref="MaxLength"/> bytes.</summary>
-    public static ChunkHeader For(ReadOnlySpan<byte> value)
+    /// <summary>
+    /// The header of a value longer than <see cref="ChunkSize"/> and at most
+    /// <see cref="MaxLength"/> bytes whose chunks go into <paramref name="slot"/>.
+    /// </summary>
+    public static ChunkHeader For(ReadOnlySpan<byte> value, int slot)
     {
         if (value.Length is <= ChunkSize or > MaxLength)
         {
             throw new ArgumentOutOfRangeException(nameof(value), value.Length, "a chunked value is longer than one item and at most MaxLength bytes");
         }
-        return new ChunkHeader(ChunksFor(value.Length), value.Length, SHA256.HashData(value));
+        if (slot is < 0 or >= Slots)
+        {
+            throw new ArgumentOutOfRangeException(nameof(slot), slot, "a slot is 0 or 1");
+        }
+        return new ChunkHeader(slot, ChunksFor(value.Length), value.Length, SHA256.HashData(value));
     }
 
     /// <summary>
@@ -111,14 +136,19 @@ internal readonly struct ChunkHeader
             problem = "the header has the wrong size";
             return false;
         }
-        int count = BinaryPrimitives.ReadUInt16LittleEndian(blob[2..]);
+        if (blob[2] >= Slots)
+        {
+            problem = string.Create(CultureInfo.InvariantCulture, $"header slot {blob[2]} is unknown");
+            return false;
+        }
+        int count = blob[3];
         var length = BinaryPrimitives.ReadUInt32LittleEndian(blob[4..]);
         if (length is <= ChunkSize or > MaxLength || count != ChunksFor((int)length))
         {
             problem = "the header's length and chunk count do not agree";
             return false;
         }
-        header = new ChunkHeader(count, (int)length, blob[8..Size].ToArray());
+        header = new ChunkHeader(blob[2], count, (int)length, blob[8..Size].ToArray());
         problem = null;
         return true;
     }
@@ -129,11 +159,18 @@ internal readonly struct ChunkHeader
         var blob = new byte[Size];
         blob[0] = Marker;
         blob[1] = Version;
-        BinaryPrimitives.WriteUInt16LittleEndian(blob.AsSpan(2), (ushort)Count);
+        blob[2] = (byte)Slot;
+        blob[3] = (byte)Count;
         BinaryPrimitives.WriteUInt32LittleEndian(blob.AsSpan(4), (uint)Length);
         Sha256.Span.CopyTo(blob.AsSpan(8));
         return blob;
     }
+
+    /// <summary>The number in the name of chunk <paramref name="index"/> (1-based): <c>#&lt;number&gt;</c>.</summary>
+    public int ChunkNumber(int index) => (Slot * MaxChunks) + index;
+
+    /// <summary>Whether <c>#&lt;number&gt;</c> is one of this header's chunks.</summary>
+    public bool HasChunk(int number) => number > Slot * MaxChunks && number <= (Slot * MaxChunks) + Count;
 
     /// <summary>How many bytes chunk <paramref name="index"/> (1-based) holds.</summary>
     public int ChunkLength(int index) => index < Count ? ChunkSize : Length - (ChunkSize * (Count - 1));

@@ -9,6 +9,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 
 namespace Malachi.Credentials.Tests;
 
@@ -47,9 +48,15 @@ internal sealed class MemoryCredentialManager : ICredentialManager
     /// <summary>The stored item, or null.</summary>
     public GenericCredential? Item(string targetName) => items.GetValueOrDefault(targetName);
 
-    /// <summary>Puts an item in place without going through the store.</summary>
-    public void Put(string targetName, byte[] blob, string userName = "", string comment = "") =>
-        items[targetName] = new GenericCredential(targetName, userName, comment, [.. blob]);
+    /// <summary>
+    /// Puts an item in place without going through the store, the way
+    /// another program would: without a digest unless one is given.
+    /// </summary>
+    public void Put(string targetName, byte[] blob, byte[]? digest = null, string userName = "", string comment = "") =>
+        items[targetName] = new GenericCredential(targetName, userName, comment, [.. blob], digest is null ? null : [.. digest]);
+
+    /// <summary>Puts a value in place with the digest the store gives it.</summary>
+    public void PutValue(string targetName, byte[] blob) => Put(targetName, blob, SHA256.HashData(blob));
 
     /// <summary>Removes an item without going through the store.</summary>
     public void Remove(string targetName) => items.Remove(targetName);
@@ -67,11 +74,11 @@ internal sealed class MemoryCredentialManager : ICredentialManager
         }
         var blob = item.Blob.ToArray();
         HandedOut.Add(blob);
-        credential = item with { Blob = blob };
+        credential = item with { Blob = blob, Digest = item.Digest?.ToArray() };
         return 0;
     }
 
-    public int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob)
+    public int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob, ReadOnlySpan<byte> digest)
     {
         if (Injected("write", targetName) is var error and not 0)
         {
@@ -85,7 +92,7 @@ internal sealed class MemoryCredentialManager : ICredentialManager
         {
             return ErrorBadStubData;
         }
-        items[targetName] = new GenericCredential(targetName, userName, comment, blob.ToArray());
+        items[targetName] = new GenericCredential(targetName, userName, comment, blob.ToArray(), digest.IsEmpty ? null : digest.ToArray());
         return 0;
     }
 

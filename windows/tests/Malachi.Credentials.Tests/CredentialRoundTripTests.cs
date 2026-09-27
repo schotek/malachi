@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Tests/MalachiKeychainTests/RequestTests.swift
-// (KeychainRoundTripTests): a real round trip through the store, here
-// Windows Credential Manager instead of the login keychain; the chunked
-// values and the longest identifiers are Windows additions. It writes to
-// the user's Credential Manager, only under account ids that begin with
-// malachi-test-, removes everything it wrote, and runs only on request
-// (MALACHI_CREDENTIALS_TEST=1, as MALACHI_KEYCHAIN_TEST=1 on macOS).
+// (KeychainRoundTripTests); GTK: none. A real round trip through the store,
+// here Windows Credential Manager instead of the login keychain; the chunked
+// values, the slots, the digest and the longest identifiers are Windows
+// additions. It writes to the user's Credential Manager, only under account
+// ids that begin with malachi-test-, removes everything it wrote, and runs
+// only on request (MALACHI_CREDENTIALS_TEST=1, as MALACHI_KEYCHAIN_TEST=1 on
+// macOS).
 
 using System;
+using System.Globalization;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using Xunit;
 
@@ -58,8 +62,10 @@ public sealed class CredentialRoundTripTests
             Assert.Equal($"{Request.Service}/{request.Account}/password", item.TargetName);
             Assert.Equal($"{request.Account}/password", item.UserName);
             Assert.Equal($"Malachi Mail: {request.Account} (password)", item.Comment);
-            // UTF-8, not the UTF-16 the Credential Manager dialogs write.
+            // UTF-8, not the UTF-16 the Credential Manager dialogs write,
+            // and its SHA-256 in the attribute that says the helper wrote it.
             Assert.Equal(Encoding.UTF8.GetBytes("pa\"ss wörd\n"), item.Blob);
+            Assert.Equal(SHA256.HashData(item.Blob), item.Digest);
         }
         finally
         {
@@ -97,6 +103,63 @@ public sealed class CredentialRoundTripTests
             Assert.Null(store.Delete(request));
             Assert.Equal(0, manager.List(store.TargetName(request), out var left));
             Assert.Empty(left);
+        }
+        finally
+        {
+            RemoveAll(request.Account);
+        }
+    }
+
+    [Fact]
+    public void ReplacingAChunkedValueWritesTheOtherSlot()
+    {
+        SkipUnlessEnabled();
+        var manager = new Win32CredentialManager();
+        var store = new CredentialStore(manager);
+        var request = new Request(TestAccount(), "oauth2.refresh_token");
+        var target = store.TargetName(request);
+        try
+        {
+            Assert.Null(store.Set(request, Value(6144)));
+            Assert.Equal([target + "#1", target + "#2", target + "#3"], Chunks(manager, target));
+            Assert.Null(store.Set(request, Value(5000)));
+            Assert.Equal([target + "#17", target + "#18"], Chunks(manager, target));
+            Assert.Equal(Value(5000), GetBytes(store, request));
+            Assert.Null(store.Delete(request));
+            Assert.Empty(Chunks(manager, target));
+        }
+        finally
+        {
+            RemoveAll(request.Account);
+        }
+    }
+
+    [Fact]
+    public void AnItemWrittenAsUtf16IsCorrupt()
+    {
+        SkipUnlessEnabled();
+        var manager = new Win32CredentialManager();
+        var store = new CredentialStore(manager);
+        var request = new Request(TestAccount(), "password");
+        var target = store.TargetName(request);
+        try
+        {
+            // What cmdkey and the Credential Manager dialogs store (ProcessTests
+            // runs cmdkey itself): UTF-16LE, no attribute.
+            Assert.Equal(0, manager.Write(target, "dummy", "", Encoding.Unicode.GetBytes("abc"), []));
+            Assert.Equal(0, manager.Read(target, out var item));
+            Assert.Null(item?.Digest);
+            Assert.Equal(CredentialFailure.Corrupt("the item was not written by malachi-credentials"), store.Get(request, out var value));
+            Assert.Null(value);
+
+            // An edit that kept the attribute of the value before it.
+            Assert.Equal(0, manager.Write(target, "dummy", "", Encoding.Unicode.GetBytes("abc"), SHA256.HashData("abc"u8)));
+            Assert.Equal(CredentialFailure.Corrupt("the value does not match the item's SHA-256"), store.Get(request, out value));
+            Assert.Null(value);
+
+            // A set replaces it.
+            Assert.Null(store.Set(request, "abc"u8));
+            Assert.Equal("abc", Get(store, request));
         }
         finally
         {
@@ -169,6 +232,13 @@ public sealed class CredentialRoundTripTests
             value[i] = (byte)('A' + (i % 58));
         }
         return value;
+    }
+
+    // The chunk names of a target, in order of their numbers.
+    private static string[] Chunks(Win32CredentialManager manager, string target)
+    {
+        Assert.Equal(0, manager.List(target + "#", out var names));
+        return [.. names.OrderBy(name => int.Parse(name.AsSpan(target.Length + 1), NumberStyles.None, CultureInfo.InvariantCulture))];
     }
 
     private static byte[]? GetBytes(CredentialStore store, Request request)

@@ -39,6 +39,12 @@ internal sealed record Request(string Account, string Key, byte[]? Value = null)
     public const int MaxInput = 1 << 20;
 
     /// <summary>
+    /// The most of stdout the daemon keeps (<c>maxStdout</c> in
+    /// backend/internal/auth/helper): a longer get answer would be cut.
+    /// </summary>
+    public const int MaxAnswer = 64 << 10;
+
+    /// <summary>
     /// Account ids and keys are opaque identifiers of the daemon
     /// (<c>acc_…</c>, <c>password</c>, <c>oauth2.refresh_token</c>); anything
     /// else is rejected before it can reach a credential's name.
@@ -125,22 +131,30 @@ internal sealed record Request(string Account, string Key, byte[]? Value = null)
         {
             throw new ArgumentException("the value is not UTF-8", nameof(value));
         }
-        ReadOnlySpan<byte> head = "{\"value\":\""u8;
-        ReadOnlySpan<byte> tail = "\"}\n"u8;
-        var length = head.Length + tail.Length;
-        foreach (var b in value)
-        {
-            length += EscapedLength(b);
-        }
-        var line = new byte[length];
-        head.CopyTo(line);
-        var at = head.Length;
+        var line = new byte[ValueLineLength(value)];
+        LineHead.CopyTo(line);
+        var at = LineHead.Length;
         foreach (var b in value)
         {
             at = Escape(b, line, at);
         }
-        tail.CopyTo(line.AsSpan(at));
+        LineTail.CopyTo(line.AsSpan(at));
         return line;
+    }
+
+    /// <summary>
+    /// The length of the <see cref="ValueLine"/> of the value, without
+    /// building it: 13 bytes and the value, each quotation mark, backslash
+    /// and control character counted as its escape.
+    /// </summary>
+    public static int ValueLineLength(ReadOnlySpan<byte> value)
+    {
+        var length = LineHead.Length + LineTail.Length;
+        foreach (var b in value)
+        {
+            length += EscapedLength(b);
+        }
+        return length;
     }
 
     /// <summary>Overwrites the value's bytes with zeros.</summary>
@@ -245,6 +259,10 @@ internal sealed record Request(string Account, string Key, byte[]? Value = null)
         }
         return Utf8.IsValid(value);
     }
+
+    private static ReadOnlySpan<byte> LineHead => "{\"value\":\""u8;
+
+    private static ReadOnlySpan<byte> LineTail => "\"}\n"u8;
 
     private static int EscapedLength(byte b) => b switch
     {

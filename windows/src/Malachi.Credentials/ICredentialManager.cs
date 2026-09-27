@@ -24,9 +24,10 @@ internal interface ICredentialManager
 
     /// <summary>
     /// CredWriteW: creates the item or replaces it, persisted for this user
-    /// on this computer (CRED_PERSIST_LOCAL_MACHINE).
+    /// on this computer (CRED_PERSIST_LOCAL_MACHINE), with the digest as its
+    /// one attribute; an empty digest writes an item without attributes.
     /// </summary>
-    int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob);
+    int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob, ReadOnlySpan<byte> digest);
 
     /// <summary>CredDeleteW: removes the item, or ERROR_NOT_FOUND.</summary>
     int Delete(string targetName);

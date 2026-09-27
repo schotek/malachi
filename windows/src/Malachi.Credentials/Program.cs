@@ -133,7 +133,11 @@ internal static class Program
             }
             catch (IOException)
             {
-                // The daemon stopped listening (its timeout); nobody reads a word.
+                // An answer that was not delivered is not success. The stream
+                // Main passes never throws here: Console.OpenStandardOutput
+                // takes a pipe the daemon closed (its timeout) as written, so
+                // the helper then exits 0 to nobody. This guards any other
+                // Stream Run is given, such as the tests'.
                 return HelperExit.Failure;
             }
             return HelperExit.Ok;

@@ -20,6 +20,14 @@ namespace Malachi.Credentials;
 /// <summary>The user's Credential Manager.</summary>
 internal sealed class Win32CredentialManager : ICredentialManager
 {
+    /// <summary>
+    /// The keyword of the one application attribute an item may carry, the
+    /// digest of <see cref="ICredentialManager.Write"/> (the
+    /// <c>&lt;CompanyName&gt;_&lt;Name&gt;</c> form CREDENTIAL_ATTRIBUTEW
+    /// asks for). Credential Manager's own dialogs do not show attributes.
+    /// </summary>
+    public const string DigestKeyword = "Malachi_SHA256";
+
     /// <inheritdoc/>
     public unsafe int Read(string targetName, out GenericCredential? credential)
     {
@@ -35,7 +43,8 @@ internal sealed class Win32CredentialManager : ICredentialManager
                 native->TargetName.ToString() ?? targetName,
                 native->UserName.Value is null ? null : native->UserName.ToString(),
                 native->Comment.Value is null ? null : native->Comment.ToString(),
-                blob.ToArray());
+                blob.ToArray(),
+                Digest(native));
             return (int)WIN32_ERROR.ERROR_SUCCESS;
         }
         finally
@@ -46,13 +55,21 @@ internal sealed class Win32CredentialManager : ICredentialManager
     }
 
     /// <inheritdoc/>
-    public unsafe int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob)
+    public unsafe int Write(string targetName, string userName, string comment, ReadOnlySpan<byte> blob, ReadOnlySpan<byte> digest)
     {
         fixed (char* target = targetName)
         fixed (char* user = userName)
         fixed (char* note = comment)
+        fixed (char* keyword = DigestKeyword)
         fixed (byte* data = blob)
+        fixed (byte* check = digest)
         {
+            var attribute = new CREDENTIAL_ATTRIBUTEW
+            {
+                Keyword = keyword,
+                ValueSize = (uint)digest.Length,
+                Value = check,
+            };
             var credential = new CREDENTIALW
             {
                 Type = CRED_TYPE.CRED_TYPE_GENERIC,
@@ -61,6 +78,8 @@ internal sealed class Win32CredentialManager : ICredentialManager
                 CredentialBlobSize = (uint)blob.Length,
                 CredentialBlob = data,
                 Persist = CRED_PERSIST.CRED_PERSIST_LOCAL_MACHINE,
+                AttributeCount = digest.IsEmpty ? 0u : 1u,
+                Attributes = digest.IsEmpty ? null : &attribute,
                 UserName = user,
             };
             return PInvoke.CredWrite(&credential, 0) ? (int)WIN32_ERROR.ERROR_SUCCESS : Marshal.GetLastPInvokeError();
@@ -106,4 +125,21 @@ internal sealed class Win32CredentialManager : ICredentialManager
         credential->CredentialBlob is null
             ? []
             : new Span<byte>(credential->CredentialBlob, checked((int)credential->CredentialBlobSize));
+
+    // The value of the DigestKeyword attribute, or null.
+    private static unsafe byte[]? Digest(CREDENTIALW* credential)
+    {
+        for (var i = 0; i < credential->AttributeCount; i++)
+        {
+            var attribute = &credential->Attributes[i];
+            if (attribute->Keyword.Value is not null
+                && string.Equals(attribute->Keyword.ToString(), DigestKeyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return attribute->Value is null
+                    ? []
+                    : new ReadOnlySpan<byte>(attribute->Value, checked((int)attribute->ValueSize)).ToArray();
+            }
+        }
+        return null;
+    }
 }

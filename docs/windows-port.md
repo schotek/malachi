@@ -600,16 +600,27 @@ defines, stderr capped and never carrying a value). `WinExe` subsystem (a
 console window would flash on every call) and NativeAOT (one process per
 operation). Generic credentials, `CRED_PERSIST_LOCAL_MACHINE` (secrets do
 not roam), target `io.github.schotek.Malachi/<accountId>/<key>`, comment
-`Malachi Mail: <accountId> (<key>)`, UTF-8 blobs. A value above 2560 bytes
-is split into `#1..#n` chunks written first and chunk 0 last, carrying
-`n`, the length and a SHA-256; a mismatch is a corrupt item
-(`keyringError`), never a wrong token. Chunk 0's header begins with `0xFF`,
-which no UTF-8 value does, so it is never taken for a stored value; a
-value may take at most 16 chunks (40 KiB), a longer one is refused; `set`
-removes the chunks beyond its `n` (found with `CredEnumerateW`, so a failed
-`set` leaves nothing for good), `delete` all of them. The value stays bytes
-and never becomes a string, so every buffer that held it is zeroed. The Go
-side's `MALACHI_TEST_REAL_HELPER` round trip runs against it.
+`Malachi Mail: <accountId> (<key>)`, UTF-8 blobs. Every value `get` hands
+over matches a SHA-256 the helper wrote with it; a missing chunk or any
+mismatch is a corrupt item (`keyringError`), never a wrong token. An item
+that holds the value itself carries the SHA-256 of its blob in the
+attribute `Malachi_SHA256`. `cmdkey` and the Credential Manager dialogs
+store a password as UTF-16LE without it (and an edit that keeps it no
+longer matches), so such an item is corrupt, not a wrong password: unlike
+an edit in Keychain Access, an edit there is not honoured, and the account
+is signed in again in the app. A value above 2560 bytes is split into
+chunks `<target>#<number>` written first and the main item last, whose
+header (`0xFF`, which no UTF-8 value begins with, the version, the slot,
+`n`, the length and the SHA-256) stands in for the value. The chunks
+alternate between two slots, `#1..#16` and `#17..#32`: `set` writes the
+slot the current header does not name, then the header, then removes
+every other chunk (found with `CredEnumerateW`), so a `set` that fails or
+is killed leaves the previous value readable, as `SecItemUpdate` does, and
+nothing for good; `delete` removes them all. A value may take at most 16
+chunks (40 KiB) and its `get` answer at most the 64 KiB the daemon keeps;
+a longer one is refused. The value stays bytes and never becomes a
+string, so every buffer that held it is zeroed. The Go side's
+`MALACHI_TEST_REAL_HELPER` round trip runs against it.
 
 **Notifications and sound.** Measured in phase B on 2.5.1: in a
 self-contained unpackaged app **no package set** makes
@@ -849,7 +860,7 @@ never hosted in a raw HWND controller.
   daemon), the key-file policy (owner, DACL, reparse points), the registry
   backend and its watcher, file-name rules, Mark of the Web round trip.
 - `Malachi.Credentials.Tests`: the protocol without the store; a real
-  round trip (4 KiB and chunked values) on request
+  round trip (4 KiB and chunked values, `cmdkey`'s UTF-16 items) on request
   (`MALACHI_CREDENTIALS_TEST=1`).
 - `Malachi.Conventions.Tests`: strings, msgid and gschema coverage, SPDX
   headers of every file type, the manifest identity.

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiKeychain/Request.swift (Operation); the raw
-// values are in OperationRawValues.
+// Port of macos/Sources/MalachiKeychain/Request.swift (Operation); GTK:
+// none. The raw values are in OperationRawValues.
 
 namespace Malachi.Credentials;
 

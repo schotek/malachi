@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiKeychain/Keychain.swift (KeychainFailure):
-// the store's failures and the words stderr gives them. A message is built
+// Port of macos/Sources/MalachiKeychain/Keychain.swift (KeychainFailure);
+// GTK: none. The store's failures and the words stderr gives them. A message is built
 // from fixed text, the name of the Win32 function, the error number and the
 // system's text for it; never from the request or the value.
 
@@ -28,6 +28,14 @@ internal sealed record CredentialFailure
     public static CredentialFailure TooLarge { get; } = new(
         CredentialFailureKind.TooLarge,
         string.Create(CultureInfo.InvariantCulture, $"the value is longer than the {ChunkHeader.MaxLength} bytes an item can hold"));
+
+    /// <summary>
+    /// A value whose get answer, with its JSON escapes, would be longer than
+    /// the daemon reads (<see cref="Request.MaxAnswer"/>).
+    /// </summary>
+    public static CredentialFailure AnswerTooLarge { get; } = new(
+        CredentialFailureKind.TooLarge,
+        string.Create(CultureInfo.InvariantCulture, $"the value's get answer would be longer than the {Request.MaxAnswer} bytes the daemon reads"));
 
     /// <summary>What went wrong.</summary>
     public CredentialFailureKind Kind { get; }

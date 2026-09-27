@@ -4,10 +4,12 @@
 // Windows only: the helper as a process, the way the daemon runs it. A GUI
 // (WinExe) program has no console, yet the pipes it was started with are
 // its standard handles: these tests prove that, and that it reads and
-// writes plain UTF-8 bytes there. The round trip touches Credential Manager
-// and runs only with MALACHI_CREDENTIALS_TEST=1.
+// writes plain UTF-8 bytes there. The tests that touch Credential Manager
+// run only with MALACHI_CREDENTIALS_TEST=1.
 
 using System;
+using System.Diagnostics;
+using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using Xunit;
@@ -90,5 +92,62 @@ public sealed class ProcessTests
         }
     }
 
+    [Fact]
+    public async Task AnItemWrittenByCmdkeyIsNotHandedOver()
+    {
+        CredentialRoundTripTests.SkipUnlessEnabled();
+        var account = CredentialRoundTripTests.TestAccount();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var target = $"{Request.Service}/{account}/password";
+        try
+        {
+            // cmdkey stores the password as UTF-16LE, without the digest.
+            var item = WriteWithCmdkey(target, "abc");
+            Assert.Equal(Encoding.Unicode.GetBytes("abc"), item.Blob);
+            Assert.Null(item.Digest);
+
+            var run = await HelperProcess.RunAsync(["get"], Encoding.UTF8.GetBytes($$"""{"account":"{{account}}","key":"password"}""" + "\n"), cancellationToken);
+            Assert.Equal(
+                (1, "", "malachi-credentials: get: the stored item is corrupt: the item was not written by malachi-credentials\n"),
+                (run.Exit, Utf8(run.Stdout), Utf8(run.Stderr)));
+        }
+        finally
+        {
+            CredentialRoundTripTests.RemoveAll(account);
+        }
+    }
+
     private static string Utf8(byte[] bytes) => Encoding.UTF8.GetString(bytes);
+
+    // Stores a generic credential with the system's cmdkey.exe and reads it
+    // back.
+    private static GenericCredential WriteWithCmdkey(string target, string password)
+    {
+        var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmdkey.exe"))
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var arg in new[] { "/generic:" + target, "/user:dummy", "/pass:" + password })
+        {
+            start.ArgumentList.Add(arg);
+        }
+        using (var process = Process.Start(start) ?? throw new InvalidOperationException("cmdkey did not start"))
+        {
+            var output = process.StandardOutput.ReadToEndAsync();
+            var error = process.StandardError.ReadToEndAsync();
+            if (!process.WaitForExit(TimeSpan.FromSeconds(30)))
+            {
+                process.Kill();
+                Assert.Fail("cmdkey did not finish");
+            }
+            Assert.Equal(0, process.ExitCode);
+            Task.WaitAll(output, error);
+        }
+        Assert.Equal(0, new Win32CredentialManager().Read(target, out var item));
+        Assert.NotNull(item);
+        return item;
+    }
 }

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Tests/MalachiKeychainTests/RequestTests.swift (RequestTests),
-// test for test and case for case; the Windows additions for the reader
-// that keeps the value as bytes follow after them.
+// Port of macos/Tests/MalachiKeychainTests/RequestTests.swift (RequestTests);
+// GTK: none. Test for test and case for case; the Windows additions for the
+// reader that keeps the value as bytes follow after them.
 
 using System;
 using System.Linq;
@@ -174,6 +174,29 @@ public sealed class RequestTests
         using var back = JsonDocument.Parse(line);
         Assert.Equal(controls, back.RootElement.GetProperty("value").GetString());
         Assert.Equal("{\"value\":\"\"}\n", Encoding.UTF8.GetString(Request.ValueLine([])));
+    }
+
+    [Theory]
+    [InlineData("", 13)]
+    [InlineData("hunter2", 20)]
+    [InlineData("wörd", 18)]
+    [InlineData("\"", 15)]
+    [InlineData("\\", 15)]
+    [InlineData("\n\t", 17)]
+    [InlineData("\u0001", 19)]
+    [InlineData("\u001f\u007f", 20)]
+    public void ValueLineLengthIsTheLengthOfTheLine(string value, int length)
+    {
+        var bytes = Encoding.UTF8.GetBytes(value);
+        Assert.Equal(length, Request.ValueLineLength(bytes));
+        Assert.Equal(Request.ValueLine(bytes).Length, Request.ValueLineLength(bytes));
+    }
+
+    [Fact]
+    public void MaxAnswerIsWhatTheDaemonKeeps()
+    {
+        // maxStdout in backend/internal/auth/helper.
+        Assert.Equal(65536, Request.MaxAnswer);
     }
 
     [Fact]

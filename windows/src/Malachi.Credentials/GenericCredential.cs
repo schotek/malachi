@@ -13,4 +13,9 @@ namespace Malachi.Credentials;
 /// <param name="Blob">
 /// A copy of the credential blob; whoever reads it zeroes it after use.
 /// </param>
-internal sealed record GenericCredential(string TargetName, string? UserName, string? Comment, byte[] Blob);
+/// <param name="Digest">
+/// A copy of the item's digest attribute
+/// (<see cref="Win32CredentialManager.DigestKeyword"/>), or null when it has
+/// none.
+/// </param>
+internal sealed record GenericCredential(string TargetName, string? UserName, string? Comment, byte[] Blob, byte[]? Digest = null);
