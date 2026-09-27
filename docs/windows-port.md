@@ -344,22 +344,40 @@ overwrite onto a file that a reader holds, even with delete sharing, is
 refused; deleting it is not.
 
 **Supervisor.** The state machine of `DaemonSupervisor.swift` in Core
-(probe every 100 ms, start timeout 15 s, stop timeout 15 s, backoff 0 then
-1 s doubling to 60 s, adopt foreign daemons), over an `IDaemonProcessHost`
-from Platform.Windows: `UseShellExecute=false`, `CreateNoWindow`,
-`CreateNewProcessGroup`, `ArgumentList` `--socket --config --store`,
-stdout/stderr pumped to the log and, when the app was started from a
-terminal, to it. Stop: under a process-wide lock, `AttachConsole(pid)`,
-`GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`, `FreeConsole`, then
-`Kill` after 15 s (a kill is crash-safe: the store is intact, the lock is
-released, the next daemon replaces the socket and key). The app also stops
-its daemon on `WM_ENDSESSION`.
+(`Malachi.Core.Daemon`: `DaemonSupervisor`, `Paths`, `DaemonLaunch`; probe
+every 100 ms, start timeout 15 s, stop timeout 15 s, backoff 0 then 1 s
+doubling to 60 s, adopt foreign daemons and never stop them), over an
+`IDaemonProcessHost`; `BeginStopping` stops restarts at once for the console
+handler (CTRL_CLOSE below). The Windows host
+(`Malachi.Platform.Windows.Processes.DaemonProcessHost`) does not use
+`Process.Start`, which hands every inheritable handle of the app to the
+child: `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` passes
+exactly NUL as stdin and one pipe as stdout and stderr (the daemon's lines
+stay in order), `CREATE_NEW_PROCESS_GROUP`, `CREATE_NO_WINDOW` only when the
+app has no console, the arguments `--socket --config --store` quoted as the C
+runtimes parse them. The environment is the app's plus
+`MALACHI_KEYRING=helper`/`MALACHI_KEYRING_HELPER` (or `none` without the
+helper) and `DBUS_SESSION_BUS_ADDRESS=disabled:`, each left alone when
+already set. The lines go to `logs\malachid.log` (rotated at 4 MiB, two
+predecessors kept) and, when the app is attached to a terminal, to it. Before
+every start the run directory is made private (`Paths.EnsureSocketDirectory`;
+a directory named by `MALACHI_SOCKET` is only created when missing, never
+changed). Stop: the three paths of Console below, under the process-wide
+console lock, then `Kill` after 15 s (a kill is crash-safe: the store is
+intact, the lock is released, the next daemon replaces the socket and key).
+The app also stops its daemon on `WM_ENDSESSION`. The namespaces are
+`Processes` and `Consoles`: one named `Process` or `Console` would hide
+`System.Diagnostics.Process` or `System.Console` in every
+`Malachi.Platform.Windows` namespace.
 
 **Console** (measured in phase B, from PowerShell, Git Bash in a pseudo
-console and mintty, directly and through make). `Main`, before anything
-touches `System.Console`, clears `HANDLE_FLAG_INHERIT` on the inherited
-standard handles and calls `AttachConsole(ATTACH_PARENT_PROCESS)`. Started
-from a terminal (`make run-windows`), the app is then attached: its log and
+console and mintty, directly and through make; replayed by
+`ConsoleAttachmentTests` with the test binary as terminal and app). `Main`,
+before anything touches `System.Console`, calls
+`ConsoleAttachment.Initialize`, which clears `HANDLE_FLAG_INHERIT` on the
+inherited standard handles and calls
+`AttachConsole(ATTACH_PARENT_PROCESS)`. Started from a terminal
+(`make run-windows`), the app is then attached: its log and
 the daemon's reach the terminal, and Ctrl+C arrives in the app's
 `SetConsoleCtrlHandler` routine, which quits gracefully. The daemon is
 started with `CreateNewProcessGroup` (so the terminal's Ctrl+C spares it),
@@ -799,10 +817,13 @@ ever given local paths the user picked. The code: `Malachi.Core.Platform`
 https only), nothing else.
 
 **MCP registration** (Preferences → AI): `malachi-mcp.exe status|install|
-uninstall --json` beside the app, 15 s timeout, output capped, the process
-tree killed on timeout; the MSIX Claude Desktop's configuration path and the
-app folder's bridge path are passed with the new flags (§14). Failures go
-into the group description as in GTK.
+uninstall --json` beside the app, 15 s timeout, output capped (1 MiB per
+stream, both drained at once), the process tree killed on timeout, the
+drains given up 500 ms after the exit (`Malachi.Core.Platform.BridgeRunner`;
+a kill reads as status -1, a crash as its NTSTATUS, `ExitStatus.Describe`);
+the MSIX Claude Desktop's configuration path and the app folder's bridge
+path are passed with the new flags (§14). Failures go into the group
+description as in GTK.
 
 ## 11. UI
 
