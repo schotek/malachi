@@ -6,7 +6,9 @@ package mcpsetup
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,15 +16,21 @@ import (
 	"unicode/utf8"
 )
 
-// fakeBridge writes a shell script that plays malachi-mcp and returns its
-// path. body runs with the bridge's arguments in $1, $2.
-func fakeBridge(t *testing.T, body string) string {
-	t.Helper()
-	p := filepath.Join(t.TempDir(), Name)
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
-		t.Fatal(err)
+// The test binary doubles as the bridge: when fakeEnv is set, TestMain
+// plays malachi-mcp in that mode instead of running the tests. The bridge
+// inherits the environment, so a t.Setenv in the test selects what the
+// process it starts does. holdEnv names the file the "hang" mode runs
+// for.
+const (
+	fakeEnv = "MALACHI_TEST_FAKE_BRIDGE"
+	holdEnv = "MALACHI_TEST_FAKE_BRIDGE_HOLD"
+)
+
+func TestMain(m *testing.M) {
+	if mode := os.Getenv(fakeEnv); mode != "" {
+		os.Exit(fakeBridgeMain(mode, os.Args[1:]))
 	}
-	return p
+	os.Exit(m.Run())
 }
 
 const report = `{"command":"/opt/malachi/bin/malachi-mcp","clients":[
@@ -31,8 +39,86 @@ const report = `{"command":"/opt/malachi/bin/malachi-mcp","clients":[
 {"id":"claude-code","name":"Claude Code","present":true,"registered":true,
  "path":"/home/u/.claude.json","other":"/usr/local/bin/malachi-mcp"}]}`
 
+const noClientLine = "no Claude app found: neither Claude Desktop nor Claude Code is installed"
+
+// longReason is 100 three-byte runes: the 200-byte cap falls inside a
+// rune. A rune constant, so no tool on the way can turn the escape into a
+// literal.
+var longReason = strings.Repeat(string(rune(0x20AC)), 100) // U+20AC EURO SIGN
+
+// fakeBridgeMain plays malachi-mcp, given its arguments, and returns the
+// exit status. The modes:
+//
+//	report   prints the report above
+//	args     prints a report whose command is the arguments it got
+//	noclient writes noClientLine to stderr, status 1
+//	reason   writes longReason and a second line to stderr, status 2
+//	silent   writes nothing, status 3
+//	notjson  prints a line that is not JSON
+//	hang     starts a child that keeps its stdout and stderr open after it
+//	         is killed, then waits; both run while the file named by
+//	         holdEnv exists, at most 10 s
+//	hold     the child
+func fakeBridgeMain(mode string, args []string) int {
+	switch mode {
+	case "report":
+		fmt.Println(report)
+	case "args":
+		fmt.Printf("{\"command\":%q,\"clients\":[]}\n", strings.Join(args, " "))
+	case "noclient":
+		fmt.Fprintln(os.Stderr, noClientLine)
+		return 1
+	case "reason":
+		fmt.Fprintf(os.Stderr, "  %s  \nsecond line with details\n", longReason)
+		return 2
+	case "silent":
+		return 3
+	case "notjson":
+		fmt.Println("not json")
+	case "hang":
+		self, err := os.Executable()
+		if err != nil {
+			return 4
+		}
+		child := exec.Command(self)
+		child.Env = append(os.Environ(), fakeEnv+"=hold")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			return 4
+		}
+		hold()
+		fmt.Println("{}")
+	case "hold":
+		hold()
+	default:
+		return 5
+	}
+	return 0
+}
+
+// hold returns once the file named by holdEnv is gone, or after 10 s.
+func hold() {
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		if _, err := os.Stat(os.Getenv(holdEnv)); err != nil {
+			return
+		}
+	}
+}
+
+// fakeBridge returns a bridge that plays malachi-mcp in mode: the test
+// binary itself (see TestMain).
+func fakeBridge(t *testing.T, mode string) string {
+	t.Helper()
+	t.Setenv(fakeEnv, mode)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return exe
+}
+
 func TestQueryParsesReport(t *testing.T) {
-	bridge := fakeBridge(t, "cat <<'EOF'\n"+report+"\nEOF\n")
+	bridge := fakeBridge(t, "report")
 	st, err := Query(context.Background(), bridge)
 	if err != nil {
 		t.Fatalf("Query: %v", err)
@@ -59,8 +145,8 @@ func TestQueryParsesReport(t *testing.T) {
 }
 
 func TestSubcommandsPassJSONFlag(t *testing.T) {
-	// The script reports its own arguments as the command.
-	bridge := fakeBridge(t, `printf '{"command":"%s","clients":[]}\n' "$*"`+"\n")
+	// The bridge reports its own arguments as the command.
+	bridge := fakeBridge(t, "args")
 	for _, tc := range []struct {
 		name string
 		call func(context.Context, string) (Status, error)
@@ -101,13 +187,12 @@ func TestRegistered(t *testing.T) {
 }
 
 func TestInstallNoClient(t *testing.T) {
-	const line = "no Claude app found: neither Claude Desktop nor Claude Code is installed"
-	bridge := fakeBridge(t, "echo '"+line+"' >&2\nexit 1\n")
+	bridge := fakeBridge(t, "noclient")
 	_, err := Install(context.Background(), bridge)
 	if !errors.Is(err, ErrNoClient) {
 		t.Fatalf("Install error = %v, want ErrNoClient", err)
 	}
-	if err.Error() != line {
+	if err.Error() != noClientLine {
 		t.Errorf("Error() = %q, want the bridge's reason", err.Error())
 	}
 	var exit *ExitError
@@ -117,10 +202,7 @@ func TestInstallNoClient(t *testing.T) {
 }
 
 func TestExitReasonIsFirstLineBounded(t *testing.T) {
-	// 100 three-byte runes: the 200-byte cap falls inside a rune. A rune
-	// constant, so no tool on the way can turn the escape into a literal.
-	first := strings.Repeat(string(rune(0x20AC)), 100) // U+20AC EURO SIGN
-	bridge := fakeBridge(t, "printf '  %s  \\nsecond line with details\\n' '"+first+"' >&2\nexit 2\n")
+	bridge := fakeBridge(t, "reason")
 	_, err := Uninstall(context.Background(), bridge)
 	if err == nil {
 		t.Fatal("Uninstall succeeded on exit 2")
@@ -138,13 +220,13 @@ func TestExitReasonIsFirstLineBounded(t *testing.T) {
 		t.Errorf("reason was cut inside a rune: %q", msg)
 	case strings.ContainsAny(msg, "\n\r") || strings.Contains(msg, "second line"):
 		t.Errorf("reason leaks past the first line: %q", msg)
-	case !strings.HasPrefix(first, msg):
+	case !strings.HasPrefix(longReason, msg):
 		t.Errorf("reason is not a prefix of the first line: %q", msg)
 	}
 }
 
 func TestExitWithoutReason(t *testing.T) {
-	bridge := fakeBridge(t, "exit 3\n")
+	bridge := fakeBridge(t, "silent")
 	_, err := Query(context.Background(), bridge)
 	if err == nil {
 		t.Fatal("Query succeeded on exit 3")
@@ -158,7 +240,7 @@ func TestExitWithoutReason(t *testing.T) {
 }
 
 func TestBadReport(t *testing.T) {
-	bridge := fakeBridge(t, "echo 'not json'\n")
+	bridge := fakeBridge(t, "notjson")
 	if _, err := Query(context.Background(), bridge); err == nil {
 		t.Fatal("Query accepted a non-JSON report")
 	}
@@ -169,9 +251,15 @@ func TestTimeoutKillsTheBridge(t *testing.T) {
 	waitDelay = 100 * time.Millisecond
 	t.Cleanup(func() { waitDelay = old })
 
-	// sleep is a child of the script and keeps the pipes open after the
-	// script itself is killed: WaitDelay has to end the wait.
-	bridge := fakeBridge(t, "sleep 5\necho '{}'\n")
+	// The bridge's child keeps the pipes open after the bridge itself is
+	// killed: WaitDelay has to end the wait. Both stop holding when the
+	// test is over and its temporary directory goes.
+	holdFile := filepath.Join(t.TempDir(), "hold")
+	if err := os.WriteFile(holdFile, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(holdEnv, holdFile)
+	bridge := fakeBridge(t, "hang")
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
@@ -194,6 +282,40 @@ func TestMissingBridge(t *testing.T) {
 	}
 }
 
+// executableName is how this system spells a program called name, the file
+// a PATH search finds: the bare name where a file runs by its execute
+// permission (Unix), else name with the extension this test binary has
+// (".exe" on Windows).
+func executableName(t *testing.T, name string) string {
+	t.Helper()
+	probe := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(probe, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.LookPath(probe); err == nil {
+		return name
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return name + filepath.Ext(self)
+}
+
+// writeProgram creates an empty file named name in dir with the given mode
+// and returns its path; Locate only looks at it.
+func writeProgram(t *testing.T, dir, name string, mode os.FileMode) string {
+	t.Helper()
+	p := filepath.Join(dir, name)
+	if err := os.WriteFile(p, nil, mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, mode); err != nil { // umask may have narrowed it
+		t.Fatal(err)
+	}
+	return p
+}
+
 func TestLocate(t *testing.T) {
 	old := executable
 	t.Cleanup(func() { executable = old })
@@ -201,11 +323,15 @@ func TestLocate(t *testing.T) {
 	t.Run("beside the executable", func(t *testing.T) {
 		dir := t.TempDir()
 		executable = func() (string, error) { return filepath.Join(dir, "malachi"), nil }
-		want := fakeBridge(t, "")
-		if err := os.Rename(want, filepath.Join(dir, Name)); err != nil {
+		want := writeProgram(t, dir, Name, 0o755)
+		fi, err := os.Stat(want)
+		if err != nil {
 			t.Fatal(err)
 		}
-		want = filepath.Join(dir, Name)
+		if fi.Mode()&0o111 == 0 {
+			// Windows keeps no execute permission, which this rule reads.
+			t.Skipf("the file system reports mode %v for a 0755 file", fi.Mode())
+		}
 		t.Setenv("PATH", t.TempDir())
 		if got, err := Locate(); got != want || err != nil {
 			t.Fatalf("Locate = %q, %v; want %q", got, err, want)
@@ -213,8 +339,9 @@ func TestLocate(t *testing.T) {
 	})
 	t.Run("path", func(t *testing.T) {
 		executable = func() (string, error) { return filepath.Join(t.TempDir(), "malachi"), nil }
-		want := fakeBridge(t, "")
-		t.Setenv("PATH", filepath.Dir(want))
+		dir := t.TempDir()
+		want := writeProgram(t, dir, executableName(t, Name), 0o755)
+		t.Setenv("PATH", dir)
 		if got, err := Locate(); got != want || err != nil {
 			t.Fatalf("Locate = %q, %v; want %q", got, err, want)
 		}
@@ -222,9 +349,7 @@ func TestLocate(t *testing.T) {
 	t.Run("not executable beside", func(t *testing.T) {
 		dir := t.TempDir()
 		executable = func() (string, error) { return filepath.Join(dir, "malachi"), nil }
-		if err := os.WriteFile(filepath.Join(dir, Name), []byte("#!/bin/sh\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		writeProgram(t, dir, Name, 0o644)
 		t.Setenv("PATH", t.TempDir())
 		if got, err := Locate(); err == nil {
 			t.Fatalf("Locate = %q, want an error for a non-executable file", got)
