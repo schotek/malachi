@@ -113,7 +113,10 @@ public sealed class OpenDir
     /// (<see cref="IMarkOfTheWeb"/>, <see cref="ILauncher"/>). The
     /// subdirectory is new (<see cref="IPrivateDirectoryFactory.CreateNew"/>)
     /// and the file is created with <see cref="FileMode.CreateNew"/>, so
-    /// nothing that was there before is ever reused or overwritten.
+    /// nothing that was there before is ever reused or overwritten. When
+    /// the file cannot be written, the exception is of the file system's
+    /// kind and HResult, without the path (<see cref="FileErrors"/>); the
+    /// caller logs its type and HResult only.
     /// </summary>
     public string Write(string name, ReadOnlySpan<byte> data)
     {
@@ -130,6 +133,12 @@ public sealed class OpenDir
                 stream.Write(data);
             }
             return path;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            TryDelete(sub);
+            // The path carries the attachment's name: not in the message.
+            throw FileErrors.WithoutPath(e, "could not write a file for opening");
         }
         catch
         {

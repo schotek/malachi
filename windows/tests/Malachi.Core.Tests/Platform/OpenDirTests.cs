@@ -136,13 +136,16 @@ public sealed class OpenDirTests
     public void WriteLeavesNothingBehindWhenTheFileCannotBeCreated()
     {
         using var temp = new TemporaryDirectory();
-        var directories = new BlockingDirectories("a.txt");
+        var directories = new BlockingDirectories("secret-name.txt");
         var open = new OpenDir(temp.Path, directories, new FakeTimeProvider(Now));
 
         // Windows says access denied to a file in a directory's place.
-        var e = Assert.ThrowsAny<Exception>(() => open.Write("a.txt", "x"u8));
+        var e = Assert.ThrowsAny<Exception>(() => open.Write("secret-name.txt", "x"u8));
         Assert.True(e is IOException or UnauthorizedAccessException, e.GetType().Name);
         Assert.Empty(Directory.EnumerateFileSystemEntries(temp.Path));
+        // The path carries the attachment's name: not in the error.
+        Assert.DoesNotContain("secret-name", e.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(0, e.HResult);
     }
 
     [Theory]

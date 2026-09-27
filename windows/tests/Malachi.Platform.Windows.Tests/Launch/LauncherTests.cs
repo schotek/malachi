@@ -138,6 +138,56 @@ public sealed class LauncherTests
     }
 
     [Theory]
+    // What .NET drops or keeps in the host, and the browser maps after
+    // the fact: the target says where the browser really goes.
+    [InlineData("https://exa\u202Emple.com/", "https://example.com/")]
+    [InlineData("https://example.com\u3002evil.com/", "https://example.com.evil.com/")]
+    [InlineData("https://ex\u00ADample.com/", "https://example.com/")]
+    [InlineData("https://ex\u200Bample.com/", "https://example.com/")]
+    [InlineData("https://\u0430pple.com/", "https://xn--pple-43d.com/")]
+    [InlineData("https://čeština.cz/a b", "https://xn--etina-gya30d.cz/a%20b")]
+    // The rest escaped, never split.
+    [InlineData("http://example.com/a b?q=\"c\"#f g", "http://example.com/a%20b?q=%22c%22#f%20g")]
+    [InlineData("https://example.com/\u202Egnp.exe", "https://example.com/%E2%80%AEgnp.exe")]
+    [InlineData("HTTPS://EXAMPLE.com:443/Path", "https://example.com/Path")]
+    [InlineData("https://[::1]:8443/x?y#z", "https://[::1]:8443/x?y#z")]
+    [InlineData("https://user@example.com/", "https://user@example.com/")]
+    [InlineData("https://paypal.com@evil.example/", "https://paypal.com@evil.example/")]
+    [InlineData("https://x/", "https://x/")]
+    // Refused.
+    [InlineData("mailto:a@b", null)]
+    [InlineData("javascript:alert(1)", null)]
+    [InlineData("https:x", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public async Task LinkTargetIsWhatTheBrowserGets(string? url, string? want)
+    {
+        var shell = new StandInShell();
+
+        Assert.Equal(want, Launcher.WebLinkTarget(url));
+        Assert.Equal(want, ((Malachi.Core.Platform.ILauncher)shell.Launcher).LinkTarget(url));
+        Assert.Equal(want is not null, Launcher.IsWebLink(url));
+        if (want is null)
+        {
+            return;
+        }
+
+        await shell.Launcher.OpenLinkAsync(url!, 0, TestContext.Current.CancellationToken);
+
+        Assert.Equal(want, Assert.Single(shell.Launches).Target);
+    }
+
+    [Fact]
+    public async Task ASignInPageGoesToTheHostDnsGets()
+    {
+        var shell = new StandInShell();
+
+        await shell.Launcher.OpenUrlAsync("https://login.example.com\u3002evil.com/authorize", 0, TestContext.Current.CancellationToken);
+
+        Assert.Equal("https://login.example.com.evil.com/authorize", Assert.Single(shell.Launches).Target);
+    }
+
+    [Theory]
     [InlineData("mailto:a@b")]
     [InlineData("javascript:alert(1)")]
     [InlineData("file:///C:/x.pdf")]
@@ -201,6 +251,54 @@ public sealed class LauncherTests
         await Assert.ThrowsAnyAsync<ArgumentException>(() => shell.Launcher.OpenFileAsync(path, 0, TestContext.Current.CancellationToken));
 
         Assert.Empty(shell.Launches);
+    }
+
+    [Fact]
+    public async Task FilesOnANetworkDriveAreNotOpened()
+    {
+        using var temp = new TestDirectory();
+        var path = temp.Combine("report.pdf");
+        File.WriteAllText(path, "%PDF");
+        // As if the drive of the directory were mapped to a share (net use).
+        var shell = new StandInShell { Drive = DriveType.Network };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => shell.Launcher.OpenFileAsync(path, 0, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => shell.Launcher.OpenWithAsync(path, 0, TestContext.Current.CancellationToken));
+
+        Assert.Equal([Path.GetPathRoot(path)!, Path.GetPathRoot(path)!], shell.Roots);
+        Assert.Empty(shell.Launches);
+        Assert.Empty(shell.OpenedWith);
+    }
+
+    [Fact]
+    public void TheTemporaryDirectoryIsOnALocalDrive()
+    {
+        // The drive the real launcher asks about, for the tests above.
+        using var temp = new TestDirectory();
+
+        Assert.NotEqual(DriveType.Network, new DriveInfo(Path.GetPathRoot(temp.Path)!).DriveType);
+    }
+
+    [Fact]
+    public async Task ErrorsNeverNameThePath()
+    {
+        using var temp = new TestDirectory();
+        var shell = new StandInShell();
+
+        var missing = await Assert.ThrowsAsync<FileNotFoundException>(
+            () => shell.Launcher.OpenFileAsync(temp.Combine("secret-name.pdf"), 0, TestContext.Current.CancellationToken));
+        var noDirectory = await Assert.ThrowsAsync<DirectoryNotFoundException>(
+            () => shell.Launcher.OpenFileAsync(temp.Combine("secret-dir", "secret-name.pdf"), 0, TestContext.Current.CancellationToken));
+        File.WriteAllText(temp.Combine("secret-name.exe"), "x");
+        var program = await Assert.ThrowsAsync<ArgumentException>(
+            () => shell.Launcher.OpenFileAsync(temp.Combine("secret-name.exe"), 0, TestContext.Current.CancellationToken));
+
+        // The path carries the attachment's name, which is mail content.
+        foreach (var e in new Exception[] { missing, noDirectory, program })
+        {
+            Assert.DoesNotContain("secret-", e.ToString(), StringComparison.Ordinal);
+        }
+        Assert.Null(missing.FileName);
     }
 
     [Fact]
@@ -300,10 +398,18 @@ public sealed class LauncherTests
     {
         public StandInShell()
         {
-            Launcher = new Launcher(new FileTypePolicy(), Shell, OpenWith);
+            Launcher = new Launcher(new FileTypePolicy(), Shell, OpenWith, root =>
+            {
+                Roots.Add(root);
+                return Drive;
+            });
         }
 
         public Launcher Launcher { get; }
+
+        public DriveType Drive { get; init; } = DriveType.Fixed;
+
+        public List<string> Roots { get; } = [];
 
         public bool Answer { get; init; } = true;
 

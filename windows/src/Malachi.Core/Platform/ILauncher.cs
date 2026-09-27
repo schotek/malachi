@@ -31,15 +31,25 @@ public interface ILauncher
     /// <summary>
     /// Opens a link of a message that the reader decided to open (remote.go
     /// <c>launchURI</c> after <c>openLink</c>): an http or https address;
-    /// <c>mailto:</c> goes to the composer, never here.
+    /// <c>mailto:</c> goes to the composer, never here. What the browser
+    /// gets is <see cref="LinkTarget"/> of it.
     /// </summary>
     Task<bool> OpenLinkAsync(string url, nint owner, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The address <see cref="OpenLinkAsync"/> would hand the browser for
+    /// <paramref name="url"/> (escaped, the host as DNS gets it), or null
+    /// when it refuses <paramref name="url"/>: what a confirmation of the
+    /// link shows, so the user judges exactly the address that is opened.
+    /// </summary>
+    string? LinkTarget(string? url);
+
+    /// <summary>
     /// Opens a file written out of a message, and marked, with its default
-    /// application (attachments.go <c>launchFile</c>); a local file only,
-    /// never a program (<see cref="IFileTypePolicy"/>). Where no application
-    /// is set, Windows asks for one; false when the user dismissed that.
+    /// application (attachments.go <c>launchFile</c>); a file on a local
+    /// drive only, never a program (<see cref="IFileTypePolicy"/>). Where no
+    /// application is set, Windows asks for one; false when the user
+    /// dismissed that. Its exceptions never name the path.
     /// </summary>
     Task<bool> OpenFileAsync(string path, nint owner, CancellationToken cancellationToken = default);
 

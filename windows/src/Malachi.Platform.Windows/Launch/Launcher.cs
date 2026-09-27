@@ -37,13 +37,14 @@ public sealed class Launcher : ILauncher
     private readonly IFileTypePolicy fileTypes;
     private readonly Func<string, nint, bool, bool> shell;
     private readonly Func<string, nint, bool> openWith;
+    private readonly Func<string, DriveType> driveType;
 
     /// <summary>
     /// A launcher that refuses every file <paramref name="fileTypes"/> calls
     /// dangerous.
     /// </summary>
     public Launcher(IFileTypePolicy fileTypes)
-        : this(fileTypes, ShellExecute, OpenWithDialog)
+        : this(fileTypes, ShellExecute, OpenWithDialog, DriveTypeOf)
     {
     }
 
@@ -51,14 +52,17 @@ public sealed class Launcher : ILauncher
     /// A launcher over other shell calls: <paramref name="shell"/> takes
     /// the target, the owner window and whether the shell may show its own
     /// dialogs, and says false when the user dismissed one;
-    /// <paramref name="openWith"/> takes the file and the owner window.
+    /// <paramref name="openWith"/> takes the file and the owner window;
+    /// <paramref name="driveType"/> tells what the root of a path is.
     /// </summary>
-    internal Launcher(IFileTypePolicy fileTypes, Func<string, nint, bool, bool> shell, Func<string, nint, bool> openWith)
+    internal Launcher(
+        IFileTypePolicy fileTypes, Func<string, nint, bool, bool> shell, Func<string, nint, bool> openWith, Func<string, DriveType> driveType)
     {
         ArgumentNullException.ThrowIfNull(fileTypes);
         this.fileTypes = fileTypes;
         this.shell = shell;
         this.openWith = openWith;
+        this.driveType = driveType;
     }
 
     /// <inheritdoc/>
@@ -72,9 +76,12 @@ public sealed class Launcher : ILauncher
     /// <inheritdoc/>
     public Task<bool> OpenLinkAsync(string url, nint owner, CancellationToken cancellationToken = default)
     {
-        var target = LinkTarget(url) ?? throw new ArgumentException("not an http or https address", nameof(url));
+        var target = WebLinkTarget(url) ?? throw new ArgumentException("not an http or https address", nameof(url));
         return StaThread.RunAsync(() => shell(target, owner, false), cancellationToken);
     }
+
+    /// <inheritdoc/>
+    public string? LinkTarget(string? url) => WebLinkTarget(url);
 
     /// <inheritdoc/>
     public Task<bool> OpenFileAsync(string path, nint owner, CancellationToken cancellationToken = default)
@@ -107,7 +114,33 @@ public sealed class Launcher : ILauncher
     /// an absolute http or https address with a host (htmlview.AllowedLink
     /// without <c>mailto:</c>), and no control characters.
     /// </summary>
-    public static bool IsWebLink(string? url) => LinkTarget(url) is not null;
+    public static bool IsWebLink(string? url) => WebLinkTarget(url) is not null;
+
+    /// <summary>
+    /// The address <see cref="OpenLinkAsync"/> hands the browser for
+    /// <paramref name="url"/>, null when it refuses it: escaped, and with
+    /// the host as DNS gets it (IDNA: "。" is a dot, a soft hyphen is
+    /// nothing, a Cyrillic "а" is punycode), so a confirmation that shows
+    /// this shows exactly where the browser goes, not the message's href.
+    /// </summary>
+    public static string? WebLinkTarget(string? url)
+    {
+        if (string.IsNullOrEmpty(url) || url.Any(c => c < ' ' || c == '\x7F'))
+        {
+            return null;
+        }
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || uri.Host.Length == 0)
+        {
+            return null;
+        }
+        return Escaped(uri);
+    }
 
     // The address the browser gets for a sign-in page, or null.
     private static string? BrowserTarget(string? url)
@@ -139,39 +172,30 @@ public sealed class Launcher : ILauncher
         return Escaped(uri);
     }
 
-    // The address the browser gets for a link of a message, or null.
-    private static string? LinkTarget(string? url)
-    {
-        if (string.IsNullOrEmpty(url) || url.Any(c => c < ' ' || c == '\x7F'))
-        {
-            return null;
-        }
-        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)
-            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) || uri.Host.Length == 0)
-        {
-            return null;
-        }
-        return Escaped(uri);
-    }
-
-    // The address as .NET escapes it, which is what reaches the browser's
-    // command line: never a space or a quote to split it at.
+    // The address as .NET escapes it, with the host as DNS gets it (.NET
+    // keeps "。", U+00AD and the like in AbsoluteUri, and the browser maps
+    // them after the fact); what reaches the browser's command line is
+    // ASCII, never a space or a quote to split it at.
     private static string? Escaped(Uri uri)
     {
-        var s = uri.AbsoluteUri;
-        return s.Any(c => c <= ' ' || c == '"' || c == '\x7F') ? null : s;
+        string s;
+        try
+        {
+            s = new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri;
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+        return s.Any(c => c <= ' ' || c == '"' || c >= '\x7F') ? null : s;
     }
 
     // A file of this machine that the policy lets be opened: fully
-    // qualified on a drive (never a share, whose server would learn the
-    // user's credentials, nor a device), a file's own content (not an
-    // alternate data stream), there, not a directory, not a link, and not a
-    // program.
+    // qualified on a local drive (never a share, nor a drive mapped to
+    // one, whose server would learn the user's credentials, nor a device),
+    // a file's own content (not an alternate data stream), there, not a
+    // directory, not a link, and not a program. No message names the path,
+    // which carries the attachment's name.
     private string CheckFile(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -184,7 +208,19 @@ public sealed class Launcher : ILauncher
         {
             throw new ArgumentException("an alternate data stream, not a file", nameof(path));
         }
-        var attributes = File.GetAttributes(full);
+        if (driveType(Path.GetPathRoot(full)!) == DriveType.Network)
+        {
+            throw new ArgumentException("a file on a network drive, not of this machine", nameof(path));
+        }
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(full);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            throw FileErrors.WithoutPath(e, "the file to open cannot be read");
+        }
         if ((attributes & FileAttributes.ReparsePoint) != 0)
         {
             throw new ArgumentException("a link, not a file", nameof(path));
@@ -199,6 +235,10 @@ public sealed class Launcher : ILauncher
         }
         return full;
     }
+
+    // What the root of a path is: a fixed or removable drive, or a drive
+    // letter mapped to a share (net use).
+    private static DriveType DriveTypeOf(string root) => new DriveInfo(root).DriveType;
 
     // ShellExecuteEx on the calling STA thread (Process.Start does nothing
     // else with UseShellExecute): the default verb, SEE_MASK_NOASYNC, the
