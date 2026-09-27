@@ -172,6 +172,46 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
   `windows/README.md` and the code says why. A new deviation never lands
   silently.
 
+### 3.1 Conventions for the C# code
+
+- **Files and names.** One type per file, the file named after it; folders
+  and namespaces mirror the Swift folders (`Malachi.Core.Api`,
+  `.Transport`, `.Daemon`, `.Model`, `.Compose`, `.Html`, `.Wizard`,
+  `.Controllers`, `.Presentation`, `.I18n`, `.Settings`, `.Text`,
+  `.Platform`), file-scoped namespaces. Swift type names are kept; members
+  become PascalCase with the same words (`reconnectNow` →
+  `ReconnectNow`), so a reader can diff the two. The header is the two SPDX
+  lines, a blank line, then the port note.
+- **Data.** API records are `sealed record`s with `init` members,
+  `required` where Swift is non-optional, lists as `IReadOnlyList<T>`
+  defaulting to `[]` (never `ImmutableArray<T>` in records: its equality is
+  by reference). Optimistic changes are `with` expressions. Models that
+  Swift keeps as mutable structs become classes with explicit `Clone()`
+  where a snapshot is taken.
+- **JSON.** System.Text.Json source generation only (`JsonSerializerContext`
+  partials per area); no reflection-based serialisation, no `dynamic`.
+- **Async.** `Task`/`ValueTask`; cancellation through `CancellationToken`.
+  Transport and platform code use `ConfigureAwait(false)`; controllers and
+  presentation classes never do (§7.1). Fire-and-forget only through
+  `Perform` (§7.2).
+- **Time.** `TimeProvider` injected everywhere; no `DateTime.Now`,
+  `Task.Delay` or timers without the provider.
+- **Logging.** `ILogger<T>`; method names, codes and ids only. Mail
+  content, addresses, keys, nonces, proofs and tokens are never logged
+  (wrap payload-like values in `Sensitive<T>`, which renders `<private>` in
+  Release).
+- **Strings.** `L10n.T/N/C` with the GTK msgid verbatim, formats through
+  the Go-printf formatter, never concatenation; `// Windows-only string`
+  where there is no msgid.
+- **Errors.** Exceptions carry the exact Go/Swift texts wherever a test or
+  a user-visible mapping compares them.
+- **Tests.** xUnit v3, one test class per Swift suite and Go test file with
+  the same name, `[Theory]` for parameterised cases, no sleeps
+  (`FakeTimeProvider`, `IdleAsync`).
+- **Platform code.** Only in `Malachi.Platform.Windows` and `Malachi.App`;
+  P/Invoke and COM through CsWin32 (`NativeMethods.txt`), never hand-written
+  where CsWin32 can generate it.
+
 The eleven macOS deviations that its table does not list (the parity
 report's U1–U11) are resolved for Windows as follows: unlisted links are
 confirmed (U1, decided); the AI page reports bridge failures in the group
