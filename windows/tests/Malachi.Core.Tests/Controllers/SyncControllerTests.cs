@@ -9,7 +9,11 @@
 // which SyncStatusTests leaves to this suite; it carries the Go cases of a
 // handshake mismatch that the Swift table folds away. Swift pins `now` and
 // shortens the timers; here the controller runs on a fake clock, and the
-// timers fire when the tests advance it.
+// timers fire when the tests advance it. Added: what a Swift callback
+// cannot do, a handler that throws (AThrowingHandlerDoesNotStopTheRefresh,
+// AThrowingBindingDoesNotStopTheLine), what Swift's close() makes
+// harmless (NothingStartsOnceClosed), and the cancellation this port's
+// RequestSignInUrlAsync takes (RequestSignInUrlCancelledByTheCallerOpensNothing).
 
 using System;
 using System.Collections.Generic;
@@ -322,6 +326,41 @@ public sealed class SyncControllerTests
         Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed"), await Request(null));
         Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed"), await Request(""));
         Assert.Equal(new SignInUrl.Failed("The link could not be opened: not an https address"), await Request("http://login.example/x"));
+    }
+
+    /// <summary>
+    /// A caller that gives up (its window closed) gets the cancellation, not
+    /// the notification's page: nothing is opened for a request it
+    /// abandoned, and a request cancelled before it started sends nothing.
+    /// </summary>
+    [Fact]
+    public async Task RequestSignInUrlCancelledByTheCallerOpensNothing()
+    {
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await using var fake = new FakeDaemon();
+        fake.On(API.AccountOAuthStart.Name, async _ =>
+        {
+            asked.TrySetResult();
+            await gate.Task;
+            return """{"sessionId":"s_1","authUrl":"https://login.example/late","expiresAt":"2026-09-25T10:10:00Z"}""";
+        });
+        await fake.StartAsync();
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
+        await client.ConnectAsync(Ct);
+
+        using var h = new Harness();
+        var (sc, _) = await h.MakeAsync();
+        using var cts = new CancellationTokenSource();
+        Task<SignInUrl> Request() => h.Ui.InvokeAsync(() => sc.RequestSignInUrlAsync(client, "a5", "https://login.example/x", cts.Token));
+        var request = Request();
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        gate.SetResult();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(Request);
+        await fake.IdleAsync();
+        Assert.Equal([API.AccountOAuthStart.Name], fake.Calls);
     }
 
     [Fact]
@@ -668,6 +707,117 @@ public sealed class SyncControllerTests
         await h.AdvanceAsync(SyncController.RefreshInterval);
         await h.AdvanceAsync(SyncController.RefreshInterval);
         Assert.Equal(count, await h.Ui.RunAsync(() => log.Footers.Count));
+    }
+
+    /// <summary>
+    /// A handler that throws (a view's bug) is reported and stops nothing:
+    /// the line follows the footer in the same tick, and the minute's
+    /// redraw goes on; so it does after a tick whose account lookup (the
+    /// mailbox's) failed.
+    /// </summary>
+    [Fact]
+    public async Task AThrowingHandlerDoesNotStopTheRefresh()
+    {
+        using var h = new Harness();
+        var (sc, log) = await h.MakeAsync();
+        var boom = new InvalidOperationException("a broken view");
+        var trip = false; // touched on the UI thread only
+        Task<(int Footers, int Lines)> Emitted() => h.Ui.RunAsync(() => (log.Footers.Count, log.Lines.Count));
+        await h.Ui.RunAsync(() =>
+        {
+            sc.FooterChanged += (_, _) =>
+            {
+                if (trip)
+                {
+                    trip = false;
+                    throw boom;
+                }
+            };
+            sc.StartRefreshing();
+        });
+        await h.AdvanceAsync(SyncController.RefreshInterval);
+        Assert.Equal((1, 1), await Emitted());
+
+        await h.Ui.RunAsync(() => trip = true);
+        h.Time.Advance(SyncController.RefreshInterval);
+        var failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync());
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+        Assert.Equal((2, 2), await Emitted());
+
+        await h.Ui.RunAsync(() =>
+        {
+            var accounts = sc.Accounts;
+            var once = true;
+            sc.Accounts = () =>
+            {
+                if (once)
+                {
+                    once = false;
+                    throw boom;
+                }
+                return accounts();
+            };
+        });
+        h.Time.Advance(SyncController.RefreshInterval);
+        failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync());
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+        Assert.Equal((2, 2), await Emitted());
+        await h.AdvanceAsync(SyncController.RefreshInterval);
+        Assert.Equal((3, 3), await Emitted());
+        await h.Ui.RunAsync(sc.Close);
+    }
+
+    /// <summary>
+    /// A PropertyChanged handler that throws (a binding) is reported for
+    /// every change and does not stop the change's other outputs.
+    /// </summary>
+    [Fact]
+    public async Task AThrowingBindingDoesNotStopTheLine()
+    {
+        using var h = new Harness();
+        var (sc, log) = await h.MakeAsync();
+        var boom = new InvalidOperationException("a broken binding");
+        var changes = await h.Ui.RunAsync(() =>
+        {
+            sc.PropertyChanged += (_, _) => throw boom;
+            sc.SetConnection(new ConnectionState.Connected(Info));
+            sc.Apply(State("a1", SyncStatus.Syncing, folder: "f_inbox"));
+            Assert.Equal(new StatusLine("Syncing Inbox…", Spinning: true, Active: true, Daemon: Daemon), sc.Line);
+            Assert.Equal(sc.Line, log.Lines[^1]);
+            Assert.Equal(new FooterState("Syncing Inbox…", true), log.Footers[^1]);
+            return log.Properties.Count;
+        });
+        var failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync());
+        Assert.Equal(changes, failed.InnerExceptions.Count);
+        Assert.All(failed.InnerExceptions, e => Assert.Same(boom, e));
+    }
+
+    /// <summary>
+    /// Once closed, a check or a refresh starts no timer and emits nothing,
+    /// and closing again (a window's teardown disposing what it closed) is
+    /// harmless.
+    /// </summary>
+    [Fact]
+    public async Task NothingStartsOnceClosed()
+    {
+        using var h = new Harness();
+        var (sc, log) = await h.MakeAsync();
+        await h.Ui.RunAsync(() =>
+        {
+            sc.SetConnection(new ConnectionState.Connected(Info));
+            sc.Close();
+            sc.BeginChecking();
+            sc.StartRefreshing();
+        });
+        await h.AdvanceAsync(SyncController.DefaultFallbackDelay);
+        await h.AdvanceAsync(SyncController.RefreshInterval);
+        await h.Ui.RunAsync(() =>
+        {
+            sc.Close();
+            sc.Dispose();
+            Assert.Single(log.Footers);
+            Assert.Single(log.Lines);
+        });
     }
 
     /// <summary>

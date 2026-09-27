@@ -22,9 +22,16 @@
 // notification one for a window on its way out. Swift's Task.sleep is a
 // wait on the injected TimeProvider; its os.Logger is an ILogger, at the
 // same levels.
+//
+// Swift's callbacks cannot throw; the handlers of StateChanged,
+// NotificationReceived and PropertyChanged can, and are isolated
+// (ControllerEvents): a handler's failure is reported and neither leaves a
+// state change half done nor ends the readers or the retry loop, which
+// also guard every item and tick.
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -62,6 +69,13 @@ namespace Malachi.Core.Controllers;
 /// A refused handshake is logged at error level once per distinct reason
 /// until the next connection; the routine failures while the daemon is
 /// down stay at debug level.
+/// </para>
+/// <para>
+/// A handler of <see cref="StateChanged"/>, <see cref="NotificationReceived"/>
+/// or <see cref="ObservableObject.PropertyChanged"/> that throws is reported
+/// by <see cref="Pending"/> (logged at error level) and stops nothing: the
+/// other handlers are called, the state change completes, and the stream
+/// readers and the retry loop go on.
 /// </para>
 /// <para>
 /// UI-thread-affine (docs/windows-port.md §7.1): create it and call it on
@@ -195,7 +209,7 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
         if (!ShowsMismatch)
         {
             State = new ConnectionState.Connecting();
-            StateChanged?.Invoke(this, State);
+            scope.Raise(StateChanged, this, State);
         }
         // Run starts the work after this turn: the handle is set before the
         // attempt can end and clear it, however fast it fails.
@@ -314,10 +328,10 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
         LogRefused(logger, description);
     }
 
-    // Swift `for await s in client.states`: the only reader of the stream.
-    // WaitToReadAsync is awaited on the UI thread's context, so a state the
-    // transport writes is posted there before anything it completes after it
-    // (the attempt's ConnectAsync, say).
+    // Swift `for await s in client.states`: the only reader of the stream,
+    // so no state may end it. WaitToReadAsync is awaited on the UI thread's
+    // context, so a state the transport writes is posted there before
+    // anything it completes after it (the attempt's ConnectAsync, say).
     private async Task ReadStatesAsync(CancellationToken cancellationToken)
     {
         ChannelReader<RpcClientState> states = Client.States;
@@ -325,12 +339,14 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
         {
             while (states.TryRead(out var s))
             {
-                ClientStateChanged(s);
+                scope.Guard(() => ClientStateChanged(s));
             }
         }
     }
 
-    // Swift `for await n in client.notifications`: forwarded in order.
+    // Swift `for await n in client.notifications`: forwarded in order, each
+    // handler isolated, so a notification a view fails on (one it cannot
+    // decode, say) does not end the stream.
     private async Task ReadNotificationsAsync(CancellationToken cancellationToken)
     {
         ChannelReader<RpcNotification> notifications = Client.Notifications;
@@ -338,7 +354,7 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
         {
             while (notifications.TryRead(out var n))
             {
-                NotificationReceived?.Invoke(this, n);
+                scope.Raise(NotificationReceived, this, n);
             }
         }
     }
@@ -351,7 +367,7 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
             await Task.Delay(ReconnectInterval, time, cancellationToken);
             if (!clientConnected)
             {
-                ReconnectNow();
+                scope.Guard(ReconnectNow);
             }
         }
     }
@@ -435,8 +451,20 @@ public sealed partial class ConnectionController : ObservableObject, IDisposable
             return;
         }
         State = s;
-        StateChanged?.Invoke(this, s);
+        scope.Raise(StateChanged, this, s);
     }
+
+    /// <summary>
+    /// Notifies the bindings of a change; a handler that throws is reported
+    /// and does not leave the state change half done (<see cref="ControllerEvents"/>).
+    /// </summary>
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e) => scope.Guard(() => base.OnPropertyChanged(e));
+
+    /// <summary>
+    /// Notifies the bindings of a change to come; a handler that throws is
+    /// reported and does not keep the change from being made.
+    /// </summary>
+    protected override void OnPropertyChanging(PropertyChangingEventArgs e) => scope.Guard(() => base.OnPropertyChanging(e));
 
     /// <summary>A short description of a connect-time error for the state (Swift <c>describe</c>).</summary>
     private static string Describe(Exception error) => error switch

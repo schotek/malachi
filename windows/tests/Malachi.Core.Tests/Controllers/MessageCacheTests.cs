@@ -9,7 +9,8 @@
 // them go, and the tests wait for quiescence instead of polling. Added:
 // AFastFailingCallReleasesTheWaiters, the trap of docs/windows-port.md §7.2
 // (a call that fails before its first await must not settle the entry
-// while its other half has not started).
+// while its other half has not started), and AThrowingViewStrandsNothing,
+// a handler or waiter that throws, which a Swift callback cannot.
 
 using System;
 using System.Collections.Generic;
@@ -375,6 +376,56 @@ public sealed class MessageCacheTests
             Assert.Equal(2, second.Count);
         });
         Assert.Empty(h.Daemon.Calls);
+    }
+
+    /// <summary>
+    /// A view whose handlers or waiter throw is reported and strands
+    /// nothing: the other waiters and views hear every settle, and the
+    /// images request it came with still runs, ends and answers.
+    /// </summary>
+    [Fact]
+    public async Task AThrowingViewStrandsNothing()
+    {
+        await using var h = await Harness.CreateAsync();
+        h.Serve("m10", html: "<p>blocked</p>", allowHtml: "<p>with pictures</p>");
+        await h.StartAsync();
+        var s = Summary("m10");
+        var boom = new InvalidOperationException("a broken view");
+        var heard = new List<bool>();
+        await h.Ui.RunAsync(() =>
+        {
+            h.Cache.Fetch(s, _ => throw boom);
+            h.Cache.Fetch(s, l => heard.Add(l.Complete));
+        });
+        var failed = await Assert.ThrowsAsync<AggregateException>(h.IdleAsync);
+        Assert.Equal(2, failed.InnerExceptions.Count);
+        Assert.All(failed.InnerExceptions, e => Assert.Same(boom, e));
+        var lm = await h.Ui.RunAsync(() => h.Cache.Loaded(s.Id)!);
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.Equal([false, true], heard);
+            Assert.Equal([s.Id, s.Id], h.Log.Loaded);
+        });
+
+        Outcome<LoadedMessage>? outcome = null;
+        await h.Ui.RunAsync(() =>
+        {
+            h.Cache.RemoteBarChanged += (_, _) => throw boom;
+            h.Cache.MessageLoaded += (_, _) => throw boom;
+            h.Cache.LoadImages(s, o => outcome = o);
+        });
+        failed = await Assert.ThrowsAsync<AggregateException>(h.IdleAsync);
+        Assert.Equal(2, failed.InnerExceptions.Count);
+        Assert.All(failed.InnerExceptions, e => Assert.Same(boom, e));
+        await h.Ui.RunAsync(() =>
+        {
+            Assert.True(outcome?.IsSuccess, "loadImages failed");
+            Assert.False(lm.LoadingImages);
+            Assert.Equal("<p>with pictures</p>", lm.Body?.Html);
+            // The views before the broken ones heard the bar and the images.
+            Assert.Equal([true], h.Log.Bars.Select(b => b.Loading));
+            Assert.Equal([s.Id, s.Id, s.Id], h.Log.Loaded);
+        });
     }
 
     private static MessageSummary Summary(string id) => new()

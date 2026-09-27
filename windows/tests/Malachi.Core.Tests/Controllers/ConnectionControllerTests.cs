@@ -16,9 +16,15 @@
 // client keeps the real clock for its dial and handshake timeouts. Added:
 // AFastFailingTransportIsRetried, the trap of docs/windows-port.md §7.2
 // with the real transport (a dial with nothing on the socket fails before
-// its first await).
+// its first await); SystemInfoOfADroppedConnectionIsDropped, the
+// generation check that Swift leaves untested (window.go fetchSystemInfo's
+// state check); and the handlers that throw, which a Swift callback cannot
+// (AThrowingStateHandlerStopsNeitherTheStatesNorTheRetries,
+// AThrowingNotificationHandlerStillHearsTheNext,
+// AThrowingBindingDoesNotStopTheConnection).
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -429,6 +435,166 @@ public sealed class ConnectionControllerTests
         await h.IdleAsync(fake);
         Assert.Equal([Connecting, Connected], h.Log.States);
         Assert.Equal(1, Dials(fake));
+        // Nor does the retry loop dial while connected.
+        await h.TickAsync(fake);
+        await h.TickAsync(fake);
+        Assert.Equal([Connecting, Connected], h.Log.States);
+        Assert.Equal(1, Dials(fake));
+    }
+
+    /// <summary>
+    /// The generation (window.go <c>fetchSystemInfo</c> drops an answer once
+    /// the state is no longer connected): the UI thread is held while the
+    /// client connects and the daemon hangs up, so it sees the connection
+    /// and its end in one turn, and the system.info asked at the connection
+    /// fails (nothing to send it on) after the drop was reported. That
+    /// failure belongs to a connection that is gone: the line stays
+    /// unavailable, not "system.info failed".
+    /// </summary>
+    [Fact]
+    public async Task SystemInfoOfADroppedConnectionIsDropped()
+    {
+        await using var fake = await MakeFakeAsync();
+        await using var h = await Harness.CreateAsync(fake.Path);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var dropped = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        h.Client.StateChanged += (_, s) =>
+        {
+            if (s is RpcClientState.Connected)
+            {
+                connected.TrySetResult();
+            }
+            else if (s is RpcClientState.Disconnected && connected.Task.IsCompleted)
+            {
+                dropped.TrySetResult();
+            }
+        };
+        using var hold = new ManualResetEventSlim();
+        // Start posts the readers and the attempt; the hold comes after
+        // them, once the attempt is dialling.
+        await h.Ui.RunAsync(h.Cc.Start);
+        h.Ui.Post(_ => hold.Wait(TimeSpan.FromSeconds(10)), null);
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        fake.CloseAll();
+        await dropped.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        hold.Set();
+        await h.IdleAsync(fake);
+
+        Assert.Equal(["connecting", "unavailable"], h.Log.States.Select(Kind));
+        Assert.IsType<ConnectionState.Unavailable>(await h.StateAsync());
+        Assert.Empty(fake.Calls);
+        Assert.DoesNotContain(h.Logger.Entries, e => e.Message.StartsWith("system.info", StringComparison.Ordinal));
+        // The retry loop takes it from there.
+        await h.TickAsync(fake);
+        Assert.Equal(Connected, await h.StateAsync());
+    }
+
+    /// <summary>
+    /// A handler of StateChanged that throws (a view's bug) is reported and
+    /// stops nothing: a throw on the drop, handed over by the reader of the
+    /// client's states, leaves that reader running, and a throw on the
+    /// retry loop's "Connecting…" leaves the attempt and the loop running
+    /// (RpcClient.Raise isolates its handlers for the same reason).
+    /// </summary>
+    [Fact]
+    public async Task AThrowingStateHandlerStopsNeitherTheStatesNorTheRetries()
+    {
+        const int OnUnavailable = 1;
+        const int OnConnecting = 2;
+        await using var fake = await MakeFakeAsync();
+        await using var h = await Harness.CreateAsync(fake.Path);
+        var boom = new InvalidOperationException("a broken view");
+        var trip = 0;
+        h.Cc.StateChanged += (_, s) =>
+        {
+            var on = s switch
+            {
+                ConnectionState.Unavailable => OnUnavailable,
+                ConnectionState.Connecting => OnConnecting,
+                _ => 0,
+            };
+            if (on != 0 && Interlocked.CompareExchange(ref trip, 0, on) == on)
+            {
+                throw boom;
+            }
+        };
+        var after = new ConcurrentQueue<ConnectionState>();
+        h.Cc.StateChanged += (_, s) => after.Enqueue(s);
+        await h.StartAsync(fake);
+        Assert.Equal(Connected, await h.StateAsync());
+
+        Interlocked.Exchange(ref trip, OnUnavailable);
+        fake.CloseAll();
+        var failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync(fake, () => h.Log.States[^1] is ConnectionState.Unavailable));
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+
+        Interlocked.Exchange(ref trip, OnConnecting);
+        h.Time.Advance(h.Cc.ReconnectInterval);
+        failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync(fake));
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+        Assert.Equal(Connected, await h.StateAsync());
+
+        // Both are still there: the states reader sees the next drop, the
+        // loop dials again.
+        fake.CloseAll();
+        await h.IdleAsync(fake, () => h.Log.States[^1] is ConnectionState.Unavailable);
+        await h.TickAsync(fake);
+        Assert.Equal(Connected, await h.StateAsync());
+        string[] want = ["connecting", "connected", "unavailable", "connecting", "connected", "unavailable", "connecting", "connected"];
+        Assert.Equal(want, h.Log.States.Select(Kind));
+        // The handler after the broken one heard every state.
+        Assert.Equal(want, after.Select(Kind));
+    }
+
+    /// <summary>
+    /// A handler of NotificationReceived that throws (one that cannot decode
+    /// a notification, say) is reported; the handlers after it hear that
+    /// notification, and every handler hears the next.
+    /// </summary>
+    [Fact]
+    public async Task AThrowingNotificationHandlerStillHearsTheNext()
+    {
+        await using var fake = await MakeFakeAsync();
+        await using var h = await Harness.CreateAsync(fake.Path);
+        var boom = new InvalidOperationException("an undecodable notification");
+        var heard = new ConcurrentQueue<string>();
+        h.Cc.NotificationReceived += (_, n) =>
+        {
+            heard.Enqueue(n.Method);
+            if (heard.Count == 1)
+            {
+                throw boom;
+            }
+        };
+        var after = new ConcurrentQueue<string>();
+        h.Cc.NotificationReceived += (_, n) => after.Enqueue(n.Method);
+        await h.StartAsync(fake);
+
+        await fake.PushNotificationAsync("notify.test1", """{"i":1}""");
+        var failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync(fake, () => h.Log.Notifications.Count == 1));
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+        await fake.PushNotificationAsync("notify.test2", """{"i":2}""");
+        await h.IdleAsync(fake, () => h.Log.Notifications.Count == 2);
+        Assert.Equal(["notify.test1", "notify.test2"], heard);
+        Assert.Equal(["notify.test1", "notify.test2"], after);
+    }
+
+    /// <summary>
+    /// A PropertyChanged handler that throws (a binding) is reported and
+    /// does not stop the change: the state is set and StateChanged follows.
+    /// </summary>
+    [Fact]
+    public async Task AThrowingBindingDoesNotStopTheConnection()
+    {
+        await using var fake = await MakeFakeAsync();
+        await using var h = await Harness.CreateAsync(fake.Path);
+        var boom = new InvalidOperationException("a broken binding");
+        h.Cc.PropertyChanged += (_, _) => throw boom;
+        await h.Ui.RunAsync(h.Cc.Start);
+        var failed = await Assert.ThrowsAsync<AggregateException>(() => h.IdleAsync(fake));
+        Assert.Same(boom, Assert.Single(failed.InnerExceptions));
+        Assert.Equal(Connected, await h.StateAsync());
+        Assert.Equal([Connecting, Connected], h.Log.States);
     }
 
     /// <summary>

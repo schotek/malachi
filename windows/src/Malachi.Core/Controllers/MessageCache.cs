@@ -16,7 +16,9 @@
 // by ObjectIdentifier; here a dictionary compares the entries by reference.
 // The calls that the caller awaits (message.part, message.embedded) are
 // made directly. The cache has no closed flag, as in Swift: it lives as long
-// as the app.
+// as the app. Swift's callbacks cannot throw; a view's handler or waiter
+// here can, and is isolated (ControllerEvents), so that one view's failure
+// strands neither the other views nor the request it came with.
 
 using System;
 using System.Collections.Generic;
@@ -46,8 +48,9 @@ namespace Malachi.Core.Controllers;
 /// are only ever touched there (the GTK window's <c>glib.IdleAdd</c>
 /// discipline). Callers guard staleness themselves (the pane by its current
 /// message, a window by its closed flag): the cache is keyed by id and stays
-/// valid whatever is on display now. UI-thread-affine
-/// (docs/windows-port.md §7.1).
+/// valid whatever is on display now. A handler or waiter that throws is
+/// reported by <see cref="Pending"/> (logged at error level) and the others
+/// are called all the same. UI-thread-affine (docs/windows-port.md §7.1).
 /// </remarks>
 public sealed partial class MessageCache : IDisposable
 {
@@ -300,7 +303,7 @@ public sealed partial class MessageCache : IDisposable
             {
                 Cache.Store(id, lm);
             }
-            MessageLoaded?.Invoke(this, new MessageCacheEntry(id, lm));
+            scope.Raise(MessageLoaded, this, new MessageCacheEntry(id, lm));
             then(Outcome.Success(lm));
         });
     }
@@ -325,7 +328,7 @@ public sealed partial class MessageCache : IDisposable
     {
         ArgumentNullException.ThrowIfNull(lm);
         scope.VerifyAccess();
-        RemoteBarChanged?.Invoke(this, new MessageCacheEntry(id, lm));
+        scope.Raise(RemoteBarChanged, this, new MessageCacheEntry(id, lm));
     }
 
     // Parts and attached messages
@@ -388,9 +391,9 @@ public sealed partial class MessageCache : IDisposable
         }
         foreach (var w in ws)
         {
-            w(lm);
+            scope.Guard(() => w(lm));
         }
-        MessageLoaded?.Invoke(this, new MessageCacheEntry(id, lm));
+        scope.Raise(MessageLoaded, this, new MessageCacheEntry(id, lm));
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "message.get failed")]

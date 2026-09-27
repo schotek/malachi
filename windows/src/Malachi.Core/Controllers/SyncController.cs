@@ -20,9 +20,15 @@
 // Swift's `now` is the TimeProvider's (tests use a FakeTimeProvider), and
 // its two timers wait on the TimeProvider too: the fallback of beginChecking
 // and the refresh of startRefreshing, each cancelled when restarted.
+// Swift's callbacks cannot throw; the handlers of the events here and of
+// PropertyChanged can, and are isolated (ControllerEvents): a handler's
+// failure is reported and neither stops the other outputs of a change nor
+// ends the minute's redraw, which also guards every tick. After close()
+// Swift's timers start and return at once; here none is started.
 
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -66,6 +72,13 @@ namespace Malachi.Core.Controllers;
 /// timer as the guarantee that the spinner never sticks. A second timer
 /// (<see cref="StartRefreshing"/>) redraws the line every minute, so the
 /// time of the last check it names becomes a date once the day is over.
+/// </para>
+/// <para>
+/// A handler of the events or of
+/// <see cref="ObservableObject.PropertyChanged"/> that throws is reported by
+/// <see cref="Pending"/> (logged at error level) and stops nothing: the
+/// other handlers are called, the other outputs of the change follow, and
+/// the timers go on.
 /// </para>
 /// <para>UI-thread-affine (docs/windows-port.md §7.1).</para>
 /// </remarks>
@@ -262,11 +275,16 @@ public sealed partial class SyncController : ObservableObject, IDisposable
     /// (<see cref="RefreshInterval"/>) without a state change (window.go
     /// <c>New</c>, the <c>statusRefreshSeconds</c> timeout): it names the
     /// time of the last check ("Up to date · 15:04"), which a day later has
-    /// to be a date. Calling it again restarts the timer.
+    /// to be a date. Calling it again restarts the timer; once closed it
+    /// starts none.
     /// </summary>
     public void StartRefreshing(TimeSpan? every = null)
     {
         scope.VerifyAccess();
+        if (closed)
+        {
+            return;
+        }
         var interval = every ?? RefreshInterval;
         refresher?.Cancel();
         var timer = new CancellationTokenSource();
@@ -283,7 +301,9 @@ public sealed partial class SyncController : ObservableObject, IDisposable
                     {
                         return;
                     }
-                    RefreshFooter();
+                    // A tick that fails (an account lookup of the mailbox's)
+                    // is reported, and the next one comes all the same.
+                    scope.Guard(RefreshFooter);
                 }
             }
             catch (OperationCanceledException) when (timer.IsCancellationRequested)
@@ -426,11 +446,16 @@ public sealed partial class SyncController : ObservableObject, IDisposable
     /// timer that recomputes the line after <see cref="FallbackDelay"/> in
     /// case no <c>notify.syncState</c> follows. Calling it again restarts the
     /// timer. As in GTK only the text and the spinner change: the
-    /// connection's icon and the rest of the line stay as they are.
+    /// connection's icon and the rest of the line stay as they are. Once
+    /// closed it does nothing.
     /// </summary>
     public void BeginChecking()
     {
         scope.VerifyAccess();
+        if (closed)
+        {
+            return;
+        }
         var text = L10n.T("Checking for new mail…");
         SetFooter(new FooterState(text, true));
         SetLine(Line with { Text = text, Spinning = true });
@@ -457,6 +482,11 @@ public sealed partial class SyncController : ObservableObject, IDisposable
             }
             finally
             {
+                // What is disposed must not stay behind for close() to cancel.
+                if (fallback == timer)
+                {
+                    fallback = null;
+                }
                 timer.Dispose();
             }
         });
@@ -469,7 +499,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
             return;
         }
         Footer = f;
-        FooterChanged?.Invoke(this, f);
+        scope.Raise(FooterChanged, this, f);
     }
 
     private void SetLine(StatusLine l)
@@ -479,7 +509,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
             return;
         }
         Line = l;
-        StatusLineChanged?.Invoke(this, l);
+        scope.Raise(StatusLineChanged, this, l);
     }
 
     // Certificate banner
@@ -504,7 +534,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
             }
             CertBannerAccount = null;
             certBannerTitle = null;
-            CertBannerChanged?.Invoke(this, SyncBanner.Hidden);
+            scope.Raise(CertBannerChanged, this, SyncBanner.Hidden);
             return;
         }
         var a = found.Account;
@@ -516,7 +546,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         CertBannerAccount = a.Id;
         certBannerTitle = title;
         // TRANSLATORS: banner button
-        CertBannerChanged?.Invoke(this, new SyncBanner(a.Id, title, WithoutMnemonic(L10n.T("_Edit Account…"))));
+        scope.Raise(CertBannerChanged, this, new SyncBanner(a.Id, title, WithoutMnemonic(L10n.T("_Edit Account…"))));
     }
 
     // Sign-in banner
@@ -580,7 +610,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         AuthBannerAccount = n.AccountId;
         AuthBannerAction = action;
         var (title, button) = AuthBannerFor(n, account);
-        AuthBannerChanged?.Invoke(this, new SyncBanner(n.AccountId, title, button));
+        scope.Raise(AuthBannerChanged, this, new SyncBanner(n.AccountId, title, button));
     }
 
     /// <summary>Hides the banner and forgets its account (sync.go <c>hideAuthBanner</c>).</summary>
@@ -592,7 +622,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         AuthBannerAction = null;
         if (wasShown)
         {
-            AuthBannerChanged?.Invoke(this, SyncBanner.Hidden);
+            scope.Raise(AuthBannerChanged, this, SyncBanner.Hidden);
         }
     }
 
@@ -604,7 +634,10 @@ public sealed partial class SyncController : ObservableObject, IDisposable
     /// cannot answer; only an https address is opened. The daemon completes
     /// the sign-in by itself and the banner goes with the next
     /// <c>notify.syncState</c>. Awaited by its caller, so the call is made
-    /// directly rather than through the scope.
+    /// directly rather than through the scope. A caller that cancels
+    /// <paramref name="cancellationToken"/> gets the
+    /// <see cref="OperationCanceledException"/>, not the fallback: it
+    /// abandoned the request, and nothing is to be opened for it.
     /// </summary>
     public async Task<SignInUrl> RequestSignInUrlAsync(
         RpcClient client, AccountId accountId, string? fallbackUrl, CancellationToken cancellationToken = default)
@@ -616,6 +649,10 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         {
             var parameters = new AccountOAuthStartParams { AccountId = accountId, BrowserPage = OAuth.BrowserPage() };
             url = (await client.CallAsync(API.AccountOAuthStart, parameters, RpcTimeouts.OAuthStart, cancellationToken)).AuthUrl;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
 #pragma warning disable CA1031 // Every failure of the start falls back to the notification's page, as Swift's catch-all does.
         catch (Exception e)
@@ -636,6 +673,19 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         }
         return new SignInUrl.Open(url);
     }
+
+    /// <summary>
+    /// Notifies the bindings of a change; a handler that throws is reported
+    /// and does not keep the change's other outputs from following
+    /// (<see cref="ControllerEvents"/>).
+    /// </summary>
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e) => scope.Guard(() => base.OnPropertyChanged(e));
+
+    /// <summary>
+    /// Notifies the bindings of a change to come; a handler that throws is
+    /// reported and does not keep the change from being made.
+    /// </summary>
+    protected override void OnPropertyChanging(PropertyChangingEventArgs e) => scope.Guard(() => base.OnPropertyChanging(e));
 
     /// <summary>
     /// How the notified account signs in: by its config, or, for an account
