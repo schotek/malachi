@@ -127,8 +127,20 @@ type Parsed struct {
 	Attachments    []api.Attachment
 	HasAttachments bool // at least one non-inline attachment
 
-	Truncated bool     // a limit was hit: the result is incomplete
-	Problems  []string // technical English notes on tolerated defects (not for display)
+	Truncated bool // a limit was hit: the result is incomplete
+	// Crypto is set when the walk meets a signed or encrypted structure:
+	// multipart/signed, multipart/encrypted, or a leaf of type
+	// application/pkcs7-mime, application/x-pkcs7-mime or
+	// application/pgp-encrypted. Such a message is never reduced to a
+	// skeleton: a signature covers the parts as they are.
+	Crypto   bool
+	Problems []string // technical English notes on tolerated defects (not for display)
+
+	// The shape of the walk, for VerifySkeleton: whether it ended on a
+	// reader error instead of the final boundary, and how many entities
+	// (containers included) it visited.
+	walkFailed bool
+	entities   int
 }
 
 // errStop is the sentinel returned from the walk callback to end the walk.
@@ -165,7 +177,9 @@ func Parse(r io.Reader, limits Limits) (*Parsed, error) {
 	p.envelope(root.Header)
 	if werr := root.Walk(p.visit); werr != nil && !errors.Is(werr, errStop) {
 		p.problem("walk: " + werr.Error())
+		p.out.walkFailed = true
 	}
+	p.out.entities = p.parts
 	if lr.N == 0 {
 		p.out.Truncated = true
 		p.problem("input exceeds MaxInputBytes")
@@ -218,6 +232,9 @@ func (p *parser) visit(path []int, e *message.Entity, err error) error {
 	mediaType, params, ctErr := e.Header.ContentType()
 	if ctErr != nil {
 		p.problem("part " + id + ": content-type: " + ctErr.Error())
+	}
+	if isCryptoType(mediaType) {
+		p.out.Crypto = true
 	}
 	// Mirror go-message's own test: it descends exactly when the (possibly
 	// unparsed) media type starts with "multipart/".
@@ -337,6 +354,21 @@ func normalizeMediaType(s string) string {
 		return "application/octet-stream"
 	}
 	return s
+}
+
+// isCryptoType reports whether a Content-Type value (as go-message's
+// ContentType returns it: the lower-cased type, or the raw field value when
+// it did not parse) names a signed or encrypted structure. The comparison
+// ignores case and parameters, so an unparsable "Multipart/Signed; …" that
+// the walk treats as a leaf still counts.
+func isCryptoType(mediaType string) bool {
+	t, _, _ := strings.Cut(mediaType, ";")
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "multipart/signed", "multipart/encrypted",
+		"application/pkcs7-mime", "application/x-pkcs7-mime", "application/pgp-encrypted":
+		return true
+	}
+	return false
 }
 
 // isToken reports whether s is a non-empty RFC 2045 token.

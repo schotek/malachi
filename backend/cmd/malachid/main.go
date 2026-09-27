@@ -123,6 +123,13 @@ func run() error {
 	default:
 		return fmt.Errorf("unknown MALACHI_KEYRING %q (secretservice|helper|none)", v)
 	}
+	// Defaults of preferences the starting process chose (the macOS app);
+	// StartSync stores the ones without a value.
+	defaults, envErr := core.RuntimeDefaultsFromEnv(os.LookupEnv)
+	if envErr != nil {
+		log.Warn("ignoring an invalid preference default", "err", envErr)
+	}
+	backend.SetRuntimeDefaults(defaults)
 	if err := backend.ImportConfigAccounts(ctx); err != nil {
 		return fmt.Errorf("import accounts from %s: %w", *flagConfig, err)
 	}
@@ -134,7 +141,11 @@ func run() error {
 	// Idempotent; removes the key file and the socket on every way out.
 	defer srv.Close()
 	syncDone := backend.StartSync(ctx)
-	go backend.Maintain(ctx)
+	maintainDone := make(chan struct{})
+	go func() {
+		defer close(maintainDone)
+		backend.Maintain(ctx)
+	}()
 
 	// Say why the daemon stops before the server logs its own shutdown:
 	// Serve's context ends only after this line.
@@ -151,12 +162,20 @@ func run() error {
 	srv.Close()     // idempotent; removes the key file and the socket, closes connections
 	backend.Close() // ends waiting sign-ins and closes their listeners
 
-	// Let the syncers log out and finish their current store writes before
-	// the deferred store close; a hung connection must not hold the exit.
+	// Let the syncers log out and finish their current store writes, and
+	// the maintenance its current batch, before the deferred store close;
+	// a hung connection must not hold the exit.
+	deadline := time.After(syncStopTimeout)
 	select {
 	case <-syncDone:
-	case <-time.After(syncStopTimeout):
+	case <-deadline:
 		log.Warn("sync supervisor did not stop in time", "timeout", syncStopTimeout)
+		return err
+	}
+	select {
+	case <-maintainDone:
+	case <-deadline:
+		log.Warn("maintenance did not stop in time", "timeout", syncStopTimeout)
 	}
 	return err
 }
@@ -174,7 +193,8 @@ func oauthClients(cfg config.Config) []string {
 	return out
 }
 
-// syncStopTimeout caps how long shutdown waits for the sync supervisor.
+// syncStopTimeout caps how long shutdown waits for the sync supervisor and
+// the maintenance together.
 const syncStopTimeout = 10 * time.Second
 
 func newLogger() *slog.Logger {

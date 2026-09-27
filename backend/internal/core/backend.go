@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/auth"
@@ -127,6 +128,25 @@ type Backend struct {
 	// draft upload (scheduleDraftSync), per account, under draftMu.
 	draftMu     sync.Mutex
 	draftTimers map[string]*time.Timer
+
+	// rawSteps are the background jobs of the raw maintenance loop
+	// (raw_maintenance.go), in the order AddRawStep registered them.
+	rawSteps []RawStep
+
+	// dl is the state of message.download (download.go).
+	dl downloadState
+
+	// rawKick wakes the raw maintenance loop (kickRaw; capacity 1), and
+	// rawNoSpace is set while the loop waits after a full disk.
+	rawKick    chan struct{}
+	rawNoSpace atomic.Bool
+	// runtimeDefaults are the preference defaults of this run
+	// (SetRuntimeDefaults); nil until set.
+	runtimeDefaults atomic.Pointer[RuntimeDefaults]
+	// prefMu orders writing the preferences with applying them
+	// (config.set, StartSync), so that what applies is what was written
+	// last.
+	prefMu sync.Mutex
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -162,6 +182,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		tokenSources:      map[string]*oauth2flow.TokenSource{},
 		draftTimers:       map[string]*time.Timer{},
 		oauthSessions:     map[string]oauthSession{},
+		rawKick:           make(chan struct{}, 1),
 	}
 	b.OAuth = oauth2flow.NewManager(oauth2flow.Options{
 		Log:      log,
@@ -183,7 +204,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() imap.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
+			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days, AttachmentOfflineDays: b.attachmentOfflineDays()}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
@@ -196,7 +217,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() graph.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
+			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days, AttachmentOfflineDays: b.attachmentOfflineDays()}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
@@ -227,6 +248,10 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Log:              log,
 	})
 	b.Delivery = newKindOutbox(imapOutbox, graphOutbox)
+	// The raw maintenance steps in the order they run: the conversion to
+	// the store's codec, then the attachments kept on the server only.
+	b.AddRawStep(newCodecStep(b))
+	b.AddRawStep(newAttachmentStep(b))
 	return b
 }
 
@@ -373,10 +398,13 @@ func (b *Backend) SyncPrefs() (intervalSeconds, offlineDays int) {
 }
 
 // StartSync runs both supervisors and starts a syncer and an outbox worker
-// for every enabled account in the store. The returned channel is closed
-// when both Run methods have returned, i.e. after ctx is cancelled and
-// every syncer and worker has stopped.
+// for every enabled account in the store. Before that it stores the
+// runtime defaults that have no preference yet (SetRuntimeDefaults) and
+// sets the codec of new raw files. The returned channel is closed when
+// both Run methods have returned, i.e. after ctx is cancelled and every
+// syncer and worker has stopped.
 func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
+	b.applyStoredPreferences(ctx)
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -425,8 +453,9 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link and index
-// the messages stored before threading and search existed, then the
-// orphan attachment sweep at start and hourly.
+// the messages stored before threading and search existed, then the raw
+// maintenance loop (maintainRaw) beside the orphan attachment sweep at
+// start and hourly. It returns once all of it has stopped.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
@@ -437,6 +466,14 @@ func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillSearch(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill search index", "err", err)
 	}
+	// The raw maintenance loop runs beside the attachment sweep; Maintain
+	// returns once it has stopped too.
+	rawDone := make(chan struct{})
+	go func() {
+		defer close(rawDone)
+		b.maintainRaw(ctx)
+	}()
+	defer func() { <-rawDone }()
 	sweep := func() {
 		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
 		if err != nil {

@@ -15,8 +15,10 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/mime"
 	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -544,8 +546,11 @@ func (s *Syncer) syncFlags(ctx context.Context, sess *session, f store.Folder, u
 // over the raw cap are marked tooBig without a download; a message the
 // server does not return is marked failed so the loop cannot stall. A
 // message counts as new (notify.newMessage) once its body state is
-// settled, when prevUIDNext > 0 and its UID is at or above it.
+// settled, when prevUIDNext > 0 and its UID is at or above it. Every body
+// is stored under the attachment policy of the preferences as they are
+// when the folder's bodies start (ingest.Store).
 func (s *Syncer) fetchBodies(ctx context.Context, sess *session, f store.Folder, prevUIDNext uint32, progress func(float64)) error {
+	pol := ingest.Policy{AttachmentOfflineDays: s.prefs().AttachmentOfflineDays}
 	attempted := map[string]bool{}
 	done := 0
 	for {
@@ -583,7 +588,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, sess *session, f store.Folder,
 				bytes += todo[0].Size
 				todo = todo[1:]
 			}
-			if err := s.fetchBodyBatch(ctx, sess, f, batch, prevUIDNext); err != nil {
+			if err := s.fetchBodyBatch(ctx, sess, f, batch, prevUIDNext, pol); err != nil {
 				return err
 			}
 			done += len(batch)
@@ -598,8 +603,9 @@ func (s *Syncer) fetchBodies(ctx context.Context, sess *session, f store.Folder,
 
 // fetchBodyBatch runs one UID FETCH BODY.PEEK[] and stores every literal
 // as it streams in. A storage error is remembered and returned once the
-// command is fully consumed.
-func (s *Syncer) fetchBodyBatch(ctx context.Context, sess *session, f store.Folder, batch []store.MessageRef, prevUIDNext uint32) error {
+// command is fully consumed; a literal that breaks off ends the batch at
+// once, as the connection is gone.
+func (s *Syncer) fetchBodyBatch(ctx context.Context, sess *session, f store.Folder, batch []store.MessageRef, prevUIDNext uint32, pol ingest.Policy) error {
 	byUID := make(map[uint32]store.MessageRef, len(batch))
 	uids := make([]uint32, 0, len(batch))
 	for _, r := range batch {
@@ -624,16 +630,31 @@ func (s *Syncer) fetchBodyBatch(ctx context.Context, sess *session, f store.Fold
 					}
 					ref, ok := byUID[uid]
 					if !ok || storeErr != nil {
-						io.Copy(io.Discard, it.Literal)
+						if err := drainLiteral(it.Literal); err != nil {
+							sess.raw.Close()
+							return err
+						}
 						continue
 					}
 					delete(byUID, uid)
-					if err := s.storeBody(ctx, f, ref, it.Literal, prevUIDNext); err != nil {
+					lit := newLiteralReader(it.Literal)
+					if err := s.storeBody(ctx, f, ref, lit, prevUIDNext, pol); err != nil {
 						storeErr = err
+					}
+					if lit.err != nil {
+						// The connection broke under the literal: nothing
+						// more comes, and the library must not read the
+						// literal again (its reader runs on and stops by
+						// itself).
+						sess.raw.Close()
+						return lit.err
 					}
 				case imapclient.FetchItemDataBinarySection:
 					if it.Literal != nil {
-						io.Copy(io.Discard, it.Literal)
+						if err := drainLiteral(it.Literal); err != nil {
+							sess.raw.Close()
+							return err
+						}
 					}
 				}
 			}
@@ -646,64 +667,63 @@ func (s *Syncer) fetchBodyBatch(ctx context.Context, sess *session, f store.Fold
 	return storeErr
 }
 
-// storeBody writes the raw message, parses it and stores the result; the
-// literal is always drained so the decoder can continue.
-func (s *Syncer) storeBody(ctx context.Context, f store.Folder, ref store.MessageRef, lit io.Reader, prevUIDNext uint32) error {
-	_, err := s.deps.Store.WriteMessageRaw(ctx, s.account.ID, ref.ID, lit, s.rawLimit())
-	io.Copy(io.Discard, lit)
-	switch {
-	case errors.Is(err, store.ErrTooBig):
-		return s.settleBody(ctx, f, ref, prevUIDNext, store.BodyTooBig)
-	case err != nil:
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return storageError(err)
-	}
-	raw, err := s.deps.Store.OpenMessageRaw(ctx, s.account.ID, ref.ID)
-	if err != nil {
-		return storageError(err)
-	}
-	parsed, perr := mime.Parse(raw, mime.DefaultLimits())
-	raw.Close()
-	if perr != nil {
-		s.log.Warn("message body unparsable", "message", ref.ID, "err", perr)
-		return s.settleBody(ctx, f, ref, prevUIDNext, store.BodyFailed)
-	}
-	u := store.BodyUpdate{
-		Text:           parsed.Text,
-		HasHTML:        parsed.HasHTML,
-		Snippet:        parsed.Snippet,
-		Attachments:    parsed.Attachments,
-		HasAttachments: parsed.HasAttachments,
-		Headers:        parsed.Headers,
-		References:     parsed.References,
-		State:          store.BodyFetched,
-		Subject:        parsed.Subject,
-		From:           parsed.From,
-		Date:           parsed.Date,
-		RFCMessageID:   parsed.MessageID,
-		InReplyTo:      parsed.InReplyTo,
-	}
-	if err := s.deps.Store.SetMessageBody(ctx, ref.ID, u); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil // deleted meanwhile
-		}
-		return storageError(err)
-	}
-	s.notifyNew(ctx, f, ref, prevUIDNext)
-	return nil
+// drainLiteral reads a literal nobody wants to its end. An error means the
+// connection broke under it (a literal cut short included): the caller
+// gives the connection up and returns at once, without asking the command
+// for more. The library's reader resumed when the read failed, and the
+// command's next item would discard the rest of this literal by reading
+// the connection again, alongside it.
+func drainLiteral(lit imap.LiteralReader) error {
+	_, err := io.Copy(io.Discard, newLiteralReader(lit))
+	return err
 }
 
-// settleBody records a terminal body state and reports the message.
+// storeBody stores one downloaded body (ingest.Store: the whole message,
+// or its skeleton when the policy leaves its large attachments on the
+// server); the literal is always drained so the decoder can continue. A
+// body another writer settled meanwhile (message.download, a deletion) is
+// left to it; a literal that broke off is the connection's failure.
+func (s *Syncer) storeBody(ctx context.Context, f store.Folder, ref store.MessageRef, lit *literalReader, prevUIDNext uint32, pol ingest.Policy) error {
+	_, err := ingest.Store(ctx, s.deps.Store, ingest.Request{
+		Target: ingest.Target{
+			AccountID: s.account.ID, MessageID: ref.ID, Role: f.Role, HasServerCopy: ref.UID > 0,
+			InternalDate: ref.InternalDate, Date: ref.Date,
+		},
+		Body:   lit,
+		Limit:  s.rawLimit(),
+		Policy: pol,
+		Now:    s.now(),
+		Expect: store.RawExpect{BodyState: store.BodyNone},
+	}, s.log)
+	io.Copy(io.Discard, lit)
+	switch {
+	case err == nil:
+		s.notifyNew(ctx, f, ref, prevUIDNext)
+		return nil
+	case errors.Is(err, ingest.ErrTooBig):
+		return s.settleBody(ctx, f, ref, prevUIDNext, store.BodyTooBig)
+	case errors.Is(err, ingest.ErrUnparsable):
+		s.log.Warn("message body unparsable", "message", ref.ID)
+		return s.settleBody(ctx, f, ref, prevUIDNext, store.BodyFailed)
+	case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrNotFound):
+		return nil
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case lit.err != nil:
+		return classify(ctx, transport.StageCommand, lit.err)
+	}
+	return storageError(err)
+}
+
 // rawLimit is the largest message whose body is downloaded.
 func (s *Syncer) rawLimit() int64 {
 	if s.deps.MaxRawMessageBytes > 0 {
 		return s.deps.MaxRawMessageBytes
 	}
-	return maxRawMessageBytes
+	return ingest.MaxMessageBytes
 }
 
+// settleBody records a terminal body state and reports the message.
 func (s *Syncer) settleBody(ctx context.Context, f store.Folder, ref store.MessageRef, prevUIDNext uint32, state store.BodyState) error {
 	if err := s.deps.Store.MarkBodyState(ctx, ref.ID, state); err != nil {
 		if errors.Is(err, store.ErrNotFound) {

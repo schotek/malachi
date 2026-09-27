@@ -200,6 +200,8 @@ type harnessOptions struct {
 	buildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
 	// gmail makes the syncer see Gmail's X-GM-EXT-1 capability.
 	gmail bool
+	// session wraps every server session (a server that refuses commands).
+	session func(imapserver.Session) imapserver.Session
 }
 
 // harness is a memserver behind a proxy, a temporary store with one
@@ -242,7 +244,10 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
 			s := mem.NewSession()
 			if o.token != "" {
-				return &saslSession{Session: s, username: "me", password: password, token: o.token}, nil, nil
+				s = &saslSession{Session: s, username: "me", password: password, token: o.token}
+			}
+			if o.session != nil {
+				s = o.session(s)
 			}
 			return s, nil, nil
 		},

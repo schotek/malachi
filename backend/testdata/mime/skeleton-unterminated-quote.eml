@@ -1,0 +1,18 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Unterminated quote
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-quote@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="unterminated
+
+--unterminated
+Content-Type: text/plain
+
+Lost behind a broken parameter: the walk has no boundary.
+--unterminated
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="lost.bin"
+
+never seen
+--unterminated--

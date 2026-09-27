@@ -179,10 +179,18 @@ func FuzzSanitize(f *testing.F) {
 	for _, h := range corpusHTML(f) {
 		f.Add(h, 0)
 	}
+	for _, s := range cidTricks {
+		f.Add(s, 0)
+	}
 	f.Fuzz(func(t *testing.T, src string, mode int) {
 		in := Input{HTML: src, Mode: ModeView, Policy: api.RemoteBlock, KnownCIDs: fuzzKnown}
 		if mode%2 == 1 {
 			in.Mode = ModeCompose
+		}
+		if in.Mode == ModeView {
+			// Whatever the view resolves, the ingest must count as shown
+			// (cid_superset_test.go).
+			checkCIDSuperset(t, src, nil)
 		}
 		out, err := Sanitize(in)
 		if err != nil {

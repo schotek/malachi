@@ -37,9 +37,8 @@ const (
 	// again in the desktop settings without anything waking the syncer.
 	authRetry = 5 * time.Minute
 
-	maxRawMessageBytes = 25 << 20 // larger messages are never downloaded (bodyState tooBig)
-	bodyConcurrency    = 4        // parallel $value downloads (the service's per-mailbox limit)
-	unfetchedBatch     = 200      // ListUnfetched page
+	bodyConcurrency = 4   // parallel $value downloads (the service's per-mailbox limit)
+	unfetchedBatch  = 200 // ListUnfetched page
 
 	maxOpAttempts = 10 // a queued change is dropped after this many failures
 	opBackoffMin  = 30 * time.Second
@@ -50,6 +49,10 @@ const (
 type SyncPrefs struct {
 	IntervalSeconds int // polling interval of every folder; 0 = manual only
 	OfflineDays     int // retention window; 0 = everything
+	// AttachmentOfflineDays decides which large attachments of the bodies
+	// downloaded are stored (ingest.Policy): 0 all, N those of the last N
+	// days, api.AttachmentOfflineNone none.
+	AttachmentOfflineDays int
 }
 
 // Deps wires one syncer to the rest of the daemon.

@@ -6,6 +6,8 @@ package core
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/mime"
@@ -35,8 +37,11 @@ func (b *Backend) renderHTML(ctx context.Context, accountID, id string, policy a
 		b.withholdHTML(res, id, "raw message unavailable", err)
 		return
 	}
-	defer f.Close()
+	// The parse is all that reads the file; sanitising, and fetching remote
+	// images under allow, can take seconds more. The pictures the HTML shows
+	// are always stored, even when other parts are on the server only.
 	parsed, err := mime.Parse(f, mime.DefaultLimits())
+	f.Close()
 	if err != nil {
 		b.withholdHTML(res, id, "raw message unparsable", err)
 		return
@@ -153,7 +158,7 @@ func (s *messageService) Part(ctx context.Context, p api.MessagePartParams) (*ap
 	if err != nil {
 		return nil, err
 	}
-	part, err := s.b.extractPart(ctx, a.ID, m.ID, p.PartID)
+	part, err := s.b.extractPart(ctx, m, p.PartID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,16 +173,43 @@ func (s *messageService) Part(ctx context.Context, p api.MessagePartParams) (*ap
 
 // extractPart reads one part of a stored message, decoded and capped at
 // api.MaxAttachmentDataBytes, with the failures mapped to the API errors
-// message.part documents.
-func (b *Backend) extractPart(ctx context.Context, accountID, id, partID string) (*mime.Part, error) {
-	f, err := b.store.OpenMessageRaw(ctx, accountID, id)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return nil, api.NewError(api.CodePartNotFound, "message content is not stored")
-	case err != nil:
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
+// message.part documents. m is the message's row as read before the call.
+//
+// A part the row names as kept on the server is partNotDownloaded,
+// whatever the file holds and whether there is one: a skeleton has an
+// empty body in the part's place, which must never pass for its content.
+// The file can change while it is opened, so the row is asked twice: m,
+// read before the file was opened, because a download names the part
+// stored only after the whole file is in place; and the row read after,
+// because a reduction names the part remote before its skeleton replaces
+// the whole file. A part either calls remote is: at worst the client
+// downloads a message that was already whole. A large part the row calls
+// stored that reads back empty is treated the same way, and recorded as
+// remote (markLostParts): the file is a skeleton the row does not describe.
+func (b *Backend) extractPart(ctx context.Context, m store.Message, partID string) (*mime.Part, error) {
+	notDownloaded := func() error {
+		return api.NewError(api.CodePartNotDownloaded, "part %q is on the mail server only; message.download fetches it", partID)
 	}
-	defer f.Close()
+	if slices.Contains(m.RemoteParts, partID) {
+		return nil, notDownloaded()
+	}
+	f, openErr := b.store.OpenMessageRaw(ctx, m.AccountID, m.ID)
+	if openErr == nil {
+		defer f.Close()
+	}
+	cur, err := b.getMessage(ctx, m.AccountID, m.ID)
+	if err != nil {
+		return nil, err
+	}
+	if slices.Contains(cur.RemoteParts, partID) {
+		return nil, notDownloaded()
+	}
+	switch {
+	case errors.Is(openErr, store.ErrNotFound):
+		return nil, api.NewError(api.CodePartNotFound, "message content is not stored")
+	case openErr != nil:
+		return nil, api.NewError(api.CodeStorageError, "%v", openErr)
+	}
 	part, err := mime.ExtractPart(f, partID, mime.DefaultLimits(), api.MaxAttachmentDataBytes)
 	switch {
 	case errors.Is(err, mime.ErrPartNotFound):
@@ -189,5 +221,51 @@ func (b *Backend) extractPart(ctx context.Context, accountID, id, partID string)
 	case err != nil:
 		return nil, api.NewError(api.CodeMalformedMessage, "%v", err)
 	}
+	if lostPart(cur, partID, len(part.Body)) {
+		if err := b.markLostParts(ctx, cur, partID); err != nil {
+			return nil, err
+		}
+		return nil, notDownloaded()
+	}
 	return part, nil
+}
+
+// lostPart reports whether a part read back from a message's stored file
+// with n bytes lacks its data although m's row calls it stored: an
+// attachment of api.LargeAttachmentMinBytes or more that is empty. Only a
+// skeleton has such a part, the background pass leaves nothing smaller on
+// the server, and here one the row does not describe: a crash kept the
+// reduced file but lost the row's commits, the file is a leftover of the
+// other codec, or it was reduced and made whole again while being opened.
+func lostPart(m store.Message, partID string, n int) bool {
+	if n > 0 {
+		return false
+	}
+	for _, a := range m.Attachments {
+		if a.PartID == partID {
+			return a.Size >= api.LargeAttachmentMinBytes
+		}
+	}
+	return false
+}
+
+// markLostParts records parts of a stored message whose data its file lacks
+// (lostPart) as kept on the mail server, as a reduction would have, so
+// that message.download fetches them again and the caller can answer
+// partNotDownloaded. An error when that cannot help: an outbox message has
+// no copy on a server, and a store that refuses the change has to be
+// reported. Only ids are logged.
+func (b *Backend) markLostParts(ctx context.Context, m store.Message, parts ...string) error {
+	err := b.store.MarkPartsRemote(context.WithoutCancel(ctx), m.AccountID, m.ID, parts)
+	switch {
+	case err == nil:
+		b.log.Warn("stored message lacks parts its row called stored; marked as on the server", "message", m.ID, "parts", parts)
+		return nil
+	case errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrConflict):
+		// Gone, or its body is to be downloaded anyway.
+		return nil
+	case errors.Is(err, store.ErrOutbox):
+		return api.NewError(api.CodeStorageError, "the stored message lacks the data of part %s", strings.Join(parts, ", "))
+	}
+	return api.NewError(api.CodeStorageError, "%v", err)
 }

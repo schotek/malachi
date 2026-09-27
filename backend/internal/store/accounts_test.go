@@ -7,8 +7,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -214,6 +216,34 @@ func TestAccountsDelete(t *testing.T) {
 	}
 	if err := s.DeleteAccount(ctx, a.ID, true); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("second delete: %v", err)
+	}
+}
+
+// An account's raw files go with it in either codec, both variants of a
+// message between a conversion's phases included, and so does their
+// accounting.
+func TestAccountsDeleteRemovesCompressedFiles(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	a := Account{Name: "Work", Enabled: true, Config: testAccountConfig("me@example.invalid")}
+	if err := s.AddAccount(ctx, &a); err != nil {
+		t.Fatal(err)
+	}
+	inbox := seedFolder(t, s, a.ID, "INBOX", api.RoleInbox)
+	s.SetRawCodec(RawZstd)
+	m := seedMessage(t, s, inbox, 1, "compressed", time.Now())
+	if err := os.WriteFile(s.MessageRawPath(a.ID, m.ID), []byte("plain twin"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteAccount(ctx, a.ID, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(s.MessageDir(), a.ID)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("message directory left: %v", err)
+	}
+	var n int
+	if err := s.DB().QueryRow(`SELECT COUNT(*) FROM message_files`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("accounting rows left: %d %v", n, err)
 	}
 }
 

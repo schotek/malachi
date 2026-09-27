@@ -124,7 +124,7 @@ func (b *Backend) draftFromMessage(ctx context.Context, accountID string, m stor
 	}
 
 	q := &quoter{b: b, account: accountID, forward: true}
-	raw, parsed := q.openRaw(ctx, m.ID)
+	raw, parsed := q.openRaw(ctx, m)
 	if raw != nil {
 		defer raw.Close()
 	}

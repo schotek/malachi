@@ -4,10 +4,12 @@
 package imap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -176,6 +178,47 @@ func TestSentCopyAppended(t *testing.T) {
 	}
 	if n := h.notes.newMessages(); len(n) != 0 {
 		t.Fatalf("sent copy must not notify, got %+v", n)
+	}
+}
+
+// TestSentCopyAppendedCompressedStore: with a compressed store the outbox
+// copy is still uploaded with its exact length, and the copy fetched back
+// is stored compressed.
+func TestSentCopyAppendedCompressedStore(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	h.st.SetRawCodec(store.RawZstd)
+	if err := h.user.Create("Sent", nil); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+	sent := h.folder("sent")
+	m := h.queueSent("s3", time.Now().Add(-time.Hour).Truncate(time.Second))
+	raw, err := h.st.OpenMessageRaw(context.Background(), h.acc.ID, m.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := io.ReadAll(raw)
+	raw.Close()
+	h.syncer.Trigger(api.FolderID(sent.ID), false)
+
+	waitFor(t, "sent copy fetched locally", func() bool {
+		msgs := h.messages(sent.ID)
+		return len(msgs) == 1 && msgs[0].BodyState == store.BodyFetched
+	})
+	local := h.messages(sent.ID)[0]
+	if _, err := os.Stat(h.st.MessageRawPath(h.acc.ID, local.ID) + store.RawZstSuffix); err != nil {
+		t.Fatalf("sent copy not compressed: %v", err)
+	}
+	r, err := h.st.OpenMessageRaw(context.Background(), h.acc.ID, local.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(r)
+	r.Close()
+	if err != nil || !bytes.Equal(got, want) {
+		t.Fatalf("sent copy = %q, %v; want %q", got, err, want)
 	}
 }
 

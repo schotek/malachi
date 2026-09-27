@@ -1,0 +1,25 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Preamble and epilogue
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-pe@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="pe"
+
+This is the preamble. Readers never show it.
+--pe-looks-like-a-delimiter
+--pe
+Content-Type: text/plain
+
+Body.
+--pe
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="pe.bin"
+
+payload
+--pe--
+This is the epilogue.
+--pe
+Content-Type: text/plain
+
+Nothing after the close delimiter is a part.

@@ -1,0 +1,24 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Encrypted
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-encrypted@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/encrypted; protocol="application/pgp-encrypted";
+ boundary="enc"
+
+--enc
+Content-Type: application/pgp-encrypted
+Content-Description: PGP/MIME version identification
+
+Version: 1
+
+--enc
+Content-Type: application/octet-stream; name="encrypted.asc"
+Content-Disposition: inline; filename="encrypted.asc"
+
+-----BEGIN PGP MESSAGE-----
+
+hQEMAwAAAAAAAAAAAQf/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+-----END PGP MESSAGE-----
+--enc--

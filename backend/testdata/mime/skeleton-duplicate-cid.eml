@@ -1,0 +1,33 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: One Content-ID, three parts
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-dupcid@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="dup"; type="text/html"
+
+--dup
+Content-Type: text/html; charset=utf-8
+
+<p><img src="cid:logo@example.org" alt="logo"></p>
+--dup
+Content-Type: image/png
+Content-ID: <logo@example.org>
+Content-Disposition: inline; filename="logo.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--dup
+Content-Type: image/gif
+Content-ID: <LOGO@Example.org>
+Content-Disposition: inline; filename="logo.gif"
+Content-Transfer-Encoding: base64
+
+R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
+--dup
+Content-Type: application/octet-stream
+Content-ID: <logo@example.org>
+Content-Disposition: attachment; filename="also-logo.bin"
+
+A third part claiming the same identifier.
+--dup--

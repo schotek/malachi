@@ -236,7 +236,7 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		return
 	}
 	defer f.Close()
-	info, err := f.Stat()
+	size, err := f.Size()
 	if err != nil {
 		w.missing(ctx, id, "raw message", err)
 		return
@@ -247,7 +247,7 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		smtpCfg = *w.account.Config.SMTP
 	}
 	dctx, cancel := context.WithTimeout(ctx, deliverTimeout)
-	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, info.Size())
+	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, size)
 	cancel()
 	if err == nil {
 		w.succeed(ctx, e)

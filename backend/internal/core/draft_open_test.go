@@ -326,3 +326,25 @@ func TestDraftCopyGoesWithSend(t *testing.T) {
 		t.Errorf("syncer not woken for the drafts folder: %v", got)
 	}
 }
+
+// A message of the Drafts folder whose large attachments are on the server
+// (moved there after the background pass reduced it) opens with them in
+// skipped, and so without replaces: the draft is not the message whole.
+func TestDraftOpenRemoteParts(t *testing.T) {
+	m := seedMailbox(t)
+	drafts := m.draftsFolder(t)
+	msg := m.seedLarge(t, 7, time.Now().AddDate(-1, 0, 0), smallOnly)
+	if _, err := m.b.Messages().Move(context.Background(), api.MessageMoveParams{AccountID: m.acc,
+		MessageIDs: []api.MessageID{api.MessageID(msg.ID)}, TargetFolderID: api.FolderID(drafts.ID)}); err != nil {
+		t.Fatal(err)
+	}
+	res := m.open(t, msg.ID)
+	if len(res.Skipped) != 2 || !res.Skipped[0].Remote || res.Skipped[0].Size != int64(len(bigPDF)) || res.Draft.Replaces != "" {
+		t.Fatalf("draft.open: skipped %+v, replaces %q", res.Skipped, res.Draft.Replaces)
+	}
+	for _, a := range res.Draft.Attachments {
+		if a.Filename == "report.pdf" || a.Size == 0 {
+			t.Errorf("attachment %+v", a)
+		}
+	}
+}

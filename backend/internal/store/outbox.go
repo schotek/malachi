@@ -124,13 +124,15 @@ func outboxFolderTx(ctx context.Context, tx *sql.Tx, accountID string) (Folder, 
 }
 
 // EnqueueOutbox turns a draft into a queued message. The raw message is
-// written first (WriteMessageRawFunc with in.Build and in.Limit → ErrTooBig);
-// then, in one transaction, the draft is verified (missing → ErrNotFound,
-// other version → ErrVersionConflict), the outbox folder ensured, the
-// messages row inserted there (uid 0, flags ["seen"], body fetched with
-// in.Text, size = bytes written), the outbox row inserted as queued, the
-// draft deleted (its attachment rows cascade) together with its copy in the
-// Drafts folder (dropCopyTx), and the folders recounted.
+// written first (PutMessageRaw with in.Build and in.Limit → ErrTooBig),
+// plain whatever the store's codec and flushed to disk, since it is the
+// only copy of the mail until it is sent; then, in one transaction, the
+// draft is verified (missing → ErrNotFound, other version →
+// ErrVersionConflict), the outbox folder ensured, the messages row
+// inserted there (uid 0, flags ["seen"], body fetched with in.Text, size =
+// bytes written) with its message_files row, the outbox row inserted as
+// queued, the draft deleted (its attachment rows cascade) together with
+// its copy in the Drafts folder (dropCopyTx), and the folders recounted.
 // The attachment files go after the commit. On any failure nothing is left
 // behind, the raw file included. The stored message is returned.
 func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, error) {
@@ -151,11 +153,11 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 		limit = api.MaxOutgoingMessageBytes
 	}
 	id := newID("m_")
-	size, err := s.WriteMessageRawFunc(ctx, accountID, id, limit, in.Build)
+	info, err := s.PutMessageRaw(ctx, accountID, id, RawWrite{Limit: limit, Plain: true, Sync: true}, in.Build)
 	if err != nil {
 		return Message{}, fmt.Errorf("enqueue outbox: %w", err)
 	}
-	m, attachments, gone, err := s.enqueueOutboxTx(ctx, in, id, size)
+	m, attachments, gone, err := s.enqueueOutboxTx(ctx, in, id, info.Bytes)
 	if err != nil {
 		s.removeMessageFiles([]messageFile{{accountID: accountID, id: id}})
 		return Message{}, err
@@ -221,6 +223,12 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 		m.RFCMessageID, m.InReplyTo, enc.references, size, m.Snippet, boolInt(m.HasAttachments),
 		enc.attachments, enc.headers, in.Text, string(BodyFetched), m.ThreadID, now, now); err != nil {
 		return Message{}, nil, nil, fmt.Errorf("insert outbox message: %w", err)
+	}
+	// The file was written before the row existed, so its accounting row
+	// comes here.
+	if _, err := tx.ExecContext(ctx, `INSERT INTO message_files (message_id, codec, bytes, disk_bytes) VALUES (?, ?, ?, ?)`,
+		id, RawPlain.String(), size, size); err != nil {
+		return Message{}, nil, nil, fmt.Errorf("record outbox message file: %w", err)
 	}
 	if err := insertRefsTx(ctx, tx, id, accountID, m.InReplyTo, m.References); err != nil {
 		return Message{}, nil, nil, err

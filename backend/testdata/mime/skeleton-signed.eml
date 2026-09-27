@@ -1,0 +1,32 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Signed
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-signed@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/signed; micalg=pgp-sha256;
+ protocol="application/pgp-signature"; boundary="signed"
+
+--signed
+Content-Type: multipart/mixed; boundary="content"
+
+--content
+Content-Type: text/plain
+
+Signed text.
+--content
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="signed.bin"
+
+covered by the signature
+--content--
+
+--signed
+Content-Type: application/pgp-signature; name="signature.asc"
+Content-Disposition: attachment; filename="signature.asc"
+
+-----BEGIN PGP SIGNATURE-----
+
+iQEzBAEBCAAdFiEEAAAAAAAAAAAAAAAAAAAAAAAAAAAFAmb2AAAACgkQAAAAAAAAAAA=
+-----END PGP SIGNATURE-----
+--signed--

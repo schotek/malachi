@@ -1,0 +1,50 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Every spelling of a cid: reference
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-cid@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="cid-mixed"
+
+--cid-mixed
+Content-Type: multipart/related; boundary="cid-rel"; type="text/html"
+
+--cid-rel
+Content-Type: text/html; charset=utf-8
+
+<html><head><style>.hero { background: url('cid:block@example.org') }</style></head><body>
+<p><img src="CID:Upper@Example.org" alt="capitals"></p>
+<p><img src="&#99;id:entity@example.org" alt="entity"></p>
+<p><img src="cid:percent%40example.org" alt="percent"></p>
+<p><img src="cid:<angle@example.org>" alt="angle"></p>
+<p><img src="c	id:tab@example.org" alt="tab"></p>
+<p><img srcset="cid:srcset1@example.org 1x, cid:srcset2@example.org 2x" alt="srcset"></p>
+<div style="background-image:url(cid:style@example.org)">styled</div>
+<table><tr><td background="cid:background@example.org">cell</td></tr></table>
+<p><a href="cid:href@example.org">link</a></p>
+<noscript><img src="cid:noscript@example.org" alt="noscript"></noscript>
+<!-- <img src="cid:comment@example.org"> -->
+</body></html>
+--cid-rel
+Content-Type: image/png
+Content-ID: <upper@example.org>
+Content-Disposition: inline; filename="upper.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--cid-rel
+Content-Type: image/png
+Content-ID: <comment@example.org>
+Content-Disposition: inline; filename="comment.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+--cid-rel--
+--cid-mixed
+Content-Type: application/pdf
+Content-ID: <image001.png@01DB1234.56789ABC>
+Content-Disposition: attachment; filename="invoice.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKJcOkw7zDtsOfCg==
+--cid-mixed--

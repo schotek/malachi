@@ -54,7 +54,7 @@ func (s *messageService) Embedded(ctx context.Context, p api.MessageEmbeddedPara
 	if err != nil {
 		return nil, err
 	}
-	part, err := s.b.extractPart(ctx, a.ID, m.ID, p.PartID)
+	part, err := s.b.extractPart(ctx, m, p.PartID)
 	if err != nil {
 		return nil, err
 	}

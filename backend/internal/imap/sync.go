@@ -23,6 +23,10 @@ import (
 type SyncPrefs struct {
 	IntervalSeconds int // polling interval; 0 = no periodic pass (IDLE or manual only)
 	OfflineDays     int // retention window; 0 = everything
+	// AttachmentOfflineDays decides which large attachments of the bodies
+	// downloaded are stored (ingest.Policy): 0 all, N those of the last N
+	// days, api.AttachmentOfflineNone none.
+	AttachmentOfflineDays int
 }
 
 // Deps wires one syncer to the rest of the daemon.
@@ -46,7 +50,7 @@ type Deps struct {
 	// server rejected SEARCH SINCE); a test hook.
 	NoSinceSearch bool
 	// MaxRawMessageBytes caps the messages whose bodies are downloaded;
-	// 0 = the built-in 25 MiB. A test hook (headers without bodies).
+	// 0 = ingest.MaxMessageBytes. A test hook (headers without bodies).
 	MaxRawMessageBytes int64
 	// Backoff overrides the reconnect delay for the given attempt (0-based);
 	// nil = 5 s doubling to 5 min with ±20 % jitter.

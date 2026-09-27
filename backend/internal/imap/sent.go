@@ -82,11 +82,12 @@ func (s *Syncer) appendOne(ctx context.Context, sess *session, mailbox string, e
 		return false, storageError(err)
 	}
 	defer raw.Close()
-	info, err := raw.Stat()
+	// The message's own length whatever the codec it is stored in: the
+	// literal below must carry exactly that many bytes.
+	size, err := raw.Size()
 	if err != nil {
 		return false, storageError(err)
 	}
-	size := info.Size()
 	if size <= 0 {
 		s.log.Warn("sent message file empty, dropping local copy", "message", e.MessageID)
 		return false, s.dropSent(ctx, e.MessageID)

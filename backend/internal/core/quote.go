@@ -8,10 +8,8 @@ import (
 	"context"
 	"errors"
 	"html"
-	"io"
 	"net/mail"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"unicode/utf8"
@@ -283,6 +281,35 @@ type quoter struct {
 	account     string
 	forward     bool
 	attribution string // validated, LF-separated, possibly empty
+	// remote are the original's parts kept on the mail server only, by
+	// part id, as its row lists them (openRaw): their data is not in the
+	// stored file, so they are never copied, only reported.
+	remote map[string]api.Attachment
+	// row is the original's row as read once its file was open (openRaw):
+	// what it says a part is when the file lacks the part's data
+	// (lostPart).
+	row store.Message
+}
+
+// remoteParts lists the parts that any of the rows of one stored message
+// names as on the mail server only, with the metadata message.get reports
+// for them: the original's name, type and size, and Remote set.
+func remoteParts(rows ...store.Message) map[string]api.Attachment {
+	var out map[string]api.Attachment
+	for _, m := range rows {
+		for _, id := range m.RemoteParts {
+			if _, ok := out[id]; ok {
+				continue
+			}
+			if out == nil {
+				out = map[string]api.Attachment{}
+			}
+			entry := storedAttachment(m, id)
+			entry.Remote = true
+			out[id] = entry
+		}
+	}
+	return out
 }
 
 // quoteResult is what the quoter produced: the form it managed, the two
@@ -311,7 +338,7 @@ func (q *quoter) quote(ctx context.Context, m store.Message) (quoteResult, error
 	if state != store.BodyFetched {
 		return quoteResult{form: api.QuoteNone}, nil
 	}
-	raw, parsed := q.openRaw(ctx, m.ID)
+	raw, parsed := q.openRaw(ctx, m)
 	if raw != nil {
 		defer raw.Close()
 	}
@@ -346,14 +373,27 @@ func (q *quoter) quote(ctx context.Context, m store.Message) (quoteResult, error
 	return res, nil
 }
 
-// openRaw opens and parses the stored original; nil, nil when it cannot
-// be had, which only costs the pictures and the formatting.
-func (q *quoter) openRaw(ctx context.Context, id string) (*os.File, *mime.Parsed) {
+// openRaw opens and parses the stored original m, and sets q.remote; nil,
+// nil when it cannot be had, which only costs the pictures and the
+// formatting. The file can change while it is opened, so the parts on the
+// server only are those m (read before: a download names a part stored
+// only after the whole file is in place) or the row read after the file
+// was opened (a reduction names a part remote before its skeleton replaces
+// the whole file) names: no part copied can be an empty stand-in.
+func (q *quoter) openRaw(ctx context.Context, m store.Message) (store.RawMessage, *mime.Parsed) {
+	id := m.ID
 	f, err := q.b.store.OpenMessageRaw(ctx, q.account, id)
 	if err != nil {
 		q.b.log.Warn("quote: raw message unavailable", "id", id, "err", err)
 		return nil, nil
 	}
+	after, err := q.b.store.GetMessage(ctx, q.account, id)
+	if err != nil {
+		f.Close()
+		q.b.log.Warn("quote: message unavailable", "id", id, "err", err)
+		return nil, nil
+	}
+	q.remote, q.row = remoteParts(m, after), after
 	parsed, err := mime.Parse(f, mime.DefaultLimits())
 	if err != nil {
 		f.Close()
@@ -425,9 +465,13 @@ func (imp *imported) all() []store.Attachment {
 // referenced (Content-ID → part) as inline attachments under fresh ids,
 // and, forwarding, every other part as a regular attachment. A part that
 // is over a cap, unreadable, or (for a picture) not a safe image is
-// skipped and reported; a store that will not take a copy undoes the ones
-// made and is storageError.
-func (q *quoter) importParts(ctx context.Context, raw *os.File, parsed *mime.Parsed, referenced map[string]string) (*imported, error) {
+// skipped and reported; so is a part kept on the mail server only
+// (q.remote), with its stored metadata, never extracted: the stored file
+// holds an empty body in its place. A large part the row calls stored that
+// reads back empty is reported the same way and recorded as remote
+// (lostPart). A store that will not take a copy undoes the ones made and is
+// storageError.
+func (q *quoter) importParts(ctx context.Context, raw store.RawMessage, parsed *mime.Parsed, referenced map[string]string) (*imported, error) {
 	imp := &imported{rewrite: map[string]string{}}
 	if raw == nil {
 		return imp, nil
@@ -438,6 +482,10 @@ func (q *quoter) importParts(ctx context.Context, raw *os.File, parsed *mime.Par
 		if !inline && !q.forward {
 			continue
 		}
+		if stored, ok := q.remote[att.PartID]; ok {
+			imp.skipped = append(imp.skipped, stored)
+			continue
+		}
 		if att.Size > quotedPartLimit || total+att.Size > api.MaxDraftAttachmentBytes ||
 			len(imp.inline)+len(imp.regular) >= api.MaxDraftAttachments ||
 			(inline && len(imp.inline) >= maxQuotedInline) {
@@ -445,6 +493,12 @@ func (q *quoter) importParts(ctx context.Context, raw *os.File, parsed *mime.Par
 			continue
 		}
 		part, err := extractQuotedPart(raw, att.PartID)
+		if err == nil && lostPart(q.row, att.PartID, len(part.Body)) {
+			entry := storedAttachment(q.row, att.PartID)
+			entry.Remote = q.b.markLostParts(ctx, q.row, att.PartID) == nil
+			imp.skipped = append(imp.skipped, entry)
+			continue
+		}
 		if err != nil || len(part.Body) == 0 {
 			q.b.log.Warn("quote: part not copied", "part", att.PartID, "err", err)
 			imp.skipped = append(imp.skipped, att)
@@ -491,10 +545,21 @@ func (q *quoter) importParts(ctx context.Context, raw *os.File, parsed *mime.Par
 	return imp, nil
 }
 
+// storedAttachment is part partID as m's row lists it (the name, type and
+// size of the original part).
+func storedAttachment(m store.Message, partID string) api.Attachment {
+	for _, a := range m.Attachments {
+		if a.PartID == partID {
+			return a
+		}
+	}
+	return api.Attachment{PartID: partID}
+}
+
 // extractQuotedPart reads one part out of the original, which the earlier
 // parse left at its end.
-func extractQuotedPart(raw *os.File, partID string) (*mime.Part, error) {
-	if _, err := raw.Seek(0, io.SeekStart); err != nil {
+func extractQuotedPart(raw store.RawMessage, partID string) (*mime.Part, error) {
+	if err := raw.Rewind(); err != nil {
 		return nil, err
 	}
 	return mime.ExtractPart(raw, partID, mime.DefaultLimits(), quotedPartLimit)

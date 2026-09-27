@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/mime"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -207,8 +208,11 @@ func (s *Syncer) messageRow(f store.Folder, m message) *store.Message {
 // fetchBodies downloads the bodies the folder still lacks, newest first,
 // bodyConcurrency at a time. A message the server no longer has, or that
 // cannot be parsed, is settled as failed so the loop cannot stall; one
-// over the raw cap is tooBig.
+// over the raw cap is tooBig. Every body is stored under the attachment
+// policy of the preferences as they are when the folder's bodies start
+// (ingest.Store).
 func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[string]bool, progress func(float64)) error {
+	pol := ingest.Policy{AttachmentOfflineDays: s.prefs().AttachmentOfflineDays}
 	attempted := map[string]bool{}
 	done := 0
 	for {
@@ -234,7 +238,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[s
 			break
 		}
 		total := done + len(todo)
-		if err := s.fetchBatch(ctx, f, todo, announce, func(n int) {
+		if err := s.fetchBatch(ctx, f, todo, announce, pol, func(n int) {
 			done += n
 			progress(float64(done) / float64(total))
 		}); err != nil {
@@ -247,7 +251,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[s
 
 // fetchBatch downloads a batch concurrently; the first failure that is
 // not about a single message ends the batch.
-func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.MessageRef, announce map[string]bool, advance func(int)) error {
+func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.MessageRef, announce map[string]bool, pol ingest.Policy, advance func(int)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var (
@@ -270,7 +274,7 @@ func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.M
 		go func(ref store.MessageRef) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			err := s.fetchBody(ctx, f, ref, announce)
+			err := s.fetchBody(ctx, f, ref, announce, pol)
 			mu.Lock()
 			if err != nil && firstErr == nil {
 				firstErr = err
@@ -285,61 +289,50 @@ func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.M
 	return firstErr
 }
 
-// fetchBody streams one raw message into the store and parses it.
-func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool) error {
-	rc, err := s.client.GetRaw(ctx, "me/messages/"+url.PathEscape(ref.RemoteID)+"/$value")
+// fetchBody streams one raw message into the store (ingest.Store: the
+// whole message, or its skeleton when the policy leaves its large
+// attachments on the server); the size stored is the size downloaded. A
+// body another writer settled meanwhile (message.download, a deletion) is
+// left to it.
+func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool, pol ingest.Policy) error {
+	rc, err := s.client.GetRaw(ctx, valuePath(ref.RemoteID))
 	switch {
 	case IsNotFound(err):
 		return s.settleBody(ctx, f, ref, announce, store.BodyFailed)
 	case err != nil:
 		return err
 	}
-	size, err := s.deps.Store.WriteMessageRaw(ctx, s.account.ID, ref.ID, rc, maxRawMessageBytes)
-	_, _ = io.Copy(io.Discard, io.LimitReader(rc, 1<<20))
+	src := &transferReader{r: rc}
+	_, err = ingest.Store(ctx, s.deps.Store, ingest.Request{
+		Target: ingest.Target{
+			AccountID: s.account.ID, MessageID: ref.ID, Role: f.Role, HasServerCopy: ref.RemoteID != "",
+			InternalDate: ref.InternalDate, Date: ref.Date,
+		},
+		Body:   src,
+		Limit:  ingest.MaxMessageBytes,
+		Policy: pol,
+		Now:    s.now(),
+		Expect: store.RawExpect{BodyState: store.BodyNone},
+	}, s.log)
+	_, _ = io.Copy(io.Discard, io.LimitReader(rc, maxValueDrain))
 	rc.Close()
 	switch {
-	case errors.Is(err, store.ErrTooBig):
+	case err == nil:
+		s.notifyNew(ctx, f, ref, announce)
+		return nil
+	case errors.Is(err, ingest.ErrTooBig):
 		return s.settleBody(ctx, f, ref, announce, store.BodyTooBig)
-	case err != nil:
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		return storageError(err)
-	}
-	raw, err := s.deps.Store.OpenMessageRaw(ctx, s.account.ID, ref.ID)
-	if err != nil {
-		return storageError(err)
-	}
-	parsed, perr := mime.Parse(raw, mime.DefaultLimits())
-	raw.Close()
-	if perr != nil {
-		s.log.Warn("message body unparsable", "message", ref.ID, "err", perr)
+	case errors.Is(err, ingest.ErrUnparsable):
+		s.log.Warn("message body unparsable", "message", ref.ID)
 		return s.settleBody(ctx, f, ref, announce, store.BodyFailed)
+	case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrNotFound):
+		return nil
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case src.err != nil:
+		return ToAPIError(src.err)
 	}
-	u := store.BodyUpdate{
-		Text:           parsed.Text,
-		HasHTML:        parsed.HasHTML,
-		Snippet:        parsed.Snippet,
-		Attachments:    parsed.Attachments,
-		HasAttachments: parsed.HasAttachments,
-		Headers:        parsed.Headers,
-		References:     parsed.References,
-		State:          store.BodyFetched,
-		Subject:        parsed.Subject,
-		From:           parsed.From,
-		Date:           parsed.Date,
-		RFCMessageID:   parsed.MessageID,
-		InReplyTo:      parsed.InReplyTo,
-		Size:           size,
-	}
-	if err := s.deps.Store.SetMessageBody(ctx, ref.ID, u); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return nil // deleted meanwhile
-		}
-		return storageError(err)
-	}
-	s.notifyNew(ctx, f, ref, announce)
-	return nil
+	return storageError(err)
 }
 
 // settleBody records a terminal body state and reports the message.

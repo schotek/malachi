@@ -1,0 +1,4 @@
+# Test messages keep their exact bytes (CRLF, lone LF, NUL): the MIME parser
+# and the skeleton rewriter are tested on them, so no line-ending conversion
+# (core.autocrlf) may touch them on commit or checkout.
+backend/testdata/mime/*.eml -text

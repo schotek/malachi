@@ -36,15 +36,14 @@ const (
 	backoffMax    = 5 * time.Minute // cap of the exponential backoff
 	backoffJitter = 0.2             // ±20 % randomisation of every delay
 
-	maxRawMessageBytes = 25 << 20 // larger messages are never downloaded (bodyState tooBig)
-	envelopeBatch      = 200      // messages per UID FETCH of envelopes
-	bodyBatchMessages  = 20       // messages per UID FETCH of bodies
-	bodyBatchBytes     = 8 << 20  // announced bytes per body batch
-	flagBatch          = 2000     // UIDs per UID FETCH (FLAGS)
-	maxFolders         = 5000     // LIST entries kept (hostile server guard)
-	maxOpAttempts      = 8        // pushes of one local operation before it is dropped
-	opBackoffMin       = 30 * time.Second
-	opBackoffMax       = time.Hour
+	envelopeBatch     = 200     // messages per UID FETCH of envelopes
+	bodyBatchMessages = 20      // messages per UID FETCH of bodies
+	bodyBatchBytes    = 8 << 20 // announced bytes per body batch
+	flagBatch         = 2000    // UIDs per UID FETCH (FLAGS)
+	maxFolders        = 5000    // LIST entries kept (hostile server guard)
+	maxOpAttempts     = 8       // pushes of one local operation before it is dropped
+	opBackoffMin      = 30 * time.Second
+	opBackoffMax      = time.Hour
 
 	// maxSearchResults bounds a UID SEARCH result before it is expanded into
 	// memory; a server answering with a wider range is refused.

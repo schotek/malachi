@@ -53,20 +53,24 @@ func TestConfigSetOverridesAndPersists(t *testing.T) {
 	ctx := context.Background()
 	b := newTestBackend(t, config.Default())
 
-	want := api.Preferences{SyncIntervalSeconds: 0, RemoteContent: api.RemoteKnownSenders}
-	res, err := b.Config().Set(ctx, api.ConfigSetParams{Preferences: want})
+	in := api.Preferences{SyncIntervalSeconds: 0, RemoteContent: api.RemoteKnownSenders}
+	res, err := b.Config().Set(ctx, api.ConfigSetParams{Preferences: in})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Preferences != want {
-		t.Fatalf("set echoed %+v", res.Preferences)
+	// The result is the effective set: the fields left out at their
+	// defaults.
+	want := in
+	want.CompressStore, want.AttachmentOfflineDays = api.Ptr(false), api.Ptr(0)
+	if !samePreferences(res.Preferences, want) {
+		t.Fatalf("set echoed %s", prefString(res.Preferences))
 	}
 	got, err := b.Config().Get(ctx, api.ConfigGetParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Preferences != want {
-		t.Fatalf("get after set = %+v, want %+v", got.Preferences, want)
+	if !samePreferences(got.Preferences, want) {
+		t.Fatalf("get after set = %s, want %s", prefString(got.Preferences), prefString(want))
 	}
 
 	// The stored value wins over config.toml on a fresh backend over the same store.

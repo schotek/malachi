@@ -1,0 +1,32 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Odd and long boundaries
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-odd@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed;
+ boundary="=_odd ?:(bound)/+,.=_"
+
+--=_odd ?:(bound)/+,.=_
+Content-Type: text/plain
+
+Odd characters in the boundary, a folded parameter.
+--=_odd ?:(bound)/+,.=_
+Content-Type: multipart/mixed; boundary="long-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+--long-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="long.bin"
+
+payload behind a 101-byte boundary
+--long-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+Content-Type: multipart/mixed; boundary="trailing space "
+
+--trailing space 
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="space.bin"
+
+the boundary ends in a space
+--trailing space --
+--long-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef--
+--=_odd ?:(bound)/+,.=_--

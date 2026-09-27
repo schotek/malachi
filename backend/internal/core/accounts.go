@@ -152,11 +152,12 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	if p.AccountID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId is required")
 	}
-	// Stop before the rows go so neither the syncer nor the outbox worker
-	// can write into a half-deleted account; Stop on an unknown id is a
-	// no-op.
+	// Stop before the rows go so neither the syncer, the outbox worker nor
+	// a download (message.download) can write into a half-deleted account;
+	// Stop on an unknown id is a no-op.
 	s.b.Supervisor.Stop(string(p.AccountID))
 	s.b.Delivery.Stop(string(p.AccountID))
+	s.b.dl.stopAccount(string(p.AccountID))
 	err := s.b.store.DeleteAccount(ctx, string(p.AccountID), p.DeleteLocalData)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
@@ -199,6 +200,7 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	} else {
 		s.b.Supervisor.Stop(string(p.AccountID))
 		s.b.Delivery.Stop(string(p.AccountID))
+		s.b.dl.stopAccount(string(p.AccountID))
 	}
 	s.b.accountsChanged()
 	return &api.AccountSetEnabledResult{}, nil
