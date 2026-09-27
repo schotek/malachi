@@ -18,7 +18,6 @@
 
 using System;
 using System.Threading.Tasks;
-using Malachi.Core;
 using Malachi.Core.Controllers;
 using Malachi.Core.Daemon;
 using Malachi.Core.I18n;
@@ -36,7 +35,6 @@ using Malachi.Platform.Windows.Settings;
 using Malachi.Platform.Windows.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace Malachi.App.Shell;
 

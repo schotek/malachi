@@ -32,7 +32,6 @@ using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
 using Malachi.Core.Wizard;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;

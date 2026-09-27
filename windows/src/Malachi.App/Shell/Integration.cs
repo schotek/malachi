@@ -22,12 +22,9 @@
 
 using System;
 using System.Collections.Generic;
-using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
-using Malachi.Platform.Windows.Launch;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml;
 
 namespace Malachi.App.Shell;
 
