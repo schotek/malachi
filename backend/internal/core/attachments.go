@@ -48,6 +48,11 @@ func (s *attachmentService) Import(ctx context.Context, p api.AttachmentImportPa
 		if !filepath.IsAbs(p.Path) {
 			return nil, bad("path must be absolute")
 		}
+		// Opening and closing the store's lock file would drop the lock on
+		// Linux and macOS (store.Lock), and let a second daemon in.
+		if store.IsLockFile(s.b.store.Path(), p.Path) {
+			return nil, bad("%q is the daemon's store lock", p.Path)
+		}
 		f, err := os.OpenFile(p.Path, os.O_RDONLY|syscall.O_NONBLOCK|syscall.O_NOCTTY|syscall.O_CLOEXEC, 0)
 		if err != nil {
 			return nil, bad("cannot open %q: %v", p.Path, err)

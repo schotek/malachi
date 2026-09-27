@@ -92,7 +92,7 @@ authenticated ones. Details: [api.md §1](api.md#1-transport).
 
 Startup ordering is not assumed: the UI keeps retrying the socket and shows
 its state; the daemon locks its store first, so a second daemon for the
-same store exits at once, replaces a stale socket after a crash and
+same store exits within a second, replaces a stale socket after a crash and
 refuses to start on a socket whose daemon answers (a flood that makes that
 check fail can defeat it only for a daemon of another store, see
 [security.md §8](security.md#8-local-storage)). The daemon writes its key
@@ -870,14 +870,21 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   an ACL for the user alone.
 - One daemon per store: **decided** (2026-09-27) — the daemon takes an
   exclusive lock on its store before it touches the store or the socket:
-  an EXCLUSIVE SQLite transaction, never committed, on `<store>.lock`
-  beside it (`store.Lock`), which the kernel drops with the process
-  however it ends. The socket check alone could be fooled: on Windows and
-  macOS a flood of connections makes it fail outright, and a second
-  daemon then took over a live daemon's socket, synced the same store and
-  reset its outbox, which could send a message twice. SQLite is already
-  the store's engine and locks files alike on every platform (POSIX record
-  locks, LockFileEx), so this needs no code per platform (§6, CLAUDE.md
-  rule 4). Rejected: `flock`/`LockFileEx` called directly (code per
-  platform); a PID file (a liveness check per platform, reused PIDs); the
-  socket as the lock (a flood cannot be told from a dead daemon).
+  an EXCLUSIVE SQLite transaction, never committed, on
+  `<store>.daemon.lock` beside it (`store.Lock`; a store reached through a
+  symbolic link has the lock of its target), which the kernel drops with
+  the process however it ends. The socket check alone could be fooled: on
+  Windows and macOS a flood of connections makes it fail outright, and a
+  second daemon then took over a live daemon's socket, synced the same
+  store and reset its outbox, which could send a message twice. SQLite is
+  already the store's engine and locks files alike on every platform
+  (POSIX record locks, LockFileEx), so this needs no code per platform
+  (§6, CLAUDE.md rule 4). One rule comes with POSIX record locks: they
+  belong to the process, and closing any descriptor of the file drops
+  them, so nothing else in the daemon may open the lock file
+  (`store.IsLockFile` guards `attachment.import`). Not `<store>.lock`:
+  that is the directory SQLite's own dot-file locking makes on a file
+  system without byte-range locks. Rejected: `flock`/`LockFileEx` called
+  directly (code per platform); a PID file (a liveness check per platform,
+  reused PIDs); the socket as the lock (a flood cannot be told from a dead
+  daemon).

@@ -37,7 +37,7 @@ instance (and the host) sees, so a UI started later still finds a daemon an
 earlier instance left running.
 
 Startup: before it touches its store or the socket, the daemon takes an
-exclusive lock on the store (`<store>.lock` beside it, which the system
+exclusive lock on the store (`<store>.daemon.lock` beside it, which the system
 releases with the process, however it ends); a second daemon for the same
 store exits with an error. The daemon replaces a stale socket file left by
 a crash after checking that nothing answers on it. If another daemon is

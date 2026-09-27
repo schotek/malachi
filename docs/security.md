@@ -566,12 +566,17 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 
 - One daemon per store: before it touches the store or the socket, the
   daemon takes an exclusive lock on the store, an EXCLUSIVE SQLite
-  transaction it never commits on `store.db.lock` beside it (`0600`), which
-  the system drops with the process however it ends. A second daemon for
-  the same store exits with an error, so two never sync, send from or
-  write one store; without the lock, a second daemon whose socket check a
-  flood of connections had fooled would reset the outbox of a live one and
-  could send a message twice.
+  transaction it never commits on `store.db.daemon.lock` beside it
+  (`0600`), which the system drops with the process however it ends. A
+  second daemon for the same store, also one reaching it through a
+  symbolic link, exits with an error within a second, so two never sync,
+  send from or write one store; without the lock, a second daemon whose
+  socket check a flood of connections had fooled would reset the outbox of
+  a live one and could send a message twice. The lock relies on the file
+  system's locks (a network file system may not have working ones), and on
+  Linux and macOS it holds only while nothing else in the daemon opens the
+  lock file, since closing any descriptor of a file drops the process's
+  locks on it: `attachment.import` refuses that file, also through a link.
 - `store.db` is `0600` in a `0700` directory. Mail is stored unencrypted at
   rest; full-disk encryption is the user's responsibility and is stated in
   the README.
