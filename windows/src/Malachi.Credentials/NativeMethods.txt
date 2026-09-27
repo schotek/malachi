@@ -2,4 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The Win32 functions CsWin32 generates for malachi-credentials, one per
-// line: CredReadW, CredWriteW, CredDeleteW and friends in phase C4.
+// line: the generic credentials of Credential Manager (Win32CredentialTable).
+CredReadW
+CredWriteW
+CredDeleteW
+CredEnumerateW
+CredFree
+CRED_MAX_CREDENTIAL_BLOB_SIZE
+CRED_MAX_STRING_LENGTH
+WIN32_ERROR
