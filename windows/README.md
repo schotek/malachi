@@ -169,6 +169,10 @@ windows/
     Malachi.Credentials.Tests/
     Malachi.Conventions.Tests/    repository checks: SPDX headers, the gschema keys against
                                   the settings, the strings check and the msgid coverage
+    Malachi.App.Canary/           the network canary over the WebView2 layer: the real viewer,
+                                  editor and previewer against hostile documents and the raw
+                                  MIME corpus, with loopback listeners and a NetLog
+    Malachi.App.Canary.Host/      its WinUI host, compiling src/Malachi.App/WebViews
 ```
 
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
@@ -221,6 +225,8 @@ phases that implement them.
 | *Preferences* has a *Default apps* button that opens Settings → Apps → Default apps | None | Windows does not let an app make itself the default mail app; the app registers itself in HKCU at start |
 | Quitting saves the unsaved changes of every message being written as drafts | The compose windows close; what was typed since the last automatic save is lost | Decided |
 | A link the daemon did not list in `links[]` is confirmed before it opens, as on macOS | Opened | WebView2 hands out normalised URLs, so an exact match with the daemon's raw hrefs can fail (docs/windows-port.md §6.4) |
+| The compose editor's context menu offers Undo, Redo, Cut, Copy, Paste, Paste as plain text and Select All (WebView2's own items, their labels the runtime's) | No context menu | WebView2's menu reduced to the editing commands; Windows users paste from it. Its navigation, printing, saving and inspection items are removed (docs/windows-port.md §6.5) |
+| The attachment previewer does not follow links in a PDF or a text | Sushi | Every navigation of the previewer is cancelled, as in the editor (docs/windows-port.md §6.6) |
 | The new-mail sound is the user's *New Mail Notification* system sound, skipped in quiet hours | The sound theme's `message-new-email` | Windows' own event for it |
 | *Preferences* has no search field | `Adw.PreferencesDialog` with search | Decided (as macOS) |
 | The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format. The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
@@ -261,6 +267,12 @@ phases that implement them.
 - **`build\malachid.exe is in use`.** A daemon started from `build\` is
   running (`make run-backend`); that copy is left as it is, and the app
   folder gets its own.
+- **The network canary is skipped or fails.** `Malachi.App.Canary` starts
+  its WinUI host beyond the edge of the screen, so it needs an interactive
+  desktop session and the WebView2 runtime; without either its tests are
+  skipped with that reason. `MALACHI_CANARY_KEEP=1` keeps each run's
+  configuration, results and NetLog under `%TEMP%\malachi-canary-<id>\`
+  for a look after a failure (docs/windows-port.md §12).
 - **A lock file changed after a restore.** The lock files hold every
   package version, including the ones the SDK adds by itself, which are
   pinned in `Directory.Packages.props` (`MalachiSdkPackVersion`) so that a

@@ -136,6 +136,8 @@ windows/
     Malachi.Platform.Windows.Tests/
     Malachi.Credentials.Tests/
     Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers
+    Malachi.App.Canary/         the network canary (§12) over the WebView2 layer
+    Malachi.App.Canary.Host/    its WinUI host, compiling src/Malachi.App/WebViews
 ```
 
 | Project | May use | Holds |
@@ -438,10 +440,23 @@ summarised in §16. What it established:
 - WebView2 has no isolated script world: an injected bridge shares the
   page's world.
 
+The code is `Malachi.App/WebViews` (`WebViewEnvironment`, `HardenedWebView`
+and the three views over it) and its pure rules in `Malachi.Core.Presentation`
+(`RequestGate`, `NavigationPolicy`, `LinkProbe`, `ContextMenuPolicy`,
+`HoverLabel`, `ViewerZoom`, `PreviewContent`, `PreviewDocument`,
+`PreviewPanel`, `EditorKeys`), which have their tests. The views are built
+in code, not XAML, and use nothing else of the app, so the network canary
+(§12) compiles the same files into its host. A view initialises when it is
+first loaded into a window and is closed with `Close()` when its window
+goes; `Unavailable` says it will show nothing.
+
 ### 6.1 One environment
 
-One `CoreWebView2Environment` for the app, user data folder
-`…\Malachi Mail\WebView2`, `WEBVIEW2_*` variables cleared first:
+One `CoreWebView2Environment` for the app (`WebViewEnvironment`), user data
+folder `<data dir>\WebView2`, every `WEBVIEW2_*` variable of the process
+cleared first (the loader appends `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` to
+the app's; an administrator's WebView2 policy in the registry stays
+authoritative):
 
 - `AdditionalBrowserArguments = --host-resolver-rules="MAP * ~NOTFOUND"
   --proxy-server=127.0.0.1:1 --proxy-bypass-list=<-loopback>`: the resolver
@@ -449,54 +464,103 @@ One `CoreWebView2Environment` for the app, user data folder
   Microsoft advises against flags in production; they are kept because
   they are the only way to meet "the view makes no connection", and a
   runtime that ignored them would still have the request gate below. The
-  automated canary (§12) proves them on every runtime;
-- `CustomSchemeRegistrations` assigned: `malachi-cid` and `cid` (secure, no
-  authority) for pictures, `malachi-doc` (secure, with authority) for
-  documents;
+  automated canary (§12) proves them on every runtime. The rule maps the
+  proxy's own address too, so WebView2's background requests
+  (`config.edge.skype.com`) fail at the proxy's name, before any socket; the
+  one socket the NetLog shows is Chromium's IPv6 reachability probe, a UDP
+  connect to a Microsoft address that fails at once and sends nothing;
+- `CustomSchemeRegistrations` assigned as a new list: `malachi-cid` and
+  `cid` (secure, no authority) for pictures, `malachi-doc` (secure, with
+  authority) for documents;
 - `AreBrowserExtensionsEnabled=false`, `IsCustomCrashReportingEnabled=true`
-  (renderer dumps can hold mail; they stay local);
+  (renderer dumps can hold mail; they stay local),
+  `AllowSingleSignOnUsingOSPrimaryAccount=false`,
+  `ExclusiveUserDataFolderAccess=true`;
 - each view gets `IsInPrivateModeEnabled=true` with its own profile name
   (`viewer`, `editor`, `preview`) through
-  `EnsureCoreWebView2Async(env, controllerOptions)`;
-- the environment is created at start (it once took ~5 s); until it is
-  ready, and if it cannot be created with these arguments or the runtime is
-  missing, the reader shows the plain text with the existing hint. Fail
-  closed.
+  `EnsureCoreWebView2Async(env, controllerOptions)`, checked on the profile
+  afterwards;
+- the shell calls `WebViewEnvironment.Start(<data dir>\WebView2)` at start
+  (the first creation once took ~5 s); the first view creates it otherwise.
+  A view waits for it; if the runtime is missing
+  (`GetAvailableBrowserVersionString`), the environment cannot be created
+  with these arguments, or any setting below cannot be applied (a runtime too
+  old for it), the view loads nothing and raises `Unavailable`: the reader
+  shows the plain text with the existing hint, the editor reports its
+  failure, the previewer shows its panel. Fail closed. A failure is not
+  remembered: the next document tries again. A dead browser process
+  (`ProcessFailed` `BrowserProcessExited`) retires the environment, and
+  the view builds a new control in a new one and reloads.
+
+`WebViewEnvironment.LoggerFactory` is set by the shell; the views log kinds,
+statuses and counts, never a URL or any other content.
 
 ### 6.2 The request gate (the content rule list of Windows)
 
 Before the first navigation every view adds
-`AddWebResourceRequestedFilter("*", All, SourceKinds.All)` and answers
-everything with 403 except its current document (served exactly once,
-`malachi-doc://<view>/<generation>-<nonce>`, with the CSP as a response
-header **and** as a `<meta>`, and a fixed `<title>`: the hosting window's
-title is readable by other processes) and its own picture scheme (with a
-deferral; 404 once the view's generation moved on). `data:` never reaches
-the gate.
+`AddWebResourceRequestedFilter("*", All, SourceKinds.All)` and answers every
+request with what `RequestGate` decides: its current document once
+(`malachi-doc://<view>/<generation>-<nonce>`, 128 random bits of nonce, the
+bytes forgotten when served), with the CSP as a response header **and** as a
+`<meta>`, `nosniff`, `no-store` and `no-referrer` (`ResponseHeaders`); its
+own picture scheme only (the viewer `malachi-cid:`, the editor `cid:`, the
+previewer none), each picture with a deferral and answered 404 once the
+view's generation moved on (WebView2 cannot withdraw a request, as WebKit's
+`stop` does); 403 for everything else, the document a second time and
+`data:` included (which WebView2 does not route here; a runtime that did
+would break pictures rather than open a rule). Every document has a fixed
+`<title>`: WinUI draws a WebView2 through a top-level `Chrome_WidgetWin_1`
+window of the browser process over the control, titled with the document's
+title (*Malachi Mail – [InPrivate]*, measured by the canary), which other
+processes can read.
 
 ### 6.3 Viewer (`MessageWebView`)
 
 `IsScriptEnabled=false`, `IsWebMessageEnabled=false`,
 `AreHostObjectsAllowed=false`, `AreDefaultScriptDialogsEnabled=false`,
 `AreDevToolsEnabled=false`, `IsStatusBarEnabled=false`,
-`IsReputationCheckingRequired=false`, autofill, password save, pinch,
-swipe, zoom control and the error page off; `PreferredColorScheme=Light`,
-white background. The document is the byte-identical port of
-`htmlview.Document` with the GTK/macOS CSP `default-src 'none'; img-src
-malachi-cid: data:; style-src 'unsafe-inline'`. `malachi-cid:` is the port
-of `PartSchemeHandler` (`parsePartPath`, `message.part`, images only, never
-SVG). Hover: `StatusBarTextChanged` still fires with the status bar off and
-feeds the link label (capped at 512 characters). Links:
-`NavigationStarting` allows only the pending document; anything else is
-cancelled for the UI (the gate keeps it off the network) and the raw href
-is read with `document.activeElement.getAttribute('href')` through
-`ExecuteScriptAsync` (host scripts run with page script off) and handed
-with the resolved URL to the port of `linkDecision`; `NewWindowRequested`
-(middle, Ctrl, Shift click, `target=_blank`) the same. Downloads, external
-schemes, frames, permissions and authentication are refused. The context
-menu keeps Copy and Copy Link (every `ContextMenuTarget` property read in
-`try`, `Handled` set in `finally`). Text zoom through CSS `zoom`.
-`ProcessFailed` reloads the last body. One view per pane, reused.
+`IsReputationCheckingRequired=false`, `AreBrowserAcceleratorKeysEnabled=false`,
+autofill, password save, pinch, swipe, zoom control, the non-client region
+and the error page off (every view has these, `HardenedWebView.Harden`);
+`PreferredColorScheme=Light`, white background; a dark desktop leaves the
+message on its white canvas, as GTK and macOS do. The document is the port
+of `htmlview.Document` (`ViewerDocument`) with the GTK/macOS CSP
+`default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'`.
+`malachi-cid:` is the port of `PartSchemeHandler` (`parsePartPath`,
+`message.part` through `PartFetcher`, which the reader sets with
+`UseCache(MessageCache)`; images only, never SVG). The same body is not
+reloaded (macOS `loadedBody`); `Clear()` loads an empty one.
+
+Hover: `StatusBarTextChanged` still fires with the status bar off; its text
+is capped at 512 characters (`HoverLabel.Cap`, macOS) and shown in the
+view's own label at the bottom left, cut in the middle to GTK's 80
+characters (`HoverLabel.Display`), as plain text; `HoveredLink` and
+`HoveredLinkChanged` expose it.
+
+Links (`NavigationPolicy`, `LinkProbe`): `NavigationStarting` allows only
+the pending document, once, not as a redirect; anything else is cancelled for
+the view (the gate keeps its request off the network). An http, https or
+mailto target may be a link: a host script (`ExecuteScriptAsync` runs with
+page script off) reads the focused element through the prototypes' own
+accessors, which a named element of the page cannot shadow, and the
+attribute of the link it is in is taken only when that link resolves to
+exactly the navigation's URL. A meta refresh or a form submit arrives as a
+user navigation too, and the focus then is on no such link: nothing is
+handed on. `NewWindowRequested` (middle, Ctrl, Shift click, `target=_blank`)
+opens nothing; a user's request is a link activation as in GTK, confirmed
+with the URL alone when the focus did not follow and no form control made
+it. The result is `LinkActivated(ActivatedLink)`, which the reader decides
+with `LinkDecision.For` (§6.4) and opens, confirms through its alerts or
+composes. Downloads, external schemes, frames, permissions, authentication,
+client certificates, certificate errors, screen capture and Save As are
+refused. The context menu keeps Copy and Copy Link (`ContextMenuPolicy`;
+separators only between kept groups; every item read in `try`, `Handled`
+set in `finally`, a menu that could not be reduced is not shown). Text zoom
+(the `text-zoom` setting, `Zoom`) is CSS `zoom` on the document's root, set
+as the document is served and by a host script when the setting changes
+(`ViewerZoom`); the WinUI control has no `ZoomFactor`. A crashed renderer
+reloads the last body, a hung one or a dead browser gets a new control.
+One view per pane, reused. Automation name *Message*.
 
 ### 6.4 Links
 
@@ -517,45 +581,95 @@ that is a separate GTK/backend task (§14), not part of this port.
 ### 6.5 Editor (`ComposeWebView`)
 
 `IsScriptEnabled=true` (required: with script off no listener fires),
-`IsWebMessageEnabled=true`, `AreHostObjectsAllowed=false`, DevTools and
-dialogs off. The document is served from `malachi-doc://editor/…` with the
-CSP `default-src 'none'; style-src 'unsafe-inline'; img-src cid: data:` as
-header and meta, so every page script, handler and `javascript:` URL in
-pasted or quoted HTML is blocked. The bridge is the GTK/macOS bridge with a
+`IsWebMessageEnabled=true`, `AreHostObjectsAllowed=false`, DevTools,
+dialogs and browser keys off. The document is `EditorDocument`, served from
+`malachi-doc://editor/…` with the CSP `default-src 'none'; style-src
+'unsafe-inline'; img-src cid: data:` as header and meta, so every page
+script, handler and `javascript:` URL in pasted or quoted HTML is blocked
+(the canary loads its hostile document and the corpus with scripts into
+it). The bridge (`EditorBridge.Script`) is the GTK/macOS bridge with a
 `chrome.webview.postMessage` channel, injected with
-`AddScriptToExecuteOnDocumentCreatedAsync`, guarded by `window.top` and the
-document URL, using `Document.prototype`/`EventTarget.prototype` accessors
-captured at document start (a pasted `<img name="body">` clobbers `document.body`
-otherwise; verified in Chromium). `WebMessageReceived` accepts only messages
-whose `Source` is the current document and whose shape parses. `cid:` is the
-port of `CIDSchemeHandler` (only ids in the window's `CIDRegistry`,
-`checkInline`). File drops go through the bridge
-(`postMessageWithAdditionalObjects` → `CoreWebView2File.Path` →
-`attachment.import`). Flushes use macOS's sequence numbers **and** an
-order-independent echo rule: WebView2 delivers the changed message before
-the `ExecuteScriptAsync` result (15 of 15 trials), which on macOS very
-likely leaves drafts dirty after every save. Saving on Quit (§0) flushes
-outside a save, which GTK and macOS never do, so the echo gets two
-baselines: a flush when the editor becomes ready records how the page
-serialises the loaded body (`ComposeDraftController.EditorReady`), and
-Quit's flush records content that comes back unchanged; its waits are
-bounded, so a hung renderer makes Quit ask rather than wait. The bridge is
-a third copy beside `ui/internal/editor/bridge.go` and the Swift one; a
-test compares it with the Go copy modulo the documented deltas.
+`AddScriptToExecuteOnDocumentCreatedAsync` before the first navigation,
+guarded by `window.top` and the document URL, using
+`Document.prototype`/`EventTarget.prototype` accessors captured at document
+start (a pasted `<img name="body">` clobbers `document.body` otherwise;
+verified in Chromium). `WebMessageReceived` accepts only strings whose
+`Source` is the current document and whose shape parses; they go to Core's
+`EditorChannel` (`Channel`: `Ready`, `Changed`, `StateChanged`,
+`KeyPressed`, `Html`, `Text`). Host to page is `ExecuteScriptAsync`:
+`Flush(done)` (the flush script, its `seq` handed back to the channel),
+`Exec(command, argument)`, `FocusStart()`. `cid:` is the port of
+`CIDSchemeHandler` (only ids in the window's `CidRegistry`, a registered
+file read off the UI thread when it is a regular file within the cap, a
+fetcher bounded by `FetchTimeout`, then `checkInline`). File drops go
+through the bridge (`postMessageWithAdditionalObjects` →
+`CoreWebView2File.Path` → `FilesDropped`, which the compose window hands to
+`attachment.import`); the page never sees them. Every navigation but the
+pending document is cancelled, links of a quoted original included; new
+windows are refused. The context menu keeps Undo, Redo, Cut, Copy, Paste,
+Paste as plain text and Select All (`ContextMenuPolicy`; GTK and macOS have
+none, a listed deviation). A dead renderer, and a document that could not
+be loaded, raise `Crashed` (the latter once until a document loads, as
+macOS's `reportedUnavailable`): the compose window shows its toast and
+loads `Html` again.
+
+Flushes use macOS's sequence numbers **and** an order-independent echo rule:
+WebView2 delivers the changed message before the `ExecuteScriptAsync`
+result (15 of 15 trials), which on macOS very likely leaves drafts dirty
+after every save. Saving on Quit (§0) flushes outside a save, which GTK and
+macOS never do, so the echo gets two baselines: a flush when the editor
+becomes ready records how the page serialises the loaded body
+(`ComposeDraftController.EditorReady`), and Quit's flush records content
+that comes back unchanged; its waits are bounded, so a hung renderer makes
+Quit ask rather than wait. The bridge is a third copy beside
+`ui/internal/editor/bridge.go` and the Swift one; a test compares it with
+the Go copy modulo the documented deltas.
+
+The compose window wires the view as GTK wires `editor.Editor`: its
+`IComposeForm` answers `EditorHtml`/`EditorText`/`FlushEditor` with `Html`,
+`Text` and `Flush`; `Channel.Ready` and `Channel.Changed` go to the draft
+controller's `EditorReady` and `EditorChanged`, `Channel.StateChanged` to the
+format bar, `Channel.KeyPressed` (`escape`, `link`) to the window's Escape
+and Insert Link, `FilesDropped` to `attachment.import`, `Crashed` to the
+editor-failure toast and a `Load(Html)`. Keys (§11.5): while the editor has
+focus every key passes the window's pre-translate handler before Chromium;
+the router lets the keys of `EditorKeys.BridgeHandles` through (Ctrl+B, I,
+U with or without Shift, Ctrl+K, Escape: the bridge formats, prevents
+Ctrl+Shift+I's Tab and posts Ctrl+K and Escape back) and acts on and
+swallows its own (Ctrl+Enter, Ctrl+S, Ctrl+W, Ctrl+Q, …); everything else
+reaches the page as typing.
 
 ### 6.6 Previewer
 
-The replacement for Quick Look and Sushi (decided): a reusable preview
-window with its own hardened view (script off, `preview` profile, the gate,
-downloads cancelled, the PDF toolbar's Save/Save As/Print/More hidden). The
-bytes from `message.part` are served directly as `malachi-doc://preview/…`
-with the sniffed type: images except SVG, `application/pdf`, `text/plain`;
-HTML, SVG, XML and `.eml` are shown as source text. Nothing is written to
-disk. Other types get a panel with the icon, name, size and type and *Open*
-/ *Save As…*; executables get metadata only. Shell preview handlers are not
-hosted: third-party handlers run in-process-adjacent code over hostile
-files, and Windows itself stopped previewing internet files in Explorer in
-October 2025 because previews leaked NTLM hashes.
+The replacement for Quick Look and Sushi (decided): the content of a
+reusable preview window (`PreviewWebView`; the window, its title and *Open*
+/ *Save As…* are the reader's) with its own hardened view (script off,
+`preview` profile, the gate, downloads cancelled, the PDF toolbar's Save,
+Save As, Print, Full screen and More settings hidden). The bytes from
+`message.part` are served from memory as `malachi-doc://preview/…` with the
+type `PreviewContent` sniffed: pictures by their signature (PNG, JPEG, GIF,
+WebP, BMP, ICO, AVIF; never by the claim alone, never SVG), PDF by `%PDF-`
+within the first KiB, text in the previewer's own escaped document
+(`PreviewDocument.Text`, a `<pre>` under `default-src 'none'`), which is
+also how HTML, SVG, XML and messages (`.eml`) are shown: as their source.
+The claimed charset is honoured, a byte-order mark wins, UTF-8 when valid,
+Windows-1252 otherwise; bytes with a NUL are not text. Nothing is written
+to disk. Links in a PDF or a text are not followed (every navigation is
+cancelled, as in the editor). Other types, everything the platform would
+run (`DangerousTypes`, and `FileTypePolicy` when the reader sets
+`TypePolicy`), and everything when the view is unavailable get a panel
+(`PreviewPanel`): the icon Windows has for the extension, the name, the
+size and the type name. `ShellFileTypes` asks by the extension alone
+(`AssocQueryString` for the name, `SHGetFileInfo` with
+`SHGFI_USEFILEATTRIBUTES` and the system image list for a 256-pixel icon,
+which also knows packaged apps' icons), so no file exists and no icon handler
+reads an attachment; `SHGetFileInfo` is the one hand-written P/Invoke of
+the client, because CsWin32 generates it only for a specific architecture
+(its structure is packed on 32-bit Windows, which the app does not ship
+for). Shell preview handlers are not hosted: third-party handlers run
+in-process-adjacent code over hostile files, and Windows itself stopped
+previewing internet files in Explorer in October 2025 because previews
+leaked NTLM hashes.
 
 ## 7. Concurrency
 
@@ -618,7 +732,9 @@ behaviour is macOS's): `NotificationHub`, `SignInRepair`,
 `AccountsPageController`, `ComposeAttachmentsController`,
 `SuggestionsController`, `Debouncer`, `FlushEcho`, `AvatarPalette`
 (`g_str_hash % 14 + 1`, initials), `AttachmentOpener`, `LinkOpener`,
-`NotificationPolicy`, `MessageWindowRegistry`.
+`NotificationPolicy`, `MessageWindowRegistry`. The rules of the WebView2
+layer, which macOS keeps in its web views, live there too
+(`Malachi.Core.Presentation`, §6).
 
 The shell's are in `Malachi.Core/Presentation` (phase E wave 1): the
 `NotificationHub` above; `ActivationRequest` and `CommandLine` (what a
@@ -1166,11 +1282,34 @@ editor once they exist.
   session lock.
 - `Malachi.Conventions.Tests`: strings, msgid and gschema coverage, SPDX
   headers of every file type, the manifest identity.
-- The **network canary**: a test harness renders the `backend/testdata/mime`
-  HTML corpus and the spike's hostile document in the real viewer, editor
-  and previewer with loopback canaries and a NetLog, asserting zero
-  connections, lookups, navigations, windows and downloads. It runs in
-  `make test-windows` and on every WebView2 runtime bump.
+- The **network canary** (`Malachi.App.Canary`, with its WinUI host
+  `Malachi.App.Canary.Host`, which compiles `src/Malachi.App/WebViews`
+  itself): the host holds the real viewer, editor and previewer in the
+  app's environment, in a window beyond the edge of the screen that never
+  takes the focus, and plays the spike's hostile document (every vector
+  with its own loopback listener in the test process, DNS-only host names,
+  a `file:` picture), its active twin (hover, press, a link with `ping`, a
+  form, `target=_blank`, a middle click, `mailto:`, `download`, a meta
+  refresh; pointer input through the DevTools protocol), the previewer's
+  HTML, SVG, PDF (its link clicked, its open action), picture and text, and
+  every HTML part of `backend/testdata/mime` **raw**, without the
+  sanitiser, in the viewer and the editor. Chromium writes a NetLog
+  (`--log-net-log`, an option only the canary sets). The test asserts that
+  no listener was reached, no name was looked up (every resolver request
+  mapped to `~notfound`, no resolver job), no TCP connection was attempted
+  and every UDP connect failed, nothing navigated but the views' own
+  documents, no window opened (the three windows WebView2 draws the views
+  in aside, all titled *Malachi Mail*), nothing downloaded, the gate
+  answered 403 to everything not the view's own, and that clicks reached
+  the reader as links (forms and refreshes not); and, as checks of the
+  views themselves, that the editor's bridge types, formats and flushes
+  under its CSP, a dropped file arrives as a path, and the viewer zooms.
+  A control run of the same document in a WebView2 without protection
+  (its reach beyond the machine cut off) must reach the canaries, so the
+  harness is known to see leaks. Both runs go side by side in about 45 s;
+  without a desktop session or the WebView2 runtime the tests are skipped
+  with that reason; `MALACHI_CANARY_KEEP=1` keeps the runs' files. It runs
+  in `make test-windows` and on every WebView2 runtime bump.
 - UI smoke tests with FlaUI (UIA3) for the main flows, against a local IMAP
   and SMTP test server (the go-imap and go-smtp servers the backend's own
   tests use).
