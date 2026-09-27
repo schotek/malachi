@@ -4,6 +4,7 @@
 // Port of macos/Sources/MalachiCore/Wizard/Fields.swift (ServerFields); GTK:
 // ui/internal/accountwizard/fields.go (ServerFields).
 
+using System.Globalization;
 using Malachi.Core.Api;
 
 namespace Malachi.Core.Wizard;
@@ -30,4 +31,14 @@ public sealed record ServerFields
 
     /// <summary>The pinned certificate's fingerprint; "" for none.</summary>
     public string CertificateSha256 { get; init => field = value ?? ""; } = "";
+
+    /// <summary>
+    /// The endpoint without the login name, which is usually the address
+    /// (docs/windows-port.md §3.1: no addresses in logs): only whether it is
+    /// set, as <see cref="Identity"/> prints its fields.
+    /// </summary>
+    public override string ToString() => string.Create(
+        CultureInfo.InvariantCulture,
+        $"ServerFields(host: {Host}, port: {Port}, security: {Security}, username: {(Username.Length == 0 ? "\"\"" : "<redacted>")}, "
+        + $"certificateSha256: {(CertificateSha256.Length == 0 ? "\"\"" : CertificateSha256)})");
 }

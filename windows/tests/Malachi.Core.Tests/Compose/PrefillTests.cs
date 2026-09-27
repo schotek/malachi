@@ -236,4 +236,47 @@ public sealed class PrefillTests
         var src = new ComposeSource { From = [new Address { Name = "A" + (char)0xD800, Email = "a@example.invalid" }] };
         Assert.Equal("A\xFFFD wrote:", Prefill.Attribution(ComposeKind.Reply, src));
     }
+
+    // Windows: the parameters of a compose window and its source print ids
+    // and sizes, never an address, a name, the subject, the date or the body
+    // (docs/windows-port.md §3.1).
+    [Fact]
+    public void ParamsAndSourcePrintNoContent()
+    {
+        var who = new Address { Name = "Secret Name", Email = "secret@example.invalid" };
+        var p = new ComposeParams
+        {
+            Kind = ComposeKind.Reply,
+            AccountId = new AccountId("acc1"),
+            To = [who],
+            Cc = [who, who],
+            Subject = "Secret subject",
+            BodyHtml = "<p>secret</p>",
+            InReplyTo = new MessageId("m1"),
+            Attachments = [new DraftAttachment { Id = "att1", Filename = "secret.pdf", ContentType = "application/pdf", Size = 1, Inline = false }],
+            DraftId = new DraftId("d1"),
+            Version = 3,
+        };
+        Assert.Equal(
+            "ComposeParams(kind: Reply, accountId: acc1, to: 1, cc: 2, bcc: 0, subject: 14 chars, bodyHtml: 13 chars, "
+            + "inReplyTo: m1, forwarding: null, attachments: 1, draftId: d1, version: 3, replaces: null)",
+            p.ToString());
+        var src = new ComposeSource
+        {
+            Id = new MessageId("m1"),
+            AccountId = new AccountId("acc1"),
+            From = [who],
+            To = [who, who],
+            Subject = "Secret subject",
+            Date = Date,
+            Text = "secret",
+        };
+        Assert.Equal(
+            "ComposeSource(id: m1, accountId: acc1, from: 1, replyTo: 0, to: 2, cc: 0, subject: 14 chars, date: set, text: 6 chars)",
+            src.ToString());
+        foreach (var printed in new[] { p.ToString(), src.ToString(), new ComposeParams().ToString(), new ComposeSource().ToString() })
+        {
+            Assert.DoesNotContain("ecret", printed, StringComparison.Ordinal);
+        }
+    }
 }

@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Malachi.Core.Api;
 
@@ -58,4 +59,13 @@ public sealed record ComposeSource
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Id, AccountId, From.Count, To.Count, Subject, Date);
+
+    /// <summary>
+    /// The ids and the sizes of the rest: never an address, the subject, the
+    /// date or the text (docs/windows-port.md §3.1: no mail content in logs).
+    /// </summary>
+    public override string ToString() => string.Create(
+        CultureInfo.InvariantCulture,
+        $"ComposeSource(id: {Id}, accountId: {AccountId}, from: {From.Count}, replyTo: {ReplyTo.Count}, to: {To.Count}, "
+        + $"cc: {Cc.Count}, subject: {Subject.Length} chars, date: {(Date is null ? "null" : "set")}, text: {Text.Length} chars)");
 }

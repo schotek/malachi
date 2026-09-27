@@ -230,4 +230,13 @@ public sealed class WizardFieldsTests
         Assert.Equal("Identity(displayName: <redacted>, email: <redacted>, password: <redacted>)", id.ToString());
         Assert.Equal("Identity(displayName: \"\", email: \"\", password: \"\")", new Identity().ToString());
     }
+
+    // Windows: an endpoint prints no login name, which is usually the address.
+    [Fact]
+    public void ServerFieldsHideTheUsername()
+    {
+        var f = new ServerFields { Host = "imap.example.org", Port = 993, Security = Security.Tls, Username = "me@x.org" };
+        Assert.Equal("ServerFields(host: imap.example.org, port: 993, security: tls, username: <redacted>, certificateSha256: \"\")", f.ToString());
+        Assert.Equal("ServerFields(host: , port: 0, security: tls, username: \"\", certificateSha256: \"\")", new ServerFields().ToString());
+    }
 }

@@ -9,6 +9,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Malachi.Core.Api;
 
@@ -80,4 +81,19 @@ public sealed record ComposeParams
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, AccountId, To.Count, Subject, BodyHtml, DraftId, Version);
+
+    /// <summary>
+    /// The kind, the ids and the sizes of the rest: never an address, the
+    /// subject or the body (docs/windows-port.md §3.1: no mail content in
+    /// logs).
+    /// </summary>
+    public override string ToString() => string.Create(
+        CultureInfo.InvariantCulture,
+        $"ComposeParams(kind: {Kind}, accountId: {Id(AccountId)}, to: {To.Count}, cc: {Cc.Count}, bcc: {Bcc.Count}, "
+        + $"subject: {Subject.Length} chars, bodyHtml: {BodyHtml.Length} chars, inReplyTo: {Id(InReplyTo)}, "
+        + $"forwarding: {Id(Forwarding)}, attachments: {Attachments.Count}, draftId: {Id(DraftId)}, version: {Version}, "
+        + $"replaces: {Id(Replaces)})");
+
+    private static string Id<T>(T? id)
+        where T : struct => id is { } value ? value.ToString() ?? "" : "null";
 }
