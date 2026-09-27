@@ -92,10 +92,10 @@ authenticated ones. Details: [api.md §1](api.md#1-transport).
 
 Startup ordering is not assumed: the UI keeps retrying the socket and shows
 its state; the daemon locks its store first, so a second daemon for the
-same store exits within a second, replaces a stale socket after a crash and
-refuses to start on a socket whose daemon answers (a flood that makes that
-check fail can defeat it only for a daemon of another store, see
-[security.md §8](security.md#8-local-storage)). The daemon writes its key
+same store exits after about a second, replaces a stale socket after a
+crash and refuses to start on a socket whose daemon answers (a flood that
+makes that check fail can defeat it only for a daemon of another store,
+see [security.md §8](security.md#8-local-storage)). The daemon writes its key
 before it accepts a connection, and a client reads the key only once the
 daemon has answered `system.hello`, afresh for every connection, so a
 socket that answers still means a daemon that is ready, and a restarted

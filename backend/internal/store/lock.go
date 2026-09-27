@@ -23,8 +23,8 @@ var ErrStoreLocked = errors.New("another malachid is using the store")
 // lockWaitMillis is how long Lock waits for a lock another process holds
 // before it gives up: long enough for a holder that is just exiting (the
 // system may drop a dead process's locks a moment late), short enough that
-// a second daemon is refused within a second. A variable so that tests can
-// shorten it.
+// a second daemon is refused after about a second. A variable so that tests
+// can shorten it.
 var lockWaitMillis = 1000
 
 // lockSuffix names the lock file after the store. Not "<store>.lock":
@@ -94,9 +94,9 @@ func Lock(ctx context.Context, storePath string) (*StoreLock, error) {
 		return nil, fmt.Errorf("create store lock %s: %w", path, err)
 	}
 
-	// No journal: the transaction never writes, and a journal file would
-	// only be one more file to explain.
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(OFF)", uriPath(path), lockWaitMillis)
+	// The journal in memory: no journal file beside the store, and the
+	// write below still rolls back cleanly.
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(%d)&_pragma=journal_mode(MEMORY)", uriPath(path), lockWaitMillis)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open store lock %s: %w", path, err)
@@ -108,10 +108,20 @@ func Lock(ctx context.Context, storePath string) (*StoreLock, error) {
 		db.Close()
 		return nil, lockError(path, storePath, err)
 	}
-	if _, err := conn.ExecContext(ctx, "BEGIN EXCLUSIVE"); err != nil {
-		conn.Close()
-		db.Close()
-		return nil, lockError(path, storePath, err)
+	// BEGIN EXCLUSIVE takes the lock. A file SQLite cannot write it opens
+	// read-only without saying so, and there the same statement is a read
+	// transaction whose shared lock every daemon gets at once: a write,
+	// never committed, proves the lock is exclusive, and fails otherwise.
+	for _, stmt := range []string{
+		"BEGIN EXCLUSIVE",
+		"CREATE TABLE IF NOT EXISTS daemon_lock (held INTEGER)",
+		"INSERT INTO daemon_lock (held) VALUES (1)",
+	} {
+		if _, err := conn.ExecContext(ctx, stmt); err != nil {
+			conn.Close()
+			db.Close()
+			return nil, lockError(path, storePath, err)
+		}
 	}
 	return &StoreLock{db: db, conn: conn, path: path}, nil
 }
@@ -123,6 +133,8 @@ func lockError(path, storePath string, err error) error {
 		return fmt.Errorf("%w: %s", ErrStoreLocked, storePath)
 	case sqlite3.SQLITE_NOTADB:
 		return fmt.Errorf("take store lock: %s is not a lock file; remove it if no malachid runs: %w", path, err)
+	case sqlite3.SQLITE_READONLY:
+		return fmt.Errorf("take store lock: %s cannot be written, so it cannot lock the store; make it writable: %w", path, err)
 	}
 	return fmt.Errorf("take store lock %s: %w", path, err)
 }

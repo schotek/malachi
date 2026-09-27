@@ -139,6 +139,33 @@ func TestLockRefusesAForeignFile(t *testing.T) {
 	}
 }
 
+// A lock file the daemon cannot write must stop it. SQLite would open it
+// read-only without saying so, and there BEGIN EXCLUSIVE takes only a
+// shared lock, which every daemon would get at once.
+func TestLockRefusesAReadOnlyFile(t *testing.T) {
+	shortLockWait(t)
+	store := filepath.Join(t.TempDir(), "store.db")
+	mustLock(t, store).Close()
+	path := LockPath(store)
+	if err := os.Chmod(path, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+	if f, err := os.OpenFile(path, os.O_WRONLY, 0); err == nil {
+		f.Close()
+		t.Skip("this process may write a read-only file (it runs privileged)")
+	}
+
+	l, err := Lock(context.Background(), store)
+	if err == nil {
+		l.Close()
+		t.Fatal("Lock on a read-only lock file succeeded")
+	}
+	if errors.Is(err, ErrStoreLocked) || !strings.Contains(err.Error(), "cannot be written") {
+		t.Fatalf("Lock on a read-only lock file: %v, want a \"cannot be written\" error", err)
+	}
+}
+
 func TestLockPathFollowsALinkedStore(t *testing.T) {
 	shortLockWait(t)
 	dir := t.TempDir()
