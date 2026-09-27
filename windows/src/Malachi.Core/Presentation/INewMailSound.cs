@@ -13,10 +13,10 @@ namespace Malachi.Core.Presentation;
 public interface INewMailSound
 {
     /// <summary>
-    /// Whether Windows asks applications not to disturb the user now (quiet
-    /// time, a presentation, a full-screen application): the sound is
-    /// skipped then. Toasts are left to Windows, which holds them back
-    /// itself.
+    /// Whether Windows asks applications not to disturb the user now (Do Not
+    /// Disturb, a presentation, a full-screen program, the screen saver, a
+    /// locked session): the sound is skipped then. Toasts are left to
+    /// Windows, which holds them back itself.
     /// </summary>
     bool IsQuietTime { get; }
 

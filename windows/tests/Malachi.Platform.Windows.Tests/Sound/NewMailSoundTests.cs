@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Tests of NewMailSound, the counterpart of window.go playNewMailSound: the
-// MailBeep event through PlaySound, asynchronous and silent when the user
-// set no sound for it, a failure logged at debug level and never thrown;
+// MailBeep event through PlaySound, asynchronous, silent when the user set
+// no sound for it and in the System Sounds session of the volume mixer, a
+// failure logged at debug level and never thrown;
 // quiet hours asked of QuietHours. The real PlaySound is called only with an
 // alias that no scheme has, which plays nothing.
 
@@ -19,7 +20,7 @@ namespace Malachi.Platform.Windows.Tests.Sound;
 public sealed class NewMailSoundTests
 {
     [Fact]
-    public void PlaysTheMailBeepEventAsynchronouslyAndNeverTheDefaultBeep()
+    public void PlaysTheMailBeepEventAsynchronouslyAsASystemSoundAndNeverTheDefaultBeep()
     {
         var calls = new List<(string Alias, SND_FLAGS Flags)>();
         var sound = new NewMailSound(() => false, (alias, flags) =>
@@ -30,7 +31,7 @@ public sealed class NewMailSoundTests
         sound.Play();
         var (alias, flags) = Assert.Single(calls);
         Assert.Equal("MailBeep", alias);
-        Assert.Equal(SND_FLAGS.SND_ALIAS | SND_FLAGS.SND_ASYNC | SND_FLAGS.SND_NODEFAULT, flags);
+        Assert.Equal(SND_FLAGS.SND_ALIAS | SND_FLAGS.SND_ASYNC | SND_FLAGS.SND_NODEFAULT | SND_FLAGS.SND_SYSTEM, flags);
     }
 
     [Fact]

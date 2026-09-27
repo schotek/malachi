@@ -8,10 +8,12 @@
 // (playSound: NSSound "Glass"). Windows plays the user's own sound for the
 // system event MailBeep ("Desktop Mail Notification" in Control Panel →
 // Sound, Windows Notify Email.wav by default) through PlaySound with
-// SND_ALIAS | SND_ASYNC | SND_NODEFAULT: asynchronous, and silent when the
-// user set no sound for it instead of the default beep
-// (docs/windows-port.md §10, a row of windows/README.md). Quiet hours are
-// QuietHours'.
+// SND_ALIAS | SND_ASYNC | SND_NODEFAULT | SND_SYSTEM: asynchronous, silent
+// when the user set no sound for it instead of the default beep, and in the
+// System Sounds session of the volume mixer, so that muting or lowering
+// system sounds applies to it as it does to GTK's event sound (canberra's
+// event role) (docs/windows-port.md §10, a row of windows/README.md). When
+// to stay quiet is QuietHours'.
 
 using System;
 using Malachi.Core.Presentation;
@@ -29,8 +31,11 @@ public sealed partial class NewMailSound : INewMailSound
     /// <summary>The system sound event (HKCU\AppEvents\Schemes\Apps\.Default\MailBeep).</summary>
     public const string Alias = "MailBeep";
 
-    /// <summary>What PlaySound gets: the event by its alias, asynchronously, nothing when the event has no sound.</summary>
-    internal const SND_FLAGS Flags = SND_FLAGS.SND_ALIAS | SND_FLAGS.SND_ASYNC | SND_FLAGS.SND_NODEFAULT;
+    /// <summary>
+    /// What PlaySound gets: the event by its alias, asynchronously, nothing
+    /// when the event has no sound, at the system sounds' volume.
+    /// </summary>
+    internal const SND_FLAGS Flags = SND_FLAGS.SND_ALIAS | SND_FLAGS.SND_ASYNC | SND_FLAGS.SND_NODEFAULT | SND_FLAGS.SND_SYSTEM;
 
     private readonly Func<bool> isQuiet;
     private readonly Func<string, SND_FLAGS, bool> play;

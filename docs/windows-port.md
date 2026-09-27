@@ -1000,10 +1000,12 @@ from the last active window, which gets the toasts); title the sender's
 display name or *New message*, body the subject or *(No subject)*, both
 capped at 200 bytes; group = account,
 tag = `message-<id>`; a click shows the main window. The sound is its own
-switch: `PlaySound("MailBeep", SND_ALIAS|SND_ASYNC|SND_NODEFAULT)`, the
-user's system sound for mail (*Desktop Mail Notification* in Control
+switch: `PlaySound("MailBeep", SND_ALIAS|SND_ASYNC|SND_NODEFAULT|SND_SYSTEM)`,
+the user's system sound for mail (*Desktop Mail Notification* in Control
 Panel → Sound; closer to GTK's `message-new-email` than macOS's *Glass*),
-silent when the user set none, skipped in quiet hours; toasts are muted.
+silent when the user set none, in the volume mixer's *System Sounds*
+session (muting system sounds mutes it, as GTK's event sound follows the
+event role), and skipped while Windows asks for quiet; toasts are muted.
 In the code, the rules are Core's (`Malachi.Core.Presentation`):
 `NotificationHub`, the port of the macOS hub (every daemon notification
 decoded and handed to the handlers of its kind, a handler's failure
@@ -1011,9 +1013,15 @@ reported instead of stopping the others), and `NotificationPolicy` over
 `IDesktopNotifier` and `INewMailSound`; `DesktopNotification` cuts a tag
 or group longer than the 64 characters a toast allows to its start and a
 hash. `Malachi.Platform.Windows` has `Notifications/` (`NotificationArguments`,
-the account and message a click carries back; `QuietHours`: every
-`SHQueryUserNotificationState` answer but `QUNS_ACCEPTS_NOTIFICATIONS` keeps
-the sound quiet) and `Sound/NewMailSound`; the app's
+the account and message a click carries back; `QuietHours`: Do Not
+Disturb, that is `ToastNotificationManager.GetDefault().NotificationMode`
+other than `Unrestricted`, whether switched on by hand, on a schedule or by
+its rules for games and full-screen apps, and the
+`SHQueryUserNotificationState` answers for a presentation, a full-screen
+program or Direct3D game, the screen saver, a locked or another user's
+session, and quiet time, the first hour after a new user's first sign-in;
+`QUNS_APP`, a Store app in front, is not quiet, and neither is what Windows
+cannot say) and `Sound/NewMailSound`; the app's
 `Platform/NotificationService` is the only code over `AppNotificationManager`.
 Verified outside Claude's process tree: the toast shows the name and icon
 (`Assets\notification.png`, rendered by `make-icons.ps1` with the `.ico`),
