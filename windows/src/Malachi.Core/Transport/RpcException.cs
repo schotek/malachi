@@ -11,6 +11,7 @@
 using System;
 using System.Text.Json;
 using Malachi.Core.Api;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Transport;
 
@@ -20,7 +21,7 @@ namespace Malachi.Core.Transport;
 /// (<c>"{message} ({code})"</c>), for logs, never for the user: the UI turns
 /// the code into a sentence.
 /// </summary>
-public sealed class RpcException : Exception
+public sealed class RpcException : Exception, RpcErrorText.IFailure
 {
     /// <summary>The exception of the daemon's <paramref name="error"/>.</summary>
     public RpcException(RpcError error)
@@ -51,6 +52,12 @@ public sealed class RpcException : Exception
 
     /// <summary>The daemon's error object.</summary>
     public RpcError Error { get; }
+
+    /// <summary>A daemon error, for the error texts (Swift <c>error as? RPCError</c>).</summary>
+    RpcErrorText.FailureKind RpcErrorText.IFailure.Kind => RpcErrorText.FailureKind.Daemon;
+
+    /// <inheritdoc/>
+    RpcError? RpcErrorText.IFailure.DaemonError => Error;
 
     /// <summary>The stable code (docs/api.md §2).</summary>
     public ErrorCode Code => Error.Code;

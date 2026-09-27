@@ -5,6 +5,8 @@
 // RPCClient.ClientError).
 
 using System;
+using Malachi.Core.Api;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Transport;
 
@@ -12,7 +14,7 @@ namespace Malachi.Core.Transport;
 /// A call or a dial failed without an answer from the daemon; the
 /// <see cref="Error"/> says why, and the message is its text.
 /// </summary>
-public sealed class RpcClientException : Exception
+public sealed class RpcClientException : Exception, RpcErrorText.IFailure
 {
     /// <summary>The exception of <paramref name="error"/>.</summary>
     public RpcClientException(ClientError error)
@@ -50,4 +52,19 @@ public sealed class RpcClientException : Exception
 
     /// <summary>Why.</summary>
     public ClientError Error { get; }
+
+    /// <summary>
+    /// How the error texts read this failure, as Swift's rpcErrorText does:
+    /// no connection, or one lost while waiting, needs a running backend; a
+    /// timeout timed out; a failed socket is the plain "failed".
+    /// </summary>
+    RpcErrorText.FailureKind RpcErrorText.IFailure.Kind => Error.Kind switch
+    {
+        ClientErrorKind.NotConnected or ClientErrorKind.Disconnected => RpcErrorText.FailureKind.NoBackend,
+        ClientErrorKind.Timeout => RpcErrorText.FailureKind.TimedOut,
+        _ => RpcErrorText.FailureKind.Failed,
+    };
+
+    /// <inheritdoc/>
+    RpcError? RpcErrorText.IFailure.DaemonError => null;
 }
