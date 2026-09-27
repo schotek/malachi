@@ -23,6 +23,12 @@ public let remoteChoices: [RemoteContentPolicy] = [.block, .knownSenders, .allow
 /// 3 months, 1 year, Everything (0).
 public let retentionChoices: [Int] = [7, 30, 90, 365, 0]
 
+/// Keep Attachments Offline For: `Preferences.attachmentOfflineDays` per
+/// row, ascending like `retentionChoices`: Small Attachments Only
+/// (`API.Limits.attachmentOfflineNone`), 1 week, 1 month, 3 months,
+/// Everything (0).
+public let attachmentChoices: [Int] = [API.Limits.attachmentOfflineNone, 7, 30, 90, 0]
+
 /// Maps a sync interval in seconds to the closest pop-up position (0 stays
 /// "Manually"; preferences.go `nearestInterval`).
 public func nearestInterval(_ seconds: Int) -> Int {
@@ -51,6 +57,29 @@ public func indexOfRetention(_ days: Int) -> Int {
     var best = 0
     var bestDiff = -1
     for (i, v) in retentionChoices.enumerated() where v != 0 {
+        let diff = abs(v - days)
+        if bestDiff < 0 || diff < bestDiff {
+            best = i
+            bestDiff = diff
+        }
+    }
+    return best
+}
+
+/// Maps `Preferences.attachmentOfflineDays` to the closest pop-up position
+/// (preferences.go `indexOfAttachmentDays`): a negative value (only -1 is
+/// valid) selects "Small Attachments Only", 0 "Everything", any other the
+/// nearest number of days, a tie going to the smaller.
+public func indexOfAttachmentDays(_ days: Int) -> Int {
+    if days < 0 {
+        return 0
+    }
+    if days == 0 {
+        return attachmentChoices.count - 1
+    }
+    var best = 1
+    var bestDiff = -1
+    for (i, v) in attachmentChoices.enumerated() where v > 0 {
         let diff = abs(v - days)
         if bestDiff < 0 || diff < bestDiff {
             best = i

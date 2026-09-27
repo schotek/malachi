@@ -59,6 +59,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     public static let serverError: ErrorCode = 1302
     public static let tlsError: ErrorCode = 1303
     public static let serverTimeout: ErrorCode = 1304
+    /// The mail server no longer has the message (another client deleted
+    /// or moved it); the local copy goes with the next sync.
+    public static let messageGone: ErrorCode = 1305
 
     // 1400–1499: local storage.
     public static let storageError: ErrorCode = 1400
@@ -71,6 +74,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
     /// Over a documented limit; `data` is `{"limit": n, "size": n}`.
     public static let attachmentTooBig: ErrorCode = 1502
     public static let partNotFound: ErrorCode = 1503
+    /// The part's data is not stored on this device (`Attachment.remote`);
+    /// `message.download` fetches it.
+    public static let partNotDownloaded: ErrorCode = 1504
 
     /// The stable symbolic name (api.ErrorCode.String): `"attachmentTooBig"`,
     /// or `"unknown(1234)"` for a code this client does not know.
@@ -87,9 +93,9 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .notImplemented, .invalidArgument, .conflict, .cancelled, .unavailable, .unauthenticated,
         .accountNotFound, .folderNotFound, .messageNotFound, .threadNotFound, .draftNotFound, .attachmentNotFound,
         .authRequired, .authFailed, .keyringError, .oauthClientMissing,
-        .offline, .networkError, .serverError, .tlsError, .serverTimeout,
+        .offline, .networkError, .serverError, .tlsError, .serverTimeout, .messageGone,
         .storageError, .migrationFailed,
-        .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound,
+        .malformedMessage, .sanitizeFailed, .attachmentTooBig, .partNotFound, .partNotDownloaded,
     ]
 
     private static let names: [ErrorCode: String] = [
@@ -119,12 +125,14 @@ public struct ErrorCode: RawRepresentable, Hashable, Codable, Sendable, Expressi
         .serverError: "serverError",
         .tlsError: "tlsError",
         .serverTimeout: "serverTimeout",
+        .messageGone: "messageGone",
         .storageError: "storageError",
         .migrationFailed: "migrationFailed",
         .malformedMessage: "malformedMessage",
         .sanitizeFailed: "sanitizeFailed",
         .attachmentTooBig: "attachmentTooBig",
         .partNotFound: "partNotFound",
+        .partNotDownloaded: "partNotDownloaded",
     ]
 }
 

@@ -77,8 +77,8 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     }
 }
 
-/// api.Attachment: a MIME part the user can download; metadata only, the
-/// bytes come through `message.part`. `filename` is sanitised by the daemon.
+/// api.Attachment: a MIME part of a message; metadata only, the bytes come
+/// through `message.part`. `filename` is sanitised by the daemon.
 public struct Attachment: Codable, Sendable, Equatable {
     public var partId: String
     public var filename: String
@@ -87,15 +87,27 @@ public struct Attachment: Codable, Sendable, Equatable {
     /// Referenced from the HTML body via cid:.
     public var inline: Bool
     public var contentId: String?
+    /// The part's data is not stored on this device, only on the mail
+    /// server (`Preferences.attachmentOfflineDays`); `message.download`
+    /// fetches it. Set only once the body is fetched; name, type and size
+    /// are those of the original part. Absent means false.
+    public var remote: Bool?
 
-    public init(partId: String, filename: String, contentType: String, size: Int, inline: Bool, contentId: String? = nil) {
+    public init(
+        partId: String, filename: String, contentType: String, size: Int, inline: Bool, contentId: String? = nil,
+        remote: Bool? = nil
+    ) {
         self.partId = partId
         self.filename = filename
         self.contentType = contentType
         self.size = size
         self.inline = inline
         self.contentId = contentId
+        self.remote = remote
     }
+
+    /// `remote` as Go reads it: absent is false.
+    public var isRemote: Bool { remote == true }
 }
 
 /// api.Message: the full header view (`message.get`). Go embeds
@@ -382,6 +394,31 @@ public struct MessageEmbeddedResult: Codable, Sendable, Equatable {
         self.partId = partId
         self.message = message
         self.body = body
+    }
+}
+
+/// api.MessageDownloadParams: a stored message whose missing content (the
+/// attachments kept on the server, or a body not downloaded yet) the daemon
+/// fetches from the mail server now.
+public struct MessageDownloadParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var messageId: MessageID
+
+    public init(accountId: AccountID, messageId: MessageID) {
+        self.accountId = accountId
+        self.messageId = messageId
+    }
+}
+
+/// api.MessageDownloadResult: the message as `message.get` reports it after
+/// the download, no attachment `remote` any more. Part ids may differ from
+/// before on Microsoft 365 accounts, whose server rebuilds the MIME: a
+/// client replaces the message it shows with this one.
+public struct MessageDownloadResult: Codable, Sendable, Equatable {
+    public var message: Message
+
+    public init(message: Message) {
+        self.message = message
     }
 }
 

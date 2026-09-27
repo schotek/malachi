@@ -175,6 +175,31 @@ on request: `MALACHI_KEYCHAIN_TEST=1 swift test --package-path macos
 `MALACHI_TEST_REAL_HELPER="$PWD/build/Malachi Mail.app/Contents/MacOS/malachi-keychain"
 go test ./internal/auth/helper -run TestRealHelper` from `backend/`.
 
+## Disk space
+
+Many Macs have small disks, so the daemon the app starts gets two
+defaults of its own: `MALACHI_DEFAULT_COMPRESS_STORE=1` (stored mail is
+kept zstd-compressed) and `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`
+(attachments of 100 KiB and up of messages older than 30 days stay on the
+mail server and are downloaded when you open them; the pictures a message
+shows are always kept). The supervisor sets them unless the environment
+has them already with a value (an empty one, no default to the daemon, is
+replaced), whatever the keyring, and the daemon stores a default as the
+preference the first time it applies it, for an existing store as well
+([docs/api.md §4.8](../docs/api.md#48-config)). A stored preference
+always wins: *Settings → General → Mail* changes both (*Keep Attachments
+Offline For*, *Compress Stored Mail*), and a daemon started another way
+later (`make run-backend`, which sets nothing) keeps what is stored. A
+daemon the app adopts because it already answers gets no environment from
+the app; it applies whatever it was started with, which changes nothing
+stored. *Disk Space Used* in the same group shows the store's size, what
+compression saves and how much of the attachments is on the server only.
+A chip of an attachment on the server shows a cloud symbol; opening,
+previewing or saving it downloads the message first (a spinner after
+0.4 s), and so does a forward, which asks whether to go on without them
+only when the download fails (a message too large to download is
+forwarded at once).
+
 ## Where things are
 
 | What | Path |
@@ -246,6 +271,7 @@ the strings and the confirmation dialogs.
 | ⌘R is a setting (*Settings → General → Keyboard*): *Reply* as in Mail (⌘R Reply, ⇧⌘R Reply All, ⇧⌘F Forward, ⇧⌘N Check for New Mail), or *Check for New Mail* as on Linux (⌘R refresh, ⌥⌘R / ⌥⇧⌘R / ⌥⇧⌘F for the replies) | Ctrl+R refreshes | Decided: a choice, default Mail's |
 | Alerts follow `NSAlert`: *Cancel* on the right is the default (Return) and takes Escape, the destructive button has no shortcut; "Save changes to this draft?" keeps *Save Draft* on Return | GTK button order, suggested/destructive styling; the same default and close responses | AppKit convention |
 | Files opened, previewed or saved from a message get the quarantine attribute (type e-mail attachment, agent Malachi Mail) | No attribute | Gatekeeper and the opening application treat them as downloads; a gain |
+| The chip of an attachment on the mail server shows the server symbol (a cloud, `icloud.and.arrow.down`) after the chip's two segments, or the spinner there while the message downloads; the symbol is not clickable, the segments act as on any chip | The server icon, or the spinner, inside the chip's preview button, after the size and before the arrow, so a click on it previews like the rest of the button | A segment of `NSSegmentedControl` holds one image and one label, which the type icon and the name with the size already take |
 | The new-mail sound is the system *Glass* sound | The sound theme's `message-new-email` | macOS has no such event |
 | The *Keyboard Shortcuts* item is left out of the primary menu | Present | It never worked in the GTK UI either |
 | The message list uses the system selection highlight | Rounded, themed rows | `NSTableView` |
@@ -258,6 +284,7 @@ the strings and the confirmation dialogs.
 | The message header keeps 12 pt above the subject, the same as below the date | `margin-top: 24` above the subject, 12 below the date | Equal margins were asked for; the pane already sits below the toolbar |
 | The account wizard's sheet has a Cancel button at the bottom left of every page (Escape) and no close control in its header; while the browser sign-in waits, the page's own *Cancel* stands alone (Escape still closes the sheet and cancels the sign-in) | Close button in the header bar | macOS sheets carry no window controls; Cancel is the convention, and two Cancel buttons on one page would be ambiguous |
 | The daemon's key file (`rpc.sock.key`) is used only when it belongs to the user and grants nothing to group or others, besides being a regular file, not a link, of 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log) | The Go clients (the GTK UI, `malachi-mcp`, `api.ReadKeyFile`) check the file's type, size and format, not its owner and mode | Defence in depth: the daemon writes the file 0600 in its private directory, so a key another user owns or could read was not written by it or has been exposed. The Go clients cannot check owner and mode the same way on every platform they build for (CLAUDE.md rule 4); on macOS it costs nothing |
+| New and existing stores are compressed, and the large attachments of messages older than 30 days stay on the mail server until opened (*Settings* shows *Compress Stored Mail* on and *Keep Attachments Offline For* at *1 month*; the supervisor's `MALACHI_DEFAULT_*`, see [Disk space](#disk-space)) | Stored uncompressed, every attachment kept (the daemon's built-in defaults; *Everything*, compression off) | Many Macs have 256 GB disks; on Linux a file system such as btrfs compresses by itself. The same daemon, chosen at run time, no platform code |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked

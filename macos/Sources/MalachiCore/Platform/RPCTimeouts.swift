@@ -33,4 +33,8 @@ public enum RPCTimeouts {
     /// One `account.oauthWait` call: the daemon blocks up to 60 s before it
     /// answers `pending`.
     public static let oauthWaitCall: Duration = .seconds(75)
+    /// `message.download`: the daemon's budget is 4 minutes, and the
+    /// download goes on when the caller gives up (docs/api.md: wait at
+    /// least 5 minutes).
+    public static let download: Duration = .seconds(300)
 }

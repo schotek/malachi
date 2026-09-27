@@ -19,12 +19,18 @@ private func waitUntil(_ timeout: Duration = .seconds(5), _ cond: @MainActor () 
     }
 }
 
-/// What the daemon was asked to store, in order.
+/// What the daemon was asked to store, in order, and the keys of each
+/// preference object as it went over the wire.
 private actor SetLog {
     var sent: [Preferences] = []
+    var keys: [[String]] = []
 
     func record(_ p: Preferences) {
         sent.append(p)
+    }
+
+    func record(keys: [String]) {
+        self.keys.append(keys)
     }
 }
 
@@ -35,30 +41,37 @@ private final class Recorder {
     var enabled: [Bool] = []
     var descriptions: [String] = []
     var toasts: [String] = []
+    var saved = 0
 
     func attach(_ c: MailPreferencesController) {
         c.onPreferences = { [weak self] in self?.preferences.append($0) }
         c.onEnabled = { [weak self] in self?.enabled.append($0) }
         c.onDescription = { [weak self] in self?.descriptions.append($0) }
         c.onToast = { [weak self] in self?.toasts.append($0) }
+        c.onSaved = { [weak self] in self?.saved += 1 }
     }
 }
 
 private let stored = Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30)
+/// What a daemon that knows the storage preferences reports.
+private let storedFull = Preferences(
+    syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true, attachmentOfflineDays: 30)
 
-/// A daemon that serves `stored` from config.get and echoes config.set
+/// A daemon that serves `initial` from config.get and echoes config.set
 /// (after `normalise`, the daemon's validation) into `log`.
 private func makeFake(
-    log: SetLog, delay: (@Sendable (Preferences) -> Duration?)? = nil,
+    log: SetLog, initial: Preferences = stored, delay: (@Sendable (Preferences) -> Duration?)? = nil,
     normalise: @escaping @Sendable (Preferences) -> Preferences = { $0 }
 ) async throws -> FakeDaemon {
     let fake = try FakeDaemon()
     await fake.on(API.ConfigGet.name) { _ in
-        try JSONCoding.encoder().encode(ConfigGetResult(preferences: stored))
+        try JSONCoding.encoder().encode(ConfigGetResult(preferences: initial))
     }
     await fake.on(API.ConfigSet.name) { params in
         let p = try JSONCoding.decoder().decode(ConfigSetParams.self, from: params).preferences
         await log.record(p)
+        let object = try JSONSerialization.jsonObject(with: params) as? [String: Any]
+        await log.record(keys: ((object?["preferences"] as? [String: Any])?.keys.sorted()) ?? [])
         if let d = delay?(p) {
             try await Task.sleep(for: d)
         }
@@ -305,5 +318,122 @@ private func loadedController(_ fake: FakeDaemon) async throws -> (MailPreferenc
         try await Task.sleep(for: .milliseconds(100))
         #expect(await log.sent.count == 1)
         #expect(rec.preferences.count == renders)
+    }
+
+    // MARK: Storage preferences (compressStore, attachmentOfflineDays)
+
+    @Test func selectionMapsTheStoragePreferences() {
+        let full = MailPreferencesController.MailSelection(storedFull)
+        #expect(full == .init(interval: 1, remoteContent: 0, retention: 1, attachments: 2, compress: true))
+        let small = Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: false, attachmentOfflineDays: -1)
+        #expect(MailPreferencesController.MailSelection(small).attachments == 0)
+        #expect(MailPreferencesController.MailSelection(small).compress == false)
+        let everything = Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, attachmentOfflineDays: 0)
+        #expect(MailPreferencesController.MailSelection(everything).attachments == 4)
+        // An older daemon: the rows are hidden.
+        let old = MailPreferencesController.MailSelection(stored)
+        #expect(old.attachments == nil && old.compress == nil)
+    }
+
+    @Test func storagePreferencesAreSentWithTheWholeSet() async throws {
+        let log = SetLog()
+        let fake = try await makeFake(log: log, initial: storedFull)
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        #expect(c.preferences == storedFull)
+
+        c.set(compressStore: false)
+        #expect(!c.isEnabled)
+        try await waitUntil { c.isEnabled }
+        var want = storedFull
+        want.compressStore = false
+        #expect(await log.sent == [want])
+        #expect(rec.saved == 1)
+
+        c.selectAttachmentDays(at: 0)
+        try await waitUntil { c.isEnabled }
+        want.attachmentOfflineDays = -1
+        #expect(await log.sent.last == want)
+        c.selectAttachmentDays(at: 4)
+        try await waitUntil { c.isEnabled }
+        want.attachmentOfflineDays = 0
+        #expect(await log.sent.last == want)
+        #expect(await log.keys.last == ["attachmentOfflineDays", "compressStore", "offlineDays", "remoteContent", "syncIntervalSeconds"],
+                "false and 0 go over the wire")
+        // A position outside the table is ignored.
+        c.selectAttachmentDays(at: 5)
+        c.selectAttachmentDays(at: -1)
+        #expect(c.isEnabled)
+        #expect(await log.sent.count == 3)
+        #expect(rec.saved == 3)
+        #expect(c.preferences == want)
+
+        // Another row keeps the storage values as confirmed.
+        c.set(checkInterval: 900)
+        try await waitUntil { c.isEnabled }
+        let last = await log.sent.last
+        #expect(last?.compressStore == false && last?.attachmentOfflineDays == 0)
+        #expect(rec.toasts.isEmpty)
+    }
+
+    /// A value between the pop-up's positions (14 days from config.toml)
+    /// is shown at its nearest one and goes back unchanged when another
+    /// row is saved; only a choice in its own pop-up replaces it
+    /// (preferences.go `attachmentDaysToSave`).
+    @Test func anUntouchedAttachmentValueIsKept() async throws {
+        let log = SetLog()
+        var initial = storedFull
+        initial.attachmentOfflineDays = 14
+        let fake = try await makeFake(log: log, initial: initial)
+        defer { Task { await fake.stop() } }
+        let (c, _) = try await loadedController(fake)
+        #expect(MailPreferencesController.MailSelection(initial).attachments == 1, "shown as 1 week")
+
+        c.set(checkInterval: 900)
+        try await waitUntil { c.isEnabled }
+        c.set(compressStore: false)
+        try await waitUntil { c.isEnabled }
+        c.selectRetention(at: 2)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.sent.map(\.attachmentOfflineDays) == [14, 14, 14])
+
+        c.selectAttachmentDays(at: 2)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.sent.last?.attachmentOfflineDays == 30)
+    }
+
+    /// An older daemon does not report them: their setters do nothing and
+    /// the fields never go back (absent is "unchanged" to a newer one).
+    @Test func anOlderDaemonsSetIsSentWithoutThem() async throws {
+        let log = SetLog()
+        let fake = try await makeFake(log: log)
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        c.set(compressStore: true)
+        c.set(attachmentOfflineDays: 7)
+        c.selectAttachmentDays(at: 1)
+        #expect(c.isEnabled)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await log.sent.isEmpty)
+
+        c.set(offlineDays: 90)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.keys == [["offlineDays", "remoteContent", "syncIntervalSeconds"]])
+        #expect(rec.saved == 1)
+    }
+
+    @Test func aFailedSaveIsNotReportedAsSaved() async throws {
+        let log = SetLog()
+        let fake = try await makeFake(log: log, initial: storedFull)
+        await fake.on(API.ConfigSet.name) { _ in
+            throw RPCError(code: .invalidArgument, message: "attachmentOfflineDays out of range")
+        }
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        c.set(attachmentOfflineDays: 99999)
+        try await waitUntil { c.isEnabled }
+        #expect(rec.saved == 0)
+        #expect(rec.toasts == ["Saving mail settings was rejected: attachmentOfflineDays out of range"])
+        #expect(c.preferences == storedFull)
     }
 }

@@ -317,8 +317,9 @@ private func makeController(accounts: [Account] = twoAccounts) -> (SyncControlle
 
         let (sc, _) = makeController()
         #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "https://login.example/x") == .open("https://login.example/x"))
-        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: nil) == .failed("Starting the sign-in failed"))
-        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "") == .failed("Starting the sign-in failed"))
+        // unavailable: the daemon runs too many sign-ins at once.
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: nil) == .failed("Starting the sign-in failed: try again in a moment"))
+        #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "") == .failed("Starting the sign-in failed: try again in a moment"))
         #expect(await sc.requestSignInURL(client: client, accountId: "a5", fallbackURL: "http://login.example/x")
                 == .failed("The link could not be opened: not an https address"))
         await client.close()

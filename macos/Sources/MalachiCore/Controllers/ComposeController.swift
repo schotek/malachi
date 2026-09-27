@@ -100,6 +100,12 @@ public final class ComposeController {
             // scripts; said once, as after a save.
             w.toast(msg)
         }
+        let skipped = skippedSummary(p.skipped)
+        if !skipped.isEmpty {
+            // Parts of a forwarded original stayed behind (over a cap, or
+            // on the mail server after a failed download).
+            w.toast(skipped)
+        }
     }
 
     /// Manager.FindDraft: the open window that edits `draft` (from

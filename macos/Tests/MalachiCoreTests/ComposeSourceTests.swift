@@ -74,4 +74,62 @@ private struct Boom: Error {}
             #expect(!composeFallbackText("Preparing the reply", err).isEmpty, "\(err): no toast")
         }
     }
+
+    /// compose_open.go `forwardNeedsDownload`: a forward downloads first
+    /// when an attachment other than the HTML's pictures is on the server,
+    /// or the body is not downloaded yet, or the cache cannot tell
+    /// (message.download answers at once when nothing is missing).
+    @Test func forwardNeedsDownloadTest() {
+        func att(_ id: String, inline: Bool = false, remote: Bool? = nil) -> MalachiCore.Attachment {
+            MalachiCore.Attachment(partId: id, filename: id + ".bin", contentType: "application/octet-stream", size: 200_000,
+                                   inline: inline, contentId: inline ? id + "@x" : nil, remote: remote)
+        }
+        func body(_ state: BodyState) -> MessageBodyResult {
+            MessageBodyResult(messageId: "m_1", bodyState: state, hasHtml: false, text: "", remoteContent: .block, sanitizerVersion: "1")
+        }
+        #expect(forwardNeedsDownload(nil), "not in the cache")
+        #expect(forwardNeedsDownload(LoadedMessage(body: body(.pending))), "nothing known before message.get")
+        #expect(forwardNeedsDownload(LoadedMessage(body: body(.fetched))), "message.get failed")
+        let local = Message(summary: summary("m_1"), attachments: [att("2"), att("3", remote: false)])
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: local, body: body(.fetched))))
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: local)), "body not asked for yet")
+        #expect(forwardNeedsDownload(LoadedMessage(msg: local, body: body(.pending))), "a body not downloaded yet")
+        let remote = Message(summary: summary("m_1"), attachments: [att("2"), att("3", remote: true)])
+        #expect(forwardNeedsDownload(LoadedMessage(msg: remote, body: body(.fetched))))
+        #expect(forwardNeedsDownload(LoadedMessage(msg: remote)), "on the server, body not loaded here")
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: local, body: body(.tooBig))), "too big to download anyway")
+        let picture = Message(summary: summary("m_1"), attachments: [att("2", inline: true, remote: true)])
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: picture, body: body(.fetched))), "an inline part is never waited for")
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: Message(summary: summary("m_1")), body: body(.failed))))
+    }
+
+    /// A failed download asks, unless asking would change nothing: no
+    /// daemon, one without message.download, or a message it can never
+    /// download.
+    @Test func askForwardWithoutTest() {
+        let atOnce: [any Error] = [
+            RPCError(code: .methodNotFound, message: "x"),
+            RPCError(code: .notImplemented, message: "x"),
+            RPCClient.ClientError.notConnected,
+            RPCClient.ClientError.disconnected,
+            RPCError(code: .attachmentTooBig, message: "over the cap"),
+        ]
+        for err in atOnce {
+            #expect(!askForwardWithout(err), "\(err)")
+        }
+        let ask: [any Error] = [
+            RPCError(code: .offline, message: "x"),
+            RPCError(code: .messageGone, message: "x"),
+            RPCError(code: .unavailable, message: "x"),
+            RPCError(code: .serverTimeout, message: "x"),
+            RPCError(code: .cancelled, message: "x"),
+            RPCClient.ClientError.timeout(method: "message.download"),
+            RPCClient.ClientError.transport("reset"),
+            CancellationError(),
+            Boom(),
+        ]
+        for err in ask {
+            #expect(askForwardWithout(err), "\(err)")
+        }
+    }
 }

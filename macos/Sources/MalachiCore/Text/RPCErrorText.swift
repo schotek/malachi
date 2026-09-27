@@ -30,7 +30,7 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
     }
     if let e = error as? RPCError {
         switch e.code {
-        case .notImplemented:
+        case .notImplemented, .methodNotFound: // an older daemon lacks the method
             return L10n.T("%s is not available yet", what)
         case .conflict:
             return L10n.T("%s conflicted with another change", what)
@@ -38,7 +38,7 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
             return L10n.T("%s was rejected: %s", what, e.message)
         case .draftNotFound:
             return L10n.T("The draft no longer exists")
-        case .attachmentNotFound:
+        case .attachmentNotFound, .partNotFound: // of a draft, or of a message
             return L10n.T("The attachment no longer exists")
         case .attachmentTooBig:
             return L10n.T("The attachment is too big")
@@ -66,6 +66,15 @@ public func rpcErrorText(_ what: String, _ error: (any Error)?) -> String {
             return L10n.T("%s failed: the secure connection could not be established", what)
         case .serverTimeout:
             return L10n.T("%s failed: the server did not respond in time", what)
+        case .offline:
+            // TRANSLATORS: %s is an action such as "Opening the attachment".
+            return L10n.T("%s failed: no network connection", what)
+        case .unavailable:
+            return L10n.T("%s failed: try again in a moment", what)
+        case .partNotDownloaded:
+            return L10n.T("%s failed: the attachment is not on this computer", what)
+        case .messageGone:
+            return L10n.T("%s failed: the message is no longer on the server", what)
         default:
             break
         }

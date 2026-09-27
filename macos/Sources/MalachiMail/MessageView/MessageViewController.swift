@@ -66,8 +66,10 @@ final class MessageViewController: NSViewController {
     var onEmbeddedLoadImages: (@MainActor () -> Void)?
 
     /// A chip's View: opens the attached message in its own window
-    /// (`MessageWindows.openEmbedded`); installed by the hub.
-    var onOpenEmbedded: (@MainActor (_ containing: MessageSummary, _ part: String, _ chip: NSView?) -> Void)?
+    /// (`MessageWindows.openEmbedded`), downloading the message first when
+    /// the chip showed it on the mail server (`remote`); installed by the
+    /// hub.
+    var onOpenEmbedded: (@MainActor (_ containing: MessageSummary, _ attachment: Attachment, _ remote: Bool, _ chip: NSView?) -> Void)?
 
     /// The toast overlay of a window mode view; the pane uses the main
     /// window's (window.blp `toast_overlay`).
@@ -94,6 +96,9 @@ final class MessageViewController: NSViewController {
     private var emptyPage: StatusPageView?
     private var showingMessage: Bool
     private var chips: [NSView] = []
+    /// The cache entry last rendered, for redrawing the chips when the
+    /// cache no longer holds it (`refreshChips`).
+    private var shownLoaded: LoadedMessage?
     private var spinnerWork: DispatchWorkItem?
     private var settingsTokens: [Settings.ChangeToken] = []
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "message")
@@ -278,6 +283,7 @@ final class MessageViewController: NSViewController {
         guard mode == .pane else { return }
         _ = view
         current = nil
+        shownLoaded = nil
         links = []
         renderedBody = nil
         scrollToTopPending = true
@@ -309,6 +315,7 @@ final class MessageViewController: NSViewController {
     /// (message_view.go `render`).
     func render(_ s: MessageSummary, _ lm: LoadedMessage?) {
         _ = view
+        shownLoaded = lm
         renderHeaders(s, lm?.msg)
         if let lm, lm.bodySettled {
             renderBody(lm)
@@ -326,6 +333,19 @@ final class MessageViewController: NSViewController {
     /// (remote.go `refreshRemoteBar`).
     func refreshRemoteBar(_ lm: LoadedMessage) {
         renderRemoteBar(lm)
+    }
+
+    /// Redraws the attachment chips of the message on display from `lm`
+    /// (or the entry last rendered, when the cache no longer holds it) and
+    /// leaves the rest alone: its download began to show the spinner or
+    /// ended (download.go `refreshChips`).
+    func refreshChips(_ lm: LoadedMessage?) {
+        guard let s = current else { return }
+        let entry = lm ?? shownLoaded
+        if let lm {
+            shownLoaded = lm
+        }
+        renderAttachments(s, entry)
     }
 
     /// The headers: from the summary alone, or from the full message when
@@ -566,8 +586,26 @@ final class MessageViewController: NSViewController {
     /// Rebuilds the chips for what `lm` holds (attachments.go
     /// `renderAttachments`): nothing until message.get answered, otherwise
     /// every attachment except the pictures the HTML body on display
-    /// already shows.
+    /// already shows. A part on the mail server shows the server symbol,
+    /// or the spinner while its message downloads; Save All appears with
+    /// two or more parts that can all be saved, now or after a download.
+    /// The chip that holds the keyboard focus (one used a moment ago, whose
+    /// download starts or ends now) goes with the rest; the focus goes to
+    /// the chip in its place, or to the body when there is none.
     private func renderAttachments(_ s: MessageSummary, _ lm: LoadedMessage?) {
+        let focusAt = focusedChip()
+        let window = view.window
+        if focusAt != nil {
+            window?.makeFirstResponder(nil)
+        }
+        defer {
+            if let at = focusAt, let window {
+                let target = at < chips.count ? ((chips[at] as? AttachmentChipView)?.control ?? chips[at]) : nil
+                if target.map({ window.makeFirstResponder($0) }) != true {
+                    window.makeFirstResponder(bodyTextView)
+                }
+            }
+        }
         header.chips.removeAllViews()
         chips = []
         guard let lm, let m = lm.msg else {
@@ -579,22 +617,30 @@ final class MessageViewController: NSViewController {
             header.chipsVisible = false
             return
         }
+        let downloading = mode != .embedded && cache.showsDownload(s.id)
         var allOK = true
         for a in atts {
-            var (ok, why) = partAvailable(a, lm.body)
+            var (state, why) = partState(a, lm.body)
             if mode == .embedded {
                 // The parts of an attached message have no numbers; nothing
                 // can fetch them (message.embedded in docs/api.md).
-                ok = false
+                state = .unavailable
                 why = L10n.T("Files inside an attached message cannot be opened or saved yet.")
             }
-            allOK = allOK && ok
-            addChip(buildChip(s, a, available: ok, why: why))
+            allOK = allOK && (state == .local || state == .remote)
+            addChip(buildChip(s, a, state: state, why: why, downloading: downloading))
         }
         if atts.count >= 2, allOK {
-            addChip(buildSaveAll(s, atts))
+            addChip(buildSaveAll(s, atts, remote: anyRemote(atts, lm.body)))
         }
         header.chipsVisible = true
+    }
+
+    /// The position of the chip (or Save All) that holds the keyboard
+    /// focus of the view's window, nil when none does.
+    private func focusedChip() -> Int? {
+        guard let focus = view.window?.firstResponder as? NSView else { return nil }
+        return chips.firstIndex { focus === $0 || focus.isDescendant(of: $0) }
     }
 
     private func addChip(_ chip: NSView) {
@@ -602,41 +648,49 @@ final class MessageViewController: NSViewController {
         chips.append(chip)
     }
 
+    /// The chip on display for part `partId`, for Quick Look to zoom out
+    /// of: the chips are drawn again while a download runs, so the one
+    /// that was clicked may be gone by the time the file is ready.
+    private func chipView(forPart partId: String) -> NSView? {
+        chips.first { ($0 as? AttachmentChipView)?.attachment.partId == partId }
+    }
+
     /// One attachment (attachments.go `buildChip`); the actions close over
     /// the attachment and the message it belongs to.
-    private func buildChip(_ s: MessageSummary, _ a: Attachment, available: Bool, why: String) -> NSView {
-        let chip = AttachmentChipView(attachment: a, available: available, why: why)
+    private func buildChip(_ s: MessageSummary, _ a: Attachment, state: PartState, why: String, downloading: Bool) -> NSView {
+        let chip = AttachmentChipView(attachment: a, state: state, why: why, downloading: downloading)
+        let remote = state == .remote
         chip.onPreview = { [weak self, weak chip] in
             guard let self else { return }
-            self.delegate?.previewAttachment(a, of: s, from: chip?.window ?? self.view.window, source: chip)
+            self.delegate?.previewAttachment(a, of: s, remote: remote, from: chip?.window ?? self.view.window) { [weak self] part in
+                self?.chipView(forPart: part)
+            }
         }
         chip.onOpen = { [weak self, weak chip] in
             guard let self else { return }
-            self.delegate?.openAttachment(a, of: s, from: chip?.window ?? self.view.window)
+            self.delegate?.openAttachment(a, of: s, remote: remote, from: chip?.window ?? self.view.window)
         }
         chip.onSave = { [weak self, weak chip] in
             guard let self else { return }
-            self.delegate?.saveAttachment(a, of: s, from: chip?.window ?? self.view.window)
+            self.delegate?.saveAttachment(a, of: s, remote: remote, from: chip?.window ?? self.view.window)
         }
         chip.onView = { [weak self, weak chip] in
             guard let self else { return }
-            self.onOpenEmbedded?(s, a.partId, chip)
+            self.onOpenEmbedded?(s, a, remote, chip)
         }
         return chip
     }
 
     /// The button after the chips that saves all of them into one folder;
-    /// disabled while the run lasts (attachments.go `saveAllAttachments`
-    /// `SetSensitive`), until the delegate reports its end.
-    private func buildSaveAll(_ s: MessageSummary, _ atts: [Attachment]) -> NSView {
+    /// `remote` says that some are on the mail server. It stays disabled
+    /// while a Save All of the message runs, wherever the message is shown
+    /// (attachments.go `buildSaveAll`, `MessageCache.isSavingAll`).
+    private func buildSaveAll(_ s: MessageSummary, _ atts: [Attachment], remote: Bool) -> NSView {
         let button = SaveAllChipView()
+        button.isEnabled = !cache.isSavingAll(s.id)
         button.onClick = { [weak self, weak button] in
             guard let self, let delegate = self.delegate else { return }
-            let window = button?.window ?? self.view.window
-            button?.isEnabled = false
-            delegate.saveAllAttachments(atts, of: s, from: window) {
-                button?.isEnabled = true
-            }
+            delegate.saveAllAttachments(atts, of: s, remote: remote, from: button?.window ?? self.view.window)
         }
         return button
     }

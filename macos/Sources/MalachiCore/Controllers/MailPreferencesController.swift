@@ -14,7 +14,10 @@ import os
 /// failed save shows a toast and reverts the pop-ups to the last state the
 /// daemon confirmed. The pane renders from `onPreferences` (nil until the
 /// daemon answered) and `onEnabled`, and maps values onto pop-up positions
-/// with `MailSelection`.
+/// with `MailSelection`. Keep Attachments Offline For and Compress Stored
+/// Mail exist only when the daemon reports them: an older daemon's rows are
+/// hidden (`MailSelection` nil) and their setters do nothing, so what goes
+/// back leaves the fields out, which config.set reads as unchanged.
 @MainActor
 public final class MailPreferencesController {
     /// The pop-up positions of a preference set, in the order of the
@@ -24,11 +27,17 @@ public final class MailPreferencesController {
         public var interval: Int
         public var remoteContent: Int
         public var retention: Int
+        /// The position in `attachmentChoices`; nil hides the row.
+        public var attachments: Int?
+        /// The switch; nil hides the row.
+        public var compress: Bool?
 
-        public init(interval: Int, remoteContent: Int, retention: Int) {
+        public init(interval: Int, remoteContent: Int, retention: Int, attachments: Int? = nil, compress: Bool? = nil) {
             self.interval = interval
             self.remoteContent = remoteContent
             self.retention = retention
+            self.attachments = attachments
+            self.compress = compress
         }
 
         /// The nearest positions of `p` (preferences.go `apply`).
@@ -36,6 +45,8 @@ public final class MailPreferencesController {
             interval = nearestInterval(p.syncIntervalSeconds)
             remoteContent = indexOfPolicy(p.remoteContent)
             retention = indexOfRetention(p.offlineDays)
+            attachments = p.attachmentOfflineDays.map(indexOfAttachmentDays)
+            compress = p.compressStore
         }
     }
 
@@ -58,6 +69,9 @@ public final class MailPreferencesController {
     public var onDescription: (@MainActor (String) -> Void)?
     /// Called with the text of a toast (a failed save).
     public var onToast: (@MainActor (String) -> Void)?
+    /// Called after the daemon confirmed a change (the disk space is
+    /// measured again then; preferences.go `refreshStorage`).
+    public var onSaved: (@MainActor () -> Void)?
 
     private let client: RPCClient
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "preferences")
@@ -129,6 +143,21 @@ public final class MailPreferencesController {
         save(want)
     }
 
+    /// Compress Stored Mail; nothing while the daemon does not report it.
+    public func set(compressStore on: Bool) {
+        guard var want = preferences, want.compressStore != nil else { return }
+        want.compressStore = on
+        save(want)
+    }
+
+    /// Keep Attachments Offline For, in days (0 = everything, -1 = small
+    /// attachments only); nothing while the daemon does not report it.
+    public func set(attachmentOfflineDays days: Int) {
+        guard var want = preferences, want.attachmentOfflineDays != nil else { return }
+        want.attachmentOfflineDays = days
+        save(want)
+    }
+
     /// The pop-up positions, for the pane: a position outside the table is
     /// ignored (preferences.go `save`).
     public func selectInterval(at i: Int) {
@@ -144,6 +173,11 @@ public final class MailPreferencesController {
     public func selectRetention(at i: Int) {
         guard retentionChoices.indices.contains(i) else { return }
         set(offlineDays: retentionChoices[i])
+    }
+
+    public func selectAttachmentDays(at i: Int) {
+        guard attachmentChoices.indices.contains(i) else { return }
+        set(attachmentOfflineDays: attachmentChoices[i])
     }
 
     /// Runs config.set with the whole set. The group is insensitive
@@ -172,6 +206,7 @@ public final class MailPreferencesController {
             case .success(let res):
                 self.preferences = res.preferences
                 self.onPreferences?(res.preferences)
+                self.onSaved?()
             }
         }
     }

@@ -59,3 +59,40 @@ public func composeFallbackText(_ what: String, _ error: any Error) -> String {
     }
     return rpcErrorText(what, error)
 }
+
+/// Whether a forward of the loaded message downloads it first
+/// (compose_open.go `forwardNeedsDownload`): draft.create imports only what
+/// is stored, so a body not downloaded yet, or an attachment kept on the
+/// mail server, is fetched before the template is asked for. The pictures
+/// the HTML shows are always stored. Without the full message in the
+/// cache nothing is known, so it downloads as well: message.download
+/// answers at once when nothing is missing.
+@MainActor
+public func forwardNeedsDownload(_ lm: LoadedMessage?) -> Bool {
+    guard let lm, let m = lm.msg else {
+        return true
+    }
+    if lm.body?.bodyState == .pending {
+        return true
+    }
+    return m.attachments.contains { !$0.inline && $0.isRemote }
+}
+
+/// Whether a failed download before a forward asks "Forward Without
+/// Attachments?" (compose_open.go `askForwardWithout`). The forward goes on
+/// at once with what the daemon has where asking would change nothing:
+/// without a daemon to ask (`RPCClient.ClientError.notConnected` /
+/// `.disconnected`; draft.create fails the same way and the window opens
+/// from what the pane knows), for a daemon without message.download
+/// (methodNotFound, notImplemented), as before attachments on demand, and
+/// for a message over the daemon's cap, which can never be downloaded
+/// (attachmentTooBig; draft.create lists what it could not take).
+public func askForwardWithout(_ error: any Error) -> Bool {
+    if let e = error as? RPCClient.ClientError, e == .notConnected || e == .disconnected {
+        return false
+    }
+    if methodUnsupported(error) {
+        return false
+    }
+    return (error as? RPCError)?.code != .attachmentTooBig
+}

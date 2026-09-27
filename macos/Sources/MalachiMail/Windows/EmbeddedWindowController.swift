@@ -25,9 +25,13 @@ final class EmbeddedWindowController: NSWindowController, NSWindowDelegate, Toas
     let messageView: MessageViewController
     let toasts: ToastPresenter
 
-    /// The message the shown one was attached to, and the part.
+    /// The message the shown one was attached to, and the part: the
+    /// attachment as its chip listed it, with the part id actually
+    /// rendered (a download on Microsoft 365 may move it).
     let containing: MessageSummary
-    let part: String
+    private(set) var attachment: Attachment
+
+    var part: String { attachment.partId }
 
     /// What the window displays, for putting the bar back after a failed
     /// image load.
@@ -42,11 +46,11 @@ final class EmbeddedWindowController: NSWindowController, NSWindowDelegate, Toas
     private var escape: EscapeCloser?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "embedded")
 
-    init(state: AppState, cache: MessageCache, containing: MessageSummary, part: String, result: MessageEmbeddedResult) {
+    init(state: AppState, cache: MessageCache, containing: MessageSummary, attachment: Attachment, result: MessageEmbeddedResult) {
         self.state = state
         self.cache = cache
         self.containing = containing
-        self.part = part
+        self.attachment = attachment
         shown = result
         messageView = MessageViewController(state: state, cache: cache, mode: .embedded)
         toasts = messageView.toasts ?? ToastPresenter()
@@ -97,7 +101,8 @@ final class EmbeddedWindowController: NSWindowController, NSWindowDelegate, Toas
 
     /// The bar's Load Images: message.embedded again with remote images
     /// allowed for this one call, shown in place of what is on display
-    /// (embedded.go `loadImages`).
+    /// (embedded.go `loadImages`, through `embeddedData`: a part the daemon
+    /// has moved to the mail server since is downloaded once).
     private func loadImages() {
         if loading {
             return
@@ -106,12 +111,13 @@ final class EmbeddedWindowController: NSWindowController, NSWindowDelegate, Toas
         messageView.showRemoteBar(RemoteBarState(visible: true, loading: true))
         let cache = cache
         let containing = containing
-        let part = part
+        let attachment = attachment
         Task { [weak self] in
             let outcome: Result<MessageEmbeddedResult, any Error>
             do {
-                outcome = .success(try await cache.fetchEmbedded(
-                    accountID: containing.accountId, messageID: containing.id, partID: part, remote: .allow))
+                outcome = .success(try await cache.embeddedData(
+                    accountID: containing.accountId, messageID: containing.id, attachment: attachment, onServer: false,
+                    policy: .allow))
             } catch {
                 outcome = .failure(error)
             }
@@ -127,6 +133,9 @@ final class EmbeddedWindowController: NSWindowController, NSWindowDelegate, Toas
                 // The bar offers the images again.
                 self.messageView.renderRemoteBar(LoadedMessage(body: self.shown.body))
             case .success(let res):
+                if !res.partId.isEmpty {
+                    self.attachment.partId = res.partId
+                }
                 self.show(res)
             }
         }

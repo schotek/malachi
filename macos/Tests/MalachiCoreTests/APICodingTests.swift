@@ -151,7 +151,21 @@ import Testing
         #expect(m.references == ["<v@example.org>", "<w@example.org>"])
         #expect(m.attachments.count == 2 && m.attachments[1].inline && m.attachments[1].contentId == "image001@example.org")
         #expect(m.attachments[0].contentId == nil)
+        #expect(m.attachments[0].remote == nil && !m.attachments[0].isRemote, "absent is false")
         #expect(m.headers == ["List-Unsubscribe": "<mailto:u@example.org>", "Auto-Submitted": "no"])
+    }
+
+    /// docs/api.md §3 Attachment: `remote` (opt), omitted when not set.
+    @Test func attachmentRemoteFlag() throws {
+        let a = try decode(MalachiCore.Attachment.self, #"""
+        {"partId":"2","filename":"safe-name.pdf","contentType":"application/pdf","size":12345,"inline":false,"contentId":"x","remote":true}
+        """#)
+        #expect(a.isRemote && a.remote == true && a.size == 12345)
+        let local = try decode(MalachiCore.Attachment.self, #"{"partId":"3","filename":"a.txt","contentType":"text/plain","size":1,"inline":false,"remote":false}"#)
+        #expect(!local.isRemote)
+        #expect(try encodeObject(a)["remote"] as? Bool == true)
+        let plain = try encodeObject(MalachiCore.Attachment(partId: "1", filename: "a", contentType: "text/plain", size: 1, inline: false))
+        #expect(plain["remote"] == nil, "omitempty")
     }
 
     @Test func messageRoundTripsFlat() throws {
@@ -444,10 +458,74 @@ import Testing
     @Test func configGetExample() throws {
         let r = try decode(ConfigGetResult.self, #"{"preferences":{"syncIntervalSeconds":300,"remoteContent":"knownSenders","offlineDays":30}}"#)
         #expect(r.preferences == Preferences(syncIntervalSeconds: 300, remoteContent: .knownSenders, offlineDays: 30))
-        // config.set echoes the whole set.
+        #expect(r.preferences.compressStore == nil && r.preferences.attachmentOfflineDays == nil, "an older daemon")
+        // config.set echoes the whole set; what the daemon did not report
+        // is left out, which it reads as unchanged.
         let obj = try encodeObject(ConfigSetParams(preferences: r.preferences))
         let prefs = try #require(obj["preferences"] as? [String: Any])
         #expect(prefs["syncIntervalSeconds"] as? Int == 300 && prefs["remoteContent"] as? String == "knownSenders" && prefs["offlineDays"] as? Int == 30)
+        #expect(prefs.keys.sorted() == ["offlineDays", "remoteContent", "syncIntervalSeconds"], "nil is never sent")
+
+        // docs/api.md §4.8: a daemon that knows the storage preferences.
+        let full = try decode(ConfigGetResult.self, #"""
+        {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,
+                        "compressStore":true,"attachmentOfflineDays":30}}
+        """#)
+        #expect(full.preferences == Preferences(
+            syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true, attachmentOfflineDays: 30))
+        let small = try decode(ConfigSetResult.self, #"""
+        {"preferences":{"syncIntervalSeconds":0,"remoteContent":"allow","offlineDays":0,"compressStore":false,"attachmentOfflineDays":-1}}
+        """#)
+        #expect(small.preferences.compressStore == false && small.preferences.attachmentOfflineDays == API.Limits.attachmentOfflineNone)
+        // Set values are sent, false and 0 included.
+        let off = try encodeObject(ConfigSetParams(preferences: Preferences(
+            syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: false, attachmentOfflineDays: 0)))
+        let sent = try #require(off["preferences"] as? [String: Any])
+        #expect(sent["compressStore"] as? Bool == false && sent["attachmentOfflineDays"] as? Int == 0)
+        let one = try encodeObject(ConfigSetParams(preferences: Preferences(
+            syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true)))
+        let partial = try #require(one["preferences"] as? [String: Any])
+        #expect(partial["compressStore"] as? Bool == true && partial["attachmentOfflineDays"] == nil)
+        #expect(API.Limits.attachmentOfflineDaysMax == 3650 && API.Limits.largeAttachmentMinBytes == 100 << 10)
+    }
+
+    /// docs/api.md §4.0 `system.storage`.
+    @Test func systemStorageExample() throws {
+        let r = try decode(SystemStorageResult.self, #"""
+        {
+          "totalBytes": 734003200,
+          "databaseBytes": 44470272,
+          "messageBytes": 546700000,
+          "messageUncompressedBytes": 909800000,
+          "savedBytes": 363100000,
+          "attachmentBytes": 250000,
+          "remoteAttachmentBytes": 312000000,
+          "messages": 3725,
+          "compressedMessages": 3725,
+          "partialMessages": 410,
+          "conversion": "idle"
+        }
+        """#)
+        #expect(r == SystemStorageResult(
+            totalBytes: 734_003_200, databaseBytes: 44_470_272, messageBytes: 546_700_000,
+            messageUncompressedBytes: 909_800_000, savedBytes: 363_100_000, attachmentBytes: 250_000,
+            remoteAttachmentBytes: 312_000_000, messages: 3725, compressedMessages: 3725, partialMessages: 410,
+            conversion: .idle))
+        let full = try decode(SystemStorageResult.self, #"{"totalBytes":0,"databaseBytes":0,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"noSpace"}"#)
+        #expect(full.conversion == .noSpace && full.conversion != .running)
+        // A state a newer daemon adds still decodes.
+        let odd = try decode(SystemStorageResult.self, #"{"totalBytes":1,"databaseBytes":1,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"paused"}"#)
+        #expect(odd.conversion == StorageConversion(rawValue: "paused"))
+    }
+
+    /// docs/api.md §4.3 `message.download`.
+    @Test func messageDownloadExample() throws {
+        let params = try encodeObject(MessageDownloadParams(accountId: "acc_1", messageId: "m_123"))
+        #expect(params.keys.sorted() == ["accountId", "messageId"])
+        #expect(params["accountId"] as? String == "acc_1" && params["messageId"] as? String == "m_123")
+        let r = try decode(MessageDownloadResult.self, #"{"message":\#(Self.messageJSON)}"#)
+        #expect(r.message.summary.id == "m_123" && r.message.attachments.count == 2)
+        #expect(r.message.attachments.allSatisfy { !$0.isRemote }, "nothing is remote after a download")
     }
 
     @Test func contactSearchExample() throws {
@@ -651,12 +729,14 @@ import Testing
         (1104, "draftNotFound"), (1105, "attachmentNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
+        (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
+        (1504, "partNotDownloaded"),
     ]
 
     @Test func errorCodesAreNamed() {
-        #expect(ErrorCode.all.count == 32 && Set(ErrorCode.all).count == 32)
+        #expect(ErrorCode.all.count == 34 && Set(ErrorCode.all).count == 34)
         #expect(ErrorCode.all.map(\.rawValue) == Self.goCodes.map { $0.0 })
         #expect(ErrorCode.all.map(\.name) == Self.goCodes.map { $0.1 })
         for code in ErrorCode.all {
@@ -672,6 +752,8 @@ import Testing
         #expect(ErrorCode(rawValue: 1203) == .oauthClientMissing)
         let code: ErrorCode = 1102
         #expect(code == .messageNotFound)
+        #expect(ErrorCode.messageGone.rawValue == 1305 && ErrorCode(rawValue: 1305).name == "messageGone")
+        #expect(ErrorCode.partNotDownloaded.rawValue == 1504 && ErrorCode(rawValue: 1504).name == "partNotDownloaded")
     }
 
     // MARK: Params encoding
@@ -723,13 +805,13 @@ import Testing
 
     /// api.AllMethods, copied from backend/pkg/api/methods.go.
     static let goMethods = [
-        "system.info", "system.hello", "system.authenticate",
+        "system.info", "system.hello", "system.authenticate", "system.storage",
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
-        "message.embedded", "message.flag", "message.move", "message.delete",
+        "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
         "message.send",
         "outbox.retry",
         "thread.list", "thread.get",
@@ -743,8 +825,8 @@ import Testing
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 46)
-        #expect(Set(API.allMethods).count == 46, "no duplicates")
+        #expect(API.allMethods.count == 48)
+        #expect(Set(API.allMethods).count == 48, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -766,10 +848,13 @@ import Testing
         #expect(RPCTimeouts.oauthStart == .seconds(10) && RPCTimeouts.oauthWaitCall == .seconds(75))
         #expect(API.AccountOAuthCancel.timeout == .seconds(5))
         #expect(RPCTimeouts.default == .seconds(5) && RPCTimeouts.remote == .seconds(30))
+        // The daemon's download budget is 4 minutes; the client waits 5.
+        #expect(RPCTimeouts.download == .seconds(300) && API.MessageDownload.timeout == RPCTimeouts.download)
+        #expect(API.SystemStorage.timeout == .seconds(5))
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
-                                    "account.oauthStart", "account.oauthWait"]
+                                    "account.oauthStart", "account.oauthWait", "message.download"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

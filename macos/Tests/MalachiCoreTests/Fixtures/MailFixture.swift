@@ -123,6 +123,17 @@ actor MailFixture {
         refreshCounts(key.account)
     }
 
+    /// Makes `message.get` answer `m` for its message (its attachments,
+    /// its full headers).
+    func setDetail(_ m: Message) {
+        details[m.summary.id] = m
+    }
+
+    /// Makes `message.body` answer `b` for its message.
+    func setBody(_ b: MessageBodyResult) {
+        bodies[b.messageId] = b
+    }
+
     /// Adds one message to the folder its summary names.
     func addMessage(_ s: MessageSummary) {
         let key = FolderKey(account: s.accountId, folder: s.folderId)

@@ -11,7 +11,10 @@ import MalachiCore
 /// through `LoginItemService` (the Background portal's place, `SMAppService`
 /// being authoritative); the Mail group is the daemon's, through
 /// `MailPreferencesController` (config.get / config.set), and stays
-/// insensitive until the daemon answered.
+/// insensitive until the daemon answered. Keep Attachments Offline For and
+/// Compress Stored Mail are shown only when the daemon reports them, Disk
+/// Space Used only while it answers system.storage
+/// (`StorageUsageController`, every 5 s while the window is open).
 ///
 /// The pane needs the settings, the client and a toast sink; they come
 /// with `init` or later through `configure`, and the bindings start once
@@ -36,12 +39,19 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     let checkInterval = NSPopUpButton(frame: .zero, pullsDown: false)
     let remoteImages = NSPopUpButton(frame: .zero, pullsDown: false)
     let offlineDays = NSPopUpButton(frame: .zero, pullsDown: false)
+    let attachmentDays = NSPopUpButton(frame: .zero, pullsDown: false)
+    let compressStore = NSSwitch()
+    /// The Disk Space Used row's value (`storage_size`: dim, numeric).
+    let storageValue = NSTextField(labelWithString: "")
 
     /// The ⌘R pop-up's items, in order.
     static let commandRChoices: [Settings.CommandR] = [.reply, .refresh]
 
     /// The Mail group's controller; nil until `configure` gave a client.
     private(set) var mail: MailPreferencesController?
+    /// The Disk Space Used row's controller; nil until `configure` gave a
+    /// client.
+    private(set) var storage: StorageUsageController?
     /// The window closed (or the lead said so): bindings undone, late
     /// replies dropped.
     var closed: Bool {
@@ -59,6 +69,9 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     private let loginItems = LoginItemService()
     private let bindings = PreferenceBindingSet()
     private var launchAtLoginRow: PreferenceRowView?
+    private var attachmentDaysRow: PreferenceRowView?
+    private var compressStoreRow: PreferenceRowView?
+    private var storageRow: PreferenceRowView?
     private var bound = false
     /// The login switch is being set from the service, not by the user.
     private var revertingLogin = false
@@ -138,11 +151,38 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         checkInterval.selectItem(at: 1)
         remoteImages.addItems(withTitles: [L10n.T("Never"), L10n.T("From Known Senders"), L10n.T("Always")])
         offlineDays.addItems(withTitles: [L10n.T("1 week"), L10n.T("1 month"), L10n.T("3 months"), L10n.T("1 year"), L10n.T("Everything")])
+        // Ascending like the retention, sharing its strings.
+        attachmentDays.addItems(withTitles: [
+            L10n.T("Small Attachments Only"), L10n.T("1 week"), L10n.T("1 month"), L10n.T("3 months"), L10n.T("Everything"),
+        ])
+        attachmentDays.selectItem(at: 4)
+        storageValue.textColor = .secondaryLabelColor
+        storageValue.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+        storageValue.lineBreakMode = .byTruncatingTail
+        storageValue.isSelectable = false
+        let attachmentsRow = PreferenceRowView(
+            title: L10n.T("Keep Attachments Offline For"),
+            subtitle: L10n.T("Large attachments of older messages stay on the server and are downloaded when you open them"),
+            trailing: attachmentDays)
+        let compressRow = PreferenceRowView(
+            title: L10n.T("Compress Stored Mail"),
+            subtitle: L10n.T("Uses less disk space; stored mail is converted in the background"),
+            trailing: compressStore)
+        let usageRow = PreferenceRowView(title: L10n.T("Disk Space Used"), trailing: storageValue)
+        attachmentDaysRow = attachmentsRow
+        compressStoreRow = compressRow
+        storageRow = usageRow
         mailGroup.setRows([
             PreferenceRowView(title: L10n.T("Check for New Mail"), trailing: checkInterval),
             PreferenceRowView(title: L10n.T("Load Remote Images"), trailing: remoteImages),
             PreferenceRowView(title: L10n.T("Keep Mail Offline For"), subtitle: L10n.T("Older messages stay on the server and are not shown"), trailing: offlineDays),
+            attachmentsRow,
+            compressRow,
+            usageRow,
         ])
+        // Until the daemon says it knows them (an older one does not).
+        mailGroup.setRow(attachmentsRow, hidden: true)
+        mailGroup.setRow(compressRow, hidden: true)
         mailGroup.isEnabled = false
         addGroup(mailGroup)
     }
@@ -179,9 +219,11 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
 
         if let client {
             bindMail(client)
+            bindStorage(client)
         }
         bindings.onClose = { [weak self] in
             self?.mail?.close()
+            self?.storage?.close()
         }
     }
 
@@ -254,13 +296,22 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         mail.onToast = { [weak self] text in
             self?.toast?(text)
         }
-        for popup in [checkInterval, remoteImages, offlineDays] {
+        // A confirmed change is measured at once (preferences.go
+        // `refreshStorage`).
+        mail.onSaved = { [weak self] in
+            self?.storage?.refresh()
+        }
+        for popup in [checkInterval, remoteImages, offlineDays, attachmentDays] {
             popup.target = self
             popup.action = #selector(mailChanged(_:))
         }
+        compressStore.target = self
+        compressStore.action = #selector(mailChanged(_:))
         mail.load()
     }
 
+    /// The values the daemon confirmed, into the controls; a row whose
+    /// field the daemon does not report is hidden (preferences.go `apply`).
     private func renderMail(_ p: Preferences?) {
         guard let p else { return }
         let sel = MailPreferencesController.MailSelection(p)
@@ -268,7 +319,19 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         checkInterval.selectItem(at: sel.interval)
         remoteImages.selectItem(at: sel.remoteContent)
         offlineDays.selectItem(at: sel.retention)
+        if let i = sel.attachments {
+            attachmentDays.selectItem(at: i)
+        }
+        if let on = sel.compress {
+            compressStore.state = on ? .on : .off
+        }
         syncingMail = false
+        if let row = attachmentDaysRow {
+            mailGroup.setRow(row, hidden: sel.attachments == nil)
+        }
+        if let row = compressStoreRow {
+            mailGroup.setRow(row, hidden: sel.compress == nil)
+        }
     }
 
     @objc private func mailChanged(_ sender: Any?) {
@@ -279,6 +342,36 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             mail.selectRemoteContent(at: remoteImages.indexOfSelectedItem)
         } else if sender as AnyObject === offlineDays {
             mail.selectRetention(at: offlineDays.indexOfSelectedItem)
+        } else if sender as AnyObject === attachmentDays {
+            mail.selectAttachmentDays(at: attachmentDays.indexOfSelectedItem)
+        } else if sender as AnyObject === compressStore {
+            mail.set(compressStore: compressStore.state == .on)
         }
+    }
+
+    // MARK: Disk Space Used (preferences.go `bindStorage`)
+
+    /// system.storage now, after every confirmed change and every 5 s until
+    /// the window closes. The value is the total; the subtitle what
+    /// compression saves and what stays on the server (`storageTexts`), or
+    /// why the last call failed, the value kept. A daemon without the
+    /// method hides the row for good.
+    private func bindStorage(_ client: RPCClient) {
+        let storage = StorageUsageController(client: client)
+        self.storage = storage
+        storage.onUsage = { [weak self] usage in
+            guard let self else { return }
+            let texts = storageTexts(usage)
+            self.storageValue.stringValue = texts.value
+            self.storageRow?.subtitle = texts.details
+        }
+        storage.onError = { [weak self] text in
+            self?.storageRow?.subtitle = text
+        }
+        storage.onUnsupported = { [weak self] in
+            guard let self, let row = self.storageRow else { return }
+            self.mailGroup.setRow(row, hidden: true)
+        }
+        storage.start()
     }
 }

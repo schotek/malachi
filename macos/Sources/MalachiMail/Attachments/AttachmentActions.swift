@@ -16,7 +16,10 @@ import UniformTypeIdentifiers
 /// name or the type conforms to (`executableByType`), before the fetch on
 /// what the message lists and again after it on the name and type the
 /// daemon served. The content comes through message.part, so a part over
-/// `API.Limits.maxAttachmentDataBytes` is out of reach. Every file written
+/// `API.Limits.maxAttachmentDataBytes` is out of reach; a part kept on the
+/// mail server is downloaded first, and one the daemon moved there since
+/// the chip was drawn after its partNotDownloaded (`MessageCache.partData`,
+/// the chips show the spinner meanwhile). Every file written
 /// gets the quarantine attribute, so the system treats it like a download
 /// (the plan's deviation from GTK); a file for opening is not opened
 /// unless the attribute is on it.
@@ -43,18 +46,24 @@ final class AttachmentActions {
     /// An executable is saved instead: the chip keeps Open disabled for
     /// those already, this is the second look, and a third follows the
     /// fetch on the name and type the daemon served, which are what the
-    /// file gets.
-    func open(_ a: Attachment, of s: MessageSummary, from window: NSWindow?) {
+    /// file gets. `remote` (the chip showed the part on the mail server)
+    /// downloads the message first.
+    func open(_ a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?) {
         if Self.mustNotOpen(filename: a.filename, contentType: a.contentType) {
-            saveAs(a, of: s, from: window)
+            saveAs(a, of: s, remote: remote, from: window)
             return
         }
         Task { @MainActor [weak self] in
-            guard let self, let res = await self.fetchForViewing(a, of: s, from: window) else { return }
+            guard let self, let res = await self.fetchForViewing(a, of: s, remote: remote, from: window) else { return }
             let name = fileName(res, a)
             if Self.mustNotOpen(filename: name, contentType: res.contentType) {
                 self.log.info("attachment \(a.partId, privacy: .public) turned out executable after the fetch; saving instead")
-                self.saveAs(a, of: s, from: window)
+                // Downloaded by now; the part the daemon served.
+                var served = a
+                if !res.partId.isEmpty {
+                    served.partId = res.partId
+                }
+                self.saveAs(served, of: s, remote: false, from: window)
                 return
             }
             guard let url = await self.writeForViewing(name: name, data: res.data, from: window) else { return }
@@ -70,22 +79,34 @@ final class AttachmentActions {
     /// Writes the part to a private file and shows it in Quick Look
     /// (attachments.go `previewAttachment`): a click on the chip. Quick
     /// Look only renders, so a program or script is previewed like any
-    /// file; it carries the quarantine attribute all the same. `source` is
-    /// the chip, which the panel zooms out of.
-    func preview(_ a: Attachment, of s: MessageSummary, from window: NSWindow?, source: NSView?) {
-        Task { @MainActor [weak self, weak source] in
-            guard let self, let res = await self.fetchForViewing(a, of: s, from: window) else { return }
+    /// file; it carries the quarantine attribute all the same. `source`
+    /// finds the chip of the part fetched, which the panel zooms out of,
+    /// once the file is ready (the chip clicked may have been drawn again
+    /// during a download).
+    func preview(
+        _ a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?,
+        source: @escaping @MainActor (_ partId: String) -> NSView?
+    ) {
+        Task { @MainActor [weak self] in
+            guard let self, let res = await self.fetchForViewing(a, of: s, remote: remote, from: window) else { return }
             let name = fileName(res, a)
             guard let url = await self.writeForViewing(name: name, data: res.data, from: window) else { return }
-            AttachmentPreview.shared.show(url: url, source: source)
+            AttachmentPreview.shared.show(url: url, source: source(res.partId.isEmpty ? a.partId : res.partId))
         }
+    }
+
+    /// The part through `MessageCache.partData` (attachments.go
+    /// `partData`): the message downloaded first when the part is on the
+    /// server (`remote`, the chip's `partState`).
+    private func partData(_ a: Attachment, of s: MessageSummary, remote: Bool) async throws -> MessagePartResult {
+        try await cache.partData(accountID: s.accountId, messageID: s.id, attachment: a, onServer: remote)
     }
 
     /// message.part for the attachment being opened or previewed; nil
     /// after a failure, which has had its toast.
-    private func fetchForViewing(_ a: Attachment, of s: MessageSummary, from window: NSWindow?) async -> MessagePartResult? {
+    private func fetchForViewing(_ a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?) async -> MessagePartResult? {
         do {
-            return try await cache.fetchAttachment(accountID: s.accountId, messageID: s.id, partID: a.partId)
+            return try await partData(a, of: s, remote: remote)
         } catch {
             log.warning("message.part \(a.partId, privacy: .public): \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
             toast(rpcErrorText(L10n.T("Opening the attachment"), error), in: window)
@@ -151,17 +172,16 @@ final class AttachmentActions {
     // MARK: Save As
 
     /// Asks where to put the part, then fetches and writes it
-    /// (attachments.go `saveAttachment`). The panel already confirmed an
-    /// overwrite, so the write replaces; only a failure gets a toast, a
-    /// dismissal nothing.
-    func saveAs(_ a: Attachment, of s: MessageSummary, from window: NSWindow?) {
+    /// (attachments.go `saveAttachment`), downloading the message first
+    /// when `remote`. The panel already confirmed an overwrite, so the
+    /// write replaces; only a failure gets a toast, a dismissal nothing.
+    func saveAs(_ a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?) {
         let panel = NSSavePanel()
         panel.title = L10n.T("Save Attachment")
         panel.message = L10n.T("Save Attachment")
         panel.nameFieldStringValue = fileName(nil, a)
         panel.canCreateDirectories = true
         panel.isExtensionHidden = false
-        let cache = cache
         Task { @MainActor [weak self] in
             guard let self else { return }
             let response = await self.run(panel, on: window)
@@ -169,7 +189,7 @@ final class AttachmentActions {
                 return // dismissed
             }
             do {
-                let res = try await cache.fetchAttachment(accountID: s.accountId, messageID: s.id, partID: a.partId)
+                let res = try await self.partData(a, of: s, remote: remote)
                 let data = res.data
                 try await Task.detached(priority: .userInitiated) {
                     try data.write(to: url, options: .atomic)
@@ -186,10 +206,15 @@ final class AttachmentActions {
 
     /// Asks for a folder and writes every attachment into it, one
     /// message.part at a time, never overwriting: a name that exists gets
-    /// " (2)" and so on. One toast sums it up, and `done` runs at the end,
-    /// dismissal included, so the button that started the run can be
-    /// disabled meanwhile (attachments.go `saveAllAttachments`).
-    func saveAll(_ atts: [Attachment], of s: MessageSummary, from window: NSWindow?, done: @escaping @MainActor () -> Void) {
+    /// " (2)" and so on. When some are on the mail server (`remote`,
+    /// `anyRemote`) the message is downloaded once first; if that fails,
+    /// nothing is written and the toast says why. One toast sums it up.
+    /// The Save All buttons of the message stay disabled while it runs
+    /// (`MessageCache.beginSaveAll`: the chips may be drawn again
+    /// meanwhile); a second one for the same message, started while the
+    /// first runs, ends at its folder panel (attachments.go
+    /// `saveAllAttachments`).
+    func saveAll(_ atts: [Attachment], of s: MessageSummary, remote: Bool, from window: NSWindow?) {
         let panel = NSOpenPanel()
         panel.title = L10n.T("Save Attachments")
         panel.message = L10n.T("Save Attachments")
@@ -198,18 +223,34 @@ final class AttachmentActions {
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = mn(L10n.T("_Save"))
+        let cache = cache
         Task { @MainActor [weak self] in
-            defer { done() }
             guard let self else { return }
             let response = await self.run(panel, on: window)
-            guard response == .OK, let folder = panel.url else {
-                return // dismissed
+            guard response == .OK, let folder = panel.url, cache.beginSaveAll(s.id) else {
+                return // dismissed, or another Save All of the message runs
+            }
+            defer { cache.endSaveAll(s.id) }
+            var downloaded: Message?
+            if remote {
+                do {
+                    downloaded = try await cache.download(accountID: s.accountId, messageID: s.id)
+                } catch {
+                    self.log.warning("message.download for Save All: \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
+                    self.toast(rpcErrorText(L10n.T("Saving the attachments"), error), in: window)
+                    return
+                }
             }
             var saved = 0
             var failed = 0
             for a in atts {
                 do {
-                    try await self.saveInto(folder, s, a)
+                    // Microsoft 365 may have moved the part ids; a part the
+                    // downloaded message no longer lists is not fetched.
+                    guard let part = partAfterDownload(a, downloaded) else {
+                        throw partNotFoundAfterDownload
+                    }
+                    try await self.saveInto(folder, s, part)
                     saved += 1
                 } catch {
                     self.log.warning("saving an attachment \(a.partId, privacy: .public): \(Self.errorText(error), privacy: .public): \(String(describing: error), privacy: .private)")
@@ -221,9 +262,11 @@ final class AttachmentActions {
     }
 
     /// Fetches `a` and creates it in `folder` under a name that is not
-    /// taken yet (attachments.go `saveInto`).
+    /// taken yet (attachments.go `saveInto`). The message was downloaded
+    /// already when it had to be; a part the daemon answers
+    /// partNotDownloaded for after all gets its one download and retry.
     private func saveInto(_ folder: URL, _ s: MessageSummary, _ a: Attachment) async throws {
-        let res = try await cache.fetchAttachment(accountID: s.accountId, messageID: s.id, partID: a.partId)
+        let res = try await cache.partData(accountID: s.accountId, messageID: s.id, attachment: a, onServer: false)
         let name = fileName(res, a)
         let data = res.data
         try await Task.detached(priority: .userInitiated) {

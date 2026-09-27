@@ -97,9 +97,13 @@ public func formatDateTime(_ t: Date, locale: Locale = .current, calendar: Calen
     strftime(t, L10n.T("%a, %-d %b %Y at %H:%M"), locale: locale, calendar: calendar)
 }
 
-/// Renders a byte count for attachment chips: MiB, KiB or B (format.go
-/// `FormatSize`).
+/// Renders a byte count for attachment chips and the disk space of the
+/// settings: GiB, MiB, KiB or B (format.go `FormatSize`).
 public func formatSize(_ n: Int) -> String {
+    if n >= 1 << 30 {
+        // TRANSLATORS: file size in gibibytes.
+        return L10n.T("%.1f GiB", Double(n) / Double(1 << 30))
+    }
     if n >= 1 << 20 {
         // TRANSLATORS: file size in mebibytes.
         return L10n.T("%.1f MiB", Double(n) / Double(1 << 20))

@@ -58,6 +58,12 @@ private actor Recorder {
     var preferences: [Preferences] = []
     var drafts: [DraftCreateParams] = []
     var opens: [DraftOpenParams] = []
+    var downloads: [MessageDownloadParams] = []
+    /// What the next message.download answers with, nil for success.
+    var downloadError: RPCError?
+
+    func addDownload(_ p: MessageDownloadParams) { downloads.append(p) }
+    func set(downloadError: RPCError?) { self.downloadError = downloadError }
 
     func addSender(_ a: String) { senders.append(a) }
     func addOpen(_ p: DraftOpenParams) { opens.append(p) }
@@ -847,4 +853,145 @@ private final class Harness {
         #expect(h.log.toasts.last == "The draft has not been downloaded yet; try again in a moment")
         #expect(h.log.composed.count == 1)
     }
+
+    /// compose_open.go: a forward of a message with attachments on the
+    /// mail server (or one the cache does not hold) downloads it before
+    /// draft.create; a failed download asks "Forward Without
+    /// Attachments?" over the window it came from, except without a
+    /// daemon, on a daemon without message.download and for a message
+    /// over its cap; the parts draft.create could not import reach the
+    /// window as `skipped`.
+    @Test func forwardDownloadsTheAttachmentsFirst() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen), msg("m2", 2, .seen)]])
+        defer { Task { await h.stop() } }
+        let onServer = MalachiCore.Attachment(partId: "2", filename: "big.pdf", contentType: "application/pdf", size: 300_000, inline: false, remote: true)
+        let remote = Message(summary: try h.summary("m1"), attachments: [onServer])
+        var local = remote
+        local.attachments[0].remote = nil
+        await h.fixture.setDetail(remote)
+        let rec = Recorder()
+        let downloaded = try encode(MessageDownloadResult(message: local))
+        await h.fixture.on(API.MessageDownload.name) { params in
+            await rec.addDownload(try decode(MessageDownloadParams.self, params))
+            try await Task.sleep(for: .milliseconds(30))
+            if let err = await rec.downloadError {
+                throw err
+            }
+            return downloaded
+        }
+        let draft = Draft(accountId: "a", subject: "Fwd: s-m1", textBody: "fwd", htmlBody: "<p>fwd</p>", forwarding: "m1")
+        let created = try encode(DraftCreateResult(draft: draft, quoted: .html, skipped: [onServer]))
+        await h.fixture.on(API.DraftCreate.name) { params in
+            await rec.addDraft(try decode(DraftCreateParams.self, params))
+            return created
+        }
+        let parents = ParentLog()
+        let log = h.log
+        h.actions.confirm = { parent, heading, body, label in
+            parents.seen.append(parent === parents.window)
+            log.confirmations.append(Confirmation(heading: heading, body: body, label: label))
+            return log.answer
+        }
+        try await h.load("m1")
+        let base = await h.fixture.calls().count
+
+        // Downloaded first, once however often asked; then the template.
+        h.actions.openCompose(.forward, "m1", from: parents.window)
+        h.actions.openCompose(.forward, "m1", from: parents.window)
+        try await waitUntil { h.log.composed.count == 1 }
+        #expect(Array(await h.fixture.calls().dropFirst(base)) == [API.MessageDownload.name, API.DraftCreate.name])
+        #expect(await rec.downloads == [MessageDownloadParams(accountId: "a", messageId: "m1")])
+        let f = h.log.composed[0]
+        #expect(f.kind == .forward && f.forwarding == "m1" && f.subject == "Fwd: s-m1")
+        #expect(f.skipped == 1)
+        #expect(h.log.confirmations.isEmpty && h.log.toasts.isEmpty)
+        #expect(h.cache.loaded("m1")?.msg == local, "the downloaded message replaced the cached one")
+
+        // Nothing on the server any more: straight to draft.create.
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 2 }
+        #expect(await rec.downloads.count == 1)
+
+        // A failed download asks over the window it came from; Cancel
+        // opens nothing.
+        h.cache.loaded("m1")?.msg = remote
+        await rec.set(downloadError: RPCError(code: .offline, message: "no network"))
+        h.log.answer = false
+        h.actions.openCompose(.forward, "m1", from: parents.window)
+        try await waitUntil { h.log.confirmations.count == 1 }
+        #expect(h.log.confirmations[0] == Confirmation(
+            heading: "Forward Without Attachments?", body: "Downloading the attachments failed: no network connection",
+            label: "_Forward Without Attachments"))
+        #expect(parents.seen == [true])
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(h.log.composed.count == 2)
+        #expect(await rec.drafts.count == 2)
+        #expect(h.log.toasts.isEmpty)
+
+        // Confirmed: the template without them; the next click works again.
+        h.log.answer = true
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 3 }
+        #expect(h.log.confirmations.count == 2)
+        #expect(h.log.composed[2].skipped == 1)
+        #expect(await rec.drafts.count == 3)
+
+        // A daemon without message.download: not asked about.
+        await rec.set(downloadError: RPCError(code: .methodNotFound, message: "unknown method"))
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 4 }
+        #expect(h.log.confirmations.count == 2)
+
+        // A reply never downloads.
+        let downloads = await rec.downloads.count
+        h.actions.openCompose(.reply, "m1")
+        try await waitUntil { h.log.composed.count == 5 }
+        #expect(await rec.downloads.count == downloads)
+        #expect(h.log.composed[4].skipped == 1, "whatever draft.create reports")
+
+        // Without a confirmation hook a failed download forwards nothing.
+        h.actions.confirm = nil
+        await rec.set(downloadError: RPCError(code: .offline, message: "no network"))
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { await rec.downloads.count == downloads + 1 }
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(h.log.composed.count == 5)
+
+        // A message over the daemon's cap can never be downloaded: asking
+        // would change nothing, the template comes at once.
+        h.actions.confirm = { _, heading, body, label in
+            log.confirmations.append(Confirmation(heading: heading, body: body, label: label))
+            return log.answer
+        }
+        await rec.set(downloadError: RPCError(code: .attachmentTooBig, message: "over the cap"))
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 6 }
+        #expect(h.log.confirmations.count == 2)
+
+        // A message the cache does not hold is downloaded first all the
+        // same: message.download answers at once when nothing is missing.
+        await rec.set(downloadError: nil)
+        #expect(h.cache.loaded("m2") == nil)
+        h.actions.openCompose(.forward, "m2")
+        try await waitUntil { h.log.composed.count == 7 }
+        #expect(await rec.downloads.last == MessageDownloadParams(accountId: "a", messageId: "m2"))
+        #expect(await rec.drafts.last?.messageId == "m2")
+
+        // Without a daemon nothing is asked either: the window opens from
+        // what the pane knows, without a toast.
+        h.cache.loaded("m1")?.msg = remote
+        await h.client.close()
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 8 }
+        #expect(h.log.composed[7].kind == .forward && h.log.composed[7].forwarding == "m1")
+        #expect(h.log.confirmations.count == 2)
+        #expect(h.log.toasts.isEmpty)
+    }
+}
+
+/// The parent handed to the confirmation hook, by identity.
+@MainActor
+private final class ParentLog {
+    let window = NSObject()
+    var seen: [Bool] = []
 }

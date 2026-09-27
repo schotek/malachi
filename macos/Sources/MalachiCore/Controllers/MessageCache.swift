@@ -41,6 +41,17 @@ public final class MessageCache {
     /// `refreshRemoteBar`, which avoids reloading the web view).
     public var onRemoteBar: (@MainActor (MessageID, LoadedMessage) -> Void)?
 
+    /// Fired when the attachment chips of a message have to be drawn again:
+    /// its download began to show the spinner, or ended (download.go
+    /// `refreshChips`, the pane and the open windows). The entry is nil
+    /// when the cache no longer holds the message.
+    public var onChips: (@MainActor (MessageID, LoadedMessage?) -> Void)?
+
+    /// How long a download runs before the chips show a spinner
+    /// (download.go, message_view.go `bodySpinnerDelay`): a download that
+    /// finds nothing missing answers at once and never flashes one.
+    public nonisolated static let downloadSpinnerDelay: Duration = .milliseconds(400)
+
     private let toast: @MainActor (String) -> Void
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "message")
 
@@ -49,12 +60,26 @@ public final class MessageCache {
     /// evicted while in flight keeps its own waiters.
     private var waiters: [ObjectIdentifier: [Waiter]] = [:]
 
+    /// The message.download calls in flight, one per message
+    /// (`Window.downloads`): a second request joins the first.
+    private var downloads: [MessageID: Task<Message, any Error>] = [:]
+    /// The messages whose chips show the spinner (`spinning`).
+    private var spinning: Set<MessageID> = []
+    /// The messages whose Save All runs (`Window.savingAll`).
+    private var savingAll: Set<MessageID> = []
+    private let spinnerDelay: Duration
+
     /// - Parameters:
     ///   - client: the transport; calls fail with `notConnected` until the
     ///     connection controller reports a connection.
     ///   - toast: shows a transient message (the window's toast overlay).
-    public init(client: RPCClient, toast: @escaping @MainActor (String) -> Void) {
+    ///   - spinnerDelay: `downloadSpinnerDelay`, shorter in tests.
+    public init(
+        client: RPCClient, spinnerDelay: Duration = MessageCache.downloadSpinnerDelay,
+        toast: @escaping @MainActor (String) -> Void
+    ) {
         self.client = client
+        self.spinnerDelay = spinnerDelay
         self.toast = toast
     }
 
@@ -287,5 +312,145 @@ public final class MessageCache {
             API.MessageEmbedded.self,
             MessageEmbeddedParams(accountId: accountID, messageId: messageID, partId: partID, remoteContent: remote),
             timeout: RPCTimeouts.remote)
+    }
+
+    /// The data of attachment `a` of message `messageID` (download.go
+    /// `partData`): message.part, after message.download when the chip
+    /// showed the part on the server (`onServer`), or once when message.part
+    /// answers partNotDownloaded (`withDownload`). The result's `partId` is
+    /// the part actually fetched.
+    public func partData(
+        accountID: AccountID, messageID: MessageID, attachment a: Attachment, onServer: Bool
+    ) async throws -> MessagePartResult {
+        try await withDownload(
+            a, remote: onServer,
+            fetch: { a in try await self.fetchAttachment(accountID: accountID, messageID: messageID, partID: a.partId) },
+            download: { try await self.download(accountID: accountID, messageID: messageID) })
+    }
+
+    /// The attached message `a` of message `messageID` rendered by the
+    /// daemon (download.go `embeddedData`): message.embedded, downloading
+    /// the containing message first or after a partNotDownloaded, as
+    /// `partData`. `policy` is message.embedded's `remoteContent`.
+    public func embeddedData(
+        accountID: AccountID, messageID: MessageID, attachment a: Attachment, onServer: Bool,
+        policy: RemoteContentPolicy? = nil
+    ) async throws -> MessageEmbeddedResult {
+        try await withDownload(
+            a, remote: onServer,
+            fetch: { a in
+                try await self.fetchEmbedded(accountID: accountID, messageID: messageID, partID: a.partId, remote: policy)
+            },
+            download: { try await self.download(accountID: accountID, messageID: messageID) })
+    }
+
+    // MARK: Save All
+
+    /// Whether a Save All of message `id` runs (attachments.go
+    /// `savingAll`): its Save All buttons stay disabled wherever the
+    /// message is shown, across the chips being drawn again.
+    public func isSavingAll(_ id: MessageID) -> Bool {
+        savingAll.contains(id)
+    }
+
+    /// Marks a Save All of message `id` as running and draws its chips
+    /// again (`onChips`); false, and nothing changes, when one runs already.
+    public func beginSaveAll(_ id: MessageID) -> Bool {
+        guard !savingAll.contains(id) else { return false }
+        savingAll.insert(id)
+        onChips?(id, cache[id])
+        return true
+    }
+
+    /// Ends the Save All of message `id` and draws its chips again.
+    public func endSaveAll(_ id: MessageID) {
+        guard savingAll.remove(id) != nil else { return }
+        onChips?(id, cache[id])
+    }
+
+    // MARK: Downloads
+
+    /// Whether the chips of message `id` show the download spinner
+    /// (download.go `spinning`): a download of it has run for
+    /// `downloadSpinnerDelay` and not ended yet.
+    public func showsDownload(_ id: MessageID) -> Bool {
+        spinning.contains(id)
+    }
+
+    /// Whether a download of message `id` is running.
+    public func downloading(_ id: MessageID) -> Bool {
+        downloads[id] != nil
+    }
+
+    /// message.download for message `id` (download.go `download`): makes
+    /// the parts kept on the mail server, and a body not downloaded yet,
+    /// local, and answers the message as the daemon reports it afterwards.
+    /// One call per message: a request while one runs waits for the same
+    /// answer. The chips show a spinner once the call has taken
+    /// `downloadSpinnerDelay` (`showsDownload`, `onChips`); when it ends the
+    /// cached message is replaced with the answer (Microsoft 365 may move
+    /// part ids), a body that was not fetched is dropped and fetched again,
+    /// and the chips are drawn again (`endDownload`). A failure is thrown to
+    /// every caller, for its own toast; the daemon finishes a download its
+    /// caller gave up on, so the call has the long `RPCTimeouts.download`.
+    @discardableResult
+    public func download(accountID: AccountID, messageID id: MessageID) async throws -> Message {
+        if let running = downloads[id] {
+            return try await running.value
+        }
+        let client = client
+        let task = Task { [weak self] () async throws -> Message in
+            let outcome: Result<Message, any Error>
+            do {
+                outcome = .success(try await client.call(
+                    API.MessageDownload.self, MessageDownloadParams(accountId: accountID, messageId: id),
+                    timeout: RPCTimeouts.download).message)
+            } catch {
+                outcome = .failure(error)
+            }
+            // Before any caller resumes, so every one of them finds the
+            // cache as the download left it.
+            self?.endDownload(id, outcome)
+            return try outcome.get()
+        }
+        downloads[id] = task
+        beginDownload(id, task)
+        return try await task.value
+    }
+
+    /// Shows the spinner on the chips of `id` once `task` has run for the
+    /// delay and is still the message's download (`beginDownload`).
+    private func beginDownload(_ id: MessageID, _ task: Task<Message, any Error>) {
+        let delay = spinnerDelay
+        Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, self.downloads[id] == task, !self.spinning.contains(id) else { return }
+            self.spinning.insert(id)
+            self.onChips?(id, self.cache[id])
+        }
+    }
+
+    /// The download of `id` ended (`endDownload`): no spinner, the cached
+    /// message replaced with the downloaded one, a body that was not
+    /// fetched dropped and fetched again (every view re-renders through
+    /// `onLoaded`), and the chips drawn again.
+    private func endDownload(_ id: MessageID, _ outcome: Result<Message, any Error>) {
+        downloads[id] = nil
+        spinning.remove(id)
+        let lm = cache[id]
+        switch outcome {
+        case .failure(let err):
+            log.warning("message.download: \(String(describing: err), privacy: .public)")
+        case .success(let m):
+            if let lm {
+                lm.msg = m
+                if let b = lm.body, b.bodyState != .fetched, !lm.fetching {
+                    lm.body = nil
+                    lm.err = nil
+                    fetch(m.summary) { _ in }
+                }
+            }
+        }
+        onChips?(id, lm)
     }
 }

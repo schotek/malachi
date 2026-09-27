@@ -194,6 +194,21 @@ private final class Harness {
         #expect(h.handles[1].toasts.isEmpty)
     }
 
+    /// manager.go `Open`: what draft.create could not import is said once,
+    /// after what the sanitiser removed.
+    @Test func skippedPartsOfTheOriginalAreSaidOnOpen() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        h.compose.open(ComposeParams(kind: .forward, skipped: 2))
+        #expect(h.handles[0].toasts == ["2 attachments of the original could not be attached"])
+        h.compose.open(ComposeParams(kind: .forward, blocked: BlockedContent(scripts: 1), skipped: 1))
+        #expect(h.handles[1].toasts == [
+            "1 unsafe element was removed from the message", "1 attachment of the original could not be attached",
+        ])
+        h.compose.open(ComposeParams(kind: .forward, skipped: 0))
+        #expect(h.handles[2].toasts.isEmpty)
+    }
+
     /// Manager.FindDraft: the window editing the draft draft.open
     /// answered with, by its id or by the Drafts message it takes over.
     @Test func findDraftByIdOrReplacedMessage() async throws {

@@ -12,7 +12,8 @@ import os
 /// `refreshRemoteBar`, outbox.go `showOutboxState`): one window per
 /// message, one per attached message, and the fan-out of what the cache
 /// learns to every view showing the message. The hub installs itself as
-/// the cache's `onLoaded` and `onRemoteBar`.
+/// the cache's `onLoaded`, `onRemoteBar` and `onChips` (download.go
+/// `refreshChips`).
 ///
 /// The app sets `delegate` once; it reaches every tracked view and every
 /// window, open now or later.
@@ -48,6 +49,7 @@ final class MessageWindows {
         self.cache = cache
         cache.onLoaded = { [weak self] id, lm in self?.showLoaded(id, lm) }
         cache.onRemoteBar = { [weak self] id, lm in self?.refreshRemoteBar(id, lm) }
+        cache.onChips = { [weak self] id, lm in self?.refreshChips(id, lm) }
     }
 
     // MARK: Views
@@ -63,8 +65,8 @@ final class MessageWindows {
     /// embedded-window opener. Views are held weakly.
     func track(_ v: MessageViewController) {
         v.delegate = delegate
-        v.onOpenEmbedded = { [weak self] containing, part, chip in
-            self?.openEmbedded(containing: containing, part: part, chipView: chip)
+        v.onOpenEmbedded = { [weak self] containing, attachment, remote, chip in
+            self?.openEmbedded(containing: containing, attachment: attachment, remote: remote, chipView: chip)
         }
         tracked.append(WeakView(v))
     }
@@ -114,13 +116,16 @@ final class MessageWindows {
 
     // MARK: Attached messages
 
-    /// Shows the attached message `part` of `containing` in its own
+    /// Shows the attached message `attachment` of `containing` in its own
     /// window, or raises the window already showing it (embedded.go
     /// `openEmbeddedWindow`). Nothing changes on screen while the daemon
-    /// renders; a failure is a toast where the chip is.
-    func openEmbedded(containing: MessageSummary, part: String, chipView: NSView?) {
-        let key = Key.embedded(containing.id, part)
-        if state.windows.present(key: key) {
+    /// renders; an attached message kept on the mail server (`remote`,
+    /// what its chip showed) is downloaded first (`MessageCache
+    /// .embeddedData`, the chips show the spinner); a failure is a toast
+    /// where the chip is. The window is known by the part actually
+    /// rendered, which a download on Microsoft 365 may have moved.
+    func openEmbedded(containing: MessageSummary, attachment: Attachment, remote: Bool, chipView: NSView?) {
+        if state.windows.present(key: Key.embedded(containing.id, attachment.partId)) {
             return
         }
         let cache = cache
@@ -128,8 +133,8 @@ final class MessageWindows {
         Task { [weak self] in
             let outcome: Result<MessageEmbeddedResult, any Error>
             do {
-                outcome = .success(try await cache.fetchEmbedded(
-                    accountID: containing.accountId, messageID: containing.id, partID: part))
+                outcome = .success(try await cache.embeddedData(
+                    accountID: containing.accountId, messageID: containing.id, attachment: attachment, onServer: remote))
             } catch {
                 outcome = .failure(error)
             }
@@ -139,11 +144,16 @@ final class MessageWindows {
                 self.log.warning("message.embedded: \(String(describing: err), privacy: .public)")
                 self.toast(rpcErrorText(L10n.T("Opening the attached message"), err), in: chipWindow)
             case .success(let res):
+                var shown = attachment
+                if !res.partId.isEmpty {
+                    shown.partId = res.partId
+                }
+                let key = Key.embedded(containing.id, shown.partId)
                 if self.state.windows.present(key: key) {
                     return // a second click overtook the first
                 }
                 let wc = EmbeddedWindowController(
-                    state: self.state, cache: self.cache, containing: containing, part: part, result: res)
+                    state: self.state, cache: self.cache, containing: containing, attachment: shown, result: res)
                 // Tracked like the other views, so its links reach the
                 // delegate (embedded.go: the shared view's `openLink`); the
                 // fan-out skips views of this mode.
@@ -174,6 +184,18 @@ final class MessageWindows {
         for v in views where v.mode != .embedded {
             if let s = v.current, s.id == id {
                 v.refreshRemoteBar(lm)
+            }
+        }
+    }
+
+    /// Redraws the attachment chips of message `id` wherever it is on
+    /// display, the pane and the windows (download.go `refreshChips`): its
+    /// download began to show the spinner or ended. An attached message's
+    /// view carries the containing message's id and is left alone.
+    func refreshChips(_ id: MessageID, _ lm: LoadedMessage?) {
+        for v in views where v.mode != .embedded {
+            if let s = v.current, s.id == id {
+                v.refreshChips(lm)
             }
         }
     }
