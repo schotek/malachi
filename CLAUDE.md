@@ -225,9 +225,11 @@ AppKit: API typy přepsané z `docs/api.md`, transport, supervisor,
 `UserDefaults` s klíči GSettings + `command-r`, gettext shim s klíči =
 GTK msgid; `scripts/po2strings.py` generuje `.lproj` z `po/` při
 buildu), `MalachiMail` (AppKit), `MalachiKeychain` (`malachi-keychain`,
-helper keyringu démona nad login keychain). Démon dostal jediné
-rozšíření: `MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER`
-(`internal/auth/helper`, styl git-credential, platformně neutrální);
+helper keyringu démona nad login keychain). Démon pro něj dostal dvě
+rozšíření volená za běhu, obě platformně neutrální:
+`MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER` (`internal/auth/helper`,
+styl git-credential) a výchozí hodnoty preferencí úložiště
+`MALACHI_DEFAULT_*` (komprese zapnutá, přílohy 30 dní; viz níže);
 app spouští `malachid` z bundlu s `--config`/`--store` v
 `~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
@@ -299,8 +301,40 @@ nejvýš 32 takových spojení). Go klienti (GTK UI, MCP most) volají
 vlastníka a práva souboru s klíčem. Co to chrání a co ne:
 `docs/security.md` §8.
 
-Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
-knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
+Úložiště pošty (migrace 0014, `docs/architecture.md` §3.1, §3.2, §7):
+surová zpráva je `messages/<účet>/<id>` (jak přišla) nebo `<id>.zst` (jeden
+zstd rámec přes `klauspost/compress` s velikostí a checksumem, ověřený před
+přejmenováním); jak se soubor čte, určuje jméno, nikdy obsah. Soubory jen
+přes `store.OpenMessageRaw`/`PutMessageRaw`/`WithMessageRaw` (zámek na
+zprávu), účetnictví v `message_files`, příjem přes `staging/`, outbox vždy
+prostý a fsyncnutý. Preference `compressStore` a `attachmentOfflineDays`
+(0 vše, N dní, -1 jen malé; v `config.set` chybějící = beze změny, bez klíče
+v `config.toml`), výchozí za běhu `MALACHI_DEFAULT_COMPRESS_STORE` /
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` (nastavuje jen macOS supervisor,
+1 a 30; `StartSync` je při prvním použití uloží). `internal/ingest`
+rozhodne každou zprávu hned při stažení (stage → parse → `Decide` →
+`mime.Skeleton` → `VerifySkeleton` → `CommitMessageRaw`), takže první
+synchronizace disk nezaplní: podle `attachmentOfflineDays` (stáří podle
+`internal_date`) zůstanou na serveru přílohy ≥ 100 KiB, které HTML
+neukazuje přes `cid:`, nikdy však u Konceptů, Outboxu, zpráv bez kopie na
+serveru, podepsaných či šifrovaných a 7 dní po stažení na vyžádání; při
+pochybnosti celá zpráva. `Attachment.remote` se jen odvozuje z
+`remote_parts`, `message.part`/`message.embedded` vrací 1504
+`partNotDownloaded`, `message.download` stáhne celou zprávu samostatným
+spojením jen pro čtení (IMAP EXAMINE + `BODY.PEEK[]`, Graph `$value`; 1305
+`messageGone`). Údržba v `core.Maintain` (`core/raw_maintenance.go`):
+hodinový úklid souborů, kroky `codec` (převod oběma směry) a `attachments`
+(ořez stárnoucí pošty bez sítě) s kurzory v `meta` `raw.step.*`; uvolnění
+nastavení nic zpětně nestahuje; `system.storage` hlásí obsazené místo a
+stav převodu. Obě UI: Předvolby → Obecné → Pošta (*Keep Attachments
+Offline For*, *Compress Stored Mail*, *Disk Space Used*), čip vzdálené
+přílohy stáhne zprávu před otevřením, uložením i přeposláním; MCP
+`get_attachment` a přeposlání v `create_draft` stahují z vlastního serveru
+uživatele (2 min, 256 MiB na proces).
+
+Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
+jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
+komprese a příloh na vyžádání, Microsoft účty).
 
 ## Čeho si být vědom
 

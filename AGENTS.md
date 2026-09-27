@@ -150,7 +150,10 @@ verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
 části zprávy pro schéma `malachi-cid:`; `message.embedded` vykreslí
 přiloženou zprávu (`message/rfc822`, `.eml`) jen pro čtení a jen na
 vyžádání, obrázky vloží jako `data:`, parser nerekurzuje, nic se neukládá
-(UI ji otevře z chipu přílohy v samostatném okně). UI je vykresluje ve WebKitGTK 6.0
+(UI ji otevře z chipu přílohy v samostatném okně); klik na jinou přílohu
+ji ukáže v náhledu (GNOME Sushi přes `ui/internal/preview`, bez Sushi
+výchozí aplikace; na macOS Quick Look), Otevřít a Uložit jako jsou v menu
+chipu. UI je vykresluje ve WebKitGTK 6.0
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`
@@ -160,7 +163,15 @@ adresáti, `Re:`/`Fwd:`, originál citovaný jako sanitizované HTML v compose
 režimu (první `draft.save` je identita), jeho `cid:` obrázky zkopírované do
 úložiště příloh pod novými id (`attachment.get` je vrací editoru); UI dodá
 jen lokalizovanou hlavičku citace (`attribution`), `compose.Prefill` je
-fallback bez démona. Doplňování příjemců: `contact.search` slévá
+fallback bez démona. Koncepty na serveru: uložený koncept po 30 s klidu
+nahraje syncer do složky Koncepty (IMAP `APPEND` s `\Draft`, Graph
+`POST me/messages`), každá verze s novým Message-ID, předchozí kopie jde
+přes `OpDelete` (`store/draft_sync.go`, `core/draft_sync.go`, migrace 0012);
+odeslání, `draft.delete` a koš/přesun kopie mažou druhou stranu;
+`draft.open` otevře zprávu ze složky Koncepty jako koncept (vlastní, nebo
+převzatý od jiného klienta přes `replaces` jen bez ztráty); obě UI ji
+otevírají dvojklikem a pruhem „Upravit“. Trvalé smazání na Gmailu jde přes
+Koš. Doplňování příjemců: `contact.search` slévá
 sebrané adresy (`collected_addresses`, plní outbox worker po doručení a
 jednorázový backfill ze složek Odeslané, nikdy z příchozího `From`)
 s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`
@@ -180,7 +191,20 @@ Předvolby → Seznam zpráv → Seskupovat podle konverzací (GSettings
 (`ui/internal/window/thread_model.go` čistý model, `threads.go` zrcadlení
 do ListBoxu podle klíčů), rozbalení volá `thread.get {folderId}`, akce na
 sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
-Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
+Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
+`offlineDays`), contentless FTS5 `messages_fts` s prefixy 2 a 3 a
+`search_docs` (migrace 0013, triggery na `messages`, backfill v
+`core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
+syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
+rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
+`search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
+výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
+se při psaní do pole vypínají; MCP nástroj `search_messages`; macOS:
+hledací pole v toolbaru (⌘F), pruh rozsahu nad seznamem jako v Mailu,
+logika v `MalachiCore` (`SearchModel.swift`,
+`MailboxController+Search.swift`). MCP most pro AI agenty
 (`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
 `pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
@@ -201,17 +225,19 @@ AppKit: API typy přepsané z `docs/api.md`, transport, supervisor,
 `UserDefaults` s klíči GSettings + `command-r`, gettext shim s klíči =
 GTK msgid; `scripts/po2strings.py` generuje `.lproj` z `po/` při
 buildu), `MalachiMail` (AppKit), `MalachiKeychain` (`malachi-keychain`,
-helper keyringu démona nad login keychain). Démon dostal jediné
-rozšíření: `MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER`
-(`internal/auth/helper`, styl git-credential, platformně neutrální);
+helper keyringu démona nad login keychain). Démon pro něj dostal dvě
+rozšíření volená za běhu, obě platformně neutrální:
+`MALACHI_KEYRING=helper` + `MALACHI_KEYRING_HELPER` (`internal/auth/helper`,
+styl git-credential) a výchozí hodnoty preferencí úložiště
+`MALACHI_DEFAULT_*` (komprese zapnutá, přílohy 30 dní; viz níže);
 app spouští `malachid` z bundlu s `--config`/`--store` v
 `~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
-doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
+doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
-hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
@@ -227,7 +253,7 @@ Pořadí prací:
    (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
    démonem, multipart/alternative)
 5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
-6. Vyhledávání
+6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS)
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
@@ -275,8 +301,40 @@ nejvýš 32 takových spojení). Go klienti (GTK UI, MCP most) volají
 vlastníka a práva souboru s klíčem. Co to chrání a co ne:
 `docs/security.md` §8.
 
-Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
-knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
+Úložiště pošty (migrace 0014, `docs/architecture.md` §3.1, §3.2, §7):
+surová zpráva je `messages/<účet>/<id>` (jak přišla) nebo `<id>.zst` (jeden
+zstd rámec přes `klauspost/compress` s velikostí a checksumem, ověřený před
+přejmenováním); jak se soubor čte, určuje jméno, nikdy obsah. Soubory jen
+přes `store.OpenMessageRaw`/`PutMessageRaw`/`WithMessageRaw` (zámek na
+zprávu), účetnictví v `message_files`, příjem přes `staging/`, outbox vždy
+prostý a fsyncnutý. Preference `compressStore` a `attachmentOfflineDays`
+(0 vše, N dní, -1 jen malé; v `config.set` chybějící = beze změny, bez klíče
+v `config.toml`), výchozí za běhu `MALACHI_DEFAULT_COMPRESS_STORE` /
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` (nastavuje jen macOS supervisor,
+1 a 30; `StartSync` je při prvním použití uloží). `internal/ingest`
+rozhodne každou zprávu hned při stažení (stage → parse → `Decide` →
+`mime.Skeleton` → `VerifySkeleton` → `CommitMessageRaw`), takže první
+synchronizace disk nezaplní: podle `attachmentOfflineDays` (stáří podle
+`internal_date`) zůstanou na serveru přílohy ≥ 100 KiB, které HTML
+neukazuje přes `cid:`, nikdy však u Konceptů, Outboxu, zpráv bez kopie na
+serveru, podepsaných či šifrovaných a 7 dní po stažení na vyžádání; při
+pochybnosti celá zpráva. `Attachment.remote` se jen odvozuje z
+`remote_parts`, `message.part`/`message.embedded` vrací 1504
+`partNotDownloaded`, `message.download` stáhne celou zprávu samostatným
+spojením jen pro čtení (IMAP EXAMINE + `BODY.PEEK[]`, Graph `$value`; 1305
+`messageGone`). Údržba v `core.Maintain` (`core/raw_maintenance.go`):
+hodinový úklid souborů, kroky `codec` (převod oběma směry) a `attachments`
+(ořez stárnoucí pošty bez sítě) s kurzory v `meta` `raw.step.*`; uvolnění
+nastavení nic zpětně nestahuje; `system.storage` hlásí obsazené místo a
+stav převodu. Obě UI: Předvolby → Obecné → Pošta (*Keep Attachments
+Offline For*, *Compress Stored Mail*, *Disk Space Used*), čip vzdálené
+přílohy stáhne zprávu před otevřením, uložením i přeposláním; MCP
+`get_attachment` a přeposlání v `create_draft` stahují z vlastního serveru
+uživatele (2 min, 256 MiB na proces).
+
+Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
+jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
+komprese a příloh na vyžádání, Microsoft účty).
 
 ## Čeho si být vědom
 

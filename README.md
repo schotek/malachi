@@ -40,7 +40,9 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **Reading offline.** Folders and messages are synchronised into a local
   store within a configurable retention window; new mail arrives as the
   server announces it (IMAP IDLE). Flags, moves and deletions are queued
-  locally and pushed back.
+  locally and pushed back. To save disk space the stored mail can be kept
+  compressed, and the large attachments of older messages can stay on the
+  server until you open them.
 - **HTML mail, safely.** Bodies are sanitised in the daemon before the UI
   sees them. Remote images stay blocked until you load them or trust the
   sender; the renderer runs with JavaScript off, a strict content policy
@@ -237,7 +239,12 @@ hands secrets to an external program instead, named by an absolute path in
 `MALACHI_KEYRING_HELPER`: one process per operation, git-credential style,
 the request as a JSON line on stdin, the value on stdout (the protocol is
 documented in `backend/internal/auth/helper`). The macOS app uses it for
-its bundled `malachi-keychain`.
+its bundled `malachi-keychain`. `MALACHI_DEFAULT_COMPRESS_STORE` (a
+boolean) and `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` (`-1` small
+attachments only, `0` all, or a number of days) give the daemon defaults
+for the two storage preferences where none is stored yet; it stores them
+the first time, and the preferences change them later. The macOS app sets
+`1` and `30`.
 
 UI preferences are stored in GSettings. `make build` compiles the schema
 into `build/glib-2.0/schemas`, and `make run-dev` / `make run-frontend`
@@ -318,6 +325,9 @@ committed template matches the sources.
 |---|---|
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
+| Stored messages | `messages/<account>/<id>` beside the store, the message as received, or `<id>.zst` when *Compress Stored Mail* is on (zstd); `0600` files in `0700` directories |
+| Draft attachments | `attachments/<id>` beside the store: files added to drafts, and the parts a reply or forward copies from the original; received attachments stay inside their message |
+| Staging | `staging/` beside the store: messages being received; emptied at every daemon start |
 | Store lock | `store.db.daemon.lock` beside the store: held by the running daemon (the system releases it with the process, even after a crash), so a second daemon for the same store exits; the file stays |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | RPC key | beside the socket, its path plus `.key` (`rpc.sock.key`): the daemon's connection key for the current run, `0600`, replaced at every start and removed on a clean exit (after a crash it stays until the next start replaces it); every client reads it when it connects |
