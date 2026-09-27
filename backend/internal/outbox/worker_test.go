@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -231,6 +232,33 @@ func (h *harness) gone(id string) bool {
 	return errors.Is(err, store.ErrNotFound)
 }
 
+// rawErr reports whether message id has its raw file: nil when it has,
+// store.ErrNotFound when not. The file is closed at once: a handle left
+// open keeps Windows from deleting it, at the store's clean-up as at the
+// test's.
+func (h *harness) rawErr(id string) error {
+	f, err := h.s.OpenMessageRaw(context.Background(), h.account.ID, id)
+	if err == nil {
+		f.Close()
+	}
+	return err
+}
+
+// waitRawGone waits for the raw file of a delivered message to be deleted
+// (the store deletes it just after the row) and fails when anything else,
+// a temporary file say, is left in the account's raw message directory.
+func (h *harness) waitRawGone(id string) {
+	h.t.Helper()
+	waitFor(h.t, "raw file deleted", func() bool { return errors.Is(h.rawErr(id), store.ErrNotFound) })
+	entries, err := os.ReadDir(filepath.Join(h.s.MessageDir(), h.account.ID))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		h.t.Fatal(err)
+	}
+	for _, e := range entries {
+		h.t.Errorf("left in the raw message directory: %s", e.Name())
+	}
+}
+
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -261,9 +289,7 @@ func TestWorkerDeliversWithoutSentFolder(t *testing.T) {
 	if _, err := h.s.GetMessage(ctx, h.account.ID, id); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("message row after delivery: %v", err)
 	}
-	if _, err := h.s.OpenMessageRaw(ctx, h.account.ID, id); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("raw file after delivery: %v", err)
-	}
+	h.waitRawGone(id)
 	for _, addr := range []string{"to@example.invalid", "bcc@example.invalid"} {
 		if known, err := h.s.IsKnownSender(ctx, addr); err != nil || !known {
 			t.Errorf("known sender %s = %v, %v", addr, known, err)
@@ -339,7 +365,7 @@ func TestWorkerDeliversWithSentFolder(t *testing.T) {
 	if e.Attempts != 1 || e.LastErrorCode != 0 || e.LastError != "" || !e.NextAttemptAt.IsZero() {
 		t.Fatalf("entry = %+v", e)
 	}
-	if _, err := h.s.OpenMessageRaw(ctx, h.account.ID, id); err != nil {
+	if err := h.rawErr(id); err != nil {
 		t.Fatalf("raw file must stay for the Sent append: %v", err)
 	}
 	want := fmt.Sprintf("%s:%s:false", h.account.ID, sentID)
@@ -393,7 +419,7 @@ func TestWorkerPermanentFailure(t *testing.T) {
 	if e.Attempts != 1 || e.LastErrorCode != api.CodeServerError || !e.NextAttemptAt.IsZero() {
 		t.Fatalf("entry = %+v", e)
 	}
-	if _, err := h.s.OpenMessageRaw(context.Background(), h.account.ID, id); err != nil {
+	if err := h.rawErr(id); err != nil {
 		t.Fatalf("raw file of a failed message must stay: %v", err)
 	}
 }
@@ -527,6 +553,7 @@ func TestWorkerResetsInterruptedAttempt(t *testing.T) {
 	if _, err := h.s.GetMessage(ctx, h.account.ID, id); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("message after delivery: %v", err)
 	}
+	h.waitRawGone(id)
 }
 
 func TestWorkerResetMakesDeferredDue(t *testing.T) {
@@ -663,9 +690,7 @@ func TestWorkerFilesSentCopyDropsLocalCopyAndTriggersSent(t *testing.T) {
 	t.Cleanup(func() { cancel(); <-done })
 
 	waitFor(t, "message delivered and dropped", func() bool { return h.gone(id) })
-	if _, err := h.s.OpenMessageRaw(ctx, h.account.ID, id); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("raw file after a server-filed delivery: %v", err)
-	}
+	h.waitRawGone(id)
 	want := fmt.Sprintf("%s:%s:false", h.account.ID, sentID)
 	waitFor(t, "sent folder trigger", func() bool { got := h.rec.triggered(); return len(got) == 1 && got[0] == want })
 }

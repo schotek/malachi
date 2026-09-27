@@ -35,8 +35,12 @@ func (b *Backend) renderHTML(ctx context.Context, accountID, id string, policy a
 		b.withholdHTML(res, id, "raw message unavailable", err)
 		return
 	}
-	defer f.Close()
 	parsed, err := mime.Parse(f, mime.DefaultLimits())
+	// The parse keeps what it found in memory. The file is closed before
+	// the sanitiser runs and the remote images are fetched (seconds): a
+	// sync pass may delete the message meanwhile, and Windows refuses to
+	// delete a file that is still open.
+	f.Close()
 	if err != nil {
 		b.withholdHTML(res, id, "raw message unparsable", err)
 		return

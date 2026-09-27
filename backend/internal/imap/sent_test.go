@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -104,6 +105,14 @@ func (h *harness) outboxMessages() []store.Message {
 	return h.messages(f.ID)
 }
 
+// rawGone reports whether message id's raw file has left the store. It
+// only stats the file: a handle the test held open would keep Windows from
+// deleting it.
+func (h *harness) rawGone(id string) bool {
+	_, err := os.Stat(h.st.MessageRawPath(h.acc.ID, id))
+	return errors.Is(err, os.ErrNotExist)
+}
+
 // clock is a settable time source for the syncer.
 type clock struct {
 	mu sync.Mutex
@@ -174,6 +183,7 @@ func TestSentCopyAppended(t *testing.T) {
 	if got := h.outboxMessages(); len(got) != 0 {
 		t.Fatalf("outbox after = %+v", got)
 	}
+	waitFor(t, "raw file of the appended message removed", func() bool { return h.rawGone(m.ID) })
 	if n := h.notes.newMessages(); len(n) != 0 {
 		t.Fatalf("sent copy must not notify, got %+v", n)
 	}
@@ -194,6 +204,7 @@ func TestSentCopyDroppedWithoutSentFolder(t *testing.T) {
 	if got := h.outboxMessages(); len(got) != 0 {
 		t.Fatalf("outbox after = %+v", got)
 	}
+	waitFor(t, "raw file of the dropped message removed", func() bool { return h.rawGone(m.ID) })
 	if names := h.serverMailboxes(); len(names) != 1 || names[0] != "INBOX" {
 		t.Fatalf("server mailboxes = %v", names)
 	}
@@ -235,6 +246,9 @@ func TestSentCopyRefusedKeepsEntry(t *testing.T) {
 	if _, err := h.st.GetMessage(context.Background(), h.acc.ID, m.ID); err != nil {
 		t.Fatalf("local copy gone: %v", err)
 	}
+	if h.rawGone(m.ID) {
+		t.Fatal("raw file of a refused sent copy removed")
+	}
 	if got := h.serverUIDs("Sent/Sub"); len(got) != 0 {
 		t.Fatalf("server Sent/Sub = %v", got)
 	}
@@ -264,6 +278,7 @@ func TestSentCopyRefusedKeepsEntry(t *testing.T) {
 	if got := h.outboxMessages(); len(got) != 0 {
 		t.Fatalf("outbox after drop = %+v", got)
 	}
+	waitFor(t, "raw file of the dropped message removed", func() bool { return h.rawGone(m.ID) })
 	h.waitStatus(api.SyncIdle)
 	if st := h.syncer.State(); st.Error != nil {
 		t.Fatalf("refusal must not fail the sync: %+v", st)
