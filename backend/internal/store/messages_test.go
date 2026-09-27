@@ -555,11 +555,11 @@ func TestWriteMessageRaw(t *testing.T) {
 		t.Errorf("path = %s", path)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || info.Mode().Perm() != permOf(t, 0o600, false) {
 		t.Fatalf("file: %v %v", info, err)
 	}
 	dir, _ := os.Stat(filepath.Dir(path))
-	if dir.Mode().Perm() != 0o700 {
+	if dir.Mode().Perm() != permOf(t, 0o700, true) {
 		t.Errorf("dir mode = %v", dir.Mode().Perm())
 	}
 	f, err := s.OpenMessageRaw(ctx, "acc", "m_1")
