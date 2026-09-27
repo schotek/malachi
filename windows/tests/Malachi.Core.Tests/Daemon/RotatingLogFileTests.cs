@@ -98,6 +98,75 @@ public sealed class RotatingLogFileTests
     }
 
     [Fact]
+    public void AReaderThatHoldsTheFileDelaysTheRotationAndCostsNothing()
+    {
+        SkipUnlessSharingIsEnforced();
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "malachid.log");
+        File.WriteAllLines(path + ".1", ["older 1"]);
+        File.WriteAllLines(path + ".2", ["older 2"]);
+        var big = new string('a', 70);
+        using var log = new RotatingLogFile(path, maxBytes: 64, keep: 2);
+        Assert.True(log.WriteLine("first"));
+        // A reader without delete sharing: the file cannot be renamed.
+        using (var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            Assert.True(log.WriteLine(big), "a line past the limit is kept in the current file");
+            Assert.True(log.WriteLine("next"));
+        }
+        Assert.Equal(["first", big, "next"], ReadLines(path));
+        Assert.Equal(["older 1"], ReadLines(path + ".1"));
+        Assert.Equal(["older 2"], ReadLines(path + ".2"));
+
+        // Once the reader has gone, the next try goes through.
+        Assert.True(log.WriteLine("last"));
+        Assert.Equal(["last"], ReadLines(path));
+        Assert.Equal(["first", big, "next"], ReadLines(path + ".1"));
+        Assert.Equal(["older 1"], ReadLines(path + ".2"));
+        Assert.False(File.Exists(path + ".3"));
+        Assert.False(File.Exists(path + ".rotating"));
+    }
+
+    [Fact]
+    public void AHeldFirstPredecessorKeepsTheCurrentFileGrowing()
+    {
+        SkipUnlessSharingIsEnforced();
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "malachid.log");
+        File.WriteAllLines(path + ".1", ["older 1"]);
+        using var log = new RotatingLogFile(path, maxBytes: 64, keep: 2);
+        Assert.True(log.WriteLine("first"));
+        using (var reader = new FileStream(path + ".1", FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            Assert.True(log.WriteLine(new string('b', 70)));
+        }
+        Assert.Equal(["first", new string('b', 70)], ReadLines(path));
+        Assert.Equal(["older 1"], ReadLines(path + ".1"));
+        Assert.False(File.Exists(path + ".2"), "nothing moved while name.1 was held");
+        Assert.False(File.Exists(path + ".rotating"));
+    }
+
+    [Fact]
+    public void AHeldOlderFileStaysAndTheNewestStillMoveUp()
+    {
+        SkipUnlessSharingIsEnforced();
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "malachid.log");
+        File.WriteAllLines(path + ".1", ["older 1"]);
+        File.WriteAllLines(path + ".2", ["older 2"]);
+        using var log = new RotatingLogFile(path, maxBytes: 64, keep: 2);
+        Assert.True(log.WriteLine("first"));
+        using (var reader = new FileStream(path + ".2", FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+        {
+            Assert.True(log.WriteLine(new string('c', 70)));
+        }
+        // name.1 could not move up into the held name.2, so it went.
+        Assert.Equal([new string('c', 70)], ReadLines(path));
+        Assert.Equal(["first"], ReadLines(path + ".1"));
+        Assert.Equal(["older 2"], ReadLines(path + ".2"));
+    }
+
+    [Fact]
     public void LinesAfterDisposeAreDropped()
     {
         using var temp = new TemporaryDirectory();
@@ -126,5 +195,18 @@ public sealed class RotatingLogFileTests
         var lines = File.ReadAllLines(path);
         Assert.Equal(1600, lines.Length);
         Assert.All(lines, l => Assert.Matches(@"^thread \d line \d+ z{40}$", l));
+    }
+
+    // Windows refuses to rename or delete a file somebody holds without
+    // delete sharing; .NET elsewhere has no such lock.
+    private static void SkipUnlessSharingIsEnforced() =>
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "only Windows keeps a file held without delete sharing where it is");
+
+    // The lines of a file the log may still have open.
+    private static string[] ReadLines(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd().Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
     }
 }

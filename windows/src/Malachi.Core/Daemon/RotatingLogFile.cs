@@ -10,8 +10,14 @@
 // bounded: past MaxBytes it becomes name.1, the older ones move up, and the
 // oldest beyond Keep goes. It is opened for appending with read, write and
 // delete sharing, so it can be followed while it grows and rotated while it
-// is being read. A line that cannot be written is dropped: the log never
-// stops the daemon's output from being read.
+// is being read. A reader that holds a file without delete sharing (Windows
+// then refuses to rename or delete it) never costs a line or the newest
+// logs: the current file is moved out of the way before anything else is
+// touched, so a reader of it stops the rotation at the start and the file
+// is appended to until a later try, after another eighth of MaxBytes, goes
+// through; an older file that is held stays, and the newer one that cannot
+// move up in its place goes instead. A line that cannot be written is
+// dropped: the log never stops the daemon's output from being read.
 
 using System;
 using System.IO;
@@ -34,6 +40,10 @@ public sealed class RotatingLogFile : IDisposable
     private readonly Lock gate = new();
     private FileStream? stream;
     private bool disposed;
+
+    // After a rotation that could not be made: the size the file must pass
+    // before the next try (0 otherwise).
+    private long retryAt;
 
     /// <summary>A log at <paramref name="path"/>, which is created (with its directory) on the first line.</summary>
     public RotatingLogFile(string path, long maxBytes = DefaultMaxBytes, int keep = DefaultKeep)
@@ -72,10 +82,10 @@ public sealed class RotatingLogFile : IDisposable
             try
             {
                 var file = Open();
-                if (file.Length > 0 && file.Length + bytes.Length > MaxBytes)
+                var length = file.Length;
+                if (length > 0 && length + bytes.Length > Math.Max(MaxBytes, retryAt))
                 {
-                    Rotate();
-                    file = Open();
+                    file = Rotate(length);
                 }
                 file.Write(bytes);
                 file.Flush();
@@ -119,26 +129,89 @@ public sealed class RotatingLogFile : IDisposable
         return stream;
     }
 
-    // name.(Keep-1) → name.Keep, ..., name → name.1; with Keep 0 the file
-    // just starts again.
-    private void Rotate()
+    // Starts a new file, or, when the current one cannot be moved out of the
+    // way, goes on with it and tries again later. Returns the file to write
+    // to.
+    private FileStream Rotate(long length)
     {
         stream?.Dispose();
         stream = null;
+        if (MoveOut())
+        {
+            retryAt = 0;
+        }
+        else
+        {
+            retryAt = length + Math.Max(1, MaxBytes / 8);
+        }
+        return Open();
+    }
+
+    // name → name.1 after name.1 → name.2, ..., name.(Keep-1) → name.Keep;
+    // with Keep 0 the file just starts again. The current file goes first,
+    // to a name of its own: when that fails nothing has changed. False when
+    // the current file is still where it was.
+    private bool MoveOut()
+    {
         if (Keep == 0)
         {
-            File.Delete(FilePath);
-            return;
+            return TryDelete(FilePath);
         }
-        File.Delete(Numbered(Keep));
-        for (var i = Keep - 1; i >= 1; i--)
+        var staged = FilePath + ".rotating";
+        if (!TryMove(FilePath, staged, overwrite: true))
         {
-            if (File.Exists(Numbered(i)))
-            {
-                File.Move(Numbered(i), Numbered(i + 1), overwrite: true);
-            }
+            return false;
         }
-        File.Move(FilePath, Numbered(1), overwrite: true);
+        if (Vacate(1) && TryMove(staged, Numbered(1), overwrite: false))
+        {
+            return true;
+        }
+        // name.1 is held: the current file comes back and grows on (should
+        // even that fail, it stays as name.rotating and a new one starts).
+        return !TryMove(staged, FilePath, overwrite: false);
+    }
+
+    // Frees name.n: moves it up (after freeing the place above it) or, when
+    // it cannot move, deletes it; name.Keep is only deleted. False when
+    // name.n stays (it is held).
+    private bool Vacate(int n)
+    {
+        var path = Numbered(n);
+        if (!File.Exists(path))
+        {
+            return true;
+        }
+        if (n < Keep && Vacate(n + 1) && TryMove(path, Numbered(n + 1), overwrite: false))
+        {
+            return true;
+        }
+        return TryDelete(path);
+    }
+
+    private static bool TryMove(string from, string to, bool overwrite)
+    {
+        try
+        {
+            File.Move(from, to, overwrite);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryDelete(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private string Numbered(int n) => FilePath + "." + n.ToString(System.Globalization.CultureInfo.InvariantCulture);
