@@ -78,6 +78,20 @@ func run() error {
 		log.Info("no configuration file, using defaults", "path", *flagConfig)
 	}
 
+	// One daemon per store, and before it touches the store or the socket:
+	// a second one would sync, send and write the same data, and its
+	// socket check can be fooled into taking a live daemon's socket.
+	lock, err := store.Lock(ctx, *flagStore)
+	if err != nil {
+		return err
+	}
+	defer func() { // runs last: the store is closed by then
+		if err := lock.Close(); err != nil {
+			log.Error("release store lock", "err", err)
+		}
+	}()
+	log.Debug("store locked", "lock", lock.Path())
+
 	st, err := store.Open(ctx, *flagStore, log)
 	if err != nil {
 		return fmt.Errorf("open store: %w", err)

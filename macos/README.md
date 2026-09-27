@@ -181,6 +181,7 @@ go test ./internal/auth/helper -run TestRealHelper` from `backend/`.
 |---|---|
 | Configuration | `~/Library/Application Support/Malachi Mail/config.toml` |
 | Mail store | `~/Library/Application Support/Malachi Mail/store.db` |
+| Store lock | `~/Library/Application Support/Malachi Mail/store.db.daemon.lock`: held by the running daemon, released by the system with its process; a second daemon for the same store exits |
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
 | RPC key | beside the socket, its path plus `.key` (`~/.cache/malachi/run/rpc.sock.key`): a new key at every daemon start, mode 0600, removed when the daemon stops cleanly; the app reads it for every connection and keeps nothing ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Attachments being opened or previewed | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
