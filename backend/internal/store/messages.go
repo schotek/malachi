@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/internal/thread"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -910,15 +911,17 @@ func (s *Store) WriteMessageRawFunc(ctx context.Context, accountID, id string, l
 	}
 	tmp := final + ".tmp"
 	// A crashed earlier attempt may have left the temporary file behind;
-	// O_EXCL then only guards against a concurrent writer.
-	_ = os.Remove(tmp)
+	// O_EXCL then only guards against a concurrent writer. Removals and
+	// the rename wait out a moment's hold of the file by another handle
+	// (fsretry), which Windows would refuse them.
+	_ = fsretry.Remove(tmp)
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("create message file: %w", err)
 	}
 	cleanup := func() {
 		f.Close()
-		os.Remove(tmp)
+		_ = fsretry.Remove(tmp)
 	}
 	lw := &limitedWriter{w: f, limit: limit}
 	err = fn(lw)
@@ -937,11 +940,11 @@ func (s *Store) WriteMessageRawFunc(ctx context.Context, accountID, id string, l
 		return 0, err
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmp)
+		_ = fsretry.Remove(tmp)
 		return 0, fmt.Errorf("close message file: %w", err)
 	}
-	if err := os.Rename(tmp, final); err != nil {
-		os.Remove(tmp)
+	if err := fsretry.Rename(tmp, final); err != nil {
+		_ = fsretry.Remove(tmp)
 		return 0, fmt.Errorf("finalise message file: %w", err)
 	}
 	return lw.n, nil
@@ -1042,11 +1045,12 @@ func deleteMessageRowsTx(ctx context.Context, tx *sql.Tx, files []messageFile) e
 // removeMessageFiles unlinks raw files after their rows are gone; a missing
 // file is not an error (the row is authoritative).
 func (s *Store) removeMessageFiles(files []messageFile) {
+	var b fsretry.Batch
 	for _, mf := range files {
 		if checkPathSegment(mf.accountID) != nil || checkPathSegment(mf.id) != nil {
 			continue
 		}
-		if err := os.Remove(s.MessageRawPath(mf.accountID, mf.id)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := b.Remove(s.MessageRawPath(mf.accountID, mf.id)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			s.log.Warn("remove message file", "id", mf.id, "err", err)
 		}
 	}
@@ -1057,7 +1061,7 @@ func (s *Store) removeMessageDir(accountID string) {
 	if checkPathSegment(accountID) != nil {
 		return
 	}
-	if err := os.RemoveAll(filepath.Join(s.MessageDir(), accountID)); err != nil {
+	if err := fsretry.RemoveAll(filepath.Join(s.MessageDir(), accountID)); err != nil {
 		s.log.Warn("remove message directory", "account", accountID, "err", err)
 	}
 }

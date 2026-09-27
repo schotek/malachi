@@ -55,6 +55,45 @@ func TestDoRetriesOtherErrors(t *testing.T) {
 	}
 }
 
+// A batch retries until one removal fails for good, then tries each file
+// once: a missing file does not count as a failure.
+func TestBatchStopsRetryingAfterALastingFailure(t *testing.T) {
+	shortWaits(t, 3)
+	calls := map[string]int{}
+	denied := errors.New("access denied")
+	saved := remove
+	remove = func(path string) error {
+		calls[path]++
+		switch path {
+		case "gone":
+			return &fs.PathError{Op: "remove", Path: path, Err: fs.ErrNotExist}
+		case "stuck", "stuck too":
+			return denied
+		}
+		return nil
+	}
+	t.Cleanup(func() { remove = saved })
+
+	var b Batch
+	steps := []struct {
+		path  string
+		err   error
+		calls int
+	}{
+		{"gone", fs.ErrNotExist, 1},
+		{"first", nil, 1},
+		{"stuck", denied, 4}, // retried: the batch has not given up yet
+		{"stuck too", denied, 1},
+		{"last", nil, 1},
+	}
+	for _, s := range steps {
+		err := b.Remove(s.path)
+		if (s.err == nil) != (err == nil) || (s.err != nil && !errors.Is(err, s.err)) || calls[s.path] != s.calls {
+			t.Errorf("%s: %v after %d attempts, want %v after %d", s.path, err, calls[s.path], s.err, s.calls)
+		}
+	}
+}
+
 // holdFor opens path and closes it after d, as a reader of the file would.
 func holdFor(t *testing.T, path string, d time.Duration) {
 	t.Helper()

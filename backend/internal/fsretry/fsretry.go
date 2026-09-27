@@ -46,10 +46,42 @@ func Do(op func() error) error {
 
 // Remove is os.Remove through Do.
 func Remove(path string) error {
-	return Do(func() error { return os.Remove(path) })
+	return Do(func() error { return remove(path) })
 }
+
+// remove is os.Remove, a variable so that tests can count the attempts.
+var remove = os.Remove
 
 // Rename is os.Rename through Do.
 func Rename(oldpath, newpath string) error {
 	return Do(func() error { return os.Rename(oldpath, newpath) })
+}
+
+// RemoveAll is os.RemoveAll through Do: an attempt removes what it can,
+// the next one what a handle held up.
+func RemoveAll(path string) error {
+	return Do(func() error { return os.RemoveAll(path) })
+}
+
+// Batch removes many files for one caller. Each removal is retried as
+// Remove does until one fails even so; from then on the batch tries each
+// file once. What holds up a single file, a reader, is over in a moment;
+// what outlasts the retries of one file, a directory without write
+// permission say, likely holds up the others, and would otherwise cost the
+// whole wait for every file. The zero value is ready; a Batch is for one
+// goroutine.
+type Batch struct {
+	gaveUp bool
+}
+
+// Remove removes path within the batch.
+func (b *Batch) Remove(path string) error {
+	if b.gaveUp {
+		return remove(path)
+	}
+	err := Remove(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		b.gaveUp = true
+	}
+	return err
 }
