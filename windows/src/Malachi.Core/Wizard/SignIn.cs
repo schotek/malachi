@@ -1,0 +1,346 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiCore/Wizard/SignIn.swift (classifyDiscovery)
+// and the rules OAuth.swift takes from signin (signedInAs, isBrowserURL,
+// isSignInProblem); GTK: ui/internal/signin/signin.go (Kind, KindOf,
+// Provider, ProviderName, NeedsBrowserSignIn, Path, ClassifyDiscovery,
+// isPasswordAccount, Failure, ClassifyFailure, signedInAsOf, IsClientMissing,
+// TestNeedsSignIn, BrowserURL).
+//
+// How an account signs in and which way the wizard takes after
+// account.discover. KindOf, Provider and ProviderName are GTK's signin
+// functions, which macOS moved to Model/Provider.swift (signInKind,
+// accountProvider, providerName) and which Malachi.Core.Model ports as
+// well; the rules are the same. Failed calls are read through
+// RpcErrorText.Classify (the transport's exceptions, a timeout, a
+// cancellation), the counterpart of Go's errors.Is/As and Swift's type
+// checks. The browser's address is judged by the port of Go's url.Parse
+// (UrlSyntax), never by System.Uri.
+
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
+using System.Text.Json;
+using Malachi.Core.Api;
+using Malachi.Core.Compose;
+using Malachi.Core.Text;
+
+namespace Malachi.Core.Wizard;
+
+/// <summary>The signin package: how an account signs in, and the way after <c>account.discover</c>.</summary>
+public static class SignIn
+{
+    // signin.maxAddressLen: bounds data.signedInAs (RFC 5321 path limit).
+    private const int MaxAddressLen = 254;
+
+    /// <summary>signin.Kind: where an account's sign-in lives, and so where it is repaired.</summary>
+    public enum Kind
+    {
+        /// <summary>A password (or app password) the user types; the servers are the user's to edit.</summary>
+        Password,
+
+        /// <summary>GNOME Online Accounts holds the sign-in; it is fixed there.</summary>
+        Goa,
+
+        /// <summary>The daemon's own sign-in in the browser (source daemon); it is fixed by signing in again.</summary>
+        OAuth,
+    }
+
+    /// <summary>signin.Path (Swift <c>Discovery.Path</c>): the page the wizard continues on.</summary>
+    public enum Path
+    {
+        /// <summary>
+        /// Servers and a password: the connection test when the discovery has
+        /// a config, the Servers page with a guess otherwise.
+        /// </summary>
+        Password,
+
+        /// <summary>Signed in through GNOME Online Accounts: the daemon's account is complete; test it.</summary>
+        Goa,
+
+        /// <summary>
+        /// An address of a GNOME Online Accounts provider the desktop is not
+        /// signed in to yet: the hint page (with the browser as a way out when
+        /// <see cref="Discovery.OAuthAlt"/> is set).
+        /// </summary>
+        GoaHint,
+
+        /// <summary>The daemon's own sign-in in the browser.</summary>
+        OAuth,
+    }
+
+    /// <summary>signin.Failure: why a browser sign-in ended without an account.</summary>
+    public enum Failure
+    {
+        /// <summary>Anything else; the caller shows the generic sentence of <see cref="RpcErrorText"/>.</summary>
+        Other,
+
+        /// <summary>Access was denied in the browser, or the session was cancelled.</summary>
+        Cancelled,
+
+        /// <summary>The provider refused the sign-in (authFailed).</summary>
+        Refused,
+
+        /// <summary>The session expired, or the call to the daemon timed out.</summary>
+        Timeout,
+
+        /// <summary>The browser signed in to another mailbox.</summary>
+        WrongAccount,
+    }
+
+    /// <summary>
+    /// signin.KindOf (Swift <c>signInKind</c>): a Graph account signs in
+    /// through GNOME Online Accounts when <c>graph.source</c> is goa and
+    /// through the daemon's own sign-in otherwise; an account with an
+    /// <c>oauth2</c> block likewise by its source; anything else with a
+    /// password.
+    /// </summary>
+    public static Kind KindOf(AccountConfig cfg)
+    {
+        ArgumentNullException.ThrowIfNull(cfg);
+        if (cfg.ProtocolKind == AccountKind.Graph)
+        {
+            return cfg.Graph is { } graph && graph.Source == GraphSource.Goa ? Kind.Goa : Kind.OAuth;
+        }
+        if (cfg.OAuth2 is { } oauth2)
+        {
+            return oauth2.Source == OAuth2Source.Goa ? Kind.Goa : Kind.OAuth;
+        }
+        return Kind.Password;
+    }
+
+    /// <summary>
+    /// signin.Provider (Swift <c>accountProvider</c>): Microsoft 365 for a
+    /// Graph account, the <c>oauth2</c> provider otherwise (office365 is
+    /// Microsoft 365), null for a password account or a provider this client
+    /// does not know.
+    /// </summary>
+    public static LinkedProvider? Provider(AccountConfig cfg)
+    {
+        ArgumentNullException.ThrowIfNull(cfg);
+        if (cfg.ProtocolKind == AccountKind.Graph)
+        {
+            return LinkedProvider.Microsoft365;
+        }
+        return cfg.OAuth2?.Provider.Value switch
+        {
+            OAuth2Provider.Google => new LinkedProvider(LinkedProvider.Google),
+            OAuth2Provider.Office365 => new LinkedProvider(LinkedProvider.Microsoft365),
+            _ => (LinkedProvider?)null,
+        };
+    }
+
+    /// <summary>
+    /// signin.ProviderName (Swift <c>providerName</c>): the provider's name as
+    /// shown to the user, "" for an unknown one. Brand names, not translated;
+    /// the daemon's <c>providerName</c> is untrusted text and never used in
+    /// their place.
+    /// </summary>
+    public static string ProviderName(LinkedProvider? provider) => provider?.Value switch
+    {
+        LinkedProvider.Microsoft365 => "Microsoft 365",
+        LinkedProvider.Google => "Google",
+        _ => "",
+    };
+
+    /// <summary>
+    /// signin.NeedsBrowserSignIn: an account that waits for the user to sign
+    /// in again through the daemon's own sign-in.
+    /// </summary>
+    public static bool NeedsBrowserSignIn(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        return a.State.Status == SyncStatus.AuthRequired && KindOf(a.Config) == Kind.OAuth;
+    }
+
+    /// <summary>
+    /// signin.ClassifyDiscovery: a GNOME Online Accounts config with an
+    /// account id goes to the test, one without to the hint (with the first
+    /// browser sign-in and the first app-password account among the
+    /// alternatives); a daemon config goes to the browser sign-in (with the
+    /// first app-password account); anything else, a failure
+    /// (<paramref name="error"/> set) or an answer without a config included,
+    /// is the password path.
+    /// </summary>
+    public static Discovery ClassifyDiscovery(AccountDiscoverResult? result, Exception? error = null)
+    {
+        if (error is not null || result?.Config is not { } cfg)
+        {
+            return new Discovery { Path = Path.Password };
+        }
+        var provider = Provider(cfg);
+        switch (KindOf(cfg))
+        {
+            case Kind.Goa:
+                if (Linked.LinkedAccountId(cfg) is not null)
+                {
+                    return new Discovery { Path = Path.Goa, Config = cfg, Provider = provider };
+                }
+                return new Discovery
+                {
+                    Path = Path.GoaHint,
+                    Config = cfg,
+                    OAuthAlt = First(result.Alternatives, c => KindOf(c) == Kind.OAuth),
+                    PasswordAlt = First(result.Alternatives, IsPasswordAccount),
+                    Provider = provider,
+                };
+            case Kind.OAuth:
+                return new Discovery
+                {
+                    Path = Path.OAuth,
+                    Config = cfg,
+                    PasswordAlt = First(result.Alternatives, IsPasswordAccount),
+                    Provider = provider,
+                };
+            default:
+                return new Discovery { Path = Path.Password, Config = cfg };
+        }
+    }
+
+    /// <summary>
+    /// signin.ClassifyFailure: sorts an <c>account.oauthWait</c> failure;
+    /// <c>SignedInAs</c> is the mailbox the browser signed in to, set for
+    /// <see cref="Failure.WrongAccount"/> only.
+    /// </summary>
+    public static (Failure Failure, string SignedInAs) ClassifyFailure(Exception? error)
+    {
+        var (kind, e) = RpcErrorText.Classify(error);
+        if (kind == RpcErrorText.FailureKind.TimedOut)
+        {
+            return (Failure.Timeout, "");
+        }
+        if (e is null)
+        {
+            return (Failure.Other, "");
+        }
+        switch (e.Code.Value)
+        {
+            case ErrorCode.Cancelled:
+                return (Failure.Cancelled, "");
+            case ErrorCode.AuthFailed:
+                return (Failure.Refused, "");
+            case ErrorCode.ServerTimeout:
+                return (Failure.Timeout, "");
+            case ErrorCode.InvalidArgument when SignedInAs(e) is { } who:
+                return (Failure.WrongAccount, who);
+            default:
+                return (Failure.Other, "");
+        }
+    }
+
+    /// <summary>
+    /// signin.signedInAsOf: the mailbox the browser signed in to, from an
+    /// invalidArgument's <c>data.signedInAs</c>; null unless it is a plausible
+    /// address (trimmed of White_Space, at most 254 UTF-8 bytes, no lone
+    /// surrogate, no control characters and no invisible format characters
+    /// such as U+202E, which reverses what follows). It comes from the
+    /// provider through the daemon and is only ever shown as plain text.
+    /// </summary>
+    public static string? SignedInAs(RpcError e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        if (e.Data is not { ValueKind: JsonValueKind.Object } data || !data.TryGetProperty("signedInAs", out var v)
+            || v.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+        string raw;
+        try
+        {
+            raw = v.GetString() ?? "";
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+        var s = raw.Trim();
+        if (s.Length == 0 || Encoding.UTF8.GetByteCount(s) > MaxAddressLen)
+        {
+            return null;
+        }
+        for (var i = 0; i < s.Length;)
+        {
+            if (Rune.DecodeFromUtf16(s.AsSpan(i), out var r, out var n) != System.Buffers.OperationStatus.Done)
+            {
+                return null; // Go: not valid UTF-8
+            }
+            if (Rune.GetUnicodeCategory(r) is UnicodeCategory.Control or UnicodeCategory.Format)
+            {
+                return null;
+            }
+            i += n;
+        }
+        return s;
+    }
+
+    /// <summary>
+    /// signin.IsClientMissing: the <c>oauthClientMissing</c> error of
+    /// <c>account.oauthStart</c>: no OAuth client is configured for the
+    /// provider.
+    /// </summary>
+    public static bool IsClientMissing(Exception? error) =>
+        RpcErrorText.DaemonError(error) is { } e && e.Code == ErrorCode.OAuthClientMissing;
+
+    /// <summary>
+    /// signin.TestNeedsSignIn (Swift <c>isSignInProblem</c>): an
+    /// <c>account.test</c> outcome that only a new sign-in can fix: the call
+    /// (<paramref name="error"/>) or an endpoint failed with authFailed or
+    /// authRequired. The results then offer "Sign In Again".
+    /// </summary>
+    public static bool TestNeedsSignIn(AccountTestResult? result, Exception? error)
+    {
+        if (RpcErrorText.DaemonError(error) is { } e)
+        {
+            return IsSignInCode(e.Code);
+        }
+        if (result is null)
+        {
+            return false;
+        }
+        foreach (var r in (ReadOnlySpan<EndpointTestResult?>)[result.Imap, result.Smtp, result.Graph])
+        {
+            if (r?.Error is { } re && IsSignInCode(re.Code))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// signin.BrowserURL (Swift <c>isBrowserURL</c>): only an absolute https
+    /// address with a host and without user information, as the daemon builds
+    /// them, is opened in the browser.
+    /// </summary>
+    public static bool BrowserUrl(string s)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        return UrlSyntax.Parse(s) is { } u && u.Scheme == "https" && u.Rest.Host.Length > 0 && !u.Rest.HasUserinfo
+            && u.Rest.Opaque.IsEmpty;
+    }
+
+    private static bool IsSignInCode(ErrorCode c) => c == ErrorCode.AuthFailed || c == ErrorCode.AuthRequired;
+
+    // signin.isPasswordAccount: an IMAP/SMTP account whose endpoints both
+    // sign in with a password (Google's app-password alternative).
+    private static bool IsPasswordAccount(AccountConfig c) =>
+        KindOf(c) == Kind.Password && c.ProtocolKind == AccountKind.Imap
+        && c.Imap is { } imap && imap.AuthMethod == AuthMethod.Password
+        && c.Smtp is { } smtp && smtp.AuthMethod == AuthMethod.Password;
+
+    // signin.firstAlternative: the first alternative that matches, null when
+    // none does.
+    private static AccountConfig? First(IReadOnlyList<AccountConfig> alternatives, Func<AccountConfig, bool> match)
+    {
+        foreach (var c in alternatives)
+        {
+            if (match(c))
+            {
+                return c;
+            }
+        }
+        return null;
+    }
+}
