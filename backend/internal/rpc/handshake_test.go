@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -291,9 +292,9 @@ func TestWriteKeyFile(t *testing.T) {
 }
 
 func TestWriteKeyFileCleansUpOnFailure(t *testing.T) {
-	saved := fileRetryWaits
-	fileRetryWaits = []time.Duration{time.Millisecond, time.Millisecond}
-	t.Cleanup(func() { fileRetryWaits = saved })
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
 
 	dir := shortDir(t)
 	path := filepath.Join(dir, "rpc.sock.key")

@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -341,7 +342,7 @@ func (s *Server) removeSocket(path string, fi os.FileInfo) {
 		s.log.Info("socket file left in place: it is not the one this daemon bound", "path", path)
 		return
 	}
-	if err := retryFileOp(func() error { return os.Remove(path) }); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := fsretry.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.log.Warn("cannot remove the socket file", "path", path, "err", err)
 	}
 }
