@@ -94,7 +94,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos run-macos test-macos help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos run-macos test-macos windows run-windows test-windows help FORCE
 
 all: build
 
@@ -302,6 +302,28 @@ test-macos:
 else
 macos run-macos test-macos:
 	@echo "$@ needs macOS (this is $(UNAME_S)); see macos/README.md" >&2; exit 1
+endif
+
+# The Windows client (windows/, C#/WinUI 3) is a separate client of the
+# daemon; these targets delegate to windows/build.ps1, which does the work
+# and runs without make as well, and exist on Windows alone.
+## windows: build the Windows app build/windows/<arch>/Malachi Mail with malachid, malachi-mcp and malachi-credentials inside (Windows only)
+## run-windows: build the Windows app and run it from the terminal until its window closes (Windows only)
+## test-windows: run the tests of the Windows client (Windows only)
+ifeq ($(OS),Windows_NT)
+WINDOWS_PS  := powershell.exe -NoProfile -ExecutionPolicy Bypass -File windows/build.ps1
+
+windows: backend mcp
+	$(WINDOWS_PS) app -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+run-windows: backend mcp
+	$(WINDOWS_PS) run -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+
+test-windows: backend mcp
+	$(WINDOWS_PS) test -Version "$(VERSION)" -BuildDir "$(CURDIR)/$(BUILD_DIR)"
+else
+windows run-windows test-windows:
+	@echo "$@ needs Windows (this is $(UNAME_S)); see windows/README.md" >&2; exit 1
 endif
 
 help:
