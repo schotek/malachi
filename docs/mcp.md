@@ -21,6 +21,9 @@ build/malachi-mcp -version
 build/malachi-mcp -h  # the server flags and the setup subcommands
 ```
 
+On Windows the binary is `build\malachi-mcp.exe`, which the extension-less
+`build/malachi-mcp` of the repository's `.mcp.json` (below) resolves to.
+
 Without a subcommand the binary is the stdio server. A first argument that
 does not start with `-` is one of the setup subcommands `status`, `install`
 and `uninstall`, which register the binary with the Claude apps and exit
@@ -31,7 +34,8 @@ Flags and environment of the server:
 
 | Flag / variable | Meaning |
 |---|---|
-| `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
+| `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` (`~/.cache/malachi/run/rpc.sock` without it) |
+| `-socket` on Windows | the same rules; Windows sets neither XDG variable, so the default is `%USERPROFILE%\.cache\malachi\run\rpc.sock`, as for the daemon and the Windows app. It is outside `AppData` on purpose: a bridge started by the MSIX Claude Desktop sees a redirected `AppData` (see [below](#claude-desktop-and-claude-code-status-install-uninstall)) but the same socket |
 | `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
@@ -350,6 +354,8 @@ The repository root carries a project-scoped `.mcp.json`:
   if a different command line is wanted.
 - On a machine without the daemon (macOS, a checkout that was never built)
   the server simply fails to connect; that is harmless.
+- On Windows the same entry starts `build\malachi-mcp.exe`: the command
+  has no extension, and `.exe` is tried for it.
 
 ### Claude Desktop and Claude Code: `status`, `install`, `uninstall`
 
@@ -466,10 +472,11 @@ wins over the user-scope entry; elsewhere the registered binary is used.
 
 ### Any other stdio client
 
-Register the command `build/malachi-mcp` with the flags you want. The
-bridge speaks MCP over newline-delimited JSON-RPC on stdin/stdout, logs to
-stderr, and needs to reach the daemon socket and read the key file beside
-it (`rpc.sock.key`) as the same user.
+Register the command `build/malachi-mcp` (`build\malachi-mcp.exe` on
+Windows) with the flags you want. The bridge speaks MCP over
+newline-delimited JSON-RPC on stdin/stdout, logs to stderr, and needs to
+reach the daemon socket and read the key file beside it (`rpc.sock.key`)
+as the same user.
 
 ## Not in this version
 
