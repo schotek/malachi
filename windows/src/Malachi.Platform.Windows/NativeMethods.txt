@@ -22,3 +22,5 @@ SHOpenWithDialog
 // Files: the best-fit look-alikes of the ANSI code page (Files/AnsiLookAlikes).
 WideCharToMultiByte
 GetACP
+// Transport: the key-file policy (Transport/WindowsKeyFilePolicy).
+GetFileType
