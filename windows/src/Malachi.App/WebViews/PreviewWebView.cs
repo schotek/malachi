@@ -109,8 +109,17 @@ public sealed partial class PreviewWebView : HardenedWebView
         switch (content.Kind)
         {
             case PreviewKind.Image:
-            case PreviewKind.Pdf:
                 ShowDocument(content.Kind, bytes, content.MediaType, PreviewDocument.MediaCsp);
+                break;
+            case PreviewKind.Pdf:
+                // Embedded in a page of its own: a PDF served as the document
+                // names the view's window with its own /Title.
+                Shown = content.Kind;
+                Panel = null;
+                panelView.Visibility = Visibility.Collapsed;
+                Web.Visibility = Visibility.Visible;
+                LoadDocument(uri => Encoding.UTF8.GetBytes(PreviewDocument.PdfPage(uri)), "text/html; charset=utf-8",
+                    PreviewDocument.PdfCsp, bytes, content.MediaType);
                 break;
             case PreviewKind.Text:
                 ShowDocument(content.Kind, Encoding.UTF8.GetBytes(PreviewDocument.Text(content.Text)), "text/html; charset=utf-8", PreviewDocument.Csp);

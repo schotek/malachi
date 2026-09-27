@@ -57,9 +57,12 @@ public abstract partial class HardenedWebView : UserControl
     private CoreWebView2? core;
     private Task? initializing;
     private string? pendingUri;
+    private string? pendingContentUri;
     private byte[]? documentBytes;
     private string documentHeaders = "";
-    private (byte[] Bytes, string MediaType, string Csp)? waiting;
+    private byte[]? contentBytes;
+    private string contentHeaders = "";
+    private PendingDocument? waiting;
     private CancellationTokenSource generationCancel = new();
     private bool closed;
 
@@ -134,6 +137,7 @@ public abstract partial class HardenedWebView : UserControl
         generationCancel.Dispose();
         waiting = null;
         documentBytes = null;
+        contentBytes = null;
         try
         {
             Web.Close();
@@ -155,21 +159,43 @@ public abstract partial class HardenedWebView : UserControl
     private protected void LoadDocument(byte[] bytes, string mediaType, string csp)
     {
         ArgumentNullException.ThrowIfNull(bytes);
+        Load(new PendingDocument(_ => bytes, mediaType, _ => csp, null, null));
+    }
+
+    /// <summary>
+    /// Shows a page that embeds <paramref name="content"/> (served once, as
+    /// <paramref name="contentType"/>, at the URL <paramref name="page"/> and
+    /// <paramref name="csp"/> are given) as the view's next document.
+    /// </summary>
+    private protected void LoadDocument(Func<string, byte[]> page, string mediaType, Func<string, string> csp, byte[] content, string contentType)
+    {
+        ArgumentNullException.ThrowIfNull(page);
+        ArgumentNullException.ThrowIfNull(csp);
+        ArgumentNullException.ThrowIfNull(content);
+        Load(new PendingDocument(uri => page(uri!), mediaType, uri => csp(uri!), content, contentType));
+    }
+
+    private void Load(PendingDocument document)
+    {
         if (closed)
         {
             return;
         }
         if (core is null)
         {
-            waiting = (bytes, mediaType, csp);
+            waiting = document;
             EnsureInitialized();
             return;
         }
         NextGeneration();
-        var uri = Gate.NextDocument();
-        documentBytes = bytes;
-        documentHeaders = ResponseHeaders.Document(mediaType, csp);
+        var uri = Gate.NextDocument(withContent: document.Content is not null);
+        documentBytes = document.Build(Gate.ContentUri);
+        var csp = document.Csp(Gate.ContentUri);
+        documentHeaders = ResponseHeaders.Document(document.MediaType, csp);
+        contentBytes = document.Content;
+        contentHeaders = document.Content is null ? "" : ResponseHeaders.Document(document.ContentType!, csp);
         pendingUri = uri;
+        pendingContentUri = Gate.ContentUri;
         try
         {
             core.Navigate(uri);
@@ -178,7 +204,9 @@ public abstract partial class HardenedWebView : UserControl
         {
             WebViewLog.NavigateFailed(log, e);
             pendingUri = null;
+            pendingContentUri = null;
             documentBytes = null;
+            contentBytes = null;
         }
     }
 
@@ -189,7 +217,9 @@ public abstract partial class HardenedWebView : UserControl
         NextGeneration();
         Gate.Retire();
         documentBytes = null;
+        contentBytes = null;
         pendingUri = null;
+        pendingContentUri = null;
     }
 
     /// <summary>Runs a host script, ignoring its result and its failure.</summary>
@@ -345,7 +375,7 @@ public abstract partial class HardenedWebView : UserControl
         if (waiting is { } w)
         {
             waiting = null;
-            LoadDocument(w.Bytes, w.MediaType, w.Csp);
+            Load(w);
         }
     }
 
@@ -393,7 +423,7 @@ public abstract partial class HardenedWebView : UserControl
         c.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
         c.WebResourceRequested += OnWebResourceRequested;
         c.NavigationStarting += OnNavigationStarting;
-        c.FrameNavigationStarting += (_, e) => e.Cancel = true;
+        c.FrameNavigationStarting += OnFrameNavigationStarting;
         c.NewWindowRequested += OnNewWindowRequested;
         c.DownloadStarting += (_, e) =>
         {
@@ -420,6 +450,15 @@ public abstract partial class HardenedWebView : UserControl
         };
         c.SaveAsUIShowing += (_, e) => e.Cancel = true;
         c.ContextMenuRequested += OnContextMenuRequested;
+        // The window WebView2 draws in carries the document's title; a PDF
+        // names its own, a picture its URL.
+        c.DocumentTitleChanged += (sender, _) =>
+        {
+            if (!FixedTitle.IsFixed(sender.DocumentTitle))
+            {
+                Run(FixedTitle.Script);
+            }
+        };
     }
 
     private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
@@ -441,6 +480,10 @@ public abstract partial class HardenedWebView : UserControl
                 // Served once: the bytes are forgotten with it.
                 documentBytes = null;
                 Respond(args, bytes, documentHeaders);
+                break;
+            case GateDecision.Content when contentBytes is { } content:
+                contentBytes = null;
+                Respond(args, content, contentHeaders);
                 break;
             case GateDecision.Part or GateDecision.InlineImage:
                 _ = ServePictureAsync(decision, args);
@@ -471,6 +514,18 @@ public abstract partial class HardenedWebView : UserControl
         {
             OnLinkCandidate(uri, newWindow: false);
         }
+    }
+
+    private void OnFrameNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
+    {
+        if (NavigationPolicy.Frame(args.Uri, pendingContentUri) == NavigationAction.Allow && !args.IsRedirected)
+        {
+            // Once, as the document.
+            pendingContentUri = null;
+            return;
+        }
+        args.Cancel = true;
+        WebViewLog.NavigationRefused(log);
     }
 
     private void OnNewWindowRequested(CoreWebView2 sender, CoreWebView2NewWindowRequestedEventArgs args)
@@ -587,6 +642,11 @@ public abstract partial class HardenedWebView : UserControl
         }
         OnWebViewReplaced(Web);
     }
+
+    // A document to load: its bytes (built once its embedded resource's URL
+    // is known), its type and CSP, and that resource when it has one.
+    private sealed record PendingDocument(
+        Func<string?, byte[]> Build, string MediaType, Func<string?, string> Csp, byte[]? Content, string? ContentType);
 
     /// <summary>A new WebView2 took the old one's place (automation name, visibility).</summary>
     private protected virtual void OnWebViewReplaced(WebView2 web)

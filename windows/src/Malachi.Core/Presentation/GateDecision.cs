@@ -21,6 +21,10 @@ public abstract record GateDecision
     /// <param name="Generation">The document's generation.</param>
     public sealed record Document(long Generation) : GateDecision;
 
+    /// <summary>The current document's embedded resource, served this once.</summary>
+    /// <param name="Generation">The document's generation.</param>
+    public sealed record Content(long Generation) : GateDecision;
+
     /// <summary>
     /// A <c>malachi-cid:</c> picture of the viewer (PartSchemeHandler): fetched
     /// through <c>message.part</c> and served only when it is a picture

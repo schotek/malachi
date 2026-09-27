@@ -35,6 +35,33 @@ public sealed class RequestGateTests
         Assert.Equal(new GateDecision.Document(2), gate.Decide(second));
     }
 
+    // The previewer's PDF page embeds one resource: served once, after its
+    // page, and gone with it.
+    [Fact]
+    public void TheEmbeddedResourceIsServedOnceAfterItsPage()
+    {
+        var gate = new RequestGate(WebViewKind.Preview);
+        var plain = gate.NextDocument();
+        Assert.Null(gate.ContentUri);
+        Assert.Same(GateDecision.Refused.Forbidden, gate.Decide(plain + "/content"));
+
+        var page = gate.NextDocument(withContent: true);
+        var content = gate.ContentUri;
+        Assert.Equal(page + "/content", content);
+        Assert.Same(GateDecision.Refused.Forbidden, gate.Decide(content!));
+        Assert.False(gate.ContentServed);
+        Assert.Equal(new GateDecision.Document(2), gate.Decide(page));
+        Assert.Equal(new GateDecision.Content(2), gate.Decide(content!));
+        Assert.True(gate.ContentServed);
+        Assert.Same(GateDecision.Refused.Forbidden, gate.Decide(content!));
+
+        gate.NextDocument();
+        Assert.Null(gate.ContentUri);
+        Assert.Same(GateDecision.Refused.Forbidden, gate.Decide(content!));
+        gate.Retire();
+        Assert.Null(gate.ContentUri);
+    }
+
     // Another view's document, a guessed nonce and a different case are not
     // the document.
     [Fact]

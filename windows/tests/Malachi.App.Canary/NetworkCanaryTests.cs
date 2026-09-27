@@ -87,7 +87,9 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
                 e.Kind + " in " + e.View + " at " + e.Uri);
         }
         Assert.All(results.Events.Where(e => e.Kind is HostEvent.Kinds.Frame or HostEvent.Kinds.ExternalScheme),
-            e => Assert.True(e.Stopped, e.Kind + " not cancelled: " + e.Uri));
+            e => Assert.True(e.Stopped == true || IsPreviewContent(e), e.Kind + " not cancelled: " + e.Uri));
+        // The previewer's PDF is the one frame that loads, in its own page.
+        Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Frame && e.Stopped == false && IsPreviewContent(e));
         // The activations happened (the canary is not silent for want of
         // them): each was cancelled.
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Navigation && e.Stopped == true && e.Phase == "viewer-nav");
@@ -109,10 +111,15 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         // title, which other processes can read (docs/windows-port.md §6.2):
         // always the views' fixed one, never a message's.
         var results = ProtectedResults();
-        var titles = results.Events.Where(e => e.Kind == HostEvent.Kinds.Title).Select(e => e.Detail!.Split(" | ")[1]).ToList();
+        var titles = results.Events.Where(e => e.Kind == HostEvent.Kinds.Title).Select(e => (e.Phase, Title: e.Detail!.Split(" | ")[1])).ToList();
         Assert.NotEmpty(titles);
-        Assert.All(titles, title => Assert.True(title.Length == 0 || title.StartsWith("Malachi Mail", StringComparison.Ordinal),
-            "window title " + title));
+        // Taken while the previewer shows the PDF (its metadata has a title
+        // of its own), the picture, and at the end.
+        Assert.Contains(titles, t => t.Phase == "preview-pdf");
+        Assert.Contains(titles, t => t.Phase == "preview-png");
+        Assert.All(titles, t => Assert.True(t.Title.Length == 0 || t.Title.StartsWith("Malachi Mail", StringComparison.Ordinal),
+            "window title " + t.Title + " in " + t.Phase));
+        Assert.DoesNotContain(titles, t => t.Title.Contains(HostileDocuments.PdfTitle, StringComparison.Ordinal));
     }
 
     [Fact]
@@ -240,6 +247,11 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.True(log.EventCount > 0, "the NetLog is empty");
         return log;
     }
+
+    // The embedded resource of the previewer's own page (its PDF).
+    private static bool IsPreviewContent(HostEvent e) =>
+        e.View == "preview" && e.Uri is { } uri && uri.StartsWith("malachi-doc://preview/", StringComparison.Ordinal)
+        && uri.EndsWith("/content", StringComparison.Ordinal);
 
     private void SkipIfNeeded() => Assert.SkipWhen(fixture.SkipReason is not null, fixture.SkipReason ?? "");
 

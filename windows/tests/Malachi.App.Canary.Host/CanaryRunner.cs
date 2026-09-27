@@ -293,6 +293,9 @@ internal sealed class CanaryRunner
             case "zoom":
                 viewer!.Zoom = (int)step.X;
                 break;
+            case "titles":
+                _ = BrowserWindows();
+                break;
             case "probe":
                 Add(HostEvent.Kinds.Probe, step.View, null, detail: await core!.ExecuteScriptAsync(step.Html ?? "null"));
                 break;
@@ -430,17 +433,10 @@ internal sealed class CanaryRunner
     // unless it is one of those, one per view.
     private void NewWindows()
     {
-        var browsers = cores.Values.Select(c => c.BrowserProcessId).ToHashSet();
         var drawing = 0;
-        foreach (var hwnd in Windows())
+        foreach (var (hwnd, description, isBrowser) in BrowserWindows())
         {
-            var description = Describe(hwnd);
             var parts = description.Split(" | ");
-            var isBrowser = browsers.Contains(uint.Parse(parts[^1], CultureInfo.InvariantCulture));
-            if (isBrowser)
-            {
-                Add(HostEvent.Kinds.Title, "", null, detail: description);
-            }
             if (knownWindows.Contains(hwnd))
             {
                 continue;
@@ -451,6 +447,25 @@ internal sealed class CanaryRunner
             }
             Add(HostEvent.Kinds.Window, "", null, detail: description);
         }
+    }
+
+    // The visible windows of this process and the browser's, each browser
+    // window's title recorded (what other processes can read).
+    private List<(nint Handle, string Description, bool IsBrowser)> BrowserWindows()
+    {
+        var browsers = cores.Values.Select(c => c.BrowserProcessId).ToHashSet();
+        var found = new List<(nint, string, bool)>();
+        foreach (var hwnd in Windows())
+        {
+            var description = Describe(hwnd);
+            var isBrowser = browsers.Contains(uint.Parse(description.Split(" | ")[^1], CultureInfo.InvariantCulture));
+            if (isBrowser)
+            {
+                Add(HostEvent.Kinds.Title, "", null, detail: description);
+            }
+            found.Add((hwnd, description, isBrowser));
+        }
+        return found;
     }
 
     // Closes the views and waits for the browser process to end, so that it

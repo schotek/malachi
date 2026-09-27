@@ -166,8 +166,12 @@ public sealed class CanaryFixture : IAsyncLifetime
         Show("drawing.svg", "image/svg+xml", HostileDocuments.Svg(run.Canary), 800, "preview-svg");
         Show("canary.pdf", "application/pdf", HostileDocuments.Pdf(run.Canary), 1500, "preview-pdf");
         steps.Add(new HostStep { View = "preview", Op = "click", X = 400, Y = 300, Ms = 1500 });
+        // The window titles while a PDF (with a title of its own) and a
+        // picture are shown.
+        Add("preview", "titles");
         Show("picture.png", "image/png", Convert.FromBase64String(
             "iVBORw0KGgoAAAANSUhEUgAAAAcAAAAFCAIAAAAG+GGPAAAAEUlEQVR42mNQaHiAiRhoJAoALlM0gX31oMMAAAAASUVORK5CYII="), 400, "preview-png");
+        Add("preview", "titles");
         Show("notes.txt", "text/plain", System.Text.Encoding.UTF8.GetBytes(active), 400, "preview-text");
 
         // The corpus, raw, in the viewer and the editor.

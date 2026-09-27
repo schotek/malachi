@@ -6,6 +6,7 @@
 
 using System;
 using Malachi.Core.Api;
+using Malachi.Core.Html;
 using Malachi.Core.Presentation;
 using Xunit;
 
@@ -35,6 +36,37 @@ public sealed class PreviewDocumentTests
         Assert.Contains("white-space: pre-wrap", html, StringComparison.Ordinal);
         Assert.Equal("default-src 'none'; style-src 'unsafe-inline'", PreviewDocument.Csp);
         Assert.StartsWith("default-src 'none'", PreviewDocument.MediaCsp, StringComparison.Ordinal);
+    }
+
+    // A PDF is embedded in a page of the previewer's own, whose title stays
+    // fixed (a PDF served as the document names the window after its
+    // metadata), and whose CSP admits exactly that PDF.
+    [Fact]
+    public void ThePdfPage()
+    {
+        const string content = "malachi-doc://preview/2-00ff/content";
+        Assert.Equal(
+            "default-src 'none'; object-src malachi-doc://preview/2-00ff/content; frame-src malachi-doc://preview/2-00ff/content; style-src 'unsafe-inline'",
+            PreviewDocument.PdfCsp(content));
+        var page = PreviewDocument.PdfPage(content);
+        Assert.StartsWith("<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>Malachi Mail</title>"
+            + "<meta http-equiv=\"Content-Security-Policy\" content=\"" + PreviewDocument.PdfCsp(content) + "\">",
+            page, StringComparison.Ordinal);
+        Assert.Contains("<embed type=\"application/pdf\" src=\"" + content + "\">", page, StringComparison.Ordinal);
+        Assert.Contains("src=\"a&quot;b\"", PreviewDocument.PdfPage("a\"b"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFixedTitle()
+    {
+        Assert.Equal("Malachi Mail", FixedTitle.Title);
+        Assert.Equal(ViewerDocument.Title, FixedTitle.Title);
+        Assert.Equal(EditorDocument.Title, FixedTitle.Title);
+        Assert.Equal(PreviewDocument.Title, FixedTitle.Title);
+        Assert.True(FixedTitle.IsFixed("Malachi Mail"));
+        Assert.False(FixedTitle.IsFixed("canary-pdf-title"));
+        Assert.False(FixedTitle.IsFixed(null));
+        Assert.Equal("Object.getOwnPropertyDescriptor(Document.prototype, 'title').set.call(document, 'Malachi Mail')", FixedTitle.Script);
     }
 
     [Fact]

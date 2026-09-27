@@ -509,10 +509,18 @@ view's generation moved on (WebView2 cannot withdraw a request, as WebKit's
 `stop` does); 403 for everything else, the document a second time and
 `data:` included (which WebView2 does not route here; a runtime that did
 would break pictures rather than open a rule). Every document has a fixed
-`<title>`: WinUI draws a WebView2 through a top-level `Chrome_WidgetWin_1`
-window of the browser process over the control, titled with the document's
-title (*Malachi Mail – [InPrivate]*, measured by the canary), which other
-processes can read.
+title (`FixedTitle`): WinUI draws a WebView2 through a top-level
+`Chrome_WidgetWin_1` window of the browser process over the control, titled
+with the document's title (*Malachi Mail – [InPrivate]*, measured by the
+canary), which other processes can read. The viewer's, editor's and
+previewer's own documents carry it as their first `<title>`; a picture
+served as the document would be titled with its URL and size, and a PDF
+with its own `/Title`, which is content of the mail (measured), so
+`DocumentTitleChanged` puts the fixed title back with a host script, and a
+PDF is embedded in a page of the previewer's own (§6.6). The gate serves
+that page's one embedded resource (`<document>/content`) once, after the
+page, and the frame navigation to it is the one a view allows
+(`NavigationPolicy.Frame`).
 
 ### 6.3 Viewer (`MessageWebView`)
 
@@ -649,7 +657,11 @@ Save As, Print, Full screen and More settings hidden). The bytes from
 `message.part` are served from memory as `malachi-doc://preview/…` with the
 type `PreviewContent` sniffed: pictures by their signature (PNG, JPEG, GIF,
 WebP, BMP, ICO, AVIF; never by the claim alone, never SVG), PDF by `%PDF-`
-within the first KiB, text in the previewer's own escaped document
+within the first KiB (shown by WebView2's viewer in an `<embed>` of a page
+of the previewer's own, `PreviewDocument.PdfPage`, whose CSP admits exactly
+that one URL as object and frame: `'self'` does not match a custom scheme's
+origin; served as the document, the PDF's `/Title` would name the window),
+text in the previewer's own escaped document
 (`PreviewDocument.Text`, a `<pre>` under `default-src 'none'`), which is
 also how HTML, SVG, XML and messages (`.eml`) are shown: as their source.
 The claimed charset is honoured, a byte-order mark wins, UTF-8 when valid,
@@ -1299,7 +1311,8 @@ editor once they exist.
   mapped to `~notfound`, no resolver job), no TCP connection was attempted
   and every UDP connect failed, nothing navigated but the views' own
   documents, no window opened (the three windows WebView2 draws the views
-  in aside, all titled *Malachi Mail*), nothing downloaded, the gate
+  in aside, titled *Malachi Mail* throughout, also while the previewer
+  shows a PDF whose metadata has a title of its own), nothing downloaded, the gate
   answered 403 to everything not the view's own, and that clicks reached
   the reader as links (forms and refreshes not); and, as checks of the
   views themselves, that the editor's bridge types, formats and flushes

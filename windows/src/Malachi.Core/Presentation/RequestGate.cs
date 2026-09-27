@@ -49,15 +49,28 @@ public sealed class RequestGate
     public bool DocumentServed { get; private set; }
 
     /// <summary>
-    /// Starts a new document: the next generation, a fresh nonce. Returns the
-    /// URL the view navigates to; the previous document's URL no longer
-    /// resolves.
+    /// The URL of the current document's one embedded resource
+    /// (<c>&lt;document&gt;/content</c>: the previewer's PDF inside its
+    /// own page); null when the document has none.
     /// </summary>
-    public string NextDocument()
+    public string? ContentUri { get; private set; }
+
+    /// <summary>Whether the embedded resource has been served (it is served once, after the document).</summary>
+    public bool ContentServed { get; private set; }
+
+    /// <summary>
+    /// Starts a new document: the next generation, a fresh nonce, and with
+    /// <paramref name="withContent"/> one embedded resource under it. Returns
+    /// the URL the view navigates to; the previous document's URLs no longer
+    /// resolve.
+    /// </summary>
+    public string NextDocument(bool withContent = false)
     {
         Generation++;
         DocumentUri = DocumentAddress.For(Kind, Generation, DocumentAddress.NewNonce());
         DocumentServed = false;
+        ContentUri = withContent ? DocumentUri + "/content" : null;
+        ContentServed = false;
         return DocumentUri;
     }
 
@@ -71,6 +84,8 @@ public sealed class RequestGate
         Generation++;
         DocumentUri = null;
         DocumentServed = false;
+        ContentUri = null;
+        ContentServed = false;
     }
 
     /// <summary>Whether <paramref name="generation"/> is still the view's (a fetched picture may be served).</summary>
@@ -78,7 +93,8 @@ public sealed class RequestGate
 
     /// <summary>
     /// The answer to a request for <paramref name="requestUri"/> (as
-    /// WebView2 reports it): the current document once; the viewer's
+    /// WebView2 reports it): the current document once, and its embedded
+    /// resource once after it; the viewer's
     /// <c>malachi-cid:</c> parts whose path parses (404 otherwise); the
     /// editor's <c>cid:</c> ids; 403 for everything else, the document a
     /// second time, another view's scheme and <c>data:</c> included (which
@@ -96,6 +112,15 @@ public sealed class RequestGate
             }
             DocumentServed = true;
             return new GateDecision.Document(Generation);
+        }
+        if (ContentUri is not null && string.Equals(requestUri, ContentUri, StringComparison.Ordinal))
+        {
+            if (ContentServed || !DocumentServed)
+            {
+                return GateDecision.Refused.Forbidden;
+            }
+            ContentServed = true;
+            return new GateDecision.Content(Generation);
         }
         if (Kind == WebViewKind.Viewer && requestUri.StartsWith(PartPrefix, StringComparison.OrdinalIgnoreCase))
         {

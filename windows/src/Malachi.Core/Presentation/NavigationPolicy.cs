@@ -47,6 +47,19 @@ public static class NavigationPolicy
     }
 
     /// <summary>
+    /// FrameNavigationStarting: no frame navigates (the sanitiser leaves
+    /// none), except the one the view's own page embeds, once: the
+    /// previewer's PDF (<see cref="RequestGate.ContentUri"/>).
+    /// </summary>
+    public static NavigationAction Frame(string uri, string? pendingContent)
+    {
+        ArgumentNullException.ThrowIfNull(uri);
+        return pendingContent is not null && string.Equals(uri, pendingContent, StringComparison.Ordinal)
+            ? NavigationAction.Allow
+            : NavigationAction.Cancel;
+    }
+
+    /// <summary>
     /// NewWindowRequested: never a window. In the viewer a request the user
     /// started for a target <see cref="Links.AllowedLink"/> accepts is a link
     /// activation (<see cref="NavigationAction.CancelAndProbe"/>).

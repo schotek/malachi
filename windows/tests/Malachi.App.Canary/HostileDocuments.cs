@@ -154,9 +154,13 @@ internal static class HostileDocuments
             + "<use xlink:href=\"" + u + "/sprite.svg#a\"/><script href=\"" + u + "/svg.js\"/></svg>");
     }
 
+    /// <summary>The title in the canary PDF's metadata, which must never name a window.</summary>
+    public const string PdfTitle = "canary-pdf-title";
+
     /// <summary>
-    /// A one-page PDF whose page is a link to the pdf-link canary and whose
-    /// open action is a URI action to the pdf-open canary.
+    /// A one-page PDF whose page is a link to the pdf-link canary, whose open
+    /// action is a URI action to the pdf-open canary, and whose metadata
+    /// carries <see cref="PdfTitle"/>.
     /// </summary>
     public static byte[] Pdf(Func<string, CanaryListener> canary)
     {
@@ -170,20 +174,7 @@ internal static class HostileDocuments
                 + "/Annots[<</Type/Annot/Subtype/Link/Rect[0 0 400 300]/Border[0 0 0]/A<</S/URI/URI(" + link + ")>>>>]>>",
             ContentStream("BT /F1 24 Tf 40 200 Td (Malachi canary) Tj ET"),
             "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
-        };
-        return Document(objects);
-    }
-
-    /// <summary>A one-page PDF saying <paramref name="text"/> (ASCII), for looking at the previewer.</summary>
-    public static byte[] SimplePdf(string text)
-    {
-        var objects = new[]
-        {
-            "<</Type/Catalog/Pages 2 0 R>>",
-            "<</Type/Pages/Kids[3 0 R]/Count 1>>",
-            "<</Type/Page/Parent 2 0 R/MediaBox[0 0 400 300]/Contents 4 0 R/Resources<</Font<</F1 5 0 R>>>>>>",
-            ContentStream("BT /F1 24 Tf 40 200 Td (" + text + ") Tj ET"),
-            "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            "<</Title(" + PdfTitle + ")>>",
         };
         return Document(objects);
     }
@@ -191,7 +182,8 @@ internal static class HostileDocuments
     private static string ContentStream(string content) =>
         "<</Length " + content.Length.ToString(CultureInfo.InvariantCulture) + ">>stream\n" + content + "\nendstream";
 
-    // A PDF with a correct cross-reference table over the objects.
+    // A PDF with a correct cross-reference table over the objects, the first
+    // the catalog, the last the document information.
     private static byte[] Document(string[] objects)
     {
         var b = new StringBuilder("%PDF-1.4\n");
@@ -207,7 +199,8 @@ internal static class HostileDocuments
         {
             b.Append(offset.ToString("D10", CultureInfo.InvariantCulture)).Append(" 00000 n \n");
         }
-        b.Append("trailer\n<</Size ").Append(objects.Length + 1).Append("/Root 1 0 R>>\nstartxref\n").Append(xref).Append("\n%%EOF\n");
+        b.Append("trailer\n<</Size ").Append(objects.Length + 1).Append("/Root 1 0 R/Info ").Append(objects.Length)
+            .Append(" 0 R>>\nstartxref\n").Append(xref).Append("\n%%EOF\n");
         return Encoding.ASCII.GetBytes(b.ToString());
     }
 }

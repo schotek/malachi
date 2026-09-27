@@ -59,6 +59,18 @@ public sealed class NavigationPolicyTests
         Assert.Equal(NavigationAction.Cancel, NavigationPolicy.NewWindow(kind, "https://example.org/", isUserInitiated: true));
     }
 
+    // No frame navigates but the one the view's own page embeds.
+    [Fact]
+    public void Frames()
+    {
+        const string content = "malachi-doc://preview/3-00ff/content";
+        Assert.Equal(NavigationAction.Allow, NavigationPolicy.Frame(content, content));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Frame(content, null));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Frame("about:blank", content));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Frame("https://example.org/frame", content));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Frame("about:srcdoc", null));
+    }
+
     // Never a window; a user's middle, Ctrl or Shift click or a target in
     // the viewer is a link activation.
     [Fact]

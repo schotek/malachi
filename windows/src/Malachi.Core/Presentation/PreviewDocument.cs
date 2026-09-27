@@ -21,11 +21,39 @@ public static class PreviewDocument
     public const string Csp = "default-src 'none'; style-src 'unsafe-inline'";
 
     /// <summary>
-    /// The CSP a picture or a PDF is served with: nothing may load from it.
-    /// Chromium draws a picture served as the document and hands a PDF to its
-    /// built-in viewer without a request of the page's own.
+    /// The CSP a picture is served with: nothing may load from it. Chromium
+    /// draws a picture served as the document without a request of the
+    /// page's own.
     /// </summary>
     public const string MediaCsp = "default-src 'none'; style-src 'unsafe-inline'";
+
+    /// <summary>
+    /// The CSP of the page a PDF is shown in (<see cref="PdfPage"/>): its one
+    /// embedded document at <paramref name="contentUri"/>, which Chromium
+    /// checks as an object and as a frame ('self' does not match a custom
+    /// scheme's origin; measured), inline styles, nothing else.
+    /// </summary>
+    public static string PdfCsp(string contentUri)
+    {
+        ArgumentNullException.ThrowIfNull(contentUri);
+        return "default-src 'none'; object-src " + contentUri + "; frame-src " + contentUri + "; style-src 'unsafe-inline'";
+    }
+
+    /// <summary>
+    /// The page that embeds the PDF served at <paramref name="contentUri"/>.
+    /// A PDF served as the document itself names the window WebView2 draws
+    /// in with its own /Title, which is content of the mail and readable by
+    /// other processes (measured); embedded, it leaves the page's fixed title.
+    /// </summary>
+    public static string PdfPage(string contentUri)
+    {
+        ArgumentNullException.ThrowIfNull(contentUri);
+        return "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>" + Title
+            + "</title><meta http-equiv=\"Content-Security-Policy\" content=\"" + PdfCsp(contentUri) + "\"><style>"
+            + "html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #ffffff; }\n"
+            + "embed { display: block; width: 100%; height: 100%; border: 0; }"
+            + "</style></head><body><embed type=\"application/pdf\" src=\"" + Escape(contentUri) + "\"></body></html>";
+    }
 
     /// <summary>The document's fixed title (a brand name, not translated).</summary>
     public const string Title = "Malachi Mail"; // Windows-only string
