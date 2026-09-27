@@ -44,6 +44,13 @@ public static class Linked
     /// account name derived from the address when the daemon left it at the
     /// address itself.
     /// </summary>
+    /// <remarks>
+    /// Go compares the name with the address by strings.EqualFold, Swift by
+    /// caseInsensitiveCompare, and this by OrdinalIgnoreCase: the three agree
+    /// on ASCII and may differ on rare letters beyond it (EqualFold's
+    /// simple-fold orbits, such as "ϑ" and "ϴ"), where the name the user
+    /// gave is kept rather than replaced; no pin or match depends on it.
+    /// </remarks>
     public static AccountConfig WithIdentity(AccountConfig config, Identity id)
     {
         ArgumentNullException.ThrowIfNull(config);

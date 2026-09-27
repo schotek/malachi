@@ -12,9 +12,15 @@
 // endpoint (docs/security.md §7): ServerConfig.CertificateSha256, never with
 // security none or authMethod oauth2, and a changed host or port drops the
 // pin. No texts: the sentences are the wizard's and the window's. Strings
-// are compared as Go compares them: ordinally, case folded by
-// ToLowerInvariant, with no canonical equivalence (a composed and a
-// decomposed name differ).
+// are compared as Go compares them, ordinally, with no canonical equivalence
+// (a composed and a decomposed name differ), and case folded by
+// ToLowerInvariant, as Swift folds them by lowercased(). For ASCII that is
+// Go's strings.EqualFold and strings.ToLower; beyond it, EqualFold also
+// equates letters of one simple-fold orbit that lower-case differently
+// ("ſ" and "s", "ς" and "σ", "ϑ" and "ϴ"), which this does not. The
+// drift is in the safe direction: a host that differs from the trusted one
+// only so drops its pin here and the user is asked again, and a pin still
+// accepts exactly one certificate.
 
 using System;
 using System.Collections.Generic;
@@ -328,7 +334,8 @@ public static class CertTrust
     }
 
     // The key Go compares names by (strings.ToLower, strings.EqualFold):
-    // case folded, no canonical equivalence.
+    // case folded, no canonical equivalence; stricter than EqualFold beyond
+    // ASCII (the file's header).
     private static string FoldKey(string s) => s.ToLowerInvariant();
 
     // Go's "" as null.

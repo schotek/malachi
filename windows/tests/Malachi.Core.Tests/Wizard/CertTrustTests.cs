@@ -349,6 +349,14 @@ public sealed class CertTrustTests
                 With(s => s with { Host = "cafe\x0301.example" }), ""),
             ("same composed host, other case", With(s => s with { Host = "caf\x00E9.example", CertificateSha256 = SumA }),
                 With(s => s with { Host = "CAF\x00C9.EXAMPLE" }), SumA),
+            // Windows: Go's EqualFold says no here too (U+0130 has no simple fold).
+            ("dotted capital I is not i", With(s => s with { Host = "\x0130map.example", CertificateSha256 = SumA }),
+                With(s => s with { Host = "imap.example" }), ""),
+            // Windows: stricter than Go, whose EqualFold equates the long s
+            // with s and keeps this pin (CertTrust.cs header): the user is
+            // asked again, and the pin still accepts one certificate only.
+            ("long s is not s", With(s => s with { Host = "\x017Fmtp.example", CertificateSha256 = SumA }),
+                With(s => s with { Host = "smtp.example" }), ""),
         ];
         foreach (var (name, o, cur, want) in cases)
         {

@@ -3,6 +3,12 @@
 
 // Port of ui/internal/compose/draft_test.go TestFlushEcho (the Swift port
 // has no counterpart: macOS keeps the rule in its AppKit window).
+//
+// Named after the class it tests rather than after draft_test.go, which
+// §3.1 would ask for: that file's other test, TestBlockedSummary, is
+// Swift's BlockedSummaryTests suite and lives there under the Swift name,
+// and FlushEcho sits in Html beside EditorChannel, whose order rule it
+// completes (docs/windows-port.md §6.5, §7.4).
 
 using Malachi.Core.Html;
 using Xunit;
