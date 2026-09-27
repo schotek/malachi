@@ -9,6 +9,7 @@ require (
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
 	github.com/emersion/go-smtp v0.25.0
 	github.com/godbus/dbus/v5 v5.1.0
+	github.com/klauspost/compress v1.18.2
 	github.com/modelcontextprotocol/go-sdk v1.7.0
 	golang.org/x/net v0.58.0
 	golang.org/x/oauth2 v0.35.0
