@@ -108,7 +108,15 @@ Claude Desktop's process tree must use it: new files under AppData are
 silently redirected into Claude's package store there, and so are writes to
 HKCU (measured), so an agent that tests settings, `mailto:` registration,
 launch at login or notifications starts the app **outside** that tree
-(for example through WMI `Win32_Process.Create`).
+(for example through WMI `Win32_Process.Create`). With `MALACHI_DATA_DIR`
+set, the app also leaves the user's registrations alone at start: it
+neither writes the `mailto:` registration nor points a Run value at itself
+(`Registration/SelfRegistration`), because such a copy usually runs from a
+worktree or temporary folder that is deleted later, and a `mailto:` handler
+or Run value pointing there would break for a user who chose Malachi Mail.
+What the user asks for in Preferences is still written. A copy that a
+click on a notification starts is started by COM, without the variable,
+so a test of such a cold start removes the registration afterwards.
 
 ## 2. Solution and module boundaries
 

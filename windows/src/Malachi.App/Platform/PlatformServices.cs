@@ -25,6 +25,9 @@
 //   on the way out:     Stop(), on the UI thread (Main's thread after
 //                       Application.Start returned is the same one).
 // LaunchAtLogin, Mailto and OpenDefaultApps are for Preferences.
+// With MALACHI_DATA_DIR set (tests, agents, dev builds run from a temporary
+// folder) Start leaves the user's mailto: registration and Run value alone
+// (Registration/SelfRegistration).
 
 using System;
 using System.Collections.Generic;
@@ -112,8 +115,11 @@ public static partial class PlatformServices
     /// launch-at-login mirror (a Run value of a moved app folder follows
     /// it), the <c>mailto:</c> registration when it is missing or stale (off
     /// the UI thread), and the notification-area icon once the app runs in
-    /// the background. Clicks held since <see cref="InitializeEarly"/> are
-    /// handed over. Call it once, after <see cref="InitializeEarly"/>.
+    /// the background. With <c>MALACHI_DATA_DIR</c> set, neither the Run
+    /// value nor the <c>mailto:</c> registration is written: such a copy
+    /// runs from a folder that goes away (<see cref="SelfRegistration"/>).
+    /// Clicks held since <see cref="InitializeEarly"/> are handed over. Call
+    /// it once, after <see cref="InitializeEarly"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">Off the UI thread, or a second time.</exception>
     public static void Start(PlatformContext context)
@@ -148,8 +154,16 @@ public static partial class PlatformServices
         newMessage = context.Notifications.AddNewMessage(policy.Deliver);
         tray = new BackgroundTray(context, queue, exe, logger);
         tray.SetVisible(background);
-        StartLaunchAtLogin(context);
-        StartMailtoRegistration();
+        var selfRegistration = SelfRegistration.IsAllowed();
+        if (!selfRegistration)
+        {
+            LogNoSelfRegistration(logger, SelfRegistration.DataDirVariable);
+        }
+        StartLaunchAtLogin(context, selfRegistration);
+        if (selfRegistration)
+        {
+            StartMailtoRegistration();
+        }
         foreach (var activation in held)
         {
             Deliver(activation);
@@ -233,11 +247,11 @@ public static partial class PlatformServices
         }
     }
 
-    private static void StartLaunchAtLogin(PlatformContext context)
+    private static void StartLaunchAtLogin(PlatformContext context, bool repair)
     {
         try
         {
-            if (LaunchAtLogin.RepairMovedExecutable())
+            if (repair && LaunchAtLogin.RepairMovedExecutable())
             {
                 LogRunRepaired(logger);
             }
@@ -293,6 +307,9 @@ public static partial class PlatformServices
 
     [LoggerMessage(Level = LogLevel.Information, Message = "platform: mailto: registration written")]
     private static partial void LogMailtoRegistered(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "platform: {Variable} is set; the mailto: registration and the Run value are left alone")]
+    private static partial void LogNoSelfRegistration(ILogger logger, string variable);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "platform: {What}: {Reason}")]
     private static partial void LogRegistryFailed(ILogger logger, string what, string reason);
