@@ -5,6 +5,33 @@
 # Everything Go-related is built inside the Toolbx container; `make flatpak`
 # is meant to be run on the host where flatpak-builder lives.
 
+# Windows: GNU make for Windows (winget install ezwinports.make) runs recipes
+# and $(shell ...) with the first sh.exe on PATH and falls back to cmd.exe,
+# which none of the POSIX recipes below survive; from PowerShell there is no
+# sh.exe on PATH. Git for Windows' usr\bin (sh, sed, grep, find, ...) goes
+# first on PATH and sh.exe becomes the shell, so PowerShell and Git Bash
+# behave alike. This has to stay above the first $(shell ...). GIT_USR_BIN
+# overrides the directory, found from `git --exec-path`
+# (<Git>/mingw64/libexec/git-core; usr/bin is beside mingw64). An MSYS2
+# make (MAKE_HOST ends in -msys or -cygwin) has its own POSIX shell and PATH.
+# EXE is the suffix of the Go binaries, empty on Linux and macOS.
+EXE         :=
+ifeq ($(OS),Windows_NT)
+EXE         := .exe
+ifeq ($(MAKE_HOST),Windows32)
+ifndef GIT_USR_BIN
+_empty      :=
+_space      := $(_empty) $(_empty)
+_git_prefix := $(subst /libexec/git-core,,$(shell git --exec-path))
+# $(dir ...) splits at spaces ("Program Files"): they are swapped for a
+# character no Windows path holds while the last element is cut off.
+GIT_USR_BIN := $(if $(_git_prefix),$(subst |,$(_space),$(dir $(subst $(_space),|,$(_git_prefix))))usr/bin,C:/Program Files/Git/usr/bin)
+endif
+export PATH := $(GIT_USR_BIN);$(PATH)
+SHELL       := sh.exe
+endif
+endif
+
 APP_ID      := io.github.schotek.Malachi
 # Release versions are the git tags, "v0.1.0" style; the leading v is cut
 # because AppStream and Flatpak want a bare number. Between tags this is
@@ -74,24 +101,24 @@ all: build
 ## build: compile backend daemon, MCP bridge and UI into ./build
 build: backend mcp ui schemas locale
 
-backend: $(BUILD_DIR)/malachid
+backend: $(BUILD_DIR)/malachid$(EXE)
 
 # The find below also matches cmd/malachi-mcp, so an MCP-only edit relinks
 # malachid; with the Go build cache that is a sub-second no-op.
-$(BUILD_DIR)/malachid: $(shell find backend -name '*.go' -o -name '*.sql' -o -name go.mod)
+$(BUILD_DIR)/malachid$(EXE): $(shell find backend -name '*.go' -o -name '*.sql' -o -name go.mod)
 	@mkdir -p $(BUILD_DIR)
 	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachid
 
 ## mcp: compile the MCP bridge for AI agents into ./build/malachi-mcp (see docs/mcp.md)
-mcp: $(BUILD_DIR)/malachi-mcp
+mcp: $(BUILD_DIR)/malachi-mcp$(EXE)
 
-$(BUILD_DIR)/malachi-mcp: $(shell find backend/cmd/malachi-mcp backend/pkg/api -name '*.go') backend/go.mod
+$(BUILD_DIR)/malachi-mcp$(EXE): $(shell find backend/cmd/malachi-mcp backend/pkg/api -name '*.go') backend/go.mod
 	@mkdir -p $(BUILD_DIR)
 	cd backend && $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o ../$@ ./cmd/malachi-mcp
 
-ui: blueprint $(BUILD_DIR)/malachi
+ui: blueprint $(BUILD_DIR)/malachi$(EXE)
 
-$(BUILD_DIR)/malachi: $(BLP_OUT) $(shell find ui -name '*.go' -o -name go.mod) backend/pkg/api/*.go
+$(BUILD_DIR)/malachi$(EXE): $(BLP_OUT) $(shell find ui -name '*.go' -o -name go.mod) backend/pkg/api/*.go
 	@mkdir -p $(BUILD_DIR)
 	cd ui && $(GO) build $(GOFLAGS) $(UI_TAGS) -ldflags '$(LDFLAGS_UI)' -o ../$@ .
 
@@ -174,11 +201,11 @@ run: run-dev
 
 ## run-backend: build and start only the daemon in the foreground (Ctrl+C to stop)
 run-backend: backend
-	./$(BUILD_DIR)/malachid $(ARGS)
+	./$(BUILD_DIR)/malachid$(EXE) $(ARGS)
 
 ## run-frontend: build and start the UI (connects to a running malachid, or starts build/malachid itself; MALACHI_DAEMON=none to only show the banner)
 run-frontend: ui mcp schemas locale
-	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi $(ARGS)
+	$(SCHEMA_ENV) $(LOCALE_ENV) $(ICON_ENV) ./$(BUILD_DIR)/malachi$(EXE) $(ARGS)
 
 ## test: run Go tests for both modules
 test: blueprint schemas
@@ -253,7 +280,12 @@ rpm:
 
 # The macOS client (macos/, Swift/AppKit) is a separate client of the daemon;
 # these targets only delegate to macos/Makefile and exist on Darwin alone.
+# On Windows uname says MINGW64_NT-… or MSYS_NT-…; it is not asked there.
+ifeq ($(OS),Windows_NT)
+UNAME_S := Windows_NT
+else
 UNAME_S := $(shell uname -s)
+endif
 
 ## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
