@@ -38,7 +38,8 @@ public sealed class OpenDir
 
     // A path that a program which knows no long paths still opens has at
     // most 259 characters (MAX_PATH with its terminating NUL); a file name
-    // is kept within what is left of it where it can be.
+    // is kept within what is left of it where it can be
+    // (MaxFileNameLength).
     private const int MaxPath = 260;
 
     // mkdtemp's ten random characters; lower case, as Windows compares
@@ -85,15 +86,27 @@ public sealed class OpenDir
     }
 
     /// <summary>
+    /// The longest file name <see cref="Write"/> gives a file: what keeps
+    /// its whole path within MAX_PATH, so that a program which knows no
+    /// long paths still opens it, but never less than
+    /// <see cref="WindowsFileNames.MinLength"/>.
+    /// </summary>
+    public int MaxFileNameLength =>
+        Math.Clamp(MaxPath - 1 - (Path.Length + 1 + SubdirectoryNameLength + 1), WindowsFileNames.MinLength, WindowsFileNames.MaxLength);
+
+    /// <summary>
     /// Writes <paramref name="data"/> into a fresh private subdirectory and
     /// returns the file's path (<c>writeOpenFile</c>). Entries older than
     /// <see cref="OpenMaxAge"/> go first. The name goes through
-    /// <see cref="WindowsFileNames.Sanitize(string, int)"/> (callers pass a
-    /// sanitised one already; it changes nothing then) with a length that
-    /// keeps the whole path within MAX_PATH where it can. The subdirectory
-    /// is new (<see cref="IPrivateDirectoryFactory.CreateNew"/>) and the
-    /// file is created with <see cref="FileMode.CreateNew"/>, so nothing
-    /// that was there before is ever reused or overwritten.
+    /// <see cref="WindowsFileNames.Sanitize(string, int)"/> once more, cut
+    /// to <see cref="MaxFileNameLength"/>: a long name comes out shorter
+    /// than the caller's (never with an extension it did not have), so the
+    /// name of the returned path, not <paramref name="name"/>, is the one
+    /// to judge (<see cref="IFileTypePolicy"/>) and to pass on
+    /// (<see cref="IMarkOfTheWeb"/>, <see cref="ILauncher"/>). The
+    /// subdirectory is new (<see cref="IPrivateDirectoryFactory.CreateNew"/>)
+    /// and the file is created with <see cref="FileMode.CreateNew"/>, so
+    /// nothing that was there before is ever reused or overwritten.
     /// </summary>
     public string Write(string name, ReadOnlySpan<byte> data)
     {
@@ -103,9 +116,7 @@ public sealed class OpenDir
         var sub = NewSubdirectory();
         try
         {
-            var room = MaxPath - 1 - (sub.Length + 1);
-            var fileName = WindowsFileNames.Sanitize(
-                name, Math.Clamp(room, WindowsFileNames.MinLength, WindowsFileNames.MaxLength));
+            var fileName = WindowsFileNames.Sanitize(name, MaxFileNameLength);
             var path = System.IO.Path.Combine(sub, fileName);
             using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {

@@ -82,8 +82,10 @@ public static class WindowsFileNames
     /// spaces go (Windows would drop them silently), a device name gets a
     /// leading <c>_</c> ("CON.txt" is the console), and the result has at
     /// most <see cref="MaxBytes"/> bytes and <paramref name="maxLength"/>
-    /// characters, a short extension kept. Never empty; applying it again
-    /// changes nothing.
+    /// characters, a short extension kept. Whatever the cap, the result's
+    /// extension is the one the name has after those rules, or none: a cut
+    /// through a long one turns the dots it leaves into <c>_</c>. Never
+    /// empty; applying it again changes nothing.
     /// </summary>
     public static string Sanitize(string? raw, int maxLength)
     {
@@ -243,7 +245,11 @@ public static class WindowsFileNames
 
     // safename truncate: at most MaxBytes bytes and maxLength characters,
     // cut on a scalar boundary, keeping an extension of at most 16 bytes;
-    // the fallback before the extension when nothing else fits.
+    // the fallback before the extension when nothing else fits. A longer
+    // "extension" is cut with the rest, and that cut must not leave a
+    // shorter one in its place: "x.exeabcdefghijklmnopq" cut after "exe"
+    // would be a program no check saw, the cap depends on the length of
+    // the profile path, and that can be guessed from an address.
     private static string Fit(string s, int maxLength)
     {
         if (s.Length <= maxLength && Utf8(s) <= MaxBytes)
@@ -257,11 +263,37 @@ public static class WindowsFileNames
             ext = s[dot..];
         }
         var stem = Shorten(s[..^ext.Length], maxLength - ext.Length, MaxBytes - Utf8(ext));
-        if (ext.Length == 0)
+        if (ext.Length > 0)
         {
-            stem = TrimEnd(stem);
+            return stem.Length == 0 ? Fallback + ext : stem + ext;
         }
-        return stem.Length == 0 ? Fallback + ext : stem + ext;
+        stem = WithoutNewExtension(TrimEnd(stem), Extension(s));
+        return stem.Length == 0 ? Fallback : stem;
+    }
+
+    // A cut that dropped the extension: its dots become "_", from the last
+    // one, until what follows the last dot is the uncut name's extension
+    // or there is no dot, so a cut never gives the file a type of its own.
+    // Nothing the lists name contains "_" (nor does a class ID), so the
+    // joined parts are no type either.
+    private static string WithoutNewExtension(string cut, string extension)
+    {
+        while (true)
+        {
+            var dot = cut.LastIndexOf('.');
+            if (dot < 0 || string.Equals(cut[(dot + 1)..], extension, StringComparison.OrdinalIgnoreCase))
+            {
+                return cut;
+            }
+            cut = string.Concat(cut.AsSpan(0, dot), "_", cut.AsSpan(dot + 1));
+        }
+    }
+
+    // Go's filepath.Ext without the dot, of a name without separators.
+    private static string Extension(string name)
+    {
+        var dot = name.LastIndexOf('.');
+        return dot < 0 ? "" : name[(dot + 1)..];
     }
 
     // Drops scalars from the end of s until it has at most chars characters

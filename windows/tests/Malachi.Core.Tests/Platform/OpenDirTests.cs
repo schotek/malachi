@@ -176,6 +176,47 @@ public sealed class OpenDirTests
         Assert.True(File.Exists(path));
     }
 
+    [Theory]
+    // Each "extension" is too long to keep, and the room under MAX_PATH
+    // cuts the name right after a shorter one inside it (the review's
+    // three, measured with a root of 58 characters).
+    [InlineData(".settingcontent-ms", "Z")]
+    [InlineData(".exe", "abcdefghijklmnopq")]
+    [InlineData(".url", "_is_not_a_url_ext")]
+    public void WriteNeverCutsANameToANewExtension(string inner, string rest)
+    {
+        using var temp = new TemporaryDirectory();
+        var open = new OpenDir(temp.Path, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        var kept = new string('x', open.MaxFileNameLength - inner.Length);
+        var name = kept + inner + rest;
+        Assert.False(DangerousTypes.IsDangerous(name, null), name);
+
+        var path = open.Write(name, "x"u8);
+
+        // The name that was written is the one to judge, and it is no
+        // more dangerous than the one passed in.
+        var written = Path.GetFileName(path);
+        Assert.Equal(kept + "_" + inner[1..], written);
+        Assert.False(DangerousTypes.IsDangerous(written, null), written);
+        Assert.True(File.Exists(path));
+        Assert.True(path.Length <= 259, $"{path.Length}");
+    }
+
+    [Fact]
+    public void MaxFileNameLengthLeavesRoomUnderMaxPath()
+    {
+        using var temp = new TemporaryDirectory();
+        var open = new OpenDir(temp.Path, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        // The directory, a separator, ten random characters, a separator.
+        Assert.Equal(259 - (open.Path.Length + 12), open.MaxFileNameLength);
+        var root = Path.GetPathRoot(temp.Path)!;
+        var shallow = new OpenDir(Path.Combine(root, "o"), new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        Assert.Equal(259 - (shallow.Path.Length + 12), shallow.MaxFileNameLength);
+        // Deeper than MAX_PATH leaves room: the shortest cap, and long paths.
+        var deep = new OpenDir(Path.Combine(temp.Path, new string('d', 250)), new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        Assert.Equal(WindowsFileNames.MinLength, deep.MaxFileNameLength);
+    }
+
     [Fact]
     public void WriteSweepsFirst()
     {

@@ -33,6 +33,8 @@ public sealed class WindowsFileNamesTests
         "." + new string('d', 300), "NUL" + new string(' ', 300) + "x.txt", "CON." + new string('x', 300),
         new string('á', 200) + "😀" + new string('y', 100) + ".pdf",
         "😀😀😀.png", "Jörg's Übersicht.ods", "a.b.c.d", "x.{3050F4D8-98B5-11CF-BB82-00AA00BDCE0B}",
+        new string('x', 28) + ".exeabcdefghijklmnopq", new string('x', 96) + ".url_is_not_a_url_ext",
+        new string('x', 14) + ".settingcontent-msZ", "invoice.exe." + new string('q', 300),
     };
 
     [Theory]
@@ -239,9 +241,47 @@ public sealed class WindowsFileNamesTests
         Assert.StartsWith("_NUL", got, StringComparison.Ordinal);
         Assert.True(got.Length <= WindowsFileNames.MaxLength);
         Assert.EndsWith(".txt", got, StringComparison.Ordinal);
+        // The cut through its long "extension" takes the dot, and with it
+        // the device name.
         var dotted = WindowsFileNames.Sanitize("CON." + new string('x', 300));
-        Assert.StartsWith("_CON.", dotted, StringComparison.Ordinal);
-        Assert.Equal(WindowsFileNames.MaxLength, dotted.Length);
+        Assert.Equal("CON_" + new string('x', 251), dotted);
+    }
+
+    [Theory]
+    // Each "extension" is too long to keep, and the cap cuts the name
+    // right after a shorter one inside it: the file would get a type that
+    // no check of the uncut name saw.
+    [InlineData(".settingcontent-ms", "Z")]
+    [InlineData(".exe", "abcdefghijklmnopq")]
+    [InlineData(".url", "_is_not_a_url_ext")]
+    [InlineData(".exe", ".abcdefghijklmnopqrstu")]
+    [InlineData(".exe.", "abcdefghijklmnopqrstu")]
+    [InlineData(".lnk", " abcdefghijklmnopqrstu")]
+    public void ACutNeverLeavesANewExtension(string inner, string rest)
+    {
+        foreach (var cap in new[] { WindowsFileNames.MinLength, 100, 189, WindowsFileNames.MaxLength })
+        {
+            var kept = new string('x', cap - inner.TrimEnd('.').Length);
+            var name = kept + inner + rest;
+            Assert.False(DangerousTypes.IsDangerous(name, null), name);
+
+            var got = WindowsFileNames.Sanitize(name, cap);
+
+            Assert.Equal(kept + "_" + inner.Trim('.'), got);
+            Assert.False(DangerousTypes.IsDangerous(got, null), got);
+        }
+    }
+
+    [Fact]
+    public void ACutKeepsNoDotItGaveANewMeaning()
+    {
+        // Every dot the cut leaves goes, not only the last one:
+        // "invoice.exe.<long>" must not become "invoice.exe".
+        Assert.Equal("invoice_exe_abcdefghijklmnopqrst", WindowsFileNames.Sanitize("invoice.exe.abcdefghijklmnopqrstuvwxyz", 32));
+        // Where the cut ends on the name's own extension, that one stays:
+        // it is the extension the checks saw.
+        var e = new string('e', 30);
+        Assert.Equal("a." + e, WindowsFileNames.Sanitize("a." + e + "." + e, 32));
     }
 
     [Theory]
@@ -259,6 +299,11 @@ public sealed class WindowsFileNamesTests
             Assert.False(got.StartsWith('.') || char.IsWhiteSpace(got[0]), got);
             Assert.False(WindowsFileNames.IsReservedName(got), got);
             Assert.Equal(got, WindowsFileNames.Sanitize(got, maxLength));
+            // Whatever the cap, no extension the checks did not see.
+            var extension = DangerousTypes.Extension(got);
+            Assert.True(
+                extension.Length == 0 || DangerousTypes.CandidateExtensions(input).Contains(extension, StringComparer.OrdinalIgnoreCase),
+                $"{got}: .{extension} is new");
             // No broken surrogate survives.
             Assert.Equal(got, Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(got)));
         }
