@@ -100,9 +100,12 @@ public sealed class RealDaemonTests
         var refused = await Assert.ThrowsAsync<RpcClientException>(() => client.ConnectAsync(Ct));
         Assert.Equal(ClientError.Transport($"nothing listens on {daemon.Socket}"), refused.Error);
 
+        // The new daemon listens before it writes its key, and makes sure of
+        // the key before it answers system.hello: once connected, the file
+        // holds the new key.
         await daemon.StartAsync(Ct);
-        Assert.NotEqual(before, await File.ReadAllBytesAsync(RpcAuth.KeyPath(daemon.Socket), Ct));
         await client.ConnectAsync(Ct);
+        Assert.NotEqual(before, await File.ReadAllBytesAsync(RpcAuth.KeyPath(daemon.Socket), Ct));
         Assert.Equal(daemon.Pid, (await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct)).Pid);
     }
 }

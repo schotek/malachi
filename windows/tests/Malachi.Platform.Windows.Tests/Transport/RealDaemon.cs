@@ -79,7 +79,12 @@ internal sealed class RealDaemon : IDisposable
         return new RealDaemon(executable, socketDir, dataDir);
     }
 
-    /// <summary>Starts the daemon and waits until its socket answers and its key file is there.</summary>
+    /// <summary>
+    /// Starts the daemon and waits until its socket answers and a key file is
+    /// there. After a crash that may still be the old run's: the daemon
+    /// listens before it writes its key, and makes sure of the key before it
+    /// answers <c>system.hello</c>.
+    /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var start = new ProcessStartInfo(Executable)

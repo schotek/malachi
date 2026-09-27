@@ -223,17 +223,18 @@ public sealed partial class RpcClient : IDisposable
     /// <summary>Drops the connection; pending calls fail with <see cref="ClientErrorKind.Disconnected"/>.</summary>
     public void Close()
     {
+        Connection? closing;
         lock (gate)
         {
-            if (connection is { } conn)
-            {
-                Teardown(conn, null);
-            }
-            else
+            closing = connection;
+            if (closing is null)
             {
                 SetState(new RpcClientState.Disconnected(null));
+                return;
             }
+            Detach(closing, null);
         }
+        closing.Dispose();
     }
 
     /// <summary>Closes the connection and completes <see cref="Notifications"/> and <see cref="States"/>.</summary>
@@ -276,20 +277,36 @@ public sealed partial class RpcClient : IDisposable
         cancellationToken.ThrowIfCancellationRequested();
         var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         var conn = new Connection(socket);
+        var disposedMeanwhile = false;
         lock (gate)
         {
-            if (disposed)
+            disposedMeanwhile = disposed;
+            if (!disposedMeanwhile)
             {
-                conn.Dispose();
-                throw new ObjectDisposedException(nameof(RpcClient));
+                connection = conn;
+                SetState(new RpcClientState.Connecting());
             }
-            connection = conn;
-            SetState(new RpcClientState.Connecting());
         }
-        await DialAsync(conn, cancellationToken).ConfigureAwait(false);
-        // The socket is open; the connection is usable only once both ends
-        // proved that they hold the daemon's key. The state stays Connecting.
-        await HandshakeAsync(conn, cancellationToken).ConfigureAwait(false);
+        if (disposedMeanwhile)
+        {
+            conn.Dispose();
+            throw new ObjectDisposedException(nameof(RpcClient));
+        }
+        try
+        {
+            await DialAsync(conn, cancellationToken).ConfigureAwait(false);
+            // The socket is open; the connection is usable only once both
+            // ends proved that they hold the daemon's key. The state stays
+            // Connecting.
+            await HandshakeAsync(conn, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is not (RpcClientException or HandshakeException or OperationCanceledException))
+        {
+            // Nothing the dial and the handshake expect: the attempt is over
+            // all the same, and must not stay Connecting.
+            Abandon(conn, Connection.Describe(e));
+            throw;
+        }
         lock (gate)
         {
             if (connection != conn)
@@ -386,10 +403,7 @@ public sealed partial class RpcClient : IDisposable
             }
             reason = Connection.Describe(e);
         }
-        lock (gate)
-        {
-            Teardown(conn, reason);
-        }
+        Teardown(conn, reason);
     }
 
     private void Dispatch(Connection conn, IReadOnlyList<byte[]> lines)
@@ -458,30 +472,40 @@ public sealed partial class RpcClient : IDisposable
         answer?.TrySetException(error);
     }
 
-    /// <summary>Tears a failed attempt down, unless something else did already.</summary>
-    private void Abandon(Connection conn, string? reason)
+    /// <summary>
+    /// Drops <paramref name="conn"/> if it is still the current connection:
+    /// pending calls fail with <see cref="ClientErrorKind.Disconnected"/>, the
+    /// state becomes <see cref="RpcClientState.Disconnected"/> with the
+    /// reason, and the socket is closed. The socket is closed outside the
+    /// lock: its cancellation may run awaiting code inline.
+    /// </summary>
+    private void Teardown(Connection conn, string? reason)
     {
         lock (gate)
         {
-            Teardown(conn, reason);
+            if (!Detach(conn, reason))
+            {
+                return;
+            }
         }
+        conn.Dispose();
     }
 
+    /// <summary>Tears a failed attempt down, unless something else did already.</summary>
+    private void Abandon(Connection conn, string? reason) => Teardown(conn, reason);
+
     /// <summary>
-    /// Drops <paramref name="conn"/> if it is still the current connection:
-    /// pending calls fail with <see cref="ClientErrorKind.Disconnected"/>, and
-    /// the state becomes <see cref="RpcClientState.Disconnected"/> with the
-    /// reason. Called under the lock.
+    /// The part of <see cref="Teardown"/> under the lock; false when
+    /// <paramref name="conn"/> is no longer the current connection. The
+    /// caller disposes it after the lock.
     /// </summary>
-    [SuppressMessage("Reliability", "CA2000", Justification = "The connection is disposed here; the reference is only compared.")]
-    private void Teardown(Connection conn, string? reason)
+    private bool Detach(Connection conn, string? reason)
     {
         if (connection != conn)
         {
-            return;
+            return false;
         }
         connection = null;
-        conn.Dispose();
         if (reason is not null)
         {
             LogEnded(logger, reason);
@@ -492,6 +516,7 @@ public sealed partial class RpcClient : IDisposable
         }
         pending.Clear();
         SetState(new RpcClientState.Disconnected(reason));
+        return true;
     }
 
     /// <summary>Records and announces a state change; nothing for the same state. Called under the lock.</summary>
