@@ -15,8 +15,9 @@ namespace Malachi.Core.Controllers;
 /// A new snapshot of the list's rows and how the selection was reconciled
 /// with it. The view applies the rows by key
 /// (<see cref="Infrastructure.KeyedListSync"/>, <see cref="ListRow.Key"/>),
-/// then mirrors <see cref="ListController.SelectedKey"/>, which is current
-/// when the update arrives.
+/// with row view models updated in place, then mirrors
+/// <see cref="ListController.SelectedKey"/>, which is current when the
+/// update arrives (docs/windows-port.md §7.5).
 /// </summary>
 /// <param name="Rows">Every row, in order; never changed afterwards.</param>
 /// <param name="Hint">How the selection followed.</param>

@@ -634,15 +634,36 @@ of those loops and their `PropertyChanged` notifications with
 The mailbox is the first to follow this: `MailboxController` publishes the
 sidebar as `Entries` (keyed by `SidebarKey.Of`) with the highlighted row as
 `SelectedEntryKey`, and its list half `ListController` publishes `Rows`
-(keyed by `ListRow.Key`) with `SelectedKey`, announced by `RowsChanged`
-together with the `SelectionHint`. The key is the source of truth: the view
-applies the snapshot with `KeyedListSync`, then selects the key, again
-whenever the sync reported moves, and suppresses its own selection handler
-meanwhile; a click goes back as `SelectFolder`/`Select`. The paging of the
-list and the search box's pause, which macOS keeps in AppKit, are in Core
-(`MailboxController.Paging.cs`, `SearchFieldChanged`): the view reports its
-layout through `ViewportChanged` and shows *Load More* only while
-`LoadMoreRetry` says so.
+(keyed by `ListRow.Key`) with `SelectedKey`. The key is the source of
+truth, and it is current whenever a snapshot is announced:
+
+- The rows arrive with `RowsChanged` (and its `SelectionHint`) and, in flat
+  mode, with `RowsRefreshed` (a flag changed: mark-as-read, about a second
+  after every selection); the sidebar with `EntriesChanged` and
+  `BadgesChanged` (a count moved: every mark-as-read in the selected
+  folder). The sidebar's highlight moves on its own with `SelectionChanged`.
+- A changed row (a flag, a badge, a conversation's counts) is a new record
+  under the same key. The view keeps row view models and applies every
+  snapshot with the view overload of `KeyedListSync.Apply`
+  (`create`/`update`), which updates them in place. The record overload
+  would `Replace` the row, and a WinUI selector treats that as a removal
+  plus an insertion, dropping the selection. It is only for lists without
+  a selection.
+- After every apply the view selects `SelectedKey` or `SelectedEntryKey`
+  where its `ListView`'s selection differs (a moved row may have lost it),
+  with its own selection handler suppressed while it applies and selects.
+  A deselection the collection caused must never go back as `Select(null)`,
+  which would clear the reader. A click goes back as
+  `SelectFolder`/`Select`.
+
+The paging of the list and the search box's pause, which macOS keeps in
+AppKit, are in Core (`MailboxController.Paging.cs`, `SearchFieldChanged`):
+the view reports its layout through `ViewportChanged` after every change
+of the rows' extent or the pane's size and on every scroll, and shows
+*Load More* only while `LoadMoreRetry` says so. The footer
+(`LoadMoreState`) follows the model under a status page too, so the
+emptied list of another listing never asks for the previous listing's
+next page.
 
 ## 8. Settings
 

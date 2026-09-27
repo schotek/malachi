@@ -15,12 +15,14 @@
 // (Swift shortens the delay's tick to 20 ms and sleeps). The controllers
 // live on the tests' UI thread, which goes on working after a call
 // returns, so what Swift reads right after a call is read in the same UI
-// turn here. The last test is Windows-only: the rows as keyed snapshots and
-// the selection as a key (docs/windows-port.md §7.5).
+// turn here. The last two tests are Windows-only: the rows as keyed
+// snapshots with the selection as a key, and a flag change applied in place
+// (docs/windows-port.md §7.5).
 
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
@@ -862,6 +864,97 @@ public sealed class MailboxControllerListTests
         Assert.Contains(nameof(ListController.ListState), changed);
     }
 
+    /// <summary>
+    /// Windows-only (docs/windows-port.md §7.5): a flag that changes on the
+    /// selected row (mark-as-read after every selection) is a new snapshot
+    /// with a new record under the same key, announced as
+    /// <see cref="ListController.RowsRefreshed"/> in flat mode and as
+    /// <see cref="ListController.RowsChanged"/> in grouped mode. Applied
+    /// through the view overload of <see cref="KeyedListSync"/>, the
+    /// selected row keeps its view object, updated in place, and the
+    /// collection raises nothing, so a ListView keeps its selection; the
+    /// record overload would replace the row, which a WinUI selector takes
+    /// for a removal and an insertion.
+    /// </summary>
+    [Fact]
+    public async Task FlagChangesUpdateTheSelectedRowInPlace()
+    {
+        // Flat.
+        await using (var h = await StartAsync(new ListLog(), messages: new() { [Inbox] = [.. Enumerable.Range(1, 5).Select(i => Msg($"m{i}", i))] }))
+        {
+            await h.IdleAsync();
+            var (view, actions) = await ViewOfAsync(h);
+            await h.On(() => h.List.Select(new ListKey(Message: "m3")));
+            var selected = view.Single(v => v.Key == h.List.SelectedKey);
+
+            var refreshed = new List<IReadOnlyList<ListKey>>();
+            await h.On(() =>
+            {
+                h.List.RowsRefreshed += (_, keys) => refreshed.Add(keys);
+                h.List.ApplyFlags(["m3"], setFlags: [Flag.Seen]);
+            });
+            Assert.Equal([new ListKey(Message: "m3")], Assert.Single(refreshed));
+            Assert.Empty(actions);
+            Assert.Equal(new ListKey(Message: "m3"), h.List.SelectedKey);
+            Assert.Same(selected, view.Single(v => v.Key == h.List.SelectedKey));
+            Assert.Equal([Flag.Seen], selected.Row.Message.Flags);
+            Assert.Equal(1, await RecordsReplacedAsync(h, flag: "m2"));
+        }
+
+        // Grouped: the conversation row's aggregates move.
+        await using (var h = await StartAsync(new ListLog(), messages: new() { [Inbox] = ThreadedMessages() }, grouped: true))
+        {
+            await h.IdleAsync();
+            var (view, actions) = await ViewOfAsync(h);
+            await h.On(() => h.List.Select(new ListKey("t3")));
+            var selected = view.Single(v => v.Key == h.List.SelectedKey);
+            Assert.Equal(1, selected.Row.Summary?.UnreadCount);
+
+            Assert.Equal(["c2"], Ids(await h.On(() => h.List.ApplyFlags(["c2"], setFlags: [Flag.Seen]))));
+            Assert.Empty(actions);
+            Assert.Equal(new ListKey("t3"), h.List.SelectedKey);
+            Assert.Same(selected, view.Single(v => v.Key == h.List.SelectedKey));
+            Assert.Equal(0, selected.Row.Summary?.UnreadCount);
+            Assert.Equal(1, await RecordsReplacedAsync(h, flag: "a3"));
+        }
+
+        // The view a WinUI list would keep: row view models applied in
+        // place on every announcement of the rows, and what the collection
+        // raised since the selection.
+        static async Task<(ObservableCollection<RowView> View, List<NotifyCollectionChangedAction> Actions)> ViewOfAsync(MailboxControllerHarness h)
+        {
+            var view = new ObservableCollection<RowView>();
+            var actions = new List<NotifyCollectionChangedAction>();
+            await h.On(() =>
+            {
+                Apply(view, h.List.Rows);
+                h.List.RowsChanged += (_, u) => Apply(view, u.Rows);
+                h.List.RowsRefreshed += (_, _) => Apply(view, h.List.Rows);
+                h.List.SelectedMessageChanged += (_, _) => actions.Clear();
+                view.CollectionChanged += (_, e) => actions.Add(e.Action);
+            });
+            return (view, actions);
+        }
+
+        static void Apply(ObservableCollection<RowView> view, IReadOnlyList<ListRow> rows) =>
+            KeyedListSync.Apply(view, rows, r => r.Key, v => v.Key, r => new RowView(r), (v, r) => v.Row = r);
+
+        // What the record overload does to a flag change of one message:
+        // the collection of records replaces its row.
+        static async Task<int> RecordsReplacedAsync(MailboxControllerHarness h, MessageId flag)
+        {
+            var changes = await h.On(() =>
+            {
+                var records = new ObservableCollection<ListRow>();
+                KeyedListSync.Apply(records, h.List.Rows, r => r.Key);
+                h.List.ApplyFlags([flag], setFlags: [Flag.Seen]);
+                return KeyedListSync.Apply(records, h.List.Rows, r => r.Key);
+            });
+            Assert.True(changes.KeptStructure);
+            return changes.Updated;
+        }
+    }
+
     /// <summary>A message dated <paramref name="hours"/> after <see cref="Base"/>; unread unless <paramref name="flags"/> say otherwise.</summary>
     internal static MessageSummary Msg(string id, int hours, string from = "alice", string? thread = null, Flag[]? flags = null) => new()
     {
@@ -967,6 +1060,14 @@ public sealed class MailboxControllerListTests
         list.MarkRead += (_, id) => log.Marks.Add(id);
         list.RowsRefreshed += (_, keys) => log.Refreshed.Add(keys);
         list.SelectionCleared += (_, _) => log.Cleared++;
+    }
+
+    /// <summary>A list row's view model, updated in place (docs/windows-port.md §7.5).</summary>
+    private sealed class RowView(ListRow row)
+    {
+        public ListKey Key { get; } = row.Key;
+
+        public ListRow Row { get; set; } = row;
     }
 
     /// <summary>What the controllers emitted, in order.</summary>

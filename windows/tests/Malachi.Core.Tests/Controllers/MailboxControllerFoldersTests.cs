@@ -14,16 +14,20 @@
 // assertions on the connection half of the line and on the sign-in
 // banner's texts become assertions on the connection and the notification
 // the mailbox handed over (those texts are SyncController's and are tested
-// with it). The last test is Windows-only: the sidebar as keyed snapshots
-// and the highlighted row as a key (docs/windows-port.md §7.5).
+// with it). The last tests are Windows-only: the sidebar as keyed
+// snapshots, the highlighted row as a key, current when the rows arrive,
+// and a badge applied in place (docs/windows-port.md §7.5).
 
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
+using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Model;
 using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Transport;
@@ -945,6 +949,52 @@ public sealed class MailboxControllerFoldersTests
     }
 
     /// <summary>
+    /// Windows-only (docs/windows-port.md §7.5): a badge that moves (a new
+    /// message, a mark-as-read) is a new snapshot of new records under the
+    /// same keys. Applied through the view overload of
+    /// <see cref="KeyedListSync"/>, the highlighted row keeps its view
+    /// object, updated in place, and the collection raises nothing, so a
+    /// ListView keeps its selection; the record overload would replace the
+    /// row, which a WinUI selector takes for a removal and an insertion.
+    /// </summary>
+    [Fact]
+    public async Task BadgesUpdateTheHighlightedRowInPlace()
+    {
+        var (accounts, folders) = NestedAccount();
+        var log = new Log();
+        await using var h = await StartAsync(log, accounts, folders);
+        await h.IdleAsync();
+        var inKey = new FolderKey("a", "in");
+        var view = new ObservableCollection<EntryView>();
+        var records = new ObservableCollection<FolderEntry>();
+        var actions = new List<NotifyCollectionChangedAction>();
+        EntryView? selected = null;
+        await h.On(() =>
+        {
+            Apply(view, h.Mailbox.Entries);
+            KeyedListSync.Apply(records, h.Mailbox.Entries, SidebarKey.Of);
+            selected = view.Single(v => v.Key == h.Mailbox.SelectedEntryKey);
+            view.CollectionChanged += (_, e) => actions.Add(e.Action);
+            h.Mailbox.BadgesChanged += (_, _) => Apply(view, h.Mailbox.Entries);
+        });
+        Assert.Equal(SidebarKey.ForFolder(inKey, false), selected!.Key);
+        Assert.Equal(1, selected.Entry.Badge);
+
+        await h.On(() => h.Mailbox.HandleNewMessage(new NewMessageNotification { AccountId = "a", FolderId = "in", Message = Summary("n1") }));
+        Assert.Empty(actions);
+        Assert.Same(selected, view.Single(v => v.Key == h.Mailbox.SelectedEntryKey));
+        Assert.Equal(2, selected.Entry.Badge);
+        Assert.Equal(1, log.BadgeRefreshes);
+
+        // What the record overload would have done to the same change.
+        var replaced = await h.On(() => KeyedListSync.Apply(records, h.Mailbox.Entries, SidebarKey.Of));
+        Assert.Equal(new KeyedListChanges(0, 0, 0, 1), replaced);
+
+        static void Apply(ObservableCollection<EntryView> target, IReadOnlyList<FolderEntry> entries) =>
+            KeyedListSync.Apply(target, entries, SidebarKey.Of, v => v.Key, e => new EntryView(e), (v, e) => v.Entry = e);
+    }
+
+    /// <summary>
     /// Windows-only: the window's <c>callThen</c> (actions.go; Swift
     /// <c>call</c>), which the actions reach through the mailbox: a success
     /// goes to its handler, a failure is toasted in the words of
@@ -1020,6 +1070,14 @@ public sealed class MailboxControllerFoldersTests
         mailbox.RefreshOutboxViews = a => log.OutboxRefreshes.Add(a);
         mailbox.CollapseLoading = () => log.Collapses++;
         mailbox.ListTitleChanged += (_, t) => log.Titles.Add(t);
+    }
+
+    /// <summary>A sidebar row's view model, updated in place (docs/windows-port.md §7.5).</summary>
+    private sealed class EntryView(FolderEntry entry)
+    {
+        public SidebarKey Key { get; } = SidebarKey.Of(entry);
+
+        public FolderEntry Entry { get; set; } = entry;
     }
 
     /// <summary>What the controller emitted, in order.</summary>

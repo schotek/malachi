@@ -38,7 +38,11 @@ namespace Malachi.Core.Controllers.Infrastructure;
 /// insertion, which may deselect the moved row (not verified for WinUI 3;
 /// phase E checks it). A list controller therefore re-applies its selection
 /// by key after a sync whose <see cref="KeyedListChanges.Moved"/> is not 0,
-/// rather than trusting the <c>ListView</c> to keep it.
+/// rather than trusting the <c>ListView</c> to keep it. A <c>Replace</c>,
+/// which the record overload makes of an item whose value changed, is a
+/// removal and an insertion to a WinUI selector as well: a list with a
+/// selection holds view models and applies its snapshots with the view
+/// overload, which updates them in place and never replaces one.
 /// </para>
 /// </remarks>
 public static class KeyedListSync

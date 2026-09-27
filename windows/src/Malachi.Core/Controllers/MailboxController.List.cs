@@ -23,10 +23,13 @@
 // mark-as-read delay runs on the TimeProvider, the Swift callbacks are
 // events of the same words, and the state a view binds to is observable.
 // The rows are a snapshot keyed by ListRow.Key for KeyedListSync, and
-// SelectedKey is the source of truth for the selection: the view applies
-// the rows of RowsChanged (SelectedKey is current by then) and selects
-// SelectedKey afterwards, again after a sync that moved rows, since WinUI
-// may drop the selection of a moved item (phase E verifies).
+// SelectedKey is the source of truth for the selection, current whenever
+// the rows are announced (RowsChanged, RowsRefreshed): the view applies
+// them by key with row view models updated in place (KeyedListSync's view
+// overload, so a changed flag is never a Replace) and selects SelectedKey
+// with its own handler suppressed, after every apply, since WinUI may drop
+// the selection of a moved item (docs/windows-port.md §7.5; phase E
+// verifies).
 
 using System;
 using System.Collections.Generic;
@@ -130,7 +133,11 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// <summary>
     /// The rows changed (Swift <c>onRows</c>): reconcile the list by key,
     /// then mirror <see cref="SelectedKey"/>. <see cref="Rows"/> and
-    /// <see cref="SelectedKey"/> are current when it is raised.
+    /// <see cref="SelectedKey"/> are current when it is raised. A row that
+    /// stays may be a new record (a conversation's counts after a flag
+    /// change): its view model is updated in place, never replaced, and the
+    /// view selects the key with its own selection handler suppressed
+    /// (docs/windows-port.md §7.5).
     /// </summary>
     public event EventHandler<RowsUpdate>? RowsChanged;
 
@@ -148,9 +155,16 @@ public sealed partial class ListController : ObservableObject, IDisposable
     public event EventHandler? SelectionCleared;
 
     /// <summary>
-    /// Flat mode: the rows with these keys changed in place (a flag; Swift
-    /// <c>onRowsRefreshed</c>); <see cref="RowFor"/> has the new content.
-    /// Grouped mode goes through <see cref="RowsChanged"/>.
+    /// Flat mode: the rows with these keys changed in place (a flag, as
+    /// mark-as-read sets about a second after every selection; Swift
+    /// <c>onRowsRefreshed</c>); <see cref="RowFor"/> and <see cref="Rows"/>
+    /// have the new content, new records under the same keys, and
+    /// <see cref="SelectedKey"/> stays. The view updates the rows' view
+    /// models in place (or applies <see cref="Rows"/> through the view
+    /// overload of <see cref="KeyedListSync"/>), never replaces them, which a
+    /// WinUI selector takes for a removal and an insertion that drops the
+    /// selection (docs/windows-port.md §7.5). Grouped mode goes through
+    /// <see cref="RowsChanged"/>.
     /// </summary>
     public event EventHandler<IReadOnlyList<ListKey>>? RowsRefreshed;
 

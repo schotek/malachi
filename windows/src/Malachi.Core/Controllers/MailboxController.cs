@@ -24,11 +24,14 @@
 // them, a test replaces them). The state a view binds to is observable,
 // and the sidebar is published as a snapshot (Entries) whose rows keep
 // their SidebarKey across rebuilds, with the highlighted row as a key
-// (SelectedEntryKey), which is the source of truth for the WinUI list: a
-// view applies Entries by key (KeyedListSync) and then selects
-// SelectedEntryKey, again after a sync that moved rows (WinUI may drop the
-// selection of a moved item; phase E verifies). The status line is reached
-// through IMailboxSync, the share of SyncController the mailbox uses.
+// (SelectedEntryKey), which is the source of truth for the WinUI list and
+// current whenever the entries are announced: a view applies Entries by
+// key with row view models updated in place (KeyedListSync's view
+// overload, so a changed badge is never a Replace) and then selects
+// SelectedEntryKey with its own handler suppressed, after every apply,
+// since WinUI may drop the selection of a moved item (docs/windows-port.md
+// §7.5; phase E verifies). The status line is reached through
+// IMailboxSync, the share of SyncController the mailbox uses.
 
 using System;
 using System.Collections.Generic;
@@ -115,13 +118,25 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
 
     // Callbacks (the sidebar)
 
-    /// <summary><see cref="MailModel.Entries"/> were rebuilt: reload the sidebar rows (Swift <c>onEntriesChanged</c>).</summary>
+    /// <summary>
+    /// <see cref="MailModel.Entries"/> were rebuilt: reload the sidebar rows
+    /// (Swift <c>onEntriesChanged</c>). <see cref="Entries"/> and
+    /// <see cref="SelectedEntryKey"/> are current when it is raised: apply
+    /// the entries by key, the rows' view models updated in place, then
+    /// select the key with the view's own selection handler suppressed
+    /// (docs/windows-port.md §7.5).
+    /// </summary>
     public event EventHandler? EntriesChanged;
 
     /// <summary>
     /// Only the badges of the entries moved (folders.go
     /// <c>updateFolderRow</c>; Swift <c>onBadgesChanged</c>); without a
-    /// handler <see cref="EntriesChanged"/> is raised instead.
+    /// handler <see cref="EntriesChanged"/> is raised instead. The keys and
+    /// <see cref="SelectedEntryKey"/> stay, but <see cref="Entries"/> is a
+    /// new snapshot of new records: update the rows' view models in place
+    /// (the view overload of <see cref="Infrastructure.KeyedListSync"/>),
+    /// never replace them, which a WinUI selector takes for a removal and
+    /// an insertion that drops the highlight (docs/windows-port.md §7.5).
     /// </summary>
     public event EventHandler? BadgesChanged;
 
