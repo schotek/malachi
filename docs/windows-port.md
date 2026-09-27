@@ -631,6 +631,19 @@ of those loops and their `PropertyChanged` notifications with
 `ControllerEvents.Guard`; what a handler throws is reported by the
 `PendingWork` (logged at error level, and failing the tests' `IdleAsync`).
 
+The mailbox is the first to follow this: `MailboxController` publishes the
+sidebar as `Entries` (keyed by `SidebarKey.Of`) with the highlighted row as
+`SelectedEntryKey`, and its list half `ListController` publishes `Rows`
+(keyed by `ListRow.Key`) with `SelectedKey`, announced by `RowsChanged`
+together with the `SelectionHint`. The key is the source of truth: the view
+applies the snapshot with `KeyedListSync`, then selects the key, again
+whenever the sync reported moves, and suppresses its own selection handler
+meanwhile; a click goes back as `SelectFolder`/`Select`. The paging of the
+list and the search box's pause, which macOS keeps in AppKit, are in Core
+(`MailboxController.Paging.cs`, `SearchFieldChanged`): the view reports its
+layout through `ViewportChanged` and shows *Load More* only while
+`LoadMoreRetry` says so.
+
 ## 8. Settings
 
 `Malachi.Core/Settings` is the typed facade with the gschema's keys,
