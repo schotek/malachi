@@ -13,6 +13,9 @@ only.
     <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
     <OutputType>Exe</OutputType>
     <RootNamespace>Malachi.Platform.Windows.Tests</RootNamespace>
+    <!-- The tray tests read the interop structures' layout and drive a
+         window procedure with CsWin32's handles. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
