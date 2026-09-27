@@ -1,0 +1,53 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The network canary (docs/windows-port.md §12): runs the app's real viewer,
+editor and previewer in Malachi.App.Canary.Host over the spike's hostile
+document and every HTML part of backend/testdata/mime rendered raw, with a
+loopback listener per vector and a NetLog, and asserts that nothing
+connected, resolved, navigated, opened a window or downloaded; and that the
+same document in an unprotected WebView2 does leak, so the harness itself
+is known to see leaks. Needs a desktop session and the WebView2 runtime;
+skipped with the reason otherwise.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.App.Canary</RootNamespace>
+    <!-- The host is built (ProjectReference below) but not referenced: it is
+         a self-contained WinUI executable, started as a process. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+    <MalachiCanaryHostRid Condition="'$(Platform)' == 'ARM64'">win-arm64</MalachiCanaryHostRid>
+    <MalachiCanaryHostRid Condition="'$(MalachiCanaryHostRid)' == ''">win-x64</MalachiCanaryHostRid>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Malachi.App.Canary.Host\Malachi.App.Canary.Host.csproj"
+                      ReferenceOutputAssembly="false" Private="false" SkipGetTargetFrameworkProperties="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The host's configuration and results, one definition for both sides. -->
+    <Compile Include="..\Malachi.App.Canary.Host\HostConfig.cs" Link="Host\HostConfig.cs" />
+    <Compile Include="..\Malachi.App.Canary.Host\HostStep.cs" Link="Host\HostStep.cs" />
+    <Compile Include="..\Malachi.App.Canary.Host\HostEvent.cs" Link="Host\HostEvent.cs" />
+    <Compile Include="..\Malachi.App.Canary.Host\HostResults.cs" Link="Host\HostResults.cs" />
+    <Compile Include="..\Malachi.App.Canary.Host\CanaryJson.cs" Link="Host\CanaryJson.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Where the host lands (UseArtifactsOutput: bin\<project>\<config>_<rid>). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MalachiCanaryHost</_Parameter1>
+      <_Parameter2>$(ArtifactsPath)\bin\Malachi.App.Canary.Host\$(Configuration.ToLowerInvariant())_$(MalachiCanaryHostRid)\Malachi.App.Canary.Host.exe</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MalachiRoot</_Parameter1>
+      <_Parameter2>$(MalachiRoot)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

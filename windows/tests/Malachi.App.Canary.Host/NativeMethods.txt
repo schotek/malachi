@@ -1,0 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for the canary host: the window is
+// placed beyond the virtual screen, and new top-level windows of the
+// browser process are counted.
+GetSystemMetrics
+EnumWindows
+GetWindowThreadProcessId
+IsWindowVisible
+GetClassName
+GetWindowText

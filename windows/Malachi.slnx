@@ -35,6 +35,11 @@ test.
     <Project Path="src/Malachi.Platform.Windows/Malachi.Platform.Windows.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Malachi.App.Canary/Malachi.App.Canary.csproj" />
+    <Project Path="tests/Malachi.App.Canary.Host/Malachi.App.Canary.Host.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
     <Project Path="tests/Malachi.Conventions.Tests/Malachi.Conventions.Tests.csproj" />
     <Project Path="tests/Malachi.Core.TestDaemon/Malachi.Core.TestDaemon.csproj" />
     <Project Path="tests/Malachi.Core.Tests/Malachi.Core.Tests.csproj" />
