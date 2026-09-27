@@ -24,7 +24,7 @@ public sealed class FileTypePolicyTests
         "isp", "its", "js", "jse", "ksh", "library-ms", "lnk", "mad", "maf", "mag", "mam", "maq", "mar",
         "mas", "mat", "mau", "mav", "maw", "mcf", "mda", "mdb", "mde", "mdt", "mdw", "mdz", "msc", "msh",
         "msh1", "msh1xml", "msh2", "msh2xml", "mshxml", "msi", "msp", "mst", "msu", "ocx", "ops", "pcd",
-        "pif", "pl", "plg", "prf", "prg", "printerexport", "ps1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2",
+        "pif", "pl", "plg", "ppkg", "prf", "prg", "printerexport", "ps1", "ps1xml", "ps2", "ps2xml", "psc1", "psc2",
         "psd1", "psm1", "pssc", "pst", "reg", "scf", "scr", "sct", "shb", "shs", "theme", "tmp", "udl",
         "url", "vb", "vbe", "vbp", "vbs", "vhd", "vhdx", "vsmacros", "vsw", "webpnp", "website", "ws", "wsc",
         "wsf", "wsh", "xnk",

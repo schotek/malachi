@@ -122,6 +122,7 @@ public sealed class MarkOfTheWebTests
     [InlineData("x.iso", true)]
     [InlineData("x.vhdx", true)]
     [InlineData("x.msi", true)]
+    [InlineData("x.ppkg", true)]
     [InlineData("x.pdf", false)]
     [InlineData("x.txt", false)]
     [InlineData("x.docx", false)]

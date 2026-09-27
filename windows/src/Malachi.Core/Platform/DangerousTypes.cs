@@ -80,23 +80,27 @@ public static class DangerousTypes
     /// <c>.searchconnector-ms</c>, <c>.settingcontent-ms</c>,
     /// <c>.appinstaller</c>, <c>.msix</c>, <c>.xll</c>, <c>.jar</c>,
     /// <c>.py</c>, <c>.sh</c>): remote-session files, app packages and
-    /// their installers, search and settings shortcuts that reach out to
-    /// other hosts, Office add-ins and data links, the script hosts,
-    /// installers, drivers, themes (their pictures can be fetched from a
-    /// share), and invitations that open a connection.
+    /// their installers, provisioning packages, search and settings
+    /// shortcuts that reach out to other hosts, Office add-ins, web queries
+    /// and data connections, the script hosts, installers, drivers,
+    /// certificate stores (they open the import wizard), themes and visual
+    /// styles (their pictures can be fetched from a share), and
+    /// invitations that open a connection.
     /// </summary>
     public static readonly IReadOnlySet<string> WindowsExtensions = Set(
         // Remote sessions, remote assistance, RemoteApp.
         "rdp", "ica", "msrcincident", "wcx",
-        // App packages and what installs them.
+        // App packages, encrypted ones included, and what installs them;
+        // provisioning packages, which install as well.
         "appinstaller", "msix", "msixbundle", "appx", "appxbundle",
+        "emsix", "emsixbundle", "eappx", "eappxbundle", "ppkg",
         "application", "appref-ms", "xbap", "vsto", "vsix",
         "msi", "msp", "mst", "msu", "diagcab", "wsb",
         // Shell shortcuts, searches, libraries and settings.
         "lnk", "pif", "url", "website", "searchconnector-ms", "search-ms",
         "settingcontent-ms", "library-ms", "scf", "glk", "mcl",
-        // Office: web queries, SYLK, add-in libraries.
-        "iqy", "slk", "xll", "wll",
+        // Office: web queries, data connections, SYLK, add-in libraries.
+        "iqy", "dqy", "oqy", "rqy", "odc", "slk", "xll", "wll",
         // The script hosts: PowerShell, Windows Script Host, Python, Java, shells.
         "ps1", "psm1", "psd1", "ps1xml", "psc1", "pssc", "cdxml",
         "vbs", "vbe", "js", "jse", "wsf", "wsh", "wsc", "ws", "sct", "hta",
@@ -106,8 +110,10 @@ public static class DangerousTypes
         "msc", "gadget", "job",
         // Setup information, registry files, compiled help.
         "inf", "reg", "chm", "hlp",
-        // Themes.
-        "theme", "themepack", "deskthemepack");
+        // Certificate stores and lists, beside .cer .crt .der of Outlook's list.
+        "p7b", "p7c", "pfx", "p12", "sst", "spc", "stl",
+        // Themes and visual styles.
+        "theme", "themepack", "deskthemepack", "msstyles");
 
     /// <summary>
     /// Disk images Windows mounts on a double click; mounting one has been
