@@ -183,6 +183,33 @@ func (r *recorder) authCount() int {
 	return len(r.auths)
 }
 
+// promptIdle is a memserver session whose IDLE reports every queued update,
+// as a real server does. The memserver's own IDLE wakes only for changes
+// made while it runs, so a message appended between the syncer's last
+// command and its IDLE would stay unannounced; this one polls the queue,
+// starting at once.
+type promptIdle struct{ imapserver.Session }
+
+func (s promptIdle) Idle(w *imapserver.UpdateWriter, stop <-chan struct{}) error {
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if err := s.Poll(w, true); err != nil {
+			return err
+		}
+		select {
+		case <-stop:
+			return nil
+		case <-tick.C:
+		}
+	}
+}
+
+// Move keeps the memserver's MOVE reachable, as saslSession.Move does.
+func (s promptIdle) Move(w *imapserver.MoveWriter, numSet imap.NumSet, dest string) error {
+	return s.Session.(imapserver.SessionMove).Move(w, numSet, dest)
+}
+
 // harnessOptions tunes one test setup.
 type harnessOptions struct {
 	caps    imap.CapSet   // server capabilities; nil = fullCaps
@@ -240,7 +267,7 @@ func newHarness(t *testing.T, o harnessOptions) *harness {
 	}
 	srv := imapserver.New(&imapserver.Options{
 		NewSession: func(*imapserver.Conn) (imapserver.Session, *imapserver.GreetingData, error) {
-			s := mem.NewSession()
+			s := promptIdle{mem.NewSession()}
 			if o.token != "" {
 				return &saslSession{Session: s, username: "me", password: password, token: o.token}, nil, nil
 			}
