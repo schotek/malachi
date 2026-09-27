@@ -48,4 +48,16 @@ public interface IComposeWindowHandle
     /// true when nothing unsaved is left. True by default (nothing to save).
     /// </summary>
     Task<bool> SaveForQuitAsync() => Task.FromResult(true);
+
+    /// <summary>
+    /// Quit could not save this window's draft
+    /// (<see cref="ComposeController.SaveForQuitAsync"/> returned it): asks
+    /// the window's close question (its draft controller's
+    /// <see cref="ComposeDraftController.CloseRequestAsync"/>) and closes the
+    /// window when the answer lets it. True when the window closed; false
+    /// when the user kept it, which abandons the Quit
+    /// (Malachi.Core.Presentation.QuitSequence). True by default (nothing
+    /// to ask).
+    /// </summary>
+    Task<bool> CloseForQuitAsync() => Task.FromResult(true);
 }
