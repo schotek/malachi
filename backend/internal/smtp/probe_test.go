@@ -42,6 +42,24 @@ type serverOpts struct {
 	rcptErr   error         // returned from every RCPT TO
 	dataErr   error         // returned after the message was read
 	dataDelay time.Duration // wait before answering DATA (cancelled at shutdown)
+	// greetDelay holds every accepted connection that long before the
+	// server greets it.
+	greetDelay time.Duration
+}
+
+// slowListener hands every connection to the server a delay after it was
+// accepted, so the greeting comes at least that long after the dial.
+type slowListener struct {
+	net.Listener
+	delay time.Duration
+}
+
+func (l slowListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err == nil {
+		time.Sleep(l.delay)
+	}
+	return c, err
 }
 
 // testServer is a running server plus what the last session recorded.
@@ -189,6 +207,9 @@ func startServerWith(t *testing.T, opts serverOpts) *testServer {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if opts.greetDelay > 0 {
+		ln = slowListener{ln, opts.greetDelay}
+	}
 	if opts.implicit {
 		srv.TLSConfig = nil
 		ln = tls.NewListener(ln, opts.tls)
@@ -242,13 +263,17 @@ func TestProbeXOAuth2(t *testing.T) {
 }
 
 func TestProbeSuccess(t *testing.T) {
-	port := startServer(t, nil, true, true)
-	res, err := Probe(context.Background(), cfg(port, api.SecurityNone), password)
+	// A loopback probe can take less than one tick of a coarse clock
+	// (Windows: up to 15.6 ms) and measure 0. The greeting delay is far
+	// above that, and the latency has to cover it.
+	const greetDelay = 100 * time.Millisecond
+	ts := startServerWith(t, serverOpts{insecure: true, auth: true, greetDelay: greetDelay})
+	res, err := Probe(context.Background(), cfg(ts.port, api.SecurityNone), password)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Latency <= 0 {
-		t.Fatalf("latency = %v", res.Latency)
+	if res.Latency < greetDelay/2 {
+		t.Fatalf("latency = %v, but the greeting alone took %v", res.Latency, greetDelay)
 	}
 	joined := strings.Join(res.Capabilities, ",")
 	if !strings.Contains(joined, "AUTH PLAIN") || !strings.Contains(joined, "8BITMIME") {
