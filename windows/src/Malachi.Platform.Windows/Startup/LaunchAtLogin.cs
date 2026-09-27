@@ -40,7 +40,12 @@ public sealed class LaunchAtLogin
     /// <summary>Where Windows Settings and Task Manager keep the user's switch, under HKEY_CURRENT_USER.</summary>
     public const string ApprovedKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 
-    /// <summary>The name of the Run value, which Windows Settings shows.</summary>
+    /// <summary>
+    /// The name of the Run value and of the user's switch under
+    /// StartupApproved\Run. Settings → Apps → Startup and Task Manager's
+    /// Startup tab do not show it: they show the executable's
+    /// FileDescription (the app's assembly title).
+    /// </summary>
     public const string ValueName = AppIdentity.DisplayName;
 
     /// <summary>The argument that starts the app hidden, in the background.</summary>
