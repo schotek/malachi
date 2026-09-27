@@ -5,25 +5,33 @@
 // the class measured in APP-SPIKES §4.3 (spikes2/app/rec/TrayIcon.cs) with
 // its two bugs fixed as the report notes (the icon is re-added on every
 // TaskbarCreated; the menu's anchor is read as signed coordinates), one
-// instance per window instead of a static current one, and a 32-bit guard.
-// GTK and macOS have no counterpart: GNOME has no tray and macOS has the
-// Dock; the row "a notification-area icon while running in the background"
-// of windows/README.md.
+// instance per window instead of a static current one, a 32-bit guard, and
+// the icon sized for the taskbar's DPI. GTK and macOS have no counterpart:
+// GNOME has no tray and macOS has the Dock; the row "a notification-area
+// icon while running in the background" of windows/README.md.
 //
 // The host is a hidden top-level WS_EX_TOOLWINDOW window, not a
 // message-only one: only top-level windows receive the TaskbarCreated
 // broadcast that Explorer sends after a restart (measured). The icon is
 // version 4 (NIN_SELECT for a click or Enter, WM_CONTEXTMENU with the
-// anchor in wParam), taken from the executable. The menu is the native
-// TrackPopupMenuEx: a WinUI MenuFlyout opened from the tray lands behind
-// other windows, gets no keyboard and shows nothing while its owner is
-// hidden (measured). New icons land in the Windows 11 overflow.
+// anchor in wParam), taken from the executable with SHDefExtractIcon at the
+// small-icon size of the taskbar's DPI (GetDpiForWindow of Shell_TrayWnd):
+// ExtractIconEx and LoadIconMetric give the size of the process's system
+// DPI, which can differ from the taskbar's once the user changed the scale
+// without signing out, and LoadIconMetric also needs the Common Controls 6
+// manifest this app does not have. The executable's .ico holds the sizes
+// of the usual scales (16 to 40 px), which are then not rescaled; a new
+// taskbar (TaskbarCreated) gets the icon at its DPI again. The menu is the
+// native TrackPopupMenuEx: a WinUI MenuFlyout opened from the tray lands
+// behind other windows, gets no keyboard and shows nothing while its owner
+// is hidden (measured). New icons land in the Windows 11 overflow.
 
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Windows.Win32;
@@ -64,13 +72,18 @@ public sealed unsafe partial class TrayIcon : IDisposable
     // process; the windows find their icon in Icons.
     private static readonly WNDPROC Procedure = WindowProcedure;
     private static readonly ConcurrentDictionary<nint, TrayIcon> Icons = new();
-    private static readonly Lazy<HINSTANCE> WindowClass = new(RegisterWindowClass);
+    // PublicationOnly: a registration that failed is tried again by the next
+    // icon instead of rethrowing a cached exception for the process's life
+    // (the class may be registered twice at once: the second registration
+    // finds it there, ERROR_CLASS_ALREADY_EXISTS).
+    private static readonly Lazy<HINSTANCE> WindowClass = new(RegisterWindowClass, LazyThreadSafetyMode.PublicationOnly);
 
     private readonly HWND window;
-    private readonly HICON icon;
-    private readonly bool ownsIcon;
+    private readonly string? iconFile;
     private readonly string tooltip;
     private readonly ILogger logger;
+    private HICON icon;
+    private bool ownsIcon;
     private bool disposed;
 
     /// <summary>
@@ -104,7 +117,8 @@ public sealed unsafe partial class TrayIcon : IDisposable
             throw new InvalidOperationException($"the tray window was not created ({Marshal.GetLastPInvokeError()})");
         }
         Icons[(nint)window.Value] = this;
-        (icon, ownsIcon) = LoadSmallIcon(iconFile ?? Environment.ProcessPath);
+        this.iconFile = iconFile ?? Environment.ProcessPath;
+        (icon, ownsIcon) = LoadSmallIcon(this.iconFile, SmallIconSize(TaskbarDpi()));
         Add();
     }
 
@@ -248,18 +262,53 @@ public sealed unsafe partial class TrayIcon : IDisposable
         return data;
     }
 
-    // The small icon of file, or the shared application icon (never
-    // destroyed) when the file has none.
-    private static (HICON Icon, bool Owned) LoadSmallIcon(string? file)
+    // After TaskbarCreated: the icon at the new taskbar's DPI, then back
+    // into the notification area; the old icon is freed once the shell has
+    // the new one.
+    private void Refresh()
     {
-        if (!string.IsNullOrEmpty(file))
+        var (old, ownedOld) = (icon, ownsIcon);
+        (icon, ownsIcon) = LoadSmallIcon(iconFile, SmallIconSize(TaskbarDpi()));
+        Add();
+        if (ownedOld && old != icon)
         {
-            HICON small = default;
+            PInvoke.DestroyIcon(old);
+        }
+    }
+
+    /// <summary>The DPI of the taskbar's monitor, else the system DPI.</summary>
+    internal static uint TaskbarDpi()
+    {
+        var taskbar = PInvoke.FindWindow("Shell_TrayWnd", null);
+        var dpi = taskbar.IsNull ? 0 : PInvoke.GetDpiForWindow(taskbar);
+        return dpi != 0 ? dpi : PInvoke.GetDpiForSystem();
+    }
+
+    /// <summary>The small-icon size (SM_CXSMICON) at <paramref name="dpi"/>, in pixels.</summary>
+    internal static int SmallIconSize(uint dpi)
+    {
+        var size = PInvoke.GetSystemMetricsForDpi(SYSTEM_METRICS_INDEX.SM_CXSMICON, dpi);
+        return size > 0 ? size : (int)(16 * Math.Max(dpi, 96u) / 96);
+    }
+
+    /// <summary>
+    /// The first icon of <paramref name="file"/> at <paramref name="size"/>
+    /// pixels, to be destroyed; else the shared application icon (never
+    /// destroyed) when the file has none or cannot be read.
+    /// </summary>
+    internal static (HICON Icon, bool Owned) LoadSmallIcon(string? file, int size)
+    {
+        if (!string.IsNullOrEmpty(file) && size > 0)
+        {
+            HICON loaded = default;
             fixed (char* path = file)
             {
-                if (PInvoke.ExtractIconEx(path, 0, null, &small, 1) > 0 && !small.IsNull)
+                // S_OK only: S_FALSE is a file without icons. The large icon
+                // is the one asked for, at LOWORD(size); no small one.
+                var both = (uint)(size & 0xFFFF) | ((uint)(size & 0xFFFF) << 16);
+                if (PInvoke.SHDefExtractIcon(path, 0, 0, &loaded, null, both).Value == 0 && !loaded.IsNull)
                 {
-                    return (small, true);
+                    return (loaded, true);
                 }
             }
         }
@@ -319,8 +368,9 @@ public sealed unsafe partial class TrayIcon : IDisposable
             if (message == TaskbarCreatedMessage)
             {
                 // Always: after an Explorer restart the icon is gone even
-                // if nothing here noticed.
-                tray.Add();
+                // if nothing here noticed; the new taskbar may have another
+                // DPI.
+                tray.Refresh();
                 return (LRESULT)0;
             }
         }

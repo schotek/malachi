@@ -7,7 +7,9 @@
 // removed as an Explorer restart removes it and re-added by TaskbarCreated,
 // then disposed; its callback turned into Activated and MenuRequested with
 // signed coordinates; a handler that throws kept out of the window
-// procedure. The window procedure is driven with SendMessage from the same
+// procedure; the icon's image at the small-icon size of the taskbar's DPI,
+// read from a file's icons or the system's application icon when it has
+// none. The window procedure is driven with SendMessage from the same
 // thread, so no message loop is needed. The native menu is modal and is
 // checked by hand (docs/windows-port.md §10). Where no taskbar runs (a
 // service session) the icon tests are skipped. Explorer remembers the icon
@@ -16,9 +18,12 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Malachi.Platform.Windows.Tray;
 using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.WindowsAndMessaging;
 using Xunit;
 using static Malachi.Platform.Windows.Tray.NotifyIconInterop;
 
@@ -27,17 +32,32 @@ namespace Malachi.Platform.Windows.Tests.Tray;
 public sealed unsafe class TrayIconTests
 {
     [Fact]
-    public void TheInteropHasTheSdksSizesFor64BitProcesses()
+    public void TheInteropHasTheSdksLayoutFor64BitProcesses()
     {
+        // The sizes and offsets shellapi.h gives a 64-bit process.
         Assert.True(Environment.Is64BitProcess);
         Assert.Equal(976, sizeof(NOTIFYICONDATAW));
         Assert.Equal(40, sizeof(NOTIFYICONIDENTIFIER));
         Assert.Equal(16, sizeof(IconRect));
         var d = default(NOTIFYICONDATAW);
-        Assert.Equal(304, (int)((byte*)&d.uVersion - (byte*)&d) - 512);
-        Assert.Equal(816, (int)((byte*)&d.uVersion - (byte*)&d));
-        Assert.Equal(952, (int)((byte*)&d.guidItem - (byte*)&d));
-        Assert.Equal(968, (int)((byte*)&d.hBalloonIcon - (byte*)&d));
+        var start = (byte*)&d;
+        Assert.Equal(8, (int)((byte*)&d.hWnd - start));
+        Assert.Equal(16, (int)((byte*)&d.uID - start));
+        Assert.Equal(24, (int)((byte*)&d.uCallbackMessage - start));
+        Assert.Equal(32, (int)((byte*)&d.hIcon - start));
+        Assert.Equal(40, (int)((byte*)d.szTip - start));
+        Assert.Equal(296, (int)((byte*)&d.dwState - start));
+        Assert.Equal(304, (int)((byte*)d.szInfo - start));
+        Assert.Equal(816, (int)((byte*)&d.uVersion - start));
+        Assert.Equal(820, (int)((byte*)d.szInfoTitle - start));
+        Assert.Equal(948, (int)((byte*)&d.dwInfoFlags - start));
+        Assert.Equal(952, (int)((byte*)&d.guidItem - start));
+        Assert.Equal(968, (int)((byte*)&d.hBalloonIcon - start));
+        var id = default(NOTIFYICONIDENTIFIER);
+        var idStart = (byte*)&id;
+        Assert.Equal(8, (int)((byte*)&id.hWnd - idStart));
+        Assert.Equal(16, (int)((byte*)&id.uID - idStart));
+        Assert.Equal(20, (int)((byte*)&id.guidItem - idStart));
     }
 
     [Fact]
@@ -134,6 +154,74 @@ public sealed unsafe class TrayIconTests
         var icon = new TrayIcon("Malachi Mail tests", "C:\\no\\such\\file.exe");
         icon.Dispose();
         Assert.Throws<ObjectDisposedException>(() => icon.ShowMenu(0, 0, TrayMenu.Items()));
+    }
+
+    [Theory]
+    [InlineData(96u, 16)]
+    [InlineData(120u, 20)]
+    [InlineData(144u, 24)]
+    [InlineData(192u, 32)]
+    public void TheSmallIconSizeFollowsTheDpi(uint dpi, int size)
+    {
+        Assert.Equal(size, TrayIcon.SmallIconSize(dpi));
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(20)]
+    [InlineData(24)]
+    [InlineData(32)]
+    public void TheIconIsReadAtTheSizeAskedFor(int size)
+    {
+        var (icon, owned) = TrayIcon.LoadSmallIcon(Path.Combine(Environment.SystemDirectory, "shell32.dll"), size);
+        try
+        {
+            Assert.True(owned);
+            Assert.Equal(size, IconWidth(icon));
+        }
+        finally
+        {
+            if (owned)
+            {
+                PInvoke.DestroyIcon(icon);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(@"C:\no\such\file.exe")]
+    [InlineData(null)]
+    public void WithoutAnIconTheSystemsApplicationIconIsSharedNotOwned(string? file)
+    {
+        var (icon, owned) = TrayIcon.LoadSmallIcon(file, 16);
+        Assert.False(owned);
+        Assert.False(icon.IsNull);
+        Assert.Equal(PInvoke.LoadIcon(HINSTANCE.Null, PInvoke.IDI_APPLICATION), icon);
+    }
+
+    [Fact]
+    public void TheTaskbarsDpiIsRead()
+    {
+        SkipWithoutTaskbar();
+        Assert.InRange(TrayIcon.TaskbarDpi(), 96u, 96u * 5);
+    }
+
+    private static int IconWidth(HICON icon)
+    {
+        ICONINFO info;
+        Assert.True(PInvoke.GetIconInfo(icon, &info));
+        try
+        {
+            var bitmap = info.hbmColor.IsNull ? info.hbmMask : info.hbmColor;
+            BITMAP bm;
+            Assert.NotEqual(0, PInvoke.GetObject(bitmap, sizeof(BITMAP), &bm));
+            return bm.bmWidth;
+        }
+        finally
+        {
+            PInvoke.DeleteObject(info.hbmColor);
+            PInvoke.DeleteObject(info.hbmMask);
+        }
     }
 
     private static void SkipWithoutTaskbar() =>

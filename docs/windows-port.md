@@ -1043,7 +1043,11 @@ Mail and Quit (`Malachi.Platform.Windows` `Tray/`, the app's
 `Platform/BackgroundTray`): `Shell_NotifyIcon` on a hidden top-level
 `WS_EX_TOOLWINDOW` window (a message-only window misses the
 `TaskbarCreated` broadcast), `NOTIFYICON_VERSION_4`, the icon taken from the
-exe, re-added unconditionally on `TaskbarCreated`, and a native
+exe with `SHDefExtractIcon` at the small-icon size of the taskbar's DPI
+(`ExtractIconEx` and `LoadIconMetric` use the process's system DPI, which
+can differ from the taskbar's once the user changed the scale without
+signing out, and `LoadIconMetric` needs the Common Controls 6 manifest), re-added unconditionally, at the
+new taskbar's DPI, on `TaskbarCreated`, and a native
 `TrackPopupMenuEx` menu (a WinUI `MenuFlyout` opened from the tray lands
 behind other windows, gets no keyboard and shows nothing while the owner is
 hidden; measured). CsWin32 refuses `Shell_NotifyIcon` and its structures in

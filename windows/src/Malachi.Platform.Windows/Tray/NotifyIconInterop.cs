@@ -5,8 +5,9 @@
 // their structures, declared by hand because CsWin32 refuses them in an Any
 // CPU library (PInvoke005: shellapi.h packs NOTIFYICONDATAW differently on
 // 32-bit x86). The layouts below are those of the Windows SDK for 64-bit
-// processes, the only ones the app ships (x64, ARM64); NotifyIconInteropTests
-// checks their sizes, and TrayIcon refuses to run in a 32-bit process.
+// processes, the only ones the app ships (x64, ARM64);
+// TrayIconTests.TheInteropHasTheSdksLayoutFor64BitProcesses checks their
+// sizes and field offsets, and TrayIcon refuses to run in a 32-bit process.
 
 using System.Runtime.InteropServices;
 using Windows.Win32.Foundation;

@@ -33,7 +33,10 @@ CreateWindowEx
 DefWindowProc
 DestroyWindow
 GetModuleHandle
-ExtractIconEx
+SHDefExtractIcon
+GetDpiForWindow
+GetDpiForSystem
+GetSystemMetricsForDpi
 LoadIcon
 IDI_APPLICATION
 DestroyIcon
@@ -48,9 +51,14 @@ SetForegroundWindow
 WM_APP
 WM_NULL
 WM_CONTEXTMENU
-// The tray tests: whether a taskbar runs, whether a window is gone.
+// The tray tests: whether a taskbar runs, whether a window is gone, the
+// size of an icon (FindWindow also finds the taskbar for its DPI).
 FindWindow
 IsWindow
+GetIconInfo
+GetObject
+DeleteObject
+BITMAP
 // Notifications and sound (Notifications/, Sound/): quiet hours, the
 // new-mail sound.
 SHQueryUserNotificationState
