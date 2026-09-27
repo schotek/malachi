@@ -3,7 +3,9 @@
 
 // A stand-in for the UI thread's DispatcherQueueSynchronizationContext
 // (docs/windows-port.md §7.1): one thread that runs what is posted to it in
-// order, for the tests of changes that arrive from another thread.
+// order. The controller tests create their controllers on it (Swift's
+// @MainActor test suites), and IdleAsync (Quiescence) waits until its
+// queue is empty.
 
 using System;
 using System.Collections.Concurrent;
@@ -11,13 +13,15 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Malachi.Core.Tests.Settings;
+namespace Malachi.Core.Tests.Fixtures;
 
+/// <summary>A single-thread <see cref="SynchronizationContext"/>, the tests' UI thread.</summary>
 internal sealed class TestUIContext : SynchronizationContext, IDisposable
 {
     private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> queue = [];
     private readonly Thread thread;
     private readonly List<Exception> failures = [];
+    private int queued; // posted and not finished running
     private bool closed;
 
     public TestUIContext()
@@ -28,6 +32,9 @@ internal sealed class TestUIContext : SynchronizationContext, IDisposable
 
     /// <summary>The managed id of the context's thread.</summary>
     public int ThreadId => thread.ManagedThreadId;
+
+    /// <summary>Whether nothing is queued or running.</summary>
+    public bool IsIdle => Volatile.Read(ref queued) == 0;
 
     /// <summary>Exceptions thrown by posted callbacks.</summary>
     public IReadOnlyList<Exception> Failures
@@ -49,6 +56,7 @@ internal sealed class TestUIContext : SynchronizationContext, IDisposable
         {
             if (!closed)
             {
+                Interlocked.Increment(ref queued);
                 queue.Add((d, state));
             }
         }
@@ -75,6 +83,22 @@ internal sealed class TestUIContext : SynchronizationContext, IDisposable
         }, null);
         return done.Task;
     }
+
+    /// <summary>Runs <paramref name="action"/> on the context's thread and waits for it.</summary>
+    public Task RunAsync(Action action) => RunAsync(() =>
+    {
+        action();
+        return true;
+    });
+
+    /// <summary>
+    /// Starts <paramref name="action"/> on the context's thread, so that its
+    /// continuations come back to it, and completes with its task.
+    /// </summary>
+    public Task<T> InvokeAsync<T>(Func<Task<T>> action) => RunAsync(action).Unwrap();
+
+    /// <inheritdoc cref="InvokeAsync{T}(Func{Task{T}})"/>
+    public Task InvokeAsync(Func<Task> action) => RunAsync(action).Unwrap();
 
     /// <summary>Completes once everything posted before it has run.</summary>
     public Task DrainAsync() => RunAsync(() => true);
@@ -109,6 +133,10 @@ internal sealed class TestUIContext : SynchronizationContext, IDisposable
                 {
                     failures.Add(e);
                 }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref queued);
             }
         }
     }

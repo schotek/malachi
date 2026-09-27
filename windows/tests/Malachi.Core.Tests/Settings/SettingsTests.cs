@@ -16,6 +16,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Settings;
+using Malachi.Core.Tests.Fixtures;
 using Xunit;
 
 namespace Malachi.Core.Tests.Settings;
