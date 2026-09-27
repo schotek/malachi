@@ -254,6 +254,36 @@ internal static class ConsoleRoles
             Arguments = ["--socket", socket, "--config", Path.Combine(directory, "config.toml"), "--store", Path.Combine(directory, "store.db")],
             Environment = environment,
         });
+        try
+        {
+            Scenario(daemon, attachment, controls, socket, report, parent, result);
+        }
+        finally
+        {
+            // Whatever failed, the daemon does not outlive the app: once the
+            // app has gone, nothing ties it to the test any more.
+            if (!daemon.Exited.IsCompleted)
+            {
+                daemon.Kill();
+                daemon.Exited.Wait(TimeSpan.FromSeconds(15));
+            }
+            daemon.Dispose();
+        }
+        attachment.ShutdownCompleted();
+        Write(report, result);
+        return 0;
+    }
+
+    // What the app does with its daemon; the report goes into result.
+    private static void Scenario(
+        DaemonProcess daemon,
+        ConsoleAttachment attachment,
+        ConcurrentQueue<ConsoleControl> controls,
+        string socket,
+        string report,
+        uint parent,
+        Dictionary<string, object?> result)
+    {
         result["daemonPid"] = daemon.Id;
         result["answered"] = WaitForSocket(socket, daemon, TimeSpan.FromSeconds(20));
         result["sharesConsole"] = ConsoleAttachment.ConsoleProcesses().Contains((uint)daemon.Id);
@@ -291,10 +321,6 @@ internal static class ConsoleRoles
         result["onTerminalConsole"] = ConsoleAttachment.ConsoleProcesses().Contains(parent);
         attachment.Terminal?.WriteLine("app: still writing after the stop");
         result["terminalAfter"] = attachment.Terminal is null ? "none" : attachment.Terminal.IsConsole ? "console" : "pipe";
-        daemon.Dispose();
-        attachment.ShutdownCompleted();
-        Write(report, result);
-        return 0;
     }
 
     private static bool WaitForSocket(string socket, DaemonProcess daemon, TimeSpan limit)
