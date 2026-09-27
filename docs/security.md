@@ -460,15 +460,19 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   model equals the Secret Service's: a process running as the same user
   could already read `store.db` and the RPC key, so being able to run
   the helper gives it nothing new. On the daemon's side the helper path
-  must be absolute and name an executable regular file, one call is
-  bounded by 30 s (a Keychain prompt waits for the user), stdout and
-  stderr are capped, exit 2 is "no such item" and exit 3 a request the
-  helper refused. `malachi-keychain` itself accepts only account ids and
-  keys matching `[A-Za-z0-9._-]{1,128}` before anything reaches a
-  Keychain attribute, refuses more than 1 MiB on stdin, files the items as
-  `<accountId>/<key>` with a label naming the same, and prints the value
-  only as the answer to `get`. The app sets the two variables only when
-  `MALACHI_KEYRING` is not already in its environment.
+  must be absolute and name a regular file that is a program by the
+  platform's rule, which `exec.LookPath` applies: execute permission for
+  the daemon's user on Linux and macOS, a name with an extension on
+  Windows. The check catches a wrong path at start; it is no trust
+  boundary, since whoever sets the daemon's environment runs as the same
+  user anyway. One call is bounded by 30 s (a Keychain prompt waits for
+  the user), stdout and stderr are capped, exit 2 is "no such item" and
+  exit 3 a request the helper refused. `malachi-keychain` itself accepts
+  only account ids and keys matching `[A-Za-z0-9._-]{1,128}` before
+  anything reaches a Keychain attribute, refuses more than 1 MiB on stdin,
+  files the items as `<accountId>/<key>` with a label naming the same, and
+  prints the value only as the answer to `get`. The app sets the two
+  variables only when `MALACHI_KEYRING` is not already in its environment.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 

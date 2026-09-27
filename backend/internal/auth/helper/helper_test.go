@@ -11,9 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -27,8 +25,13 @@ import (
 // t.Setenv in the test selects the behaviour of the process it spawns.
 const (
 	fakeEnv   = "MALACHI_TEST_FAKE_HELPER"
-	fakeStore = "MALACHI_TEST_FAKE_STORE" // directory: store.json and pid
+	fakeStore = "MALACHI_TEST_FAKE_STORE" // directory: store.json and beat
 	fakeMode  = "MALACHI_TEST_FAKE_MODE"
+
+	// fakeBeat is how often the sleeping fake appends to its heartbeat
+	// file, a liveness probe that also works where kill(pid, 0) does not
+	// exist (Windows).
+	fakeBeat = 20 * time.Millisecond
 )
 
 func TestMain(m *testing.M) {
@@ -41,8 +44,9 @@ func TestMain(m *testing.M) {
 // fakeHelper speaks the protocol strictly: argv[1] is the operation, stdin
 // exactly one JSON line. Modes: "" (a working store in a JSON file),
 // "exit1-with-value-in-stderr" (fails and echoes the value),
-// "sleep" (records its pid, never answers), "garbage-stdout" (exit 0 with
-// a non-JSON answer), "exit3" (rejects the request).
+// "sleep" (never answers, appends a byte to beat every fakeBeat while it
+// lives), "garbage-stdout" (exit 0 with a non-JSON answer), "exit3"
+// (rejects the request).
 func fakeHelper() int {
 	dir := os.Getenv(fakeStore)
 	if len(os.Args) != 2 {
@@ -65,8 +69,13 @@ func fakeHelper() int {
 		fmt.Fprintf(os.Stderr, "fake: cannot store %q for %s\n\tsecond line\x00\x1b[0m\n", req.Value, req.Account)
 		return 1
 	case "sleep":
-		_ = os.WriteFile(filepath.Join(dir, "pid"), []byte(strconv.Itoa(os.Getpid())), 0o600)
-		time.Sleep(10 * time.Second)
+		beat := filepath.Join(dir, "beat")
+		for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(fakeBeat) {
+			if f, err := os.OpenFile(beat, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o600); err == nil {
+				_, _ = f.Write([]byte{'.'})
+				_ = f.Close()
+			}
+		}
 		return 0
 	case "garbage-stdout":
 		fmt.Println("not json at all")
@@ -207,17 +216,32 @@ func TestTimeoutKillsTheHelper(t *testing.T) {
 	if time.Since(start) > 5*time.Second {
 		t.Fatalf("Get blocked %s past the timeout", time.Since(start))
 	}
-	raw, err := os.ReadFile(filepath.Join(dir, "pid"))
-	if err != nil {
-		t.Fatalf("the fake did not record its pid: %v", err)
+	// Get returns only after the killed helper was waited for, so its
+	// heartbeat has stopped for good: it must have beaten while it lived
+	// and must not beat again.
+	beat := filepath.Join(dir, "beat")
+	last := beats(t, beat)
+	if last == 0 {
+		t.Fatal("the fake never beat, so there is nothing to see stop")
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	quiet := 15 * fakeBeat
+	time.Sleep(quiet)
+	if now := beats(t, beat); now != last {
+		t.Fatalf("helper still alive after the timeout: %d beats, %d after another %s", last, now, quiet)
+	}
+}
+
+// beats counts the fake's heartbeats so far: the size of its beat file.
+func beats(t *testing.T, path string) int64 {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("helper %d still exists after the timeout (kill 0: %v)", pid, err)
-	}
+	return fi.Size()
 }
 
 func TestCancelPassesThrough(t *testing.T) {
@@ -255,36 +279,63 @@ func TestBadRequestIsKeyringError(t *testing.T) {
 
 func TestNewRejectsBadPaths(t *testing.T) {
 	dir := t.TempDir()
-	plain := filepath.Join(dir, "plain")
-	if err := os.WriteFile(plain, []byte("#!/bin/sh\n"), 0o644); err != nil {
-		t.Fatal(err)
+	write := func(name string, mode os.FileMode) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		return path
 	}
-	cases := map[string]string{
-		"empty":          "",
-		"relative":       "malachi-keychain",
-		"missing":        filepath.Join(dir, "nonexistent"),
-		"not executable": plain,
-		"directory":      dir,
+	// Not a program anywhere: no execute bit for Unix; for Windows no
+	// extension, and no plain.exe or the like beside it for PATHEXT to find.
+	plain := write("plain", 0o644)
+	// For the name tool Windows would start tool.exe, so the file checked
+	// would not be the one that runs; on Unix tool has no execute bit.
+	tool := write("tool", 0o644)
+	write("tool.exe", 0o755)
+
+	cases := map[string]struct {
+		path string
+		want string // in the error: the check that refused the path
+	}{
+		"empty":                 {"", "is not set"},
+		"relative":              {"malachi-keychain", "must be an absolute path"},
+		"directory":             {dir, "is not a regular file"},
+		"not executable":        {plain, "is not executable"},
+		"resolves to a sibling": {tool, "is not executable"},
 	}
-	for name, path := range cases {
+	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			k, err := New(path, nil)
+			k, err := New(c.path, nil)
 			if err == nil || k != nil {
-				t.Fatalf("New(%q) = %v, %v; want an error", path, k, err)
+				t.Fatalf("New(%q) = %v, %v; want an error", c.path, k, err)
 			}
 			if !strings.Contains(err.Error(), PathEnv) {
 				t.Fatalf("error does not name %s: %v", PathEnv, err)
 			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("New(%q) = %v; want it refused with %q", c.path, err, c.want)
+			}
 		})
 	}
+	t.Run("missing", func(t *testing.T) {
+		missing := filepath.Join(dir, "nonexistent")
+		k, err := New(missing, nil)
+		if k != nil || !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), PathEnv) {
+			t.Fatalf("New(%q) = %v, %v; want the not-found error under %s", missing, k, err, PathEnv)
+		}
+	})
 	t.Run("symlink to an executable", func(t *testing.T) {
 		exe, err := os.Executable()
 		if err != nil {
 			t.Fatal(err)
 		}
-		link := filepath.Join(dir, "link")
+		// The target's extension, which is what makes a program on Windows.
+		link := filepath.Join(dir, "link"+filepath.Ext(exe))
 		if err := os.Symlink(exe, link); err != nil {
-			t.Fatal(err)
+			// Windows grants it only with a privilege or in developer mode.
+			t.Skipf("cannot create a symlink here: %v", err)
 		}
 		if _, err := New(link, nil); err != nil {
 			t.Fatalf("New(symlink) = %v", err)
