@@ -22,4 +22,8 @@ any OS.
     <!-- Where the checked tree is; the test binary lives under build\. -->
     <AssemblyMetadata Include="MalachiRoot" Value="$(MalachiRoot)" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The settings facade the gschema coverage test compares with. -->
+    <ProjectReference Include="..\..\src\Malachi.Core\Malachi.Core.csproj" />
+  </ItemGroup>
 </Project>
