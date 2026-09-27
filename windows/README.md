@@ -9,13 +9,16 @@ daemon runs on Windows unchanged and does all the mail work. How the client
 is designed, built and kept in step with the GTK UI, and the decisions
 behind it, are in [docs/windows-port.md](../docs/windows-port.md).
 
-**Status: in progress, scaffold (phase B of docs/windows-port.md §15).** The
+**Status: in progress, phase C of docs/windows-port.md §15.** The
 solution, its projects and packages, the build and test entry points
 (`make windows`, `run-windows`, `test-windows`, `windows/build.ps1`), the
-application icon and an empty main window with its title bar exist. Nothing
-talks to the daemon yet: the API layer, the transport, the supervisor, the
-keyring helper and the ported logic follow in phases C and D, the user
-interface in phase E. Everything below that describes the running app
+application icon and an empty main window with its title bar exist; so do
+the typed API layer, localisation from `po/`, the settings (registry), the
+attachment-safety services (Mark of the Web, the never-open list,
+Windows-safe names, the open directory) and the keyring helper
+`malachi-credentials.exe`. The app does not talk to the daemon yet: the
+transport, the supervisor and the ported logic follow in phases C and D,
+the user interface in phase E. Everything below that describes the running app
 (where things are, the differences from GTK) is the design the phases
 implement.
 
@@ -145,8 +148,8 @@ windows/
     Malachi.FakeBridge/           a scripted malachi-mcp for the MCP registration tests
     Malachi.Platform.Windows.Tests/
     Malachi.Credentials.Tests/
-    Malachi.Conventions.Tests/    repository checks: SPDX headers (later strings, msgids,
-                                  gschema keys)
+    Malachi.Conventions.Tests/    repository checks: SPDX headers, the gschema keys against
+                                  the settings (later strings and msgids)
 ```
 
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
@@ -190,7 +193,7 @@ phases that implement them.
 | The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (`reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
 | Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
-| Files opened or saved from a message get the Mark of the Web through `IAttachmentExecute` (which also runs the antivirus check and the attachment policy); a file whose zone cannot be read back is not opened | No mark | The counterpart of the macOS quarantine attribute: SmartScreen and Office's Protected View treat the files as downloads |
+| Files opened or saved from a message get the Mark of the Web through `IAttachmentExecute` (which also runs the antivirus check and the attachment policy): the Restricted zone, or the Internet zone for a program saved with Save As (Restricted would make Attachment Services delete it). A file for opening is opened only after a check that passed and a zone that reads back, unless an administrator turned zone information off (`SaveZoneInformation=1`) or Attachment Services is missing; a saved file stays the user's | No mark | The counterpart of the macOS quarantine attribute: SmartScreen and Office's Protected View treat the files as downloads |
 | A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk); other types offer Open and Save As…; programs are never opened | GNOME Sushi, the default application without it | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files |
 | While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
 | Context menus on messages and folders, with the actions that exist elsewhere | None | Windows convention |
