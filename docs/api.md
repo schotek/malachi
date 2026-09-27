@@ -36,12 +36,16 @@ private tmpfs per instance, and that directory is the one part every
 instance (and the host) sees, so a UI started later still finds a daemon an
 earlier instance left running.
 
-Startup: the daemon replaces a stale socket file left by a crash after
-checking that nothing answers on it. If another daemon is alive, or a
-connection attempt to the socket times out (0.5 s), it exits with an error
-rather than stealing the socket (a flood of connections that makes that
-check fail can defeat it, `docs/security.md` §8); anything at the path
-that is not a socket is never removed. The daemon writes the key file
+Startup: before it touches its store or the socket, the daemon takes an
+exclusive lock on the store (`<store>.lock` beside it, which the system
+releases with the process, however it ends); a second daemon for the same
+store exits with an error. The daemon replaces a stale socket file left by
+a crash after checking that nothing answers on it. If another daemon is
+alive, or a connection attempt to the socket times out (0.5 s), it exits
+with an error rather than stealing the socket (a flood of connections
+that makes that check fail can defeat it for a daemon of another store,
+`docs/security.md` §8); anything at the path that is not a socket is never
+removed. The daemon writes the key file
 after binding the socket and before it accepts any connection, and
 clients read the key only after the `system.hello` answer (§1.4), so "the
 socket answers" stays a valid test that the daemon is ready. Nothing on

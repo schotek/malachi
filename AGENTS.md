@@ -296,6 +296,10 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
   Ruční komunikace se socketem (`socat`, skript) vyžaduje handshake
   z `docs/api.md` §1.4, jinak přijde 1005 `unauthenticated` a zavřené spojení;
   pouhé připojení a zavření je v pořádku.
+- Démon drží výhradní zámek storu `<store>.lock` (`store.Lock`: EXCLUSIVE
+  transakce SQLite, kterou systém uvolní s procesem i po pádu); druhý démon
+  nad stejným storem skončí chybou „another malachid is using the store“ ještě
+  dřív, než sáhne na socket (třeba `make run-backend` vedle démona z UI).
 - Démona nespouští nic na desktopu: UI si ho spustí samo (`ui/internal/daemon`,
   hledá `malachid` vedle vlastní binárky, `MALACHI_DAEMON=none` vypne) a při
   ukončení aplikace ho zastaví. Běžícího démona (`make run-backend`) použije

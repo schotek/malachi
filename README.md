@@ -318,6 +318,7 @@ committed template matches the sources.
 |---|---|
 | Configuration | `~/.config/malachi/config.toml` |
 | Mail store | `~/.local/share/malachi/store.db` |
+| Store lock | `store.db.lock` beside the store: held by the running daemon (the system releases it with the process, even after a crash), so a second daemon for the same store exits; the file stays |
 | RPC socket | `$XDG_RUNTIME_DIR/malachi/rpc.sock`, or `~/.cache/malachi/run/rpc.sock` when the variable is unset (containers, ssh); inside Flatpak `$XDG_RUNTIME_DIR/app/io.github.schotek.Malachi/malachi/rpc.sock`. `MALACHI_SOCKET` moves it for `make run-dev` and the UI; the daemon takes `--socket` |
 | RPC key | beside the socket, its path plus `.key` (`rpc.sock.key`): the daemon's connection key for the current run, `0600`, replaced at every start and removed on a clean exit (after a crash it stays until the next start replaces it); every client reads it when it connects |
 | MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |

@@ -35,7 +35,7 @@ does about the local attackers:
 | Reaches the socket but not the key file beside it: a `socat` or `ssh -R` forward, a container or a Flatpak app given the socket file alone (a bind mount or `--filesystem` grant of its directory exposes the key file as well); on Windows, where Go can neither set nor check a socket's permissions, a peer that reaches it that way | Keeps it out: without the key it cannot authenticate, and anything else closes the connection (a request gets error 1005 first); no backend code runs for it and no notification reaches it |
 | Sits on the socket's path without the key | Gets no request: a client sends nothing after `system.hello` until the daemon has proved the key, so an `account.add` password never reaches it |
 | Holds the key of an earlier run, or a recorded handshake | Gains nothing: every start makes a new key, every connection new nonces |
-| Opens many connections | Bounded: before authentication 4 KiB and 10 s per connection and at most 32 at a time, which cannot stall authenticated clients; while it holds all 32, or floods the socket so that the system refuses connections, new clients cannot get in, and on Windows and macOS a daemon starting meanwhile can take the socket over from the live one (§8) |
+| Opens many connections | Bounded: before authentication 4 KiB and 10 s per connection and at most 32 at a time, which cannot stall authenticated clients; while it holds all 32, or floods the socket so that the system refuses connections, new clients cannot get in, and on Windows and macOS a daemon of another store starting meanwhile can take the socket over from the live one; one for the same store is stopped by the store lock (§8) |
 | Relays between a client and the daemon, which takes write access to the socket's directory | Not detected: the proofs are not bound to the connection, and the traffic after them is neither encrypted nor protected against change |
 | Can read the key file: runs as the user (a container or Flatpak app given the socket's directory included), or as administrator, root or SYSTEM | Nothing: it reads the key as it reads `store.db` and can use the whole API |
 
@@ -564,6 +564,14 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
 
 ## 8. Local storage
 
+- One daemon per store: before it touches the store or the socket, the
+  daemon takes an exclusive lock on the store, an EXCLUSIVE SQLite
+  transaction it never commits on `store.db.lock` beside it (`0600`), which
+  the system drops with the process however it ends. A second daemon for
+  the same store exits with an error, so two never sync, send from or
+  write one store; without the lock, a second daemon whose socket check a
+  flood of connections had fooled would reset the outbox of a live one and
+  could send a message twice.
 - `store.db` is `0600` in a `0700` directory. Mail is stored unencrypted at
   rest; full-disk encryption is the user's responsibility and is stated in
   the README.
@@ -605,10 +613,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   everything after them. It guarantees no availability: whoever can
   connect can occupy the 32 handshake slots, and on Windows and macOS a
   flood of connections can make a starting daemon's check of the socket
-  fail outright, so that it takes the socket over from a live daemon,
-  which keeps running on the same store: two daemons then sync it, and
-  the second one's outbox reset can send a message the first was sending
-  again (there is no single-instance lock on the store yet). Every
+  fail outright, so that a daemon of another store (a second `--store` on
+  the same socket path) takes the socket over from the live one; two
+  daemons never share a store (the store lock above). Every
   authenticated client has the same rights; nothing is authorised per
   client. A socket moved into a directory other users can read or write
   (`--socket` or `MALACHI_SOCKET` pointing into `/tmp`, or on Windows
