@@ -5,9 +5,10 @@
 // (safeFileNameTest, uniqueNameTest, fileNameTest), which carry
 // backend/internal/safename's TestFilename and TestFilenameTruncates; GTK:
 // ui/internal/window/attachments_test.go (TestUniqueName, TestFileName).
-// The Windows cases (reserved characters, streams, trailing dots, device
-// names, lengths) are new; Malachi.Platform.Windows.Tests writes them to
-// disk.
+// The Windows cases (reserved characters and their look-alikes, streams,
+// trailing dots, device names, lengths) are new; Malachi.Platform.Windows.
+// Tests writes them to disk and scans the code pages. One part of the
+// split of AttachmentsTests.swift (see DangerousTypesTests).
 
 using System;
 using System.Collections.Generic;

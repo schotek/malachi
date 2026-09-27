@@ -673,12 +673,17 @@ Links are parsed by the port of `compose.ParseMailto`.
 
 **Attachments.** Opened files go to the open directory (a fresh random
 subdirectory per file, `FileMode.CreateNew`) under a Windows-safe name
-(reserved characters, device names including `COM¹`-style superscripts,
-trailing dots and spaces, `:` streams, path length). Every file written out
+(reserved characters and their best-fit look-alikes: those of code page
+1252 and every look-alike of `"` always, those of this machine's ANSI code
+page as well, so no `"` comes back to split an ANSI program's command
+line; device names including `COM¹`-style superscripts, trailing dots and
+spaces, `:` streams, path length, a cut to length never leaving an
+extension the name did not have). Every file written out
 of a message, opened or saved, gets the Mark of the Web through
 `IAttachmentExecute` (`SetClientGuid`, `SetLocalPath`, `SetFileName`,
 `Save()` on an STA thread; also the AV scan and policy), the counterpart of
-the macOS quarantine attribute; if the zone cannot be read back, the file is
+the macOS quarantine attribute; the file is judged by its own name, the
+path's last component. If the zone cannot be read back, the file is
 not opened (a saved file stays the user's), unless an administrator turned
 zone information off (`SaveZoneInformation=1`), whose choice that is. The
 zone is Microsoft's e-mail client guidance: no `SetSource`, so Restricted
@@ -686,17 +691,26 @@ sites (`ZoneId=4`, measured). That zone's policy blocks what
 `AssocIsDangerous` names, and `Save()` then deletes the file (measured), so
 a saved file of such a type gets `SetSource("about:internet")` instead
 (`ZoneId=3`, Chromium's choice): it stays, scanned, and running it goes
-through SmartScreen and the security prompt. Where `Save()` fails without a
-verdict the stream is written directly; a verdict (antivirus, policy) keeps
-the file from being opened. Never opened, only saved: the
+through SmartScreen and the security prompt. Where Attachment Services
+cannot be created (the class is missing), the stream is written directly
+and the file opens as it would without the service; where `Save()` fails,
+the stream is written directly too, and a file for opening stays shut: a
+verdict (antivirus, policy) or a check that failed without one never
+opens. `IAttachmentExecute` is CsWin32's built-in COM interop, which a
+trimmed publish would have to replace with its source-generated COM.
+Never opened, only saved: the
 GTK list, the macOS additions, Outlook's Level-1 list, `.rdp`,
-`.appinstaller`, `.msix`, `.searchconnector-ms` and friends, anything
+`.appinstaller`, `.msix`, `.ppkg`, `.searchconnector-ms` and friends, anything
 `AssocIsDangerous` or `CheckPolicy` flags, and disk images (`.iso`, `.img`,
 `.vhd`, `.vhdx`: mounting them has been a Mark-of-the-Web bypass). Opening
 anything else uses `ShellExecuteEx` (through `Process.Start` on an STA
 thread, zone checks on, the shell's dialogs owned by the window) and *Open
 With…* `SHOpenWithDialog` (this once, never the default); only files on a
-local drive, never a share, a link or a stream. `attachment.import` is only
+local drive, never a share (nor a drive mapped to one), a link or a
+stream. A link of a message goes to the browser escaped and with its host
+as DNS gets it (`ILauncher.LinkTarget`), which is what its confirmation
+shows. No exception of these services names the path of a file written
+out of a message, which carries the attachment's name. `attachment.import` is only
 ever given local paths the user picked. The code: `Malachi.Core.Platform`
 (`DangerousTypes`, `WindowsFileNames`, `OpenDir`, the interfaces) and
 `Malachi.Platform.Windows` `Attachments/`, `Files/`, `Launch/`.

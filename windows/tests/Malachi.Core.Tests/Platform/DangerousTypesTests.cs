@@ -5,7 +5,10 @@
 // (executableAttachmentTest); GTK: ui/internal/window/attachments_test.go
 // (TestExecutableAttachment). The Windows cases (Outlook's list, what
 // Windows runs, installs or follows, disk images, names Windows rewrites)
-// are new.
+// are new. AttachmentsTests.swift is split by the class under test:
+// DangerousTypesTests, WindowsFileNamesTests and OpenDirTests hold the
+// suites of Malachi.Core.Platform; the rest of it (the chips) belongs in
+// AttachmentsTests.
 
 using System.Linq;
 using Malachi.Core.Platform;

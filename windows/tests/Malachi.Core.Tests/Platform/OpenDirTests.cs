@@ -6,7 +6,8 @@
 // (TestSweepOpenDir). What Swift checks with POSIX modes is checked here as
 // the calls to the private-directory factory (the real one and its DACL are
 // tested in Malachi.Platform.Windows.Tests); the cases of locked files,
-// links and long names are new.
+// links and long names are new. One part of the split of
+// AttachmentsTests.swift (see DangerousTypesTests).
 
 using System;
 using System.Collections.Generic;
