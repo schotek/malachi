@@ -191,8 +191,10 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
   by reference). Optimistic changes are `with` expressions. Models that
   Swift keeps as mutable structs become classes with explicit `Clone()`
   where a snapshot is taken.
-- **JSON.** System.Text.Json source generation only (`JsonSerializerContext`
-  partials per area); no reflection-based serialisation, no `dynamic`.
+- **JSON.** System.Text.Json source generation only (one
+  `JsonSerializerContext` per contract, its type list grouped by area: the
+  generator refuses `[JsonSerializable]` on several partial declarations);
+  no reflection-based serialisation, no `dynamic`.
 - **Async.** `Task`/`ValueTask`; cancellation through `CancellationToken`.
   Transport and platform code use `ConfigureAwait(false)`; controllers and
   presentation classes never do (§7.1). Fire-and-forget only through
@@ -231,31 +233,45 @@ unused gschema geometry keys are used (U10); the window is *Preferences*
 area as `MalachiCore/API/`:
 
 - every method is a static descriptor `RpcMethod<TParams, TResult>(name,
-  timeout)`; `client.CallAsync(Api.MessageList, params, ct)` is the only
-  way to call one, so a typo cannot compile. The table has all 46 methods
-  in the order of `api.AllMethods`, stubs included; `system.hello` and
-  `system.authenticate` are sent only by the handshake;
-- records are sealed and immutable (`init`, `ImmutableArray`/
-  `IReadOnlyList`), changed with `with`: the optimistic reverts of the
-  controllers rely on snapshots that nothing aliases;
-- JSON is System.Text.Json with a source-generated context (trimming and
-  AOT stay possible): property names verbatim via `[JsonPropertyName]`,
-  nulls omitted on write, relaxed escaping (the default inflates HTML about
-  sixfold), a null-as-empty converter for arrays (Go's nil slices), C#
-  `required` where Swift is non-optional with the same lenient exceptions,
-  and an RFC 3339 converter that requires a zone, writes `Z` and clamps
-  Go's year 0 instead of failing a whole list;
+  timeout)` carrying the `JsonTypeInfo` of both types;
+  `client.CallAsync(API.MessageList, params, ct)` is the only way to call
+  one, so a typo cannot compile. The table is the static class `API`, the
+  Swift name kept: a class `Api` in the namespace `Malachi.Core.Api` would
+  be read as that namespace from every other `Malachi.Core.*` namespace. It
+  has all 46 methods in the order of `api.AllMethods`, stubs included;
+  `system.hello` and `system.authenticate` are sent only by the handshake;
+- records are sealed and immutable (`init`, lists as `IReadOnlyList`),
+  changed with `with`: the optimistic reverts of the controllers rely on
+  snapshots that nothing aliases. Swift's names are kept, with one forced
+  exception: `Address.address` is `Address.Email` (C# allows no member
+  named like its type);
+- JSON is System.Text.Json with one source-generated context,
+  `ApiJsonContext` (trimming and AOT stay possible; a NativeAOT build shows
+  no warning): property names verbatim via `[JsonPropertyName]`, nulls
+  omitted on write, relaxed escaping (the default inflates HTML about
+  sixfold; `JsonCoding.WriterOptions` for a writer the transport owns), a
+  null-as-empty converter for arrays (Go's nil slices), C# `required`
+  where Swift is non-optional with the same lenient exceptions (and a
+  missing `error.message` read as empty, as Go's client does), a null in a
+  member that is not nullable refused as Swift refuses it, and an RFC 3339
+  converter that requires a zone, writes `Z` and clamps Go's year 0 instead
+  of failing a whole list. Source generation reads an absent init-only
+  member as its type's default, not the property's initializer, so every
+  list and string that must never be null coalesces in its `init`;
 - wire enums (`FolderRole`, `Flag`, `SyncStatus`, …, 22 of them) are
   `readonly record struct`s over the wire string with `const` members, so
   an unknown value from a newer daemon decodes; `ErrorCode` is a record
   struct over `int` with the 32 documented codes and a `Name`;
-  `RpcError.Data` survives as a cloned `JsonElement`;
+  `RpcError.Data` survives as a cloned `JsonElement`. The tests compare the
+  method table, the error codes, every wire enum's values and every
+  record's members with `backend/pkg/api` as it is in the tree;
 - the protocol version is compared in the handshake before the key file is
   read, and again with `system.info` (`ConnectionController`), exactly as
   on macOS;
 - timeouts are the GTK UI's (`RpcTimeouts`): 5 s default, 5 s for the whole
   handshake, 3 s `system.info`, 60 s `message.part` and `attachment.get`,
-  30 s `message.body` under `allow`, `message.embedded`, `draft.create`,
+  30 s `message.body` (always: a stored `allow` or a known sender may
+  resolve to `allow`), `message.embedded`, `draft.create`, `draft.open`,
   `account.add`/`update`, 15 s `account.discover`, 45 s `account.test`, 10 s
   `account.oauthStart`, 75 s per `account.oauthWait`.
 
