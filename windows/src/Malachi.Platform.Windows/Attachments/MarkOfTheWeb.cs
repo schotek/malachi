@@ -20,8 +20,20 @@
 // the source "about:internet" instead, as Chromium does: Save keeps it,
 // still scans it, and writes ZoneId=3 with HostUrl=about:internet, so
 // running it goes through SmartScreen and the security prompt.
+//
+// The name judged is always the path's own: measured, a Save of
+// "probe3.exe" told it was "probe3.pdf" got the Restricted zone from the
+// policy check of the .pdf, and Save then deleted the .exe.
+//
+// Where Attachment Services cannot be created or told about the file (the
+// class is missing), the zone is written directly and the file may open,
+// as it would without the service. Where Save ran and failed without a
+// verdict, the stream is written directly too, but the file may not have
+// been scanned, so a file for opening is not opened: the direct write then
+// serves what the user saved (Save As, Save All), which stays theirs.
 
 using System;
+using System.Collections.Frozen;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -51,10 +63,16 @@ public sealed class MarkOfTheWeb : IMarkOfTheWeb
     /// </summary>
     public const string InternetSource = "about:internet";
 
-    // Save's verdicts, as Chromium reads them: the attachment policy
-    // blocked the file, or an antivirus reported it.
-    private static readonly int BlockedByPolicy = HRESULT.INET_E_SECURITY_PROBLEM.Value;
-    private const int ReportedByAntivirus = unchecked((int)0x80004005); // E_FAIL
+    // Save's verdicts: the attachment policy blocked the file, or an
+    // antivirus reported it (E_FAIL, as Chromium reads it, and the Win32
+    // errors of a virus found or deleted).
+    private static readonly FrozenSet<int> Verdicts = new[]
+    {
+        HRESULT.INET_E_SECURITY_PROBLEM.Value,
+        unchecked((int)0x80004005), // E_FAIL
+        unchecked((int)0x800700E1), // HRESULT_FROM_WIN32(ERROR_VIRUS_INFECTED)
+        unchecked((int)0x800700E2), // HRESULT_FROM_WIN32(ERROR_VIRUS_DELETED)
+    }.ToFrozenSet();
 
     private readonly IAttachmentServices services;
     private readonly Func<bool> zoneInformationDisabled;
@@ -72,11 +90,10 @@ public sealed class MarkOfTheWeb : IMarkOfTheWeb
     }
 
     /// <inheritdoc/>
-    public Task<ZoneMark> MarkAsync(string path, string fileName, AttachmentUse use, CancellationToken cancellationToken = default)
+    public Task<ZoneMark> MarkAsync(string path, AttachmentUse use, CancellationToken cancellationToken = default)
     {
         CheckPath(path);
-        ArgumentException.ThrowIfNullOrEmpty(fileName);
-        return StaThread.RunAsync(() => Mark(path, fileName, use), cancellationToken);
+        return StaThread.RunAsync(() => Mark(path, use), cancellationToken);
     }
 
     /// <summary>
@@ -93,31 +110,36 @@ public sealed class MarkOfTheWeb : IMarkOfTheWeb
     }
 
     /// <summary>The work of <see cref="MarkAsync"/>, on the calling STA thread.</summary>
-    internal ZoneMark Mark(string path, string fileName, AttachmentUse use)
+    internal ZoneMark Mark(string path, AttachmentUse use)
     {
+        // The file's own name, for the policy check and Save alike.
+        var fileName = Path.GetFileName(path);
         var internet = use == AttachmentUse.Save && services.PolicyBlocks(fileName);
         var source = internet ? InternetSource : null;
         var zone = internet ? ZoneIdentifier.Internet : ZoneIdentifier.Restricted;
-        var result = services.Save(path, fileName, source);
+        var save = services.Save(path, fileName, source);
         if (!File.Exists(path))
         {
-            return new ZoneMark { Outcome = ZoneMarkOutcome.Removed, SaveResult = result };
+            return new ZoneMark { Outcome = ZoneMarkOutcome.Removed, SaveResult = save.HResult };
         }
-        var verdict = result == BlockedByPolicy || result == ReportedByAntivirus;
+        var verdict = save.Ran && Verdicts.Contains(save.HResult);
+        var failed = save.Ran && save.HResult != 0 && !verdict;
         var read = ZoneIdentifier.Read(path);
         if (zoneInformationDisabled())
         {
             // The administrator's choice: nothing written behind it.
             return new ZoneMark
             {
-                Outcome = verdict ? ZoneMarkOutcome.Rejected : ZoneMarkOutcome.PolicyDisabled,
+                Outcome = verdict ? ZoneMarkOutcome.Rejected
+                    : failed ? ZoneMarkOutcome.CheckFailed
+                    : ZoneMarkOutcome.PolicyDisabled,
                 ZoneId = read,
-                SaveResult = result,
+                SaveResult = save.HResult,
             };
         }
-        if (result == 0 && IsMark(read))
+        if (save == AttachmentSaveResult.Saved && IsMark(read))
         {
-            return new ZoneMark { Outcome = ZoneMarkOutcome.Marked, ZoneId = read, SaveResult = result };
+            return new ZoneMark { Outcome = ZoneMarkOutcome.Marked, ZoneId = read, SaveResult = save.HResult };
         }
         if (!IsMark(read))
         {
@@ -132,9 +154,10 @@ public sealed class MarkOfTheWeb : IMarkOfTheWeb
             read = ZoneIdentifier.Read(path);
         }
         var outcome = verdict ? ZoneMarkOutcome.Rejected
+            : failed ? ZoneMarkOutcome.CheckFailed
             : IsMark(read) ? ZoneMarkOutcome.MarkedDirectly
             : ZoneMarkOutcome.NotMarked;
-        return new ZoneMark { Outcome = outcome, ZoneId = read, SaveResult = result };
+        return new ZoneMark { Outcome = outcome, ZoneId = read, SaveResult = save.HResult };
     }
 
     // A zone that marks the file as coming from outside: Internet or
@@ -142,17 +165,23 @@ public sealed class MarkOfTheWeb : IMarkOfTheWeb
     private static bool IsMark(int? zone) => zone is ZoneIdentifier.Internet or ZoneIdentifier.Restricted;
 
     // A file's own content: the stream is written beside it, so the path
-    // cannot name a stream itself.
+    // cannot name a stream itself. The messages leave the path out: it
+    // carries the attachment's name, which is mail content.
     private static void CheckPath(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         if (!Path.IsPathFullyQualified(path))
         {
-            throw new ArgumentException(path + " is not a fully qualified path", nameof(path));
+            throw new ArgumentException("not a fully qualified path", nameof(path));
         }
-        if (Path.GetFileName(path).Contains(':', StringComparison.Ordinal))
+        var name = Path.GetFileName(path);
+        if (name.Length == 0)
         {
-            throw new ArgumentException(path + " names an alternate data stream", nameof(path));
+            throw new ArgumentException("not the path of a file", nameof(path));
+        }
+        if (name.Contains(':', StringComparison.Ordinal))
+        {
+            throw new ArgumentException("an alternate data stream, not a file", nameof(path));
         }
     }
 }

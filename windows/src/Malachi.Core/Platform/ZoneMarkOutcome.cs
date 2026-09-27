@@ -18,9 +18,10 @@ public enum ZoneMarkOutcome
     Marked,
 
     /// <summary>
-    /// Attachment Services could not check the file (it failed without a
-    /// verdict, or is not there at all), so the zone was written directly;
-    /// it reads back. The file was not scanned through it.
+    /// The zone was written directly and reads back: Attachment Services is
+    /// not there to use (it cannot be created, or not told about the file),
+    /// so there was no scan through it either, or its check passed without
+    /// writing a zone.
     /// </summary>
     MarkedDirectly,
 
@@ -31,6 +32,15 @@ public enum ZoneMarkOutcome
     /// must never be opened.
     /// </summary>
     Rejected,
+
+    /// <summary>
+    /// Attachment Services ran, but its check failed without a verdict
+    /// (access denied, an antivirus that could not scan): the zone was
+    /// written directly where it could be. The file may not have been
+    /// scanned, so a file for opening is not opened; a saved file is the
+    /// user's all the same.
+    /// </summary>
+    CheckFailed,
 
     /// <summary>
     /// The file is gone after the check: an antivirus or the attachment

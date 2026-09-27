@@ -18,7 +18,8 @@ internal interface IAttachmentServices
 
     /// <summary>
     /// <c>SetClientGuid</c>, <c>SetLocalPath</c>, <c>SetFileName</c>, the
-    /// source if any, <c>Save</c>: the HRESULT, 0 when it succeeded.
+    /// source if any, then <c>Save</c>: whether it came as far as
+    /// <c>Save</c>, and the HRESULT.
     /// </summary>
-    int Save(string path, string fileName, string? source);
+    AttachmentSaveResult Save(string path, string fileName, string? source);
 }

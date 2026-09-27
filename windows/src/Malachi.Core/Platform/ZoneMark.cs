@@ -22,15 +22,18 @@ public sealed record ZoneMark
     public int? ZoneId { get; init; }
 
     /// <summary>
-    /// The HRESULT of <c>IAttachmentExecute::Save</c>, 0 when it succeeded;
-    /// for the log (a code, never a name).
+    /// The HRESULT of Attachment Services: of <c>IAttachmentExecute::Save</c>,
+    /// 0 when it succeeded, or of creating it where it could not be created
+    /// or told about the file; for the log (a code, never a name).
     /// </summary>
     public int SaveResult { get; init; }
 
     /// <summary>
     /// Whether a file written for opening may be handed to its application:
-    /// the mark reads back, or the administrator turned zone information
-    /// off (then no file could ever carry one, and the policy is theirs).
+    /// the check passed (or there was none to run) and the mark reads back,
+    /// or the administrator turned zone information off (then no file could
+    /// ever carry one, and the policy is theirs). Never after a verdict or a
+    /// check that failed.
     /// </summary>
     public bool MayOpen =>
         Outcome is ZoneMarkOutcome.Marked or ZoneMarkOutcome.MarkedDirectly or ZoneMarkOutcome.PolicyDisabled;
