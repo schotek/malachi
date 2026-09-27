@@ -621,6 +621,16 @@ a list controller re-applies its selection by key after a sync that moved
 entries, and phase E verifies what WinUI 3 does. `{x:Bind}` only. Dialogs are async hooks
 (`IAlerts`), never a `ContentDialog` created by a controller.
 
+A Swift callback cannot throw; a C# handler can, and inside a controller
+its exception would leave a state change half done or end a loop that
+lives as long as the controller (the only reader of the client's states,
+the reconnect loop, the status line's redraw). Controllers therefore raise
+their events through `ControllerEvents.Raise` (each handler in its own
+`try`, as `RpcClient.Raise` does for the transport) and guard the steps
+of those loops and their `PropertyChanged` notifications with
+`ControllerEvents.Guard`; what a handler throws is reported by the
+`PendingWork` (logged at error level, and failing the tests' `IdleAsync`).
+
 ## 8. Settings
 
 `Malachi.Core/Settings` is the typed facade with the gschema's keys,
