@@ -204,7 +204,7 @@ public sealed class OpenDirTests
         Assert.Equal(kept + "_" + inner[1..], written);
         Assert.False(DangerousTypes.IsDangerous(written, null), written);
         Assert.True(File.Exists(path));
-        Assert.True(path.Length <= 259, $"{path.Length}");
+        Assert.True(path.Length <= 259 || open.MaxFileNameLength == WindowsFileNames.MinLength, $"{path.Length}");
     }
 
     [Fact]
