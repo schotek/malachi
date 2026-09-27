@@ -394,12 +394,18 @@ CTRL_BREAK, `FreeConsole`, `AttachConsole(ATTACH_PARENT_PROCESS)`; if the app
 has no console, `AttachConsole(pid)`, `SetConsoleCtrlHandler(NULL, TRUE)`,
 CTRL_BREAK, `FreeConsole`; `Kill` after 15 s. On CTRL_CLOSE (the terminal
 tab closes) the daemon stops by itself and the app does not restart it.
-`build.ps1 run` must start the app with `Process.Start` (no redirection)
-and wait for it in a loop, up to 20 s more in `finally` (INPUT-SPIKES.md
+`build.ps1 run` starts the app with `Process.Start` (no redirection)
+and waits for it in a loop, up to 20 s more in `finally` (INPUT-SPIKES.md
 §4.3); never `& exe` (returns at once) or `& exe | …` (on Ctrl+C PowerShell
 kills the app and orphans the daemon, and the inherited pipe keeps
-PowerShell waiting). Today's `Invoke-Run` still pipes (`& $exe 2>&1 | …`);
-it is switched when the app starts its daemon (E1).
+PowerShell waiting). The app's handler (`Program.OnConsoleControl`) turns
+Ctrl+C and Ctrl+Break into Quit on the UI thread, and CTRL_CLOSE (and the
+never-delivered LOGOFF/SHUTDOWN) into a session end: `BeginStopping` at
+once on the handler's thread, then the way out without drafts or
+questions (`QuitSequence`, §10), the handler released by
+`ShutdownCompleted` just before `Application.Exit`. The app's own log goes
+to `logs\MalachiMail.log` and the terminal (`Shell/AppLog`, the level from
+`MALACHI_LOG_LEVEL` as in `ui/main.go`).
 
 ## 6. The WebView2 security layer
 
@@ -614,6 +620,17 @@ behaviour is macOS's): `NotificationHub`, `SignInRepair`,
 (`g_str_hash % 14 + 1`, initials), `AttachmentOpener`, `LinkOpener`,
 `NotificationPolicy`, `MessageWindowRegistry`.
 
+The shell's are in `Malachi.Core/Presentation` (phase E wave 1): the
+`NotificationHub` above; `ActivationRequest` and `CommandLine` (what a
+launch or a redirected second launch asks, §10); `WindowLifetime` (the
+GApplication rule for the one main window); `QuitSequence` (Quit, §10);
+`ShortcutMap` with `KeyChord`, `ShortcutCommand`, `ShortcutContext` and
+`WindowKind` (the key map of §11.5); `ToastPresenter` (Adw.ToastOverlay's
+queue on the `TimeProvider`); `DialogScheduler` (one `ContentDialog` at a
+time per window); `Mnemonic` (`mn()` plus the access key); `IconGlyphs`
+(GTK icon names to Segoe Fluent Icons glyphs, each checked against the
+font; a test finds every icon name of `ui/` in the table).
+
 ### 7.5 Exposure to XAML
 
 Observable state as `INotifyPropertyChanged` properties (CommunityToolkit.Mvvm
@@ -712,16 +729,31 @@ language (matched by base language, English always available);
 Windows-only strings stay English (`// Windows-only string`, `<!--
 Windows-only string -->`); nothing enters `po/POTFILES`.
 
-The strings check (`Malachi.Conventions.Tests`, the counterpart of
-`macos/scripts/check-strings.py`): Roslyn over `src/**/*.cs` and an XML
-reader over `**/*.xaml` require every literal msgid of `L10n.T/N/C` and
-`{l:T}` to be in `po/malachi.pot` with its context and plural pair, warn
-about literals in WinUI text sinks (`Text`, `Content`, `Header`, `Title`,
-`PlaceholderText`, `Label`, `ToolTip`, `AutomationProperties.Name`, …)
-unless marked Windows-only, and fail on missing msgids. A coverage test
-requires every msgid of `po/malachi.pot` to be referenced in `windows/` or
-listed with a reason in `windows/parity-exclusions.txt`; another compares
-the gschema's keys and defaults with the settings facade.
+The strings check (`Malachi.Conventions.Tests/Strings`, the counterpart of
+`macos/scripts/check-strings.py`): Roslyn (`Microsoft.CodeAnalysis.CSharp`)
+over `windows/src/**/*.cs` and an XML reader over `windows/src/**/*.xaml`
+require every literal msgid of `L10n.T/N/C` and `{l:T}` to be in
+`po/malachi.pot` with its context and plural pair (a call marked
+`// Windows-only string` may miss, as check-strings.py accepts
+"macOS-only string"), and fail on a msgid built at run time. They warn,
+as a skipped test that lists them, about literals in WinUI text sinks
+(`Text`, `Content`, `Header`, `Title`, `PlaceholderText`, `Label`,
+`ToolTipService.ToolTip`, `AutomationProperties.Name`, the text inside a
+`TextBlock`, …) and about literals formatted into a translated sentence,
+unless marked Windows-only: in C# a comment on the line or right above the
+statement (or initializer entry), or `// Windows-only strings` earlier in
+the same block; in XAML a comment right before the element or an
+enclosing one. A coverage test requires every msgid of `po/malachi.pot`
+to be a string literal of `windows/src` (or a `{l:T}` msgid) or listed
+with a reason in `windows/parity-exclusions.txt` (one msgid per line with
+C escapes and `\004` between a context and its msgid, a tab, the reason;
+seeded from research 05 Appendix A: GNOME, GOA, portal, Flatpak, gsound,
+gschema and desktop metadata), and every exclusion to be a template msgid
+the sources do not use. Until the screens of phase E wave 2 exist it
+skips with the list of the missing msgids; `CoverageEnforced` in
+`StringsCheckTests` (or `MALACHI_MSGID_COVERAGE=strict`) makes it fail,
+and is turned on with the last screen. Another test compares the
+gschema's keys and defaults with the settings facade.
 
 ## 10. Platform services
 
@@ -772,9 +804,13 @@ writes its registry entries first, so toasts show but clicks are lost).
 The fix is a build target that unpacks that one DLL (34 KB, same version)
 from the Runtime package's framework MSIX
 (`tools\MSIX\win10-<arch>\Microsoft.WindowsAppRuntime.2.msix`, fetched with
-a `PackageDownload`) into the output; it goes once a Foundation release
+a `PackageDownload`) into the output (`MalachiInsightsResource` in
+`Malachi.App.csproj`; `build.ps1 app` checks the DLL is in the app
+folder); it goes once a Foundation release
 with WindowsAppSDK PR #6725 ships, and `Register()` is re-tested on every
-WinAppSDK bump. The `NotificationInvoked` handler is attached **before**
+WinAppSDK bump (in phase E wave 1 the published app, run outside Claude
+Desktop's process tree, registered in 70 ms and unregistered cleanly). The
+`NotificationInvoked` handler is attached **before**
 `Register()` (otherwise COM registers single-use and every click starts a
 new process); `Register("Malachi Mail", <icon>)` with no explicit AUMID;
 `Unregister()` on exit (a later click still cold-starts the app). A click
@@ -811,11 +847,43 @@ login is the Run value with `--background`, which starts hidden; a
 it in Windows Settings, which is shown as such, never overwritten.
 
 **Single instance and activation.** A custom `Main`
-(`DISABLE_XAML_GENERATED_MAIN`): register notifications, then
+(`DISABLE_XAML_GENERATED_MAIN`, `Malachi.App/Program.cs`): the console
+(§5), the log, the notifications' hook (`PlatformServices.InitializeEarly`:
+the handler, then `Register()`), then
 `AppInstance.FindOrRegisterForKey("io.github.schotek.Malachi")`; a second
-launch calls `AllowSetForegroundWindow` and `RedirectActivationToAsync`
-and exits. Kinds: launch (shows the window), `mailto:` (the composer only,
-as GTK), a notification (the window), `--background` (nothing).
+launch redirects with `RedirectActivationToAsync` (which grants the first
+instance the foreground right itself, so no `AllowSetForegroundWindow`),
+pumping COM with `CoWaitForMultipleObjects` meanwhile, and exits. The
+first instance hands every activation, its own and each redirect's
+(`AppInstance.Activated`, a worker thread), to `App.Activate` on the UI
+thread (`ActivationRequest`, Core). An unpackaged launch carries its whole
+command line (split as the C runtime splits it). Kinds: launch (shows the
+window), `mailto:` (the composer only, as GTK; a cold `mailto:` shows no
+main window, and one that no compose window can take yet brings the main
+window up instead), a notification (the window), `--background` (nothing;
+the first launch holds the app without a window, GTK's service hold),
+`----AppNotificationActivated:` and `-Embedding` ignored, anything else
+logged by count and ignored.
+
+**Lifecycle and Quit** (`App.xaml.cs`, `Shell/`). One main window for the
+process, made at start and shown unless the activation says otherwise;
+`AppWindow.Closing` is always cancelled and the window hides; with *Run in
+Background* off, and once no other window is open and no background hold
+is left, that quits (`WindowLifetime`, the GApplication rule; the other
+windows count from `WindowTracker.Track` until they close). Quit
+(`QuitSequence`): `ComposeController.SaveForQuitAsync`, then the close
+question of each window it returned (`IComposeWindowHandle.CloseForQuitAsync`,
+an additive member whose default is "closed"); a Cancel abandons the Quit.
+Then the point of no return (the supervisor starts nothing any more, the
+window geometry is kept, `PlatformServices.Stop`, every window hides),
+`ConnectionController.StopAsync` (the daemon this app started is stopped,
+never one it adopted), `AppState.Dispose` (controllers, open directory,
+settings), `Application.Exit`. `WM_ENDSESSION` (a subclass of the main
+window's procedure) stops the daemon before it returns and then quits as
+a session end. The platform services get their moments through
+`Malachi.App/Platform/PlatformServices` (`InitializeEarly`, `Start`,
+`NewMessage` before the list, `MainWindowVisibilityChanged`, `Stop`,
+`Shutdown`).
 
 **`mailto:` and the default mail app.** The app writes its HKCU
 registration at start when it is missing or stale (the app folder can
@@ -919,6 +987,21 @@ set with `SetTitleBar`, `PreferredHeightOption=Tall`; the colour scheme sets
 in-box `SelectorBar` (the toolkit's `Segmented` items lack the UIA selection
 pattern).
 
+As built in phase E wave 1 (`MainWindow.xaml`): the title bar, the search
+box (`MainWindow.Search`, focused by the Search command), the size and the
+maximised state in the gschema keys (the minimum through
+`WM_GETMINMAXINFO`), and four regions the wave-2 screens fill:
+`MainWindow.Sidebar`, `MessageList`, `Reader` (under the toast overlay) and
+`StatusBar` (replacing a provisional status line); `PaneColumns` gives the
+two columns to size. While the regions are empty a provisional summary
+(Windows-only strings) shows the connection, the status line and the counts
+of what the mailbox loaded. Every other window is tracked by
+`WindowTracker.Track(window, kind, root, toasts)` right after it is made:
+the colour scheme on its root and caption buttons, its `WindowCommands`
+and `CommandRouter`, its toast overlay as the router's target while it is
+active, and its part in the app's life. A window without Mica gives its
+root `Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"`.
+
 ### 11.2 Sidebar and list
 
 The sidebar is a flat `ListView` over the Core's entries (the GTK row model:
@@ -962,6 +1045,19 @@ Narrator notification). Alerts go through one `AlertService` that queues
 left, Cancel right), defaults and close responses stay GTK's (*Save Draft*
 is the default of the close question).
 
+As built: `Controls/ToastHost` over Core's `ToastPresenter` (a capsule 42 px
+high, 24 px above the bottom, one line with the whole text as its tooltip,
+a 0.2 s fade, a click dismisses; `AutomationPeer.RaiseNotificationEvent`),
+and `Shell/ToastRouter` for the application's toasts (the active window's
+overlay, else the main window's). `Shell/IAlerts` is Contracts.swift's
+`Alerts` (destructive, destructive with a check box, the close question,
+*Open This Link?*, *Trust This Certificate?* with its details grid) plus
+About; `AlertService.ConfirmHook()` is the `ConfirmDestructive` the
+controllers take. A dialog for a hidden window goes on the main window,
+shown first. Mnemonics: `{l:T}` returns the msgid with its `_`, and
+`Localization/MnemonicLabel.Text` turns it into the control's text and
+`AccessKey` (a `ContentDialog`'s buttons take none: stripped).
+
 ### 11.5 Keyboard
 
 | Function | Windows | GTK |
@@ -995,6 +1091,25 @@ text input has focus: in a `TextBox` they would fire and type at once.
 Overlays (`ContentDialog`, flyouts, `TeachingTip`, `InfoBar`, popups) draw
 above the WebView2 with no airspace workaround; the viewer and editor are
 never hosted in a raw HWND controller.
+
+As built (`Commands/`): every tracked window has a `WindowCommands` (named
+`XamlUICommand`s: the application's, the per-message ones enabled from
+`Flags`, an `ActionFlags` the screen sets, Check for New Mail, Search,
+Close, Send, Save Draft, the reordering) and a `CommandRouter` that runs
+them for Core's `ShortcutMap` (the `ctrl-r` setting read at each key). The
+XAML side is `KeyboardAccelerator`s on the window's root (placement
+hidden), plus the root's `PreviewKeyDown` for Ctrl+Q, which a `TextBox`
+consumes before any accelerator; the WebView2 side is
+`PreTranslateKeyboard` (the COM interop of the spike, built-in COM, the
+app being untrimmed): a mapped key down of the `Chrome_WidgetWin_0` focus
+window is swallowed and its command runs after the message, the matching
+key up is swallowed too, an auto-repeat runs nothing more, and the
+browser's own keys are swallowed even when they run nothing. The compose
+editor's WebView2 carries `KeyboardRouting.IsEditor="True"`, so that its
+single keys type and Escape stays with its bridge. No key runs anything
+while one of the window's dialogs is up. Verified with real input: Ctrl+F
+puts the focus in the search box, letters then type there, and Ctrl+Q
+quits from it.
 
 ## 12. Tests
 

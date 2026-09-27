@@ -9,18 +9,23 @@ daemon runs on Windows unchanged and does all the mail work. How the client
 is designed, built and kept in step with the GTK UI, and the decisions
 behind it, are in [docs/windows-port.md](../docs/windows-port.md).
 
-**Status: in progress, phase C of docs/windows-port.md §15.** The
+**Status: in progress, phase E of docs/windows-port.md §15.** The
 solution, its projects and packages, the build and test entry points
 (`make windows`, `run-windows`, `test-windows`, `windows/build.ps1`), the
-application icon and an empty main window with its title bar exist; so do
-the typed API layer, localisation from `po/`, the settings (registry), the
-attachment-safety services (Mark of the Web, the never-open list,
-Windows-safe names, the open directory) and the keyring helper
-`malachi-credentials.exe`. The app does not talk to the daemon yet: the
-transport, the supervisor and the ported logic follow in phases C and D,
-the user interface in phase E. Everything below that describes the running app
-(where things are, the differences from GTK) is the design the phases
-implement.
+typed API layer, the transport and the daemon's supervisor, localisation
+from `po/`, the settings (registry), the attachment-safety services, the
+keyring helper `malachi-credentials.exe` and every ported controller of
+the Go UI and macOS exist (phases A to D). Of the app, the shell stands
+(phase E wave 1): it runs as a single instance, starts or adopts its
+daemon, connects, and shows the connection, the status line and what the
+mailbox loaded; it quits cleanly (drafts first, then the daemon it
+started), from its window, Ctrl+Q or Ctrl+C in the terminal; the keyboard,
+the dialogs, the toasts, the colour scheme and the strings check are in
+place. The screens (sidebar, list, reader, compose, wizard, preferences),
+the WebView2 layer and the platform services (notifications, the
+notification-area icon, launch at login, `mailto:` registration) follow in
+the rest of phase E. The rows below that describe them are the design those
+steps implement.
 
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
 `malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). Every
@@ -61,9 +66,10 @@ make windows        # builds build\malachid.exe and build\malachi-mcp.exe, then 
                     # and assembles "build\windows\<arch>\Malachi Mail\" with MalachiMail.exe,
                     # malachid.exe, malachi-mcp.exe, malachi-credentials.exe, locale\*.po
                     # and the licences
-make run-windows    # the same, then runs MalachiMail.exe from the terminal until its
-                    # window closes; the app's output (and later the daemon's log) stays
-                    # visible
+make run-windows    # the same, then runs MalachiMail.exe in the terminal until it quits;
+                    # its log and the daemon's appear there, and Ctrl+C quits the app,
+                    # which stops the daemon it started (make then says "Error 512",
+                    # its way of reporting the interrupt)
 make test-windows   # every test project of the solution
 ```
 
@@ -87,7 +93,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `icons` | renders `Malachi.ico` from `docs\malachi_icon.png`, cropped as `macos/Makefile` crops it (the build does this by itself) |
 | `app` | `go`, then publishes and assembles `build\windows\<arch>\Malachi Mail\` (Release) |
 | `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug) |
-| `run` | `app` for this machine, then `MalachiMail.exe` until its window closes |
+| `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
 | `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` |
 | `clean` | removes `build\windows\` |
@@ -112,9 +118,13 @@ each project's `packages.lock.json` is committed, and a CI build restores in
 locked mode.
 
 The app folder is self-contained (the .NET runtime and the Windows App SDK
-travel with it, nothing is installed): about 270 MB today, of which the
-Windows App SDK metapackage's AI and ML runtime takes some 60 MB until the
-component set is chosen.
+travel with it, nothing is installed): about 215 MB for x64, the daemon and
+the MCP bridge included. The Windows App SDK comes as its component packages
+(`Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences`), not the
+metapackage, whose AI and ML runtime would add some 60 MB; one DLL the
+components lack, `Microsoft.WindowsAppRuntime.Insights.Resource.dll`, is
+unpacked from the Runtime package's framework MSIX by the build
+(docs/windows-port.md §10: without it notifications cannot register).
 
 ## Layout
 
@@ -132,6 +142,8 @@ windows/
                                   the SDK's own packages pinned
   Directory.Packages.props        every package version
   .editorconfig                   C# style; the SPDX header template (IDE0073)
+  parity-exclusions.txt           the msgids of po/malachi.pot the client does not use, with
+                                  the reason (the strings check's coverage)
   scripts/make-icons.ps1          docs\malachi_icon.png -> multi-size Malachi.ico
   src/
     Malachi.Core/                 net10.0: everything that needs neither WinUI nor P/Invoke
@@ -139,7 +151,13 @@ windows/
                                   settings, i18n); builds and is tested on any OS
     Malachi.Platform.Windows/     Windows services behind Core's interfaces (CsWin32)
     Malachi.App/                  WinUI 3 -> MalachiMail.exe; thin: windows, pages, XAML,
-                                  the WebView2 layer
+                                  the WebView2 layer. Program.cs (console, single instance,
+                                  activation), App.xaml.cs (lifecycle, Quit), Shell/ (the
+                                  composition root AppState, the Integration, alerts, toasts,
+                                  window tracking and theme, the log), Commands/ (the command
+                                  router and the window commands), Controls/, Localization/
+                                  ({l:T}, mnemonics), Resources/ (icons, text styles),
+                                  Platform/ (the platform services' entry points)
     Malachi.Credentials/          malachi-credentials.exe, the daemon's keyring helper over
                                   Credential Manager (NativeAOT); depends on nothing else
   tests/
@@ -149,7 +167,7 @@ windows/
     Malachi.Platform.Windows.Tests/
     Malachi.Credentials.Tests/
     Malachi.Conventions.Tests/    repository checks: SPDX headers, the gschema keys against
-                                  the settings (later strings and msgids)
+                                  the settings, the strings check and the msgid coverage
 ```
 
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
@@ -159,7 +177,9 @@ Microsoft.Testing.Platform.
 
 ## Where things are
 
-The design of docs/windows-port.md §1; the app does not use them yet.
+The design of docs/windows-port.md §1. The app uses all of them but the
+WebView2 data, launch at login and the `mailto:` registration, which come
+with the rest of phase E.
 
 | What | Where |
 |---|---|
@@ -168,7 +188,7 @@ The design of docs/windows-port.md §1; the app does not use them yet.
 | Mail store | `%LOCALAPPDATA%\Malachi Mail\store.db` (`--store`), lock `store.db.daemon.lock` |
 | RPC socket | `%USERPROFILE%\.cache\malachi\run\rpc.sock`, the daemon's own default (`MALACHI_SOCKET` overrides); outside AppData on purpose |
 | RPC key | `rpc.sock.key` beside the socket, a new key at every daemon start, read afresh for every connection |
-| Logs | `%LOCALAPPDATA%\Malachi Mail\logs\` (and the terminal under `make run-windows`) |
+| Logs | `%LOCALAPPDATA%\Malachi Mail\logs\`: `MalachiMail.log` (the app, `MALACHI_LOG_LEVEL`) and `malachid.log` (the daemon), each rotated at 4 MiB; also the terminal under `make run-windows` |
 | WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` |
 | Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit) |
 | Preferences | `HKCU\Software\io.github.schotek.Malachi`, the gschema's keys plus `ctrl-r` |
@@ -205,6 +225,8 @@ phases that implement them.
 | The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format. The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
 | The message list pages itself at its end; *Load More* appears only to retry a page that failed | The *Load More* button under the list | As macOS |
 | In *Preferences → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch | Ctrl+Up / Ctrl+Down reorder the selected row, so a click must select (as macOS) |
+| The window's caption names the selected folder: *Inbox – Malachi Mail* | *Malachi Mail* (the folder is the list's header) | The taskbar and Alt+Tab tell windows apart by their captions; macOS shows the folder as the window's title too |
+| *About Malachi Mail* is a dialog with the name, icon, developer, version, licence, website and issue tracker; its description says *A native mail client.* | `Adw.AboutDialog` with *A native mail client for the GNOME desktop.* | GTK's text names GNOME; the fields are GTK's (research U8) |
 | The window's size, maximised state and pane widths are kept in the gschema's keys (`window-width`, `window-height`, `window-maximized`, `folder-pane-width`, `message-list-width`), written only from a wide layout | Declared in the gschema, never written | The keys exist; the window opens where it was left |
 
 ## Troubleshooting
