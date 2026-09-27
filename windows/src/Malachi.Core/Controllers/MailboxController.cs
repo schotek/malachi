@@ -690,26 +690,29 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
 
     /// <summary>
     /// <see cref="ToggleFolder"/> for a view that knows the target state (a
-    /// tree view reports "expanded" / "collapsed"): a no-op when the model
-    /// already agrees.
+    /// twisty, Left and Right on a folder row): a no-op when the model
+    /// already agrees, which returns false so the key still reaches the list
+    /// for its normal navigation (collapse.go <c>addFolderShortcuts</c>).
     /// </summary>
-    public void SetFolderCollapsed(FolderKey k, bool collapsed)
+    public bool SetFolderCollapsed(FolderKey k, bool collapsed)
     {
         if (Model.Collapsed.FolderCollapsed(k) == collapsed)
         {
-            return;
+            return false;
         }
         ToggleFolder(k);
+        return true;
     }
 
-    /// <summary><see cref="ToggleAccount"/> for a view that knows the target state.</summary>
-    public void SetAccountCollapsed(AccountId id, bool collapsed)
+    /// <summary><see cref="ToggleAccount"/> for a view that knows the target state; false when the model already agrees.</summary>
+    public bool SetAccountCollapsed(AccountId id, bool collapsed)
     {
         if (Model.Collapsed.AccountCollapsed(id) == collapsed)
         {
-            return;
+            return false;
         }
         ToggleAccount(id);
+        return true;
     }
 
     /// <summary>

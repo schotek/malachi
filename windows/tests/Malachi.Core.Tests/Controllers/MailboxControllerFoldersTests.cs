@@ -397,9 +397,11 @@ public sealed class MailboxControllerFoldersTests
         Assert.True(log.Rebuilds == 2, "our own write must not rebuild twice");
         Assert.True(h.Mailbox.Model.Collapsed.FolderCollapsed(alpha));
 
-        await h.On(() => h.Mailbox.SetFolderCollapsed(alpha, true));
+        // (Windows: the answer says whether Left or Right did anything, as
+        // collapse.go addFolderShortcuts does.)
+        Assert.False(await h.On(() => h.Mailbox.SetFolderCollapsed(alpha, true)));
         Assert.True(log.Rebuilds == 2, "already collapsed: a no-op");
-        await h.On(() => h.Mailbox.SetFolderCollapsed(alpha, false));
+        Assert.True(await h.On(() => h.Mailbox.SetFolderCollapsed(alpha, false)));
         Assert.Equal(3, log.Rebuilds);
         Assert.Empty(h.Settings.CollapsedFolders);
 
@@ -407,6 +409,8 @@ public sealed class MailboxControllerFoldersTests
         Assert.Equal(["acc2"], h.Settings.CollapsedAccounts);
         Assert.Equal("zeta", FolderIds(h.Mailbox.Model.Entries)[^1]);
         Assert.True(h.Mailbox.Model.Entries[^1].Header, "a folded account leaves its header behind");
+        Assert.False(await h.On(() => h.Mailbox.SetAccountCollapsed("acc2", true)), "already folded");
+        Assert.Equal(4, log.Rebuilds);
 
         // Another window folded something: the sidebar follows.
         await h.On(() =>
