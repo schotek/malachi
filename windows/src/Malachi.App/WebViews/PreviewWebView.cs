@@ -25,6 +25,8 @@ using Malachi.Core.Platform;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
@@ -71,6 +73,9 @@ public sealed partial class PreviewWebView : HardenedWebView
             Visibility = Visibility.Collapsed,
             Children = { icon, genericIcon, nameText, sizeText, typeText },
         };
+        // The icons are decoration: Narrator reads the name, size and type.
+        AutomationProperties.SetAccessibilityView(icon, AccessibilityView.Raw);
+        AutomationProperties.SetAccessibilityView(genericIcon, AccessibilityView.Raw);
         Root.Children.Add(panelView);
         Web.Visibility = Visibility.Collapsed;
     }

@@ -96,7 +96,6 @@ public sealed partial class MessageWebView : HardenedWebView
             IsHitTestVisible = false,
             Child = status,
         };
-        AutomationProperties.SetAccessibilityView(statusBox, Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         Root.Children.Add(statusBox);
         SetAccessibleName(Web);
     }
