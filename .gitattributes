@@ -1,0 +1,14 @@
+# Line endings: the repository is LF, and every checkout keeps it LF,
+# whatever core.autocrlf says (Git for Windows defaults it to true).
+# Test fixtures stay byte-exact: several MIME samples are CRLF on purpose.
+* text=auto eol=lf
+**/testdata/** -text
+
+*.png binary
+*.ico binary
+*.icns binary
+*.pfx binary
+
+# Windows batch files need CRLF to run.
+*.cmd text eol=crlf
+*.bat text eol=crlf
