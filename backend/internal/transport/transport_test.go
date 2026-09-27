@@ -84,7 +84,10 @@ func TestClassify(t *testing.T) {
 	bg := context.Background()
 	expired, cancel := context.WithTimeout(bg, time.Nanosecond)
 	defer cancel()
-	time.Sleep(time.Millisecond)
+	// The context is cancelled by a timer on a goroutine of its own, on a
+	// tick of the clock (Windows: up to 15.6 ms apart), so a short sleep
+	// does not make sure it is done: wait for it.
+	<-expired.Done()
 
 	cases := []struct {
 		name  string
