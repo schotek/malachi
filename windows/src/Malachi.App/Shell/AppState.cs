@@ -153,6 +153,12 @@ public sealed partial class AppState : IDisposable
         MainWindow is { } w && w.AppWindow.IsVisible && Windows.IsActive(w);
 
     /// <summary>
+    /// Quit is past its point of no return: no window comes back (a second
+    /// launch, a notification or the tray during the daemon's stop).
+    /// </summary>
+    public bool IsStopping { get; internal set; }
+
+    /// <summary>
     /// Makes the application's objects (see the file's header), on the UI
     /// thread. <paramref name="startHidden"/> is a background start's hold.
     /// </summary>
@@ -227,7 +233,7 @@ public sealed partial class AppState : IDisposable
     /// </summary>
     public void ShowMainWindow()
     {
-        if (MainWindow is not { } w)
+        if (MainWindow is not { } w || IsStopping)
         {
             return;
         }

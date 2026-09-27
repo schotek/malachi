@@ -857,10 +857,11 @@ the handler, then `Register()`), then
 `AppInstance.FindOrRegisterForKey("io.github.schotek.Malachi")`; a second
 launch redirects with `RedirectActivationToAsync` (which grants the first
 instance the foreground right itself, so no `AllowSetForegroundWindow`),
-pumping COM with `CoWaitForMultipleObjects` meanwhile, and exits; its
-lines go to the same app log, each written at the file's end
-(`RotatingLogFile`), so the first instance's later lines do not overwrite
-them. The
+pumping COM with `CoWaitForMultipleObjects` meanwhile (10 s at most; a
+first instance that does not answer is logged and the second exits all the
+same), and exits; its lines go to the same app log, each written at the
+file's end (`RotatingLogFile`), so the first instance's later lines do not
+overwrite them. The
 first instance hands every activation, its own and each redirect's
 (`AppInstance.Activated`, a worker thread), to `App.Activate` on the UI
 thread (`ActivationRequest`, Core). An unpackaged launch carries its whole
@@ -884,7 +885,7 @@ an additive member whose default keeps the window, so a window that could
 not save and asks nothing never loses its draft to a Quit); a Cancel
 abandons the Quit. Then the point of no return (the supervisor starts
 nothing any more, the window geometry is kept, `PlatformServices.Stop`,
-every window hides),
+every window hides and no activation shows one again),
 `ConnectionController.StopAsync` (the daemon this app started is stopped,
 never one it adopted), `AppState.Dispose` (controllers, open directory,
 settings), `Application.Exit`. `WM_ENDSESSION` (a subclass of the main

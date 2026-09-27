@@ -78,8 +78,10 @@ public partial class App : Application
     /// </summary>
     internal void Activate(ActivationRequest request)
     {
-        if (state is null)
+        if (state is null || state.IsStopping)
         {
+            // Past Quit's point of no return nothing opens or comes back:
+            // the windows hid for good.
             return;
         }
         if (request.Ignored.Count > 0)
@@ -138,6 +140,7 @@ public partial class App : Application
                 SaveDrafts = integration.Compose.SaveForQuitAsync,
                 BeginStopping = () =>
                 {
+                    s.IsStopping = true;
                     s.Supervisor.BeginStopping();
                     main.SaveGeometry();
                     PlatformServices.Stop();

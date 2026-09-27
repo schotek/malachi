@@ -138,10 +138,13 @@ public static partial class Program
 
     // A second launch: hand the activation to the first instance, keeping
     // this STA thread pumping COM while the redirect runs (the documented
-    // way: the redirect's own calls may need it), then exit.
+    // way: the redirect's own calls may need it), then exit. When the first
+    // instance does not answer in time this one exits all the same; the
+    // event is then left to the finaliser, since the redirect may still
+    // finish and signal it while the process ends.
     private static unsafe void Redirect(AppInstance key, AppActivationArguments activation)
     {
-        using var done = new ManualResetEvent(false);
+        var done = new ManualResetEvent(false);
         _ = Task.Run(() =>
         {
             try
@@ -158,7 +161,15 @@ public static partial class Program
             }
         });
         var handle = (HANDLE)done.SafeWaitHandle.DangerousGetHandle();
-        PInvoke.CoWaitForMultipleObjects((uint)CWMO_FLAGS.CWMO_DEFAULT, (uint)RedirectTimeout.TotalMilliseconds, new ReadOnlySpan<HANDLE>(ref handle), out _);
+        var waited = PInvoke.CoWaitForMultipleObjects(
+            (uint)CWMO_FLAGS.CWMO_DEFAULT, (uint)RedirectTimeout.TotalMilliseconds, new ReadOnlySpan<HANDLE>(ref handle), out _);
+        if (waited.Failed)
+        {
+            // RPC_S_CALLPENDING: the first instance is busy or hung.
+            LogRedirectTimedOut(logger, RedirectTimeout.TotalSeconds, waited.Value);
+            return;
+        }
+        done.Dispose();
     }
 
     // A second launch's activation, on a worker thread.
@@ -219,6 +230,9 @@ public static partial class Program
 
     [LoggerMessage(Level = LogLevel.Error, Message = "the activation could not be redirected")]
     private static partial void LogRedirectFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the first instance did not take the activation within {Seconds} s (0x{Result:X8}); exiting")]
+    private static partial void LogRedirectTimedOut(ILogger logger, double seconds, int result);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "console {Control}: quitting")]
     private static partial void LogConsoleControl(ILogger logger, ConsoleControl control);
