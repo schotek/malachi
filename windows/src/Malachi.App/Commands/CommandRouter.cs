@@ -14,19 +14,21 @@
 //   accelerator sees it, so the root's PreviewKeyDown, which sees every
 //   key first, runs Quit there.
 // - The island's InputPreTranslateKeyboardSource, while a WebView2 has
-//   the focus (no XAML key event fires then): the key down of a mapped
-//   key is swallowed and its command runs once the message is handled,
-//   the matching key up is swallowed too; the browser's own keys (reload,
-//   find, print, developer tools) are swallowed even when they run
-//   nothing. An auto-repeated key runs its command once, on the first
-//   press. The compose editor keeps its single keys and Escape (its bridge
-//   handles Escape, Ctrl+B/I/U and Ctrl+K).
+//   the focus (no XAML key event fires then), or, where the island gives
+//   none, a thread-local WH_KEYBOARD hook (ThreadKeyboardHook, the
+//   measured fallback): the key down of a mapped key is swallowed and its
+//   command runs once the message is handled, and the key up of that
+//   press is swallowed too when it comes to the same WebView2 (Core's
+//   SwallowedKeys; a command that moves the focus sends it elsewhere); the
+//   browser's own keys (reload, find, print, developer tools) are
+//   swallowed even when they run nothing. An auto-repeated key runs its
+//   command once, on the first press. The compose editor keeps its single
+//   keys and Escape (its bridge handles Escape, Ctrl+B/I/U and Ctrl+K).
 //
 // Nothing runs while one of the window's dialogs is up. The map itself is
 // Core's (ShortcutMap), with the ctrl-r setting read at every key.
 
 using System;
-using System.Collections.Generic;
 using Malachi.Core.Presentation;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -41,31 +43,41 @@ using WinUIModifiers = Windows.System.VirtualKeyModifiers;
 namespace Malachi.App.Commands;
 
 /// <summary>Runs a window's commands for its keys.</summary>
-internal sealed partial class CommandRouter
+internal sealed partial class CommandRouter : IDisposable
 {
     private readonly WindowKind kind;
     private readonly WindowCommands commands;
     private readonly SettingsStore settings;
+    private readonly nint windowHandle;
     private readonly DispatcherQueue dispatcher;
     private readonly Func<bool> dialogUp;
     private readonly ILogger logger;
     private readonly PreTranslateKeyboard webViewKeys = new();
-    private readonly HashSet<int> swallowed = [];
+    private readonly SwallowedKeys swallowed = new();
+    private ThreadKeyboardHook? hook;
     private UIElement? root;
 
     /// <summary>A router for a window of <paramref name="kind"/> over <paramref name="commands"/>.</summary>
     /// <param name="kind">Which keys the window has.</param>
     /// <param name="commands">What they run.</param>
     /// <param name="settings">The ctrl-r setting.</param>
+    /// <param name="windowHandle">The window's handle (the WebView2s inside it, for the keyboard hook).</param>
     /// <param name="dispatcher">The window's UI thread, where a WebView2's keys run their commands.</param>
     /// <param name="dialogUp">Whether one of the window's dialogs is up (then no key runs anything).</param>
     /// <param name="logger">Where a failure to see a WebView2's keys is reported.</param>
     public CommandRouter(
-        WindowKind kind, WindowCommands commands, SettingsStore settings, DispatcherQueue dispatcher, Func<bool> dialogUp, ILogger logger)
+        WindowKind kind,
+        WindowCommands commands,
+        SettingsStore settings,
+        nint windowHandle,
+        DispatcherQueue dispatcher,
+        Func<bool> dialogUp,
+        ILogger logger)
     {
         this.kind = kind;
         this.commands = commands;
         this.settings = settings;
+        this.windowHandle = windowHandle;
         this.dispatcher = dispatcher;
         this.dialogUp = dialogUp;
         this.logger = logger;
@@ -103,6 +115,13 @@ internal sealed partial class CommandRouter
         {
             fe.Loaded += OnLoaded;
         }
+    }
+
+    /// <summary>Removes the keyboard hook, if the window has one (the window closed).</summary>
+    public void Dispose()
+    {
+        hook?.Dispose();
+        hook = null;
     }
 
     /// <summary>Runs the command of <paramref name="chord"/> as a key press would; true when one ran.</summary>
@@ -170,10 +189,18 @@ internal sealed partial class CommandRouter
 
     private void InstallWebViewKeys(XamlRoot xamlRoot)
     {
-        if (!webViewKeys.Install(xamlRoot, OnWebViewKey))
+        if (webViewKeys.Install(xamlRoot, OnWebViewKey))
         {
-            LogNoPreTranslate(logger, kind);
+            return;
         }
+        var fallback = new ThreadKeyboardHook();
+        if (fallback.Install(windowHandle, OnWebViewKey))
+        {
+            hook = fallback;
+            LogKeyboardHook(logger, kind);
+            return;
+        }
+        LogNoWebViewKeys(logger, kind);
     }
 
     private ShortcutCommand? Resolve(KeyChord chord)
@@ -202,20 +229,22 @@ internal sealed partial class CommandRouter
         }
     }
 
-    // A key of a focused WebView2 (PreTranslateKeyboard): true swallows it.
+    // A key of a focused WebView2 (PreTranslateKeyboard or the keyboard
+    // hook): true swallows it.
     private bool OnWebViewKey(WebViewKey key)
     {
         if (!key.IsDown)
         {
-            return swallowed.Remove(key.VirtualKey);
+            return swallowed.KeyUp(key.VirtualKey, key.Window);
         }
         var chord = new KeyChord(key.VirtualKey, FromSource(key.Modifiers));
         var command = Resolve(chord);
-        if (command is null && !ShortcutMap.IsBrowserKey(chord))
+        var swallow = command is not null || ShortcutMap.IsBrowserKey(chord);
+        swallowed.KeyDown(key.VirtualKey, key.Window, swallow);
+        if (!swallow)
         {
             return false;
         }
-        swallowed.Add(key.VirtualKey);
         if (command is { } c && !key.Repeat)
         {
             // After the message: a command may show a dialog or close the window.
@@ -224,6 +253,9 @@ internal sealed partial class CommandRouter
         return true;
     }
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "no pre-translate source in a {Kind} window: its WebView2 keys go through a keyboard hook")]
+    private static partial void LogKeyboardHook(ILogger logger, WindowKind kind);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "the keys of a focused WebView2 cannot be seen in a {Kind} window")]
-    private static partial void LogNoPreTranslate(ILogger logger, WindowKind kind);
+    private static partial void LogNoWebViewKeys(ILogger logger, WindowKind kind);
 }

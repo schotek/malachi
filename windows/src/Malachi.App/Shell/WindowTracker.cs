@@ -95,7 +95,7 @@ public sealed partial class WindowTracker : IDisposable
         var tracked = new TrackedWindow(window, kind, commands, windowToasts);
         WireApplicationCommands(tracked);
         var router = new CommandRouter(
-            kind, commands, settings, window.DispatcherQueue ?? DispatcherQueue.GetForCurrentThread(),
+            kind, commands, settings, WindowPresenter.Handle(window), window.DispatcherQueue ?? DispatcherQueue.GetForCurrentThread(),
             () => Alerts?.IsShowing(window) == true, logger);
         router.Attach(root);
         tracked.Router = router;
@@ -201,6 +201,7 @@ public sealed partial class WindowTracker : IDisposable
     private void Forget(TrackedWindow tracked)
     {
         windows.Remove(tracked);
+        tracked.Router?.Dispose();
         if (ReferenceEquals(Active, tracked))
         {
             Active = null;

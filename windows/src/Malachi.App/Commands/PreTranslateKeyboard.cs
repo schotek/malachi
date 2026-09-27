@@ -14,7 +14,8 @@
 // window both methods fire, so only OnTreeMessage acts, and only for that
 // class. The app is not trimmed, so the built-in COM interop of the spike
 // is used; a trimmed or NativeAOT build would need the source-generated
-// ComWrappers instead.
+// ComWrappers instead. Where the island gives no source, ThreadKeyboardHook
+// takes its place.
 
 using System;
 using System.Diagnostics.CodeAnalysis;
@@ -32,7 +33,8 @@ namespace Malachi.App.Commands;
 /// <param name="VirtualKey">The virtual-key code (wParam).</param>
 /// <param name="Modifiers">FSHIFT (0x4), FCONTROL (0x8) and FALT (0x10), as the source reports them.</param>
 /// <param name="Repeat">An auto-repeated key down (bit 30 of lParam).</param>
-internal readonly record struct WebViewKey(uint Message, int VirtualKey, uint Modifiers, bool Repeat)
+/// <param name="Window">The WebView2's focus window the message is for.</param>
+internal readonly record struct WebViewKey(uint Message, int VirtualKey, uint Modifiers, bool Repeat, nint Window)
 {
     /// <summary>A key down (WM_KEYDOWN or WM_SYSKEYDOWN).</summary>
     public bool IsDown => Message is PInvoke.WM_KEYDOWN or PInvoke.WM_SYSKEYDOWN;
@@ -92,8 +94,8 @@ internal sealed partial class PreTranslateKeyboard
         }
     }
 
-    // The class of the window a message was sent to.
-    private static unsafe bool IsWebViewFocusWindow(HWND hwnd)
+    /// <summary>Whether <paramref name="hwnd"/> is a WebView2's focus window (its class).</summary>
+    internal static unsafe bool IsWebViewFocusWindow(HWND hwnd)
     {
         Span<char> name = stackalloc char[32];
         fixed (char* p = name)
@@ -143,7 +145,7 @@ internal sealed partial class PreTranslateKeyboard
                     && IsWebViewFocusWindow(msg.hwnd))
                 {
                     var repeat = ((nint)msg.lParam.Value & (1 << 30)) != 0;
-                    var key = new WebViewKey(msg.message, (int)(nuint)msg.wParam.Value, keyboardModifiers, repeat);
+                    var key = new WebViewKey(msg.message, (int)(nuint)msg.wParam.Value, keyboardModifiers, repeat, msg.hwnd);
                     if (onKey(key))
                     {
                         handled = 1;

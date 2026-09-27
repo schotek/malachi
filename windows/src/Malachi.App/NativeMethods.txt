@@ -20,10 +20,19 @@ MINMAXINFO
 CoWaitForMultipleObjects
 CWMO_FLAGS
 // The command router (Commands/): the class of the window a key was sent
-// to (the WebView2's Chrome_WidgetWin_0), and the key messages.
+// to (the WebView2's Chrome_WidgetWin_0), and the key messages; the
+// thread-local keyboard hook where the island has no pre-translate source.
 GetClassName
 MSG
 WM_KEYDOWN
 WM_KEYUP
 WM_SYSKEYDOWN
 WM_SYSKEYUP
+SetWindowsHookEx
+CallNextHookEx
+UnhookWindowsHookEx
+HC_ACTION
+GetCurrentThreadId
+GetFocus
+IsChild
+GetKeyState

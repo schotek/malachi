@@ -1101,10 +1101,16 @@ XAML side is `KeyboardAccelerator`s on the window's root (placement
 hidden), plus the root's `PreviewKeyDown` for Ctrl+Q, which a `TextBox`
 consumes before any accelerator; the WebView2 side is
 `PreTranslateKeyboard` (the COM interop of the spike, built-in COM, the
-app being untrimmed): a mapped key down of the `Chrome_WidgetWin_0` focus
-window is swallowed and its command runs after the message, the matching
-key up is swallowed too, an auto-repeat runs nothing more, and the
-browser's own keys are swallowed even when they run nothing. The compose
+app being untrimmed), or, where an island gives no pre-translate source,
+`ThreadKeyboardHook` (the measured `WH_KEYBOARD` fallback: thread-local,
+acting only while the thread's focus window is a `Chrome_WidgetWin_0`
+inside its window): a mapped key down of the `Chrome_WidgetWin_0` focus
+window is swallowed and its command runs after the message, the key up of
+that press is swallowed too when it comes to the same focus window (Core's
+`SwallowedKeys`: a command that moves the focus sends it elsewhere, and
+the next press of the key starts afresh), an auto-repeat runs nothing
+more, and the browser's own keys are swallowed even when they run
+nothing. The compose
 editor's WebView2 carries `KeyboardRouting.IsEditor="True"`, so that its
 single keys type and Escape stays with its bridge. No key runs anything
 while one of the window's dialogs is up. Verified with real input: Ctrl+F

@@ -155,8 +155,9 @@ windows/
                                   activation), App.xaml.cs (lifecycle, Quit), Shell/ (the
                                   composition root AppState, the Integration, alerts, toasts,
                                   window tracking and theme, the log), Commands/ (the command
-                                  router and the window commands), Controls/, Localization/
-                                  ({l:T}, mnemonics), Resources/ (icons, text styles),
+                                  router, the WebView2 keys through the island's pre-translate
+                                  source or a keyboard hook, the window commands), Controls/,
+                                  Localization/ ({l:T}, mnemonics), Resources/ (icons, text styles),
                                   Platform/ (the platform services' entry points)
     Malachi.Credentials/          malachi-credentials.exe, the daemon's keyring helper over
                                   Credential Manager (NativeAOT); depends on nothing else
