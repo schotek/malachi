@@ -357,13 +357,15 @@ public abstract partial class HardenedWebView : UserControl
                 return;
             }
             var c = web.CoreWebView2;
+            // Before the gate is attached: it answers with this environment's
+            // responses from its first request on.
+            environment = env;
             Harden(c);
             await ConfigureAsync(c);
             if (closed || !ReferenceEquals(web, Web))
             {
                 return;
             }
-            environment = env;
             core = c;
         }
         catch (Exception e) when (e is not OutOfMemoryException)
