@@ -30,8 +30,9 @@ func TestResolvePathsSocket(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := p.SocketFile(); got != tc.want {
-				t.Errorf("SocketFile = %q, want %q", got, tc.want)
+			// The path is joined with the system's separator.
+			if got, want := p.SocketFile(), filepath.FromSlash(tc.want); got != want {
+				t.Errorf("SocketFile = %q, want %q", got, want)
 			}
 		})
 	}
@@ -47,6 +48,23 @@ func writeConfig(t *testing.T, body string, mode os.FileMode) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// modeKept reports whether the file at path has exactly mode, as
+// writeConfig set it. Unix keeps the permission bits; Windows has none and
+// reports 0666 for every writable file, so a check that needs, say, a file
+// only its owner may read cannot run there and is skipped with a note.
+func modeKept(t *testing.T, path string, mode os.FileMode) bool {
+	t.Helper()
+	fi, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fi.Mode().Perm(); got != mode {
+		t.Logf("the file system reports mode %04o for a %04o file; the check that needs it is skipped", got, mode)
+		return false
+	}
+	return true
 }
 
 func TestLoadOAuth2Clients(t *testing.T) {
@@ -96,7 +114,7 @@ email = "me@gmail.invalid"
 	if a.OAuth2 == nil || a.OAuth2.Source != api.OAuth2SourceDaemon || a.OAuth2.Provider != api.OAuth2ProviderGoogle {
 		t.Fatalf("account oauth2 = %+v", a.OAuth2)
 	}
-	if WarnExposedSecret(nil, path, cfg) {
+	if modeKept(t, path, 0o600) && WarnExposedSecret(nil, path, cfg) {
 		t.Fatal("warned about a 0600 file")
 	}
 
@@ -145,9 +163,13 @@ func TestWarnExposedSecret(t *testing.T) {
 		{0o640, body, true},
 		{0o604, body, true},
 		{0o644, "[oauth2.google]\nclient_id = \"a\"\n", false}, // no secret
+		{0o666, body, true}, // a mode Windows can make too
 	} {
 		buf.Reset()
 		path := writeConfig(t, tc.body, tc.mode)
+		if !modeKept(t, path, tc.mode) {
+			continue
+		}
 		cfg, _, err := Load(path)
 		if err != nil {
 			t.Fatal(err)
