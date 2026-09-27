@@ -45,12 +45,22 @@ build from Visual Studio (F5) runs a complete app as build.ps1 app does.
   <!-- The icon compiled into MalachiMail.exe (ApplicationIcon), rendered
        from docs/malachi_icon.png as macos/Makefile renders its .icns, never
        committed. It has to exist before the XAML compiler's first pass
-       compiles the assembly, not just before CoreCompile. -->
+       compiles the assembly, not just before CoreCompile. The same run
+       renders Assets\notification.png, the icon the desktop notifications
+       register (AppNotificationManager.Register, docs/windows-port.md §10),
+       which goes beside the executable in a build and a publish. -->
+  <PropertyGroup Condition="'$(MalachiApp)' == 'true'">
+    <MalachiNotificationIconFile>$([System.IO.Path]::GetDirectoryName('$(MalachiIconFile)'))\notification.png</MalachiNotificationIconFile>
+  </PropertyGroup>
   <Target Name="MalachiIcons" BeforeTargets="XamlPreCompile;CoreCompile" Condition="'$(MalachiApp)' == 'true'"
           Inputs="$(MalachiRoot)docs\malachi_icon.png;$(MSBuildThisFileDirectory)scripts\make-icons.ps1"
-          Outputs="$(MalachiIconFile)">
-    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\make-icons.ps1&quot; -Source &quot;$(MalachiRoot)docs\malachi_icon.png&quot; -OutFile &quot;$(MalachiIconFile)&quot;" />
+          Outputs="$(MalachiIconFile);$(MalachiNotificationIconFile)">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\make-icons.ps1&quot; -Source &quot;$(MalachiRoot)docs\malachi_icon.png&quot; -OutFile &quot;$(MalachiIconFile)&quot; -PngFile &quot;$(MalachiNotificationIconFile)&quot;" />
   </Target>
+  <ItemGroup Condition="'$(MalachiApp)' == 'true'">
+    <None Include="$(MalachiNotificationIconFile)" Link="Assets\notification.png" Visible="false"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <!-- For F5: the host-architecture binaries that build.ps1 go (or make
        backend mcp) and build.ps1 app leave in build\ are copied beside

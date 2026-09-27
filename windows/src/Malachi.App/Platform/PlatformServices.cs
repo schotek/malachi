@@ -1,70 +1,310 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Windows-only file, a stub of the shell (phase E wave 1, E1): the entry
-// points through which the shell hands the platform services of
-// docs/windows-port.md §10 their moments. The platform-services package
-// (E7: notifications and sound, the notification-area icon, launch at
-// login, the mailto: registration) owns this file and replaces the bodies;
-// the shell calls exactly these, in this order:
+// Windows-only file: the entry points of the Windows platform services
+// (docs/windows-port.md §10, "Notifications and sound", "Background, tray,
+// launch at login", "mailto: and the default mail app"), what the macOS
+// AppDelegate and AppState wire by hand (NotificationService,
+// LoginItemService, the URL type) and GTK gets from the desktop (the
+// notification server, the Background portal, the desktop file).
 //
-// 1. InitializeEarly, in Main before AppInstance.FindOrRegisterForKey:
-//    AppNotificationManager's NotificationInvoked handler first, then
-//    Register() (a toast's click is delivered through COM, and without a
-//    handler the class is registered single-use). A click while the app
-//    runs arrives on a worker thread; hand its argument to invoked, which
-//    shows the main window. A cold start by a click is the shell's (the
-//    activation kind AppNotification).
-// 2. Start, on the UI thread once the application's objects, the main
-//    window and the Integration exist, before the connection starts.
-// 3. NewMessage, for every notify.newMessage, before the list gets it
-//    (notify.go's order).
-// 4. MainWindowVisibilityChanged, whenever the main window is shown or
-//    hidden (Run in Background: the tray icon comes and goes).
-// 5. Stop, on the UI thread at Quit's point of no return (the icon goes).
-// 6. Shutdown, in Main once Application.Start has returned (Unregister()).
+// The shell calls them in this order:
+//   Main, first:        InitializeEarly(onActivated): the notification
+//                       platform, before AppInstance.GetActivatedEventArgs
+//                       and the single-instance redirect;
+//   Main, cold start:   NotificationActivationFrom(GetActivatedEventArgs())
+//                       tells a click on a notification from a launch (also
+//                       for a redirected activation in AppInstance.Activated);
+//   UI thread, started: Start(context), once the hub exists and before the
+//                       mailbox adds its notify.newMessage handler (GTK
+//                       shows the notification first, then updates the list);
+//   UI thread:          SetRunningInBackground(true) when the main window is
+//                       hidden in the background (closed with Run in
+//                       Background, or never shown after --background), false
+//                       when it is shown again;
+//   on the way out:     Stop(), on the UI thread (Main's thread after
+//                       Application.Start returned is the same one).
+// LaunchAtLogin, Mailto and OpenDefaultApps are for Preferences.
 
 using System;
-using Malachi.App.Shell;
-using Malachi.Core.Api;
+using System.Collections.Generic;
+using System.IO;
+using System.Security;
+using System.Threading;
+using System.Threading.Tasks;
+using Malachi.Core.Presentation;
+using Malachi.Platform.Windows.Notifications;
+using Malachi.Platform.Windows.Registration;
+using Malachi.Platform.Windows.Sound;
+using Malachi.Platform.Windows.Startup;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Dispatching;
+using Microsoft.Windows.AppLifecycle;
 
 namespace Malachi.App.Platform;
 
-/// <summary>The platform services' entry points (a stub until E7 replaces it).</summary>
-internal static class PlatformServices
+/// <summary>
+/// Notifications and the new-mail sound, the notification-area icon,
+/// launch at login and the <c>mailto:</c> registration.
+/// </summary>
+public static partial class PlatformServices
 {
-    /// <summary>Main, before the single instance: the notification registration.</summary>
-    /// <param name="invoked">Called, on any thread, with the argument of a notification clicked while the app runs.</param>
-    public static void InitializeEarly(Action<string> invoked)
+    private static readonly Lock Gate = new();
+    private static ILoggerFactory loggers = NullLoggerFactory.Instance;
+    private static ILogger logger = NullLogger.Instance;
+    private static NotificationService? notifications;
+    private static Action<NotificationActivation>? onActivated;
+    private static List<NotificationActivation>? early = [];
+    private static DispatcherQueue? dispatcher;
+    private static PlatformContext? current;
+    private static NotificationHub.Token? newMessage;
+    private static BackgroundTray? tray;
+    private static bool background;
+    private static LaunchAtLogin? launchAtLogin;
+    private static MailtoRegistration? mailto;
+
+    /// <summary>
+    /// Registers the app with the notification platform and routes clicks
+    /// on its notifications to <paramref name="activated"/>. Call it first
+    /// in Main, before <c>AppInstance.GetActivatedEventArgs</c> (a click on
+    /// a notification of an app that is not running starts it through COM,
+    /// and the handler has to exist before registering). The handler runs
+    /// on the UI thread; clicks that arrive before <see cref="Start"/> are
+    /// handed over by it, in order. A click only ever means: show the main
+    /// window. Idempotent.
+    /// </summary>
+    /// <param name="activated">Shows the main window for a click; the activation names the message.</param>
+    /// <param name="loggerFactory">Where the services log; nothing when null.</param>
+    public static void InitializeEarly(Action<NotificationActivation> activated, ILoggerFactory? loggerFactory = null)
     {
-        ArgumentNullException.ThrowIfNull(invoked);
+        ArgumentNullException.ThrowIfNull(activated);
+        lock (Gate)
+        {
+            if (notifications is not null)
+            {
+                return;
+            }
+            loggers = loggerFactory ?? NullLoggerFactory.Instance;
+            logger = loggers.CreateLogger("Malachi.App.Platform");
+            onActivated = activated;
+        }
+        var service = NotificationService.Initialize(Activate, logger);
+        lock (Gate)
+        {
+            notifications = service;
+        }
     }
 
-    /// <summary>The application is up (UI thread): what the services need is in <paramref name="state"/>.</summary>
-    public static void Start(AppState state)
+    /// <summary>
+    /// The click on a notification that started or re-activated the app,
+    /// from <c>AppInstance.GetActivatedEventArgs()</c> or the
+    /// <c>Activated</c> event of a redirected instance; null when the
+    /// activation is anything else (a launch, a <c>mailto:</c> link).
+    /// </summary>
+    public static NotificationActivation? NotificationActivationFrom(AppActivationArguments? args) =>
+        NotificationService.FromActivation(args);
+
+    /// <summary>
+    /// Starts the services on the UI thread: the desktop notification and
+    /// the new-mail sound of every <c>notify.newMessage</c> of the hub (a
+    /// handler added now, so call it before the mailbox adds its own), the
+    /// launch-at-login mirror (a Run value of a moved app folder follows
+    /// it), the <c>mailto:</c> registration when it is missing or stale (off
+    /// the UI thread), and the notification-area icon once the app runs in
+    /// the background. Clicks held since <see cref="InitializeEarly"/> are
+    /// handed over. Call it once, after <see cref="InitializeEarly"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Off the UI thread, or a second time.</exception>
+    public static void Start(PlatformContext context)
     {
-        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(context);
+        var queue = DispatcherQueue.GetForCurrentThread()
+            ?? throw new InvalidOperationException("PlatformServices.Start runs on the UI thread");
+        List<NotificationActivation> held;
+        lock (Gate)
+        {
+            if (current is not null)
+            {
+                throw new InvalidOperationException("PlatformServices.Start was called already");
+            }
+            if (context.LoggerFactory is not null && ReferenceEquals(loggers, NullLoggerFactory.Instance))
+            {
+                loggers = context.LoggerFactory;
+                logger = loggers.CreateLogger("Malachi.App.Platform");
+            }
+            current = context;
+            dispatcher = queue;
+            held = early ?? [];
+            early = null;
+        }
+        if (notifications is null)
+        {
+            LogNotInitialized(logger);
+        }
+        var exe = ExecutablePath;
+        IDesktopNotifier notifier = notifications is { } n ? n : new NoNotifier();
+        var policy = new NotificationPolicy(context.Settings, context.IsMainWindowActive, notifier, new NewMailSound(logger));
+        newMessage = context.Notifications.AddNewMessage(policy.Deliver);
+        tray = new BackgroundTray(context, queue, exe, logger);
+        tray.SetVisible(background);
+        StartLaunchAtLogin(context);
+        StartMailtoRegistration();
+        foreach (var activation in held)
+        {
+            Deliver(activation);
+        }
     }
 
-    /// <summary>notify.newMessage (UI thread), before the list: the desktop notification and the sound.</summary>
-    public static void NewMessage(NewMessageNotification notification)
+    /// <summary>
+    /// Whether the app runs in the background with its main window hidden:
+    /// the notification-area icon is shown exactly then. Call it on the UI
+    /// thread; before <see cref="Start"/> the state is kept for it.
+    /// </summary>
+    public static void SetRunningInBackground(bool inBackground)
     {
-        ArgumentNullException.ThrowIfNull(notification);
+        background = inBackground;
+        tray?.SetVisible(inBackground);
     }
 
-    /// <summary>The main window was shown or hidden (UI thread).</summary>
-    public static void MainWindowVisibilityChanged(bool visible)
-    {
-        _ = visible;
-    }
-
-    /// <summary>Quit's point of no return (UI thread).</summary>
+    /// <summary>
+    /// Stops the services on the way out: the icon leaves the notification
+    /// area, the hub's handler is removed and the live notification
+    /// registration is revoked (a later click starts the app again). Safe to
+    /// call in any state and more than once.
+    /// </summary>
     public static void Stop()
     {
+        tray?.Dispose();
+        tray = null;
+        newMessage?.Cancel();
+        newMessage = null;
+        NotificationService? service;
+        lock (Gate)
+        {
+            service = notifications;
+            dispatcher = null;
+        }
+        service?.Unregister();
     }
 
-    /// <summary>The application has ended (Main, after Application.Start).</summary>
-    public static void Shutdown()
+    /// <summary>Launch at login of this executable, for Preferences (read afresh on every call).</summary>
+    public static LaunchAtLogin LaunchAtLogin => launchAtLogin ??= new LaunchAtLogin(ExecutablePath);
+
+    /// <summary>The <c>mailto:</c> registration of this executable, for Preferences and an uninstaller.</summary>
+    public static MailtoRegistration Mailto => mailto ??= new MailtoRegistration(ExecutablePath);
+
+    /// <summary>
+    /// Opens Settings → Apps → Default apps on Malachi Mail's page (the
+    /// Default apps button of Preferences); false when Windows could not.
+    /// </summary>
+    public static bool OpenDefaultApps() => SystemSettings.Open(SystemSettings.DefaultAppsUri);
+
+    private static string ExecutablePath =>
+        current?.ExecutablePath ?? Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "MalachiMail.exe");
+
+    // A click, from the notification platform's thread: to the UI thread,
+    // or held until Start.
+    private static void Activate(NotificationActivation activation)
     {
+        lock (Gate)
+        {
+            if (early is not null)
+            {
+                early.Add(activation);
+                return;
+            }
+        }
+        Deliver(activation);
+    }
+
+    private static void Deliver(NotificationActivation activation)
+    {
+        DispatcherQueue? queue;
+        Action<NotificationActivation>? handler;
+        lock (Gate)
+        {
+            queue = dispatcher;
+            handler = onActivated;
+        }
+        if (queue is null || handler is null || !queue.TryEnqueue(() => Guard(() => handler(activation))))
+        {
+            LogActivationDropped(logger);
+        }
+    }
+
+    private static void StartLaunchAtLogin(PlatformContext context)
+    {
+        try
+        {
+            if (LaunchAtLogin.RepairMovedExecutable())
+            {
+                LogRunRepaired(logger);
+            }
+            LaunchAtLogin.MirrorInto(context.Settings);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or IOException or SecurityException)
+        {
+            LogRegistryFailed(logger, "launch at login", e.Message);
+        }
+    }
+
+    private static void StartMailtoRegistration()
+    {
+        var registration = Mailto;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                if (registration.EnsureRegistered())
+                {
+                    LogMailtoRegistered(logger);
+                }
+            }
+            catch (Exception e) when (e is UnauthorizedAccessException or IOException or SecurityException)
+            {
+                LogRegistryFailed(logger, "mailto: registration", e.Message);
+            }
+        });
+    }
+
+    private static void Guard(Action action)
+    {
+        try
+        {
+            action();
+        }
+#pragma warning disable CA1031 // A queued callback that throws would end the application.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            LogHandlerFailed(logger, e);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "platform: Start without InitializeEarly; no desktop notifications")]
+    private static partial void LogNotInitialized(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "platform: a notification click was dropped; the UI thread is gone")]
+    private static partial void LogActivationDropped(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "platform: the Run value pointed at a moved app folder and was rewritten")]
+    private static partial void LogRunRepaired(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "platform: mailto: registration written")]
+    private static partial void LogMailtoRegistered(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "platform: {What}: {Reason}")]
+    private static partial void LogRegistryFailed(ILogger logger, string what, string reason);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "platform: the activation handler failed")]
+    private static partial void LogHandlerFailed(ILogger logger, Exception error);
+
+    /// <summary>Desktop notifications when the platform was never initialised: none.</summary>
+    private sealed class NoNotifier : IDesktopNotifier
+    {
+        public void Show(DesktopNotification notification)
+        {
+        }
     }
 }

@@ -5,7 +5,11 @@
 # docs/malachi_icon.png: the counterpart of the icon target of macos/Makefile
 # (sips and iconutil), with the System.Drawing that Windows PowerShell ships.
 # Run by the MalachiIcons target of Directory.Build.targets and by
-# build.ps1 icons.
+# build.ps1 icons. With -PngFile it also writes the icon the desktop
+# notifications show (Assets/notification.png beside the app, registered
+# with AppNotificationManager.Register; docs/windows-port.md §10): the same
+# square at -PngSize pixels (128 by default), which Windows scales to the
+# sizes it shows.
 #
 # The source keeps a transparent margin around its rounded square (a 1254 px
 # canvas). The square is cut out exactly as macos/Makefile cuts it,
@@ -21,7 +25,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)] [string] $Source,
-    [Parameter(Mandatory = $true)] [string] $OutFile
+    [Parameter(Mandatory = $true)] [string] $OutFile,
+    [string] $PngFile,
+    [int] $PngSize = 128
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +37,9 @@ Add-Type -AssemblyName System.Drawing
 # Relative to the current location, which .NET's own resolution ignores.
 $Source = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Source)
 $OutFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutFile)
+if ($PngFile) {
+    $PngFile = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($PngFile)
+}
 
 $CropX = 65
 $CropY = 64
@@ -132,7 +141,16 @@ try {
 }
 
 $images = [System.Collections.Generic.List[byte[]]]::new()
+$pngBytes = $null
 try {
+    if ($PngFile) {
+        $frame = New-Frame $square $PngSize
+        try {
+            $pngBytes = Get-PngBytes $frame
+        } finally {
+            $frame.Dispose()
+        }
+    }
     foreach ($size in $Sizes) {
         $frame = New-Frame $square $size
         try {
@@ -183,11 +201,18 @@ try {
 
 # Written beside the target and moved into place, so that an interrupted run
 # never leaves a truncated icon that MSBuild would take as up to date.
-$dir = [System.IO.Path]::GetDirectoryName($OutFile)
-[System.IO.Directory]::CreateDirectory($dir) | Out-Null
-$temp = "$OutFile.tmp"
-[System.IO.File]::WriteAllBytes($temp, $bytes)
-if ([System.IO.File]::Exists($OutFile)) {
-    [System.IO.File]::Delete($OutFile)
+function Write-Atomically([string] $Path, [byte[]] $Content) {
+    $dir = [System.IO.Path]::GetDirectoryName($Path)
+    [System.IO.Directory]::CreateDirectory($dir) | Out-Null
+    $temp = "$Path.tmp"
+    [System.IO.File]::WriteAllBytes($temp, $Content)
+    if ([System.IO.File]::Exists($Path)) {
+        [System.IO.File]::Delete($Path)
+    }
+    [System.IO.File]::Move($temp, $Path)
 }
-[System.IO.File]::Move($temp, $OutFile)
+
+if ($PngFile) {
+    Write-Atomically $PngFile $pngBytes
+}
+Write-Atomically $OutFile $bytes
