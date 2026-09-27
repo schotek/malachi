@@ -7,12 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
+	"github.com/emersion/go-imap/v2/imapclient"
 
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -108,6 +110,72 @@ func replyMessage(id, subject, parent, body string) string {
 	return fmt.Sprintf("From: Bob <bob@example.test>\r\nTo: me@example.test\r\nSubject: %s\r\nDate: Mon, 01 Sep 2026 11:00:00 +0000\r\n"+
 		"Message-ID: <%s@example.test>\r\nIn-Reply-To: <%s@example.test>\r\nReferences: <root@example.test>\r\n <%s@example.test>\r\n"+
 		"Content-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", subject, id, parent, parent, body)
+}
+
+// A message that arrives while a pass is finishing, after its UID SEARCH
+// and before its closing STATUS, is announced by the next pass: that STATUS
+// already counts it, so it must not become the baseline the next pass
+// tells new UIDs by.
+func TestNewMessageDuringPass(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	appended := make(chan error, 1)
+	h.syncer.deps.Notifier = beforeNewMessage{h.notes, func(n api.NewMessageNotification) {
+		if n.Message.Subject == "Ping" {
+			// The syncer's goroutine is inside the pass that fetched the
+			// first message, and waits for this APPEND.
+			appended <- h.appendNow("INBOX", replyMessage("n2", "Re: Ping", "n1", "reply"))
+		}
+	}}
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	h.append("INBOX", rawMessage("n1", "Ping", "first line of the body"), time.Now())
+	if n := h.waitNewMessage(); n.Message.Subject != "Ping" {
+		t.Fatalf("first notification = %+v", n.Message)
+	}
+	if err := <-appended; err != nil {
+		t.Fatalf("append during the pass: %v", err)
+	}
+	if n := h.waitNewMessage(); n.Message.Subject != "Re: Ping" {
+		t.Fatalf("second notification = %+v", n.Message)
+	}
+}
+
+// beforeNewMessage is a Notifier that runs hook on the syncer's goroutine
+// before it passes a new-message notification on.
+type beforeNewMessage struct {
+	api.Notifier
+	hook func(api.NewMessageNotification)
+}
+
+func (b beforeNewMessage) NewMessage(n api.NewMessageNotification) {
+	b.hook(n)
+	b.Notifier.NewMessage(n)
+}
+
+// appendNow is h.append for a goroutine other than the test's: it reports
+// an error instead of failing the test.
+func (h *harness) appendNow(mailbox, raw string) error {
+	c, err := imapclient.DialInsecure(h.srvURL, nil)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err := c.Login("me", password).Wait(); err != nil {
+		return err
+	}
+	cmd := c.Append(mailbox, int64(len(raw)), &imap.AppendOptions{Time: time.Now()})
+	if _, err := io.WriteString(cmd, raw); err != nil {
+		return err
+	}
+	if err := cmd.Close(); err != nil {
+		return err
+	}
+	if _, err := cmd.Wait(); err != nil {
+		return err
+	}
+	return c.Logout().Wait()
 }
 
 // References are fetched with the envelope, so a conversation is known

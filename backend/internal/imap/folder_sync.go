@@ -102,11 +102,15 @@ func (s *Syncer) syncFolder(ctx context.Context, sess *session, f store.Folder, 
 		LastSyncAt:     time.Now(),
 	}
 	// A fresh STATUS is the baseline of the next change detection; the
-	// SELECT values are from before this pass.
+	// SELECT values are from before this pass. Except UIDNEXT: a message
+	// that arrived after the UID SEARCH above is counted by the STATUS but
+	// was not fetched, and would look old to the next pass (never
+	// announced; outside INBOX not even fetched). SELECT's UIDNEXT
+	// predates the search, so the next pass takes such a message as new.
 	st, err := folderStatus(ctx, sess, f.Mailbox)
 	switch {
 	case err == nil && st != nil:
-		if st.UIDValidity == sel.UIDValidity && st.UIDNext != 0 {
+		if state.UIDNext == 0 && st.UIDValidity == sel.UIDValidity && st.UIDNext != 0 {
 			state.UIDNext = uint32(st.UIDNext)
 		}
 		if st.NumMessages != nil {
