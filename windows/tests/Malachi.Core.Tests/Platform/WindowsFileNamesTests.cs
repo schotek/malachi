@@ -191,12 +191,43 @@ public sealed class WindowsFileNamesTests
     [InlineData("a：b／c＼d.txt", "a_b_c_d.txt")]
     [InlineData("＜＞？＊｜.txt", "_____.txt")]
     [InlineData("aʺb̎c″d〃e.txt", "a_b_c_d_e.txt")]
+    // A '"' that came back would split the command line of an ANSI
+    // program: "…\x" --flag ".pdf".
+    [InlineData("x‟ --flag ‟.pdf", "x_ --flag _.pdf")]
+    [InlineData("x‶ --flag ‶.pdf", "x_ --flag _.pdf")]
+    [InlineData("x〝 --flag 〞.pdf", "x_ --flag _.pdf")]
+    // The separators, the colon, the star, the bar and the angle brackets
+    // of code page 1252.
+    [InlineData("a∕b⁄c∖d.txt", "a_b_c_d.txt")]
+    [InlineData("a∶b։c∗d.txt", "a_b_c_d.txt")]
+    [InlineData("aǀb∣c❘d.txt", "a_b_c_d.txt")]
+    [InlineData("〈a〉〈b〉.txt", "_a__b_.txt")]
     // Full-width letters and CJK punctuation are left as they are.
     [InlineData("ＡＢＣ.txt", "ＡＢＣ.txt")]
     [InlineData("資料、最終.pdf", "資料、最終.pdf")]
     public void BestFitLookAlikesBecomeUnderscores(string input, string want)
     {
         Assert.Equal(want, WindowsFileNames.Sanitize(input));
+    }
+
+    [Theory]
+    // Ordinary characters of names, look-alikes only in some code pages:
+    // replaced only where the caller says this machine has them.
+    [InlineData("¥100.pdf", '¥', "_100.pdf")]
+    [InlineData("„Návrh“.docx", '„', "_Návrh“.docx")]
+    [InlineData("A → B.pdf", '→', "A _ B.pdf")]
+    [InlineData("čeština ´.txt", '´', "čeština _.txt")]
+    [InlineData("►play.mp3", '►', "_play.mp3")]
+    [InlineData("₩5000.xlsx", '₩', "_5000.xlsx")]
+    public void TheLookAlikesOfThisMachineBecomeUnderscores(string input, char lookAlike, string want)
+    {
+        Assert.Equal(input, WindowsFileNames.Sanitize(input));
+        HashSet<char> machine = [lookAlike];
+        Assert.Equal(want, WindowsFileNames.Sanitize(input, WindowsFileNames.MaxLength, machine));
+        Assert.Equal(want, WindowsFileNames.FileName(input, "listed.pdf", machine));
+        // Applied again, with or without them, it changes nothing.
+        Assert.Equal(want, WindowsFileNames.Sanitize(want, WindowsFileNames.MaxLength, machine));
+        Assert.Equal(want, WindowsFileNames.Sanitize(want));
     }
 
     [Theory]

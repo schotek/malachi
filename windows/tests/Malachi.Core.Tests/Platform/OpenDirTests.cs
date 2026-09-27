@@ -9,6 +9,7 @@
 // links and long names are new.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Malachi.Core.Platform;
@@ -200,6 +201,18 @@ public sealed class OpenDirTests
         Assert.False(DangerousTypes.IsDangerous(written, null), written);
         Assert.True(File.Exists(path));
         Assert.True(path.Length <= 259, $"{path.Length}");
+    }
+
+    [Fact]
+    public void WriteReplacesTheLookAlikesOfThisMachine()
+    {
+        using var temp = new TemporaryDirectory();
+        var open = new OpenDir(temp.Path, new FakePrivateDirectories(), new FakeTimeProvider(Now), new HashSet<char> { '¥' });
+
+        var path = open.Write("¥100 ‟x‟.pdf", "x"u8);
+
+        Assert.Equal("_100 _x_.pdf", Path.GetFileName(path));
+        Assert.Equal("¥100 _x_.pdf", Path.GetFileName(new OpenDir(temp.Path, new FakePrivateDirectories(), new FakeTimeProvider(Now)).Write("¥100 ‟x‟.pdf", "x"u8)));
     }
 
     [Fact]

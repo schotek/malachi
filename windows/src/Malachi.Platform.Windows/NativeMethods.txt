@@ -19,3 +19,6 @@ AssocIsDangerous
 INET_E_SECURITY_PROBLEM
 // Launch: Open With (Launch/); ShellExecuteEx comes through Process.Start.
 SHOpenWithDialog
+// Files: the best-fit look-alikes of the ANSI code page (Files/AnsiLookAlikes).
+WideCharToMultiByte
+GetACP

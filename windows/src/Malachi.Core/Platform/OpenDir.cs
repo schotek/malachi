@@ -9,6 +9,7 @@
 // and the sweeps leave alone what a viewer still holds open.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
 
@@ -50,13 +51,16 @@ public sealed class OpenDir
 
     private readonly IPrivateDirectoryFactory directories;
     private readonly TimeProvider time;
+    private readonly IReadOnlySet<char>? lookAlikes;
 
     /// <summary>
     /// The open directory at <paramref name="path"/>, which must be fully
     /// qualified; <paramref name="directories"/> makes it and its
-    /// subdirectories private.
+    /// subdirectories private, and <paramref name="lookAlikes"/> are the
+    /// characters this machine's ANSI code page turns into reserved ones
+    /// (<see cref="WindowsFileNames.Sanitize(string, int, IReadOnlySet{char})"/>).
     /// </summary>
-    public OpenDir(string path, IPrivateDirectoryFactory directories, TimeProvider time)
+    public OpenDir(string path, IPrivateDirectoryFactory directories, TimeProvider time, IReadOnlySet<char>? lookAlikes = null)
     {
         ArgumentNullException.ThrowIfNull(path);
         ArgumentNullException.ThrowIfNull(directories);
@@ -68,6 +72,7 @@ public sealed class OpenDir
         Path = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));
         this.directories = directories;
         this.time = time;
+        this.lookAlikes = lookAlikes;
     }
 
     /// <summary>The directory (OpenDir.swift <c>url</c>).</summary>
@@ -79,10 +84,11 @@ public sealed class OpenDir
     /// <c>default</c>). The caller resolves the data directory, including
     /// the <c>MALACHI_DATA_DIR</c> override.
     /// </summary>
-    public static OpenDir InDataDirectory(string dataDirectory, IPrivateDirectoryFactory directories, TimeProvider time)
+    public static OpenDir InDataDirectory(
+        string dataDirectory, IPrivateDirectoryFactory directories, TimeProvider time, IReadOnlySet<char>? lookAlikes = null)
     {
         ArgumentNullException.ThrowIfNull(dataDirectory);
-        return new OpenDir(System.IO.Path.Combine(dataDirectory, DirectoryName), directories, time);
+        return new OpenDir(System.IO.Path.Combine(dataDirectory, DirectoryName), directories, time, lookAlikes);
     }
 
     /// <summary>
@@ -98,8 +104,9 @@ public sealed class OpenDir
     /// Writes <paramref name="data"/> into a fresh private subdirectory and
     /// returns the file's path (<c>writeOpenFile</c>). Entries older than
     /// <see cref="OpenMaxAge"/> go first. The name goes through
-    /// <see cref="WindowsFileNames.Sanitize(string, int)"/> once more, cut
-    /// to <see cref="MaxFileNameLength"/>: a long name comes out shorter
+    /// <see cref="WindowsFileNames.Sanitize(string, int, IReadOnlySet{char})"/>
+    /// once more, with this machine's look-alikes and cut to
+    /// <see cref="MaxFileNameLength"/>: a long name comes out shorter
     /// than the caller's (never with an extension it did not have), so the
     /// name of the returned path, not <paramref name="name"/>, is the one
     /// to judge (<see cref="IFileTypePolicy"/>) and to pass on
@@ -116,7 +123,7 @@ public sealed class OpenDir
         var sub = NewSubdirectory();
         try
         {
-            var fileName = WindowsFileNames.Sanitize(name, MaxFileNameLength);
+            var fileName = WindowsFileNames.Sanitize(name, MaxFileNameLength, lookAlikes);
             var path = System.IO.Path.Combine(sub, fileName);
             using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {

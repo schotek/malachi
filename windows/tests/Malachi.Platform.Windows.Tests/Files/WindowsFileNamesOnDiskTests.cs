@@ -27,7 +27,7 @@ public sealed class WindowsFileNamesOnDiskTests
         "COM¹.txt", "LPT³", "CONIN$", "CONOUT$", "CLOCK$",
         "desktop.ini", "thumbs.db",
         "..\\..\\evil.exe", "x\\..\\y.txt", "/etc/passwd",
-        "photo‮gnp.exe", "\t.txt", "＂x＂.txt", "\uD800.txt",
+        "photo‮gnp.exe", "\t.txt", "＂x＂.txt", "\uD800.txt", "x‟ --flag ‟.pdf", "a∶b∕c∖d.txt",
         new string('a', 400), new string('ž', 300) + ".txt", "NUL" + new string(' ', 300) + "x.txt",
         "😀.png", "Jörg's Übersicht.ods",
     };

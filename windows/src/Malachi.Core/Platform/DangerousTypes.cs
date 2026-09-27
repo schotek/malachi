@@ -239,7 +239,10 @@ public static class DangerousTypes
     /// <summary>
     /// The extensions an attachment's name is judged by, without their dot:
     /// that of the name as given (trimmed) and that of the name it gets on
-    /// disk, once each, empty ones left out.
+    /// disk, once each, empty ones left out. A shorter cap or this
+    /// machine's look-alikes give no other type: a cut leaves the same
+    /// extension or none, and a look-alike becomes <c>_</c>, which nothing
+    /// listed contains.
     /// </summary>
     public static IReadOnlyList<string> CandidateExtensions(string? filename)
     {

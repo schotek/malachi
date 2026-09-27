@@ -5,12 +5,14 @@
 // (safeFileName, uniqueName, fileName), itself the mirror of
 // backend/internal/safename (Filename); GTK: ui/internal/window/
 // attachments.go (uniqueName, fileName). What Windows adds is its own
-// naming rules (docs/windows-port.md §10): reserved characters, alternate
+// naming rules (docs/windows-port.md §10): reserved characters and what the
+// best-fit conversion into an ANSI code page turns into them, alternate
 // data streams, trailing dots and spaces, device names, the length of a
 // path.
 
 using System;
 using System.Collections.Frozen;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
@@ -62,11 +64,45 @@ public static class WindowsFileNames
         "desktop.ini", "thumbs.db",
     }.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
+    // The characters Windows keeps out of names ('/' and '\' never get
+    // here: only the last path component is left), and their look-alikes.
+    // A program that reads its command line in the ANSI code page gets the
+    // path of the file it opens through Windows' best-fit conversion, which
+    // turns these back into reserved ones; a '"' that comes back splits the
+    // command line and passes the rest of the name as arguments (WorstFit).
+    // Measured with WideCharToMultiByte on Windows 11 26100: everything
+    // code page 1252 turns into < > : " / \ | ? *, and everything any ANSI
+    // code page turns into '"' except „ (U+201E: a '"' only in code page
+    // 874, and the opening quote of Czech and German). What the other code
+    // pages add (¥ in 932, ¦ in 932–950, ₩ in 949, ´ in 1253, „ in 874,
+    // ← → in 1251 and 1253, ↕ ↨ in 1250 and 1254, ► ◄ ♂ in 1250, 1251,
+    // 1253 and 1254) are ordinary characters of names everywhere else: the
+    // caller passes those of this machine's code page (the lookAlikes of
+    // Sanitize, from Malachi.Platform.Windows.Files.AnsiLookAlikes).
+    private static readonly FrozenSet<char> ReservedCharacters = new[]
+    {
+        '<', '>', ':', '"', '|', '?', '*',
+        // The full-width forms.
+        '＂', '＊', '／', '：', '＜', '＞', '？', '＼', '｜',
+        // Code page 1252: ǀ ʺ ̎ ։ ‟ ″ ‶ ⁄ ∕ ∖ ∗ ∣ ∶ 〈 〉 ❘ 〈 〉.
+        'ǀ', 'ʺ', '̎', '։', '‟', '″', '‶', '⁄', '∕',
+        '∖', '∗', '∣', '∶', '〈', '〉', '❘', '〈', '〉',
+        // The '"' of code page 1254 (〝 〞), and the ditto mark 〃, which
+        // looks like one.
+        '〝', '〞', '〃',
+    }.ToFrozenSet();
+
     /// <summary>
     /// <see cref="Sanitize(string, int)"/> with the longest name Windows
     /// allows.
     /// </summary>
-    public static string Sanitize(string? raw) => Sanitize(raw, MaxLength);
+    public static string Sanitize(string? raw) => Sanitize(raw, MaxLength, null);
+
+    /// <summary>
+    /// <see cref="Sanitize(string, int, IReadOnlySet{char})"/> without
+    /// look-alikes of this machine's own.
+    /// </summary>
+    public static string Sanitize(string? raw, int maxLength) => Sanitize(raw, maxLength, null);
 
     /// <summary>
     /// A file name Windows stores exactly as returned (AttachmentChips.swift
@@ -75,19 +111,22 @@ public static class WindowsFileNames
     /// bidirectional formatting characters (a U+202E before "gnp.exe" makes
     /// "photo.exe.png" appear on screen), no U+FFFD or broken surrogates,
     /// surrounding white space and leading dots removed. Then Windows' own
-    /// rules: <c>&lt; &gt; : " | ? *</c> and their full-width forms become
+    /// rules: <c>&lt; &gt; : " | ? *</c> and their look-alikes become
     /// <c>_</c> (<c>:</c> would write an alternate data stream, and the
-    /// full-width forms turn back into the reserved ones when a program
-    /// reads its command line in an ANSI code page), trailing dots and
-    /// spaces go (Windows would drop them silently), a device name gets a
-    /// leading <c>_</c> ("CON.txt" is the console), and the result has at
-    /// most <see cref="MaxBytes"/> bytes and <paramref name="maxLength"/>
-    /// characters, a short extension kept. Whatever the cap, the result's
-    /// extension is the one the name has after those rules, or none: a cut
-    /// through a long one turns the dots it leaves into <c>_</c>. Never
-    /// empty; applying it again changes nothing.
+    /// look-alikes turn back into the reserved ones when a program reads
+    /// its command line in an ANSI code page: the full-width forms, what
+    /// code page 1252 maps to them, every look-alike of <c>"</c>, and
+    /// <paramref name="lookAlikes"/>, those of this machine's code page),
+    /// trailing dots and spaces go (Windows would drop them silently), a
+    /// device name gets a leading <c>_</c> ("CON.txt" is the console), and
+    /// the result has at most <see cref="MaxBytes"/> bytes and
+    /// <paramref name="maxLength"/> characters, a short extension kept.
+    /// Whatever the cap, the result's extension is the one the name has
+    /// after those rules, or none: a cut through a long one turns the dots
+    /// it leaves into <c>_</c>. Never empty; applying it again changes
+    /// nothing.
     /// </summary>
-    public static string Sanitize(string? raw, int maxLength)
+    public static string Sanitize(string? raw, int maxLength, IReadOnlySet<char>? lookAlikes)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxLength, MinLength);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maxLength, MaxLength);
@@ -105,7 +144,7 @@ public static class WindowsFileNames
             {
                 continue;
             }
-            if (Reserved(r.Value))
+            if (r.IsBmp && (ReservedCharacters.Contains((char)r.Value) || lookAlikes?.Contains((char)r.Value) == true))
             {
                 kept.Append('_');
                 continue;
@@ -196,13 +235,15 @@ public static class WindowsFileNames
     /// The name a fetched part is written under (AttachmentChips.swift
     /// <c>fileName</c>, attachments.go <c>fileName</c>): what message.part
     /// reported (<paramref name="served"/>), else the listed name, else
-    /// <see cref="Fallback"/>; each through <see cref="Sanitize(string)"/>.
+    /// <see cref="Fallback"/>; each through
+    /// <see cref="Sanitize(string, int, IReadOnlySet{char})"/> with this
+    /// machine's <paramref name="lookAlikes"/>.
     /// </summary>
-    public static string FileName(string? served, string? listed)
+    public static string FileName(string? served, string? listed, IReadOnlySet<char>? lookAlikes = null)
     {
         foreach (var candidate in new[] { served ?? "", listed ?? "" })
         {
-            var n = Sanitize(candidate);
+            var n = Sanitize(candidate, MaxLength, lookAlikes);
             if (n != Fallback)
             {
                 return n;
@@ -218,18 +259,6 @@ public static class WindowsFileNames
         || c is 0x200E or 0x200F // LRM, RLM
         || c is >= 0x202A and <= 0x202E // LRE, RLE, PDF, LRO, RLO
         || c is >= 0x2066 and <= 0x2069; // LRI, RLI, FSI, PDI
-
-    // The characters Windows keeps out of file names, and the ones its
-    // best-fit conversion to code page 1252 turns into them: the
-    // full-width forms and the look-alikes of '"'. The separators never
-    // get here; the last path component is all that is left.
-    private static bool Reserved(int c) => c switch
-    {
-        '<' or '>' or ':' or '"' or '|' or '?' or '*' => true,
-        0xFF02 or 0xFF0A or 0xFF0F or 0xFF1A or 0xFF1C or 0xFF1E or 0xFF1F or 0xFF3C or 0xFF5C => true,
-        0x02BA or 0x030E or 0x2033 or 0x3003 => true,
-        _ => false,
-    };
 
     // Windows drops trailing dots and spaces from a name; so does this, and
     // any other white space they uncover.
