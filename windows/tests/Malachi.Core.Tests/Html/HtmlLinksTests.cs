@@ -139,6 +139,13 @@ public sealed class HtmlLinksTests
     [InlineData("bank.example.org", "  https://evil.example.net/  ", true)] // the href is trimmed
     [InlineData("bank.example.org", "//evil.example.net/", true)] // a network-path reference has a host
     [InlineData("bank.example.org", "https://evil.example.net/\x0001", false)] // a control byte fails the parse
+    [InlineData("bank.example.org", "https://[fe80::1%25%41]/", true)] // a zone may escape a byte a host could carry
+    [InlineData("bank.example.org", "https://[fe80::1%25%20x]/", true)] // or a space
+    [InlineData("bank.example.org", "https://[fe80::1%25en%30]/", true)]
+    [InlineData("bank.example.org", "https://[fe80::1%25%C3%A4]/", false)] // but no byte beyond ASCII
+    [InlineData("bank.example.org", "https://[fe80::1%25%2F]/", false)] // nor one a host may not carry
+    [InlineData("bank.example.org", "https://[fe80::%41%25x]/", false)] // before the zone, the host's rules
+    [InlineData("bank.example.org", "https://[fe80::1%25en0]:%38/", false)] // and after it
     public void GoHostRules(string text, string href, bool want)
     {
         Assert.Equal(want, Links.IsMasked(text, href));

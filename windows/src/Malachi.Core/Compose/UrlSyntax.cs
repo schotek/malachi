@@ -11,13 +11,18 @@
 // does. System.Uri is stricter in places (spaces, some escapes) and looser
 // in others (it normalises, accepts backslashes, fills in a scheme's
 // default authority), and the phishing check must not drift. The input is
-// the string's UTF-8 bytes; decoded bytes that are not UTF-8 are replaced,
-// as Swift and .NET read them. These are Go 1.25's rules, the GTK module's
-// go version and the Swift port's: checked against Go's url.Parse on a
-// corpus of hostile URLs, they differ only where Go 1.26 made hosts
-// stricter whatever the module declares (a bracketed literal must be an
-// IPv6 address, a "[" may not appear later in the host), which neither the
-// GTK UI built with Go 1.25 nor macOS applies.
+// the string's UTF-8 bytes. These are Go 1.25's rules, the GTK module's go
+// version, the IPv6 zone of a bracketed host ("[fe80::1%25en0]", RFC 6874)
+// included: its escapes may stand for a space or any byte a host may
+// contain, but not for a byte beyond ASCII (macOS's URLSyntax decodes a
+// zone as the rest of the host, the other way round; GTK is the
+// reference). Checked against Go's url.Parse on a corpus of hostile URLs,
+// they differ in two ways only. Go 1.26 made bracketed hosts stricter
+// whatever the module declares (the literal must be an IPv6 address, with a
+// non-empty zone, and a "[" may not appear later in the host), which
+// neither the GTK UI built with Go 1.25 nor macOS applies. And decoded bytes
+// that are not UTF-8 become U+FFFD here, as Swift and .NET read them,
+// where Go keeps the bytes ("https://%80/" has the host "\x80" in Go).
 
 using System;
 using System.Collections.Generic;
@@ -30,7 +35,8 @@ internal static class UrlSyntax
 {
     /// <summary>
     /// Which component is being unescaped (net/url's encoding); only the
-    /// host and a query component have rules of their own.
+    /// host, the zone of an IPv6 host and a query component have rules of
+    /// their own.
     /// </summary>
     public enum Mode
     {
@@ -42,6 +48,9 @@ internal static class UrlSyntax
 
         /// <summary>A host.</summary>
         Host,
+
+        /// <summary>The zone of a bracketed IPv6 host, from its "%25" to the "]" (encodeZone).</summary>
+        Zone,
     }
 
     /// <summary>What url.Parse makes of the part after the scheme.</summary>
@@ -138,13 +147,20 @@ internal static class UrlSyntax
     /// <summary>
     /// unescape: percent-decoding with net/url's checks. Null on a malformed
     /// escape, on an escape a host may not carry (only bytes beyond ASCII,
-    /// and "%25"), and on a byte a host may not contain. "+" becomes a space
-    /// only in a query component.
+    /// and "%25") or a zone may not carry (anything but "%25", a space and
+    /// the bytes a host may contain), and on a byte a host or zone may not
+    /// contain. "+" becomes a space only in a query component.
     /// </summary>
-    public static string? Unescape(ReadOnlySpan<byte> s, Mode mode)
+    public static string? Unescape(ReadOnlySpan<byte> s, Mode mode) =>
+        UnescapeBytes(s, mode) is { } bytes ? Encoding.UTF8.GetString(bytes) : null;
+
+    // unescape on bytes, which parseHost joins before they are read as UTF-8,
+    // as Go joins its strings.
+    private static byte[]? UnescapeBytes(ReadOnlySpan<byte> s, Mode mode)
     {
         var n = 0;
         var hasPlus = false;
+        var hostLike = mode is Mode.Host or Mode.Zone;
         for (var i = 0; i < s.Length;)
         {
             switch (s[i])
@@ -155,9 +171,21 @@ internal static class UrlSyntax
                     {
                         return null;
                     }
-                    if (mode == Mode.Host && Unhex(s[i + 1]) < 8 && !(s[i + 1] == (byte)'2' && s[i + 2] == (byte)'5'))
+                    var percent = s[i + 1] == (byte)'2' && s[i + 2] == (byte)'5';
+                    if (mode == Mode.Host && Unhex(s[i + 1]) < 8 && !percent)
                     {
                         return null;
+                    }
+                    if (mode == Mode.Zone)
+                    {
+                        // RFC 6874 lets a zone escape anything; Go takes only
+                        // what could be written unescaped, and a space
+                        // (Windows names interfaces with spaces).
+                        var v = (byte)((Unhex(s[i + 1]) << 4) | Unhex(s[i + 2]));
+                        if (!percent && v != (byte)' ' && HostShouldEscape(v))
+                        {
+                            return null;
+                        }
                     }
                     i += 3;
                     break;
@@ -166,7 +194,7 @@ internal static class UrlSyntax
                     i++;
                     break;
                 default:
-                    if (mode == Mode.Host && s[i] < 0x80 && HostShouldEscape(s[i]))
+                    if (hostLike && s[i] < 0x80 && HostShouldEscape(s[i]))
                     {
                         return null;
                     }
@@ -176,7 +204,7 @@ internal static class UrlSyntax
         }
         if (n == 0 && !hasPlus)
         {
-            return Encoding.UTF8.GetString(s);
+            return s.ToArray();
         }
         var output = new List<byte>(s.Length - (2 * n));
         for (var i = 0; i < s.Length;)
@@ -197,7 +225,7 @@ internal static class UrlSyntax
                     break;
             }
         }
-        return Encoding.UTF8.GetString([.. output]);
+        return [.. output];
     }
 
     /// <summary>
@@ -314,10 +342,10 @@ internal static class UrlSyntax
         return host;
     }
 
-    // parseHost: a bracketed literal must close and carry a valid port;
-    // otherwise anything after the last colon must be a valid port. An IPv6
-    // zone ("%25…") is not given its own rules: it decodes as any other host
-    // escape does.
+    // parseHost: a bracketed literal must close and carry a valid port, and
+    // the first "%25" before its last "]" starts a zone, unescaped by the
+    // zone's rules between the host's; otherwise anything after the last
+    // colon must be a valid port.
     private static string? ParseHost(ReadOnlySpan<byte> host)
     {
         if (host.Length > 0 && host[0] == (byte)'[')
@@ -326,6 +354,17 @@ internal static class UrlSyntax
             if (close < 0 || !ValidOptionalPort(host[(close + 1)..]))
             {
                 return null;
+            }
+            var zone = host[..close].IndexOf("%25"u8);
+            if (zone >= 0)
+            {
+                if (UnescapeBytes(host[..zone], Mode.Host) is not { } address
+                    || UnescapeBytes(host[zone..close], Mode.Zone) is not { } zoneId
+                    || UnescapeBytes(host[close..], Mode.Host) is not { } port)
+                {
+                    return null;
+                }
+                return Encoding.UTF8.GetString([.. address, .. zoneId, .. port]);
             }
         }
         else

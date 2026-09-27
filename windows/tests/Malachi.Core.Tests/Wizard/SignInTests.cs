@@ -517,6 +517,21 @@ public sealed class SignInTests
         Assert.Equal(want, SignIn.BrowserUrl(url));
     }
 
+    // Windows: an IPv6 zone is read by Go 1.25's rules (UrlSyntax), each
+    // case checked against url.Parse.
+    [Theory]
+    [InlineData("https://[fe80::1%25%41]/", true)]
+    [InlineData("https://[fe80::1%25%20x]/", true)]
+    [InlineData("https://[fe80::1%25en%30]/", true)]
+    [InlineData("https://[fe80::1%25en0]:8080/", true)]
+    [InlineData("https://[fe80::1%25%C3%A4]/", false)]
+    [InlineData("https://[fe80::1%25%0A]/", false)]
+    [InlineData("https://[fe80::1%25a%2]/", false)]
+    public void BrowserUrlZones(string url, bool want)
+    {
+        Assert.Equal(want, SignIn.BrowserUrl(url));
+    }
+
     // oauth_test.go TestOAuthErrorText: the sentence for each kind of failure.
     [Fact]
     public void TestOAuthErrorText()
