@@ -27,8 +27,10 @@ public interface IDaemonProcess : IDisposable
     /// <summary>
     /// Asks the process to shut down cleanly, the SIGTERM of Go and Swift
     /// (CTRL_BREAK on Windows, which Go reads as an interrupt). False when
-    /// the request could not be delivered; the supervisor then kills it
-    /// after its stop timeout all the same.
+    /// the request could not be delivered, or was not sent because the
+    /// process has exited (<see cref="Exited"/> may still be waiting for its
+    /// last lines); the supervisor then kills it after its stop timeout all
+    /// the same.
     /// </summary>
     bool RequestStop();
 

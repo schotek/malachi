@@ -31,4 +31,11 @@ public enum DaemonStopPath
     /// attached to the daemon's hidden one for the event, then let go.
     /// </summary>
     Borrowed,
+
+    /// <summary>
+    /// Nothing was sent: the daemon had exited already, and its exit was
+    /// only waiting for its last lines. An attached app does not leave its
+    /// terminal's console for a process that is gone.
+    /// </summary>
+    Exited,
 }

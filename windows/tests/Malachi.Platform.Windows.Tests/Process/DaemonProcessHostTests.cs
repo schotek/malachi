@@ -5,7 +5,8 @@
 // (docs/windows-port.md §5, §12): the real malachid stopped cleanly with
 // CTRL_BREAK in a private run directory (the log's "shutting down", exit 0,
 // the socket and the key removed), the stand-in daemon stopped the same way
-// and killed when it ignores the request, what the daemon gets (its
+// and killed when it ignores the request, no stop request to one that has
+// exited while its output drains, what the daemon gets (its
 // arguments exactly, its environment, NUL as stdin, no handle of the app
 // but its output pipe) and what comes back (UTF-8 lines, the exit code
 // after the last of them). The real daemon is MALACHI_TEST_MALACHID, else
@@ -209,6 +210,47 @@ public sealed class DaemonProcessHostTests
             || line == "testdaemon: probe handle " + value + " written");
     }
 
+    [Fact]
+    public async Task NoStopRequestGoesToADaemonThatHasExitedWhileItsOutputDrains()
+    {
+        // The exit is reported once the output has drained, or DrainGrace
+        // after the exit; a program the daemon started can hold the pipe
+        // that long. A stop in between (the app quitting right after the
+        // daemon stopped by itself on CTRL_CLOSE) must not move an attached
+        // app off its terminal's console for a process that is gone.
+        using var dir = new TestDirectory();
+        using var log = new RotatingLogFile(dir.Combine("malachid.log"));
+        var host = new DaemonProcessHost(log: log);
+        var env = EnvironmentWith(
+            (TestDaemonSettings.ModeEnv, TestDaemonSettings.Exit),
+            (TestDaemonSettings.ExitCodeEnv, "0"),
+            (TestDaemonSettings.HoldOutputEnv, "4000"));
+        using var daemon = (DaemonProcess)host.Start(new DaemonStartInfo
+        {
+            Executable = TestDaemonSettings.ExecutablePath,
+            Arguments = [],
+            Environment = Strict(env),
+        });
+        try
+        {
+            var clock = Stopwatch.StartNew();
+            while (!daemon.HasExited && clock.Elapsed < TimeSpan.FromSeconds(15))
+            {
+                await Task.Delay(10, TestContext.Current.CancellationToken);
+            }
+            Assert.True(daemon.HasExited, "the stand-in did not exit");
+            Assert.False(daemon.Exited.IsCompleted, "the exit waits for the last lines");
+            Assert.False(daemon.RequestStop(), "no stop request goes to a process that has exited");
+            Assert.Equal(DaemonStopPath.Exited, daemon.LastStopPath);
+            Assert.Equal(0, await daemon.Exited.WaitAsync(TimeSpan.FromSeconds(15), TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            await Task.WhenAny(daemon.Exited, Task.Delay(TimeSpan.FromSeconds(15), CancellationToken.None));
+            EndHolder(log);
+        }
+    }
+
     [Theory]
     [InlineData("plain")]
     [InlineData("two words")]
@@ -349,6 +391,32 @@ public sealed class DaemonProcessHostTests
         {
             Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), "the line did not come: " + string.Join(" | ", File.Exists(log.FilePath) ? LogLines(log) : []));
             await Task.Delay(20, TestContext.Current.CancellationToken);
+        }
+    }
+
+    // Ends the copy of the stand-in that held its output, if it still runs.
+    private static void EndHolder(RotatingLogFile log)
+    {
+        if (!File.Exists(log.FilePath))
+        {
+            return;
+        }
+        foreach (var line in LogLines(log).Where(l => l.StartsWith(TestDaemonSettings.HolderLine, StringComparison.Ordinal)))
+        {
+            var pid = int.Parse(line.AsSpan(TestDaemonSettings.HolderLine.Length), System.Globalization.CultureInfo.InvariantCulture);
+            try
+            {
+                using var holder = Process.GetProcessById(pid);
+                if (holder.ProcessName == Path.GetFileNameWithoutExtension(TestDaemonSettings.ExecutablePath))
+                {
+                    holder.Kill();
+                    holder.WaitForExit(TimeSpan.FromSeconds(5));
+                }
+            }
+            catch (Exception e) when (e is ArgumentException or InvalidOperationException or Win32Exception)
+            {
+                // Gone already.
+            }
         }
     }
 

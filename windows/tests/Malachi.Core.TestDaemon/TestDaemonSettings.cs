@@ -48,6 +48,18 @@ public static class TestDaemonSettings
     /// <summary>What goes to the probe handle.</summary>
     public const string ProbeMarker = "inherited";
 
+    /// <summary>
+    /// Milliseconds the output of an <see cref="Exit"/> daemon stays open
+    /// after it exits: it leaves a copy of itself behind that shares its
+    /// stdout and stderr and exits that much later (a program the daemon
+    /// started that holds the pipe). The daemon names the copy in
+    /// <see cref="HolderLine"/>.
+    /// </summary>
+    public const string HoldOutputEnv = "MALACHI_TEST_DAEMON_HOLD_OUTPUT_MS";
+
+    /// <summary>The start of the line that gives the process ID of the copy holding the output.</summary>
+    public const string HolderLine = "testdaemon: output held by pid ";
+
     /// <summary>Listens on <c>--socket</c> and exits cleanly on a stop request (daemon_test.go "listen").</summary>
     public const string Listen = "listen";
 

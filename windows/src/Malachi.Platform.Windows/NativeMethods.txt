@@ -55,3 +55,6 @@ STARTUPINFOEXW
 CloseHandle
 GetExitCodeProcess
 TerminateProcess
+// The daemon's exit seen on its handle, before its output has drained
+// (Process/DaemonProcess.HasExited).
+WaitForSingleObject

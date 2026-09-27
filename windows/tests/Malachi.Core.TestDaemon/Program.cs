@@ -13,10 +13,12 @@
 // UTF-8, as the daemon's log is, and says what it was given (arguments,
 // the keyring and D-Bus variables, whether stdin was closed), so that the
 // tests can check what the host passed. Its modes come from the
-// environment (TestDaemonSettings).
+// environment (TestDaemonSettings); an exiting one can leave a copy of
+// itself behind that keeps its output open.
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Net.Sockets;
@@ -67,6 +69,7 @@ internal static class Program
         {
             case TestDaemonSettings.Exit:
                 Thread.Sleep(Delay(0));
+                HoldOutput();
                 return Environment.GetEnvironmentVariable(TestDaemonSettings.ExitCodeEnv) is { Length: > 0 } code
                     ? int.Parse(code, CultureInfo.InvariantCulture)
                     : 1;
@@ -146,6 +149,30 @@ internal static class Program
         {
             stop.TrySetResult("stdin");
         }
+    }
+
+    // Leaves a copy of this program behind that has the same stdout and
+    // stderr and exits later, so the pipe outlives this process.
+    private static void HoldOutput()
+    {
+        if (Environment.GetEnvironmentVariable(TestDaemonSettings.HoldOutputEnv) is not { Length: > 0 } hold)
+        {
+            return;
+        }
+        // Standard input redirected: .NET then hands the child this
+        // process's stdout and stderr explicitly.
+        var start = new ProcessStartInfo(Environment.ProcessPath!)
+        {
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+        };
+        start.Environment.Remove(TestDaemonSettings.HoldOutputEnv);
+        start.Environment.Remove(TestDaemonSettings.ProbeHandleEnv);
+        start.Environment[TestDaemonSettings.ModeEnv] = TestDaemonSettings.Exit;
+        start.Environment[TestDaemonSettings.DelayEnv] = hold;
+        start.Environment[TestDaemonSettings.ExitCodeEnv] = "0";
+        using var holder = Process.Start(start) ?? throw new InvalidOperationException("the holder did not start");
+        Out(TestDaemonSettings.HolderLine + holder.Id.ToString(CultureInfo.InvariantCulture));
     }
 
     // Writes the marker to a handle value the parent named: it arrives

@@ -10,8 +10,9 @@
 // on as UTF-8 text; its exit is a wait on the process handle, reported once
 // the output has been passed on or DrainGrace after the exit, whichever
 // comes first (a program the daemon started could hold the pipe). The stop
-// request is CTRL_BREAK (ConsoleBreak); the kill is TerminateProcess with
-// the exit code Process.Kill leaves too (-1).
+// request is CTRL_BREAK (ConsoleBreak), sent only while the handle says the
+// process runs (not in the drain after its exit); the kill is
+// TerminateProcess with the exit code Process.Kill leaves too (-1).
 
 using System;
 using System.IO;
@@ -22,6 +23,7 @@ using Malachi.Core.Daemon;
 using Malachi.Platform.Windows.Consoles;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
+using Windows.Win32.Foundation;
 
 namespace Malachi.Platform.Windows.Processes;
 
@@ -67,11 +69,39 @@ internal sealed class DaemonProcess : IDaemonProcess
     /// <summary>How the last stop request went (for tests and the log).</summary>
     public DaemonStopPath LastStopPath { get; private set; }
 
+    /// <summary>
+    /// Whether the process has ended, seen on its handle: up to
+    /// <see cref="DrainGrace"/> before <see cref="Exited"/> completes. False
+    /// once disposed without a known exit (the handle is gone).
+    /// </summary>
+    public bool HasExited
+    {
+        get
+        {
+            if (exited.Task.IsCompleted)
+            {
+                return true;
+            }
+            try
+            {
+                return PInvoke.WaitForSingleObject(child.Handle, 0) == WAIT_EVENT.WAIT_OBJECT_0;
+            }
+            catch (ObjectDisposedException)
+            {
+                return false;
+            }
+        }
+    }
+
     /// <inheritdoc/>
     public bool RequestStop()
     {
-        if (exited.Task.IsCompleted)
+        if (HasExited)
         {
+            // Its output may still be draining; a stop request would find
+            // no process, after an attached app had left its terminal's
+            // console for it.
+            LastStopPath = DaemonStopPath.Exited;
             return false;
         }
         LastStopPath = ConsoleBreak.Send(child.Id, console);
