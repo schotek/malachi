@@ -12,3 +12,8 @@ MUI_LANGUAGE_NAME
 CreateDirectory
 CreateFile
 WIN32_ERROR
+// Attachments: the Mark of the Web and the file-type policy (Attachments/).
+AttachmentServices
+IAttachmentExecute
+AssocIsDangerous
+INET_E_SECURITY_PROBLEM

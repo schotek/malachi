@@ -23,4 +23,7 @@ them (docs/windows-port.md §2, §3.1).
   <ItemGroup>
     <ProjectReference Include="..\Malachi.Core\Malachi.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Malachi.Platform.Windows.Tests" />
+  </ItemGroup>
 </Project>
