@@ -40,7 +40,7 @@ the port with the research of the same day; the reports are summarised in
 | Stopping the daemon | `CTRL_BREAK_EVENT` through `AttachConsole`/`GenerateConsoleCtrlEvent` (Go maps it to SIGINT; verified clean exit in ~18 ms), `Kill` after 15 s. No backend change; GTK/macOS semantics kept (a daemon left behind by a crashed UI is adopted, never stopped) |
 | Secrets | `malachi-credentials.exe`, the helper keyring over **Windows Credential Manager**, values above the 2560-byte blob limit split into hash-checked chunks |
 | Main window | **GTK structure**: a command row per pane under a slim title bar that holds the search box; the primary menu behind a `…` button (no menu bar); GTK back navigation below 900/600 px; the status line across the whole bottom edge |
-| Keyboard | Windows scheme: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+F/Ctrl+E search; a setting `ctrl-r` (`reply`, default, or `refresh`) as macOS's `command-r`; Outlook-style modified aliases because bare letters do not pass a focused WebView2 (§11.9) |
+| Keyboard | Windows scheme: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+F/Ctrl+E search; a setting `ctrl-r` (`reply`, default, or `refresh`) as macOS's `command-r`; otherwise GTK's keys, Ctrl+Q Quit and A/J/U/S/Delete included (no Outlook aliases: a pre-translate handler delivers every key even with a WebView2 focused, §11.5) |
 | Attachment click | An **own previewer**: images, PDF and text in a locked-down WebView2 window (no network, no script, no temporary file); other types offer Open / Save As; programs are never opened |
 | Windows additions | Notification-area icon while running in the background; context menus on messages and folders; a *Default apps* button in Preferences; dirty drafts saved on Quit |
 | Unlisted links | Confirmed before opening, as on macOS (GTK opens them; see §6.4) |
@@ -305,6 +305,29 @@ terminal, to it. Stop: under a process-wide lock, `AttachConsole(pid)`,
 `Kill` after 15 s (a kill is crash-safe: the store is intact, the lock is
 released, the next daemon replaces the socket and key). The app also stops
 its daemon on `WM_ENDSESSION`.
+
+**Console** (measured in phase B, from PowerShell, Git Bash in a pseudo
+console and mintty, directly and through make). `Main`, before anything
+touches `System.Console`, clears `HANDLE_FLAG_INHERIT` on the inherited
+standard handles and calls `AttachConsole(ATTACH_PARENT_PROCESS)`. Started
+from a terminal (`make run-windows`), the app is then attached: its log and
+the daemon's reach the terminal, and Ctrl+C arrives in the app's
+`SetConsoleCtrlHandler` routine, which quits gracefully. The daemon is
+started with `CreateNewProcessGroup` (so the terminal's Ctrl+C spares it),
+`CreateNoWindow` only when the app has no console (otherwise a console-less
+parent gets a new terminal window), stdin closed, stdout and stderr pumped
+to the log and, when attached, the terminal. Stop, under a process-wide
+lock: if the daemon shares the app's console (`GetConsoleProcessList`), a
+direct `GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid)`; if the app is
+attached but the daemon is not, `FreeConsole`, `AttachConsole(pid)`,
+CTRL_BREAK, `FreeConsole`, `AttachConsole(ATTACH_PARENT_PROCESS)`; if the app
+has no console, `AttachConsole(pid)`, `SetConsoleCtrlHandler(NULL, TRUE)`,
+CTRL_BREAK, `FreeConsole`; `Kill` after 15 s. On CTRL_CLOSE (the terminal
+tab closes) the daemon stops by itself and the app does not restart it.
+`build.ps1 run` starts the app with `Process.Start` (no redirection) and
+waits; never `& exe` (returns at once) or `& exe | …` (on Ctrl+C PowerShell
+kills the app and orphans the daemon, and the inherited pipe keeps
+PowerShell waiting).
 
 ## 6. The WebView2 security layer
 
@@ -688,15 +711,31 @@ is the default of the close question).
 | Reply / Reply All / Forward | Ctrl+R (with `ctrl-r` = `reply`) / Ctrl+Shift+R / Ctrl+Shift+F | — |
 | Check for New Mail | F5; Ctrl+R with `ctrl-r` = `refresh` | Ctrl+R |
 | Search | Ctrl+F, Ctrl+E; Enter first result, Escape closes | Ctrl+F |
-| Trash / Archive / Junk / Unread / Star | Delete / A / J / U / S, only while no text input has focus (GTK `setTypingAccels`); aliases Ctrl+D, Ctrl+U, Insert, and Ctrl+Q for Mark as Read (Outlook), which also work with the WebView2 focused | Delete / a / j / u / s |
-| Quit | Ctrl+Shift+Q (Ctrl+Q is Mark as Read) | Ctrl+Q |
+| Trash / Archive / Junk / Unread / Star | Delete / A / J / U / S, also with the message's WebView2 focused, never while a text input has focus (GTK `setTypingAccels`) | Delete / a / j / u / s |
+| Quit | Ctrl+Q | Ctrl+Q |
 | Close a secondary window | Escape, Ctrl+W | Escape |
 | Send / Save draft / Bold, Italic, Underline | Ctrl+Enter / Ctrl+S / Ctrl+B, I, U | same |
 | Reorder accounts | Ctrl+Up / Ctrl+Down | same |
 
-Whether WinUI forwards Escape, Delete and Ctrl combinations from a focused
-WebView2 to XAML accelerators is spiked in phase B before the key map is
-built on it.
+Measured in phase B: while a WebView2 has focus, **no** XAML accelerator
+and no XAML key event fires (27 keys, real input, viewer and editor), but
+every key reaches the window's `InputPreTranslateKeyboardSource`
+(`GetForIsland(XamlRoot.ContentIsland)`, `SetPreTranslateHandler`) exactly
+once, on the UI thread, and can be swallowed there. Each window therefore
+has one command router, fed by XAML `KeyboardAccelerator`s while XAML has
+focus and by the pre-translate handler while a WebView2 has focus (acting on
+`WM_KEYDOWN` of the `Chrome_WidgetWin_0` focus window and swallowing the
+matching `WM_KEYUP`); a UI-thread `WH_KEYBOARD` hook is the fallback. In the
+editor, Ctrl+B/I/U, Ctrl+K and Escape stay in the bridge (`preventDefault`,
+as in GTK and macOS), Ctrl+Shift+I is prevented there too (Chromium types a
+Tab for it); window keys (Ctrl+Enter, Ctrl+S, Ctrl+W, Quit) go to the
+router. `AreBrowserAcceleratorKeysEnabled=false` really suppresses reload,
+find, print and DevTools for real input (CDP-injected keys bypass it, so
+keyboard UI tests use real input). Single-letter keys are gated whenever a
+text input has focus: in a `TextBox` they would fire and type at once.
+Overlays (`ContentDialog`, flyouts, `TeachingTip`, `InfoBar`, popups) draw
+above the WebView2 with no airspace workaround; the viewer and editor are
+never hosted in a raw HWND controller.
 
 ## 12. Tests
 
