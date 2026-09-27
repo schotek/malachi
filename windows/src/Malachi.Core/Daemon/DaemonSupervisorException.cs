@@ -4,7 +4,10 @@
 // Port of macos/Sources/MalachiCore/Daemon/DaemonSupervisor.swift
 // (SupervisorError and its description, the texts kept); GTK:
 // ui/internal/daemon/daemon.go (the errors of Locate and Ensure). The
-// status line shows the message (ConnectionController describe).
+// status line shows the message (ConnectionController describe). The
+// seconds until the next start are rounded as Go rounds them
+// (wait.Round(time.Second)); Swift truncates, which reads "0 s" for a 1 s
+// pause looked at a few milliseconds later.
 
 using System;
 using System.Globalization;
@@ -60,14 +63,18 @@ public sealed class DaemonSupervisorException : Exception
         DaemonSupervisorFailure.NoDaemon,
         "malachid not found beside the app or on PATH (" + DaemonSupervisor.DaemonEnv + "=none switches the automatic start off)");
 
-    /// <summary>The daemon exited <paramref name="failures"/> times in a row; the next start is in <paramref name="retryIn"/>.</summary>
+    /// <summary>
+    /// The daemon exited <paramref name="failures"/> times in a row; the
+    /// next start is in <paramref name="retryIn"/> (<see cref="RetryIn"/>,
+    /// exact; the message has it in whole seconds, halves rounded up).
+    /// </summary>
     public static DaemonSupervisorException Backoff(int failures, TimeSpan retryIn) => new(
         DaemonSupervisorFailure.Backoff,
         string.Format(
             CultureInfo.InvariantCulture,
             "malachid exited {0} times in a row; next start in {1} s",
             failures,
-            (long)retryIn.TotalSeconds))
+            (long)Math.Round(retryIn.TotalSeconds, MidpointRounding.AwayFromZero)))
     {
         Failures = failures,
         RetryIn = retryIn,

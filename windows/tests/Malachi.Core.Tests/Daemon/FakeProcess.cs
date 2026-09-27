@@ -24,11 +24,15 @@ internal sealed class FakeProcess(int id, bool exitOnStop) : IDaemonProcess
 
     public bool Disposed { get; private set; }
 
+    /// <summary>The managed thread the last stop request came on.</summary>
+    public int StopRequestThread { get; private set; }
+
     public void ExitWith(int code) => exit.TrySetResult(code);
 
     public bool RequestStop()
     {
         StopRequests++;
+        StopRequestThread = System.Environment.CurrentManagedThreadId;
         if (exitOnStop)
         {
             ExitWith(0);

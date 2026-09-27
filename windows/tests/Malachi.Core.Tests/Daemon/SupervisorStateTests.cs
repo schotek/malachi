@@ -7,16 +7,19 @@
 // touch at the second exit; the start as the host sees it (arguments,
 // environment); a start that fails; BeforeStart; the clean stop and the
 // kill after StopTimeout; BeginStopping, the console's CTRL_CLOSE path;
-// cancellation.
+// cancellation; the backoff's seconds in the message. EnsureAsync and
+// StopAsync leave the caller's thread first, so the clock is advanced only
+// once the supervisor is seen to wait on it (WatchedTimeProvider).
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Daemon;
-using Microsoft.Extensions.Time.Testing;
+using Malachi.Core.Tests.Settings;
 using Xunit;
 
 namespace Malachi.Core.Tests.Daemon;
@@ -47,12 +50,12 @@ public sealed class SupervisorStateTests
         }
     }
 
-    private static (DaemonSupervisor Supervisor, FakeProcessHost Host, Probe Probe, FakeTimeProvider Time) Make(
+    private static (DaemonSupervisor Supervisor, FakeProcessHost Host, Probe Probe, WatchedTimeProvider Time) Make(
         Action? beforeStart = null, IReadOnlyDictionary<string, string?>? environment = null)
     {
         var host = new FakeProcessHost();
         var probe = new Probe();
-        var time = new FakeTimeProvider(new DateTimeOffset(2026, 9, 27, 12, 0, 0, TimeSpan.Zero));
+        var time = new WatchedTimeProvider(new DateTimeOffset(2026, 9, 27, 12, 0, 0, TimeSpan.Zero));
         var supervisor = new DaemonSupervisor(Launch, Launch.Socket, host)
         {
             Time = time,
@@ -61,6 +64,17 @@ public sealed class SupervisorStateTests
             BaseEnvironment = environment ?? new Dictionary<string, string?> { ["PATH"] = @"C:\Windows" },
         };
         return (supervisor, host, probe, time);
+    }
+
+    // Starts a daemon that answers at the poll after its start.
+    private static async Task StartAsync(DaemonSupervisor sup, Probe probe, WatchedTimeProvider time)
+    {
+        var polling = time.NextTimer();
+        var ensure = sup.EnsureAsync(TestContext.Current.CancellationToken);
+        await WatchedTimeProvider.WaitForAsync(polling, ensure);
+        probe.Answers = true;
+        time.Advance(DaemonSupervisor.DefaultPollInterval);
+        await ensure;
     }
 
     [Fact]
@@ -107,10 +121,7 @@ public sealed class SupervisorStateTests
         // The third start answers: the count starts again.
         host.ExitAtOnce = null;
         probe.Answers = false;
-        var ensure = sup.EnsureAsync(cancellationToken);
-        probe.Answers = true;
-        time.Advance(DaemonSupervisor.DefaultPollInterval);
-        await ensure;
+        await StartAsync(sup, probe, time);
         Assert.Equal(3, sup.Spawns);
         Assert.True(sup.Running);
 
@@ -190,13 +201,12 @@ public sealed class SupervisorStateTests
         var (sup, host, probe, time) = Make();
         host.ExitOnStop = false;
         probe.Answers = false;
-        var ensure = sup.EnsureAsync(TestContext.Current.CancellationToken);
-        probe.Answers = true;
-        time.Advance(DaemonSupervisor.DefaultPollInterval);
-        await ensure;
+        await StartAsync(sup, probe, time);
         var daemon = Assert.Single(host.Started);
 
+        var timeout = time.NextTimer();
         var stop = sup.StopAsync();
+        await WatchedTimeProvider.WaitForAsync(timeout, stop);
         Assert.Equal(1, daemon.StopRequests);
         Assert.False(stop.IsCompleted);
         time.Advance(DaemonSupervisor.DefaultStopTimeout - TimeSpan.FromMilliseconds(1));
@@ -213,10 +223,7 @@ public sealed class SupervisorStateTests
     {
         var (sup, host, probe, time) = Make();
         probe.Answers = false;
-        var ensure = sup.EnsureAsync(TestContext.Current.CancellationToken);
-        probe.Answers = true;
-        time.Advance(DaemonSupervisor.DefaultPollInterval);
-        await ensure;
+        await StartAsync(sup, probe, time);
         await sup.StopAsync();
         var daemon = Assert.Single(host.Started);
         Assert.Equal(1, daemon.StopRequests);
@@ -233,10 +240,7 @@ public sealed class SupervisorStateTests
     {
         var (sup, host, probe, time) = Make();
         probe.Answers = false;
-        var ensure = sup.EnsureAsync(TestContext.Current.CancellationToken);
-        probe.Answers = true;
-        time.Advance(DaemonSupervisor.DefaultPollInterval);
-        await ensure;
+        await StartAsync(sup, probe, time);
         var daemon = Assert.Single(host.Started);
 
         // CTRL_CLOSE: the app marks itself as quitting, the daemon got the
@@ -257,7 +261,10 @@ public sealed class SupervisorStateTests
     {
         var (sup, host, probe, time) = Make();
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var polling = time.NextTimer();
         var ensure = sup.EnsureAsync(cancel.Token);
+        await WatchedTimeProvider.WaitForAsync(polling, ensure);
+        Assert.Equal(1, sup.Spawns);
         Assert.False(ensure.IsCompleted);
         await cancel.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ensure);
@@ -266,6 +273,50 @@ public sealed class SupervisorStateTests
         await sup.EnsureAsync(TestContext.Current.CancellationToken);
         Assert.Equal(1, sup.Spawns);
         Assert.True(sup.Running);
+    }
+
+    [Fact]
+    public async Task EnsureAndStopLeaveTheCallersThread()
+    {
+        // The caller is the UI thread (ConnectionController): the probe, the
+        // start and the stop request run elsewhere, as a call into the Swift
+        // actor runs off the main actor.
+        using var ui = new TestUIContext();
+        var host = new FakeProcessHost();
+        var threads = new ConcurrentBag<int>();
+        using var sup = new DaemonSupervisor(Launch, Launch.Socket, host)
+        {
+            Probe = (_, _) =>
+            {
+                threads.Add(Environment.CurrentManagedThreadId);
+                return ValueTask.FromResult(host.Started.Count > 0);
+            },
+            BeforeStart = () => threads.Add(Environment.CurrentManagedThreadId),
+            BaseEnvironment = new Dictionary<string, string?>(),
+        };
+        await await ui.RunAsync(() => sup.EnsureAsync(TestContext.Current.CancellationToken));
+        await await ui.RunAsync(sup.StopAsync);
+        var daemon = Assert.Single(host.Started);
+        Assert.Equal(1, daemon.StopRequests);
+        threads.Add(daemon.StopRequestThread);
+        Assert.Equal(4, threads.Count);
+        Assert.DoesNotContain(ui.ThreadId, threads);
+        Assert.Empty(ui.Failures);
+    }
+
+    [Theory]
+    [InlineData(1000, "1")]
+    [InlineData(997, "1")]
+    [InlineData(1499, "1")]
+    [InlineData(1500, "2")]
+    [InlineData(400, "0")]
+    [InlineData(60000, "60")]
+    public void TheBackoffMessageRoundsTheSecondsAsGoDoes(int milliseconds, string seconds)
+    {
+        // A 1 s pause read a few milliseconds later is still "1 s".
+        var e = DaemonSupervisorException.Backoff(2, TimeSpan.FromMilliseconds(milliseconds));
+        Assert.Equal("malachid exited 2 times in a row; next start in " + seconds + " s", e.Message);
+        Assert.Equal(TimeSpan.FromMilliseconds(milliseconds), e.RetryIn);
     }
 
     [Fact]

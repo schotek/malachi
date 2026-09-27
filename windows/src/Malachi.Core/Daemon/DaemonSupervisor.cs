@@ -12,7 +12,14 @@
 // CTRL_BREAK instead of SIGTERM on Windows), and its Exited task is the
 // record of its exit. Ensure calls are serialised as in Go (a second caller
 // waits for the first spawn instead of racing it); the Swift actor gives
-// the same result. Windows additions: the daemon's environment also
+// the same result. Like a call into the Swift actor, Ensure and Stop leave
+// the caller's thread before they do anything: the probe's connect,
+// BeforeStart and CreateProcess are synchronous, and the caller is the UI
+// thread. The probe counts a busy listener as there (a full backlog, a
+// connect that outlasts the probe's 500 ms): that is Swift's rule
+// (UnixSocketProbe: EINPROGRESS and EAGAIN answer), which §5 of
+// docs/windows-port.md keeps; Go's answers counts only a completed
+// connect. Windows additions: the daemon's environment also
 // disables D-Bus (DBUS_SESSION_BUS_ADDRESS=disabled:, docs/windows-port.md
 // §1), and BeginStopping lets the console handler stop restarts before the
 // daemon, which got the terminal's CTRL_CLOSE too, is seen to exit (§5
@@ -72,7 +79,9 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// <summary>The longest pause between restarts of a daemon that keeps exiting.</summary>
     public static readonly TimeSpan DefaultMaxBackoff = TimeSpan.FromSeconds(60);
 
-    // How long one probe may take (daemon.go answers: DialTimeout).
+    // How long one probe may take (daemon.go answers: DialTimeout). An I/O
+    // timeout, deliberately on the real clock rather than Time: AnswersAsync
+    // is static, and a supervisor on a fake clock is given a fake Probe.
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(500);
 
     private readonly DaemonLaunch? launch;
@@ -252,7 +261,9 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// True when something listens on <paramref name="socket"/> (the probe
     /// of daemon.go <c>answers</c> and UnixSocketProbe.answers). A missing
     /// or dead socket is refused at once; a listener whose backlog is full
-    /// exists and counts, as does one that takes longer than half a second.
+    /// exists and counts, as does one that takes longer than half a second
+    /// (Swift's rule; Go's counts only a completed connect). The half second
+    /// is on the real clock.
     /// </summary>
     public static async ValueTask<bool> AnswersAsync(string socket, CancellationToken cancellationToken)
     {
@@ -295,10 +306,13 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// answers; throws <see cref="DaemonSupervisorException"/> otherwise.
     /// A daemon that exits before answering counts as a failure, and the
     /// next start is delayed (<see cref="DaemonSupervisorFailure.Backoff"/>,
-    /// at once).
+    /// at once). Returns to the caller before any of the work (the probe,
+    /// <see cref="BeforeStart"/>, the start), which runs on the thread pool
+    /// as a call into the Swift actor runs off the main actor.
     /// </summary>
     public async Task EnsureAsync(CancellationToken cancellationToken = default)
     {
+        await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         await ensureGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -327,10 +341,13 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// <summary>
     /// Stops the daemon this supervisor started: a clean stop request, up
     /// to <see cref="StopTimeout"/>, then a kill. Somebody else's daemon is
-    /// left alone. Nothing is started afterwards.
+    /// left alone. Nothing is started afterwards. Like
+    /// <see cref="EnsureAsync"/>, it returns to the caller before the stop
+    /// request (which moves between consoles on Windows) is made.
     /// </summary>
     public async Task StopAsync()
     {
+        await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         IDaemonProcess? running;
         lock (gate)
         {
