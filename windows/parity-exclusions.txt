@@ -1,0 +1,55 @@
+# SPDX-FileCopyrightText: 2026 Vladislav Janeček
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# The msgids of po/malachi.pot the Windows client does not use, each with
+# the reason (docs/windows-port.md §9; seeded from the parity research's
+# Appendix A, the msgids the macOS client does not use either). The coverage
+# test of Malachi.Conventions.Tests requires every msgid of the template to
+# be referenced in windows/src or listed here, and every line here to name
+# a msgid of the template that windows/src does not reference.
+#
+# One msgid per line, exactly as in the template (C escapes: \n, \t,
+# \", \\; a context is written before its msgid, separated by \004),
+# then a tab, then the reason.
+A native mail client for the GNOME desktop.	GNOME: About's comment names the GNOME desktop; Windows says "A native mail client." (a Windows-only string, as macOS)
+Use	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
+Added	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
+Accounts from GNOME Online Accounts can be added without a password.	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
+Check Again	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
+Could not open Online Accounts; open GNOME Settings yourself	GNOME Online Accounts: no GNOME Settings on Windows
+Check for new mail and show notifications in the background	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
+The desktop portal refused to change autostart	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
+Autostart needs xdg-desktop-portal	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
+Not available in the Flatpak build	Flatpak: the Windows client is no Flatpak
+New mail	gsound: the event description of the sound theme; Windows plays the user's New Mail Notification sound
+_Keyboard Shortcuts	The primary menu's Keyboard Shortcuts: no help overlay exists in GTK either (research 05 W4)
+Window width	gschema: a key's summary or description, for dconf editors, not the UI
+Window height	gschema: a key's summary or description, for dconf editors, not the UI
+Window maximized state	gschema: a key's summary or description, for dconf editors, not the UI
+Width of the folder sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+Width of the message list pane	gschema: a key's summary or description, for dconf editors, not the UI
+Folders whose subfolders are hidden in the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+Accounts whose folders are hidden in the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+Folders pinned to the Favourites section of the sidebar	gschema: a key's summary or description, for dconf editors, not the UI
+Start hidden in the background at login (mirrors the Background portal's autostart decision)	gschema: a key's summary or description, for dconf editors, not the UI
+Closing the main window keeps the application running	gschema: a key's summary or description, for dconf editors, not the UI
+Seconds a message must be shown before it is marked as read; 0 = immediately	gschema: a key's summary or description, for dconf editors, not the UI
+Show a desktop notification for new mail	gschema: a key's summary or description, for dconf editors, not the UI
+Color scheme	gschema: a key's summary or description, for dconf editors, not the UI
+Follow the system preference, or force a light or dark appearance.	gschema: a key's summary or description, for dconf editors, not the UI
+Message list density	gschema: a key's summary or description, for dconf editors, not the UI
+Show a one-line preview under each message in the list	gschema: a key's summary or description, for dconf editors, not the UI
+Group the message list by conversation	gschema: a key's summary or description, for dconf editors, not the UI
+Show one row per conversation in the selected folder; expanding it lists the messages the folder holds.	gschema: a key's summary or description, for dconf editors, not the UI
+Where a search looks	gschema: a key's summary or description, for dconf editors, not the UI
+The selected folder, every folder of its account, or every account; the last choice made in the search bar.	gschema: a key's summary or description, for dconf editors, not the UI
+Show sender avatars in the message list	gschema: a key's summary or description, for dconf editors, not the UI
+Draw avatars in neutral grey instead of per-sender colours	gschema: a key's summary or description, for dconf editors, not the UI
+Use a monospace font for plain-text message bodies	gschema: a key's summary or description, for dconf editors, not the UI
+Message body text zoom in percent	gschema: a key's summary or description, for dconf editors, not the UI
+Email Client	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
+Read and send email	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
+mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
+Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
+Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
+This is an early version. Mail can be read, written, sent and searched, but keep a second mail program for anything that matters.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
