@@ -208,6 +208,7 @@ public sealed class ComposeControllerTests
 
         IComposeWindowHandle plain = new PlainHandle();
         Assert.True(await plain.SaveForQuitAsync());
+        Assert.False(await plain.CloseForQuitAsync());
         Assert.False(plain.Edits(new Draft { Id = "d_1", AccountId = "a" }));
         plain.Present();
 
@@ -219,6 +220,34 @@ public sealed class ComposeControllerTests
             }
         });
         Assert.Empty(await h.Ui.InvokeAsync(() => h.Compose.SaveForQuitAsync()));
+    }
+
+    /// <summary>
+    /// The Quit of the app (QuitSequence over SaveForQuitAsync, as the
+    /// shell wires it): a window whose save fails and which asks no close
+    /// question of its own keeps its draft, and the app does not exit.
+    /// Once the save goes through, the next Quit does.
+    /// </summary>
+    [Fact]
+    public async Task AQuitNeverLosesADraftItCouldNotSave()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.Run(() => h.Compose.Open(new ComposeParams { Kind = ComposeKind.New }));
+        await h.IdleAsync();
+        h.Handles[0].SavesForQuit = false;
+        var exits = 0;
+        var quit = new Malachi.Core.Presentation.QuitSequence(new Malachi.Core.Presentation.QuitSteps
+        {
+            SaveDrafts = h.Compose.SaveForQuitAsync,
+            Exit = () => exits++,
+        });
+        Assert.False(await h.Ui.InvokeAsync(() => quit.QuitAsync()));
+        Assert.Equal(0, exits);
+        Assert.False(quit.IsQuitting);
+
+        h.Handles[0].SavesForQuit = true;
+        Assert.True(await h.Ui.InvokeAsync(() => quit.QuitAsync()));
+        Assert.Equal(1, exits);
     }
 
     /// <summary>What <c>account.list</c> answers.</summary>

@@ -880,9 +880,11 @@ is left, that quits (`WindowLifetime`, the GApplication rule; the other
 windows count from `WindowTracker.Track` until they close). Quit
 (`QuitSequence`): `ComposeController.SaveForQuitAsync`, then the close
 question of each window it returned (`IComposeWindowHandle.CloseForQuitAsync`,
-an additive member whose default is "closed"); a Cancel abandons the Quit.
-Then the point of no return (the supervisor starts nothing any more, the
-window geometry is kept, `PlatformServices.Stop`, every window hides),
+an additive member whose default keeps the window, so a window that could
+not save and asks nothing never loses its draft to a Quit); a Cancel
+abandons the Quit. Then the point of no return (the supervisor starts
+nothing any more, the window geometry is kept, `PlatformServices.Stop`,
+every window hides),
 `ConnectionController.StopAsync` (the daemon this app started is stopped,
 never one it adopted), `AppState.Dispose` (controllers, open directory,
 settings), `Application.Exit`. `WM_ENDSESSION` (a subclass of the main

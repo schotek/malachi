@@ -56,8 +56,10 @@ public interface IComposeWindowHandle
     /// <see cref="ComposeDraftController.CloseRequestAsync"/>) and closes the
     /// window when the answer lets it. True when the window closed; false
     /// when the user kept it, which abandons the Quit
-    /// (Malachi.Core.Presentation.QuitSequence). True by default (nothing
-    /// to ask).
+    /// (Malachi.Core.Presentation.QuitSequence). False by default: a window
+    /// whose draft could not be saved and that cannot ask keeps its draft,
+    /// and the app runs on (only a window that overrides
+    /// <see cref="SaveForQuitAsync"/> can get here).
     /// </summary>
-    Task<bool> CloseForQuitAsync() => Task.FromResult(true);
+    Task<bool> CloseForQuitAsync() => Task.FromResult(false);
 }

@@ -137,6 +137,22 @@ public sealed class QuitSequenceTests
     }
 
     [Fact]
+    public async Task AWindowThatCannotAskKeepsItsDraftAndTheAppRunsOn()
+    {
+        // A compose window whose save failed and which has no question of
+        // its own: the draft is not lost to the Quit.
+        var exited = false;
+        var quit = new QuitSequence(new QuitSteps
+        {
+            SaveDrafts = () => Task.FromResult<IReadOnlyList<IComposeWindowHandle>>([new Mute()]),
+            Exit = () => exited = true,
+        });
+        Assert.False(await quit.QuitAsync());
+        Assert.False(exited);
+        Assert.False(quit.IsQuitting);
+    }
+
+    [Fact]
     public async Task NoStepsStillQuit() => Assert.True(await new QuitSequence(new QuitSteps()).QuitAsync());
 
     private sealed class Harness
@@ -209,6 +225,18 @@ public sealed class QuitSequenceTests
         {
             closed?.Add("close " + Name);
             return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>A window that implements only what the protocol requires.</summary>
+    private sealed class Mute : IComposeWindowHandle
+    {
+        public void SetAccounts(IReadOnlyList<Account> accounts, bool placeholder)
+        {
+        }
+
+        public void Toast(string text)
+        {
         }
     }
 }
