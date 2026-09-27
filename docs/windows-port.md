@@ -307,13 +307,23 @@ failure table (`backend/pkg/api/handshake_test.go`) are ported.
 Go's checks (a regular file, not a reparse point, exactly 65 bytes, the key
 format) are `DaemonKey`'s in Core; `IKeyFilePolicy` adds the platform's.
 `WindowsKeyFilePolicy` opens the file with `FILE_FLAG_OPEN_REPARSE_POINT`
-(a link or junction is refused as itself, never followed), refuses what
-`GetFileType` does not call a disk file (a pipe, `NUL`), requires the
-owner to be the current user (or the token's default owner, which an
-elevated run gives its files), and lets the DACL give the data (read,
-write, append, directly or through generic rights) or `WRITE_DAC` /
+(a link or junction is refused as itself, never followed), refuses on
+opening what `GetFileType` does not call a disk file (a pipe, `NUL`),
+requires the owner to be the current user (or the token's default owner,
+which an elevated run gives its files), and lets the DACL give the data
+(read, write, append, directly or through generic rights) or `WRITE_DAC` /
 `WRITE_OWNER` to no one but the user, SYSTEM, Administrators and OWNER
-RIGHTS; a NULL DACL is refused. The reasons are macOS's texts. Before the
+RIGHTS; a NULL DACL is refused. The reasons are macOS's texts, in Swift's
+order: what the file is, then whose it is and who may read it, then its
+size and content; whatever a policy throws is `keyUnavailable`, as every
+error of `api.ReadKeyFile` is. `RpcClient` takes the policy as a required
+argument: the app passes `WindowsKeyFilePolicy`, tests and other systems
+`PortableKeyFilePolicy.Instance` (Go's rule), so no composition root loses
+the check by leaving it out. The daemon's 0600 means nothing on Windows:
+the key file inherits its directory's ACL. A `MALACHI_SOCKET` directory
+must therefore be private, as the run directory is, or the client refuses
+the key as accessible to other users (outside the profile, say `D:\…`,
+Authenticated Users may modify by default). Before the
 first spawn the client creates the run directory
 `%USERPROFILE%\.cache\malachi\run` with a protected DACL (user and SYSTEM).
 The key is read with `FileShare.ReadWrite | FileShare.Delete`: a reader

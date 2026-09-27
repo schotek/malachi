@@ -38,7 +38,10 @@ public interface IKeyFilePolicy
     /// <summary>
     /// Why the open file must not be used (a <see cref="KeyFileReason"/>
     /// text), or null. Called after <see cref="DaemonKey"/> saw a regular
-    /// file and before it reads a byte.
+    /// file and before it looks at the size or reads a byte (Swift's order:
+    /// what the file is, whose it is and who may read it, its content). An
+    /// exception is a <see cref="KeyUnavailableException"/> "cannot inspect"
+    /// all the same.
     /// </summary>
     string? Check(SafeFileHandle handle, string path);
 }

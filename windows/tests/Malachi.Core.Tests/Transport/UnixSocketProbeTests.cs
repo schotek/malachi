@@ -62,14 +62,14 @@ public sealed class UnixSocketProbeTests
     public void AListenerAnswersEvenWithAFullBacklog()
     {
         var path = FakeDaemon.NewSocketPath();
-        using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        listener.Bind(new UnixDomainSocketEndPoint(path));
-        listener.Listen(1);
-        Assert.True(UnixSocketProbe.Answers(path));
-        // Nobody accepts: the backlog fills, and the listener is still there.
+        var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         var waiting = new List<Socket>();
         try
         {
+            listener.Bind(new UnixDomainSocketEndPoint(path));
+            listener.Listen(1);
+            Assert.True(UnixSocketProbe.Answers(path));
+            // Nobody accepts: the backlog fills, and the listener is still there.
             for (var i = 0; i < 16; i++)
             {
                 var s = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified) { Blocking = false };
@@ -90,6 +90,9 @@ public sealed class UnixSocketProbeTests
             {
                 s.Dispose();
             }
+            listener.Dispose();
+            // A socket file stays behind its listener.
+            File.Delete(path);
         }
     }
 

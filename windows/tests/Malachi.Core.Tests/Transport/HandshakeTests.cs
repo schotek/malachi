@@ -18,6 +18,11 @@
 //
 // The handshake deadline runs on a FakeTimeProvider: only the timeout cases
 // advance it, so a slow machine cannot turn another case into a timeout.
+//
+// DecodesAsGo is the C# client's own: lines Go's table does not have, on
+// which the decoding of encoding/json into Go's structs decides (folded
+// member names, null members, repeated members, deep nesting, bytes that
+// are not UTF-8), each with the outcome Go's client has.
 
 using System;
 using System.Collections.Generic;
@@ -78,7 +83,7 @@ public sealed class HandshakeTests
         await fake.StartAsync();
         await EditAsync(fc.KeyFile, fake.KeyPath);
         var time = new FakeTimeProvider();
-        using var client = new RpcClient(fake.Path, timeProvider: time);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, timeProvider: time);
         var connect = client.ConnectAsync(Ct);
         if (fc.Outcome is Outcome.Refused { Error.Reason: HandshakeReason.TimedOut })
         {
@@ -103,7 +108,7 @@ public sealed class HandshakeTests
         fake.SetHandshake(new HandshakeMode.Raw(new HandshakeScript { Hello = ctx => Answer(1, ctx.RightResult) }));
         await fake.StartAsync();
         File.Delete(fake.KeyPath);
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         var e = await Assert.ThrowsAsync<HandshakeException>(() => client.ConnectAsync(Ct));
         var unavailable = Assert.IsType<KeyUnavailableException>(e.InnerException);
         Assert.IsType<FileNotFoundException>(unavailable.InnerException);
@@ -124,7 +129,7 @@ public sealed class HandshakeTests
             fake.SetHandshake(mode);
             await fake.StartAsync();
             var time = new FakeTimeProvider();
-            using var client = new RpcClient(fake.Path, timeProvider: time);
+            using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, timeProvider: time);
             var connect = client.ConnectAsync(Ct);
             if (mode is HandshakeMode.Silent)
             {
@@ -182,7 +187,7 @@ public sealed class HandshakeTests
         await using var fake = new FakeDaemon();
         fake.SetNotificationWithAuthenticateAnswer(API.Notify.AccountsChanged);
         await fake.StartAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(Ct);
         Assert.Equal(API.Notify.AccountsChanged, (await client.Notifications.ReadAsync(Ct)).Method);
         // The fake's secrets: the key, then the client's nonce, its own nonce
@@ -210,7 +215,7 @@ public sealed class HandshakeTests
             Authenticate = _ => Answer(2, "{}"),
         }));
         await fake.StartAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(Ct);
         Assert.Equal(new RpcClientState.Connected(), client.State);
     }
@@ -225,7 +230,7 @@ public sealed class HandshakeTests
             await using var fake = new FakeDaemon();
             fake.SetHandshake(new HandshakeMode.Raw(new HandshakeScript { Hello = _ => ErrorAnswer(1, ErrorCode.MethodNotFound, "unknown method") }));
             await fake.StartAsync();
-            using var client = new RpcClient(fake.Path);
+            using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
             await Assert.ThrowsAsync<HandshakeException>(() => client.ConnectAsync(Ct));
             await fake.WaitForEndedAsync(1);
             var line = Assert.Single(fake.ReceivedLines);
@@ -252,7 +257,7 @@ public sealed class HandshakeTests
         {
             fake.SetHandshake(new HandshakeMode.Silent());
             await fake.StartAsync();
-            using var client = new RpcClient(fake.Path);
+            using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
             using var cancel = new CancellationTokenSource();
             var connect = client.ConnectAsync(cancel.Token);
             await Eventually.Holds(() => fake.Received.Count == 1);
@@ -264,7 +269,7 @@ public sealed class HandshakeTests
         await using (var fake = new FakeDaemon())
         {
             await fake.StartAsync();
-            using var client = new RpcClient(fake.Path);
+            using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
             using var cancel = new CancellationTokenSource();
             cancel.Cancel();
             await Assert.ThrowsAnyAsync<OperationCanceledException>(() => client.ConnectAsync(cancel.Token));
@@ -281,7 +286,7 @@ public sealed class HandshakeTests
         await fake.StartAsync();
         var time = new FakeTimeProvider();
         var timeout = TimeSpan.FromMilliseconds(200);
-        using var client = new RpcClient(fake.Path, handshakeTimeout: timeout, timeProvider: time);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, handshakeTimeout: timeout, timeProvider: time);
         await client.ConnectAsync(Ct);
         time.Advance(2 * timeout);
         await fake.PushNotificationAsync(API.Notify.AccountsChanged, "{}");
@@ -295,11 +300,93 @@ public sealed class HandshakeTests
     {
         await using var fake = new FakeDaemon();
         await fake.StartAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(Ct);
         var lines = fake.ReceivedLines;
         Assert.Equal(2, lines.Count);
         Assert.True(lines.Sum(l => Encoding.UTF8.GetByteCount(l) + 1) <= (4 << 10) / 4);
+    }
+
+    public static TheoryData<string> DecodingCaseNames => [.. DecodingCases().Keys];
+
+    /// <summary>
+    /// Lines that encoding/json reads in its own way, and the outcome Go's
+    /// client has with each: connected (null), or the refusal.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(DecodingCaseNames))]
+    public async Task DecodesAsGo(string name)
+    {
+        var (script, want) = DecodingCases()[name];
+        await using var fake = new FakeDaemon();
+        fake.SetHandshake(new HandshakeMode.Raw(script));
+        await fake.StartAsync();
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, timeProvider: new FakeTimeProvider());
+        if (want is null)
+        {
+            await client.ConnectAsync(Ct);
+            Assert.Equal(new RpcClientState.Connected(), client.State);
+            return;
+        }
+        var e = await Assert.ThrowsAsync<HandshakeException>(() => client.ConnectAsync(Ct));
+        Assert.Equal(want, e.Error);
+    }
+
+    private static Dictionary<string, (HandshakeScript Script, HandshakeError? Want)> DecodingCases()
+    {
+        // The right result with text put in front of its members, or after them.
+        static Func<HelloContext, string?> Before(string members) => c => Answer(1, "{" + members + "," + c.RightResult[1..]);
+        static Func<HelloContext, string?> After(string members) => c => Answer(1, c.RightResult[..^1] + "," + members + "}");
+        static HandshakeScript Connects(Func<HelloContext, string?> hello, bool latin1 = false) =>
+            new() { Hello = hello, Authenticate = _ => Answer(2, "{}"), Latin1 = latin1 };
+        static HandshakeScript Rejects(string authenticate) =>
+            new() { Hello = c => Answer(1, c.RightResult), Authenticate = _ => authenticate };
+        static string Capitals(string result) => result
+            .Replace("\"protocolVersion\"", "\"PROTOCOLVERSION\"", StringComparison.Ordinal)
+            .Replace("\"daemonNonce\"", "\"DaemonNonce\"", StringComparison.Ordinal);
+        var noVersion = HandshakeError.Malformed("the system.hello result has no valid protocolVersion");
+        var notJsonRpc = HandshakeError.Malformed("a line is not a JSON-RPC 2.0 message");
+        var nested = new string('[', 100) + new string(']', 100);
+        return new()
+        {
+            // A member of the wrong type fails the decoding, whatever follows it.
+            ["protocolVersion of the wrong type, then the right one"] = (Connects(Before("\"protocolVersion\":\"2\"")), noVersion),
+            ["daemonNonce of the wrong type, then the right one"] =
+                (Connects(c => Answer(1, "{\"daemonNonce\":5," + c.RightResult[1..])), HandshakeError.Malformed("the system.hello result does not decode")),
+            ["an error code of the wrong type, then a right one"] =
+                (Rejects(Line("""{"jsonrpc":"2.0","id":2,"error":{"code":"x","code":1005}}""")), notJsonRpc),
+
+            // Null leaves a field as it was.
+            ["protocolVersion null after the right one"] = (Connects(After("\"protocolVersion\":null")), null),
+            ["daemonNonce null after the right one"] = (Connects(After("\"daemonNonce\":null")), null),
+            ["jsonrpc null after 2.0"] = (Connects(c => Line($$"""{"jsonrpc":"2.0","id":1,"result":{{c.RightResult}},"jsonrpc":null}""")), null),
+            ["an error code null after 1005"] =
+                (Rejects(Line("""{"jsonrpc":"2.0","id":2,"error":{"code":1005,"code":null,"message":"no"}}""")), HandshakeError.Rejected(ErrorCode.Unauthenticated)),
+            ["a second error object without a code"] =
+                (Rejects(Line("""{"jsonrpc":"2.0","id":2,"error":{"code":1005},"error":{"message":"no"}}""")), HandshakeError.Rejected(ErrorCode.Unauthenticated)),
+
+            // Member names match as Go folds them.
+            ["members in capitals"] = (Connects(c => Line("{\"JSONRPC\":\"2.0\",\"Id\":1,\"RESULT\":" + Capitals(c.RightResult) + "}")), null),
+            ["a long s for an s"] = (Connects(_ => Answer(1, "{\"protocolVer\u017Fion\":99}")), HandshakeError.ProtocolMismatch(99)),
+            ["a name that only looks alike"] = (Connects(_ => Answer(1, "{\"protocolVers\u0130on\":99}")), noVersion),
+
+            // Nesting as deep as Go's decoder takes it.
+            ["a member nested 100 deep"] = (Connects(After("\"x\":" + nested)), null),
+
+            // Bytes that are not UTF-8 are read as U+FFFD.
+            ["not UTF-8 in a member nobody reads"] = (Connects(After("\"x\":\"\u00ff\""), latin1: true), null),
+            ["not UTF-8 in a member's name"] = (Connects(After("\"\u00ff\":1"), latin1: true), null),
+            ["not UTF-8 in a skipped notification's method"] =
+                (Connects(c => Line("{\"jsonrpc\":\"2.0\",\"method\":\"notify.\u00ff\"}") + Answer(1, c.RightResult), latin1: true), null),
+            ["not UTF-8 in daemonNonce"] =
+                (Connects(c => Answer(1, c.RightResult.Replace("\"daemonNonce\":\"", "\"daemonNonce\":\"\u00ff", StringComparison.Ordinal)), latin1: true),
+                    HandshakeError.Malformed("daemonNonce is not 64 lowercase hex digits")),
+            ["not UTF-8 in jsonrpc"] =
+                (Connects(c => Line("{\"jsonrpc\":\"2.\u00ff\",\"id\":1,\"result\":" + c.RightResult + "}"), latin1: true), notJsonRpc),
+            ["not UTF-8 in the id"] =
+                (Connects(c => Line("{\"jsonrpc\":\"2.0\",\"id\":\"\u00ff\",\"result\":" + c.RightResult + "}"), latin1: true),
+                    HandshakeError.Malformed("an answer without the request's id")),
+        };
     }
 
     private static Dictionary<string, FailCase> FailCases()

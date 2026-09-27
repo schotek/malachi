@@ -10,7 +10,15 @@
 // connection; here the connection's LineReader reads, and the deadline is a
 // CancellationTokenSource on the TimeProvider. Where Swift and Go differ,
 // Go decides (an id must be the text 1 exactly; a member of the wrong type
-// breaks the line).
+// breaks the line), and the lines are read as encoding/json reads them into
+// Go's structs: a member name matches its field as Go folds it, null leaves
+// a field as it was, a member of the wrong type fails the whole line even
+// when a later one is right, nesting goes 10000 deep, and a string that is
+// not UTF-8 is read with U+FFFD. One difference is left: protocolVersion
+// and an error's code are Go ints, 64 bits, and here Int32 (as
+// HandshakeError keeps them), so a daemon that sends a larger one is
+// malformed here, where Go reports that version or code. The daemon never
+// sends such lines.
 
 using System;
 using System.IO;
@@ -220,7 +228,9 @@ public sealed partial class RpcClient
     /// <summary>
     /// The result's <c>protocolVersion</c> as Go decodes it into an int of a
     /// struct: an object's member that is an integer (not 2.0, not "2"),
-    /// and above 0; null otherwise.
+    /// and above 0; null otherwise. The last of repeated members wins, a
+    /// null one changes nothing, and one of the wrong type fails the
+    /// decoding whatever comes after it, as for Go.
     /// </summary>
     private static int? ProtocolVersionOf(JsonElement result)
     {
@@ -228,18 +238,22 @@ public sealed partial class RpcClient
         {
             return null;
         }
-        int? version = 0;
+        var version = 0;
         foreach (var member in result.EnumerateObject())
         {
-            // The last of repeated members wins, as for Go.
-            if (member.NameEquals("protocolVersion"u8))
+            if (!IsField(member, "protocolVersion"))
             {
-                version = member.Value.ValueKind switch
-                {
-                    JsonValueKind.Null => 0,
-                    JsonValueKind.Number when member.Value.TryGetInt32(out var v) => v,
-                    _ => null,
-                };
+                continue;
+            }
+            switch (member.Value.ValueKind)
+            {
+                case JsonValueKind.Null:
+                    break;
+                case JsonValueKind.Number when member.Value.TryGetInt32(out var v):
+                    version = v;
+                    break;
+                default:
+                    return null;
             }
         }
         return version > 0 ? version : null;
@@ -247,30 +261,111 @@ public sealed partial class RpcClient
 
     /// <summary>
     /// A string member of the system.hello result as Go decodes it into a
-    /// string field: absent or null is "", a string is itself, anything else
-    /// does not decode (null).
+    /// string field: "" when absent, a string is itself (the last one), null
+    /// changes nothing, anything else does not decode (null).
     /// </summary>
     private static string? HelloMember(JsonElement result, string name)
     {
-        var value = "";
+        string? value = "";
         foreach (var member in result.EnumerateObject())
         {
-            if (member.NameEquals(name))
+            if (IsField(member, name) && !StringOrNull(member.Value, ref value))
             {
-                switch (member.Value.ValueKind)
-                {
-                    case JsonValueKind.Null:
-                        value = "";
-                        break;
-                    case JsonValueKind.String:
-                        value = member.Value.GetString()!;
-                        break;
-                    default:
-                        return null;
-                }
+                return null;
             }
         }
         return value;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="member"/> goes to the Go struct field tagged
+    /// <paramref name="field"/> (ASCII letters): its name exactly, or as
+    /// encoding/json folds names (bytes.EqualFold: ASCII case, and the Kelvin
+    /// sign and the long s, which fold to K and S). A name that is not UTF-8
+    /// matches no field.
+    /// </summary>
+    private static bool IsField(JsonProperty member, string field)
+    {
+        string name;
+        try
+        {
+            if (member.NameEquals(field))
+            {
+                return true;
+            }
+            name = member.Name;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        if (name.Length != field.Length)
+        {
+            return false;
+        }
+        for (var i = 0; i < name.Length; i++)
+        {
+            if (GoFold(name[i]) != GoFold(field[i]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static char GoFold(char c) => c switch
+    {
+        >= 'a' and <= 'z' => (char)(c - ('a' - 'A')),
+        '\u212A' => 'K', // KELVIN SIGN
+        '\u017F' => 'S', // LATIN SMALL LETTER LONG S
+        _ => c,
+    };
+
+    // A string member as Go decodes it into a string field: a string is
+    // itself, null leaves the field as it was; false for any other type.
+    private static bool StringOrNull(JsonElement value, ref string? text)
+    {
+        switch (value.ValueKind)
+        {
+            case JsonValueKind.String:
+                text = GoString(value);
+                return true;
+            case JsonValueKind.Null:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// A string value as far as the handshake compares it. Go reads bytes
+    /// that are not UTF-8 as U+FFFD, where .NET refuses to transcode them;
+    /// such a string is U+FFFD here, which is, as Go's string is, never
+    /// "2.0", never empty and never hex.
+    /// </summary>
+    private static string GoString(JsonElement value)
+    {
+        try
+        {
+            return value.GetString()!;
+        }
+        catch (InvalidOperationException)
+        {
+            return "\uFFFD";
+        }
+    }
+
+    // A member's JSON text (Go's json.RawMessage), U+FFFD for one that is not UTF-8.
+    private static string RawText(JsonElement value)
+    {
+        try
+        {
+            return value.GetRawText();
+        }
+        catch (InvalidOperationException)
+        {
+            return "\uFFFD";
+        }
     }
 
     private static HandshakeException Malformed(string detail) => new(HandshakeError.Malformed(detail));
@@ -286,6 +381,9 @@ public sealed partial class RpcClient
     /// </summary>
     private sealed record HandshakeLine
     {
+        /// <summary>How deep Go's decoder nests (encoding/json maxNestingDepth).</summary>
+        private const int GoMaxDepth = 10000;
+
         /// <summary>The id's JSON text; null when absent or null.</summary>
         public string? Id { get; private init; }
 
@@ -306,7 +404,7 @@ public sealed partial class RpcClient
             JsonDocument document;
             try
             {
-                document = JsonDocument.Parse(raw);
+                document = JsonDocument.Parse(raw, new JsonDocumentOptions { MaxDepth = GoMaxDepth });
             }
             catch (JsonException)
             {
@@ -327,31 +425,31 @@ public sealed partial class RpcClient
                 foreach (var member in root.EnumerateObject())
                 {
                     var value = member.Value;
-                    if (member.NameEquals("jsonrpc"u8))
+                    if (IsField(member, "jsonrpc"))
                     {
-                        if (!StringOrNull(value, out jsonrpc))
+                        if (!StringOrNull(value, ref jsonrpc))
                         {
                             return null;
                         }
                     }
-                    else if (member.NameEquals("id"u8))
+                    else if (IsField(member, "id"))
                     {
-                        id = value.ValueKind == JsonValueKind.Null ? null : value.GetRawText();
+                        id = value.ValueKind == JsonValueKind.Null ? null : RawText(value);
                     }
-                    else if (member.NameEquals("method"u8))
+                    else if (IsField(member, "method"))
                     {
-                        if (!StringOrNull(value, out method))
+                        if (!StringOrNull(value, ref method))
                         {
                             return null;
                         }
                     }
-                    else if (member.NameEquals("result"u8))
+                    else if (IsField(member, "result"))
                     {
                         result = value.Clone();
                     }
-                    else if (member.NameEquals("error"u8))
+                    else if (IsField(member, "error"))
                     {
-                        if (!ReadError(value, out errorCode))
+                        if (!ReadError(value, ref errorCode))
                         {
                             return null;
                         }
@@ -365,42 +463,34 @@ public sealed partial class RpcClient
             }
         }
 
-        // A string member, or null (Go leaves the field empty); false for any
-        // other type.
-        private static bool StringOrNull(JsonElement value, out string? text)
+        // api.Error (a pointer in Go's line) as far as the handshake reads
+        // it: null drops it; an object is decoded into the one already there,
+        // so a code survives a later error object without one; the code (0
+        // when missing, null changes nothing), and a message that is a string
+        // if it is there. False for any other type.
+        private static bool ReadError(JsonElement value, ref ErrorCode? code)
         {
-            text = value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-            return value.ValueKind is JsonValueKind.String or JsonValueKind.Null;
-        }
-
-        // api.Error as far as the handshake reads it: the code (0 when
-        // missing), and a message that is a string if it is there.
-        private static bool ReadError(JsonElement value, out ErrorCode? code)
-        {
-            code = null;
             if (value.ValueKind == JsonValueKind.Null)
             {
+                code = null;
                 return true;
             }
             if (value.ValueKind != JsonValueKind.Object)
             {
                 return false;
             }
-            var n = 0;
+            var n = code?.Value ?? 0;
             foreach (var member in value.EnumerateObject())
             {
-                if (member.NameEquals("code"u8))
+                if (IsField(member, "code"))
                 {
-                    if (member.Value.ValueKind == JsonValueKind.Null)
-                    {
-                        n = 0;
-                    }
-                    else if (member.Value.ValueKind != JsonValueKind.Number || !member.Value.TryGetInt32(out n))
+                    if (member.Value.ValueKind != JsonValueKind.Null
+                        && (member.Value.ValueKind != JsonValueKind.Number || !member.Value.TryGetInt32(out n)))
                     {
                         return false;
                     }
                 }
-                else if (member.NameEquals("message"u8) && member.Value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
+                else if (IsField(member, "message") && member.Value.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
                 {
                     return false;
                 }

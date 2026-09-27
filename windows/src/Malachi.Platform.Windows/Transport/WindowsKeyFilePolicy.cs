@@ -91,6 +91,14 @@ public sealed class WindowsKeyFilePolicy : IKeyFilePolicy
             null);
         if (!handle.IsInvalid)
         {
+            // A pipe or a console at the path opens like a file, and would
+            // fail DaemonKey's look at the attributes with an I/O error:
+            // refused on sight, as what it is.
+            if (PInvoke.GetFileType(handle) != FILE_TYPE.FILE_TYPE_DISK)
+            {
+                handle.Dispose();
+                throw new KeyUnavailableException(KeyFileReason.NotRegular(path));
+            }
             return handle;
         }
         var error = (WIN32_ERROR)Marshal.GetLastPInvokeError();
@@ -109,11 +117,6 @@ public sealed class WindowsKeyFilePolicy : IKeyFilePolicy
     public string? Check(SafeFileHandle handle, string path)
     {
         ArgumentNullException.ThrowIfNull(handle);
-        // A pipe or a console at the path opens like a file.
-        if (PInvoke.GetFileType(handle) != FILE_TYPE.FILE_TYPE_DISK)
-        {
-            return KeyFileReason.NotRegular(path);
-        }
         KeyFileSecurity security;
         try
         {

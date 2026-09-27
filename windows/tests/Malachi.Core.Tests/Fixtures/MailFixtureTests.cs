@@ -169,7 +169,7 @@ public sealed class MailFixtureTests
 
     private static async Task<RpcClient> ConnectAsync(MailFixture f)
     {
-        var c = new RpcClient(f.Path);
+        var c = new RpcClient(f.Path, PortableKeyFilePolicy.Instance);
         await c.ConnectAsync(Ct);
         return c;
     }

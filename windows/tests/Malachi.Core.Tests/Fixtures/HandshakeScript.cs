@@ -3,11 +3,13 @@
 
 // Port of macos/Tests/MalachiCoreTests/Fixtures/FakeDaemon.swift
 // (FakeDaemon.Script). Swift's hello closure gets the right result only;
-// here it gets the connection's nonces and key as well, which the cases of
-// backend/pkg/api/handshake_test.go that Swift left out need (a reflected
-// proof, swapped nonces).
+// here it gets the connection's nonces and key as well (HelloContext),
+// which the cases of backend/pkg/api/handshake_test.go that Swift left out
+// need (a reflected proof, swapped nonces). Added: Latin1, for lines that
+// are not UTF-8, which a C# string cannot carry.
 
 using System;
+using System.Text;
 
 namespace Malachi.Core.Tests.Fixtures;
 
@@ -35,11 +37,14 @@ internal sealed record HandshakeScript
 
     /// <summary>Closes the connection's write side after that.</summary>
     public bool CloseAfterAuthenticate { get; init; }
-}
 
-/// <summary>What a script's <c>system.hello</c> answer is made of.</summary>
-/// <param name="RightResult">The JSON of the result the daemon would write (<see cref="FakeDaemon.HelloResult"/>).</param>
-/// <param name="ClientNonce">The client's nonce.</param>
-/// <param name="DaemonNonce">The daemon's nonce of the connection.</param>
-/// <param name="Key">The key of the key file.</param>
-internal sealed record HelloContext(string RightResult, byte[] ClientNonce, byte[] DaemonNonce, byte[] Key);
+    /// <summary>
+    /// Writes each char of the script as one byte (ISO-8859-1) instead of
+    /// UTF-8: "ÿ" is the byte 0xFF, which no UTF-8 text has. The right
+    /// result is ASCII, the same either way.
+    /// </summary>
+    public bool Latin1 { get; init; }
+
+    /// <summary>The bytes <paramref name="text"/> of the script is written as.</summary>
+    public byte[] Encode(string text) => Latin1 ? Encoding.Latin1.GetBytes(text) : Encoding.UTF8.GetBytes(text);
+}

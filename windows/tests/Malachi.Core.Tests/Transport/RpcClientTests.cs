@@ -39,7 +39,7 @@ public sealed class RpcClientTests
     public async Task SystemInfoRoundTrip()
     {
         await using var fake = await StartFakeAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(Ct);
         Assert.Equal(new RpcClientState.Connected(), client.State);
         var info = await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct);
@@ -242,7 +242,7 @@ public sealed class RpcClientTests
     public async Task DeadPathFailsPromptly()
     {
         var path = FakeDaemon.NewSocketPath();
-        using var client = new RpcClient(path);
+        using var client = new RpcClient(path, PortableKeyFilePolicy.Instance);
         var started = DateTime.UtcNow;
         var e = await Assert.ThrowsAsync<RpcClientException>(() => client.ConnectAsync(Ct));
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(3), "a refused unix connect must not hang");
@@ -270,7 +270,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.Silent());
-        using var client = new RpcClient(fake.Path, handshakeTimeout: TimeSpan.FromSeconds(10));
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, handshakeTimeout: TimeSpan.FromSeconds(10));
         var dial = client.ConnectAsync(Ct);
         await Eventually.Holds(() => fake.Handshakes.SequenceEqual([API.SystemHello.Name]));
         Assert.Equal(new RpcClientState.Connecting(), client.State); // connecting until the handshake is done
@@ -301,7 +301,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetNotificationsBeforeHello(9);
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         Assert.Equal(HandshakeError.Malformed("an unexpected notification"), await RefusalAsync(client));
         Assert.Equal([API.SystemHello.Name], fake.Handshakes);
     }
@@ -315,7 +315,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetNotificationWithAuthenticateAnswer("notify.first");
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         var events = new Events(client);
         await client.ConnectAsync(Ct);
         await Eventually.Holds(() => events.All.Count >= 3);
@@ -330,7 +330,7 @@ public sealed class RpcClientTests
             await using var fake = await StartFakeAsync();
             fake.SetHandshake(new HandshakeMode.OldDaemon());
             fake.SetNotificationsBeforeHello(early);
-            using var client = new RpcClient(fake.Path);
+            using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
             // Both ways a consumer gets notifications: the handler and the stream.
             var events = new Events(client);
             var refused = await RefusalAsync(client);
@@ -353,7 +353,7 @@ public sealed class RpcClientTests
         fake.SetHandshake(new HandshakeMode.ProtocolVersion(99));
         // No key file at all: the version is compared before it is read.
         File.Delete(fake.KeyPath);
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         Assert.Equal(HandshakeError.ProtocolMismatch(99), await RefusalAsync(client));
         await fake.WaitForEndedAsync(1);
         Assert.Equal([API.SystemHello.Name], fake.Received);
@@ -364,7 +364,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.WrongProof());
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         Assert.Equal(HandshakeError.DaemonUnproven, await RefusalAsync(client));
         await fake.WaitForEndedAsync(1);
         Assert.Equal([API.SystemHello.Name], fake.Handshakes); // system.authenticate was never sent
@@ -376,7 +376,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.RejectClient());
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         Assert.Equal(HandshakeError.Rejected(ErrorCode.Unauthenticated), await RefusalAsync(client));
         Assert.Equal([API.SystemHello.Name, API.SystemAuthenticate.Name], fake.Handshakes);
         Assert.Empty(fake.Calls);
@@ -387,7 +387,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         File.Delete(fake.KeyPath);
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         var refused = await RefusalAsync(client);
         Assert.Equal(HandshakeError.KeyUnavailable($"{fake.KeyPath} does not exist"), refused);
         await fake.WaitForEndedAsync(1);
@@ -399,7 +399,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.MalformedProof());
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         Assert.Equal(HandshakeError.Malformed("daemonProof is not 64 lowercase hex digits"), await RefusalAsync(client));
         await fake.WaitForEndedAsync(1);
         Assert.Equal([API.SystemHello.Name], fake.Received);
@@ -411,7 +411,7 @@ public sealed class RpcClientTests
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.Silent());
         var time = new FakeTimeProvider();
-        using var client = new RpcClient(fake.Path, handshakeTimeout: TimeSpan.FromMilliseconds(200), timeProvider: time);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, handshakeTimeout: TimeSpan.FromMilliseconds(200), timeProvider: time);
         var dial = RefusalAsync(client);
         await Eventually.Holds(() => fake.Handshakes.Count == 1);
         time.Advance(TimeSpan.FromMilliseconds(200));
@@ -508,7 +508,7 @@ public sealed class RpcClientTests
     {
         await using var fake = await StartFakeAsync();
         fake.SetHandshake(new HandshakeMode.Silent());
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         using var cancel = new CancellationTokenSource();
         var dial = client.ConnectAsync(cancel.Token);
         await Eventually.Holds(() => fake.Handshakes.Count == 1);
@@ -522,7 +522,7 @@ public sealed class RpcClientTests
     public async Task AThrowingHandlerDoesNotBreakTheTransport()
     {
         await using var fake = await StartFakeAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         client.StateChanged += (_, _) => throw new InvalidOperationException("a broken handler");
         client.NotificationReceived += (_, _) => throw new InvalidOperationException("a broken handler");
         await client.ConnectAsync(Ct);
@@ -556,6 +556,35 @@ public sealed class RpcClientTests
         Assert.Equal(FakeInfo, await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct));
     }
 
+    /// <summary>
+    /// A notification whose method is not UTF-8 is ignored as any line that
+    /// does not decode: the connection lives on and the next one arrives.
+    /// </summary>
+    [Fact]
+    public async Task ALineThatIsNotUtf8IsIgnored()
+    {
+        await using var fake = await StartFakeAsync();
+        using var client = await ConnectedAsync(fake);
+        byte[] broken = [.. "{\"jsonrpc\":\"2.0\",\"method\":\"notify.x"u8, 0xFF, .. "\",\"params\":{}}\n"u8];
+        await fake.PushRawAsync(broken);
+        await fake.PushNotificationAsync(API.Notify.AccountsChanged, "{}");
+        Assert.Equal(API.Notify.AccountsChanged, (await client.Notifications.ReadAsync(Ct)).Method);
+        Assert.Equal(new RpcClientState.Connected(), client.State);
+        Assert.Equal(FakeInfo, await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct));
+    }
+
+    /// <summary>A timeout no timer takes is refused before the call has an id: nothing is sent.</summary>
+    [Fact]
+    public async Task AnImpossibleTimeoutIsRefusedBeforeTheCall()
+    {
+        await using var fake = await StartFakeAsync();
+        using var client = await ConnectedAsync(fake);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.CallAsync(API.SystemInfo, new EmptyParams(), TimeSpan.FromSeconds(-2), Ct));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => client.CallAsync(API.SystemInfo, new EmptyParams(), TimeSpan.FromDays(100), Ct));
+        Assert.Equal(FakeInfo, await client.CallAsync(API.SystemInfo, new EmptyParams(), Ct));
+        Assert.Equal([API.SystemInfo.Name], fake.Calls);
+    }
+
     internal static async Task<FakeAnswer> Standard(string method, byte[] line) => method switch
     {
         API.SystemInfoName => FakeAnswer.Result(SystemInfoJson),
@@ -579,7 +608,7 @@ public sealed class RpcClientTests
 
     private static async Task<RpcClient> ConnectedAsync(FakeDaemon fake, TimeProvider? time = null)
     {
-        var client = new RpcClient(fake.Path, timeProvider: time);
+        var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance, timeProvider: time);
         await client.ConnectAsync(Ct);
         return client;
     }

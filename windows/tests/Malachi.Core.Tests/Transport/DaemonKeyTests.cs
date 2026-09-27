@@ -9,7 +9,10 @@
 // and the mode, and the named pipe and the device, are the Windows policy's
 // (Malachi.Platform.Windows.Tests, WindowsKeyFilePolicyTests); a FIFO has no
 // counterpart in a Windows file system. Added: the retry while another
-// process holds the file without sharing it.
+// process holds the file without sharing it; that the policy is asked about
+// regular files only, before the size (Swift's order); and that whatever a
+// policy throws is a KeyUnavailableException (every error of
+// api.ReadKeyFile is HandshakeKeyUnavailable).
 
 using System;
 using System.IO;
@@ -20,6 +23,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Tests.Platform;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Time.Testing;
+using Microsoft.Win32.SafeHandles;
 using Xunit;
 
 namespace Malachi.Core.Tests.Transport;
@@ -165,6 +169,42 @@ public sealed class DaemonKeyTests
         Assert.False(File.Exists(path));
     }
 
+    /// <summary>
+    /// The policy is asked about a regular file only, and before its size:
+    /// a directory is not a regular file whatever the policy would say, and
+    /// a file of the wrong size is refused by the policy first.
+    /// </summary>
+    [Fact]
+    public async Task ThePolicyLooksAtRegularFilesFirst()
+    {
+        using var dir = new TemporaryDirectory();
+        var policy = new StubPolicy { Check = (_, _) => "refused by the policy" };
+        var sub = Path.Combine(dir.Path, "dir.key");
+        Directory.CreateDirectory(sub);
+        Assert.Equal($"{sub} is not a regular file", await RefusalAsync(sub, policy));
+        Assert.Equal(0, policy.Checked);
+        var shortFile = Write([1, 2, 3], "short.key", dir);
+        Assert.Equal("refused by the policy", await RefusalAsync(shortFile, policy));
+        Assert.Equal(1, policy.Checked);
+    }
+
+    /// <summary>Whatever a policy throws, the key is unavailable, with the cause kept.</summary>
+    [Fact]
+    public async Task EveryFailureIsKeyUnavailable()
+    {
+        using var dir = new TemporaryDirectory();
+        var path = Write(KeyFile(RpcAuth.NewNonce()), "rpc.sock.key", dir);
+        var noSecurity = new StubPolicy { Check = (_, _) => throw new NotSupportedException("no security on this file system") };
+        var e = await Assert.ThrowsAsync<KeyUnavailableException>(() => DaemonKey.ReadAsync(path, noSecurity, TimeProvider.System, Ct));
+        Assert.Equal($"cannot inspect {path}: NotSupportedException", e.Reason);
+        Assert.IsType<NotSupportedException>(e.InnerException);
+
+        var badPath = new StubPolicy { Open = _ => throw new ArgumentException("a path the system does not take") };
+        e = await Assert.ThrowsAsync<KeyUnavailableException>(() => DaemonKey.ReadAsync(path, badPath, TimeProvider.System, Ct));
+        Assert.Equal($"cannot open {path}: ArgumentException", e.Reason);
+        Assert.IsType<ArgumentException>(e.InnerException);
+    }
+
     private static byte[] KeyFile(byte[] key) => Encoding.ASCII.GetBytes(RpcAuth.Hex(key) + "\n");
 
     private static string Write(byte[] content, string name, TemporaryDirectory dir)
@@ -177,11 +217,11 @@ public sealed class DaemonKeyTests
     private static Task<byte[]> ReadAsync(string path) => DaemonKey.ReadAsync(path, PortableKeyFilePolicy.Instance, TimeProvider.System, Ct);
 
     /// <summary>Why DaemonKey refused the file; null (and a failed assertion) when it read it.</summary>
-    private static async Task<string?> RefusalAsync(string path)
+    private static async Task<string?> RefusalAsync(string path, IKeyFilePolicy? policy = null)
     {
         try
         {
-            await ReadAsync(path);
+            await DaemonKey.ReadAsync(path, policy ?? PortableKeyFilePolicy.Instance, TimeProvider.System, Ct);
             Assert.Fail($"{path} was read");
         }
         catch (KeyUnavailableException e)
@@ -189,5 +229,23 @@ public sealed class DaemonKeyTests
             return e.Reason;
         }
         return null;
+    }
+
+    /// <summary>The portable policy, with its steps replaced where a test says so; counts its checks.</summary>
+    private sealed class StubPolicy : IKeyFilePolicy
+    {
+        public Func<string, SafeFileHandle> Open { get; init; } = PortableKeyFilePolicy.Instance.Open;
+
+        public Func<SafeFileHandle, string, string?> Check { get; init; } = (_, _) => null;
+
+        public int Checked { get; private set; }
+
+        SafeFileHandle IKeyFilePolicy.Open(string path) => Open(path);
+
+        string? IKeyFilePolicy.Check(SafeFileHandle handle, string path)
+        {
+            Checked++;
+            return Check(handle, path);
+        }
     }
 }

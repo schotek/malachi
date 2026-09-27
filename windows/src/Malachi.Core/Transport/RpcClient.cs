@@ -56,7 +56,17 @@ namespace Malachi.Core.Transport;
 /// <see cref="Notifications"/> and raised as <see cref="StateChanged"/> and
 /// <see cref="NotificationReceived"/> in the order they happen, under the
 /// client's lock: a handler must not block, and must not wait for another
-/// thread that uses this client.
+/// thread that uses this client. The two channels are unbounded and always
+/// written, events or not: the client's owner reads both for as long as the
+/// client lives (ConnectionController does, as Swift's does with the
+/// streams), or they grow with every notification.
+/// </para>
+/// <para>
+/// The key-file policy is a required argument, so that no composition root
+/// can lose the Windows owner and access check by leaving it out: the app
+/// passes Malachi.Platform.Windows' <c>WindowsKeyFilePolicy</c>, tests and
+/// other systems <see cref="PortableKeyFilePolicy.Instance"/> (the Go
+/// clients' rule).
 /// </para>
 /// </remarks>
 public sealed partial class RpcClient : IDisposable
@@ -84,21 +94,26 @@ public sealed partial class RpcClient : IDisposable
 
     /// <summary>A client of the daemon listening on <paramref name="socketPath"/>.</summary>
     /// <param name="socketPath">The daemon's socket; its key file lies beside it (<see cref="RpcAuth.KeyPath"/>).</param>
+    /// <param name="keyFilePolicy">
+    /// How the key file is opened and checked: the platform's policy in the
+    /// app, <see cref="PortableKeyFilePolicy.Instance"/> for the Go clients'
+    /// rule (see the remarks of the class).
+    /// </param>
     /// <param name="handshakeTimeout">Bounds the whole handshake of each connection (<see cref="RpcTimeouts.Handshake"/>); tests shorten it.</param>
-    /// <param name="keyFilePolicy">How the key file is opened and checked; the Go clients' rule when null.</param>
     /// <param name="timeProvider">The clock of every timeout.</param>
     /// <param name="logger">Receives method names, codes and reasons, never a key, a nonce, a proof or mail data.</param>
     public RpcClient(
         string socketPath,
+        IKeyFilePolicy keyFilePolicy,
         TimeSpan? handshakeTimeout = null,
-        IKeyFilePolicy? keyFilePolicy = null,
         TimeProvider? timeProvider = null,
         ILogger<RpcClient>? logger = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(socketPath);
+        ArgumentNullException.ThrowIfNull(keyFilePolicy);
         SocketPath = socketPath;
         this.handshakeTimeout = handshakeTimeout ?? RpcTimeouts.Handshake;
-        this.keyFilePolicy = keyFilePolicy ?? PortableKeyFilePolicy.Instance;
+        this.keyFilePolicy = keyFilePolicy;
         time = timeProvider ?? TimeProvider.System;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
     }
@@ -182,11 +197,14 @@ public sealed partial class RpcClient : IDisposable
     /// Performs one call with <paramref name="timeout"/> in place of the
     /// method's own (<see cref="Timeout.InfiniteTimeSpan"/> waits for ever).
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A negative <paramref name="timeout"/> other than the infinite one, or one beyond what a timer takes (about 49 days).</exception>
     public async Task<TResult> CallAsync<TParams, TResult>(
         RpcMethod<TParams, TResult> method, TParams parameters, TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(method);
         ArgumentNullException.ThrowIfNull(parameters);
+        // The timer first: a timeout it refuses throws before the call has an id.
+        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, time);
         // An already cancelled caller sends nothing.
         cancellationToken.ThrowIfCancellationRequested();
         var answer = new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -212,7 +230,6 @@ public sealed partial class RpcClient : IDisposable
             Forget(id);
             throw;
         }
-        using var timer = timeout == Timeout.InfiniteTimeSpan ? null : new CancellationTokenSource(timeout, time);
         using var onTimeout = timer?.Token.UnsafeRegister(_ => Fail(id, new RpcClientException(ClientError.Timeout(method.Name))), null);
         using var onCancel = cancellationToken.UnsafeRegister(_ => Fail(id, new OperationCanceledException(cancellationToken)), null);
         _ = SendAsync(conn, id, line);
@@ -403,6 +420,13 @@ public sealed partial class RpcClient : IDisposable
             }
             reason = Connection.Describe(e);
         }
+#pragma warning disable CA1031 // Nobody awaits the loop: whatever ends it must end the connection, or the client stays Connected without a reader.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            LogReadLoopFailed(logger, e);
+            reason = Connection.Describe(e);
+        }
         Teardown(conn, reason);
     }
 
@@ -563,4 +587,7 @@ public sealed partial class RpcClient : IDisposable
 
     [LoggerMessage(Level = LogLevel.Error, Message = "A handler of the RPC client failed")]
     private static partial void LogHandlerFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "The read loop of the RPC client failed")]
+    private static partial void LogReadLoopFailed(ILogger logger, Exception error);
 }

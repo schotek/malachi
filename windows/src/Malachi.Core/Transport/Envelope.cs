@@ -40,8 +40,8 @@ public readonly record struct Envelope
     /// <summary>
     /// Reads the members that classify <paramref name="line"/>. False for a
     /// line that is not a JSON object, or whose <c>method</c> is not a string
-    /// or whose <c>error</c> is not an error object: such a line is ignored,
-    /// as the GTK and Swift clients ignore it.
+    /// (or not UTF-8) or whose <c>error</c> is not an error object: such a
+    /// line is ignored, as the GTK and Swift clients ignore it.
     /// </summary>
     public static bool TryParse(ReadOnlySpan<byte> line, out Envelope envelope)
     {
@@ -111,6 +111,11 @@ public readonly record struct Envelope
         }
         catch (JsonException)
         {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            // A method that is not UTF-8, which the reader will not transcode.
             return false;
         }
     }

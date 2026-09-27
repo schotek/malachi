@@ -28,7 +28,7 @@ public sealed class RealDaemonTests
     {
         using var daemon = RealDaemon.CreateOrSkip();
         await daemon.StartAsync(Ct);
-        using var client = new RpcClient(daemon.Socket, keyFilePolicy: new WindowsKeyFilePolicy());
+        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy());
         await client.ConnectAsync(Ct);
         Assert.Equal(new RpcClientState.Connected(), client.State);
 
@@ -79,7 +79,7 @@ public sealed class RealDaemonTests
     {
         using var daemon = RealDaemon.CreateOrSkip();
         await daemon.StartAsync(Ct);
-        using var client = new RpcClient(daemon.Socket, keyFilePolicy: new WindowsKeyFilePolicy());
+        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy());
         await client.ConnectAsync(Ct);
         var before = await File.ReadAllBytesAsync(RpcAuth.KeyPath(daemon.Socket), Ct);
 

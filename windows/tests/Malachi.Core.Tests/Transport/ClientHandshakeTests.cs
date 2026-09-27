@@ -37,7 +37,7 @@ public sealed class ClientHandshakeTests
     public async Task ConnectAuthenticates()
     {
         await using var d = await StartFakeAsync(new HandshakeMode.Normal());
-        using var c = new RpcClient(d.Path);
+        using var c = new RpcClient(d.Path, PortableKeyFilePolicy.Instance);
         var events = Record(c);
         await c.ConnectAsync(Ct);
         Assert.Equal(new RpcClientState.Connected(), c.State);
@@ -62,7 +62,7 @@ public sealed class ClientHandshakeTests
     {
         await using var d = await StartFakeAsync(new HandshakeMode.Normal());
         d.SetNotificationWithAuthenticateAnswer(API.Notify.AccountsChanged);
-        using var c = new RpcClient(d.Path);
+        using var c = new RpcClient(d.Path, PortableKeyFilePolicy.Instance);
         await c.ConnectAsync(Ct);
         var n = await c.Notifications.ReadAsync(Ct).AsTask().WaitAsync(TimeSpan.FromSeconds(5), Ct);
         Assert.Equal(API.Notify.AccountsChanged, n.Method);
@@ -79,7 +79,7 @@ public sealed class ClientHandshakeTests
             File.Delete(d.KeyPath);
         }
         var time = new FakeTimeProvider();
-        using var c = new RpcClient(d.Path, timeProvider: time);
+        using var c = new RpcClient(d.Path, PortableKeyFilePolicy.Instance, timeProvider: time);
         var events = Record(c);
         var notes = new List<string>();
         c.NotificationReceived += (_, n) =>
@@ -129,7 +129,7 @@ public sealed class ClientHandshakeTests
     {
         var sock = FakeDaemon.NewSocketPath();
         var first = await StartFakeAsync(new HandshakeMode.Normal(), path: sock);
-        using var c = new RpcClient(sock);
+        using var c = new RpcClient(sock, PortableKeyFilePolicy.Instance);
         await c.ConnectAsync(Ct);
         c.Close();
         var firstKey = first.Key;
@@ -146,7 +146,7 @@ public sealed class ClientHandshakeTests
     [Fact]
     public async Task ConnectWithoutDaemon()
     {
-        using var c = new RpcClient(FakeDaemon.NewSocketPath());
+        using var c = new RpcClient(FakeDaemon.NewSocketPath(), PortableKeyFilePolicy.Instance);
         var events = Record(c);
         var err = await Assert.ThrowsAsync<RpcClientException>(() => c.ConnectAsync(Ct));
         Assert.Equal(0, HandshakeError.DaemonProtocol(err));

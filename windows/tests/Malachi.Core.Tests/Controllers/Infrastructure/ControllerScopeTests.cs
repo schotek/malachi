@@ -146,7 +146,7 @@ public sealed class ControllerScopeTests
     {
         await using var fake = new FakeDaemon((method, line) => Transport.RpcClientTests.Standard(method, line));
         await fake.StartAsync();
-        using var client = new RpcClient(fake.Path);
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(TestContext.Current.CancellationToken);
         using var ui = new TestUIContext();
         var pending = new PendingWork();

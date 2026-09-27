@@ -35,7 +35,11 @@ namespace Malachi.Core.Transport;
 /// and pass the <see cref="IKeyFilePolicy"/>: on Windows the user's own file
 /// that grants nobody else access (the deviation table in
 /// windows/README.md). The file is opened once and everything is checked on
-/// the open handle. The key is never logged, and no reason quotes the file.
+/// the open handle, in Swift's order: a regular file, then the policy (owner
+/// and access), then the size and the content. Every failure is a
+/// <see cref="KeyUnavailableException"/>, whatever the policy throws, as
+/// every error of api.ReadKeyFile is HandshakeKeyUnavailable. The key is
+/// never logged, and no reason quotes the file.
 /// </remarks>
 public static class DaemonKey
 {
@@ -69,7 +73,17 @@ public static class DaemonKey
         ArgumentNullException.ThrowIfNull(policy);
         ArgumentNullException.ThrowIfNull(timeProvider);
         using var handle = await OpenAsync(path, policy, timeProvider, cancellationToken).ConfigureAwait(false);
-        return ReadOpen(handle, path, policy);
+        try
+        {
+            return ReadOpen(handle, path, policy);
+        }
+        catch (Exception e) when (e is not KeyUnavailableException)
+        {
+            // What the policy or the system throws beyond the expected (a
+            // file system without security, a descriptor .NET cannot read):
+            // the file cannot be used all the same.
+            throw new KeyUnavailableException(KeyFileReason.CannotInspect(path, e.GetType().Name), e);
+        }
     }
 
     /// <summary>Whether <paramref name="e"/> is Windows refusing a file another process holds.</summary>
@@ -112,6 +126,12 @@ public static class DaemonKey
             {
                 throw new KeyUnavailableException(KeyFileReason.CannotOpen(path, Detail(e)), e);
             }
+            catch (Exception e) when (e is not (KeyUnavailableException or OperationCanceledException))
+            {
+                // A path the system refuses to take (NotSupportedException,
+                // ArgumentException), or anything else a policy throws.
+                throw new KeyUnavailableException(KeyFileReason.CannotOpen(path, e.GetType().Name), e);
+            }
         }
     }
 
@@ -119,23 +139,37 @@ public static class DaemonKey
     // cannot slip another file in.
     private static byte[] ReadOpen(SafeFileHandle handle, string path, IKeyFilePolicy policy)
     {
+        FileAttributes attributes;
+        try
+        {
+            attributes = File.GetAttributes(handle);
+        }
+        catch (IOException e)
+        {
+            throw new KeyUnavailableException(KeyFileReason.CannotInspect(path, Detail(e)), e);
+        }
+        catch (UnauthorizedAccessException e)
+        {
+            throw new KeyUnavailableException(KeyFileReason.CannotInspect(path, "access denied"), e);
+        }
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new KeyUnavailableException(KeyFileReason.SymbolicLink(path));
+        }
+        if ((attributes & (FileAttributes.Directory | FileAttributes.Device)) != 0)
+        {
+            throw new KeyUnavailableException(KeyFileReason.NotRegular(path));
+        }
+
+        // A regular file: now whose it is and who else may read it.
         if (policy.Check(handle, path) is { } refused)
         {
             throw new KeyUnavailableException(refused);
         }
-        FileAttributes attributes;
+
         long length;
         try
         {
-            attributes = File.GetAttributes(handle);
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new KeyUnavailableException(KeyFileReason.SymbolicLink(path));
-            }
-            if ((attributes & (FileAttributes.Directory | FileAttributes.Device)) != 0)
-            {
-                throw new KeyUnavailableException(KeyFileReason.NotRegular(path));
-            }
             length = RandomAccess.GetLength(handle);
         }
         catch (IOException e)
@@ -167,6 +201,10 @@ public static class DaemonKey
                 catch (IOException e)
                 {
                     throw new KeyUnavailableException(KeyFileReason.CannotRead(path, Detail(e)), e);
+                }
+                catch (UnauthorizedAccessException e)
+                {
+                    throw new KeyUnavailableException(KeyFileReason.CannotRead(path, "access denied"), e);
                 }
                 if (n == 0)
                 {

@@ -185,6 +185,15 @@ public sealed class WindowsKeyFilePolicyTests
         Directory.CreateDirectory(sub);
         Assert.Equal($"{sub} is not a regular file", await RefusalAsync(sub));
         Assert.Equal("NUL is not a regular file", await RefusalAsync("NUL"));
+
+        // What it is comes before whose it is and who may read it (Swift's
+        // order): a directory that everyone may read is not a regular file.
+        var open = dir.Combine("open.key");
+        Directory.CreateDirectory(open);
+        var security = new DirectorySecurity();
+        security.SetSecurityDescriptorSddlForm($"D:P(A;OICI;FA;;;{User})(A;OICI;FR;;;WD)", AccessControlSections.Access);
+        new DirectoryInfo(open).SetAccessControl(security);
+        Assert.Equal($"{open} is not a regular file", await RefusalAsync(open));
     }
 
     [Fact]

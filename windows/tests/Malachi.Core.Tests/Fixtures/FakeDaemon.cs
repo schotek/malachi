@@ -10,7 +10,8 @@
 // AF_UNIX socket (System.Net.Sockets) at a short path in the temporary
 // directory: sun_path takes 107 UTF-8 bytes on Windows and Linux, and the
 // test directories are longer than that. The key file is written through a
-// temporary file and File.Move(overwrite), the daemon's atomic replace;
+// temporary file and File.Move(overwrite), the daemon's atomic replace,
+// retried while a reader holds the old file as the daemon retries it;
 // Windows has no 0600, and the temporary directory's ACL (the user, SYSTEM,
 // Administrators) is what the Windows key-file policy accepts. Additions
 // for the C# tests: EndedCount/WaitForEndedAsync (Go's waitEnded: once the
@@ -75,6 +76,14 @@ internal sealed class FakeDaemon : IAsyncDisposable
     /// <summary>The default generic handler: methodNotFound.</summary>
     public static readonly Handler MethodNotFound = (method, _) =>
         Task.FromResult(FakeAnswer.Failure(new RpcError { Code = MethodNotFoundCode, Message = $"unknown method {method}" }));
+
+    /// <summary>The pauses between the attempts to replace the key file (backend/internal/fsretry Waits).</summary>
+    private static readonly TimeSpan[] RenameWaits =
+    [
+        TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(40), TimeSpan.FromMilliseconds(80), TimeSpan.FromMilliseconds(160),
+        TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(200),
+        TimeSpan.FromMilliseconds(200),
+    ];
 
     private readonly Lock gate = new();
     private readonly Handler handler;
@@ -285,7 +294,7 @@ internal sealed class FakeDaemon : IAsyncDisposable
         try
         {
             File.WriteAllBytes(tmp, Encoding.ASCII.GetBytes(RpcAuth.Hex(fresh) + "\n"));
-            File.Move(tmp, KeyPath, overwrite: true);
+            ReplaceKeyFile(tmp, KeyPath);
         }
         catch
         {
@@ -325,6 +334,24 @@ internal sealed class FakeDaemon : IAsyncDisposable
         foreach (var p in targets)
         {
             await SendAsync(p, line).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Writes <paramref name="data"/> as it is to every authenticated client:
+    /// a line no C# string can carry (bytes that are not UTF-8), or a line
+    /// cut short. Not counted in <see cref="Pushed"/>.
+    /// </summary>
+    public async Task PushRawAsync(byte[] data)
+    {
+        List<Peer> targets = [];
+        lock (gate)
+        {
+            targets.AddRange(peers.FindAll(p => p.State is PeerState.Authenticated));
+        }
+        foreach (var p in targets)
+        {
+            await SendAsync(p, data).ConfigureAwait(false);
         }
     }
 
@@ -450,6 +477,29 @@ internal sealed class FakeDaemon : IAsyncDisposable
         Encoding.UTF8.GetBytes($$"""{"jsonrpc":"2.0","method":"{{method}}","params":{{paramsJson}}}""" + "\n");
 
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Moves the new key file over the old one as the daemon's writeKeyFile
+    /// does (fsretry.Rename): Windows refuses to replace a file while a
+    /// reader holds it, even one that shares delete (docs/windows-port.md
+    /// §5), so a client reading the key right then holds the move up for a
+    /// moment. The same waits as fsretry.Waits; the last failure is thrown.
+    /// </summary>
+    private static void ReplaceKeyFile(string from, string to)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                File.Move(from, to, overwrite: true);
+                return;
+            }
+            catch (Exception e) when ((e is IOException or UnauthorizedAccessException) && attempt < RenameWaits.Length)
+            {
+                Thread.Sleep(RenameWaits[attempt]);
+            }
+        }
+    }
 
     private static void TryDelete(string path)
     {
@@ -616,7 +666,7 @@ internal sealed class FakeDaemon : IAsyncDisposable
                     case HandshakeMode.Raw raw:
                         SetState(peer, new PeerState.Done());
                         var scripted = raw.Script.Authenticate(RpcAuth.Hex(answered.ClientNonce)) ?? "";
-                        await WriteAsync(peer, Encoding.UTF8.GetBytes(scripted), raw.Script.CloseAfterAuthenticate).ConfigureAwait(false);
+                        await WriteAsync(peer, raw.Script.Encode(scripted), raw.Script.CloseAfterAuthenticate).ConfigureAwait(false);
                         break;
                     default:
                         // Authenticated in the same step as the answer is
@@ -688,7 +738,7 @@ internal sealed class FakeDaemon : IAsyncDisposable
                 SetState(peer, new PeerState.HelloAnswered(clientNonce, daemonNonce));
                 var right = HelloResult(version, daemonNonce, proof);
                 var scripted = raw.Script.Hello(new HelloContext(right, clientNonce, daemonNonce, key)) ?? "";
-                await WriteAsync(peer, Encoding.UTF8.GetBytes(scripted), raw.Script.CloseAfterHello).ConfigureAwait(false);
+                await WriteAsync(peer, raw.Script.Encode(scripted), raw.Script.CloseAfterHello).ConfigureAwait(false);
                 return;
             default:
                 break;
