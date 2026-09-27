@@ -97,7 +97,7 @@ GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
 | Launch at login | `HKCU\…\CurrentVersion\Run` value `Malachi Mail` = `"<exe>" --background`, `StartupApproved` respected |
 | `mailto:` | `HKCU\Software\Classes\io.github.schotek.Malachi.mailto`, `HKCU\Software\Clients\Mail\Malachi Mail\Capabilities`, `HKCU\Software\RegisteredApplications` |
-| Notifications | `AppNotificationManager`, AUMID `io.github.schotek.Malachi` |
+| Notifications | `AppNotificationManager.Register("Malachi Mail", Assets\notification.png)`, no explicit AUMID: Windows keys the registration by the executable's path (`HKCU\Software\Classes\AppUserModelId\<path>`) |
 
 Development overrides, as on macOS: `MALACHI_DAEMON` (path, or `none`),
 `MALACHI_SOCKET`, `MALACHI_KEYRING`/`MALACHI_KEYRING_HELPER` (a preset
@@ -993,21 +993,45 @@ display name or *New message*, body the subject or *(No subject)*, both
 capped at 200 bytes; group = account,
 tag = `message-<id>`; a click shows the main window. The sound is its own
 switch: `PlaySound("MailBeep", SND_ALIAS|SND_ASYNC|SND_NODEFAULT)`, the
-user's *New Mail Notification* system sound (closer to GTK's
-`message-new-email` than macOS's *Glass*), skipped in quiet hours; toasts
-are muted.
+user's system sound for mail (*Desktop Mail Notification* in Control
+Panel → Sound; closer to GTK's `message-new-email` than macOS's *Glass*),
+silent when the user set none, skipped in quiet hours; toasts are muted.
+In the code, the rules are Core's (`Malachi.Core.Presentation`):
+`NotificationHub`, the port of the macOS hub (every daemon notification
+decoded and handed to the handlers of its kind, a handler's failure
+reported instead of stopping the others), and `NotificationPolicy` over
+`IDesktopNotifier` and `INewMailSound`; `DesktopNotification` cuts a tag
+or group longer than the 64 characters a toast allows to its start and a
+hash. `Malachi.Platform.Windows` has `Notifications/` (`NotificationArguments`,
+the account and message a click carries back; `QuietHours`: every
+`SHQueryUserNotificationState` answer but `QUNS_ACCEPTS_NOTIFICATIONS` keeps
+the sound quiet) and `Sound/NewMailSound`; the app's
+`Platform/NotificationService` is the only code over `AppNotificationManager`.
+Verified outside Claude's process tree: the toast shows the name and icon
+(`Assets\notification.png`, rendered by `make-icons.ps1` with the `.ico`),
+a sender's `<…>` and a subject's markup as plain text, and a click reaches
+the running app on its UI thread and cold-starts an exited one (kind
+`AppNotification`) with the ids intact, `;`, `=` and `%` included.
 
 **Background, tray, launch at login.** `DispatcherShutdownMode.OnExplicitShutdown`;
 one main window for the process, hidden on close when *Run in background*
 is on (otherwise the last visible window quits, the GApplication rule). While
 hidden, a notification-area icon offers Open, New Message, Check for New
-Mail and Quit: `Shell_NotifyIcon` through CsWin32 on a hidden top-level
+Mail and Quit (`Malachi.Platform.Windows` `Tray/`, the app's
+`Platform/BackgroundTray`): `Shell_NotifyIcon` on a hidden top-level
 `WS_EX_TOOLWINDOW` window (a message-only window misses the
 `TaskbarCreated` broadcast), `NOTIFYICON_VERSION_4`, the icon taken from the
 exe, re-added unconditionally on `TaskbarCreated`, and a native
 `TrackPopupMenuEx` menu (a WinUI `MenuFlyout` opened from the tray lands
 behind other windows, gets no keyboard and shows nothing while the owner is
-hidden; measured). New icons land in the Windows 11 overflow. Every path
+hidden; measured). CsWin32 refuses `Shell_NotifyIcon` and its structures in
+an Any CPU library (PInvoke005: x86 packs them differently), so
+`Tray/NotifyIconInterop` declares their 64-bit layouts, checked against
+the SDK's sizes. The labels are GTK's msgids where GTK has the action
+(`_New Message` with its mnemonic as the access key, `Check for New Mail`);
+*Open Malachi Mail* and *Quit* are Windows-only strings. The commands are
+queued to the UI thread, so they run after the menu has returned. New icons
+land in the Windows 11 overflow. Every path
 that shows the main window (tray, notification, redirected launch,
 background start) calls `AppWindow.Show()`, `Activate()` and then
 `SetForegroundWindow(hwnd)`: without the last, the window stays behind
@@ -1015,7 +1039,16 @@ background start) calls `AppWindow.Show()`, `Activate()` and then
 `RedirectActivationToAsync` already grants the foreground right. Launch at
 login is the Run value with `--background`, which starts hidden; a
 `StartupApproved\Run` value whose first byte is odd means the user disabled
-it in Windows Settings, which is shown as such, never overwritten.
+it in Windows Settings, which is shown as such, never overwritten
+(`Startup/LaunchAtLogin`: turning it on then writes the Run value and
+answers `RequiresApproval`, which Preferences reports with GTK's *Autostart
+was not granted* and can follow with Settings → Apps → Startup). The
+`launch-at-login` key only mirrors the status, at start and whenever
+Preferences opens; a Run value naming an executable that no longer exists
+(the app folder moved) is pointed at the running one at start.
+`Startup/LaunchArguments` reads the command line: `--background`, the
+`mailto:` links in order, and COM's `----AppNotificationActivated:` and
+`-Embedding`, which are neither.
 
 **Single instance and activation.** A custom `Main`
 (`DISABLE_XAML_GENERATED_MAIN`, `Malachi.App/Program.cs`): the console
@@ -1075,8 +1108,25 @@ Preferences (decided) opens `ms-settings:defaultapps?registeredAppUser=Malachi%2
 The ProgID carries `Application\ApplicationName` = *Malachi Mail* (without
 it Windows lists the exe name), and the registration ends with
 `SHChangeNotify(SHCNE_ASSOCCHANGED)` (verified with
-`SHAssocEnumHandlersForProtocolByApplication`).
-Links are parsed by the port of `compose.ParseMailto`.
+`SHAssocEnumHandlersForProtocolByApplication`, which lists *Malachi Mail*
+after the registration and no more after `Unregister`).
+Links are parsed by the port of `compose.ParseMailto`. The code:
+`Malachi.Platform.Windows` `Registration/` (`MailtoRegistration`, rewritten
+when any value is missing or differs, `Unregister` for an uninstaller,
+`IsDefault` through `AssocQueryString`; `SystemSettings` for the two
+Settings pages).
+
+**The app's side** (`Malachi.App/Platform/PlatformServices`), called by the
+shell in this order: `InitializeEarly(onActivated)` first in `Main` (the
+notification handler, then `Register`), `NotificationActivationFrom` on
+`GetActivatedEventArgs()` for a cold start by a click (and on a redirected
+activation), `Start(PlatformContext)` on the UI thread once the
+`NotificationHub` is attached to the connection and before the mailbox adds
+its own `notify.newMessage` handler (GTK notifies first, then updates the
+list), `SetRunningInBackground(bool)` whenever the main window is hidden in
+the background or shown again, and `Stop()` on the way out. A click arrives
+on the UI thread (held until `Start` when it comes earlier). Preferences
+takes `LaunchAtLogin`, `Mailto` and `OpenDefaultApps` from it.
 
 **Attachments.** Opened files go to the open directory (a fresh random
 subdirectory per file, `FileMode.CreateNew`) under a Windows-safe name
@@ -1326,7 +1376,15 @@ editor once they exist.
 - `Malachi.Platform.Windows.Tests`: the process host against
   `Malachi.Core.TestDaemon` (graceful stop, kill after the timeout, deaf
   daemon), the key-file policy (owner, DACL, reparse points), the registry
-  backend and its watcher, file-name rules, Mark of the Web round trip.
+  backend and its watcher, file-name rules, Mark of the Web round trip,
+  the notification-area icon on a hidden window (added, re-added after a
+  simulated Explorer restart, removed), launch at login and the `mailto:`
+  registration under a test key of their own
+  (`HKCU\Software\io.github.schotek.Malachi.Tests\<guid>`), the command
+  line, the notification arguments, quiet hours and the sound. What only
+  the real shell shows (a toast and its click, the handler list, the Run
+  key, the icon's menu) is checked by hand from outside Claude's process
+  tree (§1) and cleaned up afterwards.
 - `Malachi.Credentials.Tests`: the protocol without the store; a real
   round trip (4 KiB and chunked values, `cmdkey`'s UTF-16 items) on request
   (`MALACHI_CREDENTIALS_TEST=1`), one test at a time under the helper's
