@@ -348,7 +348,10 @@ refused; deleting it is not.
 every 100 ms, start timeout 15 s, stop timeout 15 s, backoff 0 then 1 s
 doubling to 60 s, adopt foreign daemons and never stop them), over an
 `IDaemonProcessHost`; `BeginStopping` stops restarts at once for the console
-handler (CTRL_CLOSE below). The Windows host
+handler (CTRL_CLOSE below). `EnsureAsync` and `StopAsync` leave the
+caller's thread before they do anything (the Swift actor hop): the probe's
+connect, the run directory's DACL and `CreateProcess` never run on the UI
+thread. The Windows host
 (`Malachi.Platform.Windows.Processes.DaemonProcessHost`) does not use
 `Process.Start`, which hands every inheritable handle of the app to the
 child: `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` passes
@@ -391,10 +394,12 @@ CTRL_BREAK, `FreeConsole`, `AttachConsole(ATTACH_PARENT_PROCESS)`; if the app
 has no console, `AttachConsole(pid)`, `SetConsoleCtrlHandler(NULL, TRUE)`,
 CTRL_BREAK, `FreeConsole`; `Kill` after 15 s. On CTRL_CLOSE (the terminal
 tab closes) the daemon stops by itself and the app does not restart it.
-`build.ps1 run` starts the app with `Process.Start` (no redirection) and
-waits; never `& exe` (returns at once) or `& exe | …` (on Ctrl+C PowerShell
+`build.ps1 run` must start the app with `Process.Start` (no redirection)
+and wait for it in a loop, up to 20 s more in `finally` (INPUT-SPIKES.md
+§4.3); never `& exe` (returns at once) or `& exe | …` (on Ctrl+C PowerShell
 kills the app and orphans the daemon, and the inherited pipe keeps
-PowerShell waiting).
+PowerShell waiting). Today's `Invoke-Run` still pipes (`& $exe 2>&1 | …`);
+it is switched when the app starts its daemon (E1).
 
 ## 6. The WebView2 security layer
 
