@@ -34,6 +34,7 @@ using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -67,10 +68,48 @@ internal sealed class ActionLog
     /// <summary>"id:flagged" per star change.</summary>
     public List<string> Stars { get; } = [];
 
+    /// <summary>"id:seen" per seen change a message window hears of.</summary>
+    public List<string> Seen { get; } = [];
+
     public List<MessageId> OutboxStates { get; } = [];
 
     /// <summary>"id:loading" per remote-bar redraw.</summary>
     public List<string> Bars { get; } = [];
+}
+
+/// <summary>
+/// A logger that keeps what a controller logged, level and message, for the
+/// tests that check a failure is not lost.
+/// </summary>
+internal sealed class RecordingLogger<T> : ILogger<T>
+{
+    private readonly List<(LogLevel Level, string Message)> entries = [];
+
+    /// <summary>What was logged so far, in order.</summary>
+    public IReadOnlyList<(LogLevel Level, string Message)> Entries
+    {
+        get
+        {
+            lock (entries)
+            {
+                return [.. entries];
+            }
+        }
+    }
+
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+    {
+        ArgumentNullException.ThrowIfNull(formatter);
+        lock (entries)
+        {
+            entries.Add((logLevel, formatter(state, exception)));
+        }
+    }
 }
 
 /// <summary>The harness of the actions tests.</summary>
@@ -109,6 +148,9 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
     public SettingsStore Settings { get; }
 
     public ActionLog Log { get; } = new();
+
+    /// <summary>What the actions controller logged.</summary>
+    public RecordingLogger<ActionsController> Logger { get; } = new();
 
     public MailboxHalf Mailbox { get; private set; } = null!;
 
@@ -211,7 +253,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             h.Mailbox.List = h.List;
             h.Cache = new CacheHalf(scope, client, log.Toasts.Add);
             h.Cache.RemoteBar += (id, lm) => log.Bars.Add($"{id.Value}:{(lm.LoadingImages ? "true" : "false")}");
-            var actions = new ActionsController(h.Mailbox, h.List, h.Cache, settings, log.Toasts.Add)
+            var actions = new ActionsController(h.Mailbox, h.List, h.Cache, settings, log.Toasts.Add, h.Logger)
             {
                 Confirm = (_, heading, body, label) =>
                 {
@@ -228,6 +270,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             actions.OpenMessageWindowRequested += (_, s) => log.MessageWindows.Add(s.Id);
             actions.WindowsClose += (_, id) => log.ClosedWindows.Add(id);
             actions.StarChanged += (_, e) => log.Stars.Add($"{e.Id.Value}:{(e.Flagged ? "true" : "false")}");
+            actions.SeenChanged += (_, e) => log.Seen.Add($"{e.Id.Value}:{(e.Seen ? "true" : "false")}");
             actions.OutboxStateChanged += (_, id) => log.OutboxStates.Add(id);
             h.Actions = actions;
             h.Mailbox.LoadAccounts();

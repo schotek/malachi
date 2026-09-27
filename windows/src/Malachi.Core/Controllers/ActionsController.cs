@@ -25,9 +25,11 @@
 // installs: the confirmation dialog (Confirm), the compose window
 // (OpenComposeRequested, RaiseDraft), the message windows that follow a
 // removed message (WindowsClose, OpenMessageWindowRequested) and the views
-// that show a star or an outbox banner (StarChanged, OutboxStateChanged).
-// Log lines carry method names and errors only, never subjects or
-// addresses.
+// that show a star, the seen state or an outbox banner (StarChanged,
+// SeenChanged, OutboxStateChanged). SeenChanged is GTK's refreshSeen, which
+// macOS leaves to AppKit's menu validation; WinUI commands are not asked
+// when a menu opens, so Windows follows GTK (docs/windows-port.md §3). Log
+// lines carry method names and errors only, never subjects or addresses.
 
 using System;
 using System.Collections.Generic;
@@ -109,6 +111,16 @@ public sealed partial class ActionsController
     public event EventHandler<(MessageId Id, bool Flagged)>? StarChanged;
 
     /// <summary>
+    /// GTK <c>refreshSeen</c> (actions.go): the seen flag of a message
+    /// changed (from the list, the mark-as-read timer or a message window,
+    /// or back after a refused change), the actions of its message window
+    /// follow (Mark as Read / Mark as Unread, the U key; message_window.go
+    /// <c>setSeen</c>). macOS has no such callback: AppKit asks
+    /// <c>flags(for:)</c> whenever a menu opens, which WinUI commands do not.
+    /// </summary>
+    public event EventHandler<(MessageId Id, bool Seen)>? SeenChanged;
+
+    /// <summary>
     /// Swift <c>onOutboxStateChanged</c>: the cached delivery state of an
     /// outbox message changed, every banner showing it follows (outbox.go
     /// <c>showOutboxState</c>).
@@ -181,10 +193,11 @@ public sealed partial class ActionsController
 
     /// <summary>
     /// Changes the seen flag of the messages that do not have it so yet,
-    /// optimistically (rows, unread badge of the folder, commands), and
-    /// sends one <c>message.flag</c>; a failure puts everything back
-    /// (actions.go <c>setSeenIDs</c>). The messages are of one folder (a
-    /// conversation row's members are).
+    /// optimistically (rows, unread badge of the folder, commands, the
+    /// message windows through <see cref="SeenChanged"/>), and sends one
+    /// <c>message.flag</c>; a failure puts everything back (actions.go
+    /// <c>setSeenIDs</c>). The messages are of one folder (a conversation
+    /// row's members are).
     /// </summary>
     public void SetSeen(IReadOnlyList<MessageId> ids, bool seen)
     {
@@ -213,6 +226,10 @@ public sealed partial class ActionsController
             if (changed.Count == 0)
             {
                 return;
+            }
+            foreach (var id in changed)
+            {
+                SeenChanged?.Invoke(this, (id, on));
             }
             // Marking unread raises the unread count.
             Mailbox.AdjustCounts(k, on ? -changed.Count : changed.Count, 0);
@@ -821,7 +838,14 @@ public sealed partial class ActionsController
         }
         Mailbox.Scope.Perform(_ => confirm(parent, heading, body, label), outcome =>
         {
-            if (outcome.TryGetValue(out var confirmed, out _) && confirmed)
+            if (!outcome.TryGetValue(out var confirmed, out var error))
+            {
+                // The dialog could not be shown (another one is open): the
+                // action is not run, and the reason is not lost.
+                LogConfirmationFailed(logger, error!);
+                return;
+            }
+            if (confirmed)
             {
                 proceed();
             }
@@ -839,4 +863,7 @@ public sealed partial class ActionsController
 
     [LoggerMessage(Level = LogLevel.Error, Message = "no confirmation hook is installed; the action was refused")]
     private static partial void LogNoConfirmationHook(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the confirmation failed; the action was not run")]
+    private static partial void LogConfirmationFailed(ILogger logger, Exception error);
 }

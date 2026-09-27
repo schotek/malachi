@@ -12,13 +12,15 @@
 //
 // Swift polls with waitUntil and sleeps before the negative checks; here
 // the test waits until the controllers, the daemon and the UI queue are
-// idle (IdleAsync) and then asserts. The one daemon slowed down on purpose
-// (a refused junk move) waits on the fixture's fake clock, and the test
-// advances it. A daemon answer that must stay out while a second click
-// arrives is held by a gate instead of Swift's 50 ms sleep. The harness is
-// ActionsControllerHarness. One check is the list controller's rather than
-// the actions': draftOpensForEditing's activation of the row through
+// idle (IdleAsync) and then asserts. A daemon answer that must stay out
+// while the test looks (a second click, a refused junk move) is held by a
+// gate instead of Swift's sleeps. The harness is ActionsControllerHarness.
+// One check is the list controller's rather than the actions':
+// draftOpensForEditing's activation of the row through
 // ListController.activate; the model rule it goes by is checked instead.
+// Beyond Swift: the message windows hear of every seen change (SeenChanged,
+// GTK refreshSeen, which macOS leaves to AppKit's menu validation), and a
+// confirmation that fails runs nothing and is logged.
 
 using System;
 using System.Collections.Generic;
@@ -31,6 +33,7 @@ using Malachi.Core.Model;
 using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
 using Malachi.Core.Transport;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Malachi.Core.Tests.Controllers.ActionsControllerHarness;
 
@@ -53,10 +56,12 @@ public sealed class ActionsControllerTests
             h.Actions.SetSeen(["m1", "m3", "unknown"], true);
             Assert.Equal(Seen, h.List.Row(new ListKey(Message: "m1"))!.Message.Flags);
             Assert.Equal(1, h.Unread(Inbox));
+            Assert.Equal(["m1:true"], h.Log.Seen);
         });
         await h.IdleAsync();
         AssertFlagRequest(Assert.Single(h.Fixture.FlagRequests), ["m1"], set: Seen, clear: null);
         Assert.Empty(h.Log.Toasts);
+        Assert.Equal(["m1:true"], h.Log.Seen);
 
         // Nothing to do: no call at all.
         await h.Run(() =>
@@ -66,20 +71,24 @@ public sealed class ActionsControllerTests
         });
         await h.IdleAsync();
         Assert.Single(h.Fixture.FlagRequests);
+        Assert.Single(h.Log.Seen);
 
-        // A refused change is put back, with a toast naming the count.
+        // A refused change is put back, with a toast naming the count; the
+        // message windows hear of both.
         h.Fixture.Fail(API.MessageFlag.Name, Error(ErrorCode.ServerError, "500"));
         await h.Run(() =>
         {
             h.Actions.SetSeen(["m1", "m3"], false);
             Assert.Equal(3, h.Unread(Inbox));
             Assert.Empty(h.List.Row(new ListKey(Message: "m3"))!.Message.Flags);
+            Assert.Equal(["m1:true", "m1:false", "m3:false"], h.Log.Seen);
         });
         await h.IdleAsync();
         Assert.Equal(["Marking 2 messages as unread failed: the server returned an error"], h.Log.Toasts);
         Assert.Equal(1, h.Unread(Inbox));
         Assert.Equal(Seen, h.List.Row(new ListKey(Message: "m1"))!.Message.Flags);
         Assert.Equal(Seen, h.List.Row(new ListKey(Message: "m3"))!.Message.Flags);
+        Assert.Equal(["m1:true", "m1:false", "m3:false", "m1:true", "m3:true"], h.Log.Seen);
         h.Fixture.Succeed(API.MessageFlag.Name);
 
         // The singular forms.
@@ -93,6 +102,7 @@ public sealed class ActionsControllerTests
         Assert.Equal(3, h.Log.Toasts.Count);
         Assert.Equal("Marking the message as read failed: the server could not be reached", h.Log.Toasts[^1]);
         Assert.Equal(1, h.Unread(Inbox));
+        Assert.Equal(["m1:false", "m1:true", "m2:true", "m2:false"], h.Log.Seen.Skip(5));
         h.Fixture.Succeed(API.MessageFlag.Name);
 
         // The mark-as-read timer's target: only a message still unread.
@@ -101,6 +111,8 @@ public sealed class ActionsControllerTests
         Assert.Equal(2, h.Fixture.FlagRequests.Count);
         Assert.Equal(["m2"], IdsOf(h.Fixture.FlagRequests[^1].MessageIds));
         Assert.Equal(0, h.Unread(Inbox));
+        Assert.Equal("m2:true", h.Log.Seen[^1]);
+        Assert.Equal(10, h.Log.Seen.Count);
     }
 
     [Fact]
@@ -360,13 +372,23 @@ public sealed class ActionsControllerTests
         Assert.Equal(2, h.Fixture.MoveRequests.Count);
 
         // A refused move comes back with a toast, the badges with it. The
-        // daemon is slowed down (on the fixture's clock) so the rows can be
-        // seen gone meanwhile.
-        h.Fixture.Fail(API.MessageMove.Name, Error(ErrorCode.NetworkError, "down"));
-        h.Fixture.Delay(API.MessageMove.Name, TimeSpan.FromMilliseconds(150));
+        // daemon's refusal is held by a gate so the rows can be seen gone
+        // meanwhile.
+        var refusal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var refusing = new List<MessageMoveParams>();
+        h.Fixture.On(API.MessageMove.Name, async p =>
+        {
+            lock (refusing)
+            {
+                refusing.Add(JsonCoding.Decode<MessageMoveParams>(p));
+            }
+            await refusal.Task;
+            throw new RpcException(Error(ErrorCode.NetworkError, "down"));
+        });
         await h.Run(() => h.Actions.Junk(["x1", "m1"], "both"));
-        await Eventually.Holds(() => h.Fixture.Served.Count(m => m == API.MessageMove.Name) == 3);
+        await Eventually.Holds(() => Locked(refusing).Count == 1);
         await h.Ui.DrainAsync();
+        AssertMoveRequest(Locked(refusing)[0], ["x1", "m1"], "junk");
         Assert.Equal(3, h.Log.Confirmations.Count);
         Assert.Equal("Mark 2 messages as junk?", h.Log.Confirmations[^1].Heading);
         Assert.Empty(h.List.Rows);
@@ -374,7 +396,7 @@ public sealed class ActionsControllerTests
         Assert.Equal(2, h.Unread(JunkFolder));
         Assert.Equal(["m1", "m2", "x1", "m1"], IdsOf(h.Log.ClosedWindows));
         Assert.Empty(h.Log.Toasts);
-        h.Time.Advance(TimeSpan.FromMilliseconds(150));
+        refusal.SetResult();
         await h.IdleAsync();
         Assert.Equal(["Marking 2 messages as junk failed: the server could not be reached"], h.Log.Toasts);
         Assert.Equal(["x1", "m1"], Ids(h.List.Rows));
@@ -707,6 +729,31 @@ public sealed class ActionsControllerTests
         Assert.Empty(h.Fixture.DeleteRequests);
         Assert.Empty(h.Fixture.MoveRequests);
         Assert.Empty(h.Log.Toasts);
+    }
+
+    /// <summary>
+    /// A confirmation that cannot be shown (WinUI allows one
+    /// <c>ContentDialog</c> at a time) runs nothing, and the failure is
+    /// logged rather than lost.
+    /// </summary>
+    [Fact]
+    public async Task AFailedConfirmationRunsNothingAndIsLogged()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1)));
+        await h.Run(() =>
+        {
+            h.Actions.Confirm = (_, _, _, _) => throw new InvalidOperationException("Only a single ContentDialog can be open at any time.");
+            h.Actions.Trash(["m1"], "s-m1");
+            h.Actions.Junk("m1");
+        });
+        await h.IdleAsync();
+        Assert.Single(h.List.Rows);
+        Assert.Empty(h.Fixture.DeleteRequests);
+        Assert.Empty(h.Fixture.MoveRequests);
+        Assert.Empty(h.Log.Toasts);
+        Assert.Equal(
+            [(LogLevel.Warning, "the confirmation failed; the action was not run"), (LogLevel.Warning, "the confirmation failed; the action was not run")],
+            h.Logger.Entries);
     }
 
     /// <summary>
