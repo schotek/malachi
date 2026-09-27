@@ -857,7 +857,10 @@ the handler, then `Register()`), then
 `AppInstance.FindOrRegisterForKey("io.github.schotek.Malachi")`; a second
 launch redirects with `RedirectActivationToAsync` (which grants the first
 instance the foreground right itself, so no `AllowSetForegroundWindow`),
-pumping COM with `CoWaitForMultipleObjects` meanwhile, and exits. The
+pumping COM with `CoWaitForMultipleObjects` meanwhile, and exits; its
+lines go to the same app log, each written at the file's end
+(`RotatingLogFile`), so the first instance's later lines do not overwrite
+them. The
 first instance hands every activation, its own and each redirect's
 (`AppInstance.Activated`, a worker thread), to `App.Activate` on the UI
 thread (`ActivationRequest`, Core). An unpackaged launch carries its whole

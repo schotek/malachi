@@ -48,6 +48,33 @@ public sealed class RotatingLogFileTests
     }
 
     [Fact]
+    public void TwoWritersOfOneFileKeepEachOthersLines()
+    {
+        // The app's log as a running first instance and a second launch
+        // that redirects its activation write it: each its own handle.
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, "malachi.log");
+        using (var first = new RotatingLogFile(path))
+        using (var second = new RotatingLogFile(path))
+        {
+            Assert.True(first.WriteLine("first: started"));
+            Assert.True(second.WriteLine("second: another instance runs: redirecting a Launch activation to it"));
+            Assert.True(first.WriteLine("first: activated"));
+            Assert.True(second.WriteLine("second: exited"));
+            Assert.True(first.WriteLine("first: connected"));
+        }
+        Assert.Equal(
+            [
+                "first: started",
+                "second: another instance runs: redirecting a Launch activation to it",
+                "first: activated",
+                "second: exited",
+                "first: connected",
+            ],
+            File.ReadAllLines(path));
+    }
+
+    [Fact]
     public void RotatesPastTheLimitAndKeepsTheNewest()
     {
         using var temp = new TemporaryDirectory();

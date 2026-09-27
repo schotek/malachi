@@ -18,6 +18,14 @@
 // through; an older file that is held stays, and the newer one that cannot
 // move up in its place goes instead. A line that cannot be written is
 // dropped: the log never stops the daemon's output from being read.
+//
+// Several processes may append to one file (the app's log is also opened by
+// a second launch that hands its activation to the first and exits): every
+// line is written at the file's end as it is at that moment, never at the
+// position this handle last wrote to, which another process's lines may
+// have passed (FileMode.Append only seeks to the end once, when the file is
+// opened). Two processes writing in the same instant could still meet
+// between the seek and the write; the second launch writes a line or two.
 
 using System;
 using System.IO;
@@ -82,7 +90,8 @@ public sealed class RotatingLogFile : IDisposable
             try
             {
                 var file = Open();
-                var length = file.Length;
+                // At the end, past what other processes appended meanwhile.
+                var length = file.Seek(0, SeekOrigin.End);
                 if (length > 0 && length + bytes.Length > Math.Max(MaxBytes, retryAt))
                 {
                     file = Rotate(length);
