@@ -19,7 +19,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Daemon;
-using Malachi.Core.Tests.Settings;
+using Malachi.Core.Tests.Fixtures;
 using Xunit;
 
 namespace Malachi.Core.Tests.Daemon;

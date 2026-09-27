@@ -33,7 +33,6 @@ GenerateConsoleCtrlEvent
 SetConsoleCtrlHandler
 GetStdHandle
 SetHandleInformation
-GetFileType
 WriteConsole
 WriteFile
 GENERIC_ACCESS_RIGHTS

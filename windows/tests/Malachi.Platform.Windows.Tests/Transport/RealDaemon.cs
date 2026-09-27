@@ -4,7 +4,7 @@
 // Windows-only test helper: the real malachid.exe on a throwaway socket,
 // configuration and store, the way docs/windows-port.md §1 starts it
 // (--socket --config --store, the keyring switched off, D-Bus disabled).
-// The binary comes from MALACHI_TEST_DAEMON or build\malachid.exe of the
+// The binary comes from MALACHI_TEST_MALACHID or build\malachid.exe of the
 // repository (make windows, build.ps1 go); without one the tests skip.
 
 using System;
@@ -62,14 +62,14 @@ internal sealed class RealDaemon : IDisposable
     /// <summary>The daemon to test against, or a skipped test without one.</summary>
     public static RealDaemon CreateOrSkip()
     {
-        var executable = Environment.GetEnvironmentVariable("MALACHI_TEST_DAEMON");
+        var executable = Environment.GetEnvironmentVariable("MALACHI_TEST_MALACHID");
         if (string.IsNullOrEmpty(executable))
         {
             executable = RepositoryRoot() is { } root ? Path.Combine(root, "build", "malachid.exe") : null;
         }
         if (executable is null || !File.Exists(executable))
         {
-            Assert.Skip("no malachid.exe: build it (make windows, windows\\build.ps1 go) or set MALACHI_TEST_DAEMON");
+            Assert.Skip("no malachid.exe: build it (make windows, windows\\build.ps1 go) or set MALACHI_TEST_MALACHID");
         }
         var id = Guid.NewGuid().ToString("N")[..8];
         var socketDir = Path.Combine(Path.GetTempPath(), "md-" + id);
