@@ -75,7 +75,7 @@ namespace Malachi.Core.Controllers;
 /// list generation checks race with nothing.
 /// </para>
 /// </remarks>
-public sealed partial class ListController : ObservableObject, IDisposable
+public sealed partial class ListController : ObservableObject, IDisposable, IActionsList
 {
     private readonly ILogger logger;
     private readonly TimeProvider time;

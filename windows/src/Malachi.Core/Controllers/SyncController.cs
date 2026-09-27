@@ -82,7 +82,7 @@ namespace Malachi.Core.Controllers;
 /// </para>
 /// <para>UI-thread-affine (docs/windows-port.md §7.1).</para>
 /// </remarks>
-public sealed partial class SyncController : ObservableObject, IDisposable
+public sealed partial class SyncController : ObservableObject, IDisposable, IMailboxSync
 {
     /// <summary>
     /// How long the spinner started by <see cref="BeginChecking"/> stays on
@@ -546,7 +546,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         CertBannerAccount = a.Id;
         certBannerTitle = title;
         // TRANSLATORS: banner button
-        scope.Raise(CertBannerChanged, this, new SyncBanner(a.Id, title, WithoutMnemonic(L10n.T("_Edit Account…"))));
+        scope.Raise(CertBannerChanged, this, new SyncBanner(a.Id, title, WizardController.WithoutMnemonic(L10n.T("_Edit Account…"))));
     }
 
     // Sign-in banner
@@ -569,7 +569,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         var name = account is null ? n.AccountId.Value : AccountsPage.AccountRowTitle(account);
         var kind = AuthBannerKind(n, account);
         // The banner's button shows no mnemonic.
-        var button = WithoutMnemonic(SyncStatusTexts.AuthBannerButton(kind, n.Reason));
+        var button = WizardController.WithoutMnemonic(SyncStatusTexts.AuthBannerButton(kind, n.Reason));
         return (SyncStatusTexts.AuthBannerTitle(kind, n.Reason, name), button);
     }
 
@@ -701,27 +701,6 @@ public sealed partial class SyncController : ObservableObject, IDisposable
         return string.IsNullOrEmpty(n.AuthUrl) ? SignInKind.Password : SignInKind.OAuth;
     }
 
-    /// <summary>
-    /// A GTK label with its mnemonic marker removed: <c>_Next</c> → <c>Next</c>,
-    /// <c>__</c> → <c>_</c> (WizardController.swift <c>withoutMnemonic</c>).
-    /// </summary>
-    private static string WithoutMnemonic(string s)
-    {
-        var @out = new StringBuilder(s.Length);
-        for (var i = 0; i < s.Length; i++)
-        {
-            if (s[i] == '_')
-            {
-                if (i + 1 < s.Length)
-                {
-                    @out.Append(s[++i]);
-                }
-                continue;
-            }
-            @out.Append(s[i]);
-        }
-        return @out.ToString();
-    }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "sync.status failed")]
     private static partial void LogSyncStatusFailed(ILogger logger, Exception error);

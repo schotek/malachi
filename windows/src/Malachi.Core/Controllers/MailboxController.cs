@@ -69,7 +69,7 @@ namespace Malachi.Core.Controllers;
 /// GTK window's <c>glib.IdleAdd</c> discipline).
 /// </para>
 /// </remarks>
-public sealed partial class MailboxController : ObservableObject, IDisposable
+public sealed partial class MailboxController : ObservableObject, IDisposable, IActionsMailbox
 {
     private readonly Action<string> toast;
     private readonly ILogger logger;

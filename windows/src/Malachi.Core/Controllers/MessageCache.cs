@@ -52,7 +52,7 @@ namespace Malachi.Core.Controllers;
 /// reported by <see cref="Pending"/> (logged at error level) and the others
 /// are called all the same. UI-thread-affine (docs/windows-port.md §7.1).
 /// </remarks>
-public sealed partial class MessageCache : IDisposable
+public sealed partial class MessageCache : IDisposable, IActionsCache
 {
     private readonly ControllerScope scope;
     private readonly Action<string> toast;
@@ -200,9 +200,9 @@ public sealed partial class MessageCache : IDisposable
     /// Forgets the cached <c>message.get</c> result of <paramref name="s"/>
     /// (unless one is in flight, which then serves) and fetches again; the
     /// body stays cached (outbox.go <c>refetchMessage</c>).
-    /// <paramref name="then"/> runs as <see cref="Fetch"/>'s does.
+    /// <paramref name="done"/> runs as <see cref="Fetch"/>'s does.
     /// </summary>
-    public void Refetch(MessageSummary s, Action<LoadedMessage> then)
+    public void Refetch(MessageSummary s, Action<LoadedMessage> done)
     {
         ArgumentNullException.ThrowIfNull(s);
         scope.VerifyAccess();
@@ -210,7 +210,7 @@ public sealed partial class MessageCache : IDisposable
         {
             lm.Msg = null;
         }
-        Fetch(s, then);
+        Fetch(s, done);
     }
 
     /// <summary>
@@ -218,14 +218,14 @@ public sealed partial class MessageCache : IDisposable
     /// message the cache knows the account of (its full message is cached);
     /// nothing happens otherwise.
     /// </summary>
-    public void Refetch(MessageId id, Action<LoadedMessage> then)
+    public void Refetch(MessageId id, Action<LoadedMessage> done)
     {
         scope.VerifyAccess();
         if (Summary(id) is not { } s)
         {
             return;
         }
-        Refetch(s, then);
+        Refetch(s, done);
     }
 
     // Remote images
@@ -236,12 +236,12 @@ public sealed partial class MessageCache : IDisposable
     /// on display (remote.go <c>loadRemoteImages</c>). The daemon does the
     /// fetching; the views only get the inlined pictures. The bar shows the
     /// wait from the click on (<see cref="RemoteBarChanged"/>). A request
-    /// already running is left alone and <paramref name="then"/> is not
-    /// called. <paramref name="then"/> gets the entry with the new body, or
+    /// already running is left alone and <paramref name="done"/> is not
+    /// called. <paramref name="done"/> gets the entry with the new body, or
     /// the error; the error was already toasted and the bar put back
     /// (<see cref="ImagesDone"/>).
     /// </summary>
-    public void LoadImages(MessageSummary s, Action<Outcome<LoadedMessage>> then)
+    public void LoadImages(MessageSummary s, Action<Outcome<LoadedMessage>> done)
     {
         ArgumentNullException.ThrowIfNull(s);
         scope.VerifyAccess();
@@ -249,7 +249,7 @@ public sealed partial class MessageCache : IDisposable
         {
             return;
         }
-        FetchRemoteImages(s, lm, then);
+        FetchRemoteImages(s, lm, done);
     }
 
     /// <summary>
@@ -278,11 +278,11 @@ public sealed partial class MessageCache : IDisposable
     /// with the images on display or the bar back as it was and a toast
     /// (remote.go <c>fetchRemoteImages</c>).
     /// </summary>
-    public void FetchRemoteImages(MessageSummary s, LoadedMessage lm, Action<Outcome<LoadedMessage>> then)
+    public void FetchRemoteImages(MessageSummary s, LoadedMessage lm, Action<Outcome<LoadedMessage>> done)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(lm);
-        ArgumentNullException.ThrowIfNull(then);
+        ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
         var id = s.Id;
         var parameters = new MessageBodyParams { AccountId = s.AccountId, MessageId = id, RemoteContent = RemoteContentPolicy.Allow };
@@ -293,7 +293,7 @@ public sealed partial class MessageCache : IDisposable
                 LogImagesFailed(logger, err!);
                 toast(RpcErrorText.Text(L10n.T("Loading the images"), err));
                 ImagesDone(id, lm);
-                then(Outcome.Failure<LoadedMessage>(err!));
+                done(Outcome.Failure<LoadedMessage>(err!));
                 return;
             }
             lm.LoadingImages = false;
@@ -304,7 +304,7 @@ public sealed partial class MessageCache : IDisposable
                 Cache.Store(id, lm);
             }
             scope.Raise(MessageLoaded, this, new MessageCacheEntry(id, lm));
-            then(Outcome.Success(lm));
+            done(Outcome.Success(lm));
         });
     }
 
