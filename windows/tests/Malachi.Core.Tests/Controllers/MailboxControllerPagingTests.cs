@@ -187,5 +187,118 @@ public sealed class MailboxControllerPagingTests
         Assert.False(h.List.LoadMoreRetry);
     }
 
-    private static MessageSummary[] Many(int n) => [.. Enumerable.Range(1, n).Select(i => Msg($"m{i}", i))];
+    /// <summary>
+    /// The view reports the emptied list of another listing (a filter, a
+    /// folder) before its first page is back: the footer is the new
+    /// listing's by then, with nothing to ask for, so the report asks
+    /// nothing, and once the page is back an unfilled pane pages on.
+    /// </summary>
+    [Fact]
+    public async Task AnEmptiedListingReportedBeforeItsPagePagesOn()
+    {
+        await using var h = await StartAsync(new ListLog(), messages: new() { [Inbox] = Many(120), [Trash] = Many(120, "t") });
+        await h.IdleAsync();
+        Assert.True(h.List.LoadMoreState.Button);
+
+        // A filter: the footer of the listing before goes with its rows.
+        var footer = await h.On(() =>
+        {
+            h.List.SetListFilter(MessageFilter.Unread);
+            h.List.ViewportChanged(scrollable: false, atEnd: false);
+            return h.List.LoadMoreState;
+        });
+        Assert.Equal(new LoadMoreState(), footer);
+        await h.IdleAsync();
+        Assert.Equal(50, h.List.Rows.Count);
+        Assert.True(h.List.LoadMoreState.Button);
+        await h.On(() => h.List.ViewportChanged(scrollable: false, atEnd: true));
+        await h.IdleAsync();
+        Assert.Equal(100, h.List.Rows.Count);
+        Assert.Equal("50", h.Fixture.ListRequests[^1].Page.Cursor);
+        Assert.False(h.List.LoadMoreRetry);
+
+        // A folder: the same.
+        footer = await h.On(() =>
+        {
+            h.Mailbox.SelectFolder(Trash, fav: false);
+            h.List.ViewportChanged(scrollable: false, atEnd: false);
+            return h.List.LoadMoreState;
+        });
+        Assert.Equal(new LoadMoreState(), footer);
+        await h.IdleAsync();
+        Assert.Equal(50, h.List.Rows.Count);
+        await h.On(() => h.List.ViewportChanged(scrollable: false, atEnd: true));
+        await h.IdleAsync();
+        Assert.Equal(100, h.List.Rows.Count);
+        Assert.Equal(new MessageListParams
+        {
+            AccountId = "a",
+            FolderId = Trash.Folder,
+            Page = new Page { Cursor = "50", Limit = 50 },
+            Sort = SortOrder.DateDesc,
+            Filter = MessageFilter.Unread,
+        }, h.Fixture.ListRequests[^1]);
+        Assert.False(h.List.LoadMoreRetry);
+        Assert.Empty(h.Toasts);
+    }
+
+    /// <summary>
+    /// A report while nothing can be asked for (the folder reloading after
+    /// a sync, rows kept, the footer still offering the next page) starts
+    /// no page and so is no request: once the reload is back, an unfilled
+    /// pane pages on.
+    /// </summary>
+    [Fact]
+    public async Task AReportThatStartsNoPageIsNoRequest()
+    {
+        await using var h = await StartAsync(new ListLog(), messages: new() { [Inbox] = Many(120) });
+        await h.IdleAsync();
+        var served = h.Fixture.CallCount(API.MessageList.Name);
+
+        await h.On(() =>
+        {
+            h.List.LoadMessages();
+            h.List.ViewportChanged(scrollable: false, atEnd: true);
+        });
+        await h.IdleAsync();
+        Assert.Equal(served + 1, h.Fixture.CallCount(API.MessageList.Name));
+        Assert.Equal(50, h.List.Rows.Count);
+        Assert.True(h.List.LoadMoreState.Button);
+        Assert.False(h.List.LoadMoreRetry);
+
+        await h.On(() => h.List.ViewportChanged(scrollable: false, atEnd: true));
+        await h.IdleAsync();
+        Assert.Equal(100, h.List.Rows.Count);
+        Assert.Equal("50", h.Fixture.ListRequests[^1].Page.Cursor);
+    }
+
+    /// <summary>
+    /// A request answered by the folder's last page is over: a reload after
+    /// it (a sync, back to the first page and its cursor) is not taken for
+    /// that request failing, offers no retry and pages on.
+    /// </summary>
+    [Fact]
+    public async Task AReloadAfterTheLastPageOffersNoRetry()
+    {
+        await using var h = await StartAsync(new ListLog(), messages: new() { [Inbox] = Many(70) });
+        await h.IdleAsync();
+        await h.On(() => h.List.ViewportChanged(scrollable: false, atEnd: true));
+        await h.IdleAsync();
+        Assert.Equal(70, h.List.Rows.Count);
+        Assert.Equal(new LoadMoreState(), h.List.LoadMoreState);
+
+        await h.On(h.List.LoadMessages);
+        await h.IdleAsync();
+        Assert.Equal(50, h.List.Rows.Count);
+        Assert.True(h.List.LoadMoreState.Button);
+        Assert.False(h.List.LoadMoreRetry);
+
+        await h.On(() => h.List.ViewportChanged(scrollable: false, atEnd: true));
+        await h.IdleAsync();
+        Assert.Equal(70, h.List.Rows.Count);
+        Assert.False(h.List.LoadMoreRetry);
+        Assert.Empty(h.Toasts);
+    }
+
+    private static MessageSummary[] Many(int n, string prefix = "m") => [.. Enumerable.Range(1, n).Select(i => Msg($"{prefix}{i}", i))];
 }

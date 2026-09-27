@@ -877,6 +877,74 @@ public sealed class MailboxControllerFoldersTests
     }
 
     /// <summary>
+    /// Windows-only (docs/windows-port.md §7.5): when
+    /// <see cref="MailboxController.EntriesChanged"/> arrives,
+    /// <see cref="MailboxController.SelectedEntryKey"/> is already the row
+    /// the rebuild leaves highlighted, listed in the new
+    /// <see cref="MailboxController.Entries"/> (or null), as
+    /// <see cref="ListController.SelectedKey"/> is with the rows; the
+    /// announcements of the selection follow as before.
+    /// </summary>
+    [Fact]
+    public async Task EntriesArriveWithTheirHighlight()
+    {
+        var (accounts, folders) = NestedAccount();
+        var log = new Log();
+        await using var h = await StartAsync(log, accounts, folders);
+        await h.IdleAsync();
+        var seen = new List<SidebarKey?>();
+        await h.On(() => h.Mailbox.EntriesChanged += (_, _) =>
+        {
+            var k = h.Mailbox.SelectedEntryKey;
+            Assert.True(k is null || h.Mailbox.Entries.Any(e => SidebarKey.Of(e) == k), $"{k} is not listed");
+            seen.Add(k);
+        });
+        var inKey = new FolderKey("a", "in");
+        var zulu = new FolderKey("a", "zulu");
+        var old = new FolderKey("a", "old");
+
+        // Unpinned while its row in the section carries the highlight: the
+        // tree's row carries it by the time the rows arrive.
+        await h.On(() =>
+        {
+            h.Mailbox.ToggleFavourite(inKey);
+            h.Mailbox.SelectFolder(inKey, fav: true);
+        });
+        var highlights = log.Highlights.Count;
+        await h.On(() => h.Mailbox.ToggleFavourite(inKey));
+        Assert.Equal(SidebarKey.ForFolder(inKey, false), seen[^1]);
+        Assert.Equal(seen[^1], h.Mailbox.SelectedEntryKey);
+        Assert.Equal(new FolderSelection(inKey, true), Assert.Single(log.Highlights.Skip(highlights)));
+
+        // Folded out of sight: none.
+        await h.On(() => h.Mailbox.SelectFolder(old, fav: false));
+        await h.On(() => h.Mailbox.ToggleFolder(new FolderKey("a", "work")));
+        Assert.Null(seen[^1]);
+        await h.On(() => h.Mailbox.ToggleFolder(new FolderKey("a", "work")));
+        Assert.Equal(SidebarKey.ForFolder(old, false), seen[^1]);
+
+        // The selected folder went away: the initial folder's row, which
+        // the rebuild then selects.
+        await h.On(() => h.Mailbox.SelectFolder(zulu, fav: false));
+        var selections = log.Selections.Count;
+        h.Fixture.SetFolders([.. NestedFolders().Where(f => f.Id != zulu.Folder)], "a");
+        await h.On(() => h.Mailbox.LoadFolders("a", h.Mailbox.Model.FoldersGen));
+        await h.IdleAsync();
+        Assert.Equal(SidebarKey.ForFolder(inKey, false), seen[^1]);
+        Assert.Equal(seen[^1], h.Mailbox.SelectedEntryKey);
+        Assert.Equal([inKey], log.Selections.Skip(selections));
+        Assert.Equal(new FolderSelection(inKey, false), log.Highlights[^1]);
+
+        // No folder left: none, and the selection is cleared.
+        h.Fixture.SetFolders([], "a");
+        await h.On(() => h.Mailbox.LoadFolders("a", h.Mailbox.Model.FoldersGen));
+        await h.IdleAsync();
+        Assert.Null(seen[^1]);
+        Assert.Null(h.Mailbox.Model.Selected);
+        Assert.Equal(new FolderSelection(null, false), log.Highlights[^1]);
+    }
+
+    /// <summary>
     /// Windows-only: the window's <c>callThen</c> (actions.go; Swift
     /// <c>call</c>), which the actions reach through the mailbox: a success
     /// goes to its handler, a failure is toasted in the words of

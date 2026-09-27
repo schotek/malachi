@@ -520,8 +520,17 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// <c>showListState</c>): nothing selected, not synchronised, an error
     /// with Try Again, loading, or empty for the active filter.
     /// </summary>
+    /// <remarks>
+    /// The footer follows the model under a status page too (Windows only):
+    /// GTK and Swift leave it as the last rows had it, hidden with the rows'
+    /// page, but here the list pages itself from
+    /// <see cref="LoadMoreState"/>, and the emptied list of another listing,
+    /// which the view reports, must not ask for the page the listing before
+    /// offered.
+    /// </remarks>
     public void ShowListState()
     {
+        Scope.VerifyAccess();
         if (Model.RowCount > 0)
         {
             SetListState(new ListState.Messages());
@@ -531,6 +540,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
         if (Model.Search.Active)
         {
             SetListState(SearchListState());
+            ShowLoadMore();
             return;
         }
         ListState state;
@@ -571,6 +581,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
             state = new ListState.Status("mail-unread-symbolic", L10n.T("No Messages"), L10n.T("This folder is empty."), false);
         }
         SetListState(state);
+        ShowLoadMore();
     }
 
     /// <summary>
@@ -579,6 +590,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// </summary>
     public void ShowLoadMore()
     {
+        Scope.VerifyAccess();
         var cursor = Model.NextCursor ?? "";
         // Under the last page of results: how far back search reaches.
         var st = Model.Search;
@@ -632,7 +644,11 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// conversation row takes over (and the pane shows the newest member);
     /// when the selected row is gone the pane is cleared.
     /// </summary>
-    public void SyncRows() => Reconcile(SelectionHint.Keep);
+    public void SyncRows()
+    {
+        Scope.VerifyAccess();
+        Reconcile(SelectionHint.Keep);
+    }
 
     /// <summary>
     /// <see cref="SyncRows"/> for a removal (threads.go
@@ -716,6 +732,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
     public void RefreshRows(IReadOnlyList<MessageId> ids)
     {
         ArgumentNullException.ThrowIfNull(ids);
+        Scope.VerifyAccess();
         if (Model.Grouped)
         {
             SyncRows();
@@ -755,6 +772,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// </summary>
     public bool SetThreadExpanded(ThreadId tid, bool on)
     {
+        Scope.VerifyAccess();
         if (Model.Expanded.Contains(tid) == on)
         {
             return false;
@@ -949,6 +967,7 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// <summary>Re-evaluates the per-message actions for the selected row (actions.go <c>refreshMessageActions</c>).</summary>
     public void RefreshActionFlags()
     {
+        Scope.VerifyAccess();
         var f = ActionRules.MessageActionState(SelectedRow, Model.InOutbox, Model.CanMoveToRole);
         if (f == ActionFlags)
         {
@@ -1116,10 +1135,10 @@ public sealed partial class ListController : ObservableObject, IDisposable
     /// <c>setFlaggedIDs</c>; the caller adjusts the folder badge and sends
     /// message.flag).
     /// </summary>
-    public IReadOnlyList<MessageId> ApplyFlags(IReadOnlyList<MessageId> ids, IReadOnlyList<Flag>? set = null, IReadOnlyList<Flag>? clear = null)
+    public IReadOnlyList<MessageId> ApplyFlags(IReadOnlyList<MessageId> ids, IReadOnlyList<Flag>? setFlags = null, IReadOnlyList<Flag>? clearFlags = null)
     {
         Scope.VerifyAccess();
-        var changed = Model.ApplyFlags(ids, set ?? [], clear ?? []);
+        var changed = Model.ApplyFlags(ids, setFlags ?? [], clearFlags ?? []);
         RefreshRows(changed);
         RefreshActionFlags();
         return changed;

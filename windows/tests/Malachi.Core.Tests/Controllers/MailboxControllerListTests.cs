@@ -679,7 +679,7 @@ public sealed class MailboxControllerListTests
 
         // The flags applied by the actions refresh the rows and the actions.
         await h.On(() => h.List.Select(new ListKey(Message: "m1")));
-        Assert.Equal(["m1"], Ids(await h.On(() => h.List.ApplyFlags(["m1", "m4"], set: [Flag.Seen]))));
+        Assert.Equal(["m1"], Ids(await h.On(() => h.List.ApplyFlags(["m1", "m4"], setFlags: [Flag.Seen]))));
         Assert.Equal([new ListKey(Message: "m1")], log.Refreshed[^1]);
         Assert.Equal(["seen"], h.List.RowFor(new ListKey(Message: "m1"))!.Message.Flags.Select(f => f.Value));
         Assert.True(h.List.ActionFlags.MarkUnread && !h.List.ActionFlags.MarkRead);

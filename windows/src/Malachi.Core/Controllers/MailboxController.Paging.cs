@@ -16,6 +16,15 @@
 // the layout and reports it through ViewportChanged after every layout pass
 // that changes the rows' extent or the pane's size, and whenever the user
 // scrolls; Core decides.
+//
+// Reported that often, the emptied list of another listing and a report
+// while a page cannot be asked for (the listing reloading) reach code that
+// Swift's view rarely runs then, and three holes of its logic would stop an
+// unfilled pane from paging: here a request is noted only when a page
+// started (RequestMore), it is over once the spinner stops, the folder's
+// end included (FollowLoadMore), and the footer follows the model under a
+// status page too (ListController.ShowListState), so no report acts on
+// the footer of the listing before.
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -70,11 +79,24 @@ public sealed partial class ListController
         RequestMore();
     }
 
-    /// <summary>Asks for the next page, noting the rows it had then (<c>requestMore</c>).</summary>
+    /// <summary>
+    /// Asks for the next page, noting the rows it had then
+    /// (<c>requestMore</c>). Only a page on its way is a request: where
+    /// <see cref="LoadMore"/> starts none (the listing is loading, reloading
+    /// or searching, or has no further page), no footer would ever answer the
+    /// note, and <see cref="FillPane"/> would wait for it for good (Swift
+    /// notes the rows first either way; its view reports its layout less
+    /// often than a WinUI one, which reports every change of the rows'
+    /// extent).
+    /// </summary>
     private void RequestMore()
     {
-        requestedAt = Rows.Count;
+        var at = Rows.Count;
         LoadMore();
+        if (Model.LoadingMore)
+        {
+            requestedAt = at;
+        }
     }
 
     /// <summary>
@@ -94,15 +116,20 @@ public sealed partial class ListController
     /// <summary>
     /// The footer changed (MessageListViewController <c>showLoadMore</c>): a
     /// page this list asked for is back, as rows, or failed (the controller
-    /// toasted why) and the button offers the retry.
+    /// toasted why) and the button offers the retry. A page that brought
+    /// the folder's end is back too: Swift keeps its note until a footer
+    /// offers a page again, which after a reload (back to the first page and
+    /// its cursor) takes the reload's rows for the old request failing and
+    /// offers a retry nobody needs; here the note goes as soon as the
+    /// spinner does.
     /// </summary>
     private void FollowLoadMore(LoadMoreState state)
     {
         var failed = false;
-        if (state.Button && requestedAt is { } at)
+        if (!state.Spinner && requestedAt is { } at)
         {
             requestedAt = null;
-            failed = Rows.Count == at;
+            failed = state.Button && Rows.Count == at;
         }
         LoadMoreRetry = failed;
     }

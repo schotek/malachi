@@ -452,14 +452,22 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// failedOutbox, and the notify.syncState that follows reloads the
     /// folders, possibly before the reply arrives.
     /// </summary>
-    public void NoteOutboxCancelled(AccountId acc) => outbox.NoteCancelled(acc);
+    public void NoteOutboxCancelled(AccountId acc)
+    {
+        Scope.VerifyAccess();
+        outbox.NoteCancelled(acc);
+    }
 
     /// <summary>
     /// Takes a <see cref="NoteOutboxCancelled"/> back after the daemon
     /// refused the removal (outbox.go <c>cancelSendFrom</c>'s error path); a
     /// folder reload in between may have used it up already.
     /// </summary>
-    public void NoteOutboxCancelFailed(AccountId acc) => outbox.NoteCancelFailed(acc);
+    public void NoteOutboxCancelFailed(AccountId acc)
+    {
+        Scope.VerifyAccess();
+        outbox.NoteCancelFailed(acc);
+    }
 
     /// <summary>
     /// Recreates the sidebar entries from the model (folders.go
@@ -470,18 +478,37 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// against the model (<see cref="MailModel.FolderListed"/>) and not
     /// against the rows on screen.
     /// </summary>
+    /// <remarks>
+    /// The folder the rebuild leaves selected is decided before
+    /// <see cref="EntriesChanged"/> (Swift decides it after
+    /// <c>onEntriesChanged</c>, to the same effect), so that
+    /// <see cref="SelectedEntryKey"/> is already its row when the new rows
+    /// arrive, as <see cref="ListController.SelectedKey"/> is with
+    /// <see cref="ListController.RowsChanged"/>; the selection's
+    /// announcements follow as in Swift.
+    /// </remarks>
     public void RebuildFolderList()
     {
         Scope.VerifyAccess();
         try
         {
             Model.RebuildEntries();
-            Entries = Model.Entries;
-            EntriesChanged?.Invoke(this, EventArgs.Empty);
-
             // Entries, not rows: an account folded shut leaves its header
             // behind and the sidebar is not empty.
-            if (Model.Entries.Count == 0)
+            var empty = Model.Entries.Count == 0;
+            FolderKey? next = null;
+            if (!empty)
+            {
+                // The selection stays when its folder still exists (folded
+                // out of sight included), else the initial folder, else none:
+                // only non-selectable containers are left.
+                next = Model.Selected is { } sel && Model.FolderListed(sel) ? sel : Model.InitialFolder();
+            }
+            Entries = Model.Entries;
+            SelectedEntryKey = HighlightKey(next, Model.SelectedFav);
+            EntriesChanged?.Invoke(this, EventArgs.Empty);
+
+            if (empty)
             {
                 ShowEmptySidebarStatus();
                 // Nothing to show; a folder selected earlier is gone with its rows.
@@ -493,15 +520,10 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
             }
             SetSidebarStatus(new SidebarStatus.Folders());
 
-            if (Model.Selected is { } sel && Model.FolderListed(sel))
+            if (next is { } k)
             {
-                // Highlights the row when there is one, and does nothing
-                // beyond that while the folder is folded out of sight.
-                Select(sel);
-                return;
-            }
-            if (Model.InitialFolder() is { } k)
-            {
+                // The folder that stays only has its row highlighted, and
+                // nothing beyond that while it is folded out of sight.
                 Select(k);
                 return;
             }
@@ -524,6 +546,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// </summary>
     public void ShowEmptySidebarStatus()
     {
+        Scope.VerifyAccess();
         var enabled = Model.EnabledAccounts;
         if (!HasAccounts)
         {
@@ -656,6 +679,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// </summary>
     public void RefreshListTitle()
     {
+        Scope.VerifyAccess();
         var heading = Model.Search.Active
             ? new ListHeading(L10n.T("Search"), SearchModel.SearchTotalText(Model.Total, Model.Search.Shown))
             : new ListHeading(SelectedFolderTitle, SelectedFolderSubtitle);
@@ -696,6 +720,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// </summary>
     public bool SetFolderCollapsed(FolderKey k, bool collapsed)
     {
+        Scope.VerifyAccess();
         if (Model.Collapsed.FolderCollapsed(k) == collapsed)
         {
             return false;
@@ -707,6 +732,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// <summary><see cref="ToggleAccount"/> for a view that knows the target state; false when the model already agrees.</summary>
     public bool SetAccountCollapsed(AccountId id, bool collapsed)
     {
+        Scope.VerifyAccess();
         if (Model.Collapsed.AccountCollapsed(id) == collapsed)
         {
             return false;
@@ -821,6 +847,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// </summary>
     public void UpdateFolderRow(FolderKey k)
     {
+        Scope.VerifyAccess();
         Entries = Model.Entries;
         if (BadgesChanged is { } badges)
         {
@@ -872,6 +899,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     /// </summary>
     public void HandleAccountsChanged()
     {
+        Scope.VerifyAccess();
         Sync.HideAuthBanner();
         LoadAccounts();
     }
@@ -880,6 +908,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable
     public void HandleAuthRequired(AuthRequiredNotification n)
     {
         ArgumentNullException.ThrowIfNull(n);
+        Scope.VerifyAccess();
         Sync.ShowAuthRequired(n, Model.Account(n.AccountId));
     }
 
