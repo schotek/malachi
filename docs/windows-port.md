@@ -498,7 +498,13 @@ The port of macOS's `ActivatedLink`/`linkDecision`: `mailto:` opens the
 composer; a masked link (the text shows another destination) asks *Open
 This Link?*; a link the daemon did not list in `links[]` is **confirmed**
 too (decided; macOS behaviour), because WebView2 hands out normalised URLs
-and an exact match against the daemon's raw hrefs can fail. The research
+and an exact match against the daemon's raw hrefs can fail. The attribute
+read from the page decides, as on macOS, unless it leads somewhere else
+than the navigation; without it (`ActivatedLink.Raw` null) the resolved URL
+is compared with Chromium's canonical form of every listed href
+(`ChromiumUrl`, computed only where certain, null otherwise), and in a body
+that carries a masked link every such click is confirmed, since a listed
+href whose canonical form is not certain could be the one clicked. The research
 found that the GTK check is likely bypassable with a non-canonical href;
 that is a separate GTK/backend task (§14), not part of this port.
 
