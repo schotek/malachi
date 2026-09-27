@@ -636,7 +636,7 @@ of those loops and their `PropertyChanged` notifications with
 `ControllerEvents.Guard`; what a handler throws is reported by the
 `PendingWork` (logged at error level, and failing the tests' `IdleAsync`).
 
-The mailbox is the first to follow this: `MailboxController` publishes the
+How the lists reach the view, as the mailbox does it: `MailboxController` publishes the
 sidebar as `Entries` (keyed by `SidebarKey.Of`) with the highlighted row as
 `SelectedEntryKey`, and its list half `ListController` publishes `Rows`
 (keyed by `ListRow.Key`) with `SelectedKey`. The key is the source of
