@@ -5,6 +5,7 @@
 // waits on.
 
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Controllers.Infrastructure;
@@ -72,6 +73,21 @@ public sealed class PendingWorkTests
         Assert.Empty(pending.TakeFaults());
         pending.Report(new InvalidOperationException("three"));
         Assert.Equal("three", Assert.Single(pending.TakeFaults()).Message);
+    }
+
+    /// <summary>A failure that recurs where nobody takes the failures keeps only the latest.</summary>
+    [Fact]
+    public void KeepsTheLatestFailures()
+    {
+        var pending = new PendingWork();
+        for (var i = 0; i < PendingWork.MaxKeptFaults + 36; i++)
+        {
+            pending.Report(new InvalidOperationException(i.ToString(CultureInfo.InvariantCulture)));
+        }
+        var faults = pending.TakeFaults();
+        Assert.Equal(PendingWork.MaxKeptFaults, faults.Count);
+        Assert.Equal("36", faults[0].Message);
+        Assert.Equal((PendingWork.MaxKeptFaults + 35).ToString(CultureInfo.InvariantCulture), faults[^1].Message);
     }
 
     [Fact]

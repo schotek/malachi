@@ -30,6 +30,8 @@ public sealed class ControllerScopeTests
     /// <summary>
     /// An attempt that fails before its first real await still finds its
     /// handle set, and clears it: work starts only after Run has returned.
+    /// The attempt turns its routine failure into a state, as Swift's
+    /// connectOnce does; nothing escapes to the tracker.
     /// </summary>
     [Fact]
     public async Task WorkStartsAfterTheCallerHasItsHandle()
@@ -38,21 +40,40 @@ public sealed class ControllerScopeTests
         var pending = new PendingWork();
         Task? attempt = null;
         bool? handleWasSetWhenTheWorkRan = null;
+        string? state = null;
         await ui.RunAsync(() =>
         {
             var scope = new ControllerScope(pending);
-            attempt = scope.Run(_ =>
+            attempt = scope.Run(async _ =>
             {
                 handleWasSetWhenTheWorkRan = attempt is not null;
+                try
+                {
+                    await Task.FromException(new RpcClientException(ClientError.NotConnected));
+                }
+                catch (RpcClientException e)
+                {
+                    state = e.Message;
+                }
                 attempt = null; // the attempt ends: the next one may start
-                return Task.FromException(new RpcClientException(ClientError.NotConnected));
             });
         });
-        await pending.IdleAsync(TestContext.Current.CancellationToken);
-        await ui.DrainAsync();
+        await Quiescence.IdleAsync(ui, pending);
         Assert.True(handleWasSetWhenTheWorkRan);
         Assert.Null(attempt);
-        Assert.IsType<RpcClientException>(Assert.Single(pending.TakeFaults()));
+        Assert.Equal(new RpcClientException(ClientError.NotConnected).Message, state);
+    }
+
+    /// <summary>A failure that escapes the work is a bug: reported, not lost.</summary>
+    [Fact]
+    public async Task AFailureOfTheWorkIsReported()
+    {
+        using var ui = new TestUIContext();
+        var pending = new PendingWork();
+        await ui.RunAsync(() => new ControllerScope(pending).Run(_ => Task.FromException(new InvalidOperationException("broken"))));
+        await pending.IdleAsync(TestContext.Current.CancellationToken);
+        await ui.DrainAsync();
+        Assert.Equal("broken", Assert.Single(pending.TakeFaults()).Message);
     }
 
     [Fact]
@@ -178,6 +199,56 @@ public sealed class ControllerScopeTests
         Assert.Equal(ClientError.NotConnected, refused.Error);
     }
 
+    /// <summary>
+    /// Close cancels the calls not yet written: a Perform in the same UI turn
+    /// right before Close never reaches the daemon. PerformPastClose does, as
+    /// a Swift Task does (ComposeDraftController's discard deletes the draft,
+    /// then the window closes), and its outcome is dropped all the same.
+    /// </summary>
+    [Fact]
+    public async Task OnlyPerformPastCloseOutlivesTheScope()
+    {
+        await using var fake = new FakeDaemon();
+        fake.On(API.DraftDelete.Name, _ => "{}");
+        await fake.StartAsync();
+        using var client = new RpcClient(fake.Path, PortableKeyFilePolicy.Instance);
+        await client.ConnectAsync(TestContext.Current.CancellationToken);
+        using var ui = new TestUIContext();
+        var pending = new PendingWork();
+        var parameters = new DraftDeleteParams { AccountId = new AccountId("a1"), DraftId = new DraftId("d1") };
+        var delivered = 0;
+
+        await ui.RunAsync(() =>
+        {
+            var scope = new ControllerScope(pending);
+            scope.Perform(client, API.DraftDelete, parameters, _ => delivered++);
+            scope.Close();
+        });
+        await Quiescence.IdleAsync(ui, pending, fake);
+        Assert.Empty(fake.Calls);
+
+        await ui.RunAsync(() =>
+        {
+            var scope = new ControllerScope(pending);
+            scope.PerformPastClose(client, API.DraftDelete, parameters, _ => delivered++);
+            scope.PerformPastClose(client, API.DraftDelete, parameters); // no callback: fire and forget
+            scope.Close();
+        });
+        await Quiescence.IdleAsync(ui, pending, fake);
+        Assert.Equal([API.DraftDelete.Name, API.DraftDelete.Name], fake.Calls);
+        Assert.Equal(0, delivered);
+
+        // While the scope is open its outcome arrives, on the UI thread.
+        Outcome<EmptyResult>? got = null;
+        await ui.RunAsync(() => new ControllerScope(pending).PerformPastClose(client, API.DraftDelete, parameters, o =>
+        {
+            Assert.Equal(ui.ThreadId, Environment.CurrentManagedThreadId);
+            got = o;
+        }));
+        await Quiescence.IdleAsync(ui, pending, fake);
+        Assert.True(got!.Value.IsSuccess);
+    }
+
     /// <summary>A detached loop is not waited for, ends quietly with the scope, and its failure is reported.</summary>
     [Fact]
     public async Task DetachedWorkIsNotTracked()
@@ -221,5 +292,14 @@ public sealed class ControllerScopeTests
         Assert.Throws<InvalidOperationException>(scope.VerifyAccess);
         Assert.IsType<InvalidOperationException>(Record.Exception(() => { _ = scope.Perform(_ => Task.FromResult(1), _ => { }); }));
         await ui.RunAsync(scope.VerifyAccess);
+    }
+
+    /// <summary>A scope made where there is no UI context would run its controllers on the thread pool: refused in debug builds.</summary>
+    [Fact]
+    public async Task AScopeNeedsTheUIContext()
+    {
+        Assert.SkipUnless(DebugBuild, "the context is checked in debug builds only");
+        var e = await Task.Run(() => Record.Exception(() => new ControllerScope()), TestContext.Current.CancellationToken);
+        Assert.IsType<InvalidOperationException>(e);
     }
 }

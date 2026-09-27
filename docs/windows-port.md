@@ -543,13 +543,25 @@ fake daemon's in-flight count and the drained UI queue), never on sleeps.
 
 In the code (`Malachi.Core/Controllers/Infrastructure`): `ControllerScope`
 holds a controller's (or a group's, the mailbox with its halves) thread
-(`ThreadAffinity`, `VerifyAccess` in debug builds), `IsClosed`,
-`Lifetime` token and `PendingWork`; `Perform` hands an `Outcome<T>` (Swift's
-`Result`) to the UI thread, `Run` starts tracked work, `RunDetached` loops
-and waits on the clock (a tracked wait on a `FakeTimeProvider` would hold
-`IdleAsync` for ever), all yield-first. The tests' side is
-`Fixtures/Quiescence.IdleAsync`, `TestUIContext`, `FakeDaemon` and
-`MailFixture`.
+(`ThreadAffinity`, `VerifyAccess` and a present `SynchronizationContext`
+checked in debug builds), `IsClosed`, `Lifetime` token and `PendingWork`;
+`Perform` hands an `Outcome<T>` (Swift's `Result`) to the UI thread, `Run`
+starts tracked work, `RunDetached` loops and waits on the clock (a tracked
+wait on a `FakeTimeProvider` would hold `IdleAsync` for ever), all
+yield-first. The tests' side is `Fixtures/Quiescence.IdleAsync`,
+`TestUIContext`, `FakeDaemon` and `MailFixture`.
+
+`Close` goes one step further than Swift's `closed` flag: it cancels
+`Lifetime`, so a call that is not written yet is never sent, even one that
+`Perform` started in the same UI turn right before the close (its work has
+not run). That suits reads. A mutation fired on the way out, which Swift
+and GTK send all the same (ComposeDraftController's discard: `draft.delete`,
+then the window closes; `discardNow`'s `attachment.remove`), goes through
+`PerformPastClose`: tracked and yield-first too, but its call does not pass
+`Lifetime`, and its outcome is dropped once the scope is closed. Work
+started by `Run` or `RunDetached` catches its routine failures itself, as
+Swift's `connectOnce` turns a failed dial into a state; what escapes is a
+bug, logged at error level and kept (the last 64) for the tests.
 
 ### 7.3 Time
 

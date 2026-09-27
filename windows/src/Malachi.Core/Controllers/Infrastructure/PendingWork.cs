@@ -21,12 +21,17 @@ namespace Malachi.Core.Controllers.Infrastructure;
 /// <see cref="ControllerScope.Run"/>): <see cref="IdleAsync"/> completes when
 /// there is none. A task that fails is logged and kept in
 /// <see cref="TakeFaults"/>, so that no failure of a callback disappears
-/// with its fire-and-forget task. Thread-safe.
+/// with its fire-and-forget task; the last <see cref="MaxKeptFaults"/> are
+/// kept, so that a failure that recurs in an app where nobody takes them
+/// costs its log lines and no more. Thread-safe.
 /// </summary>
 public sealed partial class PendingWork
 {
+    /// <summary>How many failures <see cref="TakeFaults"/> keeps: the latest.</summary>
+    public const int MaxKeptFaults = 64;
+
     private readonly Lock gate = new();
-    private readonly List<Exception> faults = [];
+    private readonly Queue<Exception> faults = new();
     private readonly ILogger logger;
     private int count;
     private TaskCompletionSource? idle;
@@ -75,7 +80,10 @@ public sealed partial class PendingWork
         }
     }
 
-    /// <summary>The failures of tracked tasks since the last call, oldest first; clears them.</summary>
+    /// <summary>
+    /// The failures of tracked tasks since the last call, oldest first, at
+    /// most the last <see cref="MaxKeptFaults"/>; clears them.
+    /// </summary>
     public IReadOnlyList<Exception> TakeFaults()
     {
         lock (gate)
@@ -93,7 +101,11 @@ public sealed partial class PendingWork
         LogFailed(logger, error);
         lock (gate)
         {
-            faults.Add(error);
+            if (faults.Count == MaxKeptFaults)
+            {
+                faults.Dequeue();
+            }
+            faults.Enqueue(error);
         }
     }
 
