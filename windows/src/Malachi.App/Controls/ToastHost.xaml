@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Shared/ToastPresenter.swift (the view);
+GTK: Adw.ToastOverlay (window.blp toast_overlay over the message pane,
+message_window.blp, compose.blp). A capsule at the bottom centre of what
+it covers: 42 px high, 24 px above the bottom, at most the width less 24,
+text padded by 18, one line cut with an ellipsis and the whole text as its
+tooltip, a fade of 0.2 s. Only the capsule takes the pointer; a click
+dismisses it. Place it last in the grid cell it covers, spanning it.
+-->
+<UserControl
+    x:Class="Malachi.App.Controls.ToastHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    HorizontalAlignment="Stretch"
+    VerticalAlignment="Stretch"
+    IsTabStop="False">
+    <Grid x:Name="Layer" Background="{x:Null}">
+        <Border
+            x:Name="Capsule"
+            Height="42"
+            Margin="12,0,12,24"
+            Padding="18,0,18,0"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="{ThemeResource SystemFillColorSolidNeutralBackgroundBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="21"
+            Opacity="0"
+            Visibility="Collapsed"
+            Tapped="OnCapsuleTapped">
+            <Border.OpacityTransition>
+                <ScalarTransition Duration="0:0:0.2" />
+            </Border.OpacityTransition>
+            <TextBlock
+                x:Name="Label"
+                VerticalAlignment="Center"
+                MaxLines="1"
+                Style="{StaticResource BodyLabelStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </Border>
+    </Grid>
+</UserControl>

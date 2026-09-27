@@ -16,7 +16,8 @@
 #   app      go, then publish the app and the keyring helper self-contained and assemble
 #            build\windows\<arch>\Malachi Mail\ (Release)
 #   test     every test project of the solution (Debug)
-#   run      app for the host's architecture, then MalachiMail.exe until its window closes
+#   run      app for the host's architecture, then MalachiMail.exe in this terminal until it quits
+#            (Ctrl+C quits it and the daemon it started)
 #   lint     dotnet format --verify-no-changes and the conventions tests
 #   package  app, then build\windows\Malachi-Mail-<version>-<arch>.zip
 #   clean    remove build\windows
@@ -306,7 +307,10 @@ function Add-VsWhereToPath {
 }
 
 function Test-AppFolder {
+    # The Insights resource DLL: without it AppNotificationManager.Register()
+    # fails (Malachi.App.csproj, MalachiInsightsResource).
     $expected = @('MalachiMail.exe', 'MalachiMail.pri', 'malachid.exe', 'malachi-mcp.exe', 'malachi-credentials.exe',
+        'Microsoft.WindowsAppRuntime.Insights.Resource.dll', 'Assets\Malachi.ico',
         'LICENSE.txt', 'LICENSE-backend.txt', 'LICENSING.md')
     foreach ($language in (Get-Languages)) {
         $expected += "locale\$language.po"
@@ -368,23 +372,35 @@ function Invoke-Lint {
             '-c', $Configuration) + $MsbuildProperties)
 }
 
-# A GUI program gets no console; through a pipe its stdout and stderr reach
-# this terminal (and, once the app starts the daemon, the daemon's log), and
-# the pipe keeps this command waiting until the app exits. Ctrl+C here stops
-# the waiting, not the app.
+# The app attaches to this console by itself (docs/windows-port.md §5
+# Console): its log and the daemon's reach the terminal, and Ctrl+C reaches
+# the app, which quits gracefully and stops the daemon it started (the
+# daemon, in a process group of its own, is spared the Ctrl+C). So it is
+# started without pipes (a pipe would be the app's stderr instead, and on
+# Ctrl+C PowerShell kills a piped program and orphans its daemon;
+# spikes2/INPUT-SPIKES.md §4.3), and waited for in a loop that Ctrl+C
+# interrupts, then up to 20 s more while the app shuts down. Never & $exe
+# (it returns at once) or & $exe | ...
 function Invoke-Run {
     Invoke-AppBuild
     $exe = Join-Path $AppDir 'MalachiMail.exe'
-    Write-Host "running $exe; closing its window ends this command"
-    $ErrorActionPreference = 'Continue'
-    & $exe 2>&1 | ForEach-Object {
-        if ($_ -is [System.Management.Automation.ErrorRecord]) {
-            [Console]::Error.WriteLine($_.ToString())
-        } else {
-            [Console]::Out.WriteLine($_)
+    Write-Host "running $exe; Quit (Ctrl+Q), closing its window or Ctrl+C here ends this command"
+    $start = New-Object System.Diagnostics.ProcessStartInfo $exe
+    $start.UseShellExecute = $false
+    $start.WorkingDirectory = $AppDir
+    $app = [System.Diagnostics.Process]::Start($start)
+    $done = $false
+    try {
+        while (-not $app.WaitForExit(200)) {
+        }
+        $done = $true
+    } finally {
+        if (-not $done) {
+            # Ctrl+C: the app got it too and is quitting; wait for it.
+            [void]$app.WaitForExit(20000)
         }
     }
-    $status = $LASTEXITCODE
+    $status = $app.ExitCode
     if ($status -ne 0) {
         throw "MalachiMail.exe exited with status $status"
     }

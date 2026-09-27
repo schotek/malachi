@@ -59,6 +59,12 @@ App SDK and .NET travel in the app folder, nothing is installed.
     <ProjectReference Include="..\Malachi.Core\Malachi.Core.csproj" />
     <ProjectReference Include="..\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The icon the build renders (MalachiIconFile) as a file of the app
+         too: the title bar, the About dialog and the window's icon load it
+         (ms-appx:///Assets/Malachi.ico), and so can the notifications. -->
+    <Content Include="$(MalachiIconFile)" Link="Assets\Malachi.ico" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <!-- WindowsAppSDK#6774 (docs/windows-port.md §10, APP-SPIKES.md §1.2):
        in a self-contained unpackaged app AppNotificationManager.Register()

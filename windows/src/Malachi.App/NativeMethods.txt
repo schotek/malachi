@@ -1,0 +1,29 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for Malachi.App, one per line
+// (docs/windows-port.md §3.1: never hand-written where CsWin32 can
+// generate them). The WebView2 layer and the platform services keep their
+// own entries below their own headings.
+//
+// The shell (Shell/): the show path (§10), the main window's session end
+// and minimum size (a subclass of its window procedure), the wait of a
+// second instance while it redirects its activation (Program).
+SetForegroundWindow
+SetWindowSubclass
+DefSubclassProc
+RemoveWindowSubclass
+GetDpiForWindow
+WM_ENDSESSION
+WM_GETMINMAXINFO
+MINMAXINFO
+CoWaitForMultipleObjects
+CWMO_FLAGS
+// The command router (Commands/): the class of the window a key was sent
+// to (the WebView2's Chrome_WidgetWin_0), and the key messages.
+GetClassName
+MSG
+WM_KEYDOWN
+WM_KEYUP
+WM_SYSKEYDOWN
+WM_SYSKEYUP
