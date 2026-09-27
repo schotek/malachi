@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiKeychain/Request.swift (Request): the pure
-// half of malachi-credentials, the protocol the daemon's
+// Port of macos/Sources/MalachiKeychain/Request.swift (Request); GTK: none
+// (on Linux the daemon keeps secrets in the Secret Service itself). The
+// pure half of malachi-credentials, the protocol the daemon's
 // internal/auth/helper speaks, parsed and validated without touching
 // Credential Manager, so that it can be tested without it.
 //

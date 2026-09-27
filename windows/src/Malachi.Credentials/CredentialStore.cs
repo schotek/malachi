@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiKeychain/Keychain.swift (KeychainStore): the
-// store half of the helper, over Windows Credential Manager instead of the
-// login keychain, named after its store as malachi-keychain is. One generic
-// credential per account id and key: target <service>/<account>/<key>, user
-// name <account>/<key>, comment "Malachi Mail: <account> (<key>)", the
-// value's UTF-8 as the blob.
+// Port of macos/Sources/MalachiKeychain/Keychain.swift (KeychainStore);
+// GTK: none (on Linux the daemon keeps secrets in the Secret Service
+// itself). The store half of the helper, over Windows Credential Manager
+// instead of the login keychain, named after its store as malachi-keychain
+// is. One generic credential per account id and key: target
+// <service>/<account>/<key>, user name <account>/<key>, comment
+// "Malachi Mail: <account> (<key>)", the value's UTF-8 as the blob.
 //
 // A credential holds at most 2560 bytes (docs/windows-port.md §10). A longer
 // value goes into chunks <target>#1..#n, written first; the main item is

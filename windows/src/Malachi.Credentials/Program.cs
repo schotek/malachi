@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiKeychain/main.swift: malachi-credentials, the
-// keyring helper malachid runs on Windows (MALACHI_KEYRING=helper,
+// Port of macos/Sources/MalachiKeychain/main.swift; GTK: none (on Linux the
+// daemon keeps secrets in the Secret Service itself). malachi-credentials,
+// the keyring helper malachid runs on Windows (MALACHI_KEYRING=helper,
 // backend/internal/auth/helper). One operation per process:
 // `malachi-credentials get|set|delete`, one JSON line on stdin, the answer
 // on stdout, the outcome in the exit status. The value reaches stdout only
