@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -230,6 +231,26 @@ func TestStopWithoutDaemon(t *testing.T) {
 	s.Stop() // no panic, nothing to do
 }
 
+// executableName is how this system spells a program called name, the file
+// a PATH search finds: the bare name where a file runs by its execute
+// permission (Unix), else name with the extension this test binary has
+// (".exe" on Windows).
+func executableName(t *testing.T, name string) string {
+	t.Helper()
+	probe := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(probe, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := exec.LookPath(probe); err == nil {
+		return name
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return name + filepath.Ext(self)
+}
+
 // unsetenv removes key for the duration of the test (t.Setenv registers the
 // restore; "" alone would mean "none" to Locate).
 func unsetenv(t *testing.T, key string) {
@@ -255,7 +276,7 @@ func TestLocate(t *testing.T) {
 	})
 	t.Run("path", func(t *testing.T) {
 		dir := t.TempDir()
-		p := filepath.Join(dir, "malachid")
+		p := filepath.Join(dir, executableName(t, "malachid"))
 		if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
