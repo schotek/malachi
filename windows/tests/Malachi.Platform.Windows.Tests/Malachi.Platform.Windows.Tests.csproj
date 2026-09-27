@@ -1,0 +1,24 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Tests of Malachi.Platform.Windows: the process host against the stand-in
+daemon, the key-file policy, the registry settings and their watcher,
+file-name rules, the Mark of the Web (docs/windows-port.md §12). Windows
+only.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.Platform.Windows.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

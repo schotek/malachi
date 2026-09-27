@@ -1,0 +1,59 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Settings every project of the Windows client shares. A warning fails the
+build, as -warnings-as-errors does in macos/Makefile; restores are locked
+to the committed packages.lock.json files on CI; everything MSBuild writes
+goes under the repository's ignored build\ tree (build\windows\artifacts),
+never beside the sources.
+
+windows\build.ps1 passes MalachiVersion (git describe with the leading v
+cut, the root Makefile's rule) and MalachiNumericVersion
+(Major.Minor.Patch.CommitsSinceTag); a build from Visual Studio says "dev".
+It also passes MalachiBuildDir when -BuildDir moves the output elsewhere.
+-->
+<Project>
+  <PropertyGroup>
+    <MalachiRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..'))</MalachiRoot>
+    <MalachiBuildDir Condition="'$(MalachiBuildDir)' == ''">$(MalachiRoot)build</MalachiBuildDir>
+    <MalachiBuildPath>$([MSBuild]::NormalizeDirectory('$(MalachiBuildDir)'))</MalachiBuildPath>
+    <!-- Rendered from docs\malachi_icon.png by the MalachiIcons target
+         (Directory.Build.targets) or build.ps1 icons; one file for every
+         configuration and architecture. -->
+    <MalachiIconFile>$(MalachiBuildPath)windows\artifacts\obj\Malachi.App\Malachi.ico</MalachiIconFile>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- A new NuGet vulnerability advisory is reported, but does not turn
+         every build red overnight. -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1901;NU1902;NU1903;NU1904</WarningsNotAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(ContinuousIntegrationBuild)' == 'true'">true</RestoreLockedMode>
+    <IsPackable>false</IsPackable>
+    <NeutralLanguage>en</NeutralLanguage>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MalachiBuildPath)windows\artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <MalachiVersion Condition="'$(MalachiVersion)' == ''">dev</MalachiVersion>
+    <MalachiNumericVersion Condition="'$(MalachiNumericVersion)' == ''">0.0.0.0</MalachiNumericVersion>
+    <Version>$([System.Text.RegularExpressions.Regex]::Match('$(MalachiNumericVersion)', '^\d+\.\d+\.\d+'))</Version>
+    <FileVersion>$(MalachiNumericVersion)</FileVersion>
+    <InformationalVersion>$(MalachiVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Authors>Vladislav Janeček</Authors>
+    <Company>Vladislav Janeček</Company>
+    <Product>Malachi Mail</Product>
+    <Copyright>© 2026 Vladislav Janeček</Copyright>
+  </PropertyGroup>
+</Project>

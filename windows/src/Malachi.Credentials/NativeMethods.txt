@@ -1,0 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for malachi-credentials, one per
+// line: CredReadW, CredWriteW, CredDeleteW and friends in phase C4.

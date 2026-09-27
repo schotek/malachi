@@ -1,0 +1,72 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+What the projects get on top of an ordinary build: every project the SDK's
+own packages at a pinned version; the app project (MalachiApp=true) the
+translations, the icon, and the daemon beside the executable, so that a
+build from Visual Studio (F5) runs a complete app as build.ps1 app does.
+-->
+<Project>
+  <!-- The SDK's own packages at the version Directory.Packages.props pins
+       (MalachiSdkPackVersion), whichever SDK builds. -->
+  <ItemGroup>
+    <KnownILLinkPack Update="Microsoft.NET.ILLink.Tasks" ILLinkPackVersion="$(MalachiSdkPackVersion)" />
+    <KnownILCompilerPack Update="Microsoft.DotNet.ILCompiler" ILCompilerPackVersion="$(MalachiSdkPackVersion)" />
+  </ItemGroup>
+
+  <!-- po/ is the single source of truth (docs/windows-port.md §9): every
+       language of po/LINGUAS ships as locale\<lang>.po beside the
+       executable and is parsed at run time; English needs no file. -->
+  <Target Name="MalachiLocale" BeforeTargets="AssignTargetPaths" Condition="'$(MalachiApp)' == 'true'">
+    <PropertyGroup>
+      <_MalachiLinguas>$([System.IO.File]::ReadAllText('$(MalachiRoot)po\LINGUAS'))</_MalachiLinguas>
+      <_MalachiLinguas>$([System.Text.RegularExpressions.Regex]::Replace('$(_MalachiLinguas)', '#[^\r\n]*', ''))</_MalachiLinguas>
+      <_MalachiLinguas>$([System.Text.RegularExpressions.Regex]::Replace('$(_MalachiLinguas)', '\s+', ';'))</_MalachiLinguas>
+    </PropertyGroup>
+    <ItemGroup>
+      <!-- A function's result comes back escaped; the ; must split. -->
+      <MalachiLanguage Include="$([MSBuild]::Unescape('$(_MalachiLinguas)'))" />
+    </ItemGroup>
+    <Error Condition="'@(MalachiLanguage)' != '' and !Exists('$(MalachiRoot)po\%(MalachiLanguage.Identity).po')"
+           Text="po/LINGUAS names %(MalachiLanguage.Identity), but po/%(MalachiLanguage.Identity).po is missing" />
+    <ItemGroup>
+      <Content Include="$(MalachiRoot)po\%(MalachiLanguage.Identity).po"
+               Link="locale\%(MalachiLanguage.Identity).po"
+               CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup Condition="'$(MalachiApp)' == 'true'">
+    <!-- Items added by a target are invisible to Visual Studio's fast
+         up-to-date check. -->
+    <UpToDateCheckInput Include="$(MalachiRoot)po\LINGUAS;$(MalachiRoot)po\*.po" />
+  </ItemGroup>
+
+  <!-- The icon compiled into MalachiMail.exe (ApplicationIcon), rendered
+       from docs/malachi_icon.png as macos/Makefile renders its .icns, never
+       committed. It has to exist before the XAML compiler's first pass
+       compiles the assembly, not just before CoreCompile. -->
+  <Target Name="MalachiIcons" BeforeTargets="XamlPreCompile;CoreCompile" Condition="'$(MalachiApp)' == 'true'"
+          Inputs="$(MalachiRoot)docs\malachi_icon.png;$(MSBuildThisFileDirectory)scripts\make-icons.ps1"
+          Outputs="$(MalachiIconFile)">
+    <Exec Command="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\make-icons.ps1&quot; -Source &quot;$(MalachiRoot)docs\malachi_icon.png&quot; -OutFile &quot;$(MalachiIconFile)&quot;" />
+  </Target>
+
+  <!-- For F5: the host-architecture binaries that build.ps1 go (or make
+       backend mcp) and build.ps1 app leave in build\ are copied beside
+       MalachiMail.exe, where the app looks for the daemon, the MCP bridge
+       and the keyring helper. A build for another architecture gets none:
+       they would not match. Nothing here reaches a publish; build.ps1 app
+       assembles those itself. -->
+  <Target Name="MalachiCopyDaemon" AfterTargets="Build"
+          Condition="'$(MalachiApp)' == 'true' and '$(RuntimeIdentifier)' == '$(NETCoreSdkRuntimeIdentifier)'">
+    <ItemGroup>
+      <_MalachiDevBinary Include="$(MalachiBuildPath)malachid.exe;$(MalachiBuildPath)malachi-mcp.exe;$(MalachiBuildPath)malachi-credentials.exe" />
+      <_MalachiDevBinaryFound Include="@(_MalachiDevBinary)" Condition="Exists('%(FullPath)')" />
+      <_MalachiDevBinaryMissing Include="@(_MalachiDevBinary)" Condition="!Exists('%(FullPath)')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_MalachiDevBinaryFound)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Condition="'@(_MalachiDevBinaryMissing)' != ''"
+             Text="MalachiCopyDaemon: @(_MalachiDevBinaryMissing->'%(Filename)%(Extension)', ', ') not in $(MalachiBuildPath); windows\build.ps1 app puts them there" />
+  </Target>
+</Project>

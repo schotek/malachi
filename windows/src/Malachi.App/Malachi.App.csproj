@@ -1,0 +1,50 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Malachi.App: the WinUI 3 application, MalachiMail.exe. Thin: windows,
+pages, XAML and the WebView2 layer render what Core's controllers hold
+(docs/windows-port.md §2). Unpackaged and self-contained (§0): the Windows
+App SDK and .NET travel in the app folder, nothing is installed.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <AssemblyName>MalachiMail</AssemblyName>
+    <RootNamespace>Malachi.App</RootNamespace>
+    <UseWinUI>true</UseWinUI>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- The architecture follows the solution platform. Set here, not
+         inferred, so that x64 and ARM64 builds get separate output folders
+         (build\windows\artifacts\bin\Malachi.App\<config>_win-<arch>). -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <!-- Without it, publish leaves out MalachiMail.pri and the app dies at
+         start with 0xC000027B. -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>$(MalachiIconFile)</ApplicationIcon>
+    <!-- Program.cs is the entry point, so that start-up work (single
+         instance, notifications) can run before the application. -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- Directory.Build.targets: locale\*.po, the icon, the daemon for F5. -->
+    <MalachiApp>true</MalachiApp>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Malachi.Core\Malachi.Core.csproj" />
+    <ProjectReference Include="..\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

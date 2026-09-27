@@ -1,0 +1,41 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Every NuGet version of the Windows client, in one place. The projects name
+packages without versions; each project's packages.lock.json records what
+the restore resolved and is committed. A new package needs its reason in
+the commit message (CLAUDE.md); the set below is the one decided in
+docs/windows-port.md §0.
+-->
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- The packages the SDK adds by itself: the trimming analyzers
+         (Microsoft.NET.ILLink.Tasks, for IsAotCompatible) and the NativeAOT
+         compiler of malachi-credentials with its runtime. The SDK takes the
+         version of the runtime it bundles, so the lock files would change
+         with every SDK that global.json rolls forward to, and a locked
+         restore on CI would fail over it. Pinned here instead
+         (Directory.Build.targets, Malachi.Credentials.csproj); raise it
+         with a .NET servicing release. -->
+    <MalachiSdkPackVersion>10.0.11</MalachiSdkPackVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The app: WinUI 3 and WebView2. The metapackage for now; the
+         component set that leaves out the AI/ML runtime is a phase B spike. -->
+    <PackageVersion Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2705" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.Segmented" Version="8.2.251219" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.SettingsControls" Version="8.2.251219" />
+    <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.251219" />
+    <!-- Core and the platform services. -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Windows.CsWin32" Version="0.3.335" />
+    <!-- Tests: xUnit v3 on Microsoft.Testing.Platform (global.json). -->
+    <PackageVersion Include="xunit.v3" Version="4.0.1" />
+    <PackageVersion Include="Microsoft.Testing.Extensions.TrxReport" Version="2.4.1" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" />
+  </ItemGroup>
+</Project>

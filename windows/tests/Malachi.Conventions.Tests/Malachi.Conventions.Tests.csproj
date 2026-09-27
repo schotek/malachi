@@ -1,0 +1,25 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Repository checks of the Windows client that no compiler makes: the SPDX
+headers of every file type, and later the strings (msgids against
+po/malachi.pot), the gschema coverage and the manifest identity
+(docs/windows-port.md §9, §12). They read the source tree, so they run on
+any OS.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.Conventions.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Where the checked tree is; the test binary lives under build\. -->
+    <AssemblyMetadata Include="MalachiRoot" Value="$(MalachiRoot)" />
+  </ItemGroup>
+</Project>
