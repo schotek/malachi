@@ -32,6 +32,17 @@
           "Microsoft.WindowsAppSDK": "1.6.250108002"
         }
       },
+      "Microsoft.Windows.CsWin32": {
+        "type": "Direct",
+        "requested": "[0.3.335, )",
+        "resolved": "0.3.335",
+        "contentHash": "gzkl9xgrYFqPBQgad1c7T45XfiS18z0Qbxsxx+8/tYDQ9AJ0zMTVpdA5v0ilSi+7ePLf84aDUpMYitkwWlrnlg==",
+        "dependencies": {
+          "Microsoft.Windows.SDK.Win32Docs": "0.1.42-alpha",
+          "Microsoft.Windows.SDK.Win32Metadata": "71.0.14-preview",
+          "Microsoft.Windows.WDK.Win32Metadata": "0.13.25-experimental"
+        }
+      },
       "Microsoft.Windows.SDK.BuildTools": {
         "type": "Direct",
         "requested": "[10.0.28000.2705, )",
@@ -54,6 +65,27 @@
           "Microsoft.WindowsAppSDK.Search": "2.5.5",
           "Microsoft.WindowsAppSDK.Widgets": "2.0.5",
           "Microsoft.WindowsAppSDK.WinUI": "2.3.9"
+        }
+      },
+      "Microsoft.WindowsAppSDK.InteractiveExperiences": {
+        "type": "Direct",
+        "requested": "[2.1.9, )",
+        "resolved": "2.1.9",
+        "contentHash": "59nvb3pQYsBTTGrobeHkB4bkxASHtpaORJl7r6Zvg8PSIDCupEZTPKrIhnUknHDGfAtuBsnORjgvRi2WXGaRhA==",
+        "dependencies": {
+          "Microsoft.WindowsAppSDK.Base": "2.0.4"
+        }
+      },
+      "Microsoft.WindowsAppSDK.WinUI": {
+        "type": "Direct",
+        "requested": "[2.3.9, )",
+        "resolved": "2.3.9",
+        "contentHash": "GiuYUQqMYD5lycT+X2AGX1rlbHU/zf8xoPeZNXZbJj4mZcSr4STsxeRUMxnTUQLAmmjjQaPrTIRjn78vbPhAvg==",
+        "dependencies": {
+          "Microsoft.Web.WebView2": "1.0.3719.77",
+          "Microsoft.WindowsAppSDK.Base": "2.0.4",
+          "Microsoft.WindowsAppSDK.Foundation": "2.3.12",
+          "Microsoft.WindowsAppSDK.InteractiveExperiences": "2.1.8"
         }
       },
       "CommunityToolkit.Common": {
@@ -111,6 +143,24 @@
         "resolved": "1.7.251221100",
         "contentHash": "f4aIZJ0NUth2403oxrpR+9rxVzZVI6dabqB21u8ncnk8eJAKCs9m77E4iYAnvP1YwrRe4axz3f8+yUcttNSfEA=="
       },
+      "Microsoft.Windows.SDK.Win32Docs": {
+        "type": "Transitive",
+        "resolved": "0.1.42-alpha",
+        "contentHash": "Z/9po23gUA9aoukirh2ItMU2ZS9++Js9Gdds9fu5yuMojDrmArvY2y+tq9985tR3cxFxpZO1O35Wjfo0khj5HA=="
+      },
+      "Microsoft.Windows.SDK.Win32Metadata": {
+        "type": "Transitive",
+        "resolved": "71.0.14-preview",
+        "contentHash": "39I8YpjHYJF7Qncztn6+cu15Ti35myn5QQnLZwN6AngBsfaU1l3Nsxvt2087AlExLxg5a/llFIRSeahK7GW/Dw=="
+      },
+      "Microsoft.Windows.WDK.Win32Metadata": {
+        "type": "Transitive",
+        "resolved": "0.13.25-experimental",
+        "contentHash": "IM50tb/+UIwBr9FMr6ZKcZjCMW+Axo6NjGqKxgjUfyCY8dRnYUfrJEXxAaXoWtYP4X8EmASmC1Jtwh4XucseZg==",
+        "dependencies": {
+          "Microsoft.Windows.SDK.Win32Metadata": "63.0.31-preview"
+        }
+      },
       "Microsoft.WindowsAppSDK.AI": {
         "type": "Transitive",
         "resolved": "2.5.5",
@@ -144,14 +194,6 @@
         "dependencies": {
           "Microsoft.WindowsAppSDK.Base": "2.0.4",
           "Microsoft.WindowsAppSDK.InteractiveExperiences": "2.1.8"
-        }
-      },
-      "Microsoft.WindowsAppSDK.InteractiveExperiences": {
-        "type": "Transitive",
-        "resolved": "2.1.9",
-        "contentHash": "59nvb3pQYsBTTGrobeHkB4bkxASHtpaORJl7r6Zvg8PSIDCupEZTPKrIhnUknHDGfAtuBsnORjgvRi2WXGaRhA==",
-        "dependencies": {
-          "Microsoft.WindowsAppSDK.Base": "2.0.4"
         }
       },
       "Microsoft.WindowsAppSDK.ML": {
@@ -190,17 +232,6 @@
           "Microsoft.WindowsAppSDK.Base": "2.0.3"
         }
       },
-      "Microsoft.WindowsAppSDK.WinUI": {
-        "type": "Transitive",
-        "resolved": "2.3.9",
-        "contentHash": "GiuYUQqMYD5lycT+X2AGX1rlbHU/zf8xoPeZNXZbJj4mZcSr4STsxeRUMxnTUQLAmmjjQaPrTIRjn78vbPhAvg==",
-        "dependencies": {
-          "Microsoft.Web.WebView2": "1.0.3719.77",
-          "Microsoft.WindowsAppSDK.Base": "2.0.4",
-          "Microsoft.WindowsAppSDK.Foundation": "2.3.12",
-          "Microsoft.WindowsAppSDK.InteractiveExperiences": "2.1.8"
-        }
-      },
       "System.Numerics.Tensors": {
         "type": "Transitive",
         "resolved": "9.0.0",
@@ -216,7 +247,7 @@
       "malachi.platform.windows": {
         "type": "Project",
         "dependencies": {
-          "Malachi.Core": "[0.1.0, )"
+          "Malachi.Core": "[0.0.0, )"
         }
       },
       "CommunityToolkit.Mvvm": {

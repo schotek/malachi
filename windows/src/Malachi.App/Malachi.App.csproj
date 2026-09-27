@@ -30,21 +30,59 @@ App SDK and .NET travel in the app folder, nothing is installed.
     <EnableMsixTooling>true</EnableMsixTooling>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>$(MalachiIconFile)</ApplicationIcon>
-    <!-- Program.cs is the entry point, so that start-up work (single
-         instance, notifications) can run before the application. -->
+    <!-- Program.cs is the entry point, so that start-up work (the console,
+         notifications, the single instance) runs before the application. -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!-- CsWin32's pointers (NativeMethods.txt). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Directory.Build.targets: locale\*.po, the icon, the daemon for F5. -->
     <MalachiApp>true</MalachiApp>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Windows App SDK 2.5.1 as components (Directory.Packages.props). -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+    <!-- CommunityToolkit 8.2 on the component packages (APP-SPIKES.md §2.1):
+         only its compile and runtime assets, and the metapackage it asks
+         for held at 2.5.1 with nothing of it used, so that neither the
+         monolithic 1.6 nor the 2.5.1 AI and ML runtime comes in. -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" ExcludeAssets="all" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" IncludeAssets="compile;runtime" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" IncludeAssets="compile;runtime" />
+    <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" IncludeAssets="compile;runtime" />
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+    <!-- Only its framework MSIX is used, by the target below. -->
+    <PackageDownload Include="Microsoft.WindowsAppSDK.Runtime" Version="[$(MalachiWindowsAppRuntimeVersion)]" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Malachi.Core\Malachi.Core.csproj" />
     <ProjectReference Include="..\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
   </ItemGroup>
+
+  <!-- WindowsAppSDK#6774 (docs/windows-port.md §10, APP-SPIKES.md §1.2):
+       in a self-contained unpackaged app AppNotificationManager.Register()
+       throws 0x8007007E, because Microsoft.WindowsAppRuntime.Insights.Resource.dll
+       is in none of the 2.x component packages; it is only in the framework
+       MSIX of the Runtime package. This unpacks that one DLL (34 KB, the
+       same version) into the output and the publish. Delete the target
+       once a Foundation release with WindowsAppSDK PR #6725 ships (and
+       Register() works without it). -->
+  <Target Name="MalachiInsightsResource" BeforeTargets="AssignTargetPaths">
+    <PropertyGroup>
+      <_MalachiMsixArch>x64</_MalachiMsixArch>
+      <_MalachiMsixArch Condition="'$(RuntimeIdentifier)' == 'win-arm64' or '$(Platform)' == 'ARM64'">arm64</_MalachiMsixArch>
+      <!-- NuGetPackageRoot has no trailing separator in this SDK. -->
+      <_MalachiMsix>$([MSBuild]::EnsureTrailingSlash('$(NuGetPackageRoot)'))microsoft.windowsappsdk.runtime\$(MalachiWindowsAppRuntimeVersion)\tools\MSIX\win10-$(_MalachiMsixArch)\Microsoft.WindowsAppRuntime.2.msix</_MalachiMsix>
+      <_MalachiMsixOut>$(IntermediateOutputPath)wasdkmsix\</_MalachiMsixOut>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_MalachiMsix)')" Text="The Windows App SDK framework MSIX was not found: $(_MalachiMsix)" />
+    <Unzip SourceFiles="$(_MalachiMsix)" DestinationFolder="$(_MalachiMsixOut)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <None Include="$(_MalachiMsixOut)Microsoft.WindowsAppRuntime.Insights.Resource.dll"
+            Link="Microsoft.WindowsAppRuntime.Insights.Resource.dll"
+            CopyToOutputDirectory="PreserveNewest"
+            CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>
