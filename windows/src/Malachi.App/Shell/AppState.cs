@@ -144,9 +144,13 @@ public sealed partial class AppState : IDisposable
     /// <summary>Quit (app.quit), set by the app.</summary>
     public Func<QuitReason, Task<bool>>? QuitHandler { get; internal set; }
 
-    /// <summary>Whether the main window is the active window (notify.go: no desktop notification then).</summary>
+    /// <summary>
+    /// Whether the main window is the active window (notify.go: no desktop
+    /// notification then): shown, and neither another window of the app nor
+    /// another application has the activation.
+    /// </summary>
     public bool IsMainWindowActive =>
-        MainWindow is { } w && w.AppWindow.IsVisible && ReferenceEquals(Windows.Active?.Window, w);
+        MainWindow is { } w && w.AppWindow.IsVisible && Windows.IsActive(w);
 
     /// <summary>
     /// Makes the application's objects (see the file's header), on the UI

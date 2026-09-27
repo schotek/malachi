@@ -22,7 +22,11 @@
 // - its commands and keys: a WindowCommands with the application's
 //   commands wired (New Message, Preferences, Add Account, About, Quit,
 //   Check for New Mail, Search) and a CommandRouter on its root;
-// - its toasts: the router's presenter while it is the active window;
+// - its activation (Core's WindowActivation): the window that is active
+//   now, none while another application has the foreground (GTK's
+//   w.IsActive(), macOS isKeyWindow), and the one that was active last,
+//   which gets the application's toasts and owns their dialogs;
+// - its toasts: the router's presenter while it is the last active window;
 // - its life: a secondary window counts for the GApplication rule
 //   (WindowLifetime) until it closes, and LastWindowClosed tells the app
 //   when nothing holds it any more.
@@ -50,6 +54,7 @@ public sealed partial class WindowTracker : IDisposable
     private readonly WindowLifetime lifetime;
     private readonly ILogger logger;
     private readonly SettingsChangeToken themeToken;
+    private readonly WindowActivation activation = new();
 
     internal WindowTracker(SettingsStore settings, AppHooks hooks, ToastRouter toasts, WindowLifetime lifetime, ILogger logger)
     {
@@ -65,7 +70,7 @@ public sealed partial class WindowTracker : IDisposable
     /// <summary>A secondary window closed and nothing holds the app any more (the GApplication rule): quit.</summary>
     public event EventHandler? LastWindowClosed;
 
-    /// <summary>A tracked window became the active one, or closed.</summary>
+    /// <summary>Another tracked window became the last active one, or the last active one closed.</summary>
     public event EventHandler? ActiveWindowChanged;
 
     /// <summary>The alerts, for the About command and to keep keys away from an open dialog.</summary>
@@ -77,8 +82,12 @@ public sealed partial class WindowTracker : IDisposable
     /// <summary>The windows being tracked, the main window first.</summary>
     public IReadOnlyList<TrackedWindow> Windows => windows;
 
-    /// <summary>The tracked window that is active now, if any.</summary>
-    public TrackedWindow? Active { get; private set; }
+    /// <summary>
+    /// The tracked window that was active last, also while another
+    /// application is in the foreground: where the application's toasts go,
+    /// the owner of what it opens.
+    /// </summary>
+    public TrackedWindow? Active => activation.LastActive as TrackedWindow;
 
     /// <summary>
     /// Tracks <paramref name="window"/>, a window of <paramref name="kind"/>
@@ -104,9 +113,12 @@ public sealed partial class WindowTracker : IDisposable
 
         window.Activated += (_, e) =>
         {
-            if (e.WindowActivationState != WindowActivationState.Deactivated)
+            if (e.WindowActivationState == WindowActivationState.Deactivated)
             {
-                Active = tracked;
+                activation.Deactivated(tracked);
+            }
+            else if (activation.Activated(tracked))
+            {
                 toasts.Presenter = tracked.Toasts;
                 ActiveWindowChanged?.Invoke(this, EventArgs.Empty);
             }
@@ -121,6 +133,13 @@ public sealed partial class WindowTracker : IDisposable
 
     /// <summary>The tracked window of <paramref name="window"/>, if it is tracked.</summary>
     public TrackedWindow? Find(Window window) => windows.FirstOrDefault(w => w.Window == window);
+
+    /// <summary>
+    /// Whether <paramref name="window"/> is the active window now: false
+    /// while another application is in the foreground (GTK's
+    /// w.IsActive()).
+    /// </summary>
+    public bool IsActive(Window window) => Find(window) is { } tracked && activation.IsActive(tracked);
 
     /// <summary>Stops following the colour scheme.</summary>
     public void Dispose() => themeToken.Cancel();
@@ -202,9 +221,8 @@ public sealed partial class WindowTracker : IDisposable
     {
         windows.Remove(tracked);
         tracked.Router?.Dispose();
-        if (ReferenceEquals(Active, tracked))
+        if (activation.Closed(tracked))
         {
-            Active = null;
             toasts.Presenter = null;
             ActiveWindowChanged?.Invoke(this, EventArgs.Empty);
         }

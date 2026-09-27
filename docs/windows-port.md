@@ -818,8 +818,12 @@ while running raises `NotificationInvoked`; a cold click starts the app
 with `----AppNotificationActivated: -Embedding`, which the argument parser
 ignores, and arrives through `GetActivatedEventArgs()` as kind
 `AppNotification`. As `notify.go`: nothing while the main window is
-the active window; title the sender's display name or *New message*, body
-the subject or *(No subject)*, both capped at 200 bytes; group = account,
+the active window (`AppState.IsMainWindowActive`: shown and holding the
+activation, false while another window of the app or another application
+has it, as GTK's `IsActive()`; Core's `WindowActivation` keeps it apart
+from the last active window, which gets the toasts); title the sender's
+display name or *New message*, body the subject or *(No subject)*, both
+capped at 200 bytes; group = account,
 tag = `message-<id>`; a click shows the main window. The sound is its own
 switch: `PlaySound("MailBeep", SND_ALIAS|SND_ASYNC|SND_NODEFAULT)`, the
 user's *New Mail Notification* system sound (closer to GTK's
