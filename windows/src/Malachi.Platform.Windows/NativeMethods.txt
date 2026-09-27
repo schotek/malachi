@@ -4,6 +4,11 @@
 // The Win32 functions CsWin32 generates for Malachi.Platform.Windows, one
 // per line. Scaffold: one harmless entry that NativeProbe uses.
 GetCurrentProcessId
+// Settings and languages (Settings/, I18n/).
 RegNotifyChangeKeyValue
 GetUserPreferredUILanguages
 MUI_LANGUAGE_NAME
+// Files: private directories (Files/).
+CreateDirectory
+CreateFile
+WIN32_ERROR
