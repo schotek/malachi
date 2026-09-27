@@ -76,6 +76,36 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
+// jsonString is s the way the bridge writes it into a file: a JSON string
+// with its quotes, nothing HTML-escaped. A fixture that puts a path into
+// JSON text needs it, because a Windows path is full of backslashes.
+func jsonString(t *testing.T, s string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// chmodded is the permission Stat reports here for a file chmod'ed to
+// mode: mode itself where files carry Unix permission bits, 0666 or 0444
+// on Windows, where they carry only a read-only attribute. The mode
+// assertions compare against it, so they hold, and still check what the
+// file system can express, on every platform.
+func chmodded(t *testing.T, mode os.FileMode) os.FileMode {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "mode-probe")
+	writeFile(t, p, "", mode)
+	info, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
+}
+
 // parseFile decodes a configuration file the way the code does.
 func parseFile(t *testing.T, path string) map[string]any {
 	t.Helper()
@@ -206,8 +236,8 @@ func TestSetupInstallCreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Errorf("new file mode %o, want 0600", info.Mode().Perm())
+	if got, want := info.Mode().Perm(), chmodded(t, 0o600); got != want {
+		t.Errorf("new file mode %o, want %o (what chmod 0600 gives here)", got, want)
 	}
 	if _, err := os.Stat(fx.codeFile()); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("install created %s for an app that is not installed", fx.codeFile())
@@ -241,7 +271,7 @@ func TestSetupInstallKeepsForeignContent(t *testing.T) {
 		`"n": 12345678901234567890`, `"big": 1.0e+30`, `"t": 1758700000123`,
 		`"allowedTools": [`, `"other": {`, `"/bin/other"`, `"--x"`,
 		`"s": "<tag> & ünïcödé"`,
-		"\n  \"mcpServers\": {\n    \"malachi\": {\n      \"args\": [],\n      \"command\": \""+fx.command+"\",\n      \"type\": \"stdio\"\n    },\n")
+		"\n  \"mcpServers\": {\n    \"malachi\": {\n      \"args\": [],\n      \"command\": "+jsonString(t, fx.command)+",\n      \"type\": \"stdio\"\n    },\n")
 	// The escapes are assembled here because some editors decode them.
 	esc := "\\" + "u"
 	mustNotContain(t, after, esc+"003c", esc+"0026")
@@ -260,8 +290,8 @@ func TestSetupInstallKeepsForeignContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o644 {
-		t.Errorf("mode %o, want the original 0644", info.Mode().Perm())
+	if got, want := info.Mode().Perm(), chmodded(t, 0o644); got != want {
+		t.Errorf("mode %o, want the original's %o (what chmod 0644 gives here)", got, want)
 	}
 	entries, err := os.ReadDir(fx.home)
 	if err != nil {
@@ -301,7 +331,7 @@ func TestSetupInstallReplacesOtherCommand(t *testing.T) {
 func TestSetupInstallLeavesAnExactEntryAlone(t *testing.T) {
 	fx := newSetupFixture(t)
 	// Compact, unsorted, no trailing newline: a rewrite would change it.
-	before := `{"z":1,"mcpServers":{"malachi":{"type":"stdio","command":"` + fx.command + `","args":[]}}}`
+	before := `{"z":1,"mcpServers":{"malachi":{"type":"stdio","command":` + jsonString(t, fx.command) + `,"args":[]}}}`
 	writeFile(t, fx.codeFile(), before, 0o600)
 	if _, _, err := runCmd("install"); err != nil {
 		t.Fatal(err)
@@ -313,7 +343,7 @@ func TestSetupInstallLeavesAnExactEntryAlone(t *testing.T) {
 
 func TestSetupUninstall(t *testing.T) {
 	fx := newSetupFixture(t)
-	writeFile(t, fx.desktopFile(), `{"mcpServers": {"malachi": {"command": "`+fx.command+`"}}}`, 0o600)
+	writeFile(t, fx.desktopFile(), `{"mcpServers": {"malachi": {"command": `+jsonString(t, fx.command)+`}}}`, 0o600)
 	writeFile(t, fx.codeFile(), `{"keep": true, "mcpServers": {"malachi": {"command": "x"}, "other": {"command": "y"}}}`, 0o600)
 
 	st := statusJSON(t, "uninstall")
