@@ -146,7 +146,7 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		}
 		id := m.ID
 		if id == "" {
-			id = newID("m_")
+			id = newID(messageIDPrefix)
 		}
 		enc, err := encodeMessage(m)
 		if err != nil {
@@ -1043,7 +1043,8 @@ func deleteMessageRowsTx(ctx context.Context, tx *sql.Tx, files []messageFile) e
 }
 
 // removeMessageFiles unlinks raw files after their rows are gone; a missing
-// file is not an error (the row is authoritative).
+// file is not an error (the row is authoritative). A file that cannot go
+// now is the orphan sweep's (SweepMessageFiles).
 func (s *Store) removeMessageFiles(files []messageFile) {
 	var b fsretry.Batch
 	for _, mf := range files {

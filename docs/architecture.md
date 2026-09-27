@@ -823,7 +823,8 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   window exists.
 - Message body storage: **decided**. The raw RFC 822 message is a file
   under `<data dir>/messages/<account>/<id>` (`0600` in a `0700` per-account
-  directory, removed with the folder or the account); the parsed plain
+  directory, removed with the folder or the account; one that outlives its
+  row is swept by `core.Maintain` once it is a day old); the parsed plain
   text, the curated headers and the attachment metadata live in SQLite
   (`messages.text_body` and friends). HTML is never stored separately: when
   the sanitiser lands, `message.body` re-parses the raw file and sanitises

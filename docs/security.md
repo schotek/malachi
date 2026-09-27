@@ -219,6 +219,11 @@ the page.
 - Raw RFC 822 messages are stored as received, as `0600` files in a `0700`
   per-account directory under `<data dir>/messages/`, and are removed with
   their folder or account. They are input for later parsing, never served.
+  A raw file that outlives its row (a removal that failed, as Windows
+  refuses to delete a file that is open, or a crash) is deleted by the
+  daemon's hourly sweep once it is a day old, a stale `.tmp` of a write
+  after an hour; the sweep touches only the names the store gives these
+  files.
 - `messages.text_body` (what `message.body` returns as `text`) is derived
   text only: the decoded `text/plain` part, or for HTML-only messages a
   text rendering produced by walking the HTML *tokens*

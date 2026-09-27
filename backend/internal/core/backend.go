@@ -37,6 +37,11 @@ import (
 // (never listed by a draft.save) before the sweep deletes it.
 const attachmentSweepAge = 24 * time.Hour
 
+// messageSweepAge is how old a raw message file without a message row must
+// be before the sweep deletes it. Only an outgoing message is written
+// before its row, a moment before; the margin is for clocks and crashes.
+const messageSweepAge = 24 * time.Hour
+
 // Backend is the production api.Backend.
 type Backend struct {
 	rpc.StubBackend
@@ -426,7 +431,7 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link and index
 // the messages stored before threading and search existed, then the
-// orphan attachment sweep at start and hourly.
+// orphan sweeps (sweepFiles) at start and hourly.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
@@ -437,15 +442,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillSearch(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill search index", "err", err)
 	}
-	sweep := func() {
-		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
-		if err != nil {
-			b.log.Warn("attachment sweep", "err", err)
-		} else if n > 0 {
-			b.log.Info("attachment sweep", "removed", n)
-		}
-	}
-	sweep()
+	b.sweepFiles(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -453,7 +450,30 @@ func (b *Backend) Maintain(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			sweep()
+			b.sweepFiles(ctx)
 		}
+	}
+}
+
+// sweepFiles deletes the files the store keeps for nothing: unbound
+// attachments and data files without a row, raw message files without a
+// row (a deletion that failed, as Windows refuses to delete an open file,
+// or a crash), and stale temporary files of both.
+func (b *Backend) sweepFiles(ctx context.Context) {
+	n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
+	if err != nil {
+		if !isCancelled(err) {
+			b.log.Warn("attachment sweep", "err", err)
+		}
+	} else if n > 0 {
+		b.log.Info("attachment sweep", "removed", n)
+	}
+	n, err = b.store.SweepMessageFiles(ctx, messageSweepAge)
+	if err != nil {
+		if !isCancelled(err) {
+			b.log.Warn("message file sweep", "err", err)
+		}
+	} else if n > 0 {
+		b.log.Info("message file sweep", "removed", n)
 	}
 }

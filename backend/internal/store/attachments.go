@@ -192,7 +192,7 @@ func (s *Store) SweepAttachments(ctx context.Context, olderThan time.Duration) (
 		name := e.Name()
 		switch {
 		case strings.HasSuffix(name, ".tmp"):
-			if time.Since(info.ModTime()) > time.Hour && b.Remove(filepath.Join(s.AttachmentDir(), name)) == nil {
+			if time.Since(info.ModTime()) > staleTempAge && b.Remove(filepath.Join(s.AttachmentDir(), name)) == nil {
 				removed++
 			}
 		default:

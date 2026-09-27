@@ -150,7 +150,7 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 	if limit <= 0 {
 		limit = api.MaxOutgoingMessageBytes
 	}
-	id := newID("m_")
+	id := newID(messageIDPrefix)
 	size, err := s.WriteMessageRawFunc(ctx, accountID, id, limit, in.Build)
 	if err != nil {
 		return Message{}, fmt.Errorf("enqueue outbox: %w", err)
