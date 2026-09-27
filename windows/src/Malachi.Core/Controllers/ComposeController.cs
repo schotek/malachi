@@ -141,7 +141,13 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
         return windows.FirstOrDefault(w => w.Edits(draft));
     }
 
-    /// <summary>Manager.remove: the window closed.</summary>
+    /// <summary>
+    /// Manager.remove: the window closed. The window calls it once it really
+    /// closes, after its draft controller's
+    /// <see cref="ComposeDraftController.Cleanup"/> (GTK: cleanup); a window
+    /// left in the list would keep being asked by <see cref="FindDraft"/> and
+    /// <see cref="SaveForQuitAsync"/>.
+    /// </summary>
     public void Remove(IComposeWindowHandle w)
     {
         scope.VerifyAccess();

@@ -15,7 +15,16 @@
 // TimeProvider. One more thing is a Windows addition (docs/windows-port.md
 // §0): SaveForQuitAsync, which saves a dirty draft on Quit without asking
 // and says whether that went through, so that the app asks only when it did
-// not.
+// not. It flushes the editor first, which GTK and macOS never do outside a
+// save, so the echo needs two baselines they do without: what the page
+// reports when it becomes ready (EditorReady; the page serialises the loaded
+// body its own way), and, for Quit's flush, the content the editor had
+// already reported, when the flush reports it unchanged.
+//
+// The window's part (phase E): it forwards the editor's Ready and Changed
+// to EditorReady and EditorChanged, runs CloseRequestAsync on a close, and
+// once it really closes (Cleanup has run) calls ComposeController.Remove
+// with its handle, as GTK's cleanup calls Manager.remove.
 //
 // Every call is fired as GTK and Swift fire it, to its end even when the
 // window closes meanwhile (GTK: "a closed window does not cancel a save in
@@ -62,6 +71,14 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// draft is saved (a second edit does not restart the timer).
     /// </summary>
     public static readonly TimeSpan AutosaveDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long <see cref="SaveForQuitAsync"/> waits for the editor to
+    /// report its content, and for each save on top of <c>draft.save</c>'s
+    /// own timeout: a renderer that hangs, rather than crashes, never answers
+    /// a flush, and Quit must not wait for it for ever.
+    /// </summary>
+    public static readonly TimeSpan QuitFlushTimeout = TimeSpan.FromSeconds(5);
 
     private readonly RpcClient client;
     private readonly SettingsStore settings;
@@ -178,17 +195,51 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     public void EditorChanged()
     {
         scope.VerifyAccess();
-        if (Form is not { } form || flushed.Echo(form.EditorHtml()))
+        if (Draft.Closed || Form is not { } form || flushed.Echo(form.EditorHtml()))
         {
             return;
         }
         MarkDirty();
     }
 
+    /// <summary>
+    /// Windows addition, for <see cref="SaveForQuitAsync"/>: the editor's
+    /// <c>Ready</c> (the window forwards it, as it forwards
+    /// <c>Changed</c>). The page is asked for the document it was given, and
+    /// what it reports is recorded as the flush echo: its serialisation of
+    /// the loaded body need not match that body character for character
+    /// (<c>&amp;#39;</c> comes back as an apostrophe), and Quit's flush must
+    /// not take the page's first report of untouched content for an edit.
+    /// GTK and macOS need no such baseline, since their pages report only
+    /// after an input or for a save. An edit typed in the few milliseconds
+    /// before this flush reaches the page would be taken for the baseline;
+    /// the next edit marks the draft dirty with it all the same.
+    /// </summary>
+    public void EditorReady()
+    {
+        scope.VerifyAccess();
+        if (Draft.Closed || Form is not { } form)
+        {
+            return;
+        }
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel).
+            if (!Draft.Closed)
+            {
+                flushed.Record(form.EditorHtml());
+            }
+        });
+    }
+
     /// <summary>markDirty records an edit and arms the autosave timer.</summary>
     public void MarkDirty()
     {
         scope.VerifyAccess();
+        if (Draft.Closed)
+        {
+            return; // a late report of a window already gone
+        }
         Draft = Draft with { Dirty = true };
         RefreshStatus();
         if (autosave is not null)
@@ -528,7 +579,14 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
             _ => ConfirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard")),
             outcome =>
             {
-                if (outcome.TryGetValue(out var confirmed, out _) && confirmed && !Draft.Closed)
+                if (!outcome.TryGetValue(out var confirmed, out var error))
+                {
+                    // The dialog could not be shown (another one is open);
+                    // nothing is discarded unasked.
+                    LogConfirmationFailed(logger, error!);
+                    return;
+                }
+                if (confirmed && !Draft.Closed)
                 {
                     DiscardNow();
                 }
@@ -612,10 +670,13 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// Quit"): saves what the window holds without asking, as the close
     /// question's Save Draft would, and says whether nothing unsaved is left.
     /// An edit the editor has not reported yet (its <c>changed</c> is
-    /// debounced) is fetched with a flush first; a save in flight is waited
+    /// debounced) is fetched with a flush first, also while a save is in
+    /// flight (that save's flush may have come before the keystroke); what
+    /// the flush reports unchanged is no edit. A save in flight is waited
     /// for, and edits that arrived meanwhile are saved after it. True when
     /// everything is saved, there was nothing to save, or the window is gone
-    /// or being discarded; false when a save failed (its toast is shown): the
+    /// or being discarded; false when a save failed (its toast is shown) or
+    /// the editor did not answer within <see cref="QuitFlushTimeout"/>: the
     /// app then asks that window's question (<see cref="CloseRequestAsync"/>),
     /// and only then. The window stays open either way; closing it is the
     /// app's next step.
@@ -627,17 +688,41 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return true;
         }
-        if (!Draft.Dirty && !Draft.Saving)
+        if (!Draft.Dirty)
         {
-            // The flush's changed reaches EditorChanged right after done;
-            // the continuation runs after that turn.
-            var reported = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            form.FlushEditor(() => reported.TrySetResult());
-            await reported.Task;
+            // Content the editor reports unchanged since its last report (or
+            // since the baseline of EditorReady) is recorded as this flush's
+            // echo before the Changed of the same report arrives
+            // (EditorChannel); new content is an edit and is saved below.
+            // Recording every flush, as a save does, would lose exactly the
+            // edit this flush is for.
+            var before = form.EditorHtml();
+            // The continuation runs after the turn that raised the Changed.
+            var (reported, _) = await WithinAsync<bool>(
+                answer => form.FlushEditor(() =>
+                {
+                    if (!Draft.Closed && string.Equals(form.EditorHtml(), before, StringComparison.Ordinal))
+                    {
+                        flushed.Record(before);
+                    }
+                    answer(true);
+                }),
+                QuitFlushTimeout);
+            if (!reported)
+            {
+                LogQuitTimedOut(logger, "editor flush");
+                return Draft.Closed || Draft.Discard;
+            }
         }
         while (!Draft.Closed && !Draft.Discard && (Draft.Dirty || Draft.Saving))
         {
-            if (await SaveAsync(SaveReason.Explicit) is not null)
+            var (saved, error) = await WithinAsync<Exception?>(answer => Save(SaveReason.Explicit, answer), QuitFlushTimeout + API.DraftSave.Timeout);
+            if (!saved)
+            {
+                LogQuitTimedOut(logger, API.DraftSave.Name);
+                return Draft.Closed || Draft.Discard;
+            }
+            if (error is not null)
             {
                 return Draft.Closed;
             }
@@ -682,6 +767,21 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         return done.Task;
     }
 
+    // Starts work, which calls its answer once (on the UI thread), and
+    // waits for that answer or for limit on the controller's clock,
+    // whichever comes first: (true, the answer) or (false, default). What
+    // the work started is left to finish whenever it does. One completion
+    // source for both, whose continuation is posted to the UI thread when
+    // it completes (Task.WaitAsync would add a hop through the thread pool
+    // that nothing tracks).
+    private async Task<(bool Answered, T Value)> WithinAsync<T>(Action<Action<T>> work, TimeSpan limit)
+    {
+        var done = new TaskCompletionSource<(bool, T)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var timer = time.CreateTimer(_ => done.TrySetResult((false, default!)), null, limit, Timeout.InfiniteTimeSpan);
+        work(value => done.TrySetResult((true, value)));
+        return await done.Task;
+    }
+
     private void RunPending(Exception? failure)
     {
         var pending = pendingAfterSave.ToArray();
@@ -715,4 +815,10 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "{Method} failed")]
     private static partial void LogCallFailed(ILogger logger, string method, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the discard confirmation failed; nothing was discarded")]
+    private static partial void LogConfirmationFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "saving for quit: {Step} did not finish in time")]
+    private static partial void LogQuitTimedOut(ILogger logger, string step);
 }

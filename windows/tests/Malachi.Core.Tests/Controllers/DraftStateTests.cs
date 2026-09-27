@@ -8,7 +8,9 @@
 // editorChanged and save's record, whose rule TestFlushEcho checks in
 // Html/FlushEchoTests; here over a real EditorChannel in both orders of the
 // flush's answers), and the Windows addition of saving dirty drafts on Quit
-// (docs/windows-port.md §0).
+// (docs/windows-port.md §0) with the echo's baseline it needs (EditorReady):
+// untouched windows are left alone, unreported edits are saved, a hanging
+// editor is given up on.
 //
 // Swift shortens the autosave to milliseconds and sleeps; here the
 // controller's clock is a FakeTimeProvider that the test advances, and the
@@ -17,7 +19,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
@@ -29,6 +33,7 @@ using Malachi.Core.Settings;
 using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
 using Malachi.Core.Transport;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -576,7 +581,9 @@ public sealed class DraftStateTests
     // Html/FlushEchoTests; Swift keeps the rule in its window and has no
     // test): the editor's changed that a save's flush produces is the echo
     // of what is saved, in either order of the flush's two answers, and any
-    // other content is an edit.
+    // other content is an edit. The window forwards the editor's Ready too
+    // (EditorReady, a Windows addition for Quit's flush), whose flush the
+    // page answers first.
 
     [Theory]
     [InlineData(true)] // WebView2's order: the changed before the script's result
@@ -584,16 +591,15 @@ public sealed class DraftStateTests
     public async Task TheFlushEchoLeavesTheSavedDraftClean(bool changedFirst)
     {
         await using var h = await Harness.StartAsync(editor: true);
-        var editor = h.Form.Editor!;
         await h.Run(() =>
         {
-            editor.Receive("{\"type\":\"ready\"}");
-            editor.Receive(Changed(1, "<p>a</p>"));
+            h.Form.Ready("", changedFirst);
+            h.Form.Post("<p>a</p>");
         });
         Assert.True(h.Draft.Draft.Dirty, "new content is an edit");
 
         await h.Run(() => h.Draft.Save(SaveReason.Explicit));
-        await h.Run(() => h.Form.AnswerFlush(Changed(2, "<p>a</p>"), 2, changedFirst));
+        await h.Run(() => h.Form.Answer("<p>a</p>", changedFirst));
         await h.IdleAsync();
         Assert.Equal("<p>a</p>", Assert.Single(h.Script.Saves).Draft.HtmlBody);
         Assert.False(h.Draft.Draft.Dirty, "the flush's own changed marked the saved draft dirty");
@@ -601,17 +607,77 @@ public sealed class DraftStateTests
         Assert.StartsWith("Draft saved ", h.Form.Statuses[^1], StringComparison.Ordinal);
 
         // A late debounced changed with the same content stays an echo.
-        await h.Run(() => editor.Receive(Changed(3, "<p>a</p>")));
+        await h.Run(() => h.Form.Post("<p>a</p>"));
         Assert.False(h.Draft.Draft.Dirty);
         // New content is an edit, and so is going back to the saved text.
-        await h.Run(() => editor.Receive(Changed(4, "<p>ab</p>")));
+        await h.Run(() => h.Form.Post("<p>ab</p>"));
         Assert.True(h.Draft.Draft.Dirty);
         Assert.True(h.Draft.AutosaveArmed);
         Assert.Single(h.Script.Saves);
     }
 
+    /// <summary>
+    /// EditorReady: what the page reports for the document it was given is
+    /// the baseline of the echo, however it serialises the loaded body (here
+    /// the backend's <c>&amp;#39;</c> comes back as an apostrophe), in either
+    /// order of the flush's answers; content after it is an edit.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task TheEditorsFirstReportIsTheBaselineNotAnEdit(bool changedFirst)
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        await h.Run(() =>
+        {
+            h.Form.Load(QuotedLoaded);
+            h.Form.Ready(QuotedSerialised, changedFirst);
+        });
+        Assert.Equal(0, h.Form.Unanswered);
+        Assert.Equal(QuotedSerialised, h.Form.EditorHtml());
+        Assert.False(h.Draft.Draft.Dirty, "the page's serialisation of the loaded body is no edit");
+        Assert.False(h.Draft.AutosaveArmed);
+        // A debounced report of the same content (typed and deleted) stays
+        // the baseline; anything else is an edit.
+        await h.Run(() => h.Form.Post(QuotedSerialised));
+        Assert.False(h.Draft.Draft.Dirty);
+        await h.Run(() => h.Form.Post("<p>Thanks</p>" + QuotedSerialised));
+        Assert.True(h.Draft.Draft.Dirty);
+        Assert.True(h.Draft.AutosaveArmed);
+        await h.IdleAsync();
+        Assert.Empty(h.Fake.Calls);
+    }
+
+    /// <summary>
+    /// A report that arrives after the window closed (the editor's debounce
+    /// outlives the window by up to 250 ms) marks nothing: the status line
+    /// of a window on its way out is not changed, and no autosave is armed.
+    /// </summary>
+    [Fact]
+    public async Task ALateReportAfterTheWindowClosedChangesNothing()
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        await h.Run(() =>
+        {
+            h.Form.Load("");
+            h.Form.Ready("", changedFirst: true);
+            h.Draft.Cleanup();
+            var statuses = h.Form.Statuses.Count;
+            h.Form.Post("<p>late</p>");
+            h.Draft.MarkDirty();
+            h.Draft.EditorReady();
+            Assert.False(h.Draft.Draft.Dirty);
+            Assert.False(h.Draft.AutosaveArmed);
+            Assert.Equal(statuses, h.Form.Statuses.Count);
+            Assert.Equal(0, h.Form.Unanswered);
+        });
+        await h.AutosaveAsync();
+        Assert.Empty(h.Fake.Calls);
+    }
+
     // Saving on Quit (docs/windows-port.md §0, a Windows addition): without
-    // a question, with the flush first, and false only when a save failed.
+    // a question, with the flush first, and false only when a save failed or
+    // the editor did not answer.
 
     [Fact]
     public async Task SaveForQuitSavesADirtyDraftWithoutAsking()
@@ -655,41 +721,242 @@ public sealed class DraftStateTests
     }
 
     /// <summary>
-    /// An edit the editor has not reported yet (its changed is debounced) is
-    /// fetched with a flush and saved, whichever of the flush's answers
-    /// comes first.
+    /// A window nobody typed in is left alone by Quit, over a real editor
+    /// channel whose flush always reports: a new message, a reply whose quote
+    /// the page serialises its own way, and a message opened from the Drafts
+    /// folder, which a save would take over from the client that wrote it
+    /// (<c>replaces</c>). Quit's flush reports the content unchanged, in
+    /// either order of its answers, and no <c>draft.save</c> goes out.
+    /// </summary>
+    [Theory]
+    [InlineData("new", true)]
+    [InlineData("new", false)]
+    [InlineData("reply", true)]
+    [InlineData("reply", false)]
+    [InlineData("drafts", true)]
+    [InlineData("drafts", false)]
+    public async Task SaveForQuitLeavesAnUntouchedWindowAlone(string window, bool changedFirst)
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        var (loaded, page) = window switch
+        {
+            "reply" => (QuotedLoaded, QuotedSerialised),
+            "drafts" => ("<p>quoted</p>", "<p>quoted</p>"),
+            _ => ("", ""),
+        };
+        await h.Run(() =>
+        {
+            if (window == "reply")
+            {
+                h.Draft.SetOriginal("m1", null);
+            }
+            else if (window == "drafts")
+            {
+                h.Draft.SetOpened(null, 0, "m9", fromDrafts: true);
+            }
+            h.Form.Load(loaded);
+            h.Form.Ready(page, changedFirst);
+        });
+        await h.IdleAsync();
+
+        var quit = await h.StartQuitAsync();
+        await h.IdleAsync();
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer(page, changedFirst));
+        Assert.True(await h.SettledAsync(quit));
+        await h.IdleAsync();
+        Assert.Empty(h.Fake.Calls);
+        Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.AutosaveArmed);
+        Assert.True(h.Draft.CanCloseWithoutAsking);
+        Assert.Empty(h.Form.Toasts);
+    }
+
+    /// <summary>
+    /// Quit's flush on its own, without the baseline of EditorReady (a
+    /// window that does not forward Ready): content the page reports
+    /// unchanged since what the editor last knew is no edit, so a message
+    /// opened from the Drafts folder is not taken over from its client on
+    /// Quit. This is the review's reproduction.
     /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task SaveForQuitSavesAnEditTheEditorHasNotReported(bool changedFirst)
+    public async Task SaveForQuitSeesUnchangedContentWithoutTheBaseline(bool changedFirst)
     {
-        await using var h = await Harness.StartAsync(editor: true);
-        var editor = h.Form.Editor!;
+        await using var h = await Harness.StartAsync(editor: true, forwardReady: false);
         await h.Run(() =>
         {
-            editor.Receive("{\"type\":\"ready\"}");
-            editor.Receive(Changed(1, "<p>a</p>"));
+            h.Form.Load("<p>quoted</p>");
+            h.Form.Ready();
+            h.Draft.SetOpened(null, 0, "m9", fromDrafts: true);
+        });
+        Assert.Equal(0, h.Form.Unanswered);
+
+        var quit = await h.StartQuitAsync();
+        await h.IdleAsync();
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer("<p>quoted</p>", changedFirst));
+        Assert.True(await h.SettledAsync(quit));
+        Assert.Empty(h.Fake.Calls);
+        Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.AutosaveArmed);
+    }
+
+    /// <summary>
+    /// A saved window nobody typed in since: Quit's flush reports what was
+    /// saved, which is no edit.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveForQuitLeavesASavedWindowAlone(bool changedFirst)
+    {
+        const string Reply = "<p>Thanks</p>" + QuotedSerialised;
+        await using var h = await Harness.StartAsync(editor: true);
+        await h.Run(() =>
+        {
+            h.Form.Load(QuotedLoaded);
+            h.Form.Ready(QuotedSerialised, changedFirst);
+            h.Form.Post(Reply);
             h.Draft.Save(SaveReason.Explicit);
-            h.Form.AnswerFlush(Changed(2, "<p>a</p>"), 2, changedFirst);
+            h.Form.Answer(Reply, changedFirst);
         });
         await h.IdleAsync();
         Assert.Single(h.Script.Saves);
         Assert.False(h.Draft.Draft.Dirty);
 
-        // "b" typed; the page has not posted it yet.
-        var quit = h.Ui.InvokeAsync(() => h.Draft.SaveForQuitAsync());
+        var quit = await h.StartQuitAsync();
         await h.IdleAsync();
-        Assert.Equal(2, h.Form.PendingFlushes);
-        await h.Run(() => h.Form.AnswerFlush(Changed(3, "<p>ab</p>"), 3, changedFirst));
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer(Reply, changedFirst));
+        Assert.True(await h.SettledAsync(quit));
+        await h.IdleAsync();
+        Assert.Single(h.Script.Saves);
+        Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.AutosaveArmed);
+    }
+
+    /// <summary>
+    /// Quit right after the editor became ready: the baseline's flush and
+    /// Quit's are both outstanding when the page answers them, and neither
+    /// takes the untouched quote for an edit. Before the editor is ready
+    /// there is nothing unreported to fetch, and the flush answers at once.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveForQuitRightAfterTheEditorBecameReady(bool changedFirst)
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        await h.Run(() => h.Form.Load(QuotedLoaded));
+        Assert.True(await h.SaveForQuitAsync());
+        Assert.Equal(0, h.Form.Unanswered);
+
+        await h.Run(() => h.Form.Ready());
+        var quit = await h.StartQuitAsync();
+        await h.IdleAsync();
+        Assert.Equal(2, h.Form.Unanswered);
+        await h.Run(() =>
+        {
+            h.Form.Answer(QuotedSerialised, changedFirst);
+            h.Form.Answer(QuotedSerialised, changedFirst);
+        });
+        Assert.True(await h.SettledAsync(quit));
+        await h.IdleAsync();
+        Assert.Empty(h.Fake.Calls);
+        Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.AutosaveArmed);
+    }
+
+    /// <summary>
+    /// An edit the editor has not reported yet (its changed is debounced) is
+    /// fetched with a flush and saved, whichever of the flush's answers
+    /// comes first: in a window saved before, and in one nobody had typed in
+    /// until just now.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public async Task SaveForQuitSavesAnEditTheEditorHasNotReported(bool changedFirst, bool savedBefore)
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        await h.Run(() =>
+        {
+            h.Form.Load("<p>a</p>");
+            h.Form.Ready("<p>a</p>", changedFirst);
+            if (savedBefore)
+            {
+                h.Form.Post("<p>a.</p>");
+                h.Draft.Save(SaveReason.Explicit);
+                h.Form.Answer("<p>a.</p>", changedFirst);
+            }
+        });
+        await h.IdleAsync();
+        Assert.Equal(savedBefore ? 1 : 0, h.Script.Saves.Count);
+        Assert.False(h.Draft.Draft.Dirty);
+
+        // "b" typed; the page has not posted it yet.
+        var typed = savedBefore ? "<p>a.b</p>" : "<p>ab</p>";
+        var quit = await h.StartQuitAsync();
+        await h.IdleAsync();
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer(typed, changedFirst));
         await h.IdleAsync();
         Assert.True(h.Draft.Draft.Saving, "the unreported edit is being saved");
-        Assert.Equal(3, h.Form.PendingFlushes);
-        await h.Run(() => h.Form.AnswerFlush(Changed(4, "<p>ab</p>"), 4, changedFirst));
-        Assert.True(await quit);
-        Assert.Equal(2, h.Script.Saves.Count);
-        Assert.Equal("<p>ab</p>", h.Script.Saves[^1].Draft.HtmlBody);
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer(typed, changedFirst));
+        Assert.True(await h.SettledAsync(quit));
+        await h.IdleAsync();
+        Assert.Equal(savedBefore ? 2 : 1, h.Script.Saves.Count);
+        Assert.Equal(typed, h.Script.Saves[^1].Draft.HtmlBody);
         Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.AutosaveArmed);
+    }
+
+    /// <summary>
+    /// A keystroke after an autosave's flush, while its draft.save is on its
+    /// way: Quit flushes all the same, the report is an edit, and it is saved
+    /// after the save in flight.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SaveForQuitFetchesAnEditTypedWhileAnAutosaveIsInFlight(bool changedFirst)
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        var gate = h.Script.HoldSaves();
+        await h.Run(() =>
+        {
+            h.Form.Load("");
+            h.Form.Ready("", changedFirst);
+            h.Form.Post("<p>a</p>");
+            h.Draft.Save(SaveReason.Autosave);
+            h.Form.Answer("<p>a</p>", changedFirst);
+        });
+        await Eventually.Holds(() => h.Script.Saves.Count == 1);
+
+        // "b" typed after that flush; the page has not posted it yet.
+        var quit = await h.StartQuitAsync();
+        await h.Run(() =>
+        {
+            Assert.True(h.Draft.Draft.Saving);
+            Assert.False(h.Draft.Draft.Dirty);
+            Assert.Equal(1, h.Form.Unanswered);
+            h.Form.Answer("<p>ab</p>", changedFirst);
+            Assert.True(h.Draft.Draft.Dirty, "the report after the save's flush is an edit");
+        });
+        gate.SetResult();
+        await h.IdleAsync();
+        Assert.Equal(1, h.Form.Unanswered);
+        await h.Run(() => h.Form.Answer("<p>ab</p>", changedFirst));
+        Assert.True(await h.SettledAsync(quit));
+        await h.IdleAsync();
+        Assert.Equal(["<p>a</p>", "<p>ab</p>"], h.Script.Saves.Select(s => s.Draft.HtmlBody));
+        Assert.False(h.Draft.Draft.Dirty);
+        Assert.False(h.Draft.Draft.Saving);
         Assert.False(h.Draft.AutosaveArmed);
     }
 
@@ -707,9 +974,9 @@ public sealed class DraftStateTests
         // An edit while the autosave is in flight.
         h.Form.SubjectText = "second";
         await h.Run(() => h.Draft.MarkDirty());
-        var quit = h.Ui.InvokeAsync(() => h.Draft.SaveForQuitAsync());
+        var quit = await h.StartQuitAsync();
         gate.SetResult();
-        Assert.True(await quit);
+        Assert.True(await h.SettledAsync(quit));
         Assert.Equal(["first", "second"], h.Script.Saves.Select(s => s.Draft.Subject));
         Assert.False(h.Draft.Draft.Dirty);
         Assert.False(h.Draft.Draft.Saving);
@@ -746,13 +1013,96 @@ public sealed class DraftStateTests
         Assert.Single(h.Script.Saves);
     }
 
+    /// <summary>
+    /// An editor that hangs never answers a flush: Quit gives up after
+    /// <see cref="ComposeDraftController.QuitFlushTimeout"/> (on a save,
+    /// that plus draft.save's own timeout) and says so, so that the app asks
+    /// the window's question instead of waiting for ever.
+    /// </summary>
+    [Fact]
+    public async Task SaveForQuitGivesUpOnAnEditorThatDoesNotAnswer()
+    {
+        await using var h = await Harness.StartAsync(editor: true);
+        var questions = 0;
+        h.Draft.SaveDraftQuestion = () =>
+        {
+            questions++;
+            return Task.FromResult(DraftCloseAnswer.Discard);
+        };
+        await h.Run(() =>
+        {
+            h.Form.Load("<p>q</p>");
+            h.Form.Ready("<p>q</p>", changedFirst: true);
+        });
+
+        // A clean window: Quit's own flush is not answered.
+        var quit = await h.StartQuitAsync();
+        await h.IdleAsync();
+        h.Time.Advance(ComposeDraftController.QuitFlushTimeout - TimeSpan.FromMilliseconds(1));
+        await h.IdleAsync();
+        Assert.False(quit.IsCompleted);
+        h.Time.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.False(await h.SettledAsync(quit));
+        Assert.Contains((LogLevel.Warning, "saving for quit: editor flush did not finish in time"), h.Logger.Entries);
+
+        // A dirty window: the save's flush is not answered either.
+        await h.Run(() => h.Draft.MarkDirty());
+        var dirty = await h.StartQuitAsync();
+        await h.IdleAsync();
+        Assert.True(h.Draft.Draft.Saving);
+        h.Time.Advance(ComposeDraftController.QuitFlushTimeout + API.DraftSave.Timeout - TimeSpan.FromMilliseconds(1));
+        await h.IdleAsync();
+        Assert.False(dirty.IsCompleted);
+        h.Time.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.False(await h.SettledAsync(dirty));
+        Assert.Contains((LogLevel.Warning, "saving for quit: draft.save did not finish in time"), h.Logger.Entries);
+        Assert.Empty(h.Fake.Calls);
+        Assert.Empty(h.Form.Toasts);
+
+        // The app asks now; Discard closes.
+        Assert.True(await h.CloseRequestAsync());
+        Assert.Equal(1, questions);
+        Assert.True(h.Draft.Draft.Closed);
+        Assert.Empty(h.Fake.Calls);
+    }
+
+    /// <summary>
+    /// The discard question that cannot be shown (WinUI allows one
+    /// <c>ContentDialog</c> at a time) discards nothing, and says why in the
+    /// log.
+    /// </summary>
+    [Fact]
+    public async Task AFailedDiscardQuestionDiscardsNothing()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Draft.ConfirmDiscard = (_, _, _) => throw new InvalidOperationException("Only a single ContentDialog can be open at any time.");
+        await h.Run(() =>
+        {
+            h.Draft.MarkDirty();
+            h.Draft.Discard();
+        });
+        await h.IdleAsync();
+        Assert.Equal(0, h.Form.Closes);
+        Assert.False(h.Draft.Draft.Discard);
+        Assert.Empty(h.Fake.Calls);
+        Assert.Equal([(LogLevel.Warning, "the discard confirmation failed; nothing was discarded")], h.Logger.Entries);
+    }
+
     // Helpers
 
     private static DraftAttachment Att(string id, bool inline = false, string? cid = null) =>
         new() { Id = id, Filename = id + ".bin", ContentType = "application/octet-stream", Size = 10, Inline = inline, ContentId = cid };
 
-    private static string Changed(long seq, string html) =>
-        "{\"type\":\"changed\",\"seq\":" + seq + ",\"html\":\"" + html + "\",\"text\":\"t" + seq + "\"}";
+    // A reply's quote as the backend renders it, and as the page's
+    // innerHTML serialises the same document.
+    private const string QuotedLoaded = "<p>Alice wrote:</p><blockquote type=\"cite\"><p>don&#39;t</p></blockquote>";
+    private const string QuotedSerialised = "<p>Alice wrote:</p><blockquote type=\"cite\"><p>don't</p></blockquote>";
+
+    private static string Changed(long seq, string html)
+    {
+        var n = seq.ToString(CultureInfo.InvariantCulture);
+        return "{\"type\":\"changed\",\"seq\":" + n + ",\"html\":\"" + JsonEncodedText.Encode(html).Value + "\",\"text\":\"t" + n + "\"}";
+    }
 
     /// <summary>The daemon's answers and what it was asked, off the UI thread.</summary>
     private sealed class Script
@@ -858,13 +1208,19 @@ public sealed class DraftStateTests
 
     /// <summary>
     /// The compose window as the controller sees it. With an editor its
-    /// content and flushes are an EditorChannel's, whose Changed reaches the
-    /// controller as the window forwards it; without one a flush answers at
+    /// content and flushes are an EditorChannel's, whose Ready and Changed
+    /// reach the controller as the window forwards them, and the test plays
+    /// the page: its ready, its debounced changed, its answers to the
+    /// flushes in the order they were asked. Without one a flush answers at
     /// once, as Swift's fake does.
     /// </summary>
     private sealed class FakeForm : IComposeForm
     {
-        private readonly List<long> flushIds = [];
+        // The flushes the page has not answered yet, oldest first.
+        private readonly List<long> unanswered = [];
+
+        // The page's seq of its last changed in the current document.
+        private long seq;
 
         public FakeForm(bool editor)
         {
@@ -891,8 +1247,8 @@ public sealed class DraftStateTests
 
         public int Flushes { get; private set; }
 
-        /// <summary>The flushes started on the editor so far.</summary>
-        public int PendingFlushes => flushIds.Count;
+        /// <summary>The flushes the page has not answered yet.</summary>
+        public int Unanswered => unanswered.Count;
 
         public List<string> Statuses { get; } = [];
 
@@ -930,18 +1286,46 @@ public sealed class DraftStateTests
             }
             if (Editor.BeginFlush(done) is { } id)
             {
-                flushIds.Add(id);
+                unanswered.Add(id);
             }
         }
 
         /// <summary>
-        /// The page answers the latest flush: its changed and the script's
-        /// result <paramref name="seq"/>, in the order given.
+        /// editor.Load: a new document with <paramref name="html"/>; the
+        /// page's seq starts over and the old document's flushes are gone.
         /// </summary>
-        public void AnswerFlush(string changed, long seq, bool changedFirst)
+        public void Load(string html)
         {
-            var id = flushIds[^1];
-            var result = seq.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            Editor!.Load(html);
+            seq = 0;
+            unanswered.Clear();
+        }
+
+        /// <summary>The page's ready; the controller's EditorReady asks for a flush.</summary>
+        public void Ready() => Editor!.Receive("{\"type\":\"ready\"}");
+
+        /// <summary>The page's ready, and its answer to EditorReady's flush with <paramref name="html"/>.</summary>
+        public void Ready(string html, bool changedFirst)
+        {
+            Ready();
+            Answer(html, changedFirst);
+        }
+
+        /// <summary>The page's debounced changed with <paramref name="html"/>.</summary>
+        public void Post(string html) => Editor!.Receive(Changed(++seq, html));
+
+        /// <summary>
+        /// The page answers the oldest flush with <paramref name="html"/>:
+        /// its changed and the script's result (the changed's seq), in the
+        /// order given.
+        /// </summary>
+        public void Answer(string html, bool changedFirst)
+        {
+            var id = unanswered[0];
+            unanswered.RemoveAt(0);
+            var n = ++seq;
+            var changed = Changed(n, html);
+            var result = n.ToString(CultureInfo.InvariantCulture);
             if (changedFirst)
             {
                 Editor!.Receive(changed);
@@ -997,7 +1381,9 @@ public sealed class DraftStateTests
 
         public ComposeDraftController Draft { get; private set; } = null!;
 
-        public static async Task<Harness> StartAsync(bool connect = true, bool placeholder = false, bool editor = false)
+        public RecordingLogger<ComposeDraftController> Logger { get; } = new();
+
+        public static async Task<Harness> StartAsync(bool connect = true, bool placeholder = false, bool editor = false, bool forwardReady = true)
         {
             var h = new Harness(editor);
             h.Fake.On(API.DraftSave.Name, h.Script.Save);
@@ -1012,11 +1398,16 @@ public sealed class DraftStateTests
             }
             h.Draft = await h.Ui.RunAsync(() =>
             {
-                var draft = new ComposeDraftController(h.Client, h.Settings, () => placeholder, h.Registry, h.Time, h.Pending) { Form = h.Form };
+                var draft = new ComposeDraftController(h.Client, h.Settings, () => placeholder, h.Registry, h.Time, h.Pending, h.Logger) { Form = h.Form };
                 if (h.Form.Editor is { } channel)
                 {
-                    // The window forwards the editor's Changed (compose.go).
+                    // The window forwards the editor's Changed (compose.go)
+                    // and Ready (the Windows baseline of the echo).
                     channel.Changed += (_, _) => draft.EditorChanged();
+                    if (forwardReady)
+                    {
+                        channel.Ready += (_, _) => draft.EditorReady();
+                    }
                 }
                 return draft;
             });
@@ -1052,11 +1443,26 @@ public sealed class DraftStateTests
             return closed;
         }
 
-        public async Task<bool> SaveForQuitAsync()
+        public async Task<bool> SaveForQuitAsync() => await SettledAsync(await StartQuitAsync());
+
+        /// <summary>
+        /// Starts SaveForQuitAsync on the UI thread and hands back the
+        /// controller's own task, which completes on the UI thread: once the
+        /// test is idle, whether it completed is exact.
+        /// </summary>
+        public Task<Task<bool>> StartQuitAsync() => Ui.RunAsync(() => Draft.SaveForQuitAsync());
+
+        /// <summary>
+        /// The answer of a SaveForQuitAsync once everything is idle. A Quit
+        /// still waiting then waits for a flush the test does not answer
+        /// (a save the window should not have started): a failure, not a
+        /// hang.
+        /// </summary>
+        public async Task<bool> SettledAsync(Task<bool> quit)
         {
-            var saved = await Ui.InvokeAsync(() => Draft.SaveForQuitAsync());
             await IdleAsync();
-            return saved;
+            Assert.True(quit.IsCompleted, "SaveForQuitAsync is still waiting, for a flush nobody answers");
+            return await quit;
         }
 
         public async ValueTask DisposeAsync()

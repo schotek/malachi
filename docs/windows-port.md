@@ -528,9 +528,14 @@ port of `CIDSchemeHandler` (only ids in the window's `CIDRegistry`,
 `attachment.import`). Flushes use macOS's sequence numbers **and** an
 order-independent echo rule: WebView2 delivers the changed message before
 the `ExecuteScriptAsync` result (15 of 15 trials), which on macOS very
-likely leaves drafts dirty after every save. The bridge is a third copy
-beside `ui/internal/editor/bridge.go` and the Swift one; a test compares it
-with the Go copy modulo the documented deltas.
+likely leaves drafts dirty after every save. Saving on Quit (§0) flushes
+outside a save, which GTK and macOS never do, so the echo gets two
+baselines: a flush when the editor becomes ready records how the page
+serialises the loaded body (`ComposeDraftController.EditorReady`), and
+Quit's flush records content that comes back unchanged; its waits are
+bounded, so a hung renderer makes Quit ask rather than wait. The bridge is
+a third copy beside `ui/internal/editor/bridge.go` and the Swift one; a
+test compares it with the Go copy modulo the documented deltas.
 
 ### 6.6 Previewer
 
@@ -929,7 +934,12 @@ message, closed with the message) and attached-message windows as on macOS.
 Compose (760×640): From, To/Cc/Bcc with the recipient popup of
 `suggest.go` (not `AutoSuggestBox`: no preselection, no Tab accept), the
 format toolbar, the editor of §6.5, attachment chips, *Save changes to this
-draft?* on close. The account wizard is an owned modal window (a window
+draft?* on close. The window forwards the editor's Ready and Changed to
+`EditorReady` and `EditorChanged` of its draft controller and, once it
+really closes (after `Cleanup`), hands itself to
+`ComposeController.Remove`, as GTK's cleanup calls `Manager.remove`;
+Quit runs `ComposeController.SaveForQuitAsync` and asks the close
+question only of the windows it returns. The account wizard is an owned modal window (a window
 allows one `ContentDialog` at a time and the wizard nests the certificate
 prompt), five pages as GTK/macOS. Preferences is a single-instance window
 with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the

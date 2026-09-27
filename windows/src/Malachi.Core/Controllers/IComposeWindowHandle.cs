@@ -16,7 +16,12 @@ namespace Malachi.Core.Controllers;
 /// <summary>
 /// What the compose manager pushes to an open compose window (the refreshed
 /// account list, a toast) and what it asks of one (whether it edits a
-/// draft, to come to the front, to save for Quit). UI-thread-affine.
+/// draft, to come to the front, to save for Quit). UI-thread-affine. The
+/// window hands itself to <see cref="ComposeController.Remove"/> once it
+/// really closes, after its draft controller's
+/// <see cref="ComposeDraftController.Cleanup"/> (GTK's cleanup calls
+/// Manager.remove); otherwise <see cref="ComposeController.FindDraft"/> and
+/// <see cref="ComposeController.SaveForQuitAsync"/> keep visiting it.
 /// </summary>
 public interface IComposeWindowHandle
 {
