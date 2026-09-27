@@ -24,3 +24,34 @@ WideCharToMultiByte
 GetACP
 // Transport: the key-file policy (Transport/WindowsKeyFilePolicy).
 GetFileType
+// Console: the attach recipe of make run-windows and the control handler
+// (Console/, docs/windows-port.md §5).
+AttachConsole
+FreeConsole
+GetConsoleProcessList
+GenerateConsoleCtrlEvent
+SetConsoleCtrlHandler
+GetStdHandle
+SetHandleInformation
+GetFileType
+WriteConsole
+WriteFile
+GENERIC_ACCESS_RIGHTS
+ATTACH_PARENT_PROCESS
+CTRL_C_EVENT
+CTRL_BREAK_EVENT
+CTRL_CLOSE_EVENT
+CTRL_LOGOFF_EVENT
+CTRL_SHUTDOWN_EVENT
+// Process: the daemon, started with an explicit list of inherited handles
+// (Process/).
+CreatePipe
+CreateProcess
+InitializeProcThreadAttributeList
+UpdateProcThreadAttribute
+DeleteProcThreadAttributeList
+PROC_THREAD_ATTRIBUTE_HANDLE_LIST
+STARTUPINFOEXW
+CloseHandle
+GetExitCodeProcess
+TerminateProcess

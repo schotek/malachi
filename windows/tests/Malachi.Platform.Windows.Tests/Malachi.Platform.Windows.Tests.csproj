@@ -17,8 +17,11 @@ only.
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
+    <!-- The stand-in daemon the process host tests start. -->
+    <ProjectReference Include="..\Malachi.Core.TestDaemon\Malachi.Core.TestDaemon.csproj" />
   </ItemGroup>
 </Project>
