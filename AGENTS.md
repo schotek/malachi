@@ -330,7 +330,21 @@ stav převodu. Obě UI: Předvolby → Obecné → Pošta (*Keep Attachments
 Offline For*, *Compress Stored Mail*, *Disk Space Used*), čip vzdálené
 přílohy stáhne zprávu před otevřením, uložením i přeposláním; MCP
 `get_attachment` a přeposlání v `create_draft` stahují z vlastního serveru
-uživatele (2 min, 256 MiB na proces).
+uživatele (2 min, 256 MiB na proces). Preference `neverStoreAttachments`
+(`attachments.never_store`, výchozí vypnuto, bez výchozí hodnoty
+z prostředí) přebíjí `attachmentOfflineDays` a neuloží žádnou přílohu
+ani obrázek z HTML od 100 KiB (menší obrázky přes `cid:` zůstávají;
+`message.body` `remotePictures` → pruh *Download Pictures*; výjimky výše
+zůstávají celé, `strippable_bytes` -2 = nikdy neořezávat, denní krok
+`3:never:<datum>` (verze pravidla `ingest.NeverStoreRule`) ořízne i dříve
+stažené), příjem staguje v paměti (`store.StageMemory`) a
+`message.download` drží celou zprávu jen v paměťové cache démona
+(`core/memcache.go`: LRU 256 MiB, 30 min nečinnosti, zahozená při
+ukončení, vypnutí režimu a pozastavení či odebrání účtu), ze které
+`message.part`/`message.embedded`/`draft.create`/`draft.open` obslouží
+vzdálené části, takže stažená zpráva na disk nejde; obě UI mají
+přepínač *Never Store Attachments* a adresář pro otevření a náhled mažou
+při každém startu i ukončení.
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

@@ -11,11 +11,17 @@ defend against. Code that touches mail content must be reviewed against it.
 - The user's identity as a sender (no unauthorised sending).
 - The local machine: no code execution, no file exfiltration.
 - The user's privacy: no unrequested network requests triggered by mail.
-  The one download a stored message can need, a large attachment left on
-  the mail server (`attachmentOfflineDays`), comes from the account's own
-  server, read-only, and only when the user opens, saves or forwards it or
-  an MCP tool asks for that attachment or a forward (§10); showing a
-  message never needs it (§3.2).
+  The one download a stored message can need, an attachment left on the
+  mail server (a large one under `attachmentOfflineDays`, any under
+  `neverStoreAttachments`, which also leaves there the pictures the HTML
+  shows of 100 KiB and more, and where it is downloaded again whenever
+  the daemon no longer holds it in memory, §8), comes from the account's
+  own server, read-only, and only when the user opens, saves or forwards
+  it, asks for the pictures of a message, replies to a message whose quote
+  needs pictures kept there, or an MCP tool asks for that attachment or a
+  forward (§10); showing a message never makes the daemon
+  contact the server, and a picture left there is shown only once the
+  user asked for it (§3.2).
 
 ## 2. Attackers
 
@@ -105,10 +111,15 @@ defence. Requirements are listed in that package's documentation; summary:
 - every part the HTML references through `cid:` stays on the device
   whatever `attachmentOfflineDays` says (`mime.CIDReferences` collects a
   superset of what the sanitiser resolves, a property its tests and fuzz
-  target check), so the view's pictures come from the stored file:
-  `message.part` never contacts the mail server, and a part kept there
-  answers `partNotDownloaded`, never the empty body a skeleton holds in its
-  place;
+  target check), and under `neverStoreAttachments` every such part smaller
+  than 100 KiB; the exception is a picture of 100 KiB and more under
+  `neverStoreAttachments`, whose `malachi-cid:` URL stays in the HTML
+  while `message.body` counts it (`remotePictures`) and the user decides
+  whether to download it. So the view's pictures come from the stored
+  file or the daemon's memory: `message.part` never contacts the mail
+  server, and a part kept there answers `partNotDownloaded`, never the
+  empty body a skeleton holds in its place, unless `message.download`
+  holds the whole message in memory (§8);
 - size cap on input and output, nesting-depth cap, node-count cap,
   attribute-count cap, CSS rule cap;
 - a `sanitizerVersion` string returned with every body; bump on any rule
@@ -245,9 +256,11 @@ the page.
   parsed again, and `mime.VerifySkeleton` must find the same envelope,
   headers, bodies, snippet, part numbers and attachment list as the
   original's parse, every size equal but the omitted parts', which must be
-  empty; anything else keeps the original whole. Only attachments of at
-  least 100 KiB that the HTML does not reference through `cid:` are ever
-  left out, and a signed or encrypted message (`multipart/signed`,
+  empty; anything else keeps the original whole. Only attachments that
+  the HTML does not reference through `cid:` (of at least 100 KiB, of any
+  size under `neverStoreAttachments`) and, under `neverStoreAttachments`,
+  pictures it references of at least 100 KiB are ever left out, and a
+  signed or encrypted message (`multipart/signed`,
   `multipart/encrypted`, `application/(x-)pkcs7-mime`,
   `application/pgp-encrypted` anywhere in it) never is: a signature covers
   the parts as they are. `FuzzSkeleton` and `FuzzCIDReferences` cover it,
@@ -256,7 +269,8 @@ the page.
   the server announced, or a Graph body that breaks off, is a network error
   and nothing of it is stored as a message; a message downloaded again
   (`message.download`) must be the stored one (the same Message-ID, and on
-  IMAP the same part numbers and sizes) or nothing is stored.
+  IMAP the same part numbers and sizes) or nothing is stored, nor held in
+  memory (§8).
 - `messages.text_body` (what `message.body` returns as `text`) is derived
   text only: the decoded `text/plain` part, or for HTML-only messages a
   text rendering produced by walking the HTML *tokens*
@@ -676,9 +690,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   application. Inside Flatpak the directory is
   `$XDG_RUNTIME_DIR/app/<app-id>/malachi/open`: the rest of the sandbox's
   runtime dir is private to it, and the previewer runs on the host. The
-  viewer may read it lazily, so the file is not removed at once: the directory is
-  emptied when the UI starts and exits, and entries older than an hour are
-  swept whenever the next attachment is opened. On macOS the directory is
+  viewer may read it lazily, so the file is not removed at once: entries
+  older than an hour are swept whenever the next attachment is opened. On
+  macOS the directory is
   `~/Library/Caches/Malachi Mail/open` (there is no runtime dir of the
   XDG kind), each file goes into a fresh `mkdtemp` subdirectory and is
   created `O_EXCL` with mode `0600`, and every file the client writes out
@@ -690,7 +704,18 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   opened); a
   file the user saved is theirs regardless. Log lines about these files
   carry an error's domain and code in the open and its description, which
-  names the file, as private.
+  names the file, as private. On both platforms, and whatever the
+  preferences, the whole directory is removed when the UI quits and again
+  when it starts (what a crash left), so nothing opened or previewed
+  outlives the session, which is also what `neverStoreAttachments`
+  promises; the macOS client removes it before it stops the daemon and
+  once more as the process ends. The removal refuses any path but an
+  absolute one ending in `malachi/open` (`Malachi Mail/open` on macOS), so
+  an unset runtime or cache directory cannot aim it at anything else,
+  removes a symbolic link in its place without following it, and logs a
+  failure. On Linux the runtime dir is normally a `tmpfs` in memory; the
+  fallback cache dir and the macOS directory are on disk until the
+  removal.
 - Raw messages are `<data dir>/messages/<account>/<id>`, or `<id>.zst`
   when compressed (`0600` files, `0700` directories). The name decides how
   a file is read, never its content, so a message that begins with zstd's
@@ -713,7 +738,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   files with random names, created exclusively, in a `0700` directory)
   and reaches `messages/` only after the parse, a skeleton only once
   verified; the daemon empties the directory at every start and the sweep
-  removes what is older than an hour.
+  removes what is older than an hour. Under `neverStoreAttachments`
+  nothing is staged there: the message is received into the daemon's
+  memory, and only the file committed from it is written (below).
 - A message whose large attachments stayed on the server is a skeleton
   file plus the ids of the missing parts in `messages.remote_parts`. The
   row names a part remote before the skeleton replaces the file (that
@@ -721,12 +748,44 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   name only after a whole file is in place, so after a crash it may call a
   stored part remote, never the reverse; `message.part` and
   `message.embedded` answer `partNotDownloaded` for such a part rather
-  than return the empty body the skeleton holds. Should a large part the
-  row calls stored still read back empty (a leftover file), they and
-  `draft.create` treat it as remote too and record it so.
+  than return the empty body the skeleton holds. Should a part the row
+  calls stored, with a size, still read back empty (a leftover file), they
+  and `draft.create` treat it as remote too and record it so.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.
+- Under `neverStoreAttachments` the daemon writes no attachment the HTML
+  does not show, nor a picture it shows of 100 KiB and more (only the
+  smaller pictures are stored with the text; the others are downloaded
+  when the user asks for the pictures, `message.body` `remotePictures`).
+  A message a sync receives, or a body downloaded for the first time, is
+  staged in memory and stored as a skeleton (the preference as it is when
+  the message arrives); the stored attachments and large pictures are
+  removed in the background, also those downloaded on request before,
+  the small attachments and large pictures of messages reduced under
+  `attachmentOfflineDays` and those of a message stored while the
+  preference was being switched on, a store already in the mode loses
+  its large pictures once when the rule grows to take them, and a pass
+  every day catches what came to be stored whole since. A message the
+  user downloads is held whole in the daemon's memory
+  (`core/memcache.go`), never written to disk and never logged: at most
+  256 MiB, a message unused for 30 minutes dropped, everything dropped when
+  the daemon quits (or dies: it is process memory) or the preference is
+  switched off, an account's messages when the account is paused or
+  removed. Stored whole all the same, attachments included, are the
+  messages that cannot be reduced safely or have no other copy: Drafts,
+  the Outbox until delivery, messages without a copy on the server, signed
+  or encrypted ones, a MIME structure the parser could not read to the
+  end, a skeleton that does not verify. What it does not cover: a reply or
+  a forward, or a draft opened from the Drafts folder, copies the
+  attachments and pictures it takes into the compose attachment store
+  (above) like any draft attachment, and the copy of the draft uploaded to the Drafts folder is
+  stored whole like everything there; attachment names, types and sizes
+  stay in `store.db` and the search index; removing a stored attachment
+  replaces the file and does not overwrite the old blocks, which snapshots
+  and backups may also still hold; and the system may page the daemon's
+  memory out to swap or a hibernation image (encrypted by default on
+  macOS; on Linux as the swap is set up).
 - The search index (`messages_fts`, migration 0013) lives in `store.db`
   with everything else. It is contentless: it holds the tokens of the
   subject, the people, the attachment names and the plain-text body, not a
@@ -821,7 +880,12 @@ Defences:
   fetches the whole message from the account's own server, read-only
   (`message.download`), never from a URL found in the mail; the bridge
   waits at most 2 minutes, and one process may cause at most 256 MiB of
-  downloads;
+  downloads, every download it asks for counted by the message's size,
+  the same message again too, since the daemon may have dropped a copy it
+  held in memory (§8) and fetch it anew; `get_attachment` asks for the
+  part first and downloads only when the daemon does not have it, and a
+  download that certainly fetched nothing gives back only what that call
+  counted;
 - every mail-derived string is cleaned (valid UTF-8, no control or Unicode
   format characters) and placed inside a fence whose delimiter carries a
   per-call random nonce, with trusted fields outside; links and extra

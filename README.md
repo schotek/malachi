@@ -42,7 +42,10 @@ work reliably anymore, and on Linux that is worse than anywhere else.
   server announces it (IMAP IDLE). Flags, moves and deletions are queued
   locally and pushed back. To save disk space the stored mail can be kept
   compressed, and the large attachments of older messages can stay on the
-  server until you open them.
+  server until you open them. With *Never Store Attachments* none is
+  stored but the pictures a message shows (drafts and signed or encrypted
+  mail stay whole): an attachment you open is downloaded into memory and
+  is gone when you quit.
 - **HTML mail, safely.** Bodies are sanitised in the daemon before the UI
   sees them. Remote images stay blocked until you load them or trust the
   sender; the renderer runs with JavaScript off, a strict content policy
