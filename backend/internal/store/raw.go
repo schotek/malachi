@@ -1013,9 +1013,12 @@ func (s *Store) createRawFile(path string) (rawFile, error) {
 	return os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 }
 
-// syncFile flushes the file at path to disk.
+// syncFile flushes the file at path to disk. The handle is opened for
+// writing, though nothing is written: Windows flushes only through a
+// handle that may write (FlushFileBuffers), and denies it to a read-only
+// one.
 func syncFile(path string) error {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("flush message file: %w", err)
 	}

@@ -664,6 +664,34 @@ func TestCodecChangeDuringWrite(t *testing.T) {
 	}
 }
 
+// A replacement is flushed before it counts. When the codec turns plain
+// while a compressed write of unknown size is being spooled, the spool
+// becomes the new file and is flushed by name (syncFile), through a handle
+// that may write: Windows flushes through no other, and the replacement
+// failed there with "access denied".
+func TestReplacementSpoolFlushed(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	s.SetRawCodec(RawZstd)
+	if _, err := s.PutMessageRaw(ctx, "acc", "m_spool", RawWrite{}, chunked([]byte("Subject: first\r\n\r\nbody"))); err != nil {
+		t.Fatal(err)
+	}
+	info, err := s.PutMessageRaw(ctx, "acc", "m_spool", RawWrite{}, func(w io.Writer) error {
+		s.SetRawCodec(RawPlain)
+		_, err := w.Write([]byte("Subject: second\r\n\r\nbody"))
+		return err
+	})
+	if err != nil || info.Codec != RawPlain {
+		t.Fatalf("replacement: %+v %v", info, err)
+	}
+	if got := readRaw(t, s, "acc", "m_spool"); string(got) != "Subject: second\r\n\r\nbody" {
+		t.Errorf("replaced content %q", got)
+	}
+	if err := syncFile(filepath.Join(t.TempDir(), "missing")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("flush of a missing file: %v", err)
+	}
+}
+
 func TestRawTxStatSettlesLeftover(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
