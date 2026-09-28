@@ -112,6 +112,10 @@ func Strip(ctx context.Context, st *store.Store, m store.Message, pol Policy, no
 			return err
 		}
 		skel, omitted, err := reduce(ctx, st, raw, parsed, plan.Omit, MaxMessageBytes, pol)
+		// That was the last read of the stored file: it is closed before the
+		// commit renames the skeleton over it, which Windows refuses while a
+		// handle of the file is open, this one included.
+		raw.Close()
 		switch {
 		case errors.Is(err, mime.ErrNotReducible), errors.Is(err, store.ErrRawCorrupt):
 			log.Info("message kept as stored: its parts cannot be left on the server safely", "message", m.ID)

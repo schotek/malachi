@@ -29,12 +29,12 @@ import (
 // Staged is a message received into the staging area: it takes the bytes
 // (Write, ReadFrom) up to its limit, reads them back from the start as
 // often as needed (Reader), and is removed by Remove, which is always to
-// be called. Committing a plain one renames it into the message's place,
-// after which it only closes; one staged in memory is copied. It is not
-// safe for concurrent use.
+// be called. Committing a plain one closes its file and renames it into the
+// message's place, after which Remove has nothing left to do; one staged
+// in memory is copied. It is not safe for concurrent use.
 type Staged struct {
 	ctx      context.Context
-	f        rawFile // nil when staged in memory
+	f        rawFile // nil when staged in memory, and once a commit closed it
 	mem      []byte  // the bytes when staged in memory
 	inMemory bool
 	path     string
@@ -94,7 +94,7 @@ func (s *Store) StageMemory(ctx context.Context, limit, hint int64) *Staged {
 // that did not take everything cannot be committed.
 func (st *Staged) Write(p []byte) (int, error) {
 	switch {
-	case st.consumed || st.removed:
+	case st.done():
 		return 0, errStagedDone
 	case st.werr != nil:
 		return 0, st.werr
@@ -145,11 +145,19 @@ func (st *Staged) ReadFrom(r io.Reader) (int64, error) {
 // Reader reads the staged bytes from the first one, independently of other
 // readers and of the writes that follow.
 func (st *Staged) Reader() *io.SectionReader {
-	if st.inMemory {
+	switch {
+	case st.inMemory:
 		return io.NewSectionReader(bytes.NewReader(st.mem[:st.n]), 0, st.n)
+	case st.f == nil:
+		return io.NewSectionReader(closedFile{}, 0, st.n)
 	}
 	return io.NewSectionReader(st.f, 0, st.n)
 }
+
+// closedFile is what Reader reads once a commit has closed the staged file.
+type closedFile struct{}
+
+func (closedFile) ReadAt([]byte, int64) (int, error) { return 0, os.ErrClosed }
 
 // Size is how many bytes are staged.
 func (st *Staged) Size() int64 { return st.n }
@@ -179,7 +187,11 @@ func (st *Staged) Remove() error {
 		st.mem = nil
 		return nil
 	}
-	err := st.f.Close()
+	var err error
+	if st.f != nil {
+		err = st.f.Close()
+		st.f = nil
+	}
 	if !st.consumed {
 		if rerr := os.Remove(st.path); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 			err = errors.Join(err, rerr)
@@ -191,13 +203,46 @@ func (st *Staged) Remove() error {
 	return nil
 }
 
+// closeFile closes the staged file for a commit that renames it into a
+// message's place: Windows refuses to rename a file that is open, even by
+// the process renaming it. Until reopen nothing more can be written or
+// committed, and Reader fails.
+func (st *Staged) closeFile() error {
+	if st.f == nil {
+		return nil
+	}
+	err := st.f.Close()
+	st.f = nil
+	if err != nil {
+		return fmt.Errorf("close staged message: %w", err)
+	}
+	return nil
+}
+
+// reopen opens the staged file again after closeFile, for a commit that
+// copies it after all.
+func (st *Staged) reopen() error {
+	f, err := os.OpenFile(st.path, os.O_RDWR, 0)
+	if err != nil {
+		return fmt.Errorf("reopen staged message: %w", err)
+	}
+	st.f = f
+	return nil
+}
+
 func (*Staged) rawSource() {}
+
+// done says whether the staged message is used up: removed, committed, or
+// on disk with its file closed by a commit that then failed.
+func (st *Staged) done() bool {
+	return st.consumed || st.removed || (!st.inMemory && st.f == nil)
+}
 
 // usable says whether the staged message can be committed: it holds all it
 // was given and is neither removed nor committed already.
 func (st *Staged) usable() error {
 	switch {
-	case st.consumed || st.removed:
+	case st.done():
 		return errStagedDone
 	case st.exceeded:
 		return ErrTooBig

@@ -605,9 +605,17 @@ func (s *Store) tempFromStaged(h *rawHold, j rawJob) (string, RawInfo, error) {
 	}
 	tmp := filepath.Join(h.dir, h.id+tmpSuffix)
 	_ = os.Remove(tmp)
+	// The staged file's own handle goes first: Windows refuses to rename a
+	// file that is open, even by the process renaming it.
+	if err := st.closeFile(); err != nil {
+		return "", RawInfo{}, err
+	}
 	if err := os.Rename(st.path, tmp); err != nil {
 		// The message directory is on another file system than the
 		// staging area (a linked directory): copy instead.
+		if err := st.reopen(); err != nil {
+			return "", RawInfo{}, err
+		}
 		return s.writeTemp(h, RawPlain, n, n, fromStaged, j.syncFile)
 	}
 	st.consumed = true
@@ -739,6 +747,10 @@ func (s *Store) convertLocked(ctx context.Context, h *rawHold, from, to RawCodec
 		_, err := io.Copy(w, r)
 		return err
 	}, true)
+	// The source is read in full: closed before placeLocked removes it
+	// (unless keepSource), which Windows refuses while it is open, even by
+	// the process removing it.
+	r.Close()
 	if err != nil {
 		if errors.Is(err, ErrRawCorrupt) {
 			return RawInfo{}, err
