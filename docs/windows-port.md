@@ -293,7 +293,7 @@ area as `MalachiCore/API/`:
 - wire enums (`FolderRole`, `Flag`, `SyncStatus`, …, 22 of them) are
   `readonly record struct`s over the wire string with `const` members, so
   an unknown value from a newer daemon decodes; `ErrorCode` is a record
-  struct over `int` with the 32 documented codes and a `Name`;
+  struct over `int` with the 34 documented codes and a `Name`;
   `RpcError.Data` survives as a cloned `JsonElement`. The tests compare the
   method table, the error codes, every wire enum's values and every
   record's members with `backend/pkg/api` as it is in the tree;
@@ -305,7 +305,9 @@ area as `MalachiCore/API/`:
   30 s `message.body` (always: a stored `allow` or a known sender may
   resolve to `allow`), `message.embedded`, `draft.create`, `draft.open`,
   `account.add`/`update`, 15 s `account.discover`, 45 s `account.test`, 10 s
-  `account.oauthStart`, 75 s per `account.oauthWait`.
+  `account.oauthStart`, 75 s per `account.oauthWait`, 5 min
+  `message.download` (the daemon's budget is 4 minutes, and it finishes a
+  download its caller gave up on).
 
 `docs/api.md` and `backend/pkg/api` are not changed from `windows/`. A
 feature that needs a new method goes backend → GTK → macOS → Windows.
@@ -647,8 +649,16 @@ of `htmlview.Document` (`ViewerDocument`) with the GTK/macOS CSP
 `UseCache(MessageCache)`; images only, never SVG; a type that is not
 `token/token`, a CR or LF in it included, is answered 404 rather than put
 into the header block, `ResponseHeaders.Picture`, as the editor's `cid:`).
-The same body is not reloaded (macOS `loadedBody`); `Clear()` loads an
-empty one.
+The same body is not reloaded (macOS `loadedBody`), except when its
+pictures kept on the mail server were downloaded: the body asked for again
+carries the same HTML, whose `malachi-cid:` URLs now have something to
+serve, so `ReaderController.HtmlReloadRequested` has the view load it once
+more (`Load(body, reload: true)`, macOS `picturesArrived`; GTK loads every
+render). A picture `message.part` answers partNotDownloaded for (the daemon
+let go of the copy it held under `neverStoreAttachments`) is answered 404
+and handed to the cache (`MessageCache.FetchPartAsync`, remote.go
+`pictureFailed`), which asks for the body once more so that its count
+brings the pictures bar back. `Clear()` loads an empty one.
 
 Hover: `StatusBarTextChanged` still fires with the status bar off; its text
 is capped at 512 characters (`HoverLabel.Cap`, macOS) and shown in the
@@ -986,11 +996,14 @@ The window is `Malachi.App/Windows/PreviewWindow` with
 `Attachments/AttachmentPreview`: one window, made on the first click on a
 chip, its content swapped by the next while it is open, gone when closed.
 Nothing changes on screen while the part is fetched (`message.part`, through
-`AttachmentOpener.PreviewAsync`); a failure is GTK's toast where the chip
-was. A program's bytes are not even fetched: its panel shows what the chip
-lists. The title bar carries the attachment's name and *Open* (disabled for
-a program) and *Save As…*, which act as the chip's menu does; Escape and
-Ctrl+W close it (`WindowKind.Other`), as Escape closes Sushi and Quick Look.
+`AttachmentOpener.PreviewAsync`, after `message.download` for a part kept on
+the mail server, while the chips show their spinner); a failure is GTK's
+toast where the chip was. A program's bytes are not even fetched: its panel
+shows what the chip lists. The title bar carries the attachment's name and
+*Open* (disabled for a program) and *Save As…*, which act as the chip's
+menu does on the part the daemon served (a download on Microsoft 365 may
+renumber it); Escape and Ctrl+W close it (`WindowKind.Other`), as Escape
+closes Sushi and Quick Look.
 
 ## 7. Concurrency
 
@@ -1557,13 +1570,26 @@ type the daemon served and on the name the file got, writes into the open
 directory, marks (`AttachmentUse.Open`) and opens only when
 `ZoneMark.MayOpen`; Save As and Save All write where the user chose, never
 overwriting in Save All (" (2)"), mark (`AttachmentUse.Save`), and count a
-file the check removed as not saved. Save All leaves out what is never
-opened (a listed deviation): Explorer parses a `.url`, `.lnk`, `.scf`,
-`.library-ms` or `.searchConnector-ms` file for its icon and location as
-soon as the folder is shown, whatever its mark, and has sent the user's
-NTLM hash to another host that way (CVE-2025-24054). It is judged on what
-the message lists (such a part is not fetched), on the name and type the
-daemon served, and on the free name the file would get; after GTK's
+file the check removed as not saved. A part kept on the mail server
+(`Attachment.remote`, or any part of a body not downloaded yet) comes
+through `IReaderCache.PartDataAsync` (download.go `partData`): the message
+is downloaded first (`message.download`, one call per message however many
+actions ask, `MessageCache.DownloadAsync`), the part is looked up again in
+the message the download answered with (`AttachmentChips.PartAfterDownload`:
+the same id while it is the same file, else the only part with its name and
+type, else *The attachment no longer exists* and nothing fetched under the
+old id), and a part the chip showed stored that the daemon answers
+partNotDownloaded for gets one download and one retry, never a loop
+(`Download.WithDownloadAsync`). Save All downloads once, after the folder is
+chosen, when any of its parts is on the server; a failed download writes
+nothing and says why (*Saving the attachments failed: …*). Save All leaves
+out what is never opened (a listed deviation): Explorer parses a `.url`,
+`.lnk`, `.scf`, `.library-ms` or `.searchConnector-ms` file for its icon
+and location as soon as the folder is shown, whatever its mark, and has
+sent the user's NTLM hash to another host that way (CVE-2025-24054). It
+is judged on what the message lists (such a part is not fetched), on the
+name and type the daemon served, and on the free name the file would get;
+after GTK's
 summary of what it tried, a second, Windows-only toast says how many it
 left out and that Save As saves one (*N attachments were not saved; save
 programs and scripts with Save As…*), and when nothing else is left no
@@ -1836,8 +1862,21 @@ but are reached by Tab; then the No Message Selected and No Accounts pages
 address and offers Copy Address and New Message, "+N more", the attachment
 chips as `SplitButton`s (the click previews, an attached message opens in
 its window; View, Open, Save As… from the arrow, or from the keyboard with
-F4 or Alt+Down) with Save All, the hint and a separator. The headers scroll
-on their own once they would take more than two thirds of the page (a
+F4 or Alt+Down) with Save All, the hint and a separator; a part kept on the
+mail server shows the server glyph after its size, dimmed like GTK's
+`dim-label` and with *On the server only; it is downloaded when you open
+it* as its tooltip and name, or a `ProgressRing` once the message's
+download has run for 400 ms (`MessageCache.ChipsChanged`, the registry's
+`RefreshChips`); its chip stays enabled and every action on it downloads
+first. Under the remote-image bar, the pictures bar says how many pictures
+of the HTML are on the mail server only (*N pictures of this message are on
+the server only*, `neverStoreAttachments`) with *Download Pictures*, which
+downloads the message and asks for its body again (under `allow` when the
+remote images are shown, so they stay), a `ProgressRing` in its place
+meanwhile; a failure is a toast in the window of the click and the bar
+offers the pictures again. An attached message's window has no pictures
+bar: its pictures arrive inlined. The headers scroll on their own once
+they would take more than two thirds of the page (a
 hostile message listing hundreds of parts, every address unfolded), so the
 body and the last chips stay in reach; another message starts them at
 their top. Below, the body as a selectable `TextBlock` in the same clamp
@@ -1856,7 +1895,17 @@ of chips looks up at most 24 extensions it has not seen (Core's
 the UI thread. Save All is disabled while its run lasts, from the folder
 picker to its last toast, by message (`AttachmentOpener.IsSavingAll`),
 so neither a re-rendered button nor the same message in another window
-starts a second run. Copy Address writes to the Windows clipboard, which
+starts a second run. A forward of a message with parts on the mail server
+(or a body not downloaded yet, or one the cache does not hold) downloads it
+before `draft.create`; when that fails, *Forward Without Attachments?* asks
+over the window the forward came from (the main window when that one has
+closed meanwhile), unless asking would change nothing: no daemon, one
+without `message.download`, or a message over its cap. A reply downloads
+first only when the body on display counts pictures on the server, and goes
+on without a word when that fails; the compose window says once how many
+parts of the original `draft.create` left out (*N attachments of the
+original could not be attached*). Copy Address writes to the Windows
+clipboard, which
 another program may hold open (`CLIPBRD_E_CANT_OPEN`): it is tried five
 times 50 ms apart, then a toast says the address could not be copied (a
 Windows-only string) and the log has the error's kind only. Message windows (820×620, 360×294 at least) show the subject as the

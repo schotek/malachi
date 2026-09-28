@@ -963,9 +963,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   only when that check passed and the zone reads back (unless an
   administrator switched zone information off); a failed check never
   opens. No exception of these services names the path of a file written
-  out of a message. The data directory, `%LOCALAPPDATA%\Malachi Mail`,
-  lies in the user's profile, whose permissions admit the user, SYSTEM
-  and Administrators; the daemon's `0600` and `0700` mean nothing there.
+  out of a message. Its previewer holds the part in memory and writes
+  nothing, so an attachment kept on the mail server under
+  `neverStoreAttachments` reaches the disk only when the user opens it
+  (into this directory, gone at exit) or saves it. The data directory,
+  `%LOCALAPPDATA%\Malachi Mail`, lies in the user's profile, whose
+  permissions admit the user, SYSTEM and Administrators; the daemon's
+  `0600` and `0700` mean nothing there.
 - Raw messages are `<data dir>/messages/<account>/<id>`, or `<id>.zst`
   when compressed (`0600` files, `0700` directories). The name decides how
   a file is read, never its content, so a message that begins with zstd's

@@ -19,7 +19,9 @@ and folding, the message list (flat and grouped by conversation, with the
 All / Unread / Flagged filter, paging itself), search in the folder, the
 account or every account, the reader with a locked-down WebView2 view,
 message windows and attached messages, attachments with a previewer of
-the app's own, message actions with context menus, notifications with the
+the app's own (those the daemon keeps on the mail server downloaded when
+they are opened, saved or forwarded, and the pictures it keeps there on
+request), message actions with context menus, notifications with the
 system's new-mail sound, compose with the rich-text editor, drafts (kept
 in the Drafts folder and opened from it for editing), reply and forward
 with the quoted original, `mailto:` links and the *Default apps*
