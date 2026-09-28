@@ -5,11 +5,11 @@
 // CanaryTests.cs, SPIKES.md §2c), with a canary per vector: every way a page
 // can make a request or a connection that the spike measured (pictures, CSS,
 // <link> hints, prerender and speculation rules, frames, plugins, media,
-// SVG, forms, pings, refresh), host-name variants for the DNS check, and the
-// active document whose links, form, new-window and download targets the
-// host clicks and hovers. Plus what the previewer gets: an SVG that
-// references the canaries and a PDF whose link and open action point at
-// them.
+// SVG, forms, pings, refresh), host-name variants for the DNS check, UNC
+// paths, and the active document whose links, form, new-window, download
+// and UNC targets the host clicks and hovers. Plus what the previewer gets:
+// an SVG that references the canaries and a PDF whose link and open action
+// point at them.
 
 using System;
 using System.Collections.Generic;
@@ -72,12 +72,17 @@ internal static class HostileDocuments
         ("noscript-img", "<noscript><img src='{U}/noscript.png' width=10 height=10></noscript>"),
         ("anchor-plain", "<a href='{U}/anchor'>plain anchor</a>"),
         ("protocol-relative", "<img src='//127.0.0.1:{P}/protocol-relative.png' width=10 height=10>"),
+        // A UNC path in its WebDAV form (\\127.0.0.1@port\share): were
+        // Chromium ever to open it, Windows' WebClient service would carry
+        // it to this listener over HTTP, NTLM included. The SMB form below
+        // (port 445) is outside what the canary can see.
+        ("unc-webdav", "<img src='file://127.0.0.1@{P}/share/webdav.png' width=10 height=10>"),
         ("base-href", ""),
         ("body-background", ""),
     ];
 
     /// <summary>The vectors of the active document (clicked, hovered, submitted, refreshed).</summary>
-    public static readonly string[] ActiveVectors = ["hover", "nav", "ping", "form", "blank", "middle", "download", "refresh"];
+    public static readonly string[] ActiveVectors = ["hover", "nav", "ping", "form", "blank", "middle", "download", "refresh", "unc-link"];
 
     /// <summary>The previewer's vectors (an SVG's references, a PDF's link and open action).</summary>
     public static readonly string[] PreviewVectors = ["svg-preview", "pdf-link", "pdf-open"];
@@ -113,6 +118,9 @@ internal static class HostileDocuments
         b.Append("<link rel=preconnect href='http://").Append(hosts[1]).Append("'>\n");
         b.Append("<link rel=dns-prefetch href='//").Append(hosts[2]).Append("'>\n");
         b.Append("<a href='http://").Append(hosts[3]).Append("/'>dns anchor</a>\n");
+        // The SMB form of a UNC path (the NTLM leak of Windows mail
+        // clients): played, but port 445 is outside Chromium's NetLog and
+        // the listeners, so only its WebDAV twin (unc-webdav) is observed.
         b.Append("<img src='file://127.0.0.1/c$/windows/win.ini' width=10 height=10>\n");
         b.Append("</body></html>");
         return b.ToString();
@@ -135,6 +143,8 @@ internal static class HostileDocuments
             + "<a id=hover href='" + canary("hover").Origin + "/hover' style='" + Box(220) + "'>hover link</a>"
             + "<a id=middle href='" + canary("middle").Origin + "/middle' style='" + Box(270) + "'>middle link</a>"
             + "<a id=dl download href='" + canary("download").Origin + "/file.bin' style='" + Box(320) + "'>download</a>"
+            + "<a id=unc href='file://127.0.0.1@" + canary("unc-link").Port.ToString(CultureInfo.InvariantCulture)
+            + "/share/link.txt' style='" + Box(370) + "'>unc</a>"
             + "</body></html>";
     }
 

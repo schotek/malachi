@@ -6,8 +6,11 @@
 // in one window beyond the edge of the screen, the steps of the
 // configuration played on them, and everything they did recorded. Pointer
 // actions go through the DevTools protocol (Input.dispatchMouseEvent), which
-// needs no real pointer and no foreground window; keys are not tested here
-// (CDP keys bypass AreBrowserAcceleratorKeysEnabled, INPUT-SPIKES.md). The
+// needs no real pointer and no foreground window, and so do a renderer's
+// crash (Page.crash) and its hang (a host script that never ends); keys are
+// not tested here (CDP keys bypass AreBrowserAcceleratorKeysEnabled,
+// INPUT-SPIKES.md). A view that replaces its control after a failed process
+// is observed again from the new one on (CoreWebViewInitialized). The
 // counting of connections and lookups is the test's, from its listeners and
 // the NetLog this run makes the browser write.
 
@@ -16,6 +19,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -83,6 +87,8 @@ internal sealed class CanaryRunner
             else
             {
                 WebViewEnvironment.NetLogPath = config.NetLog;
+                WebViewEnvironment.LoggerFactory = new HostLoggerFactory((category, message) =>
+                    Add(HostEvent.Kinds.Log, category[(category.LastIndexOf('.') + 1)..], null, detail: message));
                 WebViewEnvironment.Start(config.UserDataFolder);
                 var registry = new CidRegistry();
                 registry.RegisterFetcher("canary@x", _ => Task.FromResult(new InlineImage(Png, "image/png")));
@@ -104,19 +110,22 @@ internal sealed class CanaryRunner
                 editor.Channel.Ready += (_, _) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "ready");
                 editor.Channel.KeyPressed += (_, key) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "key " + key);
                 editor.FilesDropped += (_, paths) => Add(HostEvent.Kinds.Dropped, "editor", null, detail: string.Join("|", paths));
-                editor.Crashed += (_, _) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "crashed");
+                editor.Crashed += (_, _) =>
+                {
+                    Add(HostEvent.Kinds.Bridge, "editor", null, detail: "crashed");
+                    // What the compose window does (editor.OnCrashed): the
+                    // last text again.
+                    editor.Load(editor.Html);
+                };
                 foreach (var (name, view) in new (string, HardenedWebView)[] { ("viewer", viewer), ("editor", editor), ("preview", preview) })
                 {
                     view.Unavailable += (_, _) => Add(HostEvent.Kinds.Unavailable, name, null);
+                    view.CoreWebViewInitialized += (_, _) => Initialized(name, view);
                 }
             }
             Place(window);
             await ReadyAsync();
-            foreach (var (name, core) in cores)
-            {
-                Observe(name, core);
-                version ??= core.Environment.BrowserVersionString;
-            }
+            version = cores.Values.First().Environment.BrowserVersionString;
             RememberWindows();
             foreach (var step in config.Steps)
             {
@@ -143,7 +152,10 @@ internal sealed class CanaryRunner
         {
             exited = await CloseAsync();
         }
-        return new HostResults { Completed = completed, BrowserVersion = version, BrowserExited = exited, Events = [.. events] };
+        lock (events)
+        {
+            return new HostResults { Completed = completed, BrowserVersion = version, BrowserExited = exited, Events = [.. events] };
+        }
     }
 
     // Beyond the right edge of the virtual screen, shown without taking the
@@ -178,21 +190,18 @@ internal sealed class CanaryRunner
             c.CoreWebView2.Settings.IsScriptEnabled = false;
             cores["control"] = c.CoreWebView2;
             Add(HostEvent.Kinds.Ready, "control", null);
+            Observe("control", c.CoreWebView2);
             return;
         }
         var deadline = DateTime.UtcNow.AddSeconds(45);
-        var views = new (string Name, HardenedWebView View)[] { ("viewer", viewer!), ("editor", editor!), ("preview", preview!) };
         while (DateTime.UtcNow < deadline)
         {
-            foreach (var (name, view) in views)
+            bool unavailable;
+            lock (events)
             {
-                if (!cores.ContainsKey(name) && view.CoreWebView is { } core)
-                {
-                    cores[name] = core;
-                    Add(HostEvent.Kinds.Ready, name, null);
-                }
+                unavailable = events.Any(e => e.Kind == HostEvent.Kinds.Unavailable);
             }
-            if (cores.Count == views.Length || events.Any(e => e.Kind == HostEvent.Kinds.Unavailable))
+            if (cores.Count == 3 || unavailable)
             {
                 return;
             }
@@ -201,11 +210,26 @@ internal sealed class CanaryRunner
         throw new TimeoutException("the views did not become ready within 45 s");
     }
 
+    // A view has a control: the first, or a new one after a failed process
+    // (then its events are observed from the new one on).
+    private void Initialized(string name, HardenedWebView view)
+    {
+        if (view.CoreWebView is not { } core)
+        {
+            return;
+        }
+        var again = cores.ContainsKey(name);
+        cores[name] = core;
+        Add(HostEvent.Kinds.Ready, name, null, detail: again ? "again" : null);
+        Observe(name, core);
+    }
+
     // A second handler after the view's own: it sees what the view decided.
     private void Observe(string name, CoreWebView2 core)
     {
         core.Profile.DefaultDownloadFolderPath = config.Downloads;
-        core.NavigationStarting += (_, e) => Add(HostEvent.Kinds.Navigation, name, e.Uri, e.Cancel);
+        core.NavigationStarting += (_, e) => Add(HostEvent.Kinds.Navigation, name, e.Uri, e.Cancel,
+            detail: e.IsUserInitiated ? HostEvent.UserInitiated : HostEvent.NotUserInitiated);
         core.NavigationCompleted += (s, e) => Add(HostEvent.Kinds.Completed, name, s.Source, detail: e.IsSuccess + " " + e.WebErrorStatus);
         core.SourceChanged += (s, _) => Add(HostEvent.Kinds.Source, name, s.Source);
         core.FrameNavigationStarting += (_, e) => Add(HostEvent.Kinds.Frame, name, e.Uri, e.Cancel);
@@ -299,6 +323,30 @@ internal sealed class CanaryRunner
             case "probe":
                 Add(HostEvent.Kinds.Probe, step.View, null, detail: await core!.ExecuteScriptAsync(step.Html ?? "null"));
                 break;
+            case "crash":
+                Crash(core!);
+                break;
+            case "await":
+                await AwaitAsync(step);
+                return;
+            case "hang":
+                // A renderer busy for ever, and input for it to not answer.
+                _ = HangAsync(core!);
+                for (var i = 0; i < 4; i++)
+                {
+                    _ = MouseAsync(core!, "mouseMoved", (50 + i, 50), "none", 0);
+                    await Task.Delay(250);
+                }
+                break;
+            case "loadcrash":
+                // A load, and the renderer's crash while it is still loading.
+                StartLoad(step, core!);
+                if (step.X > 0)
+                {
+                    await Task.Delay((int)step.X);
+                }
+                Crash(core!);
+                break;
             default:
                 throw new InvalidOperationException("unknown step " + step.Op);
         }
@@ -311,6 +359,12 @@ internal sealed class CanaryRunner
     private async Task LoadAsync(HostStep step, CoreWebView2 core)
     {
         using var loaded = new LoadWatch(core);
+        StartLoad(step, core);
+        await loaded.WaitAsync();
+    }
+
+    private void StartLoad(HostStep step, CoreWebView2 core)
+    {
         var html = step.Html ?? "";
         switch (step.View)
         {
@@ -324,7 +378,59 @@ internal sealed class CanaryRunner
                 core.NavigateToString(html);
                 break;
         }
-        await loaded.WaitAsync();
+    }
+
+    // The DevTools protocol's Page.crash ends the page's renderer at once
+    // (a stand-in for a body that kills it); it never answers.
+    private void Crash(CoreWebView2 core) => _ = CrashAsync(core);
+
+    // Until the view has recorded an event of the step's kind (Target) whose
+    // detail contains Html, since the step began; at most Ms.
+    private async Task AwaitAsync(HostStep step)
+    {
+        int start;
+        lock (events)
+        {
+            start = events.Count;
+        }
+        var deadline = clock.ElapsedMilliseconds + step.Ms;
+        while (clock.ElapsedMilliseconds < deadline)
+        {
+            lock (events)
+            {
+                if (events.Skip(start).Any(e => e.Kind == step.Target && e.View == step.View
+                    && (step.Html is null || (e.Detail?.Contains(step.Html, StringComparison.Ordinal) ?? false))))
+                {
+                    return;
+                }
+            }
+            await Task.Delay(100);
+        }
+    }
+
+    private async Task HangAsync(CoreWebView2 core)
+    {
+        try
+        {
+            await core.ExecuteScriptAsync("for (;;) {}");
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            Add(HostEvent.Kinds.Crash, "", null, detail: "hang " + e.GetType().Name);
+        }
+    }
+
+    private async Task CrashAsync(CoreWebView2 core)
+    {
+        try
+        {
+            await core.CallDevToolsProtocolMethodAsync("Page.crash", "{}");
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // The renderer went away before it could answer.
+            Add(HostEvent.Kinds.Crash, "", null, detail: e.GetType().Name);
+        }
     }
 
     private async Task ShowAsync(HostStep step, CoreWebView2 core)
@@ -372,23 +478,35 @@ internal sealed class CanaryRunner
         await core.CallDevToolsProtocolMethodAsync("Input.dispatchMouseEvent", json);
     }
 
+    // Also appended to the progress file, which says where a run that never
+    // wrote its results stopped. The views may log from other threads.
     private void Add(string kind, string view, string? uri, bool? stopped = null, string? detail = null)
     {
         if (uri is { Length: > MaxUri })
         {
             uri = uri[..MaxUri] + "…";
         }
-        events.Add(new HostEvent { Kind = kind, View = view, Phase = phase, Uri = uri, Stopped = stopped, Detail = detail, Ms = clock.ElapsedMilliseconds });
+        lock (events)
+        {
+            var e = new HostEvent { Kind = kind, View = view, Phase = phase, Uri = uri, Stopped = stopped, Detail = detail, Ms = clock.ElapsedMilliseconds };
+            events.Add(e);
+            try
+            {
+                File.AppendAllText(config.Results + ".progress",
+                    e.Ms.ToString(CultureInfo.InvariantCulture) + " " + kind + " " + view + " " + e.Phase + " " + uri + " " + stopped + " " + detail + "\n");
+            }
+            catch (IOException)
+            {
+                // Progress is a convenience.
+            }
+        }
     }
 
     // The visible top-level windows of this process and the browser's.
     private HashSet<nint> Windows()
     {
-        var pids = new HashSet<uint> { (uint)Environment.ProcessId };
-        foreach (var core in cores.Values)
-        {
-            pids.Add(core.BrowserProcessId);
-        }
+        var pids = BrowserProcessIds();
+        pids.Add((uint)Environment.ProcessId);
         var found = new HashSet<nint>();
         PInvoke.EnumWindows(
             (hwnd, _) =>
@@ -453,7 +571,7 @@ internal sealed class CanaryRunner
     // window's title recorded (what other processes can read).
     private List<(nint Handle, string Description, bool IsBrowser)> BrowserWindows()
     {
-        var browsers = cores.Values.Select(c => c.BrowserProcessId).ToHashSet();
+        var browsers = BrowserProcessIds();
         var found = new List<(nint, string, bool)>();
         foreach (var hwnd in Windows())
         {
@@ -468,11 +586,40 @@ internal sealed class CanaryRunner
         return found;
     }
 
+    // The browser processes of the views' live controls (a control closed
+    // after a failed process answers no more).
+    private HashSet<uint> BrowserProcessIds()
+    {
+        var pids = new HashSet<uint>();
+        foreach (var core in cores.Values)
+        {
+            try
+            {
+                pids.Add(core.BrowserProcessId);
+            }
+            catch (COMException)
+            {
+            }
+        }
+        return pids;
+    }
+
     // Closes the views and waits for the browser process to end, so that it
     // finishes its NetLog.
     private async Task<bool> CloseAsync()
     {
-        var environment = cores.Values.FirstOrDefault()?.Environment;
+        CoreWebView2Environment? environment = null;
+        foreach (var core in cores.Values)
+        {
+            try
+            {
+                environment = core.Environment;
+                break;
+            }
+            catch (COMException)
+            {
+            }
+        }
         var exited = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (environment is not null)
         {

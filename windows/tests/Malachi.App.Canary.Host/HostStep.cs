@@ -17,7 +17,13 @@ public sealed record HostStep
     /// <see cref="ContentType"/>, <see cref="Data"/>), <c>hover</c>,
     /// <c>press</c> (mouse down and leave), <c>click</c>, <c>middle</c>
     /// (a middle click) on <see cref="Target"/> or at
-    /// <see cref="X"/>/<see cref="Y"/>, or <c>wait</c>.
+    /// <see cref="X"/>/<see cref="Y"/>, <c>crash</c> (the page's renderer,
+    /// through the DevTools protocol), <c>loadcrash</c> (a load, and the
+    /// crash <see cref="X"/> milliseconds later, while it loads),
+    /// <c>hang</c> (a host script that never ends, and pointer input it
+    /// leaves unanswered), <c>await</c> (until the view records an event of
+    /// the kind <see cref="Target"/> whose detail contains <see cref="Html"/>,
+    /// at most <see cref="Ms"/>), or <c>wait</c>.
     /// </summary>
     public required string Op { get; init; }
 

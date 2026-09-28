@@ -14,7 +14,13 @@
 // - control: the same hostile document in a WebView2 without any
 //   protection (only its reach beyond the machine cut off: a dead proxy and
 //   no name but 127.0.0.1 resolved), which must reach the canaries: the
-//   proof that the harness sees what it looks for.
+//   proof that the harness sees what it looks for;
+// - recovery: the app's views with harmless documents whose renderers are
+//   crashed twice each (DevTools Page.crash, also while a document loads)
+//   and hung once (a host script that never ends): each document is shown
+//   again once and then given up (RendererRecovery), never reloaded in a
+//   loop. A run of its own because a hang takes Chromium's hang monitor
+//   about 15 s to report.
 
 using System;
 using System.Collections.Generic;
@@ -47,6 +53,8 @@ public sealed class CanaryFixture : IAsyncLifetime
     internal CanaryRun? Protected { get; private set; }
 
     internal CanaryRun? Control { get; private set; }
+
+    internal CanaryRun? Recovery { get; private set; }
 
     /// <summary>The file the editor gets dropped on it.</summary>
     internal string DroppedFile => Path.Combine(root ?? Path.GetTempPath(), "dropped file.txt");
@@ -82,15 +90,18 @@ public sealed class CanaryFixture : IAsyncLifetime
         await File.WriteAllTextAsync(DroppedFile, "dropped");
         Protected = new CanaryRun("protected", Path.Combine(root, "p"), HostileDocuments.AllVectors);
         Control = new CanaryRun("control", Path.Combine(root, "c"), HostileDocuments.AllVectors);
+        Recovery = new CanaryRun("recovery", Path.Combine(root, "r"), []);
         await Task.WhenAll(
             Protected.RunAsync(host, Protected.Config(HostConfig.Modes.Protected, ProtectedSteps(Protected))),
-            Control.RunAsync(host, Control.Config(HostConfig.Modes.Control, ControlSteps(Control))));
+            Control.RunAsync(host, Control.Config(HostConfig.Modes.Control, ControlSteps(Control))),
+            Recovery.RunAsync(host, Recovery.Config(HostConfig.Modes.Protected, RecoverySteps())));
     }
 
     public async ValueTask DisposeAsync()
     {
         Protected?.Dispose();
         Control?.Dispose();
+        Recovery?.Dispose();
         // MALACHI_CANARY_KEEP=1 keeps the runs' files (configuration,
         // results, NetLogs) for a look after a failure.
         if (root is null || Environment.GetEnvironmentVariable("MALACHI_CANARY_KEEP") == "1")
@@ -134,6 +145,7 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("viewer", "middle", "viewer-middle", target: "middle", ms: 800);
         Add("viewer", "click", "viewer-mailto", target: "mailto", ms: 600);
         Add("viewer", "click", "viewer-download", target: "dl", ms: 800);
+        Add("viewer", "click", "viewer-unc", target: "unc", ms: 800);
         Add("viewer", "load", "viewer-refresh", refresh, ms: 2000);
 
         // The editor: the same content pasted, with page script on.
@@ -142,6 +154,7 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("editor", "hover", target: "hover", ms: 800);
         Add("editor", "click", target: "pinglink", ms: 800);
         Add("editor", "click", target: "sub", ms: 800);
+        Add("editor", "click", target: "unc", ms: 600);
         Add("editor", "load", "editor-refresh", refresh, ms: 2000);
 
         // The editor's bridge under its CSP: typing, a format command, a
@@ -197,8 +210,55 @@ public sealed class CanaryFixture : IAsyncLifetime
             // The link navigated: the active page again for the form.
             new() { View = "control", Op = "load", Phase = "control-form", Html = active, Ms = 200 },
             new() { View = "control", Op = "click", Target = "sub", Ms = 1200 },
+            new() { View = "control", Op = "load", Phase = "control-unc", Html = active, Ms = 200 },
+            new() { View = "control", Op = "click", Target = "unc", Ms = 800 },
             new() { View = "control", Op = "load", Phase = "control-refresh", Html = HostileDocuments.Refresh(run.Canary), Ms = 2000 },
         ];
+    }
+
+    // Each view's renderer crashed twice under one document (the second
+    // time after the view showed it again), the viewer's also while a
+    // document loads, then hung once; between them a document of its own
+    // shows the view still works. Phases name what the tests look at.
+    private static List<HostStep> RecoverySteps()
+    {
+        var steps = new List<HostStep>();
+        void Add(string view, string op, string phase, string? html = null, int ms = 0, string? target = null, double x = 0) =>
+            steps.Add(new HostStep { View = view, Op = op, Phase = phase, Html = html, Ms = ms, Target = target, X = x });
+
+        Add("viewer", "load", "viewer-crash", "<p>crash</p>", 300);
+        Add("viewer", "crash", "viewer-crash-1", ms: 1500);
+        Add("viewer", "crash", "viewer-crash-2", ms: 1500);
+        Add("viewer", "load", "viewer-after", "<p>after</p>", 300);
+        // A body large enough to be still loading when its renderer dies.
+        Add("viewer", "loadcrash", "viewer-loadcrash", "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>",
+            2500, x: 20);
+
+        Add("editor", "load", "editor-crash", "<p>text</p>", 300);
+        Add("editor", "crash", "editor-crash-1", ms: 2000);
+        Add("editor", "crash", "editor-crash-2", ms: 2000);
+
+        steps.Add(new HostStep
+        {
+            View = "preview",
+            Op = "show",
+            Phase = "preview-crash",
+            Name = "picture.png",
+            ContentType = "image/png",
+            Ms = 300,
+            Data = "iVBORw0KGgoAAAANSUhEUgAAAAcAAAAFCAIAAAAG+GGPAAAAEUlEQVR42mNQaHiAiRhoJAoALlM0gX31oMMAAAAASUVORK5CYII=",
+        });
+        Add("preview", "crash", "preview-crash-1", ms: 1500);
+        Add("preview", "crash", "preview-crash-2", ms: 1500);
+
+        // Reported by Chromium's hang monitor about 15 s after the input the
+        // renderer left unanswered, then RendererRecovery.AnswerTimeout.
+        Add("viewer", "load", "viewer-hang", "<p>hang</p>", 300);
+        Add("viewer", "hang", "viewer-hang-1");
+        Add("viewer", "await", "viewer-hang-1", "again", 40_000, target: HostEvent.Kinds.Ready);
+        Add("viewer", "wait", "viewer-hang-1", ms: 1000);
+        Add("viewer", "load", "viewer-after-hang", "<p>after the hang</p>", 300);
+        return steps;
     }
 
     private static bool WebView2Installed()

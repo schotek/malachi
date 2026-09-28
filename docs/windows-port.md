@@ -1339,29 +1339,53 @@ editor once they exist.
   app's environment, in a window beyond the edge of the screen that never
   takes the focus, and plays the spike's hostile document (every vector
   with its own loopback listener in the test process, DNS-only host names,
-  a `file:` picture), its active twin (hover, press, a link with `ping`, a
-  form, `target=_blank`, a middle click, `mailto:`, `download`, a meta
-  refresh; pointer input through the DevTools protocol), the previewer's
-  HTML, SVG, PDF (its link clicked, its open action), picture and text, and
-  every HTML part of `backend/testdata/mime` **raw**, without the
-  sanitiser, in the viewer and the editor. Chromium writes a NetLog
-  (`--log-net-log`, an option only the canary sets). The test asserts that
-  no listener was reached, no name was looked up (every resolver request
-  mapped to `~notfound`, no resolver job), no TCP connection was attempted
-  and every UDP connect failed, nothing navigated but the views' own
-  documents, no window opened (the three windows WebView2 draws the views
-  in aside, titled *Malachi Mail* throughout, also while the previewer
-  shows a PDF whose metadata has a title of its own), nothing downloaded, the gate
-  answered 403 to everything not the view's own, and that clicks reached
+  UNC paths), its active twin (hover, press, a link with `ping`, a form,
+  `target=_blank`, a middle click, `mailto:`, `download`, a UNC link, a
+  meta refresh; pointer input through the DevTools protocol), the
+  previewer's HTML, SVG, PDF (its link clicked, its open action), picture
+  and text, and every HTML part of `backend/testdata/mime` **raw**, without
+  the sanitiser, in the viewer and the editor. Chromium writes a NetLog
+  (`--log-net-log`, an option only the canary sets); reading it fails when
+  the runtime lacks an event or source type the reader relies on, so a
+  renamed event cannot make the checks pass by never matching. The test
+  asserts that no listener was reached; no name was looked up (resolver
+  requests were made, every one mapped to `~notfound`, no resolver job,
+  and no DNS canary name appears anywhere in the log); no TCP connection
+  was attempted and every UDP connect failed; no URL request was started
+  but WebView2's own background ones (runtime 153: `config.edge.skype.com`),
+  which checks the gate, the CSP and SmartScreen apart from the resolver
+  rule that would hide what passed them (what only that rule stops, by
+  design, is a cancelled navigation's speculative preconnect, which starts
+  no URL request); nothing navigated but the views' own documents; a click
+  is user-initiated and a meta refresh not (what `NavigationPolicy` relies
+  on); no window opened (the three windows WebView2 draws the views in
+  aside, titled *Malachi Mail* throughout, also while the previewer shows a
+  PDF whose metadata has a title of its own); nothing downloaded; the gate
+  answered 403 to everything not the view's own; and that clicks reached
   the reader as links (forms and refreshes not); and, as checks of the
   views themselves, that the editor's bridge types, formats and flushes
   under its CSP, a dropped file arrives as a path, and the viewer zooms.
   A control run of the same document in a WebView2 without protection
-  (its reach beyond the machine cut off) must reach the canaries, so the
-  harness is known to see leaks. Both runs go side by side in about 45 s;
-  without a desktop session or the WebView2 runtime the tests are skipped
-  with that reason; `MALACHI_CANARY_KEEP=1` keeps the runs' files. It runs
-  in `make test-windows` and on every WebView2 runtime bump.
+  (its reach beyond the machine cut off) must reach the canaries (the
+  preconnect and the prerender among them) and show connections, URL
+  requests to the canaries and the DNS canaries' names in its NetLog, so
+  the harness is known to see leaks. The UNC vectors are played but not
+  observed: Chromium refuses `file:` from a web page in either run (the
+  link becomes `about:blank#blocked`, the pictures are never requested);
+  their WebDAV form (`file://127.0.0.1@<port>/…`) would reach its listener
+  through the WebClient service if a runtime ever opened one, while the
+  SMB form (port 445, the NTLM leak) stays outside what the canary sees.
+  A recovery run crashes each view's renderer twice under one document
+  (DevTools `Page.crash`, once while a document loads) and hangs the
+  viewer's once (a host script that never ends): each document is shown
+  again exactly once, the second crash raises `Unavailable` with no
+  further load (the editor's `Crashed` once), and the hung renderer gets a
+  new control once its report went 5 s unanswered (§6.1). The three runs
+  go side by side in about 50 s; without a desktop session or the WebView2
+  runtime the tests are skipped with that reason; `MALACHI_CANARY_KEEP=1`
+  keeps the runs' files, and each run's `results.json.progress` shows how
+  far a run that never finished got. It runs in `make test-windows` and on
+  every WebView2 runtime bump.
 - UI smoke tests with FlaUI (UIA3) for the main flows, against a local IMAP
   and SMTP test server (the go-imap and go-smtp servers the backend's own
   tests use).

@@ -29,6 +29,12 @@ public sealed record HostEvent
     /// <summary>Milliseconds since the run started.</summary>
     public long Ms { get; init; }
 
+    /// <summary>The <see cref="Detail"/> of a <see cref="Kinds.Navigation"/> WebView2 calls user-initiated.</summary>
+    public const string UserInitiated = "IsUserInitiated=True";
+
+    /// <summary>The <see cref="Detail"/> of a <see cref="Kinds.Navigation"/> WebView2 does not call user-initiated.</summary>
+    public const string NotUserInitiated = "IsUserInitiated=False";
+
     /// <summary>The event kinds.</summary>
     public static class Kinds
     {
@@ -38,7 +44,10 @@ public sealed record HostEvent
         /// <summary>The view reported itself unavailable.</summary>
         public const string Unavailable = "unavailable";
 
-        /// <summary>NavigationStarting; <see cref="Stopped"/>: cancelled.</summary>
+        /// <summary>
+        /// NavigationStarting; <see cref="Stopped"/>: cancelled;
+        /// <see cref="Detail"/>: <see cref="UserInitiated"/> or <see cref="NotUserInitiated"/>.
+        /// </summary>
         public const string Navigation = "navigation";
 
         /// <summary>NavigationCompleted; <see cref="Uri"/>: the view's source then.</summary>
@@ -80,7 +89,7 @@ public sealed record HostEvent
         /// <summary>A file appeared in the download folder.</summary>
         public const string DownloadedFile = "downloadedFile";
 
-        /// <summary>The editor's bridge: <see cref="Detail"/> ready, key …, crashed.</summary>
+        /// <summary>The editor's bridge: <see cref="Detail"/> ready, key …, crashed (the host then reloads its text).</summary>
         public const string Bridge = "bridge";
 
         /// <summary>A flush of the editor ended; <see cref="Detail"/>: its HTML then.</summary>
@@ -91,6 +100,12 @@ public sealed record HostEvent
 
         /// <summary>A probe script's result; <see cref="Detail"/>: its JSON.</summary>
         public const string Probe = "probe";
+
+        /// <summary>The DevTools call that crashed a renderer ended; <see cref="Detail"/>: how.</summary>
+        public const string Crash = "crash";
+
+        /// <summary>A view logged (Information and above); <see cref="View"/>: its kind; <see cref="Detail"/>: level and message.</summary>
+        public const string Log = "log";
 
         /// <summary>Something of the harness failed; <see cref="Detail"/>: what.</summary>
         public const string Error = "error";

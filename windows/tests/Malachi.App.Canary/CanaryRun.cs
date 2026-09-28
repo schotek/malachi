@@ -34,7 +34,7 @@ internal sealed class CanaryRun : IDisposable
         }
     }
 
-    /// <summary>protected or control.</summary>
+    /// <summary>protected, control or recovery.</summary>
     public string Name { get; }
 
     /// <summary>The run's own directory (user data, NetLog, results, downloads).</summary>
@@ -51,6 +51,9 @@ internal sealed class CanaryRun : IDisposable
 
     /// <summary>The NetLog; null when there is none.</summary>
     public NetLog? NetLog { get; private set; }
+
+    /// <summary>Why the NetLog could not be read (a runtime without an event the reader relies on); null otherwise.</summary>
+    public string? NetLogError { get; private set; }
 
     /// <summary>The listener of <paramref name="vector"/>.</summary>
     public CanaryListener Canary(string vector) => canaries[vector];
@@ -90,7 +93,15 @@ internal sealed class CanaryRun : IDisposable
         }
         if (File.Exists(config.NetLog))
         {
-            NetLog = NetLog.Read(config.NetLog);
+            try
+            {
+                NetLog = NetLog.Read(config.NetLog);
+            }
+            catch (Exception e) when (e is InvalidDataException or JsonException)
+            {
+                // The tests that need the log say why there is none.
+                NetLogError = e.Message;
+            }
         }
     }
 
