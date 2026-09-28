@@ -21,8 +21,12 @@ daemon, connects, and shows the connection, the status line and what the
 mailbox loaded; it quits cleanly (drafts first, then the daemon it
 started), from its window, Ctrl+Q or Ctrl+C in the terminal; the keyboard,
 the dialogs, the toasts, the colour scheme and the strings check are in
-place. The screens (sidebar, list, reader, compose, wizard, preferences),
-the WebView2 layer and the platform services (notifications, the
+place. The main window's panes stand too (phase E wave 2): the folder
+sidebar with its Favourites, the message list (flat and by conversation,
+search with its scope, paging), the command rows of the three panes with
+their context menus, the status line with its flyout, and the narrow
+layouts. The other screens (reader, compose, wizard, preferences), the
+WebView2 layer and the platform services (notifications, the
 notification-area icon, launch at login, `mailto:` registration) follow in
 the rest of phase E. The rows below that describe them are the design those
 steps implement.
@@ -158,7 +162,9 @@ windows/
                                   router, the WebView2 keys through the island's pre-translate
                                   source or a keyboard hook, the window commands), Controls/,
                                   Localization/ ({l:T}, mnemonics), Resources/ (icons, text styles),
-                                  Platform/ (the platform services' entry points)
+                                  Platform/ (the platform services' entry points), Main/ (the
+                                  main window's panes: sidebar, list and rows, the command rows,
+                                  the status line)
     Malachi.Credentials/          malachi-credentials.exe, the daemon's keyring helper over
                                   Credential Manager (NativeAOT); depends on nothing else
   tests/
@@ -223,6 +229,9 @@ phases that implement them.
 | A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk); other types offer Open and Save As…; programs are never opened | GNOME Sushi, the default application without it | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files |
 | While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
 | Context menus on messages and folders, with the actions that exist elsewhere | None | Windows convention |
+| At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, and the title bar's back button returns to the list | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
+| The primary menu `…` has New Message, Add Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing (research 05 W4) |
+| Left and Right fold an account's heading in the sidebar, as they fold a folder | Only a folder's; a heading folds with its arrow | A row's buttons are no tab stops in a Windows list, so the heading's arrow needs the keys |
 | *Preferences* has a *Default apps* button that opens Settings → Apps → Default apps | None | Windows does not let an app make itself the default mail app; the app registers itself in HKCU at start |
 | Quitting saves the unsaved changes of every message being written as drafts | The compose windows close; what was typed since the last automatic save is lost | Decided |
 | A link the daemon did not list in `links[]` is confirmed before it opens, as on macOS | Opened | WebView2 hands out normalised URLs, so an exact match with the daemon's raw hrefs can fail (docs/windows-port.md §6.4) |

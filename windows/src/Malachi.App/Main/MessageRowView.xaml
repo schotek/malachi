@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/data/ui/message_row.blp (ui/internal/widget/message_row.go);
+macOS: MessageList/MessageCellView.swift and MessageRowView.swift. One row
+of the message list, element by element: content_box (spacing 12, margins
+6/6 and 8 or 3 by density, the start by applyLead), lead_box (spacing 4:
+the fold arrow, its spinner, the avatar of 40 or 28), and the column
+(spacing 2) of line 1 (spacing 6: the sender, the member count pill, the
+attachment and star icons, the origin of a search result, the date, the
+unread dot), the subject and the preview. The hairline under every row but
+the last is window.blp's show-separators. What the row shows is Core's
+MessageRow; every text is set as plain text, the matched words of a search
+result as bold runs built in code (never markup).
+-->
+<UserControl
+    x:Class="Malachi.App.Main.MessageRowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Grid>
+        <!-- style.go: the members of an unfolded conversation on a faint
+             tint, so they read as one group. -->
+        <Border Visibility="{x:Bind res:Bind.Visible(Row.IsMember), Mode=OneWay}">
+            <Border.Background>
+                <SolidColorBrush Opacity="0.03" Color="{ThemeResource TextFillColorPrimary}" />
+            </Border.Background>
+        </Border>
+        <Grid
+            x:Name="ContentBox"
+            Margin="{x:Bind main:MessageRowView.ContentMargin(Row.MarginStart, Row.MarginTop, Row.MarginBottom), Mode=OneWay}"
+            ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- lead_box: the fold arrow of a conversation (or its kept
+                 place), its spinner while the members load, the avatar. -->
+            <StackPanel
+                x:Name="LeadBox"
+                VerticalAlignment="Top"
+                Orientation="Horizontal"
+                Spacing="4">
+                <Button
+                    x:Name="Expander"
+                    Width="20"
+                    Height="20"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AccessibilityView="{x:Bind main:MessageRowView.View(Row.ExpanderLive), Mode=OneWay}"
+                    AutomationProperties.Name="{x:Bind Row.ExpanderTooltip, Mode=OneWay}"
+                    Click="OnExpanderClick"
+                    IsHitTestVisible="{x:Bind Row.ExpanderLive, Mode=OneWay}"
+                    IsTabStop="False"
+                    Opacity="{x:Bind main:MessageRowView.Opaque(Row.ExpanderLive), Mode=OneWay}"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.ExpanderTooltip), Mode=OneWay}"
+                    Visibility="{x:Bind res:Bind.Visible(Row.ExpanderShown), Mode=OneWay}">
+                    <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph(Row.ExpanderIcon), Mode=OneWay}" />
+                </Button>
+                <ProgressRing
+                    x:Name="ExpanderSpinner"
+                    Width="16"
+                    Height="16"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    IsActive="{x:Bind Row.Loading, Mode=OneWay}"
+                    Visibility="{x:Bind res:Bind.Visible(Row.Loading), Mode=OneWay}" />
+                <main:Avatar
+                    x:Name="AvatarView"
+                    Monochrome="{x:Bind Row.Monochrome, Mode=OneWay}"
+                    Size="{x:Bind Row.AvatarSize, Mode=OneWay}"
+                    Text="{x:Bind Row.AvatarText, Mode=OneWay}"
+                    Visibility="{x:Bind res:Bind.Visible(Row.AvatarVisible), Mode=OneWay}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Spacing="2">
+                <Grid ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="FromLabel"
+                        FontWeight="{x:Bind main:MessageRowView.Weight(Row.Unread), Mode=OneWay}"
+                        MaxLines="1"
+                        Style="{StaticResource BodyLabelStyle}"
+                        Text="{x:Bind Row.Sender, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap"
+                        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.SenderTooltip), Mode=OneWay}" />
+                    <!-- The member count of a conversation row; hidden below two. -->
+                    <Border
+                        x:Name="CountBadge"
+                        Grid.Column="1"
+                        Padding="6,0"
+                        VerticalAlignment="Center"
+                        CornerRadius="8"
+                        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.CountTooltip), Mode=OneWay}"
+                        Visibility="{x:Bind res:Bind.VisibleIfText(Row.CountText), Mode=OneWay}">
+                        <!-- style.go label.thread-count: the text colour at 10 %. -->
+                        <Border.Background>
+                            <SolidColorBrush Opacity="0.1" Color="{ThemeResource TextFillColorPrimary}" />
+                        </Border.Background>
+                        <TextBlock Style="{StaticResource CaptionLabelStyle}" Text="{x:Bind Row.CountText, Mode=OneWay}" />
+                    </Border>
+                    <FontIcon
+                        x:Name="AttachmentIcon"
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Glyph="{x:Bind res:Icons.Glyph('mail-attachment-symbolic')}"
+                        Visibility="{x:Bind res:Bind.Visible(Row.HasAttachments), Mode=OneWay}" />
+                    <FontIcon
+                        x:Name="StarIcon"
+                        Grid.Column="3"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AccessibilityView="Raw"
+                        FontSize="14"
+                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                        Glyph="{x:Bind res:Icons.Glyph('starred-symbolic')}"
+                        Visibility="{x:Bind res:Bind.Visible(Row.Flagged), Mode=OneWay}" />
+                    <!-- Where a search result lies; hidden outside search. -->
+                    <TextBlock
+                        x:Name="OriginLabel"
+                        Grid.Column="4"
+                        MaxWidth="120"
+                        VerticalAlignment="Center"
+                        MaxLines="1"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        Text="{x:Bind Row.Origin, Mode=OneWay}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap"
+                        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.OriginTooltip), Mode=OneWay}"
+                        Visibility="{x:Bind res:Bind.VisibleIfText(Row.Origin), Mode=OneWay}" />
+                    <TextBlock
+                        x:Name="DateLabel"
+                        Grid.Column="5"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource DimCaptionLabelStyle}"
+                        Text="{x:Bind Row.DateText, Mode=OneWay}"
+                        TextAlignment="Right" />
+                    <!-- unread-dot (ui/internal/style): 8 px in the accent colour. -->
+                    <Ellipse
+                        x:Name="UnreadDot"
+                        Grid.Column="6"
+                        Width="8"
+                        Height="8"
+                        VerticalAlignment="Center"
+                        Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                        Visibility="{x:Bind res:Bind.Visible(Row.Unread), Mode=OneWay}" />
+                </Grid>
+                <TextBlock
+                    x:Name="SubjectLabel"
+                    FontWeight="{x:Bind main:MessageRowView.Weight(Row.Unread), Mode=OneWay}"
+                    MaxLines="1"
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{x:Bind Row.Subject, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <TextBlock
+                    x:Name="PreviewLabel"
+                    MaxLines="1"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap"
+                    Visibility="{x:Bind res:Bind.Visible(Row.ShowPreview), Mode=OneWay}" />
+            </StackPanel>
+        </Grid>
+        <!-- The hairline between messages (show-separators). -->
+        <Rectangle
+            Height="1"
+            VerticalAlignment="Bottom"
+            Fill="{ThemeResource DividerStrokeColorDefaultBrush}"
+            Visibility="{x:Bind main:MessageRowView.NotLast(Row.IsLast), Mode=OneWay}" />
+    </Grid>
+</UserControl>

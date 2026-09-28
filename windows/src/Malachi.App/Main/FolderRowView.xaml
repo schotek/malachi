@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the sidebar rows of ui/internal/window/folders.go (newHeaderRow,
+newFolderRow, newTwisty) and favourites.go (newStar), with the sidebar
+rules of ui/internal/style (rows of 24 px plus 1 above and below, icons of
+14, the title at 88 %, the fold arrow and the star squeezed to 18, the star
+waiting for the pointer or the keyboard); macOS:
+Sidebar/FolderCellView.swift and SidebarHeaderCellView. A heading is the
+fold arrow (inert and invisible on Favourites) and a dim caption heading,
+3 px lower than a row; a folder is indented 12 per level: its arrow (in
+a nested account), role icon, name (and whose it is, for a pinned folder
+with several accounts), unread badge and pin star. What the row shows is
+Core's SidebarRow; every text is plain.
+-->
+<UserControl
+    x:Class="Malachi.App.Main.FolderRowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <!-- The title box at 88 % (style.go row.folder-row). -->
+        <Style x:Key="FolderTitleStyle" BasedOn="{StaticResource BodyLabelStyle}" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13" />
+        </Style>
+        <!-- caption-heading dim-label. -->
+        <Style x:Key="FolderHeadingStyle" BasedOn="{StaticResource DimCaptionLabelStyle}" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Resources>
+    <Grid
+        x:Name="RowRoot"
+        MinHeight="26"
+        Margin="{x:Bind main:FolderRowView.RowMargin(Row.Indent, Row.IsHeading), Mode=OneWay}"
+        Background="Transparent"
+        ColumnSpacing="6"
+        ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.Tooltip), Mode=OneWay}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- newTwisty: pan-down open, pan-end folded; an inactive arrow
+             keeps its place, invisible and inert. -->
+        <Button
+            x:Name="Twisty"
+            Width="18"
+            Height="18"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="{x:Bind main:MessageRowView.View(Row.TwistyActive), Mode=OneWay}"
+            AutomationProperties.Name="{x:Bind Row.TwistyTooltip, Mode=OneWay}"
+            Click="OnTwistyClick"
+            IsHitTestVisible="{x:Bind Row.TwistyActive, Mode=OneWay}"
+            IsTabStop="False"
+            Opacity="{x:Bind main:MessageRowView.Opaque(Row.TwistyActive), Mode=OneWay}"
+            Style="{StaticResource SubtleButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.TwistyTooltip), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.Visible(Row.TwistyShown), Mode=OneWay}">
+            <FontIcon FontSize="10" Glyph="{x:Bind res:Icons.Glyph(Row.TwistyIcon), Mode=OneWay}" />
+        </Button>
+
+        <FontIcon
+            x:Name="RoleIcon"
+            Grid.Column="1"
+            VerticalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
+            FontSize="14"
+            Glyph="{x:Bind res:Icons.Glyph(Row.Icon), Mode=OneWay}"
+            Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Icon), Mode=OneWay}" />
+
+        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+            <TextBlock
+                x:Name="TitleLabel"
+                MaxLines="1"
+                Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
+                Style="{x:Bind TitleStyle(Row.IsHeading), Mode=OneWay}"
+                Text="{x:Bind Row.Title, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <TextBlock
+                x:Name="SubtitleLabel"
+                MaxLines="1"
+                Style="{StaticResource DimCaptionLabelStyle}"
+                Text="{x:Bind Row.Subtitle, Mode=OneWay}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap"
+                Visibility="{x:Bind res:Bind.VisibleIfText(Row.Subtitle), Mode=OneWay}" />
+        </StackPanel>
+
+        <TextBlock
+            x:Name="Badge"
+            Grid.Column="3"
+            VerticalAlignment="Center"
+            Style="{StaticResource DimCaptionLabelStyle}"
+            Text="{x:Bind Row.Badge, Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.VisibleIfText(Row.Badge), Mode=OneWay}" />
+
+        <!-- newStar: Add to / Remove from Favourites; waits for the pointer,
+             the selection or the keyboard, but a filled star in the tree. -->
+        <Button
+            x:Name="Star"
+            Grid.Column="4"
+            Width="18"
+            Height="18"
+            Padding="0"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="{x:Bind Row.StarTooltip, Mode=OneWay}"
+            Click="OnStarClick"
+            GotFocus="OnStarFocus"
+            LostFocus="OnStarFocus"
+            Style="{StaticResource SubtleButtonStyle}"
+            ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.StarTooltip), Mode=OneWay}"
+            Visibility="{x:Bind res:Bind.Visible(Row.HasStar), Mode=OneWay}">
+            <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph(Row.StarIcon), Mode=OneWay}" />
+        </Button>
+    </Grid>
+</UserControl>

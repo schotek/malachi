@@ -43,6 +43,14 @@ public sealed class AppHooks
         set => Set(ref addAccount, value);
     }
 
+    /// <summary>
+    /// Opens the account wizard in edit mode for an account (sync.go
+    /// editAccount: the banners and the status flyout), asking for the
+    /// password when a reason is given (WizardController.RequestPassword).
+    /// Wave 2 (E6) sets it; while it is null those buttons do nothing.
+    /// </summary>
+    public Action<AccountId, ErrorCode?>? EditAccount { get; set; }
+
     /// <summary>Opens an empty compose window (app.compose, Ctrl+N).</summary>
     public Action? ComposeNew
     {

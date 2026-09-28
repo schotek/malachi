@@ -806,6 +806,14 @@ time per window); `Mnemonic` (`mn()` plus the access key); `IconGlyphs`
 (GTK icon names to Segoe Fluent Icons glyphs, each checked against the
 font; a test finds every icon name of `ui/` in the table).
 
+The main window's (phase E wave 2, E3): `AvatarPalette` and `AvatarColours`
+(above); `PaneLayout` with `PaneMode` and `PaneWidths` (window.blp's
+breakpoints and ranges, where the folded layouts navigate, when the widths
+are kept); `SidebarRow` and `SidebarRowKind` (a sidebar row of folders.go
+and favourites.go); `MessageRow` and `RowAppearance` (a list row of
+message_row.go); `StatusPopover` and `StatusPopoverRow` (the flyout of
+status.go). The rows are the view models the `ListView`s keep (§7.5).
+
 ### 7.5 Exposure to XAML
 
 Observable state as `INotifyPropertyChanged` properties (CommunityToolkit.Mvvm
@@ -815,7 +823,8 @@ the Swift `onX` callbacks, and lists as snapshots applied to
 keeps its containers and scroll. WinUI and UWP have been reported to turn
 a `Move` into a removal and an insertion, which may deselect the moved row:
 a list controller re-applies its selection by key after a sync that moved
-entries, and phase E verifies what WinUI 3 does. `{x:Bind}` only. Dialogs are async hooks
+entries (the main window's lists select their key after every apply, with
+their own handler suppressed; §11.2). `{x:Bind}` only. Dialogs are async hooks
 (`IAlerts`), never a `ContentDialog` created by a controller.
 
 A Swift callback cannot throw; a C# handler can, and inside a controller
@@ -1248,17 +1257,59 @@ pattern).
 As built in phase E wave 1 (`MainWindow.xaml`): the title bar, the search
 box (`MainWindow.Search`, focused by the Search command), the size and the
 maximised state in the gschema keys (the minimum through
-`WM_GETMINMAXINFO`), and four regions the wave-2 screens fill:
-`MainWindow.Sidebar`, `MessageList`, `Reader` (under the toast overlay) and
-`StatusBar` (replacing a provisional status line); `PaneColumns` gives the
-two columns to size. While the regions are empty a provisional summary
-(Windows-only strings) shows the connection, the status line and the counts
-of what the mailbox loaded. Every other window is tracked by
+`WM_GETMINMAXINFO`). Every other window is tracked by
 `WindowTracker.Track(window, kind, root, toasts)` right after it is made:
 the colour scheme on its root and caption buttons, its `WindowCommands`
 and `CommandRouter`, its toast overlay as the router's target while it is
 active, and its part in the app's life. A window without Mica gives its
 root `Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"`.
+
+As built in wave 2 (E3; `MainWindow.xaml`, `MainWindow.Panes.cs`,
+`Malachi.App/Main`): the panes are the window's own controls, wired to the
+Integration's controllers in `MainWindow.Attach`; the reader's region
+(`MainWindow.Reader`, E4) sits under the message page's header bar and the
+toast overlay. outer_split is a `SplitView`: the sidebar (`SidebarPane`) is
+its pane, inline while the window is wider than 900 effective pixels, an
+overlay (opaque) opened by the title bar's pane button at 900 or less
+(window.blp's `max-width` conditions, so 900 itself folds), closed by a
+folder chosen with a click or Enter (not by the arrow keys, which move the
+selection), a click outside or Escape. inner_split is the grid's two
+columns: at 600 or less they are one stack, choosing a message shows it,
+the title bar's back button returns to the list (as does the Search
+command, search.go `startSearch`), and a folder chosen shows its list
+rather than the emptied message page a GTK stack keeps. Core's
+`PaneLayout` decides all of this and the widths: the stored ones clamped to
+window.blp's ranges, the list narrowed first so that the message keeps 300.
+The sidebar is dragged with the toolkit's `PropertySizer` on the
+`SplitView`'s `OpenPaneLength`, the list with its `GridSplitter`, pointer
+only (GTK has no handle, macOS no keyboard one: not tab stops, and hidden
+from UI Automation, where the toolkit's own name does not resolve in this
+package set); the widths go to the gschema keys when a drag ends and with
+the window's geometry, only from the wide layout. The command rows are 44
+px under the tall title bar: the sidebar's accent New Message and the
+primary menu `…` (`_New Message`, `_Add Account…`, `_Preferences`, `_About
+Malachi Mail` and a Windows-only *Quit*, with the keys beside them; GTK's
+dead `_Keyboard Shortcuts` is left out), the list's Check for New Mail and
+title with its counts (`MessageListPane`, no search toggle: the box is in
+the title bar), the message page's Reply, Reply All, Forward and, packed
+from the end as in the Blueprint, Trash, Junk, Archive, the Star toggle and
+More Actions (`message_menu_model`; `MessageCommandBar`). Every button runs
+a `WindowCommands` command (the per-message ones are `SelectionActions`,
+the port of the selection half of `MessageActionsController.swift`) and is
+enabled while it is; the star and the trash follow the flags (Star or
+Unstar, Move to Trash or Cancel Sending). A control is not given the
+command's `XamlUICommand` itself: assigned to `Button.Command` it replaces
+the button's content with the command's empty label (measured: the header
+icons came out blank), so `Main/CommandBinding` wires the click and the
+enabled state. The status line (`StatusBarView`) is the bar across the
+bottom with the flyout of status.go (`StatusPopover` in Core: rows rebuilt
+only when the accounts change, the buttons changed only with the action,
+the unsent row leading to the outbox; the actions run after the flyout
+closed). The banners' buttons and the flyout's actions are
+`Main/AccountRepair` (Integration.swift's `authBannerButton`,
+`signInAgain`, `statusAction`): the edit wizard through the new
+`AppHooks.EditAccount` hook (E6), the browser for the daemon's own
+sign-in, the preferences otherwise.
 
 ### 11.2 Sidebar and list
 
@@ -1270,6 +1321,48 @@ message list is a virtualised `ListView` updated by key diff, rows after
 ported, bold unread, count pill, date, unread dot, search highlights); it
 pages itself at the end (macOS M6), *Load More* only to retry. Context menus
 (decided) on messages and folders offer only existing actions.
+
+As built (E3, `Malachi.App/Main`, the view models in
+`Malachi.Core/Presentation` with their tests): the sidebar's rows are
+`SidebarRow`s (the rows of folders.go: headings 3 px lower with the fold
+arrow, which the Favourites heading keeps as an invisible place; folders
+indented 12 per level, the arrow's column only in a nested account, the
+role glyph, the name and, for a pinned folder with two or more accounts,
+whose it is, the badge, the star), shown by `FolderRowView` and applied by
+key; the selection is the mailbox's `SelectedEntryKey`, a heading or a
+container never takes it, Left and Right fold a folder with children and,
+beyond GTK, an account heading (whose arrow is no tab stop in a row). The
+star waits for the pointer, the selection or the keyboard (a 150 ms fade),
+stays in sight in the tree for a pinned folder, and is reached with Tab
+from its row (U5; verified). The context menu of a folder or heading has
+Add to / Remove from Favourites and Expand / Collapse. The message rows are
+`MessageRow`s (message_row.go's `SetMessage`, `SetThread` and `applyLead`:
+the start margin 6, 2 in a grouped list, a member indented by the avatar
+and the gap or 24; 8 or 3 above and below; the avatar 40 or 28; the
+participants and the count pill of a conversation; the attachment and star
+glyphs, the origin of a search result, the date through Core's `Format`,
+the unread dot; sender and subject semibold while unread; the preview line
+by the setting, always in search, its matched words as bold runs; the
+members of an unfolded conversation on a 3 % tint; the hairline under every
+row but the last), shown by `MessageRowView` with `Avatar` (Core's
+`AvatarPalette`: `g_str_hash % 14 + 1`, the libadwaita gradients, the
+initials; the monochrome variant). Double click and Enter activate (a
+conversation folds, a draft goes to `draft.open`, a message to the message
+windows of E4), Left and Right fold, a right click selects the row and
+opens the header's actions (Reply, Reply All, Forward; Mark as Unread,
+Mark as Read, Star or Unstar; Archive, Mark as Junk, Move to Trash or
+Cancel Sending). The view reports the viewport after every change of the
+rows' extent or the pane's size and on every scroll (the list's
+`ScrollViewer` exists only once its template was applied, which a list
+under a status page has not had: it is looked up again with every size
+change). Verified against devmail: mark-as-read, S, U, A (the neighbour
+takes the selection), J and Delete (their confirmations), a conversation
+unfolded and folded with its member selected, a search in every account
+with the origins and bold matches, Enter to its first result and Escape
+back to the folder with the list focused, a page past the first, and Load
+More appearing only after a page request timed out (the daemon suspended),
+then paging on. WinUI keeps the selection through the in-place updates of
+the view overload and restores it where the controller moves it.
 
 ### 11.3 Reader, windows, compose, wizard, preferences
 

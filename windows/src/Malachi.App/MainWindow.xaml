@@ -3,16 +3,20 @@
 SPDX-FileCopyrightText: 2026 Vladislav Janeček
 SPDX-License-Identifier: GPL-3.0-or-later
 
-The main window (ui/data/ui/window.blp; macos MainWindowController and
-MainContentViewController), the frame of docs/windows-port.md §11.1: the
-TitleBar on Mica with the icon, "Malachi Mail" and the search box in the
-middle; below it the panes of window.blp; the status line across the
-bottom edge (26 px). The panes are regions the wave-2 screens fill
-(MainWindow.Sidebar, MessageList, Reader, StatusBar); the toast overlay
-covers the message pane, as window.blp's toast_overlay does. Until the
-screens exist the regions are empty, and a summary in their place shows
-the connection, the status line and the counts of what the mailbox
-loaded, with a provisional status line at the bottom.
+The main window (ui/data/ui/window.blp; macos MainWindowController,
+MainSplitViewController and MainContentViewController), docs/windows-port.md
+§11.1: the TitleBar on Mica with the icon, "Malachi Mail", the search box
+in the middle and, in the narrow layouts, the pane and back buttons; below
+it the panes of window.blp, outer_split's sidebar (SidebarPane) beside
+inner_split's list (MessageListPane) and message page (its header bar,
+MessageCommandBar, over the reader's region and the toast overlay, as
+window.blp's toast_overlay covers the message page's content); the status
+line across the bottom edge (StatusBarView, 26 px). The sidebar is the
+SplitView's pane: inline while the window is wider than 900, an overlay
+opened from the title bar at 900 or less; at 600 or less list and message
+are one stack with the title bar's back button (MainWindow.Panes.cs, Core's
+PaneLayout). The pane widths are dragged with the toolkit's sizers
+(window.blp's ranges on the columns).
 -->
 <Window
     x:Class="Malachi.App.MainWindow"
@@ -20,7 +24,9 @@ loaded, with a provisional status line at the bottom.
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
-    xmlns:res="using:Malachi.App.Resources">
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls">
     <Window.SystemBackdrop>
         <MicaBackdrop />
     </Window.SystemBackdrop>
@@ -39,13 +45,16 @@ loaded, with a provisional status line at the bottom.
             Visibility="Collapsed" />
 
         <!-- The title bar: icon, title, and the search box in the middle
-             (Ctrl+F, Ctrl+E; window.blp search_entry). The back and pane
-             buttons of the narrow layouts are the main window's (wave 2). -->
+             (Ctrl+F, Ctrl+E; window.blp search_entry); the pane button
+             opens the folded sidebar, the back button leaves the message
+             of the narrow stack. -->
         <TitleBar
             x:Name="AppTitleBar"
             Grid.Row="0"
+            BackRequested="OnBackRequested"
             IsBackButtonVisible="False"
-            IsPaneToggleButtonVisible="False">
+            IsPaneToggleButtonVisible="False"
+            PaneToggleRequested="OnPaneToggleRequested">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
             </TitleBar.IconSource>
@@ -56,6 +65,7 @@ loaded, with a provisional status line at the bottom.
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Center"
                 AutomationProperties.AutomationId="SearchBox"
+                AutomationProperties.Name="{l:T Msgid='Search'}"
                 PlaceholderText="{l:T Msgid='Search Mail'}">
                 <AutoSuggestBox.QueryIcon>
                     <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph('edit-find')}" />
@@ -63,120 +73,95 @@ loaded, with a provisional status line at the bottom.
             </AutoSuggestBox>
         </TitleBar>
 
-        <!-- The panes of window.blp: folders | messages | message. -->
-        <Grid x:Name="PanesHost" Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition x:Name="SidebarColumn" Width="Auto" />
-                <ColumnDefinition x:Name="ListColumn" Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <ContentControl
-                x:Name="SidebarRegion"
-                Grid.Column="0"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
-                IsTabStop="False" />
-            <ContentControl
-                x:Name="ListRegion"
-                Grid.Column="1"
-                HorizontalContentAlignment="Stretch"
-                VerticalContentAlignment="Stretch"
-                IsTabStop="False" />
-            <Grid x:Name="MessagePane" Grid.Column="2">
-                <ContentControl
-                    x:Name="ReaderRegion"
-                    HorizontalContentAlignment="Stretch"
-                    VerticalContentAlignment="Stretch"
-                    IsTabStop="False" />
-                <controls:ToastHost x:Name="ToastsHost" />
-            </Grid>
+        <!-- outer_split: the sidebar beside the list and message. -->
+        <SplitView
+            x:Name="PaneSplit"
+            Grid.Row="1"
+            DisplayMode="Inline"
+            IsPaneOpen="True"
+            IsTabStop="False"
+            OpenPaneLength="240"
+            PaneBackground="Transparent"
+            PaneClosed="OnPaneClosed">
+            <SplitView.Pane>
+                <Grid>
+                    <!-- The overlay of a folded sidebar is opaque. -->
+                    <Border
+                        x:Name="OverlayBackground"
+                        Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                        BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                        BorderThickness="0,1,1,0"
+                        Visibility="Collapsed" />
+                    <main:SidebarPane x:Name="SidebarPane" AutomationProperties.AutomationId="Sidebar" />
+                </Grid>
+            </SplitView.Pane>
 
-            <!-- Provisional (until the wave-2 screens fill the regions):
-                 what the shell knows. Windows-only strings. -->
-            <StackPanel
-                x:Name="ShellSummary"
-                Grid.ColumnSpan="3"
-                MaxWidth="400"
-                Margin="36,12"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Spacing="12">
-                <Image
-                    Width="96"
-                    Height="96"
-                    HorizontalAlignment="Center"
-                    Source="ms-appx:///Assets/Malachi.ico" />
-                <TextBlock
-                    x:Name="SummaryTitle"
-                    AutomationProperties.AutomationId="SummaryTitle"
-                    Style="{StaticResource Title1LabelStyle}"
-                    Text="{x:Bind res:Bind.AppName}" />
-                <TextBlock
-                    x:Name="SummaryConnection"
-                    HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="SummaryConnection"
-                    Style="{StaticResource BodyLabelStyle}"
-                    Text="{x:Bind res:Bind.ConnectionText(Sync.Connection), Mode=OneWay}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-                <TextBlock
-                    x:Name="SummaryHeading"
-                    HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="SummaryHeading"
-                    Style="{StaticResource HeadingLabelStyle}"
-                    Text="{x:Bind HeadingText, Mode=OneWay}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-                <TextBlock
-                    x:Name="SummaryCounts"
-                    HorizontalAlignment="Center"
-                    AutomationProperties.AutomationId="SummaryCounts"
-                    Style="{StaticResource DimLabelStyle}"
-                    Text="{x:Bind CountsText, Mode=OneWay}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-            </StackPanel>
-        </Grid>
+            <!-- inner_split: the list beside the message page. -->
+            <Grid x:Name="ContentPanes">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition
+                        x:Name="ListColumn"
+                        Width="380"
+                        MinWidth="280"
+                        MaxWidth="460" />
+                    <ColumnDefinition x:Name="MessageColumn" Width="*" MinWidth="300" />
+                </Grid.ColumnDefinitions>
+                <!-- The content layer the list and the message sit on. -->
+                <Border
+                    x:Name="ContentLayer"
+                    Grid.ColumnSpan="2"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1,1,0,0"
+                    CornerRadius="8,0,0,0" />
+                <main:MessageListPane x:Name="ListPane" AutomationProperties.AutomationId="MessageListPane" />
+                <Rectangle
+                    x:Name="ListDivider"
+                    Width="1"
+                    HorizontalAlignment="Right"
+                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <Grid x:Name="MessagePane" Grid.Column="1">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+                    <main:MessageCommandBar x:Name="MessageCommands" AutomationProperties.AutomationId="MessageCommands" />
+                    <ContentControl
+                        x:Name="ReaderRegion"
+                        Grid.Row="1"
+                        HorizontalContentAlignment="Stretch"
+                        VerticalContentAlignment="Stretch"
+                        IsTabStop="False" />
+                    <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+                </Grid>
+                <!-- The list's width (inner_split, 280 to 460). -->
+                <tk:GridSplitter
+                    x:Name="ListSplitter"
+                    Width="8"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Margin="0,0,-4,0"
+                    HorizontalAlignment="Right"
+                    Background="Transparent"
+                    IsThumbVisible="False"
+                    ResizeBehavior="CurrentAndNext"
+                    ResizeDirection="Columns" />
+                <!-- The sidebar's width (outer_split, 200 to 320). -->
+                <tk:PropertySizer
+                    x:Name="SidebarSizer"
+                    Width="8"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Margin="-4,0,0,0"
+                    HorizontalAlignment="Left"
+                    Background="Transparent"
+                    Binding="{x:Bind PaneSplit.OpenPaneLength, Mode=TwoWay}"
+                    IsThumbVisible="False"
+                    Maximum="320"
+                    Minimum="200" />
+            </Grid>
+        </SplitView>
 
         <!-- The status line across the bottom edge (window.blp status_button,
              at the bottom of the window as on macOS). -->
-        <ContentControl
-            x:Name="StatusBarRegion"
-            Grid.Row="2"
-            HorizontalContentAlignment="Stretch"
-            IsTabStop="False">
-            <Grid
-                x:Name="ProvisionalStatusLine"
-                Height="26"
-                Padding="12,0"
-                ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ProgressRing
-                    Grid.Column="0"
-                    Width="14"
-                    Height="14"
-                    IsActive="{x:Bind Sync.Line.Spinning, Mode=OneWay, FallbackValue=False}"
-                    Visibility="{x:Bind res:Bind.Visible(Sync.Line.Spinning), Mode=OneWay, FallbackValue=Collapsed}" />
-                <FontIcon
-                    Grid.Column="1"
-                    FontSize="14"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Glyph="{x:Bind res:Icons.Glyph(Sync.Line.Icon), Mode=OneWay}"
-                    Visibility="{x:Bind res:Bind.VisibleIfText(Sync.Line.Icon), Mode=OneWay, FallbackValue=Collapsed}" />
-                <TextBlock
-                    x:Name="StatusLineText"
-                    Grid.Column="2"
-                    VerticalAlignment="Center"
-                    AutomationProperties.AutomationId="StatusLine"
-                    MaxLines="1"
-                    Style="{StaticResource DimCaptionLabelStyle}"
-                    Text="{x:Bind Sync.Line.Text, Mode=OneWay}"
-                    TextTrimming="CharacterEllipsis" />
-            </Grid>
-        </ContentControl>
+        <main:StatusBarView x:Name="StatusLine" Grid.Row="2" />
     </Grid>
 </Window>

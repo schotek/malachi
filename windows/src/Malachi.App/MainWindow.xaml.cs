@@ -14,21 +14,18 @@
 // - 1200×760 and at least 360×294 (window.blp), the size and the
 //   maximised state kept in the gschema keys GTK declares
 //   (window-width, window-height, window-maximized; U10);
-// - the regions the wave-2 screens fill (Sidebar, MessageList, Reader,
-//   StatusBar), the toast overlay over the message pane, and a provisional
-//   summary and status line until they are filled;
+// - the panes (MainWindow.Panes.cs: the sidebar, the list, the message
+//   page's header bar, the status line and the adaptive layout), the
+//   reader's region the reader fills (wave 2, E4), the toast overlay over
+//   the message page's content;
 // - closing never destroys the window (one main window per process): it
 //   asks the app, which hides it (docs/windows-port.md §10).
 
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Globalization;
 using System.IO;
 using Malachi.App.Commands;
 using Malachi.App.Shell;
 using Malachi.Core;
-using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Composition.SystemBackdrops;
@@ -42,7 +39,7 @@ namespace Malachi.App;
 
 /// <summary>The main window of the application.</summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "The window procedure's hook is removed when the window closes.")]
-public sealed partial class MainWindow : Window, INotifyPropertyChanged
+public sealed partial class MainWindow : Window
 {
     /// <summary>window.blp default-width.</summary>
     public const int DefaultWidth = 1200;
@@ -58,11 +55,6 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
     private readonly AppState state;
     private readonly MainWindowHook hook;
-    private SyncController? sync;
-    private string headingText = "";
-    private string countsText = "";
-    private int accounts;
-    private int folders;
     private bool maximizeOnShow;
 
     /// <summary>Builds the (hidden) main window; <see cref="AppState.ShowMainWindow"/> shows it.</summary>
@@ -94,11 +86,8 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         AppWindow.Closing += OnClosing;
         AppWindow.Changed += OnAppWindowChanged;
         Closed += (_, _) => hook.Dispose();
-        UpdateSummary();
+        InitializePanes();
     }
-
-    /// <inheritdoc/>
-    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>The user asked to close the window (the caption's button, Alt+F4); the app decides.</summary>
     public event EventHandler? CloseRequested;
@@ -109,115 +98,41 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
     /// <summary>The window as the shell tracks it.</summary>
     public TrackedWindow Tracked { get; }
 
-    /// <summary>The main window's commands (bind the command rows to them; wave 2 sets the per-message handlers).</summary>
+    /// <summary>The main window's commands (the panes bind their buttons to them and set the per-message handlers).</summary>
     public WindowCommands Commands => Tracked.Commands;
 
     /// <summary>The toast overlay over the message pane (window.go Toast).</summary>
     public IToasts Toasts => ToastsHost;
 
-    /// <summary>The title bar's search box (window.blp search_entry); the list's search wires it (wave 2).</summary>
+    /// <summary>The title bar's search box (window.blp search_entry); the list's search follows it (MainWindow.Panes.cs).</summary>
     public Microsoft.UI.Xaml.Controls.AutoSuggestBox Search => SearchBox;
 
-    /// <summary>The status line and the banners' state, once the Integration exists.</summary>
-    public SyncController? Sync
-    {
-        get => sync;
-        private set
-        {
-            sync = value;
-            Changed(nameof(Sync));
-        }
-    }
-
-    /// <summary>The selected folder and its counts (provisional summary).</summary>
-    public string HeadingText
-    {
-        get => headingText;
-        private set
-        {
-            headingText = value;
-            Changed(nameof(HeadingText));
-        }
-    }
-
-    /// <summary>How many accounts and folders the mailbox loaded (provisional summary).</summary>
-    public string CountsText
-    {
-        get => countsText;
-        private set
-        {
-            countsText = value;
-            Changed(nameof(CountsText));
-        }
-    }
-
-    /// <summary>Wave 2 (E3): the folder sidebar, in the first column.</summary>
-    public UIElement? Sidebar
-    {
-        get => SidebarRegion.Content as UIElement;
-        set => Install(SidebarRegion, value);
-    }
-
-    /// <summary>Wave 2 (E3): the message list, in the second column.</summary>
-    public UIElement? MessageList
-    {
-        get => ListRegion.Content as UIElement;
-        set => Install(ListRegion, value);
-    }
-
-    /// <summary>Wave 2 (E4): the reader (or the No Accounts page), under the toast overlay.</summary>
+    /// <summary>Wave 2 (E4): the reader (or the No Accounts page), under the message page's header bar and the toast overlay.</summary>
     public UIElement? Reader
     {
         get => ReaderRegion.Content as UIElement;
-        set => Install(ReaderRegion, value);
+        set => ReaderRegion.Content = value;
     }
-
-    /// <summary>Wave 2 (E3): the status line with its flyout, across the bottom edge.</summary>
-    public UIElement? StatusBar
-    {
-        get => StatusBarRegion.Content as UIElement;
-        set => StatusBarRegion.Content = value ?? ProvisionalStatusLine;
-    }
-
-    /// <summary>The columns of the sidebar and the list (wave 2 sizes them from folder-pane-width and message-list-width).</summary>
-    public (Microsoft.UI.Xaml.Controls.ColumnDefinition Sidebar, Microsoft.UI.Xaml.Controls.ColumnDefinition List) PaneColumns =>
-        (SidebarColumn, ListColumn);
 
     /// <summary>The Integration exists: the window shows what its controllers hold.</summary>
     public void Attach(Integration integration)
     {
         ArgumentNullException.ThrowIfNull(integration);
-        Sync = integration.Sync;
+        AttachPanes(integration);
     }
 
-    /// <summary>window.go refreshListTitle: the selected folder in the caption, its counts in the summary.</summary>
+    /// <summary>window.go refreshListTitle: the selected folder in the caption (the list's header shows it with its counts).</summary>
     public void ShowListHeading(ListHeading heading)
     {
         // Windows-only string: the caption "<folder> – Malachi Mail" (docs/windows-port.md §11.1).
         Title = string.IsNullOrEmpty(heading.Title) ? AppIdentity.DisplayName : heading.Title + " – " + AppIdentity.DisplayName;
-        HeadingText = string.IsNullOrEmpty(heading.Subtitle) ? heading.Title : heading.Title + " · " + heading.Subtitle;
     }
 
-    /// <summary>The accounts were (re)loaded.</summary>
-    public void ShowAccounts(IReadOnlyList<Account> loaded)
-    {
-        ArgumentNullException.ThrowIfNull(loaded);
-        accounts = loaded.Count;
-        UpdateSummary();
-    }
-
-    /// <summary>The folders were (re)loaded.</summary>
-    public void ShowFolderCount(int count)
-    {
-        folders = count;
-        UpdateSummary();
-    }
-
-    /// <summary>Puts the keyboard in the search box and selects its text (win.search).</summary>
-    public void FocusSearch()
-    {
-        SearchBox.Focus(FocusState.Keyboard);
-    }
+    /// <summary>
+    /// Puts the keyboard in the search box and selects its text (win.search,
+    /// search.go startSearch: a folded window shows the list first).
+    /// </summary>
+    public void FocusSearch() => BeginSearch();
 
     /// <summary>
     /// Called before every show: a window kept maximised the last time
@@ -234,7 +149,9 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
 
     /// <summary>
     /// Keeps the size and the maximised state (window-width, window-height,
-    /// window-maximized); a minimised window keeps what it had.
+    /// window-maximized) and the pane widths of a wide layout
+    /// (folder-pane-width, message-list-width); a minimised window keeps
+    /// what it had.
     /// </summary>
     public void SaveGeometry()
     {
@@ -242,6 +159,7 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         {
             return;
         }
+        SavePaneWidths();
         switch (overlapped.State)
         {
             case OverlappedPresenterState.Maximized:
@@ -254,12 +172,6 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
                 state.Settings.WindowHeight = (int)Math.Round(AppWindow.Size.Height / scale);
                 break;
         }
-    }
-
-    private void Install(Microsoft.UI.Xaml.Controls.ContentControl region, UIElement? content)
-    {
-        region.Content = content;
-        UpdateSummary();
     }
 
     // The size of last time, in effective pixels at this window's DPI,
@@ -285,14 +197,6 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
         return dpi == 0 ? 1.0 : dpi / 96.0;
     }
 
-    private void UpdateSummary()
-    {
-        var empty = SidebarRegion.Content is null && ListRegion.Content is null && ReaderRegion.Content is null;
-        ShellSummary.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
-        // Windows-only string: the provisional summary of the shell.
-        CountsText = string.Format(CultureInfo.CurrentCulture, "Accounts: {0} · Folders: {1}", accounts, folders);
-    }
-
     private void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         // One main window for the process: it hides; the app decides whether it quits.
@@ -308,6 +212,4 @@ public sealed partial class MainWindow : Window, INotifyPropertyChanged
             ShownChanged?.Invoke(this, sender.IsVisible);
         }
     }
-
-    private void Changed(string property) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(property));
 }

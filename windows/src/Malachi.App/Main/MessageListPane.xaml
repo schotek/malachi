@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the message list of ui/data/ui/window.blp (the list_page: its
+header bar with Check for New Mail at the start and list_title, the
+selected folder and its counts; search_bar's scope toggles; the content
+box of backend_banner, auth_banner, cert_banner, message_filter and
+list_stack: message_list with the Load More footer and search_note, or
+list_status_page with Try Again) and of ui/internal/window/messages.go,
+threads.go and search.go; macOS: MessageList/MessageListViewController.swift
+and SearchScopeBar.swift. Windows' deviations (windows/README.md): the
+search box sits in the title bar, so the header has no search toggle and
+the scope toggles show over the list while a search runs; the filter and
+the scope are SelectorBars (docs/windows-port.md §11.1); the banners are
+InfoBars; the list pages itself and Load More appears only to retry a page
+that failed (as macOS).
+-->
+<UserControl
+    x:Class="Malachi.App.Main.MessageListPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:p="using:Malachi.Core.Presentation"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The list's header bar: Check for New Mail, and list_title. -->
+        <Grid
+            x:Name="HeaderRow"
+            Height="44"
+            Padding="8,0"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button
+                x:Name="RefreshButton"
+                Width="40"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="RefreshButton"
+                AutomationProperties.Name="{l:T Msgid='Check for New Mail'}"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Check for New Mail'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-refresh-symbolic')}" />
+            </Button>
+            <StackPanel
+                x:Name="ListTitle"
+                Grid.Column="1"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+                <TextBlock
+                    x:Name="ListTitleText"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="ListTitle"
+                    AutomationProperties.HeadingLevel="Level2"
+                    MaxLines="1"
+                    Style="{StaticResource HeadingLabelStyle}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    x:Name="ListSubtitleText"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="ListSubtitle"
+                    MaxLines="1"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+            <!-- Balances the refresh button, so the title stays centred. -->
+            <Border Grid.Column="2" Width="40" />
+        </Grid>
+
+        <!-- search_scope: where a search looks; only while one runs. -->
+        <SelectorBar
+            x:Name="ScopeBar"
+            Grid.Row="1"
+            HorizontalAlignment="Center"
+            AutomationProperties.AutomationId="SearchScope"
+            SelectionChanged="OnScopeChanged"
+            Visibility="Collapsed">
+            <SelectorBarItem x:Name="ScopeFolder" Text="{l:T Msgid='Folder', Context='search scope'}" />
+            <SelectorBarItem x:Name="ScopeAccount" Text="{l:T Msgid='Account', Context='search scope'}" />
+            <SelectorBarItem x:Name="ScopeAll" Text="{l:T Msgid='All Accounts', Context='search scope'}" />
+        </SelectorBar>
+
+        <InfoBar
+            x:Name="BackendBanner"
+            Grid.Row="2"
+            AutomationProperties.AutomationId="BackendBanner"
+            IsClosable="False"
+            Message="{l:T Msgid='The mail backend (malachid) is not running.'}"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button x:Name="BackendRetryButton" Content="{l:T Msgid='Retry'}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- The title is the account and the reason (sync.go showAuthRequired). -->
+        <InfoBar
+            x:Name="AuthBanner"
+            Grid.Row="3"
+            AutomationProperties.AutomationId="AuthBanner"
+            IsClosable="False"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button x:Name="AuthBannerButton" Content="{l:T Msgid='Open Preferences'}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- The first account whose server certificate is refused or has
+             changed (sync.go refreshCertBanner). -->
+        <InfoBar
+            x:Name="CertBanner"
+            Grid.Row="4"
+            AutomationProperties.AutomationId="CertBanner"
+            IsClosable="False"
+            Severity="Warning">
+            <InfoBar.ActionButton>
+                <Button x:Name="CertBannerButton" l:MnemonicLabel.Text="{l:T Msgid='_Edit Account…'}" />
+            </InfoBar.ActionButton>
+        </InfoBar>
+
+        <!-- message_filter: all, unread or flagged, applied by the daemon;
+             hidden while searching (search.go). -->
+        <SelectorBar
+            x:Name="FilterBar"
+            Grid.Row="5"
+            Margin="0,4"
+            HorizontalAlignment="Center"
+            AutomationProperties.AutomationId="MessageFilter"
+            SelectionChanged="OnFilterChanged">
+            <SelectorBarItem x:Name="FilterAll" Text="{l:T Msgid='All'}" />
+            <SelectorBarItem x:Name="FilterUnread" Text="{l:T Msgid='Unread'}" />
+            <SelectorBarItem x:Name="FilterFlagged" Text="{l:T Msgid='Flagged'}" />
+        </SelectorBar>
+
+        <!-- list_stack: the rows with their footer, or the status page. -->
+        <Grid Grid.Row="6">
+            <Grid x:Name="MessagesPage">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ListView
+                    x:Name="MessageList"
+                    AutomationProperties.AutomationId="MessageList"
+                    AutomationProperties.Name="{l:T Msgid='Messages'}"
+                    ContextRequested="OnContextRequested"
+                    DoubleTapped="OnDoubleTapped"
+                    ItemsSource="{x:Bind Rows}"
+                    PreviewKeyDown="OnListKeyDown"
+                    SelectionChanged="OnSelectionChanged"
+                    SelectionMode="Single">
+                    <ListView.ItemContainerStyle>
+                        <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="p:MessageRow">
+                            <main:MessageRowView Row="{x:Bind}" />
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+                <!-- Load More (only to retry) and the spinner of a page on its way. -->
+                <StackPanel
+                    x:Name="LoadMoreBox"
+                    Grid.Row="1"
+                    Margin="0,6"
+                    HorizontalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    Visibility="Collapsed">
+                    <Button
+                        x:Name="LoadMoreButton"
+                        AutomationProperties.AutomationId="LoadMoreButton"
+                        Content="{l:T Msgid='Load More'}"
+                        Visibility="Collapsed" />
+                    <ProgressRing
+                        x:Name="LoadMoreSpinner"
+                        Width="16"
+                        Height="16"
+                        IsActive="False"
+                        Visibility="Collapsed" />
+                </StackPanel>
+                <!-- search_note: how far back the local store reaches. -->
+                <TextBlock
+                    x:Name="SearchNote"
+                    Grid.Row="2"
+                    Margin="12,0,12,6"
+                    AutomationProperties.AutomationId="SearchNote"
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+            </Grid>
+            <main:PaneStatusPage x:Name="ListStatusPage" Visibility="Collapsed" />
+        </Grid>
+    </Grid>
+</UserControl>

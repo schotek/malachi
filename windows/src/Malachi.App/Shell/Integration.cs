@@ -13,12 +13,12 @@
 // a new message reaches the desktop notification before the list.
 //
 // The screens come in wave 2 (docs/windows-port.md §15, phase E): the
-// sidebar, the list and the reader go into MainWindow's regions, and their
-// view-side wiring (the reader following the selection, the banners and
-// their buttons, the status popover's rows, the message windows) joins
-// here next to the controller wiring below. Their entry points are marked
-// "Wave 2". Until then the main window shows the connection, the status
-// line and the counts of what the mailbox loaded.
+// sidebar, the list, the message page's header bar and the status line are
+// the main window's panes, which wire their own view side to these
+// controllers (MainWindow.Panes.cs: the banners and their buttons, the
+// status flyout's rows, the selection's commands); the reader, the message
+// windows and compose join here next to the controller wiring below. Their
+// entry points are marked "Wave 2".
 
 using System;
 using System.Collections.Generic;
@@ -146,12 +146,10 @@ public sealed class Integration : IDisposable
     }
 
     // window.go refreshListTitle: the selected folder is the window's
-    // title; the list's own header shows it with its counts (wave 2).
+    // title; the list's own header shows it with its counts.
     private void WireMailbox()
     {
         Mailbox.ListTitleChanged += (_, heading) => mainWindow.ShowListHeading(heading);
-        Mailbox.AccountsLoaded += (_, accounts) => mainWindow.ShowAccounts(accounts);
-        Mailbox.EntriesChanged += (_, _) => mainWindow.ShowFolderCount(FolderCount());
     }
 
     // window.go 337-360 and 411-433: the main window's commands act on the
@@ -193,15 +191,5 @@ public sealed class Integration : IDisposable
         hooks.MessageFilter = () => List.ListFilter;
         hooks.SearchActive = () => List.SearchActive;
         hooks.FocusSearch = mainWindow.FocusSearch;
-    }
-
-    private int FolderCount()
-    {
-        var n = 0;
-        foreach (var folders in Mailbox.Model.Folders.Values)
-        {
-            n += folders.Count;
-        }
-        return n;
     }
 }
