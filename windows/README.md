@@ -348,9 +348,18 @@ Windows display languages (*Settings → Time & language → Language &
 region*), matched by the base language; `MALACHI_LOCALE_DIR` points at
 another directory of `.po` files (the repository's `po\` works).
 
-Strings that exist only on Windows (*Quit* and *Open Malachi Mail*, the
-*Keyboard* and *Default Mail App* groups, a few accessible names) stay
-English; they are marked `// Windows-only string` (or
+Strings that exist only on Windows stay English, in a Czech UI too, until
+the GTK UI has msgids for them: *Quit* in the primary menu and in the
+notification-area icon's menu, with *Open Malachi Mail* there; in
+*Preferences → General* the *Keyboard* group (its title, *Ctrl+R*, *F5
+always checks for new mail*), the *Default Mail App* group (its title,
+*Open e-mail links with Malachi Mail*, *Default apps* and what Windows
+opens e-mail links with) and *Launch at Login*'s note that Windows
+Settings turned it off, with its *Startup apps* link; *About*'s
+description, licence line, *Website*, *Report an Issue* and *Close*; a few
+toasts (an address that could not be copied, Windows Settings that could
+not be opened) and accessible names (*Filter*, *Search Scope*, *Message
+body*). They are marked `// Windows-only string` (or
 `<!-- Windows-only string -->`) in the sources, and nothing is added to
 `po/POTFILES`. `Malachi.Conventions.Tests` checks that every msgid the
 sources use is in `po/malachi.pot`, with its context and plural, and that
@@ -372,6 +381,7 @@ confirmation dialogs.
 | The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
 | The primary menu `…` has New Message, Add Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
+| The sidebar's New Message is an accent (filled) button | A plain header-bar button | Windows 11's style for a pane's primary action (Fluent's accent button); kept after the parity review |
 | Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (*Preferences → General → Keyboard*: `reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, F10 the primary menu (while the sidebar shows it), Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
 | Mnemonics are WinUI access keys: Alt shows their key tips on the menus and buttons that carry a GTK mnemonic; a dialog's buttons have none | Underlined mnemonics | WinUI's form of mnemonics; a `ContentDialog`'s buttons take no access keys |
 | Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
@@ -403,7 +413,7 @@ confirmation dialogs.
 | While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
 | The new-mail sound is the user's system sound for mail (`MailBeep`, *Desktop Mail Notification* in Control Panel → Sound) at the system sounds' volume, silent when none is set, skipped under Do Not Disturb, in a presentation, a full-screen program, the screen saver or a locked session; notifications themselves are silent | The sound theme's `message-new-email` | Windows' own event for it |
 | The account wizard is a window of its own, modal over the window it was opened from (520×640): its title bar carries Back (also Alt+Left and the mouse's back button) and the page's title; its close button, Escape and Ctrl+W cancel it (and a sign-in waiting in the browser). The pages slide in; the result rows' icons are green for success and red for an error | An `Adw.Dialog` over its parent with a header bar on each page | A window shows one `ContentDialog` at a time, and the wizard asks *Trust This Certificate?* in one of its own (docs/windows-port.md §11.3); the colours are macOS's |
-| The wizard never shows the accounts of GNOME Online Accounts, and its GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again* | Both, for accounts GNOME Online Accounts holds | GNOME Online Accounts does not exist on Windows (as macOS); the daemon offers its own browser sign-in instead, so the page is normally not reached |
+| The wizard never shows the accounts of GNOME Online Accounts, and its GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again*; the sign-in banner of an account that GNOME Online Accounts holds keeps its button *Open Online Accounts*, which opens *Preferences* | Both, for accounts GNOME Online Accounts holds; the banner's button opens *Online Accounts* in GNOME Settings | GNOME Online Accounts does not exist on Windows (as macOS, whose table has the same row); the daemon offers its own browser sign-in instead, so the page is normally not reached; an account of GNOME Online Accounts (a configuration brought from Linux) is practically never seen here, and the Preferences are where it is edited or removed |
 | *Preferences* is one window for the app with a navigation pane (Accounts, General, Appearance, AI), only its icons below 720 px; the rows are Windows settings cards; *General* has, after GTK's groups (Startup, Reading, Deleting, Notifications, Mail), a *Keyboard* group (the `ctrl-r` choice) and a *Default Mail App* group; *Accounts* follows the accounts and their state while it is open | `Adw.PreferencesDialog` with a view switcher, built anew on every open | Windows Settings' form; the two groups are Windows' own; the window stays open beside the main window, where accounts change |
 | *Preferences* has no search field | `Adw.PreferencesDialog` with search | Decided (as macOS) |
 | *Preferences → General → Default Mail App* has a *Default apps* button that opens *Settings → Apps → Default apps* for Malachi Mail | None | Windows does not let an app make itself the default mail app; the app registers itself in HKCU at start, the user chooses it there |
@@ -411,6 +421,8 @@ confirmation dialogs.
 | In *Preferences → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch | Ctrl+Up / Ctrl+Down reorder the selected row, so a click must select (as macOS) |
 | *Launch at Login* is the Run value; when the user turned Malachi Mail off in *Settings → Apps → Startup*, the row says so and links there, and turning it on reports *Autostart was not granted* | The Background portal asks | Windows keeps that choice in Settings, where only the user changes it; the app never overwrites it |
 | *About Malachi Mail* is a dialog with the name, icon, developer, version, licence, website and issue tracker; its description says *A native mail client.* | `Adw.AboutDialog` with *A native mail client for the GNOME desktop.* | GTK's text names GNOME; the fields are GTK's |
+| *Preferences → Accounts* shows a Google or Microsoft 365 account with the generic envelope glyph, as any other | The provider's GNOME Online Accounts icon (`goa-account-google`, `goa-account-ms365`) when the icon theme has it | Windows has no such icons, and the app ships no brand icons (docs/windows-port.md §3.1, U6) |
+| A new-mail notification's title, the sender's name, is cut to 200 bytes with an ellipsis, as its body is | Only the body is capped | A display name is hostile input as much as a subject; as macOS (docs/windows-port.md §3.1, U7) |
 | The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log). The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
 
 The link under the pointer is shown at the bottom of the message view as

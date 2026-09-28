@@ -249,10 +249,10 @@ report's U1–U11) are resolved for Windows as follows: unlisted links are
 confirmed (U1, decided); the AI page reports bridge failures in the group
 description as GTK does (U2, U3); a cold `mailto:` launch opens only the
 composer as GTK does (U4); the sidebar star is keyboard-reachable (U5);
-provider rows use the generic icon (U6); notification titles are capped
-(U7); About carries the GTK fields (U8); there is no Help item (U9); the
-unused gschema geometry keys are used (U10); the window is *Preferences*
-(U11).
+provider rows use the generic icon (U6) and notification titles are capped
+(U7), both rows of the deviation table; About carries the GTK fields (U8);
+there is no Help item (U9); the unused gschema geometry keys are used
+(U10); the window is *Preferences* (U11).
 
 ## 4. The API layer
 
