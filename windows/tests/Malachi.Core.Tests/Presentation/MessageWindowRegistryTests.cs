@@ -13,6 +13,7 @@ using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
+using Malachi.Core.Tests.Fixtures;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Malachi.Core.Tests.Presentation.ReaderFixtures;
@@ -104,11 +105,18 @@ public sealed class MessageWindowRegistryTests
     [Fact]
     public async Task ASecondClickThatOvertookTheFirstRaisesItsWindow()
     {
+        // The registry is the UI thread's, as in the app: both clicks start
+        // there and their fetches come back to it one after the other.
+        // Started on the test's thread, which has no synchronization
+        // context, the gate released one continuation inline and queued the
+        // other to the thread pool, and when they ran at once both made a
+        // window.
+        using var ui = new TestUIContext();
         var containing = Summary("m1");
         cache.EmbeddedGate = new TaskCompletionSource();
         cache.Embedded = _ => Embedded("Inner");
-        var first = registry.OpenEmbeddedAsync(containing, "2", null);
-        var second = registry.OpenEmbeddedAsync(containing, "2", null);
+        var (first, second) = await ui.RunAsync(() =>
+            (registry.OpenEmbeddedAsync(containing, "2", null), registry.OpenEmbeddedAsync(containing, "2", null)));
         cache.EmbeddedGate.SetResult();
         await Task.WhenAll(first, second);
         var w = Assert.Single(made);
