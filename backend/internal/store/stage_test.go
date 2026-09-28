@@ -27,10 +27,10 @@ func TestStageRaw(t *testing.T) {
 	if filepath.Dir(st.path) != s.stagingDir() {
 		t.Errorf("staged at %s", st.path)
 	}
-	if info, err := os.Stat(s.stagingDir()); err != nil || info.Mode().Perm() != 0o700 {
+	if info, err := os.Stat(s.stagingDir()); err != nil || info.Mode().Perm() != permOf(t, 0o700, true) {
 		t.Errorf("staging dir: %v %v", info.Mode().Perm(), err)
 	}
-	if info, err := os.Stat(st.path); err != nil || info.Mode().Perm() != 0o600 {
+	if info, err := os.Stat(st.path); err != nil || info.Mode().Perm() != permOf(t, 0o600, false) {
 		t.Errorf("staged file: %v %v", info.Mode().Perm(), err)
 	}
 	if _, err := st.Write([]byte("abc")); err != nil {
@@ -93,6 +93,9 @@ func TestStagingSweptAtOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	st.Write([]byte("left behind by a crash"))
+	// A crash closes the process's files; Windows would refuse to remove
+	// one still open.
+	st.f.Close()
 	s.Close()
 	s, err = Open(ctx, path, log)
 	if err != nil {

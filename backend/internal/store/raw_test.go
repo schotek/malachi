@@ -144,6 +144,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
 	dir := filepath.Join(s.MessageDir(), "acc")
+	filePerm, dirPerm := permOf(t, 0o600, false), permOf(t, 0o700, true)
 	lengths := []int{0, 1, 255, 256, 1 << 10, 128<<10 - 1, 128 << 10, 128<<10 + 1, 1 << 20}
 	for _, codec := range []RawCodec{RawPlain, RawZstd} {
 		for _, known := range []bool{false, true} {
@@ -164,7 +165,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%s: %v", id, err)
 				}
-				if info.Codec != codec || info.Bytes != int64(n) || info.DiskBytes != st.Size() || st.Mode().Perm() != 0o600 {
+				if info.Codec != codec || info.Bytes != int64(n) || info.DiskBytes != st.Size() || st.Mode().Perm() != filePerm {
 					t.Errorf("%s: info %+v, file %d bytes mode %v", id, info, st.Size(), st.Mode().Perm())
 				}
 				if _, err := os.Stat(filepath.Join(dir, rawName(id, codec.other()))); !errors.Is(err, fs.ErrNotExist) {
@@ -193,7 +194,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 			t.Errorf("left behind: %s", name)
 		}
 	}
-	if st, _ := os.Stat(dir); st.Mode().Perm() != 0o700 {
+	if st, _ := os.Stat(dir); st.Mode().Perm() != dirPerm {
 		t.Errorf("dir mode %v", st.Mode().Perm())
 	}
 	// No row, no accounting.
