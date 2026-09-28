@@ -2035,6 +2035,20 @@ yet (§12). The Linux packaging workflows ignore pushes that change nothing
 but `windows/`, `macos/` or this workflow; tags always build everything
 (GitHub does not apply path filters to tags).
 
+The jobs run the tests as they are, without retries, and a few have
+margins that a busy machine missed while the workflow was checked locally
+(each green on its own): in `backend/`, `internal/imap`
+`TestClientSideWindowAcrossBatches` (2,500 messages synced within 15 s;
+9 to 22 s there), `internal/rpc` `TestCallsBeforeHandshakeAreRejected` (a
+rejected connection closed within 5 s) and `pkg/api`
+`TestHandshakeTimesOut` (a 150 ms context expiring before `system.hello`
+is written is reported as a plain deadline, not `timedOut`); in the
+client, `BridgeRunnerTests.ATimeoutKillsTheProcess` (a 3 s bound) and
+`ComposeAttachmentsControllerTests.RemovingForgetsTheFileAndTellsTheBackend`
+(two imports in flight are listed in the order they complete). A red run
+that names one of them is that, not a regression of the change it ran
+for; they are to be fixed where they live.
+
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in
 `LICENSING.md`); [releasing.md §7](releasing.md#7-windows) has what that
