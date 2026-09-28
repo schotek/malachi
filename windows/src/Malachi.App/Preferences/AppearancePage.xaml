@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/AppearancePaneViewController.swift;
+GTK: preferences.blp appearance_page. The Blueprint's groups in its order:
+Theme (color_scheme: Follow System, Light, Dark), Message List
+(list_density: Comfortable, Compact; group_by_conversation;
+show_preview_line; show_avatars; monochrome_avatars) and Message View
+(monospace_plain_text; text_zoom, 50 to 200 percent in steps of 10). Every
+row is bound two-way to its settings key; the windows follow the keys
+live (the colour scheme on every window and its title bar).
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.AppearancePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Theme'}" />
+                    <tk:SettingsCard Header="{l:T Msgid='Color Scheme'}">
+                        <ComboBox
+                            x:Name="ColorSchemeBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="ColorScheme"
+                            AutomationProperties.Name="{l:T Msgid='Color Scheme'}">
+                            <ComboBoxItem Content="{l:T Msgid='Follow System'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Light'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Dark'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Message List'}" />
+                    <tk:SettingsCard Header="{l:T Msgid='Density'}">
+                        <ComboBox
+                            x:Name="DensityBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="Density"
+                            AutomationProperties.Name="{l:T Msgid='Density'}">
+                            <ComboBoxItem Content="{l:T Msgid='Comfortable'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Compact'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='One row per conversation; expand it to see its messages'}" Header="{l:T Msgid='Group by Conversation'}">
+                        <ToggleSwitch
+                            x:Name="GroupByConversationSwitch"
+                            AutomationProperties.AutomationId="GroupByConversation"
+                            AutomationProperties.Name="{l:T Msgid='Group by Conversation'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Header="{l:T Msgid='Show Preview Line'}">
+                        <ToggleSwitch
+                            x:Name="ShowPreviewLineSwitch"
+                            AutomationProperties.AutomationId="ShowPreviewLine"
+                            AutomationProperties.Name="{l:T Msgid='Show Preview Line'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Header="{l:T Msgid='Show Avatars'}">
+                        <ToggleSwitch
+                            x:Name="ShowAvatarsSwitch"
+                            AutomationProperties.AutomationId="ShowAvatars"
+                            AutomationProperties.Name="{l:T Msgid='Show Avatars'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Neutral grey instead of a colour per sender'}" Header="{l:T Msgid='Monochrome Avatars'}">
+                        <ToggleSwitch
+                            x:Name="MonochromeAvatarsSwitch"
+                            AutomationProperties.AutomationId="MonochromeAvatars"
+                            AutomationProperties.Name="{l:T Msgid='Monochrome Avatars'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Message View'}" />
+                    <tk:SettingsCard Header="{l:T Msgid='Use Monospace Font for Plain Text'}">
+                        <ToggleSwitch
+                            x:Name="MonospacePlainTextSwitch"
+                            AutomationProperties.AutomationId="MonospacePlainText"
+                            AutomationProperties.Name="{l:T Msgid='Use Monospace Font for Plain Text'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Percent'}" Header="{l:T Msgid='Text Zoom'}">
+                        <NumberBox
+                            x:Name="TextZoomBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="TextZoom"
+                            AutomationProperties.Name="{l:T Msgid='Text Zoom'}"
+                            LargeChange="10"
+                            Maximum="200"
+                            Minimum="50"
+                            SmallChange="10"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

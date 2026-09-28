@@ -155,6 +155,8 @@ public partial class App : Application
         main.Attach(integration);
         // The compose windows (wave 2, E5): before the first activation, which may be a mailto:.
         global::Malachi.App.Compose.ComposeManager.Install(s, integration);
+        // The Preferences window and the account wizard (wave 2, E6).
+        Preferences.PreferencesEntryPoints.Install(s);
 
         quit = new QuitSequence(
             new QuitSteps

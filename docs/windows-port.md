@@ -1096,7 +1096,15 @@ answers `RequiresApproval`, which Preferences reports with GTK's *Autostart
 was not granted* and can follow with Settings → Apps → Startup). The
 `launch-at-login` key only mirrors the status, at start and whenever
 Preferences opens; a Run value naming an executable that no longer exists
-(the app folder moved) is pointed at the running one at start.
+(the app folder moved) is pointed at the running one at start. In
+Preferences → General the row reads the status whenever the page comes up
+or its window is activated; where the user turned the entry off in Windows
+Settings it says so under the row (*Turned off in Windows Settings*,
+Windows-only) with a *Startup apps* link, and turning it on in the app
+writes the value and answers *Autostart was not granted*, the switch
+going back. Verified outside Claude's process tree: the Run value written
+and removed, the mirror key following, the disabled state and its toast;
+the values the test wrote were removed afterwards.
 `Startup/LaunchArguments` reads the command line: `--background`, the
 `mailto:` links in order, and COM's `----AppNotificationActivated:` and
 `-Embedding`, which are neither.
@@ -1237,7 +1245,17 @@ attachment's own extension as its file type.
 
 **Sign-in.** The daemon owns the `127.0.0.1` listener; the app opens the
 `https` URL through the launcher (`ILauncher.OpenUrlAsync`: `ShellExecuteEx`,
-https only), nothing else.
+https only), nothing else. As built (phase E wave 2): the account wizard's
+browser page shows `WizardController`'s `OAuthView` (the prompt with the
+provider's button, the wait with *Open the Browser Again* and *Cancel*, and
+*No Sign-In Client Configured* with *Use an App Password Instead*); the
+controller calls `account.oauthStart` and `account.oauthWait` and hands the
+address to the launcher with the wizard's window as owner. Closing the
+wizard (its close button, Escape, Ctrl+W) closes the controller, which
+cancels a session the browser still has (`account.oauthCancel`). Verified
+with a Google address and no client configured (the unavailable page and
+the app-password path); a Microsoft address's prompt was not pressed,
+since it opens the user's browser.
 
 **MCP registration** (Preferences → AI): `malachi-mcp.exe status|install|
 uninstall --json` beside the app, 15 s timeout, output capped (1 MiB per
@@ -1254,7 +1272,14 @@ not read as someone else's registration), `--claude-desktop-config` while
 group description as in GTK (a later status that answers puts the page's
 own text back); a failed install or uninstall is a toast. A status ends
 with the page; an install or uninstall runs to its end
-(`McpRegistrationController`).
+(`McpRegistrationController`). The bridge starts its reason with its own
+name (`malachi-mcp: no Claude app found …`), which is skipped before the
+comparison with *no Claude app found*: GTK and macOS compare the whole
+line and never show their sentence for it (a fix there is separate). As
+built, the AI page asks for the status whenever it comes up; verified
+against the bundled bridge with `USERPROFILE`, `APPDATA` and
+`LOCALAPPDATA` in a temporary folder (registered in both files, removed
+again, and the toast with neither Claude app).
 
 ## 11. UI
 
@@ -1586,6 +1611,34 @@ apart, the title a drag region); the caption's Close invoked through UI
 Automation on a composer with nothing at stake, then a `mailto:` composer,
 four times without a failure; the notification of a suggestion as a UIA
 client receives it; the chips as named groups.
+
+As built (`Malachi.App/Wizard`, `Malachi.App/Preferences`): the wizard
+(`AccountWizardWindow`) is owned by the window it opens from
+(`GWLP_HWNDPARENT`) with a modal dialog `OverlappedPresenter`, 520×640
+effective pixels with its title bar, centred on its owner. Its title bar is
+the WinUI `TitleBar` with Back (`WizardController.CanGoBack`) and the
+visible page's title; below it a `Frame` navigates to a host page per
+wizard page, sliding in from the right for a later page and from the left
+for an earlier one (`WizardController.Rank`), while the five pages are
+made once and keep what was typed. The pages are `UserControl`s over the
+controller's events; the identity and Servers rows are `SettingsCard`s,
+a flagged row's title turns critical red (the GTK `error` class), the
+status pages are `Wizard/StatusPage` (Adw.StatusPage's margins). The
+certificate confirmation is the shell's ContentDialog on the wizard's
+window. Entry points: `AccountWizardWindow.Show` (add, edit, sign in again,
+ask for the password), and the hooks `AddAccount`, `EditAccount` and
+`OpenPreferences` (`Preferences/PreferencesEntryPoints`). Preferences
+(`PreferencesWindow.Show`, one instance) is a Mica window with a
+`NavigationView` pane and a page column clamped to 600 px; its settings are
+bound two-way (`Preferences/SettingBindings`), the Mail group is
+`MailPreferencesController`, the AI page `McpRegistrationController`, the
+Accounts page Core's `AccountsPageController` (§7.4) rendered with
+`KeyedListSync`. A `ListView` takes Ctrl+Up and Ctrl+Down for its own
+focus before the window's accelerators (measured), so the list asks the
+controller first in its `PreviewKeyDown`; the window's `MoveUp` and
+`MoveDown` commands cover the rest. A `ScrollViewer` places a direct child
+that has a `MaxWidth` of its own off centre (measured), so every clamped
+column sits in a `Grid`.
 
 ### 11.4 Banners, toasts, alerts
 

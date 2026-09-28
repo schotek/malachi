@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/AIPaneViewController.swift;
+GTK: preferences.blp ai_page. The group MCP (mcp_group) with its
+description, which a missing bridge or a status the bridge did not give
+replaces (GTK, U2 and U3), and its one row, Register with Claude
+(mcp_switch), insensitive until the bridge answered and while a call
+runs.
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.AiPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+                <StackPanel x:Name="McpGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='MCP'}" />
+                    <TextBlock
+                        x:Name="McpDescription"
+                        AutomationProperties.AutomationId="McpDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Text="{l:T Msgid='Lets AI assistants read your mail and prepare drafts through the Model Context Protocol.'}" />
+                    <tk:SettingsCard
+                        x:Name="RegisterRow"
+                        Description="{l:T Msgid='Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer'}"
+                        Header="{l:T Msgid='Register with Claude'}"
+                        IsEnabled="False">
+                        <ToggleSwitch
+                            x:Name="RegisterSwitch"
+                            AutomationProperties.AutomationId="RegisterWithClaude"
+                            AutomationProperties.Name="{l:T Msgid='Register with Claude'}"
+                            Toggled="OnRegisterToggled" />
+                    </tk:SettingsCard>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

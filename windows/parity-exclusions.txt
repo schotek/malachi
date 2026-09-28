@@ -15,6 +15,7 @@ A native mail client for the GNOME desktop.	GNOME: About's comment names the GNO
 Use	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
 Added	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
 Accounts from GNOME Online Accounts can be added without a password.	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
+Signed In on This Computer	GNOME Online Accounts: the wizard's group of linked accounts is never shown on Windows (M20)
 Check Again	GNOME Online Accounts: the wizard's rows of linked accounts are never shown on Windows
 Could not open Online Accounts; open GNOME Settings yourself	GNOME Online Accounts: no GNOME Settings on Windows
 Check for new mail and show notifications in the background	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key

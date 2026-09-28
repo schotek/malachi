@@ -44,12 +44,15 @@ public sealed class AppHooks
     }
 
     /// <summary>
-    /// Opens the account wizard in edit mode for an account (sync.go
-    /// editAccount: the banners and the status flyout), asking for the
-    /// password when a reason is given (WizardController.RequestPassword).
-    /// Wave 2 (E6) sets it; while it is null those buttons do nothing.
+    /// Opens the account wizard on an existing account over a window (the
+    /// main window when null): the certificate banner's and the sign-in
+    /// banner's Edit Account…, an account's row in the status popover
+    /// (sync.go editAccount, signInAgain). With a reason
+    /// (<c>authRequired</c>, <c>authFailed</c>) a password account opens on
+    /// the identity page asking for its password (RequestPassword). Wave 2
+    /// (E6) sets it.
     /// </summary>
-    public Action<AccountId, ErrorCode?>? EditAccount { get; set; }
+    public Action<Window?, AccountId, ErrorCode?>? EditAccount { get; set; }
 
     /// <summary>Opens an empty compose window (app.compose, Ctrl+N).</summary>
     public Action? ComposeNew
