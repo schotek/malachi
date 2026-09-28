@@ -60,6 +60,10 @@ var (
 	// Linux and macOS never do. The file is as it was, and a later
 	// attempt, once the reader is done, goes through.
 	ErrBusy = errors.New("store: message file in use by a reader")
+	// ErrAccountIDTaken: an account id that names the same directory of
+	// message files as another account's id on a file system that ignores
+	// case or Unicode normalisation (AddAccount).
+	ErrAccountIDTaken = errors.New("store: account id names another account's directory")
 )
 
 // Store wraps the database handle.

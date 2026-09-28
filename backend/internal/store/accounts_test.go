@@ -113,6 +113,53 @@ func TestAccountIDsThatCouldEscapeTheirDirectory(t *testing.T) {
 	}
 }
 
+// Two account ids that differ only in case or Unicode normalisation name
+// one directory of message files on macOS (APFS) and Windows, and a
+// trailing dot or space vanishes from a Windows file name: AddAccount
+// refuses the second of such a pair, and CheckAccountID the trailing ones.
+func TestAccountIDsThatShareADirectory(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	add := func(id, email string) error {
+		a := Account{ID: id, Name: id, Enabled: true, Config: testAccountConfig(email)}
+		return s.AddAccount(ctx, &a)
+	}
+	for _, id := range []string{"acc.", "acc ", "work.", "a b "} {
+		if err := CheckAccountID(id); err == nil {
+			t.Errorf("account id %q accepted", id)
+		}
+		if err := add(id, "trailing@example.invalid"); err == nil {
+			t.Errorf("account %q added", id)
+		}
+	}
+	if err := add("work", "work@example.invalid"); err != nil {
+		t.Fatal(err)
+	}
+	// NFC "é" (U+00E9) and NFD "e" + combining acute (U+0301).
+	nfc, nfd := "café", "café"
+	if err := add(nfc, "cafe@example.invalid"); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"Work", "WORK", "wOrK", nfd, "CAFÉ"} {
+		if err := add(id, id+"-other@example.invalid"); !errors.Is(err, ErrAccountIDTaken) {
+			t.Errorf("account %q: %v, want ErrAccountIDTaken", id, err)
+		}
+	}
+	// The same id is still "already exists", and other ids go in.
+	if err := add("work", "again@example.invalid"); !errors.Is(err, ErrExists) {
+		t.Errorf("same id: %v, want ErrExists", err)
+	}
+	if err := add("work2", "work2@example.invalid"); err != nil {
+		t.Errorf("work2: %v", err)
+	}
+	if err := add("", "generated@example.invalid"); err != nil {
+		t.Errorf("generated id: %v", err)
+	}
+	if list, _ := s.ListAccounts(ctx); len(list) != 4 {
+		t.Errorf("%d accounts, want 4", len(list))
+	}
+}
+
 func TestAccountsConfigRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)

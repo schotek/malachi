@@ -9,7 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -30,20 +33,35 @@ type Account struct {
 const accountColumns = `id, email, name, enabled, config, position, created_at, updated_at`
 
 // CheckAccountID reports an account id that cannot name the account's
-// directory of message files, one that could escape it (checkPathSegment):
-// an id written in config.toml, which AddAccount refuses.
+// directory of message files: one that could escape it (checkPathSegment),
+// or one ending in a dot or a space, which Windows drops from a file name
+// ("acc." would be the directory of "acc"). An id written in config.toml;
+// AddAccount refuses it.
 func CheckAccountID(id string) error {
 	if err := checkPathSegment(id); err != nil {
 		return fmt.Errorf("account id: %w", err)
 	}
+	if strings.HasSuffix(id, ".") || strings.HasSuffix(id, " ") {
+		return fmt.Errorf("account id: %q ends in a dot or a space", id)
+	}
 	return nil
+}
+
+// sameAccountDir reports whether two different account ids would name the
+// same directory of message files on a file system that ignores case
+// (macOS and Windows by default) or Unicode normalisation (APFS): equal
+// under simple case folding of their NFC forms.
+func sameAccountDir(a, b string) bool {
+	return a != b && strings.EqualFold(norm.NFC.String(a), norm.NFC.String(b))
 }
 
 // AddAccount inserts a. a.ID is honoured when set (config.toml import) and
 // valid (CheckAccountID), otherwise generated; a.Email is normalised from
 // a.Config.Email when empty; Position is appended at the end and the
 // timestamps are filled in. ErrExists when an account with the same e-mail
-// (case-insensitive) or the same id already exists.
+// (case-insensitive) or the same id already exists; ErrAccountIDTaken when
+// a.ID differs from another account's id only in case or Unicode
+// normalisation, which would share its directory of message files.
 func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	if a.ID == "" {
 		a.ID = newID("acc_")
@@ -76,6 +94,11 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	case !errors.Is(err, sql.ErrNoRows):
 		return fmt.Errorf("add account: %w", err)
 	}
+	if taken, err := accountDirTaken(ctx, tx, a.ID); err != nil {
+		return fmt.Errorf("add account: %w", err)
+	} else if taken {
+		return ErrAccountIDTaken
+	}
 
 	stamp := nowStamp()
 	err = tx.QueryRowContext(ctx,
@@ -91,6 +114,27 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	}
 	a.CreatedAt, a.UpdatedAt = parseStamp(stamp), parseStamp(stamp)
 	return nil
+}
+
+// accountDirTaken reports whether id would share the directory of message
+// files of an account already stored (sameAccountDir). The accounts table
+// is small; the comparison needs Go's folding, not SQLite's ASCII lower().
+func accountDirTaken(ctx context.Context, q querier, id string) (bool, error) {
+	rows, err := q.QueryContext(ctx, `SELECT id FROM accounts`)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var other string
+		if err := rows.Scan(&other); err != nil {
+			return false, err
+		}
+		if sameAccountDir(id, other) {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 // ListAccounts returns every account in display order: the order the user

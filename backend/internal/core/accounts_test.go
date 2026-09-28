@@ -393,6 +393,35 @@ func TestImportConfigAccountsSkipsUnsafeIDs(t *testing.T) {
 	}
 }
 
+// Ids of config.toml that differ only in case would share a directory of
+// message files on macOS and Windows: the first is imported, the second is
+// skipped with a warning, and the import goes on.
+func TestImportConfigAccountsSkipsIDsSharingADirectory(t *testing.T) {
+	ctx := context.Background()
+	server := func(host string, port int, sec string) *account.Server {
+		return &account.Server{Host: host, Port: port, Security: sec, Username: "u", AuthMethod: "password"}
+	}
+	cfg := config.Default()
+	for _, id := range []string{"Work", "work", "home"} {
+		cfg.Accounts = append(cfg.Accounts, account.Config{
+			ID: id, Name: id, Email: fmt.Sprintf("u%d@example.invalid", len(cfg.Accounts)),
+			IMAP: server("imap.example.invalid", 993, "tls"), SMTP: server("smtp.example.invalid", 587, "starttls"),
+		})
+	}
+	b := newTestBackend(t, cfg)
+	if err := b.ImportConfigAccounts(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := b.Accounts().List(ctx, api.AccountListParams{})
+	var ids []string
+	for _, a := range list.Accounts {
+		ids = append(ids, string(a.ID))
+	}
+	if len(ids) != 2 || ids[0] != "Work" || ids[1] != "home" {
+		t.Fatalf("imported %v, want [Work home]", ids)
+	}
+}
+
 func TestImportConfigAccountsKeepsStoreVersion(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.Default()

@@ -627,6 +627,11 @@ func (b *Backend) ImportConfigAccounts(ctx context.Context) error {
 		switch {
 		case errors.Is(err, store.ErrExists):
 			b.log.Debug("config.toml account already in store", "email", email)
+		case errors.Is(err, store.ErrAccountIDTaken):
+			// Its directory of message files would be another account's
+			// on a file system that ignores case (macOS, Windows).
+			b.log.Warn("config.toml account skipped: its id differs from another account's only in case or Unicode form", "index", i, "id", entry.ID)
+			continue
 		case err != nil:
 			return err
 		default:

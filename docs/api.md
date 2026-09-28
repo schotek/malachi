@@ -459,7 +459,12 @@ Accounts live in the daemon's store and are managed only through these
 methods. `[[accounts]]` entries in `config.toml` are bootstrap defaults: at
 start the daemon imports each one whose e-mail is not in the store and has
 not been imported before (so an account removed through `account.remove`
-stays removed); the daemon never writes `config.toml`. `account.list`
+stays removed); the daemon never writes `config.toml`. An entry's `id`
+names the account's directory of stored messages, so the import skips,
+with a warning in the log, an id that could leave that directory (a path
+separator, `:`, `.`, `..`, a Windows device name), one ending in a dot or a
+space, and one that differs from another account's id only in case or
+Unicode normalisation (the same directory on macOS and Windows). `account.list`
 returns accounts in display order: the order the user arranged with
 `account.reorder`, creation order until then. Every mutation is followed by
 `notify.accountsChanged`.
