@@ -52,7 +52,7 @@ namespace Malachi.Core.Controllers;
 /// reported by <see cref="Pending"/> (logged at error level) and the others
 /// are called all the same. UI-thread-affine (docs/windows-port.md §7.1).
 /// </remarks>
-public sealed partial class MessageCache : IDisposable, IActionsCache
+public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCache
 {
     private readonly ControllerScope scope;
     private readonly Action<string> toast;
@@ -134,30 +134,30 @@ public sealed partial class MessageCache : IDisposable, IActionsCache
     /// <summary>
     /// Runs <c>message.get</c> and <c>message.body</c> for
     /// <paramref name="s"/> (each only when the cache lacks it and no request
-    /// is in flight) and calls <paramref name="then"/> on the UI thread after
+    /// is in flight) and calls <paramref name="done"/> on the UI thread after
     /// every answer, with the cache entry so far; a complete entry calls
-    /// <paramref name="then"/> at once (message_view.go <c>fetchMessage</c>).
+    /// <paramref name="done"/> at once (message_view.go <c>fetchMessage</c>).
     /// A failed <c>message.get</c> is only logged (the summary headers stay)
     /// and retried the next time; a failed body sets
     /// <see cref="LoadedMessage.Err"/> and is retried the same way.
     /// </summary>
-    public void Fetch(MessageSummary s, Action<LoadedMessage> then)
+    public void Fetch(MessageSummary s, Action<LoadedMessage> done)
     {
         ArgumentNullException.ThrowIfNull(s);
-        ArgumentNullException.ThrowIfNull(then);
+        ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
         var id = s.Id;
         var lm = Cache.LoadedFor(id);
         if (lm.Complete)
         {
-            then(lm);
+            done(lm);
             return;
         }
         if (!waiters.TryGetValue(lm, out var list))
         {
             waiters[lm] = list = [];
         }
-        list.Add(then);
+        list.Add(done);
         if (lm.Msg is null && !lm.Getting)
         {
             lm.Getting = true;

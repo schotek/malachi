@@ -28,6 +28,9 @@ public enum WindowKind
     /// <summary>The account wizard (account_wizard.blp).</summary>
     Wizard,
 
-    /// <summary>Any other window (the attachment previewer): the application's keys only.</summary>
+    /// <summary>
+    /// Any other window (the attachment previewer): the application's keys,
+    /// and Escape and Ctrl+W close it (Sushi's and Quick Look's Escape).
+    /// </summary>
     Other,
 }

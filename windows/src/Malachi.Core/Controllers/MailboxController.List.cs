@@ -75,7 +75,7 @@ namespace Malachi.Core.Controllers;
 /// list generation checks race with nothing.
 /// </para>
 /// </remarks>
-public sealed partial class ListController : ObservableObject, IDisposable, IActionsList
+public sealed partial class ListController : ObservableObject, IDisposable, IActionsList, IListSelection
 {
     private readonly ILogger logger;
     private readonly TimeProvider time;
@@ -992,14 +992,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
-    /// Runs <paramref name="then"/> with the selected row and every message
+    /// Runs <paramref name="done"/> with the selected row and every message
     /// it stands for: one, or all the folder members of a conversation row,
     /// fetched first when they are not known yet (the selection must still
     /// be that conversation by then; threads.go <c>selectedIDs</c>).
     /// </summary>
-    public void SelectedIds(Action<ListRow, IReadOnlyList<MessageId>> then)
+    public void SelectedIds(Action<ListRow, IReadOnlyList<MessageId>> done)
     {
-        ArgumentNullException.ThrowIfNull(then);
+        ArgumentNullException.ThrowIfNull(done);
         Scope.VerifyAccess();
         if (SelectedRow is not { } row)
         {
@@ -1007,7 +1007,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         }
         if (Model.RowIds(row) is { } ids)
         {
-            then(row, ids);
+            done(row, ids);
             return;
         }
         if (row.Key.Thread is not { } tid)
@@ -1018,7 +1018,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         {
             if (SelectedRow is { Thread: true } r && r.Key.Thread == tid && Model.RowIds(r) is { } known)
             {
-                then(r, known);
+                done(r, known);
             }
         });
     }

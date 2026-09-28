@@ -1,0 +1,95 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Windows-only test fixture: the reader's IReaderCache answered from memory,
+// its fetches held until the test settles them (MessageCacheTests keeps the
+// real cache against a FakeDaemon; the reader only needs what it asks).
+
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Malachi.Core.Api;
+using Malachi.Core.Controllers;
+using Malachi.Core.Model;
+
+namespace Malachi.Core.Tests.Presentation;
+/// <summary>A cache over entries the test sets; fetches wait until the test answers them.</summary>
+internal sealed class FakeReaderCache : IReaderCache
+{
+    private readonly Dictionary<MessageId, LoadedMessage> entries = [];
+    private readonly List<(MessageSummary Summary, Action<LoadedMessage> Done)> fetches = [];
+
+    public int FetchCalls { get; private set; }
+
+    /// <summary>What message.part answers, by part id; a missing part fails.</summary>
+    public Dictionary<string, MessagePartResult> Parts { get; } = [];
+
+    public List<string> PartCalls { get; } = [];
+
+    /// <summary>What message.embedded answers next (null: it fails).</summary>
+    public Func<RemoteContentPolicy?, MessageEmbeddedResult?>? Embedded { get; set; }
+
+    public List<RemoteContentPolicy?> EmbeddedCalls { get; } = [];
+
+    /// <summary>A gate the embedded calls wait on, when set.</summary>
+    public TaskCompletionSource? EmbeddedGate { get; set; }
+
+    public LoadedMessage? Loaded(MessageId id) => entries.GetValueOrDefault(id);
+
+    public LoadedMessage Entry(MessageId id)
+    {
+        if (!entries.TryGetValue(id, out var lm))
+        {
+            entries[id] = lm = new LoadedMessage();
+        }
+        return lm;
+    }
+
+    public void Fetch(MessageSummary s, Action<LoadedMessage> done)
+    {
+        FetchCalls++;
+        var lm = Entry(s.Id);
+        if (lm.Complete)
+        {
+            done(lm);
+            return;
+        }
+        fetches.Add((s, done));
+    }
+
+    /// <summary>Answers the waiting fetches of <paramref name="id"/> with what the entry holds now.</summary>
+    public void Settle(MessageId id)
+    {
+        foreach (var (s, done) in fetches.ToArray())
+        {
+            if (s.Id == id)
+            {
+                done(Entry(id));
+            }
+        }
+        if (Entry(id).Complete)
+        {
+            fetches.RemoveAll(f => f.Summary.Id == id);
+        }
+    }
+
+    public Task<MessagePartResult> FetchAttachmentAsync(AccountId accountId, MessageId messageId, string partId, CancellationToken cancellationToken = default)
+    {
+        PartCalls.Add(partId);
+        return Parts.TryGetValue(partId, out var res)
+            ? Task.FromResult(res)
+            : Task.FromException<MessagePartResult>(new InvalidOperationException("no such part"));
+    }
+
+    public async Task<MessageEmbeddedResult> FetchEmbeddedAsync(
+        AccountId accountId, MessageId messageId, string partId, RemoteContentPolicy? remote = null, CancellationToken cancellationToken = default)
+    {
+        EmbeddedCalls.Add(remote);
+        if (EmbeddedGate is { } gate)
+        {
+            await gate.Task;
+        }
+        return Embedded?.Invoke(remote) ?? throw new InvalidOperationException("message.embedded failed");
+    }
+}

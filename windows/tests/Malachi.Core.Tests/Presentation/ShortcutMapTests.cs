@@ -137,7 +137,11 @@ public sealed class ShortcutMapTests
         Assert.Null(Resolve(KeyChord.Bare(K.Delete), embedded));
         Assert.Null(Resolve(KeyChord.Ctrl(K.R), embedded));
         Assert.Equal(C.CloseWindow, Resolve(KeyChord.Ctrl(K.W), new ShortcutContext(WindowKind.Wizard)));
-        Assert.Null(Resolve(KeyChord.Bare(K.Escape), new ShortcutContext(WindowKind.Other)));
+        // The attachment previewer: Escape and Ctrl+W close it, nothing per message.
+        var other = new ShortcutContext(WindowKind.Other);
+        Assert.Equal(C.CloseWindow, Resolve(KeyChord.Bare(K.Escape), other));
+        Assert.Equal(C.CloseWindow, Resolve(KeyChord.Ctrl(K.W), other));
+        Assert.Null(Resolve(KeyChord.Bare(K.Delete), other));
     }
 
     [Fact]

@@ -173,6 +173,8 @@ public static class ShortcutMap
             WindowKind.Compose => Compose.Concat(Close),
             WindowKind.Preferences => Reorder.Concat(Close),
             WindowKind.Wizard => Close,
+            // The attachment previewer closes as Sushi and Quick Look do.
+            WindowKind.Other => Close,
             _ => [],
         };
         return Application.Concat(own);
