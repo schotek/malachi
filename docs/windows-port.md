@@ -742,7 +742,7 @@ in-process-adjacent code over hostile files, and Windows itself stopped
 previewing internet files in Explorer in October 2025 because previews
 leaked NTLM hashes.
 
-As built, the window is `Malachi.App/Windows/PreviewWindow` with
+The window is `Malachi.App/Windows/PreviewWindow` with
 `Attachments/AttachmentPreview`: one window, made on the first click on a
 chip, its content swapped by the next while it is open, gone when closed.
 Nothing changes on screen while the part is fetched (`message.part`, through
@@ -1295,8 +1295,8 @@ with the page; an install or uninstall runs to its end
 (`McpRegistrationController`). The bridge starts its reason with its own
 name (`malachi-mcp: no Claude app found …`), which is skipped before the
 comparison with *no Claude app found*: GTK and macOS compare the whole
-line and never show their sentence for it (a fix there is separate). As
-built, the AI page asks for the status whenever it comes up; verified
+line and never show their sentence for it (a fix there is separate). The
+AI page asks for the status whenever it comes up; verified
 against the bundled bridge with `USERPROFILE`, `APPDATA` and
 `LOCALAPPDATA` in a temporary folder (registered in both files, removed
 again, and the toast with neither Claude app).
