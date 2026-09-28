@@ -508,6 +508,11 @@ authoritative):
   (`config.edge.skype.com`) fail at the proxy's name, before any socket; the
   one socket the NetLog shows is Chromium's IPv6 reachability probe, a UDP
   connect to a Microsoft address that fails at once and sends nothing;
+- `--disable-smooth-scrolling` as well: GTK's viewer turns WebKit's scroll
+  animation off (`html_view.blp`: "wheel steps land at once"), and WebView2
+  has no setting for it but this browser argument, which holds for every
+  view of the environment, so the editor and the previewer scroll the same
+  way (GTK's editor keeps WebKit's default; a listed deviation);
 - `CustomSchemeRegistrations` assigned as a new list: `malachi-cid` and
   `cid` (secure, no authority) for pictures, `malachi-doc` (secure, with
   authority) for documents;

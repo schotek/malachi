@@ -17,6 +17,10 @@
 //   leak (measured).
 // - --proxy-server=127.0.0.1:1 with loopback no longer bypassed: an
 //   independent second barrier, GTK's and macOS's dead proxy.
+// - --disable-smooth-scrolling: GTK's viewer turns WebKit's scroll
+//   animation off (html_view.blp enable-smooth-scrolling, "wheel steps
+//   land at once"); a browser argument is the only switch WebView2 has for
+//   it, so it holds for the editor and the previewer too.
 // - the custom schemes, ASSIGNED as a new list (the getter returns a copy,
 //   and adding to it registers nothing, measured): malachi-cid and cid
 //   (pictures; secure, no authority), malachi-doc (documents; secure, with
@@ -57,7 +61,8 @@ public static partial class WebViewEnvironment
 
     /// <summary>The browser arguments of docs/windows-port.md §6.1.</summary>
     public const string BrowserArguments =
-        "--host-resolver-rules=\"MAP * ~NOTFOUND\" --proxy-server=127.0.0.1:1 --proxy-bypass-list=<-loopback>";
+        "--host-resolver-rules=\"MAP * ~NOTFOUND\" --proxy-server=127.0.0.1:1 --proxy-bypass-list=<-loopback>"
+        + " --disable-smooth-scrolling";
 
     /// <summary>The folder under the data directory that holds WebView2's data.</summary>
     public const string UserDataFolderName = "WebView2";
