@@ -21,7 +21,13 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-const waitTimeout = 10 * time.Second
+// waitTimeout bounds every wait for something the test expects to happen
+// (a state, a notification, the syncer's end), as in the IMAP harness. A
+// passing run returns as soon as it happens; the bound only decides how
+// long a failing one takes, so it is set for a starved machine: a full
+// `go test ./...` on Windows once took more than the former 10 s to see
+// TestTokenProblemsAndRecovery's syncer idle after the new token.
+const waitTimeout = 60 * time.Second
 
 // recorder collects notifications and hands new-message and auth
 // notifications out on channels.
