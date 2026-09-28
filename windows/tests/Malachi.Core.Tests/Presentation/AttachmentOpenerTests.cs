@@ -7,6 +7,7 @@
 // its second and third look, writeForViewing's quarantine, saveAs, saveAll,
 // writeUnique), with the Windows mark in place of the quarantine: files in
 // a temporary directory, the mark, the launcher and the pickers faked.
+// Windows only: Save All leaves out what the file-type policy names.
 
 using System;
 using System.Collections.Generic;
@@ -46,6 +47,10 @@ public sealed class AttachmentOpenerTests : IDisposable
     }
 
     public void Dispose() => temp.Dispose();
+
+    // The names of the files in a folder, in order.
+    private static string[] Names(string folder) =>
+        new DirectoryInfo(folder).GetFiles().Select(f => f.Name).Order(StringComparer.Ordinal).ToArray();
 
     private void Serve(string part, string name, string type, byte[] data) => cache.Parts[part] = new MessagePartResult
     {
@@ -216,6 +221,90 @@ public sealed class AttachmentOpenerTests : IDisposable
     }
 
     [Fact]
+    public async Task SaveAllLeavesOutProgramsAndShortcutsAndSaysSo()
+    {
+        // Windows only: Explorer parses a shortcut or a library in the
+        // folder it shows, whatever its mark; Save As saves one.
+        var folder = Path.Combine(temp.Path, "folder");
+        Directory.CreateDirectory(folder);
+        Serve("2", "a.pdf", "application/pdf", [1]);
+        Serve("3", "x.url", "application/octet-stream", [2]);
+        Serve("4", "setup.exe", "application/x-msdownload", [3]);
+        Serve("5", "run.bat", "application/x-bat", [4]);
+        Serve("6", "b.png", "image/png", [5]);
+        pickers.FolderAnswer = folder;
+        await opener.SaveAllAsync(
+            [
+                Attachment("2", "a.pdf"),
+                Attachment("3", "x.url", "application/octet-stream"),
+                Attachment("4", "setup.exe", "application/x-msdownload"),
+                Attachment("5", "notes.txt", "text/plain"), // served as a program
+                Attachment("6", "b.png", "image/png"),
+            ],
+            Summary("m1"),
+            "w");
+        Assert.Equal(["a.pdf", "b.png"], Names(folder));
+        // What the message lists as a program is not even fetched.
+        Assert.Equal(["2", "5", "6"], cache.PartCalls);
+        Assert.Equal(2, mark.Marked.Count);
+        Assert.Equal(
+            [
+                ("w", "Saved 2 attachments"),
+                ("w", "3 attachments were not saved; save programs and scripts with Save As…"),
+            ],
+            toasts);
+        Assert.False(opener.IsSavingAll("m1"));
+    }
+
+    [Fact]
+    public async Task SaveAllOfProgramsAloneAsksForNoFolder()
+    {
+        pickers.FolderAnswer = Path.Combine(temp.Path, "unused");
+        await opener.SaveAllAsync(
+            [Attachment("2", "x.library-ms", "application/octet-stream"), Attachment("3", "y.searchConnector-ms", "")],
+            Summary("m1"),
+            "w");
+        Assert.Empty(pickers.FolderAsked);
+        Assert.Empty(cache.PartCalls);
+        Assert.Equal([("w", "2 attachments were not saved; save programs and scripts with Save As…")], toasts);
+        Assert.False(opener.IsSavingAll("m1"));
+    }
+
+    [Fact]
+    public async Task SaveAllOfPartsServedAsProgramsSaysOnlyThat()
+    {
+        var folder = Path.Combine(temp.Path, "folder");
+        Directory.CreateDirectory(folder);
+        Serve("2", "invoice.lnk", "application/x-ms-shortcut", [1]);
+        pickers.FolderAnswer = folder;
+        await opener.SaveAllAsync([Attachment("2", "invoice.pdf")], Summary("m1"), null);
+        Assert.Empty(Directory.GetFiles(folder));
+        Assert.Empty(mark.Marked);
+        Assert.Equal(["1 attachment was not saved; save programs and scripts with Save As…"], toasts.Select(t => t.Text));
+    }
+
+    [Fact]
+    public async Task SaveAllJudgesTheNameTheFileWouldGet()
+    {
+        // A policy that names only the " (2)" a taken name gets: the third
+        // look, on the free name, keeps it from being created.
+        var folder = Path.Combine(temp.Path, "folder");
+        Directory.CreateDirectory(folder);
+        File.WriteAllBytes(Path.Combine(folder, "a.pdf"), [0]);
+        Serve("2", "a.pdf", "application/pdf", [1]);
+        pickers.FolderAnswer = folder;
+        var strict = new AttachmentOpener(cache, openDir, mark, new NamedPolicy(" (2)"), launcher, pickers)
+        {
+            Toast = (w, text) => toasts.Add((w, text)),
+        };
+        await strict.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m1"), null);
+        Assert.Equal(["a.pdf"], Names(folder));
+        Assert.Equal([0], File.ReadAllBytes(Path.Combine(folder, "a.pdf")));
+        Assert.Empty(mark.Marked);
+        Assert.Equal(["1 attachment was not saved; save programs and scripts with Save As…"], toasts.Select(t => t.Text));
+    }
+
+    [Fact]
     public async Task SaveAllDismissedDoesNothing()
     {
         pickers.FolderAnswer = null;
@@ -270,6 +359,13 @@ public sealed class AttachmentOpenerTests : IDisposable
     private sealed class GtkPolicy : IFileTypePolicy
     {
         public bool IsDangerous(string? fileName, string? contentType) => DangerousTypes.IsDangerous(fileName, contentType);
+    }
+
+    // Names every file whose name holds a piece of text.
+    private sealed class NamedPolicy(string piece) : IFileTypePolicy
+    {
+        public bool IsDangerous(string? fileName, string? contentType) =>
+            (fileName ?? "").Contains(piece, StringComparison.Ordinal);
     }
 
     private sealed class FakeMark : IMarkOfTheWeb

@@ -346,7 +346,13 @@ into it as well.
   types Outlook's list names), and anything the shell's
   `AssocIsDangerous` or the attachment policy flags
   (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`), judged on
-  the listed, the served and the written name. It writes names
+  the listed, the served and the written name. Its Save All leaves these
+  types out, unlike GTK and macOS: Explorer parses a shortcut
+  (`.url`, `.lnk`), `.scf`, `.library-ms` or `.searchConnector-ms` file
+  for its icon and location as soon as its folder is shown, whatever its
+  Mark of the Web, and has sent the user's NTLM hash to another host that
+  way (CVE-2025-24054); a toast says how many were left out, and Save As
+  saves one on the user's explicit choice. It writes names
   that are safe on Windows (reserved characters and their ANSI best-fit
   look-alikes, device names, trailing dots and spaces, streams, the path
   length, a cut to length never adding an extension), and opens only
@@ -989,7 +995,8 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] File written out of a message on Windows: a Windows-safe name, a
       new file in a private directory, the Mark of the Web, opened only
       after the check passed and the zone read back, never a type of
-      `DangerousTypes` or what `AssocIsDangerous` flags, and no path in an
+      `DangerousTypes` or what `AssocIsDangerous` flags (nor written by
+      Save All, only by an explicit Save As), and no path in an
       exception or a log line?
 - [ ] Change to `malachi-credentials` or to `WindowsKeyFilePolicy`: does a
       value stay bytes that are zeroed, is every value handed out checked

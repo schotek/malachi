@@ -172,4 +172,18 @@ public static class AttachmentChips
         // TRANSLATORS: the first %d is how many failed, the second how many there were.
         return L10n.T("%d of %d attachments could not be saved", failed, saved + failed);
     }
+
+    /// <summary>
+    /// The toast after a Save All that left out <paramref name="skipped"/>
+    /// attachments the file-type policy names (<see cref="IFileTypePolicy"/>),
+    /// and how one of them is saved all the same: on its own, with Save As.
+    /// </summary>
+    public static string SaveAllSkipped(int skipped)
+    {
+        // Windows-only string: GTK saves every attachment (windows/README.md).
+        return L10n.N(
+            "%d attachment was not saved; save programs and scripts with Save As…",
+            "%d attachments were not saved; save programs and scripts with Save As…",
+            skipped);
+    }
 }

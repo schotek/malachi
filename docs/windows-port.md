@@ -1283,7 +1283,18 @@ type the daemon served and on the name the file got, writes into the open
 directory, marks (`AttachmentUse.Open`) and opens only when
 `ZoneMark.MayOpen`; Save As and Save All write where the user chose, never
 overwriting in Save All (" (2)"), mark (`AttachmentUse.Save`), and count a
-file the check removed as not saved. The pickers are the Windows App SDK's
+file the check removed as not saved. Save All leaves out what is never
+opened (a listed deviation): Explorer parses a `.url`, `.lnk`, `.scf`,
+`.library-ms` or `.searchConnector-ms` file for its icon and location as
+soon as the folder is shown, whatever its mark, and has sent the user's
+NTLM hash to another host that way (CVE-2025-24054). It is judged on what
+the message lists (such a part is not fetched), on the name and type the
+daemon served, and on the free name the file would get; after GTK's
+summary of what it tried, a second, Windows-only toast says how many it
+left out and that Save As saves one (*N attachments were not saved; save
+programs and scripts with Save As…*), and when nothing else is left no
+folder is asked for. Save As of a single file is the explicit way and
+stays as it is. The pickers are the Windows App SDK's
 `FileSavePicker` and `FolderPicker`, owned by the window of the click
 (`Malachi.App/Attachments/AttachmentPickers`), titled *Save Attachment* and
 *Save Attachments*, starting in Downloads; the save picker offers the
@@ -1555,7 +1566,7 @@ still empty). A chip's icon is the shell's for its extension, and one set
 of chips looks up at most 24 extensions it has not seen (Core's
 `IconLookups`; the rest get the generic glyph), since the lookup runs on
 the UI thread. Save All is disabled while its run lasts, from the folder
-picker to the summary toast, by message (`AttachmentOpener.IsSavingAll`),
+picker to its last toast, by message (`AttachmentOpener.IsSavingAll`),
 so neither a re-rendered button nor the same message in another window
 starts a second run. Copy Address writes to the Windows clipboard, which
 another program may hold open (`CLIPBRD_E_CANT_OPEN`): it is tried five

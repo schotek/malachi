@@ -23,9 +23,16 @@
 //   written over the chosen file and marked (a program saved gets the
 //   Internet zone, MarkOfTheWeb); only a failure gets a toast.
 // - Save All: a folder, then every part one message.part at a time, never
-//   overwriting (" (2)", " (3)", …), marked; one summary toast. One run per
-//   message at a time: the button is disabled while it lasts (buildSaveAll),
-//   and since a re-render rebuilds the button and another view may show the
+//   overwriting (" (2)", " (3)", …), marked; one summary toast. What the
+//   policy names is left out (a Windows deviation, windows/README.md): the
+//   shell parses a shortcut, a library or a search connector for its icon
+//   and location as soon as the folder is shown (CVE-2025-24054 is one of
+//   that class), and the Mark of the Web governs running a file, not that.
+//   It is judged on the listed name and type, again on those the daemon
+//   served and on the name the file would get; a second toast says how
+//   many were left out and that Save As saves one. One run per message at
+//   a time: the button is disabled while it lasts (buildSaveAll), and
+//   since a re-render rebuilds the button and another view may show the
 //   same message, the run is kept here, by message, not on the button.
 //
 // A file an antivirus or the attachment policy removed counts as not saved.
@@ -244,7 +251,10 @@ public sealed partial class AttachmentOpener
     /// folder and writes every attachment into it, one <c>message.part</c> at
     /// a time, never overwriting: a name that exists gets " (2)" and so on.
     /// One toast sums it up; nothing after a dismissal. A second Save All of
-    /// the same message while the first lasts does nothing.
+    /// the same message while the first lasts does nothing. Unlike GTK, what
+    /// the file-type policy names is not saved (Save As saves it), and a
+    /// toast of its own says how many were left out; when that is every
+    /// attachment, no folder is asked for.
     /// </summary>
     public async Task SaveAllAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
     {
@@ -268,6 +278,25 @@ public sealed partial class AttachmentOpener
 
     private async Task SaveAllOnceAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
     {
+        // What the message lists as a program is left out before the fetch.
+        var wanted = new List<Attachment>(atts.Count);
+        foreach (var a in atts)
+        {
+            if (policy.IsDangerous(a.Filename, a.ContentType))
+            {
+                LogSkipped(logger, a.PartId);
+            }
+            else
+            {
+                wanted.Add(a);
+            }
+        }
+        var skipped = atts.Count - wanted.Count;
+        if (wanted.Count == 0 && skipped > 0)
+        {
+            Say(window, AttachmentChips.SaveAllSkipped(skipped));
+            return;
+        }
         var folder = await pickers.PickFolderAsync(window, L10n.T("Save Attachments"));
         if (string.IsNullOrEmpty(folder))
         {
@@ -275,12 +304,18 @@ public sealed partial class AttachmentOpener
         }
         var saved = 0;
         var failed = 0;
-        foreach (var a in atts)
+        foreach (var a in wanted)
         {
             try
             {
-                await SaveIntoAsync(folder, s, a);
-                saved++;
+                if (await SaveIntoAsync(folder, s, a))
+                {
+                    saved++;
+                }
+                else
+                {
+                    skipped++;
+                }
             }
             catch (Exception e) when (e is not OutOfMemoryException)
             {
@@ -288,20 +323,41 @@ public sealed partial class AttachmentOpener
                 failed++;
             }
         }
-        Say(window, AttachmentChips.SaveAllSummary(saved, failed));
+        // GTK's summary of what was tried, then what was left out.
+        if (saved + failed > 0 || skipped == 0)
+        {
+            Say(window, AttachmentChips.SaveAllSummary(saved, failed));
+        }
+        if (skipped > 0)
+        {
+            Say(window, AttachmentChips.SaveAllSkipped(skipped));
+        }
     }
 
     // attachments.go saveInto: fetches a and creates it in folder under a
-    // name that is not taken yet, then marks it.
-    private async Task SaveIntoAsync(string folder, MessageSummary s, Attachment a)
+    // name that is not taken yet, then marks it. False, with nothing
+    // written, when the part turns out a program by the name and type the
+    // daemon served or by the name the file would get.
+    private async Task<bool> SaveIntoAsync(string folder, MessageSummary s, Attachment a)
     {
         var res = await parts.FetchAttachmentAsync(s.AccountId, s.Id, a.PartId);
         var name = AttachmentChips.FileName(res, a, lookAlikes);
-        var path = await Task.Run(() => CreateUnique(folder, name, res.Data));
+        if (policy.IsDangerous(name, res.ContentType))
+        {
+            LogSkippedAfterFetch(logger, a.PartId);
+            return false;
+        }
+        var path = await Task.Run(() => CreateUnique(folder, name, res.Data, n => policy.IsDangerous(n, res.ContentType)));
+        if (path is null)
+        {
+            LogSkippedAfterFetch(logger, a.PartId);
+            return false;
+        }
         if (await MarkAsync(path, AttachmentUse.Save, a.PartId) is { FileKept: false })
         {
             throw new IOException("the attachment check removed the file");
         }
+        return true;
     }
 
     // message.part for the attachment being opened or previewed; null after
@@ -354,13 +410,21 @@ public sealed partial class AttachmentOpener
     }
 
     // attachments.go saveInto's loop: a free name, created exclusively, again
-    // when another file took it between the check and the create.
-    private static string CreateUnique(string folder, string name, byte[] data)
+    // when another file took it between the check and the create. Null,
+    // with nothing created, when the free name is one the policy names
+    // (dangerous): the checks before judged the name the part asked for,
+    // and a " (2)" with a cut to length gives the file another, as Open's
+    // third look judges the name the open directory gave.
+    private static string? CreateUnique(string folder, string name, byte[] data, Func<string, bool> dangerous)
     {
         Exception? last = null;
         for (var attempt = 0; attempt < CreateAttempts; attempt++)
         {
             var candidate = WindowsFileNames.UniqueName(name, n => Path.Exists(Path.Combine(folder, n)));
+            if (dangerous(candidate))
+            {
+                return null;
+            }
             var path = Path.Combine(folder, candidate);
             try
             {
@@ -402,4 +466,10 @@ public sealed partial class AttachmentOpener
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "saving attachment {PartId} failed: {Kind} 0x{HResult:X8}")]
     private static partial void LogSaveFailed(ILogger logger, string partId, string kind, int hResult);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "attachment {PartId} is a program; left out of Save All")]
+    private static partial void LogSkipped(ILogger logger, string partId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "attachment {PartId} turned out a program after the fetch; left out of Save All")]
+    private static partial void LogSkippedAfterFetch(ILogger logger, string partId);
 }

@@ -101,6 +101,18 @@ public sealed class AttachmentsTests
         Assert.Equal("1 of 3 attachments could not be saved", AttachmentChips.SaveAllSummary(saved: 2, failed: 1));
     }
 
+    // Windows only: what Save All left out, with its plural.
+    [Fact]
+    public void SaveAllSkippedTest()
+    {
+        Assert.Equal(
+            "1 attachment was not saved; save programs and scripts with Save As…",
+            AttachmentChips.SaveAllSkipped(1));
+        Assert.Equal(
+            "3 attachments were not saved; save programs and scripts with Save As…",
+            AttachmentChips.SaveAllSkipped(3));
+    }
+
     // The type is the claimed one without its parameters; a guess from the
     // name (Windows' registered Content Type, here a table) only when the
     // sender said nothing useful; application/octet-stream when nothing is
