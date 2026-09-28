@@ -269,8 +269,9 @@ public sealed class OpenDirTests
     public void SweepLeavesWhatAViewerHoldsOpen()
     {
         using var temp = new TemporaryDirectory();
-        var held = Path.Combine(temp.Path, "held");
-        var free = Path.Combine(temp.Path, "free");
+        var dir = Path.Combine(temp.Path, "open");
+        var held = Path.Combine(dir, "held");
+        var free = Path.Combine(dir, "free");
         Directory.CreateDirectory(held);
         Directory.CreateDirectory(free);
         var file = Path.Combine(held, "open.docx");
@@ -278,7 +279,7 @@ public sealed class OpenDirTests
         File.WriteAllText(Path.Combine(free, "closed.docx"), "x");
         Directory.SetLastWriteTimeUtc(held, Now.UtcDateTime.AddHours(-2));
         Directory.SetLastWriteTimeUtc(free, Now.UtcDateTime.AddHours(-2));
-        var open = new OpenDir(temp.Path, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        var open = new OpenDir(dir, new FakePrivateDirectories(), new FakeTimeProvider(Now));
 
         // A viewer that did not share delete, as most do not.
         using (new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
@@ -342,12 +343,67 @@ public sealed class OpenDirTests
     public void RemoveAllOfNothingIsANoOp()
     {
         using var temp = new TemporaryDirectory();
-        var open = new OpenDir(Path.Combine(temp.Path, "missing"), new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        var open = new OpenDir(Path.Combine(temp.Path, "open"), new FakePrivateDirectories(), new FakeTimeProvider(Now));
 
         open.RemoveAll();
         open.Sweep();
 
         Assert.False(Directory.Exists(open.Path));
+    }
+
+    /// <summary>
+    /// attachments_test.go TestPurgeOpenDir (OpenDir.swift removeAll): the
+    /// removal takes the open directory with everything in it, and refuses
+    /// every other path without touching it. The Windows rule names no
+    /// parent (see <see cref="OpenDir.Purgeable"/>): an <c>open</c> directly
+    /// under a drive's or share's root is refused instead.
+    /// </summary>
+    [Fact]
+    public void RemoveAllRefusesAnyOtherDirectory()
+    {
+        using var temp = new TemporaryDirectory();
+        var data = Path.Combine(temp.Path, "Malachi Mail");
+        var dir = Path.Combine(data, "open");
+        var file = Path.Combine(dir, "x1", "report.pdf");
+        var keep = Path.Combine(data, "keep");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        Directory.CreateDirectory(keep);
+        File.WriteAllText(file, "%PDF-1.7");
+        var root = Path.GetPathRoot(temp.Path)!;
+
+        var refused = new List<string>
+        {
+            "", ".", "open", Path.Combine("Malachi Mail", "open"), // relative: the working directory's
+            root, Path.Combine(root, "open"), // a root, and an open directly under it
+            temp.Path, data, keep, Path.Combine(dir, "x1"), Path.Combine(dir, ".."),
+            Path.Combine(data, "Open"), Path.Combine(data, "opened"),
+        };
+        if (OperatingSystem.IsWindows())
+        {
+            refused.AddRange([
+                @"\\?\" + dir, @"\\.\" + dir, "//?/" + dir.Replace('\\', '/'), // device paths
+                @"\\server\share\open", // a share's root
+                root.TrimEnd('\\') + "open", // C:open, relative to the drive's working directory
+            ]);
+        }
+        foreach (var bad in refused)
+        {
+            Assert.True(OpenDir.Purgeable(bad) is null, $"Purgeable({bad}) should refuse");
+        }
+        foreach (var bad in new[] { temp.Path, data, keep, Path.Combine(dir, "x1"), Path.Combine(dir, "..") })
+        {
+            var other = new OpenDir(bad, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+            Assert.Throws<InvalidOperationException>(other.RemoveAll);
+        }
+        Assert.True(File.Exists(file), "a refused removal removed something");
+
+        Assert.Equal(dir, OpenDir.Purgeable(dir + Path.DirectorySeparatorChar));
+        Assert.Equal(dir, OpenDir.Purgeable(Path.Combine(dir, "x1", "..")));
+        new OpenDir(dir + Path.DirectorySeparatorChar, new FakePrivateDirectories(), new FakeTimeProvider(Now)).RemoveAll();
+        Assert.False(Directory.Exists(dir), "the open directory should be gone");
+        Assert.True(Directory.Exists(keep), "its sibling should stay");
+        new OpenDir(dir, new FakePrivateDirectories(), new FakeTimeProvider(Now)).RemoveAll(); // a missing directory: no error
+        Assert.Equal(Path.Combine(temp.Path, "open"), OpenDir.Purgeable(Path.Combine(temp.Path, "open"))); // MALACHI_DATA_DIR's
     }
 
     [Fact]

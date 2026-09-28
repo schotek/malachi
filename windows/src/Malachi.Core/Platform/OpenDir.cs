@@ -3,10 +3,14 @@
 
 // Port of macos/Sources/MalachiCore/Platform/OpenDir.swift; GTK:
 // ui/internal/window/attachments.go (openDir, writeOpenFile, sweepOpenDir,
-// SweepOpenedAttachments). On Windows the directory is
+// SweepOpenedAttachments, purgeOpenDir). On Windows the directory is
 // %LOCALAPPDATA%\Malachi Mail\open (docs/windows-port.md §1, §10), made
 // private by a protected DACL instead of mode 0700 (IPrivateDirectoryFactory),
-// and the sweeps leave alone what a viewer still holds open.
+// and the sweeps leave alone what a viewer still holds open. The removal of
+// the whole directory refuses any other path (Purgeable), as purgeOpenDir
+// and removeAll do; its rule cannot name the parent as theirs do, because
+// on Windows the parent is the data directory itself, which
+// MALACHI_DATA_DIR may name.
 
 using System;
 using System.Collections.Generic;
@@ -22,8 +26,8 @@ namespace Malachi.Core.Platform;
 /// one fresh private subdirectory per file, each file created exclusively.
 /// Entries older than <see cref="OpenMaxAge"/> are swept before every
 /// write; the whole directory goes when the application starts and when it
-/// exits (<see cref="RemoveAll"/>). Synchronous file work: callers run it
-/// off the UI thread.
+/// quits, whatever the preferences say (<see cref="RemoveAll"/>).
+/// Synchronous file work: callers run it off the UI thread.
 /// </summary>
 public sealed class OpenDir
 {
@@ -176,13 +180,68 @@ public sealed class OpenDir
     }
 
     /// <summary>
-    /// Removes every file written for opening (<c>SweepOpenedAttachments</c>);
-    /// the application calls it when it starts and when it exits. What a
-    /// viewer still holds open stays (and so do the directories above it);
-    /// a link in place of the directory is removed itself, and what it
-    /// points to is left alone.
+    /// Removes the directory with every file written for opening
+    /// (<c>SweepOpenedAttachments</c>, <c>purgeOpenDir</c>; OpenDir.swift
+    /// <c>removeAll</c>); the application calls it when it starts and when
+    /// it quits, whatever the preferences say, so nothing opened outlives
+    /// the session, which is also what <c>neverStoreAttachments</c>
+    /// promises. It refuses any directory but an open one
+    /// (<see cref="Purgeable"/>) and touches nothing then, so a slip cannot
+    /// take anything else with it. What a viewer still holds open stays (and
+    /// so do the directories above it), for the next start; a link in place
+    /// of the directory is removed itself, and what it points to is left
+    /// alone; a missing directory is no error.
     /// </summary>
-    public void RemoveAll() => TryDelete(Path);
+    /// <exception cref="InvalidOperationException">
+    /// <see cref="Path"/> is not an open directory; the message names no path.
+    /// </exception>
+    public void RemoveAll()
+    {
+        if (Purgeable(Path) is not { } clean)
+        {
+            throw new InvalidOperationException("not the directory for opened attachments");
+        }
+        TryDelete(clean);
+    }
+
+    /// <summary>
+    /// <paramref name="path"/> with its <c>.</c> and <c>..</c> resolved as
+    /// written, when that names an open directory; null otherwise
+    /// (attachments.go <c>purgeOpenDir</c>, OpenDir.swift <c>purgeable</c>).
+    /// An open directory is <c>&lt;data directory&gt;\open</c>: a fully
+    /// qualified path, never a relative one, which would resolve against the
+    /// working directory, nor a device path (<c>\\?\</c>, <c>\\.\</c>), whose
+    /// last component is <see cref="DirectoryName"/> and whose parent is a
+    /// directory, not the root of a drive or a share. GTK and macOS also
+    /// require the parent's name (<c>malachi/open</c>,
+    /// <c>Malachi Mail/open</c>), the part they append to a base directory
+    /// they do not choose; here the parent is the data directory itself,
+    /// <c>%LOCALAPPDATA%\Malachi Mail</c> or whatever <c>MALACHI_DATA_DIR</c>
+    /// names for a test or an agent, so only <c>open</c> is the app's own.
+    /// </summary>
+    public static string? Purgeable(string path)
+    {
+        if (string.IsNullOrEmpty(path) || !System.IO.Path.IsPathFullyQualified(path) || IsDevicePath(path))
+        {
+            return null;
+        }
+        string clean;
+        try
+        {
+            clean = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(path));
+        }
+        catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+        if (!string.Equals(System.IO.Path.GetFileName(clean), DirectoryName, StringComparison.Ordinal))
+        {
+            return null;
+        }
+        var parent = System.IO.Path.GetDirectoryName(clean);
+        // A root (C:\, \\server\share, /) has no directory above it.
+        return string.IsNullOrEmpty(parent) || System.IO.Path.GetDirectoryName(parent) is null ? null : clean;
+    }
 
     private string NewSubdirectory()
     {
@@ -200,6 +259,13 @@ public sealed class OpenDir
             }
         }
     }
+
+    // \\?\ and \\.\ (or with forward slashes): paths past the Win32
+    // normalisation, which GetFullPath does not resolve.
+    private static bool IsDevicePath(string path) =>
+        path.Length >= 4 && IsSeparator(path[0]) && IsSeparator(path[1]) && (path[2] is '?' or '.') && IsSeparator(path[3]);
+
+    private static bool IsSeparator(char c) => c == '\\' || c == '/';
 
     // Whether path is a directory of its own: there, and not a link.
     private static bool IsOwnDirectory(string path)

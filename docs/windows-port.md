@@ -99,7 +99,7 @@ GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 | RPC key | `rpc.sock.key` beside the socket; read afresh per connection with `FileShare.ReadWrite \| FileShare.Delete` |
 | Daemon and app logs | `%LOCALAPPDATA%\Malachi Mail\logs\` (and the terminal under `make run-windows`) |
 | WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written; the renderers' crash dumps removed at start and exit, §6.1) |
-| Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (protected DACL, cleared at start and exit, entries older than an hour swept) |
+| Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (protected DACL, cleared at start and exit, entries older than an hour swept; the removal refuses any other path, §10) |
 | Preferences | `HKCU\Software\io.github.schotek.Malachi` |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
 | Launch at login | `HKCU\…\CurrentVersion\Run` value `Malachi Mail` = `"<exe>" --background`, `StartupApproved` respected |
@@ -1435,13 +1435,17 @@ an additive member whose default keeps the window, so a window that could
 not save and asks nothing never loses its draft to a Quit); a Cancel
 abandons the Quit. Then the point of no return (the supervisor starts
 nothing any more, the window geometry is kept, `PlatformServices.Stop`,
-every window hides and no activation shows one again),
-`ConnectionController.StopAsync` (the daemon this app started is stopped,
-never one it adopted), `AppState.Dispose` (controllers, open directory,
-settings), the WebView2 crash dumps removed (§6.1), `Application.Exit`.
-`WM_ENDSESSION` (a subclass of the main window's procedure) stops the
-daemon before it returns, empties the open directory and removes the crash
-dumps, and then quits as a session end. The platform services get their
+every window hides and no activation shows one again, the open directory
+is emptied), `ConnectionController.StopAsync` (the daemon this app
+started is stopped, never one it adopted), `AppState.Dispose`
+(controllers, the open directory once more, settings), the WebView2 crash
+dumps removed (§6.1), `Application.Exit`. `WM_ENDSESSION` (a subclass
+of the main window's procedure) empties the open directory, stops the
+daemon before it returns, empties the open directory again and removes the
+crash dumps, and then quits as a session end. The open directory goes
+before the daemon's stop, which may take 15 s, as GTK's shutdown and the
+macOS app remove it first: a quit that never completes leaves nothing
+behind. The platform services get their
 moments through `Malachi.App/Platform/PlatformServices` (`InitializeEarly`,
 `Start`, `NewMessage` before the list, `MainWindowVisibilityChanged`,
 `Stop`, `Shutdown`).
@@ -1475,7 +1479,14 @@ on the UI thread (held until `Start` when it comes earlier). Preferences
 takes `LaunchAtLogin`, `Mailto` and `OpenDefaultApps` from it.
 
 **Attachments.** Opened files go to the open directory (a fresh random
-subdirectory per file, `FileMode.CreateNew`) under a Windows-safe name
+subdirectory per file, `FileMode.CreateNew`; the directory emptied at
+start, before the daemon's stop at Quit and once more at the end, whatever
+the preferences say; `OpenDir.RemoveAll` removes nothing but a fully
+qualified `<data directory>\open` that is no device path and not directly
+under the root of a drive or share, and logs a refusal, the counterpart of
+GTK's `purgeOpenDir` and macOS's `removeAll`, which also name the parent,
+`malachi` or `Malachi Mail`: here the parent is the data directory,
+which `MALACHI_DATA_DIR` may name) under a Windows-safe name
 (reserved characters and their best-fit look-alikes: those of code page
 1252 and every look-alike of `"` always, those of this machine's ANSI code
 page as well, so no `"` comes back to split an ANSI program's command

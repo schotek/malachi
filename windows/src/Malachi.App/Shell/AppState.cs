@@ -187,7 +187,7 @@ public sealed partial class AppState : IDisposable
         var directories = new PrivateDirectory();
         // Attachments a previous run wrote for opening (docs/security.md §8).
         var openDir = OpenDir.InDataDirectory(paths.DataDir, directories, TimeProvider.System, AnsiLookAlikes.OfThisMachine);
-        openDir.RemoveAll();
+        PurgeOpenDir(openDir, log);
         try
         {
             paths.EnsureDirectories(directories);
@@ -255,6 +255,17 @@ public sealed partial class AppState : IDisposable
     /// <summary>Quits the application (app.quit).</summary>
     public void Quit() => _ = QuitHandler?.Invoke(QuitReason.User);
 
+    /// <summary>
+    /// Removes the attachments written for opening
+    /// (<see cref="OpenDir.RemoveAll"/>; ui/main.go and attachments.go
+    /// <c>SweepOpenedAttachments</c>, AppDelegate.swift <c>purgeOpenDir</c>):
+    /// at start (what a previous run or a crash left), when Quit passes its
+    /// point of no return and before the daemon is stopped, and once more as
+    /// the app lets go of everything, whatever the preferences say, so
+    /// nothing opened outlives the session. A refused directory is logged.
+    /// </summary>
+    public void PurgeOpenDir() => PurgeOpenDir(OpenDir, logger);
+
     /// <summary>Opens a web page (https only) in the browser, over the active window.</summary>
     public async Task OpenUrlAsync(string url)
     {
@@ -277,14 +288,31 @@ public sealed partial class AppState : IDisposable
         Connection.Dispose();
         Client.Dispose();
         Supervisor.Dispose();
-        OpenDir.RemoveAll();
+        PurgeOpenDir();
         Settings.Dispose();
         SettingsBackend.Dispose();
         daemonLog.Dispose();
     }
 
+    // OpenDir.RemoveAll refuses a directory that is not <data dir>\open (a
+    // MALACHI_DATA_DIR at a drive's root); its message names no path.
+    private static void PurgeOpenDir(OpenDir openDir, ILogger log)
+    {
+        try
+        {
+            openDir.RemoveAll();
+        }
+        catch (InvalidOperationException e)
+        {
+            LogOpenDirRefused(log, e.Message);
+        }
+    }
+
     [LoggerMessage(Level = LogLevel.Error, Message = "data directory")]
     private static partial void LogDataDirectory(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "removing the attachments written for opening: {Reason}")]
+    private static partial void LogOpenDirRefused(ILogger logger, string reason);
 
     // The generator copies a message into a string literal without escaping
     // a backslash: the key's path comes as an argument.

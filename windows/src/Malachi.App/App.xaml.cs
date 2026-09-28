@@ -20,12 +20,12 @@
 //   through Activate on the UI thread.
 // - Quit is QuitSequence: the dirty drafts saved and asked about, then the
 //   point of no return (the windows hide, the supervisor starts no daemon,
-//   the platform services stop), the connection closed and the daemon this
-//   app started stopped (never one it adopted), the open directory swept,
-//   the settings let go, the WebView2 crash dumps removed,
-//   Application.Exit. Ctrl+C in the terminal is Quit;
-//   the terminal closing, and the session ending (WM_ENDSESSION), stop the
-//   daemon without saving or asking.
+//   the platform services stop, the open directory is emptied), the
+//   connection closed and the daemon this app started stopped (never one it
+//   adopted), the open directory emptied once more, the settings let go,
+//   the WebView2 crash dumps removed, Application.Exit. Ctrl+C in the
+//   terminal is Quit; the terminal closing, and the session ending
+//   (WM_ENDSESSION), stop the daemon without saving or asking.
 
 using System;
 using System.Threading.Tasks;
@@ -173,6 +173,10 @@ public partial class App : Application
                     {
                         w.Window.AppWindow.Hide();
                     }
+                    // Before the daemon's stop, which may take 15 s: a quit
+                    // that never completes (the session ends meanwhile)
+                    // leaves nothing behind (ui/main.go's shutdown order).
+                    s.PurgeOpenDir();
                 },
                 StopDaemon = s.Connection.StopAsync,
                 Release = () =>
@@ -229,6 +233,7 @@ public partial class App : Application
             return;
         }
         LogSessionEnding(logger);
+        s.PurgeOpenDir();
         s.Supervisor.BeginStopping();
         s.Client.Close();
         try
@@ -239,7 +244,7 @@ public partial class App : Application
         {
             LogSessionStopFailed(logger, e.InnerException ?? e);
         }
-        s.OpenDir.RemoveAll();
+        s.PurgeOpenDir();
         global::Malachi.App.WebViews.WebViewEnvironment.SweepCrashDumps();
         _ = QuitAsync(QuitReason.SessionEnd);
     }

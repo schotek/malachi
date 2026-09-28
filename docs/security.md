@@ -936,18 +936,25 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   preferences, the whole directory is removed when the UI quits and again
   when it starts (what a crash left), so nothing opened or previewed
   outlives the session, which is also what `neverStoreAttachments`
-  promises; the macOS client removes it before it stops the daemon and
-  once more as the process ends. The removal refuses any path but an
-  absolute one ending in `malachi/open` (`Malachi Mail/open` on macOS), so
-  an unset runtime or cache directory cannot aim it at anything else,
-  removes a symbolic link in its place without following it, and logs a
-  failure. On Linux the runtime dir is normally a `tmpfs` in memory; the
-  fallback cache dir and the macOS directory are on disk until the
-  removal.
+  promises; the macOS and Windows clients remove it before they stop the
+  daemon and once more as the process ends. The removal refuses any path
+  but an absolute one ending in `malachi/open` (`Malachi Mail/open` on
+  macOS), so an unset runtime or cache directory cannot aim it at anything
+  else, removes a symbolic link in its place without following it, and
+  logs a failure. On Windows the directory lies in the data directory,
+  which `MALACHI_DATA_DIR` may name for tests and agents, so the rule
+  cannot name the parent: the removal refuses any path but a fully
+  qualified one ending in `\open`, with `.` and `..` resolved as written,
+  that is no device path (`\\?\`, `\\.\`) and does not lie directly under
+  the root of a drive or share, and removes a symbolic link or junction in
+  its place without following it. On Linux the runtime dir is normally a
+  `tmpfs` in memory; the fallback cache dir and the macOS and Windows
+  directories are on disk until the removal.
   On Windows the directory is
   `%LOCALAPPDATA%\Malachi Mail\open` with a protected DACL for the user
-  and SYSTEM, emptied at start and exit, each file in a fresh random
-  subdirectory, created new, never over an existing one. Every file the
+  and SYSTEM, emptied at start and exit (a file a viewer still holds open
+  cannot be deleted there and goes at the next start), each file in a
+  fresh random subdirectory, created new, never over an existing one. Every file the
   client writes out of a message, opened or saved, gets the Mark of the
   Web through `IAttachmentExecute`, which also runs the antivirus check
   and the attachment policy: the Restricted zone, as Microsoft advises
