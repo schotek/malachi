@@ -10,12 +10,16 @@
 // .mcp.json and make run-backend agree without any variable; like Go's
 // os.UserHomeDir, the home is %USERPROFILE%, never HOME (which Git Bash
 // sets). Configuration, store and logs go to %LOCALAPPDATA%\Malachi Mail
-// (docs/windows-port.md §1), or to MALACHI_DATA_DIR, the one Windows-only
-// variable, for tests and agents. The bundled programs are found beside
-// the app's executable: malachi-mcp.exe, and malachi-credentials.exe, the
-// keyring helper that stands in for macOS's malachi-keychain. Directories
-// are made private by IPrivateDirectoryFactory (a protected DACL) instead
-// of mode 0700.
+// (docs/windows-port.md §1), or to MALACHI_DATA_DIR, a Windows-only
+// variable, for tests and agents. The preferences' registry key is
+// HKCU\Software\io.github.schotek.Malachi, or the one the other
+// Windows-only variable, MALACHI_SETTINGS_KEY, names for a test (§8): only
+// a name of the app's own family is taken, so that a mistyped value cannot
+// point the app's writes at another program's key. The bundled programs
+// are found beside the app's executable: malachi-mcp.exe, and
+// malachi-credentials.exe, the keyring helper that stands in for macOS's
+// malachi-keychain. Directories are made private by
+// IPrivateDirectoryFactory (a protected DACL) instead of mode 0700.
 
 using System;
 using System.Collections.Generic;
@@ -47,6 +51,14 @@ public sealed record Paths
     /// <summary>The daemon's log in <see cref="LogDir"/>.</summary>
     public const string DaemonLogName = "malachid.log";
 
+    /// <summary>The variable that names another registry key for the preferences.</summary>
+    public const string SettingsKeyVariable = "MALACHI_SETTINGS_KEY";
+
+    /// <summary>The preferences' key under HKEY_CURRENT_USER, the gschema's path on Windows.</summary>
+    public const string DefaultSettingsKey = SettingsKeyParent + AppIdentity.AppId;
+
+    private const string SettingsKeyParent = @"Software\";
+
     /// <summary>
     /// <c>MALACHI_SOCKET</c>, else <c>%XDG_RUNTIME_DIR%\malachi\rpc.sock</c>,
     /// else <c>(%XDG_CACHE_HOME% or %USERPROFILE%\.cache)\malachi\run\rpc.sock</c>:
@@ -65,6 +77,22 @@ public sealed record Paths
 
     /// <summary><c>MALACHI_DATA_DIR</c>, else <c>%LOCALAPPDATA%\Malachi Mail</c>.</summary>
     public required string DataDir { get; init; }
+
+    /// <summary>
+    /// The preferences' key under HKEY_CURRENT_USER:
+    /// <c>Software\</c> and the name <c>MALACHI_SETTINGS_KEY</c> gives when
+    /// that is the app id itself or the app id, a dot and at least one of
+    /// the ASCII letters, digits, <c>.</c>, <c>_</c> and <c>-</c> (a test's
+    /// key of its own, <c>io.github.schotek.Malachi.UiTests.&lt;guid&gt;</c>);
+    /// else <see cref="DefaultSettingsKey"/>.
+    /// </summary>
+    public string SettingsKey { get; init; } = DefaultSettingsKey;
+
+    /// <summary>
+    /// A <c>MALACHI_SETTINGS_KEY</c> that was set but ignored for not
+    /// naming a key of the app's family, for the log; null otherwise.
+    /// </summary>
+    public string? IgnoredSettingsKey { get; init; }
 
     /// <summary><c>malachi-mcp.exe</c> beside the app, null when it is not there.</summary>
     public string? McpBridge { get; init; }
@@ -122,11 +150,15 @@ public sealed record Paths
                 ProcessEnvironment.NonEmpty(environment, "LOCALAPPDATA")
                     ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 DataDirectoryName);
+        var settingsKey = ProcessEnvironment.NonEmpty(environment, SettingsKeyVariable);
+        var settingsKeyTaken = settingsKey is not null && IsSettingsKeyName(settingsKey);
         return new Paths
         {
             Socket = socket,
             SocketFromEnvironment = fromEnvironment is not null,
             DataDir = dataDir,
+            SettingsKey = settingsKeyTaken ? SettingsKeyParent + settingsKey : DefaultSettingsKey,
+            IgnoredSettingsKey = settingsKeyTaken ? null : settingsKey,
             McpBridge = Beside(baseDirectory, McpBridgeName),
             KeyringHelper = Beside(baseDirectory, KeyringHelperName),
         };
@@ -219,6 +251,33 @@ public sealed record Paths
         }
         var flatpak = ProcessEnvironment.NonEmpty(environment, "FLATPAK_ID");
         return flatpak is null ? runtime : Join(runtime, "app", flatpak);
+    }
+
+    // MALACHI_SETTINGS_KEY's rule: the app id itself, or the app id, a dot
+    // and ASCII letters, digits, '.', '_' and '-', compared exactly (the
+    // registry's own comparison ignores case, but a re-cased id is a
+    // mistake, not a request). Nothing else can come out of it: no
+    // backslash, so no other key's subkey or parent, and no space or
+    // control character that would make a lookalike name.
+    private static bool IsSettingsKeyName(string name)
+    {
+        const string prefix = AppIdentity.AppId + ".";
+        if (name == AppIdentity.AppId)
+        {
+            return true;
+        }
+        if (name.Length == prefix.Length || !name.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+        foreach (var c in name.AsSpan(prefix.Length))
+        {
+            if (!char.IsAsciiLetterOrDigit(c) && c is not ('.' or '_' or '-'))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     // Go's os.UserHomeDir on Windows.

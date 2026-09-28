@@ -4,8 +4,10 @@
 // Windows-only cases of Paths beyond SupervisorTests.swift
 // (pathsFollowTheDaemonsResolution): the home is USERPROFILE as Go's
 // os.UserHomeDir reads it, api.SocketBase's Flatpak directory, empty
-// variables, the data directory and MALACHI_DATA_DIR, the key and log
-// files, the directories made before the daemon starts; and the MCP
+// variables, the data directory and MALACHI_DATA_DIR, the preferences' key
+// and the names MALACHI_SETTINGS_KEY may give it (every other value falls
+// back to the app's key), the key and log files, the directories made
+// before the daemon starts; and the MCP
 // bridge beside the app, the cases of ui/internal/mcpsetup/mcpsetup_test.go
 // (TestLocate) that apply: the Windows app, as the macOS one, looks for the
 // bridge beside itself only, never on PATH.
@@ -88,6 +90,62 @@ public sealed class PathsTests
         var q = Paths.Resolve(Env(("LOCALAPPDATA", local), ("MALACHI_DATA_DIR", elsewhere)), null);
         Assert.Equal(elsewhere, q.DataDir);
         Assert.Equal(Path.Combine(elsewhere, "store.db"), q.Store);
+    }
+
+    [Fact]
+    public void ThePreferencesAreTheAppsKeyWithoutMalachiSettingsKey()
+    {
+        Assert.Equal(@"Software\io.github.schotek.Malachi", Paths.DefaultSettingsKey);
+        Assert.Equal("MALACHI_SETTINGS_KEY", Paths.SettingsKeyVariable);
+        foreach (var p in new[] { Paths.Resolve(Env(), null), Paths.Resolve(Env(("MALACHI_SETTINGS_KEY", "")), null) })
+        {
+            Assert.Equal(Paths.DefaultSettingsKey, p.SettingsKey);
+            Assert.Null(p.IgnoredSettingsKey);
+        }
+    }
+
+    [Theory]
+    [InlineData("io.github.schotek.Malachi")]
+    [InlineData("io.github.schotek.Malachi.UiTests.0f8e2a6c4b1d4e7f9a3c5b2d1e0f6a7b")]
+    [InlineData("io.github.schotek.Malachi.Tests")]
+    [InlineData("io.github.schotek.Malachi.a")]
+    [InlineData("io.github.schotek.Malachi.A-b_c.9")]
+    [InlineData("io.github.schotek.Malachi..")]
+    public void MalachiSettingsKeyNamesAKeyOfTheAppsFamily(string name)
+    {
+        var p = Paths.Resolve(Env(("MALACHI_SETTINGS_KEY", name)), null);
+        Assert.Equal(@"Software\" + name, p.SettingsKey);
+        Assert.Null(p.IgnoredSettingsKey);
+    }
+
+    [Theory]
+    // The prefix without anything after its dot, or without the dot.
+    [InlineData("io.github.schotek.Malachi.")]
+    [InlineData("io.github.schotek.MalachiTests")]
+    [InlineData("io.github.schotek.Malach")]
+    // Re-cased: the registry would take it as the app's key, but it is a mistake.
+    [InlineData("io.github.schotek.malachi")]
+    [InlineData("IO.GITHUB.SCHOTEK.MALACHI.Tests")]
+    // Another key, a subkey, a parent, a path.
+    [InlineData("Microsoft")]
+    [InlineData(@"Software\io.github.schotek.Malachi")]
+    [InlineData(@"io.github.schotek.Malachi\Tests")]
+    [InlineData(@"io.github.schotek.Malachi.Tests\..\..\Microsoft\Windows\CurrentVersion\Run")]
+    [InlineData("io.github.schotek.Malachi.Tests/x")]
+    [InlineData(@"..\Microsoft")]
+    // Spaces, controls and letters beyond ASCII.
+    [InlineData(" io.github.schotek.Malachi")]
+    [InlineData("io.github.schotek.Malachi ")]
+    [InlineData("io.github.schotek.Malachi.Tests x")]
+    [InlineData("io.github.schotek.Malachi.Tests\t")]
+    [InlineData("io.github.schotek.Malachi.Tests\n")]
+    [InlineData("io.github.schotek.Malachi.Testš")]
+    [InlineData("io.github.schotek.Malachi.Ｔests")]
+    public void AnyOtherMalachiSettingsKeyIsIgnored(string name)
+    {
+        var p = Paths.Resolve(Env(("MALACHI_SETTINGS_KEY", name)), null);
+        Assert.Equal(Paths.DefaultSettingsKey, p.SettingsKey);
+        Assert.Equal(name, p.IgnoredSettingsKey);
     }
 
     [Fact]

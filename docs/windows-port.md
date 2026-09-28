@@ -109,9 +109,11 @@ GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 Development overrides, as on macOS: `MALACHI_DAEMON` (path, or `none`),
 `MALACHI_SOCKET`, `MALACHI_KEYRING`/`MALACHI_KEYRING_HELPER` (a preset
 `MALACHI_KEYRING` wins over the bundled helper), `MALACHI_LOCALE_DIR`, and
-one Windows-only variable, `MALACHI_DATA_DIR`, which replaces
-`%LOCALAPPDATA%\Malachi Mail` for tests and agents. An agent running inside
-Claude Desktop's process tree must use it: new files under AppData are
+two Windows-only variables: `MALACHI_DATA_DIR`, which replaces
+`%LOCALAPPDATA%\Malachi Mail` for tests and agents, and
+`MALACHI_SETTINGS_KEY`, which gives a test a preferences key of its own
+(§8). An agent running inside
+Claude Desktop's process tree must use the first: new files under AppData are
 silently redirected into Claude's package store there, and so are writes to
 HKCU (measured), so an agent that tests settings, `mailto:` registration,
 launch at login or notifications starts the app **outside** that tree
@@ -909,7 +911,18 @@ copies. The backend is `HKCU\Software\io.github.schotek.Malachi` (DWORD for
 `b`/`i`, REG_SZ for enums, REG_MULTI_SZ for `as`) with a
 `RegNotifyChangeKeyValue` watcher that diffs and raises per-key handlers,
 so a `reg add` reaches the running app as `gsettings set` and `defaults
-write` do; tests use an in-memory backend.
+write` do; tests use an in-memory backend. `MALACHI_SETTINGS_KEY` names
+another key under `HKCU\Software` for a test that runs the real app (the
+UI smoke tests, §12, give each app they start
+`io.github.schotek.Malachi.UiTests.<guid>` and delete it afterwards): it is
+read with the other paths (`Paths.Resolve`, beside `MALACHI_DATA_DIR` and
+`MALACHI_SOCKET`) and taken only when it is `io.github.schotek.Malachi`
+itself or that name followed by a dot and ASCII letters, digits, `.`, `_`
+or `-`, compared exactly. Any other value is ignored with a warning in the
+log and the preferences stay in the app's own key, so a mistyped variable
+can never point the app's writes at another program's key or a parent of
+one; nothing else moves with it (the Run value, the `mailto:` registration
+and the notification registration are `MALACHI_DATA_DIR`'s and §10's).
 
 Window geometry uses the gschema keys GTK declares but never writes
 (`window-width`, `window-height`, `window-maximized`, `folder-pane-width`,
@@ -1797,11 +1810,11 @@ foreground).
 
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs six test projects, 3,585
-tests in about two minutes on the development machine (2026-09-28): 2,773
+`make test-windows` (`build.ps1 test`) runs six test projects, 3,611
+tests in about two minutes on the development machine (2026-09-28): 2,798
 in `Malachi.Core.Tests`, 590 in `Malachi.Platform.Windows.Tests`, 159 in
 `Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 25 in
-the canary and 11 UI tests (4 of them opt-in). The tests that need a built `malachid.exe` skip without one
+the canary and 12 UI tests (4 of them opt-in). The tests that need a built `malachid.exe` skip without one
 (`make windows` or `build.ps1 go` builds it, `MALACHI_TEST_MALACHID`
 names another), and the Credential Manager round trips run only on
 request. The `.trx` reports land in `build\windows\TestResults\`.
@@ -1913,6 +1926,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   (`build\windows\<arch>\Malachi Mail\`, or the one `MALACHI_UITEST_APP`
   names), as a user would, with a temporary folder of their own for the
   data (`MALACHI_DATA_DIR`) and the socket (`MALACHI_SOCKET`, a short path),
+  a registry key of their own per app for the preferences
+  (`MALACHI_SETTINGS_KEY=io.github.schotek.Malachi.UiTests.<guid>`, §8,
+  deleted once that app is gone, also after a failure),
   the bundled daemon and `Malachi.FakeKeyring`, a keyring helper over a JSON
   file in that folder (`MALACHI_FAKE_KEYRING_FILE`): no password reaches
   Credential Manager. The app's terminal log is its stderr, a pipe the test
@@ -1926,10 +1942,13 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   its identity page, modal, the main window enabled again after it) and
   About (the executable's version); the No Accounts page's Add Account…;
   and Quit from the primary menu: the app exits with 0, the daemon it
-  started exits with 0, and the socket and its key are gone. The classes
+  started exits with 0, and the socket and its key are gone; and the
+  preferences' key: a `window-maximized` the session wrote into its key
+  before the start shows as a maximised main window, and the key is gone
+  after the session. The classes
   share one collection without parallelism (the app is one instance per
-  executable); one app serves the window checks, another the Quit; about
-  25 s. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
+  executable); one app serves the window checks, one the Quit, one the
+  preferences; about 30 s. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
   IMAP and SMTP server of the port's research, outside the repository)
   adds a suite against a mail server: devmail started on free ports of
   127.0.0.1 and seeded with `backend/testdata/mime`, the account added over
@@ -1941,10 +1960,13 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   arriving in the server's INBOX with its copy in Sent; about 45 s with the
   smoke tests. Skipped with the reason: not Windows, no interactive
   desktop, the app not built, or `MalachiMail.exe` of that folder running
-  already (a test's launch would only activate it). Not isolated: the
-  preferences, which the app reads from the user's
-  `HKCU\Software\io.github.schotek.Malachi` (a Quit writes back the window
-  geometry it read). They run in `build.ps1 test` with the rest of the
+  already (a test's launch would only activate it). The user's
+  `HKCU\Software\io.github.schotek.Malachi` is neither read nor written
+  (a Quit writes the window geometry back into the session's key). Not
+  isolated: the notification registration, which Windows keys by the
+  executable's path (`HKCU\Software\Classes\AppUserModelId\<path>`, §10)
+  and which every start of the app folder writes, a test's as a user's.
+  They run in `build.ps1 test` with the rest of the
   solution (a stale app folder tests the old app: `build.ps1 app` first),
   or alone:
   `dotnet test --project tests\Malachi.App.UiTests\Malachi.App.UiTests.csproj -p:Platform=x64`

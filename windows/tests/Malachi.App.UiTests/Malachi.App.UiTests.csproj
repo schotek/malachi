@@ -4,9 +4,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 UI smoke tests (docs/windows-port.md §12): the published app
 (build\windows\<arch>\Malachi Mail\, build.ps1 app) started with a data
-directory and a socket of its own and driven through UI Automation: the
-main window, a composer, the Preferences, the account wizard's first page,
-About, and a clean Quit (the daemon gone, the socket and its key removed).
+directory, a socket and a preferences key of its own and driven through UI
+Automation: the main window, a composer, the Preferences, the account
+wizard's first page, About, a clean Quit (the daemon gone, the socket and
+its key removed), and the preferences read from the session's key.
 With MALACHI_DEVMAIL naming a devmail folder, also against a local mail
 server: the account, the list, the reader, a reply and a message sent.
 Skipped with the reason where there is no desktop session or no built app.

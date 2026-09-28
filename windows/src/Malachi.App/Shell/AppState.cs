@@ -6,8 +6,9 @@
 // GTK: ui/main.go (the values main threads through window.New: the
 // client, the supervisor, the settings, the compose manager). What the
 // application owns once, made in this order: the translations (every
-// string from here on is translated), the settings over the registry
-// (made on the UI thread, whose context their change handlers run on), the
+// string from here on is translated), the settings over the registry key
+// of the paths (the app's, or a test's own through MALACHI_SETTINGS_KEY;
+// made on the UI thread, whose context their change handlers run on), the
 // open directory swept of a previous run's files, the paths and the data
 // directory (MALACHI_DATA_DIR), the socket's path check, the daemon's
 // supervisor with its process host (MALACHI_DAEMON; the keyring helper
@@ -171,7 +172,16 @@ public sealed partial class AppState : IDisposable
         // Translations first: every string built from here on is translated.
         L10n.Catalogue = Catalogue.Default(preferredLanguages: WindowsPreferredLanguages.Instance, logger: log);
 
-        var backend = RegistrySettingsBackend.Open(logger: logs.CreateLogger<RegistrySettingsBackend>());
+        // The preferences' key: the app's, or a test's own (MALACHI_SETTINGS_KEY, Paths).
+        if (paths.IgnoredSettingsKey is { } ignored)
+        {
+            LogSettingsKeyIgnored(log, Paths.SettingsKeyVariable, ignored, @"HKCU\" + paths.SettingsKey);
+        }
+        else if (paths.SettingsKey != Paths.DefaultSettingsKey)
+        {
+            LogSettingsKey(log, @"HKCU\" + paths.SettingsKey, Paths.SettingsKeyVariable);
+        }
+        var backend = RegistrySettingsBackend.Open(paths.SettingsKey, logs.CreateLogger<RegistrySettingsBackend>());
         var settings = new SettingsStore(backend, System.Threading.SynchronizationContext.Current);
 
         var directories = new PrivateDirectory();
@@ -275,6 +285,14 @@ public sealed partial class AppState : IDisposable
 
     [LoggerMessage(Level = LogLevel.Error, Message = "data directory")]
     private static partial void LogDataDirectory(ILogger logger, Exception error);
+
+    // The generator copies a message into a string literal without escaping
+    // a backslash: the key's path comes as an argument.
+    [LoggerMessage(Level = LogLevel.Warning, Message = "{Variable} ignored, not io.github.schotek.Malachi or that name with a dot and ASCII letters, digits, dots, underscores or hyphens after it: [{Value}]; the preferences are in {Key}")]
+    private static partial void LogSettingsKeyIgnored(ILogger logger, string variable, string value, string key);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "the preferences are in {Key} ({Variable})")]
+    private static partial void LogSettingsKey(ILogger logger, string key, string variable);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "socket path: {Reason}")]
     private static partial void LogSocketPath(ILogger logger, string reason);

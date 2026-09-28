@@ -9,7 +9,7 @@
 // build that a test, an agent or a developer runs) would point the user's
 // real mailto: handler and Run value at a path that is deleted later,
 // breaking mailto: for a user who chose Malachi Mail as the default mail
-// app. MALACHI_DATA_DIR, the one Windows-only variable, is what tests and
+// app. MALACHI_DATA_DIR, a Windows-only variable, is what tests and
 // agents set to keep such a copy off the user's data; with it set the copy
 // also leaves those registrations alone at start. What the user asks for in
 // Preferences (launch at login, the Default apps page) is still done: that

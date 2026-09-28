@@ -230,8 +230,9 @@ windows/
                                   MIME corpus, with loopback listeners and a NetLog
     Malachi.App.Canary.Host/      its WinUI host, compiling src/Malachi.App/WebViews
     Malachi.App.UiTests/          UI smoke tests: the published app (build.ps1 app) driven
-                                  through UI Automation on a data folder of its own; with
-                                  MALACHI_DEVMAIL also against the local devmail server
+                                  through UI Automation on a data folder and a preferences
+                                  key of its own; with MALACHI_DEVMAIL also against the
+                                  local devmail server
     Malachi.FakeKeyring/          a keyring helper over a JSON file for the UI tests
 ```
 
@@ -310,7 +311,7 @@ from `backend\`.
 | Logs | `%LOCALAPPDATA%\Malachi Mail\logs\`: `MalachiMail.log` (the app, `MALACHI_LOG_LEVEL`) and `malachid.log` (the daemon), each rotated at 4 MiB; also the terminal under `make run-windows` |
 | WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written) |
 | Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit, entries older than an hour swept) |
-| Preferences | `HKCU\Software\io.github.schotek.Malachi`, the gschema's keys plus `ctrl-r`; a `reg add` reaches the running app |
+| Preferences | `HKCU\Software\io.github.schotek.Malachi` (`MALACHI_SETTINGS_KEY` names another key of that family), the gschema's keys plus `ctrl-r`; a `reg add` reaches the running app |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
 | Launch at login | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Malachi Mail` = `"<exe>" --background`; the user's switch in Windows Settings (`...\Explorer\StartupApproved\Run`) is respected, never overwritten |
 | `mailto:` | `HKCU\Software\Classes\io.github.schotek.Malachi.mailto`, `HKCU\Software\Clients\Mail\Malachi Mail`, `HKCU\Software\RegisteredApplications`, written at start when missing or stale, so the app is offered in *Settings → Apps → Default apps* |
@@ -321,8 +322,15 @@ from `backend\`.
 `MALACHI_DATA_DIR` replaces `%LOCALAPPDATA%\Malachi Mail` for tests and
 agents; a copy started with it leaves the user's `mailto:` registration
 and Run value alone (what is asked for in its Preferences is still
-written). `MALACHI_DAEMON`, `MALACHI_SOCKET`, `MALACHI_KEYRING`,
-`MALACHI_KEYRING_HELPER` and `MALACHI_LOCALE_DIR` work as on macOS. A
+written). `MALACHI_SETTINGS_KEY` names the preferences' key under
+`HKCU\Software` instead of `io.github.schotek.Malachi`, for a test that
+must not read or write the user's (the UI tests set
+`io.github.schotek.Malachi.UiTests.<guid>`): only that name itself or it
+followed by a dot and ASCII letters, digits, `.`, `_` or `-` is taken, and
+any other value is ignored with a line in the log, so that a mistyped one
+never writes into another program's key. `MALACHI_DAEMON`,
+`MALACHI_SOCKET`, `MALACHI_KEYRING`, `MALACHI_KEYRING_HELPER` and
+`MALACHI_LOCALE_DIR` work as on macOS. A
 socket path may have at most 107 bytes (AF_UNIX on Windows); the app
 checks it at start and says so, naming `MALACHI_SOCKET`.
 
@@ -440,8 +448,9 @@ features, not deviations.
   program started from Explorer. Set `MALACHI_DATA_DIR` to a directory
   outside AppData for such runs (the socket is outside AppData already,
   and a short `MALACHI_SOCKET` under `%TEMP%` keeps a test apart from the
-  real daemon); test what must reach the real registry from a process
-  started outside Claude's tree.
+  real daemon, as `MALACHI_SETTINGS_KEY` keeps its preferences apart);
+  test what must reach the real registry from a process started outside
+  Claude's tree.
 - **The message shows as plain text with "could not be shown safely", the
   previewer shows only a panel, the editor stays blank.** WebView2 could
   not start: the WebView2 runtime is missing or broken (Windows 11 ships
