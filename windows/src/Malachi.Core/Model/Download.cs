@@ -10,11 +10,13 @@
 //
 // Swift tells the daemon's error by its type (error as? RPCError), Go by
 // errors.As; here the daemon's error is an RpcException, as ComposeSources
-// tells it.
+// tells it, and MethodUnsupported reads it as RpcErrorText does. As in
+// Swift, MethodUnsupported serves StorageUsageController as well.
 
 using System;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
+using Malachi.Core.Text;
 using Malachi.Core.Transport;
 
 namespace Malachi.Core.Model;
@@ -22,18 +24,22 @@ namespace Malachi.Core.Model;
 /// <summary>Attachments on demand: the rules of a fetch that may need a download first.</summary>
 public static class Download
 {
+    // The message of PartNotFoundAfterDownload (Download.swift
+    // partNotFoundDetail): technical English, for the log only; like the
+    // daemon's messages it is never shown.
+    private const string PartNotFoundDetail = "the downloaded message no longer lists the part";
+
     /// <summary>
     /// What <see cref="WithDownloadAsync{T}"/> throws, as an
     /// <see cref="RpcException"/>, when the downloaded message no longer lists
     /// the attachment (<see cref="AttachmentChips.PartAfterDownload"/> found
     /// none): nothing is fetched, since the old part id may name another file
     /// by now, and the action's toast says that the attachment no longer
-    /// exists (partNotFound in <see cref="Text.RpcErrorText"/>; download.go
-    /// <c>errPartNotFound</c>). Its message is technical English, for the log
-    /// only: like the daemon's messages it is never shown.
+    /// exists (partNotFound in <see cref="RpcErrorText"/>; download.go
+    /// <c>errPartNotFound</c>).
     /// </summary>
     public static RpcError PartNotFoundAfterDownload { get; } =
-        new() { Code = ErrorCode.PartNotFound, Message = "the downloaded message no longer lists the part" };
+        new() { Code = ErrorCode.PartNotFound, Message = PartNotFoundDetail };
 
     /// <summary>
     /// Whether <paramref name="error"/> is the daemon's partNotDownloaded
@@ -46,11 +52,13 @@ public static class Download
     /// <summary>
     /// Whether <paramref name="error"/> says the daemon does not offer the
     /// method at all: an older one (methodNotFound) or one without it yet
-    /// (notImplemented) (download.go <c>methodUnsupported</c>). A forward
-    /// then goes on without a download.
+    /// (notImplemented) (download.go <c>methodUnsupported</c>, which reads
+    /// the error as <see cref="RpcErrorText.DaemonError"/> does, through the
+    /// wrapping). A forward then goes on without a download, and Disk Space
+    /// Used is hidden (<see cref="Controllers.StorageUsageController"/>).
     /// </summary>
     public static bool MethodUnsupported(Exception? error) =>
-        error is RpcException { Code.Value: ErrorCode.MethodNotFound or ErrorCode.NotImplemented };
+        RpcErrorText.DaemonError(error)?.Code.Value is ErrorCode.MethodNotFound or ErrorCode.NotImplemented;
 
     /// <summary>
     /// Fetches something of attachment <paramref name="a"/> that may be on the

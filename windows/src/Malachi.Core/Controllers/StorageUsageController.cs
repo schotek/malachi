@@ -8,8 +8,9 @@
 // Unsupported, onError Failed); the state is observable as well. The timer
 // waits on the injected TimeProvider, as SyncController's refresher does,
 // and runs detached (docs/windows-port.md §7): a fake clock would hold a
-// tracked wait for ever. Download.swift's methodUnsupported, which Swift
-// shares with the attachments' download, is a private helper here.
+// tracked wait for ever. An older daemon is told by Download's
+// MethodUnsupported, which the attachments' download shares, as Swift
+// shares Download.swift's methodUnsupported.
 
 using System;
 using System.Threading;
@@ -169,7 +170,7 @@ public sealed partial class StorageUsageController : ObservableObject, IDisposab
                 Usage = res;
                 UsageChanged?.Invoke(this, res);
             }
-            else if (MethodUnsupported(error))
+            else if (Download.MethodUnsupported(error))
             {
                 IsUnsupported = true;
                 StopTimer();
@@ -203,12 +204,6 @@ public sealed partial class StorageUsageController : ObservableObject, IDisposab
 
     /// <summary>Closes the controller.</summary>
     public void Dispose() => Close();
-
-    // Download.swift methodUnsupported (download.go): a daemon that does not
-    // offer the method, an older one (methodNotFound) or one without it yet
-    // (notImplemented).
-    private static bool MethodUnsupported(Exception? error) =>
-        RpcErrorText.DaemonError(error)?.Code.Value is ErrorCode.MethodNotFound or ErrorCode.NotImplemented;
 
     private void StopTimer()
     {
