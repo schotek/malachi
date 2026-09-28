@@ -857,11 +857,16 @@ the handler, then `Register()`), then
 `AppInstance.FindOrRegisterForKey("io.github.schotek.Malachi")`; a second
 launch redirects with `RedirectActivationToAsync` (which grants the first
 instance the foreground right itself, so no `AllowSetForegroundWindow`),
-pumping COM with `CoWaitForMultipleObjects` meanwhile (10 s at most; a
-first instance that does not answer is logged and the second exits all the
-same), and exits; its lines go to the same app log, each written at the
-file's end (`RotatingLogFile`), so the first instance's later lines do not
-overwrite them. The
+pumping COM with `CoWaitForMultipleObjects` meanwhile, and exits. The wait
+has no time limit, as in the Windows App SDK's own pattern: a busy first
+instance takes the activation once it is free, but aborts inside the
+Windows App SDK when it gets to a redirect whose launch has already ended
+(measured with a suspended first instance), so giving up after a timeout
+would crash the app the user already has. The wait also ends when the
+first instance's process ends, which leaves a redirect pending forever
+(measured); that launch then exits with code 1. Its lines go to the same
+app log, each written at the file's end (`RotatingLogFile`), so the first
+instance's later lines do not overwrite them. The
 first instance hands every activation, its own and each redirect's
 (`AppInstance.Activated`, a worker thread), to `App.Activate` on the UI
 thread (`ActivationRequest`, Core). An unpackaged launch carries its whole

@@ -18,9 +18,13 @@
 // 4. The single instance: AppInstance.FindOrRegisterForKey with the app
 //    id. A second launch redirects its activation (its command line with
 //    a mailto: URI or --background, a notification's click) to the first
-//    and exits; the redirect passes the right to come to the front on
-//    (APP-SPIKES.md §5.2). The first instance takes redirected
-//    activations on a worker thread and hands them to the UI thread.
+//    and exits once the first has taken it, however long that takes, or
+//    once the first has ended without taking it (exit code 1): a second
+//    launch that gave up while the first was busy would make the first
+//    abort when it got to the orphaned redirect (measured). The redirect
+//    passes the right to come to the front on (APP-SPIKES.md §5.2). The
+//    first instance takes redirected activations on a worker thread and
+//    hands them to the UI thread.
 // 5. The application, on a DispatcherQueueSynchronizationContext.
 
 using System;
@@ -41,15 +45,13 @@ using Microsoft.Windows.AppLifecycle;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.System.Com;
+using Windows.Win32.System.Threading;
 
 namespace Malachi.App;
 
 /// <summary>Starts the WinUI application, once per user session.</summary>
 public static partial class Program
 {
-    // How long a second launch waits for its redirect.
-    private static readonly TimeSpan RedirectTimeout = TimeSpan.FromSeconds(10);
-
     private static readonly Lock Gate = new();
     private static readonly List<Action<App>> Waiting = [];
     private static App? app;
@@ -82,9 +84,9 @@ public static partial class Program
         if (!key.IsCurrent)
         {
             LogRedirecting(logger, activation.Kind);
-            Redirect(key, activation);
+            var delivered = Redirect(key, activation);
             console.ShutdownCompleted();
-            return 0;
+            return delivered ? 0 : 1;
         }
         key.Activated += OnRedirected;
 
@@ -136,15 +138,21 @@ public static partial class Program
         }
     }
 
-    // A second launch: hand the activation to the first instance, keeping
+    // A second launch: hands the activation to the first instance, keeping
     // this STA thread pumping COM while the redirect runs (the documented
-    // way: the redirect's own calls may need it), then exit. When the first
-    // instance does not answer in time this one exits all the same; the
-    // event is then left to the finaliser, since the redirect may still
-    // finish and signal it while the process ends.
-    private static unsafe void Redirect(AppInstance key, AppActivationArguments activation)
+    // way: the redirect's own calls may need it). The wait has no timeout,
+    // as in the Windows App SDK's own pattern, since giving up is worse:
+    // a busy first instance (measured with a suspended one) takes the
+    // activation once it is free, but aborts in the Windows App SDK when it
+    // gets to a redirect whose launch has ended. It ends when the redirect
+    // is done or failed, or when the first instance's process ends, which
+    // leaves the redirect pending forever (measured). False when the
+    // activation was not handed over: the redirect's event is then left to
+    // the finaliser, since the redirect may still set it.
+    private static unsafe bool Redirect(AppInstance key, AppActivationArguments activation)
     {
         var done = new ManualResetEvent(false);
+        var failed = false;
         _ = Task.Run(() =>
         {
             try
@@ -153,6 +161,7 @@ public static partial class Program
             }
             catch (AggregateException e)
             {
+                failed = true;
                 LogRedirectFailed(logger, e.InnerException ?? e);
             }
             finally
@@ -160,16 +169,28 @@ public static partial class Program
                 done.Set();
             }
         });
-        var handle = (HANDLE)done.SafeWaitHandle.DangerousGetHandle();
+        using var first = PInvoke.OpenProcess_SafeHandle(PROCESS_ACCESS_RIGHTS.PROCESS_SYNCHRONIZE, false, key.ProcessId);
+        Span<HANDLE> handles =
+        [
+            (HANDLE)done.SafeWaitHandle.DangerousGetHandle(),
+            first.IsInvalid ? default : (HANDLE)first.DangerousGetHandle(),
+        ];
         var waited = PInvoke.CoWaitForMultipleObjects(
-            (uint)CWMO_FLAGS.CWMO_DEFAULT, (uint)RedirectTimeout.TotalMilliseconds, new ReadOnlySpan<HANDLE>(ref handle), out _);
-        if (waited.Failed)
+            (uint)CWMO_FLAGS.CWMO_DEFAULT, PInvoke.INFINITE, first.IsInvalid ? handles[..1] : handles, out var index);
+        if (waited.Failed || index != 0)
         {
-            // RPC_S_CALLPENDING: the first instance is busy or hung.
-            LogRedirectTimedOut(logger, RedirectTimeout.TotalSeconds, waited.Value);
-            return;
+            if (waited.Failed)
+            {
+                LogRedirectWaitFailed(logger, waited.Value);
+            }
+            else
+            {
+                LogFirstInstanceEnded(logger, key.ProcessId);
+            }
+            return false;
         }
         done.Dispose();
+        return !Volatile.Read(ref failed);
     }
 
     // A second launch's activation, on a worker thread.
@@ -231,8 +252,11 @@ public static partial class Program
     [LoggerMessage(Level = LogLevel.Error, Message = "the activation could not be redirected")]
     private static partial void LogRedirectFailed(ILogger logger, Exception error);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "the first instance did not take the activation within {Seconds} s (0x{Result:X8}); exiting")]
-    private static partial void LogRedirectTimedOut(ILogger logger, double seconds, int result);
+    [LoggerMessage(Level = LogLevel.Error, Message = "the wait for the redirect failed (0x{Result:X8})")]
+    private static partial void LogRedirectWaitFailed(ILogger logger, int result);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "the first instance (pid {ProcessId}) ended before it took the activation")]
+    private static partial void LogFirstInstanceEnded(ILogger logger, uint processId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "console {Control}: quitting")]
     private static partial void LogConsoleControl(ILogger logger, ConsoleControl control);
