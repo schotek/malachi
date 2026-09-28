@@ -46,6 +46,13 @@ internal sealed class CanaryRunner
     private const int ViewHeight = 700;
     private const int MaxUri = 240;
 
+    // How long the host waits for the browser to end once the views closed
+    // (its NetLog is whole only then): a second or two on an idle machine,
+    // 20 to 50 s while eight to ten CPU-burning processes kept every core
+    // busy (measured; the 15 s before failed that way), longer only under
+    // more than that. App.Watchdog leaves room for it.
+    private static readonly TimeSpan BrowserExitTimeout = TimeSpan.FromSeconds(60);
+
     // A 7×5 PNG, the picture every malachi-cid: and registered cid: request
     // gets.
     private static readonly byte[] Png = Convert.FromBase64String(
@@ -670,7 +677,10 @@ internal sealed class CanaryRunner
             window?.Close();
             return false;
         }
-        var done = await Task.WhenAny(exited.Task, Task.Delay(15000)) == exited.Task;
+        var waited = System.Diagnostics.Stopwatch.StartNew();
+        var done = await Task.WhenAny(exited.Task, Task.Delay(BrowserExitTimeout)) == exited.Task;
+        Add(HostEvent.Kinds.Log, "", null, detail: (done ? "the browser exited after " : "the browser still ran after ")
+            + waited.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture) + " ms");
         window?.Close();
         return done;
     }

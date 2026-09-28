@@ -18,7 +18,8 @@ namespace Malachi.App.Canary;
 /// <summary>A canary host run and its evidence.</summary>
 internal sealed class CanaryRun : IDisposable
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(110);
+    // Beyond the host's own watchdog (App.Watchdog, 150 s).
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(160);
 
     private readonly Dictionary<string, CanaryListener> canaries = new(StringComparer.Ordinal);
 
@@ -97,9 +98,12 @@ internal sealed class CanaryRun : IDisposable
             {
                 NetLog = NetLog.Read(config.NetLog);
             }
-            catch (Exception e) when (e is InvalidDataException or JsonException)
+            catch (Exception e) when (e is InvalidDataException or JsonException or IOException)
             {
-                // The tests that need the log say why there is none.
+                // The tests that need the log say why there is none. A
+                // browser still ending after a host killed at the timeout
+                // holds the file (IOException); the fixture must not fail
+                // every test for that, the run's own tests say what went wrong.
                 NetLogError = e.Message;
             }
         }
