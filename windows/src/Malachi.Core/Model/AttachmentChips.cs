@@ -116,14 +116,14 @@ public static class AttachmentChips
     /// The chip's label: the sanitised file name, or a placeholder for a part
     /// without one (attachments.go <c>chipName</c>). The daemon's name
     /// sanitiser already removes control and bidi characters; the name is
-    /// cleaned for display again all the same (<see cref="DisplayText.Clean"/>),
+    /// cleaned for display again all the same (<see cref="DisplayText.CleanTrimmed"/>),
     /// as every mail text the app shows, since it also names the previewer's
-    /// window.
+    /// window; a name that draws nothing takes the placeholder.
     /// </summary>
     public static string ChipName(Attachment a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        var n = DisplayText.Clean(a.Filename).Trim();
+        var n = DisplayText.CleanTrimmed(a.Filename);
         return n.Length > 0 ? n : L10n.T("Attachment");
     }
 

@@ -34,7 +34,7 @@ public static class NotificationText
     /// <c>notificationText</c>): the sender's display name or "New message",
     /// the subject or "(No subject)". Notifications are not markup, but the
     /// text is still attacker-controlled: both lines are trimmed and capped.
-    /// Windows-only: both are cleaned first (<see cref="DisplayText.Clean"/>),
+    /// Windows-only: both are cleaned first (<see cref="DisplayText.CleanTrimmed"/>),
     /// as everywhere else the app shows them: a control character would make
     /// the toast's XML invalid and Windows would drop the notification, and
     /// a bidi override would turn the subject around.
@@ -51,7 +51,7 @@ public static class NotificationText
                 title = name;
             }
         }
-        var body = DisplayText.Clean(n.Message.Subject).Trim();
+        var body = DisplayText.CleanTrimmed(n.Message.Subject);
         if (body.Length == 0)
         {
             body = L10n.T("(No subject)");

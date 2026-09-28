@@ -33,14 +33,14 @@ public static class Format
     /// <summary>
     /// The short form of an address for lists and avatars: the name if the
     /// backend parsed one, otherwise the bare address; cleaned for display
-    /// (<see cref="DisplayText.Clean"/>), so a name of only control or bidi
-    /// characters counts as none.
+    /// (<see cref="DisplayText.CleanTrimmed"/>), so a name of only control or
+    /// bidi characters, or of characters that draw nothing, counts as none.
     /// </summary>
     public static string DisplayName(Address a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        var name = DisplayText.Clean(a.Name).Trim();
-        return name.Length > 0 ? name : DisplayText.Clean(a.Email).Trim();
+        var name = DisplayText.CleanTrimmed(a.Name);
+        return name.Length > 0 ? name : DisplayText.CleanTrimmed(a.Email);
     }
 
     /// <summary>
@@ -53,8 +53,8 @@ public static class Format
     public static string FormatAddress(Address a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        var name = DisplayText.Clean(a.Name).Trim();
-        var addr = DisplayText.Clean(a.Email).Trim();
+        var name = DisplayText.CleanTrimmed(a.Name);
+        var addr = DisplayText.CleanTrimmed(a.Email);
         if (name.Length == 0)
         {
             return addr;

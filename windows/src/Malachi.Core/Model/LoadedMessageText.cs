@@ -19,11 +19,13 @@ public static class LoadedMessageText
     /// (message_view.go <c>subjectText</c>). Windows-only: cleaned first
     /// (<see cref="DisplayText.Clean"/>, docs/security.md §4), so no control
     /// or explicit bidi character reaches the list, the reader, a window's
-    /// caption or a question, and a subject of nothing else is "(No subject)".
+    /// caption or a question, and a subject of nothing else, or of nothing
+    /// but characters that draw nothing, is "(No subject)"
+    /// (<see cref="DisplayText.CleanTrimmed"/>).
     /// </summary>
     public static string SubjectText(string? subject)
     {
-        var s = DisplayText.Clean(subject).Trim();
+        var s = DisplayText.CleanTrimmed(subject);
         return s.Length > 0 ? s : L10n.T("(No subject)");
     }
 

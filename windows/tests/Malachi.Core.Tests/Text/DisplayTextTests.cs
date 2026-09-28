@@ -113,6 +113,50 @@ public sealed class DisplayTextTests
         XmlConvert.VerifyXmlChars(DisplayText.Clean(every.ToString()));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    [InlineData("\u200F")] // RLM
+    [InlineData("\u200E")] // LRM
+    [InlineData("\u061C")] // ALM
+    [InlineData("\u200B")] // ZERO WIDTH SPACE
+    [InlineData("\u2060")] // WORD JOINER
+    [InlineData("\uFEFF")] // the BOM, ZERO WIDTH NO-BREAK SPACE
+    [InlineData("\u200C\u200D\u00AD")] // the joiners, a soft hyphen
+    [InlineData("\u034F\uFE0F\u3164\u115F\uFFA0")] // CGJ, a variation selector, the Hangul fillers
+    [InlineData("\U000E0041\U000E007F")] // tag characters
+    public void TextOfNothingButDefaultIgnorablesIsInvisible(string? s)
+    {
+        Assert.True(DisplayText.IsInvisible(s));
+        Assert.Equal("", DisplayText.CleanTrimmed(s));
+    }
+
+    [Theory]
+    [InlineData("a")]
+    [InlineData("\u200Fמשה")] // a mark beside letters
+    [InlineData("\u0600")] // ARABIC NUMBER SIGN: a format character that draws a sign
+    [InlineData("\u06DD")] // ARABIC END OF AYAH, likewise
+    [InlineData("\uFFFD")] // what broken text becomes
+    [InlineData(" ")] // white space is a name to GTK
+    [InlineData("\u200B \u200B")]
+    public void TextThatDrawsSomethingIsNot(string s) => Assert.False(DisplayText.IsInvisible(s));
+
+    [Fact]
+    public void CleanTrimmedIsTheCleanedTextTrimmedOrNothing()
+    {
+        Assert.Equal("Hi", DisplayText.CleanTrimmed("  Hi\t"));
+        Assert.Equal(CleanedSubject.Trim(), DisplayText.CleanTrimmed(HostileSubject));
+        // Controls become spaces, and the trim takes them.
+        Assert.Equal("a b", DisplayText.CleanTrimmed("\u0007a\u2028b\r\n"));
+        Assert.Equal("", DisplayText.CleanTrimmed(" \u202E\u0007 "));
+        // White space between characters that draw nothing is nothing too.
+        Assert.Equal("", DisplayText.CleanTrimmed("\u200B \u200B"));
+        Assert.Equal("", DisplayText.CleanTrimmed(" \u200F\u3000\uFEFF "));
+        // A mark beside letters stays where it is.
+        Assert.Equal("\u200Fמשה (Moshe)", DisplayText.CleanTrimmed(" \u200Fמשה (Moshe) "));
+        Assert.Equal("\u0600", DisplayText.CleanTrimmed("\u0600"));
+    }
+
     [Fact]
     public void AnIsolateHoldsTheCleanedText()
     {

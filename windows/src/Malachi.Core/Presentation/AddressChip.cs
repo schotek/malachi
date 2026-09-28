@@ -47,10 +47,10 @@ public sealed record AddressChip(Address Address, AccountId Account, string Labe
         var full = Format.FormatAddress(a);
         var label = ChipText.TailEllipsis(name, AddressChips.AddressNameChars);
         var tooltip = !string.Equals(full, name, StringComparison.Ordinal) || !string.Equals(label, name, StringComparison.Ordinal) ? full : null;
-        var menuName = DisplayText.Clean(a.Name).Trim();
+        var menuName = DisplayText.CleanTrimmed(a.Name);
         return new AddressChip(
             a, account, label, tooltip,
             ChipText.TailEllipsis(menuName, MenuChars),
-            ChipText.MiddleEllipsis(DisplayText.Clean(a.Email).Trim(), MenuChars));
+            ChipText.MiddleEllipsis(DisplayText.CleanTrimmed(a.Email), MenuChars));
     }
 }

@@ -128,6 +128,15 @@ public sealed class FormatTests
         Assert.Equal("bob@example.org", Format.FormatAddress(controls));
         Assert.Equal("", Format.DisplayName(new Address { Name = "\u2066", Email = "\r\n" }));
 
+        // So is a name of nothing but characters that draw nothing (the
+        // marks, ZWSP, WJ, BOM): the address shows in its place.
+        var invisible = new Address { Name = "\u200F\u200E\u061C \u200B\u2060\uFEFF", Email = "eve@example.org" };
+        Assert.Equal("eve@example.org", Format.DisplayName(invisible));
+        Assert.Equal("eve@example.org", Format.FormatAddress(invisible));
+        Assert.Equal("", Format.DisplayName(new Address { Name = "\u200B", Email = "\uFEFF" }));
+        // A mark beside letters stays.
+        Assert.Equal("\u200Fמשה", Format.DisplayName(new Address { Name = "\u200Fמשה", Email = "m@example.org" }));
+
         // An Arabic name first cannot turn the list of participants around.
         List<Address> list =
         [

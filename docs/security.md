@@ -412,12 +412,14 @@ into it as well.
   isolated between U+2068 and U+2069, so a right-to-left text keeps its
   own direction and cannot move what follows it. The bidi marks (U+200E,
   U+200F, U+061C) and the joiners stay, so Hebrew, Arabic and Persian
-  names read as written. This is display only: the recipients of a
-  reply, a draft's subject, the names in a quote's header and what Copy
-  Address copies are the text as received, and a message's body and the
-  excerpt of it in the list are its content, shown as written. The GTK
-  and macOS clients show these texts as received; the same rule is
-  proposed for them
+  names read as written; a subject or name of nothing but characters that
+  draw nothing (such a mark, U+200B, U+FEFF) counts as empty and shows its
+  fallback, *(No subject)* or the address. This is display only: the
+  recipients of a reply, a draft's subject, the names in a quote's header
+  and what Copy Address copies are the text as received, and a message's
+  body and the excerpt of it in the list are its content, shown as
+  written. The GTK and macOS clients show these texts as received; the
+  same rule is proposed for them
   ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)

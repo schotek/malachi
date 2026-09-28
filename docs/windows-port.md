@@ -194,9 +194,10 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
   a XAML or RTF parser over anything from a message; HTML only in the
   WebView2 views of §6; and what the chrome shows of it (names, subjects,
   captions, notifications, attachment names) passes `Text.DisplayText`
-  first: no bidi formatting or control character reaches the screen, and
-  a name composed with other text is isolated (U+2068 … U+2069), so it
-  cannot reorder the address after it ([security.md §4](security.md#4-message-parsing-mime);
+  first: no bidi formatting or control character reaches the screen, a
+  subject or name that draws nothing takes its fallback, and a name
+  composed with other text is isolated (U+2068 … U+2069), so it cannot
+  reorder the address after it ([security.md §4](security.md#4-message-parsing-mime);
   Windows-only, a row of the deviation table);
 - where Windows differs, the row goes into the deviation table of
   `windows/README.md` and the code says why. A new deviation never lands

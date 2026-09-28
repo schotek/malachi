@@ -87,6 +87,12 @@ public sealed class NotificationTextTests
         Assert.Equal("New message", got.Title);
         Assert.Equal("(No subject)", got.Body);
 
+        // And so is nothing but characters that draw nothing.
+        n = n with { Message = n.Message with { From = [new Address { Name = "\u200F", Email = "\u200B\uFEFF" }], Subject = "\u2060\u200E" } };
+        got = NotificationText.Of(n);
+        Assert.Equal("New message", got.Title);
+        Assert.Equal("(No subject)", got.Body);
+
         // Cleaned before the cap: every control of a long subject is gone.
         n = n with { Message = n.Message with { Subject = string.Concat(System.Linq.Enumerable.Repeat("a\u0001\u202E", 300)) } };
         got = NotificationText.Of(n);

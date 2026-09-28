@@ -83,6 +83,7 @@ public sealed class ComposeHeaderRulesTests
     // caption (DisplayText).
     [InlineData("Re: " + Text.DisplayTextTests.HostileSubject, "Re: " + Text.DisplayTextTests.CleanedSubject)]
     [InlineData("\u202E\u0007", "New Message")]
+    [InlineData("\u200F\u200B", "New Message")]
     public void TheTitleIsTheSubject(string subject, string title) =>
         Assert.Equal(title, ComposeHeaderRules.WindowTitle(subject));
 }

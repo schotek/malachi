@@ -86,6 +86,7 @@ public sealed class AttachmentChipTests
         Assert.Equal("photognp.exe", AttachmentChips.ChipName(chip.Attachment));
         Assert.False(chip.CanOpen);
         Assert.Equal("Attachment", AttachmentChips.ChipName(Attachment("3", "\u202E\u0007")));
+        Assert.Equal("Attachment", AttachmentChips.ChipName(Attachment("4", "\u200B\uFEFF")));
     }
 
     [Fact]

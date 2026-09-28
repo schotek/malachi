@@ -28,6 +28,10 @@ public sealed class ActionHelpersTests
         // list, the reader, the captions and the questions.
         Assert.Equal(Text.DisplayTextTests.CleanedSubject, LoadedMessageText.SubjectText(Text.DisplayTextTests.HostileSubject));
         Assert.Equal("(No subject)", LoadedMessageText.SubjectText("\u202E\u0007\u2066"));
+        // So is one of nothing but characters that draw nothing.
+        Assert.Equal("(No subject)", LoadedMessageText.SubjectText("\u200F"));
+        Assert.Equal("(No subject)", LoadedMessageText.SubjectText(" \u200E\u061C \u200B\u2060\uFEFF "));
+        Assert.Equal("\u200FHi", LoadedMessageText.SubjectText(" \u200FHi "));
     }
 
     [Fact]

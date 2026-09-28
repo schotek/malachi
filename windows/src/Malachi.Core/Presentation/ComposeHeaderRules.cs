@@ -81,14 +81,14 @@ public static class ComposeHeaderRules
 
     /// <summary>
     /// updateTitle: the subject, trimmed, or "New Message". Windows-only:
-    /// cleaned for display first (<see cref="DisplayText.Clean"/>), as a
+    /// cleaned for display first (<see cref="DisplayText.CleanTrimmed"/>), as a
     /// reply's subject is the original sender's text; the Subject row itself
     /// keeps what was typed or prefilled.
     /// </summary>
     public static string WindowTitle(string subject)
     {
         ArgumentNullException.ThrowIfNull(subject);
-        var s = DisplayText.Clean(subject).Trim();
+        var s = DisplayText.CleanTrimmed(subject);
         return s.Length > 0 ? s : L10n.T("New Message");
     }
 }
