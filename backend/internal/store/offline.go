@@ -93,7 +93,10 @@ type RawCommit struct {
 //     when the file replaces a stored one that commit is flushed to disk
 //     first (beginDurable): the file's replacement is, and must not
 //     survive a power loss that the row's change does not;
-//  3. the file is replaced (RawTx.Replace);
+//  3. the file is replaced (RawTx.Replace); when one of the store's
+//     readers keeps the stored file open longer than the store waits
+//     (ErrBusy, on Windows), the file stays as it was and so, undone, does
+//     phase A's widening;
 //  4. phase B: the row gets the final remote set, the other columns of c
 //     and, with c.Body, the body columns and the conversation link.
 //
@@ -133,7 +136,8 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := s.commitPhaseA(ctx, accountID, id, c.Expect, remote, c.RemoteBytes, stored.any()); err != nil {
+	widened, err := s.commitPhaseA(ctx, accountID, id, c.Expect, remote, c.RemoteBytes, stored.any())
+	if err != nil {
 		return 0, err
 	}
 	if s.afterPhaseA != nil {
@@ -143,6 +147,14 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 	}
 	info, err := tx.Replace(RawWrite{Size: c.Source.Size()}, c.Source)
 	if err != nil {
+		if errors.Is(err, ErrBusy) && widened != nil {
+			// A reader kept the stored file open (Windows) and it stays as
+			// it was, whole where phase A calls parts remote. The row says
+			// what the file holds again, so that the message is still a
+			// candidate of the pass that tries it again, rather than partial
+			// until it is downloaded.
+			s.undoPhaseA(ctx, id, *widened)
+		}
 		return 0, err
 	}
 	// The file is in place: finish the row even if the caller has given
@@ -166,60 +178,81 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 // skeleton that replaced the file survived would call its parts stored for
 // good. A message's first file needs no such care: a crash that loses the
 // row's commits leaves its body not downloaded, and the syncer fetches it
-// again.
-func (s *Store) commitPhaseA(ctx context.Context, accountID, id string, want RawExpect, remote []string, remoteBytes int64, replacing bool) error {
+// again. When it widened the set it returns what it changed (undoPhaseA).
+func (s *Store) commitPhaseA(ctx context.Context, accountID, id string, want RawExpect, remote []string, remoteBytes int64, replacing bool) (*phaseAWidening, error) {
 	tx, end, err := s.beginTx(ctx, replacing && len(remote) > 0)
 	if err != nil {
-		return fmt.Errorf("commit message file: %w", err)
+		return nil, fmt.Errorf("commit message file: %w", err)
 	}
 	defer end()
 	var body, raw, hydrated, parts, role string
+	var oldBytes int64
 	err = tx.QueryRowContext(ctx, `
-		SELECT m.body_state, m.raw_state, m.hydrated_at, m.remote_parts, f.role
+		SELECT m.body_state, m.raw_state, m.hydrated_at, m.remote_parts, m.remote_bytes, f.role
 		FROM messages m JOIN folders f ON f.id = m.folder_id
-		WHERE m.id = ? AND m.account_id = ?`, id, accountID).Scan(&body, &raw, &hydrated, &parts, &role)
+		WHERE m.id = ? AND m.account_id = ?`, id, accountID).Scan(&body, &raw, &hydrated, &parts, &oldBytes, &role)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return ErrNotFound
+		return nil, ErrNotFound
 	case err != nil:
-		return fmt.Errorf("commit message file: %w", err)
+		return nil, fmt.Errorf("commit message file: %w", err)
 	case role == string(api.RoleOutbox):
-		return ErrOutbox
+		return nil, ErrOutbox
 	case role == string(api.RoleDrafts) && len(remote) > 0:
 		// Moved into Drafts since the caller decided: a draft keeps
 		// every part (ingest.Decide).
-		return fmt.Errorf("%w: the message is in Drafts", ErrConflict)
+		return nil, fmt.Errorf("%w: the message is in Drafts", ErrConflict)
 	case want.BodyState != "" && BodyState(body) != want.BodyState:
-		return fmt.Errorf("%w: body %s, expected %s", ErrConflict, body, want.BodyState)
+		return nil, fmt.Errorf("%w: body %s, expected %s", ErrConflict, body, want.BodyState)
 	case want.RawState != "" && RawState(raw) != want.RawState:
-		return fmt.Errorf("%w: file %s, expected %s", ErrConflict, raw, want.RawState)
+		return nil, fmt.Errorf("%w: file %s, expected %s", ErrConflict, raw, want.RawState)
 	case want.HydratedAt != nil && optStamp(*want.HydratedAt) != hydrated:
-		return fmt.Errorf("%w: downloaded at %q", ErrConflict, hydrated)
+		return nil, fmt.Errorf("%w: downloaded at %q", ErrConflict, hydrated)
 	}
 	var old []string
 	if err := json.Unmarshal([]byte(parts), &old); err != nil {
-		return fmt.Errorf("decode remote parts of %s: %w", id, err)
+		return nil, fmt.Errorf("decode remote parts of %s: %w", id, err)
 	}
 	if isSubset(remote, old) {
-		return nil
+		return nil, nil
 	}
 	union, err := json.Marshal(normalizeParts(append(old, remote...)))
 	if err != nil {
-		return fmt.Errorf("encode remote parts: %w", err)
+		return nil, fmt.Errorf("encode remote parts: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `UPDATE messages SET remote_parts = ?, raw_state = ?, remote_bytes = MAX(remote_bytes, ?)
 		WHERE id = ?`, string(union), string(RawPartial), remoteBytes, id); err != nil {
-		return fmt.Errorf("commit message file: %w", err)
+		return nil, fmt.Errorf("commit message file: %w", err)
 	}
 	if s.phaseACommit != nil {
 		if err := s.phaseACommit(tx); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit message file: %w", err)
+		return nil, fmt.Errorf("commit message file: %w", err)
 	}
-	return nil
+	return &phaseAWidening{parts: parts, raw: raw, bytes: oldBytes, union: string(union)}, nil
+}
+
+// phaseAWidening is what phase A changed in a row: the remote set, state
+// and size before, and the set it wrote.
+type phaseAWidening struct {
+	parts, raw string
+	bytes      int64
+	union      string
+}
+
+// undoPhaseA puts back what phase A widened, for a commit whose file was
+// not replaced after all (ErrBusy: the file stayed as it was). A row whose
+// remote set changed since (MarkPartsRemote) is left as it is, on the safe
+// side, and so is the row when the undo fails.
+func (s *Store) undoPhaseA(ctx context.Context, id string, w phaseAWidening) {
+	_, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE messages SET remote_parts = ?, raw_state = ?, remote_bytes = ?
+		WHERE id = ? AND remote_parts = ? AND raw_state = ?`, w.parts, w.raw, w.bytes, id, w.union, string(RawPartial))
+	if err != nil {
+		s.log.Warn("restore the remote parts of a message whose file stayed", "id", id, "err", err)
+	}
 }
 
 // MarkPartsRemote records that the message's stored file lacks the data of

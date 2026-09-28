@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -161,6 +162,46 @@ func TestAttachmentStep(t *testing.T) {
 	runStep(t, step)
 	if got := m.row(t, recent.ID); got.RawState != store.RawPartial {
 		t.Fatalf("keep-all fetched back %+v", got)
+	}
+}
+
+// A reader that keeps a message's file open while the step reduces it (a
+// message.part streaming a large attachment) holds the reduction up on
+// Windows, which refuses to replace an open file: once the store's retries
+// are over the step passes the message over, not as a failure, and the row
+// still says what the file holds. On Linux and macOS the reader stops
+// nothing. Either way the message is reduced once the reader is done.
+func TestAttachmentStepPassesOverAFileInUse(t *testing.T) {
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	m := seedMailbox(t)
+	ctx := context.Background()
+	step := newAttachmentStep(m.b).(*attachmentStep)
+	old := m.seedLarge(t, 7, time.Now().AddDate(0, 0, -60), ingest.Policy{})
+	m.setAttachmentDays(t, 30)
+
+	r, err := m.b.store.OpenMessageRaw(ctx, string(m.acc), old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Close() })
+	runStep(t, step)
+	switch got := m.row(t, old.ID); got.RawState {
+	case store.RawFull:
+		t.Log("the file was in use: passed over")
+		if got.StrippableBytes == store.StrippableNever || len(got.RemoteParts) != 0 || step.failed[old.ID] {
+			t.Fatalf("a message whose file was in use counted as a failure: %+v, failed %v", got, step.failed[old.ID])
+		}
+	case store.RawPartial:
+		t.Log("the reader stopped nothing: reduced at once")
+	default:
+		t.Fatalf("message %+v", got)
+	}
+	r.Close()
+	runStep(t, step)
+	if got := m.row(t, old.ID); got.RawState != store.RawPartial {
+		t.Fatalf("not reduced once the reader was done: %+v", got)
 	}
 }
 

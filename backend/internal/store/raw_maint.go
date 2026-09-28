@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -28,7 +27,7 @@ import (
 type ConvertResult struct {
 	Visited   int // accounting rows dealt with
 	Converted int // files now in the target codec
-	Busy      int // skipped: a writer held the message (the sweep counts it as misplaced)
+	Busy      int // skipped: a writer held the message, or a reader its file (ErrBusy); the sweep counts it as misplaced
 	Corrupt   int // skipped: the source is damaged and stays as it is
 	Missing   int // rows whose file was gone; the row went too
 	Failed    int // skipped after another error (logged)
@@ -46,8 +45,9 @@ const convertDefaultBatch = 64
 // of every message: first each new file is written beside the old one,
 // checked, flushed and renamed into place, then the touched directories
 // are flushed once, and only then does each old file go, unless a writer
-// replaced either file meanwhile (os.SameFile). A busy message is skipped
-// and a damaged one kept, both counted. The batch stops at a full disk
+// replaced either file meanwhile (os.SameFile). A busy message (a writer
+// holds it, or on Windows a reader has a file open that must go) is
+// skipped and a damaged one kept, both counted. The batch stops at a full disk
 // (ErrNoSpace), when ctx ends, and when the store's codec is no longer to
 // (ErrConflict); last is then the last id dealt with, and what was
 // converted so far is finished.
@@ -105,7 +105,14 @@ func (s *Store) ConvertRawBatch(ctx context.Context, afterID string, to RawCodec
 			stop = err
 			break
 		}
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrBusy):
+			// A reader held a file the conversion had to replace or
+			// remove (Windows); the sweep finds the message misplaced and
+			// the conversion comes back to it.
+			s.log.Info("message file in use by a reader: converted in a later pass", "id", mf.id)
+			res.Busy++
+		case err != nil:
 			s.log.Warn("convert message file", "id", mf.id, "err", err)
 			res.Failed++
 		}
@@ -230,9 +237,16 @@ func (s *Store) convertSecond(ctx context.Context, p convertPending, res *Conver
 		return
 	}
 	h.l.names.Lock()
-	err = fsretry.Remove(srcPath)
+	err = s.removeRaw(h.l, p.from, srcPath, nil)
 	h.l.names.Unlock()
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, ErrBusy) {
+		// A reader still has the old file open (Windows): the new one is
+		// in place and read first, and the sweep settles the pair.
+		s.log.Info("converted message's old file in use by a reader: left for the sweep", "id", p.id)
+		res.Busy++
+		return
+	}
+	if err != nil {
 		s.log.Warn("remove converted message file", "id", p.id, "err", err)
 		return
 	}
@@ -267,7 +281,7 @@ type SweepResult struct {
 	Dropped    int // accounting rows without a file removed
 	Misplaced  int // files not in the store's codec (outbox messages are not counted)
 	Corrupt    int // .zst files whose frame header is damaged (kept)
-	Busy       int // skipped: a writer held the message
+	Busy       int // skipped: a writer held the message, or a reader the file to remove (ErrBusy)
 }
 
 // metaRawAccounted marks the first complete sweep: from then on every raw
@@ -523,8 +537,12 @@ func (s *Store) sweepOrphan(ctx context.Context, accountID, id string, f rawFile
 	if exists, err := s.messageExists(ctx, accountID, id); err != nil || exists {
 		return
 	}
-	s.unlinkRaw(h.l, h.dir, id, nil)
-	res.Orphans++
+	switch err := s.unlinkRaw(h.l, h.dir, id, nil); {
+	case errors.Is(err, ErrBusy):
+		res.Busy++
+	case err == nil:
+		res.Orphans++
+	}
 }
 
 // sweepPair settles a message with both files; false when it was busy or
@@ -542,7 +560,12 @@ func (s *Store) sweepPair(ctx context.Context, accountID, id string, res *SweepR
 		return rawFiles{}, false
 	}
 	if files.both() {
-		if files, err = s.resolveLocked(ctx, h, files); err != nil {
+		files, err = s.resolveLocked(ctx, h, files)
+		switch {
+		case errors.Is(err, ErrBusy):
+			res.Busy++
+			return rawFiles{}, false
+		case err != nil:
 			s.log.Warn("settle message files", "id", id, "err", err)
 			return rawFiles{}, false
 		}

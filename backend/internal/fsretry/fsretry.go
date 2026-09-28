@@ -76,10 +76,16 @@ type Batch struct {
 
 // Remove removes path within the batch.
 func (b *Batch) Remove(path string) error {
+	return b.Do(func() error { return remove(path) })
+}
+
+// Do runs op within the batch: through Do until an op fails even so, then
+// once. A failure because the file does not exist does not count.
+func (b *Batch) Do(op func() error) error {
 	if b.gaveUp {
-		return remove(path)
+		return op()
 	}
-	err := Remove(path)
+	err := Do(op)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		b.gaveUp = true
 	}
