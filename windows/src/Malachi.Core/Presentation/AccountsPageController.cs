@@ -14,10 +14,9 @@
 //
 // The page is the daemon's: account.list fills it, account.setEnabled,
 // account.remove and account.reorder change it, and it reloads after its
-// own actions (the page gets no notify.accountsChanged, as in GTK). The
-// group stays insensitive until the first load succeeds and while an order
-// is being saved; a row is insensitive while a call about its account is
-// in flight. A pause or resume shows the switch as asked while it runs and
+// own actions. The group stays insensitive until the first load succeeds
+// and while an order is being saved; a row is insensitive while a call
+// about its account is in flight. A pause or resume shows the switch as asked while it runs and
 // flips it back when the daemon refuses; a new order shows at once and a
 // failure reloads the page, because the daemon's order is the truth.
 // Positions always come from the accounts, never from the view. Two
@@ -25,6 +24,14 @@
 // dropped (it would put the old order back over the new one), and a move
 // is refused while an order is being saved or while the row's own call
 // runs (GTK's rows are insensitive then, so their keys do nothing).
+//
+// Windows: the Preferences are a window of their own beside the main
+// window, not a dialog over it as in GTK (and a window beside it as on
+// macOS, which shows the page as it was loaded), so an account can be
+// added or edited from the main window, or change its state, while the
+// page is open. The page follows the daemon: notify.accountsChanged loads
+// it again (after an order being saved, which that load could otherwise
+// undo) and notify.syncState shows the account's new state in its row.
 
 using System;
 using System.Collections.Generic;
@@ -59,9 +66,11 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     // resume asked for (null for a removal): their rows are insensitive.
     private readonly Dictionary<AccountId, bool?> pending = [];
 
-    // The first load succeeded; a reorder is being saved.
+    // The first load succeeded; a reorder is being saved; the accounts
+    // changed while it was, so the page loads once it is saved.
     private bool loaded;
     private bool saving;
+    private bool reloadAfterSave;
 
     // Bumped by every load and every reorder: a load's reply is only taken
     // while it is the newest of them.
@@ -331,6 +340,52 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         Toast(L10n.T("Saved %s", config.Email));
     }
 
+    /// <summary>
+    /// <c>notify.accountsChanged</c>: an account was added, edited, removed
+    /// or moved, here or elsewhere (the main window's Add Account…, a
+    /// banner's Edit Account…): the page loads the daemon's accounts again.
+    /// While an order of the page is being saved the load waits for it, so
+    /// that it cannot answer with the order before it.
+    /// </summary>
+    public void HandleAccountsChanged()
+    {
+        scope.VerifyAccess();
+        if (IsClosed)
+        {
+            return;
+        }
+        if (saving)
+        {
+            reloadAfterSave = true;
+            return;
+        }
+        Load();
+    }
+
+    /// <summary>
+    /// <c>notify.syncState</c>: the account's row shows its new state (the
+    /// status beside the switch, "Sign In…"). The rows are published only
+    /// when one of them changes, not for every step of a pass; an account
+    /// not on the page is left alone.
+    /// </summary>
+    public void HandleSyncState(SyncState state)
+    {
+        scope.VerifyAccess();
+        ArgumentNullException.ThrowIfNull(state);
+        var i = IsClosed ? -1 : IndexOf(state.AccountId);
+        if (i < 0)
+        {
+            return;
+        }
+        var old = accounts[i];
+        var updated = old with { State = state };
+        accounts[i] = updated;
+        if (AccountRow.For(old) with { Account = updated } != AccountRow.For(updated))
+        {
+            Publish();
+        }
+    }
+
     /// <summary>The page closed: every late reply is dropped from now on.</summary>
     public void Close()
     {
@@ -344,7 +399,8 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
     // accounts_reorder.go reorderAccounts: the rows show the new order at
     // once, then account.reorder saves it and the daemon's
     // notify.accountsChanged reorders the main window's sidebar; a failure
-    // reloads the page.
+    // reloads the page, and so does a change of the accounts that came
+    // while the order was being saved.
     private bool Reorder(int from, int to, bool focusMoved)
     {
         if (IsClosed || !IsEnabled || from == to || from < 0 || to < 0 || from >= accounts.Count || to >= accounts.Count
@@ -369,10 +425,16 @@ public sealed partial class AccountsPageController : ObservableObject, IDisposab
         {
             saving = false;
             UpdateEnabled();
+            var reload = reloadAfterSave;
+            reloadAfterSave = false;
             if (outcome.Error is { } error)
             {
                 LogFailed(API.AccountReorder.Name, error);
                 Toast(RpcErrorText.Text(L10n.T("Saving the account order"), error));
+                Load();
+            }
+            else if (reload)
+            {
                 Load();
             }
         });

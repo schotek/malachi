@@ -393,6 +393,95 @@ public sealed class AccountsPageControllerTests
     }
 
     [Fact]
+    public async Task AChangeOfTheAccountsElsewhereReloadsThePage()
+    {
+        await using var h = await Harness.StartAsync();
+        var (c, rec) = await h.LoadedAsync();
+        await h.Ui.RunAsync(() => c.Select(B));
+        // The main window's Add Account… added one; notify.accountsChanged.
+        h.Accounts = [.. h.Accounts, TestAccount("d", email: "d@example.test")];
+        await h.Ui.RunAsync(c.HandleAccountsChanged);
+        await h.IdleAsync();
+        Assert.Equal([A, B, C, new AccountId("d")], c.Rows.Select(r => r.Id));
+        Assert.Equal(B, c.SelectedId);
+        // Unlike the wizard's own completions, no toast.
+        Assert.Empty(rec.Toasts);
+        Assert.Equal(2, h.Calls(API.AccountList.Name).Count);
+    }
+
+    [Fact]
+    public async Task AChangeWhileAnOrderIsSavedReloadsOnceItIsSaved()
+    {
+        var held = new HeldAnswer();
+        await using var h = await Harness.StartAsync(hold: m => m == API.AccountReorder.Name ? held : null);
+        var (c, _) = await h.LoadedAsync();
+        await h.Ui.RunAsync(() => Assert.True(c.MoveBy(A, 1)));
+        await held.ArrivedAsync();
+        // An account came from elsewhere; a load now could answer with the
+        // order before the move.
+        await h.Ui.RunAsync(() =>
+        {
+            c.HandleAccountsChanged();
+            // Nothing is asked but the order being saved.
+            Assert.Equal(1, h.Pending.Count);
+            Assert.Equal([B, A, C], c.Rows.Select(r => r.Id));
+        });
+        Assert.Single(h.Calls(API.AccountList.Name));
+
+        h.Accounts = [h.Accounts[1], h.Accounts[0], h.Accounts[2], TestAccount("d", email: "d@example.test")];
+        held.Release();
+        await h.IdleAsync();
+        Assert.Equal(2, h.Calls(API.AccountList.Name).Count);
+        Assert.Equal([B, A, C, new AccountId("d")], c.Rows.Select(r => r.Id));
+        Assert.True(c.IsEnabled);
+
+        // Saved without a change meanwhile: no load of its own.
+        await h.Ui.RunAsync(() => Assert.True(c.MoveBy(A, -1)));
+        held.Release();
+        await h.IdleAsync();
+        Assert.Equal(2, h.Calls(API.AccountList.Name).Count);
+    }
+
+    [Fact]
+    public async Task ASyncStateShowsInItsRow()
+    {
+        await using var h = await Harness.StartAsync();
+        var (c, rec) = await h.LoadedAsync();
+        var published = rec.Rows.Count;
+        await h.Ui.RunAsync(() =>
+        {
+            c.HandleSyncState(new SyncState { AccountId = B, Status = SyncStatus.Syncing, Progress = 10 });
+            Assert.Equal(["", "Syncing…", ""], c.Rows.Select(r => r.Status));
+            Assert.Equal(published + 1, rec.Rows.Count);
+            // A step of the same pass changes nothing the row shows.
+            c.HandleSyncState(new SyncState { AccountId = B, Status = SyncStatus.Syncing, Progress = 60 });
+            Assert.Equal(published + 1, rec.Rows.Count);
+            // The new state stays with the account: Edit Account… opens on it.
+            Assert.Equal(60, c.Account(B)!.State.Progress);
+            c.HandleSyncState(new SyncState { AccountId = B, Status = SyncStatus.AuthRequired });
+            Assert.Equal("Sign-in required", c.Rows[1].Status);
+            // An account the page does not show is left alone.
+            c.HandleSyncState(new SyncState { AccountId = new AccountId("nobody"), Status = SyncStatus.Error });
+            Assert.Equal(published + 2, rec.Rows.Count);
+        });
+
+        // A pause in flight keeps the switch as asked under a new state.
+        var held = new HeldAnswer();
+        await using var h2 = await Harness.StartAsync(hold: m => m == API.AccountSetEnabled.Name ? held : null);
+        var (c2, _) = await h2.LoadedAsync();
+        await h2.Ui.RunAsync(() => c2.SetEnabled(A, false));
+        await held.ArrivedAsync();
+        await h2.Ui.RunAsync(() =>
+        {
+            c2.HandleSyncState(new SyncState { AccountId = A, Status = SyncStatus.Syncing });
+            Assert.True(c2.Rows[0].Busy);
+            Assert.False(c2.Rows[0].Enabled);
+        });
+        held.Release();
+        await h2.IdleAsync();
+    }
+
+    [Fact]
     public async Task CloseDropsLateReplies()
     {
         var held = new HeldAnswer();
