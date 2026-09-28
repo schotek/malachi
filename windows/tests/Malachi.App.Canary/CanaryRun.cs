@@ -96,7 +96,7 @@ internal sealed class CanaryRun : IDisposable
         {
             try
             {
-                NetLog = NetLog.Read(config.NetLog);
+                NetLog = await ReadNetLogAsync(config.NetLog);
             }
             catch (Exception e) when (e is InvalidDataException or JsonException or IOException)
             {
@@ -105,6 +105,25 @@ internal sealed class CanaryRun : IDisposable
                 // holds the file (IOException); the fixture must not fail
                 // every test for that, the run's own tests say what went wrong.
                 NetLogError = e.Message;
+            }
+        }
+    }
+
+    // The browser process writes the NetLog and may still hold it after the
+    // host has exited: measured on a loaded machine (the full test run
+    // beside the UI tests), where every test of the canary failed on the
+    // fixture's sharing violation. It is read once the browser lets go.
+    private static async Task<NetLog> ReadNetLogAsync(string path)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return NetLog.Read(path);
+            }
+            catch (IOException) when (attempt < 60)
+            {
+                await Task.Delay(500);
             }
         }
     }
