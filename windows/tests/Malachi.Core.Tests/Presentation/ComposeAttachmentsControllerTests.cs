@@ -136,8 +136,9 @@ public sealed class ComposeAttachmentsControllerTests
         await h.Run(() => h.Attachments.AttachFiles([@"C:\docs\a.pdf"]));
         await h.IdleAsync();
         // The two imports run at once, and a chip is added when its import
-        // answers (GTK importFile): the order of the list, and which of them
-        // the fake daemon numbered first, is the order of the answers.
+        // answers (GTK importFile): the list is in the order of the answers,
+        // and the fake daemon numbers the imports (and their cid:) in the
+        // order they arrive.
         Assert.Equal(["a.pdf", "cat.png"], h.Attachments.Attachments.Select(a => a.Filename).Order(StringComparer.Ordinal));
         var picture = Assert.Single(h.Attachments.Attachments, a => a.Filename == "cat.png");
         var cid = Assert.IsType<string>(picture.ContentId);
