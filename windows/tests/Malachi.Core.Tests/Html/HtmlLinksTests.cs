@@ -211,8 +211,11 @@ public sealed class HtmlLinksTests
         // An address with no host, or one whose host cannot be read: spaces
         // in it (the daemon puts one around each inline element of a link's
         // text), userinfo, an escape, an IP address, a port that is none.
+        // Where the host visibly stops at such a space, what comes before it
+        // is the host (HostsOfTextSecondReview).
         Assert.Equal([""], Links.HostsOfText("http://"));
-        Assert.Equal([""], Links.HostsOfText("https://www.moje banka .example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://www.moje banka.example/login"));
+        Assert.Equal(["www.moje"], Links.HostsOfText("https://www.moje banka .example/login"));
         Assert.Equal([""], Links.HostsOfText("https://www.mojebanka.example@evil.example/login"));
         Assert.Equal([""], Links.HostsOfText("https://www.mojebanka.example%2Flogin"));
         Assert.Equal([""], Links.HostsOfText("https://192.168.0.1/"));
@@ -232,13 +235,15 @@ public sealed class HtmlLinksTests
         Assert.Equal(["xn--bcher-kva.example"], Links.HostsOfText("bücher.example"));
         Assert.Equal(["xn--e1afmkfd.xn--p1ai"], Links.HostsOfText("https://пример.рф/"));
         // An address after words, or after another address, is read too; it
-        // ends at the next space, where a text that begins as an address
-        // must be one whole.
+        // ends at the next space. In a text that begins as an address, a
+        // space ends the host only where the host does not visibly go on
+        // after it (the daemon puts one around each inline element).
         Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Log in at https://www.mojebanka.example/login"));
         Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Login:https://www.mojebanka.example/login"));
         Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Visit www.mojebanka.example for more"));
-        Assert.Equal([""], Links.HostsOfText("www.mojebanka.example for more"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("www.mojebanka.example for more"));
         Assert.Equal(["evil.example", "www.mojebanka.example"], Links.HostsOfText("https://evil.example/ https://www.mojebanka.example/login"));
+        Assert.Equal(["evil.example", "www.mojebanka.example"], Links.HostsOfText("https://evil.example https://www.mojebanka.example/login"));
         // What encloses an address in prose is no part of it.
         Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("(https://www.mojebanka.example)"));
         Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("<https://www.mojebanka.example/login>"));
@@ -251,6 +256,92 @@ public sealed class HtmlLinksTests
         // An internationalised top-level domain is a host's.
         Assert.True(Links.LooksLikeHost("xn--e1afmkfd.xn--p1ai"));
         Assert.False(Links.LooksLikeHost("example.xn--"));
+    }
+
+    // Windows, the second review: where an address begins, where the host
+    // of one the text begins with ends, and what a one-word text names.
+    [Fact]
+    public void HostsOfTextSecondReview()
+    {
+        // Two slashes begin an address whatever stands before them (B1): a
+        // colon a reader sees in a letter or a mark, or none; a colon
+        // lookalike ends the scheme before a letter could swallow it.
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("httpsꓽ//mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("httpsः//mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("https//mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("httpsː/mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("httpsꓽmojebanka.example/login"));
+        // A scheme address drawn right to left by markup: what follows its
+        // slashes is no host (B2).
+        Assert.Equal([""], Links.HostsOfText("nigol/elpmaxe.aknabejom//:sptth"));
+        // In a text that begins with an address, a space ends the host
+        // unless the host visibly goes on (S2): the next word begins with a
+        // dot or has one before its first slash, or the word before the
+        // space ends with one.
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("www.shop.example - shop now"));
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("https://www.shop.example Shop now"));
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("https://www.shop.example /sale"));
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("https:// www.shop.example"));
+        Assert.Equal(["www.moje"], Links.HostsOfText("https://www.moje banka .example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://mojebanka .example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://moje banka.example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://evil.example mojebanka.example/login"));
+        Assert.Equal([""], Links.HostsOfText("www. shop.example"));
+        Assert.Equal([""], Links.HostsOfText("www. shop .example")); // www.<b>shop</b>.example: the rule's cost
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("www.shop.example 1.5.2026"));
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("www.shop.example …"));
+        // A start of an address that those spaces split is read as drawn.
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("w ww.mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("https :/ /mojebanka.example/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("https/ /mojebanka.example/login"));
+        Assert.Equal(["www.shop.example"], Links.HostsOfText("Visit w ww.shop.example today"));
+        // A one-word text (N1): a dot another script draws, or more than one
+        // at its end, names a host that cannot be read; after a word and a
+        // colon, the host is what follows the colon; an underscore is a
+        // label's; a mark before the text is no part of it.
+        Assert.Equal([""], Links.HostsOfText("mojebankaꓸexample"));
+        Assert.Equal([""], Links.HostsOfText("mojebanka۔example/login"));
+        Assert.Equal([""], Links.HostsOfText("mojebanka.example…"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("mojebanka.example."));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("Login:mojebanka.example/login"));
+        Assert.Equal([""], Links.HostsOfText("mojebanka.example:evil.example"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("mojebanka.example:443/login"));
+        Assert.Equal(["mojebanka.example"], Links.HostsOfText("́mojebanka.example"));
+        Assert.Equal(["shop_name.example"], Links.HostsOfText("https://shop_name.example/"));
+        Assert.True(Links.LooksLikeHost("my_shop.example"));
+        Assert.False(Links.LooksLikeHost("shop.ex_ample"));
+        // What stays plain: words with dots at their end, a middle dot, a
+        // Katakana middle dot, digits of other scripts, a time, a version.
+        foreach (var plain in new[] { "More...", "etc…", "Col·legi", "スター・ウォーズ", "٢٠٢٥", "v1.2...", "12:30", "Re:Offer", "e.g..", "W W W", "h t t p s" })
+        {
+            Assert.Empty(Links.HostsOfText(plain));
+        }
+    }
+
+    // The limits of what a client can see (docs/security.md §3.2): the text
+    // judged is the daemon's links[].text, not what the view draws. These
+    // shapes still open without the question; each needs the daemon to
+    // report what it sees (the backend note in docs/windows-port.md §6.4).
+    [Theory]
+    // A host without a scheme or "www." after words, or after a word CSS
+    // hides (<span style="font-size:0">x</span>mojebanka.example/login).
+    [InlineData("Log in at mojebanka.example")]
+    [InlineData("x mojebanka.example/login")]
+    // A bare host with a path that markup draws right to left
+    // (<bdo dir=rtl>): shown as mojebanka.example/login.
+    [InlineData("nigol/elpmaxe.aknabejom")]
+    // A visible address clipped away (text-indent) behind the link's own.
+    [InlineData("https://evil.example/xxxxxxxxxhttps://mojebanka.example/login")]
+    // A host an inline element splits right after the link's own host
+    // (https://evil.example<b>moje</b>banka.example, drawn as
+    // https://evil.examplemojebanka.example): the space ends the host.
+    [InlineData("https://evil.example moje banka.example/login")]
+    // The daemon's 200-rune cap: hidden padding before the visible address.
+    [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]
+    public void TheKnownLimitsStillOpen(string text)
+    {
+        Assert.False(Links.IsMasked(text, "https://evil.example/t"));
+        Assert.False(Links.LeadsElsewhere(text, "https://evil.example/t"));
     }
 
     /// <summary>
@@ -293,6 +384,53 @@ public sealed class HtmlLinksTests
         "www.mojebanka.example:443/login",
         "https://[www.mojebanka.example]/login",
         "http://",
+        // The second review's (B1): two slashes after a letter or a mark,
+        // which a reader takes for a colon (letters and marks of other
+        // scripts, a modifier letter the scheme swallowed), or after no
+        // colon at all; none spells "www.", which alone was caught.
+        "httpsː//mojebanka.example/login", // modifier letter triangular colon
+        "httpsˑ//mojebanka.example/login", // modifier letter half triangular colon
+        "httpsꓽ//mojebanka.example/login", // Lisu letter tone mya jeu
+        "httpsः//mojebanka.example/login", // Devanagari sign visarga
+        "httpsઃ//mojebanka.example/login", // Gujarati sign visarga
+        "https//mojebanka.example/login",
+        "HTTPS//MOJEBANKA.EXAMPLE",
+        "Log in at httpsꓽ//mojebanka.example/login",
+        "httpsː/mojebanka.example/login",
+        "httpsꓽ//mojebanka .example/login",
+        // A scheme address that markup draws right to left (<bdo dir=rtl>,
+        // unicode-bidi: bidi-override): the daemon lists the text as
+        // written, whose "host" after the slashes is ":sptth".
+        "nigol/elpmaxe.aknabejom//:sptth",
+        "nigol/elpmaxe.aknabejom.www//:sptth",
+        // A one-word text (N1): a dot another script draws, more than one
+        // dot at its end, a mark before it, a word and a colon before it.
+        "mojebankaꓸexample", // Lisu letter tone mya ti
+        "mojebanka۔example/login", // Arabic full stop
+        "mojebanka܁example",
+        "mojebanka.example…", // "..." in NFKC
+        "mojebanka.example../login",
+        "́mojebanka.example",
+        "Login:mojebanka.example/login",
+        "mojebanka.example:evil.example",
+        "һttps:ⳆⳆmojebanka.example/login", // a Cyrillic "h", Coptic letters for the slashes
+        // A host split by the daemon's spaces around inline elements, and a
+        // hidden address before it (S2): the host goes on after the space.
+        "https://mojebanka .example/login",
+        "https://moje banka.example/login",
+        "https://evil.example mojebanka.example/login",
+        "www. mojebanka.example",
+        // A start of an address split by those spaces: "<b>w</b>ww.",
+        // "https<b>:/</b>/" (and the slashes of one without a colon).
+        "w ww.mojebanka.example/login",
+        "ww w.mojebanka.example/login",
+        "www .mojebanka.example/login",
+        "Log in at w ww.mojebanka.example",
+        "https :/ /mojebanka.example/login",
+        "h ttps://mojebanka.example/login",
+        "/ /mojebanka.example/login",
+        "https/ /mojebanka.example/login",
+        "http s//mojebanka.example/login",
     };
 
     [Theory]
@@ -326,6 +464,22 @@ public sealed class HtmlLinksTests
     [InlineData("Unsubscribe", "https://evil.example/")]
     [InlineData("", "https://evil.example/")]
     [InlineData("support@example.org", "https://evil.example/")]
+    // The second review's (S2): a text that begins with an address and
+    // goes on in words (an image's alt the daemon appends among them).
+    [InlineData("www.shop.example for details", "https://www.shop.example/")]
+    [InlineData("www.shop.example - shop now", "https://www.shop.example/")]
+    [InlineData("https://www.shop.example Shop now", "https://www.shop.example/")]
+    [InlineData("www.shop.example Logo", "https://www.shop.example/")]
+    [InlineData("www.shop.cz ve slevě", "https://www.shop.cz/")]
+    [InlineData("https://shop.example (valid until Sunday)", "https://shop.example/")]
+    [InlineData("https://www.shop.example Shop now at www.shop.example", "https://www.shop.example/")]
+    [InlineData("https:// www.shop.example", "https://www.shop.example/")]
+    // An underscore in a host's label (N1).
+    [InlineData("https://shop_name.example/", "https://shop_name.example/")]
+    [InlineData("https://my_shop.shop.example/", "https://my_shop.shop.example/")]
+    [InlineData("my_shop.example", "https://my_shop.example/")]
+    // A one-word text whose colon is a word's, not a port's.
+    [InlineData("Web:shop.example", "https://www.shop.example/")]
     public void ATextThatNamesItsOwnSiteIsNotMasked(string text, string href)
     {
         Assert.False(Links.IsMasked(text, href));

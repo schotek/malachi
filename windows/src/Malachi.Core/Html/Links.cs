@@ -22,15 +22,20 @@
 // zero-width character or a bidi control in its host, a trailing dot, a
 // Cyrillic letter, a space the daemon put around an inline element
 // ("https://www.moje banka .example"), a backslash or a fullwidth slash
-// before the path, and it takes the host after the "@" of a text with
-// userinfo. Here the text is read as it is seen: what is invisible goes,
-// the compatibility form (NFKC) reads fullwidth letters, dots and slashes
-// as ASCII, an internationalised host is compared in punycode (as the
-// launcher hands it to the browser), a trailing dot is no part of a site;
-// a text that reads as an address but whose host cannot be read names a
-// host no link leads to; and every address in the text counts, not only
-// one that is the whole text. The text is compared, never shown: the
-// question quotes it as the mail wrote it.
+// before the path, a colon another script draws or none ("https//…"), and
+// it takes the host after the "@" of a text with userinfo. Here the text
+// is the daemon's (links[].text: the anchor's text nodes joined with
+// spaces and capped at 200 runes), cleaned of what is invisible in it and
+// read in the compatibility form (NFKC: fullwidth letters, dots and
+// slashes as ASCII); an internationalised host is compared in punycode (as
+// the launcher hands it to the browser), a trailing dot is no part of a
+// site; a text that reads as an address but whose host cannot be read
+// names a host no link leads to; and every address in the text counts,
+// not only one that is the whole text. What the view hides or draws
+// otherwise (CSS, a <bdo>) and what the daemon cut off are not in that
+// text: those limits are the daemon's to lift (docs/security.md §3.2).
+// The text is compared, never shown: the question quotes it as the mail
+// wrote it.
 
 using System;
 using System.Collections.Generic;
@@ -51,9 +56,22 @@ public static class Links
     private const string SlashLookalikes = "\u2044\u2215\u2216\u2571\u2572\u27CB\u27CD\u29F5\u29F8\u29F9";
 
     // What a reader takes for the colon after a scheme that NFKC leaves
-    // alone: modifier letter triangular colon, raised colon, Armenian full
-    // stop, Hebrew sof pasuq, two dot punctuation, ratio, Latin colon.
-    private const string ColonLookalikes = "\u02D0\u02F8\u0589\u05C3\u205A\u2236\uA789";
+    // alone: the modifier letters triangular colon and half triangular
+    // colon, raised colon, Armenian full stop, Hebrew sof pasuq, Syriac
+    // supralinear and sublinear colon, Devanagari and Gujarati sign
+    // visarga, runic multiple punctuation, Ethiopic wordspace, two dot
+    // punctuation, ratio, Lisu letter tone mya jeu, Latin colon. Some are
+    // letters or marks, so a scheme ends at them before it could take them
+    // in.
+    private const string ColonLookalikes = "\u02D0\u02D1\u02F8\u0589\u05C3\u0703\u0704\u0903\u0A83\u16EC\u1361\u205A\u2236\uA4FD\uA789";
+
+    // What a reader takes for a dot between the labels of a one-word text
+    // that NFKC leaves alone (the ideographic full stop is read as a dot
+    // anyway): Lisu letter tone mya ti, Arabic full stop, Syriac
+    // supralinear and sublinear full stop, Vai full stop. Not the middle
+    // dots, which sit above the line and are Catalan's "l·l" and the
+    // Japanese "・" between words.
+    private const string DotLookalikes = "\uA4F8\u06D4\u0701\u0702\uA60E";
 
     /// <summary>
     /// htmlview.AllowedLink: whether a link target may be handed to the
@@ -131,19 +149,27 @@ public static class Links
     }
 
     /// <summary>
-    /// htmlview.hostOfText as a reader sees the text (Windows): the hosts
-    /// the text names, empty when it names none. Every address in the text
-    /// counts: one that begins with a scheme, its colon and a slash (http
-    /// and https need no slash, as Chromium reads them without), with two
-    /// slashes or with "www.", at the start or after anything but a letter
-    /// or a digit ("Log in at https://…", "&lt;https://…&gt;",
-    /// "Login:https://…"); and, when there is none, the whole text as a bare
-    /// host, as in GTK (a dot and an alphabetic top-level label, no space,
-    /// no "@"). A host is read up to its path, query or fragment, to a
-    /// punctuation mark or symbol, and to the next space, except in an
-    /// address the text begins with, which must be one whole: a space
-    /// inside its host (the daemon puts one around each inline element of a
-    /// link's text: "https://www.moje banka .example/login"), userinfo, an
+    /// htmlview.hostOfText over a link's text as the daemon lists it
+    /// (Windows): the hosts the text names, empty when it names none. Every
+    /// address in the text counts: two slashes wherever they stand (after a
+    /// letter or a mark they may follow a colon a reader sees in it, or
+    /// none: "httpsꓽ//…", "https//…"; a scheme address that markup draws
+    /// right to left begins there too, "…//:sptth"); and one that begins
+    /// with a scheme, its colon (or a colon another script draws) and a
+    /// slash (http and https need no slash, as Chromium reads them without)
+    /// or with "www.", at the start or after anything but a letter, a digit
+    /// or a mark ("Log in at https://…", "&lt;https://…&gt;",
+    /// "Login:https://…"); such a start that the daemon's spaces split
+    /// ("w ww.", "https :/ /") is read without them
+    /// (<see cref="SpacedPrefix"/>). When there is none, the whole text is
+    /// read as a bare host, as in GTK (a dot and an alphabetic top-level
+    /// label, no space, no "@"; <see cref="BareHost"/>). A host is read up to its path,
+    /// query or fragment, to a punctuation mark or symbol, and to the next
+    /// space, except in an address the text begins with, where a space ends
+    /// the host only where the host does not visibly go on after it (the
+    /// daemon puts a space around each inline element of a link's text:
+    /// "https://www.moje banka .example/login"; <see cref="HostGoesOn"/>),
+    /// and otherwise is inside it. A space inside the host, userinfo, an
     /// escape, a port that is no number, or a host that
     /// <see cref="LooksLikeHost"/> refuses make it "", a host no link leads
     /// to. A host comes in ASCII (punycode), lower case, without a trailing
@@ -153,7 +179,8 @@ public static class Links
     /// controls; the other default-ignorable code points; the control
     /// characters), and is read in its compatibility form (NFKC: fullwidth
     /// letters, dots, colons and slashes as ASCII) with the ideographic full
-    /// stop as a dot.
+    /// stop as a dot. What CSS hides or clips, what markup reorders and
+    /// what the daemon cut off at 200 runes are beyond this text.
     /// </summary>
     public static IReadOnlyList<string> HostsOfText(string text)
     {
@@ -163,15 +190,22 @@ public static class Links
         var p = 0;
         while (p < t.Length)
         {
-            var start = p > 0 && IsWordChar(t[p - 1]) ? -1 : AddressHost(t, p);
+            if ((p == 0 || !IsWordChar(t[p - 1])) && SpacedPrefix(t, p) is { } spaced)
+            {
+                // "w ww.", "https :/ /": the prefix as it is drawn.
+                t = string.Concat(t.AsSpan(0, p), spaced.Prefix, t.AsSpan(spaced.End));
+            }
+            var (start, begins) = Address(t, p);
             if (start < 0)
             {
                 p++;
                 continue;
             }
-            var (host, end) = ReadHost(t, start, BeginsText(t, p));
+            var (host, end) = ReadHost(t, start, BeginsText(t, begins));
             hosts.Add(host);
-            // The rest of the address, its path, names no more hosts.
+            // The rest of the address, its path, names no more hosts: an
+            // address inside a path is what archive and redirect links show
+            // ("https://web.archive.org/web/2020/https://example.com/").
             p = end;
             while (p < t.Length && !char.IsWhiteSpace(t[p]))
             {
@@ -189,7 +223,10 @@ public static class Links
     /// htmlview.looksLikeHost: at least two non-empty labels of
     /// <c>[a-z0-9-]</c>, the last one alphabetic and at least two long, or
     /// (Windows, for an internationalised host read in punycode) a
-    /// top-level label of punycode ("xn--p1ai").
+    /// top-level label of punycode ("xn--p1ai"). Windows also takes "_"
+    /// in the labels before the top-level one, as browsers and the launcher
+    /// do ("my_shop.example"), so that such a host over itself is read, not
+    /// taken for one that cannot be.
     /// </summary>
     public static bool LooksLikeHost(string h)
     {
@@ -207,7 +244,7 @@ public static class Links
             }
             foreach (var c in label)
             {
-                if (c is not ((>= 'a' and <= 'z') or (>= '0' and <= '9') or '-'))
+                if (c is not ((>= 'a' and <= 'z') or (>= '0' and <= '9') or '-' or '_'))
                 {
                     return false;
                 }
@@ -216,7 +253,7 @@ public static class Links
         var tld = labels[^1];
         if (tld.StartsWith("xn--", StringComparison.Ordinal))
         {
-            return tld.Length > "xn--".Length;
+            return tld.Length > "xn--".Length && !tld.Contains('_', StringComparison.Ordinal);
         }
         if (tld.Length < 2)
         {
@@ -328,51 +365,151 @@ public static class Links
             or 0x3164 or (>= 0xFE00 and <= 0xFE0F) or 0xFFA0 or (>= 0xFFF0 and <= 0xFFF8) or (>= 0xE0000 and <= 0xE0FFF);
     }
 
-    // Where the host of an address that starts at p begins, or -1 when no
-    // address starts there: "www." (the host begins with it), two slashes,
-    // or a scheme (a letter, then letters, digits, marks, "+", "-" or ".")
-    // with its colon and a slash, or http and https with their colon
-    // alone; the slashes are skipped.
-    private static int AddressHost(string t, int p)
+    // Where the host of an address at p begins (-1 when no address starts
+    // there) and where the address itself begins, for BeginsText. Two
+    // slashes begin one wherever they stand: after a letter or a mark they
+    // may follow a colon a reader sees in it, or none ("httpsꓽ//",
+    // "https//"; the address then begins with that word), and a scheme
+    // address drawn right to left by markup begins there as well
+    // ("…//:sptth", whose host cannot be read). Otherwise an address
+    // starts where no letter, digit or mark comes before it ("xhttps://"
+    // and "mywww." are words): "www." (the host begins with it), or a
+    // scheme (a letter, then letters, digits, marks, "+", "-" or ".", up to
+    // a colon or what a reader takes for one) with its colon and a slash,
+    // or http and https with their colon alone. The slashes are skipped.
+    private static (int Host, int Begins) Address(string t, int p)
     {
-        if (t.AsSpan(p).StartsWith("www.", StringComparison.Ordinal))
-        {
-            return p;
-        }
         if (p + 1 < t.Length && IsSlash(t[p]) && IsSlash(t[p + 1]))
         {
-            return SkipSlashes(t, p);
+            var word = p;
+            while (word > 0 && IsWordChar(t[word - 1]))
+            {
+                word--;
+            }
+            return (SkipSlashes(t, p), word);
+        }
+        if (p > 0 && IsWordChar(t[p - 1]))
+        {
+            return (-1, p);
+        }
+        if (t.AsSpan(p).StartsWith("www.", StringComparison.Ordinal))
+        {
+            return (p, p);
         }
         if (!char.IsLetter(t[p]))
         {
-            return -1;
+            return (-1, p);
         }
         var colon = p + 1;
-        while (colon < t.Length && (char.IsLetterOrDigit(t[colon]) || IsMark(t[colon]) || t[colon] is '+' or '-' or '.'))
+        while (colon < t.Length && !IsColon(t[colon])
+            && (char.IsLetterOrDigit(t[colon]) || IsMark(t[colon]) || t[colon] is '+' or '-' or '.'))
         {
             colon++;
         }
         if (colon == t.Length || !IsColon(t[colon]))
         {
-            return -1;
+            return (-1, p);
         }
         var after = colon + 1;
         var scheme = t.AsSpan(p, colon - p);
         if ((after < t.Length && IsSlash(t[after])) || scheme.SequenceEqual("http") || scheme.SequenceEqual("https"))
         {
-            return SkipSlashes(t, after);
+            return (SkipSlashes(t, after), p);
         }
-        return -1;
+        return (-1, p);
+    }
+
+    // The start of an address at p that the daemon's spaces split, where
+    // an inline element begins or ends inside it ("<b>w</b>ww." is listed as
+    // "w ww.", "https<b>:/</b>/" as "https :/ /"): "www.", two slashes or
+    // more, or http and https with their colon (or one a reader sees) and
+    // any slashes, or with two slashes and no colon, whose characters only
+    // white space parts. Returns the prefix without that white space
+    // (colons and slashes as ASCII) and where it ends in t, or null where
+    // no such prefix with white space inside it starts at p; white space
+    // after it (before the host) stays.
+    private static (string Prefix, int End)? SpacedPrefix(string t, int p)
+    {
+        var prefix = "";
+        var spaced = false;
+        var i = p;
+        while (i < t.Length)
+        {
+            var next = i;
+            while (next < t.Length && char.IsWhiteSpace(t[next]))
+            {
+                next++;
+            }
+            if (next == t.Length)
+            {
+                break;
+            }
+            var c = IsSlash(t[next]) ? '/' : IsColon(t[next]) ? ':' : t[next];
+            if (!IsAddressStart(prefix + c, complete: false))
+            {
+                break;
+            }
+            spaced |= next > i;
+            prefix += c;
+            i = next + 1;
+        }
+        return spaced && IsAddressStart(prefix, complete: true) ? (prefix, i) : null;
+    }
+
+    // Whether s begins an address as SpacedPrefix reads one (complete), or
+    // may still grow into one: "www.", two slashes or more, "http" or
+    // "https" with a colon and any slashes or with two slashes or more.
+    private static bool IsAddressStart(string s, bool complete)
+    {
+        if ("www.".StartsWith(s, StringComparison.Ordinal))
+        {
+            return !complete || s.Length == 4;
+        }
+        if (s.TrimStart('/').Length == 0)
+        {
+            return !complete || s.Length >= 2;
+        }
+        var scheme = s.StartsWith("https", StringComparison.Ordinal) ? 5 : s.StartsWith("http", StringComparison.Ordinal) ? 4 : 0;
+        if (scheme == 0)
+        {
+            return !complete && "https".StartsWith(s, StringComparison.Ordinal);
+        }
+        var rest = s[scheme..];
+        if (rest.StartsWith(':'))
+        {
+            return rest[1..].TrimStart('/').Length == 0;
+        }
+        return rest.TrimStart('/').Length == 0 && (!complete || rest.Length >= 2);
     }
 
     // The host of an address in t, which begins at start, and where it
-    // ends; "" when it cannot be read. In an address the text begins with
-    // (whole), a space does not end the host but makes it unreadable.
+    // ends; "" when it cannot be read. White space ends the host, except in
+    // an address the text begins with (whole): there white space before
+    // the host goes, and a space after some of it ends it only where the
+    // host does not visibly go on after the space (HostGoesOn); where it
+    // does, the host has a space inside and cannot be read.
     private static (string Host, int End) ReadHost(string t, int start, bool whole)
     {
         var end = start;
-        while (end < t.Length && !EndsHost(t[end], whole))
+        var begun = false;
+        while (end < t.Length)
         {
+            var c = t[end];
+            if (char.IsWhiteSpace(c))
+            {
+                if (!whole || (begun && !HostGoesOn(t, end)))
+                {
+                    break;
+                }
+            }
+            else if (EndsHost(c))
+            {
+                break;
+            }
+            else
+            {
+                begun = true;
+            }
             end++;
         }
         var part = t.AsSpan(start, end - start).Trim();
@@ -396,18 +533,55 @@ public static class Links
         return (host.Length > 0 && LooksLikeHost(host) ? host : "", end);
     }
 
-    // Whether c ends the host of an address in a link's text: a space
-    // (unless the text begins with the address), a slash, "?" or "#", the
-    // ASCII punctuation a host, its port and userinfo do not carry, and
-    // any other punctuation mark, symbol or separator. What stays in the
-    // host and is not a host's ("_", "~", "%", "@", a colon that is not a
-    // port's) makes it unreadable.
-    private static bool EndsHost(char c, bool whole)
+    // Whether a host goes on after the white space at i, in an address a
+    // link's text begins with: whether the space is one the daemon put
+    // around an inline element ("www.<b>shop</b>.example" is listed as
+    // "www. shop .example") rather than one between the address and words
+    // ("www.shop.example for details", "- shop now", an image's alt the
+    // daemon appends). It is where the word before the space ends with a
+    // dot ("www. shop.example"), or the next word, up to its first slash,
+    // begins with a dot before a letter, has one inside ("https://moje
+    // banka.example/login", or a hidden "https://evil.example" before
+    // "mojebanka.example/login") or ends with one; not where its dots
+    // only stand between digits or after one another (a date, a price, an
+    // ellipsis).
+    private static bool HostGoesOn(string t, int i)
     {
-        if (char.IsWhiteSpace(c))
+        if (i >= 2 && t[i - 1] == '.' && IsLabelChar(t[i - 2]))
         {
-            return !whole;
+            return true;
         }
+        var word = i;
+        while (word < t.Length && char.IsWhiteSpace(t[word]))
+        {
+            word++;
+        }
+        var end = word;
+        while (end < t.Length && !char.IsWhiteSpace(t[end]) && !IsSlash(t[end]) && t[end] is not ('?' or '#'))
+        {
+            end++;
+        }
+        for (var k = word; k < end; k++)
+        {
+            if (t[k] != '.')
+            {
+                continue;
+            }
+            if ((k + 1 < end && char.IsLetter(t[k + 1])) || (k + 1 == end && k > word && IsLabelChar(t[k - 1])))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Whether c ends the host of an address in a link's text, white space
+    // aside (ReadHost): a slash, "?" or "#", the ASCII punctuation a host,
+    // its port and userinfo do not carry, and any other punctuation mark,
+    // symbol or separator. What stays in the host and is not a host's
+    // ("~", "%", "@", a colon that is not a port's) makes it unreadable.
+    private static bool EndsHost(char c)
+    {
         if (IsSlash(c) || c is '?' or '#')
         {
             return true;
@@ -416,13 +590,22 @@ public static class Links
         {
             return !(char.IsAsciiLetterOrDigit(c) || c is '-' or '.' or '_' or '~' or '%' or '@' or ':');
         }
-        return !(char.IsLetterOrDigit(c) || char.IsNumber(c) || IsMark(c) || char.IsSurrogate(c));
+        return !IsLabelChar(c);
     }
 
     // GTK's reading of a text that holds no address: the whole text as a
     // host ("bank.example.org", "mojebanka.example/login"), when it has no
     // space and no "@" (an e-mail address), from its first letter or digit
-    // on; null when it names none.
+    // on (a mark before it is no part of it); null when it names none.
+    // Windows: a colon that is no port's ends a word before the host
+    // ("Login:mojebanka.example", "Web:shop.example"), or, after a host,
+    // makes it one that cannot be read, as in an address
+    // ("mojebanka.example:evil.example"); and a word a reader
+    // takes for a host that is not written as one, with a dot another
+    // script draws between its labels or more than one dot at its end
+    // ("mojebankaꓸexample", "mojebanka۔example/login", "mojebanka.example…",
+    // which is "mojebanka.example..." in NFKC), names a host that cannot be
+    // read (""). A word whose dots only end it ("More...") names none.
     private static string? BareHost(string t)
     {
         if (t.Length == 0 || t.Contains('@', StringComparison.Ordinal))
@@ -437,12 +620,53 @@ public static class Links
             }
         }
         var start = 0;
-        while (start < t.Length && !IsWordChar(t[start]))
+        while (start < t.Length && !char.IsLetterOrDigit(t[start]))
         {
             start++;
         }
-        var (host, _) = ReadHost(t, start, whole: false);
-        return host.Length > 0 ? host : null;
+        var end = start;
+        while (end < t.Length && (!EndsHost(t[end]) || DotLookalikes.Contains(t[end], StringComparison.Ordinal)))
+        {
+            end++;
+        }
+        var part = t[start..end];
+        var colon = part.LastIndexOf(':');
+        if (colon >= 0)
+        {
+            if (!part.AsSpan(colon + 1).ContainsAnyExceptInRange('0', '9'))
+            {
+                part = part[..colon]; // a port
+            }
+            else if (SeenHost(part[..colon]) is not null)
+            {
+                return ""; // a host with a port that is no number
+            }
+            else
+            {
+                part = part[(colon + 1)..]; // a word before the host
+            }
+        }
+        return SeenHost(part);
+    }
+
+    // The host a word names as BareHost reads it, null for none: with the
+    // dots another script draws as dots and without the dots at its end;
+    // "" where it needed either (a lookalike, or more than one dot at the
+    // end), since a host no link leads to is written so.
+    private static string? SeenHost(string part)
+    {
+        var seen = part;
+        foreach (var dot in DotLookalikes)
+        {
+            seen = seen.Replace(dot, '.');
+        }
+        var name = seen.TrimEnd('.');
+        var host = AsciiHost(name);
+        if (host.Length == 0 || !LooksLikeHost(host))
+        {
+            return null;
+        }
+        return string.Equals(seen, part, StringComparison.Ordinal) && seen.Length - name.Length < 2 ? host : "";
     }
 
     // A host as DNS gets it, which is how the launcher hands it to the
@@ -472,6 +696,10 @@ public static class Links
     // Whether c, right before what reads as an address, makes that part of
     // a word ("xhttps://…", "mywww.…") rather than an address of its own.
     private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || IsMark(c);
+
+    // Whether c may stand in a label of a host a text names (in any
+    // script: an internationalised host is read in punycode).
+    private static bool IsLabelChar(char c) => char.IsLetterOrDigit(c) || char.IsNumber(c) || IsMark(c) || char.IsSurrogate(c);
 
     // Whether the text begins with the address at p: nothing but spaces,
     // punctuation and symbols come before it.
