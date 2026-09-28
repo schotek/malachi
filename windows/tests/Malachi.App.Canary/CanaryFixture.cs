@@ -219,24 +219,37 @@ public sealed class CanaryFixture : IAsyncLifetime
     // Each view's renderer crashed twice under one document (the second
     // time after the view showed it again), the viewer's also while a
     // document loads, then hung once; between them a document of its own
-    // shows the view still works. Phases name what the tests look at.
+    // shows the view still works. Every step waits for what it expects (a
+    // new renderer may take seconds to start on a busy machine), then a
+    // moment for what must not follow. Phases name what the tests look at.
     private static List<HostStep> RecoverySteps()
     {
+        const int Expect = 20_000;
+        const int Settle = 1000;
+        const string Loaded = "True";
         var steps = new List<HostStep>();
         void Add(string view, string op, string phase, string? html = null, int ms = 0, string? target = null) =>
             steps.Add(new HostStep { View = view, Op = op, Phase = phase, Html = html, Ms = ms, Target = target });
+        void CrashTwice(string view)
+        {
+            Add(view, "crash", view + "-crash-1");
+            Add(view, "await", view + "-crash-1", Loaded, Expect, HostEvent.Kinds.Completed);
+            Add(view, "wait", view + "-crash-1", ms: Settle);
+            Add(view, "crash", view + "-crash-2");
+            Add(view, "await", view + "-crash-2", null, Expect, HostEvent.Kinds.Unavailable);
+            Add(view, "wait", view + "-crash-2", ms: Settle);
+        }
 
         Add("viewer", "load", "viewer-crash", "<p>crash</p>", 300);
-        Add("viewer", "crash", "viewer-crash-1", ms: 1500);
-        Add("viewer", "crash", "viewer-crash-2", ms: 1500);
+        CrashTwice("viewer");
         Add("viewer", "load", "viewer-after", "<p>after</p>", 300);
         // A body large enough to be still loading when its renderer dies.
-        Add("viewer", "loadcrash", "viewer-loadcrash", "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>",
-            2500);
+        Add("viewer", "loadcrash", "viewer-loadcrash", "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>");
+        Add("viewer", "await", "viewer-loadcrash", Loaded, Expect, HostEvent.Kinds.Completed);
+        Add("viewer", "wait", "viewer-loadcrash", ms: Settle);
 
         Add("editor", "load", "editor-crash", "<p>text</p>", 300);
-        Add("editor", "crash", "editor-crash-1", ms: 2000);
-        Add("editor", "crash", "editor-crash-2", ms: 2000);
+        CrashTwice("editor");
 
         steps.Add(new HostStep
         {
@@ -248,15 +261,15 @@ public sealed class CanaryFixture : IAsyncLifetime
             Ms = 300,
             Data = "iVBORw0KGgoAAAANSUhEUgAAAAcAAAAFCAIAAAAG+GGPAAAAEUlEQVR42mNQaHiAiRhoJAoALlM0gX31oMMAAAAASUVORK5CYII=",
         });
-        Add("preview", "crash", "preview-crash-1", ms: 1500);
-        Add("preview", "crash", "preview-crash-2", ms: 1500);
+        CrashTwice("preview");
 
         // Reported by Chromium's hang monitor about 15 s after the input the
         // renderer left unanswered, then RendererRecovery.AnswerTimeout.
         Add("viewer", "load", "viewer-hang", "<p>hang</p>", 300);
         Add("viewer", "hang", "viewer-hang-1");
-        Add("viewer", "await", "viewer-hang-1", "again", 40_000, target: HostEvent.Kinds.Ready);
-        Add("viewer", "wait", "viewer-hang-1", ms: 1000);
+        Add("viewer", "await", "viewer-hang-1", "again", 40_000, HostEvent.Kinds.Ready);
+        Add("viewer", "await", "viewer-hang-1", Loaded, Expect, HostEvent.Kinds.Completed);
+        Add("viewer", "wait", "viewer-hang-1", ms: Settle);
         Add("viewer", "load", "viewer-after-hang", "<p>after the hang</p>", 300);
         return steps;
     }
