@@ -342,8 +342,8 @@ a DACL souboru s klíčem); `.blp` jsou reference, nová funkce jde nejdřív
 do backendu a GTK, pak do macOS a Windows. Před veřejným vydáním zbývá
 (`docs/windows-port.md` §17): licenční výjimka GPLv3 §7 pro komponenty
 Microsoftu (rozhodnutí vlastníka), podpis kódu, instalátor (Velopack,
-winget), běh ARM64 na skutečném hardwaru, první běh CI na GitHubu a ruční
-ověření kliknutí na notifikaci. Kontributorský popis `docs/windows-port.md`.
+winget), běh ARM64 na skutečném hardwaru, UI smoke testy na runneru CI
+a ruční ověření kliknutí na notifikaci. Kontributorský popis `docs/windows-port.md`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo

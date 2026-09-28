@@ -2492,16 +2492,43 @@ tried yet. The Linux packaging workflows ignore pushes that change
 nothing but `windows/`, `macos/` or this workflow; tags always build
 everything (GitHub does not apply path filters to tags).
 
-The jobs run the tests as they are, without retries, and a few have
-margins that a busy machine missed while the workflow was checked locally
-(each green on its own): in `backend/`, `internal/imap`
-`TestClientSideWindowAcrossBatches` (2,500 messages synced within 15 s;
-9 to 22 s there), `internal/rpc` `TestCallsBeforeHandshakeAreRejected` (a
-rejected connection closed within 5 s) and `pkg/api`
-`TestHandshakeTimesOut` (a 150 ms context expiring before `system.hello`
-is written is reported as a plain deadline, not `timedOut`). A red run
-that names one of them is that, not a regression of the change it ran
-for; they are to be fixed where they live.
+The jobs run the tests as they are, without retries. The workflow's
+first run on GitHub (2026-09-28, the merge of the Windows client into
+`main`) built, tested and packaged the client for both architectures (the
+ARM64 helper's NativeAOT link included) and failed only in `backend/`,
+on a runner about three times slower than the development machine, in
+two tests, for two causes. `internal/imap`
+`TestClientSideWindowAcrossBatches` synced its 2,500 messages in 19 s
+against a 15 s bound; `TestCallsBeforeHandshakeAreRejected` and `pkg/api`
+`TestHandshakeTimesOut` (a 150 ms context that ended before
+`system.hello` was written) had failed the same way locally under load.
+These bounds now wait for what the test expects rather than time it: the
+IMAP and Graph harnesses up to 60 s (the Graph one after
+`TestTokenProblemsAndRecovery` outran its 10 s in a full local run), the
+RPC tests up to 30 s (`waitLimit`), the
+handshake test with a 1 s context that `HandshakeTimeout` must not beat;
+a passing run returns at once. So that a longer wait cannot let the
+pre-auth timeout do a close the test attributes to garbage, the byte
+budget or the cap, the RPC test server gives a connection an hour to
+authenticate. `internal/rpc` `TestPendingConnectionsAreCapped` (a refused
+connection still open after 5 s) was not the runner's speed but Windows's
+AF_UNIX: a connection the server closes within about a millisecond of
+accepting it may never show the close to a peer that only reads (10 of
+2,000 such closes in a probe, none once the peer wrote first or the
+server waited a millisecond), and the daemon closes a connection over its
+cap at once. A client writes `system.hello` first and sees the close, so
+the daemon is unchanged; the test's refused connection now sends hello
+too (the old form failed 18 runs of 300 locally, the new none, and a cap
+switched off in `server.go` fails it at once on the hello's answer). One
+more race surfaced in the run after that: `internal/core`
+`TestEndToEndAttachmentsOnDemand` expunged the message on the server while
+its syncer still ran, whose IDLE could remove the message locally before
+`message.download` asked for it (`messageNotFound` for the
+`messageGone` the test checks); the syncer now stops first. And
+`TestSystemStorage` asked for a running conversion right after compression
+was switched on while its loop ran on a 1 ms tick, which had sometimes
+converted the store's one message already; it now requires running until
+every message is converted, idle only once all are.
 
 The client's tests that a busy machine failed the same way no longer
 depend on its speed, and check what they checked: the bridge runner's
@@ -2549,7 +2576,9 @@ means for a release. Every step of the three jobs was run locally in
 order from a fresh build tree, on Windows 11 x64 with `CI=true` and
 `GITHUB_ACTIONS=true`, before the workflow was committed; the one step
 that could not pass there is the ARM64 helper's NativeAOT link, for want
-of the MSVC ARM64 build tools on that machine.
+of the MSVC ARM64 build tools on that machine; on the hosted image it
+links (first run, 2026-09-28: `malachi-windows-x64` 87 MiB and
+`malachi-windows-arm64` 83 MiB as run artefacts).
 
 ## 14. Backend and repository changes
 
@@ -2692,7 +2721,7 @@ phase's `feat(windows):` ones.
 | **C** Core foundation | C1 API layer; C2 i18n, text, settings; C3 Platform.Windows services; C4 `malachi-credentials`; then C5 transport and FakeDaemon; C6 supervisor, paths, bridge runner | all Core tests; the handshake against the real daemon; `account.add` with a password stored through the helper | Done |
 | **D** Core logic | D1 models; D2 compose, HTML (bridge), wizard; D3 connection, sync, message cache, mailbox controllers; D4 actions, compose, draft, wizard, preferences, MCP controllers | every ported Go and Swift test green; conventions tests green | Done |
 | **E** WinUI app | wave 1: E1 shell (`Main` with the console, notifications and single instance; lifecycle and Quit; integration; toasts, alerts, icons, theme, `{l:T}`; the command router; the package set of §10), E2 WebView2 layer and the canary, E7 platform services (tray, launch at login, `mailto:` registration, notifications and sound); wave 2: E3 main window, E4 reader, message and attached-message windows, attachment actions and the previewer, E5 compose, E6 wizard and preferences. Each screen's agent also wrote the presentation classes of §7.4 it needed, in Core with tests | release build without warnings; all tests; the canary; FlaUI smoke tests; a run against the local test mail server | Done; the UI checked by hand through UI Automation, the smoke tests written in phase F (without FlaUI, §12) |
-| **F** Verification and docs | end-to-end against local IMAP/SMTP servers and the UI smoke tests; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone | Done; CI checked locally step by step, not yet on GitHub (§13) |
+| **F** Verification and docs | end-to-end against local IMAP/SMTP servers and the UI smoke tests; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone | Done; CI checked locally step by step, then green on GitHub for the client at its first run (§13) |
 
 ## 16. Research summary
 
@@ -2763,10 +2792,12 @@ needs them:
   ARM64 build tools are installed, which the development machine lacks,
   so no ARM64 app folder has been assembled and none has run. It needs a
   build with those tools and a run on real ARM64 hardware.
-- **CI on GitHub.** `.github/workflows/windows.yml` (§13) was run step by
-  step on the development machine, not yet on the hosted runner; its first
-  run there, and whether the UI smoke tests (§12) can drive the app in the
-  runner's session, are open.
+- **The UI smoke tests on CI.** `.github/workflows/windows.yml` (§13)
+  runs on the hosted runner (first run 2026-09-28: the client built,
+  tested and zipped for both architectures, the ARM64 helper linked with
+  the image's MSVC ARM64 tools); whether the UI smoke tests (§12) can
+  drive the app in the runner's session is open (the test step runs
+  before the app folder exists, so they skip).
 - **A notification's click** checked by a person (§12: UI Automation did
   not see the toast).
 
