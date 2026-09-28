@@ -1130,7 +1130,15 @@ editor's WebView2 carries `KeyboardRouting.IsEditor="True"`, so that its
 single keys type and Escape stays with its bridge. No key runs anything
 while one of the window's dialogs is up. Verified with real input: Ctrl+F
 puts the focus in the search box, letters then type there, and Ctrl+Q
-quits from it.
+quits from it; Ctrl+Comma and Ctrl+N run their commands from there. The
+WebView2 side was driven the same way, through the pre-translate source
+and, forced, through the hook, on a WebView2 put in the main window for
+the test (the reader, E4, is not built yet): a letter reaches the page
+down and up; F5, Ctrl+Comma, Ctrl+N and A run their commands and the page
+sees none of them (F5 no reload); Ctrl+F moves the focus to the search box
+before its key up, and the next F typed in the page arrives down and up;
+Ctrl+Q quits. The FlaUI smoke tests repeat this on the real reader and
+editor once they exist.
 
 ## 12. Tests
 
