@@ -19,7 +19,9 @@
 //   reader's region the reader fills (wave 2, E4), the toast overlay over
 //   the message page's content;
 // - closing never destroys the window (one main window per process): it
-//   asks the app, which hides it (docs/windows-port.md §10).
+//   asks the app, which hides it (docs/windows-port.md §10); shown again, or
+//   first shown after a start in the background, it takes the keyboard
+//   (TakeKeyboard).
 
 using System;
 using System.IO;
@@ -29,8 +31,10 @@ using Malachi.Core;
 using Malachi.Core.Controllers;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Composition.SystemBackdrops;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -56,6 +60,10 @@ public sealed partial class MainWindow : Window
     private readonly AppState state;
     private readonly MainWindowHook hook;
     private bool maximizeOnShow;
+
+    // The window has been shown (its first show may come long after the
+    // start: --background).
+    private bool shownOnce;
 
     /// <summary>Builds the (hidden) main window; <see cref="AppState.ShowMainWindow"/> shows it.</summary>
     public MainWindow(AppState state, Action sessionEnding)
@@ -209,7 +217,43 @@ public sealed partial class MainWindow : Window
     {
         if (args.DidVisibilityChange)
         {
+            if (sender.IsVisible)
+            {
+                var first = !shownOnce;
+                shownOnce = true;
+                // After the window's own activation.
+                DispatcherQueue.TryEnqueue(() => TakeKeyboard(first));
+            }
             ShownChanged?.Invoke(this, sender.IsVisible);
+        }
+    }
+
+    // Measured: shown again after AppWindow.Hide() (Run in Background, or a
+    // compose window holding the app), from the tray, a second launch or a
+    // notification, the window comes to the front with the keyboard on its
+    // caption's input window instead of the XAML island, so no key reaches
+    // the commands (Ctrl+N, F5, A, J, U, S, Delete) until a click; the island
+    // takes it back, and XAML gives it to the element that had it. And shown
+    // for the first time after a start in the background (--background),
+    // WinUI's own first focus lands in the search box, past OnFirstFocus,
+    // where the single keys type: as at a normal start, the sidebar's first
+    // tab stop takes it instead.
+    private void TakeKeyboard(bool firstShow)
+    {
+        if (!AppWindow.IsVisible || Root.XamlRoot is not { } xamlRoot || xamlRoot.ContentIsland is not { } island)
+        {
+            return;
+        }
+        var input = InputFocusController.GetForIsland(island);
+        if (!input.HasFocus)
+        {
+            input.TrySetFocus();
+        }
+        var focused = FocusManager.GetFocusedElement(xamlRoot) as DependencyObject;
+        if ((focused is null || (firstShow && IsWithin(focused, SearchBox)))
+            && FocusManager.FindFirstFocusableElement(SidebarPane) is UIElement first)
+        {
+            first.Focus(FocusState.Programmatic);
         }
     }
 }
