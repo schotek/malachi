@@ -707,3 +707,54 @@ func TestSweepRemovesTheDirectoriesOfDeletedAccounts(t *testing.T) {
 		t.Errorf("records left: %v %v", left, err)
 	}
 }
+
+// A download committed from staging is newer than a variant a reader kept
+// beside it, whatever time the staged file was received: its file takes
+// the time it is placed. The staged file here is older than the .zst the
+// codec step wrote meanwhile; with the receive time kept, the reader
+// (openRaw prefers the newer variant) served the skeleton under a row that
+// says full, and the sweep then deleted the download as the older file.
+func TestStagedDownloadIsNewerThanTheKeptVariant(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	seedAccount(t, s, "acc")
+	full := []byte("Subject: full\r\n\r\nall the parts" + strings.Repeat("y", 4000))
+	skel := []byte("Subject: full\r\n\r\nskeleton")
+	m := seedFetched(t, s, inbox, 1, full)
+	if _, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, skel),
+		RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}}); err != nil {
+		t.Fatal(err)
+	}
+	// message.download receives the whole message into staging/, then the
+	// codec step converts the skeleton, and compression is switched off
+	// again while a reader (message.part) holds the .zst.
+	dl := stage(t, s, full)
+	time.Sleep(50 * time.Millisecond)
+	s.SetRawCodec(RawZstd)
+	if res := convertAll(t, s, RawZstd, 10); res.Converted != 1 {
+		t.Fatalf("conversion: %+v", res)
+	}
+	s.SetRawCodec(RawPlain)
+	release := openReader(t, s, "acc", m.ID)
+	_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: dl, Hydrated: true,
+		Expect: RawExpect{RawState: RawPartial}})
+	release()
+	if err != nil {
+		t.Fatalf("download commit: %v", err)
+	}
+	if state, parts, _, _, _, _ := rawColumns(t, s, m.ID); state != string(RawFull) {
+		t.Fatalf("row %s %s, want full", state, parts)
+	}
+	if got := readRaw(t, s, "acc", m.ID); !bytes.Equal(got, full) {
+		t.Errorf("reader: %d bytes, want the download (%d)", len(got), len(full))
+	}
+	if _, err := s.SweepMessageFiles(ctx, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got := readRaw(t, s, "acc", m.ID); !bytes.Equal(got, full) {
+		t.Errorf("after the sweep: %d bytes, want the download (%d)", len(got), len(full))
+	}
+}
+

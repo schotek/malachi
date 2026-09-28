@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -799,6 +800,13 @@ func (s *Store) tempFromStaged(h *rawHold, j rawJob) (string, RawInfo, error) {
 		return s.writeTemp(h, RawPlain, n, n, fromStaged, j.syncFile)
 	}
 	st.consumed = true
+	// The file keeps the time it was received; it takes the time it is
+	// placed, since a reader and the sweep take the newer of a message's
+	// two files (openNewest, resolveLocked) and a variant written while it
+	// downloaded (the codec step) must not pass for the newer one. Best
+	// effort: a file that keeps its old time is what a copy would not be.
+	now := time.Now()
+	_ = os.Chtimes(tmp, now, now)
 	return tmp, RawInfo{Codec: RawPlain, Bytes: n, DiskBytes: n}, nil
 }
 
