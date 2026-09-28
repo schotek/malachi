@@ -611,11 +611,126 @@ public sealed class ApiCodingTests
         Assert.Equal(
             new Preferences { SyncIntervalSeconds = 300, RemoteContent = RemoteContentPolicy.KnownSenders, OfflineDays = 30 },
             r.Preferences);
-        // config.set echoes the whole set.
+        Assert.True(r.Preferences.CompressStore is null && r.Preferences.AttachmentOfflineDays is null, "an older daemon");
+        // config.set echoes the whole set; what the daemon did not report
+        // is left out, which it reads as unchanged.
         var prefs = EncodeObject(new ConfigSetParams { Preferences = r.Preferences }).GetProperty("preferences");
         Assert.Equal(300, prefs.GetProperty("syncIntervalSeconds").GetInt32());
         Assert.Equal("knownSenders", prefs.GetProperty("remoteContent").GetString());
         Assert.Equal(30, prefs.GetProperty("offlineDays").GetInt32());
+        Assert.Equal(["offlineDays", "remoteContent", "syncIntervalSeconds"], Keys(prefs)); // null is never sent
+
+        // docs/api.md §4.8: a daemon that knows the storage preferences.
+        var full = Decode<ConfigGetResult>("""
+            {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,
+                            "compressStore":true,"attachmentOfflineDays":30}}
+            """);
+        Assert.Equal(
+            new Preferences { SyncIntervalSeconds = 300, RemoteContent = RemoteContentPolicy.Block, OfflineDays = 30, CompressStore = true, AttachmentOfflineDays = 30 },
+            full.Preferences);
+        var small = Decode<ConfigSetResult>("""
+            {"preferences":{"syncIntervalSeconds":0,"remoteContent":"allow","offlineDays":0,"compressStore":false,"attachmentOfflineDays":-1}}
+            """);
+        Assert.True(small.Preferences.CompressStore == false && small.Preferences.AttachmentOfflineDays == API.Limits.AttachmentOfflineNone);
+        // Set values are sent, false and 0 included.
+        var sent = EncodeObject(new ConfigSetParams
+        {
+            Preferences = new Preferences { SyncIntervalSeconds = 300, RemoteContent = RemoteContentPolicy.Block, OfflineDays = 30, CompressStore = false, AttachmentOfflineDays = 0 },
+        }).GetProperty("preferences");
+        Assert.False(sent.GetProperty("compressStore").GetBoolean());
+        Assert.Equal(0, sent.GetProperty("attachmentOfflineDays").GetInt32());
+        var partial = EncodeObject(new ConfigSetParams
+        {
+            Preferences = new Preferences { SyncIntervalSeconds = 300, RemoteContent = RemoteContentPolicy.Block, OfflineDays = 30, CompressStore = true },
+        }).GetProperty("preferences");
+        Assert.True(partial.GetProperty("compressStore").GetBoolean());
+        Assert.Null(Member(partial, "attachmentOfflineDays"));
+        Assert.Null(Member(partial, "neverStoreAttachments"));
+        Assert.Equal(3650, API.Limits.AttachmentOfflineDaysMax);
+        Assert.Equal(-1, API.Limits.AttachmentOfflineNone);
+
+        // docs/api.md §4.8: neverStoreAttachments, added after the two; a
+        // daemon without it (the two above) decodes it as null.
+        Assert.True(full.Preferences.NeverStoreAttachments is null && small.Preferences.NeverStoreAttachments is null);
+        var never = Decode<ConfigGetResult>("""
+            {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,
+                            "compressStore":true,"attachmentOfflineDays":30,"neverStoreAttachments":true}}
+            """);
+        Assert.Equal(
+            new Preferences
+            {
+                SyncIntervalSeconds = 300,
+                RemoteContent = RemoteContentPolicy.Block,
+                OfflineDays = 30,
+                CompressStore = true,
+                AttachmentOfflineDays = 30,
+                NeverStoreAttachments = true,
+            },
+            never.Preferences);
+        var keep = Decode<ConfigSetResult>("""
+            {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,"compressStore":false,"attachmentOfflineDays":0,"neverStoreAttachments":false}}
+            """);
+        Assert.False(keep.Preferences.NeverStoreAttachments);
+        // False goes over the wire; null never does.
+        var sentNever = EncodeObject(new ConfigSetParams { Preferences = keep.Preferences }).GetProperty("preferences");
+        Assert.False(sentNever.GetProperty("neverStoreAttachments").GetBoolean());
+        Assert.Equal(
+            ["attachmentOfflineDays", "compressStore", "neverStoreAttachments", "offlineDays", "remoteContent", "syncIntervalSeconds"],
+            Keys(sentNever));
+        var onlyNever = EncodeObject(new ConfigSetParams
+        {
+            Preferences = new Preferences { SyncIntervalSeconds = 300, RemoteContent = RemoteContentPolicy.Block, OfflineDays = 30, NeverStoreAttachments = true },
+        }).GetProperty("preferences");
+        Assert.True(onlyNever.GetProperty("neverStoreAttachments").GetBoolean());
+        Assert.True(Member(onlyNever, "compressStore") is null && Member(onlyNever, "attachmentOfflineDays") is null);
+    }
+
+    /// <summary>docs/api.md §4.0 <c>system.storage</c>.</summary>
+    [Fact]
+    public void SystemStorageExample()
+    {
+        var r = Decode<SystemStorageResult>("""
+            {
+              "totalBytes": 734003200,
+              "databaseBytes": 44470272,
+              "messageBytes": 546700000,
+              "messageUncompressedBytes": 909800000,
+              "savedBytes": 363100000,
+              "attachmentBytes": 250000,
+              "remoteAttachmentBytes": 312000000,
+              "messages": 3725,
+              "compressedMessages": 3725,
+              "partialMessages": 410,
+              "conversion": "idle"
+            }
+            """);
+        Assert.Equal(
+            new SystemStorageResult
+            {
+                TotalBytes = 734_003_200,
+                DatabaseBytes = 44_470_272,
+                MessageBytes = 546_700_000,
+                MessageUncompressedBytes = 909_800_000,
+                SavedBytes = 363_100_000,
+                AttachmentBytes = 250_000,
+                RemoteAttachmentBytes = 312_000_000,
+                Messages = 3725,
+                CompressedMessages = 3725,
+                PartialMessages = 410,
+                Conversion = StorageConversion.Idle,
+            },
+            r);
+        var full = Decode<SystemStorageResult>("""{"totalBytes":0,"databaseBytes":0,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"noSpace"}""");
+        Assert.True(full.Conversion == StorageConversion.NoSpace && full.Conversion != StorageConversion.Running);
+        // A state a newer daemon adds still decodes.
+        var odd = Decode<SystemStorageResult>("""{"totalBytes":1,"databaseBytes":1,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"paused"}""");
+        Assert.Equal(new StorageConversion("paused"), odd.Conversion);
+        // Windows addition: past 4 GiB (an int would overflow) the sizes are
+        // longs, and a result without a member fails as it fails Swift's.
+        Assert.Equal(5L << 30, Decode<SystemStorageResult>("""{"totalBytes":5368709120,"databaseBytes":0,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"idle"}""").TotalBytes);
+        Assert.Throws<JsonException>(() => Decode<SystemStorageResult>("""{"totalBytes":1}"""));
+        Assert.Equal(new SystemStorageResult(), JsonSerializer.Deserialize("""{"totalBytes":0,"databaseBytes":0,"messageBytes":0,"messageUncompressedBytes":0,"savedBytes":0,"attachmentBytes":0,"remoteAttachmentBytes":0,"messages":0,"compressedMessages":0,"partialMessages":0,"conversion":"idle"}""", API.SystemStorage.ResultInfo));
+        Assert.Equal("system.storage", API.SystemStorage.Name);
     }
 
     [Fact]
@@ -999,13 +1114,13 @@ public sealed class ApiCodingTests
     /// <summary>api.AllMethods, copied from backend/pkg/api/methods.go.</summary>
     internal static readonly string[] GoMethods =
     [
-        "system.info", "system.hello", "system.authenticate",
+        "system.info", "system.hello", "system.authenticate", "system.storage",
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
-        "message.embedded", "message.flag", "message.move", "message.delete",
+        "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
         "message.send",
         "outbox.retry",
         "thread.list", "thread.get",
@@ -1021,8 +1136,8 @@ public sealed class ApiCodingTests
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(46, API.AllMethods.Count);
-        Assert.Equal(46, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(48, API.AllMethods.Count);
+        Assert.Equal(48, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
@@ -1055,6 +1170,7 @@ public sealed class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(5), API.AccountOAuthCancel.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(5), RpcTimeouts.Default);
         Assert.Equal(TimeSpan.FromSeconds(30), RpcTimeouts.Remote);
+        Assert.Equal(TimeSpan.FromSeconds(5), API.SystemStorage.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",

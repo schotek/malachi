@@ -83,8 +83,8 @@ internal static partial class GoContract
     }
 
     /// <summary>
-    /// The integer constants of a Go file: every <c>[const] name = 50</c> or
-    /// <c>name = 25 &lt;&lt; 20</c>, as name → value.
+    /// The integer constants of a Go file: every <c>[const] name = 50</c>,
+    /// <c>name = -1</c> or <c>name = 25 &lt;&lt; 20</c>, as name → value.
     /// </summary>
     public static IReadOnlyDictionary<string, long> IntConstants(string source)
     {
@@ -179,7 +179,7 @@ internal static partial class GoContract
     [GeneratedRegex(@"^\s*(?<const>Code\w+):\s*""(?<name>[^""]+)"",", RegexOptions.Multiline)]
     private static partial Regex CodeName();
 
-    [GeneratedRegex(@"^\s*(?:const\s+)?(?<name>[A-Za-z]\w*)\s*=\s*(?<value>\d+)(?:\s*<<\s*(?<shift>\d+))?\s*(?://.*)?$", RegexOptions.Multiline)]
+    [GeneratedRegex(@"^\s*(?:const\s+)?(?<name>[A-Za-z]\w*)\s*=\s*(?<value>-?\d+)(?:\s*<<\s*(?<shift>\d+))?\s*(?://.*)?$", RegexOptions.Multiline)]
     private static partial Regex IntConstant();
 
     [GeneratedRegex(@"^\s*(?:const\s+)?(?<name>[A-Za-z]\w*)\s*=\s*(?<value>\d+)\s*\*\s*time\.Second", RegexOptions.Multiline)]

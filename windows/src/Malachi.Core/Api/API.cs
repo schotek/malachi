@@ -122,6 +122,13 @@ public static class API
     public static readonly RpcMethod<SystemAuthenticateParams, EmptyResult> SystemAuthenticate =
         new("system.authenticate", RpcTimeouts.Handshake, Wire.SystemAuthenticateParams, Wire.EmptyResult);
 
+    /// <summary>
+    /// <c>system.storage</c>: how much disk the mail store uses; cheap enough
+    /// to ask every few seconds while the preferences are open.
+    /// </summary>
+    public static readonly RpcMethod<EmptyParams, SystemStorageResult> SystemStorage =
+        new("system.storage", RpcTimeouts.Default, Wire.EmptyParams, Wire.SystemStorageResult);
+
     // Accounts
 
     /// <summary><c>account.list</c>.</summary>
@@ -327,7 +334,7 @@ public static class API
     /// <summary>Every method, in the order of methods.go.</summary>
     public static IReadOnlyList<IRpcMethod> Methods { get; } =
     [
-        SystemInfo, SystemHello, SystemAuthenticate,
+        SystemInfo, SystemHello, SystemAuthenticate, SystemStorage,
         AccountList, AccountAdd, AccountRemove, AccountSetEnabled,
         AccountUpdate, AccountDiscover, AccountTest, AccountLinked,
         AccountReorder, AccountOAuthStart, AccountOAuthWait, AccountOAuthCancel,
@@ -421,6 +428,15 @@ public static class API
 
         /// <summary>api.OfflineDaysMax.</summary>
         public const int OfflineDaysMax = 3650;
+
+        /// <summary>The largest <see cref="Preferences.AttachmentOfflineDays"/> (api.AttachmentOfflineDaysMax).</summary>
+        public const int AttachmentOfflineDaysMax = 3650;
+
+        /// <summary>
+        /// <see cref="Preferences.AttachmentOfflineDays"/> that keeps no large
+        /// attachment locally: Small Attachments Only (api.AttachmentOfflineNone).
+        /// </summary>
+        public const int AttachmentOfflineNone = -1;
 
         /// <summary><c>messageIds</c> in message.flag, message.move and message.delete.</summary>
         public const int MaxMessageIdsPerCall = 1000;

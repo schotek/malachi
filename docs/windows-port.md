@@ -266,7 +266,7 @@ area as `MalachiCore/API/`:
   one, so a typo cannot compile. The table is the static class `API`, the
   Swift name kept: a class `Api` in the namespace `Malachi.Core.Api` would
   be read as that namespace from every other `Malachi.Core.*` namespace. It
-  has all 46 methods in the order of `api.AllMethods`, stubs included;
+  has all 48 methods in the order of `api.AllMethods`, stubs included;
   `system.hello` and `system.authenticate` are sent only by the handshake;
 - records are sealed and immutable (`init`, lists as `IReadOnlyList`),
   changed with `with`: the optimistic reverts of the controllers rely on

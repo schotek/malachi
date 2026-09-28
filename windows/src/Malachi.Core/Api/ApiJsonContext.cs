@@ -176,6 +176,9 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(SenderListResult))]
 [JsonSerializable(typeof(SenderAddParams))]
 [JsonSerializable(typeof(SenderRemoveParams))]
+// Storage.cs
+[JsonSerializable(typeof(StorageConversion))]
+[JsonSerializable(typeof(SystemStorageResult))]
 // Sync.cs
 [JsonSerializable(typeof(SyncState))]
 [JsonSerializable(typeof(SyncStatusParams))]

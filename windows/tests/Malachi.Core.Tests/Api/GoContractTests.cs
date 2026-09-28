@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(46, goMethods.Length);
+        Assert.Equal(48, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -93,6 +93,7 @@ public sealed class GoContractTests
         { nameof(SyncStatus), "types.go", "SyncStatus" },
         { nameof(KnownSenderSource), "types.go", "KnownSenderSource*" },
         { nameof(ContactSource), "types.go", "ContactSource" },
+        { nameof(StorageConversion), "types.go", "StorageConversion" },
         { nameof(TlsErrorReason), "tls.go", "TLSErrorReason" },
     };
 
@@ -135,7 +136,7 @@ public sealed class GoContractTests
     {
         var go = GoContract.IntConstants(GoContract.ApiSource("types.go"));
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(23, limits.Length);
+        Assert.Equal(25, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".

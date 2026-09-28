@@ -128,7 +128,7 @@ public sealed class ApiRoundTripTests
         [nameof(AttachmentGetParams)] = Case<AttachmentGetParams>("""{"accountId":"acc_1","attachmentId":"att_1"}"""),
         [nameof(AttachmentGetResult)] = Case<AttachmentGetResult>("""{"attachmentId":"att_1","filename":"a.png","contentType":"image/png","size":3,"data":"AQID"}"""),
         // Config.cs
-        [nameof(Preferences)] = Case<Preferences>("""{"syncIntervalSeconds":300,"remoteContent":"knownSenders","offlineDays":30}"""),
+        [nameof(Preferences)] = Case<Preferences>("""{"syncIntervalSeconds":300,"remoteContent":"knownSenders","offlineDays":30,"compressStore":false,"attachmentOfflineDays":-1,"neverStoreAttachments":true}"""),
         [nameof(ConfigGetResult)] = Case<ConfigGetResult>("""{"preferences":{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0}}"""),
         [nameof(ConfigSetParams)] = Case<ConfigSetParams>("""{"preferences":{"syncIntervalSeconds":60,"remoteContent":"allow","offlineDays":3650}}"""),
         [nameof(ConfigSetResult)] = Case<ConfigSetResult>("""{"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30}}"""),
@@ -200,6 +200,9 @@ public sealed class ApiRoundTripTests
         [nameof(SenderListResult)] = Case<SenderListResult>("""{"senders":[{"address":"alice@example.org","source":"sent","addedAt":"2026-09-02T10:00:00Z"}]}"""),
         [nameof(SenderAddParams)] = Case<SenderAddParams>("""{"address":"Alice <alice@example.org>"}"""),
         [nameof(SenderRemoveParams)] = Case<SenderRemoveParams>("""{"address":"alice@example.org"}"""),
+        // Storage.cs
+        [nameof(SystemStorageResult)] = Case<SystemStorageResult>(
+            """{"totalBytes":734003200,"databaseBytes":44470272,"messageBytes":546700000,"messageUncompressedBytes":909800000,"savedBytes":363100000,"attachmentBytes":250000,"remoteAttachmentBytes":312000000,"messages":3725,"compressedMessages":3725,"partialMessages":410,"conversion":"running"}"""),
         // Sync.cs
         [nameof(SyncState)] = Case<SyncState>(State),
         [nameof(SyncStatusParams)] = Case<SyncStatusParams>("""{"accountId":"acc_1"}"""),
@@ -236,6 +239,10 @@ public sealed class ApiRoundTripTests
         ["Draft of draft.create"] = Case<Draft>(
             """{"accountId":"a","version":0,"to":null,"subject":"","textBody":"","updatedAt":"0001-01-01T00:00:00Z"}""",
             """{"accountId":"a","version":0,"to":[],"subject":"","textBody":"","updatedAt":"0001-01-01T00:00:00Z"}"""),
+        // An older daemon's preferences, or a null of a newer one: absent (unchanged to config.set).
+        ["Preferences without the storage members"] = Case<Preferences>(
+            """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0,"compressStore":null,"neverStoreAttachments":null}""",
+            """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0}"""),
         ["MessageBodyResult without links"] = Case<MessageBodyResult>(
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"remoteContent":"block","sanitizerVersion":"1"}""",
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"links":[],"remoteContent":"block","sanitizerVersion":"1"}"""),
