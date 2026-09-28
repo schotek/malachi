@@ -25,7 +25,13 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-const waitTimeout = 15 * time.Second
+// waitTimeout bounds every wait for something the test expects to happen
+// (a state, a notification, the syncer's end). A passing run returns as
+// soon as it happens; the bound only decides how long a failing one takes,
+// so it is set for a starved runner: GitHub's Windows runner synced the
+// 2,500 messages of TestClientSideWindowAcrossBatches in 19 s while the
+// other packages' tests ran beside it, past the former 15 s.
+const waitTimeout = 60 * time.Second
 
 // fullCaps is a modern server: MOVE, UIDPLUS and LIST-STATUS on top of rev1.
 var fullCaps = imap.CapSet{imap.CapIMAP4rev1: {}, imap.CapUIDPlus: {}, imap.CapMove: {}, imap.CapListStatus: {}}

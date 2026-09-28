@@ -568,7 +568,11 @@ func TestHandshakeTimesOut(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := startFake(t, testKey, script)
-			ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+			// Long enough that system.hello is written before the context
+			// ends even on a starved runner (a context that ends before
+			// the write is a plain deadline, not this timeout), and well
+			// short of HandshakeTimeout, which must not be what ended it.
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			start := time.Now()
 			err := ClientHandshake(ctx, p.client, p.r, keyFile(t, FormatKeyFile(testKey)))
@@ -578,8 +582,8 @@ func TestHandshakeTimesOut(t *testing.T) {
 			if !errors.As(err, &he) || he.Reason != HandshakeTimedOut || !errors.Is(err, os.ErrDeadlineExceeded) {
 				t.Fatalf("got %v, want timedOut", err)
 			}
-			if elapsed > HandshakeTimeout/2 {
-				t.Errorf("took %v with a context of 150ms", elapsed)
+			if elapsed >= HandshakeTimeout-time.Second {
+				t.Errorf("took %v with a context of 1s", elapsed)
 			}
 		})
 	}
