@@ -336,6 +336,14 @@ public sealed class HtmlLinksTests
     // (https://evil.example<b>moje</b>banka.example, drawn as
     // https://evil.examplemojebanka.example): the space ends the host.
     [InlineData("https://evil.example moje banka.example/login")]
+    // A one-word text whose labels a middle dot parts (runic, word
+    // separator, Canadian syllabics, an Arabic-Indic zero): left out of the
+    // dots another script draws, for Catalan "l·l" and the Japanese
+    // "・" between words.
+    [InlineData("mojebanka᛫example")]
+    [InlineData("mojebanka⸱example")]
+    [InlineData("mojebankaᐧexample")]
+    [InlineData("mojebanka٠example")]
     // The daemon's 200-rune cap: hidden padding before the visible address.
     [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]
     public void TheKnownLimitsStillOpen(string text)
@@ -431,7 +439,63 @@ public sealed class HtmlLinksTests
         "/ /mojebanka.example/login",
         "https/ /mojebanka.example/login",
         "http s//mojebanka.example/login",
+        // The third review's: slashes an inline element splits right after a
+        // colon a reader sees that is a letter or a mark ("httpsঃ<b>/</b>/"),
+        // and a scheme address drawn right to left whose slashes are split
+        // (<bdo dir=rtl>nigol/elpmaxe.aknabejom/<b>/</b>:sptth</bdo>).
+        "httpsঃ/ /mojebanka.example/login", // Bengali sign visarga
+        "httpsཿ/ /mojebanka.example/login", // Tibetan sign rnam bcad
+        "httpsး/ / mojebanka.example/login", // Myanmar sign visarga
+        "httpsះ/ /mojebanka.example/login", // Khmer sign reahmuk
+        "httpsਃ/ /mojebanka.example/login", // Gurmukhi sign visarga
+        "httpsః/ /mojebanka.example/login", // Telugu sign visarga
+        "httpsඃ/ /mojebanka.example/login", // Sinhala sign visargaya
+        "nigol/elpmaxe.aknabejom/ / :sptth",
+        // One character drawn as two or three slashes, and other slashes.
+        "https⫽mojebanka.example/login", // double solidus operator
+        "https:⫽mojebanka.example/login",
+        "https⫻mojebanka.example/login", // triple solidus operator
+        "https:᜵᜵mojebanka.example/login", // Philippine single punctuation
+        "https:㇓㇓mojebanka.example/login", // CJK stroke sp
+        // A word before the host with a colon another script draws.
+        "Web∶mojebanka.example", // ratio
+        "Web꞉mojebanka.example/login", // modifier letter colon
     };
+
+    // A host an inline element splits at a dot: the daemon lists
+    // "https://www.halifax.co<span>.</span>uk/login" as
+    // "https://www.halifax.co . uk/login", which the view draws as the
+    // bank's .co.uk; a next word that begins with a dot is the rest of the
+    // host, so over a link to its first part (www.halifax.co) it asks.
+    [Theory]
+    [InlineData("https://www.halifax.co . uk/login", "https://www.halifax.co/login")]
+    [InlineData("www.halifax.co . uk", "https://www.halifax.co/")]
+    [InlineData("https://www.halifax.co \uA4F8uk /login", "https://www.halifax.co/login")] // Lisu letter tone mya ti
+    [InlineData("https://www.halifax.co \u2024 uk/login", "https://www.halifax.co/login")] // one dot leader
+    [InlineData("https://www.paypal.co \uFF0E uk", "https://www.paypal.co/")] // fullwidth full stop
+    [InlineData("https://www.paypal.co \u3002 uk", "https://www.paypal.co/")]
+    [InlineData("https://www.paypal.co .1uk", "https://www.paypal.co/")]
+    public void AHostSplitAtADotIsMaskedOverItsFirstPart(string text, string href)
+    {
+        Assert.True(Links.IsMasked(text, href));
+        Assert.True(Links.LeadsElsewhere(text, FakeLauncher.Target(href)));
+    }
+
+    // The price of reading a space after a host as its end, where no dot
+    // says the host goes on (the second review's S2): a host whose last
+    // label an inline element splits ("https://www.natwest.co<span>m</span>/login",
+    // listed as "https://www.natwest.co m /login" and drawn as the bank's
+    // .com over a link to .co) opens without the question, as in GTK and
+    // macOS. Only the daemon can tell the space it put there from one the
+    // mail wrote (docs/security.md §3.2).
+    [Theory]
+    [InlineData("https://www.natwest.co m /login", "https://www.natwest.co/login")]
+    [InlineData("www.paypal.co m", "https://www.paypal.co/")]
+    public void AHostSplitInItsLastLabelStillOpens(string text, string href)
+    {
+        Assert.False(Links.IsMasked(text, href));
+        Assert.False(Links.LeadsElsewhere(text, FakeLauncher.Target(href)));
+    }
 
     [Theory]
     [MemberData(nameof(TextsOfTheBank))]
@@ -480,6 +544,13 @@ public sealed class HtmlLinksTests
     [InlineData("my_shop.example", "https://my_shop.example/")]
     // A one-word text whose colon is a word's, not a port's.
     [InlineData("Web:shop.example", "https://www.shop.example/")]
+    [InlineData("Web\u2236shop.example", "https://www.shop.example/")]
+    // An ellipsis after an address ends its host, glued or not; a dot
+    // that begins no ellipsis after a space is the host's (above).
+    [InlineData("www.shop.example\u2026 Shop now", "https://www.shop.example/")]
+    [InlineData("www.shop.example... Shop now", "https://www.shop.example/")]
+    [InlineData("www.shop.example \u2026", "https://www.shop.example/")]
+    [InlineData("https://www.shop.example ... more", "https://www.shop.example/")]
     public void ATextThatNamesItsOwnSiteIsNotMasked(string text, string href)
     {
         Assert.False(Links.IsMasked(text, href));

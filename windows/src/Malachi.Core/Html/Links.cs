@@ -38,6 +38,7 @@
 // wrote it.
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -52,8 +53,10 @@ public static class Links
     // before a path, besides "/" and "\" and the fullwidth and small forms
     // that NFKC turns into them: fraction slash, division slash, set minus,
     // the box-drawing and mathematical diagonals, reverse solidus operator,
-    // big solidus and big reverse solidus.
-    private const string SlashLookalikes = "\u2044\u2215\u2216\u2571\u2572\u27CB\u27CD\u29F5\u29F8\u29F9";
+    // big solidus and big reverse solidus, Philippine single punctuation,
+    // the CJK stroke that falls to the left. (The double and triple solidus
+    // operators stand for two and three slashes: Readable.)
+    private const string SlashLookalikes = "\u2044\u2215\u2216\u2571\u2572\u27CB\u27CD\u29F5\u29F8\u29F9\u1735\u31D3";
 
     // What a reader takes for the colon after a scheme that NFKC leaves
     // alone: the modifier letters triangular colon and half triangular
@@ -190,7 +193,11 @@ public static class Links
         var p = 0;
         while (p < t.Length)
         {
-            if ((p == 0 || !IsWordChar(t[p - 1])) && SpacedPrefix(t, p) is { } spaced)
+            // Split slashes are read as two after a letter or a mark as well,
+            // as two glued slashes are there (Address): "httpsঃ<b>/</b>/" is
+            // listed as "httpsঃ/ /", and a scheme address that a <bdo>
+            // draws right to left ends in "/ / :sptth".
+            if ((p == 0 || !IsWordChar(t[p - 1]) || IsSlash(t[p])) && SpacedPrefix(t, p) is { } spaced)
             {
                 // "w ww.", "https :/ /": the prefix as it is drawn.
                 t = string.Concat(t.AsSpan(0, p), spaced.Prefix, t.AsSpan(spaced.End));
@@ -317,7 +324,9 @@ public static class Links
 
     // The text as a reader sees it, for reading hosts: without what is not
     // seen, in its compatibility form, the ideographic full stop (to which
-    // NFKC also turns the halfwidth one) as a dot, lower case, trimmed.
+    // NFKC also turns the halfwidth one) as a dot, the double and triple
+    // solidus operators as the slashes they are drawn as, lower case,
+    // trimmed.
     // What EnumerateRunes makes of a lone surrogate is U+FFFD, so the
     // normalisation has nothing invalid to refuse.
     private static string Readable(string text)
@@ -339,7 +348,8 @@ public static class Links
         {
             // Not normalised: read as it is.
         }
-        return s.Replace('\u3002', '.').ToLowerInvariant().Trim();
+        return s.Replace('\u3002', '.').Replace("\u2AFD", "//", StringComparison.Ordinal)
+            .Replace("\u2AFB", "///", StringComparison.Ordinal).ToLowerInvariant().Trim();
     }
 
     // What a reader does not see: a format character (Cf: the soft hyphen,
@@ -483,7 +493,9 @@ public static class Links
     }
 
     // The host of an address in t, which begins at start, and where it
-    // ends; "" when it cannot be read. White space ends the host, except in
+    // ends; "" when it cannot be read. Two dots in a row end it, as they
+    // end a sentence ("www.shop.example… Shop now", "..." in NFKC).
+    // White space ends the host, except in
     // an address the text begins with (whole): there white space before
     // the host goes, and a space after some of it ends it only where the
     // host does not visibly go on after the space (HostGoesOn); where it
@@ -502,7 +514,7 @@ public static class Links
                     break;
                 }
             }
-            else if (EndsHost(c))
+            else if (EndsHost(c) || (c == '.' && end + 1 < t.Length && t[end + 1] == '.'))
             {
                 break;
             }
@@ -540,14 +552,17 @@ public static class Links
     // ("www.shop.example for details", "- shop now", an image's alt the
     // daemon appends). It is where the word before the space ends with a
     // dot ("www. shop.example"), or the next word, up to its first slash,
-    // begins with a dot before a letter, has one inside ("https://moje
-    // banka.example/login", or a hidden "https://evil.example" before
-    // "mojebanka.example/login") or ends with one; not where its dots
-    // only stand between digits or after one another (a date, a price, an
-    // ellipsis).
+    // begins with a dot that begins no ellipsis, whatever follows it
+    // ("https://www.halifax.co<span>.</span>uk" is listed as
+    // "https://www.halifax.co . uk"), has one before a letter inside
+    // ("https://moje banka.example/login", or a hidden
+    // "https://evil.example" before "mojebanka.example/login") or ends with
+    // one; not where its dots only stand between digits or after one
+    // another (a date, a price, an ellipsis). A dot another script draws
+    // (DotLookalikes) counts as a dot.
     private static bool HostGoesOn(string t, int i)
     {
-        if (i >= 2 && t[i - 1] == '.' && IsLabelChar(t[i - 2]))
+        if (i >= 2 && IsDot(t[i - 1]) && IsLabelChar(t[i - 2]))
         {
             return true;
         }
@@ -561,9 +576,13 @@ public static class Links
         {
             end++;
         }
+        if (word < end && IsDot(t[word]) && !(word + 1 < end && IsDot(t[word + 1])))
+        {
+            return true;
+        }
         for (var k = word; k < end; k++)
         {
-            if (t[k] != '.')
+            if (!IsDot(t[k]))
             {
                 continue;
             }
@@ -597,8 +616,9 @@ public static class Links
     // host ("bank.example.org", "mojebanka.example/login"), when it has no
     // space and no "@" (an e-mail address), from its first letter or digit
     // on (a mark before it is no part of it); null when it names none.
-    // Windows: a colon that is no port's ends a word before the host
-    // ("Login:mojebanka.example", "Web:shop.example"), or, after a host,
+    // Windows: a colon that is no port's, or one another script draws, ends
+    // a word before the host ("Login:mojebanka.example",
+    // "Web∶shop.example"), or, after a host,
     // makes it one that cannot be read, as in an address
     // ("mojebanka.example:evil.example"); and a word a reader
     // takes for a host that is not written as one, with a dot another
@@ -625,12 +645,12 @@ public static class Links
             start++;
         }
         var end = start;
-        while (end < t.Length && (!EndsHost(t[end]) || DotLookalikes.Contains(t[end], StringComparison.Ordinal)))
+        while (end < t.Length && (!EndsHost(t[end]) || DotLookalikes.Contains(t[end], StringComparison.Ordinal) || IsColon(t[end])))
         {
             end++;
         }
         var part = t[start..end];
-        var colon = part.LastIndexOf(':');
+        var colon = part.AsSpan().LastIndexOfAny(Colons);
         if (colon >= 0)
         {
             if (!part.AsSpan(colon + 1).ContainsAnyExceptInRange('0', '9'))
@@ -722,6 +742,12 @@ public static class Links
     private static bool IsSlash(char c) => c is '/' or '\\' || SlashLookalikes.Contains(c, StringComparison.Ordinal);
 
     private static bool IsColon(char c) => c == ':' || ColonLookalikes.Contains(c, StringComparison.Ordinal);
+
+    // A colon or one another script draws, for a search (BareHost).
+    private static readonly SearchValues<char> Colons = SearchValues.Create(":" + ColonLookalikes);
+
+    // A dot, or one another script draws between labels (DotLookalikes).
+    private static bool IsDot(char c) => c == '.' || DotLookalikes.Contains(c, StringComparison.Ordinal);
 
     private static int SkipSlashes(string t, int i)
     {

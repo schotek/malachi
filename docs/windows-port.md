@@ -800,6 +800,22 @@ as it did without the attribute: hrefs that differ only in case, a default
 port or escaping (`HTTPS://EVIL.EXAMPLE/dup` beside `https://evil.example/dup`)
 lead to one address, and the attribute may be another anchor's.
 
+A third review found that the `HostGoesOn` refinement had dropped a next
+word that is a dot alone: `https://www.halifax.co<span>.</span>uk/login`,
+listed as `https://www.halifax.co . uk/login` and drawn as the bank's
+.co.uk, read as `www.halifax.co` and opened over a link there, which had
+asked before. A next word that begins with a dot, or with a dot another
+script draws, now continues the host whatever follows the dot, unless the
+dot begins an ellipsis. Split slashes after a letter or a mark
+(`httpsঃ<b>/</b>/`, listed as `httpsঃ/ /`, with a Bengali visarga for
+the colon; a `<bdo>` address whose slashes are split, `…/ / :sptth`) are
+read as the two glued slashes are; the double and triple solidus
+operators (U+2AFD, U+2AFB) count as two and three slashes, U+1735 and
+U+31D3 as slashes; a one-word text takes a colon another script draws
+before its host (`Web∶mojebanka.example`); and two dots in a row end a
+host as they end a sentence (`www.shop.example… Shop now` over its own
+link opens).
+
 What the client judges is the daemon's `links[].text`, not what the view
 draws, and some shapes stay beyond it. They open without the question,
 as known limits (`HtmlLinksTests.TheKnownLimitsStillOpen` holds them):
@@ -814,10 +830,24 @@ element splits right after a host of the link's own site
 (`https://evil.example<b>moje</b>banka.example`, drawn as
 `https://evil.examplemojebanka.example`, listed as `https://evil.example
 moje banka.example`), which reads as that first host, since the space
-cannot be told from one before words; and a host without a scheme or
-`www.` after words (`Log in at mojebanka.example`), which GTK does not
-read either and whose reading would ask over every file name and
-abbreviation in prose. Reading on inside a path for a further address
+cannot be told from one before words; a host whose last label an inline
+element splits (`https://www.natwest.co<span>m</span>/login`, listed as
+`https://www.natwest.co m /login` and drawn as the bank's .com over a link
+to `www.natwest.co`), which reads as `www.natwest.co` for the same reason
+(it asked before the rule that lets `www.shop.example for details` open,
+and no rule found tells the two apart without asking over newsletters:
+`HtmlLinksTests.AHostSplitInItsLastLabelStillOpens`); a one-word text whose
+labels a middle or raised dot parts (U+00B7, U+0660, U+0F0B, U+10FB,
+U+1427, U+16EB, U+2E31, U+2E33, U+A92F, U+ABEB), left out of the dot
+lookalikes for Catalan `l·l`, the Japanese `・` between words and the
+scripts that write such dots between syllables; and a host without a scheme or
+`www.` after words (`Log in at mojebanka.example`, `https://evil.example
+→ mojebanka.example`), which GTK does not read either and whose reading
+would ask over every file name and abbreviation in prose. An underscore
+host over itself (`https://shop_name.example/`) opens with the viewer's
+attribute but asks without it (a middle click the page reports only by
+its resolved URL), since the port of Chromium's canonicalisation refuses
+`_` in a host: that fails closed. Reading on inside a path for a further address
 would not help: a clipped prefix ends with `/` or `?` as easily, and such
 an address is also what archive and redirect links show
 (`https://web.archive.org/web/2020/https://example.com/`), which would ask.

@@ -235,8 +235,9 @@ fetch a page, both unseen by the filter:
   to left); a start of an address the daemon's spaces split (`w ww.`,
   `https :/ /`) is read without them. In a text that begins with an
   address, a space ends the host unless the host visibly goes on after it
-  (the next word begins with a dot, has one before its first slash or
-  ends with one, or the word before the space ends with one):
+  (the next word begins with a dot that begins no ellipsis, has one
+  before its first slash or ends with one, or the word before the space
+  ends with one; two dots in a row end a host):
   `www.shop.example for details` names www.shop.example,
   `https://moje banka.example/login` no host that can be read. An
   address whose host cannot be read
@@ -256,7 +257,10 @@ fetch a page, both unseen by the filter:
   cap), a bare host with a path that markup draws right to left
   (`<bdo dir=rtl>`, `unicode-bidi: bidi-override`), a host an inline
   element splits right after a host of the link's own site (drawn as
-  `https://evil.examplebank.example`), and a host without a
+  `https://evil.examplebank.example`) or in its last label (drawn as
+  `https://www.bank.com` over a link to `www.bank.co`), one word whose
+  labels a middle or raised dot parts (left out for Catalan, Japanese
+  and the scripts that write such dots between syllables), and a host without a
   scheme or `www.` after words (`Log in at bank.example`), which GTK does
   not read either; an e-mail address names no host. A link the launcher
   refuses is never offered and says so in a toast
