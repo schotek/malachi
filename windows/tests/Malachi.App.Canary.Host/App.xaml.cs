@@ -20,9 +20,9 @@ namespace Malachi.App.Canary.Host;
 public partial class App : Application
 {
     // The longest run, the recovery run, took up to 75 s on a busy machine,
-    // and the browser may take CanaryRunner.BrowserExitTimeout to end after
-    // it.
-    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(150);
+    // and the browser may take CanaryRunner.BrowserExitTimeout (120 s) to
+    // end after it.
+    private static readonly TimeSpan Watchdog = TimeSpan.FromSeconds(210);
 
     // Lives as long as the process, whatever happens to OnLaunched.
     private static Timer? watchdog;

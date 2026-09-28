@@ -2282,7 +2282,9 @@ first handshake (`RealDaemon.StartLimit` and `HandshakeLimit`), since only
 the start of a real process has to be waited for. The network canary,
 which CI skips, names the background request its browser makes about a
 minute after it started (§12), which a run slowed down by a busy machine
-lasts long enough to meet.
+lasts long enough to meet, and waits up to 120 s for its browser to end
+(more than 60 s once with every core busy and the solution being rebuilt
+beside it).
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in

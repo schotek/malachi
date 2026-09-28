@@ -49,9 +49,11 @@ internal sealed class CanaryRunner
     // How long the host waits for the browser to end once the views closed
     // (its NetLog is whole only then): a second or two on an idle machine,
     // 20 to 50 s while eight to ten CPU-burning processes kept every core
-    // busy (measured; the 15 s before failed that way), longer only under
-    // more than that. App.Watchdog leaves room for it.
-    private static readonly TimeSpan BrowserExitTimeout = TimeSpan.FromSeconds(60);
+    // busy (measured; the 15 s before failed that way), and more than 60 s
+    // once while eight of them ran beside the solution being rebuilt in a
+    // loop (the 60 s before failed that way). App.Watchdog leaves room for
+    // it.
+    private static readonly TimeSpan BrowserExitTimeout = TimeSpan.FromSeconds(120);
 
     // A 7×5 PNG, the picture every malachi-cid: and registered cid: request
     // gets.

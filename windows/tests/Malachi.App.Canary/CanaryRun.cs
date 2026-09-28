@@ -18,8 +18,8 @@ namespace Malachi.App.Canary;
 /// <summary>A canary host run and its evidence.</summary>
 internal sealed class CanaryRun : IDisposable
 {
-    // Beyond the host's own watchdog (App.Watchdog, 150 s).
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(160);
+    // Beyond the host's own watchdog (App.Watchdog, 210 s).
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(220);
 
     private readonly Dictionary<string, CanaryListener> canaries = new(StringComparer.Ordinal);
 
