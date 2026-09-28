@@ -590,27 +590,63 @@ public sealed partial class MessageView : UserControl
     // Attachment chips (attachments.go renderAttachments, buildChip,
     // buildSaveAll).
 
+    // The chip that holds the focus (one used a moment ago, whose download
+    // starts or ends now) goes with the rest; the focus goes to the chip in
+    // its place, from the keyboard when it came from the keyboard, or to the
+    // body when there is none there that can take it (renderAttachments,
+    // MessageViewController.swift renderAttachments). The new chips are
+    // added before the old ones go, so the focus moves from the old chip
+    // straight to its successor, never to what WinUI would pick for a
+    // focused element that leaves the tree.
     private void FillAttachments()
     {
-        if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsInside(focused, AttachmentChips))
-        {
-            FocusBody();
-        }
-        AttachmentChips.Children.Clear();
+        var chips = AttachmentChips.Children;
+        var (focusAt, how) = FocusedChip();
+        var old = chips.Count;
         saveAllButton = null;
         saveAllOf = null;
         var icons = services.Icons.StartBatch();
         foreach (var chip in Reader.Chips)
         {
-            AttachmentChips.Children.Add(AttachmentButton(chip, icons));
+            chips.Add(AttachmentButton(chip, icons));
         }
         if (Reader.SaveAll.Count > 0 && Reader.Current is { } s)
         {
             saveAllButton = SaveAllButton(s, Reader.SaveAll, Reader.SaveAllRemote);
             saveAllOf = s.Id;
-            AttachmentChips.Children.Add(saveAllButton);
+            chips.Add(saveAllButton);
         }
-        AttachmentChips.Visibility = ReaderBind.Visible(AttachmentChips.Children.Count > 0);
+        if (focusAt >= 0 && !(old + focusAt < chips.Count && chips[old + focusAt] is Control next && next.Focus(how)))
+        {
+            // A disabled chip (on a wrapper) takes no focus, and fewer
+            // chips may leave none in its place.
+            FocusBody();
+        }
+        for (var i = 0; i < old; i++)
+        {
+            chips.RemoveAt(0);
+        }
+        AttachmentChips.Visibility = ReaderBind.Visible(chips.Count > 0);
+    }
+
+    // The position of the chip (or Save All) that holds the focus, and how
+    // to give it to the one in its place (attachments.go focusedChip): -1
+    // when none does.
+    private (int At, FocusState How) FocusedChip()
+    {
+        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
+        {
+            return (-1, FocusState.Unfocused);
+        }
+        for (var e = focused; e is not null; e = VisualTreeHelper.GetParent(e))
+        {
+            if (VisualTreeHelper.GetParent(e) is { } parent && ReferenceEquals(parent, AttachmentChips) && e is UIElement chip)
+            {
+                var how = focused is Control { FocusState: FocusState.Keyboard } ? FocusState.Keyboard : FocusState.Programmatic;
+                return (AttachmentChips.Children.IndexOf(chip), how);
+            }
+        }
+        return (-1, FocusState.Unfocused);
     }
 
     // One attachment: the click previews it (an attached message opens in
