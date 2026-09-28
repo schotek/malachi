@@ -48,7 +48,6 @@ Draw avatars in neutral grey instead of per-sender colours	gschema: a key's summ
 Use a monospace font for plain-text message bodies	gschema: a key's summary or description, for dconf editors, not the UI
 Message body text zoom in percent	gschema: a key's summary or description, for dconf editors, not the UI
 Email Client	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
-Read and send email	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release

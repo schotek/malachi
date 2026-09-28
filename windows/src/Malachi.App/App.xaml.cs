@@ -119,6 +119,11 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var s = AppState.Create(log, console, paths, initial.StartHidden);
+        // The WebView2 environment is created now: it once took seconds, and the
+        // reader shows the plain text until it is ready (docs/windows-port.md §6.1).
+        global::Malachi.App.WebViews.WebViewEnvironment.LoggerFactory = log;
+        global::Malachi.App.WebViews.WebViewEnvironment.Start(
+            System.IO.Path.Combine(paths.DataDir, global::Malachi.App.WebViews.WebViewEnvironment.UserDataFolderName));
         state = s;
         global::Malachi.App.Resources.Icons.Logger = log.CreateLogger("Icons");
         var main = new MainWindow(s, SessionEnding);
@@ -127,7 +132,22 @@ public partial class App : Application
         s.Windows.Quit = s.Quit;
         s.Windows.LastWindowClosed += (_, _) => _ = QuitAsync(QuitReason.User);
         main.CloseRequested += (_, _) => OnMainWindowCloseRequested(s, main);
-        main.ShownChanged += (_, visible) => PlatformServices.MainWindowVisibilityChanged(visible);
+        // The notification-area icon is there exactly while the app runs with its window hidden.
+        main.ShownChanged += (_, visible) => PlatformServices.SetRunningInBackground(!visible);
+
+        // The platform services subscribe to the notifications first, so that a new
+        // message reaches the desktop notification before the list (notify.go's order).
+        PlatformServices.Start(new PlatformContext
+        {
+            Settings = s.Settings,
+            Notifications = s.Notifications,
+            IsMainWindowActive = () => s.IsMainWindowActive,
+            ShowMainWindow = s.ShowMainWindow,
+            NewMessage = () => s.Hooks.ComposeNew?.Invoke(),
+            CheckForNewMail = () => s.Hooks.CheckForNewMail?.Invoke(),
+            Quit = s.Quit,
+            LoggerFactory = log,
+        });
 
         // The controllers plug into the shell before the connection reports anything.
         var integration = new Integration(s, main);
@@ -159,7 +179,6 @@ public partial class App : Application
             },
             log.CreateLogger<QuitSequence>());
 
-        PlatformServices.Start(s);
         Activate(initial);
         if (initial.StartHidden)
         {

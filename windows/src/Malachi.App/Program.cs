@@ -38,6 +38,7 @@ using Malachi.Core.Daemon;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Consoles;
 using Malachi.Platform.Windows.Files;
+using Malachi.Platform.Windows.Notifications;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -76,7 +77,7 @@ public static partial class Program
         logger = log.CreateLogger("Program");
 
         WinRT.ComWrappersSupport.InitializeComWrappers();
-        PlatformServices.InitializeEarly(OnNotificationInvoked);
+        PlatformServices.InitializeEarly(OnNotificationInvoked, log);
 
         var activation = AppInstance.GetCurrent().GetActivatedEventArgs();
         var request = RequestOf(activation, redirected: false);
@@ -96,7 +97,6 @@ public static partial class Program
             SynchronizationContext.SetSynchronizationContext(context);
             _ = new App(request, log, console, paths);
         });
-        PlatformServices.Shutdown();
         LogExited(logger);
         console.ShutdownCompleted();
         return 0;
@@ -204,9 +204,9 @@ public static partial class Program
     // The argument is the notification's own (message, account): the
     // click shows the main window, as GTK's app.show; its length only is
     // logged.
-    private static void OnNotificationInvoked(string argument)
+    private static void OnNotificationInvoked(NotificationActivation activation)
     {
-        LogNotificationInvoked(logger, argument?.Length ?? 0);
+        LogNotificationInvoked(logger, activation.MessageId is not null);
         OnApp(a => a.Activate(ActivationRequest.FromArguments(ActivationKind.Notification, [], redirected: true)));
     }
 
@@ -261,8 +261,8 @@ public static partial class Program
     [LoggerMessage(Level = LogLevel.Information, Message = "console {Control}: quitting")]
     private static partial void LogConsoleControl(ILogger logger, ConsoleControl control);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "a notification was clicked ({Length} characters of argument)")]
-    private static partial void LogNotificationInvoked(ILogger logger, int length);
+    [LoggerMessage(Level = LogLevel.Debug, Message = "a notification was clicked (for a message: {ForMessage})")]
+    private static partial void LogNotificationInvoked(ILogger logger, bool forMessage);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "exited")]
     private static partial void LogExited(ILogger logger);

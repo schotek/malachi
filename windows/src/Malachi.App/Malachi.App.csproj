@@ -13,6 +13,8 @@ App SDK and .NET travel in the app folder, nothing is installed.
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
     <AssemblyName>MalachiMail</AssemblyName>
+    <!-- What Settings > Startup, Task Manager and the tray list show as the program. -->
+    <AssemblyTitle>Malachi Mail</AssemblyTitle>
     <RootNamespace>Malachi.App</RootNamespace>
     <UseWinUI>true</UseWinUI>
     <Platforms>x64;ARM64</Platforms>

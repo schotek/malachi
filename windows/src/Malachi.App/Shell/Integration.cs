@@ -132,12 +132,9 @@ public sealed class Integration : IDisposable
     private void WireNotifications()
     {
         var hub = state.Notifications;
-        tokens.Add(hub.AddNewMessage(n =>
-        {
-            // GTK order: the desktop notification first, then the list.
-            Platform.PlatformServices.NewMessage(n);
-            Mailbox.HandleNewMessage(n);
-        }));
+        // GTK order: the desktop notification first (PlatformServices subscribed
+        // before this), then the list.
+        tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
         tokens.Add(hub.AddSyncState(Mailbox.HandleSyncState));
         tokens.Add(hub.AddAuthRequired(Mailbox.HandleAuthRequired));
         tokens.Add(hub.AddAccountsChanged(() =>

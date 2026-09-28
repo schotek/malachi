@@ -63,7 +63,7 @@ public static partial class PlatformServices
     private static List<NotificationActivation>? early = [];
     private static DispatcherQueue? dispatcher;
     private static PlatformContext? current;
-    private static NotificationHub.Token? newMessage;
+    private static IDisposable? newMessage;
     private static BackgroundTray? tray;
     private static bool background;
     private static LaunchAtLogin? launchAtLogin;
@@ -201,7 +201,7 @@ public static partial class PlatformServices
         Quietly("the notification-area icon", () => icon?.Dispose());
         var handler = newMessage;
         newMessage = null;
-        Quietly("the notify.newMessage handler", () => handler?.Cancel());
+        Quietly("the notify.newMessage handler", () => handler?.Dispose());
         NotificationService? service;
         lock (Gate)
         {
