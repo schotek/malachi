@@ -55,8 +55,10 @@ const (
 // policy; a partial message with nothing left to omit is marked Whole with
 // 0. A reader that keeps the stored file open for longer than the store
 // waits (Windows refuses to replace an open file) leaves the message as it
-// was: store.ErrBusy, for a later pass. Under pol.NeverStore the skeleton
-// is staged in memory. Nothing about the content is logged.
+// was, its row included: store.ErrBusy when the reader is the store's, for
+// a later pass, and the error of the rename when it is another process's.
+// Under pol.NeverStore the skeleton is staged in memory. Nothing about the
+// content is logged.
 func Strip(ctx context.Context, st *store.Store, m store.Message, pol Policy, now time.Time, log *slog.Logger) (Outcome, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)

@@ -377,74 +377,92 @@ func (s *Store) readerDone(key string, l *rawLock, c RawCodec) {
 	}
 }
 
-// busy marks err, the failure of a rename over or a removal of the
-// message's file in codec c that outlasted fsretry's retries, as ErrBusy
-// when one of the store's readers still has that file open. Windows
-// refuses both while a handle of the file is open, and that reader is the
-// cause (a message.part streaming a large attachment, say): the next
-// attempt, after it is done, goes through. Elsewhere a reader stops
-// neither, and such a failure is a coincidence that the next attempt
+// fileOp runs op, a rename over or a removal of path, the message's file
+// in codec c, through retry (fsretry.Do, or a batch's Do). The caller holds
+// the names lock, so the retries wait for the readers that have the file
+// open while no new one opens it: their count only falls meanwhile. Each
+// attempt counts them as it starts, and a failure that outlasts the
+// retries is ErrBusy when one of them had the file open at the last
+// attempt: Windows refuses both while a handle of the file is open, and
+// that reader is the cause (a message.part streaming a large attachment,
+// say), however soon after the attempt it lets go; the next attempt, once
+// it is done, goes through. Any other failure is returned as it is: one
+// that lasts (a directory without write permission), or a handle the store
+// does not count (another process, a virus scanner). Elsewhere a reader
+// stops neither, and such a failure is a coincidence that the next attempt
 // settles as well.
-func (s *Store) busy(l *rawLock, c RawCodec, err error) error {
-	if err == nil || errors.Is(err, fs.ErrNotExist) {
+func (s *Store) fileOp(l *rawLock, c RawCodec, path string, retry func(func() error) error, op func() error) error {
+	held := 0
+	err := retry(func() error {
+		s.rawMu.Lock()
+		n := l.readers[c]
+		s.rawMu.Unlock()
+		err := s.refused(n)
+		if err == nil {
+			err = op()
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			held = n
+			if s.attemptFailed != nil {
+				s.attemptFailed(path)
+			}
+		}
+		return err
+	})
+	if err == nil || errors.Is(err, fs.ErrNotExist) || held == 0 {
 		return err
 	}
-	s.rawMu.Lock()
-	n := l.readers[c]
-	s.rawMu.Unlock()
-	if n == 0 {
-		return err
-	}
-	return fmt.Errorf("%w (%d readers): %w", ErrBusy, n, err)
+	return fmt.Errorf("%w (%d readers): %w", ErrBusy, held, err)
 }
 
 // renameRaw renames tmp over final, the message's file in codec c, and
 // removeRaw removes path, its file in codec c, as part of b (nil: on its
-// own; a missing file is not an error). The caller holds the names lock, so
-// the retries (fsretry) wait for the readers that have the file open while
-// no new one opens it; a reader that outlasts them makes it ErrBusy.
+// own; a missing file is not an error), both through fileOp: the caller
+// holds the names lock, and a reader that outlasts the retries makes it
+// ErrBusy. A rename that fails leaves final as it was.
 func (s *Store) renameRaw(l *rawLock, c RawCodec, tmp, final string) error {
-	return s.busy(l, c, fsretry.Do(func() error {
-		if err := s.refused(l, c); err != nil {
-			return err
-		}
-		return os.Rename(tmp, final)
-	}))
+	return s.fileOp(l, c, final, fsretry.Do, func() error { return os.Rename(tmp, final) })
 }
 
 func (s *Store) removeRaw(l *rawLock, c RawCodec, path string, b *fsretry.Batch) error {
-	op := func() error {
-		if err := s.refused(l, c); err != nil {
-			return err
-		}
-		return os.Remove(path)
+	retry := fsretry.Do
+	if b != nil {
+		retry = b.Do
 	}
-	var err error
-	if b == nil {
-		err = fsretry.Do(op)
-	} else {
-		err = b.Do(op)
-	}
+	err := s.fileOp(l, c, path, retry, func() error { return os.Remove(path) })
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
-	return s.busy(l, c, err)
+	return err
 }
+
+// errNotReplaced is in the failure of a write that left the message's
+// stored file as it was, because the new file never took its name: the
+// write failed before it renamed the new file into place, or that rename
+// failed, which leaves the file it would have replaced whole. On Windows a
+// reader the store does not count (another process, a virus scanner)
+// causes that as well as one of its own (ErrBusy). CommitMessageRaw undoes
+// its phase A on it, whatever the cause. A write that fails after the
+// rename (the directory's flush) is not one: the new file is in place.
+var errNotReplaced = errors.New("store: the stored message file stays as it was")
+
+// notReplaced wraps the failure err of a write that left the stored file
+// as it was (errNotReplaced), keeping err's text.
+type notReplaced struct{ err error }
+
+func (e notReplaced) Error() string        { return e.err.Error() }
+func (e notReplaced) Unwrap() error        { return e.err }
+func (e notReplaced) Is(target error) bool { return target == errNotReplaced }
 
 // errRefused is the refusal of refused.
 var errRefused = errors.New("store test: the file is open")
 
 // refused is what a test that has the store behave as on Windows
-// (Store.refuseOpen) gets for a rename over or a removal of the message's
-// file in codec c while one of the store's readers has it open, on any
-// system; nil otherwise.
-func (s *Store) refused(l *rawLock, c RawCodec) error {
-	if !s.refuseOpen {
-		return nil
-	}
-	s.rawMu.Lock()
-	defer s.rawMu.Unlock()
-	if l.readers[c] > 0 {
+// (Store.refuseOpen) gets for a rename over or a removal of a message's
+// file while readers of the store have it open, on any system; nil
+// otherwise.
+func (s *Store) refused(readers int) error {
+	if s.refuseOpen && readers > 0 {
 		return errRefused
 	}
 	return nil
@@ -645,15 +663,16 @@ type rawJob struct {
 // written beside the old, checked, and renamed into place, the other
 // variant removed and the accounting updated. A codec change during the
 // write converts the new file at once, since the background conversion
-// may already have passed the message.
+// may already have passed the message. A failure before the new file is
+// in place leaves the stored one as it was (errNotReplaced).
 func (s *Store) writeLocked(ctx context.Context, h *rawHold, j rawJob) (RawInfo, error) {
 	tmp, info, err := s.produceTemp(ctx, h, j)
 	if err != nil {
-		return RawInfo{}, noSpace(err)
+		return RawInfo{}, notReplaced{noSpace(err)}
 	}
 	if err := ctx.Err(); err != nil {
 		os.Remove(tmp)
-		return RawInfo{}, err
+		return RawInfo{}, notReplaced{err}
 	}
 	if j.requireRow {
 		ok, err := s.messageExists(ctx, h.accountID, h.id)
@@ -828,8 +847,8 @@ func fillTemp(f rawFile, codec RawCodec, size, limit int64, produce func(io.Writ
 // goes. keepOther leaves the other variant (the conversion's first phase).
 // A reader choosing a file waits for all of it. A reader that has the old
 // file open holds the rename up on Windows: renameRaw waits for it, and
-// when it outlasts the wait the write fails with ErrBusy and the old file
-// stays as it was.
+// when it outlasts the wait the write fails with ErrBusy. A failed rename,
+// whatever the cause, leaves the old file as it was (errNotReplaced).
 func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, keepOther bool) error {
 	final := filepath.Join(h.dir, rawName(h.id, codec))
 	other := filepath.Join(h.dir, rawName(h.id, codec.other()))
@@ -837,7 +856,7 @@ func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, kee
 	defer h.l.names.Unlock()
 	if err := s.renameRaw(h.l, codec, tmp, final); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("finalise message file: %w", err)
+		return notReplaced{fmt.Errorf("finalise message file: %w", err)}
 	}
 	otherExists := false
 	if !keepOther {

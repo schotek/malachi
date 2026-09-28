@@ -93,10 +93,12 @@ type RawCommit struct {
 //     when the file replaces a stored one that commit is flushed to disk
 //     first (beginDurable): the file's replacement is, and must not
 //     survive a power loss that the row's change does not;
-//  3. the file is replaced (RawTx.Replace); when one of the store's
-//     readers keeps the stored file open longer than the store waits
-//     (ErrBusy, on Windows), the file stays as it was and so, undone, does
-//     phase A's widening;
+//  3. the file is replaced (RawTx.Replace); when that fails before the new
+//     file takes the stored one's name, the stored file stays as it was
+//     and so, undone, does phase A's widening, whatever the cause: on
+//     Windows a reader that keeps the stored file open longer than the
+//     store waits, one of the store's own (ErrBusy) or another process's,
+//     or a new file that could not be written (a full disk, ctx ending);
 //  4. phase B: the row gets the final remote set, the other columns of c
 //     and, with c.Body, the body columns and the conversation link.
 //
@@ -147,12 +149,13 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 	}
 	info, err := tx.Replace(RawWrite{Size: c.Source.Size()}, c.Source)
 	if err != nil {
-		if errors.Is(err, ErrBusy) && widened != nil {
-			// A reader kept the stored file open (Windows) and it stays as
-			// it was, whole where phase A calls parts remote. The row says
-			// what the file holds again, so that the message is still a
-			// candidate of the pass that tries it again, rather than partial
-			// until it is downloaded.
+		if errors.Is(err, errNotReplaced) && widened != nil {
+			// The stored file stays as it was (a reader kept it open on
+			// Windows, counted or not, or the new file could not be
+			// written), whole where phase A calls parts remote. The row
+			// says what the file holds again, so that the message is still
+			// a candidate of the pass that tries it again, rather than
+			// partial until it is downloaded.
 			s.undoPhaseA(ctx, id, *widened)
 		}
 		return 0, err
@@ -244,9 +247,9 @@ type phaseAWidening struct {
 }
 
 // undoPhaseA puts back what phase A widened, for a commit whose file was
-// not replaced after all (ErrBusy: the file stayed as it was). A row whose
-// remote set changed since (MarkPartsRemote) is left as it is, on the safe
-// side, and so is the row when the undo fails.
+// not replaced after all (errNotReplaced: the file stayed as it was). A
+// row whose remote set changed since (MarkPartsRemote) is left as it is,
+// on the safe side, and so is the row when the undo fails.
 func (s *Store) undoPhaseA(ctx context.Context, id string, w phaseAWidening) {
 	_, err := s.db.ExecContext(context.WithoutCancel(ctx), `UPDATE messages SET remote_parts = ?, raw_state = ?, remote_bytes = ?
 		WHERE id = ? AND remote_parts = ? AND raw_state = ?`, w.parts, w.raw, w.bytes, id, w.union, string(RawPartial))

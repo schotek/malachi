@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -196,5 +197,313 @@ func TestCommitBusyUndoesPhaseA(t *testing.T) {
 	}
 	if st, p, _, _, _, _ := rawColumns(t, s, m.ID); st != string(RawPartial) || p != `["2"]` {
 		t.Errorf("row after the commit: %s %s", st, p)
+	}
+}
+
+// lettingGo leaves fsretry a single attempt, and has the reader that
+// releases holds for a message close its file just after an attempt to
+// rename over or remove that file failed: the failure outlasts the
+// retries, and by the time they are over the store counts no reader of
+// the file any more. The store once counted them only then, and took such
+// a failure for another than a reader's. Called after asOnWindows, which
+// puts the waits back.
+func lettingGo(s *Store, releases map[string]func()) {
+	fsretry.Waits = nil
+	s.attemptFailed = func(path string) {
+		if release := releases[strings.TrimSuffix(filepath.Base(path), RawZstSuffix)]; release != nil {
+			release()
+		}
+	}
+}
+
+// logWarnings has s log its warnings into the buffer it returns.
+func logWarnings(s *Store) *bytes.Buffer {
+	var buf bytes.Buffer
+	s.log = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	return &buf
+}
+
+// rawCounts is how many message locks and open readers the store counts.
+func rawCounts(s *Store) (locks, readers int) {
+	s.rawMu.Lock()
+	defer s.rawMu.Unlock()
+	for _, l := range s.rawLocks {
+		readers += l.readers[RawPlain] + l.readers[RawZstd]
+	}
+	return len(s.rawLocks), readers
+}
+
+// A commit whose stored file the reader lets go just after the last
+// attempt of the rename failed is ErrBusy all the same, with nothing
+// warned of, and phase A is undone: the row says what the file holds.
+func TestCommitBusyWhenTheReaderLetsGoAfterTheLastAttempt(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	warned := logWarnings(s)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts")
+	m := seedFetched(t, s, inbox, 1, full)
+	state, parts, remoteBytes, _, _, _ := rawColumns(t, s, m.ID)
+
+	lettingGo(s, map[string]func(){m.ID: openReader(t, s, "acc", m.ID)})
+	_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, []byte("skeleton")),
+		RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("commit: %v", err)
+	}
+	if st, p, rb, _, _, _ := rawColumns(t, s, m.ID); st != state || p != parts || rb != remoteBytes {
+		t.Errorf("row after the refused commit: %s %s %d, want %s %s %d", st, p, rb, state, parts, remoteBytes)
+	}
+	if !bytes.Equal(readRaw(t, s, "acc", m.ID), full) {
+		t.Error("file replaced by a refused commit")
+	}
+	if warned.Len() != 0 {
+		t.Errorf("warned of a reader:\n%s", warned)
+	}
+	if locks, readers := rawCounts(s); locks != 0 || readers != 0 {
+		t.Errorf("%d locks, %d readers left", locks, readers)
+	}
+}
+
+// The conversion's removal of the sources and a deletion, each while
+// readers hold the files to remove and let go just after the attempt
+// failed: the conversion counts the messages busy rather than failed,
+// nothing is warned of, the content stays, and the sweep settles the
+// pairs and removes the deleted messages' files once the readers are done.
+func TestRemovalsBusyWhenTheReaderLetsGoAfterTheLastAttempt(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	warned := logWarnings(s)
+	seedAccount(t, s, "acc")
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	ids, sums := seedRawMessages(t, s, inbox, 4)
+	dir := filepath.Join(s.MessageDir(), "acc")
+	hold := func() map[string]func() {
+		releases := map[string]func(){}
+		for _, id := range ids {
+			releases[id] = openReader(t, s, "acc", id)
+		}
+		return releases
+	}
+
+	lettingGo(s, hold())
+	s.SetRawCodec(RawZstd)
+	if _, res, err := s.ConvertRawBatch(ctx, "", RawZstd, 10); err != nil || res.Busy != len(ids) || res.Failed != 0 || res.Converted != 0 {
+		t.Fatalf("conversion: %+v %v", res, err)
+	}
+	for _, id := range ids {
+		if files, _ := statRaw(dir, id); !files.both() {
+			t.Fatalf("%s: files %+v, want the new one beside the source", id, files)
+		}
+		if sha256.Sum256(readRaw(t, s, "acc", id)) != sums[id] {
+			t.Errorf("%s: content changed", id)
+		}
+	}
+	if res, err := s.SweepMessageFiles(ctx, 0); err != nil || res.Resolved != len(ids) || res.Busy != 0 {
+		t.Errorf("sweep once the readers are done: %+v %v", res, err)
+	}
+
+	lettingGo(s, hold())
+	uids := []uint32{1000, 1001, 1002, 1003}
+	if err := s.DeleteMessagesByUID(ctx, inbox.ID, uids); err != nil {
+		t.Fatal(err)
+	}
+	if left := dirNames(t, dir); len(left) != len(ids) {
+		t.Errorf("left after the deletion: %v, want the held files", left)
+	}
+	if res, err := s.SweepMessageFiles(ctx, 0); err != nil || res.Orphans != len(ids) {
+		t.Errorf("sweep after the deletion: %+v %v", res, err)
+	}
+	if left := dirNames(t, dir); len(left) != 0 {
+		t.Errorf("left after the sweep: %v", left)
+	}
+	if warned.Len() != 0 {
+		t.Errorf("warned of readers:\n%s", warned)
+	}
+	if locks, readers := rawCounts(s); locks != 0 || readers != 0 {
+		t.Errorf("%d locks, %d readers left", locks, readers)
+	}
+}
+
+// A commit whose rename fails for another cause than a reader (here a
+// directory where the new file is to go, which no system renames a file
+// over) is no ErrBusy, and the row says what the file holds all the same:
+// the stored file stays whole, so phase A is undone. Once the way is
+// clear the commit goes through.
+func TestCommitUndoneWhenTheRenameFails(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts")
+	m := seedFetched(t, s, inbox, 1, full)
+	state, parts, remoteBytes, _, _, _ := rawColumns(t, s, m.ID)
+	s.SetRawCodec(RawZstd)
+	blocker := s.MessageRawPath("acc", m.ID) + RawZstSuffix
+	if err := os.MkdirAll(blocker, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(blocker, "x"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	commit := func() error {
+		_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, []byte("skeleton")),
+			RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+		return err
+	}
+
+	err := commit()
+	if err == nil || errors.Is(err, ErrBusy) || !errors.Is(err, errNotReplaced) {
+		t.Fatalf("commit over a directory: %v", err)
+	}
+	if st, p, rb, _, _, _ := rawColumns(t, s, m.ID); st != state || p != parts || rb != remoteBytes {
+		t.Errorf("row after the failed commit: %s %s %d, want %s %s %d", st, p, rb, state, parts, remoteBytes)
+	}
+	if got, err := os.ReadFile(s.MessageRawPath("acc", m.ID)); err != nil || !bytes.Equal(got, full) {
+		t.Errorf("stored file after the failed commit: %q %v", got, err)
+	}
+	for _, name := range dirNames(t, filepath.Join(s.MessageDir(), "acc")) {
+		if strings.HasSuffix(name, tmpSuffix) {
+			t.Errorf("left behind: %s", name)
+		}
+	}
+	if err := os.RemoveAll(blocker); err != nil {
+		t.Fatal(err)
+	}
+	if err := commit(); err != nil {
+		t.Fatalf("commit once the way is clear: %v", err)
+	}
+	if st, p, _, _, _, _ := rawColumns(t, s, m.ID); st != string(RawPartial) || p != `["2"]` {
+		t.Errorf("row after the commit: %s %s", st, p)
+	}
+	if got := readRaw(t, s, "acc", m.ID); string(got) != "skeleton" {
+		t.Errorf("file after the commit: %q", got)
+	}
+}
+
+// A reader the store does not count (another process, a virus scanner)
+// holds the stored file through a commit: Windows refuses the rename, and
+// the commit fails without calling it busy, the row and the file as they
+// were; elsewhere the commit goes through. Either way the row says what
+// the file holds.
+func TestCommitWithAReaderTheStoreDoesNotCount(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts")
+	m := seedFetched(t, s, inbox, 1, full)
+	state, parts, remoteBytes, _, _, _ := rawColumns(t, s, m.ID)
+
+	f, err := os.Open(s.MessageRawPath("acc", m.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, []byte("skeleton")),
+		RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+	f.Close()
+	st, p, rb, _, _, _ := rawColumns(t, s, m.ID)
+	got := readRaw(t, s, "acc", m.ID)
+	switch {
+	case err == nil:
+		if st != string(RawPartial) || p != `["2"]` || string(got) != "skeleton" {
+			t.Errorf("committed: row %s %s, file %q", st, p, got)
+		}
+	case errors.Is(err, ErrBusy), !errors.Is(err, errNotReplaced):
+		t.Fatalf("commit with a reader the store does not count: %v", err)
+	default:
+		if st != state || p != parts || rb != remoteBytes || !bytes.Equal(got, full) {
+			t.Errorf("refused: row %s %s %d (was %s %s %d), file %q", st, p, rb, state, parts, remoteBytes, got)
+		}
+	}
+}
+
+// A reduction and a download of one message, each tried while a reader
+// holds the stored file past the retries, while one lets go just after
+// the last attempt, while a reader the store does not count holds it (on
+// Windows), and with no reader: after every attempt the row says what the
+// file holds (the whole message under a full row, the skeleton under a
+// partial one), and a refusal changes neither.
+func TestDownloadAndReductionKeepRowAndFileInStep(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	releases := map[string]func(){}
+	lettingGo(s, releases)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts" + strings.Repeat("y", 4000))
+	skel := []byte("Subject: full\r\n\r\nskeleton")
+	m := seedFetched(t, s, inbox, 1, full)
+	reduce := func() error {
+		_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, skel),
+			RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+		return err
+	}
+	download := func() error {
+		_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, full), Hydrated: true,
+			Expect: RawExpect{RawState: RawPartial}})
+		return err
+	}
+	inStep := func(step string, want RawState) {
+		t.Helper()
+		state, parts, _, _, _, _ := rawColumns(t, s, m.ID)
+		got := readRaw(t, s, "acc", m.ID)
+		switch {
+		case RawState(state) != want:
+			t.Errorf("%s: row %s, want %s", step, state, want)
+		case want == RawFull && (parts != "[]" || !bytes.Equal(got, full)):
+			t.Errorf("%s: full row %s over %d bytes", step, parts, len(got))
+		case want == RawPartial && (parts != `["2"]` || !bytes.Equal(got, skel)):
+			t.Errorf("%s: partial row %s over %d bytes", step, parts, len(got))
+		}
+	}
+
+	for _, op := range []struct {
+		name          string
+		run           func() error
+		before, after RawState
+	}{
+		{"reduction", reduce, RawFull, RawPartial},
+		{"download", download, RawPartial, RawFull},
+	} {
+		release := openReader(t, s, "acc", m.ID)
+		if err := op.run(); !errors.Is(err, ErrBusy) {
+			t.Fatalf("%s while a reader holds the file: %v", op.name, err)
+		}
+		release()
+		inStep(op.name+" held", op.before)
+
+		releases[m.ID] = openReader(t, s, "acc", m.ID)
+		if err := op.run(); !errors.Is(err, ErrBusy) {
+			t.Fatalf("%s while a reader lets go after the attempt: %v", op.name, err)
+		}
+		delete(releases, m.ID)
+		inStep(op.name+" let go", op.before)
+
+		f, err := os.Open(s.MessageRawPath("acc", m.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = op.run()
+		f.Close()
+		if err != nil {
+			if errors.Is(err, ErrBusy) || !errors.Is(err, errNotReplaced) {
+				t.Fatalf("%s while a reader the store does not count holds the file: %v", op.name, err)
+			}
+			inStep(op.name+" uncounted", op.before)
+			if err := op.run(); err != nil {
+				t.Fatalf("%s: %v", op.name, err)
+			}
+		}
+		inStep(op.name, op.after)
+	}
+	if locks, readers := rawCounts(s); locks != 0 || readers != 0 {
+		t.Errorf("%d locks, %d readers left", locks, readers)
 	}
 }
