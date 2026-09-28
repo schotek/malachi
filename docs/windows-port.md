@@ -711,13 +711,51 @@ them anyway), so *The link is shown as “%s” but leads to %s.* names the
 host the browser goes to first, where GTK names the href as written. A
 link the launcher refuses (the backslash and empty-authority shapes) is
 decided as masked and then not offered, as there is nothing it could
-open. `LinkDecisionTests`, `LinkOpenerTests` and, over the real launcher,
-`LauncherTests` hold the audit's shapes; the network canary (§12) clicks
-each in the real viewer and checks that it reaches the reader with its
-attribute as written and resolves to the host after the `@` (the
-backslash shape to the bank: Chromium ends the authority there), the
-input the decision is tested with. GTK (`htmlview.Masked`) and
-macOS (`Links.swift`) keep the bypass until they get the same rule or the
+open; the click shows GTK's toast for a link that could not be opened
+(*The link could not be opened: %s*, with macOS's detail `invalid URL`)
+instead of doing nothing visible, and a refused link under a plain text
+never reaches the launcher either. `LinkDecisionTests`, `LinkOpenerTests`
+and, over the real launcher, `LauncherTests` hold the audit's shapes; the
+network canary (§12) clicks each in the real viewer and checks that it
+reaches the reader with its attribute as written and resolves to the host
+after the `@` (the backslash shape to the bank: Chromium ends the
+authority there), the input the decision is tested with.
+
+An adversarial review of that fix found two more ways past the question.
+One href listed under two texts: `For(string)` judged the first listed
+link with the href, so an empty anchor before the one that wears the
+bank's address, both on evil.example, opened it. Both paths now share one
+rule (`LinkDecision.Judge`): every listed link the activation matches is
+judged, the first whose text misleads is quoted, and the link opens only
+when none does; the canary clicks the second of such a pair and checks
+that its report carries exactly the first one's attribute. And the text
+side failed open: GTK's `hostOfText` reads no host, so the link opens,
+for texts a reader takes for the bank's address (a space the daemon puts
+around an inline element, `https://www.moje banka .example/login`; a soft
+hyphen, U+200B, U+2060 or U+FEFF in the host; a trailing dot; a Cyrillic
+homoglyph; an RLO, NBSP or `。` before the path; a backslash, fullwidth
+solidus or `%2F` as the separator; `//www.mojebanka.example/login`), and
+reads evil.example for `https://www.mojebanka.example@evil.example/login`.
+`Links.HostsOfText` reads the text as it is seen: format characters (Cf:
+the soft hyphen, the zero-width characters, the bidi controls) and the
+other default-ignorable code points go, the rest is read in NFKC with
+`。` as a dot, hosts are compared as the launcher hands them to the
+browser (IDNA, punycode, lower case) and without a trailing dot; a text
+that reads as an address (a scheme with its colon and a slash, http and
+https without one, two slashes, `www.`) whose host cannot be read (a
+space inside it, userinfo, an escape, a port that is no number, no host
+name) names a host no link leads to, so it asks, with the text quoted as
+the mail wrote it; and every address in the text counts, one after words
+(`Log in at https://…`) or after a hidden first one included. `SameSite`
+no longer takes a single-label host for the site of the hosts under it
+(`www.mojebanka.cz` over `https://cz/` asks); a multi-label public suffix
+(`co.uk`) is still a parent site, as there is no public-suffix list.
+Plain words and empty texts name no host and open as before; `mailto:`
+stays exempt. `HtmlLinksTests` holds every shape and the ordinary texts
+that must not ask (a bare host over its own https URL, a path, upper
+case, an IDN text over its punycode href, a subdomain href). GTK
+(`htmlview.Masked`, `linkTextFor`) and macOS (`Links.swift`,
+`linkDecision`) keep these bypasses until they get the same rules or the
 backend's canonical hrefs.
 
 ### 6.5 Editor (`ComposeWebView`)
@@ -2013,7 +2051,8 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   with its own loopback listener in the test process, DNS-only host names,
   UNC paths), its active twin (hover, press, a link with `ping`, a form,
   `target=_blank`, a middle click, `mailto:`, `download`, a UNC link, the
-  security audit's masked links, a meta refresh; pointer input through the
+  security audit's masked links, an empty anchor before one that wears the
+  bank's address on the same href, a meta refresh; pointer input through the
   DevTools protocol), the
   previewer's HTML, SVG, PDF (its link clicked, its open action), picture
   and text, and every HTML part of `backend/testdata/mime` **raw**, without
@@ -2355,7 +2394,10 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
    or that workflow.
 
 Proposed separately, not in this branch: canonical hrefs in the sanitiser
-plus GTK confirming unlisted links (the likely masked-link bypass),
+plus GTK confirming unlisted links (the likely masked-link bypass), the
+Windows masked-link rules in GTK and macOS (every listed link with the
+clicked href judged, the text read as it is seen; §6.4), a link text in
+the sanitiser that does not put a space between inline elements,
 bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
 a runtime D-Bus opt-out, the same display-text rule in GTK and macOS
