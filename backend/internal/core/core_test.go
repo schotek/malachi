@@ -61,7 +61,7 @@ func TestConfigSetOverridesAndPersists(t *testing.T) {
 	// The result is the effective set: the fields left out at their
 	// defaults.
 	want := in
-	want.CompressStore, want.AttachmentOfflineDays = api.Ptr(false), api.Ptr(0)
+	want.CompressStore, want.AttachmentOfflineDays, want.NeverStoreAttachments = api.Ptr(false), api.Ptr(0), api.Ptr(false)
 	if !samePreferences(res.Preferences, want) {
 		t.Fatalf("set echoed %s", prefString(res.Preferences))
 	}

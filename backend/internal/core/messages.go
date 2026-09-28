@@ -132,7 +132,8 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 // (CLAUDE.md rule 2); nothing here reads stored HTML, because none is
 // stored. An HTML part that cannot be shown safely is withheld, not an
 // error: the text is still there and the caller learns why from
-// htmlWithheld.
+// htmlWithheld. The pictures the HTML shows that are on the mail server
+// only are counted (remotePictures), never fetched.
 func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
@@ -173,10 +174,11 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 		SanitizerVersion: sanitize.Version,
 	}
 	if state == store.BodyFetched && hasHTML {
-		s.b.renderHTML(ctx, a.ID, m.ID, policy, res)
+		s.b.renderHTML(ctx, m, policy, res)
 	}
 	s.b.log.Debug("message body", "id", m.ID, "bodyState", state, "hasHtml", hasHTML,
-		"remoteContent", policy, "htmlWithheld", res.HTMLWithheld, "blocked", res.Blocked)
+		"remoteContent", policy, "htmlWithheld", res.HTMLWithheld, "blocked", res.Blocked,
+		"remotePictures", res.RemotePictures)
 	return res, nil
 }
 

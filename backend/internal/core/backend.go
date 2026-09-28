@@ -135,11 +135,19 @@ type Backend struct {
 
 	// dl is the state of message.download (download.go).
 	dl downloadState
+	// mem holds the messages message.download keeps in memory under
+	// Preferences.NeverStoreAttachments (memcache.go).
+	mem memCache
 
 	// rawKick wakes the raw maintenance loop (kickRaw; capacity 1), and
 	// rawNoSpace is set while the loop waits after a full disk.
 	rawKick    chan struct{}
 	rawNoSpace atomic.Bool
+	// rawRestart names the steps the loop is to run from the start
+	// although they are done for their key (restartRawStep), under
+	// rawRestartMu.
+	rawRestartMu sync.Mutex
+	rawRestart   map[string]bool
 	// runtimeDefaults are the preference defaults of this run
 	// (SetRuntimeDefaults); nil until set.
 	runtimeDefaults atomic.Pointer[RuntimeDefaults]
@@ -204,11 +212,14 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() imap.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days, AttachmentOfflineDays: b.attachmentOfflineDays()}
+			pol := b.attachmentPolicy()
+			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days,
+				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
+		Stored:     b.storedUnder,
 	})
 	graphSync := graph.NewSupervisor(graph.SupervisorDeps{
 		Store:      st,
@@ -217,11 +228,14 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() graph.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days, AttachmentOfflineDays: b.attachmentOfflineDays()}
+			pol := b.attachmentPolicy()
+			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days,
+				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
+		Stored:     b.storedUnder,
 	})
 	b.Supervisor = newKindSupervisor(imapSync, graphSync)
 	// Through b.Supervisor, not the values above: tests swap it.

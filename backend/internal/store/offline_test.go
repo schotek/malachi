@@ -197,7 +197,7 @@ func TestCommitMessageRawRefusals(t *testing.T) {
 		"no source":       {m.ID, RawCommit{}, nil},
 		"parts, no bytes": {m.ID, RawCommit{Source: stage(t, s, []byte("x")), RemoteParts: []string{"2"}}, nil},
 		"bytes, no parts": {m.ID, RawCommit{Source: stage(t, s, []byte("x")), RemoteBytes: 5}, nil},
-		"strippable":      {m.ID, RawCommit{Source: stage(t, s, []byte("x")), StrippableBytes: -2}, nil},
+		"strippable":      {m.ID, RawCommit{Source: stage(t, s, []byte("x")), StrippableBytes: StrippableNever - 1}, nil},
 		"unknown":         {"m_nope", RawCommit{Source: stage(t, s, []byte("x"))}, ErrNotFound},
 		"outbox":          {out.ID, RawCommit{Source: stage(t, s, []byte("x"))}, ErrOutbox},
 		"body state":      {m.ID, RawCommit{Source: stage(t, s, []byte("x")), Expect: RawExpect{BodyState: BodyNone}}, ErrConflict},
@@ -611,8 +611,8 @@ func TestClassifySmall(t *testing.T) {
 	if err := s.SetStrippableBytes(ctx, "m_nope", 0); !errors.Is(err, ErrNotFound) {
 		t.Errorf("unknown: %v", err)
 	}
-	if err := s.SetStrippableBytes(ctx, small, -2); err == nil {
-		t.Error("-2 accepted")
+	if err := s.SetStrippableBytes(ctx, small, StrippableNever-1); err == nil {
+		t.Error("-3 accepted")
 	}
 }
 

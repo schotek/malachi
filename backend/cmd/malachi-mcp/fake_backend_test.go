@@ -62,6 +62,8 @@ type fakeBackend struct {
 	downloadCalls     []api.MessageDownloadParams
 	order             []string        // "get", "download" and "part" as they were called
 	reduced           map[string]bool // messages whose parts answer partNotDownloaded until a download
+	held              map[string]bool // messages held in memory (neverStoreAttachments): remote parts are served
+	holdOnDownload    bool            // a download holds the message, its parts staying remote
 	flagCalls         []api.MessageFlagParams
 	moveCalls         []api.MessageMoveParams
 	deleteCalls       []api.MessageDeleteParams
@@ -205,7 +207,9 @@ func (s fakeMessages) Get(_ context.Context, p api.MessageGetParams) (*api.Messa
 }
 
 // Download makes the message whole as the daemon does: no attachment is
-// remote afterwards, and the parts are served.
+// remote afterwards, and the parts are served; with holdOnDownload it is
+// held in memory instead, as under neverStoreAttachments, its parts
+// still remote and served.
 func (s fakeMessages) Download(_ context.Context, p api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
 	s.f.record(func() {
 		s.f.downloadCalls = append(s.f.downloadCalls, p)
@@ -220,12 +224,16 @@ func (s fakeMessages) Download(_ context.Context, p api.MessageDownloadParams) (
 	if !ok {
 		return nil, api.NewError(api.CodeMessageNotFound, "message %s not found", p.MessageID)
 	}
+	delete(s.f.reduced, string(p.MessageID))
+	if s.f.holdOnDownload {
+		s.f.held[string(p.MessageID)] = true
+		return &api.MessageDownloadResult{Message: m}, nil
+	}
 	m.Attachments = slices.Clone(m.Attachments)
 	for i := range m.Attachments {
 		m.Attachments[i].Remote = false
 	}
 	s.f.messages[p.MessageID] = m
-	delete(s.f.reduced, string(p.MessageID))
 	return &api.MessageDownloadResult{Message: m}, nil
 }
 
@@ -254,6 +262,7 @@ func (s fakeMessages) Part(_ context.Context, p api.MessagePartParams) (*api.Mes
 	for _, a := range s.f.messages[p.MessageID].Attachments {
 		remote = remote || (a.PartID == p.PartID && a.Remote)
 	}
+	remote = remote && !s.f.held[string(p.MessageID)]
 	s.f.mu.Unlock()
 	if remote {
 		return nil, api.NewError(api.CodePartNotDownloaded, "part %s is on the mail server only", p.PartID)
@@ -611,6 +620,7 @@ func newFixture() *fakeBackend {
 		quoteForm: map[api.MessageID]api.QuoteForm{},
 		attMeta:   map[string]api.DraftAttachment{},
 		reduced:   map[string]bool{},
+		held:      map[string]bool{},
 	}
 	return f
 }

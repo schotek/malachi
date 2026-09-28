@@ -49,9 +49,9 @@ func base64Lines(data []byte) string {
 // report is a message with every kind of part the rule tells apart:
 //
 //	1.1 the HTML body, showing 1.2 through cid:
-//	1.2 a 150 KiB picture the HTML shows (kept)
+//	1.2 a 150 KiB picture the HTML shows (kept; under NeverStore a candidate)
 //	2   a 200 KiB PDF (a candidate)
-//	3   a small text file (kept)
+//	3   a small text file (kept; under NeverStore a candidate)
 //	4   a 120 KiB picture with an Outlook-style Content-ID nothing shows (a candidate)
 type report struct {
 	raw                     []byte
@@ -59,8 +59,16 @@ type report struct {
 }
 
 func newReport(messageID string, pdfSize int) report {
+	return newReportLogo(messageID, pdfSize, 150<<10)
+}
+
+// smallLogo is the size of a picture the HTML shows that NeverStore keeps.
+const smallLogo = 20 << 10
+
+// newReportLogo is newReport with a picture 1.2 of logoSize bytes.
+func newReportLogo(messageID string, pdfSize, logoSize int) report {
 	r := report{
-		logo:  payload(1, 150<<10),
+		logo:  payload(1, logoSize),
 		pdf:   payload(2, pdfSize),
 		small: []byte("a small text attachment"),
 		stray: payload(4, 120<<10),
@@ -334,7 +342,7 @@ func TestStoreKeepsWhole(t *testing.T) {
 }
 
 // A message whose split is doubtful (here: no final boundary) is stored
-// whole and never looked at again; one without candidates (signed) too.
+// whole and never looked at again, under any policy; a signed one too.
 func TestStoreFallsBackWhole(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
@@ -354,7 +362,7 @@ func TestStoreFallsBackWhole(t *testing.T) {
 			t.Fatalf("message %d: %+v %v", i, res, err)
 		}
 		got := f.get(t, m.ID)
-		if got.RawState != store.RawFull || got.StrippableBytes != 0 || got.BodyState != store.BodyFetched || !bytes.Equal(f.raw(t, m.ID), raw) {
+		if got.RawState != store.RawFull || got.StrippableBytes != store.StrippableNever || got.BodyState != store.BodyFetched || !bytes.Equal(f.raw(t, m.ID), raw) {
 			t.Fatalf("message %d: row %+v", i, got)
 		}
 	}
@@ -382,7 +390,7 @@ func TestStoreErrors(t *testing.T) {
 	if _, err := Store(ctx, f.st, f.request(m, junk, Policy{}), nil); !errors.Is(err, ErrUnparsable) {
 		t.Fatalf("empty body: %v", err)
 	}
-	if got := f.get(t, m.ID); got.StrippableBytes != 0 || got.BodyState != store.BodyNone {
+	if got := f.get(t, m.ID); got.StrippableBytes != store.StrippableNever || got.BodyState != store.BodyNone {
 		t.Errorf("unparsable row %+v", got)
 	}
 

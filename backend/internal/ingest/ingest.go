@@ -14,6 +14,7 @@ import (
 
 	"github.com/schotek/malachi/backend/internal/mime"
 	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 var (
@@ -37,12 +38,18 @@ type Request struct {
 	Body io.Reader
 	// Limit caps the message in bytes (<= 0 or more than MaxMessageBytes:
 	// MaxMessageBytes); a larger one is ErrTooBig.
-	Limit  int64
+	Limit int64
+	// Size is the length the server announced for Body (an IMAP literal),
+	// <= 0 when it announced none. A message received into memory
+	// (Policy.NeverStore, Hold) gets room for it up front, within Limit;
+	// nothing else relies on it.
+	Size   int64
 	Policy Policy
 	// Now is the moment the policy is applied at; zero = time.Now().
 	Now time.Time
 	// OnDemand is a download the user asked for (message.download): the
-	// message is stored whole and the grace of HydratedKeep starts.
+	// message is stored whole and the grace of HydratedKeep starts, unless
+	// Policy.NeverStore leaves its attachments on the server all the same.
 	OnDemand bool
 	// Expect is the state the caller read the message's row in; a row
 	// that changed meanwhile fails the commit with store.ErrConflict (a
@@ -66,6 +73,12 @@ type Result struct {
 	// decoded size; empty when the message is stored whole.
 	RemoteParts []string
 	RemoteBytes int64
+	// Whole is the message as downloaded when it was received into memory
+	// (Policy.NeverStore), for a caller that keeps it there (shared with
+	// nothing else; never to be changed), and Attachments the attachment
+	// list of its parse; both nil otherwise, and after an error.
+	Whole       []byte
+	Attachments []api.Attachment
 }
 
 // Store receives one message and commits it: the bytes are staged, parsed,
@@ -74,9 +87,12 @@ type Result struct {
 // the whole message is stored. The row gets the parse of the whole message
 // whatever the file holds (attachments_json always describes every part)
 // and the size downloaded; st.CommitMessageRaw keeps the row and the file
-// in step. A message whose reduction is refused as unsafe is marked as
-// never to be reduced (strippable 0); one whose reduction failed on the way
-// (the disk, say) keeps its candidates for the background pass.
+// in step. A message whose reduction is refused as unsafe, or that cannot
+// be parsed, is marked as never to be reduced (store.StrippableNever); one
+// whose reduction failed on the way (the disk, say) keeps its candidates
+// for the background pass. Under Policy.NeverStore the message and its
+// skeleton are staged in memory (store.StageMemory): nothing but the file
+// committed reaches the disk, and Result.Whole hands the message over.
 //
 // Errors: ErrTooBig, ErrUnparsable, ErrMismatch, store.ErrConflict and
 // store.ErrNotFound (the row changed or went meanwhile), store.ErrNoSpace,
@@ -94,7 +110,7 @@ func Store(ctx context.Context, st *store.Store, req Request, log *slog.Logger) 
 	if now.IsZero() {
 		now = time.Now()
 	}
-	full, err := st.StageRaw(ctx, limit)
+	full, err := stage(ctx, st, req.Policy, limit, req.Size)
 	if err != nil {
 		return Result{}, fmt.Errorf("ingest: %w", err)
 	}
@@ -117,7 +133,7 @@ func Store(ctx context.Context, st *store.Store, req Request, log *slog.Logger) 
 		// As received, the way the syncers always kept such a body: there
 		// is nothing to decide about and nothing to verify.
 		if _, err := st.CommitMessageRaw(ctx, req.AccountID, req.MessageID, store.RawCommit{
-			Source: full, StrippableBytes: 0, Expect: req.Expect,
+			Source: full, StrippableBytes: store.StrippableNever, Expect: req.Expect,
 		}); err != nil {
 			return res, fmt.Errorf("ingest: %w", err)
 		}
@@ -133,38 +149,102 @@ func Store(ctx context.Context, st *store.Store, req Request, log *slog.Logger) 
 	plan := Decide(parsed, req.Target, req.Policy, now, req.OnDemand)
 	commit := store.RawCommit{
 		Source:          full,
-		StrippableBytes: plan.CandidateBytes,
+		StrippableBytes: plan.Strippable(),
 		Body:            bodyUpdate(parsed, n),
-		Hydrated:        req.OnDemand,
 		Expect:          req.Expect,
 	}
 	if len(plan.Omit) > 0 {
-		skel, omitted, err := reduce(ctx, st, full.Reader(), parsed, plan.Omit, limit)
+		skel, omitted, err := reduce(ctx, st, full.Reader(), parsed, plan.Omit, limit, req.Policy)
 		switch {
 		case err == nil:
 			defer skel.Remove()
 			commit.Source, commit.RemoteParts, commit.RemoteBytes = skel, omitted, sizeOf(parsed, omitted)
+			commit.StrippableBytes = plan.ReducedStrippable(req.Policy)
 		case errors.Is(err, mime.ErrNotReducible):
 			log.Info("message stored whole: its parts cannot be left on the server safely", "message", req.MessageID)
-			commit.StrippableBytes = 0
+			commit.StrippableBytes = store.StrippableNever
 		default:
 			log.Warn("message stored whole: reducing it failed", "message", req.MessageID, "err", err)
 		}
 	}
+	// The grace of HydratedKeep is for a message a download made whole.
+	commit.Hydrated = req.OnDemand && len(commit.RemoteParts) == 0
 	if _, err := st.CommitMessageRaw(ctx, req.AccountID, req.MessageID, commit); err != nil {
 		return res, fmt.Errorf("ingest: %w", err)
 	}
 	res.RemoteParts, res.RemoteBytes = commit.RemoteParts, commit.RemoteBytes
+	if whole := full.Bytes(); whole != nil {
+		res.Whole, res.Attachments = whole, parsed.Attachments
+	}
 	return res, nil
 }
 
+// stage makes the staged message a download is received into: on disk,
+// or, under Policy.NeverStore, in memory, with room for hint bytes (the
+// size announced, <= 0 unknown).
+func stage(ctx context.Context, st *store.Store, pol Policy, limit, hint int64) (*store.Staged, error) {
+	if pol.NeverStore {
+		return st.StageMemory(ctx, limit, hint), nil
+	}
+	return st.StageRaw(ctx, limit)
+}
+
+// Held is a message received into memory by Hold: the bytes as downloaded
+// and the attachment list of their parse.
+type Held struct {
+	Raw         []byte
+	Attachments []api.Attachment
+}
+
+// Hold receives a stored message downloaded again into memory and checks
+// that it is the stored one, as Store checks a download (req.Verify, which
+// Hold requires, and req.Strict), but stores nothing: message.download of a
+// message whose body is fetched, under Policy.NeverStore, where the whole
+// message is kept in the daemon's memory only. req.Target, Policy, Now,
+// OnDemand and Expect are not used.
+//
+// Errors: ErrTooBig, ErrUnparsable, ErrMismatch, and the reader's own error
+// when the download breaks off. Nothing about the content is logged.
+func Hold(ctx context.Context, st *store.Store, req Request, log *slog.Logger) (Held, error) {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+	if req.Verify == nil {
+		return Held{}, errors.New("ingest: hold: nothing to verify the message against")
+	}
+	limit := req.Limit
+	if limit <= 0 || limit > MaxMessageBytes {
+		limit = MaxMessageBytes
+	}
+	buf := st.StageMemory(ctx, limit, req.Size)
+	defer buf.Remove()
+	_, err := buf.ReadFrom(req.Body)
+	switch {
+	case errors.Is(err, store.ErrTooBig):
+		return Held{}, ErrTooBig
+	case err != nil:
+		return Held{}, fmt.Errorf("ingest: receive message: %w", err)
+	}
+	parsed, err := mime.Parse(buf.Reader(), mime.DefaultLimits())
+	if err != nil {
+		return Held{}, ErrUnparsable
+	}
+	again := req.Verify.BodyState == store.BodyFetched
+	if err := verify(req.Verify, parsed, req.Strict && again); err != nil {
+		log.Warn("downloaded message does not match the stored one", "message", req.MessageID, "err", err)
+		return Held{}, err
+	}
+	return Held{Raw: buf.Bytes(), Attachments: parsed.Attachments}, nil
+}
+
 // reduce writes the skeleton of the message src reads, without the parts in
-// omit, into a new staged file and checks that it shows what orig, the
-// parse of src, shows. An error wrapping mime.ErrNotReducible means the
-// message must stay whole; any other is a failure on the way (reading,
-// staging). The caller removes the staged skeleton.
-func reduce(ctx context.Context, st *store.Store, src io.Reader, orig *mime.Parsed, omit map[string]bool, limit int64) (*store.Staged, []string, error) {
-	skel, err := st.StageRaw(ctx, limit)
+// omit, into a new staged file (in memory under pol.NeverStore) and checks
+// that it shows what orig, the parse of src, shows. An error wrapping
+// mime.ErrNotReducible means the message must stay whole; any other is a
+// failure on the way (reading, staging). The caller removes the staged
+// skeleton.
+func reduce(ctx context.Context, st *store.Store, src io.Reader, orig *mime.Parsed, omit map[string]bool, limit int64, pol Policy) (*store.Staged, []string, error) {
+	skel, err := stage(ctx, st, pol, limit, 0)
 	if err != nil {
 		return nil, nil, err
 	}

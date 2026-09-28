@@ -84,6 +84,37 @@ func (b *Backend) kickRaw() {
 	}
 }
 
+// restartRawStep makes the loop run a step from the start again, although
+// it finished for its current key: work turned up that the key does not
+// tell (a message stored under a policy that no longer holds). The
+// progress is cleared at once, so that the restart outlives the daemon,
+// and once more by the loop before it next reads it (takeRawRestart), so
+// that a batch running meanwhile cannot store its own progress over it.
+func (b *Backend) restartRawStep(ctx context.Context, name string) {
+	b.rawRestartMu.Lock()
+	if b.rawRestart == nil {
+		b.rawRestart = map[string]bool{}
+	}
+	b.rawRestart[name] = true
+	b.rawRestartMu.Unlock()
+	if err := b.store.SetMeta(ctx, rawStepMetaPrefix+name, ""); err != nil {
+		b.log.Warn("restart a raw maintenance step", "step", name, "err", err)
+	}
+	b.kickRaw()
+}
+
+// takeRawRestart reports whether a restart of the step was asked for
+// since the loop last looked (restartRawStep), and forgets it.
+func (b *Backend) takeRawRestart(name string) bool {
+	b.rawRestartMu.Lock()
+	defer b.rawRestartMu.Unlock()
+	if !b.rawRestart[name] {
+		return false
+	}
+	delete(b.rawRestart, name)
+	return true
+}
+
 // rawStepState reads a step's progress towards key: the cursor to go on
 // from ("" = from the start), or done.
 func (b *Backend) rawStepState(ctx context.Context, s RawStep, key string) (cursor string, done bool, err error) {
@@ -186,6 +217,9 @@ func (l *rawLoop) runStep(ctx context.Context, s RawStep) (r roundResult, again 
 		}
 		if l.sweepDue() {
 			return roundAgain, true
+		}
+		if l.b.takeRawRestart(name) {
+			l.save(ctx, s, "")
 		}
 		key, err := s.Key(ctx, time.Now())
 		if err != nil {

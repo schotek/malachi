@@ -4,6 +4,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -20,16 +21,22 @@ import (
 // committed (RawTx.Replace, CommitMessageRaw). A staged file is private
 // to its creator; the daemon removes whatever is left there when it opens
 // the store (a staged file never outlives its process) and the sweep
-// removes stale ones.
+// removes stale ones. A message that must not reach the disk whole
+// (Preferences.NeverStoreAttachments) is staged in memory instead
+// (StageMemory): the same Staged, whose commit writes the message's own
+// file from memory.
 
 // Staged is a message received into the staging area: it takes the bytes
 // (Write, ReadFrom) up to its limit, reads them back from the start as
 // often as needed (Reader), and is removed by Remove, which is always to
 // be called. Committing a plain one renames it into the message's place,
-// after which it only closes. It is not safe for concurrent use.
+// after which it only closes; one staged in memory is copied. It is not
+// safe for concurrent use.
 type Staged struct {
 	ctx      context.Context
-	f        rawFile
+	f        rawFile // nil when staged in memory
+	mem      []byte  // the bytes when staged in memory
+	inMemory bool
 	path     string
 	limit    int64
 	n        int64
@@ -64,6 +71,24 @@ func (s *Store) StageRaw(ctx context.Context, limit int64) (*Staged, error) {
 	}
 }
 
+// StageMemory is StageRaw for a message that must not be written to disk
+// whole (Preferences.NeverStoreAttachments, internal/ingest): the bytes
+// stay in memory, at most limit of them (<= 0 or over MaxRawBytes:
+// MaxRawBytes), and nothing is created; only a commit writes a file, the
+// message's own, from them. hint is the size the sender announced, if any
+// (<= 0: unknown): room for it, within limit, is taken up front, so that
+// the bytes are not copied as they grow. ctx bounds ReadFrom.
+func (s *Store) StageMemory(ctx context.Context, limit, hint int64) *Staged {
+	if limit <= 0 || limit > MaxRawBytes {
+		limit = MaxRawBytes
+	}
+	st := &Staged{ctx: ctx, limit: limit, inMemory: true}
+	if hint > 0 {
+		st.mem = make([]byte, 0, min(hint, limit))
+	}
+	return st
+}
+
 // Write appends p. A write past the limit fails with ErrTooBig and stores
 // nothing of p; like a failure of the file, it sticks, so a staged message
 // that did not take everything cannot be committed.
@@ -76,6 +101,11 @@ func (st *Staged) Write(p []byte) (int, error) {
 	case st.exceeded || st.n+int64(len(p)) > st.limit:
 		st.exceeded = true
 		return 0, ErrTooBig
+	}
+	if st.inMemory {
+		st.mem = append(st.mem, p...)
+		st.n += int64(len(p))
+		return len(p), nil
 	}
 	n, err := st.f.Write(p)
 	st.n += int64(n)
@@ -114,18 +144,41 @@ func (st *Staged) ReadFrom(r io.Reader) (int64, error) {
 
 // Reader reads the staged bytes from the first one, independently of other
 // readers and of the writes that follow.
-func (st *Staged) Reader() *io.SectionReader { return io.NewSectionReader(st.f, 0, st.n) }
+func (st *Staged) Reader() *io.SectionReader {
+	if st.inMemory {
+		return io.NewSectionReader(bytes.NewReader(st.mem[:st.n]), 0, st.n)
+	}
+	return io.NewSectionReader(st.f, 0, st.n)
+}
 
 // Size is how many bytes are staged.
 func (st *Staged) Size() int64 { return st.n }
 
+// Bytes are the staged bytes of a message staged in memory (StageMemory),
+// shared, not copied: the caller must not change them. nil for one staged
+// on disk, and once removed.
+func (st *Staged) Bytes() []byte {
+	switch {
+	case !st.inMemory || st.removed:
+		return nil
+	case st.mem == nil:
+		return []byte{}
+	}
+	return st.mem[:st.n:st.n]
+}
+
 // Remove closes the staged message and deletes its file, unless a commit
-// made it a message's file; removing twice is harmless.
+// made it a message's file; removing twice is harmless. One staged in
+// memory lets go of its bytes (a slice Bytes returned keeps them).
 func (st *Staged) Remove() error {
 	if st.removed {
 		return nil
 	}
 	st.removed = true
+	if st.inMemory {
+		st.mem = nil
+		return nil
+	}
 	err := st.f.Close()
 	if !st.consumed {
 		if rerr := os.Remove(st.path); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {

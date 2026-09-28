@@ -24,7 +24,11 @@ import (
 // attachmentOfflineDays, a body not downloaded yet). It runs on a
 // connection of its own, apart from the syncer and its IDLE, only reads
 // the server, and stores the whole message through ingest.Store, which
-// checks that it is the stored one.
+// checks that it is the stored one. Under neverStoreAttachments it stores
+// nothing of a message whose body is stored: the whole message is received
+// into memory (ingest.Hold) and held there (memCache), and the parts stay
+// remote; a body not downloaded yet is stored without its attachments and
+// held in memory whole too.
 
 // downloadBudget bounds one download from the connection to the commit;
 // a client waits longer (docs/api.md asks for 5 minutes). A variable so a
@@ -171,11 +175,11 @@ func (d *downloadState) close(log *slog.Logger) {
 }
 
 // Download makes a stored message whole (docs/api.md §4.3,
-// message.download): a message with nothing missing, or one that failed to
-// parse, answers at once; one over the raw cap is attachmentTooBig; a
-// paused account is unavailable. Otherwise the call joins the message's
-// download, or starts it, and waits; a caller that gives up gets
-// cancelled while the download goes on.
+// message.download): a message with nothing missing, one whose whole copy
+// is held in memory, or one that failed to parse, answers at once; one
+// over the raw cap is attachmentTooBig; a paused account is unavailable.
+// Otherwise the call joins the message's download, or starts it, and
+// waits; a caller that gives up gets cancelled while the download goes on.
 func (s *messageService) Download(ctx context.Context, p api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
@@ -188,7 +192,7 @@ func (s *messageService) Download(ctx context.Context, p api.MessageDownloadPara
 	if err != nil {
 		return nil, err
 	}
-	need, err := needsDownload(m)
+	need, err := s.b.needsFetch(m)
 	switch {
 	case err != nil:
 		return nil, err
@@ -226,6 +230,20 @@ func needsDownload(m store.Message) (bool, error) {
 		return false, messageTooBig(m.Size)
 	}
 	return true, nil
+}
+
+// needsFetch is needsDownload for the message as the daemon has it: one
+// whose attachments are on the server while message.download holds a
+// whole copy in memory (neverStoreAttachments) that has every one of them
+// (heldMissing) needs nothing, and is marked used there. A copy that
+// lacks one does not count: a download fetches the message again.
+func (b *Backend) needsFetch(m store.Message) (bool, error) {
+	need, err := needsDownload(m)
+	if err != nil || !need || m.BodyState != store.BodyFetched {
+		return need, err
+	}
+	held, ok := b.mem.get(m.AccountID, m.ID)
+	return !ok || len(heldMissing(m, held.attachments)) > 0, nil
 }
 
 // messageTooBig is the error for a message over the raw-message cap.
@@ -267,7 +285,7 @@ func (b *Backend) runDownload(ctx context.Context, accountID, id string) error {
 		case err != nil:
 			return err
 		}
-		need, err := needsDownload(m)
+		need, err := b.needsFetch(m)
 		if err != nil || !need {
 			return err
 		}
@@ -292,7 +310,16 @@ func (b *Backend) runDownload(ctx context.Context, accountID, id string) error {
 // before). A message the server announces over the cap is refused before a
 // byte of it is read (the fetcher then gives the connection up rather than
 // drain it); one that turns out longer than announced still stops at the
-// cap (ingest.Store).
+// cap (ingest.Store). The attachment preferences apply as they are when
+// the message arrives. Under neverStoreAttachments a message whose body is
+// stored is only held in memory (hold), whatever its folder or kind: such
+// a message is downloaded only for parts its row keeps on the server, and
+// one in Drafts has those when it was reduced before it was moved there.
+// A body stored for the first time keeps its attachments on the server and
+// the whole message is held in memory too, unless the store keeps it whole
+// anyway (Drafts, signed, ...), which is then not held. A message stored
+// whole because the preference was switched on while it was being
+// received is judged again by the attachment pass (storedUnder).
 func (b *Backend) fetchInto(ctx context.Context, a store.Account, m store.Message, loc store.ServerLocation) error {
 	role := loc.Folder.Role
 	if f, err := b.store.GetFolder(ctx, a.ID, m.FolderID); err == nil {
@@ -305,7 +332,6 @@ func (b *Backend) fetchInto(ctx context.Context, a store.Account, m store.Messag
 			InternalDate: m.InternalDate, Date: m.Date, HydratedAt: m.HydratedAt,
 		},
 		Limit:    ingest.MaxMessageBytes,
-		Policy:   ingest.Policy{AttachmentOfflineDays: b.attachmentOfflineDays()},
 		OnDemand: true,
 		Expect:   store.RawExpect{BodyState: m.BodyState, RawState: m.RawState, HydratedAt: &hydrated},
 		Verify:   &m,
@@ -319,10 +345,48 @@ func (b *Backend) fetchInto(ctx context.Context, a store.Account, m store.Messag
 		if size > req.Limit {
 			return ingest.ErrTooBig
 		}
-		req.Body = r
-		_, err := ingest.Store(ctx, b.store, req, b.log)
-		return err
+		// The generation before the policy: a switch-off in between
+		// clears the cache, and what this download holds then goes too
+		// (memCache.put).
+		gen := b.mem.generation()
+		req.Policy = b.attachmentPolicy()
+		req.Body, req.Size = r, size
+		if req.Policy.NeverStore && m.BodyState == store.BodyFetched {
+			return b.hold(ctx, gen, m, req)
+		}
+		res, err := ingest.Store(ctx, b.store, req, b.log)
+		if err != nil {
+			return err
+		}
+		if len(res.RemoteParts) > 0 && res.Whole != nil {
+			b.mem.put(gen, a.ID, m.ID, res.Whole, res.Attachments)
+		}
+		b.storedUnder(ctx, m.ID, req.Policy)
+		return nil
 	})
+}
+
+// hold receives a stored message downloaded again into memory
+// (ingest.Hold, checked against m) and holds it there (memCache) for the
+// parts m keeps on the server. A copy that lacks any of them
+// (heldMissing: Microsoft 365 rebuilds a message, and may name or type a
+// part anew) cannot stand in for the stored message, so it is not held
+// (a held one would answer message.download at once, and the part stay
+// partNotDownloaded for good): serverError, as for a download that is
+// not the stored message; the log names the ids only.
+func (b *Backend) hold(ctx context.Context, gen uint64, m store.Message, req ingest.Request) error {
+	held, err := ingest.Hold(ctx, b.store, req, b.log)
+	if err != nil {
+		return err
+	}
+	if missing := heldMissing(m, held.Attachments); len(missing) > 0 {
+		b.mem.remove(m.AccountID, m.ID)
+		b.log.Warn("downloaded message lacks parts the stored one keeps on the server; not held",
+			"account", m.AccountID, "message", m.ID, "parts", missing)
+		return api.NewError(api.CodeServerError, "the server's copy of message %s lacks parts the stored one lists", m.ID)
+	}
+	b.mem.put(gen, m.AccountID, m.ID, held.Raw, held.Attachments)
+	return nil
 }
 
 // fetchRaw downloads a stored message from its account's server: IMAP on

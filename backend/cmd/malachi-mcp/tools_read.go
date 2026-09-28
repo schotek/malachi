@@ -565,11 +565,14 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 		return withheld(reason), nil, nil
 	}
 
-	// A part kept on the mail server only is downloaded first; so is one
-	// the daemon reports missing, when the background pass left it on the
-	// server after message.get read the message.
+	// The part is asked for first, also one message.get calls remote: the
+	// daemon may hold its message in memory (neverStoreAttachments) and
+	// serve it without a download. Only when it answers that the part is
+	// on the mail server only (remote, or left there by the background
+	// pass after message.get read the message) is the message downloaded,
+	// and the part asked for once more.
 	downloaded := false
-	fetchFirst := func() *mcp.CallToolResult {
+	fetch := func() *mcp.CallToolResult {
 		m, fail := b.download(ctx, acc, got.Message.MessageSummary)
 		if fail != nil {
 			return toolErrorf("%s", fail.text)
@@ -586,11 +589,6 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 		}
 		return nil
 	}
-	if att.Remote {
-		if res := fetchFirst(); res != nil {
-			return res, nil, nil
-		}
-	}
 	part := func() (*api.MessagePartResult, error) {
 		partCtx, cancel := b.callCtx(ctx)
 		defer cancel()
@@ -599,8 +597,8 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 		})
 	}
 	res, err := part()
-	if codeOf(err) == api.CodePartNotDownloaded && !downloaded {
-		if res := fetchFirst(); res != nil {
+	if codeOf(err) == api.CodePartNotDownloaded {
+		if res := fetch(); res != nil {
 			return res, nil, nil
 		}
 		res, err = part()

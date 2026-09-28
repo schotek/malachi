@@ -166,16 +166,17 @@ destructive, only `send_message` open-world.
     3 MiB;
   - anything else (PDF, Office files, archives, `text/html`,
     `image/svg+xml`, attached messages) returns metadata only.
-- A part of a type that is returned but kept on the mail server only
-  (`remote`) is downloaded first: `message.download` of its message, then
-  `message.part` (see
-  [Attachments on the mail server](#attachments-on-the-mail-server)). A
-  part that `read_message` listed as local but the daemon answers
-  `partNotDownloaded` for (the background pass reduced the message in the
-  meantime) gets one download and one retry. On Microsoft 365 a download
-  may renumber the parts; when the part asked for is no longer the same,
-  the tool says to call `read_message` again rather than return another
-  file.
+- A part of a type that is returned is asked for with `message.part`
+  first, also one kept on the mail server only (`remote`), which the
+  daemon serves when it holds the message in memory
+  (`neverStoreAttachments`). When the daemon answers `partNotDownloaded`
+  (the part is `remote` and not held, or the background pass reduced the
+  message after `read_message` listed it as local) the message is
+  downloaded (`message.download`) and the part asked for once more (see
+  [Attachments on the mail server](#attachments-on-the-mail-server)). On
+  Microsoft 365 a download may renumber the parts; when the part asked for
+  is no longer the same, the tool says to call `read_message` again rather
+  than return another file.
 - After the fetch the bytes are sniffed (`http.DetectContentType`): an image
   whose bytes do not match the declared type, and "text" that sniffs as
   HTML or binary or contains NUL, is withheld. Text is made valid UTF-8
@@ -272,13 +273,17 @@ destructive, only `send_message` open-world.
 ## Attachments on the mail server
 
 Under `attachmentOfflineDays` ([api.md §4.8](api.md#48-config)) the large
-attachments of older messages stay on the account's mail server and are
-marked `remote` ([api.md §3](api.md#3-common-types)); `message.part` answers
-`partNotDownloaded` for them. Two tools need such a file's bytes and have
-the daemon download its message first (`message.download`): `get_attachment`
-for a type it returns, and `create_draft` forwarding a message. Nothing else
-downloads: not `read_message`, not a type `get_attachment` withholds, not
-a reply.
+attachments of older messages stay on the account's mail server, and under
+`neverStoreAttachments` every attachment the HTML does not show; they are
+marked `remote` ([api.md §3](api.md#3-common-types)) and `message.part`
+answers `partNotDownloaded` for them. Two tools need such a file's bytes
+and have the daemon download its message (`message.download`):
+`get_attachment` for a type it returns, which asks `message.part` first
+(the daemon may still hold the message in memory) and downloads only when
+the part is not there, and `create_draft` forwarding a message, which
+downloads first. Nothing else downloads: not `read_message`, not a type
+`get_attachment` withholds, not a reply (whose quote then lacks the large
+pictures `neverStoreAttachments` keeps on the server).
 
 - The daemon fetches the whole message from the account's own mail server,
   read-only (IMAP `EXAMINE` and `BODY.PEEK`: nothing is marked read), and
@@ -286,19 +291,31 @@ a reply.
 - One call waits at most 2 minutes. The daemon allows itself 4 and finishes
   a download the bridge stopped waiting for, so the answer is "the daemon
   keeps going, call again in a few minutes", and the next call finds the
-  message whole.
+  message whole (under `neverStoreAttachments`, held in memory).
 - A bridge process may make the daemon download at most 256 MiB, counted
-  by the size of the messages (`MessageSummary.size`); a download the
-  daemon refused or that never reached it does not count, one the bridge
-  stopped waiting for (timed out, or the tool call cancelled) does, since
-  the daemon finishes it. Past the limit the tool says so, and the user
-  can open the attachment in Malachi Mail.
+  by the size of the messages (`MessageSummary.size`) for every
+  `message.download` the bridge asks for, the same message again too: the
+  daemon may have let go of what it fetched before (under
+  `neverStoreAttachments` it holds a message in memory only, for a while,
+  and shares that memory with every other client) and fetch it anew. A
+  part the daemon still holds is served by `message.part` without a
+  download and costs nothing. A download the daemon refused or that never
+  reached it gives back what that call counted, and only that; one the
+  bridge stopped waiting for (timed out, or the tool call cancelled) stays
+  counted, since the daemon finishes it. Past the limit the tool says so,
+  and the user can open the attachment in Malachi Mail.
 - A message the server no longer has is `messageGone` (1305); no network
   is `networkError`; a paused account, or a message whose local move has
   not reached the server yet, is `unavailable`. `messageGone` and
   `unavailable` come with a hint.
 - A downloaded message stays whole on the device for 7 days before the
   daemon's background pass may keep its attachments on the server again.
+  Under `neverStoreAttachments` it is not stored at all: its parts stay
+  `remote` after the download, and the daemon serves them to
+  `message.part` and `draft.create` from the copy it holds in memory
+  (30 minutes unused at most, never past its own exit); once that copy is
+  gone the next tool call downloads the message again, and counts it
+  again.
 
 ## Content rules
 

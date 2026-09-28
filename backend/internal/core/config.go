@@ -7,6 +7,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -18,6 +19,7 @@ const (
 	prefOfflineDays           = "sync.offline_days"
 	prefCompressStore         = "store.compress"
 	prefAttachmentOfflineDays = "attachments.offline_days"
+	prefNeverStoreAttachments = "attachments.never_store"
 )
 
 type configService struct{ b *Backend }
@@ -53,20 +55,35 @@ func (s *configService) Set(ctx context.Context, p api.ConfigSetParams) (*api.Co
 	if in.AttachmentOfflineDays != nil {
 		prefs = append(prefs, store.Pref{Key: prefAttachmentOfflineDays, Value: strconv.Itoa(*in.AttachmentOfflineDays)})
 	}
+	if in.NeverStoreAttachments != nil {
+		prefs = append(prefs, store.Pref{Key: prefNeverStoreAttachments, Value: strconv.FormatBool(*in.NeverStoreAttachments)})
+	}
 	s.b.prefMu.Lock()
 	defer s.b.prefMu.Unlock()
+	prev, err := s.b.preferences(ctx)
+	if err != nil {
+		prev = api.Preferences{} // unknown: whatever is set counts as a change
+	}
 	if err := s.b.store.SetPreferences(ctx, prefs); err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 	eff, err := s.b.preferences(ctx)
 	if err != nil {
 		// Stored, but not readable back: wake what reads them itself and
-		// keep the codec as it is.
+		// keep the codec as it is. What memory holds goes all the same
+		// when the attachments are to be stored again, and the attachment
+		// pass starts over when their preference was set.
+		if off := in.NeverStoreAttachments; off != nil && !*off {
+			s.b.mem.clear()
+		}
+		if in.NeverStoreAttachments != nil {
+			s.b.restartRawStep(ctx, attachmentStepName)
+		}
 		s.b.Supervisor.Reload()
 		s.b.kickRaw()
 		return nil, err
 	}
-	s.b.preferencesChanged(eff)
+	s.b.preferencesChanged(prev, eff)
 	return &api.ConfigSetResult{Preferences: eff}, nil
 }
 
@@ -104,6 +121,7 @@ func (b *Backend) preferences(ctx context.Context) (api.Preferences, error) {
 		OfflineDays:           b.defaults.Sync.OfflineDays,
 		CompressStore:         api.Ptr(false),
 		AttachmentOfflineDays: api.Ptr(0),
+		NeverStoreAttachments: api.Ptr(false),
 	}
 	if rd.CompressStore != nil {
 		p.CompressStore = api.Ptr(*rd.CompressStore)
@@ -154,15 +172,38 @@ func (b *Backend) preferences(ctx context.Context) (api.Preferences, error) {
 			p.AttachmentOfflineDays = api.Ptr(n)
 		}
 	}
+	// No runtime default: off unless config.set said otherwise.
+	if v, ok, err := get(prefNeverStoreAttachments); err != nil {
+		return p, err
+	} else if ok {
+		if on, err := strconv.ParseBool(v); err == nil {
+			p.NeverStoreAttachments = api.Ptr(on)
+		}
+	}
 	return p, nil
 }
 
-// preferencesChanged applies new effective preferences: new raw files take
-// the codec, every syncer wakes so a new interval or retention window takes
-// effect without waiting for the next pass, and the raw maintenance loop
-// re-evaluates its steps (a conversion, the attachments to keep).
-func (b *Backend) preferencesChanged(eff api.Preferences) {
+// preferencesChanged applies new effective preferences, eff, over the ones
+// before, prev (fields nil when unknown): new raw files take the codec,
+// every syncer wakes so a new interval or retention window takes effect
+// without waiting for the next pass, and the raw maintenance loop
+// re-evaluates its steps (a conversion, the attachments to keep). With
+// NeverStoreAttachments off, the messages held in memory go (memCache) and
+// the next switch-on judges the settled messages again
+// (attachmentStep.reevaluateOnce). A change of NeverStoreAttachments
+// either way starts the attachment pass from the start, even when a pass
+// under the same key finished before (switched off and on again the same
+// day).
+func (b *Backend) preferencesChanged(prev, eff api.Preferences) {
 	b.applyRawCodec(eff)
+	on := eff.NeverStoreAttachments != nil && *eff.NeverStoreAttachments
+	if !on {
+		b.mem.clear()
+		b.forgetReevaluation(context.Background())
+	}
+	if was := prev.NeverStoreAttachments; was == nil || *was != on {
+		b.restartRawStep(context.Background(), attachmentStepName)
+	}
 	b.Supervisor.Reload()
 	b.kickRaw()
 }
@@ -195,14 +236,23 @@ func (b *Backend) applyRawCodec(p api.Preferences) {
 	b.store.SetRawCodec(c)
 }
 
-// attachmentOfflineDays is the effective Preferences.AttachmentOfflineDays
-// the syncers and the attachment step apply. When the store cannot be read
-// it is 0, which keeps every attachment: a doubt never removes data.
-func (b *Backend) attachmentOfflineDays() int {
+// attachmentPolicy is the effective Preferences.AttachmentOfflineDays and
+// NeverStoreAttachments the syncers, the attachment step and
+// message.download apply. When the store cannot be read it keeps every
+// attachment: a doubt never removes data.
+func (b *Backend) attachmentPolicy() ingest.Policy {
 	p, err := b.preferences(context.Background())
 	if err != nil {
-		b.log.Warn("read the attachment preference", "err", err)
-		return 0
+		b.log.Warn("read the attachment preferences", "err", err)
+		return ingest.Policy{}
 	}
-	return *p.AttachmentOfflineDays
+	return ingest.Policy{AttachmentOfflineDays: *p.AttachmentOfflineDays, NeverStore: *p.NeverStoreAttachments}
 }
+
+// attachmentOfflineDays is the effective
+// Preferences.AttachmentOfflineDays (attachmentPolicy).
+func (b *Backend) attachmentOfflineDays() int { return b.attachmentPolicy().AttachmentOfflineDays }
+
+// neverStoreAttachments is the effective
+// Preferences.NeverStoreAttachments (attachmentPolicy).
+func (b *Backend) neverStoreAttachments() bool { return b.attachmentPolicy().NeverStore }

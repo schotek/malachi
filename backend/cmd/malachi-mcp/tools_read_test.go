@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -379,12 +378,12 @@ func TestGetAttachmentDownloadsRemote(t *testing.T) {
 		"downloaded: fetched from the mail server first", "truncated; call again with offset=64")
 	mustContain(t, res.Content[1].(*mcp.TextContent).Text, "id,value\n1,remote data line")
 	order, downloads := h.calls()
-	if !reflect.DeepEqual(order, []string{"get", "download", "part"}) || len(downloads) != 1 || downloads[0].MessageID != "m7" {
+	if !reflect.DeepEqual(order, []string{"get", "part", "download", "part"}) || len(downloads) != 1 || downloads[0].MessageID != "m7" {
 		t.Fatalf("calls %v, downloads %+v", order, downloads)
 	}
 	// Whole now: the next call reads the part at once.
 	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"})
-	if order, _ := h.calls(); !reflect.DeepEqual(order[3:], []string{"get", "part"}) {
+	if order, _ := h.calls(); !reflect.DeepEqual(order[4:], []string{"get", "part"}) {
 		t.Fatalf("second call: %v", order)
 	}
 }
@@ -420,7 +419,7 @@ func TestGetAttachmentDownloadTimeout(t *testing.T) {
 	h := newHarness(t, fb, false, false)
 	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"},
 		"did not finish within 50ms; the daemon keeps going, call again in a few minutes")
-	if order, _ := h.calls(); slices.Contains(order, "part") {
+	if order, _ := h.calls(); !reflect.DeepEqual(order, []string{"get", "part", "download"}) {
 		t.Fatalf("part read after a timed-out download: %v", order)
 	}
 }
@@ -445,6 +444,39 @@ func TestGetAttachmentDownloadBudget(t *testing.T) {
 	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m8", "partId": "2"}, "this session already had 256 MiB downloaded")
 	if _, downloads := h.calls(); len(downloads) != 2 {
 		t.Fatalf("downloads %+v", downloads)
+	}
+}
+
+// A part message.get calls remote is asked for first: while the daemon
+// holds its message in memory (neverStoreAttachments) it is served without
+// a download and costs nothing; once the daemon let go of the copy, the
+// message is downloaded again, and every such download counts.
+func TestGetAttachmentPartFirst(t *testing.T) {
+	fb := newFixture()
+	fb.holdOnDownload = true
+	fb.held["m7"] = true
+	h := newHarness(t, fb, false, false)
+	args := map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"}
+	size := fb.messages["m7"].Size
+
+	out := h.ok(t, "get_attachment", args)
+	mustContain(t, out, "id,value\n1,remote data line")
+	mustNotContain(t, out, "downloaded: fetched from the mail server first")
+	if order, downloads := h.calls(); !reflect.DeepEqual(order, []string{"get", "part"}) || len(downloads) != 0 || h.usedBudget() != 0 {
+		t.Fatalf("held: calls %v, downloads %+v, %d counted", order, downloads, h.usedBudget())
+	}
+
+	for i := int64(1); i <= 2; i++ {
+		fb.mu.Lock()
+		delete(fb.held, "m7") // dropped: 30 minutes unused, evicted, the daemon restarted
+		fb.mu.Unlock()
+		mustContain(t, h.ok(t, "get_attachment", args), "downloaded: fetched from the mail server first")
+		if _, downloads := h.calls(); len(downloads) != int(i) || h.usedBudget() != i*size {
+			t.Fatalf("download %d: %d downloads, %d counted", i, len(downloads), h.usedBudget())
+		}
+	}
+	if order, _ := h.calls(); !reflect.DeepEqual(order[2:], []string{"get", "part", "download", "part", "get", "part", "download", "part"}) {
+		t.Fatalf("calls %v", order)
 	}
 }
 

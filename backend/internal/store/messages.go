@@ -68,7 +68,7 @@ type Message struct {
 	RawState        RawState
 	RemoteParts     []string // part ids, sorted
 	RemoteBytes     int64
-	StrippableBytes int64     // -1 not evaluated, 0 nothing to leave on the server, >0 bytes
+	StrippableBytes int64     // StrippableUnknown, StrippableNever, 0 nothing to leave on the server, >0 bytes
 	HydratedAt      time.Time // last made whole by message.download; zero = never
 }
 

@@ -24,6 +24,20 @@ import (
 // row and the file in step, and finds the messages the background pass may
 // reduce.
 
+// The values of strippable_bytes (Message.StrippableBytes, RawCommit) that
+// are not a size; 0 is "nothing the rule the message was judged by could
+// leave on the server", more what it could.
+const (
+	// StrippableUnknown: not evaluated yet.
+	StrippableUnknown int64 = -1
+	// StrippableNever: never to be reduced, whatever the rule: its parts
+	// cannot be left on the server safely (a signed or encrypted message,
+	// a doubtful MIME structure, a skeleton that does not verify, a file
+	// that cannot be read). A download that stores it again judges it
+	// anew.
+	StrippableNever int64 = -2
+)
+
 // RawState says whether a stored message's raw file is complete.
 type RawState string
 
@@ -45,16 +59,18 @@ type RawExpect struct {
 // RawCommit is a new raw file for a message and what its row is to say
 // about it (CommitMessageRaw).
 type RawCommit struct {
-	// Source is the new file (StageRaw). Committing a plain one renames it
-	// into place; the caller still calls its Remove.
+	// Source is the new file (StageRaw, or StageMemory). Committing a
+	// plain one staged on disk renames it into place; the caller still
+	// calls its Remove.
 	Source *Staged
 	// RemoteParts are the ids of the parts whose bodies Source leaves out
 	// and RemoteBytes their decoded size: both empty for a whole message,
 	// both set otherwise.
 	RemoteParts []string
 	RemoteBytes int64
-	// StrippableBytes is stored as given: -1 not evaluated, 0 nothing to
-	// leave on the server, more what could be.
+	// StrippableBytes is stored as given: StrippableUnknown,
+	// StrippableNever, 0 nothing to leave on the server, more what could
+	// be.
 	StrippableBytes int64
 	// Body, when set, is the parse of the whole message and is stored as
 	// SetMessageBody stores it (a download); nil leaves the body columns
@@ -109,7 +125,7 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 	switch {
 	case (len(remote) > 0) != (c.RemoteBytes > 0):
 		return 0, fmt.Errorf("commit message file: %d remote parts of %d bytes", len(remote), c.RemoteBytes)
-	case c.StrippableBytes < -1:
+	case c.StrippableBytes < StrippableNever:
 		return 0, fmt.Errorf("commit message file: strippable bytes %d", c.StrippableBytes)
 	}
 	s, ctx, accountID, id := tx.s, tx.ctx, tx.h.accountID, tx.h.id
@@ -380,9 +396,25 @@ type StripQuery struct {
 	// it (the grace after a download). The zero time admits only messages
 	// never made whole.
 	HydratedBefore time.Time
+	// AnyHydrated takes messages however recently they were made whole on
+	// demand (Preferences.NeverStoreAttachments); HydratedBefore is
+	// ignored.
+	AnyHydrated bool
+	// Partial takes messages stored partial instead of whole: those that
+	// still hold a non-empty attachment (storesAttachment), whatever their
+	// age, to lose it too (Preferences.NeverStoreAttachments); Cutoff, All,
+	// HydratedBefore and AnyHydrated are ignored.
+	Partial bool
 	// Limit caps the result (<= 0: 50).
 	Limit int
 }
+
+// storesAttachment is the SQL condition that the message m lists an
+// attachment of at least the parameter's bytes that its stored file holds:
+// one not among its remote_parts. A message stored whole holds every one.
+const storesAttachment = `EXISTS (SELECT 1 FROM json_each(m.attachments_json) j
+	WHERE j.type = 'object' AND COALESCE(json_extract(j.value, '$.size'), 0) >= ?
+	  AND NOT EXISTS (SELECT 1 FROM json_each(m.remote_parts) r WHERE r.value = json_extract(j.value, '$.partId')))`
 
 // StripCandidate is a message ListStripCandidates found, with the role of
 // its folder.
@@ -399,25 +431,43 @@ type StripCandidate struct {
 const messageAge = `COALESCE(NULLIF(m.internal_date, ''), NULLIF(NULLIF(m.date, ''), ?), '9999')`
 
 // ListStripCandidates returns messages the background pass may reduce,
-// oldest first: stored whole and fetched, not known to have nothing to
-// leave on the server (strippable_bytes != 0), outside Drafts and the
-// outbox, with a copy on the server (a UID or a remote id), of an enabled
-// account, and within q.
+// oldest first: stored whole (or with q.Partial stored partial, still
+// holding a non-empty attachment) and fetched, neither known to have
+// nothing to leave on the server (strippable_bytes 0) nor never to be
+// reduced (StrippableNever), outside Drafts and the outbox, with a copy on
+// the server (a UID or a remote id), of an enabled account, and within q.
 func (s *Store) ListStripCandidates(ctx context.Context, q StripQuery) ([]StripCandidate, error) {
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 50
 	}
+	// "strippable_bytes != 0" as the partial index messages_strippable
+	// says it, so that the index serves the search; the partial messages
+	// are found through messages_partial.
+	state := `m.raw_state = 'full'`
+	if q.Partial {
+		state = `m.raw_state = 'partial'`
+	}
 	where := `
-		WHERE m.raw_state = 'full' AND m.body_state = 'fetched' AND m.strippable_bytes != 0
+		WHERE ` + state + ` AND m.body_state = 'fetched' AND m.strippable_bytes != 0
+		  AND m.strippable_bytes != ?
 		  AND f.role NOT IN (?, ?)
 		  AND (m.uid > 0 OR m.remote_id != '')
-		  AND m.account_id IN (SELECT id FROM accounts WHERE enabled = 1)
-		  AND (m.hydrated_at = '' OR m.hydrated_at < ?)`
-	args := []any{string(api.RoleDrafts), string(api.RoleOutbox), optStamp(q.HydratedBefore)}
-	if !q.All {
-		where += ` AND ` + messageAge + ` < ?`
-		args = append(args, zeroStamp, stamp(q.Cutoff))
+		  AND m.account_id IN (SELECT id FROM accounts WHERE enabled = 1)`
+	args := []any{StrippableNever, string(api.RoleDrafts), string(api.RoleOutbox)}
+	switch {
+	case q.Partial:
+		where += ` AND ` + storesAttachment
+		args = append(args, 1)
+	default:
+		if !q.AnyHydrated {
+			where += ` AND (m.hydrated_at = '' OR m.hydrated_at < ?)`
+			args = append(args, optStamp(q.HydratedBefore))
+		}
+		if !q.All {
+			where += ` AND ` + messageAge + ` < ?`
+			args = append(args, zeroStamp, stamp(q.Cutoff))
+		}
 	}
 	args = append(args, zeroStamp, limit)
 	rows, err := s.db.QueryContext(ctx, `SELECT `+qualifiedMessageColumns+`, f.role
@@ -453,10 +503,13 @@ const classifyBatch = 2000
 func (s *Store) ClassifySmall(ctx context.Context, threshold int64) (int, error) {
 	total := 0
 	for {
+		// "strippable_bytes != 0" as the partial index messages_strippable
+		// says it, so that the daily pass reads the index, not the table.
 		res, err := s.db.ExecContext(ctx, `
 			UPDATE messages SET strippable_bytes = 0 WHERE id IN (
 				SELECT m.id FROM messages m
-				WHERE m.strippable_bytes = -1 AND m.raw_state = 'full' AND m.body_state = 'fetched'
+				WHERE m.strippable_bytes = -1 AND m.strippable_bytes != 0
+				  AND m.raw_state = 'full' AND m.body_state = 'fetched'
 				  AND NOT EXISTS (SELECT 1 FROM json_each(m.attachments_json) j
 				                  WHERE j.type = 'object' AND COALESCE(json_extract(j.value, '$.size'), 0) >= ?)
 				LIMIT ?)`, threshold, classifyBatch)
@@ -471,11 +524,64 @@ func (s *Store) ClassifySmall(ctx context.Context, threshold int64) (int, error)
 	}
 }
 
+// ReevaluateSettled marks the fetched messages settled as having nothing
+// to leave on the server (strippable_bytes 0) whose stored file holds an
+// attachment of at least minBytes (storesAttachment: any such of a whole
+// message, one not among remote_parts of a partial one; a picture the
+// HTML shows counts, it is listed as one) as not evaluated again
+// (StrippableUnknown), so that the background pass judges them by a rule
+// that leaves more on the server (Preferences.NeverStoreAttachments:
+// smaller attachments, large pictures the HTML shows); messages without
+// such an attachment keep their 0, and those never to be reduced
+// (StrippableNever) theirs. It walks the table in slices of the primary key, so that
+// the write lock is short, and returns how many it marked.
+func (s *Store) ReevaluateSettled(ctx context.Context, minBytes int64) (int, error) {
+	total, after := 0, ""
+	for {
+		var last sql.NullString
+		if err := s.db.QueryRowContext(ctx, `SELECT MAX(id) FROM (SELECT id FROM messages WHERE id > ? ORDER BY id LIMIT ?)`,
+			after, classifyBatch).Scan(&last); err != nil {
+			return total, fmt.Errorf("re-evaluate settled messages: %w", err)
+		}
+		if !last.Valid {
+			return total, nil
+		}
+		res, err := s.db.ExecContext(ctx, `
+			UPDATE messages AS m SET strippable_bytes = ?
+			WHERE m.id > ? AND m.id <= ? AND m.strippable_bytes = 0 AND m.body_state = 'fetched'
+			  AND `+storesAttachment,
+			StrippableUnknown, after, last.String, minBytes)
+		if err != nil {
+			return total, fmt.Errorf("re-evaluate settled messages: %w", err)
+		}
+		n, _ := res.RowsAffected()
+		total += int(n)
+		after = last.String
+	}
+}
+
+// ReevaluateSettledMessage is ReevaluateSettled for one message: one
+// stored under a rule that no longer holds (a download that was under way
+// when Preferences.NeverStoreAttachments was switched on). It reports
+// whether it marked the message; an unknown id marks nothing.
+func (s *Store) ReevaluateSettledMessage(ctx context.Context, id string, minBytes int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE messages AS m SET strippable_bytes = ?
+		WHERE m.id = ? AND m.strippable_bytes = 0 AND m.body_state = 'fetched'
+		  AND `+storesAttachment,
+		StrippableUnknown, id, minBytes)
+	if err != nil {
+		return false, fmt.Errorf("re-evaluate message %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
 // SetStrippableBytes records what the background pass found it could leave
-// on the server of a message (-1 not evaluated, 0 nothing). ErrNotFound
-// for an unknown id.
+// on the server of a message (StrippableUnknown, StrippableNever, 0
+// nothing, more). ErrNotFound for an unknown id.
 func (s *Store) SetStrippableBytes(ctx context.Context, id string, n int64) error {
-	if n < -1 {
+	if n < StrippableNever {
 		return fmt.Errorf("set strippable bytes: %d", n)
 	}
 	res, err := s.db.ExecContext(ctx, `UPDATE messages SET strippable_bytes = ? WHERE id = ?`, n, id)

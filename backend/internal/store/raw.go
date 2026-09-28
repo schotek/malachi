@@ -420,7 +420,7 @@ func (tx *RawTx) Stat() (RawInfo, bool, error) {
 // flushes the new one and the directory before the old one goes; a
 // message's first file (a download) is not flushed, and only it may create
 // the account's directory. A plain *Staged file is renamed into place
-// rather than copied, and is used up.
+// rather than copied, and is used up; one staged in memory is copied.
 func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 	if tx.done {
 		return RawInfo{}, errRawTxDone
@@ -577,7 +577,8 @@ func (s *Store) produceTemp(ctx context.Context, h *rawHold, j rawJob) (string, 
 }
 
 // tempFromStaged turns a staged file into the temporary file of the write:
-// compressed from it, or, plain, the staged file itself moved over.
+// compressed from it, or, plain, the staged file itself moved over. A
+// message staged in memory is written out in either codec.
 func (s *Store) tempFromStaged(h *rawHold, j rawJob) (string, RawInfo, error) {
 	st := j.staged
 	if err := st.usable(); err != nil {
@@ -594,8 +595,8 @@ func (s *Store) tempFromStaged(h *rawHold, j rawJob) (string, RawInfo, error) {
 		_, err := io.Copy(w, st.Reader())
 		return err
 	}
-	if j.codec == RawZstd {
-		return s.writeTemp(h, RawZstd, n, n, fromStaged, j.syncFile)
+	if j.codec == RawZstd || st.inMemory {
+		return s.writeTemp(h, j.codec, n, n, fromStaged, j.syncFile)
 	}
 	if j.syncFile {
 		if err := st.f.Sync(); err != nil {

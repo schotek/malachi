@@ -283,7 +283,8 @@ type quoter struct {
 	attribution string // validated, LF-separated, possibly empty
 	// remote are the original's parts kept on the mail server only, by
 	// part id, as its row lists them (openRaw): their data is not in the
-	// stored file, so they are never copied, only reported.
+	// stored file, so they are copied only from the whole copy
+	// message.download holds in memory (heldPart), else reported.
 	remote map[string]api.Attachment
 	// row is the original's row as read once its file was open (openRaw):
 	// what it says a part is when the file lacks the part's data
@@ -466,11 +467,13 @@ func (imp *imported) all() []store.Attachment {
 // and, forwarding, every other part as a regular attachment. A part that
 // is over a cap, unreadable, or (for a picture) not a safe image is
 // skipped and reported; so is a part kept on the mail server only
-// (q.remote), with its stored metadata, never extracted: the stored file
-// holds an empty body in its place. A large part the row calls stored that
-// reads back empty is reported the same way and recorded as remote
-// (lostPart). A store that will not take a copy undoes the ones made and is
-// storageError.
+// (q.remote), with its stored metadata, never extracted from the stored
+// file, which holds an empty body in its place. A part the row calls
+// stored, with a size, that reads back empty is reported the same way and
+// recorded as remote (lostPart). Either is copied all the same, under its
+// stored metadata, from the whole copy message.download holds in memory
+// under neverStoreAttachments, while there is one. A store that will not
+// take a copy undoes the ones made and is storageError.
 func (q *quoter) importParts(ctx context.Context, raw store.RawMessage, parsed *mime.Parsed, referenced map[string]string) (*imported, error) {
 	imp := &imported{rewrite: map[string]string{}}
 	if raw == nil {
@@ -482,9 +485,20 @@ func (q *quoter) importParts(ctx context.Context, raw store.RawMessage, parsed *
 		if !inline && !q.forward {
 			continue
 		}
+		var (
+			part *mime.Part
+			err  error
+			held bool
+		)
 		if stored, ok := q.remote[att.PartID]; ok {
-			imp.skipped = append(imp.skipped, stored)
-			continue
+			if part, held, err = q.b.heldPart(q.row, stored, quotedPartLimit); !held {
+				imp.skipped = append(imp.skipped, stored)
+				continue
+			}
+			// The part as the original has it: the stored file's parse
+			// has it empty.
+			stored.Remote = false
+			att = stored
 		}
 		if att.Size > quotedPartLimit || total+att.Size > api.MaxDraftAttachmentBytes ||
 			len(imp.inline)+len(imp.regular) >= api.MaxDraftAttachments ||
@@ -492,12 +506,18 @@ func (q *quoter) importParts(ctx context.Context, raw store.RawMessage, parsed *
 			imp.skipped = append(imp.skipped, att)
 			continue
 		}
-		part, err := extractQuotedPart(raw, att.PartID)
-		if err == nil && lostPart(q.row, att.PartID, len(part.Body)) {
-			entry := storedAttachment(q.row, att.PartID)
-			entry.Remote = q.b.markLostParts(ctx, q.row, att.PartID) == nil
-			imp.skipped = append(imp.skipped, entry)
-			continue
+		if !held {
+			part, err = extractQuotedPart(raw, att.PartID)
+			if err == nil && lostPart(q.row, att.PartID, len(part.Body)) {
+				entry := storedAttachment(q.row, att.PartID)
+				entry.Remote = q.b.markLostParts(ctx, q.row, att.PartID) == nil
+				if part, held, err = q.b.heldPart(q.row, entry, quotedPartLimit); !held {
+					imp.skipped = append(imp.skipped, entry)
+					continue
+				}
+				entry.Remote = false
+				att = entry
+			}
 		}
 		if err != nil || len(part.Body) == 0 {
 			q.b.log.Warn("quote: part not copied", "part", att.PartID, "err", err)

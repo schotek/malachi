@@ -139,7 +139,8 @@ var smallOnly = ingest.Policy{AttachmentOfflineDays: api.AttachmentOfflineNone}
 // (downloadState.fetchRaw): it serves messages by mailbox and UID and
 // records every location asked for and how many bytes were read. With gate
 // set, a fetch waits for it (or for its context) before it answers; with
-// announce set, it announces that size instead of the message's.
+// announce set, it announces that size instead of the message's; with wrap
+// set, the message is read through what wrap makes of its reader.
 type fakeServer struct {
 	mu       sync.Mutex
 	raw      map[string][]byte
@@ -147,6 +148,7 @@ type fakeServer struct {
 	gate     chan struct{}
 	err      error
 	announce int64
+	wrap     func(io.Reader) io.Reader
 	read     int64
 }
 
@@ -167,7 +169,7 @@ func (s *fakeServer) put(mailbox string, uid uint32, raw []byte) {
 func (s *fakeServer) fetch(ctx context.Context, _ store.Account, loc store.ServerLocation, fn func(io.Reader, int64) error) error {
 	s.mu.Lock()
 	s.asked = append(s.asked, loc)
-	gate, err, announce := s.gate, s.err, s.announce
+	gate, err, announce, wrap := s.gate, s.err, s.announce, s.wrap
 	raw, ok := s.raw[serverKey(loc.Folder.Mailbox, loc.UID)]
 	s.mu.Unlock()
 	if gate != nil {
@@ -188,7 +190,11 @@ func (s *fakeServer) fetch(ctx context.Context, _ store.Account, loc store.Serve
 		size = announce
 	}
 	body := &countingReader{r: bytes.NewReader(raw)}
-	err = fn(body, size)
+	var r io.Reader = body
+	if wrap != nil {
+		r = wrap(body)
+	}
+	err = fn(r, size)
 	s.mu.Lock()
 	s.read += body.n
 	s.mu.Unlock()

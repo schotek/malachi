@@ -28,16 +28,20 @@ func prefString(p api.Preferences) string {
 		}
 		return fmt.Sprint(v)
 	}
-	var compress, days any
+	var compress, days, never any
 	if p.CompressStore != nil {
 		compress = *p.CompressStore
 	}
 	if p.AttachmentOfflineDays != nil {
 		days = *p.AttachmentOfflineDays
 	}
-	return fmt.Sprintf("{interval %d, remote %s, offline %d, compress %s, attachments %s}",
+	if p.NeverStoreAttachments != nil {
+		never = *p.NeverStoreAttachments
+	}
+	return fmt.Sprintf("{interval %d, remote %s, offline %d, compress %s, attachments %s, never store %s}",
 		p.SyncIntervalSeconds, p.RemoteContent, p.OfflineDays,
-		show(compress, p.CompressStore != nil), show(days, p.AttachmentOfflineDays != nil))
+		show(compress, p.CompressStore != nil), show(days, p.AttachmentOfflineDays != nil),
+		show(never, p.NeverStoreAttachments != nil))
 }
 
 // basePrefs is a valid set without the pointer fields, as an older client
@@ -98,6 +102,7 @@ func TestConfigSetAbsentFieldsUnchanged(t *testing.T) {
 	p := basePrefs()
 	p.CompressStore, p.AttachmentOfflineDays = api.Ptr(true), api.Ptr(30)
 	want := p
+	want.NeverStoreAttachments = api.Ptr(false)
 	if got := setPrefs(t, b, p); !samePreferences(got, want) {
 		t.Fatalf("set result = %s, want %s", prefString(got), prefString(want))
 	}
@@ -106,7 +111,7 @@ func TestConfigSetAbsentFieldsUnchanged(t *testing.T) {
 	old := basePrefs()
 	old.SyncIntervalSeconds = 600
 	want = old
-	want.CompressStore, want.AttachmentOfflineDays = api.Ptr(true), api.Ptr(30)
+	want.CompressStore, want.AttachmentOfflineDays, want.NeverStoreAttachments = api.Ptr(true), api.Ptr(30), api.Ptr(false)
 	if got := setPrefs(t, b, old); !samePreferences(got, want) {
 		t.Fatalf("set without the new fields = %s, want %s", prefString(got), prefString(want))
 	}
@@ -118,14 +123,14 @@ func TestConfigSetAbsentFieldsUnchanged(t *testing.T) {
 	one := basePrefs()
 	one.CompressStore = api.Ptr(false)
 	want = one
-	want.AttachmentOfflineDays = api.Ptr(30)
+	want.AttachmentOfflineDays, want.NeverStoreAttachments = api.Ptr(30), api.Ptr(false)
 	if got := setPrefs(t, b, one); !samePreferences(got, want) {
 		t.Fatalf("set compressStore only = %s, want %s", prefString(got), prefString(want))
 	}
 	one = basePrefs()
 	one.AttachmentOfflineDays = api.Ptr(0)
 	want = one
-	want.CompressStore = api.Ptr(false)
+	want.CompressStore, want.NeverStoreAttachments = api.Ptr(false), api.Ptr(false)
 	if got := setPrefs(t, b, one); !samePreferences(got, want) {
 		t.Fatalf("set attachmentOfflineDays only = %s, want %s", prefString(got), prefString(want))
 	}

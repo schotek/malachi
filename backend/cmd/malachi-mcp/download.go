@@ -13,16 +13,21 @@ import (
 )
 
 // Attachments on demand (docs/api.md §3, Attachment.remote): the large
-// attachments of older messages may be kept on the account's mail server
-// only. The bridge has the daemon fetch such a message (message.download)
-// for the two tools that need a file's bytes, get_attachment and
-// create_draft forwarding it, and for nothing else: reading a message
-// never downloads anything. The daemon fetches from the account's own
-// server, never from a URL in the mail, and a process may make it download
-// at most maxSessionDownloadBytes.
+// attachments of older messages, or under neverStoreAttachments every
+// attachment, may be kept on the account's mail server only. The bridge
+// has the daemon fetch such a message (message.download) for the two
+// tools that need a file's bytes, get_attachment (only when message.part
+// says the part is not there, since the daemon may hold the message in
+// memory) and create_draft forwarding it, and for nothing else: reading a
+// message never downloads anything. The daemon fetches from the account's
+// own server, never from a URL in the mail, and a process may make it
+// download at most maxSessionDownloadBytes.
 
 // sessionDownloads counts, by message size, what this process made the
-// daemon download.
+// daemon download: every message.download it asks for counts, the same
+// message again too, since the daemon may have let go of what it fetched
+// before (under neverStoreAttachments it holds a message in memory only,
+// for a while) and fetch it anew.
 type sessionDownloads struct {
 	mu   sync.Mutex
 	used int64
@@ -60,8 +65,10 @@ type downloadFailure struct {
 // download has the daemon fetch message m from its mail server
 // (message.download) within downloadTimeout and the session's budget, and
 // returns the message as the daemon reports it afterwards: with no
-// attachment remote, and on Microsoft 365 possibly with other part ids.
-// Only a download that certainly fetched nothing gives its size back
+// attachment remote (under neverStoreAttachments the parts stay remote and
+// the daemon serves them from memory), and on Microsoft 365 possibly with
+// other part ids. Every call counts m's size. Only a download that
+// certainly fetched nothing gives back what this call counted
 // (fetchedNothing); one the bridge stops waiting for, by its timeout or
 // because the tool call was cancelled, keeps it counted: the daemon
 // finishes it.

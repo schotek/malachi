@@ -14,6 +14,7 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/internal/transport"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -27,6 +28,10 @@ type SyncPrefs struct {
 	// downloaded are stored (ingest.Policy): 0 all, N those of the last N
 	// days, api.AttachmentOfflineNone none.
 	AttachmentOfflineDays int
+	// NeverStoreAttachments stores no attachment of any size, and receives
+	// every body into memory rather than staging it on disk
+	// (ingest.Policy.NeverStore).
+	NeverStoreAttachments bool
 }
 
 // Deps wires one syncer to the rest of the daemon.
@@ -62,6 +67,12 @@ type Deps struct {
 	BuildDraft func(ctx context.Context, draftID string) (store.DraftUpload, error)
 	// DraftQuiet is how long a draft rests after a save before its upload.
 	DraftQuiet time.Duration
+	// Stored is told of every body stored, with the attachment policy it
+	// was stored under (the preferences as they were when it arrived), so
+	// that the daemon can hold that against the preferences by then: a
+	// body stored whole while NeverStoreAttachments was being switched on
+	// is judged again. nil = nothing.
+	Stored func(ctx context.Context, messageID string, pol ingest.Policy)
 }
 
 // request is one queued pass.

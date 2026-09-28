@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -31,6 +32,8 @@ type SupervisorDeps struct {
 	// BuildDraft and DraftQuiet: see Deps; nil = drafts stay local.
 	BuildDraft func(ctx context.Context, accountID, draftID string) (store.DraftUpload, error)
 	DraftQuiet time.Duration
+	// Stored: see Deps; nil = nothing.
+	Stored func(ctx context.Context, messageID string, pol ingest.Policy)
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -128,6 +131,7 @@ func (sv *Supervisor) Start(a store.Account) {
 		BaseURL:    sv.deps.BaseURL,
 		HTTP:       sv.deps.HTTP,
 		DraftQuiet: sv.deps.DraftQuiet,
+		Stored:     sv.deps.Stored,
 	}
 	if sv.deps.BuildDraft != nil {
 		deps.BuildDraft = func(ctx context.Context, draftID string) (store.DraftUpload, error) {

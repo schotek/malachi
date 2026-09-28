@@ -629,8 +629,9 @@ func (b *Backend) reauthURL(n api.AuthRequiredNotification) string {
 
 // Close ends every sign-in session and closes their listeners, cancels
 // the armed draft-upload wake-ups, and stops the downloads of
-// message.download before the store closes. malachid calls it on
-// shutdown; a second call does nothing.
+// message.download before the store closes, then lets go of the messages
+// they held in memory. malachid calls it on shutdown; a second call does
+// nothing.
 func (b *Backend) Close() {
 	b.closeOnce.Do(func() {
 		if b.OAuth != nil {
@@ -638,6 +639,7 @@ func (b *Backend) Close() {
 		}
 		b.stopDraftTimers()
 		b.dl.close(b.log)
+		b.mem.close()
 	})
 }
 

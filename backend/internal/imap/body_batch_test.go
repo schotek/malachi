@@ -13,7 +13,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -68,7 +67,7 @@ func TestFetchBodyBatchDrainBreaks(t *testing.T) {
 	if _, err := sess.selectMailbox(ctx, "INBOX"); err != nil {
 		t.Fatal(err)
 	}
-	err = h.syncer.fetchBodyBatch(ctx, sess, inbox, refs, 0, ingest.Policy{})
+	err = h.syncer.fetchBodyBatch(ctx, sess, inbox, refs, 0)
 	if c := code(t, err); c != api.CodeNetworkError {
 		t.Fatalf("batch over a broken connection: %v", err)
 	}

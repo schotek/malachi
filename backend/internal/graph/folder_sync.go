@@ -209,10 +209,8 @@ func (s *Syncer) messageRow(f store.Folder, m message) *store.Message {
 // bodyConcurrency at a time. A message the server no longer has, or that
 // cannot be parsed, is settled as failed so the loop cannot stall; one
 // over the raw cap is tooBig. Every body is stored under the attachment
-// policy of the preferences as they are when the folder's bodies start
-// (ingest.Store).
+// policy of the preferences as they are when it arrives (fetchBody).
 func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[string]bool, progress func(float64)) error {
-	pol := ingest.Policy{AttachmentOfflineDays: s.prefs().AttachmentOfflineDays}
 	attempted := map[string]bool{}
 	done := 0
 	for {
@@ -238,7 +236,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[s
 			break
 		}
 		total := done + len(todo)
-		if err := s.fetchBatch(ctx, f, todo, announce, pol, func(n int) {
+		if err := s.fetchBatch(ctx, f, todo, announce, func(n int) {
 			done += n
 			progress(float64(done) / float64(total))
 		}); err != nil {
@@ -251,7 +249,7 @@ func (s *Syncer) fetchBodies(ctx context.Context, f store.Folder, announce map[s
 
 // fetchBatch downloads a batch concurrently; the first failure that is
 // not about a single message ends the batch.
-func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.MessageRef, announce map[string]bool, pol ingest.Policy, advance func(int)) error {
+func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.MessageRef, announce map[string]bool, advance func(int)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var (
@@ -274,7 +272,7 @@ func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.M
 		go func(ref store.MessageRef) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			err := s.fetchBody(ctx, f, ref, announce, pol)
+			err := s.fetchBody(ctx, f, ref, announce)
 			mu.Lock()
 			if err != nil && firstErr == nil {
 				firstErr = err
@@ -290,11 +288,12 @@ func (s *Syncer) fetchBatch(ctx context.Context, f store.Folder, batch []store.M
 }
 
 // fetchBody streams one raw message into the store (ingest.Store: the
-// whole message, or its skeleton when the policy leaves its large
-// attachments on the server); the size stored is the size downloaded. A
-// body another writer settled meanwhile (message.download, a deletion) is
-// left to it.
-func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool, pol ingest.Policy) error {
+// whole message, or its skeleton when the policy leaves its attachments
+// on the server) under the attachment policy of the preferences as they
+// are when the server answers, and tells Deps.Stored which; the size
+// stored is the size downloaded. A body another writer settled meanwhile
+// (message.download, a deletion) is left to it.
+func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.MessageRef, announce map[string]bool) error {
 	rc, err := s.client.GetRaw(ctx, valuePath(ref.RemoteID))
 	switch {
 	case IsNotFound(err):
@@ -302,6 +301,8 @@ func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.Messag
 	case err != nil:
 		return err
 	}
+	prefs := s.prefs()
+	pol := ingest.Policy{AttachmentOfflineDays: prefs.AttachmentOfflineDays, NeverStore: prefs.NeverStoreAttachments}
 	src := &transferReader{r: rc}
 	_, err = ingest.Store(ctx, s.deps.Store, ingest.Request{
 		Target: ingest.Target{
@@ -318,6 +319,9 @@ func (s *Syncer) fetchBody(ctx context.Context, f store.Folder, ref store.Messag
 	rc.Close()
 	switch {
 	case err == nil:
+		if s.deps.Stored != nil {
+			s.deps.Stored(ctx, ref.ID, pol)
+		}
 		s.notifyNew(ctx, f, ref, announce)
 		return nil
 	case errors.Is(err, ingest.ErrTooBig):

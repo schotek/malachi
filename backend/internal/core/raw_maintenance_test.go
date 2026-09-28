@@ -259,6 +259,34 @@ func TestRawLoopRestartsOnKeyChange(t *testing.T) {
 	}
 }
 
+// restartRawStep runs a step done for its key once more from the start,
+// also when it is asked for while the last batch of a pass runs, whose
+// progress the loop stores after the request.
+func TestRawLoopRestartStep(t *testing.T) {
+	fastRawLoop(t, time.Millisecond, time.Hour, time.Hour)
+	b := newTestBackend(t, config.Default())
+	log := &callLog{}
+	a := &fakeStep{name: "a", n: 1, key: "k", log: log}
+	startRawLoop(t, b, a)
+	waitIdle(t, b)
+	b.restartRawStep(context.Background(), "a")
+	eventually(t, "the second pass", func() bool { return len(log.get()) == 2 })
+	waitIdle(t, b)
+
+	a.mu.Lock()
+	a.sleep = 200 * time.Millisecond
+	a.mu.Unlock()
+	b.restartRawStep(context.Background(), "a")
+	eventually(t, "the third pass to start", func() bool { return len(log.get()) == 3 })
+	b.restartRawStep(context.Background(), "a") // while its only batch runs
+	eventually(t, "the fourth pass", func() bool { return len(log.get()) == 4 })
+	waitIdle(t, b)
+	expectLog(t, log, "a:", "a:", "a:", "a:")
+	if got := metaOf(t, b, "raw.step.a"); got != "k|done" {
+		t.Fatalf("progress = %q", got)
+	}
+}
+
 // A full disk stops the loop: noSpace, no retry from the key poll or the
 // sweep, until a kick; then the step goes on from its cursor.
 func TestRawLoopNoSpace(t *testing.T) {
