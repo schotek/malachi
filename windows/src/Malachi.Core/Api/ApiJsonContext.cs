@@ -156,6 +156,8 @@ namespace Malachi.Core.Api;
 [JsonSerializable(typeof(MessagePartResult))]
 [JsonSerializable(typeof(MessageEmbeddedParams))]
 [JsonSerializable(typeof(MessageEmbeddedResult))]
+[JsonSerializable(typeof(MessageDownloadParams))]
+[JsonSerializable(typeof(MessageDownloadResult))]
 [JsonSerializable(typeof(MessageFlagParams))]
 [JsonSerializable(typeof(MessageMoveParams))]
 [JsonSerializable(typeof(MessageDeleteParams))]

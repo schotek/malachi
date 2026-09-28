@@ -3,13 +3,13 @@
 
 // Port of macos/Sources/MalachiMail/Windows/MessageWindows.swift (track,
 // openMessage, closeMessageWindow, openEmbedded, showLoaded,
-// refreshRemoteBar, showOutboxState, refreshStars) and WindowRegistry.swift
-// (register, present, close, closeAll, unregister); GTK:
-// ui/internal/window/window.go (openMessages, openEmbedded),
+// refreshRemoteBar, refreshChips, showOutboxState, refreshStars) and
+// WindowRegistry.swift (register, present, close, closeAll, unregister);
+// GTK: ui/internal/window/window.go (openMessages, openEmbedded),
 // message_view.go (openMessageWindow, closeMessageWindow), embedded.go
 // (openEmbeddedWindow, closeEmbeddedWindows), remote.go (showLoaded,
-// refreshRemoteBar), outbox.go (showOutboxState) and actions.go
-// (refreshStars, refreshSeen). One window per message, one per attached
+// refreshRemoteBar, refreshPicturesBar), download.go (refreshChips),
+// outbox.go (showOutboxState) and actions.go (refreshStars, refreshSeen). One window per message, one per attached
 // message, and the fan-out of what the cache and the actions learn to every
 // view showing a message (the pane's included); a view of an attached
 // message carries the containing message's id and is left out of the
@@ -51,11 +51,12 @@ public sealed partial class MessageWindowRegistry
     public Func<MessageSummary, IMessageWindowHandle>? MakeMessageWindow { get; set; }
 
     /// <summary>
-    /// Makes (and does not show) the window of the attached message
-    /// <c>part</c> of <c>containing</c> with what <c>message.embedded</c>
-    /// answered (embedded.go <c>newEmbeddedWindow</c>).
+    /// Makes (and does not show) the window of the attached message (its
+    /// attachment, with the part id actually rendered) of <c>containing</c>
+    /// with what <c>message.embedded</c> answered (embedded.go
+    /// <c>newEmbeddedWindow</c>).
     /// </summary>
-    public Func<MessageSummary, string, MessageEmbeddedResult, IMessageWindowHandle>? MakeEmbeddedWindow { get; set; }
+    public Func<MessageSummary, Attachment, MessageEmbeddedResult, IMessageWindowHandle>? MakeEmbeddedWindow { get; set; }
 
     /// <summary>A toast in the window where a chip was clicked (a failed <c>message.embedded</c>).</summary>
     public Action<object?, string>? Toast { get; set; }
@@ -147,37 +148,43 @@ public sealed partial class MessageWindowRegistry
     }
 
     /// <summary>
-    /// Shows the attached message <paramref name="part"/> of
+    /// Shows the attached message <paramref name="attachment"/> of
     /// <paramref name="containing"/> in its own window, or raises the window
     /// already showing it (embedded.go <c>openEmbeddedWindow</c>). Nothing
-    /// changes on screen while the daemon renders; a failure is a toast in
-    /// <paramref name="chipWindow"/>, where the chip is.
+    /// changes on screen while the daemon renders; an attached message kept
+    /// on the mail server (<paramref name="remote"/>, what its chip showed)
+    /// is downloaded first (<see cref="IReaderCache.EmbeddedDataAsync"/>, the
+    /// chips show the spinner); a failure is a toast in
+    /// <paramref name="chipWindow"/>, where the chip is. The window is known
+    /// by the part actually rendered, which a download on Microsoft 365 may
+    /// have moved.
     /// </summary>
-    public async Task OpenEmbeddedAsync(MessageSummary containing, string part, object? chipWindow)
+    public async Task OpenEmbeddedAsync(MessageSummary containing, Attachment attachment, bool remote, object? chipWindow)
     {
         ArgumentNullException.ThrowIfNull(containing);
-        ArgumentNullException.ThrowIfNull(part);
-        var key = new MessageWindowKey.Embedded(containing.Id, part);
-        if (Present(key))
+        ArgumentNullException.ThrowIfNull(attachment);
+        if (Present(new MessageWindowKey.Embedded(containing.Id, attachment.PartId)))
         {
             return;
         }
         MessageEmbeddedResult result;
         try
         {
-            result = await cache.FetchEmbeddedAsync(containing.AccountId, containing.Id, part);
+            result = await cache.EmbeddedDataAsync(containing.AccountId, containing.Id, attachment, remote);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
-            LogEmbeddedFailed(logger, part, e.GetType().Name);
+            LogEmbeddedFailed(logger, attachment.PartId, e.GetType().Name);
             Toast?.Invoke(chipWindow, RpcErrorText.Text(L10n.T("Opening the attached message"), e));
             return;
         }
+        var shown = result.PartId.Length > 0 ? attachment with { PartId = result.PartId } : attachment;
+        var key = new MessageWindowKey.Embedded(containing.Id, shown.PartId);
         if (Present(key) || MakeEmbeddedWindow is not { } make)
         {
             return; // a second click overtook the first
         }
-        var w = make(containing, part, result);
+        var w = make(containing, shown, result);
         Register(key, w);
         w.Present();
     }
@@ -225,6 +232,21 @@ public sealed partial class MessageWindowRegistry
         foreach (var v in Showing(id))
         {
             v.RefreshRemoteBar(lm);
+        }
+    }
+
+    /// <summary>
+    /// Redraws the attachment chips of message <paramref name="id"/> wherever
+    /// it is on display, the pane and the windows (download.go
+    /// <c>refreshChips</c>): its download began to show the spinner or ended.
+    /// <paramref name="lm"/> is null when the cache no longer holds the
+    /// message; a view then draws from what it last rendered.
+    /// </summary>
+    public void RefreshChips(MessageId id, LoadedMessage? lm)
+    {
+        foreach (var v in Showing(id))
+        {
+            v.RefreshChips(id, lm);
         }
     }
 

@@ -20,7 +20,9 @@
 // ListController.activate; the model rule it goes by is checked instead.
 // Beyond Swift: the message windows hear of every seen change (SeenChanged,
 // GTK refreshSeen, which macOS leaves to AppKit's menu validation), and a
-// confirmation that fails runs nothing and is logged.
+// confirmation that fails runs nothing and is logged. The cache is the real
+// MessageCache, as in Swift, so the downloads of a forward or a reply and
+// Download Pictures go through it.
 
 using System;
 using System.Collections.Generic;
@@ -29,7 +31,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
+using Malachi.Core.Controllers;
 using Malachi.Core.Model;
+using Malachi.Core.Tests.Api;
 using Malachi.Core.Tests.Fixtures;
 using Malachi.Core.Tests.Model;
 using Malachi.Core.Transport;
@@ -495,6 +499,70 @@ public sealed class ActionsControllerTests
         Assert.Equal("<p>with pictures</p>", h.Cache.Loaded("m1")!.Body!.Html);
     }
 
+    /// <summary>
+    /// remote.go <c>downloadPictures</c> through the controller: unknown ids
+    /// do nothing, the download and the body again go through the cache, and
+    /// a failure is said through the toast of the window the click came from,
+    /// or the controller's own.
+    /// </summary>
+    [Fact]
+    public async Task DownloadPicturesGoesThroughTheCache()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen)));
+        var rec = new Recorder();
+        var shown = Body("m1", "<p>pictures</p>", RemoteContentPolicy.Block) with { RemotePictures = 2 };
+        var before = JsonCoding.EncodeToString(shown);
+        var after = JsonCoding.EncodeToString(shown with { RemotePictures = null });
+        var downloaded = JsonCoding.EncodeToString(new MessageDownloadResult { Message = new Message { Summary = h.Summary("m1") } });
+        Answer(h, API.MessageBody.Name, _ => rec.Done ? after : before);
+        Answer(h, API.MessageDownload.Name, p =>
+        {
+            rec.AddDownload(JsonCoding.Decode<MessageDownloadParams>(p));
+            if (rec.DownloadError is { } e)
+            {
+                throw new RpcException(e);
+            }
+            rec.Done = true;
+            return downloaded;
+        });
+        await h.LoadAsync("m1");
+        Assert.Equal(2, RemoteBar.RemotePictures(h.Cache.Loaded("m1")!.Body));
+
+        await h.Run(() =>
+        {
+            h.Actions.DownloadPictures("nope");
+            h.Actions.DownloadPictures("m1");
+            Assert.True(h.Cache.Loaded("m1")!.LoadingPictures);
+        });
+        await h.IdleAsync();
+        Assert.Equal(0, RemoteBar.RemotePictures(h.Cache.Loaded("m1")!.Body));
+        Assert.False(h.Cache.Loaded("m1")!.LoadingPictures);
+        Assert.Equal(["m1"], rec.Downloads.Select(d => d.MessageId.Value));
+        Assert.Equal(2, h.Fixture.CallCount(API.MessageBody.Name));
+        Assert.Empty(h.Log.Toasts);
+
+        // A failure, said where the click came from.
+        rec.Done = false;
+        rec.DownloadError = Error(ErrorCode.Offline, "no network");
+        var said = new List<string>();
+        await h.Run(() =>
+        {
+            var lm = h.Cache.Loaded("m1")!;
+            lm.Body = lm.Body! with { RemotePictures = 2 };
+            h.Actions.DownloadPictures("m1", said.Add);
+        });
+        await h.IdleAsync();
+        Assert.Equal(["Downloading the pictures failed: no network connection"], said);
+        Assert.Empty(h.Log.Toasts);
+        Assert.False(h.Cache.Loaded("m1")!.LoadingPictures);
+        Assert.Equal(2, RemoteBar.RemotePictures(h.Cache.Loaded("m1")!.Body)); // the body on display stays
+
+        // Without a toast of its own the controller's is used.
+        await h.Run(() => h.Actions.DownloadPictures("m1"));
+        await h.IdleAsync();
+        Assert.Equal(["Downloading the pictures failed: no network connection"], h.Log.Toasts);
+    }
+
     [Fact]
     public async Task TrustSenderAddsThenRaisesThePolicyThenLoads()
     {
@@ -839,6 +907,271 @@ public sealed class ActionsControllerTests
         Assert.Single(h.Log.Composed);
     }
 
+    /// <summary>
+    /// compose_open.go: a forward of a message with attachments on the mail
+    /// server (or one the cache does not hold) downloads it before
+    /// draft.create; a failed download asks "Forward Without Attachments?"
+    /// over the window it came from, except without a daemon, on a daemon
+    /// without message.download and for a message over its cap; the parts
+    /// draft.create could not import reach the window as Skipped.
+    /// </summary>
+    [Fact]
+    public async Task ForwardDownloadsTheAttachmentsFirst()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen), Msg("m2", 2, flags: Seen)));
+        var onServer = new Attachment { PartId = "2", Filename = "big.pdf", ContentType = "application/pdf", Size = 300_000, Inline = false, Remote = true };
+        var remote = new Message { Summary = h.Summary("m1"), Attachments = [onServer] };
+        var local = remote with { Attachments = [onServer with { Remote = null }] };
+        h.Fixture.SetDetail("m1", remote);
+        var rec = new Recorder();
+        var downloaded = JsonCoding.EncodeToString(new MessageDownloadResult { Message = local });
+        Answer(h, API.MessageDownload.Name, p =>
+        {
+            rec.AddDownload(JsonCoding.Decode<MessageDownloadParams>(p));
+            return rec.DownloadError is { } e ? throw new RpcException(e) : downloaded;
+        });
+        var draft = new Draft { AccountId = "a", Subject = "Fwd: s-m1", TextBody = "fwd", HtmlBody = "<p>fwd</p>", Forwarding = "m1" };
+        var created = JsonCoding.EncodeToString(new DraftCreateResult { Draft = draft, Quoted = QuoteForm.Html, Skipped = [onServer] });
+        Answer(h, API.DraftCreate.Name, p =>
+        {
+            rec.AddDraft(JsonCoding.Decode<DraftCreateParams>(p));
+            return created;
+        });
+        var window = new object();
+        var parents = new List<bool>();
+        ConfirmDestructive confirm = (parent, heading, body, label) =>
+        {
+            parents.Add(ReferenceEquals(parent, window));
+            h.Log.Confirmations.Add(new Confirmation(heading, body, label));
+            return Task.FromResult(h.Log.Answer);
+        };
+        await h.Run(() => h.Actions.Confirm = confirm);
+        await h.LoadAsync("m1");
+        var calls = h.Fixture.Calls().Count;
+
+        // Downloaded first, once however often asked; then the template.
+        await h.Run(() =>
+        {
+            h.Actions.OpenCompose(ComposeKind.Forward, "m1", window);
+            h.Actions.OpenCompose(ComposeKind.Forward, "m1", window);
+        });
+        await h.IdleAsync();
+        Assert.Equal([API.MessageDownload.Name, API.DraftCreate.Name], h.Fixture.Calls().Skip(calls));
+        Assert.Equal(["m1"], rec.Downloads.Select(d => d.MessageId.Value));
+        Assert.Equal("a", rec.Downloads[0].AccountId.Value);
+        var f = Assert.Single(h.Log.Composed);
+        Assert.Equal(ComposeKind.Forward, f.Kind);
+        Assert.Equal("m1", f.Forwarding?.Value);
+        Assert.Equal("Fwd: s-m1", f.Subject);
+        Assert.Equal(1, f.Skipped);
+        Assert.Empty(h.Log.Confirmations);
+        Assert.Empty(h.Log.Toasts);
+        ApiJson.AssertSameValue(local, h.Cache.Loaded("m1")!.Msg!); // the downloaded message replaced the cached one
+
+        // Nothing on the server any more: straight to draft.create.
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Composed.Count);
+        Assert.Single(rec.Downloads);
+
+        // A failed download asks over the window it came from; Cancel opens
+        // nothing.
+        await h.Run(() => h.Cache.Loaded("m1")!.Msg = remote);
+        rec.DownloadError = Error(ErrorCode.Offline, "no network");
+        h.Log.Answer = false;
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1", window));
+        await h.IdleAsync();
+        Assert.Equal(
+            [new Confirmation("Forward Without Attachments?", "Downloading the attachments failed: no network connection", "_Forward Without Attachments")],
+            h.Log.Confirmations);
+        Assert.Equal([true], parents);
+        Assert.Equal(2, h.Log.Composed.Count);
+        Assert.Equal(2, rec.Drafts.Count);
+        Assert.Empty(h.Log.Toasts);
+
+        // Confirmed: the template without them; the next click works again.
+        h.Log.Answer = true;
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(3, h.Log.Composed.Count);
+        Assert.Equal(2, h.Log.Confirmations.Count);
+        Assert.Equal(1, h.Log.Composed[2].Skipped);
+        Assert.Equal(3, rec.Drafts.Count);
+
+        // A daemon without message.download: not asked about.
+        rec.DownloadError = Error(ErrorCode.MethodNotFound, "unknown method");
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(4, h.Log.Composed.Count);
+        Assert.Equal(2, h.Log.Confirmations.Count);
+
+        // A reply never downloads (no pictures counted).
+        var downloads = rec.Downloads.Count;
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Reply, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(5, h.Log.Composed.Count);
+        Assert.Equal(downloads, rec.Downloads.Count);
+        Assert.Equal(1, h.Log.Composed[4].Skipped); // whatever draft.create reports
+
+        // Without a confirmation hook a failed download forwards nothing.
+        await h.Run(() => h.Actions.Confirm = null);
+        rec.DownloadError = Error(ErrorCode.Offline, "no network");
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(downloads + 1, rec.Downloads.Count);
+        Assert.Equal(5, h.Log.Composed.Count);
+        Assert.Contains(h.Logger.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("no confirmation hook", StringComparison.Ordinal));
+
+        // A message over the daemon's cap can never be downloaded: asking
+        // would change nothing, the template comes at once.
+        await h.Run(() => h.Actions.Confirm = confirm);
+        rec.DownloadError = Error(ErrorCode.AttachmentTooBig, "over the cap");
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(6, h.Log.Composed.Count);
+        Assert.Equal(2, h.Log.Confirmations.Count);
+
+        // A message the cache does not hold is downloaded first all the
+        // same: message.download answers at once when nothing is missing.
+        rec.DownloadError = null;
+        Assert.Null(h.Cache.Loaded("m2"));
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m2"));
+        await h.IdleAsync();
+        Assert.Equal(7, h.Log.Composed.Count);
+        Assert.Equal("m2", rec.Downloads[^1].MessageId.Value);
+        Assert.Equal("m2", rec.Drafts[^1].MessageId?.Value);
+
+        // Without a daemon nothing is asked either: the window opens from
+        // what the pane knows, without a toast.
+        await h.Run(() => h.Cache.Loaded("m1")!.Msg = remote);
+        h.Client.Close();
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(8, h.Log.Composed.Count);
+        Assert.Equal(ComposeKind.Forward, h.Log.Composed[7].Kind);
+        Assert.Equal("m1", h.Log.Composed[7].Forwarding?.Value);
+        Assert.Equal(2, h.Log.Confirmations.Count);
+        Assert.Empty(h.Log.Toasts);
+    }
+
+    /// <summary>
+    /// compose_open.go <c>replyNeedsDownload</c>: a reply or reply all to a
+    /// message whose body counts pictures on the mail server only downloads
+    /// it first, once however often asked, and goes on without a word when
+    /// that fails; the download asks for the body again (endDownload). A
+    /// body that counts none, an attachment with a Content-ID on the server
+    /// notwithstanding, or an unknown message does not wait for anything. A
+    /// forward downloads them too (forwardNeedsDownload).
+    /// </summary>
+    [Fact]
+    public async Task ReplyDownloadsThePicturesOnTheServerFirst()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen), Msg("m2", 2, flags: Seen)));
+        var picture = new Attachment
+        {
+            PartId = "2",
+            Filename = "photo.jpg",
+            ContentType = "image/jpeg",
+            Size = 300_000,
+            Inline = true,
+            ContentId = "photo@x",
+            Remote = true,
+        };
+        // Outlook and Apple Mail give ordinary attachments a Content-ID too.
+        var report = new Attachment
+        {
+            PartId = "3",
+            Filename = "report.pdf",
+            ContentType = "application/pdf",
+            Size = 300_000,
+            Inline = false,
+            ContentId = "report@x",
+            Remote = true,
+        };
+        var original = new Message { Summary = h.Summary("m1"), Attachments = [picture, report] };
+        h.Fixture.SetDetail("m1", original);
+        var counted = Body("m1", "<p><img src=\"malachi-cid:a/m1/2\"></p>", RemoteContentPolicy.Block) with
+        {
+            InlineParts = new Dictionary<string, string> { ["photo@x"] = "2" },
+            RemotePictures = 1,
+        };
+        h.Fixture.SetBody("m1", counted);
+        var rec = new Recorder();
+        var downloaded = JsonCoding.EncodeToString(new MessageDownloadResult { Message = original });
+        Answer(h, API.MessageDownload.Name, p =>
+        {
+            rec.AddDownload(JsonCoding.Decode<MessageDownloadParams>(p));
+            return rec.DownloadError is { } e ? throw new RpcException(e) : downloaded;
+        });
+        var draft = new Draft { AccountId = "a", Subject = "Re: s-m1", TextBody = "q", HtmlBody = "<p>q</p>", InReplyTo = "m1" };
+        var created = JsonCoding.EncodeToString(new DraftCreateResult { Draft = draft, Quoted = QuoteForm.Html });
+        Answer(h, API.DraftCreate.Name, p =>
+        {
+            rec.AddDraft(JsonCoding.Decode<DraftCreateParams>(p));
+            return created;
+        });
+        await h.LoadAsync("m1");
+        var calls = h.Fixture.Calls().Count;
+        Assert.Equal(1, h.Fixture.CallCount(API.MessageBody.Name));
+
+        // The body asked for again after the download runs beside
+        // draft.create, in either order.
+        IEnumerable<string> CallsAfter(int n) => h.Fixture.Calls().Skip(n).Where(m => m != API.MessageBody.Name);
+        await h.Run(() =>
+        {
+            h.Actions.OpenCompose(ComposeKind.Reply, "m1");
+            h.Actions.OpenCompose(ComposeKind.Reply, "m1");
+        });
+        await h.IdleAsync();
+        Assert.Equal([API.MessageDownload.Name, API.DraftCreate.Name], CallsAfter(calls));
+        Assert.Equal(["m1"], rec.Downloads.Select(d => d.MessageId.Value));
+        Assert.Equal(ComposeKind.Reply, Assert.Single(h.Log.Composed).Kind);
+        Assert.Equal(2, h.Fixture.CallCount(API.MessageBody.Name));
+
+        // A failed download: the reply all the same, nothing asked or said,
+        // and no body asked for again.
+        rec.DownloadError = Error(ErrorCode.Offline, "no network");
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.ReplyAll, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(2, rec.Downloads.Count);
+        Assert.Equal(ComposeKind.ReplyAll, h.Log.Composed[1].Kind);
+        Assert.Empty(h.Log.Confirmations);
+        Assert.Empty(h.Log.Toasts);
+        Assert.Equal(2, rec.Drafts.Count);
+        Assert.Equal(2, h.Fixture.CallCount(API.MessageBody.Name));
+
+        // A forward downloads the pictures the HTML shows as well.
+        rec.DownloadError = null;
+        var before = h.Fixture.Calls().Count;
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Forward, "m1"));
+        await h.IdleAsync();
+        Assert.Equal(3, h.Log.Composed.Count);
+        Assert.Equal([API.MessageDownload.Name, API.DraftCreate.Name], CallsAfter(before));
+        Assert.Equal(3, rec.Downloads.Count);
+        Assert.Equal(3, h.Fixture.CallCount(API.MessageBody.Name));
+
+        // A body that counts no picture on the server (the daemon holds
+        // them): straight to draft.create, the attachments on the server
+        // with their Content-IDs notwithstanding.
+        await h.Run(() =>
+        {
+            var lm = h.Cache.Loaded("m1")!;
+            lm.Body = lm.Body! with { RemotePictures = null };
+            h.Actions.OpenCompose(ComposeKind.Reply, "m1");
+        });
+        await h.IdleAsync();
+        Assert.Equal(4, h.Log.Composed.Count);
+        Assert.Equal(3, rec.Downloads.Count);
+
+        // Nothing known about the message: straight to draft.create.
+        Assert.Null(h.Cache.Loaded("m2"));
+        await h.Run(() => h.Actions.OpenCompose(ComposeKind.Reply, "m2"));
+        await h.IdleAsync();
+        Assert.Equal(5, h.Log.Composed.Count);
+        Assert.Equal(3, rec.Downloads.Count);
+        Assert.Equal("m2", rec.Drafts[^1].MessageId?.Value);
+    }
+
     // Helpers
 
     private static Dictionary<FolderKey, MessageSummary[]> In(FolderKey k, params MessageSummary[] list) => new() { [k] = list };
@@ -883,5 +1216,95 @@ public sealed class ActionsControllerTests
         Assert.Equal("a", p.AccountId.Value);
         Assert.Equal(ids, IdsOf(p.MessageIds));
         Assert.Equal(target, p.TargetFolderId.Value);
+    }
+
+    /// <summary>
+    /// What the daemon's side of message.download and draft.create saw and
+    /// answers (Swift's Recorder and Downloads actors): the daemon's threads
+    /// write, the test reads once they are idle.
+    /// </summary>
+    private sealed class Recorder
+    {
+        private readonly Lock gate = new();
+        private readonly List<MessageDownloadParams> downloads = [];
+        private readonly List<DraftCreateParams> drafts = [];
+        private RpcError? downloadError;
+        private bool done;
+
+        /// <summary>What the next message.download answers with; null for success.</summary>
+        public RpcError? DownloadError
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return downloadError;
+                }
+            }
+            set
+            {
+                lock (gate)
+                {
+                    downloadError = value;
+                }
+            }
+        }
+
+        /// <summary>Whether a message.download succeeded, for a body that changes with it.</summary>
+        public bool Done
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return done;
+                }
+            }
+            set
+            {
+                lock (gate)
+                {
+                    done = value;
+                }
+            }
+        }
+
+        public IReadOnlyList<MessageDownloadParams> Downloads
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. downloads];
+                }
+            }
+        }
+
+        public IReadOnlyList<DraftCreateParams> Drafts
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return [.. drafts];
+                }
+            }
+        }
+
+        public void AddDownload(MessageDownloadParams p)
+        {
+            lock (gate)
+            {
+                downloads.Add(p);
+            }
+        }
+
+        public void AddDraft(DraftCreateParams p)
+        {
+            lock (gate)
+            {
+                drafts.Add(p);
+            }
+        }
     }
 }

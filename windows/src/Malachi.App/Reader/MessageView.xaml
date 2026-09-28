@@ -13,7 +13,9 @@ the top: the command row of the pane or window (the Adw.HeaderBar: Reply,
 Reply All, Forward at the start; Trash, Junk, Archive, Star and More at the
 end, GTK packing [end] from the right), the outbox and draft banners
 (InfoBars), the remote-image bar (a bar of its own, as in GTK: two
-buttons, reachable by Tab), and the message stack: No Message Selected
+buttons, reachable by Tab), the pictures bar under it (pictures of the HTML
+kept on the mail server only, Download Pictures; not in an attached
+message's window, whose pictures arrive inlined), and the message stack: No Message Selected
 and No Accounts (the pane only) or the message, whose headers stay put in
 a clamp of 900 (sides 24, top 12, docs/windows-port.md §11.3), scrolling
 on their own only past two thirds of the page, while the body below
@@ -126,6 +128,7 @@ scrolls on its own in the same clamp: the plain text, the spinner after
     </UserControl.Resources>
     <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -348,8 +351,59 @@ scrolls on its own in the same clamp: the plain text, the spinner after
             </Grid>
         </Border>
 
+        <!-- pictures_bar (window/remote.go): how many pictures the HTML
+             shows are kept on the mail server only (neverStoreAttachments),
+             and the button that has the daemon download the message, after
+             which the body is asked for again; the spinner in its place
+             meanwhile. Under remote_bar when both apply; never in an
+             attached message's window (embedded_window.blp has none). -->
+        <Border
+            x:Name="PicturesBar"
+            Grid.Row="4"
+            Padding="12,6"
+            AutomationProperties.AutomationId="PicturesBar"
+            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1"
+            Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarVisible), Mode=OneWay}">
+            <Grid ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <!-- Named with the bar's sentence (Downloading pictures…),
+                     as the remote-image bar's spinner is named. -->
+                <ProgressRing
+                    x:Name="PicturesSpinner"
+                    Width="16"
+                    Height="16"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="PicturesSpinner"
+                    AutomationProperties.Name="{x:Bind Reader.PicturesBarText, Mode=OneWay}"
+                    IsActive="{x:Bind Reader.PicturesBarLoading, Mode=OneWay}"
+                    Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarLoading), Mode=OneWay}" />
+                <TextBlock
+                    x:Name="PicturesLabel"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="PicturesLabel"
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{x:Bind Reader.PicturesBarText, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+                <Button
+                    x:Name="PicturesDownload"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="DownloadPicturesButton"
+                    Click="OnDownloadPictures"
+                    Visibility="{x:Bind local:ReaderBind.Hidden(Reader.PicturesBarLoading), Mode=OneWay}"
+                    l:MnemonicLabel.Text="{l:T Msgid='_Download Pictures'}" />
+            </Grid>
+        </Border>
+
         <!-- message_stack. -->
-        <Grid x:Name="Pages" Grid.Row="4">
+        <Grid x:Name="Pages" Grid.Row="5">
             <!-- "empty". -->
             <StackPanel
                 x:Name="EmptyPage"

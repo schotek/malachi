@@ -40,11 +40,12 @@ public sealed class AttachmentPreview
     /// <summary>
     /// Shows <paramref name="attachment"/> of <paramref name="message"/> in
     /// the preview window, opening it or swapping what it shows; the click
-    /// was in <paramref name="from"/>.
+    /// was in <paramref name="from"/>. <paramref name="remote"/>: the chip
+    /// showed the part on the mail server, the message is downloaded first.
     /// </summary>
-    public async Task ShowAsync(Attachment attachment, MessageSummary message, Window? from)
+    public async Task ShowAsync(Attachment attachment, MessageSummary message, bool remote, Window? from)
     {
-        if (state.IsStopping || await opener.PreviewAsync(attachment, message, from) is not { } request || state.IsStopping)
+        if (state.IsStopping || await opener.PreviewAsync(attachment, message, remote, from) is not { } request || state.IsStopping)
         {
             return;
         }

@@ -45,7 +45,8 @@ internal sealed class SelectionActions
         ArgumentNullException.ThrowIfNull(commands);
         commands.Reply.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.Reply, id));
         commands.ReplyAll.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.ReplyAll, id));
-        commands.Forward.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id));
+        // "Forward Without Attachments?" goes on the main window.
+        commands.Forward.Handler = () => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, window()));
         commands.Trash.Handler = () => list.SelectedIds((row, ids) => actions.Trash(ids, ListController.RowSubject(row), window()));
         commands.Junk.Handler = () => list.SelectedIds((row, ids) => actions.Junk(ids, ListController.RowSubject(row), window()));
         commands.Archive.Handler = () => list.SelectedIds((_, ids) => actions.Archive(ids));

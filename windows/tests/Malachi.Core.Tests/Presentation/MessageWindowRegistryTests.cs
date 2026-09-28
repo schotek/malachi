@@ -4,16 +4,19 @@
 // Tests of MessageWindowRegistry: ui/internal/window/message_view.go
 // (openMessageWindow, closeMessageWindow), embedded.go (openEmbeddedWindow,
 // closeEmbeddedWindows), remote.go (showLoaded, refreshRemoteBar),
-// outbox.go (showOutboxState), actions.go (refreshStars, refreshSeen) and
+// download.go (refreshChips, embeddedData), outbox.go (showOutboxState),
+// actions.go (refreshStars, refreshSeen) and
 // macos MessageWindows.swift and WindowRegistry.swift, with windows that
 // only record what they were asked.
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Tests.Fixtures;
+using Malachi.Core.Transport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Malachi.Core.Tests.Presentation.ReaderFixtures;
@@ -50,6 +53,9 @@ public sealed class MessageWindowRegistryTests
         return w;
     }
 
+    // The chip of an attached message under part.
+    private static Attachment Eml(string part) => Attachment(part, "fwd.eml", "message/rfc822");
+
     private static MessageEmbeddedResult Embedded(string subject) => new()
     {
         PartId = "2",
@@ -85,21 +91,54 @@ public sealed class MessageWindowRegistryTests
     {
         var containing = Summary("m1", "Outer");
         cache.Embedded = _ => null;
-        await registry.OpenEmbeddedAsync(containing, "2", "chip window");
+        await registry.OpenEmbeddedAsync(containing, Eml("2"), remote: false, "chip window");
         Assert.Empty(made);
         Assert.Equal([("chip window", "Opening the attached message failed")], toasts);
 
         cache.Embedded = _ => Embedded("Inner");
-        await registry.OpenEmbeddedAsync(containing, "2", null);
+        await registry.OpenEmbeddedAsync(containing, Eml("2"), remote: false, null);
         var w = Assert.Single(made);
         Assert.Equal("Inner", w.Reader.Subject);
         Assert.Equal(1, w.Presented);
 
         // Open again: raised, not fetched.
-        await registry.OpenEmbeddedAsync(containing, "2", null);
+        await registry.OpenEmbeddedAsync(containing, Eml("2"), remote: false, null);
         Assert.Single(made);
         Assert.Equal(2, w.Presented);
         Assert.Equal(2, cache.EmbeddedCalls.Count);
+    }
+
+    /// <summary>
+    /// embedded.go <c>openEmbeddedWindow</c> with <c>embeddedData</c>: an
+    /// attached message the chip showed on the mail server is downloaded
+    /// first, and the window is known by the part the daemon rendered, which
+    /// a download on Microsoft 365 may have moved; a failed download is a
+    /// toast where the chip is.
+    /// </summary>
+    [Fact]
+    public async Task AnAttachedMessageOnTheServerIsDownloadedFirst()
+    {
+        var containing = Summary("m1", "Outer");
+        cache.DownloadError = new RpcException(new RpcError { Code = ErrorCode.Offline, Message = "no network" });
+        await registry.OpenEmbeddedAsync(containing, Eml("2"), remote: true, "chip window");
+        Assert.Empty(made);
+        Assert.Empty(cache.EmbeddedParts);
+        Assert.Equal([("chip window", "Opening the attached message failed: no network connection")], toasts);
+
+        cache.DownloadError = null;
+        cache.Downloaded = Message(containing, [Eml("5")]);
+        cache.Embedded = _ => Embedded("Inner") with { PartId = "5" };
+        await registry.OpenEmbeddedAsync(containing, Eml("2"), remote: true, null);
+        var w = Assert.Single(made);
+        Assert.Equal(["m1", "m1"], cache.DownloadCalls.Select(id => id.Value));
+        Assert.Equal(["5"], cache.EmbeddedParts);
+        Assert.Contains(new MessageWindowKey.Embedded("m1", "5"), registry.Keys);
+
+        // Asked for again under the part rendered: raised, not fetched.
+        await registry.OpenEmbeddedAsync(containing, Eml("5"), remote: false, null);
+        Assert.Single(made);
+        Assert.Equal(2, w.Presented);
+        Assert.Single(cache.EmbeddedParts);
     }
 
     [Fact]
@@ -116,7 +155,7 @@ public sealed class MessageWindowRegistryTests
         cache.EmbeddedGate = new TaskCompletionSource();
         cache.Embedded = _ => Embedded("Inner");
         var (first, second) = await ui.RunAsync(() =>
-            (registry.OpenEmbeddedAsync(containing, "2", null), registry.OpenEmbeddedAsync(containing, "2", null)));
+            (registry.OpenEmbeddedAsync(containing, Eml("2"), remote: false, null), registry.OpenEmbeddedAsync(containing, Eml("2"), remote: false, null)));
         cache.EmbeddedGate.SetResult();
         await Task.WhenAll(first, second);
         var w = Assert.Single(made);
@@ -129,8 +168,8 @@ public sealed class MessageWindowRegistryTests
         registry.OpenMessage(Summary("m1"));
         registry.OpenMessage(Summary("m2"));
         cache.Embedded = _ => Embedded("Inner");
-        await registry.OpenEmbeddedAsync(Summary("m1"), "2", null);
-        await registry.OpenEmbeddedAsync(Summary("m2"), "3", null);
+        await registry.OpenEmbeddedAsync(Summary("m1"), Eml("2"), remote: false, null);
+        await registry.OpenEmbeddedAsync(Summary("m2"), Eml("3"), remote: false, null);
         Assert.Equal(4, made.Count);
 
         registry.CloseMessage("m1");
@@ -151,7 +190,7 @@ public sealed class MessageWindowRegistryTests
         pane.Show(s);
         registry.OpenMessage(s);
         cache.Embedded = _ => Embedded("Inner");
-        await registry.OpenEmbeddedAsync(s, "2", null);
+        await registry.OpenEmbeddedAsync(s, Eml("2"), remote: false, null);
         var window = made[0];
         var attached = made[1];
 
@@ -173,9 +212,25 @@ public sealed class MessageWindowRegistryTests
         Assert.True(pane.OutboxVisible);
         Assert.Equal("Sending…", window.Reader.OutboxTitle);
 
+        // download.go refreshChips: the chips of every view of the message,
+        // attached ones left out.
+        lm.Msg = Message(s, [Attachment("3", "big.pdf", size: 300_000) with { Remote = true }]);
+        cache.Spinning.Add("m1");
+        registry.RefreshChips("m1", lm);
+        Assert.True(pane.Chips[0].Downloading);
+        Assert.True(window.Reader.Chips[0].Downloading);
+        Assert.DoesNotContain(attached.Reader.Chips, c => c.Downloading);
+        cache.Spinning.Remove("m1");
+        registry.RefreshChips("m1", null); // the cache let it go: what each drew last
+        Assert.False(pane.Chips[0].Downloading);
+        Assert.False(window.Reader.Chips[0].Downloading);
+
         // Another message's news reach nobody here.
         registry.ShowLoaded("m2", new LoadedMessage { Body = TextBody("m2", "other") });
         Assert.Equal("<p>x</p>", pane.Html);
+        cache.Spinning.Add("m2");
+        registry.RefreshChips("m2", null);
+        Assert.False(pane.Chips[0].Downloading);
 
         registry.RefreshActions();
         Assert.Equal(1, window.Refreshed);

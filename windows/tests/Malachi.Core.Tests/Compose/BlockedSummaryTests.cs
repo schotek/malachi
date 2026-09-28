@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Tests/MalachiCoreTests/BlockedSummaryTests.swift, the
-// counterpart of ui/internal/compose/draft_test.go TestBlockedSummary
-// (English catalogue).
+// counterpart of ui/internal/compose/draft_test.go TestBlockedSummary and
+// TestSkippedSummary (English catalogue).
 
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
@@ -33,5 +33,14 @@ public sealed class BlockedSummaryTests
             TrackingPixels = 1,
         };
         Assert.Equal("9 unsafe elements were removed from the message", BlockedSummary.Text(all));
+    }
+
+    [Fact]
+    public void SkippedSummaryText()
+    {
+        Assert.Equal("", BlockedSummary.Skipped(0));
+        Assert.Equal("", BlockedSummary.Skipped(-1));
+        Assert.Equal("1 attachment of the original could not be attached", BlockedSummary.Skipped(1));
+        Assert.Equal("3 attachments of the original could not be attached", BlockedSummary.Skipped(3));
     }
 }

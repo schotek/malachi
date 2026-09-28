@@ -3,20 +3,22 @@
 
 // Tests of ReaderController: ui/internal/window/message_view.go
 // (showMessage with bodyGen, render, renderHeaders, renderBody, loading
-// with bodySpinnerDelay), remote.go (showRemoteBar), outbox.go
-// (renderOutboxBanner), embedded.go (show, loadImages) and window.go
-// (emptyPageName), which macOS keeps untested in
-// MessageViewController.swift and EmbeddedWindowController.swift. The
-// cache is a fake that answers when the test says; the spinner runs on a
-// fake clock.
+// with bodySpinnerDelay), remote.go (showRemoteBar, showPicturesBar),
+// outbox.go (renderOutboxBanner), download.go (refreshChips), embedded.go
+// (show, loadImages) and window.go (emptyPageName), which macOS keeps
+// untested in MessageViewController.swift and
+// EmbeddedWindowController.swift. The cache is a fake that answers when the
+// test says; the spinner runs on a fake clock.
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Text;
+using Malachi.Core.Transport;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Malachi.Core.Tests.Presentation.ReaderFixtures;
@@ -139,6 +141,105 @@ public sealed class ReaderControllerTests
         lm.Body = HtmlBody("m1", "<p>x</p>", remoteImages: 2, remote: RemoteContentPolicy.Allow);
         r.Render(s, lm);
         Assert.False(r.RemoteBarVisible);
+    }
+
+    /// <summary>
+    /// remote.go <c>renderPicturesBar</c>: under the remote-image bar, how
+    /// many pictures of the HTML are on the mail server only, the wait while
+    /// they download, and nothing for a body that is not in the viewer.
+    /// </summary>
+    [Fact]
+    public void ThePicturesBarCountsWhatTheHtmlMissesOnTheServer()
+    {
+        var r = Make();
+        var s = Summary("m1");
+        var lm = cache.Entry("m1");
+        lm.Msg = Message(s);
+        lm.Body = HtmlBody("m1", "<p>x</p>", remoteImages: 2) with { RemotePictures = 3 };
+        r.Show(s);
+        Assert.True(r.RemoteBarVisible);
+        Assert.True(r.PicturesBarVisible);
+        Assert.False(r.PicturesBarLoading);
+        Assert.Equal("3 pictures of this message are on the server only", r.PicturesBarText);
+
+        // Download Pictures: the wait, the body stays.
+        lm.LoadingPictures = true;
+        r.RefreshRemoteBar(lm);
+        Assert.True(r.PicturesBarVisible && r.PicturesBarLoading);
+        Assert.Equal("Downloading pictures…", r.PicturesBarText);
+        Assert.Equal("<p>x</p>", r.Html);
+
+        // One left.
+        lm.LoadingPictures = false;
+        lm.Body = lm.Body with { RemotePictures = 1 };
+        r.Render(s, lm);
+        Assert.Equal("1 picture of this message is on the server only", r.PicturesBarText);
+
+        // The plain text, a body on its way, an error: no bars.
+        lm.Body = TextBody("m1") with { RemotePictures = 2 };
+        r.Render(s, lm);
+        Assert.False(r.PicturesBarVisible || r.RemoteBarVisible);
+        lm.Body = HtmlBody("m1", "<p>x</p>") with { RemotePictures = 2 };
+        r.Render(s, lm);
+        Assert.True(r.PicturesBarVisible);
+        r.Render(s, new LoadedMessage { Msg = lm.Msg });
+        Assert.False(r.PicturesBarVisible);
+        r.Render(s, lm);
+        r.Clear();
+        Assert.False(r.PicturesBarVisible);
+
+        // An attached message's view has no pictures bar.
+        var e = Make(ReaderMode.Embedded);
+        e.ShowEmbedded(s, Attachment("2", "fwd.eml", "message/rfc822"), new MessageEmbeddedResult
+        {
+            PartId = "2",
+            Message = Message(Summary("m1", "Inner")),
+            Body = HtmlBody("m1", "<p>a</p>") with { RemotePictures = 2 },
+        });
+        Assert.False(e.PicturesBarVisible);
+    }
+
+    /// <summary>
+    /// The body asked for again once its pictures were downloaded carries
+    /// the same HTML, whose pictures load now: the viewer is told to load it
+    /// again (MessageViewController.swift <c>picturesArrived</c>); a render
+    /// of the same body, or another HTML, is no reason to.
+    /// </summary>
+    [Fact]
+    public void TheSameHtmlIsLoadedAgainOnceItsPicturesArrived()
+    {
+        var r = Make();
+        var reloads = 0;
+        r.HtmlReloadRequested += (_, _) => reloads++;
+        var s = Summary("m1");
+        var lm = cache.Entry("m1");
+        lm.Msg = Message(s);
+        var counted = HtmlBody("m1", "<p><img src=\"malachi-cid:acc/m1/2\"></p>") with { RemotePictures = 1 };
+        lm.Body = counted;
+        r.Show(s);
+        r.Render(s, lm);
+        Assert.Equal(0, reloads); // the same body again
+
+        // The pictures arrived: the same HTML, a new body.
+        lm.Body = counted with { RemotePictures = null };
+        r.Render(s, lm);
+        Assert.Equal(1, reloads);
+        Assert.False(r.PicturesBarVisible);
+        r.Render(s, lm);
+        Assert.Equal(1, reloads);
+
+        // A new body that counted none before: no reason.
+        lm.Body = lm.Body with { Text = "again" };
+        r.Render(s, lm);
+        Assert.Equal(1, reloads);
+
+        // Another HTML loads by itself (Html changes).
+        lm.Body = counted;
+        r.Render(s, lm);
+        lm.Body = HtmlBody("m1", "<p>other</p>");
+        r.Render(s, lm);
+        Assert.Equal(1, reloads);
+        Assert.Equal("<p>other</p>", r.Html);
     }
 
     [Fact]
@@ -364,6 +465,47 @@ public sealed class ReaderControllerTests
         Assert.Equal(2, changes);
     }
 
+    /// <summary>
+    /// download.go <c>refreshChips</c>: a download of the message on display
+    /// begins to show its spinner or ends, and the chips are drawn again from
+    /// the cache entry, or from what was rendered last when the cache no
+    /// longer holds it; Save All downloads first when a part is on the
+    /// server.
+    /// </summary>
+    [Fact]
+    public void TheChipsFollowTheDownloadOfTheMessage()
+    {
+        var r = Make();
+        var s = Summary("m1");
+        var lm = cache.Entry("m1");
+        lm.Msg = Message(s, [Attachment("2", "a.pdf"), Attachment("3", "big.pdf", size: 300_000) with { Remote = true }]);
+        lm.Body = TextBody("m1");
+        r.Show(s);
+        Assert.Equal([false, true], r.Chips.Select(c => c.OnServer));
+        Assert.All(r.Chips, c => Assert.False(c.Downloading));
+        Assert.Equal(2, r.SaveAll.Count);
+        Assert.True(r.SaveAllRemote);
+
+        cache.Spinning.Add("m1");
+        r.RefreshChips("m1", lm);
+        Assert.True(r.Chips[1].Downloading);
+        Assert.False(r.Chips[0].Downloading);
+
+        // Ended: the downloaded message (nothing on the server any more),
+        // drawn from what was rendered when the cache let it go.
+        cache.Spinning.Remove("m1");
+        lm.Msg = Message(s, [Attachment("2", "a.pdf"), Attachment("3", "big.pdf", size: 300_000)]);
+        r.RefreshChips("m1", null);
+        Assert.All(r.Chips, c => Assert.False(c.OnServer || c.Downloading));
+        Assert.False(r.SaveAllRemote);
+
+        // Another message on display is left alone; an attached message's
+        // view has no download of its own.
+        r.Show(Summary("m2"));
+        r.RefreshChips("m1", lm);
+        Assert.Empty(r.Chips);
+    }
+
     [Fact]
     public void AnAttachedMessageRendersReadOnlyAndLoadsItsImagesAgain()
     {
@@ -377,7 +519,7 @@ public sealed class ReaderControllerTests
             Message = Message(inner, [Attachment("", "x.pdf")]),
             Body = HtmlBody("m1", html, remoteImages: blocked),
         };
-        r.ShowEmbedded(containing, "2", Result("<p>a</p>", 1));
+        r.ShowEmbedded(containing, Attachment("2", "fwd.eml", "message/rfc822"), Result("<p>a</p>", 1));
         Assert.Equal("Inner", r.Subject);
         Assert.Same(containing, r.Containing);
         Assert.Equal("<p>a</p>", r.Html);
@@ -401,7 +543,7 @@ public sealed class ReaderControllerTests
             Message = Message(Summary("m1", "Inner")),
             Body = HtmlBody("m1", html, remoteImages: blocked, remote: remote),
         };
-        r.ShowEmbedded(containing, "2", Result("<p>a</p>", 1, RemoteContentPolicy.Block));
+        r.ShowEmbedded(containing, Attachment("2", "fwd.eml", "message/rfc822"), Result("<p>a</p>", 1, RemoteContentPolicy.Block));
         cache.EmbeddedGate = new TaskCompletionSource();
         cache.Embedded = remote => Result("<p>with images</p>", 0, remote?.Value ?? "");
         var load = r.LoadEmbeddedImagesAsync();
@@ -413,6 +555,43 @@ public sealed class ReaderControllerTests
         Assert.Equal([(RemoteContentPolicy?)RemoteContentPolicy.Allow], cache.EmbeddedCalls);
         Assert.Equal("<p>with images</p>", r.Html);
         Assert.False(r.RemoteBarVisible);
+        Assert.Empty(cache.DownloadCalls);
+    }
+
+    /// <summary>
+    /// embedded.go <c>loadImages</c> through <c>embeddedData</c>: an attached
+    /// message the daemon moved to the mail server since the window opened is
+    /// downloaded once, and the part the download renumbered is the one
+    /// asked for from then on.
+    /// </summary>
+    [Fact]
+    public async Task LoadImagesOfAnAttachedMessageOnTheServerDownloadsItFirst()
+    {
+        var r = Make(ReaderMode.Embedded);
+        var containing = Summary("m1", "Outer");
+        var eml = Attachment("2", "fwd.eml", "message/rfc822");
+        r.ShowEmbedded(containing, eml, new MessageEmbeddedResult
+        {
+            PartId = "2",
+            Message = Message(Summary("m1", "Inner")),
+            Body = HtmlBody("m1", "<p>a</p>", remoteImages: 1),
+        });
+        var answered = 0;
+        cache.Embedded = _ => ++answered == 1
+            ? throw new RpcException(new RpcError { Code = ErrorCode.PartNotDownloaded, Message = "on the server" })
+            : new MessageEmbeddedResult { PartId = "4", Message = Message(Summary("m1", "Inner")), Body = HtmlBody("m1", "<p>with images</p>") };
+        cache.Downloaded = Message(containing, [eml with { PartId = "4" }]);
+        await r.LoadEmbeddedImagesAsync();
+        Assert.Equal(["m1"], cache.DownloadCalls.Select(id => id.Value));
+        Assert.Equal("<p>with images</p>", r.Html);
+
+        // The next load asks for the part the download renumbered.
+        cache.Downloaded = null;
+        cache.Embedded = _ => new MessageEmbeddedResult { PartId = "4", Message = Message(Summary("m1", "Inner")), Body = HtmlBody("m1", "<p>b</p>") };
+        await r.LoadEmbeddedImagesAsync();
+        Assert.Single(cache.DownloadCalls);
+        Assert.Equal(["2", "4", "4"], cache.EmbeddedParts);
+        Assert.Equal("<p>b</p>", r.Html);
     }
 
     [Fact]
@@ -422,7 +601,7 @@ public sealed class ReaderControllerTests
         var toasts = new List<string>();
         r.Toast = toasts.Add;
         var containing = Summary("m1", "Outer");
-        r.ShowEmbedded(containing, "2", new MessageEmbeddedResult
+        r.ShowEmbedded(containing, Attachment("2", "fwd.eml", "message/rfc822"), new MessageEmbeddedResult
         {
             PartId = "2",
             Message = Message(Summary("m1", "Inner")),
@@ -441,7 +620,7 @@ public sealed class ReaderControllerTests
     public async Task AReplyAfterTheWindowClosedIsDropped()
     {
         var r = Make(ReaderMode.Embedded);
-        r.ShowEmbedded(Summary("m1"), "2", new MessageEmbeddedResult
+        r.ShowEmbedded(Summary("m1"), Attachment("2", "fwd.eml", "message/rfc822"), new MessageEmbeddedResult
         {
             PartId = "2",
             Message = Message(Summary("m1", "Inner")),

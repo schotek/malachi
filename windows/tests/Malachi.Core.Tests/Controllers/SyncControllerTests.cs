@@ -323,8 +323,9 @@ public sealed class SyncControllerTests
         var (sc, _) = await h.MakeAsync();
         Task<SignInUrl> Request(string? fallback) => h.Ui.InvokeAsync(() => sc.RequestSignInUrlAsync(client, "a5", fallback));
         Assert.Equal(new SignInUrl.Open("https://login.example/x"), await Request("https://login.example/x"));
-        Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed"), await Request(null));
-        Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed"), await Request(""));
+        // unavailable: the daemon runs too many sign-ins at once.
+        Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed: try again in a moment"), await Request(null));
+        Assert.Equal(new SignInUrl.Failed("Starting the sign-in failed: try again in a moment"), await Request(""));
         Assert.Equal(new SignInUrl.Failed("The link could not be opened: not an https address"), await Request("http://login.example/x"));
     }
 

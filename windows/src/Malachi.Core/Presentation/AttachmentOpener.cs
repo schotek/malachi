@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Attachments/AttachmentActions.swift
-// (open, preview, fetchForViewing, writeForViewing, saveAs, saveAll,
-// saveInto, writeUnique, quarantine); GTK: ui/internal/window/
+// (open, preview, partData, fetchForViewing, writeForViewing, saveAs,
+// saveAll, saveInto, writeUnique, quarantine); GTK: ui/internal/window/
 // attachments.go (openAttachment, previewAttachment, writeAttachment,
 // launchFile, saveAttachment, saveAllAttachments, saveInto). What a chip's
 // click, Open, Save As… and Save All do, minus the pickers and the shell,
-// which macOS keeps in AppKit (docs/windows-port.md §7.4, §10):
+// which macOS keeps in AppKit (docs/windows-port.md §7.4, §10). The part
+// comes through IReaderCache.PartDataAsync (download.go partData): a part
+// the chip showed on the mail server (remote) is downloaded first, and one
+// the daemon moved there since the chip was drawn after its
+// partNotDownloaded; the chips show the spinner meanwhile.
 //
 // - Open: a program or script is refused with GTK's toast, judged by the
 //   platform's policy (DangerousTypes and AssocIsDangerous) on what the
@@ -34,6 +38,10 @@
 //   a time: the button is disabled while it lasts (buildSaveAll), and
 //   since a re-render rebuilds the button and another view may show the
 //   same message, the run is kept here, by message, not on the button.
+//   When some are on the mail server (anyRemote) the message is downloaded
+//   once after the folder is chosen; if that fails nothing is written and
+//   the toast says why, and a part the downloaded message no longer lists
+//   (Microsoft 365 renumbers) counts as failed.
 //
 // A file an antivirus or the attachment policy removed counts as not saved.
 // Log lines carry part ids and exception types only: a file's path carries
@@ -49,6 +57,7 @@ using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Platform;
 using Malachi.Core.Text;
+using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -74,7 +83,7 @@ public sealed partial class AttachmentOpener
     // the summary toast).
     private readonly HashSet<MessageId> savingAll = [];
 
-    /// <param name="parts">Fetches the parts (<c>message.part</c>).</param>
+    /// <param name="parts">Fetches the parts (<c>message.part</c>, after <c>message.download</c> where needed).</param>
     /// <param name="openDir">Where a part is written for opening.</param>
     /// <param name="mark">The Mark of the Web.</param>
     /// <param name="policy">What the platform would run.</param>
@@ -130,9 +139,10 @@ public sealed partial class AttachmentOpener
     /// <summary>
     /// A chip's Open (attachments.go <c>openAttachment</c>): the part written
     /// to a private file, marked, and handed to its application; a program or
-    /// script is refused with a toast.
+    /// script is refused with a toast. <paramref name="remote"/> (the chip
+    /// showed the part on the mail server) downloads the message first.
     /// </summary>
-    public async Task OpenAsync(Attachment a, MessageSummary s, object? window)
+    public async Task OpenAsync(Attachment a, MessageSummary s, bool remote, object? window)
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(s);
@@ -141,7 +151,7 @@ public sealed partial class AttachmentOpener
             RefuseProgram(window);
             return;
         }
-        if (await FetchForViewingAsync(a, s, window) is not { } res)
+        if (await FetchForViewingAsync(a, s, remote, window) is not { } res)
         {
             return;
         }
@@ -193,9 +203,12 @@ public sealed partial class AttachmentOpener
     /// A chip's click (attachments.go <c>previewAttachment</c>): the bytes for
     /// the previewer, in memory; a program or script only by its metadata,
     /// judged before the fetch and again on the name and type the daemon
-    /// served. Null after a failure, which had its toast.
+    /// served. <paramref name="remote"/> downloads the message first. The
+    /// request carries the part the daemon served (a download on Microsoft
+    /// 365 may move its id), so the previewer's Open and Save As… fetch that
+    /// one. Null after a failure, which had its toast.
     /// </summary>
-    public async Task<PreviewRequest?> PreviewAsync(Attachment a, MessageSummary s, object? window)
+    public async Task<PreviewRequest?> PreviewAsync(Attachment a, MessageSummary s, bool remote, object? window)
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(s);
@@ -203,25 +216,27 @@ public sealed partial class AttachmentOpener
         {
             return new PreviewRequest(a, s, null, null, CanOpen: false);
         }
-        if (await FetchForViewingAsync(a, s, window) is not { } res)
+        if (await FetchForViewingAsync(a, s, remote, window) is not { } res)
         {
             return null;
         }
+        var served = res.PartId.Length > 0 ? a with { PartId = res.PartId } : a;
         var name = AttachmentChips.FileName(res, a, lookAlikes);
         if (policy.IsDangerous(name, res.ContentType))
         {
             LogServedAsProgram(logger, a.PartId);
-            return new PreviewRequest(a, s, null, null, CanOpen: false);
+            return new PreviewRequest(served, s, null, null, CanOpen: false);
         }
-        return new PreviewRequest(a, s, res.ContentType, res.Data, CanOpen: true);
+        return new PreviewRequest(served, s, res.ContentType, res.Data, CanOpen: true);
     }
 
     /// <summary>
     /// A chip's Save As… (attachments.go <c>saveAttachment</c>): asks where,
-    /// then fetches, writes over the chosen file and marks it. Only a failure
-    /// gets a toast; a dismissal nothing.
+    /// then fetches (downloading the message first when
+    /// <paramref name="remote"/>), writes over the chosen file and marks it.
+    /// Only a failure gets a toast; a dismissal nothing.
     /// </summary>
-    public async Task SaveAsAsync(Attachment a, MessageSummary s, object? window)
+    public async Task SaveAsAsync(Attachment a, MessageSummary s, bool remote, object? window)
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(s);
@@ -232,7 +247,7 @@ public sealed partial class AttachmentOpener
         }
         try
         {
-            var res = await parts.FetchAttachmentAsync(s.AccountId, s.Id, a.PartId);
+            var res = await parts.PartDataAsync(s.AccountId, s.Id, a, remote);
             await Task.Run(() => Replace(path, res.Data));
             if (await MarkAsync(path, AttachmentUse.Save, a.PartId) is { FileKept: false })
             {
@@ -250,13 +265,16 @@ public sealed partial class AttachmentOpener
     /// Save All (attachments.go <c>saveAllAttachments</c>): asks for a
     /// folder and writes every attachment into it, one <c>message.part</c> at
     /// a time, never overwriting: a name that exists gets " (2)" and so on.
+    /// When some are on the mail server (<paramref name="remote"/>,
+    /// <see cref="AttachmentChips.AnyRemote"/>) the message is downloaded
+    /// once first; if that fails, nothing is written and the toast says why.
     /// One toast sums it up; nothing after a dismissal. A second Save All of
     /// the same message while the first lasts does nothing. Unlike GTK, what
     /// the file-type policy names is not saved (Save As saves it), and a
     /// toast of its own says how many were left out; when that is every
     /// attachment, no folder is asked for.
     /// </summary>
-    public async Task SaveAllAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
+    public async Task SaveAllAsync(IReadOnlyList<Attachment> atts, MessageSummary s, bool remote, object? window)
     {
         ArgumentNullException.ThrowIfNull(atts);
         ArgumentNullException.ThrowIfNull(s);
@@ -267,7 +285,7 @@ public sealed partial class AttachmentOpener
         SavingAllChanged?.Invoke(this, s.Id);
         try
         {
-            await SaveAllOnceAsync(atts, s, window);
+            await SaveAllOnceAsync(atts, s, remote, window);
         }
         finally
         {
@@ -276,7 +294,7 @@ public sealed partial class AttachmentOpener
         }
     }
 
-    private async Task SaveAllOnceAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
+    private async Task SaveAllOnceAsync(IReadOnlyList<Attachment> atts, MessageSummary s, bool remote, object? window)
     {
         // What the message lists as a program is left out before the fetch.
         var wanted = new List<Attachment>(atts.Count);
@@ -302,13 +320,30 @@ public sealed partial class AttachmentOpener
         {
             return; // dismissed
         }
+        Message? downloaded = null; // the message after the download, if there was one
+        if (remote)
+        {
+            try
+            {
+                downloaded = await parts.DownloadAsync(s.AccountId, s.Id);
+            }
+            catch (Exception e) when (e is not OutOfMemoryException)
+            {
+                LogDownloadFailed(logger, e.GetType().Name);
+                Say(window, RpcErrorText.Text(L10n.T("Saving the attachments"), e));
+                return;
+            }
+        }
         var saved = 0;
         var failed = 0;
         foreach (var a in wanted)
         {
             try
             {
-                if (await SaveIntoAsync(folder, s, a))
+                // Microsoft 365 may have renumbered the parts; one the
+                // downloaded message no longer lists is not fetched.
+                var part = AttachmentChips.PartAfterDownload(a, downloaded) ?? throw new RpcException(Download.PartNotFoundAfterDownload);
+                if (await SaveIntoAsync(folder, s, part))
                 {
                     saved++;
                 }
@@ -334,13 +369,15 @@ public sealed partial class AttachmentOpener
         }
     }
 
-    // attachments.go saveInto: fetches a and creates it in folder under a
-    // name that is not taken yet, then marks it. False, with nothing
+    // attachments.go saveInto: fetches a (the message downloaded already
+    // when it had to be; a part the daemon answers partNotDownloaded for
+    // after all gets its one download and retry) and creates it in folder
+    // under a name that is not taken yet, then marks it. False, with nothing
     // written, when the part turns out a program by the name and type the
     // daemon served or by the name the file would get.
     private async Task<bool> SaveIntoAsync(string folder, MessageSummary s, Attachment a)
     {
-        var res = await parts.FetchAttachmentAsync(s.AccountId, s.Id, a.PartId);
+        var res = await parts.PartDataAsync(s.AccountId, s.Id, a, onServer: false);
         var name = AttachmentChips.FileName(res, a, lookAlikes);
         if (policy.IsDangerous(name, res.ContentType))
         {
@@ -360,13 +397,14 @@ public sealed partial class AttachmentOpener
         return true;
     }
 
-    // message.part for the attachment being opened or previewed; null after
-    // a failure, which had its toast.
-    private async Task<MessagePartResult?> FetchForViewingAsync(Attachment a, MessageSummary s, object? window)
+    // message.part for the attachment being opened or previewed, the
+    // message downloaded first when remote; null after a failure, which had
+    // its toast.
+    private async Task<MessagePartResult?> FetchForViewingAsync(Attachment a, MessageSummary s, bool remote, object? window)
     {
         try
         {
-            return await parts.FetchAttachmentAsync(s.AccountId, s.Id, a.PartId);
+            return await parts.PartDataAsync(s.AccountId, s.Id, a, remote);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
@@ -472,4 +510,7 @@ public sealed partial class AttachmentOpener
 
     [LoggerMessage(Level = LogLevel.Information, Message = "attachment {PartId} turned out a program after the fetch; left out of Save All")]
     private static partial void LogSkippedAfterFetch(ILogger logger, string partId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "message.download for Save All failed: {Kind}")]
+    private static partial void LogDownloadFailed(ILogger logger, string kind);
 }

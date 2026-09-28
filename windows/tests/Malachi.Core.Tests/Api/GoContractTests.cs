@@ -182,6 +182,9 @@ public sealed class GoContractTests
         Assert.Equal(GoContract.Seconds(wizard, "oauthStartTimeout"), RpcTimeouts.OAuthStart);
         Assert.Equal(GoContract.Seconds(wizard, "oauthWaitCallTimeout"), RpcTimeouts.OAuthWaitCall);
         Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "window", "sync.go"), "signInStartTimeout"), RpcTimeouts.OAuthStart);
+        // download.go counts in minutes, which GoContract.Seconds does not read.
+        Assert.Contains("const downloadTimeout = 5 * time.Minute", GoContract.Source("ui", "internal", "window", "download.go"), StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromMinutes(5), RpcTimeouts.Download);
     }
 
     /// <summary>

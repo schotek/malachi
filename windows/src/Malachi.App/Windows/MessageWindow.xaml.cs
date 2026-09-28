@@ -98,7 +98,7 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         var router = services.Router;
         c.Reply.Handler = () => router.Reply(Id);
         c.ReplyAll.Handler = () => router.ReplyAll(Id);
-        c.Forward.Handler = () => router.Forward(Id);
+        c.Forward.Handler = () => router.Forward(Id, this);
         c.Trash.Handler = () => router.Trash(Id, this);
         c.Junk.Handler = () => router.Junk(Id, this);
         c.Archive.Handler = () => router.Archive(Id);

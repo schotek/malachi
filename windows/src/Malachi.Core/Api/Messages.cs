@@ -119,9 +119,9 @@ public sealed record MessageSummary
 }
 
 /// <summary>
-/// api.Attachment: a MIME part the user can download; metadata only, the
-/// bytes come through <c>message.part</c>. <see cref="Filename"/> is
-/// sanitised by the daemon.
+/// api.Attachment: a MIME part of a message; metadata only, the bytes come
+/// through <c>message.part</c>. <see cref="Filename"/> is sanitised by the
+/// daemon.
 /// </summary>
 public sealed record Attachment
 {
@@ -148,6 +148,22 @@ public sealed record Attachment
     /// <summary>The Content-ID, when there is one.</summary>
     [JsonPropertyName("contentId")]
     public string? ContentId { get; init; }
+
+    /// <summary>
+    /// The part's data is not stored on this device, only on the mail server
+    /// (<c>Preferences.attachmentOfflineDays</c>,
+    /// <c>Preferences.neverStoreAttachments</c>); <c>message.download</c>
+    /// fetches it. Set only once the body is fetched; name, type and size are
+    /// those of the original part. Absent means false
+    /// (<see cref="IsRemote"/>). Under <c>neverStoreAttachments</c> it stays
+    /// set after the download, which the daemon holds in memory only.
+    /// </summary>
+    [JsonPropertyName("remote")]
+    public bool? Remote { get; init; }
+
+    /// <summary><see cref="Remote"/> as Go reads it: absent is false.</summary>
+    [JsonIgnore]
+    public bool IsRemote => Remote == true;
 }
 
 /// <summary>
@@ -479,6 +495,22 @@ public sealed record MessageBodyResult
     public IReadOnlyDictionary<string, string>? InlineParts { get; init; }
 
     /// <summary>
+    /// How many pictures of <see cref="InlineParts"/> are kept on the mail
+    /// server only and not available on this device now
+    /// (<c>Preferences.neverStoreAttachments</c> leaves those of 100 KiB and
+    /// more there): <c>message.part</c> answers partNotDownloaded for them
+    /// until <c>message.download</c> has fetched the message, after which the
+    /// body is asked for again. Absent means 0
+    /// (<see cref="RemotePictureCount"/>).
+    /// </summary>
+    [JsonPropertyName("remotePictures")]
+    public int? RemotePictures { get; init; }
+
+    /// <summary><see cref="RemotePictures"/> as Go reads it: absent, or below 0, is 0.</summary>
+    [JsonIgnore]
+    public int RemotePictureCount => Math.Max(RemotePictures ?? 0, 0);
+
+    /// <summary>
     /// The policy that was applied: <c>block</c> or <c>allow</c>, never
     /// <c>knownSenders</c>. A client offers to load images only under
     /// <c>block</c>.
@@ -578,6 +610,38 @@ public sealed record MessageEmbeddedResult
     /// <summary>Its body.</summary>
     [JsonPropertyName("body")]
     public required MessageBodyResult Body { get; init; }
+}
+
+/// <summary>
+/// api.MessageDownloadParams: a stored message whose missing content (the
+/// attachments kept on the server, or a body not downloaded yet) the daemon
+/// fetches from the mail server now.
+/// </summary>
+public sealed record MessageDownloadParams
+{
+    /// <summary>The account.</summary>
+    [JsonPropertyName("accountId")]
+    public required AccountId AccountId { get; init; }
+
+    /// <summary>The message.</summary>
+    [JsonPropertyName("messageId")]
+    public required MessageId MessageId { get; init; }
+}
+
+/// <summary>
+/// api.MessageDownloadResult: the message as <c>message.get</c> reports it
+/// after the download, no attachment <see cref="Attachment.Remote"/> any
+/// more, except under <c>Preferences.neverStoreAttachments</c>, where the
+/// parts stay remote and are served from the daemon's memory while it holds
+/// the message. Part ids may differ from before on Microsoft 365 accounts,
+/// whose server rebuilds the MIME: a client replaces the message it shows
+/// with this one.
+/// </summary>
+public sealed record MessageDownloadResult
+{
+    /// <summary>The message after the download.</summary>
+    [JsonPropertyName("message")]
+    public required Message Message { get; init; }
 }
 
 /// <summary>

@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/MessageView/MessageViewController.swift
-// (show, clear, showEmbedded, render, renderHeaders, renderBody, loading,
-// cancelSpinner, showText, setBodyPage, htmlUnavailable,
-// renderOutboxBanner, renderRemoteBar, showRemoteBar, renderAttachments,
-// setPage) and Windows/EmbeddedWindowController.swift (show, loadImages);
-// GTK: ui/internal/window/message_view.go (messageView: showMessage with
+// (show, clear, showEmbedded, render, renderHeaders, renderBody,
+// picturesArrived, loading, cancelSpinner, showText, setBodyPage,
+// htmlUnavailable, renderOutboxBanner, renderRemoteBar, showRemoteBar,
+// renderPicturesBar, hideBars, refreshChips, renderAttachments, setPage)
+// and Windows/EmbeddedWindowController.swift (show, loadImages); GTK:
+// ui/internal/window/message_view.go (messageView: showMessage with
 // bodyGen, render, renderHeaders, renderBody, loading with
 // bodySpinnerDelay, showText, setBarVisible, setBarLoading), remote.go
-// (showRemoteBar, renderRemoteBar), outbox.go (renderOutboxBanner),
-// attachments.go (renderAttachments) and embedded.go (show, loadImages).
+// (showRemoteBar, renderRemoteBar, showPicturesBar, renderPicturesBar),
+// outbox.go (renderOutboxBanner), attachments.go (renderAttachments),
+// download.go (refreshChips) and embedded.go (show, loadImages).
 //
 // One message display, minus the widgets, which macOS keeps in AppKit
 // (docs/windows-port.md §7.4): what the pane, a message window or an
@@ -27,6 +29,11 @@
 // output. A body the viewer gave up on (Unavailable after its one reload,
 // docs/windows-port.md §6.1) is shown as plain text with the hint, and the
 // same body is not loaded again by a later render of the same message.
+// The pictures bar sits under the remote-image bar (not in an attached
+// message's view, whose pictures arrive inlined); once the pictures it
+// counted are downloaded, the body asked for again may carry the same HTML,
+// whose malachi-cid: pictures load now, so the viewer is told to load it
+// again (HtmlReloadRequested; GTK loads every render anyway).
 // UI-thread-affine.
 
 using System;
@@ -78,11 +85,17 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     // message, not on every re-render (macOS scrollToTopPending).
     private bool scrollToTopPending = true;
 
-    // Embedded mode (embedded.go EmbeddedWindow): the part, the result on
-    // display and whether its images are on their way.
-    private string? part;
+    // Embedded mode (embedded.go EmbeddedWindow): the attachment as its chip
+    // listed it with the part id actually rendered (a download on
+    // Microsoft 365 may move it), the result on display and whether its
+    // images are on their way.
+    private Attachment? part;
     private MessageEmbeddedResult? shown;
     private bool loadingImages;
+
+    // What Render was last given (message_view.go shownLoaded): the chips
+    // are drawn again from it when the cache no longer holds the message.
+    private LoadedMessage? renderedLoaded;
 
     /// <summary>A view of <paramref name="mode"/> over <paramref name="cache"/>.</summary>
     /// <param name="mode">Where the view lives.</param>
@@ -108,6 +121,15 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
 
     /// <summary>The plain-text body should scroll to its top (the first text shown for a message).</summary>
     public event EventHandler? ScrollToTopRequested;
+
+    /// <summary>
+    /// The viewer should load <see cref="Html"/> again although it did not
+    /// change: the body was asked for again after its pictures kept on the
+    /// mail server were downloaded, and the same <c>malachi-cid:</c> URLs
+    /// have something to serve now (MessageViewController.swift
+    /// <c>picturesArrived</c>).
+    /// </summary>
+    public event EventHandler? HtmlReloadRequested;
 
     /// <summary>Where the view lives.</summary>
     public ReaderMode Mode { get; }
@@ -181,6 +203,21 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string RemoteBarText { get; private set; } = "";
 
+    /// <summary>
+    /// Whether the pictures bar is shown (window.blp <c>pictures_bar</c>):
+    /// pictures of the HTML body are kept on the mail server only.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool PicturesBarVisible { get; private set; }
+
+    /// <summary>Whether the pictures are on their way: the spinner instead of Download Pictures.</summary>
+    [ObservableProperty]
+    public partial bool PicturesBarLoading { get; private set; }
+
+    /// <summary>The pictures bar's sentence.</summary>
+    [ObservableProperty]
+    public partial string PicturesBarText { get; private set; } = "";
+
     /// <summary>Whether the outbox banner is shown (a message in the outbox, not delivered yet).</summary>
     [ObservableProperty]
     public partial bool OutboxVisible { get; private set; }
@@ -208,6 +245,14 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>What Save All saves; empty hides it.</summary>
     [ObservableProperty]
     public partial IReadOnlyList<Attachment> SaveAll { get; private set; } = [];
+
+    /// <summary>
+    /// Whether some of <see cref="SaveAll"/> are on the mail server only
+    /// (<see cref="AttachmentChips.AnyRemote"/>): Save All downloads the
+    /// message once first.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool SaveAllRemote { get; private set; }
 
     // Showing
 
@@ -272,12 +317,13 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         Current = null;
         Links = [];
         renderedBody = null;
+        renderedLoaded = null;
         failedHtml = null;
         scrollToTopPending = true;
         CancelSpinner();
         OutboxVisible = false;
         DraftVisible = false;
-        SetBarVisible(false);
+        HideBars();
         Html = null; // drop the pictures of the message before
         Page = hasAccounts ? ReaderPage.Empty : ReaderPage.NoAccounts;
     }
@@ -299,19 +345,20 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>
     /// Renders an attached message (embedded.go <c>show</c>): its own headers
     /// and body. <paramref name="containing"/> is the message it was attached
-    /// to, <paramref name="partId"/> the part.
+    /// to, <paramref name="attachment"/> the part as its chip listed it, with
+    /// the part id actually rendered.
     /// </summary>
-    public void ShowEmbedded(MessageSummary containing, string partId, MessageEmbeddedResult result)
+    public void ShowEmbedded(MessageSummary containing, Attachment attachment, MessageEmbeddedResult result)
     {
         ArgumentNullException.ThrowIfNull(containing);
-        ArgumentNullException.ThrowIfNull(partId);
+        ArgumentNullException.ThrowIfNull(attachment);
         ArgumentNullException.ThrowIfNull(result);
         if (Mode != ReaderMode.Embedded || closed)
         {
             return;
         }
         Containing = containing;
-        part = partId;
+        part = attachment;
         shown = result;
         var s = result.Message.Summary;
         Current = s;
@@ -324,7 +371,9 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// The bar's Load Images in an attached message's view (embedded.go
     /// <c>loadImages</c>): <c>message.embedded</c> again with remote images
     /// allowed for this one call, shown in place of what is on display; a
-    /// failure is a toast and the bar offers the images again.
+    /// failure is a toast and the bar offers the images again. Should the
+    /// daemon have moved the attached message to the mail server since, it is
+    /// downloaded again (<see cref="IReaderCache.EmbeddedDataAsync"/>).
     /// </summary>
     public async Task LoadEmbeddedImagesAsync()
     {
@@ -338,7 +387,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         Exception? error = null;
         try
         {
-            result = await cache.FetchEmbeddedAsync(c.AccountId, c.Id, p, RemoteContentPolicy.Allow);
+            result = await cache.EmbeddedDataAsync(c.AccountId, c.Id, p, onServer: false, RemoteContentPolicy.Allow);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
@@ -357,7 +406,9 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             RenderRemoteBar(new LoadedMessage { Body = before.Body });
             return;
         }
-        ShowEmbedded(c, p, result);
+        // The part the daemon rendered: a download on the way may have
+        // changed its number.
+        ShowEmbedded(c, result.PartId.Length > 0 ? p with { PartId = result.PartId } : p, result);
     }
 
     // Rendering
@@ -375,6 +426,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         {
             return;
         }
+        renderedLoaded = lm;
         RenderHeaders(s, lm?.Msg);
         if (lm is { BodySettled: true })
         {
@@ -392,14 +444,38 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         Rendered?.Invoke(this, new ReaderRender(s, lm));
     }
 
-    /// <summary>Redraws the remote-image bar for <paramref name="lm"/> and leaves the body alone (remote.go <c>refreshRemoteBar</c>).</summary>
+    /// <summary>
+    /// Redraws the remote-image bar and the pictures bar for
+    /// <paramref name="lm"/> and leaves the body alone (remote.go
+    /// <c>refreshRemoteBar</c>, <c>refreshPicturesBar</c>).
+    /// </summary>
     public void RefreshRemoteBar(LoadedMessage lm)
     {
         ArgumentNullException.ThrowIfNull(lm);
         if (!closed)
         {
             RenderRemoteBar(lm);
+            RenderPicturesBar(lm);
         }
+    }
+
+    /// <summary>
+    /// Redraws the attachment chips when the view shows message
+    /// <paramref name="id"/>, from <paramref name="lm"/>, or from the entry it
+    /// last rendered when the cache no longer holds the message (download.go
+    /// <c>refreshChips</c>): its download began to show the spinner or ended.
+    /// An attached message's view carries the containing message's id and is
+    /// left alone.
+    /// </summary>
+    public void RefreshChips(MessageId id, LoadedMessage? lm)
+    {
+        if (closed || Mode == ReaderMode.Embedded || Current is not { } s || s.Id != id)
+        {
+            return;
+        }
+        lm ??= renderedLoaded;
+        renderedLoaded = lm;
+        RenderAttachments(s, lm);
     }
 
     /// <summary>
@@ -435,6 +511,30 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         }
         RemoteBarLoading = st.Loading;
         RemoteBarVisible = st.Visible;
+    }
+
+    /// <summary>
+    /// Puts the pictures bar in state <paramref name="st"/> (remote.go
+    /// <c>showPicturesBar</c>); an attached message's view has none.
+    /// </summary>
+    public void ShowPicturesBar(PicturesBarState st)
+    {
+        if (Mode == ReaderMode.Embedded)
+        {
+            return;
+        }
+        if (st.Loading)
+        {
+            PicturesBarText = L10n.T("Downloading pictures…");
+        }
+        else if (st.Remote > 0)
+        {
+            // TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+            PicturesBarText = L10n.N(
+                "%d picture of this message is on the server only", "%d pictures of this message are on the server only", st.Remote);
+        }
+        PicturesBarLoading = st.Loading;
+        PicturesBarVisible = st.Visible;
     }
 
     /// <summary>
@@ -488,17 +588,19 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     }
 
     // renderBody: the sanitised HTML in the viewer when there is one, the
-    // plain text otherwise, with the hint when the HTML was withheld and the
-    // bar when remote images were removed; or the error that prevented it.
+    // plain text otherwise, with the hint when the HTML was withheld, the
+    // bar when remote images were removed and the pictures bar when pictures
+    // are on the mail server only; or the error that prevented it.
     private void RenderBody(LoadedMessage lm)
     {
         CancelSpinner();
         Links = [];
+        var before = renderedBody;
         renderedBody = lm.Body;
         if (lm.Err is { } err)
         {
             HintVisible = false;
-            SetBarVisible(false);
+            HideBars();
             ShowText(RpcErrorText.Text(L10n.T("Loading the message"), err));
             return;
         }
@@ -512,21 +614,34 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             }
             Links = b.Links;
             HintVisible = false;
+            var reload = PicturesArrived(before, b) && string.Equals(Html, b.Html, StringComparison.Ordinal);
             Html = b.Html;
             SetBodyPage(ReaderBodyPage.Html);
+            if (reload)
+            {
+                HtmlReloadRequested?.Invoke(this, EventArgs.Empty);
+            }
             RenderRemoteBar(lm);
+            RenderPicturesBar(lm);
             return;
         }
         HintVisible = b?.HtmlWithheld == true;
-        SetBarVisible(false);
+        HideBars();
         ShowText(LoadedMessageText.BodyText(b));
     }
+
+    // Whether now is the body on display (before) asked for again after its
+    // pictures kept on the mail server were downloaded: the HTML may be the
+    // same, but its malachi-cid: pictures load now (macOS picturesArrived;
+    // a body is a new object whenever the daemon answered again).
+    private static bool PicturesArrived(MessageBodyResult? before, MessageBodyResult now) =>
+        before is not null && before.MessageId == now.MessageId && before.RemotePictureCount > 0 && !ReferenceEquals(before, now);
 
     private void ShowPlainInsteadOfHtml(MessageBodyResult b)
     {
         Links = [];
         HintVisible = true;
-        SetBarVisible(false);
+        HideBars();
         ShowText(LoadedMessageText.BodyText(b));
     }
 
@@ -538,7 +653,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         Links = [];
         renderedBody = null;
         HintVisible = false;
-        SetBarVisible(false);
+        HideBars();
         ShowText("");
         var ticket = spinnerTicket;
         spinner = time.CreateTimer(_ => Tick(ticket), null, SpinnerDelay, Timeout.InfiniteTimeSpan);
@@ -594,16 +709,29 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
 
     private void RenderRemoteBar(LoadedMessage lm) => ShowRemoteBar(RemoteBar.RemoteBarStateFor(lm));
 
-    private void SetBarVisible(bool visible) => RemoteBarVisible = visible;
+    // remote.go renderPicturesBar.
+    private void RenderPicturesBar(LoadedMessage lm) => ShowPicturesBar(RemoteBar.PicturesBarStateFor(lm));
+
+    // Hides the remote-image bar and the pictures bar (a body that is not in
+    // the HTML view, or none; macOS hideBars).
+    private void HideBars()
+    {
+        RemoteBarVisible = false;
+        PicturesBarVisible = false;
+    }
 
     // renderAttachments: the chips are rebuilt only when what they show
     // changed, so that a re-render (message.get answering after the body)
     // leaves a menu open on a chip alone.
     private void RenderAttachments(MessageSummary s, LoadedMessage? lm)
     {
-        var (chips, saveAll) = AttachmentChip.For(s, lm, Mode == ReaderMode.Embedded, policy);
-        if (!SameChips(Chips, chips))
+        var nested = Mode == ReaderMode.Embedded;
+        var (chips, saveAll) = AttachmentChip.For(s, lm, nested, policy, downloading: !nested && cache.ShowsDownload(s.Id));
+        var remote = AttachmentChips.AnyRemote(saveAll, lm?.Body);
+        if (!SameChips(Chips, chips) || remote != SaveAllRemote)
         {
+            // Save All is rebuilt with the chips; it follows them.
+            SaveAllRemote = remote;
             Chips = chips;
         }
         if (!SameAttachments(SaveAll, saveAll))
@@ -624,7 +752,8 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             var y = b[i];
             if (x.Attachment != y.Attachment || x.Message.Id != y.Message.Id || x.Message.AccountId != y.Message.AccountId
                 || x.Label != y.Label || x.SizeText != y.SizeText || x.Tooltip != y.Tooltip || x.ArrowTooltip != y.ArrowTooltip
-                || x.Available != y.Available || x.Nested != y.Nested || x.CanOpen != y.CanOpen)
+                || x.State != y.State || x.Nested != y.Nested || x.CanOpen != y.CanOpen
+                || x.ServerTooltip != y.ServerTooltip || x.Downloading != y.Downloading)
             {
                 return false;
             }

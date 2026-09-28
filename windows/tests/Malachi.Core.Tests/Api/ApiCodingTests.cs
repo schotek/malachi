@@ -197,9 +197,26 @@ public sealed class ApiCodingTests
         Assert.True(m.Attachments[1].Inline);
         Assert.Equal("image001@example.org", m.Attachments[1].ContentId);
         Assert.Null(m.Attachments[0].ContentId);
+        Assert.True(m.Attachments[0].Remote is null && !m.Attachments[0].IsRemote, "absent is false");
         Assert.Equal(
             new Dictionary<string, string> { ["List-Unsubscribe"] = "<mailto:u@example.org>", ["Auto-Submitted"] = "no" },
             m.Headers!);
+    }
+
+    /// <summary>docs/api.md §3 Attachment: <c>remote</c> (opt), omitted when not set.</summary>
+    [Fact]
+    public void AttachmentRemoteFlag()
+    {
+        var a = Decode<Attachment>("""
+            {"partId":"2","filename":"safe-name.pdf","contentType":"application/pdf","size":12345,"inline":false,"contentId":"x","remote":true}
+            """);
+        Assert.True(a.IsRemote && a.Remote == true && a.Size == 12345);
+        var local = Decode<Attachment>("""{"partId":"3","filename":"a.txt","contentType":"text/plain","size":1,"inline":false,"remote":false}""");
+        Assert.False(local.IsRemote);
+        Assert.True(EncodeObject(a).GetProperty("remote").GetBoolean());
+        var plain = EncodeObject(new Attachment { PartId = "1", Filename = "a", ContentType = "text/plain", Size = 1, Inline = false });
+        Assert.Null(Member(plain, "remote")); // omitempty
+        Assert.Null(Member(plain, "isRemote")); // derived, never on the wire
     }
 
     [Fact]
@@ -259,6 +276,7 @@ public sealed class ApiCodingTests
                            "trackingPixels": 1 },
               "links": [ { "text": "Click here", "href": "https://real.destination/x" } ],
               "inlineParts": { "image001@example.org": "2.1" },
+              "remotePictures": 1,
               "remoteContent": "block",
               "sanitizerVersion": "1"
             }
@@ -273,6 +291,7 @@ public sealed class ApiCodingTests
         Assert.True(new BlockedContent().IsEmpty);
         Assert.Equal([new Link { Text = "Click here", Href = "https://real.destination/x" }], r.Links);
         Assert.Equal(new Dictionary<string, string> { ["image001@example.org"] = "2.1" }, r.InlineParts!);
+        Assert.True(r.RemotePictures == 1 && r.RemotePictureCount == 1);
         Assert.Equal(RemoteContentPolicy.Block, r.RemoteContent);
         Assert.Equal("1", r.SanitizerVersion);
 
@@ -284,8 +303,24 @@ public sealed class ApiCodingTests
         Assert.Null(text.Html);
         Assert.Null(text.HtmlWithheld);
         Assert.Null(text.InlineParts);
+        Assert.True(text.RemotePictures is null && text.RemotePictureCount == 0, "absent is 0");
         Assert.Empty(text.Links);
         Assert.Equal(BodyState.Pending, text.BodyState);
+        Assert.Null(Member(EncodeObject(text), "remotePictures")); // omitempty
+        Assert.Null(Member(EncodeObject(text), "remotePictureCount")); // derived, never on the wire
+    }
+
+    /// <summary>docs/api.md §4.3 <c>message.download</c>.</summary>
+    [Fact]
+    public void MessageDownloadExample()
+    {
+        var parameters = EncodeObject(new MessageDownloadParams { AccountId = "acc_1", MessageId = "m_123" });
+        Assert.Equal(["accountId", "messageId"], parameters.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("acc_1", parameters.GetProperty("accountId").GetString());
+        Assert.Equal("m_123", parameters.GetProperty("messageId").GetString());
+        var r = Decode<MessageDownloadResult>($$$"""{"message":{{{MessageJson}}}}""");
+        Assert.True(r.Message.Summary.Id == "m_123" && r.Message.Attachments.Count == 2);
+        Assert.All(r.Message.Attachments, a => Assert.False(a.IsRemote)); // nothing is remote after a download
     }
 
     internal const string ThreadJson = $$$"""
@@ -1000,15 +1035,17 @@ public sealed class ApiCodingTests
         (1104, "draftNotFound"), (1105, "attachmentNotFound"),
         (1200, "authRequired"), (1201, "authFailed"), (1202, "keyringError"), (1203, "oauthClientMissing"),
         (1300, "offline"), (1301, "networkError"), (1302, "serverError"), (1303, "tlsError"), (1304, "serverTimeout"),
+        (1305, "messageGone"),
         (1400, "storageError"), (1401, "migrationFailed"),
         (1500, "malformedMessage"), (1501, "sanitizeFailed"), (1502, "attachmentTooBig"), (1503, "partNotFound"),
+        (1504, "partNotDownloaded"),
     ];
 
     [Fact]
     public void ErrorCodesAreNamed()
     {
-        Assert.Equal(32, ErrorCode.All.Count);
-        Assert.Equal(32, ErrorCode.All.Distinct().Count());
+        Assert.Equal(34, ErrorCode.All.Count);
+        Assert.Equal(34, ErrorCode.All.Distinct().Count());
         Assert.Equal(GoCodes.Select(c => c.Code), ErrorCode.All.Select(c => c.Value));
         Assert.Equal(GoCodes.Select(c => c.Name), ErrorCode.All.Select(c => c.Name));
         foreach (var code in ErrorCode.All)
@@ -1033,6 +1070,8 @@ public sealed class ApiCodingTests
         Assert.Equal(oauthClientMissing, new ErrorCode(1203));
         ErrorCode code1102 = 1102;
         Assert.Equal(ErrorCode.MessageNotFound, code1102);
+        Assert.True(ErrorCode.MessageGone == 1305 && new ErrorCode(1305).Name == "messageGone");
+        Assert.True(ErrorCode.PartNotDownloaded == 1504 && new ErrorCode(1504).Name == "partNotDownloaded");
     }
 
     // MARK: Params encoding
@@ -1171,12 +1210,15 @@ public sealed class ApiCodingTests
         Assert.Equal(TimeSpan.FromSeconds(5), RpcTimeouts.Default);
         Assert.Equal(TimeSpan.FromSeconds(30), RpcTimeouts.Remote);
         Assert.Equal(TimeSpan.FromSeconds(5), API.SystemStorage.Timeout);
+        // The daemon's download budget is 4 minutes; the client waits 5.
+        Assert.Equal(TimeSpan.FromSeconds(300), RpcTimeouts.Download);
+        Assert.Equal(RpcTimeouts.Download, API.MessageDownload.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
             "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
             "account.add", "account.update", "account.discover", "account.test",
-            "account.oauthStart", "account.oauthWait",
+            "account.oauthStart", "account.oauthWait", "message.download",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

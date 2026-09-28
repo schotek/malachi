@@ -90,7 +90,7 @@ public sealed class ReaderHub : IDisposable
             Icons = new ChipIcons(new ShellFileTypes()),
         };
         registry.MakeMessageWindow = s => new MessageWindow(Services, s);
-        registry.MakeEmbeddedWindow = (containing, part, result) => new EmbeddedMessageWindow(Services, containing, part, result);
+        registry.MakeEmbeddedWindow = (containing, attachment, result) => new EmbeddedMessageWindow(Services, containing, attachment, result);
 
         Pane = new MessageView(ReaderMode.Pane, Services, mainWindow.Commands) { HostWindow = mainWindow };
         registry.Track(Pane.Reader);
@@ -159,6 +159,9 @@ public sealed class ReaderHub : IDisposable
         integration.Mailbox.AccountsLoaded += (_, accounts) => Pane.Reader.SetHasAccounts(accounts.Count > 0);
         integration.Cache.MessageLoaded += (_, e) => registry.ShowLoaded(e.Id, e.Loaded);
         integration.Cache.RemoteBarChanged += (_, e) => registry.RefreshRemoteBar(e.Id, e.Loaded);
+        // download.go refreshChips: a download began to show its spinner or
+        // ended.
+        integration.Cache.ChipsChanged += (_, e) => registry.RefreshChips(e.Id, e.Loaded);
     }
 
     // MessageActionsController.installHooks: the message windows follow the

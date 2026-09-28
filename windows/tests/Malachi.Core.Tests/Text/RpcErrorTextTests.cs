@@ -32,6 +32,11 @@ public sealed class RpcErrorTextTests
             [ErrorCode.ServerTimeout] = "did not respond",
             [ErrorCode.KeyringError] = "keyring",
             [ErrorCode.Conflict] = "conflicted",
+            // Attachments on demand (message.download, message.part).
+            [ErrorCode.Offline] = "no network connection",
+            [ErrorCode.Unavailable] = "try again in a moment",
+            [ErrorCode.PartNotDownloaded] = "not on this computer",
+            [ErrorCode.MessageGone] = "no longer on the server",
         };
         foreach (var (code, want) in cases)
         {
@@ -55,6 +60,29 @@ public sealed class RpcErrorTextTests
         Assert.Equal(
             "Testing the connection failed: sign-in required",
             RpcErrorText.Text("Testing the connection", new RpcError { Code = ErrorCode.AuthRequired, Message = "no stored password" }));
+        // Attachments on demand (message.download, message.part).
+        Assert.Equal(
+            "Opening the attachment failed: no network connection",
+            RpcErrorText.Text("Opening the attachment", new RpcError { Code = ErrorCode.Offline, Message = "x" }));
+        Assert.Equal(
+            "Opening the attachment failed: try again in a moment",
+            RpcErrorText.Text("Opening the attachment", new RpcError { Code = ErrorCode.Unavailable, Message = "x" }));
+        Assert.Equal(
+            "Saving the attachment failed: the attachment is not on this computer",
+            RpcErrorText.Text("Saving the attachment", new RpcError { Code = ErrorCode.PartNotDownloaded, Message = "x" }));
+        Assert.Equal(
+            "Downloading the attachments failed: the message is no longer on the server",
+            RpcErrorText.Text("Downloading the attachments", new RpcError { Code = ErrorCode.MessageGone, Message = "x" }));
+        // An older daemon without the method reads like one with a stub.
+        foreach (var code in new[] { ErrorCode.NotImplemented, ErrorCode.MethodNotFound })
+        {
+            Assert.Equal("Measuring the disk space is not available yet", RpcErrorText.Text("Measuring the disk space", new RpcError { Code = code, Message = "x" }));
+        }
+        // A part of a message is an attachment too.
+        foreach (var code in new[] { ErrorCode.AttachmentNotFound, ErrorCode.PartNotFound })
+        {
+            Assert.Equal("The attachment no longer exists", RpcErrorText.Text("Opening the attachment", new RpcError { Code = code, Message = "x" }));
+        }
     }
 
     [Fact]
@@ -115,7 +143,7 @@ public sealed class RpcErrorTextTests
             (ErrorCode.AccountNotFound, "Saving failed: unknown account"),
             (ErrorCode.KeyringError, "Saving failed: the system keyring is unavailable"),
             (ErrorCode.MessageNotFound, "Saving failed"),
-            (ErrorCode.Offline, "Saving failed"),
+            (ErrorCode.Offline, "Saving failed: no network connection"),
             (ErrorCode.Unauthenticated, "Saving failed"),
         ];
         foreach (var (code, want) in cases)
@@ -159,5 +187,8 @@ public sealed class RpcErrorTextTests
         Assert.Contains("running mail backend", RpcErrorText.Text("Testing", RpcErrorTextFailureException.Disconnected()), StringComparison.Ordinal);
         Assert.Contains("timed out", RpcErrorText.Text("Testing", new TimeoutException()), StringComparison.Ordinal);
         Assert.Equal("Testing failed", RpcErrorText.Text("Testing", RpcErrorTextFailureException.Daemon(9999)));
+        Assert.Equal(
+            "Opening the attachment failed: the message is no longer on the server",
+            RpcErrorText.Text("Opening the attachment", RpcErrorTextFailureException.Daemon(new RpcError { Code = ErrorCode.MessageGone, Message = "expunged" })));
     }
 }

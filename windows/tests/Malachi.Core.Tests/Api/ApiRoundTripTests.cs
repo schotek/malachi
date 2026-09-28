@@ -49,7 +49,7 @@ public sealed class ApiRoundTripTests
         """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@}""";
 
     private const string Attachment =
-        """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org"}""";
+        """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
         """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"}}""";
@@ -58,7 +58,7 @@ public sealed class ApiRoundTripTests
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
 
     private const string Body =
-        """{"messageId":"m_1","bodyState":"fetched","hasHtml":true,"html":"<p>é & 'x' <b>\u2028</b></p>","htmlWithheld":false,"text":"plain","blocked":@blocked@,"links":[{"text":"Click here","href":"https://real.destination/x"}],"inlineParts":{"image001@example.org":"2.1"},"remoteContent":"block","sanitizerVersion":"1"}""";
+        """{"messageId":"m_1","bodyState":"fetched","hasHtml":true,"html":"<p>é & 'x' <b>\u2028</b></p>","htmlWithheld":false,"text":"plain","blocked":@blocked@,"links":[{"text":"Click here","href":"https://real.destination/x"}],"inlineParts":{"image001@example.org":"2.1"},"remotePictures":1,"remoteContent":"block","sanitizerVersion":"1"}""";
 
     private const string DraftAttachment =
         """{"id":"att_1","filename":"a.png","contentType":"image/png","size":100,"inline":true,"contentId":"abc@malachi.local"}""";
@@ -179,6 +179,8 @@ public sealed class ApiRoundTripTests
         [nameof(MessagePartResult)] = Case<MessagePartResult>("""{"partId":"2.1","contentType":"image/png","filename":"a.png","size":3,"data":"AQID"}"""),
         [nameof(MessageEmbeddedParams)] = Case<MessageEmbeddedParams>("""{"accountId":"acc_1","messageId":"m_1","partId":"3","remoteContent":"block"}"""),
         [nameof(MessageEmbeddedResult)] = Case<MessageEmbeddedResult>("""{"partId":"3","message":@message@,"body":@body@}"""),
+        [nameof(MessageDownloadParams)] = Case<MessageDownloadParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
+        [nameof(MessageDownloadResult)] = Case<MessageDownloadResult>("""{"message":@message@}"""),
         [nameof(MessageFlagParams)] = Case<MessageFlagParams>("""{"accountId":"acc_1","messageIds":["m_1","m_2"],"set":["seen"],"clear":["flagged"]}"""),
         [nameof(MessageMoveParams)] = Case<MessageMoveParams>("""{"accountId":"acc_1","messageIds":["m_1"],"targetFolderId":"f_archive"}"""),
         [nameof(MessageDeleteParams)] = Case<MessageDeleteParams>("""{"accountId":"acc_1","messageIds":["m_1"],"permanent":true}"""),

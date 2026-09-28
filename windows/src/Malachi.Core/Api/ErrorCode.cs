@@ -117,6 +117,12 @@ public readonly record struct ErrorCode(int Value)
     /// <summary>No answer in time.</summary>
     public const int ServerTimeout = 1304;
 
+    /// <summary>
+    /// The mail server no longer has the message (another client deleted or
+    /// moved it); the local copy goes with the next sync.
+    /// </summary>
+    public const int MessageGone = 1305;
+
     // 1400–1499: local storage.
 
     /// <summary>SQLite failure.</summary>
@@ -138,6 +144,12 @@ public readonly record struct ErrorCode(int Value)
 
     /// <summary><c>message.part</c> named a part the message does not have.</summary>
     public const int PartNotFound = 1503;
+
+    /// <summary>
+    /// The part's data is not stored on this device
+    /// (<see cref="Attachment.Remote"/>); <c>message.download</c> fetches it.
+    /// </summary>
+    public const int PartNotDownloaded = 1504;
 
     private static readonly Dictionary<int, string> Names = new()
     {
@@ -167,12 +179,14 @@ public readonly record struct ErrorCode(int Value)
         [ServerError] = "serverError",
         [TlsError] = "tlsError",
         [ServerTimeout] = "serverTimeout",
+        [MessageGone] = "messageGone",
         [StorageError] = "storageError",
         [MigrationFailed] = "migrationFailed",
         [MalformedMessage] = "malformedMessage",
         [SanitizeFailed] = "sanitizeFailed",
         [AttachmentTooBig] = "attachmentTooBig",
         [PartNotFound] = "partNotFound",
+        [PartNotDownloaded] = "partNotDownloaded",
     };
 
     /// <summary>
@@ -185,9 +199,9 @@ public readonly record struct ErrorCode(int Value)
         NotImplemented, InvalidArgument, Conflict, Cancelled, Unavailable, Unauthenticated,
         AccountNotFound, FolderNotFound, MessageNotFound, ThreadNotFound, DraftNotFound, AttachmentNotFound,
         AuthRequired, AuthFailed, KeyringError, OAuthClientMissing,
-        Offline, NetworkError, ServerError, TlsError, ServerTimeout,
+        Offline, NetworkError, ServerError, TlsError, ServerTimeout, MessageGone,
         StorageError, MigrationFailed,
-        MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound,
+        MalformedMessage, SanitizeFailed, AttachmentTooBig, PartNotFound, PartNotDownloaded,
     ];
 
     /// <summary>

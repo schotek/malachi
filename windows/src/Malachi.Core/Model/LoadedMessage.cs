@@ -52,6 +52,22 @@ public sealed class LoadedMessage
     /// </summary>
     public bool LoadingImages { get; set; }
 
+    /// <summary>
+    /// Set from the moment the user asks for the pictures kept on the mail
+    /// server (Download Pictures) until the message was downloaded and its
+    /// body asked for again; the pictures bar shows it instead of the button
+    /// (<see cref="RemoteBar.PicturesBarStateFor"/>).
+    /// </summary>
+    public bool LoadingPictures { get; set; }
+
+    /// <summary>
+    /// Set once a picture of the body went missing and the body was asked
+    /// for again, until the next download of the message
+    /// (<see cref="RemoteBar.RecheckPictures"/>): never more than once in
+    /// between.
+    /// </summary>
+    public bool PicturesRechecked { get; set; }
+
     /// <summary>Nothing is left to fetch.</summary>
     public bool Complete => Msg is not null && Body is not null;
 

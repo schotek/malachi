@@ -752,7 +752,7 @@ public sealed class WizardControllerTests
         await h.IdleAsync();
         await h.Ui.RunAsync(w.SignInWithProvider);
         await h.IdleAsync();
-        Assert.Equal(["Starting the sign-in failed"], rec.Toasts);
+        Assert.Equal(["Starting the sign-in failed: try again in a moment"], rec.Toasts);
         Assert.Equal([GooglePrompt], rec.OAuth);
         Assert.Empty(h.Launcher.Opened);
         Assert.Equal([true, false], rec.Busy); // only the discovery kept the pages busy

@@ -92,7 +92,9 @@ public sealed partial class PreviewWindow : Window
     {
         if (shown is { } r && r.CanOpen)
         {
-            _ = opener.OpenAsync(r.Attachment, r.Message, this);
+            // Fetched for the preview already: the part the daemon served,
+            // downloaded again only should the daemon have let go of it.
+            _ = opener.OpenAsync(r.Attachment, r.Message, remote: false, this);
         }
     }
 
@@ -100,7 +102,7 @@ public sealed partial class PreviewWindow : Window
     {
         if (shown is { } r)
         {
-            _ = opener.SaveAsAsync(r.Attachment, r.Message, this);
+            _ = opener.SaveAsAsync(r.Attachment, r.Message, remote: false, this);
         }
     }
 }

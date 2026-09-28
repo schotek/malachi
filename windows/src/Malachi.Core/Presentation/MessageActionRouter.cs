@@ -4,8 +4,8 @@
 // Port of macos/Sources/MalachiMail/Actions/MessageActionsController.swift
 // (the MessageActions of the selection and the MessageActionDelegate of one
 // message: flags, reply, replyAll, forward, trash, junk, archive,
-// toggleFlag, markRead, markUnread, loadImages, trustSender, retryOutbox,
-// isDraft, editDraft, newMessage); GTK: the win.* actions of window.go
+// toggleFlag, markRead, markUnread, loadImages, trustSender,
+// downloadPictures, retryOutbox, isDraft, editDraft, newMessage); GTK: the win.* actions of window.go
 // registerActions acting on the selected row, and the msg.* actions of
 // message_window.go acting on the window's message. Everything that touches
 // the model or the daemon is the ActionsController's; this only resolves
@@ -55,8 +55,11 @@ public sealed class MessageActionRouter
     /// <summary>Reply All to the selected row's message.</summary>
     public void ReplyAll() => ForSelected(id => actions.OpenCompose(ComposeKind.ReplyAll, id));
 
-    /// <summary>Forward the selected row's message.</summary>
-    public void Forward() => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id));
+    /// <summary>
+    /// Forward the selected row's message; "Forward Without Attachments?"
+    /// goes on the main window.
+    /// </summary>
+    public void Forward() => ForSelected(id => actions.OpenCompose(ComposeKind.Forward, id, MainWindow?.Invoke()));
 
     /// <summary>win.trash: every message of the selected row, confirmed over the main window when the setting asks.</summary>
     public void Trash() => list.SelectedIds((row, ids) => actions.Trash(ids, ListController.RowSubject(row), MainWindow?.Invoke()));
@@ -101,8 +104,12 @@ public sealed class MessageActionRouter
     /// <summary>msg.reply-all.</summary>
     public void ReplyAll(MessageId id) => actions.OpenCompose(ComposeKind.ReplyAll, id);
 
-    /// <summary>msg.forward.</summary>
-    public void Forward(MessageId id) => actions.OpenCompose(ComposeKind.Forward, id);
+    /// <summary>
+    /// msg.forward (compose_open.go <c>openComposeFrom</c>):
+    /// <paramref name="window"/> receives "Forward Without Attachments?" when
+    /// the download of the attachments fails.
+    /// </summary>
+    public void Forward(MessageId id, object? window) => actions.OpenCompose(ComposeKind.Forward, id, window);
 
     /// <summary>msg.trash, confirmed over <paramref name="window"/>; Cancel Sending for an outbox message.</summary>
     public void Trash(MessageId id, object? window) => actions.Trash(id, window);
@@ -127,6 +134,13 @@ public sealed class MessageActionRouter
 
     /// <summary>The bar's Always From This Sender and msg.trust-sender.</summary>
     public void TrustSender(MessageId id) => actions.TrustSender(id);
+
+    /// <summary>
+    /// The pictures bar's Download Pictures (remote.go
+    /// <c>downloadPictures</c>); a failure is said through
+    /// <paramref name="say"/>, in the window the click came from.
+    /// </summary>
+    public void DownloadPictures(MessageId id, Action<string>? say) => actions.DownloadPictures(id, say);
 
     /// <summary>The outbox banner's Retry.</summary>
     public void RetryOutbox(MessageId id) => actions.RetryOutbox(id);

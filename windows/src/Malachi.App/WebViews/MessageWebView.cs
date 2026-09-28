@@ -158,12 +158,16 @@ public sealed partial class MessageWebView : HardenedWebView
     /// sanitiser's output and nothing else may ever be passed here. Until the
     /// view is initialised the body waits; should that fail,
     /// <see cref="HardenedWebView.Unavailable"/> is raised and nothing loads.
+    /// The body already on display is not loaded again unless
+    /// <paramref name="reload"/> says so: its pictures kept on the mail
+    /// server were downloaded, and the same <c>malachi-cid:</c> URLs have
+    /// something to serve now (macOS <c>load(body:reload:)</c>).
     /// </summary>
-    public void Load(string body)
+    public void Load(string body, bool reload = false)
     {
         ArgumentNullException.ThrowIfNull(body);
         ShowStatus("");
-        if (IsReady && !needsReload && string.Equals(loadedBody, body, StringComparison.Ordinal))
+        if (IsReady && !needsReload && !reload && string.Equals(loadedBody, body, StringComparison.Ordinal))
         {
             return;
         }

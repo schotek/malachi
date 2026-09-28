@@ -60,6 +60,12 @@ public static class IconGlyphs
         ["network-offline"] = G(0xF384),
         ["network-idle"] = G(0xE895),
         ["network-transmit-receive"] = G(0xE968),
+        // An attachment kept on the mail server (attachments.go
+        // remoteIconNames: network-server, then folder-remote for an icon
+        // theme without it): the cloud with the download arrow, as macOS
+        // shows icloud.and.arrow.down for both.
+        ["network-server"] = G(0xEBD3),
+        ["folder-remote"] = G(0xEBD3),
         ["web-browser"] = G(0xE774),
         ["dialog-warning"] = G(0xE7BA),
         ["dialog-error"] = G(0xE783),

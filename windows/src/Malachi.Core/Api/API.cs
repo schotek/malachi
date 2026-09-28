@@ -215,6 +215,14 @@ public static class API
     public static readonly RpcMethod<MessageEmbeddedParams, MessageEmbeddedResult> MessageEmbedded =
         new("message.embedded", RpcTimeouts.Remote, Wire.MessageEmbeddedParams, Wire.MessageEmbeddedResult);
 
+    /// <summary>
+    /// <c>message.download</c>: fetches the parts of a message kept on the
+    /// server (and a body not downloaded yet); the daemon's budget is 4
+    /// minutes, one download per message shared by every caller.
+    /// </summary>
+    public static readonly RpcMethod<MessageDownloadParams, MessageDownloadResult> MessageDownload =
+        new("message.download", RpcTimeouts.Download, Wire.MessageDownloadParams, Wire.MessageDownloadResult);
+
     /// <summary><c>message.flag</c>.</summary>
     public static readonly RpcMethod<MessageFlagParams, EmptyResult> MessageFlag =
         new("message.flag", RpcTimeouts.Default, Wire.MessageFlagParams, Wire.EmptyResult);
@@ -340,7 +348,7 @@ public static class API
         AccountReorder, AccountOAuthStart, AccountOAuthWait, AccountOAuthCancel,
         FolderList, FolderSubscribe,
         MessageList, MessageGet, MessageBody, MessagePart,
-        MessageEmbedded, MessageFlag, MessageMove, MessageDelete,
+        MessageEmbedded, MessageDownload, MessageFlag, MessageMove, MessageDelete,
         MessageSend,
         OutboxRetry,
         ThreadList, ThreadGet,

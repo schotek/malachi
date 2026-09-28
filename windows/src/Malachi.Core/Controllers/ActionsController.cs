@@ -6,8 +6,9 @@
 // markUnread, setSeenIDs, toggleFlagged, setFlaggedIDs, trashFrom, trashIDs,
 // confirmTrash, trackMoves, archiveIDs, junkFrom, junkIDs, moveIDsToRole,
 // call, callThen), outbox.go (retryOutbox, cancelSendFrom), remote.go
-// (loadRemoteImages, trustSender, ensureKnownSendersPolicy), compose_open.go
-// (openCompose) and drafts.go (openDraft).
+// (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
+// downloadPictures), compose_open.go (openCompose, openComposeFrom) and
+// drafts.go (openDraft).
 //
 // The per-message actions of the main window and the message windows,
 // minus the widgets: an optimistic change in the model and the rows,
@@ -34,6 +35,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.I18n;
@@ -638,6 +640,23 @@ public sealed partial class ActionsController
     }
 
     /// <summary>
+    /// Downloads the pictures of <paramref name="id"/> kept on the mail server
+    /// only and shows the message again wherever it is on display (remote.go
+    /// <c>downloadPictures</c>, through the cache: the bars show the wait from
+    /// the click on, a request already running is left alone, a failure is a
+    /// toast through <paramref name="say"/>, or the controller's own when
+    /// null, with the bar back as it was).
+    /// </summary>
+    public void DownloadPictures(MessageId id, Action<string>? say = null)
+    {
+        if (Summary(id) is not { } s)
+        {
+            return;
+        }
+        Cache.DownloadPictures(s, say ?? toast, static _ => { });
+    }
+
+    /// <summary>
     /// Puts the sender of <paramref name="id"/> on the daemon's known-senders
     /// list (<c>sender.add</c>), switches the stored remote-content preference
     /// to "from known senders" when it was "never" (otherwise the list would
@@ -711,22 +730,115 @@ public sealed partial class ActionsController
 
     /// <summary>
     /// Opens a reply or forward of message <paramref name="id"/>
-    /// (compose_open.go <c>openCompose</c>). The template comes from the
-    /// backend (<c>draft.create</c>: recipients, subject, the original quoted
-    /// formatted with its pictures copied into the attachment store); a
-    /// second click while it is being prepared does nothing (one window will
-    /// appear). Only when the backend cannot answer does the window open from
-    /// what the pane knows (<see cref="Prefill.Create"/>), with a toast unless
-    /// the fallback is the normal course
-    /// (<see cref="ComposeSources.ComposeFallbackText"/>).
+    /// (compose_open.go <c>openCompose</c> / <c>openComposeFrom</c>). The
+    /// template comes from the backend (<c>draft.create</c>: recipients,
+    /// subject, the original quoted formatted with its pictures copied into
+    /// the attachment store); a second click while it is being prepared does
+    /// nothing (one window will appear). Only when the backend cannot answer
+    /// does the window open from what the pane knows
+    /// (<see cref="Prefill.Create"/>), with a toast unless the fallback is the
+    /// normal course (<see cref="ComposeSources.ComposeFallbackText"/>).
     /// </summary>
-    public void OpenCompose(ComposeKind kind, MessageId id)
+    /// <remarks>
+    /// <para>
+    /// A forward of a message with parts kept on the mail server (or a body
+    /// not downloaded yet, or one the cache does not hold) downloads it first
+    /// (<see cref="ComposeSources.ForwardNeedsDownload"/>), since
+    /// <c>draft.create</c> imports only what is stored. When the download
+    /// fails the user is asked over <paramref name="parent"/> whether to
+    /// forward without them ("Forward Without Attachments?", the error as the
+    /// body), unless asking would change nothing: no daemon, one without
+    /// <c>message.download</c>, or a message over its cap
+    /// (<see cref="ComposeSources.AskForwardWithout"/>). The question has no
+    /// answer for Cancel: the request ends when it is asked, and a
+    /// confirmation starts it again (unless another one for the message runs
+    /// by then).
+    /// </para>
+    /// <para>
+    /// A reply or reply to all of a message whose pictures are kept on the
+    /// mail server only downloads it first as well
+    /// (<see cref="ComposeSources.ReplyNeedsDownload"/>), so the quote has
+    /// them; a failure is only logged and the reply goes on (the compose
+    /// window says what <c>draft.create</c> left out).
+    /// </para>
+    /// </remarks>
+    public void OpenCompose(ComposeKind kind, MessageId id, object? parent = null)
     {
         Mailbox.Scope.VerifyAccess();
         if (Summary(id) is not { } s || composing.Contains(id))
         {
             return;
         }
+        composing.Add(id);
+        var lm = Cache.Loaded(id);
+        if ((kind is ComposeKind.Reply or ComposeKind.ReplyAll) && ComposeSources.ReplyNeedsDownload(lm))
+        {
+            Mailbox.Scope.Run(async _ =>
+            {
+                // The cache logs a failure; the reply goes on without.
+                await DownloadQuietlyAsync(s);
+                if (!Mailbox.Scope.IsClosed)
+                {
+                    CreateDraft(kind, s);
+                }
+            });
+            return;
+        }
+        if (kind != ComposeKind.Forward || !ComposeSources.ForwardNeedsDownload(lm))
+        {
+            CreateDraft(kind, s);
+            return;
+        }
+        Mailbox.Scope.Run(async _ =>
+        {
+            var failure = await DownloadQuietlyAsync(s);
+            if (Mailbox.Scope.IsClosed)
+            {
+                return;
+            }
+            if (!ComposeSources.AskForwardWithout(failure))
+            {
+                CreateDraft(kind, s);
+                return;
+            }
+            composing.Remove(id);
+            Ask(
+                parent,
+                L10n.T("Forward Without Attachments?"),
+                RpcErrorText.Text(L10n.T("Downloading the attachments"), failure),
+                L10n.T("_Forward Without Attachments"),
+                () =>
+                {
+                    if (composing.Add(id))
+                    {
+                        CreateDraft(kind, s);
+                    }
+                });
+        });
+    }
+
+    // message.download of s through the cache: its failure, or null.
+    private async Task<Exception?> DownloadQuietlyAsync(MessageSummary s)
+    {
+        try
+        {
+            await Cache.DownloadAsync(s.AccountId, s.Id);
+            return null;
+        }
+#pragma warning disable CA1031 // The failure is the caller's to judge (AskForwardWithout); the cache logged it.
+        catch (Exception e)
+#pragma warning restore CA1031
+        {
+            return e;
+        }
+    }
+
+    // compose_open.go create: the draft.create half of OpenCompose for
+    // message s, whose id is in composing: the template from the backend
+    // with what it could not import (Skipped), or the fallback.
+    private void CreateDraft(ComposeKind kind, MessageSummary s)
+    {
+        var id = s.Id;
         var src = ComposeSources.ComposeSource(s, Cache.Loaded(id));
         // The account's own address, for Reply All exclusion; the first
         // account's when the message's is unknown (compose.Manager
@@ -738,7 +850,6 @@ public sealed partial class ActionsController
                 : new Address { Email = "" };
         void Fallback() => OpenComposeRequested?.Invoke(this, Prefill.Create(kind, src, me) with { AccountId = s.AccountId });
 
-        composing.Add(id);
         var attribution = Prefill.Attribution(kind, src);
         var parameters = new DraftCreateParams
         {
@@ -761,7 +872,11 @@ public sealed partial class ActionsController
                 Fallback();
                 return;
             }
-            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(kind, res.Draft, res.Blocked) with { AccountId = s.AccountId });
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(kind, res.Draft, res.Blocked) with
+            {
+                AccountId = s.AccountId,
+                Skipped = res.Skipped?.Count ?? 0,
+            });
         }, RpcTimeouts.Compose);
     }
 

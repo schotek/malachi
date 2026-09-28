@@ -4,8 +4,9 @@
 // Port of macos/Tests/MalachiCoreTests/ActionHelpersTests.swift, the
 // counterpart of ui/internal/window/actions_test.go (TestSubjectText,
 // TestBodyText, TestFlagChange, TestPruneLoaded, TestLoadedMessageState,
-// TestLoadableImages, TestRemoteBarState): the pure helpers behind the
-// message pane and the actions. The catalogue is English in tests, so the
+// TestLoadableImages, TestRemoteBarState, TestPicturesBarState,
+// TestPicturesPolicy, TestRecheckPictures, TestReloadAfterDownload): the
+// pure helpers behind the message pane and the actions. The catalogue is English in tests, so the
 // msgids come back verbatim.
 
 using System;
@@ -200,6 +201,124 @@ public sealed class ActionHelpersTests
         Assert.Equal("", RemoteBar.LinkTextFor("https://c", []));
     }
 
+    /// <summary>
+    /// The pictures bar counts the pictures of an HTML body kept on the mail
+    /// server only, and shows the wait from the click until the body was
+    /// asked for again (remote.go <c>picturesBarStateFor</c>,
+    /// <c>remotePictures</c>); it stands beside the remote-image bar, not
+    /// instead of it.
+    /// </summary>
+    [Fact]
+    public void PicturesBarStateTest()
+    {
+        const string Html = "<p><img src=\"malachi-cid:a/m/2\"></p>";
+        Assert.Equal(0, RemoteBar.RemotePictures(null));
+        Assert.Equal(0, RemoteBar.RemotePictures(Body(html: Html)));
+        Assert.Equal(3, RemoteBar.RemotePictures(Body(html: Html, remotePictures: 3)));
+        Assert.Equal(0, RemoteBar.RemotePictures(Body(html: Html, remotePictures: -1)));
+        Assert.Equal(0, RemoteBar.RemotePictures(Body(BodyState.Pending, html: Html, remotePictures: 3)));
+        Assert.Equal(0, RemoteBar.RemotePictures(Body(html: null, remotePictures: 3)));
+        Assert.Equal(0, RemoteBar.RemotePictures(Body(html: "", withheld: true, remotePictures: 3)));
+
+        var server = Body(html: Html, remotePictures: 2);
+        var local = Body(html: Html);
+        var withBlocked = Body(html: Html, remoteImages: 3, remotePictures: 2);
+        (string Name, LoadedMessage? Lm, PicturesBarState Want)[] cases =
+        [
+            ("nothing loaded", null, new PicturesBarState()),
+            ("body on its way", new LoadedMessage(), new PicturesBarState()),
+            ("on the server", new LoadedMessage { Body = server }, new PicturesBarState(Visible: true, Remote: 2)),
+            ("with remote images blocked too", new LoadedMessage { Body = withBlocked }, new PicturesBarState(Visible: true, Remote: 2)),
+            ("downloading", new LoadedMessage { Body = server, LoadingPictures = true }, new PicturesBarState(Visible: true, Loading: true)),
+            ("all here", new LoadedMessage { Body = local }, new PicturesBarState()),
+            ("remote images loading", new LoadedMessage { Body = server, LoadingImages = true }, new PicturesBarState(Visible: true, Remote: 2)),
+        ];
+        foreach (var (name, lm, want) in cases)
+        {
+            Assert.True(want == RemoteBar.PicturesBarStateFor(lm), name);
+        }
+        // The remote-image bar is unaffected by the pictures.
+        Assert.Equal(
+            new RemoteBarState(Visible: true, Blocked: 3),
+            RemoteBar.RemoteBarStateFor(new LoadedMessage { Body = withBlocked, LoadingPictures = true }));
+    }
+
+    /// <summary>
+    /// After the download the body is asked for under allow when the remote
+    /// images are shown or on their way, so they stay (remote.go
+    /// <c>picturesPolicy</c>).
+    /// </summary>
+    [Fact]
+    public void PicturesPolicyTest()
+    {
+        const string Html = "<p>x</p>";
+        Assert.Null(RemoteBar.PicturesPolicy(new LoadedMessage()));
+        Assert.Null(RemoteBar.PicturesPolicy(new LoadedMessage { Body = Body(html: Html, remoteImages: 2) }));
+        Assert.Equal(RemoteContentPolicy.Allow, RemoteBar.PicturesPolicy(new LoadedMessage { Body = Body(html: Html, policy: RemoteContentPolicy.Allow) })?.Value);
+        Assert.Equal(
+            RemoteContentPolicy.Allow,
+            RemoteBar.PicturesPolicy(new LoadedMessage { Body = Body(html: Html, remoteImages: 2), LoadingImages = true })?.Value);
+    }
+
+    /// <summary>
+    /// A picture the daemon no longer serves asks for the body again only
+    /// when the cached body lists it and counts none on the server, nothing
+    /// newer is on its way, and it has not asked since the last download
+    /// (remote.go <c>recheckPictures</c>).
+    /// </summary>
+    [Fact]
+    public void RecheckPicturesTest()
+    {
+        var parts = new Dictionary<string, string> { ["p@x"] = "1.2", ["q@x"] = "1.3" };
+        var listed = Body(html: "<p>x</p>") with { InlineParts = parts };
+        var counted = listed with { RemotePictures = 1 };
+        var text = Body(html: null, text: "x") with { InlineParts = parts };
+        (string Name, LoadedMessage? Lm, string Part, bool Want)[] cases =
+        [
+            ("not cached", null, "1.2", false),
+            ("no body", new LoadedMessage(), "1.2", false),
+            ("listed, none counted", new LoadedMessage { Body = listed }, "1.2", true),
+            ("another listed one", new LoadedMessage { Body = listed }, "1.3", true),
+            ("not a picture of the body", new LoadedMessage { Body = listed }, "2", false),
+            ("asked already", new LoadedMessage { Body = listed, PicturesRechecked = true }, "1.2", false),
+            ("the bar is up already", new LoadedMessage { Body = counted }, "1.2", false),
+            ("body on its way", new LoadedMessage { Body = listed, Fetching = true }, "1.2", false),
+            ("remote images on their way", new LoadedMessage { Body = listed, LoadingImages = true }, "1.2", false),
+            ("pictures on their way", new LoadedMessage { Body = listed, LoadingPictures = true }, "1.2", false),
+            ("text shown", new LoadedMessage { Body = text }, "1.2", false),
+        ];
+        foreach (var (name, lm, part, want) in cases)
+        {
+            Assert.True(want == RemoteBar.RecheckPictures(lm, part), name);
+        }
+    }
+
+    /// <summary>
+    /// A download asks for the body again when it counts pictures on the
+    /// server, unless Download Pictures does that itself or a body is on its
+    /// way (remote.go <c>reloadAfterDownload</c>).
+    /// </summary>
+    [Fact]
+    public void ReloadAfterDownloadTest()
+    {
+        var counted = Body(html: "<p>x</p>", remotePictures: 2);
+        (string Name, LoadedMessage? Lm, bool Want)[] cases =
+        [
+            ("not cached", null, false),
+            ("no body", new LoadedMessage(), false),
+            ("pictures on the server", new LoadedMessage { Body = counted }, true),
+            ("remote images on their way", new LoadedMessage { Body = counted, LoadingImages = true }, true),
+            ("none on the server", new LoadedMessage { Body = Body(html: "<p>x</p>") }, false),
+            ("Download Pictures asks itself", new LoadedMessage { Body = counted, LoadingPictures = true }, false),
+            ("body on its way", new LoadedMessage { Body = counted, Fetching = true }, false),
+            ("text shown", new LoadedMessage { Body = Body(html: null, text: "x", remotePictures: 2) }, false),
+        ];
+        foreach (var (name, lm, want) in cases)
+        {
+            Assert.True(want == RemoteBar.ReloadAfterDownload(lm), name);
+        }
+    }
+
     // The sensitivity rule of setMessageActionsSensitive as a pure function
     // (no Go counterpart; the GTK test is manual). The model's two answers
     // come from a folder table as MailModel gives them: an inbox, an archive
@@ -288,7 +407,7 @@ public sealed class ActionHelpersTests
 
     private static MessageBodyResult Body(
         BodyState? state = null, string? html = null, string text = "", bool? withheld = null,
-        int remoteImages = 0, RemoteContentPolicy? policy = null) =>
+        int remoteImages = 0, RemoteContentPolicy? policy = null, int? remotePictures = null) =>
         new()
         {
             MessageId = new MessageId("m"),
@@ -298,6 +417,7 @@ public sealed class ActionHelpersTests
             HtmlWithheld = withheld,
             Text = text,
             Blocked = new BlockedContent { RemoteImages = remoteImages },
+            RemotePictures = remotePictures,
             RemoteContent = policy ?? RemoteContentPolicy.Block,
             SanitizerVersion = "1",
         };

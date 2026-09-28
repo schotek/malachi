@@ -2,17 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Tests/MalachiCoreTests/AttachmentsTests.swift (the chips:
-// chipAttachmentsTest, partAvailableTest, attachedMessageTest,
-// saveAllSummaryTest, chipIconTypeTest), the counterpart of
-// ui/internal/window/attachments_test.go (TestChipAttachments,
-// TestPartAvailable, TestAttachedMessage, TestSaveAllSummary). The other
+// chipAttachmentsTest, partStateTest, anyRemoteTest, partAfterDownloadTest,
+// attachedMessageTest, saveAllSummaryTest, chipIconTypeTest), the
+// counterpart of ui/internal/window/attachments_test.go
+// (TestChipAttachments, TestPartState, TestAnyRemote, TestAttachedMessage,
+// TestSaveAllSummary) and download_test.go (TestPartAfterDownload). The other
 // suites of that Swift file test Malachi.Core.Platform and are ported there
 // (DangerousTypesTests: executableAttachmentTest; WindowsFileNamesTests:
 // safeFileNameTest, uniqueNameTest, fileNameTest; OpenDirTests:
 // sweepOpenDir, openDirWrite); claimedTypesTest, the UTType conformance
 // check, is the Windows file-type policy's (Malachi.Platform.Windows.Tests
 // FileTypePolicyTests); TestOpenDirFor is the Linux and Flatpak path of the
-// open directory, which Windows places elsewhere (docs/windows-port.md §1).
+// open directory, which Windows places elsewhere (docs/windows-port.md §1),
+// and TestPurgeOpenDir (Swift purgeOpenDir) the check of that path before
+// it is removed, which Windows makes by construction (OpenDir takes a fully
+// qualified path, and RemoveAll removes that one directory).
 
 using System;
 using System.Collections.Generic;
@@ -54,30 +58,91 @@ public sealed class AttachmentsTests
         Assert.Single(AttachmentChips.ChipAttachments(odd, Body(BodyState.Fetched, html: "<p>x</p>"))); // empty partId hidden
     }
 
+    /// <summary>attachments.go <c>partState</c>: the order of the checks is the point.</summary>
     [Fact]
-    public void PartAvailableTest()
+    public void PartStateTest()
     {
         var small = Attachment(size: 1024);
         var huge = Attachment(size: API.Limits.MaxAttachmentDataBytes + 1);
         var edge = Attachment(size: API.Limits.MaxAttachmentDataBytes);
+        var remote = Attachment(size: 1024, remote: true);
+        var hugeRemote = Attachment(size: API.Limits.MaxAttachmentDataBytes + 1, remote: true);
+        var notRemote = Attachment(size: 1024, remote: false);
         var fetched = Body(BodyState.Fetched);
-        (string Name, Attachment A, MessageBodyResult? B, bool Ok, string Why)[] cases =
+        const string OnServer = "On the server only; it is downloaded when you open it";
+        const string OverTheCap = "Attachments over 16.0 MiB cannot be opened or saved yet.";
+        (string Name, Attachment A, MessageBodyResult? B, PartState State, string Why)[] cases =
         [
-            ("no body", small, null, false, ""),
-            ("pending", small, Body(BodyState.Pending), false, "This message has not been downloaded yet."),
-            ("tooBig", small, Body(BodyState.TooBig), false, "This message is too large to download."),
-            ("failed", small, Body(BodyState.Failed), false, "This message could not be read."),
-            ("fetched", small, fetched, true, ""),
-            ("at the cap", edge, fetched, true, ""),
-            ("over the cap", huge, fetched, false, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+            ("no body", small, null, PartState.Waiting, ""),
+            ("no body, remote", remote, null, PartState.Waiting, ""),
+            ("pending: message.download fetches the body", small, Body(BodyState.Pending), PartState.Remote, OnServer),
+            ("tooBig", small, Body(BodyState.TooBig), PartState.Unavailable, "This message is too large to download."),
+            ("tooBig beats remote", remote, Body(BodyState.TooBig), PartState.Unavailable, "This message is too large to download."),
+            ("failed", small, Body(BodyState.Failed), PartState.Unavailable, "This message could not be read."),
+            ("fetched", small, fetched, PartState.Local, ""),
+            ("remote false", notRemote, fetched, PartState.Local, ""),
+            ("fetched, on the server only", remote, fetched, PartState.Remote, OnServer),
+            ("at the cap", edge, fetched, PartState.Local, ""),
+            ("over the cap", huge, fetched, PartState.Unavailable, OverTheCap),
+            ("over the cap beats remote", hugeRemote, fetched, PartState.Unavailable, OverTheCap),
+            ("over the cap while pending", huge, Body(BodyState.Pending), PartState.Unavailable, OverTheCap),
             // A state a newer daemon adds says nothing yet.
-            ("unknown state", small, Body(new BodyState("archived")), false, ""),
+            ("unknown state", small, Body(new BodyState("archived")), PartState.Waiting, ""),
         ];
-        foreach (var (name, a, b, ok, why) in cases)
+        foreach (var (name, a, b, state, why) in cases)
         {
-            var got = AttachmentChips.PartAvailable(a, b);
-            Assert.True(got.Ok == ok && got.Why == why, $"{name}: got ({got.Ok}, {got.Why})");
+            var got = AttachmentChips.PartStateOf(a, b);
+            Assert.True(got.State == state && got.Why == why, $"{name}: got ({got.State}, {got.Why})");
         }
+    }
+
+    /// <summary>attachments.go <c>anyRemote</c>: Save All downloads the message first.</summary>
+    [Fact]
+    public void AnyRemoteTest()
+    {
+        var local = Attachment("1", size: 10);
+        var remote = Attachment("2", size: 200_000, remote: true);
+        var huge = Attachment("3", size: API.Limits.MaxAttachmentDataBytes + 1, remote: true);
+        Assert.False(AttachmentChips.AnyRemote([local, local], Body(BodyState.Fetched)), "all local");
+        Assert.True(AttachmentChips.AnyRemote([local, remote], Body(BodyState.Fetched)), "one on the server");
+        Assert.False(AttachmentChips.AnyRemote([local, huge], Body(BodyState.Fetched)), "a part out of reach is never downloaded");
+        Assert.True(AttachmentChips.AnyRemote([local], Body(BodyState.Pending)), "a body not downloaded yet is fetched by the download too");
+        Assert.False(AttachmentChips.AnyRemote([remote], null), "no body loaded: nothing to decide yet");
+        Assert.False(AttachmentChips.AnyRemote([], Body(BodyState.Pending)), "no attachments");
+    }
+
+    /// <summary>
+    /// download.go <c>partAfterDownload</c>: Microsoft 365 may move part ids
+    /// when it rebuilds a message; a part that cannot be found again is not
+    /// found, and its old id, which may name another file by now, is never
+    /// used.
+    /// </summary>
+    [Fact]
+    public void PartAfterDownloadTest()
+    {
+        var a = Attachment("2", filename: "report.pdf", contentType: "application/pdf", size: 5, remote: true);
+        static Message Of(params Attachment[] atts) => new() { Summary = ReaderSummary(), Attachments = atts };
+
+        // The same id, name and type: that one (now local).
+        var same = Attachment("2", filename: "report.pdf", contentType: "application/pdf", size: 5);
+        Assert.Same(same, AttachmentChips.PartAfterDownload(a, Of(Attachment("1", filename: "x.txt"), same)));
+        Assert.False(AttachmentChips.PartAfterDownload(a, Of(same))!.IsRemote, "the downloaded entry is used");
+        // The id moved: the only one with the name and type.
+        var moved = Attachment("3", filename: "report.pdf", contentType: "application/pdf", size: 5);
+        Assert.Same(moved, AttachmentChips.PartAfterDownload(a, Of(Attachment("2", filename: "logo.png", contentType: "image/png"), moved)));
+        // The same number while it is the same file, even with another part
+        // of that name.
+        Assert.Same(same, AttachmentChips.PartAfterDownload(a, Of(same, Attachment("3", filename: "report.pdf", contentType: "application/pdf"))));
+        // Gone, another file under the old id: not found.
+        Assert.Null(AttachmentChips.PartAfterDownload(a, Of(Attachment("2", filename: "other.pdf", contentType: "application/pdf"))));
+        // Two candidates and none at the old id: not found.
+        var other = Attachment("4", filename: "report.pdf", contentType: "application/pdf", size: 7);
+        Assert.Null(AttachmentChips.PartAfterDownload(a, Of(moved, other)));
+        // The same name under another type is not the part.
+        Assert.Null(AttachmentChips.PartAfterDownload(a, Of(Attachment("5", filename: "report.pdf", contentType: "text/plain"))));
+        Assert.Null(AttachmentChips.PartAfterDownload(a, Of()));
+        // No message (nothing was downloaded): unchanged.
+        Assert.Same(a, AttachmentChips.PartAfterDownload(a, null));
     }
 
     [Theory]
@@ -161,7 +226,7 @@ public sealed class AttachmentsTests
     }
 
     private static Attachment Attachment(
-        string partId = "", string filename = "", string contentType = "", long size = 0, string? contentId = null) =>
+        string partId = "", string filename = "", string contentType = "", long size = 0, string? contentId = null, bool? remote = null) =>
         new()
         {
             PartId = partId,
@@ -170,7 +235,22 @@ public sealed class AttachmentsTests
             Size = size,
             Inline = contentId is not null,
             ContentId = contentId,
+            Remote = remote,
         };
+
+    private static MessageSummary ReaderSummary() => new()
+    {
+        Id = "m",
+        AccountId = "a",
+        FolderId = "f",
+        From = [],
+        Subject = "",
+        Date = DateTimeOffset.UnixEpoch,
+        Snippet = "",
+        Flags = [],
+        HasAttachments = true,
+        Size = 0,
+    };
 
     private static MessageBodyResult Body(
         BodyState state, string? html = null, string text = "", bool? withheld = null,

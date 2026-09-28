@@ -277,7 +277,7 @@ public sealed class PrefillTests
         };
         Assert.Equal(
             "ComposeParams(kind: Reply, accountId: acc1, to: 1, cc: 2, bcc: 0, subject: 14 chars, bodyHtml: 13 chars, "
-            + "inReplyTo: m1, forwarding: null, attachments: 1, draftId: d1, version: 3, replaces: null)",
+            + "inReplyTo: m1, forwarding: null, attachments: 1, draftId: d1, version: 3, replaces: null, skipped: 0)",
             p.ToString());
         var src = new ComposeSource
         {

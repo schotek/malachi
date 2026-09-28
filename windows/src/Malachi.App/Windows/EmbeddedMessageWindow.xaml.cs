@@ -10,8 +10,11 @@
 // “%s”"), the view in its embedded mode. Its pictures arrive inlined, so
 // the viewer needs no part server; its own attachments have no part numbers,
 // so their chips only name them; Load Images renders the part again with
-// remote images allowed for that one call (ReaderController). No actions:
-// the message has no id of its own. Escape and Ctrl+W close it.
+// remote images allowed for that one call (ReaderController), downloading
+// the containing message once should the daemon have moved the part to the
+// mail server since. No actions: the message has no id of its own. Escape
+// and Ctrl+W close it; the registry knows it by the part it was opened
+// with.
 
 using System;
 using Malachi.App.Reader;
@@ -32,17 +35,18 @@ public sealed partial class EmbeddedMessageWindow : Window, IMessageWindowHandle
     private bool focused;
 
     /// <summary>
-    /// The window of the attached message <paramref name="part"/> of
+    /// The window of the attached message <paramref name="attachment"/> (as
+    /// its chip listed it, with the part id actually rendered) of
     /// <paramref name="containing"/>, showing <paramref name="result"/>; the
     /// registry shows it.
     /// </summary>
-    public EmbeddedMessageWindow(ReaderServices services, MessageSummary containing, string part, MessageEmbeddedResult result)
+    public EmbeddedMessageWindow(ReaderServices services, MessageSummary containing, Attachment attachment, MessageEmbeddedResult result)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(containing);
-        ArgumentNullException.ThrowIfNull(part);
+        ArgumentNullException.ThrowIfNull(attachment);
         ArgumentNullException.ThrowIfNull(result);
-        var key = new MessageWindowKey.Embedded(containing.Id, part);
+        var key = new MessageWindowKey.Embedded(containing.Id, attachment.PartId);
         InitializeComponent();
         Title = L10n.T("Attached Message");
         WindowTitleBar.Title = Title;
@@ -60,7 +64,7 @@ public sealed partial class EmbeddedMessageWindow : Window, IMessageWindowHandle
             Title = subject;
             WindowTitleBar.Title = subject;
         };
-        View.Reader.ShowEmbedded(containing, part, result);
+        View.Reader.ShowEmbedded(containing, attachment, result);
         Activated += (_, e) =>
         {
             if (!focused && e.WindowActivationState != WindowActivationState.Deactivated)

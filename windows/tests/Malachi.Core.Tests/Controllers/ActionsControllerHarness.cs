@@ -3,21 +3,22 @@
 
 // Port of the Harness, ActionLog and helpers of
 // macos/Tests/MalachiCoreTests/ActionsControllerTests.swift: a MailFixture,
-// a connected client, the folder, list and cache halves and the actions
-// controller over a throwaway settings store, with the initial folder (the
-// inbox) listed.
+// a connected client, the folder and list halves, the message cache and the
+// actions controller over a throwaway settings store, with the initial
+// folder (the inbox) listed.
 //
 // Swift's harness drives the real MailboxController, ListController and
 // MessageCache. The actions reach those through IActionsMailbox,
-// IActionsList and IActionsCache; the halves below implement them over the
-// same MailModel and LoadedCache, with the parts of the Swift controllers
-// the suite exercises ported next to them: loading the accounts, the
-// folders (with the outbox's delivery tracking) and the first page of a
-// folder in either mode, removing rows with their restore (messages.go
-// removeRows / removeMessageRow), the conversation members of a selected
-// row (threads.go selectedIDs, ensureMembers) and the cache's fetching and
-// remote images (message_view.go fetchMessage, remote.go). The mailbox's
-// scope is the group's, as in the app.
+// IActionsList and IActionsCache; the halves below implement the first two
+// over the same MailModel, with the parts of the Swift controllers the suite
+// exercises ported next to them: loading the accounts, the folders (with
+// the outbox's delivery tracking) and the first page of a folder in either
+// mode, removing rows with their restore (messages.go removeRows /
+// removeMessageRow) and the conversation members of a selected row
+// (threads.go selectedIDs, ensureMembers). The cache is the real
+// MessageCache, as in Swift, on the fixture's clock (its download spinner)
+// and counted in the harness's work. The mailbox's scope is the group's, as
+// in the app.
 
 using System;
 using System.Collections.Generic;
@@ -156,7 +157,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
 
     public ListHalf List { get; private set; } = null!;
 
-    public CacheHalf Cache { get; private set; } = null!;
+    public MessageCache Cache { get; private set; } = null!;
 
     public ActionsController Actions { get; private set; } = null!;
 
@@ -251,8 +252,8 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             h.Mailbox = new MailboxHalf(scope, client, settings, log.Toasts.Add);
             h.List = new ListHalf(h.Mailbox);
             h.Mailbox.List = h.List;
-            h.Cache = new CacheHalf(scope, client, log.Toasts.Add);
-            h.Cache.RemoteBar += (id, lm) => log.Bars.Add($"{id.Value}:{(lm.LoadingImages ? "true" : "false")}");
+            h.Cache = new MessageCache(client, log.Toasts.Add, pending: h.Pending, timeProvider: time);
+            h.Cache.RemoteBarChanged += (_, e) => log.Bars.Add($"{e.Id.Value}:{(e.Loaded.LoadingImages ? "true" : "false")}");
             var actions = new ActionsController(h.Mailbox, h.List, h.Cache, settings, log.Toasts.Add, h.Logger)
             {
                 Confirm = (_, heading, body, label) =>
@@ -312,7 +313,11 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await Ui.RunAsync(() => Mailbox.Scope.Close());
+        await Ui.RunAsync(() =>
+        {
+            Mailbox.Scope.Close();
+            Cache.Dispose();
+        });
         Client.Dispose();
         await Fixture.DisposeAsync();
         Ui.Dispose();
@@ -601,148 +606,6 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
                     fn();
                 }
             });
-        }
-    }
-
-    /// <summary>
-    /// The cache (MessageCache.swift's share of the suite): fetching, the
-    /// refetch of an outbox message and the remote images.
-    /// </summary>
-    internal sealed class CacheHalf(ControllerScope scope, RpcClient client, Action<string> toast) : IActionsCache
-    {
-        private readonly LoadedCache cache = new();
-        private readonly Dictionary<LoadedMessage, List<Action<LoadedMessage>>> waiters = new(ReferenceEqualityComparer.Instance);
-
-        /// <summary>Swift <c>onRemoteBar</c>: only the remote-image bar of a message changed.</summary>
-        public event Action<MessageId, LoadedMessage>? RemoteBar;
-
-        public LoadedMessage? Loaded(MessageId id) => cache[id];
-
-        public MessageSummary? Summary(MessageId id) => cache[id]?.Msg?.Summary;
-
-        /// <summary>message_view.go fetchMessage: message.get and message.body, each when missing and not in flight.</summary>
-        public void Fetch(MessageSummary s, Action<LoadedMessage> then)
-        {
-            var id = s.Id;
-            var lm = cache.LoadedFor(id);
-            if (lm.Complete)
-            {
-                then(lm);
-                return;
-            }
-            if (!waiters.TryGetValue(lm, out var list))
-            {
-                waiters[lm] = list = [];
-            }
-            list.Add(then);
-            if (lm.Msg is null && !lm.Getting)
-            {
-                lm.Getting = true;
-                scope.Perform(client, API.MessageGet, new MessageGetParams { AccountId = s.AccountId, MessageId = id }, outcome =>
-                {
-                    lm.Getting = false;
-                    if (outcome.TryGetValue(out var res, out _))
-                    {
-                        lm.Msg = res.Message;
-                    }
-                    Settle(id, lm);
-                });
-            }
-            if (lm.Body is null && !lm.Fetching)
-            {
-                lm.Fetching = true;
-                lm.Err = null;
-                scope.Perform(client, API.MessageBody, new MessageBodyParams { AccountId = s.AccountId, MessageId = id }, outcome =>
-                {
-                    lm.Fetching = false;
-                    if (outcome.TryGetValue(out var res, out var error))
-                    {
-                        lm.Body = res;
-                    }
-                    else
-                    {
-                        lm.Err = error;
-                    }
-                    Settle(id, lm);
-                });
-            }
-        }
-
-        public void Refetch(MessageSummary s, Action<LoadedMessage> done)
-        {
-            if (cache[s.Id] is { Getting: false } lm)
-            {
-                lm.Msg = null;
-            }
-            Fetch(s, done);
-        }
-
-        public void LoadImages(MessageSummary s, Action<Outcome<LoadedMessage>> done)
-        {
-            if (BeginLoadingImages(s.Id) is { } lm)
-            {
-                FetchRemoteImages(s, lm, done);
-            }
-        }
-
-        public LoadedMessage? BeginLoadingImages(MessageId id)
-        {
-            var lm = cache.LoadedFor(id);
-            if (lm.LoadingImages)
-            {
-                return null;
-            }
-            lm.LoadingImages = true;
-            RemoteBar?.Invoke(id, lm);
-            return lm;
-        }
-
-        public void FetchRemoteImages(MessageSummary s, LoadedMessage lm, Action<Outcome<LoadedMessage>> done)
-        {
-            var id = s.Id;
-            var parameters = new MessageBodyParams { AccountId = s.AccountId, MessageId = id, RemoteContent = RemoteContentPolicy.Allow };
-            scope.Perform(client, API.MessageBody, parameters, outcome =>
-            {
-                if (!outcome.TryGetValue(out var res, out var error))
-                {
-                    toast(RpcErrorText.Text(L10n.T("Loading the images"), error));
-                    ImagesDone(id, lm);
-                    done(Outcome.Failure<LoadedMessage>(error!));
-                    return;
-                }
-                lm.LoadingImages = false;
-                lm.Body = res;
-                lm.Err = null;
-                if (cache[id] is null)
-                {
-                    cache.Store(id, lm);
-                }
-                done(Outcome.Success(lm));
-            });
-        }
-
-        public void ImagesDone(MessageId id, LoadedMessage lm)
-        {
-            lm.LoadingImages = false;
-            RemoteBar?.Invoke(id, lm);
-        }
-
-        // message_view.go settleLoaded.
-        private void Settle(MessageId id, LoadedMessage lm)
-        {
-            if (cache[id] is null)
-            {
-                cache.Store(id, lm);
-            }
-            var ws = waiters.TryGetValue(lm, out var list) ? list.ToArray() : [];
-            if (!lm.Getting && !lm.Fetching)
-            {
-                waiters.Remove(lm);
-            }
-            foreach (var w in ws)
-            {
-                w(lm);
-            }
         }
     }
 }

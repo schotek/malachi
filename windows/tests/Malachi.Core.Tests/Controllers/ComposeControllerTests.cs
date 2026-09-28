@@ -147,6 +147,28 @@ public sealed class ComposeControllerTests
     }
 
     /// <summary>
+    /// manager.go <c>Open</c>: what draft.create could not import is said
+    /// once, after what the sanitiser removed.
+    /// </summary>
+    [Fact]
+    public async Task SkippedPartsOfTheOriginalAreSaidOnOpen()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.Run(() =>
+        {
+            h.Compose.Open(new ComposeParams { Kind = ComposeKind.Forward, Skipped = 2 });
+            Assert.Equal(["2 attachments of the original could not be attached"], h.Handles[0].Toasts);
+            h.Compose.Open(new ComposeParams { Kind = ComposeKind.Forward, Blocked = new BlockedContent { Scripts = 1 }, Skipped = 1 });
+            Assert.Equal(
+                ["1 unsafe element was removed from the message", "1 attachment of the original could not be attached"],
+                h.Handles[1].Toasts);
+            h.Compose.Open(new ComposeParams { Kind = ComposeKind.Forward, Skipped = 0 });
+            Assert.Empty(h.Handles[2].Toasts);
+        });
+        await h.IdleAsync();
+    }
+
+    /// <summary>
     /// Manager.FindDraft: the window editing the draft draft.open answered
     /// with, by its id or by the Drafts message it takes over.
     /// </summary>

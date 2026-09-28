@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/ComposeSource.swift
-// (composeSource, composeWhat, composeFallbackText); GTK:
-// ui/internal/window/compose_open.go (composeSource, composeWhat,
-// composeFallbackText). The class is not named ComposeSource, which is the
-// record of Malachi.Core.Compose (Compose/ComposeParams.swift).
+// (composeSource, composeWhat, composeFallbackText, forwardNeedsDownload,
+// replyNeedsDownload, askForwardWithout); GTK:
+// ui/internal/window/compose_open.go (the same names). The class is not
+// named ComposeSource, which is the record of Malachi.Core.Compose
+// (Compose/ComposeParams.swift).
 
 using System;
+using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.I18n;
@@ -86,6 +88,71 @@ public static class ComposeSources
                 return "";
             default:
                 return RpcErrorText.Text(what, error);
+        }
+    }
+
+    /// <summary>
+    /// Whether a forward of the loaded message downloads it first
+    /// (compose_open.go <c>forwardNeedsDownload</c>): <c>draft.create</c>
+    /// imports only what is stored, so a body not downloaded yet, or any part
+    /// kept on the mail server (an attachment, or a picture the HTML shows,
+    /// which <c>Preferences.neverStoreAttachments</c> leaves there from
+    /// 100 KiB), is fetched before the template is asked for. Without the
+    /// full message in the cache nothing is known, so it downloads as well:
+    /// <c>message.download</c> answers at once when nothing is missing.
+    /// </summary>
+    public static bool ForwardNeedsDownload(LoadedMessage? lm)
+    {
+        if (lm?.Msg is not { } m)
+        {
+            return true;
+        }
+        if (lm.Body?.BodyState == BodyState.Pending)
+        {
+            return true;
+        }
+        return m.Attachments.Any(a => a.IsRemote);
+    }
+
+    /// <summary>
+    /// Whether a reply (or reply to all) of the loaded message downloads it
+    /// first (compose_open.go <c>replyNeedsDownload</c>): the quote copies the
+    /// pictures the original shows, and <c>draft.create</c> imports only what
+    /// the daemon has, so when the body on display counts pictures kept on
+    /// the mail server only (<see cref="MessageBodyResult.RemotePictures"/>;
+    /// <c>Preferences.neverStoreAttachments</c> leaves the large ones there)
+    /// they are fetched before the template is asked for. The count is the
+    /// daemon's: a part on the server with a Content-ID is no reason by itself
+    /// (Outlook and Apple Mail give ordinary attachments one, and a quote
+    /// never copies those), nor is a picture the daemon holds in memory from
+    /// an earlier download. A failed download is not asked about: the reply
+    /// goes on, and the compose window says what <c>draft.create</c> left out
+    /// (<see cref="ComposeParams.Skipped"/>). Without a body in the cache
+    /// nothing is known and nothing is downloaded.
+    /// </summary>
+    public static bool ReplyNeedsDownload(LoadedMessage? lm) => RemoteBar.RemotePictures(lm?.Body) > 0;
+
+    /// <summary>
+    /// Whether a failed download before a forward asks "Forward Without
+    /// Attachments?" (compose_open.go <c>askForwardWithout</c>). The forward
+    /// goes on at once with what the daemon has where asking would change
+    /// nothing: without a daemon to ask (not connected, or the connection
+    /// lost; <c>draft.create</c> fails the same way and the window opens from
+    /// what the pane knows), for a daemon without <c>message.download</c>
+    /// (methodNotFound, notImplemented), as before attachments on demand, and
+    /// for a message over the daemon's cap, which can never be downloaded
+    /// (attachmentTooBig; <c>draft.create</c> lists what it could not take).
+    /// </summary>
+    public static bool AskForwardWithout(Exception? error)
+    {
+        switch (error)
+        {
+            case null:
+            case RpcClientException { Error.Kind: ClientErrorKind.NotConnected or ClientErrorKind.Disconnected }:
+            case RpcException { Code.Value: ErrorCode.AttachmentTooBig }:
+                return false;
+            default:
+                return !Download.MethodUnsupported(error);
         }
     }
 }

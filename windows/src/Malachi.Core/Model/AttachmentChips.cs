@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/AttachmentChips.swift
-// (chipNameChars, chipAttachments, partAvailable, attachedMessage, chipName,
-// chipIconType, fileName, saveAllSummary); GTK: ui/internal/window/
-// attachments.go (the same names) and embedded.go (attachedMessage).
+// (chipNameChars, chipAttachments, partState, anyRemote, partAfterDownload,
+// attachedMessage, chipName, chipIconType, fileName, saveAllSummary); GTK:
+// ui/internal/window/attachments.go (the same names), download.go
+// (partAfterDownload) and embedded.go (attachedMessage). PartState, the
+// enum of that Swift file, has a file of its own.
 //
 // The safety parts of that Swift file live in Malachi.Core.Platform and are
 // used from there, not repeated: DangerousTypes.IsDangerous is
@@ -32,7 +34,9 @@ namespace Malachi.Core.Model;
 /// data and are shown as plain text; programs and scripts are never opened
 /// directly (docs/security.md §4, <see cref="IFileTypePolicy"/>); the
 /// content comes through <c>message.part</c>, so a part over
-/// <see cref="API.Limits.MaxAttachmentDataBytes"/> is out of reach.
+/// <see cref="API.Limits.MaxAttachmentDataBytes"/> is out of reach, and a
+/// part kept on the mail server comes after <c>message.download</c>
+/// (<see cref="PartStateOf"/>, <see cref="Download"/>).
 /// </summary>
 public static class AttachmentChips
 {
@@ -66,39 +70,97 @@ public static class AttachmentChips
     }
 
     /// <summary>
-    /// Whether <c>message.part</c> can deliver <paramref name="a"/>, and if
-    /// not why, as the chip's tooltip (empty while the body is still on its
-    /// way; attachments.go <c>partAvailable</c>). The daemon reads parts from
-    /// the stored raw message only, and never beyond
-    /// <see cref="API.Limits.MaxAttachmentDataBytes"/>; the size is exact
-    /// once the body is fetched.
+    /// The state of <paramref name="a"/> and, for the chip's tooltip, why
+    /// (attachments.go <c>partState</c>): empty while the body is on its way
+    /// and for a stored part. The daemon reads parts from the stored raw
+    /// message only, never beyond
+    /// <see cref="API.Limits.MaxAttachmentDataBytes"/>; a part kept on the
+    /// server, or any part of a body not downloaded yet, comes after
+    /// <c>message.download</c>. Whether a part is on the server is the
+    /// daemon's word (<see cref="Attachment.Remote"/>); the size is exact
+    /// once the body is fetched (before that it is the transfer size from
+    /// BODYSTRUCTURE). The order of the checks is the point: a message too
+    /// large or unreadable, then a part over the cap, win over the server.
     /// </summary>
-    public static (bool Ok, string Why) PartAvailable(Attachment a, MessageBodyResult? b)
+    public static (PartState State, string Why) PartStateOf(Attachment a, MessageBodyResult? b)
     {
         ArgumentNullException.ThrowIfNull(a);
         if (b is null)
         {
-            return (false, "");
+            return (PartState.Waiting, "");
         }
         switch (b.BodyState.Value)
         {
-            case BodyState.Fetched:
-                break;
-            case BodyState.Pending:
-                return (false, L10n.T("This message has not been downloaded yet."));
             case BodyState.TooBig:
-                return (false, L10n.T("This message is too large to download."));
+                return (PartState.Unavailable, L10n.T("This message is too large to download."));
             case BodyState.Failed:
-                return (false, L10n.T("This message could not be read."));
-            default:
-                return (false, "");
+                return (PartState.Unavailable, L10n.T("This message could not be read."));
         }
         if (a.Size > API.Limits.MaxAttachmentDataBytes)
         {
             // TRANSLATORS: %s is a size such as "16.0 MiB".
-            return (false, L10n.T("Attachments over %s cannot be opened or saved yet.", Format.FormatSize(API.Limits.MaxAttachmentDataBytes)));
+            return (PartState.Unavailable, L10n.T("Attachments over %s cannot be opened or saved yet.", Format.FormatSize(API.Limits.MaxAttachmentDataBytes)));
         }
-        return (true, "");
+        if (a.IsRemote || b.BodyState == BodyState.Pending)
+        {
+            // TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
+            return (PartState.Remote, L10n.T("On the server only; it is downloaded when you open it"));
+        }
+        if (b.BodyState == BodyState.Fetched)
+        {
+            return (PartState.Local, "");
+        }
+        return (PartState.Waiting, "");
+    }
+
+    /// <summary>
+    /// Whether any of <paramref name="atts"/> has to be downloaded first
+    /// (attachments.go <c>anyRemote</c>): Save All then downloads the message
+    /// once.
+    /// </summary>
+    public static bool AnyRemote(IReadOnlyList<Attachment> atts, MessageBodyResult? b)
+    {
+        ArgumentNullException.ThrowIfNull(atts);
+        return atts.Any(a => PartStateOf(a, b).State == PartState.Remote);
+    }
+
+    /// <summary>
+    /// The attachment <paramref name="a"/> stands for in
+    /// <paramref name="m"/>, the message a download answered with (download.go
+    /// <c>partAfterDownload</c>): Microsoft 365 rebuilds the message, so a
+    /// part id may have moved, and a stale id could hand back another part.
+    /// The attachment of <paramref name="m"/> with <paramref name="a"/>'s part
+    /// id, file name and type; else the only one with its file name and type;
+    /// else null, not found: nothing may be fetched under the old id (the MCP
+    /// bridge refuses the same way). Without a message (nothing was
+    /// downloaded), <paramref name="a"/>.
+    /// </summary>
+    public static Attachment? PartAfterDownload(Attachment a, Message? m)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        if (m is null)
+        {
+            return a;
+        }
+        bool Same(Attachment b) =>
+            string.Equals(b.Filename, a.Filename, StringComparison.Ordinal)
+            && string.Equals(b.ContentType, a.ContentType, StringComparison.Ordinal);
+        Attachment? match = null;
+        var n = 0;
+        foreach (var b in m.Attachments)
+        {
+            if (!Same(b))
+            {
+                continue;
+            }
+            if (string.Equals(b.PartId, a.PartId, StringComparison.Ordinal))
+            {
+                return b;
+            }
+            match = b;
+            n++;
+        }
+        return n == 1 ? match : null;
     }
 
     /// <summary>

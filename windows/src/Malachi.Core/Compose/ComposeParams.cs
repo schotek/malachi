@@ -69,6 +69,13 @@ public sealed record ComposeParams
     /// <summary>The Drafts message the first save takes over (<c>draft.open</c> sets it).</summary>
     public MessageId? Replaces { get; init; }
 
+    /// <summary>
+    /// How many parts of the original <c>draft.create</c> could not import
+    /// (over a cap, unreadable, or kept on the mail server); the window says
+    /// so once (compose.Params <c>Skipped</c>).
+    /// </summary>
+    public int Skipped { get; init; }
+
     /// <inheritdoc/>
     public bool Equals(ComposeParams? other) =>
         other is not null && Kind == other.Kind && AccountId == other.AccountId
@@ -77,7 +84,8 @@ public sealed record ComposeParams
         && string.Equals(BodyHtml, other.BodyHtml, StringComparison.Ordinal)
         && InReplyTo == other.InReplyTo && Forwarding == other.Forwarding
         && Attachments.SequenceEqual(other.Attachments) && Blocked == other.Blocked
-        && DraftId == other.DraftId && Version == other.Version && Replaces == other.Replaces;
+        && DraftId == other.DraftId && Version == other.Version && Replaces == other.Replaces
+        && Skipped == other.Skipped;
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, AccountId, To.Count, Subject, BodyHtml, DraftId, Version);
@@ -92,7 +100,7 @@ public sealed record ComposeParams
         $"ComposeParams(kind: {Kind}, accountId: {Id(AccountId)}, to: {To.Count}, cc: {Cc.Count}, bcc: {Bcc.Count}, "
         + $"subject: {Subject.Length} chars, bodyHtml: {BodyHtml.Length} chars, inReplyTo: {Id(InReplyTo)}, "
         + $"forwarding: {Id(Forwarding)}, attachments: {Attachments.Count}, draftId: {Id(DraftId)}, version: {Version}, "
-        + $"replaces: {Id(Replaces)})");
+        + $"replaces: {Id(Replaces)}, skipped: {Skipped})");
 
     private static string Id<T>(T? id)
         where T : struct => id is { } value ? value.ToString() ?? "" : "null";

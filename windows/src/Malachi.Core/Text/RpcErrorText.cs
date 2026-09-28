@@ -96,6 +96,7 @@ public static class RpcErrorText
         switch (error.Code.Value)
         {
             case ErrorCode.NotImplemented:
+            case ErrorCode.MethodNotFound: // an older daemon lacks the method
                 return L10n.T("%s is not available yet", what);
             case ErrorCode.Conflict:
                 return L10n.T("%s conflicted with another change", what);
@@ -104,6 +105,7 @@ public static class RpcErrorText
             case ErrorCode.DraftNotFound:
                 return L10n.T("The draft no longer exists");
             case ErrorCode.AttachmentNotFound:
+            case ErrorCode.PartNotFound: // of a draft, or of a message
                 return L10n.T("The attachment no longer exists");
             case ErrorCode.AttachmentTooBig:
                 return L10n.T("The attachment is too big");
@@ -128,6 +130,16 @@ public static class RpcErrorText
                 return TlsReasonText(error) ?? L10n.T("%s failed: the secure connection could not be established", what);
             case ErrorCode.ServerTimeout:
                 return L10n.T("%s failed: the server did not respond in time", what);
+            case ErrorCode.Offline:
+                // TRANSLATORS: %s is an action such as "Opening the attachment".
+                return L10n.T("%s failed: no network connection", what);
+            case ErrorCode.Unavailable:
+                // A paused account, or a move the server has not seen yet.
+                return L10n.T("%s failed: try again in a moment", what);
+            case ErrorCode.PartNotDownloaded:
+                return L10n.T("%s failed: the attachment is not on this computer", what);
+            case ErrorCode.MessageGone:
+                return L10n.T("%s failed: the message is no longer on the server", what);
             default:
                 return L10n.T("%s failed", what);
         }

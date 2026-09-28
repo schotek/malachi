@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Tests of AttachmentChip: ui/internal/window/attachments.go
-// (renderAttachments, buildChip, chipMenu, buildSaveAll) and macos
-// AttachmentChipView.swift; the pure helpers are AttachmentsTests'.
+// (renderAttachments, buildChip, remoteIndicator, chipMenu, buildSaveAll)
+// and macos AttachmentChipView.swift; the pure helpers are
+// AttachmentsTests'.
 
 using System.Collections.Generic;
 using Malachi.Core.Api;
@@ -129,10 +130,63 @@ public sealed class AttachmentChipTests
         // While the body is on its way: unavailable, no reason yet.
         var waiting = AttachmentChip.For(s, new LoadedMessage { Msg = Message(s, atts) }, false, null).Chips;
         Assert.All(waiting, c => Assert.False(c.Available));
+        Assert.All(waiting, c => Assert.Equal(PartState.Waiting, c.State));
         Assert.Equal("", waiting[0].Tooltip);
 
+        // A body too large to download: out of reach, whatever the server has.
+        var tooBig = new LoadedMessage { Msg = Message(s, atts), Body = TextBody("m1") with { BodyState = BodyState.TooBig } };
+        Assert.All(AttachmentChip.For(s, tooBig, false, null).Chips, c =>
+        {
+            Assert.Equal(PartState.Unavailable, c.State);
+            Assert.Equal("This message is too large to download.", c.Tooltip);
+        });
+    }
+
+    /// <summary>
+    /// attachments.go <c>buildChip</c> with <c>partRemote</c>: a part on the
+    /// mail server only is enabled, named as any other, and carries the
+    /// server symbol with the reason, or the spinner while the message
+    /// downloads; Save All is offered and downloads first.
+    /// </summary>
+    [Fact]
+    public void APartOnTheServerIsEnabledAndSaysSo()
+    {
+        var s = Summary("m1");
+        List<Attachment> atts = [Attachment("2", "a.pdf"), Attachment("3", "big.pdf", size: 300_000) with { Remote = true }];
+        var lm = new LoadedMessage { Msg = Message(s, atts), Body = TextBody("m1") };
+        var (chips, saveAll) = AttachmentChip.For(s, lm, false, null);
+        Assert.Equal(PartState.Local, chips[0].State);
+        Assert.False(chips[0].OnServer);
+        Assert.Equal("", chips[0].ServerTooltip);
+        Assert.True(chips[1].Available && chips[1].OnServer);
+        Assert.Equal("big.pdf", chips[1].Tooltip);
+        Assert.Equal("More Actions", chips[1].ArrowTooltip);
+        Assert.Equal("On the server only; it is downloaded when you open it", chips[1].ServerTooltip);
+        Assert.False(chips[1].Downloading);
+        Assert.Equal(2, saveAll.Count);
+        Assert.True(AttachmentChips.AnyRemote(saveAll, lm.Body));
+
+        // While the message downloads: the spinner, on the parts on the
+        // server only.
+        var spinning = AttachmentChip.For(s, lm, false, null, downloading: true).Chips;
+        Assert.False(spinning[0].Downloading);
+        Assert.True(spinning[1].Downloading);
+
+        // A body not downloaded yet: every part comes with the download.
         var pending = new LoadedMessage { Msg = Message(s, atts), Body = TextBody("m1") with { BodyState = BodyState.Pending } };
-        Assert.Equal("This message has not been downloaded yet.", AttachmentChip.For(s, pending, false, null).Chips[0].Tooltip);
+        Assert.All(AttachmentChip.For(s, pending, false, null).Chips, c =>
+        {
+            Assert.True(c.Available && c.OnServer);
+            Assert.Equal("On the server only; it is downloaded when you open it", c.ServerTooltip);
+        });
+
+        // An attached message's parts have no numbers: never downloaded.
+        Assert.All(AttachmentChip.For(s, lm, nestedView: true, null, downloading: true).Chips, c =>
+        {
+            Assert.False(c.Available);
+            Assert.False(c.Downloading);
+            Assert.Equal("", c.ServerTooltip);
+        });
     }
 
     [Fact]

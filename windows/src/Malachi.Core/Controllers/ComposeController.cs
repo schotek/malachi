@@ -147,6 +147,13 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
             // scripts; said once, as after a save.
             w.Toast(message);
         }
+        var skipped = BlockedSummary.Skipped(p.Skipped);
+        if (skipped.Length > 0)
+        {
+            // Parts of a forwarded original stayed behind (over a cap, or on
+            // the mail server after a failed download).
+            w.Toast(skipped);
+        }
     }
 
     /// <summary>Manager.FindDraft: the open window that edits <paramref name="draft"/> (from <c>draft.open</c>), null when none.</summary>

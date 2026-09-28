@@ -3,13 +3,15 @@
 
 // The part of macos/Sources/MalachiCore/Controllers/MessageCache.swift that
 // ActionsController.swift uses (loaded, summary, refetch, loadImages,
-// beginLoadingImages, fetchRemoteImages, imagesDone); GTK:
-// ui/internal/window/message_view.go (loaded, summary), outbox.go
-// (refetchMessage) and remote.go (loadRemoteImages, fetchRemoteImages,
-// imagesDone). See IActionsMailbox for why the actions name the members
+// beginLoadingImages, fetchRemoteImages, imagesDone, downloadPictures,
+// download); GTK: ui/internal/window/message_view.go (loaded, summary),
+// outbox.go (refetchMessage), remote.go (loadRemoteImages,
+// fetchRemoteImages, imagesDone, downloadPictures) and download.go
+// (download). See IActionsMailbox for why the actions name the members
 // they use.
 
 using System;
+using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Model;
@@ -65,4 +67,20 @@ public interface IActionsCache
 
     /// <summary>Ends a request for the images without a new body: the bar offers them again (remote.go <c>imagesDone</c>).</summary>
     void ImagesDone(MessageId id, LoadedMessage lm);
+
+    /// <summary>
+    /// Downloads the pictures of <paramref name="s"/> kept on the mail server
+    /// only and shows the message again (remote.go <c>downloadPictures</c>);
+    /// the bars show the wait from the click on, a request already running is
+    /// left alone, a failure is toasted through <paramref name="say"/> (the
+    /// cache's own toast when null) with the bar back as it was.
+    /// </summary>
+    void DownloadPictures(MessageSummary s, Action<string>? say, Action<Outcome<LoadedMessage>> done);
+
+    /// <summary>
+    /// <c>message.download</c> for message <paramref name="id"/>, one per
+    /// message however often asked (download.go <c>download</c>); the message
+    /// as the daemon reports it afterwards, which replaced the cached one.
+    /// </summary>
+    Task<Message> DownloadAsync(AccountId accountId, MessageId id);
 }

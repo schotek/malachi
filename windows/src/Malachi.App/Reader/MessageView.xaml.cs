@@ -4,13 +4,15 @@
 // Port of macos/Sources/MalachiMail/MessageView/MessageViewController.swift
 // (the AppKit half: the pages, the web view made on first use, the fonts,
 // the chips and the address rows built from the controller, the focus
-// leaving the bar), AddressHeaderView.swift (the chips and their menu, "+N
-// more"), AttachmentChipView.swift (the chip, its menu, Save All) and
-// RemoteBarView.swift; GTK: ui/internal/window/message_view.go
-// (newMessageView, setBarVisible, setBarLoading, htmlView, setZoom),
+// leaving the bars, downloadPictures), AddressHeaderView.swift (the chips
+// and their menu, "+N more"), AttachmentChipView.swift (the chip, its menu,
+// the server symbol or the spinner, Save All) and RemoteBarView.swift (the
+// remote-image bar and the pictures bar); GTK:
+// ui/internal/window/message_view.go (newMessageView, setBarVisible,
+// setBarLoading, htmlView, setZoom), remote.go (showPicturesBar),
 // addresses.go (chip, addressMenu, moreChip), attachments.go (buildChip,
-// chipMenu, buildSaveAll) and style.go (.message-body: the text-zoom and
-// monospace settings). The state is Core's ReaderController; this view
+// remoteIndicator, chipMenu, buildSaveAll) and style.go (.message-body: the
+// text-zoom and monospace settings). The state is Core's ReaderController; this view
 // draws it and sends the clicks back: to the window's commands (the
 // command row and its menu), the MessageActionRouter (the banners, the
 // bar, an address's New Message), the AttachmentOpener and previewer (the
@@ -28,7 +30,11 @@
 // thirds of the page scroll (GTK's grow), Copy Address can fail while
 // another program holds the clipboard (GTK's cannot) and says so, and Save
 // All stays disabled while its run lasts even when a re-render rebuilds the
-// button (the run is AttachmentOpener's, by message).
+// button (the run is AttachmentOpener's, by message). A part kept on the
+// mail server shows the server glyph (GTK's network-server icon, Segoe
+// Fluent's download from the cloud) after the size, with the reason as its
+// tooltip, or a ProgressRing while the message downloads, inside the split
+// button's main part (GTK and macOS put it beside the arrow).
 
 using System;
 using System.Collections.Generic;
@@ -115,6 +121,16 @@ public sealed partial class MessageView : UserControl
         // still reaches them.
         RemoteLoad.AllowFocusOnInteraction = false;
         RemoteTrust.AllowFocusOnInteraction = false;
+        PicturesDownload.AllowFocusOnInteraction = false;
+        Reader.HtmlReloadRequested += (_, _) =>
+        {
+            // The same HTML, whose malachi-cid: pictures have something to
+            // serve now (their download ended).
+            if (!closed && Reader.Html is { } html)
+            {
+                EnsureWeb().Load(html, reload: true);
+            }
+        };
 
         var settings = services.State.Settings;
         ApplyBodyFont();
@@ -252,7 +268,12 @@ public sealed partial class MessageView : UserControl
                 // Hiding the button that has the focus would hand it on to
                 // whatever comes next: the body is somewhere harmless
                 // (message_view.go setBarVisible, setBarLoading).
-                MoveFocusOutOfBar();
+                MoveFocusOutOf(RemoteBar);
+                break;
+            case nameof(ReaderController.PicturesBarVisible) when !Reader.PicturesBarVisible:
+            case nameof(ReaderController.PicturesBarLoading) when Reader.PicturesBarLoading:
+                // The same for the pictures bar (remote.go showPicturesBar).
+                MoveFocusOutOf(PicturesBar);
                 break;
             case nameof(ReaderController.Chips):
             case nameof(ReaderController.SaveAll):
@@ -335,9 +356,9 @@ public sealed partial class MessageView : UserControl
         }
     }
 
-    private void MoveFocusOutOfBar()
+    private void MoveFocusOutOf(DependencyObject bar)
     {
-        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused || !IsInside(focused, RemoteBar))
+        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused || !IsInside(focused, bar))
         {
             return;
         }
@@ -396,6 +417,18 @@ public sealed partial class MessageView : UserControl
         {
             services.Router.TrustSender(s.Id);
         }
+    }
+
+    // The pictures bar's Download Pictures (remote.go downloadPictures): a
+    // failure is said in this view's window.
+    private void OnDownloadPictures(object sender, RoutedEventArgs e)
+    {
+        if (Reader.Mode == ReaderMode.Embedded || Reader.Current is not { } s)
+        {
+            return;
+        }
+        var window = HostWindow;
+        services.Router.DownloadPictures(s.Id, text => services.ToastIn(window, text));
     }
 
     // Address rows (addresses.go fill).
@@ -573,7 +606,7 @@ public sealed partial class MessageView : UserControl
         }
         if (Reader.SaveAll.Count > 0 && Reader.Current is { } s)
         {
-            saveAllButton = SaveAllButton(s, Reader.SaveAll);
+            saveAllButton = SaveAllButton(s, Reader.SaveAll, Reader.SaveAllRemote);
             saveAllOf = s.Id;
             AttachmentChips.Children.Add(saveAllButton);
         }
@@ -582,7 +615,8 @@ public sealed partial class MessageView : UserControl
 
     // One attachment: the click previews it (an attached message opens in
     // its own window), the arrow offers View, Open and Save As…. The
-    // actions close over the chip, so it never acts on another message.
+    // actions close over the chip, so it never acts on another message; a
+    // chip of a part on the mail server downloads the message first.
     private FrameworkElement AttachmentButton(AttachmentChip chip, IconLookups<ImageSource>.Batch icons)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -593,6 +627,10 @@ public sealed partial class MessageView : UserControl
         if (chip.SizeText.Length > 0)
         {
             content.Children.Add(new TextBlock { Text = chip.SizeText, Style = Look("ChipSizeStyle") });
+        }
+        if (chip.OnServer)
+        {
+            content.Children.Add(RemoteIndicator(chip));
         }
         var button = new SplitButton
         {
@@ -621,10 +659,10 @@ public sealed partial class MessageView : UserControl
         }
         var open = new MenuFlyoutItem { IsEnabled = chip.CanOpen };
         MnemonicLabel.Apply(open, L10n.T("_Open"));
-        open.Click += (_, _) => _ = services.Attachments.OpenAsync(chip.Attachment, chip.Message, HostWindow);
+        open.Click += (_, _) => _ = services.Attachments.OpenAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
         var save = new MenuFlyoutItem();
         MnemonicLabel.Apply(save, L10n.T("Save _As…"));
-        save.Click += (_, _) => _ = services.Attachments.SaveAsAsync(chip.Attachment, chip.Message, HostWindow);
+        save.Click += (_, _) => _ = services.Attachments.SaveAsAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
         menu.Items.Add(open);
         menu.Items.Add(save);
         button.Flyout = menu;
@@ -636,7 +674,7 @@ public sealed partial class MessageView : UserControl
             }
             else
             {
-                _ = services.Preview.ShowAsync(chip.Attachment, chip.Message, HostWindow);
+                _ = services.Preview.ShowAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
             }
         };
         if (chip.Available)
@@ -656,17 +694,43 @@ public sealed partial class MessageView : UserControl
         return wrapper;
     }
 
+    // attachments.go remoteIndicator: after the size of a part on the mail
+    // server only, the server glyph with the reason as its tooltip, dimmed
+    // like the size, or a spinner while the message is being downloaded.
+    private static FrameworkElement RemoteIndicator(AttachmentChip chip)
+    {
+        if (chip.Downloading)
+        {
+            var spinner = new ProgressRing
+            {
+                Width = 14,
+                Height = 14,
+                IsActive = true,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            AutomationProperties.SetName(spinner, L10n.T("Downloading…"));
+            return spinner;
+        }
+        var glyph = Icons.Create("network-server", Icons.Small);
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        glyph.Opacity = 0.55; // GTK's .dim-label
+        ToolTipService.SetToolTip(glyph, chip.ServerTooltip);
+        AutomationProperties.SetName(glyph, chip.ServerTooltip);
+        return glyph;
+    }
+
     // A style of the view's resources (MessageView.xaml).
     private Style Look(string key) => (Style)Resources[key];
 
     private void OpenAttached(AttachmentChip chip) =>
-        _ = services.Windows.OpenEmbeddedAsync(chip.Message, chip.Attachment.PartId, HostWindow);
+        _ = services.Windows.OpenEmbeddedAsync(chip.Message, chip.Attachment, chip.OnServer, HostWindow);
 
     // buildSaveAll: flat, as dense as the chips beside it; disabled while
     // the run lasts, which AttachmentOpener keeps by message, so a button
     // rebuilt by a re-render, or the same message's in another window, is
-    // disabled too.
-    private Button SaveAllButton(MessageSummary s, IReadOnlyList<Attachment> atts)
+    // disabled too. remote: some are on the mail server only, the message
+    // is downloaded once first.
+    private Button SaveAllButton(MessageSummary s, IReadOnlyList<Attachment> atts, bool remote)
     {
         var mnemonic = Mnemonic.Parse(L10n.T("Save _All"));
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
@@ -681,7 +745,7 @@ public sealed partial class MessageView : UserControl
         };
         AutomationProperties.SetName(button, mnemonic.Label);
         AutomationProperties.SetAutomationId(button, "SaveAllButton");
-        button.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, HostWindow);
+        button.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, remote, HostWindow);
         return button;
     }
 

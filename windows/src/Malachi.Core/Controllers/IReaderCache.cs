@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Windows-only seam: what the reader asks of the loaded-message cache
-// (macos/Sources/MalachiMail/MessageView/MessageViewController.swift and
-// Windows/EmbeddedWindowController.swift use MessageCache directly: loaded,
-// fetch, fetchEmbedded; GTK: message_view.go fetchMessage and embedded.go
-// fetchEmbedded on the Window). MessageCache implements it; the reader's
-// tests answer it without a daemon.
+// (macos/Sources/MalachiMail/MessageView/MessageViewController.swift,
+// Windows/EmbeddedWindowController.swift and Attachments/AttachmentActions.swift
+// use MessageCache directly: loaded, fetch, fetchEmbedded, partData,
+// embeddedData, download, showsDownload; GTK: message_view.go fetchMessage,
+// embedded.go fetchEmbedded and download.go on the Window). MessageCache
+// implements it; the reader's tests answer it without a daemon.
 
 using System;
 using System.Threading;
@@ -37,4 +38,31 @@ public interface IReaderCache
     /// <summary><c>message.embedded</c> for one part (embedded.go <c>fetchEmbedded</c>).</summary>
     Task<MessageEmbeddedResult> FetchEmbeddedAsync(
         AccountId accountId, MessageId messageId, string partId, RemoteContentPolicy? remote = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The data of attachment <paramref name="a"/> (download.go
+    /// <c>partData</c>): <c>message.part</c>, downloading the message first
+    /// when the chip showed it on the mail server (<paramref name="onServer"/>)
+    /// or once after a partNotDownloaded; the result's <c>PartId</c> is the
+    /// part actually fetched.
+    /// </summary>
+    Task<MessagePartResult> PartDataAsync(AccountId accountId, MessageId messageId, Attachment a, bool onServer);
+
+    /// <summary>
+    /// The attached message <paramref name="a"/> rendered by the daemon
+    /// (download.go <c>embeddedData</c>): <c>message.embedded</c> under
+    /// <paramref name="policy"/>, downloading as <see cref="PartDataAsync"/>.
+    /// </summary>
+    Task<MessageEmbeddedResult> EmbeddedDataAsync(
+        AccountId accountId, MessageId messageId, Attachment a, bool onServer, RemoteContentPolicy? policy = null);
+
+    /// <summary>
+    /// <c>message.download</c> for message <paramref name="id"/>, one per
+    /// message however often asked (download.go <c>download</c>); the message
+    /// as the daemon reports it afterwards.
+    /// </summary>
+    Task<Message> DownloadAsync(AccountId accountId, MessageId id);
+
+    /// <summary>Whether the chips of message <paramref name="id"/> show the download spinner (download.go <c>spinning</c>).</summary>
+    bool ShowsDownload(MessageId id);
 }

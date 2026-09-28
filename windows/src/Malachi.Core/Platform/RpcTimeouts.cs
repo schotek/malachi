@@ -4,7 +4,8 @@
 // Port of macos/Sources/MalachiCore/Platform/RPCTimeouts.swift; GTK:
 // ui/internal/window/actions.go (rpcTimeout), window.go (fetchSystemInfo),
 // attachments.go (partTimeout), remote.go (remoteTimeout), compose_open.go
-// (composeTimeout), ui/internal/accountwizard/wizard.go (discoverTimeout,
+// (composeTimeout), download.go (downloadTimeout),
+// ui/internal/accountwizard/wizard.go (discoverTimeout,
 // testTimeout, addTimeout, oauthStartTimeout, oauthWaitCallTimeout),
 // backend/pkg/api/auth.go (HandshakeTimeout).
 
@@ -62,4 +63,11 @@ public static class RpcTimeouts
     /// it answers <c>pending</c>.
     /// </summary>
     public static readonly TimeSpan OAuthWaitCall = TimeSpan.FromSeconds(75);
+
+    /// <summary>
+    /// <c>message.download</c>: the daemon's budget is 4 minutes, and the
+    /// download goes on when the caller gives up (docs/api.md: wait at least
+    /// 5 minutes; download.go <c>downloadTimeout</c>).
+    /// </summary>
+    public static readonly TimeSpan Download = TimeSpan.FromMinutes(5);
 }
