@@ -339,13 +339,7 @@ internal sealed class CanaryRunner
                 }
                 break;
             case "loadcrash":
-                // A load, and the renderer's crash while it is still loading.
-                StartLoad(step, core!);
-                if (step.X > 0)
-                {
-                    await Task.Delay((int)step.X);
-                }
-                Crash(core!);
+                await LoadAndCrashAsync(step, core!);
                 break;
             default:
                 throw new InvalidOperationException("unknown step " + step.Op);
@@ -378,6 +372,30 @@ internal sealed class CanaryRunner
                 core.NavigateToString(html);
                 break;
         }
+    }
+
+    // A load, and the renderer's crash as soon as the document committed,
+    // while it still loads (a large one parses for about a second). A crash
+    // sent at a fixed time after the load could reach no renderer at all,
+    // the navigation between two.
+    private async Task LoadAndCrashAsync(HostStep step, CoreWebView2 core)
+    {
+        var committed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnSource(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args) => committed.TrySetResult();
+        core.SourceChanged += OnSource;
+        try
+        {
+            StartLoad(step, core);
+            if (await Task.WhenAny(committed.Task, Task.Delay(5000)) != committed.Task)
+            {
+                throw new TimeoutException("the document did not commit");
+            }
+        }
+        finally
+        {
+            core.SourceChanged -= OnSource;
+        }
+        Crash(core);
     }
 
     // The DevTools protocol's Page.crash ends the page's renderer at once

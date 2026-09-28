@@ -223,8 +223,8 @@ public sealed class CanaryFixture : IAsyncLifetime
     private static List<HostStep> RecoverySteps()
     {
         var steps = new List<HostStep>();
-        void Add(string view, string op, string phase, string? html = null, int ms = 0, string? target = null, double x = 0) =>
-            steps.Add(new HostStep { View = view, Op = op, Phase = phase, Html = html, Ms = ms, Target = target, X = x });
+        void Add(string view, string op, string phase, string? html = null, int ms = 0, string? target = null) =>
+            steps.Add(new HostStep { View = view, Op = op, Phase = phase, Html = html, Ms = ms, Target = target });
 
         Add("viewer", "load", "viewer-crash", "<p>crash</p>", 300);
         Add("viewer", "crash", "viewer-crash-1", ms: 1500);
@@ -232,7 +232,7 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("viewer", "load", "viewer-after", "<p>after</p>", 300);
         // A body large enough to be still loading when its renderer dies.
         Add("viewer", "loadcrash", "viewer-loadcrash", "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>",
-            2500, x: 20);
+            2500);
 
         Add("editor", "load", "editor-crash", "<p>text</p>", 300);
         Add("editor", "crash", "editor-crash-1", ms: 2000);
