@@ -217,4 +217,46 @@ public sealed class SupervisorTests
         var dbus = new Dictionary<string, string?>(@base) { ["DBUS_SESSION_BUS_ADDRESS"] = "tcp:host=localhost,port=1" };
         Assert.Equal("tcp:host=localhost,port=1", DaemonSupervisor.Environment(dbus, withHelper)["DBUS_SESSION_BUS_ADDRESS"]);
     }
+
+    /// <summary>
+    /// The counterpart of Swift's environmentSetsStorageDefaults, decided the
+    /// other way: the macOS app gives its daemon
+    /// MALACHI_DEFAULT_COMPRESS_STORE=1 and
+    /// MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30, the Windows app sets
+    /// neither, as the GTK UI, so the daemon's own defaults apply (off and
+    /// 0; docs/windows-port.md §5). Values already in the environment go
+    /// through untouched, whatever the keyring.
+    /// </summary>
+    [Fact]
+    public async Task EnvironmentLeavesTheStorageDefaultsToTheDaemon()
+    {
+        await using var f = new DaemonFixture();
+        var helper = f.Program("app", Paths.KeyringHelperName);
+        var daemon = Path.Combine(Path.GetDirectoryName(helper)!, DaemonSupervisor.ExecutableName);
+        var @base = Env(("USERPROFILE", OperatingSystem.IsWindows() ? @"C:\Users\u" : "/home/u"));
+
+        foreach (var launch in new[] { f.Launch(daemon, helper), f.Launch(daemon) })
+        {
+            var env = DaemonSupervisor.Environment(@base, launch);
+            Assert.False(env.ContainsKey("MALACHI_DEFAULT_COMPRESS_STORE"));
+            Assert.False(env.ContainsKey("MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"));
+        }
+
+        var preset = new Dictionary<string, string?>(@base)
+        {
+            ["MALACHI_DEFAULT_COMPRESS_STORE"] = "1",
+            ["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = "-1",
+            ["MALACHI_KEYRING"] = "none",
+        };
+        var kept = DaemonSupervisor.Environment(preset, f.Launch(daemon, helper));
+        Assert.Equal("1", kept["MALACHI_DEFAULT_COMPRESS_STORE"]);
+        Assert.Equal("-1", kept["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"]);
+        preset.Remove("MALACHI_KEYRING");
+        preset["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = "";
+        var withEmpty = DaemonSupervisor.Environment(preset, f.Launch(daemon, helper));
+        Assert.Equal("helper", withEmpty["MALACHI_KEYRING"]);
+        Assert.Equal("1", withEmpty["MALACHI_DEFAULT_COMPRESS_STORE"]);
+        // An empty one stays empty: the daemon reads it as no default.
+        Assert.Equal("", withEmpty["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"]);
+    }
 }

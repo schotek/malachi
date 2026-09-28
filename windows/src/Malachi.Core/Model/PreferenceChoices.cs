@@ -3,7 +3,8 @@
 
 // Port of macos/Sources/MalachiCore/Model/PreferenceChoices.swift; GTK:
 // ui/internal/window/preferences.go (the choice tables, nearestInterval,
-// indexOfRetention, indexOfPolicy).
+// indexOfRetention, indexOfAttachmentDays, attachmentDaysApply,
+// indexOfPolicy).
 
 using System;
 using System.Collections.Generic;
@@ -36,6 +37,14 @@ public static class PreferenceChoices
     /// 1 month, 3 months, 1 year, Everything (0).
     /// </summary>
     public static IReadOnlyList<int> RetentionChoices { get; } = [7, 30, 90, 365, 0];
+
+    /// <summary>
+    /// Keep Attachments Offline For: <c>Preferences.attachmentOfflineDays</c>
+    /// per row, ascending like <see cref="RetentionChoices"/>: Small
+    /// Attachments Only (<see cref="API.Limits.AttachmentOfflineNone"/>),
+    /// 1 week, 1 month, 3 months, Everything (0).
+    /// </summary>
+    public static IReadOnlyList<int> AttachmentChoices { get; } = [API.Limits.AttachmentOfflineNone, 7, 30, 90, 0];
 
     /// <summary>
     /// Maps a sync interval in seconds to the closest pop-up position (0
@@ -89,6 +98,56 @@ public static class PreferenceChoices
             }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Maps <c>Preferences.attachmentOfflineDays</c> to the closest pop-up
+    /// position (preferences.go <c>indexOfAttachmentDays</c>): a negative
+    /// value (only -1 is valid) selects "Small Attachments Only", 0
+    /// "Everything", any other the nearest number of days, a tie going to
+    /// the smaller.
+    /// </summary>
+    public static int IndexOfAttachmentDays(int days)
+    {
+        if (days < 0)
+        {
+            return 0;
+        }
+        if (days == 0)
+        {
+            return AttachmentChoices.Count - 1;
+        }
+        var best = 1;
+        var bestDiff = -1L;
+        for (var i = 0; i < AttachmentChoices.Count; i++)
+        {
+            var v = AttachmentChoices[i];
+            if (v <= 0)
+            {
+                continue;
+            }
+            var diff = Math.Abs((long)v - days);
+            if (bestDiff < 0 || diff < bestDiff)
+            {
+                best = i;
+                bestDiff = diff;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Whether <c>Preferences.attachmentOfflineDays</c> decides which
+    /// attachments are stored (preferences.go <c>attachmentDaysApply</c>):
+    /// not while none is stored at all (<c>neverStoreAttachments</c>
+    /// overrides it, docs/api.md §4.8). A daemon that does not report the
+    /// latter never overrides. Keep Attachments Offline For is insensitive
+    /// while it does not apply.
+    /// </summary>
+    public static bool AttachmentDaysApply(Preferences p)
+    {
+        ArgumentNullException.ThrowIfNull(p);
+        return p.NeverStoreAttachments != true;
     }
 
     /// <summary>

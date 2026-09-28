@@ -8,9 +8,14 @@ GTK: preferences.blp general_page. The Blueprint's groups in its order:
 Startup (launch_at_login, run_in_background), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
 (desktop_notifications, notification_sound) and the daemon's Mail group
-(mail_group: check_interval, remote_images, offline_days), insensitive
-until the daemon answered, its description replaced by a failed load's
-reason; after them two groups of Windows' own (Windows-only strings):
+(mail_group: check_interval, remote_images, offline_days, attachment_days,
+never_store_attachments, compress_store, storage_row), insensitive until
+the daemon answered, its description replaced by a failed load's reason;
+attachment_days, never_store_attachments and compress_store stay hidden
+until config.get reports them (a daemon that does not know them never
+does), and storage_row shows what system.storage says, asked again every
+few seconds while the window is open (hidden for a daemon without it);
+after them two groups of Windows' own (Windows-only strings):
 Keyboard, the ctrl-r setting as macOS's ⌘R group (Ctrl+R replies, or
 checks for new mail as in GTK), and Default Mail App, the Default apps
 button with what Windows opens mailto: links with (windows/README.md).
@@ -189,6 +194,56 @@ button with what Windows opens mailto: links with (windows/README.md).
                             <ComboBoxItem Content="{l:T Msgid='1 year'}" />
                             <ComboBoxItem Content="{l:T Msgid='Everything'}" />
                         </ComboBox>
+                    </tk:SettingsCard>
+                    <!-- Preferences.attachmentOfflineDays per row (PreferenceChoices.AttachmentChoices): -1, 7, 30, 90, 0. -->
+                    <tk:SettingsCard
+                        x:Name="AttachmentDaysRow"
+                        Description="{l:T Msgid='Large attachments of older messages stay on the server and are downloaded when you open them'}"
+                        Header="{l:T Msgid='Keep Attachments Offline For'}"
+                        Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="AttachmentDaysBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AttachmentDays"
+                            AutomationProperties.Name="{l:T Msgid='Keep Attachments Offline For'}"
+                            SelectedIndex="4"
+                            SelectionChanged="OnMailChanged">
+                            <ComboBoxItem Content="{l:T Msgid='Small Attachments Only'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 week'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 month'}" />
+                            <ComboBoxItem Content="{l:T Msgid='3 months'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Everything'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <!-- While on, AttachmentDaysRow does not apply and is insensitive (PreferenceChoices.AttachmentDaysApply). -->
+                    <tk:SettingsCard
+                        x:Name="NeverStoreRow"
+                        Description="{l:T Msgid='Attachments are downloaded whenever you open them and are gone when you quit'}"
+                        Header="{l:T Msgid='Never Store Attachments'}"
+                        Visibility="Collapsed">
+                        <ToggleSwitch
+                            x:Name="NeverStoreSwitch"
+                            AutomationProperties.AutomationId="NeverStoreAttachments"
+                            AutomationProperties.Name="{l:T Msgid='Never Store Attachments'}"
+                            Toggled="OnMailToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard
+                        x:Name="CompressStoreRow"
+                        Description="{l:T Msgid='Uses less disk space; stored mail is converted in the background'}"
+                        Header="{l:T Msgid='Compress Stored Mail'}"
+                        Visibility="Collapsed">
+                        <ToggleSwitch
+                            x:Name="CompressStoreSwitch"
+                            AutomationProperties.AutomationId="CompressStore"
+                            AutomationProperties.Name="{l:T Msgid='Compress Stored Mail'}"
+                            Toggled="OnMailToggled" />
+                    </tk:SettingsCard>
+                    <!-- The total as the value; what compression saves and what stays on the server as the description (StorageUsage.StorageTexts). -->
+                    <tk:SettingsCard x:Name="StorageRow" Header="{l:T Msgid='Disk Space Used'}">
+                        <TextBlock
+                            x:Name="StorageValue"
+                            AutomationProperties.AutomationId="DiskSpaceUsed"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     </tk:SettingsCard>
                 </StackPanel>
 

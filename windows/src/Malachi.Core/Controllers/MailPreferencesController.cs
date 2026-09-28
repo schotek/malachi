@@ -7,11 +7,14 @@
 //
 // The Swift callbacks are events of the same words (onPreferences is
 // PreferencesChanged, onEnabled EnabledChanged, onDescription
-// DescriptionChanged, onToast ToastRequested); the state they report is
-// observable as well, for bindings. Swift's set(checkInterval:),
-// set(remoteContent:) and set(offlineDays:) are SetCheckInterval,
-// SetRemoteContent and SetOfflineDays. Every call goes through the
-// controller's ControllerScope (docs/windows-port.md §7).
+// DescriptionChanged, onToast ToastRequested, onSaved Saved); the state
+// they report is observable as well, for bindings. Swift's
+// set(checkInterval:), set(remoteContent:), set(offlineDays:),
+// set(compressStore:), set(attachmentOfflineDays:) and
+// set(neverStoreAttachments:) are SetCheckInterval, SetRemoteContent,
+// SetOfflineDays, SetCompressStore, SetAttachmentOfflineDays and
+// SetNeverStoreAttachments. Every call goes through the controller's
+// ControllerScope (docs/windows-port.md §7).
 
 using System;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -38,7 +41,14 @@ namespace Malachi.Core.Controllers;
 /// failed save shows a toast and reverts the pop-ups to the last state the
 /// daemon confirmed. The page renders from <see cref="PreferencesChanged"/>
 /// (null until the daemon answered) and <see cref="EnabledChanged"/>, and
-/// maps values onto pop-up positions with <see cref="MailSelection"/>.
+/// maps values onto pop-up positions with <see cref="MailSelection"/>. Keep
+/// Attachments Offline For, Never Store Attachments and Compress Stored
+/// Mail exist only when the daemon reports them: an older daemon's rows are
+/// hidden (<see cref="MailSelection"/> null) and their setters do nothing,
+/// so what goes back leaves the fields out, which <c>config.set</c> reads
+/// as unchanged. While the daemon confirms that no attachment is stored,
+/// Keep Attachments Offline For does not apply and the page makes it
+/// insensitive (<see cref="PreferenceChoices.AttachmentDaysApply"/>).
 /// Create it, and call it, on the UI thread.
 /// </remarks>
 public sealed partial class MailPreferencesController : ObservableObject, IDisposable
@@ -84,6 +94,13 @@ public sealed partial class MailPreferencesController : ObservableObject, IDispo
 
     /// <summary>Called with the text of a toast, a failed save (Swift <c>onToast</c>).</summary>
     public event EventHandler<string>? ToastRequested;
+
+    /// <summary>
+    /// Called after the daemon confirmed a change (Swift <c>onSaved</c>):
+    /// the disk space is measured again then (preferences.go
+    /// <c>refreshStorage</c>).
+    /// </summary>
+    public event EventHandler? Saved;
 
     /// <summary>The last preference set the daemon confirmed; null until <c>config.get</c> answered.</summary>
     [ObservableProperty]
@@ -171,6 +188,44 @@ public sealed partial class MailPreferencesController : ObservableObject, IDispo
         }
     }
 
+    /// <summary>Compress Stored Mail (Swift <c>set(compressStore:)</c>); nothing while the daemon does not report it.</summary>
+    public void SetCompressStore(bool on)
+    {
+        scope.VerifyAccess();
+        if (Preferences is { CompressStore: not null } want)
+        {
+            Save(want with { CompressStore = on });
+        }
+    }
+
+    /// <summary>
+    /// Keep Attachments Offline For, in days (0 = everything, -1 = small
+    /// attachments only; Swift <c>set(attachmentOfflineDays:)</c>); nothing
+    /// while the daemon does not report it.
+    /// </summary>
+    public void SetAttachmentOfflineDays(int days)
+    {
+        scope.VerifyAccess();
+        if (Preferences is { AttachmentOfflineDays: not null } want)
+        {
+            Save(want with { AttachmentOfflineDays = days });
+        }
+    }
+
+    /// <summary>
+    /// Never Store Attachments (Swift <c>set(neverStoreAttachments:)</c>);
+    /// nothing while the daemon does not report it. Keep Attachments Offline
+    /// For goes back as confirmed either way.
+    /// </summary>
+    public void SetNeverStoreAttachments(bool on)
+    {
+        scope.VerifyAccess();
+        if (Preferences is { NeverStoreAttachments: not null } want)
+        {
+            Save(want with { NeverStoreAttachments = on });
+        }
+    }
+
     /// <summary>
     /// The Check for New Mail pop-up's position, for the page: a position
     /// outside <see cref="PreferenceChoices.IntervalChoices"/> is ignored
@@ -202,6 +257,15 @@ public sealed partial class MailPreferencesController : ObservableObject, IDispo
         }
     }
 
+    /// <summary>The Keep Attachments Offline For pop-up's position; one outside the table is ignored.</summary>
+    public void SelectAttachmentDays(int index)
+    {
+        if (index >= 0 && index < PreferenceChoices.AttachmentChoices.Count)
+        {
+            SetAttachmentOfflineDays(PreferenceChoices.AttachmentChoices[index]);
+        }
+    }
+
     // Runs config.set with the whole set. The group is insensitive
     // meanwhile; the daemon's echo is what the pop-ups show afterwards, or
     // the previous values again when the call failed.
@@ -229,6 +293,7 @@ public sealed partial class MailPreferencesController : ObservableObject, IDispo
             }
             Preferences = res.Preferences;
             PreferencesChanged?.Invoke(this, res.Preferences);
+            Saved?.Invoke(this, EventArgs.Empty);
         });
     }
 

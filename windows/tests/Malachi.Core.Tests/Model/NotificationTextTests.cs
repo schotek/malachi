@@ -3,8 +3,11 @@
 
 // Port of macos/Tests/MalachiCoreTests/NotificationTextTests.swift, the
 // counterpart of ui/internal/window/notify_test.go (TestNotificationText,
-// TestNearestInterval, TestIndexOfRetention), which also holds the
-// preference-choice cases of preferences.go.
+// TestNearestInterval, TestIndexOfRetention, TestIndexOfAttachmentDays),
+// which also holds the preference-choice cases of preferences.go.
+// TestAttachmentDaysToSave has no port: as on macOS, only the Keep
+// Attachments Offline For pop-up's own change sends its value
+// (MailPreferencesTests.AnUntouchedAttachmentValueIsKept).
 
 using System;
 using System.Globalization;
@@ -166,6 +169,42 @@ public sealed class NotificationTextTests
             Assert.True(i == PreferenceChoices.IndexOfRetention(PreferenceChoices.RetentionChoices[i]),
                 string.Create(CultureInfo.InvariantCulture, $"retentionChoices[{i}]={PreferenceChoices.RetentionChoices[i]} maps back"));
         }
+    }
+
+    /// <summary>
+    /// preferences.go <c>indexOfAttachmentDays</c>: -1 small only, 0
+    /// everything, otherwise the nearest, a tie going to the smaller.
+    /// </summary>
+    [Theory]
+    [InlineData(-1, 0)]
+    [InlineData(-7, 0)]
+    [InlineData(0, 4)]
+    [InlineData(1, 1)]
+    [InlineData(7, 1)]
+    [InlineData(18, 1)]
+    [InlineData(19, 2)]
+    [InlineData(30, 2)]
+    [InlineData(59, 2)]
+    [InlineData(60, 2)]
+    [InlineData(61, 3)]
+    [InlineData(90, 3)]
+    [InlineData(365, 3)]
+    [InlineData(3650, 3)]
+    [InlineData(int.MaxValue, 3)]
+    public void IndexOfAttachmentDaysTest(int input, int want)
+    {
+        Assert.Equal(want, PreferenceChoices.IndexOfAttachmentDays(input));
+    }
+
+    [Fact]
+    public void IndexOfAttachmentDaysMapsEveryChoiceBack()
+    {
+        for (var i = 0; i < PreferenceChoices.AttachmentChoices.Count; i++)
+        {
+            Assert.True(i == PreferenceChoices.IndexOfAttachmentDays(PreferenceChoices.AttachmentChoices[i]),
+                string.Create(CultureInfo.InvariantCulture, $"attachmentChoices[{i}]={PreferenceChoices.AttachmentChoices[i]} maps back"));
+        }
+        Assert.Equal([-1, 7, 30, 90, 0], PreferenceChoices.AttachmentChoices);
     }
 
     private static int Scalars(string s)

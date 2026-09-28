@@ -3,11 +3,17 @@
 
 // Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift
 // (bindIfReady, refreshLaunchAtLogin, launchAtLoginChanged, bindMail,
-// renderMail, mailChanged); GTK: ui/internal/window/preferences.go
-// (NewPreferences' bindings, bindLaunchAtLogin, bindMail). The UI-only
-// rows are bound two-way to the settings; the Mail group is the daemon's,
-// through MailPreferencesController (config.get, config.set), and stays
-// insensitive until the daemon answered.
+// renderMail, mailChanged, bindStorage); GTK:
+// ui/internal/window/preferences.go (NewPreferences' bindings,
+// bindLaunchAtLogin, bindMail, bindStorage). The UI-only rows are bound
+// two-way to the settings; the Mail group is the daemon's, through
+// MailPreferencesController (config.get, config.set), and stays
+// insensitive until the daemon answered. Keep Attachments Offline For,
+// Never Store Attachments and Compress Stored Mail show only when the
+// daemon reports them, the first insensitive while the daemon confirms
+// that no attachment is stored; Disk Space Used shows what system.storage
+// says (StorageUsageController: now, after every confirmed change and
+// every 5 s while the window is open), hidden for a daemon without it.
 //
 // Launch at Login is the Run value (PlatformServices.LaunchAtLogin), which
 // is authoritative as the Background portal and SMAppService are: the
@@ -25,9 +31,12 @@
 using System;
 using System.IO;
 using System.Security;
+using CommunityToolkit.WinUI.Controls;
 using Malachi.App.Platform;
 using Malachi.App.Shell;
+using Malachi.Core.Api;
 using Malachi.Core.Controllers;
+using Malachi.Core.Model;
 using Malachi.Core.Settings;
 using Malachi.Platform.Windows.Startup;
 using Microsoft.Extensions.Logging;
@@ -45,12 +54,19 @@ public sealed partial class GeneralPage : UserControl
     private readonly IToasts toasts;
     private readonly ILogger logger;
     private readonly MailPreferencesController mail;
+    private readonly StorageUsageController storage;
 
     // The login switch is being set from the Run value, not by the user.
     private bool revertingLogin;
 
-    // The Mail group's combos are being set from the controller.
+    // The Mail group's rows are being set from the controller.
     private bool syncingMail;
+
+    // The Mail group's sensitivity, and whether the confirmed preferences
+    // let Keep Attachments Offline For apply (not while no attachment is
+    // stored): that row is sensitive only with both.
+    private bool mailEnabled;
+    private bool attachmentDaysApply = true;
 
     /// <summary>The page of a preferences window over <paramref name="state"/>.</summary>
     internal GeneralPage(AppState state, SettingBindings bindings, IToasts toasts)
@@ -68,13 +84,23 @@ public sealed partial class GeneralPage : UserControl
         bindings.Toggle(NotificationSoundSwitch, SettingsKey.NotificationSound, () => s.NotificationSound, v => s.NotificationSound = v);
         bindings.Choice(CtrlRBox, SettingsKey.CtrlR, [CtrlR.Reply, CtrlR.Refresh], () => s.CtrlR, v => s.CtrlR = v);
 
-        // GTK builds every page at once: the Mail group asks the daemon now.
+        // GTK builds every page at once: the Mail group asks the daemon now,
+        // the disk space first (preferences.go binds it before the Mail group).
+        storage = new StorageUsageController(state.Client, logger: state.Logs.CreateLogger<StorageUsageController>());
+        storage.UsageChanged += (_, usage) => RenderStorage(usage);
+        // The value stays what it was; the next answer puts the details back.
+        storage.Failed += (_, text) => StorageRow.Description = text;
+        storage.Unsupported += (_, _) => StorageRow.Visibility = Visibility.Collapsed;
         mail = new MailPreferencesController(state.Client, state.Logs.CreateLogger<MailPreferencesController>());
         mail.EnabledChanged += (_, on) => SetMailEnabled(on);
         mail.PreferencesChanged += (_, p) => RenderMail(p);
         mail.DescriptionChanged += (_, text) => MailDescription.Text = text;
         mail.ToastRequested += (_, text) => toasts.Show(text);
+        // Compression or the attachments changed what the store holds, or
+        // is about to in the background (preferences.go refreshStorage).
+        mail.Saved += (_, _) => storage.Refresh();
         SetMailEnabled(false);
+        storage.Start();
         mail.Load();
         Refresh();
     }
@@ -90,8 +116,12 @@ public sealed partial class GeneralPage : UserControl
         RefreshDefaultApp();
     }
 
-    /// <summary>The window closed: late replies of the daemon are dropped.</summary>
-    public void Close() => mail.Close();
+    /// <summary>The window closed: late replies of the daemon are dropped, the disk space is not asked for any more.</summary>
+    public void Close()
+    {
+        mail.Close();
+        storage.Close();
+    }
 
     // GeneralPaneViewController.refreshLaunchAtLogin: the Run value is
     // authoritative; the switch and the mirror key follow its status.
@@ -211,14 +241,24 @@ public sealed partial class GeneralPage : UserControl
         }
     }
 
-    // The Mail group's sensitivity: loaded, and no save in flight.
+    // The Mail group's sensitivity: loaded, and no save in flight (GTK's
+    // mail_group, whose rows include Disk Space Used).
     private void SetMailEnabled(bool on)
     {
+        mailEnabled = on;
         CheckIntervalRow.IsEnabled = on;
         RemoteImagesRow.IsEnabled = on;
         OfflineDaysRow.IsEnabled = on;
+        AttachmentDaysRow.IsEnabled = on && attachmentDaysApply;
+        NeverStoreRow.IsEnabled = on;
+        CompressStoreRow.IsEnabled = on;
+        StorageRow.IsEnabled = on;
     }
 
+    // preferences.go apply: the values the daemon confirmed, into the rows;
+    // a row whose field the daemon does not report is hidden. Keep
+    // Attachments Offline For is insensitive while the confirmed set stores
+    // no attachment, so a failed save reverts that too; it keeps its value.
     private void RenderMail(DaemonPreferences? p)
     {
         if (p is null)
@@ -230,7 +270,42 @@ public sealed partial class GeneralPage : UserControl
         CheckIntervalBox.SelectedIndex = selection.Interval;
         RemoteImagesBox.SelectedIndex = selection.RemoteContent;
         OfflineDaysBox.SelectedIndex = selection.Retention;
+        if (selection.Attachments is { } attachments)
+        {
+            AttachmentDaysBox.SelectedIndex = attachments;
+        }
+        if (selection.NeverStore is { } neverStore)
+        {
+            NeverStoreSwitch.IsOn = neverStore;
+        }
+        if (selection.Compress is { } compress)
+        {
+            CompressStoreSwitch.IsOn = compress;
+        }
         syncingMail = false;
+        AttachmentDaysRow.Visibility = selection.Attachments is null ? Visibility.Collapsed : Visibility.Visible;
+        NeverStoreRow.Visibility = selection.NeverStore is null ? Visibility.Collapsed : Visibility.Visible;
+        CompressStoreRow.Visibility = selection.Compress is null ? Visibility.Collapsed : Visibility.Visible;
+        attachmentDaysApply = PreferenceChoices.AttachmentDaysApply(p);
+        AttachmentDaysRow.IsEnabled = mailEnabled && attachmentDaysApply;
+    }
+
+    // preferences.go bindStorage: the total as the value, what compression
+    // saves and what stays on the server as the description, none when
+    // there is nothing to say.
+    private void RenderStorage(SystemStorageResult usage)
+    {
+        var (value, details) = StorageUsage.StorageTexts(usage);
+        StorageValue.Text = value;
+        if (details.Length == 0)
+        {
+            // No description line at all, as the card has before the first answer.
+            StorageRow.ClearValue(SettingsCard.DescriptionProperty);
+        }
+        else
+        {
+            StorageRow.Description = details;
+        }
     }
 
     private void OnMailChanged(object sender, SelectionChangedEventArgs e)
@@ -250,6 +325,26 @@ public sealed partial class GeneralPage : UserControl
         else if (ReferenceEquals(sender, OfflineDaysBox))
         {
             mail.SelectRetention(OfflineDaysBox.SelectedIndex);
+        }
+        else if (ReferenceEquals(sender, AttachmentDaysBox))
+        {
+            mail.SelectAttachmentDays(AttachmentDaysBox.SelectedIndex);
+        }
+    }
+
+    private void OnMailToggled(object sender, RoutedEventArgs e)
+    {
+        if (syncingMail || mail is null)
+        {
+            return;
+        }
+        if (ReferenceEquals(sender, NeverStoreSwitch))
+        {
+            mail.SetNeverStoreAttachments(NeverStoreSwitch.IsOn);
+        }
+        else if (ReferenceEquals(sender, CompressStoreSwitch))
+        {
+            mail.SetCompressStore(CompressStoreSwitch.IsOn);
         }
     }
 

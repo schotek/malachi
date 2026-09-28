@@ -232,7 +232,12 @@ public sealed partial class DaemonSupervisor : IDisposable
     /// password fails with keyringError. A <c>MALACHI_KEYRING</c> already in
     /// the environment wins, so a developer can still point the daemon
     /// elsewhere; so does a <c>DBUS_SESSION_BUS_ADDRESS</c>, which is
-    /// otherwise <c>disabled:</c>.
+    /// otherwise <c>disabled:</c>. Unlike Swift's, it adds no
+    /// <c>MALACHI_DEFAULT_COMPRESS_STORE</c> or
+    /// <c>MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS</c> (the macOS app's 1 and
+    /// 30, for a Mac's often small disk): as with the GTK UI, the daemon's
+    /// own defaults apply until the user changes the preferences, and values
+    /// the environment has pass through (docs/windows-port.md §5).
     /// </summary>
     public static IReadOnlyDictionary<string, string> Environment(IReadOnlyDictionary<string, string?> @base, DaemonLaunch launch)
     {

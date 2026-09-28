@@ -186,9 +186,17 @@ public static class Format
         // "Wed, 2 Sep 2026 at 15:04".
         Strftime.Format(t, L10n.T("%a, %-d %b %Y at %H:%M"), culture ?? CultureInfo.CurrentCulture, timeZone);
 
-    /// <summary>Renders a byte count for attachment chips: MiB, KiB or B.</summary>
+    /// <summary>
+    /// Renders a byte count for attachment chips and the disk space of the
+    /// preferences: GiB, MiB, KiB or B (IEC units).
+    /// </summary>
     public static string FormatSize(long n)
     {
+        if (n >= 1L << 30)
+        {
+            // TRANSLATORS: file size in gibibytes.
+            return L10n.T("%.1f GiB", (double)n / (1L << 30));
+        }
         if (n >= 1L << 20)
         {
             // TRANSLATORS: file size in mebibytes.

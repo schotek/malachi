@@ -60,6 +60,11 @@ public sealed class FormatTests
     [InlineData(5, "5 B")]
     [InlineData(2048, "2 KiB")]
     [InlineData(3 << 20, "3.0 MiB")]
+    [InlineData((1L << 30) - 1, "1024.0 MiB")]
+    [InlineData(1L << 30, "1.0 GiB")]
+    [InlineData((5L << 30) / 2, "2.5 GiB")]
+    [InlineData((5L << 30) + (512L << 20), "5.5 GiB")]
+    [InlineData(300L << 30, "300.0 GiB")]
     public void FormatSizeTest(long input, string want)
     {
         Assert.Equal(want, Format.FormatSize(input));
@@ -183,6 +188,7 @@ public sealed class FormatTests
             CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("cs-CZ");
             Assert.Equal("3.0 MiB", Format.FormatSize(3 << 20));
             Assert.Equal("1.5 MiB", Format.FormatSize(3 << 19));
+            Assert.Equal("2.5 GiB", Format.FormatSize((5L << 30) / 2));
         }
         finally
         {
@@ -192,7 +198,7 @@ public sealed class FormatTests
         Assert.Equal("1 KiB", Format.FormatSize(1024));
         Assert.Equal("1024 KiB", Format.FormatSize((1 << 20) - 1));
         Assert.Equal("1.0 MiB", Format.FormatSize(1 << 20));
-        Assert.Equal("8796093022208.0 MiB", Format.FormatSize(long.MaxValue));
+        Assert.Equal("8589934592.0 GiB", Format.FormatSize(long.MaxValue));
         Assert.Equal("-5 B", Format.FormatSize(-5));
 
         var prague = TimeZoneInfo.FindSystemTimeZoneById("Europe/Prague");

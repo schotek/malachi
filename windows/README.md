@@ -266,6 +266,16 @@ gets `DBUS_SESSION_BUS_ADDRESS=disabled:`, so its optional Linux services
 (Secret Service, GNOME Online Accounts, Evolution Data Server) give up at
 once instead of looking for a session bus on every call.
 
+The storage preferences start at the daemon's own defaults, as with the
+GTK UI: the stored mail uncompressed and every attachment kept. The macOS
+app gives its daemon other defaults (`MALACHI_DEFAULT_COMPRESS_STORE=1`,
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`) because a Mac often has a
+small disk; this app sets neither, so it is no deviation from GTK, and the
+two variables, set in the app's environment, reach the daemon as they are.
+*Preferences → General → Mail* changes them: *Keep Attachments Offline
+For*, *Never Store Attachments* and *Compress Stored Mail*, with *Disk
+Space Used* below them.
+
 ## Keyring
 
 Windows has no Secret Service, so the daemon gets the app's own helper:

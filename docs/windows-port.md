@@ -108,7 +108,10 @@ GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 
 Development overrides, as on macOS: `MALACHI_DAEMON` (path, or `none`),
 `MALACHI_SOCKET`, `MALACHI_KEYRING`/`MALACHI_KEYRING_HELPER` (a preset
-`MALACHI_KEYRING` wins over the bundled helper), `MALACHI_LOCALE_DIR`, and
+`MALACHI_KEYRING` wins over the bundled helper), `MALACHI_LOCALE_DIR`, the
+daemon's `MALACHI_DEFAULT_COMPRESS_STORE` and
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` (the app sets neither, unlike the
+macOS app, §5; set in its environment they reach the daemon), and
 two Windows-only variables: `MALACHI_DATA_DIR`, which replaces
 `%LOCALAPPDATA%\Malachi Mail` for tests and agents, and
 `MALACHI_SETTINGS_KEY`, which gives a test a preferences key of its own
@@ -403,7 +406,14 @@ arrive), and it can wait on the shell's dialogs, which must never hold up
 the daemon's start. The environment is the app's plus
 `MALACHI_KEYRING=helper`/`MALACHI_KEYRING_HELPER` (or `none` without the
 helper) and `DBUS_SESSION_BUS_ADDRESS=disabled:`, each left alone when
-already set. The lines go to `logs\malachid.log` (rotated at 4 MiB, two
+already set, and nothing else: the macOS supervisor also gives its daemon
+`MALACHI_DEFAULT_COMPRESS_STORE=1` and
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`, because a Mac often has a
+small disk, while this one, as the GTK UI, sets no storage default (decided):
+the daemon's own defaults apply (no compression, every attachment kept)
+until the user changes them in *Preferences → General*, and such a variable
+already in the app's environment reaches the daemon as it is. Being GTK's
+behaviour, that is no row of the deviation table. The lines go to `logs\malachid.log` (rotated at 4 MiB, two
 predecessors kept) and, when the app is attached to a terminal, to it. Before
 every start the run directory is made private (`Paths.EnsureSocketDirectory`;
 a directory named by `MALACHI_SOCKET` is only created when missing, never
@@ -1030,8 +1040,9 @@ bug, logged at error level and kept (the last 64) for the tests.
 ### 7.3 Time
 
 Every timer takes a `TimeProvider`: the mark-read delay, the 30 s autosave,
-the 30 s sync fallback, the 60 s status refresh, the 5 s reconnect, the
-300/150/400 ms debounces. Tests use `FakeTimeProvider.Advance`.
+the 30 s sync fallback, the 60 s status refresh, the 5 s reconnect, the 5 s
+disk-space refresh of the preferences, the 300/150/400 ms debounces. Tests
+use `FakeTimeProvider.Advance`.
 
 ### 7.4 What moves out of the view layer
 
@@ -1776,8 +1787,11 @@ allows one `ContentDialog` at a time and the wizard nests the certificate
 prompt), five pages as GTK/macOS. Preferences is a single-instance window
 with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the
 row), General (startup, reading, deleting, notifications and the daemon's
-mail settings in GTK's order, then Windows' own groups: the `ctrl-r`
-choice, *Default apps*), Appearance and AI, built with `SettingsCard`s.
+mail settings in GTK's order, the storage rows included: *Keep Attachments
+Offline For*, *Never Store Attachments* and *Compress Stored Mail* shown
+once `config.get` reports them, *Disk Space Used* from `system.storage`;
+then Windows' own groups: the `ctrl-r` choice, *Default apps*),
+Appearance and AI, built with `SettingsCard`s.
 
 The reader (`Malachi.App/Reader`, `Windows`, `Attachments`):
 `Reader/MessageView` is the one view, its state Core's
@@ -1976,7 +1990,11 @@ ask for the password), and the hooks `AddAccount`, `EditAccount` and
 button that opens it below: `PaneDisplayMode="Auto"`, never hidden) and a
 page column clamped to 600 px, down to 480 px wide; its settings are
 bound two-way (`Preferences/SettingBindings`), the Mail group is
-`MailPreferencesController`, the AI page `McpRegistrationController`, the
+`MailPreferencesController` with `StorageUsageController` for its Disk
+Space Used row (`system.storage` when the window opens, after every change
+the daemon confirmed and every 5 s on the `TimeProvider` while the window
+is open, one call at a time; hidden for a daemon without the method; its
+texts `StorageUsage.StorageTexts`), the AI page `McpRegistrationController`, the
 Accounts page Core's `AccountsPageController` (§7.4) rendered with
 `KeyedListSync`; a row too wide for the page puts its status and its
 controls on a second line (`Preferences/AccountRowPanel`), as a
