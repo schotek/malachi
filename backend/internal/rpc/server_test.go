@@ -60,6 +60,11 @@ func startServer(t *testing.T, backend api.Backend, log *slog.Logger, tweak func
 		log = quietLog()
 	}
 	s := NewServer(backend, log)
+	// A connection gets far longer than waitLimit to authenticate, so that
+	// one a test sees closed within waitLimit was closed for the reason the
+	// test names (garbage, the byte budget, the cap), never by the timeout.
+	// Tests of the timeout set their own in tweak.
+	s.preAuthTimeout = time.Hour
 	if tweak != nil {
 		tweak(s)
 	}
@@ -111,10 +116,17 @@ func connCount(s *Server) int {
 	return len(s.conns)
 }
 
-// waitFor polls cond until it holds, for at most 5 s.
+// waitLimit bounds every wait for something the server does at once (an
+// answer, a close, a count). A passing run returns as soon as it happens;
+// the bound only decides how long a failing one takes, so it is set for a
+// starved runner: on GitHub's Windows runner a refused connection was
+// still open after 5 s while the other packages' tests ran beside it.
+const waitLimit = 30 * time.Second
+
+// waitFor polls cond until it holds, for at most waitLimit.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(waitLimit)
 	for !cond() {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
@@ -126,7 +138,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // dial connects to sock; the connection is closed when the test ends.
 func dial(t *testing.T, sock string) (net.Conn, *bufio.Reader) {
 	t.Helper()
-	c, err := net.DialTimeout("unix", sock, 2*time.Second)
+	c, err := net.DialTimeout("unix", sock, waitLimit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +148,7 @@ func dial(t *testing.T, sock string) (net.Conn, *bufio.Reader) {
 
 // clientHandshake authenticates c as the Go clients do.
 func clientHandshake(c net.Conn, r *bufio.Reader, sock string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), waitLimit)
 	defer cancel()
 	return api.ClientHandshake(ctx, c, r, api.KeyPath(sock))
 }
@@ -154,7 +166,7 @@ func dialAuthed(t *testing.T, sock string) (net.Conn, *bufio.Reader) {
 // sendLine writes s and a newline.
 func sendLine(t *testing.T, c net.Conn, s string) {
 	t.Helper()
-	_ = c.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	_ = c.SetWriteDeadline(time.Now().Add(waitLimit))
 	if _, err := io.WriteString(c, s+"\n"); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -170,7 +182,7 @@ func readLine(c net.Conn, r *bufio.Reader, d time.Duration) ([]byte, error) {
 
 func readResponse(t *testing.T, c net.Conn, r *bufio.Reader) api.Response {
 	t.Helper()
-	line, err := readLine(c, r, 5*time.Second)
+	line, err := readLine(c, r, waitLimit)
 	if err != nil {
 		t.Fatalf("no answer: %v", err)
 	}
@@ -254,7 +266,7 @@ func helloExchange(t *testing.T, c net.Conn, r *bufio.Reader, cn api.AuthNonce) 
 // system.authenticate answer for id.
 func expectAuthenticated(t *testing.T, c net.Conn, r *bufio.Reader, id string) {
 	t.Helper()
-	line, err := readLine(c, r, 5*time.Second)
+	line, err := readLine(c, r, waitLimit)
 	if err != nil {
 		t.Fatalf("no system.authenticate answer: %v", err)
 	}
@@ -272,7 +284,7 @@ func expectRejected(t *testing.T, c net.Conn, r *bufio.Reader, id string) {
 		resp.Error == nil || resp.Error.Code != api.CodeUnauthenticated {
 		t.Fatalf("want error 1005 with id %s, got %+v", id, resp)
 	}
-	expectClosed(t, c, r, 5*time.Second)
+	expectClosed(t, c, r, waitLimit)
 }
 
 // handshakeRecord is what one handshake by hand exchanged.
@@ -459,7 +471,7 @@ func TestCloseLeavesASuccessorsSocket(t *testing.T) {
 	if fi, err := os.Lstat(ts.sock); err != nil || fi.Mode().Type() != fs.ModeSocket {
 		t.Fatalf("the successor's socket is gone: %v", err)
 	}
-	c, err := net.DialTimeout("unix", ts.sock, 2*time.Second)
+	c, err := net.DialTimeout("unix", ts.sock, waitLimit)
 	if err != nil {
 		t.Fatalf("the successor's socket does not answer: %v", err)
 	}
@@ -475,7 +487,7 @@ func TestConnAcceptedAfterCloseIsClosed(t *testing.T) {
 	a, b := net.Pipe()
 	defer b.Close()
 	s.admit(context.Background(), a, nil)
-	_ = b.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = b.SetReadDeadline(time.Now().Add(waitLimit))
 	if _, err := b.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Fatalf("the connection is still open: %v", err)
 	}
@@ -505,7 +517,7 @@ func TestCloseDuringHandshake(t *testing.T) {
 
 	ts.stop()
 
-	expectClosed(t, c, r, 5*time.Second)
+	expectClosed(t, c, r, waitLimit)
 	for _, p := range []string{ts.sock, api.KeyPath(ts.sock)} {
 		if _, err := os.Lstat(p); !errors.Is(err, fs.ErrNotExist) {
 			t.Errorf("%s is still there: %v", filepath.Base(p), err)

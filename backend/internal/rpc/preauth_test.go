@@ -185,13 +185,13 @@ func TestGarbageIsClosedSilently(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c, r := dial(t, ts.sock)
 			sendLine(t, c, tc.line)
-			expectClosed(t, c, r, 5*time.Second)
+			expectClosed(t, c, r, waitLimit)
 		})
 		t.Run("after hello: "+tc.name, func(t *testing.T) {
 			c, r := dial(t, ts.sock)
 			helloExchange(t, c, r, api.NewAuthNonce())
 			sendLine(t, c, tc.line)
-			expectClosed(t, c, r, 5*time.Second)
+			expectClosed(t, c, r, waitLimit)
 		})
 	}
 }
@@ -361,7 +361,7 @@ func TestHandshakeTimeout(t *testing.T) {
 	t.Run("silent", func(t *testing.T) {
 		start := time.Now()
 		c, r := dial(t, ts.sock)
-		expectClosed(t, c, r, 5*time.Second)
+		expectClosed(t, c, r, waitLimit)
 		if d := time.Since(start); d < timeout/2 {
 			t.Errorf("closed after %v, before the timeout", d)
 		}
@@ -369,7 +369,7 @@ func TestHandshakeTimeout(t *testing.T) {
 	t.Run("silent after hello", func(t *testing.T) {
 		c, r := dial(t, ts.sock)
 		helloExchange(t, c, r, api.NewAuthNonce())
-		expectClosed(t, c, r, 5*time.Second)
+		expectClosed(t, c, r, waitLimit)
 	})
 	t.Run("half a line", func(t *testing.T) {
 		start := time.Now()
@@ -377,7 +377,7 @@ func TestHandshakeTimeout(t *testing.T) {
 		if _, err := io.WriteString(c, helloLine("1", api.NewAuthNonce().Hex())[:40]); err != nil {
 			t.Fatal(err)
 		}
-		expectClosed(t, c, r, 5*time.Second)
+		expectClosed(t, c, r, waitLimit)
 		if d := time.Since(start); d < timeout/2 {
 			t.Errorf("closed after %v, before the timeout", d)
 		}
@@ -401,7 +401,8 @@ func writeInBackground(c net.Conn, s string) {
 }
 
 func TestHandshakeByteBudget(t *testing.T) {
-	// The default timeout of 10 s: closing within 5 s is the budget's doing.
+	// The test server's pre-auth timeout is an hour (startServer): closing
+	// within waitLimit is the budget's doing.
 	ts := startServer(t, nil, nil, nil)
 	key := serverKey(ts.Server)
 	for _, tc := range []struct{ name, data string }{
@@ -412,7 +413,7 @@ func TestHandshakeByteBudget(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c, r := dial(t, ts.sock)
 			writeInBackground(c, tc.data)
-			expectClosed(t, c, r, 5*time.Second)
+			expectClosed(t, c, r, waitLimit)
 		})
 	}
 
@@ -435,7 +436,7 @@ func TestHandshakeByteBudget(t *testing.T) {
 		if resp.Error != nil || string(resp.ID) != "1" || json.Unmarshal(resp.Result, &res) != nil {
 			t.Fatalf("hello answer %+v", resp)
 		}
-		expectClosed(t, c, r, 5*time.Second)
+		expectClosed(t, c, r, waitLimit)
 	})
 
 	// Blank lines count too: exactly api.MaxHandshakeBytes is fine, one
@@ -458,7 +459,7 @@ func TestHandshakeByteBudget(t *testing.T) {
 			dn, _ := api.ParseAuthHex(res.DaemonNonce)
 			sendLine(t, c, authLine("2", api.ClientProof(key, cn, dn).Hex()))
 			if over > 0 {
-				expectClosed(t, c, r, 5*time.Second)
+				expectClosed(t, c, r, waitLimit)
 				return
 			}
 			expectAuthenticated(t, c, r, "2")
@@ -475,14 +476,28 @@ func TestPendingConnectionsAreCapped(t *testing.T) {
 		t.Helper()
 		waitFor(t, fmt.Sprintf("%d connections in the handshake", n), func() bool { return pendingCount(ts.Server) == n })
 	}
+	// refused dials a connection over the cap and sends system.hello, as
+	// every client does first, before it expects the close without an
+	// answer (an admitted one would answer). On Windows a peer that only
+	// reads may never see the close of a connection the server closed
+	// within about a millisecond of accepting it (measured: 10 of 2,000
+	// such closes, none once the peer wrote first or the server waited a
+	// millisecond), which is what admit does over the cap. The write may
+	// fail on a connection already closed; the read decides.
+	refused := func() {
+		t.Helper()
+		c, r := dial(t, ts.sock)
+		_ = c.SetWriteDeadline(time.Now().Add(waitLimit))
+		_, _ = io.WriteString(c, helloLine("1", api.NewAuthNonce().Hex())+"\n")
+		expectClosed(t, c, r, waitLimit)
+	}
 	var cs [3]net.Conn
 	var rs [3]*bufio.Reader
 	for i := range cs {
 		cs[i], rs[i] = dial(t, ts.sock)
 	}
 	pendingIs(3)
-	c4, r4 := dial(t, ts.sock)
-	expectClosed(t, c4, r4, 5*time.Second)
+	refused()
 	expectOpen(t, cs[0], rs[0], 100*time.Millisecond)
 
 	// Authenticating one frees its slot.
@@ -502,8 +517,7 @@ func TestPendingConnectionsAreCapped(t *testing.T) {
 	dial(t, ts.sock)
 	dial(t, ts.sock)
 	pendingIs(3)
-	c8, r8 := dial(t, ts.sock)
-	expectClosed(t, c8, r8, 5*time.Second)
+	refused()
 }
 
 func TestNoNotificationsBeforeAuthentication(t *testing.T) {
@@ -523,7 +537,7 @@ func TestNoNotificationsBeforeAuthentication(t *testing.T) {
 	expectOpen(t, c, r, 200*time.Millisecond) // nothing was kept for later
 
 	ts.AccountsChanged(api.AccountsChangedNotification{})
-	line, err := readLine(c, r, 5*time.Second)
+	line, err := readLine(c, r, waitLimit)
 	if err != nil || !strings.Contains(string(line), api.NotifyAccountsChanged) {
 		t.Fatalf("no notification after authentication: %q, %v", line, err)
 	}
@@ -552,7 +566,7 @@ func TestAuthenticateAnswerPrecedesNotifications(t *testing.T) {
 	for range 30 {
 		c, r := dial(t, ts.sock)
 		handshakeBy(t, c, r, key) // each answer the very next line
-		line, err := readLine(c, r, 5*time.Second)
+		line, err := readLine(c, r, waitLimit)
 		if err != nil || !strings.Contains(string(line), api.NotifyAccountsChanged) {
 			t.Fatalf("no notification after authentication: %q, %v", line, err)
 		}
@@ -564,7 +578,7 @@ func TestProbesAreNotWarnings(t *testing.T) {
 	log, logs := captureLog()
 	ts := startServer(t, nil, log, func(s *Server) { s.preAuthTimeout = 300 * time.Millisecond })
 	for range 20 {
-		c, err := net.DialTimeout("unix", ts.sock, 2*time.Second)
+		c, err := net.DialTimeout("unix", ts.sock, waitLimit)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -572,7 +586,7 @@ func TestProbesAreNotWarnings(t *testing.T) {
 	}
 	// A connection that says nothing until the timeout is no worse.
 	c, r := dial(t, ts.sock)
-	expectClosed(t, c, r, 5*time.Second)
+	expectClosed(t, c, r, waitLimit)
 	waitFor(t, "the connections to go", func() bool { return connCount(ts.Server) == 0 })
 	if n := pendingCount(ts.Server); n != 0 {
 		t.Errorf("%d connections still count as in the handshake", n)
@@ -594,7 +608,7 @@ func TestHandshakeFailuresAreRateLimited(t *testing.T) {
 		t.Helper()
 		c, r := dial(t, ts.sock)
 		sendLine(t, c, "garbage")
-		expectClosed(t, c, r, 5*time.Second)
+		expectClosed(t, c, r, waitLimit)
 	}
 	for range 5 {
 		fail()
@@ -657,12 +671,12 @@ func TestLogsCarryNoSecrets(t *testing.T) {
 	dialAuthed(t, ts.sock)
 	c, r = dial(t, ts.sock)
 	writeInBackground(c, strings.Repeat("\n", 5000))
-	expectClosed(t, c, r, 5*time.Second)
+	expectClosed(t, c, r, waitLimit)
 	c, r = dial(t, ts.sock)
 	cn = api.NewAuthNonce()
 	dn, dp = helloExchange(t, c, r, cn)
 	secrets = append(secrets, cn.Hex(), dn.Hex(), dp.Hex())
-	expectClosed(t, c, r, 5*time.Second)
+	expectClosed(t, c, r, waitLimit)
 
 	ts.stop()
 	waitFor(t, "the connections to go", func() bool { return connCount(ts.Server) == 0 })
