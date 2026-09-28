@@ -16,6 +16,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -42,7 +43,13 @@ import (
 // the short names lock orders a reader's choice of file against renames
 // and removals. A reader holds nothing once its file is open, because a
 // rename or a removal leaves an open file's contents alone, so a reader
-// never blocks a writer. The rules:
+// never blocks a writer. That is POSIX: Windows refuses to rename over or
+// to remove a file while any handle of it is open (Go opens files without
+// delete sharing). There a rename or a removal is retried for a moment
+// (fsretry) under the names lock, so that the readers that have the file
+// open finish meanwhile and no new one opens it; and nothing in the store
+// or its callers renames over or removes a file it still has open itself.
+// The rules:
 //  1. never take a raw lock while a store transaction is open;
 //  2. never hold two messages' locks at once;
 //  3. WithMessageRaw is not re-entrant: no PutMessageRaw or WithMessageRaw
@@ -480,7 +487,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 		if ok, _ := s.messageExists(context.WithoutCancel(tx.ctx), h.accountID, h.id); !ok {
 			// DeleteAccount removed the directory in between; do not
 			// leave it behind.
-			s.unlinkRaw(h.l, h.dir, h.id)
+			s.unlinkRaw(h.l, h.dir, h.id, nil)
 			os.Remove(h.dir)
 			return RawInfo{}, ErrNotFound
 		}
@@ -522,7 +529,7 @@ func (s *Store) writeLocked(ctx context.Context, h *rawHold, j rawJob) (RawInfo,
 			if err != nil {
 				return RawInfo{}, err
 			}
-			s.unlinkRaw(h.l, h.dir, h.id)
+			s.unlinkRaw(h.l, h.dir, h.id, nil)
 			return RawInfo{}, ErrNotFound
 		}
 	}
@@ -692,7 +699,10 @@ func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, kee
 	other := filepath.Join(h.dir, rawName(h.id, codec.other()))
 	h.l.names.Lock()
 	defer h.l.names.Unlock()
-	if err := os.Rename(tmp, final); err != nil {
+	// A reader that has the old file open holds the rename up on Windows:
+	// the retries (fsretry) wait for it, while the names lock keeps new
+	// readers from opening the file meanwhile.
+	if err := fsretry.Rename(tmp, final); err != nil {
 		os.Remove(tmp)
 		return fmt.Errorf("finalise message file: %w", err)
 	}
@@ -710,7 +720,7 @@ func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, kee
 		}
 	}
 	if otherExists {
-		if err := os.Remove(other); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := fsretry.Remove(other); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			s.log.Warn("remove replaced message file", "id", h.id, "err", err)
 		}
 	}
@@ -784,7 +794,7 @@ func (s *Store) resolveLocked(ctx context.Context, h *rawHold, files rawFiles) (
 	h.l.names.Lock()
 	err := syncDirectory(h.dir)
 	if err == nil {
-		err = os.Remove(filepath.Join(h.dir, rawName(h.id, keep.other())))
+		err = fsretry.Remove(filepath.Join(h.dir, rawName(h.id, keep.other())))
 		if errors.Is(err, fs.ErrNotExist) {
 			err = nil
 		}
@@ -1167,18 +1177,24 @@ func (h *rawHold) unlock() {
 	}
 	s.rawMu.Unlock()
 	if doomed {
-		s.unlinkRaw(h.l, h.dir, h.id)
+		s.unlinkRaw(h.l, h.dir, h.id, nil)
 		<-h.l.mutate
 	}
 	s.rawRelease(h.key, h.l)
 }
 
-// unlinkRaw removes both variants of a message; a missing file is fine.
-func (s *Store) unlinkRaw(l *rawLock, dir, id string) {
+// unlinkRaw removes both variants of a message; a missing file is fine. The
+// removals wait out a reader that has a file open (fsretry, see
+// placeLocked) as part of b, the batch of removals they belong to (nil: a
+// batch of their own). A file that stays is the sweep's, as an orphan.
+func (s *Store) unlinkRaw(l *rawLock, dir, id string, b *fsretry.Batch) {
+	if b == nil {
+		b = new(fsretry.Batch)
+	}
 	l.names.Lock()
 	defer l.names.Unlock()
 	for _, c := range []RawCodec{RawPlain, RawZstd} {
-		if err := os.Remove(filepath.Join(dir, rawName(id, c))); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if err := b.Remove(filepath.Join(dir, rawName(id, c))); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			s.log.Warn("remove message file", "id", id, "err", err)
 		}
 	}
@@ -1189,8 +1205,13 @@ type messageFile struct{ accountID, id string }
 
 // removeMessageFiles unlinks raw files, both variants, after their rows
 // are gone; a missing file is not an error (the row is authoritative). A
-// message a writer holds is left to that writer (doomed, see unlock).
+// message a writer holds is left to that writer (doomed, see unlock). The
+// removals share an fsretry.Batch: once one fails even after the retries,
+// which points at something lasting such as a directory without write
+// permission rather than at a reader, the rest get a single attempt each,
+// so that a folder of many messages does not wait for every one.
 func (s *Store) removeMessageFiles(files []messageFile) {
+	var b fsretry.Batch
 	for _, mf := range files {
 		if checkMessagePath(mf.accountID, mf.id) != nil {
 			continue
@@ -1211,7 +1232,7 @@ func (s *Store) removeMessageFiles(files []messageFile) {
 			continue
 		}
 		h := s.newHold(key, l, mf.accountID, mf.id)
-		s.unlinkRaw(l, h.dir, mf.id)
+		s.unlinkRaw(l, h.dir, mf.id, &b)
 		h.unlock()
 	}
 }
@@ -1219,12 +1240,13 @@ func (s *Store) removeMessageFiles(files []messageFile) {
 // removeMessageDir drops the whole raw-message directory of an account.
 // Background writers never create one (RawTx.Replace makes it only for a
 // message's first file and removes it again if the row is gone), so none
-// comes back.
+// comes back. A reader that still has a file open holds the removal up on
+// Windows: an attempt removes what it can, the next (fsretry) the rest.
 func (s *Store) removeMessageDir(accountID string) {
 	if checkPathSegment(accountID) != nil {
 		return
 	}
-	if err := os.RemoveAll(s.accountDir(accountID)); err != nil {
+	if err := fsretry.RemoveAll(s.accountDir(accountID)); err != nil {
 		s.log.Warn("remove message directory", "account", accountID, "err", err)
 	}
 }

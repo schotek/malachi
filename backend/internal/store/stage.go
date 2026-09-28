@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/schotek/malachi/backend/internal/fsretry"
 )
 
 // The staging area: a message is received into a file of its own under
@@ -193,7 +195,10 @@ func (st *Staged) Remove() error {
 		st.f = nil
 	}
 	if !st.consumed {
-		if rerr := os.Remove(st.path); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
+		// The file is closed; on Windows another process that looks at a
+		// freshly written file (a virus scanner) can still hold it for a
+		// moment, which the retries wait out.
+		if rerr := fsretry.Remove(st.path); rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
 			err = errors.Join(err, rerr)
 		}
 	}

@@ -152,7 +152,7 @@ func (tx *RawTx) Commit(c RawCommit) (int64, error) {
 		return 0, err
 	}
 	if !found {
-		s.unlinkRaw(tx.h.l, tx.h.dir, id)
+		s.unlinkRaw(tx.h.l, tx.h.dir, id, nil)
 		return 0, ErrNotFound
 	}
 	return info.Bytes, nil

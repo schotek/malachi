@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -219,7 +220,7 @@ func (s *Store) convertSecond(ctx context.Context, p convertPending, res *Conver
 		return
 	}
 	h.l.names.Lock()
-	err = os.Remove(srcPath)
+	err = fsretry.Remove(srcPath)
 	h.l.names.Unlock()
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.log.Warn("remove converted message file", "id", p.id, "err", err)
@@ -512,7 +513,7 @@ func (s *Store) sweepOrphan(ctx context.Context, accountID, id string, f rawFile
 	if exists, err := s.messageExists(ctx, accountID, id); err != nil || exists {
 		return
 	}
-	s.unlinkRaw(h.l, h.dir, id)
+	s.unlinkRaw(h.l, h.dir, id, nil)
 	res.Orphans++
 }
 
