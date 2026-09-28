@@ -30,9 +30,13 @@ internal static class Program
         if (Environment.GetEnvironmentVariable(FakeBridgeScript.HoldEnv) is { Length: > 0 } hold)
         {
             // The child: says who it is (the tests check that a timeout
-            // ended it too), then holds.
+            // ended it too), then holds. The file appears whole, moved
+            // into place: the bridge and the tests read it as soon as it
+            // exists, and WriteAllText creates it empty first.
             var parts = hold.Split('|');
-            File.WriteAllText(parts[0] + FakeBridgeScript.ChildPidSuffix, Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+            var pid = parts[0] + FakeBridgeScript.ChildPidSuffix;
+            File.WriteAllText(pid + ".tmp", Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+            File.Move(pid + ".tmp", pid);
             Hold(parts[0], int.Parse(parts[1], CultureInfo.InvariantCulture));
             return 0;
         }

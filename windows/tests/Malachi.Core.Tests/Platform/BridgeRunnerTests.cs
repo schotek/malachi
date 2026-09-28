@@ -22,13 +22,26 @@ using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Platform;
 using Malachi.FakeBridge;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Malachi.Core.Tests.Platform;
 
 public sealed class BridgeRunnerTests
 {
+    // How long the stand-in and its child hold at most: longer than a test
+    // waits for anything, so that a hold running out cannot stand in for
+    // the kill.
+    private const int HeldFor = 120_000;
+
     private static readonly string[] StatusJson = ["status", "--json"];
+
+    // How long a test waits for the stand-in's processes to start.
+    private static readonly TimeSpan ProcessStart = TimeSpan.FromSeconds(60);
+
+    // How long a run may take to end once its tree was killed; only a tree
+    // that survived takes longer (with a fake clock, for ever).
+    private static readonly TimeSpan TreeEnd = TimeSpan.FromSeconds(30);
 
     private static string Text(ReadOnlyMemory<byte> bytes) => Encoding.UTF8.GetString(bytes.Span);
 
@@ -143,27 +156,39 @@ public sealed class BridgeRunnerTests
     public async Task TimeoutKillsTheBridge()
     {
         // The bridge's child keeps the pipes open and would outlive the
-        // bridge: the whole tree goes, and the run ends promptly.
+        // bridge: the whole tree goes, and the run ends with it.
         using var dir = new TemporaryDirectory();
         var hold = Path.Combine(dir.Path, "hold");
         File.WriteAllBytes(hold, []);
         var bridge = Bridge(dir, new(
             [FakeBridgeStep.Stdout("{}\n")],
-            install: [FakeBridgeStep.HoldingChild(hold), FakeBridgeStep.Hold(hold)]));
-        // Go's 200 ms deadline, with room for two .NET processes to start
-        // on top: the child must be up before the deadline, and under a
-        // full parallel test run (four test assemblies and the WebView2
-        // canary) 1.5 s was not always enough for that. What the test
-        // measures is the end of the tree after the deadline, not how fast
-        // processes start.
-        var deadline = TimeSpan.FromSeconds(8);
-        var clock = Stopwatch.StartNew();
-        var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => new BridgeRunner().RunAsync(
-            bridge, ["install", "--json"], deadline, TestContext.Current.CancellationToken));
-        Assert.Equal(BridgeRunnerFailure.Timeout, e.Failure);
-        Assert.True(clock.Elapsed < deadline + TimeSpan.FromSeconds(2), $"Install took {clock.Elapsed} after an {deadline.TotalSeconds} s deadline");
-        var child = await ChildPidAsync(hold);
-        Assert.True(HasExited(child), "the bridge's child survived the timeout");
+            install: [FakeBridgeStep.HoldingChild(hold, HeldFor), FakeBridgeStep.Hold(hold, HeldFor)]));
+        // Go's 200 ms deadline on the runner's clock, which moves once the
+        // tree is up: the child must be running when the deadline passes,
+        // and two .NET processes may take seconds to start under a full
+        // parallel test run (a real 1.5 s deadline was not always enough,
+        // TimeoutKillsTheBridge failed). The clock also stands still for the
+        // EOF grace, so the run can end only by the pipes closing: the
+        // bridge and its child both gone.
+        var time = new FakeTimeProvider();
+        var deadline = TimeSpan.FromMilliseconds(200);
+        try
+        {
+            var run = new BridgeRunner(time).RunAsync(bridge, ["install", "--json"], deadline, TestContext.Current.CancellationToken);
+            var child = await ChildPidAsync(hold, run);
+            time.Advance(deadline);
+            var ended = await Task.WhenAny(run, Task.Delay(TreeEnd, TestContext.Current.CancellationToken)) == run;
+            Assert.True(ended, "the run did not end at its deadline: part of the bridge's tree still holds the pipes");
+            var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => run);
+            Assert.Equal(BridgeRunnerFailure.Timeout, e.Failure);
+            Assert.Equal("malachi-mcp did not finish within 0.2 s", e.Message);
+            Assert.True(HasExited(child), "the bridge's child survived the timeout");
+        }
+        finally
+        {
+            // Lets a child that survived go.
+            File.Delete(hold);
+        }
     }
 
     [Fact]
@@ -240,11 +265,21 @@ public sealed class BridgeRunnerTests
         Assert.Equal(["status", "bogus --json", "install --json", "status --json", "status --json"], FakeBridgeScript.Calls(dir.Path));
     }
 
-    private static async Task<int> ChildPidAsync(string hold)
+    // The process ID the bridge's child wrote once it ran. A run given as
+    // well must not end first (the child would never come); the limit is
+    // for two .NET processes to start, however busy the machine.
+    private static async Task<int> ChildPidAsync(string hold, Task? run = null)
     {
         var path = hold + FakeBridgeScript.ChildPidSuffix;
-        for (var i = 0; i < 500 && !File.Exists(path); i++)
+        var limit = Stopwatch.StartNew();
+        while (!File.Exists(path))
         {
+            if (run is { IsCompleted: true })
+            {
+                await run;
+                Assert.Fail("the run ended before the bridge's child was up");
+            }
+            Assert.True(limit.Elapsed < ProcessStart, "the bridge's child did not start");
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
         return int.Parse(File.ReadAllText(path), CultureInfo.InvariantCulture);
