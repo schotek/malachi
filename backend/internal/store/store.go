@@ -88,13 +88,16 @@ type Store struct {
 	// any system (refused), and so to remove the directory of an account
 	// while one of them has a file of it open (removeAccountDir).
 	// attemptFailed runs after every failed attempt of such a rename or
-	// removal (fileOp), with the file's path.
+	// removal (fileOp), with the file's path. renameFile, in place of
+	// os.Rename, renames a new file over a message's (renameRaw): a test
+	// has one take effect and report a failure all the same.
 	createFile           func(path string) (rawFile, error)
 	phaseACommit         func(tx *sql.Tx) error
 	afterPhaseA          func() error
 	betweenConvertPhases func()
 	refuseOpen           bool
 	attemptFailed        func(path string)
+	renameFile           func(oldpath, newpath string) error
 }
 
 // Open creates the parent directory if needed, opens the database with the

@@ -99,6 +99,8 @@ type RawCommit struct {
 //     Windows a reader that keeps the stored file open longer than the
 //     store waits, one of the store's own (ErrBusy) or another process's,
 //     or a new file that could not be written (a full disk, ctx ending);
+//     a rename that failed with the new file gone from its temporary name
+//     may have taken effect, and phase A stays (placeLocked);
 //  4. phase B: the row gets the final remote set, the other columns of c
 //     and, with c.Body, the body columns and the conversation link.
 //

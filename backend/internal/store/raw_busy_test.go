@@ -782,3 +782,71 @@ func TestCommitUndoesPhaseAWhenTheContextEnds(t *testing.T) {
 		t.Errorf("file %q, want the stored message", got)
 	}
 }
+
+// A rename that goes through but reports a failure (a reply lost on a
+// network file system) is retried, and the retry finds the new file gone
+// from its temporary name. The new file may be in place, so the commit
+// keeps phase A: the row calls the parts remote rather than stored over a
+// skeleton. A rename that fails with the new file still there left the
+// stored file whole, and phase A is undone.
+func TestCommitKeepsPhaseAWhenTheRenameMayHaveTakenEffect(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond, time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts")
+	skeleton := []byte("skeleton")
+	commit := func(id string) error {
+		_, err := s.CommitMessageRaw(ctx, "acc", id, RawCommit{Source: stage(t, s, skeleton),
+			RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+		return err
+	}
+	lost := errors.New("store test: the reply was lost")
+
+	m := seedFetched(t, s, inbox, 1, full)
+	replies := 0
+	s.renameFile = func(oldpath, newpath string) error {
+		if err := os.Rename(oldpath, newpath); err != nil {
+			return err
+		}
+		if replies++; replies == 1 {
+			return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: lost}
+		}
+		return nil
+	}
+	err := commit(m.ID)
+	if err == nil || errors.Is(err, errNotReplaced) || errors.Is(err, ErrBusy) {
+		t.Fatalf("commit whose rename took effect with a lost reply: %v", err)
+	}
+	if st, p, rb, _, _, _ := rawColumns(t, s, m.ID); st != string(RawPartial) || p != `["2"]` || rb != 300<<10 {
+		t.Errorf("row %s %s %d, want partial with the remote part kept", st, p, rb)
+	}
+	if got := readRaw(t, s, "acc", m.ID); !bytes.Equal(got, skeleton) {
+		t.Errorf("file %q, want the skeleton", got)
+	}
+
+	m2 := seedFetched(t, s, inbox, 2, full)
+	state, parts, remoteBytes, _, _, _ := rawColumns(t, s, m2.ID)
+	s.renameFile = func(oldpath, newpath string) error {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: lost}
+	}
+	err = commit(m2.ID)
+	s.renameFile = nil
+	if !errors.Is(err, errNotReplaced) || !errors.Is(err, lost) {
+		t.Fatalf("commit whose rename failed: %v", err)
+	}
+	if st, p, rb, _, _, _ := rawColumns(t, s, m2.ID); st != state || p != parts || rb != remoteBytes {
+		t.Errorf("row %s %s %d, want %s %s %d", st, p, rb, state, parts, remoteBytes)
+	}
+	if got := readRaw(t, s, "acc", m2.ID); !bytes.Equal(got, full) {
+		t.Errorf("file %q, want the stored message", got)
+	}
+	if files, _ := os.ReadDir(filepath.Join(s.MessageDir(), "acc")); len(files) != 2 {
+		for _, f := range files {
+			t.Log(f.Name())
+		}
+		t.Errorf("%d files in the account's directory, want the two messages'", len(files))
+	}
+}

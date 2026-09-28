@@ -441,9 +441,14 @@ func (s *Store) fileOp(l *rawLock, c RawCodec, path string, retry func(func() er
 // removeRaw removes path, its file in codec c, as part of b (nil: on its
 // own; a missing file is not an error), both through fileOp: the caller
 // holds the names lock, and a reader that outlasts the retries makes it
-// ErrBusy. A rename that fails leaves final as it was.
+// ErrBusy. A rename that fails with tmp still there leaves final as it
+// was; one that fails with tmp gone may have taken effect (placeLocked).
 func (s *Store) renameRaw(l *rawLock, c RawCodec, tmp, final string) error {
-	return s.fileOp(l, c, final, fsretry.Do, func() error { return os.Rename(tmp, final) })
+	rename := os.Rename
+	if s.renameFile != nil {
+		rename = s.renameFile
+	}
+	return s.fileOp(l, c, final, fsretry.Do, func() error { return rename(tmp, final) })
 }
 
 func (s *Store) removeRaw(l *rawLock, c RawCodec, path string, b *fsretry.Batch) error {
@@ -461,11 +466,13 @@ func (s *Store) removeRaw(l *rawLock, c RawCodec, path string, b *fsretry.Batch)
 // errNotReplaced is in the failure of a write that left the message's
 // stored file as it was, because the new file never took its name: the
 // write failed before it renamed the new file into place, or that rename
-// failed, which leaves the file it would have replaced whole. On Windows a
-// reader the store does not count (another process, a virus scanner)
-// causes that as well as one of its own (ErrBusy). CommitMessageRaw undoes
-// its phase A on it, whatever the cause. A write that fails after the
-// rename (the directory's flush) is not one: the new file is in place.
+// failed with the new file still under its temporary name, which leaves
+// the file it would have replaced whole. On Windows a reader the store
+// does not count (another process, a virus scanner) causes that as well as
+// one of its own (ErrBusy). CommitMessageRaw undoes its phase A on it,
+// whatever the cause. A write that fails after the rename (the directory's
+// flush) is not one: the new file is in place; nor is a rename that failed
+// with the new file gone from its temporary name, which may be in place.
 var errNotReplaced = errors.New("store: the stored message file stays as it was")
 
 // notReplaced wraps the failure err of a write that left the stored file
@@ -878,14 +885,23 @@ func fillTemp(f rawFile, codec RawCodec, size, limit int64, produce func(io.Writ
 // goes. keepOther leaves the other variant (the conversion's first phase).
 // A reader choosing a file waits for all of it. A reader that has the old
 // file open holds the rename up on Windows: renameRaw waits for it, and
-// when it outlasts the wait the write fails with ErrBusy. A failed rename,
-// whatever the cause, leaves the old file as it was (errNotReplaced).
+// when it outlasts the wait the write fails with ErrBusy. A failed rename
+// that leaves the new file under its temporary name, whatever the cause,
+// leaves the old file as it was (errNotReplaced). One that leaves no file
+// there may have taken effect: a rename that went through but reported a
+// failure (a reply lost on a network file system), whose retry then found
+// nothing to rename. That failure is returned as it is, on the safe side:
+// the new file may be in place, and a commit keeps its phase A.
 func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, keepOther bool) error {
 	final := filepath.Join(h.dir, rawName(h.id, codec))
 	other := filepath.Join(h.dir, rawName(h.id, codec.other()))
 	h.l.names.Lock()
 	defer h.l.names.Unlock()
 	if err := s.renameRaw(h.l, codec, tmp, final); err != nil {
+		if _, lerr := os.Lstat(tmp); lerr != nil {
+			// The other variant, if any, stays beside it for the sweep.
+			return fmt.Errorf("finalise message file: the new file left its temporary name: %w", err)
+		}
 		os.Remove(tmp)
 		return notReplaced{fmt.Errorf("finalise message file: %w", err)}
 	}
@@ -1242,10 +1258,16 @@ func noSpace(err error) error {
 	return err
 }
 
-// checkPathSegment rejects ids that could escape their directory. Ids are
-// generated here, account ids may come from config.toml.
+// checkPathSegment rejects ids that could escape their directory or name
+// another file than their own: empty, "." and "..", NUL, a separator of
+// any system (a backslash, and a colon, a drive's or a stream's, are
+// separators on Windows), and whatever the system does not take for a
+// plain local name (filepath.IsLocal: on Windows a reserved device name
+// such as NUL or COM1). Ids are generated here (a prefix and hex digits);
+// account ids may come from config.toml, and AddAccount refuses those
+// that fail (CheckAccountID).
 func checkPathSegment(seg string) error {
-	if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "/\x00") {
+	if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "/\\:\x00") || !filepath.IsLocal(seg) {
 		return fmt.Errorf("invalid path segment %q", seg)
 	}
 	return nil

@@ -591,9 +591,11 @@ func (s *accountService) logProbe(kind string, sc api.ServerConfig, r api.Endpoi
 }
 
 // ImportConfigAccounts copies the [[accounts]] entries of config.toml into
-// the store. An entry is skipped when it is invalid (logged), when an
-// account with its e-mail exists, or when its e-mail was imported before
-// (the user may have removed it since). Store failures are returned.
+// the store. An entry is skipped when it is invalid (logged; an id that
+// could escape the account's directory of message files included,
+// store.CheckAccountID), when an account with its e-mail exists, or when
+// its e-mail was imported before (the user may have removed it since).
+// Store failures are returned.
 func (b *Backend) ImportConfigAccounts(ctx context.Context) error {
 	if len(b.defaults.Accounts) == 0 {
 		return nil
@@ -604,6 +606,13 @@ func (b *Backend) ImportConfigAccounts(ctx context.Context) error {
 	}
 	changed := false
 	for i, entry := range b.defaults.Accounts {
+		if entry.ID != "" {
+			// It names the account's directory of message files.
+			if err := store.CheckAccountID(entry.ID); err != nil {
+				b.log.Warn("config.toml account skipped", "index", i, "err", err)
+				continue
+			}
+		}
 		cfg := entry.ToAPI()
 		if err := validateAccountConfig(&cfg); err != nil {
 			b.log.Warn("config.toml account skipped", "index", i, "err", err)

@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,42 @@ func TestAccountsDuplicates(t *testing.T) {
 	}
 	if list, _ := s.ListAccounts(ctx); len(list) != 1 {
 		t.Fatalf("list after duplicates = %d", len(list))
+	}
+}
+
+// An account id names the account's directory of message files, which
+// DeleteAccount and the sweep remove whole: one that any system takes for
+// a path rather than a name, a Windows path such as ..\.. from
+// config.toml say, is refused on every system, as an account and for its
+// files.
+func TestAccountIDsThatCouldEscapeTheirDirectory(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	for _, good := range []string{"acc_0123456789abcdef0123456789abcdef", "acc_home", "work", "my.work-1", "m_1f"} {
+		if err := checkPathSegment(good); err != nil {
+			t.Errorf("valid id %q: %v", good, err)
+		}
+	}
+	bad := []string{"", ".", "..", "a/b", "../x", `..\..`, `a\b`, `\x`, "C:", `C:\x`, "c:x", "x:y", "a\x00b"}
+	for _, id := range bad {
+		if err := checkPathSegment(id); err == nil {
+			t.Errorf("id %q accepted", id)
+		}
+		if err := CheckAccountID(id); err == nil {
+			t.Errorf("account id %q accepted", id)
+		}
+	}
+	for i, id := range bad[1:] { // "" has an id generated
+		a := Account{ID: id, Name: "Bad", Enabled: true, Config: testAccountConfig(fmt.Sprintf("bad%d@example.invalid", i))}
+		if err := s.AddAccount(ctx, &a); err == nil {
+			t.Errorf("account %q added", id)
+		}
+		if _, err := s.WriteMessageRaw(ctx, id, "m_1", strings.NewReader("x"), 10); err == nil {
+			t.Errorf("file written for account %q", id)
+		}
+	}
+	if list, _ := s.ListAccounts(ctx); len(list) != 0 {
+		t.Errorf("%d accounts added", len(list))
 	}
 }
 

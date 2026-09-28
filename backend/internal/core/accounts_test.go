@@ -5,6 +5,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -364,6 +365,31 @@ func TestImportConfigAccounts(t *testing.T) {
 	}
 	if list, _ = b.Accounts().List(ctx, api.AccountListParams{}); len(list.Accounts) != 1 || list.Accounts[0].Config.Name != "Work" {
 		t.Fatalf("after removal = %+v", list.Accounts)
+	}
+}
+
+// A config.toml id that could escape the account's directory of message
+// files (a Windows path such as ..\..) skips its entry, logged, and the
+// daemon starts with the others.
+func TestImportConfigAccountsSkipsUnsafeIDs(t *testing.T) {
+	ctx := context.Background()
+	server := func(host string, port int, sec string) *account.Server {
+		return &account.Server{Host: host, Port: port, Security: sec, Username: "u", AuthMethod: "password"}
+	}
+	cfg := config.Default()
+	for _, id := range []string{`..\..`, "..", "C:", "a/b", "acc_fine"} {
+		cfg.Accounts = append(cfg.Accounts, account.Config{
+			ID: id, Name: id, Email: fmt.Sprintf("u%d@example.invalid", len(cfg.Accounts)),
+			IMAP: server("imap.example.invalid", 993, "tls"), SMTP: server("smtp.example.invalid", 587, "starttls"),
+		})
+	}
+	b := newTestBackend(t, cfg)
+	if err := b.ImportConfigAccounts(ctx); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := b.Accounts().List(ctx, api.AccountListParams{})
+	if len(list.Accounts) != 1 || list.Accounts[0].ID != "acc_fine" {
+		t.Fatalf("imported = %+v, want acc_fine alone", list.Accounts)
 	}
 }
 

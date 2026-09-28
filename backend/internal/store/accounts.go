@@ -29,14 +29,26 @@ type Account struct {
 
 const accountColumns = `id, email, name, enabled, config, position, created_at, updated_at`
 
-// AddAccount inserts a. a.ID is honoured when set (config.toml import),
-// otherwise generated; a.Email is normalised from a.Config.Email when empty;
-// Position is appended at the end and the timestamps are filled in.
-// ErrExists when an account with the same e-mail (case-insensitive) or the
-// same id already exists.
+// CheckAccountID reports an account id that cannot name the account's
+// directory of message files, one that could escape it (checkPathSegment):
+// an id written in config.toml, which AddAccount refuses.
+func CheckAccountID(id string) error {
+	if err := checkPathSegment(id); err != nil {
+		return fmt.Errorf("account id: %w", err)
+	}
+	return nil
+}
+
+// AddAccount inserts a. a.ID is honoured when set (config.toml import) and
+// valid (CheckAccountID), otherwise generated; a.Email is normalised from
+// a.Config.Email when empty; Position is appended at the end and the
+// timestamps are filled in. ErrExists when an account with the same e-mail
+// (case-insensitive) or the same id already exists.
 func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	if a.ID == "" {
 		a.ID = newID("acc_")
+	} else if err := CheckAccountID(a.ID); err != nil {
+		return fmt.Errorf("add account: %w", err)
 	}
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
