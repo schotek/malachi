@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Windows/MessageWindowController.swift;
+GTK: ui/data/ui/message_window.blp (ui/internal/window/message_window.go).
+One message in its own window, opened by a double click or Enter on a row
+of the list: the title bar with the subject (window_title), and the
+message view in its window mode with its command row (the header bar's
+buttons of message_window.blp), the outbox banner, the remote-image bar,
+the headers and the body, under the window's own toast overlay.
+-->
+<Window
+    x:Class="Malachi.App.MessageWindows.MessageWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Border
+            x:Name="SolidBackground"
+            Grid.RowSpan="2"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            Visibility="Collapsed" />
+        <TitleBar
+            x:Name="WindowTitleBar"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
+            </TitleBar.IconSource>
+        </TitleBar>
+        <Grid Grid.Row="1">
+            <ContentControl
+                x:Name="ViewHost"
+                HorizontalContentAlignment="Stretch"
+                VerticalContentAlignment="Stretch"
+                IsTabStop="False" />
+            <controls:ToastHost x:Name="ToastsHost" />
+        </Grid>
+    </Grid>
+</Window>

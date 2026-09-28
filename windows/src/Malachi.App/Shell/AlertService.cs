@@ -29,6 +29,7 @@ using Malachi.Core;
 using Malachi.Core.Controllers;
 using Malachi.Core.Daemon;
 using Malachi.Core.I18n;
+using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Wizard;
 using Microsoft.Extensions.Logging;
@@ -111,9 +112,10 @@ internal sealed partial class AlertService : IAlerts
     {
         var result = await ShowAsync(window, () => new ContentDialog
         {
-            Title = Heading(L10n.T("Open This Link?")),
-            // TRANSLATORS: %s are the link's visible text and its real destination.
-            Content = Body(L10n.T("The link is shown as “%s” but leads to %s.", text, href)),
+            Title = Heading(LinkDecision.Confirm.Title),
+            // The masked link's text beside its destination, or, for a link
+            // the daemon did not list (text ""), the destination alone.
+            Content = Body(new LinkDecision.Confirm(text, href).Body(href)),
             PrimaryButtonText = Mnemonic.Strip(L10n.T("_Open Link")),
             CloseButtonText = Mnemonic.Strip(L10n.T("_Cancel")),
             DefaultButton = ContentDialogButton.Close,

@@ -37,7 +37,11 @@ public interface IAlerts
     /// <summary>"Save changes to this draft?": Save Draft (the default) / Discard / Cancel.</summary>
     Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window);
 
-    /// <summary>"Open This Link?" for a link whose text says one site and whose target is another; true opens it.</summary>
+    /// <summary>
+    /// "Open This Link?" for a link whose text says one site and whose target
+    /// is another, or, with <paramref name="text"/> "", for a link the daemon
+    /// did not list (the destination alone, as on macOS); true opens it.
+    /// </summary>
     Task<bool> OpenLinkQuestionAsync(Window? window, string text, string href);
 
     /// <summary>

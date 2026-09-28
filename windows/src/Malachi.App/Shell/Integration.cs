@@ -29,7 +29,7 @@ using Microsoft.Extensions.Logging;
 namespace Malachi.App.Shell;
 
 /// <summary>The controllers of the main window and their wiring (Swift Integration).</summary>
-public sealed class Integration : IDisposable
+public sealed partial class Integration : IDisposable
 {
     private readonly AppState state;
     private readonly MainWindow mainWindow;
@@ -61,6 +61,7 @@ public sealed class Integration : IDisposable
         WireActions();
         WireCompose();
         WireHooks();
+        WireReader();
     }
 
     /// <summary>The status line, the sign-in and certificate banners.</summary>
