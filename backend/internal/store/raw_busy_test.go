@@ -576,3 +576,134 @@ func TestReadersTakeTheNewerVariant(t *testing.T) {
 		}
 	}
 }
+
+// An account deleted while a reader has one of its files open, which
+// refuseOpen makes refuse the removal of its directory as Windows refuses
+// it, leaves the directory recorded as this store's to remove: the sweep
+// counts it busy while the reader holds it, then removes it whole, however
+// young its files, and forgets it.
+func TestDeletedAccountDirectoryGoesWithTheSweep(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	seedAccount(t, s, "acc")
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	m := seedMessage(t, s, inbox, 1, "held", time.Now())
+	seedMessage(t, s, inbox, 2, "other", time.Now())
+	dir := filepath.Join(s.MessageDir(), "acc")
+	recorded := func() bool {
+		t.Helper()
+		_, ok, err := s.GetMeta(ctx, metaDeletedDir+"acc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+
+	release := openReader(t, s, "acc", m.ID)
+	if err := s.DeleteAccount(ctx, "acc", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(dirNames(t, dir)) == 0 || !recorded() {
+		t.Fatalf("after the deletion: %v, recorded %v", dirNames(t, dir), recorded())
+	}
+	if res, err := s.SweepMessageFiles(ctx, time.Hour); err != nil || res.Busy != 1 || res.Dirs != 0 {
+		t.Errorf("sweep while the reader holds a file: %+v %v", res, err)
+	}
+	if len(dirNames(t, dir)) == 0 || !recorded() {
+		t.Fatalf("after the first sweep: %v, recorded %v", dirNames(t, dir), recorded())
+	}
+	release()
+	if res, err := s.SweepMessageFiles(ctx, time.Hour); err != nil || res.Busy != 0 || res.Dirs != 1 {
+		t.Errorf("sweep once the reader is done: %+v %v", res, err)
+	}
+	if fileExists(t, dir) || recorded() {
+		t.Errorf("after the sweep: directory %v, recorded %v", fileExists(t, dir), recorded())
+	}
+}
+
+// The same with a reader that really holds a file: Windows refuses to
+// remove it, elsewhere the directory goes at once. Once the reader is done
+// one sweep leaves nothing of the account, and no record of it.
+func TestDeletedAccountHeldFileGoesWithTheSweep(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	seedAccount(t, s, "acc")
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	m := seedMessage(t, s, inbox, 1, "held", time.Now())
+	seedMessage(t, s, inbox, 2, "other", time.Now())
+	dir := filepath.Join(s.MessageDir(), "acc")
+
+	release := openReader(t, s, "acc", m.ID)
+	if err := s.DeleteAccount(ctx, "acc", true); err != nil {
+		t.Fatal(err)
+	}
+	release()
+	if _, err := s.SweepMessageFiles(ctx, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(t, dir) {
+		t.Errorf("a deleted account's mail stays after the sweep: %v", dirNames(t, dir))
+	}
+	if _, ok, err := s.GetMeta(ctx, metaDeletedDir+"acc"); err != nil || ok {
+		t.Errorf("record after the sweep: %v %v", ok, err)
+	}
+}
+
+// The sweep removes a directory with files only for an account this store
+// deleted: one recorded but not removed (a crash right after the
+// deletion) goes whole, an unknown account's stays (another store's, see
+// TestSweepLeavesAnotherStoresMail), and the record of an account added
+// again under its id, or of a directory already gone, is forgotten, the
+// account's directory swept as any known one's.
+func TestSweepRemovesTheDirectoriesOfDeletedAccounts(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	write := func(acc, name string) string {
+		t.Helper()
+		dir := filepath.Join(s.MessageDir(), acc)
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	record := func(acc string) {
+		t.Helper()
+		if err := s.SetMeta(ctx, metaDeletedDir+acc, nowStamp()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("gone", "m_1")
+	write("gone", "m_1.zst")
+	record("gone")
+	foreign := write("foreign", "m_2")
+	seedAccount(t, s, "back")
+	inbox := seedFolder(t, s, "back", "INBOX", api.RoleInbox)
+	kept := seedMessage(t, s, inbox, 1, "kept", time.Now())
+	record("back")
+	record("none")
+
+	if res, err := s.SweepMessageFiles(ctx, time.Hour); err != nil || res.Dirs != 1 || res.Orphans != 0 {
+		t.Errorf("sweep: %+v %v", res, err)
+	}
+	if fileExists(t, filepath.Join(s.MessageDir(), "gone")) {
+		t.Error("the deleted account's directory stayed")
+	}
+	if !fileExists(t, foreign) {
+		t.Error("an unknown account's file removed")
+	}
+	if got := readRaw(t, s, "back", kept.ID); !bytes.HasPrefix(got, []byte("Subject: kept")) {
+		t.Errorf("the account added again lost its message: %q", got)
+	}
+	left, err := s.deletedDirs(ctx)
+	if err != nil || len(left) != 0 {
+		t.Errorf("records left: %v %v", left, err)
+	}
+}

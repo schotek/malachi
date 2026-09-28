@@ -85,8 +85,10 @@ type Store struct {
 	// database phases and betweenConvertPhases between ConvertRawBatch's.
 	// refuseOpen makes the store refuse, as Windows does, to rename over
 	// or remove a message's file while one of its readers has it open, on
-	// any system (refused). attemptFailed runs after every failed attempt
-	// of such a rename or removal (fileOp), with the file's path.
+	// any system (refused), and so to remove the directory of an account
+	// while one of them has a file of it open (removeAccountDir).
+	// attemptFailed runs after every failed attempt of such a rename or
+	// removal (fileOp), with the file's path.
 	createFile           func(path string) (rawFile, error)
 	phaseACommit         func(tx *sql.Tx) error
 	afterPhaseA          func() error

@@ -1415,16 +1415,91 @@ func (s *Store) removeMessageFiles(files []messageFile) {
 	}
 }
 
-// removeMessageDir drops the whole raw-message directory of an account.
+// removeMessageDir drops the whole raw-message directory of an account
+// DeleteAccount deleted, which recorded it for the sweep in the same
+// transaction (metaDeletedDir); once it is gone, the record goes too.
 // Background writers never create one (RawTx.Replace makes it only for a
 // message's first file and removes it again if the row is gone), so none
 // comes back. A reader that still has a file open holds the removal up on
-// Windows: an attempt removes what it can, the next (fsretry) the rest.
-func (s *Store) removeMessageDir(accountID string) {
+// Windows (removeAccountDir); what one keeps for longer stays, and the
+// sweep removes it once the reader is done.
+func (s *Store) removeMessageDir(ctx context.Context, accountID string) {
 	if checkPathSegment(accountID) != nil {
 		return
 	}
-	if err := fsretry.RemoveAll(s.accountDir(accountID)); err != nil {
-		s.log.Warn("remove message directory", "account", accountID, "err", err)
+	if err := s.removeAccountDir(accountID); err != nil {
+		if s.accountRead(accountID) {
+			s.log.Info("message directory in use by a reader: left for the sweep", "account", accountID, "err", err)
+		} else {
+			s.log.Warn("remove message directory; the sweep tries again", "account", accountID, "err", err)
+		}
+		return
 	}
+	if err := s.forgetDeletedDir(context.WithoutCancel(ctx), accountID); err != nil {
+		s.log.Warn("forget removed message directory", "account", accountID, "err", err)
+	}
+}
+
+// removeAccountDir removes the directory of an account's raw files and all
+// in it: an attempt removes what it can, the next (fsretry) what a reader
+// held up on Windows. Under Store.refuseOpen it refuses, as that reader
+// would, while one of the store's readers has a file of the account open.
+func (s *Store) removeAccountDir(accountID string) error {
+	dir := s.accountDir(accountID)
+	return fsretry.Do(func() error {
+		if s.refuseOpen && s.accountRead(accountID) {
+			return errRefused
+		}
+		return os.RemoveAll(dir)
+	})
+}
+
+// accountRead reports whether one of the store's readers has a file of the
+// account open.
+func (s *Store) accountRead(accountID string) bool {
+	prefix := rawKey(accountID, "")
+	s.rawMu.Lock()
+	defer s.rawMu.Unlock()
+	for key, l := range s.rawLocks {
+		if strings.HasPrefix(key, prefix) && l.readers[RawPlain]+l.readers[RawZstd] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// metaDeletedDir prefixes the meta keys of the accounts DeleteAccount
+// deleted whose directory may still hold files (removeMessageDir), by
+// account id: the sweep removes those directories whole, which it never
+// does for an unknown account's, and forgets them once they are gone.
+const metaDeletedDir = "raw.deleted."
+
+// deletedDirs lists the accounts recorded under metaDeletedDir.
+func (s *Store) deletedDirs(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT substr(key, ?) FROM meta WHERE substr(key, 1, ?) = ?`,
+		len(metaDeletedDir)+1, len(metaDeletedDir), metaDeletedDir)
+	if err != nil {
+		return nil, fmt.Errorf("list deleted message directories: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var acc string
+		if err := rows.Scan(&acc); err != nil {
+			return nil, fmt.Errorf("list deleted message directories: %w", err)
+		}
+		out[acc] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list deleted message directories: %w", err)
+	}
+	return out, nil
+}
+
+// forgetDeletedDir drops the account's metaDeletedDir record.
+func (s *Store) forgetDeletedDir(ctx context.Context, accountID string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, metaDeletedDir+accountID); err != nil {
+		return fmt.Errorf("forget deleted message directory: %w", err)
+	}
+	return nil
 }
