@@ -620,7 +620,9 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 	case errors.Is(err, sql.ErrNoRows):
 		return RawInfo{}, ErrNotFound
 	case err != nil:
-		return RawInfo{}, fmt.Errorf("replace message file: %w", err)
+		// Nothing is written yet (a context that ended, a database
+		// error): the stored file stays as it was.
+		return RawInfo{}, notReplaced{fmt.Errorf("replace message file: %w", err)}
 	case role == string(api.RoleOutbox):
 		return RawInfo{}, ErrOutbox
 	}
@@ -641,7 +643,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 	}
 	existing, err := statRaw(h.dir, h.id)
 	if err != nil {
-		return RawInfo{}, err
+		return RawInfo{}, notReplaced{err}
 	}
 	created := false
 	if existing.any() {
@@ -651,7 +653,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 		// there a moment ago, so the account was too; an account deleted
 		// since is caught below.
 		if err := os.MkdirAll(h.dir, 0o700); err != nil {
-			return RawInfo{}, noSpace(fmt.Errorf("create message directory: %w", err))
+			return RawInfo{}, notReplaced{noSpace(fmt.Errorf("create message directory: %w", err))}
 		}
 		created = true
 	}

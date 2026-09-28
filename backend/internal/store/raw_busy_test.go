@@ -758,3 +758,27 @@ func TestStagedDownloadIsNewerThanTheKeptVariant(t *testing.T) {
 	}
 }
 
+// A context that ends between phase A and the replace writes nothing, so
+// phase A is undone: the row does not call a part remote that the whole
+// file still holds.
+func TestCommitUndoesPhaseAWhenTheContextEnds(t *testing.T) {
+	s := openTestStore(t)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	full := []byte("Subject: full\r\n\r\nall the parts")
+	m := seedFetched(t, s, inbox, 1, full)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.afterPhaseA = func() error { cancel(); return nil }
+	_, err := s.CommitMessageRaw(ctx, "acc", m.ID, RawCommit{Source: stage(t, s, []byte("skeleton")),
+		RemoteParts: []string{"2"}, RemoteBytes: 300 << 10, Expect: RawExpect{RawState: RawFull}})
+	s.afterPhaseA = nil
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("commit: %v, want the context's end", err)
+	}
+	if state, parts, _, _, _, _ := rawColumns(t, s, m.ID); state != string(RawFull) {
+		t.Errorf("row %s %s over the whole file, want full", state, parts)
+	}
+	if got := readRaw(t, s, "acc", m.ID); !bytes.Equal(got, full) {
+		t.Errorf("file %q, want the stored message", got)
+	}
+}
