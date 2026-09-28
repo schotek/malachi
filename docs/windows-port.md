@@ -1226,9 +1226,6 @@ writes the value and answers *Autostart was not granted*, the switch
 going back. Verified outside Claude's process tree: the Run value written
 and removed, the mirror key following, the disabled state and its toast;
 the values the test wrote were removed afterwards.
-`Startup/LaunchArguments` reads the command line: `--background`, the
-`mailto:` links in order, and COM's `----AppNotificationActivated:` and
-`-Embedding`, which are neither.
 
 **Single instance and activation.** A custom `Main`
 (`DISABLE_XAML_GENERATED_MAIN`, `Malachi.App/Program.cs`): the console

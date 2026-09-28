@@ -63,15 +63,12 @@ BITMAP
 // new-mail sound.
 SHQueryUserNotificationState
 PlaySound
-// mailto: registration and the default mail app (Registration/), the
-// command line of a launch (Startup/LaunchArguments).
+// mailto: registration and the default mail app (Registration/).
 SHChangeNotify
 AssocQueryString
 SHAssocEnumHandlersForProtocolByApplication
 IEnumAssocHandlers
 IAssocHandler
-CommandLineToArgv
-LocalFree
 // Files: the best-fit look-alikes of the ANSI code page (Files/AnsiLookAlikes).
 WideCharToMultiByte
 GetACP
