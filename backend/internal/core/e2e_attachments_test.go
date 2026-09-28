@@ -156,7 +156,17 @@ func TestEndToEndAttachmentsOnDemand(t *testing.T) {
 		t.Fatalf("part after the pass: %v", err)
 	}
 
-	// Deleted on the server by another client: messageGone.
+	// Deleted on the server by another client: messageGone. The syncer
+	// stops first: its IDLE would see the expunge and remove the message
+	// here too, and a download of a message this store no longer has is
+	// messageNotFound (which a busy machine hit now and then). The
+	// download takes a connection of its own.
+	stopSync()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("supervisor did not stop")
+	}
 	expungeAll(t, addr)
 	if _, err := b.Messages().Download(ctx, api.MessageDownloadParams{AccountID: id, MessageID: msg.ID}); errCode(t, err) != api.CodeMessageGone {
 		t.Fatalf("download of a deleted message: %v", err)
