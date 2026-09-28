@@ -135,12 +135,17 @@ public sealed class ComposeAttachmentsControllerTests
         await h.Run(() => h.Attachments.InsertImage(@"C:\pics\cat.png", _ => { }));
         await h.Run(() => h.Attachments.AttachFiles([@"C:\docs\a.pdf"]));
         await h.IdleAsync();
-        Assert.Equal(2, h.Attachments.Attachments.Count);
-        var picture = h.Attachments.Attachments[0];
+        // The two imports run at once, and a chip is added when its import
+        // answers (GTK importFile): the order of the list, and which of them
+        // the fake daemon numbered first, is the order of the answers.
+        Assert.Equal(["a.pdf", "cat.png"], h.Attachments.Attachments.Select(a => a.Filename).Order(StringComparer.Ordinal));
+        var picture = Assert.Single(h.Attachments.Attachments, a => a.Filename == "cat.png");
+        var cid = Assert.IsType<string>(picture.ContentId);
+        Assert.IsType<CidEntry.File>(h.Registry.Lookup(cid));
 
         await h.Run(() => h.Attachments.Remove(picture.Id));
         Assert.Equal(["a.pdf"], h.Attachments.Attachments.Select(a => a.Filename));
-        Assert.Null(h.Registry.Lookup("cid-1"));
+        Assert.Null(h.Registry.Lookup(cid));
         Assert.Equal(3, h.Edits);
         await h.IdleAsync();
         var removed = Assert.Single(h.Script.Removes);
