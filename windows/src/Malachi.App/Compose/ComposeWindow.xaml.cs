@@ -170,6 +170,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         WireCommands();
         WireToolbar();
         WireRows();
+        WireHeaderBar();
         // Text-only phase (draft.go richText): no formatting to offer, no
         // inline images, and the user is told what will go out.
         FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
@@ -369,12 +370,13 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         return true;
     }
 
-    // compose.go updateTitle: the subject, or "New Message".
+    // compose.go updateTitle: the subject, or "New Message", as the
+    // window's caption (the taskbar, Alt+Tab) and in the header bar.
     private void UpdateTitle()
     {
         var title = ComposeHeaderRules.WindowTitle(Header.Subject.Text);
         Title = title;
-        ComposeTitleBar.Title = title;
+        TitleText.Text = title;
     }
 
     // compose.go validateRow: flags a recipient row with unparsable tokens.

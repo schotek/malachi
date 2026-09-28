@@ -9,9 +9,11 @@ Port of macos/Sources/MalachiMail/Compose/ComposeWindowController.swift
 A compose window, top to bottom as compose.blp:
 
 - the header bar as the window's title bar (docs/windows-port.md §11.3): Attach
-  at the start, the title (the subject, or "New Message"), the Draft Menu
-  (Save Draft, Attach Files…, Insert Image…, Discard) and the accented Send
-  at the end, on Mica;
+  at the start, the title (the subject, or "New Message", shortened as
+  Adw.WindowTitle shortens it), the Draft Menu (Save Draft, Attach Files…,
+  Insert Image…, Discard) and the accented Send at the end, on Mica; a narrow
+  window shows Send without its label and no app icon
+  (ComposeWindow.HeaderBar.cs);
 - under the toast overlay: the card of header fields (margins 12, 12, 12, 6),
   the formatting bar (margins 6), the plain-text hint (hidden while rich text
   is sent), the editor filling the rest, the attachment chips (margins 12, 6,
@@ -49,6 +51,11 @@ A compose window, top to bottom as compose.blp:
             Grid.Row="0"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="False">
+            <TitleBar.Resources>
+                <!-- The title fills the middle from where the TitleBar's own
+                     title would start, and is shortened at its end. -->
+                <HorizontalAlignment x:Key="TitleBarContentHorizontalAlignment">Stretch</HorizontalAlignment>
+            </TitleBar.Resources>
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
             </TitleBar.IconSource>
@@ -68,8 +75,24 @@ A compose window, top to bottom as compose.blp:
                     <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-attachment')}" />
                 </Button>
             </TitleBar.LeftHeader>
+            <!-- window_title: the subject in the bar's middle column, which
+                 shrinks, rather than TitleBar.Title, whose column never
+                 shortens and pushes the end buttons under the window's own.
+                 A TextBlock is no control: the TitleBar keeps it a place to
+                 drag the window by. -->
+            <TitleBar.Content>
+                <TextBlock
+                    x:Name="TitleText"
+                    VerticalAlignment="Center"
+                    Foreground="{ThemeResource TitleBarForegroundBrush}"
+                    MaxLines="1"
+                    Style="{StaticResource CaptionTextBlockStyle}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+            </TitleBar.Content>
             <TitleBar.RightHeader>
                 <StackPanel
+                    x:Name="EndButtons"
                     Margin="0,0,4,0"
                     Orientation="Horizontal"
                     Spacing="6">
@@ -115,7 +138,10 @@ A compose window, top to bottom as compose.blp:
                         Click="OnSendClick"
                         Style="{StaticResource AccentButtonStyle}"
                         ToolTipService.ToolTip="{l:T Msgid='Send (Ctrl+Enter)'}">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel
+                            x:Name="SendContent"
+                            Orientation="Horizontal"
+                            Spacing="8">
                             <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-send')}" />
                             <TextBlock x:Name="SendLabel" VerticalAlignment="Center" />
                         </StackPanel>
