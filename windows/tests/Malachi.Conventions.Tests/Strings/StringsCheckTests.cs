@@ -14,10 +14,11 @@
 // Windows-only mark; and it covers the template: every msgid is used in
 // windows/src or excluded with a reason in windows/parity-exclusions.txt.
 //
-// The coverage cannot hold before the screens of phase E wave 2 exist: it
-// skips with the list of the missing msgids until CoverageEnforced is true
-// (or MALACHI_MSGID_COVERAGE=strict is set), which the integration of the
-// last screen turns on.
+// The coverage is enforced now that every screen exists: a msgid that GTK
+// work and make po add fails the test until the client uses it or excludes
+// it. With CoverageEnforced set back to false a gap is a skip that lists
+// the missing msgids (and MALACHI_MSGID_COVERAGE=strict still fails it),
+// for a time when the template runs ahead of the client on purpose.
 
 using System;
 using System.Collections.Generic;
@@ -28,8 +29,8 @@ namespace Malachi.Conventions.Tests.Strings;
 
 public sealed class StringsCheckTests
 {
-    /// <summary>Whether a template msgid neither used nor excluded fails the coverage (true once every screen exists).</summary>
-    private const bool CoverageEnforced = false;
+    /// <summary>Whether a template msgid neither used nor excluded fails the coverage (true: every screen exists).</summary>
+    private const bool CoverageEnforced = true;
 
     // The markup extension itself hands its properties to L10n.
     private const string MarkupExtensionFile = "windows/src/Malachi.App/Localization/T.cs";
@@ -129,7 +130,7 @@ public sealed class StringsCheckTests
             + string.Join('\n', missing);
         if (!CoverageStrict)
         {
-            Assert.Skip("until the screens of phase E wave 2 exist: " + message);
+            Assert.Skip("the coverage is not enforced: " + message);
         }
         Assert.Fail(message);
     }

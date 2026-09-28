@@ -1044,11 +1044,11 @@ seeded from research 05 Appendix A: GNOME, GOA, portal, Flatpak, gsound,
 gschema and desktop metadata), and every exclusion to be a template msgid
 the sources do not use (a stale or a now used exclusion fails). The
 coverage holds for the whole template: every msgid is used or excluded.
-A gap (a msgid that GTK work and `make po` added, say) is a failure with
-`CoverageEnforced` in `StringsCheckTests` or `MALACHI_MSGID_COVERAGE=strict`,
-and a skip listing the missing msgids without them; `CoverageEnforced` is
-still `false` in the tree. Another test compares the gschema's keys and
-defaults with the settings facade.
+A gap (a msgid that GTK work and `make po` added, say) is a failure:
+`CoverageEnforced` in `StringsCheckTests` is `true` now that every screen
+exists (set back to `false`, a gap is a skip that lists the missing
+msgids, and `MALACHI_MSGID_COVERAGE=strict` still fails it). Another test
+compares the gschema's keys and defaults with the settings facade.
 
 ## 10. Platform services
 
