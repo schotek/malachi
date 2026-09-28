@@ -24,7 +24,7 @@ public sealed record ComposeAttachmentChip(string Id, string Name, string FullNa
     public static ComposeAttachmentChip For(DraftAttachment a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        return new AttachmentChip(
+        return new ComposeAttachmentChip(
             a.Id,
             ComposeAttachmentsController.ChipName(a.Filename),
             a.Filename,

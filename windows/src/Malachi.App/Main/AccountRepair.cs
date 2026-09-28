@@ -154,6 +154,7 @@ internal sealed class AccountRepair
         {
             return;
         }
-        state.Hooks.EditAccount?.Invoke(id, requestPassword);
+        // Over the main window (null: the wizard picks it), as the banners and the status flyout live there.
+        state.Hooks.EditAccount?.Invoke(null, id, requestPassword);
     }
 }

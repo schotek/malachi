@@ -28,7 +28,7 @@ file (ChipGroup), so that Narrator says whose Remove it is.
             </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="p:AttachmentChip">
+            <DataTemplate x:DataType="p:ComposeAttachmentChip">
                 <local:ChipGroup
                     Padding="8,2,2,2"
                     AutomationProperties.Name="{x:Bind FullName}"

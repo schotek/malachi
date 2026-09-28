@@ -102,7 +102,7 @@ public sealed partial class ComposeAttachmentsController : IDisposable
     public IReadOnlyList<DraftAttachment> Attachments => [.. attachments];
 
     /// <summary>The chips of <see cref="Attachments"/>, in order.</summary>
-    public IReadOnlyList<AttachmentChip> Chips => [.. attachments.Select(AttachmentChip.For)];
+    public IReadOnlyList<ComposeAttachmentChip> Chips => [.. attachments.Select(ComposeAttachmentChip.For)];
 
     /// <summary>
     /// Whether <paramref name="path"/> names a file on the file system, the

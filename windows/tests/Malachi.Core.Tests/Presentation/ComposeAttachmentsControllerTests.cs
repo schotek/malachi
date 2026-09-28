@@ -68,13 +68,13 @@ public sealed class ComposeAttachmentsControllerTests
     [Fact]
     public void AChipShowsTheIconTheNameAndTheSize()
     {
-        var file = AttachmentChip.For(Att("a1", "quarterly-report-final-version.pdf", 2048, inline: false));
+        var file = ComposeAttachmentChip.For(Att("a1", "quarterly-report-final-version.pdf", 2048, inline: false));
         Assert.Equal("a1", file.Id);
         Assert.Equal("quarterly-report-final-…", file.Name);
         Assert.Equal("quarterly-report-final-version.pdf", file.FullName);
         Assert.Equal(Malachi.Core.Text.Format.FormatSize(2048), file.Size);
         Assert.Equal("mail-attachment-symbolic", file.Icon);
-        Assert.Equal("image-x-generic-symbolic", AttachmentChip.For(Att("a2", "p.png", 1, inline: true, cid: "c2")).Icon);
+        Assert.Equal("image-x-generic-symbolic", ComposeAttachmentChip.For(Att("a2", "p.png", 1, inline: true, cid: "c2")).Icon);
     }
 
     [Fact]

@@ -20,7 +20,7 @@ namespace Malachi.App.Compose;
 /// <summary>The attachment chips of a compose window.</summary>
 public sealed partial class AttachmentChipsView : UserControl
 {
-    private readonly ObservableCollection<AttachmentChip> chips = [];
+    private readonly ObservableCollection<ComposeAttachmentChip> chips = [];
 
     /// <summary>No chips, hidden.</summary>
     public AttachmentChipsView()
@@ -34,7 +34,7 @@ public sealed partial class AttachmentChipsView : UserControl
     public event EventHandler<string>? RemoveRequested;
 
     /// <summary>Shows <paramref name="list"/>; hidden while it is empty.</summary>
-    public void Show(IReadOnlyList<AttachmentChip> list)
+    public void Show(IReadOnlyList<ComposeAttachmentChip> list)
     {
         ArgumentNullException.ThrowIfNull(list);
         KeyedListSync.Apply(chips, list, c => c.Id);

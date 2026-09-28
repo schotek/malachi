@@ -150,13 +150,18 @@ public sealed class BridgeRunnerTests
         var bridge = Bridge(dir, new(
             [FakeBridgeStep.Stdout("{}\n")],
             install: [FakeBridgeStep.HoldingChild(hold), FakeBridgeStep.Hold(hold)]));
-        // Go's 200 ms deadline, with the time two .NET processes take to
-        // start on top: the child must be up before the deadline.
+        // Go's 200 ms deadline, with room for two .NET processes to start
+        // on top: the child must be up before the deadline, and under a
+        // full parallel test run (four test assemblies and the WebView2
+        // canary) 1.5 s was not always enough for that. What the test
+        // measures is the end of the tree after the deadline, not how fast
+        // processes start.
+        var deadline = TimeSpan.FromSeconds(8);
         var clock = Stopwatch.StartNew();
         var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => new BridgeRunner().RunAsync(
-            bridge, ["install", "--json"], TimeSpan.FromMilliseconds(1500), TestContext.Current.CancellationToken));
+            bridge, ["install", "--json"], deadline, TestContext.Current.CancellationToken));
         Assert.Equal(BridgeRunnerFailure.Timeout, e.Failure);
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3.5), $"Install took {clock.Elapsed} after a 1.5 s deadline");
+        Assert.True(clock.Elapsed < deadline + TimeSpan.FromSeconds(2), $"Install took {clock.Elapsed} after an {deadline.TotalSeconds} s deadline");
         var child = await ChildPidAsync(hold);
         Assert.True(HasExited(child), "the bridge's child survived the timeout");
     }
