@@ -13,11 +13,15 @@
 // one, centred on the display of the window that was active, as document
 // windows do.
 //
-// One Windows addition: when the connection comes up while a compose window
-// is open, the account list is asked for again. A cold mailto: launch opens
-// only its composer (docs/windows-port.md §10, U4), before the connection
-// exists, so its From row would keep the placeholder identity; GTK's
-// composer-only launch never connects at all.
+// Windows additions:
+// - when the connection comes up while a compose window is open, the
+//   account list is asked for again. A cold mailto: launch opens only its
+//   composer (docs/windows-port.md §10, U4), before the connection exists,
+//   so its From row would keep the placeholder identity; GTK's
+//   composer-only launch never connects at all;
+// - a window that cannot be made is logged by ComposeController.Open and
+//   opens nothing (an activation has nothing above it to catch the
+//   failure); one that cannot be placed opens where Windows puts it.
 
 using System;
 using Malachi.App.Shell;
@@ -73,19 +77,25 @@ internal sealed partial class ComposeManager
     // compose.newWindow + Present.
     private ComposeWindow NewWindow(ComposeParams p)
     {
-        ComposeWindow window;
+        var window = new ComposeWindow(state, controller, p);
         try
         {
-            window = new ComposeWindow(state, controller, p);
+            try
+            {
+                Place(window);
+            }
+            catch (Exception e) when (e is System.Runtime.InteropServices.COMException or ArgumentException or InvalidOperationException)
+            {
+                LogPlaceFailed(logger, e);
+            }
+            WindowPresenter.Present(window);
         }
-        catch (Exception e) when (e is not OutOfMemoryException)
+        catch
         {
-            // What opened it (a key, a menu item, an activation) may swallow it.
-            LogWindowFailed(logger, e);
+            // Made but not shown, the window must not hold the app.
+            window.Close();
             throw;
         }
-        Place(window);
-        WindowPresenter.Present(window);
         return window;
     }
 
@@ -96,10 +106,9 @@ internal sealed partial class ComposeManager
     private void Place(ComposeWindow window)
     {
         var app = window.AppWindow;
-        var anchor = state.Windows.Active?.Window ?? state.MainWindow;
-        var display = anchor is not null
-            ? DisplayArea.GetFromWindowId(anchor.AppWindow.Id, DisplayAreaFallback.Primary)
-            : DisplayArea.GetFromWindowId(app.Id, DisplayAreaFallback.Primary);
+        // A window that has closed has no AppWindow any more.
+        var anchor = state.Windows.Active?.Window.AppWindow ?? state.MainWindow?.AppWindow ?? app;
+        var display = DisplayArea.GetFromWindowId(anchor.Id, DisplayAreaFallback.Primary);
         var area = display.WorkArea;
         var size = app.Size;
         var dpi = PInvoke.GetDpiForWindow((HWND)WindowPresenter.Handle(window));
@@ -123,8 +132,8 @@ internal sealed partial class ComposeManager
         last = position;
     }
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "a compose window could not be made")]
-    private static partial void LogWindowFailed(ILogger logger, Exception error);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "a compose window could not be placed")]
+    private static partial void LogPlaceFailed(ILogger logger, Exception error);
 
     private static bool Contains(RectInt32 area, PointInt32 p) =>
         p.X >= area.X && p.Y >= area.Y && p.X < area.X + area.Width && p.Y < area.Y + area.Height;

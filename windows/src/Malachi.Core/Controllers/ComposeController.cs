@@ -12,7 +12,11 @@
 // IComposeWindowHandle. Manager.OnSent is the Sent event, which the windows
 // raise through ReportSent (C# lets no other class raise an event).
 // SaveForQuitAsync is the Windows addition of docs/windows-port.md §0: Quit
-// saves every window's dirty draft and asks only where that failed.
+// saves every window's dirty draft and asks only where that failed. Another
+// Windows addition: a window the factory could not make is logged and
+// leaves nothing behind, since what asks for one (a key, a reply, a
+// mailto: activation) has nothing above it to catch the failure, and one
+// bad window would otherwise end the app with every other window's text.
 
 using System;
 using System.Collections.Generic;
@@ -122,7 +126,18 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
         {
             RefreshAccounts();
         }
-        var w = make(p);
+        IComposeWindowHandle w;
+        try
+        {
+            w = make(p);
+        }
+#pragma warning disable CA1031 // The factory is the UI's: any failure to make a window is logged, and the app and its other windows go on.
+        catch (Exception e) when (e is not OutOfMemoryException)
+#pragma warning restore CA1031
+        {
+            LogWindowFailed(logger, e);
+            return;
+        }
         windows.Add(w);
         OnPropertyChanged(nameof(OpenWindows));
         var message = BlockedSummary.Text(p.Blocked);
@@ -231,6 +246,9 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
 
     [LoggerMessage(Level = LogLevel.Error, Message = "compose window requested before the window factory was installed")]
     private static partial void LogNoFactory(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "a compose window could not be made")]
+    private static partial void LogWindowFailed(ILogger logger, Exception error);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "account.list failed")]
     private static partial void LogAccountListFailed(ILogger logger, Exception error);

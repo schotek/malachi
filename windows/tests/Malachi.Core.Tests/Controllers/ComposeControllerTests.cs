@@ -182,6 +182,30 @@ public sealed class ComposeControllerTests
     }
 
     /// <summary>
+    /// Windows addition: a window the factory could not make opens nothing
+    /// and does not reach whoever asked for it (an activation, a key); the
+    /// windows already open stay, and the next one opens.
+    /// </summary>
+    [Fact]
+    public async Task AWindowThatCannotBeMadeOpensNothing()
+    {
+        await using var h = await Harness.StartAsync();
+        await h.Run(() => h.Compose.Open(new ComposeParams { Kind = ComposeKind.New, Subject = "first" }));
+        var make = h.Compose.MakeWindow!;
+        await h.Run(() =>
+        {
+            h.Compose.MakeWindow = _ => throw new InvalidOperationException("no window");
+            h.Compose.Open(new ComposeParams { Kind = ComposeKind.New, Blocked = new BlockedContent { Forms = 1 } });
+            Assert.Same(h.Handles[0], Assert.Single(h.Compose.OpenWindows));
+            h.Compose.MakeWindow = make;
+            h.Compose.Open(new ComposeParams { Kind = ComposeKind.New, Subject = "third" });
+        });
+        await h.IdleAsync();
+        Assert.Equal(["first", "third"], h.Compose.OpenWindows.Cast<FakeHandle>().Select(w => w.Params.Subject));
+        Assert.All(h.Handles, w => Assert.Empty(w.Toasts));
+    }
+
+    /// <summary>
     /// Windows addition (docs/windows-port.md §0): Quit saves every open
     /// window's draft without asking, and hands back only the windows whose
     /// save failed, in the order they were opened, for their question. A

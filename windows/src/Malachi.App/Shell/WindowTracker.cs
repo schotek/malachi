@@ -113,6 +113,17 @@ public sealed partial class WindowTracker : IDisposable
 
         window.Activated += (_, e) =>
         {
+            if (!windows.Contains(tracked))
+            {
+                // Measured: a window closed while it is not the active one
+                // (its caption button invoked through UI Automation, a
+                // compose window closing itself after Send) reports an
+                // activation after Closed. It must not become the last
+                // active window again: its AppWindow is gone, and the next
+                // compose window placed by it failed, and the app with it.
+                LogActivatedAfterClose(logger, tracked.Kind);
+                return;
+            }
             if (e.WindowActivationState == WindowActivationState.Deactivated)
             {
                 activation.Deactivated(tracked);
@@ -231,6 +242,9 @@ public sealed partial class WindowTracker : IDisposable
             LastWindowClosed?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "a closed {Kind} window reported its activation")]
+    private static partial void LogActivatedAfterClose(ILogger logger, WindowKind kind);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "the title bar of a {Kind} window takes no theme: {Reason}")]
     private static partial void LogThemeFailed(ILogger logger, WindowKind kind, string reason);

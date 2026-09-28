@@ -25,7 +25,10 @@
 // - closing (the caption's button, Alt+F4, Escape, Ctrl+W) is the close
 //   request of draft.go: nothing at stake closes at once, otherwise "Save
 //   changes to this draft?" (AlertService: Save Draft the default, Discard,
-//   Cancel), and the window closes when the answer lets it;
+//   Cancel), and the window closes when the answer lets it. As Swift's
+//   windowShouldClose, AppWindow.Closing lets a close with nothing at stake
+//   go on and cancels only to ask, and the window is never closed from
+//   inside that event;
 // - Quit saves the draft without asking (SaveForQuitAsync) and asks the
 //   close question only when that failed (CloseForQuitAsync);
 // - TextBox.TextChanged also comes for the window's own prefill and for an
@@ -96,7 +99,8 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     // The window is closing for good: no question any more.
     private bool closing;
 
-    // The close question while it is up; a second request waits for it.
+    // The close question while it is up; a second request waits for it
+    // (Swift's closeQuestionPending).
     private Task<bool>? closeQuestion;
 
     /// <summary>
@@ -128,54 +132,65 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
         ApplySize();
         Tracked = state.Windows.Track(this, WindowKind.Compose, Root, ToastsHost);
-        var send = Mnemonic.Parse(L10n.T("_Send"));
-        SendLabel.Text = send.Label;
-        SendButton.AccessKey = send.AccessKey ?? "";
-        AutomationProperties.SetName(SendButton, send.Label);
-
-        draft = new ComposeDraftController(
-            state.Client, state.Settings, () => compose.Placeholder, CidRegistry.Shared,
-            logger: state.Logs.CreateLogger<ComposeDraftController>())
+        try
         {
-            Form = this,
-        };
-        attachments = new ComposeAttachmentsController(
-            state.Client, () => CallAccount, CidRegistry.Shared, logger: state.Logs.CreateLogger<ComposeAttachmentsController>());
-        editor = new ComposeWebView();
+            var send = Mnemonic.Parse(L10n.T("_Send"));
+            SendLabel.Text = send.Label;
+            SendButton.AccessKey = send.AccessKey ?? "";
+            AutomationProperties.SetName(SendButton, send.Label);
 
-        // The editor's callbacks first, as in compose.go: Ready and the
-        // state may follow the load at any time.
-        WireEditor();
-        WireAttachments();
+            draft = new ComposeDraftController(
+                state.Client, state.Settings, () => compose.Placeholder, CidRegistry.Shared,
+                logger: state.Logs.CreateLogger<ComposeDraftController>())
+            {
+                Form = this,
+            };
+            attachments = new ComposeAttachmentsController(
+                state.Client, () => CallAccount, CidRegistry.Shared, logger: state.Logs.CreateLogger<ComposeAttachmentsController>());
+            editor = new ComposeWebView();
 
-        // Prefill before the change handlers so it does not count as an edit.
-        Prefill(Header.To, AddressList.Format(p.To));
-        Prefill(Header.Cc, AddressList.Format(p.Cc));
-        Prefill(Header.Bcc, AddressList.Format(p.Bcc));
-        Prefill(Header.Subject, p.Subject);
-        Header.SetCcBccVisible(cc: p.Cc.Count > 0, bcc: p.Bcc.Count > 0);
-        UpdateTitle();
-        draft.SetOriginal(p.InReplyTo, p.Forwarding);
-        // A draft opened from the Drafts folder is the user's already: its id
-        // and version make the saves updates, and closing never deletes it.
-        draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
-        editor.Load(p.BodyHtml);
-        SetAccounts(compose.Accounts, compose.Placeholder);
-        // What the backend imported for the template (a quoted original's
-        // pictures, a forwarded message's files): listed and shown now,
-        // bound by the first save.
-        attachments.Set(p.Attachments);
+            // The editor's callbacks first, as in compose.go: Ready and the
+            // state may follow the load at any time.
+            WireEditor();
+            WireAttachments();
 
-        WireDraft();
-        WireCommands();
-        WireToolbar();
-        WireRows();
-        WireHeaderBar();
-        // Text-only phase (draft.go richText): no formatting to offer, no
-        // inline images, and the user is told what will go out.
-        FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
-        PlainTextHint.Visibility = ComposeDraftController.RichText ? Visibility.Collapsed : Visibility.Visible;
-        InsertImageItem.IsEnabled = ComposeDraftController.RichText;
+            // Prefill before the change handlers so it does not count as an edit.
+            Prefill(Header.To, AddressList.Format(p.To));
+            Prefill(Header.Cc, AddressList.Format(p.Cc));
+            Prefill(Header.Bcc, AddressList.Format(p.Bcc));
+            Prefill(Header.Subject, p.Subject);
+            Header.SetCcBccVisible(cc: p.Cc.Count > 0, bcc: p.Bcc.Count > 0);
+            UpdateTitle();
+            draft.SetOriginal(p.InReplyTo, p.Forwarding);
+            // A draft opened from the Drafts folder is the user's already: its id
+            // and version make the saves updates, and closing never deletes it.
+            draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
+            editor.Load(p.BodyHtml);
+            SetAccounts(compose.Accounts, compose.Placeholder);
+            // What the backend imported for the template (a quoted original's
+            // pictures, a forwarded message's files): listed and shown now,
+            // bound by the first save.
+            attachments.Set(p.Attachments);
+
+            WireDraft();
+            WireCommands();
+            WireToolbar();
+            WireRows();
+            WireHeaderBar();
+            // Text-only phase (draft.go richText): no formatting to offer, no
+            // inline images, and the user is told what will go out.
+            FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
+            PlainTextHint.Visibility = ComposeDraftController.RichText ? Visibility.Collapsed : Visibility.Visible;
+            InsertImageItem.IsEnabled = ComposeDraftController.RichText;
+        }
+        catch
+        {
+            // Tracked, the window counts for the app's life until it closes:
+            // one that could not be built must not hold the app (what opened
+            // it logs the failure, ComposeController.Open).
+            Close();
+            throw;
+        }
 
         AppWindow.Closing += OnClosing;
         Root.Loaded += OnRootLoaded;
@@ -473,37 +488,68 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         Header.FocusTo();
     }
 
-    // The caption's button and Alt+F4: the close request.
+    // windowShouldClose: the caption's button and Alt+F4. With nothing at
+    // stake the window goes on closing (the window is never closed from
+    // inside this event); otherwise the close is cancelled for the
+    // question, and the window closes once it is answered.
     private void OnClosing(AppWindow sender, AppWindowClosingEventArgs args)
     {
         if (closing)
         {
             return;
         }
+        if (draft.CanCloseWithoutAsking)
+        {
+            draft.Cleanup();
+            closing = true;
+            return;
+        }
         args.Cancel = true;
-        RequestClose();
+        // Asked once this event is over: the answer may close the window.
+        _ = DispatcherQueue.TryEnqueue(() => _ = AskOnceAsync());
     }
 
-    // closeRequest (Escape, Ctrl+W, the caption).
+    // closeRequest (Escape, Ctrl+W).
     private void RequestClose() => _ = CloseAsync();
 
-    // closeRequest: the window goes at once when nothing is at stake;
+    // closeRequest (Escape, Ctrl+W, Quit; none of them inside
+    // AppWindow.Closing): the window goes at once when nothing is at stake;
     // otherwise the draft controller asks, and the window closes when the
     // answer lets it. True when it closed.
-    private async Task<bool> CloseAsync()
+    private Task<bool> CloseAsync()
     {
         if (closing)
         {
-            return true;
+            return Task.FromResult(true);
         }
         if (draft.CanCloseWithoutAsking)
         {
             draft.Cleanup();
             CloseForGood();
-            return true;
+            return Task.FromResult(true);
         }
-        closeQuestion ??= AskAsync();
-        return await closeQuestion;
+        return AskOnceAsync();
+    }
+
+    // The close question, asked once: a request while it is up waits for
+    // the same answer. The field is cleared once the answer is in, and only
+    // while it still holds this question, so a question that ends at once
+    // (no dialog could be shown) leaves no finished task behind to answer
+    // every later request.
+    private async Task<bool> AskOnceAsync()
+    {
+        var question = closeQuestion ??= AskAsync();
+        try
+        {
+            return await question;
+        }
+        finally
+        {
+            if (ReferenceEquals(closeQuestion, question))
+            {
+                closeQuestion = null;
+            }
+        }
     }
 
     private async Task<bool> AskAsync()
@@ -522,10 +568,6 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             // The question could not be shown: the window and its draft stay.
             LogCloseQuestionFailed(logger, e);
             return false;
-        }
-        finally
-        {
-            closeQuestion = null;
         }
     }
 
