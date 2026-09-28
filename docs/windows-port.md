@@ -5,15 +5,21 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # The Windows client
 
-How the WinUI 3 client in `windows/` is designed and built, for people (and
-agents) who change it. It is the Windows sibling of
-[macos-port.md](macos-port.md) and follows the same model: a client of the
-daemon's API, a mirror of the GTK UI, no mail logic of its own.
+How the WinUI 3 client in `windows/` is built, for people (and agents) who
+change it. What it does and how to build it is in
+[windows/README.md](../windows/README.md); why there is a native client per
+platform at all is in [architecture.md §6](architecture.md#6-platform). It
+is the Windows sibling of [macos-port.md](macos-port.md) and follows the
+same model: a client of the daemon's API, a mirror of the GTK UI, no mail
+logic of its own.
 
-**Status: plan, 2026-09-27; implementation in progress on `feat/windows`.**
-§0 records the decisions, §15 the work plan and its gates. As the phases
-land, the sections turn from plan into description, the way macos-port.md
-did; §17 keeps what is still open.
+**Status: the full mail UI of the GTK application, built on
+`feat/windows` (2026-09-27 and 28).** §0 records the decisions, each with
+where it is built; §15 the phases the port was built in and their gates;
+§16 the research and the measurements it started from; §17 what is still
+open before a public release. Where a section says *measured* or
+*verified*, it was run on the development machine (Windows 11 Pro 26100
+x64), not taken from documentation.
 
 The one sentence that governs everything below, unchanged from macOS: **the
 GTK UI is the template, and the daemon is the only place logic lives.** The
@@ -28,29 +34,30 @@ the deviation table of `windows/README.md`.
 
 Decided by the owner on 2026-09-27 unless marked *architecture* (decided in
 the port with the research of the same day; the reports are summarised in
-§16).
+§16). The last column says where each decision is built; every row is,
+except for the Windows CI job of the backend row and what §17 lists.
 
-| Topic | Decision |
-|---|---|
-| Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24): the component packages `Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences` instead of the metapackage, which adds ~60 MB of AI libraries a mail client never uses (measured; the notification fix of §10 comes with it) |
-| Windows versions | Windows 11 only (`TargetPlatformMinVersion` 10.0.22000.0) |
-| Architectures | x64 and ARM64 (ARM64 is built here, run on real hardware before a release) |
-| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox |
-| Entry points | `make windows`, `make run-windows`, `make test-windows`, from PowerShell and Git Bash (GNU make 4.4 from winget `ezwinports.make`); `windows/build.ps1` does the work |
-| Stopping the daemon | `CTRL_BREAK_EVENT` through `AttachConsole`/`GenerateConsoleCtrlEvent` (Go maps it to SIGINT; verified clean exit in ~18 ms), `Kill` after 15 s. No backend change; GTK/macOS semantics kept (a daemon left behind by a crashed UI is adopted, never stopped) |
-| Secrets | `malachi-credentials.exe`, the helper keyring over **Windows Credential Manager**, values above the 2560-byte blob limit split into hash-checked chunks |
-| Main window | **GTK structure**: a command row per pane under a slim title bar that holds the search box; the primary menu behind a `…` button (no menu bar); GTK back navigation below 900/600 px; the status line across the whole bottom edge |
-| Keyboard | Windows scheme: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+F/Ctrl+E search; a setting `ctrl-r` (`reply`, default, or `refresh`) as macOS's `command-r`; otherwise GTK's keys, Ctrl+Q Quit and A/J/U/S/Delete included (no Outlook aliases: a pre-translate handler delivers every key even with a WebView2 focused, §11.5) |
-| Attachment click | An **own previewer**: images, PDF and text in a locked-down WebView2 window (no network, no script, no temporary file); other types offer Open / Save As; programs are never opened |
-| Windows additions | Notification-area icon while running in the background; context menus on messages and folders; a *Default apps* button in Preferences; dirty drafts saved on Quit |
-| Unlisted links | Confirmed before opening, as on macOS (GTK opens them; see §6.4) |
-| Dependencies | CsWin32, CommunityToolkit.WinUI Controls, CommunityToolkit.Mvvm, Microsoft.Extensions.Logging.Abstractions / TimeProvider.Testing; xUnit v3 for tests. Each justified in its commit (CLAUDE.md) |
-| Backend changes | Four platform-neutral fixes on the branch, each its own commit (§14): the helper path check, the orphaned raw files after sending, `malachi-mcp --claude-desktop-config/--command`, and `.gitattributes` + portable Go tests + Windows CI |
-| Settings store | *architecture*: `HKCU\Software\io.github.schotek.Malachi`, the gschema keys, change notification through `RegNotifyChangeKeyValue` (the counterpart of GSettings signals and macOS KVO) |
-| Data | *architecture*: `%LOCALAPPDATA%\Malachi Mail\` for `config.toml`, `store.db`, logs, the WebView2 data and the open directory; the socket stays at the daemon's default outside AppData |
-| Translations | *architecture*: `po/*.po` parsed at run time (no generator, no Python in the Windows build), GTK msgids as keys as on macOS |
-| Tests | *architecture*: xUnit v3 on Microsoft.Testing.Platform; the Core tests run on any OS; the Go UI and Swift tests ported 1:1 |
-| Preferences | *architecture*: named *Preferences* (the translated GTK msgid), no search field in v1 (as macOS) |
+| Topic | Decision | Built |
+|---|---|---|
+| Language, runtime | C# on .NET 10 (LTS), WinUI 3 on the Windows App SDK **2.5.x** (1.8 left servicing on 2026-09-24): the component packages `Microsoft.WindowsAppSDK.WinUI` and `.InteractiveExperiences` instead of the metapackage, which adds ~60 MB of AI libraries a mail client never uses (measured; the notification fix of §10 comes with it) | Built: `windows/Directory.Packages.props` (WinUI 2.3.9, InteractiveExperiences 2.1.9, the 2.5.1 Runtime package downloaded for one DLL), §2, §13 |
+| Windows versions | Windows 11 only (`TargetPlatformMinVersion` 10.0.22000.0) | Built: `Malachi.App.csproj` |
+| Architectures | x64 and ARM64 | Built: `build.ps1 -Arch x64\|arm64`, the solution's two platforms. x64 is built and run here; for ARM64 the app, the daemon and the bridge cross-build (2026-09-28), the NativeAOT keyring helper needs the MSVC ARM64 build tools, and nothing ARM64 has run yet (§17) |
+| Packaging | **Unpackaged, self-contained**, per user. `make windows` assembles a folder like the macOS `.app`; the app registers itself in HKCU. Installer (Velopack + winget), code signing and the licence permission for Microsoft components come before the first public binary (§17). MSIX is out: its AppData virtualisation hides `config.toml` and the store and breaks the Claude registration, the same reason macOS has no App Sandbox | Built: `build.ps1 app` and `package` (a zip of the folder), the HKCU registrations of §10; the installer, signing and the licence permission are §17 |
+| Entry points | `make windows`, `make run-windows`, `make test-windows`, from PowerShell and Git Bash (GNU make 4.4 from winget `ezwinports.make`); `windows/build.ps1` does the work | Built: the root `Makefile`, `windows/build.ps1` (§13), verified from both shells |
+| Stopping the daemon | `CTRL_BREAK_EVENT` through `AttachConsole`/`GenerateConsoleCtrlEvent` (Go maps it to SIGINT; verified clean exit in ~18 ms), `Kill` after 15 s. No backend change; GTK/macOS semantics kept (a daemon left behind by a crashed UI is adopted, never stopped) | Built: `Malachi.Platform.Windows` `Process/` and `Console/`, §5 |
+| Secrets | `malachi-credentials.exe`, the helper keyring over **Windows Credential Manager**, values above the 2560-byte blob limit split into hash-checked chunks | Built: `Malachi.Credentials`, §10 |
+| Main window | **GTK structure**: a command row per pane under a slim title bar that holds the search box; the primary menu behind a `…` button (no menu bar); GTK back navigation at 900/600 px or less; the status line across the whole bottom edge | Built: `MainWindow`, `Malachi.App/Main`, §11.1 |
+| Keyboard | Windows scheme: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+F/Ctrl+E search; a setting `ctrl-r` (`reply`, default, or `refresh`) as macOS's `command-r`; otherwise GTK's keys, Ctrl+Q Quit and A/J/U/S/Delete included (no Outlook aliases: a pre-translate handler delivers every key even with a WebView2 focused, §11.5) | Built: `ShortcutMap` (Core), `Malachi.App/Commands`, §11.5 |
+| Attachment click | An **own previewer**: images, PDF and text in a locked-down WebView2 window (no network, no script, no temporary file); other types offer Open / Save As; programs are never opened | Built: `PreviewWindow`, `PreviewWebView`, §6.6 |
+| Windows additions | Notification-area icon while running in the background; context menus on messages and folders; a *Default apps* button in Preferences; dirty drafts saved on Quit | Built: §10 (tray, *Default apps*, Quit), §11.2 (context menus) |
+| Unlisted links | Confirmed before opening, as on macOS (GTK opens them; see §6.4) | Built: `LinkDecision`, `LinkOpener`, §6.4 |
+| Dependencies | CsWin32, CommunityToolkit.WinUI Controls, CommunityToolkit.Mvvm, Microsoft.Extensions.Logging.Abstractions / TimeProvider.Testing; xUnit v3 for tests. Each justified in its commit (CLAUDE.md) | Built: `Directory.Packages.props`; besides these the Windows SDK build tools and, for the strings check (§9), Roslyn (`Microsoft.CodeAnalysis.CSharp`). Of the toolkit's controls the app uses SettingsControls and Sizers; Segmented is still referenced, unused since the filter became a `SelectorBar` (§11.1) |
+| Backend changes | Four platform-neutral fixes on the branch, each its own commit (§14): the helper path check, the orphaned raw files after sending, `malachi-mcp --claude-desktop-config/--command`, and `.gitattributes` + portable Go tests + Windows CI | Built, except the Windows CI workflow (§13, §17) |
+| Settings store | *architecture*: `HKCU\Software\io.github.schotek.Malachi`, the gschema keys, change notification through `RegNotifyChangeKeyValue` (the counterpart of GSettings signals and macOS KVO) | Built: `SettingsStore` (Core), `RegistrySettingsBackend`, §8 |
+| Data | *architecture*: `%LOCALAPPDATA%\Malachi Mail\` for `config.toml`, `store.db`, logs, the WebView2 data and the open directory; the socket stays at the daemon's default outside AppData | Built: `Paths` (Core), §1 |
+| Translations | *architecture*: `po/*.po` parsed at run time (no generator, no Python in the Windows build), GTK msgids as keys as on macOS | Built: `Malachi.Core/I18n`, `{l:T}`, §9 |
+| Tests | *architecture*: xUnit v3 on Microsoft.Testing.Platform; the Core tests run on any OS; the Go UI and Swift tests ported 1:1 | Built: the five test projects of §12 and their three helpers |
+| Preferences | *architecture*: named *Preferences* (the translated GTK msgid), no search field in v1 (as macOS) | Built: `PreferencesWindow`, §11.3 |
 
 ## 1. Process model
 
@@ -131,7 +138,8 @@ windows/
   Directory.Build.targets       locale copy, daemon copy for F5, icons
   Directory.Packages.props      central package versions, lock files
   .editorconfig                 C# style, the SPDX header rule (IDE0073)
-  scripts/make-icons.ps1        docs/malachi_icon.png → .ico (crop as macos/Makefile)
+  parity-exclusions.txt         the msgids of po/malachi.pot the client does not use, with reasons (§9)
+  scripts/make-icons.ps1        docs/malachi_icon.png → .ico and the notification icon (crop as macos/Makefile)
   src/
     Malachi.Core/               net10.0, no WinUI, no P/Invoke: everything testable anywhere
     Malachi.Platform.Windows/   net10.0-windows: Windows services behind Core interfaces (CsWin32)
@@ -385,8 +393,8 @@ The app also stops its daemon on `WM_ENDSESSION`. The namespaces are
 `System.Diagnostics.Process` or `System.Console` in every
 `Malachi.Platform.Windows` namespace.
 
-**Console** (measured in phase B, from PowerShell, Git Bash in a pseudo
-console and mintty, directly and through make; replayed by
+**Console** (measured in the spikes of §16, from PowerShell, Git Bash in a
+pseudo console and mintty, directly and through make; replayed by
 `ConsoleAttachmentTests` with the test binary as terminal and app). `Main`,
 before anything touches `System.Console`, calls
 `ConsoleAttachment.Initialize`, which clears `HANDLE_FLAG_INHERIT` on the
@@ -813,7 +821,7 @@ commands). The rules of the WebView2
 layer, which macOS keeps in its web views, live there too
 (`Malachi.Core.Presentation`, §6).
 
-The shell's are in `Malachi.Core/Presentation` (phase E wave 1): the
+The shell's are in `Malachi.Core/Presentation`: the
 `NotificationHub` above; `ActivationRequest` and `CommandLine` (what a
 launch or a redirected second launch asks, §10); `WindowLifetime` (the
 GApplication rule for the one main window); `QuitSequence` (Quit, §10);
@@ -824,7 +832,7 @@ time per window); `Mnemonic` (`mn()` plus the access key); `IconGlyphs`
 (GTK icon names to Segoe Fluent Icons glyphs, each checked against the
 font; a test finds every icon name of `ui/` in the table).
 
-The main window's (phase E wave 2, E3): `AvatarPalette` and `AvatarColours`
+The main window's: `AvatarPalette` and `AvatarColours`
 (above); `PaneLayout` with `PaneMode` and `PaneWidths` (window.blp's
 breakpoints and ranges, where the folded layouts navigate, when the widths
 are kept); `SidebarRow` and `SidebarRowKind` (a sidebar row of folders.go
@@ -951,11 +959,13 @@ with a reason in `windows/parity-exclusions.txt` (one msgid per line with
 C escapes and `\004` between a context and its msgid, a tab, the reason;
 seeded from research 05 Appendix A: GNOME, GOA, portal, Flatpak, gsound,
 gschema and desktop metadata), and every exclusion to be a template msgid
-the sources do not use. Until the screens of phase E wave 2 exist it
-skips with the list of the missing msgids; `CoverageEnforced` in
-`StringsCheckTests` (or `MALACHI_MSGID_COVERAGE=strict`) makes it fail,
-and is turned on with the last screen. Another test compares the
-gschema's keys and defaults with the settings facade.
+the sources do not use (a stale or a now used exclusion fails). The
+coverage holds for the whole template: every msgid is used or excluded.
+A gap (a msgid that GTK work and `make po` added, say) is a failure with
+`CoverageEnforced` in `StringsCheckTests` or `MALACHI_MSGID_COVERAGE=strict`,
+and a skip listing the missing msgids without them; `CoverageEnforced` is
+still `false` in the tree. Another test compares the gschema's keys and
+defaults with the settings facade.
 
 ## 10. Platform services
 
@@ -997,7 +1007,7 @@ previous value or as corrupt, never as a mix. The value stays bytes and
 never becomes a string, so every buffer that held it is zeroed. The Go
 side's `MALACHI_TEST_REAL_HELPER` round trip runs against it.
 
-**Notifications and sound.** Measured in phase B on 2.5.1: in a
+**Notifications and sound.** Measured on 2.5.1 (§16): in a
 self-contained unpackaged app **no package set** makes
 `AppNotificationManager.Register()` work; the metapackage, the WinUI
 packages and WinUI plus the Runtime package all throw `0x8007007E`
@@ -1010,8 +1020,8 @@ a `PackageDownload`) into the output (`MalachiInsightsResource` in
 `Malachi.App.csproj`; `build.ps1 app` checks the DLL is in the app
 folder); it goes once a Foundation release
 with WindowsAppSDK PR #6725 ships, and `Register()` is re-tested on every
-WinAppSDK bump (in phase E wave 1 the published app, run outside Claude
-Desktop's process tree, registered in 70 ms and unregistered cleanly). The
+WinAppSDK bump (the published app, run outside Claude Desktop's process
+tree, registered in 70 ms and unregistered cleanly). The
 `NotificationInvoked` handler is attached **before**
 `Register()` (otherwise COM registers single-use and every click starts a
 new process); `Register("Malachi Mail", <icon>)` with no explicit AUMID;
@@ -1255,7 +1265,7 @@ attachment's own extension as its file type.
 
 **Sign-in.** The daemon owns the `127.0.0.1` listener; the app opens the
 `https` URL through the launcher (`ILauncher.OpenUrlAsync`: `ShellExecuteEx`,
-https only), nothing else. As built (phase E wave 2): the account wizard's
+https only), nothing else. The account wizard's
 browser page shows `WizardController`'s `OAuthView` (the prompt with the
 provider's button, the wait with *Open the Browser Again* and *Cancel*, and
 *No Sign-In Client Configured* with *Use an App Password Instead*); the
@@ -1300,8 +1310,8 @@ again, and the toast with neither Claude app).
 and pane buttons in narrow layouts. Below it the three panes of
 `window.blp` in a grid with two splitters (sidebar 200–320, list 280–460,
 message ≥ 300; widths in the gschema keys, written only from a wide,
-uncollapsed layout). Below 900 effective pixels the sidebar becomes an
-overlay; below 600 list and message form one stack with Back (GTK). Command
+uncollapsed layout). At 900 effective pixels or less the sidebar becomes an
+overlay; at 600 or less list and message form one stack with Back (GTK). Command
 rows per pane: sidebar (New Message, the primary menu `…`: New Message, Add
 Account…, Preferences, About, Quit), list (folder title and counts, Check
 for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
@@ -1317,7 +1327,7 @@ set with `SetTitleBar`, `PreferredHeightOption=Tall`; the colour scheme sets
 in-box `SelectorBar` (the toolkit's `Segmented` items lack the UIA selection
 pattern).
 
-As built in phase E wave 1 (`MainWindow.xaml`): the title bar, the search
+The window itself (`MainWindow.xaml`): the title bar, the search
 box (`MainWindow.Search`, focused by the Search command), the size and the
 maximised state in the gschema keys (the minimum through
 `WM_GETMINMAXINFO`). Every other window is tracked by
@@ -1327,10 +1337,10 @@ and `CommandRouter`, its toast overlay as the router's target while it is
 active, and its part in the app's life. A window without Mica gives its
 root `Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"`.
 
-As built in wave 2 (E3; `MainWindow.xaml`, `MainWindow.Panes.cs`,
-`Malachi.App/Main`): the panes are the window's own controls, wired to the
-Integration's controllers in `MainWindow.Attach`; the reader's region
-(`MainWindow.Reader`, E4) sits under the message page's header bar and the
+The panes (`MainWindow.xaml`, `MainWindow.Panes.cs`, `Malachi.App/Main`)
+are the window's own controls, wired to the Integration's controllers in
+`MainWindow.Attach`; the reader's region (`MainWindow.Reader`) sits under
+the message page's header bar and the
 toast overlay. outer_split is a `SplitView`: the sidebar (`SidebarPane`) is
 its pane, inline while the window is wider than 900 effective pixels, an
 overlay (opaque) opened by the title bar's pane button at 900 or less
@@ -1380,7 +1390,7 @@ the unsent row leading to the outbox; the actions run after the flyout
 closed). The banners' buttons and the flyout's actions are
 `Main/AccountRepair` (Integration.swift's `authBannerButton`,
 `signInAgain`, `statusAction`): the edit wizard through the new
-`AppHooks.EditAccount` hook (E6), the browser for the daemon's own
+`AppHooks.EditAccount` hook (§11.3), the browser for the daemon's own
 sign-in, the preferences otherwise.
 
 ### 11.2 Sidebar and list
@@ -1391,10 +1401,10 @@ hover or selection, keyboard-reachable), with the status pages of GTK. The
 message list is a virtualised `ListView` updated by key diff, rows after
 `message_row.blp` (margins 8/3, avatars 40/28 with the libadwaita palette
 ported, bold unread, count pill, date, unread dot, search highlights); it
-pages itself at the end (macOS M6), *Load More* only to retry. Context menus
-(decided) on messages and folders offer only existing actions.
+pages itself at the end (as macOS), *Load More* only to retry. Context menus
+(§0) on messages and folders offer only existing actions.
 
-As built (E3, `Malachi.App/Main`, the view models in
+In the code (`Malachi.App/Main`, the view models in
 `Malachi.Core/Presentation` with their tests): the sidebar's rows are
 `SidebarRow`s (the rows of folders.go: headings 3 px lower with the fold
 arrow, which the Favourites heading keeps as an invisible place; folders
@@ -1422,7 +1432,7 @@ initials; the monochrome variant). A row's accessible name is what it
 shows, with Unread, Flagged and Attachment (msgids GTK has for the filter
 and the attachment chip) after the subject where its icons say so. Double
 click and Enter activate (a conversation folds, a draft goes to
-`draft.open`, a message to the message windows of E4), Left and Right
+`draft.open`, a message to its message window, §11.3), Left and Right
 fold, a right click selects the row (without the navigation of a folded
 window) and opens the header's actions (Reply, Reply All, Forward; Mark as
 Unread, Mark as Read, Star or Unstar; Archive, Mark as Junk, Move to Trash
@@ -1478,17 +1488,21 @@ with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the
 row), General (startup, reading, deleting, notifications, the `ctrl-r`
 choice, *Default apps*), Appearance and AI, built with `SettingsCard`s.
 
-As built, the reader (phase E wave 2, `Malachi.App/Reader`, `Windows`,
-`Attachments`): `Reader/MessageView` is the one view, its state Core's
+The reader (`Malachi.App/Reader`, `Windows`, `Attachments`):
+`Reader/MessageView` is the one view, its state Core's
 `ReaderController` (§7.4), in the pane (`Reader/ReaderHub` puts it into the
 main window's Reader region and gives the main window's per-message
 commands their handlers, the selection's actions through
 `MessageActionRouter`), in `Windows/MessageWindow` and in
 `Windows/EmbeddedMessageWindow`. From the top, as `window.blp`'s
-`message_page`: the command row (Reply, Reply All, Forward; Trash, Junk,
-Archive, Star, More with `message_menu_model`), 40-pixel `AppBarButton`s bound
-to the window's `WindowCommands`, the star and the trash button showing the
-flags (Star/Unstar, Move to Trash/Cancel Sending); the outbox and draft
+`message_page`: in a message window the command row (Reply, Reply All,
+Forward; Trash, Junk, Archive, Star, More with `message_menu_model`),
+40-pixel `AppBarButton`s bound to the window's `WindowCommands`, the star
+and the trash button showing the flags (Star/Unstar, Move to Trash/Cancel
+Sending); in the pane the main window's `MessageCommandBar` above the
+reader's region is that row (§11.1), level with the other panes' header
+rows as window.blp's message header bar is, and the view shows none of
+its own; the outbox and draft
 `InfoBar`s (Retry, Edit); the remote-image bar, a bar of its own with Load
 Images and Always From This Sender as buttons that take no focus on a click
 but are reached by Tab; then the No Message Selected and No Accounts pages
@@ -1533,7 +1547,7 @@ destination alone for an unlisted link. The folder is `Windows/`, the
 namespace `Malachi.App.MessageWindows`: a namespace `Malachi.App.Windows`
 would hide the `Windows.*` namespaces from every file of the app.
 
-The compose window as built (phase E wave 2, `Malachi.App/Compose`):
+The compose window (`Malachi.App/Compose`):
 `ComposeManager` makes the windows `ComposeController` asks for
 (`Integration.InstallComposeWindows`, before the first activation, so a
 cold `mailto:` opens its composer at once) and cascades them 32 px from a
@@ -1622,7 +1636,8 @@ Automation on a composer with nothing at stake, then a `mailto:` composer,
 four times without a failure; the notification of a suggestion as a UIA
 client receives it; the chips as named groups.
 
-As built (`Malachi.App/Wizard`, `Malachi.App/Preferences`): the wizard
+The wizard and the Preferences (`Malachi.App/Wizard`,
+`Malachi.App/Preferences`): the wizard
 (`AccountWizardWindow`) is owned by the window it opens from
 (`GWLP_HWNDPARENT`) with a modal dialog `OverlappedPresenter`, 520×640
 effective pixels with its title bar, centred on its owner. A modal window
@@ -1691,7 +1706,7 @@ Narrator notification). Alerts go through one `AlertService` that queues
 left, Cancel right), defaults and close responses stay GTK's (*Save Draft*
 is the default of the close question).
 
-As built: `Controls/ToastHost` over Core's `ToastPresenter` (a capsule 42 px
+In the code: `Controls/ToastHost` over Core's `ToastPresenter` (a capsule 42 px
 high, 24 px above the bottom, one line with the whole text as its tooltip,
 a 0.2 s fade, a click dismisses; `AutomationPeer.RaiseNotificationEvent`),
 and `Shell/ToastRouter` for the application's toasts (the active window's
@@ -1719,7 +1734,7 @@ shown first. Mnemonics: `{l:T}` returns the msgid with its `_`, and
 | Send / Save draft / Bold, Italic, Underline | Ctrl+Enter / Ctrl+S / Ctrl+B, I, U | same |
 | Reorder accounts | Ctrl+Up / Ctrl+Down | same |
 
-Measured in phase B: while a WebView2 has focus, **no** XAML accelerator
+Measured (§16): while a WebView2 has focus, **no** XAML accelerator
 and no XAML key event fires (27 keys, real input, viewer and editor), but
 every key reaches the window's `InputPreTranslateKeyboardSource`
 (`GetForIsland(XamlRoot.ContentIsland)`, `SetPreTranslateHandler`) exactly
@@ -1739,7 +1754,7 @@ Overlays (`ContentDialog`, flyouts, `TeachingTip`, `InfoBar`, popups) draw
 above the WebView2 with no airspace workaround; the viewer and editor are
 never hosted in a raw HWND controller.
 
-As built (`Commands/`): every tracked window has a `WindowCommands` (named
+In the code (`Commands/`): every tracked window has a `WindowCommands` (named
 `XamlUICommand`s: the application's, the per-message ones enabled from
 `Flags`, an `ActionFlags` the screen sets, Check for New Mail, Search,
 Close, Send, Save Draft, the reordering) and a `CommandRouter` that runs
@@ -1765,19 +1780,31 @@ puts the focus in the search box, letters then type there, and Ctrl+Q
 quits from it; Ctrl+Comma and Ctrl+N run their commands from there. The
 WebView2 side was driven the same way, through the pre-translate source
 and, forced, through the hook, on a WebView2 put in the main window for
-the test (the reader, E4, is not built yet): a letter reaches the page
-down and up; F5, Ctrl+Comma, Ctrl+N and A run their commands and the page
-sees none of them (F5 no reload); Ctrl+F moves the focus to the search box
-before its key up, and the next F typed in the page arrives down and up;
-Ctrl+Q quits. In phase F the same was done on the real reader (§12, the
-end-to-end walk): with an HTML message's viewer focused by a click, Ctrl+R
-opens the reply, S and U toggle the star and the unread state, A archives
-(the neighbour takes the selection), J and Delete ask their questions; in
-the compose editor Ctrl+Enter sends. The automated UI tests use UI
-Automation's patterns only, never synthetic keys (they run beside other
-windows and never need the foreground).
+the test before the reader existed: a letter reaches the page down and up;
+F5, Ctrl+Comma, Ctrl+N and A run their commands and the page sees none of
+them (F5 no reload); Ctrl+F moves the focus to the search box before its
+key up, and the next F typed in the page arrives down and up; Ctrl+Q
+quits. On the real editor the compose window's keys were verified with
+real input (§11.3: a message typed with bold text and sent with
+Ctrl+Enter from the editor).
+In phase F the same was done on the real reader (§12, the end-to-end
+walk): with an HTML message's viewer focused by a click, Ctrl+R opens the
+reply, S and U toggle the star and the unread state, A archives (the
+neighbour takes the selection), J and Delete ask their questions. The
+automated UI tests (§12) use UI Automation's patterns only, never
+synthetic keys (they run beside other windows and never need the
+foreground).
 
 ## 12. Tests
+
+`make test-windows` (`build.ps1 test`) runs five test projects, 3,574
+tests in about two minutes on the development machine (2026-09-28): 2,773
+in `Malachi.Core.Tests`, 590 in `Malachi.Platform.Windows.Tests`, 159 in
+`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests` and 25 in
+the canary. The tests that need a built `malachid.exe` skip without one
+(`make windows` or `build.ps1 go` builds it, `MALACHI_TEST_MALACHID`
+names another), and the Credential Manager round trips run only on
+request. The `.trx` reports land in `build\windows\TestResults\`.
 
 - `Malachi.Core.Tests` (xUnit v3): every Go UI pure-logic test and every
   Swift test of `MalachiCoreTests` ported with the same shape (Theory for
@@ -1802,7 +1829,10 @@ windows and never need the foreground).
   registration under a test key of their own
   (`HKCU\Software\io.github.schotek.Malachi.Tests.<guid>`, one key per
   test and no parent they share), the command
-  line, the notification arguments, quiet hours and the sound. What only
+  line, the notification arguments, quiet hours and the sound; the
+  handshake, a call and a notification against the real `malachid.exe`,
+  its clean stop in a private run directory, a crashed daemon replaced,
+  and the console roles of §5. What only
   the real shell shows (a toast and its click, the handler list, the Run
   key, the icon's menu) is checked by hand from outside Claude's process
   tree (§1) and cleaned up afterwards.
@@ -1810,8 +1840,11 @@ windows and never need the foreground).
   round trip (4 KiB and chunked values, `cmdkey`'s UTF-16 items) on request
   (`MALACHI_CREDENTIALS_TEST=1`), one test at a time under the helper's
   session lock.
-- `Malachi.Conventions.Tests`: strings, msgid and gschema coverage, SPDX
-  headers of every file type, the manifest identity.
+- `Malachi.Conventions.Tests`: the strings check and the msgid coverage
+  (§9), the gschema's keys against the settings facade, the SPDX headers
+  of every file type under `windows/` (C#, XAML, the MSBuild files, the
+  solution, the manifests, PowerShell, and `.js`, `.css`, `.html`, `.xml`,
+  `.config` and `.resw` should they appear).
 - The **network canary** (`Malachi.App.Canary`, with its WinUI host
   `Malachi.App.Canary.Host`, which compiles `src/Malachi.App/WebViews`
   itself): the host holds the real viewer, editor and previewer in the
@@ -1982,7 +2015,15 @@ copies the catalogues and licences, and assembles
 `windows/` (global.json selects the test platform). The XAML compiler is a
 .NET Framework tool without long-path support: keep the clone path short.
 Version: `git describe` as in the Makefile; `Major.Minor.Patch.Commits` for
-the file version, the full string as `InformationalVersion`.
+the file version, the full string as `InformationalVersion`. `build.ps1
+package` zips the app folder as `build\windows\Malachi-Mail-<version>-<arch>.zip`
+(entries with `/` separators, so every unzip tool reads them); the zip is
+unsigned and is not a release artefact yet (§17, [releasing.md](releasing.md)).
+
+`build.ps1 lint` is `dotnet format --verify-no-changes` over the solution
+and the conventions tests. Warnings are errors in every project
+(`Directory.Build.props`, code style in the build), so a Release build
+without warnings is part of the build itself.
 
 **CI** is `.github/workflows/windows.yml`, on the `windows-2025` runner
 image: Windows Server 2025 with Git, the WebView2 runtime and Visual
@@ -2030,8 +2071,11 @@ there would be about the runner. A manual run with `canary` set passes
 The Credential Manager round trip needs `MALACHI_CREDENTIALS_TEST=1`; tests
 that find no taskbar or may not create symbolic links skip themselves with
 the reason; the job summary lists every skip, and a notice on the run
-points to it. Nothing ARM64 runs (§17), and FlaUI smoke tests do not exist
-yet (§12). The Linux packaging workflows ignore pushes that change nothing
+points to it. Nothing ARM64 runs (§17). The UI smoke tests
+(§12) skip themselves with the reason that the app is not built: the
+test step runs before the package step assembles the app folder, and
+whether the hosted image's session can drive a WinUI window through UI
+Automation is not tried yet. The Linux packaging workflows ignore pushes that change nothing
 but `windows/`, `macos/` or this workflow; tags always build everything
 (GitHub does not apply path filters to tags).
 
@@ -2090,7 +2134,7 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
    supplies the Windows knowledge; `backend/` keeps none.
 6. The root **Makefile**: the Windows block, the `.exe` suffix, the three
    targets.
-7. **`.github/workflows/windows.yml`**.
+7. **`.github/workflows/windows.yml`**: not written yet (§13, §17).
 
 Proposed separately, not in this branch: canonical hrefs in the sanitiser
 plus GTK confirming unlisted links (the likely masked-link bypass),
@@ -2098,53 +2142,102 @@ bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
 a runtime D-Bus opt-out.
 
-## 15. Work plan
+## 15. How it was built
 
-Each phase is one orchestrated run: coding agents on disjoint areas, each
-in its own git worktree and branch, each gated by the build and the tests
-of its area; then the branches are merged into `feat/windows`, the full
-gate runs, and a review stage (a parity review against the Swift and Go
+The client was built on `feat/windows` in six phases, all done. Each phase
+was one orchestrated run: coding agents on disjoint areas, each in its own
+git worktree and branch, each gated by the build and the tests of its
+area; then the branches were merged into `feat/windows`, the full gate
+ran, and a review stage (a parity review against the Swift and Go
 sources, and a security review for the transport, WebView2, attachments
-and the helper) must pass before the phase's commits stay.
+and the helper) had to pass before the phase's commits stayed. The fixes
+those reviews asked for are the `fix(windows):` commits after each
+phase's `feat(windows):` ones.
 
-| Phase | Work packages | Gate |
-|---|---|---|
-| **A** Repository groundwork | §14 items 1–6 | `go vet` + `go test ./...` of `backend/` on Windows; Linux test binaries run in WSL; `GOOS=darwin go vet` |
-| **B** Scaffold and spikes | solution, props, packages, `.editorconfig`, projects, `build.ps1`, icons, manifest, make targets; spikes: the WinAppSDK 2.5 package set with `AppNotificationManager.Register` unpackaged, CommunityToolkit controls on 2.5, `TitleBar`, keyboard with a focused WebView2, `ContentDialog`/`Flyout` over WebView2 | `make windows`, `run-windows`, `test-windows` from PowerShell and Git Bash; a window opens |
-| **C** Core foundation | C1 API layer; C2 i18n, text, settings; C3 Platform.Windows services; C4 `malachi-credentials`; then C5 transport and FakeDaemon; C6 supervisor, paths, bridge runner | all Core tests; the handshake against the real daemon; `account.add` with a password stored through the helper |
-| **D** Core logic | D1 models; D2 compose, HTML (bridge), wizard; D3 connection, sync, message cache, mailbox controllers; D4 actions, compose, draft, wizard, preferences, MCP controllers | every ported Go and Swift test green; conventions tests green |
-| **E** WinUI app | wave 1: E1 shell (`Main` with the console, notifications and single instance; lifecycle and Quit; integration; toasts, alerts, icons, theme, `{l:T}`; the command router; the package set of §10), E2 WebView2 layer and the canary, E7 platform services (tray, launch at login, `mailto:` registration, notifications and sound); wave 2: E3 main window, E4 reader, message and attached-message windows, attachment actions and the previewer, E5 compose, E6 wizard and preferences. Each screen's agent also writes the presentation classes of §7.4 it needs, in Core with tests | release build without warnings; all tests; the canary; FlaUI smoke tests; a run against the local test mail server |
-| **F** Verification and docs | end-to-end against local IMAP/SMTP servers; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone |
+| Phase | Work packages | Gate | State |
+|---|---|---|---|
+| **A** Repository groundwork | §14 items 1–6 | `go vet` + `go test ./...` of `backend/` on Windows; Linux test binaries run in WSL; `GOOS=darwin go vet` | Done |
+| **B** Scaffold and spikes | solution, props, packages, `.editorconfig`, projects, `build.ps1`, icons, manifest, make targets; spikes: the WinAppSDK 2.5 package set with `AppNotificationManager.Register` unpackaged, CommunityToolkit controls on 2.5, `TitleBar`, keyboard with a focused WebView2, `ContentDialog`/`Flyout` over WebView2 | `make windows`, `run-windows`, `test-windows` from PowerShell and Git Bash; a window opens | Done |
+| **C** Core foundation | C1 API layer; C2 i18n, text, settings; C3 Platform.Windows services; C4 `malachi-credentials`; then C5 transport and FakeDaemon; C6 supervisor, paths, bridge runner | all Core tests; the handshake against the real daemon; `account.add` with a password stored through the helper | Done |
+| **D** Core logic | D1 models; D2 compose, HTML (bridge), wizard; D3 connection, sync, message cache, mailbox controllers; D4 actions, compose, draft, wizard, preferences, MCP controllers | every ported Go and Swift test green; conventions tests green | Done |
+| **E** WinUI app | wave 1: E1 shell (`Main` with the console, notifications and single instance; lifecycle and Quit; integration; toasts, alerts, icons, theme, `{l:T}`; the command router; the package set of §10), E2 WebView2 layer and the canary, E7 platform services (tray, launch at login, `mailto:` registration, notifications and sound); wave 2: E3 main window, E4 reader, message and attached-message windows, attachment actions and the previewer, E5 compose, E6 wizard and preferences. Each screen's agent also wrote the presentation classes of §7.4 it needed, in Core with tests | release build without warnings; all tests; the canary; FlaUI smoke tests; a run against the local test mail server | Done; the UI checked by hand through UI Automation instead of FlaUI tests (§12) |
+| **F** Verification and docs | end-to-end against local IMAP/SMTP servers; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone | Done but for CI (§13) |
 
 ## 16. Research summary
 
-The port was planned from nine research reports and a spike run of
-2026-09-27 (macOS inventory in two parts, GTK parity, the backend on
-Windows, WebView2 security, the Windows app model, build and
-infrastructure). Measured, not read: the daemon and `malachi-mcp` build and
-run on Windows unchanged for amd64 and arm64; AF_UNIX and the §1.4
-handshake work from .NET (vectors match); CTRL_BREAK stops the daemon
-cleanly; the WebView2 facts of §6; a hand-written unpackaged self-contained
-WinUI 3 app builds with plain `dotnet build` in ~14 s for x64 and ARM64 and
-starts in ~0.7 s to its first WebView2 navigation (~0.5 s with NativeAOT,
-which is not used for the app in v1); publish needs `EnableMsixTooling`;
-trimming needs source-generated JSON; the WinAppSDK 2.5.1 metapackage adds
-~60 MB of AI libraries a mail client does not use. The macOS client mirrors
-GTK faithfully: 502 of the 556 GTK msgids appear in its sources, and every
-miss is explained.
+The port was planned from nine research reports of 2026-09-27 (the macOS
+client's core infrastructure and its logic, its AppKit shell in two parts,
+the GTK UI's inventory with the parity matrix, the backend on Windows,
+WebView2 security with attachment safety and credential storage, the
+Windows app model, build and infrastructure) and three spike runs of the
+same day: WinUI 3, WebView2 and AF_UNIX; the app model on Windows App SDK
+2.5.1 (notifications, single instance, activation, the tray, launch at
+login, `mailto:`); and the keyboard with a focused WebView2, overlays over
+it and the console. The reports and spikes are working material outside
+the repository; what they established is in the sections above, where
+they are cited as *measured*.
+
+Measured, not read: the daemon and `malachi-mcp` build and run on Windows
+unchanged for amd64 and arm64, once the four backend fixes of §14 were in;
+AF_UNIX and the §1.4 handshake work from .NET (vectors match); CTRL_BREAK
+stops the daemon cleanly; the WebView2 facts of §6; a hand-written
+unpackaged self-contained WinUI 3 app builds with plain `dotnet build` in
+~14 s for x64 and ARM64 and starts in ~0.7 s to its first WebView2
+navigation (~0.5 s with NativeAOT, which the app does not use);
+publish needs `EnableMsixTooling`; trimming needs source-generated JSON;
+the WinAppSDK 2.5.1 metapackage adds ~60 MB of AI libraries a mail client
+does not use; `AppNotificationManager.Register()` fails unpackaged without
+the Insights resource DLL (§10); no XAML key handler sees a key while a
+WebView2 has focus, but the island's pre-translate source does (§11.5).
+The macOS client mirrors GTK faithfully: 502 of the 556 GTK msgids appear
+in its sources, and every miss is explained; those 54 seeded
+`windows/parity-exclusions.txt`.
+
+The parity report's matrix (every GTK feature against its macOS mirror and
+its Windows counterpart) and its validation list are what the Windows
+client was checked against: the msgid coverage and the gschema tests
+(§9, §12), every matrix row the same or a row of the deviation table in
+`windows/README.md`, the actions, the keys and the dialogs, and the manual
+scenarios (a notification suppressed while the window is active, the sound
+without notifications, a click on a toast, a hidden launch at login, Run
+in Background, a cold `mailto:`, a masked link, an executable attachment,
+Save All's names, reordering accounts, the AI page's failures, the
+daemon's graceful stop), recorded in §10 and §11.
 
 ## 17. Before a public release
 
-- Installer: Velopack (per user, updates from GitHub Releases) and a winget
-  manifest; the update stops the daemon gracefully first.
-- Code signing: the owner's decision (SignPath Foundation, an OV
+The client is complete as a mail client; what it lacks is distribution.
+Today `make windows` gives a self-contained, unsigned folder that needs
+nothing installed but the WebView2 runtime Windows 11 comes with, and
+`build.ps1 package` zips it. Open, in the order a first public binary
+needs them:
+
+- **Licence.** The Windows App SDK and WebView2 packages, which the app
+  folder carries, are under Microsoft's terms, not the GPL. Distributing
+  the built client needs an explicit GPLv3 §7 additional permission for
+  those Microsoft platform components in `LICENSING.md`. That is the
+  owner's decision, after a legal check, and comes before the first public
+  binary; development and the source are unaffected.
+- **Code signing.** The owner's decision (SignPath Foundation, an OV
   certificate, or signing as an organisation; Azure Artifact Signing is not
-  open to individuals in the EU).
-- Licence: the Windows App SDK and WebView2 packages are under Microsoft's
-  terms; an explicit GPLv3 §7 additional permission for Microsoft platform
-  components in `LICENSING.md`, after a legal check, before the first
-  public binary. Development and source are unaffected.
-- ARM64 run on real hardware.
-- Later tracks: MSIX (virtualisation disabled, an execution alias for
-  `malachi-mcp`), Windows Web Account Manager as a daemon extension point,
-  a taskbar unread badge.
+  open to individuals in the EU). Until then SmartScreen warns about the
+  unsigned executables.
+- **Installer.** Velopack (per user, updates from GitHub Releases) and a
+  winget manifest; an update stops the daemon gracefully first, and an
+  uninstall removes what the app registered in HKCU (the `mailto:`
+  registration, for which `MailtoRegistration.Unregister` exists, the Run
+  value and the notification registration).
+- **ARM64.** `build.ps1 app -Arch arm64` cross-builds the app, the
+  daemon and the bridge; the keyring helper links only where the MSVC
+  ARM64 build tools are installed, which the development machine lacks,
+  so no ARM64 app folder has been assembled and none has run. It needs a
+  build with those tools and a run on real ARM64 hardware.
+- **CI.** `.github/workflows/windows.yml` (§13): the backend's Go tests on
+  Windows and the client's build, tests, lint and packages for both
+  architectures.
+- **Automated UI tests** over UI Automation for the main flows (§12),
+  which today are checked by hand.
+
+Later tracks: MSIX (virtualisation disabled, an execution alias for
+`malachi-mcp`), Windows Web Account Manager as a daemon extension point, a
+taskbar unread badge, and the separate proposals at the end of §14.
