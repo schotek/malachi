@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -52,6 +53,30 @@ func TestDoRetriesOtherErrors(t *testing.T) {
 	})
 	if err != nil || calls != 3 {
 		t.Errorf("an error that passes: %v after %d calls, want nil after 3", err, calls)
+	}
+}
+
+// A failure that no open handle causes and no wait ends is returned after
+// one attempt, wrapped as os functions wrap it; a missing permission,
+// which a handle's refusal also is on Windows, is still retried.
+func TestDoReturnsLastingErrorsAtOnce(t *testing.T) {
+	shortWaits(t, 3)
+	for _, errno := range []syscall.Errno{syscall.EROFS, syscall.ENOSPC, syscall.EDQUOT, syscall.EXDEV, syscall.ENOTDIR, syscall.EISDIR} {
+		for _, want := range []error{
+			errno,
+			&fs.PathError{Op: "remove", Path: "x", Err: errno},
+			&os.LinkError{Op: "rename", Old: "x.tmp", New: "x", Err: errno},
+		} {
+			calls := 0
+			if err := Do(func() error { calls++; return want }); err != want || calls != 1 {
+				t.Errorf("Do returning %v: %v after %d calls, want one call", want, err, calls)
+			}
+		}
+	}
+	denied := &os.LinkError{Op: "rename", Old: "x.tmp", New: "x", Err: syscall.EACCES}
+	calls := 0
+	if err := Do(func() error { calls++; return denied }); err != denied || calls != 4 {
+		t.Errorf("Do returning %v: %v after %d calls, want 4", denied, err, calls)
 	}
 }
 

@@ -7,14 +7,18 @@
 // delete sharing, which is how Go's os.Open opens: a client reading the
 // daemon's key file, one of the daemon's own readers of a raw message, a
 // virus scanner perhaps. The operation goes through once that handle is
-// closed. Elsewhere an open handle is no obstacle and the first attempt is
-// the one that counts.
+// closed. Elsewhere an open handle is no obstacle, yet Do retries there
+// too: the refusal has no portable error value, so every failure is tried
+// again unless it can never be one, a missing file or one of the few that
+// last (a read-only file system, a full disk: lasting), which Do returns
+// at once.
 package fsretry
 
 import (
 	"errors"
 	"io/fs"
 	"os"
+	"syscall"
 	"time"
 )
 
@@ -26,16 +30,40 @@ var Waits = []time.Duration{
 	200 * time.Millisecond,
 }
 
-// Do runs op until it succeeds, fails because the file does not exist, or
-// has failed len(Waits)+1 times, and returns op's last error. Any other
-// error is tried again: the refusal has no portable error value (a sharing
-// violation, or access denied when a rename would replace the open file),
-// so an error that lasts, such as a missing permission, is returned only
-// after all the waits.
+// lasting are the failures that no open handle causes and no wait ends:
+// the file system is read-only, full or over the quota, the rename crosses
+// file systems, or a name is not the directory or the file it is taken
+// for. These are the values of Unix systems; Windows reports its own codes
+// (ERROR_DISK_FULL, ERROR_NOT_SAME_DEVICE, ...), which Do retries with the
+// rest, except ENOTDIR, which is ERROR_PATH_NOT_FOUND there and so a
+// missing file.
+var lasting = []error{syscall.EROFS, syscall.ENOSPC, syscall.EDQUOT, syscall.EXDEV, syscall.ENOTDIR, syscall.EISDIR}
+
+// final reports whether Do returns err without another attempt: success,
+// a file that does not exist, or a failure of lasting.
+func final(err error) bool {
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return true
+	}
+	for _, l := range lasting {
+		if errors.Is(err, l) {
+			return true
+		}
+	}
+	return false
+}
+
+// Do runs op until it succeeds, fails because the file does not exist or
+// for a reason of lasting, or has failed len(Waits)+1 times, and returns
+// op's last error. Any other error is tried again: the refusal has no
+// portable error value (a sharing violation, or access denied when a
+// rename would replace the open file), so an error that lasts but could
+// be one, such as a missing permission, is returned only after all the
+// waits.
 func Do(op func() error) error {
 	err := op()
 	for _, wait := range Waits {
-		if err == nil || errors.Is(err, fs.ErrNotExist) {
+		if final(err) {
 			return err
 		}
 		time.Sleep(wait)
