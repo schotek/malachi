@@ -309,11 +309,29 @@ public sealed class SuggestionsControllerTests
         var unnamedBook = SuggestionRow.For(Andy with { Book = null });
         Assert.Equal("Address book", unnamedBook.Tooltip);
         Assert.Equal("", SuggestionRow.For(Ann with { Name = "" }).Secondary);
-        // Windows-only: cleaned for display (DisplayText); a name of nothing
-        // but controls is no name.
+        // Windows-only: cleaned for display (DisplayText).
         Assert.Equal(new SuggestionRow(Text.DisplayTextTests.CleanedName, "ann@example.org", "document-open-recent-symbolic", "Recently used"),
             SuggestionRow.For(Ann with { Name = Text.DisplayTextTests.HostileName, Address = "ann@example.org\u202E" }));
-        Assert.Equal("ann@example.org", SuggestionRow.For(Ann with { Name = "\u202E\u0007" }).Primary);
+    }
+
+    [Theory]
+    // GTK's test (c.Name != "") on the cleaned name, which is not trimmed:
+    // spaces are a name, and so are controls, which cleaning makes spaces.
+    [InlineData("   ", "   ", "ann@example.org")]
+    [InlineData("\u202E\u0007", " ", "ann@example.org")]
+    [InlineData(" Ann ", " Ann ", "ann@example.org")]
+    // Windows-only: nothing left once cleaned, or nothing but characters
+    // that draw nothing (the marks, ZWSP, WJ, BOM), is no name: the address
+    // shows.
+    [InlineData("", "ann@example.org", "")]
+    [InlineData("\u202E\u2066", "ann@example.org", "")]
+    [InlineData("\u200F", "ann@example.org", "")]
+    [InlineData("\u200E\u061C\u200B\u2060\uFEFF", "ann@example.org", "")]
+    public void ARowIsNamedAsGtkNamesIt(string name, string primary, string secondary)
+    {
+        var row = SuggestionRow.For(Ann with { Name = name });
+        Assert.Equal(primary, row.Primary);
+        Assert.Equal(secondary, row.Secondary);
     }
 
     /// <summary>What contact.search answers, and what it was asked.</summary>

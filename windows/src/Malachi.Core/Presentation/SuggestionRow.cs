@@ -6,10 +6,14 @@
 // draws (tableView(_:viewFor:row:)): what one suggestion shows. Every text is
 // untrusted (a name, an address, an address book's name) and is shown as
 // plain text, the name and the address cleaned for display (DisplayText,
-// Windows-only; a collected name can be one a sender chose). A name counts
-// when it is not empty once cleaned and trimmed, as Swift trims it (GTK
-// only tests for empty), so a name of controls shows the address.
-// Accepting a suggestion inserts the contact as received, not these texts.
+// Windows-only; a collected name can be one a sender chose). GTK's test
+// for a name (c.Name != "") is kept, applied to the cleaned name, which is
+// not trimmed (Swift trims it first): a name of spaces, or of controls,
+// which cleaning turns into spaces, is a name, shown blank over the
+// address, as in GTK. A name that cleaning empties (only bidi controls) or
+// that draws nothing (DisplayText.IsInvisible: a mark, ZWSP, a joiner)
+// is none, so the address shows. Accepting a suggestion inserts the
+// contact as received, not these texts.
 
 using System;
 using Malachi.Core.Api;
@@ -32,9 +36,9 @@ public sealed record SuggestionRow(string Primary, string Secondary, string Icon
     public static SuggestionRow For(Contact contact)
     {
         ArgumentNullException.ThrowIfNull(contact);
-        var name = DisplayText.Clean(contact.Name).Trim();
+        var name = DisplayText.Clean(contact.Name);
         var address = DisplayText.Clean(contact.Address);
-        var named = name.Length > 0;
+        var named = !DisplayText.IsInvisible(name);
         return new SuggestionRow(
             named ? name : address,
             named ? address : "",
