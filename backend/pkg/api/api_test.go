@@ -76,11 +76,11 @@ func TestPreferencesJSON(t *testing.T) {
 		t.Fatalf("nil fields: %s, want %s", raw, want)
 	}
 	zero := old
-	zero.CompressStore, zero.AttachmentOfflineDays = Ptr(false), Ptr(0)
+	zero.CompressStore, zero.AttachmentOfflineDays, zero.NeverStoreAttachments = Ptr(false), Ptr(0), Ptr(false)
 	if raw, err = json.Marshal(zero); err != nil {
 		t.Fatal(err)
 	}
-	if want := `{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,"compressStore":false,"attachmentOfflineDays":0}`; string(raw) != want {
+	if want := `{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,"compressStore":false,"attachmentOfflineDays":0,"neverStoreAttachments":false}`; string(raw) != want {
 		t.Fatalf("false and 0: %s, want %s", raw, want)
 	}
 
@@ -88,7 +88,7 @@ func TestPreferencesJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"preferences":{"syncIntervalSeconds":0,"remoteContent":"allow","offlineDays":0}}`), &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Preferences.CompressStore != nil || p.Preferences.AttachmentOfflineDays != nil {
+	if p.Preferences.CompressStore != nil || p.Preferences.AttachmentOfflineDays != nil || p.Preferences.NeverStoreAttachments != nil {
 		t.Fatalf("absent fields decoded as set: %+v", p.Preferences)
 	}
 	if err := json.Unmarshal([]byte(`{"preferences":{"remoteContent":"block","compressStore":false,"attachmentOfflineDays":-1}}`), &p); err != nil {

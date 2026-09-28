@@ -619,16 +619,19 @@ type Attachment struct {
 	Inline      bool   `json:"inline"` // referenced from the HTML body via cid:
 	ContentID   string `json:"contentId,omitempty"`
 	// Remote: the part's data is not stored on this device, only on the
-	// mail server (Preferences.AttachmentOfflineDays); message.download
-	// fetches it. Set only once the body is fetched; name, type and size
-	// are those of the original part.
+	// mail server (Preferences.AttachmentOfflineDays,
+	// Preferences.NeverStoreAttachments); message.download fetches it —
+	// into the store, or under NeverStoreAttachments into the daemon's
+	// memory, where the part stays Remote. Set only once the body is
+	// fetched; name, type and size are those of the original part.
 	Remote bool `json:"remote,omitempty"`
 }
 
 // LargeAttachmentMinBytes is the decoded size from which an attachment may
-// be kept on the server only (Preferences.AttachmentOfflineDays). Smaller
-// parts, the text and HTML bodies and the pictures the HTML shows are
-// always stored.
+// be kept on the server only under Preferences.AttachmentOfflineDays.
+// Smaller parts, the text and HTML bodies and the pictures the HTML shows
+// are stored. Under Preferences.NeverStoreAttachments no attachment is
+// stored, and a picture the HTML shows only when it is smaller than this.
 const LargeAttachmentMinBytes = 100 << 10
 
 // Message is the full header view of a message (message.get).
@@ -789,6 +792,13 @@ type MessageBodyResult struct {
 	// InlineParts maps the Content-IDs whose cid: references survived in
 	// HTML to their attachment PartIDs.
 	InlineParts map[string]string `json:"inlineParts,omitempty"`
+	// RemotePictures counts the pictures of InlineParts kept on the mail
+	// server only (Preferences.NeverStoreAttachments leaves the ones of
+	// LargeAttachmentMinBytes and more there) and not available on this
+	// device now: message.part answers partNotDownloaded for them until
+	// message.download has fetched the message, after which a client asks
+	// for the body again. 0 when every picture can be shown.
+	RemotePictures int `json:"remotePictures,omitempty"`
 	// RemoteContent is the policy that was applied, after the stored
 	// preference, the per-call override and the known-senders list were
 	// resolved: "block" or "allow", never "knownSenders". A client offers
@@ -858,8 +868,11 @@ type MessageDownloadParams struct {
 }
 
 // MessageDownloadResult is the message as message.get reports it after the
-// download: no attachment is Remote any more. Part ids may differ from
-// before for Microsoft 365 accounts, whose server rebuilds the MIME.
+// download: no attachment is Remote any more, except under
+// Preferences.NeverStoreAttachments, where the parts stay Remote and are
+// served from the daemon's memory while the message is held there. Part ids
+// may differ from before for Microsoft 365 accounts, whose server rebuilds
+// the MIME.
 type MessageDownloadResult struct {
 	Message Message `json:"message"`
 }
@@ -1350,6 +1363,13 @@ type Preferences struct {
 	// in the last N days, the older ones stay on the server
 	// (Attachment.Remote); AttachmentOfflineNone (-1) keeps no large one.
 	AttachmentOfflineDays *int `json:"attachmentOfflineDays,omitempty"`
+	// NeverStoreAttachments stores no attachment of any size, and of the
+	// pictures the HTML shows only those smaller than
+	// LargeAttachmentMinBytes (MessageBodyResult.RemotePictures counts the
+	// others); message.download then keeps the downloaded message in the
+	// daemon's memory only, until it quits. It overrides
+	// AttachmentOfflineDays. Default false, from no environment variable.
+	NeverStoreAttachments *bool `json:"neverStoreAttachments,omitempty"`
 }
 
 // Ptr returns a pointer to v, for the optional Preferences fields.
