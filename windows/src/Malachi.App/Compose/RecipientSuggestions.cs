@@ -17,12 +17,17 @@
 // TextBox and before the window's accelerators) hands Down, Up, Enter, Tab
 // and Escape to the controller while the popup shows; Shift+Tab is GTK's
 // ISO_Left_Tab and goes on. The popup is outside the window's tree, so it
-// takes the row's theme when it opens.
+// takes the row's theme when it opens. Nor does UI Automation find it
+// there, and the keyboard never leaves the row: the row tells Narrator
+// politely which suggestion is selected when the popup opens and whenever
+// the selection moves to another address (a Windows addition; Orca follows
+// GTK's popover list on its own).
 
 using System;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -39,6 +44,9 @@ internal sealed class RecipientSuggestions : IDisposable
     private readonly SuggestionList list = new();
     private readonly Popup popup;
     private bool disposed;
+
+    // The suggestion last told to Narrator; empty while the popup is hidden.
+    private string announced = "";
 
     /// <summary>Attaches the popup of <paramref name="controller"/> to <paramref name="field"/>.</summary>
     public RecipientSuggestions(TextBox field, SuggestionsController controller)
@@ -96,6 +104,7 @@ internal sealed class RecipientSuggestions : IDisposable
         if (!controller.IsVisible)
         {
             popup.IsOpen = false;
+            announced = "";
             return;
         }
         if (field.XamlRoot is null)
@@ -107,6 +116,27 @@ internal sealed class RecipientSuggestions : IDisposable
         list.Width = Math.Max(field.ActualWidth, 160);
         list.Show(controller.Rows, controller.SelectedIndex);
         popup.IsOpen = true;
+        Announce();
+    }
+
+    // The selected suggestion, said once per address (typing on keeps the
+    // same one quiet).
+    private void Announce()
+    {
+        var i = controller.SelectedIndex;
+        if (i < 0 || i >= controller.Rows.Count)
+        {
+            return;
+        }
+        var label = SuggestionList.SpokenLabel(controller.Rows[i]);
+        if (string.Equals(label, announced, StringComparison.Ordinal))
+        {
+            return;
+        }
+        announced = label;
+        var peer = FrameworkElementAutomationPeer.FromElement(field) ?? FrameworkElementAutomationPeer.CreatePeerForElement(field);
+        peer?.RaiseNotificationEvent(
+            AutomationNotificationKind.Other, AutomationNotificationProcessing.MostRecent, label, "io.github.schotek.Malachi.suggestion");
     }
 
     // accept: the row gets the new text, the caret after the separator.

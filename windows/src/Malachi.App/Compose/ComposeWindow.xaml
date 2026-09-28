@@ -192,9 +192,7 @@ A compose window, top to bottom as compose.blp:
                 AllowDrop="True"
                 DragOver="OnEditorDragOver"
                 Drop="OnEditorDrop"
-                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                BorderThickness="0,1,0,1" />
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}" />
 
             <!-- attachments_box -->
             <local:AttachmentChipsView

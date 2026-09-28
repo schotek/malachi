@@ -28,10 +28,20 @@ public sealed partial class SuggestionList : UserControl
         {
             if (args.Item is SuggestionRow row)
             {
-                // Windows-only string: the name and the address, joined for Narrator.
-                AutomationProperties.SetName(args.ItemContainer, row.Secondary.Length > 0 ? row.Primary + ", " + row.Secondary : row.Primary);
+                AutomationProperties.SetName(args.ItemContainer, SpokenLabel(row));
             }
         };
+    }
+
+    /// <summary>
+    /// What Narrator says for <paramref name="row"/>: the name and the
+    /// address.
+    /// </summary>
+    public static string SpokenLabel(SuggestionRow row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        // Windows-only string: the name and the address, joined for Narrator.
+        return row.Secondary.Length > 0 ? row.Primary + ", " + row.Secondary : row.Primary;
     }
 
     /// <summary>A row was clicked, with its index (rowClicked, row-activated).</summary>
