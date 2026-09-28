@@ -314,7 +314,10 @@ whether a reader had the file open at the last attempt), for a later pass
 or the sweep. A commit whose new file did not take the stored one's name,
 whatever the cause (a reader the daemon does not count, such as another
 program or a virus scanner, or a new file that could not be written),
-undoes its first phase, the stored file being as it was; and of a
+undoes its first phase, the stored file being as it was; one whose
+rename failed with the new file gone from its temporary name keeps it,
+since that rename may have gone through (a reply lost on a network file
+system); and of a
 message left with both variants a reader takes the newer, the one the
 sweep keeps. A deletion removes the files once its rows are committed,
 and a message a writer holds at that moment is removed by that writer
@@ -1254,7 +1257,8 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
 - Message body storage: **decided**. The raw RFC 822 message is a file
   under `<data dir>/messages/<account>/<id>` (`0600` in a `0700` per-account
   directory, removed with the folder or the account; one that outlives its
-  row is swept by `core.Maintain` once it is a day old); the parsed plain
+  row is swept by the raw maintenance of `core.Maintain` once it is an
+  hour old, §3.1); the parsed plain
   text, the curated headers and the attachment metadata live in SQLite
   (`messages.text_body` and friends). HTML is never stored separately:
   `message.body` re-parses the raw file and sanitises on demand, so a
