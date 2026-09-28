@@ -53,7 +53,7 @@ internal sealed class NetLog
     private readonly string text;
 
     private NetLog(string text, int eventCount, IReadOnlyList<string> lookups, IReadOnlyList<string> requestedHosts,
-        IReadOnlyList<string> tcpConnects, IReadOnlyList<string> udpConnects, IReadOnlyList<string> urlRequests)
+        IReadOnlyList<string> tcpConnects, IReadOnlyList<string> udpConnects, IReadOnlyList<UrlRequest> urlRequests)
     {
         this.text = text;
         EventCount = eventCount;
@@ -79,8 +79,8 @@ internal sealed class NetLog
     /// <summary>UDP socket connects, with their address and error ("ok" when none).</summary>
     public IReadOnlyList<string> UdpConnects { get; }
 
-    /// <summary>The URL of every URL request the network stack started.</summary>
-    public IReadOnlyList<string> UrlRequests { get; }
+    /// <summary>Every URL request the network stack started, with its initiator.</summary>
+    public IReadOnlyList<UrlRequest> UrlRequests { get; }
 
     /// <summary>
     /// Whether <paramref name="value"/> appears anywhere in the log (any
@@ -128,7 +128,7 @@ internal sealed class NetLog
             var hosts = new List<string>();
             var tcp = new List<string>();
             var udp = new List<string>();
-            var urls = new List<string>();
+            var urls = new List<UrlRequest>();
             var udpAddress = new Dictionary<long, string>();
             var count = 0;
             foreach (var e in root.GetProperty("events").EnumerateArray())
@@ -176,7 +176,7 @@ internal sealed class NetLog
                 }
                 else if (name == UrlRequestStart && Param("url") is { } url)
                 {
-                    urls.Add(url);
+                    urls.Add(new UrlRequest(url, Param("initiator")));
                 }
             }
             return new NetLog(text, count, lookups, hosts, tcp, udp, urls);

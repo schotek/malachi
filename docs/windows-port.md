@@ -505,7 +505,9 @@ authoritative):
   runtime that ignored them would still have the request gate below. The
   automated canary (§12) proves them on every runtime. The rule maps the
   proxy's own address too, so WebView2's background requests
-  (`config.edge.skype.com`) fail at the proxy's name, before any socket; the
+  (`config.edge.skype.com` at once, and `edge.microsoft.com`'s component
+  updater about a minute after the browser started) fail at the proxy's
+  name, before any socket; the
   one socket the NetLog shows is Chromium's IPv6 reachability probe, a UDP
   connect to a Microsoft address that fails at once and sends nothing;
 - `--disable-smooth-scrolling` as well: GTK's viewer turns WebKit's scroll
@@ -2013,7 +2015,12 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   requests were made, every one mapped to `~notfound`, no resolver job,
   and no DNS canary name appears anywhere in the log); no TCP connection
   was attempted and every UDP connect failed; no URL request was started
-  but WebView2's own background ones (runtime 153: `config.edge.skype.com`),
+  but WebView2's own background ones (runtime 153: `config.edge.skype.com`,
+  and the component updater's check at `edge.microsoft.com`, which comes
+  about a minute after the browser started and so only in a run slowed
+  down by a busy machine), each started by the browser (the NetLog's
+  initiator, which the control run shows is the page's for a page's
+  request) to a host and path the test names,
   which checks the gate, the CSP and SmartScreen apart from the resolver
   rule that would hide what passed them (what only that rule stops, by
   design, is a cancelled navigation's speculative preconnect, which starts
@@ -2272,7 +2279,10 @@ new one none); and the tests against the real `malachid.exe`
 which failed together once while other builds kept the machine busy)
 give it three times the app's limits, 45 s to listen and 15 s for the
 first handshake (`RealDaemon.StartLimit` and `HandshakeLimit`), since only
-the start of a real process has to be waited for.
+the start of a real process has to be waited for. The network canary,
+which CI skips, names the background request its browser makes about a
+minute after it started (§12), which a run slowed down by a busy machine
+lasts long enough to meet.
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in

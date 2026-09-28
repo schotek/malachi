@@ -32,12 +32,19 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
     private static readonly string[] ControlLeaks =
         ["img", "css-bg-inline", "link-stylesheet", "link-preconnect", "link-prerender", "iframe", "nav", "form", "refresh"];
 
-    // The hosts of WebView2's own background requests, which the network
-    // stack starts whatever the page does (and the resolver rule stops):
-    // runtime 153 fetches its configuration from config.edge.skype.com. A
-    // runtime that adds one fails NothingPassedTheGate until it is named
-    // here after a look at what it is.
-    private static readonly string[] WebView2BackgroundHosts = ["config.edge.skype.com"];
+    // WebView2's own background requests, which the browser starts whatever
+    // the page does (and the resolver rule and the dead proxy stop): runtime
+    // 153 fetches its configuration from config.edge.skype.com at once, and
+    // about a minute after it started asks edge.microsoft.com's component
+    // updater for updates of its components (a CUP2-signed POST, failed at
+    // the proxy's name like the other), which a run lasts long enough to see
+    // only on a busy machine. The NetLog gives both "not an origin" as their
+    // initiator, where a page's request has the page's origin (the control
+    // run checks that), so a page's request to one of them is not taken for
+    // the browser's. A runtime that adds one fails NothingPassedTheGate
+    // until its host and path are named here after a look at what it is.
+    private static readonly (string Host, string Path)[] WebView2BackgroundRequests =
+        [("config.edge.skype.com", "/config/"), ("edge.microsoft.com", "/componentupdater/")];
 
     [Fact]
     public void TheViewsRanEveryStep()
@@ -110,7 +117,8 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
 
     // The resolver rule hides whatever reaches the network stack, so the
     // inner layers are checked on their own: no URL request was started but
-    // WebView2's own background ones. Every request of the pages, a cancelled
+    // WebView2's own background ones, started by the browser to a host and
+    // path named above. Every request of the pages, a cancelled
     // navigation's or a prerender's included, was answered by the gate (or
     // blocked by the CSP) before it became one, and SmartScreen
     // (IsReputationCheckingRequired=false) sent nothing about the clicked
@@ -122,10 +130,9 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
     {
         var log = ProtectedLog();
         Assert.NotEmpty(log.UrlRequests);
-        Assert.All(log.UrlRequests, url => Assert.True(
-            Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps
-                && WebView2BackgroundHosts.Contains(u.Host, StringComparer.OrdinalIgnoreCase),
-            "a URL request past the gate: " + url));
+        Assert.All(log.UrlRequests, request => Assert.True(
+            IsWebView2Background(request),
+            "a URL request past the gate: " + request.Url + " (initiator " + (request.Initiator ?? "none") + ")"));
     }
 
     [Fact]
@@ -318,12 +325,16 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         var reached = control.Canaries.Values.Where(c => c.Hits.Count > 0).Select(c => c.Vector).ToHashSet();
         Assert.All(ControlLeaks, vector => Assert.Contains(vector, reached));
         // The NetLog checks see what they look for: connections, URL
-        // requests to the canaries, and the DNS canaries' names.
+        // requests to the canaries, each with the initiator of the page
+        // that made it (so NothingPassedTheGate cannot take it for the
+        // browser's own), and the DNS canaries' names.
         Assert.True(control.NetLog is not null, "the control run wrote no NetLog" + (control.NetLogError is { } e ? " (" + e + ")" : ""));
         var log = control.NetLog!;
         Assert.NotEmpty(log.TcpConnects);
         var ports = control.Canaries.Values.Select(c => ":" + c.Port.ToString(System.Globalization.CultureInfo.InvariantCulture) + "/").ToArray();
-        Assert.Contains(log.UrlRequests, url => ports.Any(p => url.Contains(p, StringComparison.Ordinal)));
+        var toCanaries = log.UrlRequests.Where(r => ports.Any(p => r.Url.Contains(p, StringComparison.Ordinal))).ToList();
+        Assert.NotEmpty(toCanaries);
+        Assert.All(toCanaries, r => Assert.True(r.Initiator is not null && !r.IsBrowsersOwn, "a page's request without the page as its initiator: " + r.Url));
         var hosts = HostileDocuments.DnsHosts(fixture.RunId);
         Assert.True(log.Mentions(hosts[0]), "the control run's NetLog does not name " + hosts[0]);
         Assert.True(log.Mentions(hosts[1]), "the control run's NetLog does not name " + hosts[1]);
@@ -449,6 +460,14 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.True(log.EventCount > 0, "the NetLog is empty");
         return log;
     }
+
+    // A background request of WebView2 (WebView2BackgroundRequests): the
+    // browser's own, over HTTPS, to a named host and path.
+    private static bool IsWebView2Background(UrlRequest request) =>
+        request.IsBrowsersOwn
+        && Uri.TryCreate(request.Url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps
+        && WebView2BackgroundRequests.Any(r => string.Equals(u.Host, r.Host, StringComparison.OrdinalIgnoreCase)
+            && u.AbsolutePath.StartsWith(r.Path, StringComparison.Ordinal));
 
     // The navigation of the view's own document, allowed.
     private static bool IsOwnDocument(HostEvent e, string view) =>
