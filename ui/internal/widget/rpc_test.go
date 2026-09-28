@@ -22,6 +22,11 @@ func TestRPCErrorText(t *testing.T) {
 		api.CodeServerTimeout: "did not respond",
 		api.CodeKeyringError:  "keyring",
 		api.CodeConflict:      "conflicted",
+		// Attachments on demand (message.download, message.part).
+		api.CodeOffline:           "no network connection",
+		api.CodeUnavailable:       "try again in a moment",
+		api.CodePartNotDownloaded: "not on this computer",
+		api.CodeMessageGone:       "no longer on the server",
 	}
 	for code, want := range cases {
 		got := RPCErrorText("Testing", api.NewError(code, "detail"))
@@ -37,6 +42,21 @@ func TestRPCErrorText(t *testing.T) {
 	}
 	if got := RPCErrorText("Testing", api.NewError(9999, "x")); got != "Testing failed" {
 		t.Errorf("unknown: %q", got)
+	}
+	if got := RPCErrorText("Opening the attachment", api.NewError(api.CodeMessageGone, "expunged")); got != "Opening the attachment failed: the message is no longer on the server" {
+		t.Errorf("messageGone: %q", got)
+	}
+	// An older daemon without the method reads like one with a stub.
+	for _, code := range []api.ErrorCode{api.CodeNotImplemented, api.CodeMethodNotFound} {
+		if got := RPCErrorText("Measuring the disk space", api.NewError(code, "x")); got != "Measuring the disk space is not available yet" {
+			t.Errorf("%v: %q", code, got)
+		}
+	}
+	// A part of a message is an attachment too.
+	for _, code := range []api.ErrorCode{api.CodeAttachmentNotFound, api.CodePartNotFound} {
+		if got := RPCErrorText("Opening the attachment", api.NewError(code, "x")); got != "The attachment no longer exists" {
+			t.Errorf("%v: %q", code, got)
+		}
 	}
 }
 

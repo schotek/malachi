@@ -36,7 +36,7 @@ func RPCErrorText(what string, err error) string {
 		return fmt.Sprintf(i18n.T("%s timed out"), what)
 	case errors.As(err, &e):
 		switch e.Code {
-		case api.CodeNotImplemented:
+		case api.CodeNotImplemented, api.CodeMethodNotFound: // an older daemon lacks the method
 			return fmt.Sprintf(i18n.T("%s is not available yet"), what)
 		case api.CodeConflict:
 			return fmt.Sprintf(i18n.T("%s conflicted with another change"), what)
@@ -44,7 +44,7 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s was rejected: %s"), what, e.Message)
 		case api.CodeDraftNotFound:
 			return i18n.T("The draft no longer exists")
-		case api.CodeAttachmentNotFound:
+		case api.CodeAttachmentNotFound, api.CodePartNotFound: // of a draft, or of a message
 			return i18n.T("The attachment no longer exists")
 		case api.CodeAttachmentTooBig:
 			return i18n.T("The attachment is too big")
@@ -72,6 +72,16 @@ func RPCErrorText(what string, err error) string {
 			return fmt.Sprintf(i18n.T("%s failed: the secure connection could not be established"), what)
 		case api.CodeServerTimeout:
 			return fmt.Sprintf(i18n.T("%s failed: the server did not respond in time"), what)
+		case api.CodeOffline:
+			// TRANSLATORS: %s is an action such as "Opening the attachment".
+			return fmt.Sprintf(i18n.T("%s failed: no network connection"), what)
+		case api.CodeUnavailable:
+			// A paused account, or a move the server has not seen yet.
+			return fmt.Sprintf(i18n.T("%s failed: try again in a moment"), what)
+		case api.CodePartNotDownloaded:
+			return fmt.Sprintf(i18n.T("%s failed: the attachment is not on this computer"), what)
+		case api.CodeMessageGone:
+			return fmt.Sprintf(i18n.T("%s failed: the message is no longer on the server"), what)
 		}
 	}
 	return fmt.Sprintf(i18n.T("%s failed"), what)

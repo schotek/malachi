@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Settings() registers the gschema defaults with UserDefaults.standard.
         let settings = Settings()
         // Attachments a previous run wrote for opening (docs/security.md §8).
-        OpenDir.default.removeAll()
+        purgeOpenDir()
 
         let paths = Paths.resolve()
         do {
@@ -92,18 +92,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Quitting stops the daemon this app started (up to 15 s while its
     /// syncers log out), off the main thread so the windows stay
     /// responsive; "Run in Background" keeps everything alive by hiding
-    /// the window instead.
+    /// the window instead. The attachments written for opening go first,
+    /// as ui/main.go's shutdown removes them before it stops the daemon,
+    /// so a quit that never completes (a force quit or a logout that gives
+    /// up during the wait) leaves none behind; `applicationWillTerminate`
+    /// takes one whose write was still in flight.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        purgeOpenDir()
         guard let state else {
-            OpenDir.default.removeAll()
             return .terminateNow
         }
         Task { @MainActor in
             await state.connection.stop()
-            OpenDir.default.removeAll()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+
+    /// The last step before the process exits, whichever way the quit was
+    /// answered: the directory for opening once more, for a file that
+    /// landed while the daemon stopped.
+    func applicationWillTerminate(_ notification: Foundation.Notification) {
+        purgeOpenDir()
+    }
+
+    /// Removes the attachments written for opening or previewing
+    /// (`OpenDir.removeAll`; ui/main.go and attachments.go
+    /// `SweepOpenedAttachments`): at start (what a previous run or a crash
+    /// left) and at quit, whatever the preferences say, so nothing opened
+    /// or previewed outlives the session, which is also what Never Store
+    /// Attachments promises. A failure is logged; its description may name
+    /// the directory, hence private.
+    private func purgeOpenDir() {
+        do {
+            try OpenDir.default.removeAll()
+        } catch {
+            let ns = error as NSError
+            log.warning("removing the attachments written for opening: \(ns.domain, privacy: .public) \(ns.code, privacy: .public): \(String(describing: error), privacy: .private)")
+        }
     }
 
     /// Closing the last window quits unless "Run in Background" is on

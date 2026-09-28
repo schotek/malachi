@@ -39,6 +39,8 @@ type EmbeddedWindow struct {
 
 	key embeddedKey
 	acc api.AccountID
+	// att is the attached message's part, for asking again (Load Images).
+	att api.Attachment
 
 	// closed is set from close-request so a late reply is dropped.
 	closed bool
@@ -80,28 +82,34 @@ func (w *Window) fetchEmbedded(ctx context.Context, acc api.AccountID, id api.Me
 // openEmbeddedWindow shows the attached message a of message id in its own
 // window, or raises the window already showing it. Nothing changes on
 // screen while the daemon renders; a failure is a toast where the chip is.
-func (v *messageView) openEmbeddedWindow(acc api.AccountID, id api.MessageID, a api.Attachment) {
+// An attached message on the mail server only (remote) is downloaded
+// first, the chips showing the wait (embeddedData).
+func (v *messageView) openEmbeddedWindow(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
 	w := v.win
-	key := embeddedKey{id: id, part: a.PartID}
-	if ew, ok := w.openEmbedded[key]; ok {
+	if ew, ok := w.openEmbedded[embeddedKey{id: id, part: a.PartID}]; ok {
 		ew.Present()
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
-		defer cancel()
-		res, err := w.fetchEmbedded(ctx, acc, id, a.PartID, "")
+		res, err := w.embeddedData(acc, id, a, remote, "")
 		glib.IdleAdd(func() {
 			if err != nil {
 				w.log.Warn("message.embedded", "part", a.PartID, "err", err)
 				v.say(widget.RPCErrorText(i18n.T("Opening the attached message"), err))
 				return
 			}
+			// The part the daemon rendered: after a download its number may
+			// have changed (partAfterDownload).
+			att := a
+			if res.PartID != "" {
+				att.PartID = res.PartID
+			}
+			key := embeddedKey{id: id, part: att.PartID}
 			if ew, ok := w.openEmbedded[key]; ok {
 				ew.Present() // a second click overtook the first
 				return
 			}
-			ew := newEmbeddedWindow(w, acc, key, res)
+			ew := newEmbeddedWindow(w, acc, key, att, res)
 			w.openEmbedded[key] = ew
 			ew.ConnectCloseRequest(func() bool {
 				ew.closed = true
@@ -114,15 +122,16 @@ func (v *messageView) openEmbeddedWindow(acc api.AccountID, id api.MessageID, a 
 	}()
 }
 
-// newEmbeddedWindow builds the window for res. Like the other windows it
-// only displays what it is given: plain labels, and the HTML view gets the
-// sanitiser's output only.
-func newEmbeddedWindow(w *Window, acc api.AccountID, key embeddedKey, res *api.MessageEmbeddedResult) *EmbeddedWindow {
+// newEmbeddedWindow builds the window for res, the attached message att.
+// Like the other windows it only displays what it is given: plain labels,
+// and the HTML view gets the sanitiser's output only.
+func newEmbeddedWindow(w *Window, acc api.AccountID, key embeddedKey, att api.Attachment, res *api.MessageEmbeddedResult) *EmbeddedWindow {
 	b := data.Builder("embedded_window.ui")
 	ew := &EmbeddedWindow{
 		Window: b.GetObject("embedded_window").Cast().(*adw.Window),
 		key:    key,
 		acc:    acc,
+		att:    att,
 		title:  b.GetObject("window_title").Cast().(*adw.WindowTitle),
 		toasts: b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 	}
@@ -153,6 +162,8 @@ func (ew *EmbeddedWindow) show(res *api.MessageEmbeddedResult) {
 
 // loadImages is the bar's Load Images: message.embedded again with remote
 // images allowed for this one call, shown in place of what is on display.
+// Should the daemon have moved the attached message to the server since,
+// it is downloaded again (embeddedData).
 func (ew *EmbeddedWindow) loadImages() {
 	if ew.loading {
 		return
@@ -161,9 +172,7 @@ func (ew *EmbeddedWindow) loadImages() {
 	ew.view.showRemoteBar(remoteBarState{visible: true, loading: true})
 	w := ew.view.win
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
-		defer cancel()
-		res, err := w.fetchEmbedded(ctx, ew.acc, ew.key.id, ew.key.part, api.RemoteAllow)
+		res, err := w.embeddedData(ew.acc, ew.key.id, ew.att, false, api.RemoteAllow)
 		glib.IdleAdd(func() {
 			ew.loading = false
 			if ew.closed {
@@ -175,6 +184,11 @@ func (ew *EmbeddedWindow) loadImages() {
 				// The bar offers the images again.
 				renderRemoteBar(ew.view, &loadedMessage{body: &ew.shown.Body})
 				return
+			}
+			// The part the daemon rendered: a download on the way may have
+			// changed its number (partAfterDownload).
+			if res.PartID != "" {
+				ew.att.PartID = res.PartID
 			}
 			ew.show(res)
 		})

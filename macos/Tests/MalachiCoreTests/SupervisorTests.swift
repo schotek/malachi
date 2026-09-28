@@ -180,4 +180,69 @@ private func tempSocket() -> String {
             #expect(env["MALACHI_KEYRING_HELPER"] == nil)
         }
     }
+
+    /// The daemon of the app compresses its store and keeps the large
+    /// attachments of the last 30 days (docs/api.md §4.8), whatever the
+    /// keyring; values already in the environment win, an empty one
+    /// counts as none.
+    @Test func environmentSetsStorageDefaults() throws {
+        let helper = try script(named: "malachi-keychain", "#!/bin/sh\nexit 0\n")
+        let daemon = helper.deletingLastPathComponent().appendingPathComponent("malachid")
+        let withHelper = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d", keychainHelper: helper)
+        let without = DaemonSupervisor.Launch(executable: daemon, socket: "/tmp/s", config: "/tmp/c", store: "/tmp/d")
+        let base = ["HOME": "/Users/u"]
+
+        for launch in [withHelper, without] {
+            let env = DaemonSupervisor.environment(base: base, launch: launch)
+            #expect(env["MALACHI_DEFAULT_COMPRESS_STORE"] == "1")
+            #expect(env["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "30")
+            #expect(env["HOME"] == "/Users/u")
+        }
+
+        // Set before the keyring's early return: a developer's
+        // MALACHI_KEYRING keeps them.
+        var keyring = base
+        keyring["MALACHI_KEYRING"] = "none"
+        let env = DaemonSupervisor.environment(base: keyring, launch: withHelper)
+        #expect(env["MALACHI_KEYRING"] == "none")
+        #expect(env["MALACHI_DEFAULT_COMPRESS_STORE"] == "1")
+        #expect(env["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "30")
+
+        // Present values are kept, even ones the daemon will refuse.
+        var preset = base
+        preset["MALACHI_DEFAULT_COMPRESS_STORE"] = "0"
+        preset["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = "7"
+        let kept = DaemonSupervisor.environment(base: preset, launch: withHelper)
+        #expect(kept["MALACHI_DEFAULT_COMPRESS_STORE"] == "0")
+        #expect(kept["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "7")
+        #expect(kept["MALACHI_KEYRING"] == "helper")
+        preset["MALACHI_DEFAULT_COMPRESS_STORE"] = "maybe"
+        #expect(DaemonSupervisor.environment(base: preset, launch: withHelper)["MALACHI_DEFAULT_COMPRESS_STORE"] == "maybe")
+
+        // An empty value is no default to the daemon (it would fall back
+        // to off and 0): an inherited empty one gets the app's.
+        var empty = base
+        empty["MALACHI_DEFAULT_COMPRESS_STORE"] = ""
+        empty["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = ""
+        for launch in [withHelper, without] {
+            let filled = DaemonSupervisor.environment(base: empty, launch: launch)
+            #expect(filled["MALACHI_DEFAULT_COMPRESS_STORE"] == "1")
+            #expect(filled["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "30")
+        }
+        var oneEmpty = base
+        oneEmpty["MALACHI_DEFAULT_COMPRESS_STORE"] = "false"
+        oneEmpty["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = ""
+        oneEmpty["MALACHI_KEYRING"] = "none"
+        let partly = DaemonSupervisor.environment(base: oneEmpty, launch: withHelper)
+        #expect(partly["MALACHI_DEFAULT_COMPRESS_STORE"] == "false")
+        #expect(partly["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "30")
+        #expect(partly["MALACHI_KEYRING"] == "none")
+        var one = base
+        one["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] = "-1"
+        let mixed = DaemonSupervisor.environment(base: one, launch: without)
+        #expect(mixed["MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"] == "-1")
+        #expect(mixed["MALACHI_DEFAULT_COMPRESS_STORE"] == "1")
+        #expect(DaemonSupervisor.defaultCompressStoreEnv == "MALACHI_DEFAULT_COMPRESS_STORE")
+        #expect(DaemonSupervisor.defaultAttachmentOfflineDaysEnv == "MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS")
+    }
 }

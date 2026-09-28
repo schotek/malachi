@@ -43,10 +43,20 @@ const (
 	maxSessionDrafts     = 20  // create_draft per process
 	maxErrorMessageBytes = 200 // of a daemon error message forwarded to the model
 
+	// maxSessionDownloadBytes bounds what one process makes the daemon
+	// download from the mail server (message.download for get_attachment
+	// and a forward), counted by the size of the messages.
+	maxSessionDownloadBytes = 256 << 20
+
 	// maxReplacedPercent is how much of a text attachment may be invalid
 	// UTF-8 (replaced by U+FFFD) before it is refused as not text at all.
 	maxReplacedPercent = 10
 )
+
+// downloadTimeout bounds one message.download: the daemon takes up to 4
+// minutes and finishes a download the bridge gave up on, so a later call
+// finds the message whole. A variable so a test can run out of it.
+var downloadTimeout = 2 * time.Minute
 
 // untrustedNote is appended to the description of every tool whose output
 // carries mail content.

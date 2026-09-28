@@ -1,0 +1,24 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Encoded boundary parameters
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-enc@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=?utf-8?q?encoded=5Fboundary?="
+
+--=?utf-8?q?encoded=5Fboundary?=
+The line above is preamble: the boundary is the decoded word.
+--encoded_boundary
+Content-Type: text/plain
+
+The boundary parameter is an RFC 2047 encoded word.
+--encoded_boundary
+Content-Type: multipart/mixed; boundary*0="contin"; boundary*1="ued"
+
+--continued
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="cont.bin"
+
+behind an RFC 2231 continued boundary
+--continued--
+--encoded_boundary--

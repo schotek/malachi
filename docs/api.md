@@ -232,12 +232,14 @@ can read the key file.
 | 1302 | serverError | IMAP/SMTP server returned an error |
 | 1303 | tlsError | certificate or handshake problem; for IMAP/SMTP endpoints `data` = `TLSErrorData` (below) |
 | 1304 | serverTimeout | |
+| 1305 | messageGone | the mail server no longer has the message (another client deleted or moved it); the next sync removes the local copy |
 | 1400 | storageError | SQLite failure |
 | 1401 | migrationFailed | store schema could not be upgraded |
 | 1500 | malformedMessage | MIME unparsable even leniently |
 | 1501 | sanitizeFailed | sanitiser refused the body; **body is withheld**, never returned raw |
 | 1502 | attachmentTooBig | over a documented limit; `data` = `{ "limit": bytes, "size": bytes }` |
 | 1503 | partNotFound | `message.part` named a part the message does not have, or its content is no longer stored |
+| 1504 | partNotDownloaded | the part's data is not stored on this device (`Attachment.remote`); `message.download` fetches it |
 
 `tlsError` from an IMAP or SMTP endpoint (in `account.test` results and in a
 `SyncState`) carries:
@@ -324,11 +326,27 @@ The raw header block is never returned.
 
 ```jsonc
 Attachment { "partId": "2.1", "filename": "safe-name.pdf", "contentType": "application/pdf",
-             "size": 12345, "inline": false, "contentId": "…" }
+             "size": 12345, "inline": false, "contentId": "…",
+             "remote": true }   // (opt) data kept on the mail server only
 ```
 
 Filenames are sanitised by the backend (no path separators, no control or
 bidi-control characters, length-capped).
+
+`remote` is set when the part's data is not stored on this device: under
+`attachmentOfflineDays` (§4.8) the large attachments of older messages stay
+on the mail server, and under `neverStoreAttachments` every attachment the
+HTML does not show. Name, type and size are still those of the original
+part; `message.part` answers `partNotDownloaded` for it until
+`message.download` has fetched the message. It appears only on messages
+whose `bodyState` is `fetched`. A part not marked may still answer
+`partNotDownloaded`: the message was reduced since it was listed, or its
+stored file turned out to lack the part (after a crash), which marks it
+`remote` from then on. Under `neverStoreAttachments` (§4.8) a part stays
+`remote` after `message.download`: the daemon holds the downloaded message
+in memory only, and serves the part from there while it lasts. That mode
+also leaves on the server the pictures the HTML shows of 100 KiB and more
+(`message.body` `remotePictures`).
 
 ### SyncState
 
@@ -395,6 +413,45 @@ handshake (§1.4); `protocolVersion` equals hello's.
 
 - params: `{}`
 - result: `{ "version": "0.1.0", "protocolVersion": 2, "pid": 4242, "storePath": "/home/u/.local/share/malachi/store.db" }`
+
+#### `system.storage`
+How much disk the mail store uses, for the preferences dialog; cheap enough
+to poll every few seconds while it is open.
+
+- params: `{}`
+- result:
+
+```jsonc
+{
+  "totalBytes": 734003200,               // databaseBytes + messageBytes + attachmentBytes
+  "databaseBytes": 44470272,             // store.db with its -wal and -shm
+  "messageBytes": 546700000,             // the stored raw messages as they are stored
+  "messageUncompressedBytes": 909800000, // their content; equals messageBytes without compression
+  "savedBytes": 363100000,               // what compression saves (the difference of the two)
+  "attachmentBytes": 250000,             // the compose-side attachment store (§4.10)
+  "remoteAttachmentBytes": 312000000,    // decoded size of attachments kept on the server only
+  "messages": 3725,                      // messages with a stored raw file
+  "compressedMessages": 3725,
+  "partialMessages": 410,                // messages with attachments on the server only
+  "conversion": "idle"                   // idle | running | noSpace
+}
+```
+
+Byte counts are file lengths, not allocated blocks (a file system that
+compresses by itself, such as btrfs, may use less). `conversion` is the
+background pass that brings stored mail to the current `compressStore` and
+`attachmentOfflineDays`: `running` while it has work left, `noSpace` when it
+stopped because the disk is full (it tries again after any accepted
+`config.set`, even one that changes nothing, or a restart of the daemon),
+`idle` otherwise. It may say `running` for a while with nothing to do:
+from the first start of a daemon of this version until the pass has gone
+through the store once, and when what the pass works towards has moved (a
+new day under an `attachmentOfflineDays` of N days) until the pass has
+looked, which an idle daemon does every minute. Until that first pass has
+accounted for the files an older daemon stored, their bytes are estimated
+from the messages' sizes, as if uncompressed.
+
+- errors: storageError
 
 ### 4.1 account
 
@@ -911,7 +968,8 @@ keeps its id).
 
 `attachments` come from the server's `BODYSTRUCTURE` at header sync and are
 refined from the parsed MIME once the body is downloaded; `headers` is the
-curated subset parsed from the body (empty before it is downloaded).
+curated subset parsed from the body (empty before it is downloaded). An
+attachment marked `remote` is on the mail server only (§3).
 
 #### `message.body`
 **The only method that returns message content, and it returns only
@@ -933,6 +991,7 @@ sanitised content.**
                "trackingPixels": 1 },
   "links": [ { "text": "Click here", "href": "https://real.destination/…" } ],
   "inlineParts": { "image001@…": "2.1" },
+  "remotePictures": 0,                   // (opt) pictures of inlineParts kept on the server only
   "remoteContent": "block",              // the policy that was applied
   "sanitizerVersion": "1"
 }
@@ -991,11 +1050,24 @@ cap breach) or the raw message could not be read again. It is a state of
 the result, not an error: the caller shows `text`. `sanitizeFailed` as an
 error belongs to `draft.save`, where there is no text to fall back on.
 
+`remotePictures` counts the pictures of `inlineParts` that are kept on the
+mail server only and not available on this device now: under
+`neverStoreAttachments` (§4.8) a picture the HTML shows of 100 KiB or more
+is not stored. Their `malachi-cid:` URLs stay in `html`, but `message.part`
+answers `partNotDownloaded` for them, so a client offers to download them;
+after `message.download` (which under `neverStoreAttachments` holds the
+message in the daemon's memory, and otherwise stores it whole) it asks for
+the body again, and the count is 0 while the pictures are available. A
+picture the stored file turned out to lack (after a crash) counts too.
+Showing a message never makes the daemon contact the mail server.
+
 `bodyState` says whether content exists at all: `pending` (the sync engine
 has not downloaded the body yet; `text` empty), `tooBig` (over the daemon's
 raw-message cap, never downloaded), `failed` (downloaded but unparsable),
 `fetched`. Bodies are downloaded for every message within the `offlineDays`
-window; there is no on-demand fetch.
+window. Under `attachmentOfflineDays` (§4.8) the large attachments of older
+messages stay on the server (`Attachment.remote`); `message.download`
+fetches them, and a body still `pending`, when the user asks for them.
 
 Which policy applies: when `remoteContent` is omitted the stored preference
 from `config.get` is used (`block` by default; `knownSenders` resolves to
@@ -1022,7 +1094,8 @@ client cannot tell in advance.
 - errors: invalidArgument (missing ids, `partId` not a part number such as
   `2` or `1.2`), accountNotFound, messageNotFound, partNotFound (no such
   leaf part — a multipart container cannot be fetched — or the message's
-  content is no longer stored), attachmentTooBig (`data` would exceed
+  content is no longer stored), partNotDownloaded (the part is `remote`:
+  call `message.download` first), attachmentTooBig (`data` would exceed
   `api.MaxAttachmentDataBytes`; `error.data` = `{ "limit": bytes }`),
   malformedMessage, storageError
 
@@ -1030,17 +1103,24 @@ The decoded content of one MIME part of a received message, addressed by
 the `partId` that `Attachment` and `inlineParts` carry and that a
 `malachi-cid:` URL in `html` ends with. The webview's scheme handler uses it
 for inline images (and serves only `image/*` other than SVG from it);
-saving an attachment will use it too. The part is read from the raw message
-each time; nothing is cached.
+opening, previewing and saving an attachment use it too. The part is read
+from the raw message each time; nothing is cached. It never contacts the
+mail server: a `remote` part, including a picture of `inlineParts` that
+`message.body` counts in `remotePictures`, answers `partNotDownloaded` —
+unless `message.download` put the message into the daemon's memory under
+`neverStoreAttachments` (§4.8), which serves it until the copy is
+dropped.
 
 #### `message.embedded`
 - params: `{ "accountId", "messageId", "partId", "remoteContent": "block" | "allow" (opt) }`
 - result: `{ "partId", "message": Message, "body": MessageBodyResult }`
 - errors: invalidArgument (missing ids, `partId` not a part number, bad
   `remoteContent`, the part is not an attached message), accountNotFound,
-  messageNotFound, partNotFound (as in `message.part`), attachmentTooBig
-  (the part exceeds `api.MaxAttachmentDataBytes`), malformedMessage (the
-  containing message or the attached one cannot be parsed), storageError
+  messageNotFound, partNotFound (as in `message.part`), partNotDownloaded
+  (the attached message is `remote`: call `message.download` first),
+  attachmentTooBig (the part exceeds `api.MaxAttachmentDataBytes`),
+  malformedMessage (the containing message or the attached one cannot be
+  parsed), storageError
 
 An attached message — a `message/rfc822` part, or a part named `*.eml`
 (the file a mail client writes when a message is dragged into a new one) —
@@ -1068,6 +1148,70 @@ only — a client shows them by name and cannot fetch them.
 *containing* message: the attached message's own `From` is forwarded
 content, chosen by whoever attached it, and does not decide about loading
 images. Under `allow` the call may take several seconds, as `message.body`.
+
+#### `message.download`
+- params: `{ "accountId", "messageId" }`
+- result: `{ "message": Message }` (as `message.get` reports it afterwards)
+- errors: invalidArgument, accountNotFound, messageNotFound, unavailable
+  (the account is paused, or a local move of the message has not reached
+  the server yet: retry after the next sync; or the message changed twice
+  while the download was being stored, or the server refused it for the
+  moment, IMAP `[UNAVAILABLE]`, `[INUSE]` or `[LIMIT]`: try again),
+  messageGone (the server no longer has it: its mailbox or UID does not
+  exist, or its UIDVALIDITY changed; any other refusal is serverError),
+  attachmentTooBig (over the daemon's raw-message cap, `bodyState: tooBig`,
+  or announced over it by the server, which is then not read; a `pending`
+  body found over it is marked `tooBig`),
+  offline, networkError (also a transfer that broke off), serverError
+  (also a download that is not the stored message, and under
+  `neverStoreAttachments` one that lacks a part the stored message keeps
+  on the server), tlsError,
+  serverTimeout (not done within 4 minutes), authRequired, authFailed,
+  keyringError, malformedMessage (a `pending` body that does not parse is
+  marked `failed`), storageError, cancelled (the caller gave up while the
+  download goes on, or the daemon is stopping)
+
+Makes the whole message available locally: it downloads the message again
+from the account's mail server and stores it complete, so that no
+attachment is `remote` any more and `message.part`, `message.embedded`,
+Save All and a forward (`draft.create`) work on it. A body that is still
+`pending` is downloaded the same way. It only reads the mail server (IMAP
+`EXAMINE` and `BODY.PEEK`; nothing is marked read) and only on a user action
+— never because content asks, and never from the webview's `malachi-cid:`
+requests: a picture kept on the server (`message.body` `remotePictures`)
+is fetched only when the user asks for the message's pictures.
+
+A message with nothing missing answers at once, without contacting the
+server; `failed` messages answer at once too. Calls for the same message
+share one download, and an account runs at most two at a time. The
+download finishes even when the caller gives up (the call is idempotent),
+within the daemon's budget of 4 minutes; a client should wait at least
+5 minutes. A downloaded message stays complete for 7 days before the
+background pass may keep its attachments on the server again. On
+Microsoft 365 accounts the server rebuilds the message, so part ids may
+change: a client replaces the message it shows with the result.
+
+Under `neverStoreAttachments` (§4.8) nothing is written to the store: the
+downloaded message is held in the daemon's memory (at most 256 MiB for all
+such messages, the least recently used dropped first, each dropped after
+30 minutes unused, all of them when the daemon quits or the preference is
+switched off, and an account's when it is removed or paused). A message
+already held answers at once, without contacting the server, and counts as
+used. A download is held only when it has every part the stored message
+keeps on the server (a Microsoft 365 message rebuilt with such a part
+named or typed anew is not): otherwise the call is `serverError` and the
+next call downloads again. The preference applies as it is when the
+message arrives from the server; a message stored whole because it was
+switched on meanwhile loses its attachments in the background (§4.8).
+The result still marks the attachments `remote`; `message.part`,
+`message.embedded`, `draft.create` and `draft.open` take them from memory
+while the copy lasts, and answer as for any `remote` part once it is gone,
+so a client calls `message.download` again. That holds in the Drafts folder
+too: a reduced message moved there is held, not stored whole. A body still
+`pending` is stored as usual but without its attachments, and the whole
+message is held in memory too; one the preference stores whole anyway
+(§4.8: Drafts, Outbox, signed or encrypted, …) is stored whole and not
+held.
 
 #### `message.flag`
 - params: `{ "accountId", "messageIds": [..], "set": [Flag] (opt), "clear": [Flag] (opt) }`
@@ -1446,7 +1590,11 @@ becomes a regular attachment of a forward. A forward imports every other
 part as well, `message/rfc822` as `.eml`. Caps: one part ≤ 16 MiB, 25 MiB
 in total, 32 pictures, 100 attachments; a part over a cap, unreadable, or
 otherwise not taken is listed in `skipped` with the metadata `message.get`
-reports for it, never an error.
+reports for it, never an error. A `remote` part (§3) is imported only from
+the copy `message.download` holds in memory under `neverStoreAttachments`
+(§4.3), under the metadata `message.get` reports for it; otherwise it is
+listed in `skipped` with `remote: true`, and a client that wants the
+original's files calls `message.download` first.
 
 `attribution` is plain text, lines separated by LF (CRLF accepted), at
 most `api.MaxDraftAttributionBytes` (2048) and
@@ -1483,7 +1631,10 @@ from the message like a `draft.create` forward, but without a quote around
 it: `to`, `cc`, `bcc` and `subject` from its header, its HTML sanitised in
 compose mode with its pictures copied into the attachment store under new
 `contentId`s and every other part imported as an attachment (the caps and
-`skipped` of `draft.create`), or its text when there is no usable HTML;
+`skipped` of `draft.create`, including its rule for `remote` parts; the
+Drafts folder has such parts only when a message reduced elsewhere was
+moved into it), or its text when there is no usable
+HTML;
 `inReplyTo` names the stored message its `In-Reply-To` identifies, when
 there is one (the header itself is kept for sending either way). The draft
 is unsaved (`id` empty, `version` 0) and its attachments unbound — except
@@ -1599,7 +1750,10 @@ values: set through `config.set` (persisted in the store), else
 Preferences {
   "syncIntervalSeconds": 300,   // 0 = manual sync only; otherwise >= 60
   "remoteContent": "block" | "knownSenders" | "allow",
-  "offlineDays": 30             // 0 = keep everything; otherwise 1..3650
+  "offlineDays": 30,            // 0 = keep everything; otherwise 1..3650
+  "compressStore": true,        // (opt in config.set) store raw messages zstd-compressed
+  "attachmentOfflineDays": 30,  // (opt in config.set) 0 = all; 1..3650 days; -1 = small ones only
+  "neverStoreAttachments": false // (opt in config.set) store no attachment, no picture of 100 KiB+
 }
 ```
 
@@ -1612,15 +1766,70 @@ or the interval, wakes every syncer. Precedence: `config.set`, else
 `config.toml` `[sync] offline_days`, else 30. Because `config.set` is
 read-modify-write, a client must echo the value it got from `config.get`.
 
+`compressStore` stores each raw message as one zstd frame instead of the
+bytes as received (the file name, not its content, tells which). Changing
+it converts the stored mail in the background, in both directions
+(`system.storage.conversion`); reading a message stays byte-exact.
+
+`attachmentOfflineDays` decides which attachments are stored locally.
+Always stored: the text and HTML bodies, every part the HTML shows through
+`cid:`, and every part smaller than `api.LargeAttachmentMinBytes`
+(100 KiB). The larger ones are stored for messages received in the last N
+days (1..3650), for all messages (0) or for none (-1); the others stay on
+the mail server, marked `remote` (§3), and `message.download` fetches them
+on request. It matters only where it is stricter than `offlineDays`. The
+Drafts and Outbox folders, signed and encrypted messages and messages
+without a copy on the server are always stored whole, and so is a message
+whose reduced copy the daemon cannot verify to show the same. Tightening it
+takes effect in the background; loosening it applies to mail downloaded
+from then on, and older attachments are fetched when the user opens them.
+
+`neverStoreAttachments` stores no attachment at all, whatever its size or
+the message's age; it overrides `attachmentOfflineDays`. The text and HTML
+bodies and the pictures the HTML shows through `cid:` that are smaller than
+`api.LargeAttachmentMinBytes` (100 KiB) are still stored; larger pictures
+stay on the server and the message shows them once the user downloads them
+(`message.body` `remotePictures`). Also stored whole are the messages
+`attachmentOfflineDays` never reduces (Drafts, Outbox,
+signed or encrypted, no copy on the server, a MIME structure the daemon
+could not parse to the end, a reduced copy the daemon cannot verify).
+Switching it on removes the stored attachments in the background: also
+those downloaded on request before, the small ones of the messages
+`attachmentOfflineDays` reduced, and those of a message a sync or a
+download was storing as it was switched on; a background pass every day
+removes those of messages that came to be stored whole since (a message
+moved out of Drafts, say). While it is on, `message.download`
+keeps the attachments it fetches in the daemon's memory only (§4.3) and
+nothing is kept once the daemon quits. Switching it off applies
+to mail downloaded from then on, as loosening `attachmentOfflineDays`
+does. It has no default from the environment.
+
+These three were added after the others, so they follow different rules:
+in `config.set` an **absent** one is left unchanged (an older client drops
+fields it does not know), while `config.get` and the result of
+`config.set` always carry all of them. Precedence: `config.set`, else the
+environment of the process that starts the daemon
+(`MALACHI_DEFAULT_COMPRESS_STORE` = a boolean as Go's `strconv.ParseBool`
+reads it: `1`, `t`, `T`, `true`, `True`, `TRUE`, `0`, `f`, `F`, `false`,
+`False` or `FALSE`; `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` = a valid
+value; an empty variable counts as unset; the macOS app sets `1` and `30`,
+other clients nothing), else `false` and `0`. A default
+from the environment is stored as the preference the first time the daemon
+applies it, so a daemon started without the variables later does not
+change it back; an invalid value is logged and ignored.
+
 #### `config.get`
 - params: `{}`
 - result: `{ "preferences": Preferences }`
 
 #### `config.set`
-- params: `{ "preferences": Preferences }` (the whole set; read-modify-write)
-- result: `{ "preferences": Preferences }` (effective values)
-- errors: invalidArgument (interval below 60 and not 0, unknown policy),
-  storageError
+- params: `{ "preferences": Preferences }` (the whole set; read-modify-write;
+  an absent `compressStore`, `attachmentOfflineDays` or
+  `neverStoreAttachments` is left unchanged)
+- result: `{ "preferences": Preferences }` (the effective values, every
+  field set)
+- errors: invalidArgument (interval below 60 and not 0, unknown policy,
+  `offlineDays` or `attachmentOfflineDays` out of range), storageError
 
 ### 4.9 sender
 
@@ -1988,3 +2197,18 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   in the `system.hello` result, which a daemon of protocol 1 answers with
   `methodNotFound`; a client of protocol 1 gets `unauthenticated` on its
   first call.
+- **2** (2026-09-27, compatible addition, compressed store and attachments
+  on demand): new preferences `compressStore` and `attachmentOfflineDays`
+  (absent in `config.set` = unchanged; defaults from
+  `MALACHI_DEFAULT_COMPRESS_STORE` / `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS`,
+  stored on first use); the `config.set` result carries the effective
+  values; new `Attachment.remote` and limit `api.LargeAttachmentMinBytes`;
+  new `message.download` and `system.storage`; new error codes 1305
+  `messageGone` and 1504 `partNotDownloaded`; `draft.create` and
+  `draft.open` list `remote` parts in `skipped`.
+- **2** (2026-09-27, compatible addition, attachments never stored): new
+  preference `neverStoreAttachments` (no attachment stored, nor a picture
+  the HTML shows of 100 KiB or more); under it `message.download` keeps the
+  downloaded message in the daemon's memory only and the parts stay
+  `remote`, served from memory while the copy lasts; new `message.body`
+  field `remotePictures`.

@@ -4,6 +4,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,5 +59,42 @@ func TestAttachmentDataFitsTransport(t *testing.T) {
 	const maxLineBytes = 32 << 20
 	if MaxAttachmentDataBytes*4/3+(1<<20) > maxLineBytes {
 		t.Fatalf("MaxAttachmentDataBytes %d does not fit the %d transport line cap", MaxAttachmentDataBytes, maxLineBytes)
+	}
+}
+
+// The preference fields added later are pointers so that config.set can
+// tell "absent" (an older client, left unchanged) from false and 0: nil is
+// left out of the JSON, a set value is always sent, and decoding keeps the
+// difference.
+func TestPreferencesJSON(t *testing.T) {
+	old := Preferences{SyncIntervalSeconds: 300, RemoteContent: RemoteBlock, OfflineDays: 30}
+	raw, err := json.Marshal(old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30}`; string(raw) != want {
+		t.Fatalf("nil fields: %s, want %s", raw, want)
+	}
+	zero := old
+	zero.CompressStore, zero.AttachmentOfflineDays, zero.NeverStoreAttachments = Ptr(false), Ptr(0), Ptr(false)
+	if raw, err = json.Marshal(zero); err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,"compressStore":false,"attachmentOfflineDays":0,"neverStoreAttachments":false}`; string(raw) != want {
+		t.Fatalf("false and 0: %s, want %s", raw, want)
+	}
+
+	var p ConfigSetParams
+	if err := json.Unmarshal([]byte(`{"preferences":{"syncIntervalSeconds":0,"remoteContent":"allow","offlineDays":0}}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Preferences.CompressStore != nil || p.Preferences.AttachmentOfflineDays != nil || p.Preferences.NeverStoreAttachments != nil {
+		t.Fatalf("absent fields decoded as set: %+v", p.Preferences)
+	}
+	if err := json.Unmarshal([]byte(`{"preferences":{"remoteContent":"block","compressStore":false,"attachmentOfflineDays":-1}}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if c, d := p.Preferences.CompressStore, p.Preferences.AttachmentOfflineDays; c == nil || *c || d == nil || *d != AttachmentOfflineNone {
+		t.Fatalf("false and -1 decoded as %v %v", c, d)
 	}
 }

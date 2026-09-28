@@ -62,6 +62,18 @@ public actor DaemonSupervisor {
     /// (`secretservice|helper|none`; backend/internal/auth/helper).
     public static let keyringEnv = "MALACHI_KEYRING"
     public static let keyringHelperEnv = "MALACHI_KEYRING_HELPER"
+    /// The daemon's runtime defaults of two preferences (docs/api.md §4.8),
+    /// which the app sets for its daemon: a Mac often has a small disk.
+    /// A stored preference wins over them; the daemon stores a default the
+    /// first time it applies it.
+    public static let defaultCompressStoreEnv = "MALACHI_DEFAULT_COMPRESS_STORE"
+    public static let defaultAttachmentOfflineDaysEnv = "MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS"
+    /// Their values: compressed, and the large attachments of the last 30
+    /// days kept on this Mac.
+    public static let storageDefaults: [(key: String, value: String)] = [
+        (defaultCompressStoreEnv, "1"),
+        (defaultAttachmentOfflineDaysEnv, "30"),
+    ]
     public static let startTimeout: Duration = .seconds(15)
     /// The daemon gives its syncers 10 s to log out.
     public static let stopTimeout: Duration = .seconds(15)
@@ -145,16 +157,25 @@ public actor DaemonSupervisor {
         try await awaitSocket()
     }
 
-    /// The daemon's environment: the app's, plus the keyring. There is no
-    /// Secret Service on macOS, so the daemon gets the bundled
-    /// `malachi-keychain` as its keyring helper (`MALACHI_KEYRING=helper`,
-    /// `MALACHI_KEYRING_HELPER=<path>`); without one it runs with
-    /// `MALACHI_KEYRING=none`, where adding an account with a password
-    /// fails with keyringError. A `MALACHI_KEYRING` already in the
-    /// environment wins, so a developer can still point the daemon
+    /// The daemon's environment: the app's, plus the storage defaults and
+    /// the keyring. The defaults (`storageDefaults`: compress the stored
+    /// mail, keep the large attachments of the last 30 days) are set unless
+    /// the environment has them already with a value, whatever the keyring
+    /// (an empty one is no default to the daemon, which would fall back to
+    /// its built-in off and 0); the daemon stores them as preferences the
+    /// first time, so a daemon started otherwise later keeps them, and
+    /// Settings overrides them. There is no Secret Service on macOS, so the
+    /// daemon gets the bundled `malachi-keychain` as its keyring helper
+    /// (`MALACHI_KEYRING=helper`, `MALACHI_KEYRING_HELPER=<path>`); without
+    /// one it runs with `MALACHI_KEYRING=none`, where adding an account with
+    /// a password fails with keyringError. A `MALACHI_KEYRING` already in
+    /// the environment wins, so a developer can still point the daemon
     /// elsewhere.
     public static func environment(base: [String: String], launch: Launch) -> [String: String] {
         var env = base
+        for (key, value) in storageDefaults where env[key]?.isEmpty ?? true {
+            env[key] = value
+        }
         guard env[keyringEnv] == nil else {
             return env
         }

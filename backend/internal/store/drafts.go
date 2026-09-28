@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -294,7 +293,9 @@ func (s *Store) DeleteDraft(ctx context.Context, accountID, id string) error {
 		return fmt.Errorf("commit: %w", err)
 	}
 	s.removeMessageFiles(gone)
-	s.removeAttachmentFiles(files...)
+	for _, aid := range files {
+		s.removeAttachmentFile(aid)
+	}
 	return nil
 }
 
@@ -392,13 +393,10 @@ func decodeCursor(c string) (stamp, id string, err error) {
 	return stamp, id, nil
 }
 
-// removeAttachmentFiles unlinks attachments' data files; a missing file is
+// removeAttachmentFile unlinks an attachment's data file; a missing file is
 // not an error (the row is authoritative).
-func (s *Store) removeAttachmentFiles(ids ...string) {
-	var b fsretry.Batch
-	for _, id := range ids {
-		if err := b.Remove(filepath.Join(s.AttachmentDir(), id)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			s.log.Warn("remove attachment file", "id", id, "err", err)
-		}
+func (s *Store) removeAttachmentFile(id string) {
+	if err := os.Remove(filepath.Join(s.AttachmentDir(), id)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.log.Warn("remove attachment file", "id", id, "err", err)
 	}
 }

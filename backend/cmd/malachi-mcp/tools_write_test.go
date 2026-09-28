@@ -200,8 +200,9 @@ func TestCreateDraftOmitQuote(t *testing.T) {
 	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "FYI", "omitQuote": true})
 	mustContain(t, out, "quoted: omitted (omitQuote)", "attachments: 1 bound (0 inline), 1 skipped", `- id=att_pdf`)
 	mustNotContain(t, out, "att_in")
+	// A forward reads the original once, for its files on the mail server.
 	creates, saves, removes, gets := draftCalls(h)
-	if gets != 0 || creates[0].Attribution != "" {
+	if gets != 1 || creates[0].Attribution != "" {
 		t.Errorf("omitQuote must not build an attribution: gets=%d create=%+v", gets, creates[0])
 	}
 	d := saves[0].Draft
@@ -425,5 +426,44 @@ func TestSendRequiresSessionDraft(t *testing.T) {
 	h.fb.mu.Unlock()
 	if len(sends) != 2 || sends[0] != (api.MessageSendParams{AccountID: "a1", DraftID: "d1", Version: 1}) {
 		t.Errorf("send calls: %+v", sends)
+	}
+}
+
+// A forward downloads the files the original keeps on the mail server
+// first, so the draft carries them.
+func TestCreateDraftForwardDownloadsRemote(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m7", "body": "FYI"})
+	mustNotContain(t, out, "remote attachments:", " remote")
+	order, downloads := h.calls()
+	if !reflect.DeepEqual(order, []string{"get", "download"}) || len(downloads) != 1 || downloads[0].MessageID != "m7" {
+		t.Fatalf("calls %v, downloads %+v", order, downloads)
+	}
+	creates, saves, _, _ := draftCalls(h)
+	if len(creates) != 1 || len(saves) != 1 {
+		t.Fatalf("creates %d, saves %d", len(creates), len(saves))
+	}
+
+	// A forward of a message with nothing on the server downloads nothing.
+	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "body": "FYI"})
+	if _, downloads := h.calls(); len(downloads) != 1 {
+		t.Fatalf("downloads %+v", downloads)
+	}
+}
+
+// When the download fails the draft is made all the same, and says which
+// files it lacks and why.
+func TestCreateDraftForwardWithoutRemote(t *testing.T) {
+	fb := newFixture()
+	fb.setFail(api.MethodMessageDownload, api.NewError(api.CodeOffline, "no network"))
+	h := newHarness(t, fb, false, false)
+	out := h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m7", "body": "FYI"})
+	head, _, _ := strings.Cut(out, "--- BEGIN UNTRUSTED")
+	mustContain(t, head, "2 skipped",
+		"remote attachments: 2 not attached, they are on the mail server only (the download failed: offline (1300))")
+	body := fencedBody(t, out)
+	mustContain(t, body, `- filename="data.csv" type=text/csv size=204800 remote`, `- filename="scan.pdf" type=application/pdf size=5242880 remote`)
+	if _, saves, _, _ := draftCalls(h); len(saves) != 1 {
+		t.Fatalf("saves %d", len(saves))
 	}
 }

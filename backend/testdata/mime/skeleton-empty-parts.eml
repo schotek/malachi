@@ -1,0 +1,24 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Empty parts
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-empty@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="empty"
+
+--empty
+Content-Type: text/plain
+
+
+--empty
+
+A part without any header is text/plain.
+--empty
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="empty.bin"
+
+--empty
+Content-Type: multipart/mixed; boundary="none"
+
+--none--
+--empty--

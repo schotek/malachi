@@ -1,0 +1,13 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Upper-case multipart, broken parameter
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-upper@example.org>
+MIME-Version: 1.0
+Content-Type: MULTIPART/MIXED; boundary="upper
+
+--upper
+Content-Type: text/plain
+
+Opaque: the walk does not descend, the whole body is one leaf.
+--upper--

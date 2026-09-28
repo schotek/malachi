@@ -12,11 +12,12 @@ import Testing
 /// A body result with only the fields a case needs.
 private func body(
     _ state: BodyState = .fetched, html: String? = nil, text: String = "", withheld: Bool? = nil,
-    remoteImages: Int = 0, policy: RemoteContentPolicy = .block
+    remoteImages: Int = 0, policy: RemoteContentPolicy = .block, remotePictures: Int? = nil
 ) -> MessageBodyResult {
     MessageBodyResult(
         messageId: "m", bodyState: state, hasHtml: html != nil, html: html, htmlWithheld: withheld, text: text,
-        blocked: BlockedContent(remoteImages: remoteImages), remoteContent: policy, sanitizerVersion: "1"
+        blocked: BlockedContent(remoteImages: remoteImages), remotePictures: remotePictures, remoteContent: policy,
+        sanitizerVersion: "1"
     )
 }
 
@@ -142,6 +143,95 @@ private func body(
         }
         #expect(linkTextFor("https://b", [Link(text: "A", href: "https://a"), Link(text: "B", href: "https://b")]) == "B")
         #expect(linkTextFor("https://c", []) == "")
+    }
+
+    /// The pictures bar counts the pictures of an HTML body kept on the
+    /// mail server only, and shows the wait from the click until the body
+    /// was asked for again (remote.go `picturesBarStateFor`,
+    /// `remotePictures`).
+    @Test func picturesBarStateTest() {
+        let html = "<p><img src=\"malachi-cid:a/m/2\"></p>"
+        #expect(remotePictures(nil) == 0)
+        #expect(remotePictures(body(html: html)) == 0, "absent is 0")
+        #expect(remotePictures(body(html: html, remotePictures: 3)) == 3)
+        #expect(remotePictures(body(html: html, remotePictures: -1)) == 0)
+        #expect(remotePictures(body(.pending, html: html, remotePictures: 3)) == 0, "not in the HTML view")
+        #expect(remotePictures(body(html: nil, remotePictures: 3)) == 0, "plain text")
+        #expect(remotePictures(body(html: "", withheld: true, remotePictures: 3)) == 0, "HTML withheld")
+
+        let server = body(html: html, remotePictures: 2)
+        let local = body(html: html)
+        let cases: [(String, LoadedMessage?, PicturesBarState)] = [
+            ("nothing loaded", nil, PicturesBarState()),
+            ("body on its way", LoadedMessage(), PicturesBarState()),
+            ("on the server", LoadedMessage(body: server), PicturesBarState(visible: true, remote: 2)),
+            ("downloading", LoadedMessage(body: server, loadingPictures: true), PicturesBarState(visible: true, loading: true)),
+            ("all here", LoadedMessage(body: local), PicturesBarState()),
+            ("remote images loading", LoadedMessage(body: server, loadingImages: true), PicturesBarState(visible: true, remote: 2)),
+        ]
+        for (name, lm, want) in cases {
+            #expect(picturesBarState(for: lm) == want, Comment(rawValue: name))
+        }
+    }
+
+    /// After the download the body is asked for under allow when the
+    /// remote images are shown or on their way, so they stay (remote.go
+    /// `picturesPolicy`).
+    @Test func picturesPolicyTest() {
+        let html = "<p>x</p>"
+        #expect(picturesPolicy(LoadedMessage()) == nil)
+        #expect(picturesPolicy(LoadedMessage(body: body(html: html, remoteImages: 2))) == nil)
+        #expect(picturesPolicy(LoadedMessage(body: body(html: html, policy: .allow))) == .allow)
+        #expect(picturesPolicy(LoadedMessage(body: body(html: html, remoteImages: 2), loadingImages: true)) == .allow)
+    }
+
+    /// A picture the daemon no longer serves asks for the body again only
+    /// when the cached body lists it and counts none on the server, nothing
+    /// newer is on its way, and it has not asked since the last download
+    /// (remote.go `recheckPictures`).
+    @Test func recheckPicturesTest() {
+        var listed = body(html: "<p>x</p>")
+        listed.inlineParts = ["p@x": "1.2", "q@x": "1.3"]
+        var counted = listed
+        counted.remotePictures = 1
+        var text = body(html: nil, text: "x")
+        text.inlineParts = listed.inlineParts
+        let cases: [(String, LoadedMessage?, String, Bool)] = [
+            ("not cached", nil, "1.2", false),
+            ("no body", LoadedMessage(), "1.2", false),
+            ("listed, none counted", LoadedMessage(body: listed), "1.2", true),
+            ("another listed one", LoadedMessage(body: listed), "1.3", true),
+            ("not a picture of the body", LoadedMessage(body: listed), "2", false),
+            ("asked already", LoadedMessage(body: listed, picturesRechecked: true), "1.2", false),
+            ("the bar is up already", LoadedMessage(body: counted), "1.2", false),
+            ("body on its way", LoadedMessage(body: listed, fetching: true), "1.2", false),
+            ("remote images on their way", LoadedMessage(body: listed, loadingImages: true), "1.2", false),
+            ("pictures on their way", LoadedMessage(body: listed, loadingPictures: true), "1.2", false),
+            ("text shown", LoadedMessage(body: text), "1.2", false),
+        ]
+        for (name, lm, part, want) in cases {
+            #expect(recheckPictures(lm, part) == want, Comment(rawValue: name))
+        }
+    }
+
+    /// A download asks for the body again when it counts pictures on the
+    /// server, unless Download Pictures does that itself or a body is on
+    /// its way (remote.go `reloadAfterDownload`).
+    @Test func reloadAfterDownloadTest() {
+        let counted = body(html: "<p>x</p>", remotePictures: 2)
+        let cases: [(String, LoadedMessage?, Bool)] = [
+            ("not cached", nil, false),
+            ("no body", LoadedMessage(), false),
+            ("pictures on the server", LoadedMessage(body: counted), true),
+            ("remote images on their way", LoadedMessage(body: counted, loadingImages: true), true),
+            ("none on the server", LoadedMessage(body: body(html: "<p>x</p>")), false),
+            ("Download Pictures asks itself", LoadedMessage(body: counted, loadingPictures: true), false),
+            ("body on its way", LoadedMessage(body: counted, fetching: true), false),
+            ("text shown", LoadedMessage(body: body(html: nil, text: "x", remotePictures: 2)), false),
+        ]
+        for (name, lm, want) in cases {
+            #expect(reloadAfterDownload(lm) == want, Comment(rawValue: name))
+        }
     }
 
     /// The sensitivity rule of setMessageActionsSensitive as a pure

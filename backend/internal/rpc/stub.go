@@ -55,6 +55,10 @@ func (s stubSystem) Info(context.Context, api.SystemInfoParams) (*api.SystemInfo
 	}, nil
 }
 
+func (stubSystem) Storage(context.Context, api.SystemStorageParams) (*api.SystemStorageResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
 type stubAccounts struct{}
 
 func (stubAccounts) List(context.Context, api.AccountListParams) (*api.AccountListResult, error) {
@@ -120,6 +124,9 @@ func (stubMessages) Part(context.Context, api.MessagePartParams) (*api.MessagePa
 	return nil, api.ErrNotImplemented
 }
 func (stubMessages) Embedded(context.Context, api.MessageEmbeddedParams) (*api.MessageEmbeddedResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubMessages) Download(context.Context, api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
 	return nil, api.ErrNotImplemented
 }
 func (stubMessages) Flag(context.Context, api.MessageFlagParams) (*api.MessageFlagResult, error) {

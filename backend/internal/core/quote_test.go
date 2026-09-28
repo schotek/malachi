@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -282,6 +283,25 @@ func TestDraftCreateForward(t *testing.T) {
 	saveRoundTrip(t, m, d)
 }
 
+// A compressed original quotes and forwards the same: every part is read
+// again from the start of the decompressed message.
+func TestDraftCreateForwardCompressedStore(t *testing.T) {
+	m := seedMailbox(t)
+	m.b.store.SetRawCodec(store.RawZstd)
+	id := m.seedQuoted(t, "html-inline-cid.eml")
+	if _, err := os.Stat(m.b.store.MessageRawPath(string(m.acc), string(id)) + store.RawZstSuffix); err != nil {
+		t.Fatalf("original not compressed: %v", err)
+	}
+	res := m.create(t, api.ComposeForward, id, "Forwarded")
+	if res.Quoted != api.QuoteHTML || len(res.Draft.Attachments) != 4 || len(res.Skipped) != 0 {
+		t.Fatalf("forward: quoted %q, attachments %+v, skipped %+v", res.Quoted, res.Draft.Attachments, res.Skipped)
+	}
+	got, err := m.b.Attachments().Get(context.Background(), api.AttachmentGetParams{AccountID: m.acc, AttachmentID: res.Draft.Attachments[0].ID})
+	if err != nil || !bytes.HasPrefix(got.Data, []byte("\x89PNG")) {
+		t.Fatalf("picture: %v", err)
+	}
+}
+
 // The created draft is what draft.save stores and what goes out: the
 // inline copy stays bound, the message is built with it in a related
 // part under its new Content-ID, and attachment.get serves its bytes.
@@ -530,4 +550,78 @@ func TestDraftCreateErrors(t *testing.T) {
 		t.Errorf("text = %q", res.Draft.TextBody)
 	}
 	m.create(t, api.ComposeReply, id, strings.TrimSuffix(strings.Repeat("a\n", api.MaxDraftAttributionLines), "\n"))
+}
+
+// A forward of a message whose large attachments are on the server lists
+// them in skipped with their real metadata, never as empty copies; after
+// message.download the same forward carries them.
+func TestDraftCreateForwardRemoteParts(t *testing.T) {
+	m := seedMailbox(t)
+	srv := m.fakeServer()
+	msg := m.seedLarge(t, 7, time.Now().AddDate(-1, 0, 0), smallOnly)
+	stored := m.row(t, msg.ID).Attachments
+
+	res := m.create(t, api.ComposeForward, api.MessageID(msg.ID), "Forwarded")
+	if res.Quoted != api.QuoteHTML || len(res.Skipped) != 2 {
+		t.Fatalf("forward: quoted %q, skipped %+v", res.Quoted, res.Skipped)
+	}
+	for i, want := range []api.Attachment{stored[2], stored[3]} {
+		got := res.Skipped[i]
+		if !got.Remote || got.PartID != want.PartID || got.Filename != want.Filename || got.Size != want.Size || got.Size == 0 {
+			t.Errorf("skipped %d: %+v, stored %+v", i, got, want)
+		}
+	}
+	var names []string
+	for _, a := range res.Draft.Attachments {
+		names = append(names, a.Filename)
+		if a.Size == 0 {
+			t.Errorf("empty copy %+v", a)
+		}
+	}
+	if !slices.Contains(names, "notes.txt") || slices.Contains(names, "report.pdf") || slices.Contains(names, "attached.eml") {
+		t.Fatalf("attachments %v", names)
+	}
+	saveRoundTrip(t, m, res.Draft)
+
+	// A reply never lists the files it does not carry.
+	if reply := m.create(t, api.ComposeReply, api.MessageID(msg.ID), "Wrote"); len(reply.Skipped) != 0 {
+		t.Fatalf("reply skipped %+v", reply.Skipped)
+	}
+
+	srv.put("INBOX", 7, largeMessage("report@example.org"))
+	if _, err := m.download(context.Background(), msg.ID); err != nil {
+		t.Fatal(err)
+	}
+	res = m.create(t, api.ComposeForward, api.MessageID(msg.ID), "Forwarded")
+	if len(res.Skipped) != 0 || len(res.Draft.Attachments) != 4 {
+		t.Fatalf("forward after the download: attachments %+v, skipped %+v", res.Draft.Attachments, res.Skipped)
+	}
+}
+
+// A forward of a message whose file lacks parts its row calls stored
+// (seedLostParts) lists them in skipped as remote, with the row's
+// metadata, and the row learns it: never an empty copy.
+func TestDraftCreateForwardLostParts(t *testing.T) {
+	m := seedMailbox(t)
+	msg := m.seedLostParts(t, 7)
+	stored := m.row(t, msg.ID).Attachments
+
+	res := m.create(t, api.ComposeForward, api.MessageID(msg.ID), "Forwarded")
+	if len(res.Skipped) != 2 {
+		t.Fatalf("skipped %+v", res.Skipped)
+	}
+	for i, want := range []api.Attachment{stored[2], stored[3]} {
+		got := res.Skipped[i]
+		if !got.Remote || got.PartID != want.PartID || got.Filename != want.Filename || got.Size != want.Size || got.Size == 0 {
+			t.Errorf("skipped %d: %+v, stored %+v", i, got, want)
+		}
+	}
+	for _, a := range res.Draft.Attachments {
+		if a.Size == 0 {
+			t.Errorf("empty copy %+v", a)
+		}
+	}
+	if row := m.row(t, msg.ID); row.RawState != store.RawPartial || !slices.Equal(row.RemoteParts, []string{"3", "4"}) {
+		t.Fatalf("row after the forward %+v", row)
+	}
 }

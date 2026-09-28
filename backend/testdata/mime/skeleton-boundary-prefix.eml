@@ -1,0 +1,27 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Boundaries that share a prefix
+Date: Sun, 27 Sep 2026 10:00:00 +0200
+Message-ID: <skeleton-prefix@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="prefix"
+
+--prefix
+Content-Type: text/plain
+
+The next line is data: "prefix" is only its prefix.
+--prefixed and more
+--prefix
+Content-Type: multipart/alternative; boundary="prefix2"
+
+--prefix2
+Content-Type: text/html
+
+<p>The inner boundary starts with the outer one.</p>
+--prefix2--
+--prefix
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="prefix.bin"
+
+--prefix_not_a_delimiter
+--prefix--

@@ -9,8 +9,13 @@ import UniformTypeIdentifiers
 // The counterpart of ui/internal/window/attachments_test.go: the pure
 // helpers behind the attachment chips, and the open directory.
 
-private func attachment(_ partId: String = "", filename: String = "", contentType: String = "", size: Int = 0, contentId: String? = nil) -> MalachiCore.Attachment {
-    MalachiCore.Attachment(partId: partId, filename: filename, contentType: contentType, size: size, inline: contentId != nil, contentId: contentId)
+private func attachment(
+    _ partId: String = "", filename: String = "", contentType: String = "", size: Int = 0, contentId: String? = nil,
+    remote: Bool? = nil
+) -> MalachiCore.Attachment {
+    MalachiCore.Attachment(
+        partId: partId, filename: filename, contentType: contentType, size: size, inline: contentId != nil, contentId: contentId,
+        remote: remote)
 }
 
 private func body(_ state: BodyState, html: String? = nil, text: String = "", withheld: Bool? = nil, inlineParts: [String: String]? = nil) -> MessageBodyResult {
@@ -49,24 +54,78 @@ private func part(filename: String) -> MessagePartResult {
         #expect(chipAttachments(odd, body(.fetched, html: "<p>x</p>")).count == 1, "empty partId hidden")
     }
 
-    @Test func partAvailableTest() {
+    /// attachments.go `partState`: the order of the checks is the point.
+    @Test func partStateTest() {
         let small = attachment(size: 1024)
         let huge = attachment(size: API.Limits.maxAttachmentDataBytes + 1)
         let edge = attachment(size: API.Limits.maxAttachmentDataBytes)
+        let remote = attachment(size: 1024, remote: true)
+        let hugeRemote = attachment(size: API.Limits.maxAttachmentDataBytes + 1, remote: true)
+        let notRemote = attachment(size: 1024, remote: false)
         let fetched = body(.fetched)
-        let cases: [(String, MalachiCore.Attachment, MessageBodyResult?, Bool, String)] = [
-            ("no body", small, nil, false, ""),
-            ("pending", small, body(.pending), false, "This message has not been downloaded yet."),
-            ("tooBig", small, body(.tooBig), false, "This message is too large to download."),
-            ("failed", small, body(.failed), false, "This message could not be read."),
-            ("fetched", small, fetched, true, ""),
-            ("at the cap", edge, fetched, true, ""),
-            ("over the cap", huge, fetched, false, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+        let onServer = "On the server only; it is downloaded when you open it"
+        let cases: [(String, MalachiCore.Attachment, MessageBodyResult?, PartState, String)] = [
+            ("no body", small, nil, .waiting, ""),
+            ("no body, remote", remote, nil, .waiting, ""),
+            ("pending", small, body(.pending), .remote, onServer),
+            ("tooBig", small, body(.tooBig), .unavailable, "This message is too large to download."),
+            ("tooBig beats remote", remote, body(.tooBig), .unavailable, "This message is too large to download."),
+            ("failed", small, body(.failed), .unavailable, "This message could not be read."),
+            ("fetched", small, fetched, .local, ""),
+            ("remote false", notRemote, fetched, .local, ""),
+            ("remote", remote, fetched, .remote, onServer),
+            ("at the cap", edge, fetched, .local, ""),
+            ("over the cap", huge, fetched, .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+            ("over the cap beats remote", hugeRemote, fetched, .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+            ("over the cap while pending", huge, body(.pending), .unavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."),
+            ("an unknown state", small, body("archived"), .waiting, ""),
         ]
-        for (name, a, b, ok, why) in cases {
-            let got = partAvailable(a, b)
-            #expect(got.ok == ok && got.why == why, "\(name): got (\(got.ok), \(got.why))")
+        for (name, a, b, state, why) in cases {
+            let got = partState(a, b)
+            #expect(got.state == state && got.why == why, "\(name): got (\(got.state), \(got.why))")
         }
+    }
+
+    @Test func anyRemoteTest() {
+        let local = attachment("1", size: 10)
+        let remote = attachment("2", size: 200_000, remote: true)
+        let huge = attachment("3", size: API.Limits.maxAttachmentDataBytes + 1, remote: true)
+        #expect(!anyRemote([local], body(.fetched)))
+        #expect(anyRemote([local, remote], body(.fetched)))
+        #expect(!anyRemote([local, huge], body(.fetched)), "a part out of reach is never downloaded")
+        #expect(anyRemote([local], body(.pending)), "a body not downloaded yet")
+        #expect(!anyRemote([remote], nil), "nothing known yet")
+        #expect(!anyRemote([], body(.pending)))
+    }
+
+    /// download.go `partAfterDownload`: Microsoft 365 may move part ids
+    /// when it rebuilds a message; a part that cannot be found again is not
+    /// found, and its old id, which may name another file by now, is never
+    /// used.
+    @Test func partAfterDownloadTest() {
+        let a = attachment("2", filename: "report.pdf", contentType: "application/pdf", size: 5, remote: true)
+        func message(_ atts: [MalachiCore.Attachment]) -> Message {
+            Message(summary: summary("m"), attachments: atts)
+        }
+        // The same id, name and type: that one (now local).
+        let same = attachment("2", filename: "report.pdf", contentType: "application/pdf", size: 5)
+        #expect(partAfterDownload(a, message([attachment("1", filename: "x.txt"), same])) == same)
+        // The id moved: the only one with the name and type.
+        let moved = attachment("3", filename: "report.pdf", contentType: "application/pdf", size: 5)
+        #expect(partAfterDownload(a, message([attachment("2", filename: "logo.png", contentType: "image/png"), moved])) == moved)
+        // The same number while it is the same file, even with another
+        // part of that name.
+        #expect(partAfterDownload(a, message([same, attachment("3", filename: "report.pdf", contentType: "application/pdf")])) == same)
+        // Gone, another file under the old id: not found.
+        #expect(partAfterDownload(a, message([attachment("2", filename: "other.pdf", contentType: "application/pdf")])) == nil)
+        // Two candidates and none at the old id: not found.
+        let other = attachment("4", filename: "report.pdf", contentType: "application/pdf", size: 7)
+        #expect(partAfterDownload(a, message([moved, other])) == nil)
+        // The same name under another type is not the part.
+        #expect(partAfterDownload(a, message([attachment("5", filename: "report.pdf", contentType: "text/plain")])) == nil)
+        #expect(partAfterDownload(a, message([])) == nil)
+        // No message (nothing was downloaded): unchanged.
+        #expect(partAfterDownload(a, nil) == a)
     }
 
     @Test func executableAttachmentTest() {
@@ -247,7 +306,7 @@ private func part(filename: String) -> MessagePartResult {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("malachi-open-\(UUID().uuidString.prefix(8))", isDirectory: true)
         defer { try? fm.removeItem(at: root) }
-        let open = OpenDir(url: root.appendingPathComponent("open", isDirectory: true))
+        let open = OpenDir(url: root.appendingPathComponent("Malachi Mail/open", isDirectory: true))
         let url = try open.write(name: "a.txt", data: Data("hello".utf8))
         #expect(url.lastPathComponent == "a.txt")
         #expect(try Data(contentsOf: url) == Data("hello".utf8))
@@ -261,8 +320,60 @@ private func part(filename: String) -> MessagePartResult {
         let again = try open.write(name: "a.txt", data: Data())
         #expect(again != url)
         #expect(again.deletingLastPathComponent() != url.deletingLastPathComponent())
-        open.removeAll()
+        try open.removeAll()
         #expect(!fm.fileExists(atPath: open.url.path))
+    }
+
+    /// removeAll takes the open directory with everything in it, and
+    /// refuses every other path without touching it (attachments.go
+    /// `purgeOpenDir`, attachments_test.go TestPurgeOpenDir).
+    @Test func purgeOpenDir() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("malachi-purge-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let parent = base.appendingPathComponent("Malachi Mail", isDirectory: true)
+        let dir = parent.appendingPathComponent("open", isDirectory: true)
+        let file = dir.appendingPathComponent("x1", isDirectory: true).appendingPathComponent("report.pdf")
+        let keep = parent.appendingPathComponent("keep", isDirectory: true)
+        for d in [file.deletingLastPathComponent(), keep] {
+            try fm.createDirectory(at: d, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        }
+        try Data("%PDF-1.7".utf8).write(to: file)
+
+        let bad: [URL] = [
+            URL(fileURLWithPath: ""), URL(fileURLWithPath: "."), URL(fileURLWithPath: "/"),
+            URL(fileURLWithPath: "Malachi Mail/open"), // relative: never resolved against the working directory
+            base, parent, keep,
+            base.appendingPathComponent("open", isDirectory: true),
+            dir.appendingPathComponent("x1", isDirectory: true),
+            dir.appendingPathComponent("..", isDirectory: true),
+            try #require(URL(string: "https://example.org/Malachi%20Mail/open")),
+        ]
+        for u in bad {
+            #expect(throws: OpenDir.NotTheOpenDirectory.self, "removeAll(\(u.absoluteString)) should refuse") {
+                try OpenDir(url: u).removeAll()
+            }
+        }
+        #expect(fm.fileExists(atPath: file.path), "a refused purge removed something")
+
+        try OpenDir(url: URL(fileURLWithPath: dir.path + "/")).removeAll()
+        #expect(!fm.fileExists(atPath: dir.path), "the open directory should be gone")
+        #expect(fm.fileExists(atPath: keep.path), "its sibling should stay")
+        try OpenDir(url: dir).removeAll() // a missing directory: no error
+
+        // A link in its place goes; what it points to stays.
+        let target = base.appendingPathComponent("elsewhere", isDirectory: true)
+        try fm.createDirectory(at: target, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        let notes = target.appendingPathComponent("notes.txt")
+        try Data("x".utf8).write(to: notes)
+        try fm.createSymbolicLink(at: dir, withDestinationURL: target)
+        try OpenDir(url: dir).removeAll()
+        #expect((try? fm.attributesOfItem(atPath: dir.path)) == nil, "the link should be gone")
+        #expect(fm.fileExists(atPath: notes.path), "the link's target should stay")
+
+        // The application's own directory passes the check.
+        #expect(OpenDir.purgeable(OpenDir.default.url) != nil)
+        #expect(Array(OpenDir.default.url.pathComponents.suffix(2)) == ["Malachi Mail", "open"])
     }
 
     @Test func chipIconTypeTest() {

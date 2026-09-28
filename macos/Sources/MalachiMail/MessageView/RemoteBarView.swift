@@ -12,9 +12,14 @@ import MalachiCore
 /// bar of its own. The buttons are small bordered ones (D6 of the plan).
 /// Like the banners it is a `CalloutCard`, with a photo symbol; the spinner
 /// takes the buttons' place at the end.
+///
+/// The pictures bar below it (window.blp `pictures_bar`) is the same view
+/// with one button (`pictures()`): how many pictures of the message are
+/// kept on the mail server only, Download Pictures, and the spinner while
+/// they download.
 @MainActor
 final class RemoteBarView: NSView {
-    /// Load Images was clicked.
+    /// Load Images (Download Pictures) was clicked.
     var onLoad: (@MainActor () -> Void)?
     /// Always From This Sender was clicked.
     var onTrust: (@MainActor () -> Void)?
@@ -34,9 +39,22 @@ final class RemoteBarView: NSView {
     private let loadButton: NSButton
     private let trustButton: NSButton
 
-    init(showsTrust: Bool) {
+    /// The remote-image bar (`remote_bar`).
+    convenience init(showsTrust: Bool) {
+        self.init(symbol: "photo", loadTitle: L10n.T("Load _Images"), showsTrust: showsTrust)
+    }
+
+    /// The pictures bar (`pictures_bar`): the server symbol of the chips
+    /// of parts kept there, no trust button.
+    static func pictures() -> RemoteBarView {
+        RemoteBarView(symbol: "icloud.and.arrow.down", loadTitle: L10n.T("_Download Pictures"), showsTrust: false)
+    }
+
+    /// `loadTitle` is the translated title of the load button, with its
+    /// GTK mnemonic.
+    private init(symbol: String, loadTitle: String, showsTrust: Bool) {
         self.showsTrust = showsTrust
-        loadButton = NSButton(title: mn(L10n.T("Load _Images")), target: nil, action: nil)
+        loadButton = NSButton(title: mn(loadTitle), target: nil, action: nil)
         trustButton = NSButton(title: mn(L10n.T("Always From This _Sender")), target: nil, action: nil)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -64,7 +82,7 @@ final class RemoteBarView: NSView {
         trustButton.isHidden = !showsTrust
         spinner.isHidden = true
 
-        CalloutCard.show("photo", .info, in: symbolView)
+        CalloutCard.show(symbol, .info, in: symbolView)
         let stack = NSStackView(views: [symbolView, label, spinner, loadButton, trustButton])
         stack.orientation = .horizontal
         stack.distribution = .fill

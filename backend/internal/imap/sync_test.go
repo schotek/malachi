@@ -4,16 +4,21 @@
 package imap
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
+	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -108,6 +113,72 @@ func replyMessage(id, subject, parent, body string) string {
 	return fmt.Sprintf("From: Bob <bob@example.test>\r\nTo: me@example.test\r\nSubject: %s\r\nDate: Mon, 01 Sep 2026 11:00:00 +0000\r\n"+
 		"Message-ID: <%s@example.test>\r\nIn-Reply-To: <%s@example.test>\r\nReferences: <root@example.test>\r\n <%s@example.test>\r\n"+
 		"Content-Type: text/plain; charset=utf-8\r\n\r\n%s\r\n", subject, id, parent, parent, body)
+}
+
+// A message that arrives while a pass is finishing, after its UID SEARCH
+// and before its closing STATUS, is announced by the next pass: that STATUS
+// already counts it, so it must not become the baseline the next pass
+// tells new UIDs by.
+func TestNewMessageDuringPass(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	appended := make(chan error, 1)
+	h.syncer.deps.Notifier = beforeNewMessage{h.notes, func(n api.NewMessageNotification) {
+		if n.Message.Subject == "Ping" {
+			// The syncer's goroutine is inside the pass that fetched the
+			// first message, and waits for this APPEND.
+			appended <- h.appendNow("INBOX", replyMessage("n2", "Re: Ping", "n1", "reply"))
+		}
+	}}
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	h.append("INBOX", rawMessage("n1", "Ping", "first line of the body"), time.Now())
+	if n := h.waitNewMessage(); n.Message.Subject != "Ping" {
+		t.Fatalf("first notification = %+v", n.Message)
+	}
+	if err := <-appended; err != nil {
+		t.Fatalf("append during the pass: %v", err)
+	}
+	if n := h.waitNewMessage(); n.Message.Subject != "Re: Ping" {
+		t.Fatalf("second notification = %+v", n.Message)
+	}
+}
+
+// beforeNewMessage is a Notifier that runs hook on the syncer's goroutine
+// before it passes a new-message notification on.
+type beforeNewMessage struct {
+	api.Notifier
+	hook func(api.NewMessageNotification)
+}
+
+func (b beforeNewMessage) NewMessage(n api.NewMessageNotification) {
+	b.hook(n)
+	b.Notifier.NewMessage(n)
+}
+
+// appendNow is h.append for a goroutine other than the test's: it reports
+// an error instead of failing the test.
+func (h *harness) appendNow(mailbox, raw string) error {
+	c, err := imapclient.DialInsecure(h.srvURL, nil)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	if err := c.Login("me", password).Wait(); err != nil {
+		return err
+	}
+	cmd := c.Append(mailbox, int64(len(raw)), &imap.AppendOptions{Time: time.Now()})
+	if _, err := io.WriteString(cmd, raw); err != nil {
+		return err
+	}
+	if err := cmd.Close(); err != nil {
+		return err
+	}
+	if _, err := cmd.Wait(); err != nil {
+		return err
+	}
+	return c.Logout().Wait()
 }
 
 // References are fetched with the envelope, so a conversation is known
@@ -515,7 +586,7 @@ func TestTooBigMarked(t *testing.T) {
 		t.Skip("appends a 25 MiB message")
 	}
 	h := newHarness(t, harnessOptions{})
-	big := rawMessage("big", "Huge", strings.Repeat("x", maxRawMessageBytes+1))
+	big := rawMessage("big", "Huge", strings.Repeat("x", ingest.MaxMessageBytes+1))
 	h.append("INBOX", big, daysAgo(1))
 	h.append("INBOX", rawMessage("small", "Small", "body"), daysAgo(1))
 	start := time.Now()
@@ -529,7 +600,7 @@ func TestTooBigMarked(t *testing.T) {
 	for _, m := range msgs {
 		switch m.Subject {
 		case "Huge":
-			if m.BodyState != store.BodyTooBig || m.Size <= maxRawMessageBytes {
+			if m.BodyState != store.BodyTooBig || m.Size <= ingest.MaxMessageBytes {
 				t.Fatalf("huge = %+v", m)
 			}
 			if _, err := os.Stat(h.st.MessageRawPath(h.acc.ID, m.ID)); !errors.Is(err, os.ErrNotExist) {
@@ -681,5 +752,135 @@ func TestRetentionWithoutSearchSince(t *testing.T) {
 	})
 	if got := h.serverUIDs("INBOX"); len(got) != 3 {
 		t.Fatalf("server lost messages: %v", got)
+	}
+}
+
+// rawWithAttachment builds a message with a text body and one attachment
+// of n bytes (base64 in the message).
+func rawWithAttachment(id, subject string, n int) string {
+	data := make([]byte, n)
+	for i := range data {
+		data[i] = byte(i*7 + i/251)
+	}
+	enc := base64.StdEncoding.EncodeToString(data)
+	var body strings.Builder
+	for len(enc) > 76 {
+		body.WriteString(enc[:76] + "\r\n")
+		enc = enc[76:]
+	}
+	body.WriteString(enc)
+	return strings.Join([]string{
+		"From: Alice <alice@example.test>",
+		"To: me@example.test",
+		"Subject: " + subject,
+		"Date: Mon, 01 Sep 2026 10:00:00 +0000",
+		"Message-ID: <" + id + "@example.test>",
+		"MIME-Version: 1.0",
+		`Content-Type: multipart/mixed; boundary="b"`,
+		"",
+		"--b",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"see the attachment",
+		"--b",
+		"Content-Type: application/pdf",
+		`Content-Disposition: attachment; filename="big.pdf"`,
+		"Content-Transfer-Encoding: base64",
+		"",
+		body.String(),
+		"--b--",
+		"",
+	}, "\r\n")
+}
+
+// The body of an old message is stored without its large attachment,
+// which stays on the server (and is fetched back byte for byte); a recent
+// one is stored whole.
+func TestSyncStripsOldAttachments(t *testing.T) {
+	h := newHarness(t, harnessOptions{prefs: SyncPrefs{OfflineDays: 90, AttachmentOfflineDays: 30}})
+	oldRaw := rawWithAttachment("old", "Old report", 300<<10)
+	oldUID := h.append("INBOX", oldRaw, daysAgo(60))
+	newRaw := rawWithAttachment("new", "New report", 300<<10)
+	h.append("INBOX", newRaw, daysAgo(2))
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	ctx := context.Background()
+	var old, recent store.Message
+	for _, m := range h.messages(h.folder("inbox").ID) {
+		switch m.Subject {
+		case "Old report":
+			old = m
+		case "New report":
+			recent = m
+		}
+	}
+	if old.BodyState != store.BodyFetched || old.RawState != store.RawPartial || len(old.RemoteParts) != 1 ||
+		old.RemoteParts[0] != "2" || old.RemoteBytes != 300<<10 || old.Size != int64(len(oldRaw)) {
+		t.Fatalf("old message = %+v", old)
+	}
+	if len(old.Attachments) != 1 || !old.Attachments[0].Remote || old.Attachments[0].Size != 300<<10 {
+		t.Fatalf("old attachments = %+v", old.Attachments)
+	}
+	if text, _, _, _ := h.st.GetMessageText(ctx, h.acc.ID, old.ID); text != "see the attachment" {
+		t.Fatalf("old text = %q", text)
+	}
+	if recent.RawState != store.RawFull || recent.StrippableBytes != 300<<10 || recent.Attachments[0].Remote {
+		t.Fatalf("recent message = %+v", recent)
+	}
+	stored := func(id string) []byte {
+		r, err := h.st.OpenMessageRaw(ctx, h.acc.ID, id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Close()
+		b, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	if n := len(stored(old.ID)); n > 4<<10 {
+		t.Fatalf("old message stored with %d bytes", n)
+	}
+	if string(stored(recent.ID)) != newRaw {
+		t.Fatal("recent message not stored as received")
+	}
+	// What was left out is still on the server, unchanged.
+	folder := h.folder("inbox")
+	var back bytes.Buffer
+	if err := FetchMessage(ctx, *h.acc.Config.IMAP, password, Location{Mailbox: "INBOX", UIDValidity: folder.UIDValidity, UID: oldUID},
+		func(r io.Reader, _ int64) error { _, err := io.Copy(&back, r); return err }); err != nil {
+		t.Fatal(err)
+	}
+	if back.String() != oldRaw {
+		t.Fatal("the server copy differs")
+	}
+}
+
+// Drafts keep everything, whatever the policy.
+func TestSyncNeverStripsDrafts(t *testing.T) {
+	h := newHarness(t, harnessOptions{prefs: SyncPrefs{OfflineDays: 90, AttachmentOfflineDays: api.AttachmentOfflineNone}})
+	if err := h.user.Create("Drafts", nil); err != nil {
+		t.Fatal(err)
+	}
+	draft := rawWithAttachment("draft", "Unfinished", 200<<10)
+	h.append("Drafts", draft, daysAgo(60), imap.FlagDraft)
+	h.append("INBOX", rawWithAttachment("in", "Received", 200<<10), daysAgo(60))
+	start := time.Now()
+	h.start()
+	h.waitIdle(start)
+
+	drafts := h.folder("drafts")
+	if drafts.Role != api.RoleDrafts {
+		t.Fatalf("drafts folder = %+v", drafts)
+	}
+	msgs := h.messages(drafts.ID)
+	if len(msgs) != 1 || msgs[0].RawState != store.RawFull || msgs[0].BodyState != store.BodyFetched || msgs[0].Attachments[0].Remote {
+		t.Fatalf("draft = %+v", msgs)
+	}
+	if in := h.messages(h.folder("inbox").ID); len(in) != 1 || in[0].RawState != store.RawPartial {
+		t.Fatalf("inbox message = %+v", in)
 	}
 }

@@ -5,12 +5,28 @@ import Foundation
 
 /// Where attachments being opened are written (ui/internal/window/
 /// attachments.go `openDir`, `writeOpenFile`, `sweepOpenDir`,
-/// `SweepOpenedAttachments`; docs/security.md §8): a private directory
-/// (0700) under the user's caches, one fresh subdirectory per file, each
-/// file created exclusively with mode 0600. Entries older than `openMaxAge`
-/// are swept before every write; the whole directory goes when the
-/// application starts and when it exits.
+/// `SweepOpenedAttachments`, `purgeOpenDir`; docs/security.md §8): a
+/// private directory (0700) under the user's caches, one fresh
+/// subdirectory per file, each file created exclusively with mode 0600.
+/// Entries older than `openMaxAge` are swept before every write; the whole
+/// directory goes when the application starts and when it quits, whatever
+/// the preferences say (`removeAll`).
 public struct OpenDir: Sendable {
+    /// What `removeAll` throws for a URL that is not an open directory;
+    /// nothing was touched. The path names the user's directories: log it
+    /// as private.
+    public struct NotTheOpenDirectory: Error, Equatable, CustomStringConvertible {
+        public let path: String
+
+        public var description: String {
+            "not the directory for opened attachments: \(path)"
+        }
+    }
+
+    /// The last two components of every open directory's path.
+    static let parentName = "Malachi Mail"
+    static let name = "open"
+
     public let url: URL
 
     public init(url: URL) {
@@ -23,8 +39,8 @@ public struct OpenDir: Sendable {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Caches", isDirectory: true)
         return OpenDir(url: caches
-            .appendingPathComponent("Malachi Mail", isDirectory: true)
-            .appendingPathComponent("open", isDirectory: true))
+            .appendingPathComponent(parentName, isDirectory: true)
+            .appendingPathComponent(name, isDirectory: true))
     }
 
     /// Writes `data` as `name` into a fresh private subdirectory and returns
@@ -82,9 +98,38 @@ public struct OpenDir: Sendable {
         }
     }
 
-    /// Removes every file written for opening (`SweepOpenedAttachments`).
-    public func removeAll() {
-        try? FileManager.default.removeItem(at: url)
+    /// Removes the directory with every file written for opening
+    /// (`SweepOpenedAttachments`, `purgeOpenDir`), and refuses any
+    /// directory but an open one: `url` must be an absolute file path
+    /// that ends in `Malachi Mail/open` once `.` and `..` are taken as
+    /// written, or `NotTheOpenDirectory` is thrown and nothing is touched,
+    /// so a slip cannot take anything else with it. A symbolic link in its
+    /// place is removed, never followed; a missing directory is no error.
+    /// Any other failure is thrown for the caller's log.
+    public func removeAll() throws {
+        guard let clean = Self.purgeable(url) else {
+            throw NotTheOpenDirectory(path: url.path)
+        }
+        do {
+            try FileManager.default.removeItem(at: clean)
+        } catch CocoaError.fileNoSuchFile {
+            // Nothing to remove.
+        }
+    }
+
+    /// `url` with its `.` and `..` resolved lexically, when that names an
+    /// open directory; nil otherwise. A path relative to the working
+    /// directory is refused, not resolved against it.
+    static func purgeable(_ url: URL) -> URL? {
+        guard url.isFileURL, url.baseURL == nil, url.relativePath.hasPrefix("/") else {
+            return nil
+        }
+        let clean = url.standardizedFileURL
+        let parts = clean.pathComponents
+        guard parts.count >= 3, parts[parts.count - 1] == name, parts[parts.count - 2] == parentName else {
+            return nil
+        }
+        return clean
     }
 
     private func writeAll(_ fd: Int32, _ data: Data) throws {

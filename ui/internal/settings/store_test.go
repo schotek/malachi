@@ -33,6 +33,11 @@ func TestMemoryDefaults(t *testing.T) {
 	if got := s.MarkReadDelay(); got != 2 {
 		t.Errorf("MarkReadDelay = %d, want 2", got)
 	}
+	// Bind pushes the stored value into the window, so the fallback needs
+	// the geometry keys too.
+	if w, h := s.integer(KeyWindowWidth), s.integer(KeyWindowHeight); w != 1200 || h != 760 || s.boolean(KeyWindowMaximized) {
+		t.Errorf("window geometry defaults = %dx%d maximized=%v, want 1200x760 false", w, h, s.boolean(KeyWindowMaximized))
+	}
 	s.SetMarkReadDelay(999)
 	if got := s.MarkReadDelay(); got != MarkReadDelayMax {
 		t.Errorf("MarkReadDelay not clamped: %d", got)

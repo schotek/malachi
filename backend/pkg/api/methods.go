@@ -11,6 +11,7 @@ const (
 	MethodSystemInfo         = "system.info"
 	MethodSystemHello        = "system.hello"
 	MethodSystemAuthenticate = "system.authenticate"
+	MethodSystemStorage      = "system.storage"
 
 	// Accounts.
 	MethodAccountList        = "account.list"
@@ -36,6 +37,7 @@ const (
 	MethodMessageBody     = "message.body"
 	MethodMessagePart     = "message.part"
 	MethodMessageEmbedded = "message.embedded"
+	MethodMessageDownload = "message.download"
 	MethodMessageFlag     = "message.flag"
 	MethodMessageMove     = "message.move"
 	MethodMessageDelete   = "message.delete"
@@ -91,13 +93,13 @@ const (
 // AllMethods lists every callable method. The RPC server uses it to register
 // stubs and tests use it to check docs/api.md coverage.
 var AllMethods = []string{
-	MethodSystemInfo, MethodSystemHello, MethodSystemAuthenticate,
+	MethodSystemInfo, MethodSystemHello, MethodSystemAuthenticate, MethodSystemStorage,
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
 	MethodAccountReorder, MethodAccountOAuthStart, MethodAccountOAuthWait, MethodAccountOAuthCancel,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
-	MethodMessageEmbedded, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
+	MethodMessageEmbedded, MethodMessageDownload, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
 	MethodMessageSend,
 	MethodOutboxRetry,
 	MethodThreadList, MethodThreadGet,

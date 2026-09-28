@@ -796,7 +796,7 @@ private func pinnedAccount(id: AccountID = "acc-9") -> Account {
         try await waitUntil { rec.pages.last == [.identity, .oauth] }
         w.signInWithProvider()
         try await waitUntil { !rec.toasts.isEmpty }
-        #expect(rec.toasts == ["Starting the sign-in failed"])
+        #expect(rec.toasts == ["Starting the sign-in failed: try again in a moment"])
         #expect(rec.oauth == [googlePrompt])
         #expect(rec.opened.isEmpty)
         #expect(rec.busy == [true, false], "only the discovery kept the pages busy")

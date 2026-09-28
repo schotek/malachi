@@ -6,8 +6,10 @@ using Adw 1;
 // own window, opened from its chip under the containing message's headers
 // (ui/internal/window/embedded.go). The message display shares its object
 // IDs with window.blp and message_window.blp (message_view.go); keep them in
-// sync. No actions: the message has no id of its own, so there is nothing
-// to flag, move or reply to.
+// sync. The one exception is pictures_bar: the pictures of an attached
+// message arrive inlined, never on the mail server only. No actions: the
+// message has no id of its own, so there is nothing to flag, move or reply
+// to.
 Adw.Window embedded_window {
   default-width: 820;
   default-height: 620;

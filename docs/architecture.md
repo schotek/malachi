@@ -29,7 +29,9 @@ The backend (`backend/`, Go) owns everything that is not pixels:
 - IMAP and SMTP (`emersion/go-imap`, `go-message`, `go-smtp`, `go-sasl`)
 - Microsoft Graph for Microsoft 365 / Outlook.com mailboxes (REST over
   `net/http`, tokens from GNOME Online Accounts)
-- the offline store, synchronisation, conflict handling
+- the offline store (compressed on request, the large attachments of older
+  mail left on the server if the user wishes), synchronisation, conflict
+  handling
 - conversation threading
 - full-text search (SQLite FTS5)
 - **HTML sanitisation** (see §4)
@@ -48,9 +50,13 @@ only when started with a flag.
 
 A third client, the macOS application (`macos/`, Swift/AppKit, §6 and
 [macos-port.md](macos-port.md)), speaks the same protocol over the same socket and
-mirrors the GTK UI screen for screen. It needed one addition to the
-daemon, the platform-neutral helper keyring (`internal/auth/helper`, §3),
-and no change to the contract.
+mirrors the GTK UI screen for screen. It needed two additions to the
+daemon, both extension points chosen at run time rather than platform
+code: the helper keyring (`internal/auth/helper`, §3), and run-time
+defaults for the two storage preferences (`MALACHI_DEFAULT_COMPRESS_STORE`,
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS`, §3.1), which its daemon gets
+because many Macs have small disks. Neither added anything
+macOS-specific to the contract.
 
 A fourth client, the Windows application (`windows/`, C#/WinUI 3, §6 and
 [windows-port.md](windows-port.md)), speaks the same protocol over the same
@@ -160,14 +166,22 @@ backend/
                       (MX, autoconfig hosts, gmail.com) with alternatives (the
                       own sign-in, Gmail with an app password), guesses
   internal/core       composes services, owns the supervisor lifecycle (one
-                      dispatcher per account kind) and the notification coalescer
+                      dispatcher per account kind), the notification coalescer,
+                      message.download and the background maintenance (§3.1)
   internal/graph      Microsoft Graph client + sync supervisor for Microsoft 365
                       accounts, sendMail delivery (probe.go: mailbox test)
   internal/imap       IMAP client + sync supervisor, one syncer per enabled
                       account (probe.go: connection test)
-  internal/mime       MIME parsing (headers, text extraction, part tree; hostile input)
+  internal/ingest     what of a downloaded message is stored: the attachment
+                      policy, the skeleton and its check, the commit; used by
+                      both syncers and message.download (§3.2)
+  internal/mime       MIME parsing (headers, text extraction, part tree; hostile
+                      input); the skeleton of a message without some of its
+                      parts, and the cid: references of its HTML
   internal/smtp       sending + outbox (probe.go: connection test)
-  internal/store      SQLite, migrations, all SQL
+  internal/store      SQLite, migrations, all SQL; the raw message files (plain
+                      or zstd, per-message locks, conversion and sweep) and the
+                      staging area they are received into
   internal/search     FTS5 indexing and query parsing
   internal/thread     conversation threading
   internal/sanitize   HTML sanitisation (security-critical)
@@ -207,7 +221,7 @@ attachment metadata, plus the cached `text_body` / `has_html` and a
 move has not been pushed yet) and `message_ops` (the operation log: one
 `flag|move|delete` row per message and local change, with the source
 folder/UID snapshot, attempts and backoff). Raw RFC 822 messages are files
-under `<data dir>/messages/<account>/<id>` (see §7). `outbox` (0006) holds
+under `<data dir>/messages/<account>/` (below, and §7). `outbox` (0006) holds
 the delivery metadata of a queued message (envelope sender and recipients,
 `queued|sending|sent|failed`, attempts, next attempt, last error); the
 message itself is a `messages` row in the account's local `outbox` role
@@ -219,6 +233,120 @@ let a listing group a folder by conversation at query time; `message_refs`
 (`In-Reply-To` and `References`), so a parent arriving after its replies
 finds them (§3.4). `messages_fts` (0013) is the full-text index behind
 search, with `search_docs` mapping its rowids to message ids (§3.5).
+`message_files` (0014) accounts for the raw files, and the same migration
+gives `messages` the columns of a message stored without its large
+attachments (below).
+
+A raw message is `<account>/<id>`, the bytes as received, or
+`<account>/<id>.zst`, the same bytes as one zstd frame
+(`github.com/klauspost/compress`, pure Go; level 3 with a 4 MiB window and
+entropy coding of literal-only blocks, without which base64 attachments are
+stored as they came; `store/rawcodec.go`). The name decides how a file
+is read, never its content: mail may begin with zstd's magic number on
+purpose, so a plain file is never sniffed, and a `.zst` that is not such a
+frame is an error (`store.ErrRawCorrupt`), never read as the message. Every
+frame records its content size and a checksum of it, and a new `.zst` is
+decoded and checked before it is renamed into place; a reader returns no
+more than the frame records and never more than 64 MiB
+(`store.MaxRawBytes`), so a damaged file fails the read instead of
+yielding a shorter or longer message. New files are written in the store's
+codec (`Preferences.compressStore`, which `core` hands to
+`store.SetRawCodec` at start and on every change) and older ones are
+converted in the background (below); a reader tries the store codec's name
+first, then the other, so a message stays readable throughout. Nothing
+outside `internal/store` touches the files: callers go through
+`OpenMessageRaw` (a `RawMessage` whose `Size` and `Rewind` behave the same
+in either codec, which is what an IMAP `APPEND` literal and SMTP `SIZE`
+need), `PutMessageRaw` and `WithMessageRaw`. A write goes to a temporary
+file beside the final name and is renamed into place; a replacement is
+flushed before the rename, and the directory before a file in the other
+codec is removed, so a crash leaves the old or the new file whole, while a
+message's first file is not flushed (a crash costs a download, as before).
+Outbox messages are the exception: always plain, flushed with their
+directory before the transaction that deletes the draft they replace, and
+never converted, since they are the only copy of mail not sent yet.
+
+The two storage preferences, `compressStore` and `attachmentOfflineDays`
+(§3.2), have no `config.toml` key and resolve differently from the others
+(api.md §4.8): a stored value, else a run-time default the starting process
+put in the environment (`MALACHI_DEFAULT_COMPRESS_STORE`,
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS`, `core/runtime_defaults.go`; only
+the macOS app sets them, to on and 30 days), else off and 0; in
+`config.set` an absent one stays as it is. `StartSync` stores such a
+default as the preference where none is stored yet, in an existing store
+too, so a daemon started later without the environment keeps what applied;
+an invalid value is logged and ignored. Like `MALACHI_KEYRING`, it is
+chosen at run time, not by a build tag (§6). The third,
+`neverStoreAttachments` (§3.2), follows the same rules without a run-time
+default: stored, else off.
+
+`message_files` holds the codec, the message's length and the file's length
+of every raw file, so neither `system.storage` nor the conversion has to
+stat the directory; it is a table of its own so that updating it never
+rewrites a `messages` row with a large `text_body`, and every write,
+conversion and removal keeps it current. The partial state lives in
+`messages` (§3.2): `raw_state` (`full|partial`), `remote_parts` (the ids of
+the parts whose bodies the file leaves out) and `remote_bytes` (their
+decoded size), which are set together or not at all; `strippable_bytes`
+(what the background pass may leave on the server: -1 not evaluated, 0
+nothing under the rule it was judged by, -2 `store.StrippableNever`, never
+under any rule); `hydrated_at` (when `message.download` last made the
+message whole). `Attachment.remote` is derived from `remote_parts` when a row is
+read and never stored in `attachments_json`, whose change would reindex the
+message for search, and a change of these columns alone never moves
+`updated_at`. `CommitMessageRaw` changes a file and its row in two phases
+around the rename, so a crash never leaves a row that calls a part stored
+when the file lacks it: the row first names the union of the old and the
+new remote sets, then the file is replaced, then the row gets its final
+state. That first commit is flushed to disk before a stored file is
+replaced (synchronous `FULL` on a connection of its own; the store's other
+commits reach the disk with the next checkpoint), and a part the row calls
+stored, with a size, that still reads back empty is answered and recorded
+as remote (`store.MarkPartsRemote`). Writers of one message take its lock in
+turn; a reader holds nothing once its file is open, since a rename or a
+removal leaves an open file's content alone, and the background passes only
+try the lock and skip a busy message. A deletion removes the files once
+its rows are committed, and a message a writer holds at that moment is
+removed by that writer before it lets go. A download is received into
+`<data dir>/staging/` first (random names, created exclusively, on the
+file system of `messages/` so that a commit is a rename), which the daemon
+empties whenever it opens the store; under `neverStoreAttachments` it is
+received into memory instead (`store.StageMemory`), and only the file the
+commit writes from there reaches the disk (§3.2).
+
+Background work on the files is the raw maintenance loop that
+`core.Maintain` runs after its one-off upgrade passes
+(`core/raw_maintenance.go`). At its start and every hour it sweeps
+(`store.SweepMessageFiles`): temporary and staged files, the files of
+messages without a row and the empty directories of unknown accounts go
+once they are an hour old (a directory with files stays: two stores in one
+data directory share `messages/`); of a message left with both variants
+the newer valid one stays; missing accounting rows are added and wrong
+ones corrected, which on the first start after migration 0014 accounts for
+every older file (`meta` `raw.accounted`; until then `system.storage`
+estimates those files from the message sizes). Then it runs its steps in
+order, each a `RawStep` with its progress in `meta` under
+`raw.step.<name>` (`<key>|<cursor>`, or `<key>|done`), restarted from the
+beginning when its key changes: `codec`
+(key: the target codec) converts the files to the store's codec in either
+direction, 64 per batch and in two phases — every new file written, checked
+and flushed beside its source, the directories flushed, and only then each
+source removed, unless a writer replaced either file meanwhile
+(`os.SameFile`) — and starts over when a sweep finds files in the other
+codec; `attachments` (key: the policy and the date, so it runs daily as
+mail ages) reduces the messages that aged past `attachmentOfflineDays`,
+oldest first, or under `neverStoreAttachments` (key `3:never:<date>`, the
+version of the rule first, daily as well) every stored message (§3.2);
+`restartRawStep` starts a step's pass over although it finished for its key, clearing the progress at once
+and again when the loop next looks, so that a batch running meanwhile
+cannot store its own progress over the restart. After each batch the
+loop pauses as long as the batch took, at least 20 ms, so it never takes
+more than half a core; `config.set` wakes it to look at the keys again,
+and so does a check every minute while it is idle. A full disk
+(`store.ErrNoSpace`) stops it, `system.storage` reporting
+`conversion: noSpace`, until the next `config.set` or restart. At
+shutdown `malachid` waits for the batch in progress, within the same
+10 seconds it gives the syncers, before it closes the store.
 
 ### 3.2 Sync model (implemented)
 
@@ -237,7 +365,9 @@ account; `internal/core` owns its lifecycle:
 - **Retention window.** `offlineDays` bounds what exists locally: headers
   *and* bodies of messages within the window are fetched (`UID SEARCH
   SINCE`), older messages are not stored at all. Shrinking the window prunes
-  on the next pass; growing it backfills silently.
+  on the next pass; growing it backfills silently. Within the window,
+  `attachmentOfflineDays` may leave the large attachments of the older
+  messages on the server (below).
 - **Local-first mutations.** `message.flag/move/delete` change the rows and
   queue `message_ops` in one transaction, then nudge the syncer
   (`Trigger`). Every cycle pushes the queued operations first (in order,
@@ -253,8 +383,9 @@ account; `internal/core` owns its lifecycle:
   behind the bulky ones; the display order is `folder.list`'s own):
   UIDVALIDITY check (reset on change), UID diff against the
   window, envelopes and `BODYSTRUCTURE` first, then bodies newest-first
-  (raw file → `internal/mime` → text body; over the raw cap → `tooBig`,
-  unparsable → `failed`), server flags for the rest → `IDLE` on INBOX where
+  (each through `internal/ingest`, below: staged, parsed, stored whole or
+  as a skeleton, text body; over the 25 MiB cap → `tooBig`, unparsable →
+  `failed`), server flags for the rest → `IDLE` on INBOX where
   offered, polling at the configured interval otherwise, or a trigger.
 - **Failures.** A network error degrades the account to `offline` with
   backoff; a refused login to `authRequired` (plus `notify.authRequired`,
@@ -297,8 +428,8 @@ and the notifications above are the same. What differs:
   fallback) → per folder a delta query (`mailFolders/{id}/messages/delta`,
   cursor in `folders.delta_link`, the first enumeration bounded by
   `receivedDateTime ge <window>`) → bodies newest-first through
-  `messages/{id}/$value` (four at a time; the same raw-file → `internal/mime`
-  pipeline as IMAP) → tombstones applied only after every folder of the
+  `messages/{id}/$value` (four at a time; through `internal/ingest` as for
+  IMAP) → tombstones applied only after every folder of the
   pass ran, so a message that reappears elsewhere is moved locally, not
   deleted and re-created. A cursor the service rejects (410 /
   `SyncStateNotFound`) restarts the folder from scratch.
@@ -314,6 +445,197 @@ and the notifications above are the same. What differs:
   and every folder at the sync interval; triggers interrupt the wait.
   Throttling (429/503 with `Retry-After`) is honoured per request up to a
   minute, then the syncer backs off as a whole.
+
+#### Stored bodies and attachments on demand
+
+Every body a syncer downloads, over IMAP or Graph, and every
+`message.download` goes through `ingest.Store`: the bytes are received into
+the staging area (at most 25 MiB, `ingest.MaxMessageBytes`), parsed, judged
+by the attachment policy and, when parts are to stay on the server,
+rewritten into a skeleton that has to pass a check, then committed together
+with the row (`store.CommitMessageRaw`, §3.1); an unparsable body is stored
+as received and marked `failed`, as before. Each message is decided when it
+is downloaded, so a first sync of a large mailbox does not fill the disk
+with attachments it is about to drop. It saves disk, not transfer: a
+message is always downloaded whole.
+
+The policy (`ingest.Decide`, `Preferences.attachmentOfflineDays`: 0 keeps
+every attachment, N those of the last N days, -1 small ones only): the
+candidates are the attachments of at least 100 KiB
+(`api.LargeAttachmentMinBytes`) that are not the text or HTML body and whose
+Content-ID the HTML does not reference. The references come from
+`mime.CIDReferences`, a superset of what the sanitiser resolves (every
+attribute and every text node, not only `img src`; when the list may be
+incomplete, every part with a Content-ID counts as referenced), so a
+message never loses a picture it shows (under this preference;
+`neverStoreAttachments` below leaves the large ones on the server). The
+candidates stay on the server
+when the message is older than the cutoff (midnight UTC N days back, the
+retention window's day boundary), judged by the server's internal date and
+only without one by the `Date` header the sender chose, or under -1 at
+once; never for a message in Drafts or the outbox, one without a copy on the
+server (no UID, no Graph id), a signed or encrypted one (`Parsed.Crypto`: a
+signature covers the parts as they are), a parse that hit a limit, or
+within seven days of an on-demand download (`hydrated_at`,
+`ingest.HydratedKeep`).
+
+The skeleton (`mime.Skeleton`) is the message again with the omitted
+leaves' bodies left empty: every header as go-message reads it, the other
+leaves byte for byte, the multipart structure with the same boundaries and
+hand-written delimiter lines, split by the same readers, limits and part
+numbering as `mime.Parse`. It is only a candidate: `ingest` parses it, and
+`mime.VerifySkeleton` must find the same envelope, headers, text and HTML
+bodies, snippet, part numbers and attachment list as in the original, every
+size equal except the omitted parts', which must be 0. Anything doubtful —
+a missing boundary, a reader error, a limit, a line that would read as a
+delimiter once its line ending became CRLF — stores the whole message, and
+a message that cannot be reduced safely (this, a signed or encrypted one, a
+parse that hit a limit, a stored file that does not parse) is marked so
+(`strippable_bytes` -2, `store.StrippableNever`) and not tried again under
+any policy. The row always gets the parse of the whole message:
+`attachments_json`, `text_body` and the search index describe every part,
+and a skeleton changes only the file and the partial-state columns (§3.1).
+
+Mail that ages past the policy after it was stored is reduced by the
+maintenance step `attachments` (§3.1, `ingest.Strip`), oldest first, from
+the stored file alone, without a network request; a tightened setting is
+applied the same way. A loosened one applies to mail downloaded from then
+on: nothing is fetched back in the background, and an older attachment
+comes when the user opens it (§7).
+
+`message.download` (`core/download.go`) fetches a stored message again when
+the user asks for content the device does not hold: a `remote` attachment,
+or a body still `pending`. It uses a connection of its own, apart from the
+syncer and its IDLE, and only reads: IMAP `EXAMINE` with the folder's
+UIDVALIDITY checked, then `UID FETCH BODY.PEEK[]` (`imap.FetchMessage`), or
+Graph's `me/messages/{id}/$value` (`graph.FetchMessage`). `ingest.Store`
+then keeps the whole message, after checking that the download is the
+stored message: the same Message-ID and, on IMAP, where a UID names the
+same bytes for good, the same part numbers and sizes (Microsoft 365
+rebuilds a message's MIME, so its part ids may change). A message whose
+local move has not reached the server yet is found through the UID
+snapshot of its pending operation. Calls for one message share one
+download, an account runs two at a time, and a download runs detached from
+its caller within 4 minutes; pausing or removing the account cancels its
+downloads and waits for them before rows or files go. A message the server
+no longer has is `messageGone` and triggers a pass of its folder, which
+removes the local copy; on IMAP only a `NO [NONEXISTENT]` or
+`[EXPUNGEISSUED]`, a mailbox `LIST` does not show after a `NO` without a
+code, another UIDVALIDITY or a `UID FETCH` answered without the message
+say so, while `[UNAVAILABLE]`, `[INUSE]` and `[LIMIT]` are `unavailable`
+and any other `NO` a `serverError`. A message announced over the cap is
+refused unread. An IMAP literal shorter than the size the server
+announced, or a Graph body that breaks off, is a network error and never
+stored as a message; the syncers check the same.
+
+`neverStoreAttachments` (`ingest.Policy.NeverStore`) overrides
+`attachmentOfflineDays`: every attachment of at least one byte that the
+HTML does not show through `cid:` is a candidate, and so is a picture it
+shows of 100 KiB and more (`api.LargeAttachmentMinBytes`; with a
+reference list that may be incomplete, a part with a Content-ID of that
+size), whatever the message's age and however recently it was
+downloaded; a smaller picture the HTML shows stays with the text. The
+exceptions above stay as they are (Drafts, the outbox, no copy on the
+server, signed or encrypted, a parse that hit a limit or failed, a
+skeleton that does not verify: stored whole). A picture left on the server
+keeps its part, headers and Content-ID in the skeleton, with an empty
+body, so the HTML still points at it (below). A body a syncer downloads,
+and a `pending` one `message.download` fetches, is received into memory
+(`store.StageMemory`) instead of `staging/`, and its skeleton is built
+there too, so only the file committed, the skeleton or a whole message of
+the exceptions, reaches the disk. Switching the preference on changes the
+key of the `attachments` step to `<rule>:never:<date>`
+(`ingest.NeverStoreRule`, now 3; 2 did not take the pictures the HTML
+shows, and a daemon with a new rule runs the pass at once), a pass a day
+that reduces every stored message, also those downloaded on request
+(`StripQuery.AnyHydrated`), and catches what came to be stored whole since
+the last one (a message moved out of Drafts, one a batch passed over
+while it changed); a day with nothing to do costs a search of the partial
+indexes. After the messages stored whole, each batch takes the messages
+stored partial whose file still holds a non-empty attachment
+(`StripQuery.Partial`, through `messages_partial`: a message
+`attachmentOfflineDays` reduced keeps its small attachments):
+`ingest.Strip` parses the stored skeleton, whose omitted parts are empty
+and so no candidates, builds the new skeleton from it and verifies it
+against that parse, and commits the union of the old and the new remote
+sets (phase A widens the row first, as for any reduction) with
+`remote_bytes` grown by the parts omitted now.
+A reduction under `NeverStore` records `strippable_bytes` 0 (nothing more
+to leave on the server, so the pass never takes the message up again),
+and a partial message with nothing left to omit is settled at 0 without
+a new file; one under the size threshold keeps the candidates' size, so
+that a later switch-on takes it up. A partial message that cannot be
+reduced further safely is -2, as a whole one. Before the first pass,
+once per switch-on and rule (`meta` `attachments.never_store.reevaluated`
+holds the rule it was done by, `3`, or `done` for rule 2; cleared while
+the preference is off), the messages settled at 0 whose file still holds
+a non-empty attachment (any listed one of a whole message, one outside
+`remote_parts` of a partial one; a picture the HTML shows is listed too)
+are marked not evaluated again (`store.ReevaluateSettled`); the daily
+passes do not repeat that. A store judged under rule 2 in the same
+switch-on holds, in its settled messages, only pictures the HTML shows,
+so from `done` only a message whose file holds a part of 100 KiB or more
+is marked; a message never to be reduced (-2) keeps its mark.
+Switching the preference either way and enabling a paused account start
+the pass over at once (`restartRawStep`), so that switching it off and on
+again the same day runs a pass although one finished under that day's
+key. The syncers read the preferences for each body as it arrives, and
+`message.download` when the server starts sending, and they tell the
+daemon which policy a message was stored under (`storedUnder`): one
+stored without `NeverStore` while the preference is on by then (switched
+on while it was being received, perhaps after the switch-on's pass) is
+marked not evaluated again if it had settled at 0
+(`store.ReevaluateSettledMessage`) and the pass starts over, which takes
+it up whether it was stored whole or reduced under the size threshold. Switching it
+off brings nothing back, as loosening `attachmentOfflineDays` does: the
+next download of a message stores it whole.
+
+Under the preference, `message.download` of a message whose body is stored
+writes nothing: `ingest.Hold` receives the download into memory and checks
+it against the row as `ingest.Store` would, and the whole message goes into
+the daemon's memory cache (`core/memcache.go`), the row and the skeleton
+staying as they were and the parts `remote`. That holds in Drafts too, for
+a reduced message moved there. A `pending` body is stored as a skeleton and
+held whole as well, unless it is one of the exceptions, which is stored
+whole and not held. The cache is bounded by bytes (256 MiB, the least
+recently used message evicted first), drops a message unused for 30
+minutes, and is emptied when the preference is switched off and when the
+daemon closes (`Backend.Close`), an account's messages when the account is
+paused or removed; a generation counter keeps a download that finishes
+after a switch-off from putting its message back. Nothing of it is written
+to disk or logged; `put` keeps the downloaded bytes it is handed without
+a copy, and a download received into memory takes room for the size an
+IMAP server announces up front, within the 25 MiB cap. A message held
+answers `message.download` at once, as long as the copy has every part
+the row keeps on the server (`heldMissing`); `message.download` holds a
+copy only then (Microsoft 365 rebuilds a message it serves again and may
+name or type a part anew, which its check by Message-ID alone lets
+through) and answers `serverError` otherwise, so that an unusable copy
+never keeps a message from being downloaded again. `message.part` and
+`message.embedded` (`extractPart`) and the quoter of `draft.create` and
+`draft.open` (`importParts`) take a part the row calls remote from the
+held copy (`heldPart`): the part with the same id, file name, type and
+size, else the only one with that name, type and size, else the only one
+with that name and type (Microsoft 365 numbers the parts anew when it
+serves a message again), never one of another size while one of the right
+size is there; without a copy or a match the part is `partNotDownloaded`,
+or `skipped`, as before. A part the row gives a
+size that reads back with no bytes counts as remote in either mode, since
+under this one even a small part is left on the server.
+
+`message.body` still shows a message whose large pictures are on the
+server: the sanitiser rewrites their `cid:` references to `malachi-cid:`
+as for any part the message has, and `renderHTML` counts in
+`remotePictures` the entries of `inlineParts` that `message.part` cannot
+serve now: parts the row keeps on the server (read before the file is
+opened and again after, as `extractPart` does), and parts the file holds
+empty although the row gives them a size, which it records as remote
+(`markLostParts`) so that `message.download` fetches them, less those the
+held copy has (`heldPartID`). It asks the store and memory only; showing
+a message never contacts the server. The UI offers to download the
+pictures and asks for the body again, which counts 0 while the copy lasts.
+A reply or forward quotes such a picture only from the held copy and
+otherwise lists it in `skipped` with `remote` set, as any other part.
 
 **When extending this, read Geary's `engine/imap-engine` and
 Evolution's `camel-imapx`.** Not to copy code, but to learn how they handle
@@ -671,11 +993,50 @@ first activation; the mark-as-read delay is a timer around `message.flag`;
 deleting confirms with an `Adw.AlertDialog` before `message.delete`; new
 mail arrives as `notify.newMessage` and becomes a `GNotification` whose
 default action is `app.show`. The *Mail* group is daemon-owned
-(`config.get`/`config.set`): check interval, remote content and *Keep
+(`config.get`/`config.set`): check interval, remote content, *Keep
 Mail Offline For* (`offlineDays`; 1 week, 1 month, 3 months, 1 year or
-everything, an arbitrary stored value snapping to the nearest row).
+everything, an arbitrary stored value snapping to the nearest row), *Keep
+Attachments Offline For* (`attachmentOfflineDays`; small attachments only,
+1 week, 1 month, 3 months or everything, snapping alike), *Never Store
+Attachments* (`neverStoreAttachments`; while the daemon confirms it on, the
+row above is insensitive, `attachmentDaysApply`, so a failed save reverts
+that too) and *Compress Stored Mail* (`compressStore`), the last three
+hidden for a daemon that does not report them; *Disk Space Used* shows
+`system.storage` (the total, what compression saves, what is on the server
+only, a conversion under way), asked again every 5 seconds while the
+dialog is open.
 `config.set` is read-modify-write, so every change echoes the whole
 preference set the dialog last received.
+
+An attachment kept on the mail server (`Attachment.remote`), or one of a
+message whose body is still `pending`, has a server icon on its chip
+(`partState` in `window/attachments.go`). Opening, previewing or saving
+it, Save All, an attached message and a forward first ask the daemon for
+the whole message (`message.download`, `window/download.go`; one call per
+message, the chips' spinner after 400 ms), then do what was asked. A
+forward downloads first whenever an attachment is remote or the message is
+not fully loaded yet (the call answers at once when nothing is missing); if
+the download fails it asks whether to go on without the attachments, except
+when there is no daemon connection, the daemon lacks the method, or the
+message is over the daemon's size cap, where it forwards straight away and
+`draft.create` lists what it could not take. After a download a part is
+found again by id, name and type; one that cannot be matched is reported as
+gone, never replaced by another part. Under *Never Store Attachments* the
+parts stay remote after the download, which the daemon holds in memory
+only (§3.2), so the chip keeps its server icon and every later action asks
+`message.download` again, answered at once while the daemon still holds
+the message. A message whose large pictures the daemon kept on the server
+(`message.body` `remotePictures`) shows a second bar under the
+remote-images bar, *N pictures of this message are on the server only*
+with *Download Pictures*: `message.download`, then `message.body` again
+(keeping remote images the user already loaded) and a redraw; a reply
+downloads first when the body on display counts such pictures (the
+daemon's count, not the parts' `remote`), and a forward whenever any part
+is remote. The UI never decides what is stored: it only asks, on these
+clicks. The files written for opening and previewing (`openDir`) go when
+the application starts and when it shuts down, whatever the preferences
+(`SweepOpenedAttachments` in `main.go`; `purgeOpenDir` removes nothing but
+an absolute path ending in `malachi/open`).
 
 ## 6. Platform
 
@@ -715,8 +1076,10 @@ over the login keychain (`MALACHI_KEYRING=helper`, §3). `make macos`
 assembles `build/Malachi Mail.app` with `malachid`, `malachi-mcp` and
 `malachi-keychain` inside `Contents/MacOS/`; the app hands the daemon
 macOS paths for the config and the store (`~/Library/Application
-Support/Malachi Mail/`), the helper as its keyring, and keeps the
-daemon's default socket path so the MCP bridge needs no configuration.
+Support/Malachi Mail/`), the helper as its keyring, the defaults of the
+two storage preferences (compressed, attachments of 30 days kept;
+`MALACHI_DEFAULT_*`, §3.1), and keeps the daemon's default socket path so
+the MCP bridge needs no configuration.
 
 The Windows client is `windows/`, a .NET solution of three projects and a
 helper ([windows-port.md](windows-port.md)), ported from the macOS client
@@ -878,11 +1241,89 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   directory, removed with the folder or the account; one that outlives its
   row is swept by `core.Maintain` once it is a day old); the parsed plain
   text, the curated headers and the attachment metadata live in SQLite
-  (`messages.text_body` and friends). HTML is never stored separately: when
-  the sanitiser lands, `message.body` re-parses the raw file and sanitises
-  on demand, so a ruleset bump never has to migrate cached HTML. Compose
-  attachments follow the same split (`<data dir>/attachments/<id>` plus
-  metadata including SHA-256 in SQLite).
+  (`messages.text_body` and friends). HTML is never stored separately:
+  `message.body` re-parses the raw file and sanitises on demand, so a
+  ruleset bump never has to migrate cached HTML. Compose attachments follow
+  the same split (`<data dir>/attachments/<id>` plus metadata including
+  SHA-256 in SQLite). *Amended 2026-09-27 by the two decisions below: the
+  file may be one zstd frame (`<id>.zst`), and a skeleton of the message
+  whose large attachments stayed on the server.*
+- Compressed message store: **decided** (2026-09-27) — a raw message file
+  may be one zstd frame (`<id>.zst`, §3.1) written with
+  `github.com/klauspost/compress` (pure Go without cgo, no dependencies of
+  its own, BSD-3-Clause), under the preference `compressStore`: on in the
+  macOS app (`MALACHI_DEFAULT_COMPRESS_STORE=1`, since many Macs have
+  256 GB disks), off elsewhere (a file system such as btrfs compresses by
+  itself), chosen at run time, never by a build tag, and applied to
+  existing stores too; a change converts the stored mail in the background,
+  in both directions. Measured on a real store of 3,725 messages (three
+  accounts; Apple M4, one core): the raw files were 96 % of the footprint
+  (910 MiB beside a 42 MB `store.db`); zstd at `SpeedDefault` with entropy
+  coding of literal-only blocks keeps 60 % of them (72 % without that
+  option, which stores base64 attachments as they came) at about 450 MB/s
+  compressing and 900 MB/s decompressing, for 0.3 ms more per message
+  opened (34 ms more for a 25 MiB message) and 0.6 ms more CPU per message
+  synchronised. Rejected: compressing inside `store.db` (the FTS index and
+  the text bodies are about 4 % of the footprint, and FTS5 `detail=column`
+  would break the phrase queries `internal/search` sends); SQLite page
+  compression (ZIPVFS and CEROD are proprietary, and sqlite-zstd needs cgo
+  and a Rust extension `modernc.org/sqlite` cannot load); the file system's
+  compression (APFS does not compress ordinary writes, and anything else is
+  code per platform, §6); the standard library's deflate (slower
+  decompression); a zstd dictionary (it helps only messages under 32 KiB).
+- Attachments on demand: **decided** (2026-09-27) — the attachments of at
+  least 100 KiB (`api.LargeAttachmentMinBytes`) that the HTML does not show
+  through `cid:` may stay on the mail server, under the preference
+  `attachmentOfflineDays` (small ones only, N days, or all; 30 days in the
+  macOS app through `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS`, all
+  elsewhere): the message is stored as a verified skeleton and made whole
+  by `message.download` when the user opens, saves or forwards such a part
+  (§3.2). On the same store, leaving those attachments on the server (the
+  pictures the HTML shows kept) keeps 36 % of the raw files, and 19 %
+  together with compression. A download comes only from the account's own
+  server, read-only, on a user action or when an MCP tool asks for that
+  attachment or a forward (docs/mcp.md); signed and encrypted mail is never
+  reduced. Rejected: fetching single parts (IMAP `BODY[n]`) and reassembling
+  the message (parsers disagree about broken MIME, so the result could not
+  be verified against the original, and Graph has no per-part MIME);
+  extracting attachments into a store of their own (the skeleton keeps the
+  message one file that the parser, `message.part` and the quoter read as
+  before); go-message's `MultipartWriter.SetBoundary` for writing the
+  skeleton (it rejects boundaries its own reader accepts, so the delimiters
+  are written by hand); downloading on the syncer's session (one goroutine
+  that waits in IDLE on the inbox: a download would have to wait for it or
+  interrupt it); keeping the remote flags inside `attachments_json` (every
+  change would fire the search index's update trigger, so `remote_parts` is
+  a column of its own); re-downloading in the background when the setting
+  is loosened (the user's decision: an older attachment comes when it is
+  opened). Not included: saving transfer on a first sync (a message is
+  downloaded whole and reduced at once), messages over the 25 MiB cap
+  (still `tooBig`). *Amended 2026-09-27: never store attachments.* The
+  preference `neverStoreAttachments` (off, and without a default from the
+  environment on any platform) leaves every attachment the HTML does not
+  show on the server, whatever its size or the message's age, and the
+  pictures it shows of 100 KiB and more (after a test store of 729 MiB, of
+  which about 400 MiB were pictures the HTML shows and 302 MiB of them
+  pictures of 100 kB and more: the user's decision), with the same
+  exceptions stored whole; the messages already stored are reduced in the
+  background, also those downloaded on request, and a store already in the
+  mode is judged again once when the rule grows (`ingest.NeverStoreRule`).
+  Such a message shows its text and small pictures at once and offers to
+  download the large ones (`message.body` `remotePictures`); showing it
+  never contacts the server. A download the user
+  asks for is received and held in the daemon's memory, not in the store
+  (256 MiB, the least recently used first, 30 minutes unused), and the
+  parts are served from there (§3.2); a file the user opens or previews
+  must still be a file for the viewer, so both UIs remove their directory
+  for opening at every start and quit. Memory, because nothing of the
+  message reaches the disk, it is gone when the daemon quits or crashes
+  without anything to sweep, and it needs no code per platform (§6).
+  Rejected: temporary files removed at quit (a crash leaves them until the
+  next start, and until they go snapshots and backups may take them, while
+  removing a file does not overwrite its blocks); a RAM disk (`hdiutil
+  attach ram://` on macOS, a tmpfs mount on Linux: code per platform, a
+  volume the user's other processes and the Finder see, and one a crash
+  leaves in place).
 - Contacts and recipient completion: **decided** (2026-09-06) — the
   system address books through Evolution Data Server over D-Bus
   (`internal/contacts/eds`: `Sources5` for the registry,

@@ -478,6 +478,17 @@ public final class ActionsController {
         cache.loadImages(s) { _ in }
     }
 
+    /// Downloads the pictures of `id` kept on the mail server only and
+    /// shows the message again wherever it is on display (remote.go
+    /// `downloadPictures`, through the cache: the bars show the wait from
+    /// the click on, a request already running is left alone, a failure is
+    /// a toast through `toast`, or the controller's own when nil, with the
+    /// bar back as it was).
+    public func downloadPictures(_ id: MessageID, toast: (@MainActor (String) -> Void)? = nil) {
+        guard let s = summary(id) else { return }
+        cache.downloadPictures(s, toast: toast ?? self.toast) { _ in }
+    }
+
     /// Puts the sender of `id` on the daemon's known-senders list
     /// (sender.add), switches the stored remote-content preference to
     /// "from known senders" when it was "never" (otherwise the list would
@@ -540,15 +551,85 @@ public final class ActionsController {
     // MARK: Compose
 
     /// Opens a reply or forward of message `id` (compose_open.go
-    /// `openCompose`). The template comes from the backend (draft.create:
-    /// recipients, subject, the original quoted formatted with its pictures
-    /// copied into the attachment store); a second click while it is being
-    /// prepared does nothing (one window will appear). Only when the backend
-    /// cannot answer does the window open from what the pane knows
-    /// (`prefill`), with a toast unless the fallback is the normal course
-    /// (`composeFallbackText`).
-    public func openCompose(_ kind: ComposeKind, _ id: MessageID) {
+    /// `openCompose` / `openComposeFrom`). The template comes from the
+    /// backend (draft.create: recipients, subject, the original quoted
+    /// formatted with its pictures copied into the attachment store); a
+    /// second click while it is being prepared does nothing (one window will
+    /// appear). Only when the backend cannot answer does the window open
+    /// from what the pane knows (`prefill`), with a toast unless the
+    /// fallback is the normal course (`composeFallbackText`).
+    ///
+    /// A forward of a message with attachments kept on the mail server (or
+    /// a body not downloaded yet, or one the cache does not hold) downloads
+    /// it first (`forwardNeedsDownload`), since draft.create imports only
+    /// what is stored. When the download fails the user is asked over
+    /// `parent` whether to forward without them ("Forward Without
+    /// Attachments?", the error as the body), unless asking would change
+    /// nothing: no daemon, one without message.download, or a message over
+    /// its cap (`askForwardWithout`).
+    /// The question has no answer for Cancel: the request ends when it is
+    /// asked, and a confirmation starts it again (unless another one for
+    /// the message runs by then).
+    ///
+    /// A reply or reply to all of a message whose pictures are kept on the
+    /// mail server only downloads it first as well (`replyNeedsDownload`),
+    /// so the quote has them; a failure is only logged and the reply goes
+    /// on (the compose window says what draft.create left out).
+    public func openCompose(_ kind: ComposeKind, _ id: MessageID, from parent: AnyObject? = nil) {
         guard let s = summary(id), !composing.contains(id) else { return }
+        composing.insert(id)
+        if kind == .reply || kind == .replyAll, replyNeedsDownload(cache.loaded(id)) {
+            let cache = cache
+            Task { @MainActor [weak self] in
+                // download() logs a failure; the reply goes on without.
+                _ = try? await cache.download(accountID: s.accountId, messageID: id)
+                self?.createDraft(kind, s)
+            }
+            return
+        }
+        guard kind == .forward, forwardNeedsDownload(cache.loaded(id)) else {
+            createDraft(kind, s)
+            return
+        }
+        let cache = cache
+        Task { @MainActor [weak self] in
+            var failure: (any Error)?
+            do {
+                try await cache.download(accountID: s.accountId, messageID: id)
+            } catch {
+                failure = error
+            }
+            guard let self else { return }
+            guard let err = failure, askForwardWithout(err) else {
+                self.createDraft(kind, s)
+                return
+            }
+            self.composing.remove(id)
+            guard await self.confirmForwardWithout(parent, err), !self.composing.contains(id) else { return }
+            self.composing.insert(id)
+            self.createDraft(kind, s)
+        }
+    }
+
+    /// "Forward Without Attachments?" after the failed download `err`
+    /// (compose_open.go, `ConfirmDestructive`); without a confirmation hook
+    /// the forward is refused, like every question that must be asked.
+    private func confirmForwardWithout(_ parent: AnyObject?, _ err: any Error) async -> Bool {
+        guard let confirm else {
+            log.error("no confirmation hook is installed; the forward was refused")
+            return false
+        }
+        return await confirm(
+            parent, L10n.T("Forward Without Attachments?"),
+            rpcErrorText(L10n.T("Downloading the attachments"), err),
+            L10n.T("_Forward Without Attachments"))
+    }
+
+    /// The draft.create half of `openCompose` for message `s`, whose id is
+    /// in `composing` (compose_open.go `create`): the template from the
+    /// backend with what it could not import (`skipped`), or the fallback.
+    private func createDraft(_ kind: ComposeKind, _ s: MessageSummary) {
+        let id = s.id
         let src = composeSource(summary: s, loaded: cache.loaded(id))
         // The account's own address, for Reply All exclusion; the first
         // account's when the message's is unknown (compose.Manager
@@ -563,7 +644,6 @@ public final class ActionsController {
             self.openCompose?(p)
         }
 
-        composing.insert(id)
         let attributionLine = attribution(kind: kind, source: src)
         let params = DraftCreateParams(
             accountId: s.accountId, mode: kind.mode, messageId: id,
@@ -583,6 +663,7 @@ public final class ActionsController {
             case .success(let res):
                 var p = fromDraft(kind: kind, draft: res.draft, blocked: res.blocked)
                 p.accountID = s.accountId
+                p.skipped = res.skipped?.count ?? 0
                 self.openCompose?(p)
             }
         }

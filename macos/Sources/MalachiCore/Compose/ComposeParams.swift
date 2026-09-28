@@ -87,12 +87,16 @@ public struct ComposeParams: Sendable, Equatable {
     public var draftID: DraftID?
     public var version: Int
     public var replaces: MessageID?
+    /// How many parts of the original draft.create could not import (over
+    /// a cap, unreadable, or kept on the mail server); the window says so
+    /// once (compose.Params `Skipped`).
+    public var skipped: Int
 
     public init(
         kind: ComposeKind = .new, accountID: AccountID? = nil, to: [Address] = [], cc: [Address] = [],
         bcc: [Address] = [], subject: String = "", bodyHTML: String = "", inReplyTo: MessageID? = nil,
         forwarding: MessageID? = nil, attachments: [DraftAttachment] = [], blocked: BlockedContent = BlockedContent(),
-        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil
+        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil, skipped: Int = 0
     ) {
         self.kind = kind
         self.accountID = accountID
@@ -108,5 +112,6 @@ public struct ComposeParams: Sendable, Equatable {
         self.draftID = draftID
         self.version = version
         self.replaces = replaces
+        self.skipped = skipped
     }
 }

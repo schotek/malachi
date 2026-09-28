@@ -12,6 +12,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
@@ -83,6 +84,18 @@ type Window struct {
 	// openEmbedded tracks the windows of attached messages (embedded.go),
 	// by containing message and part, for the same reason.
 	openEmbedded map[embeddedKey]*EmbeddedWindow
+
+	// downloads are the message.download calls in flight (download.go), one
+	// per message; they are started and joined off the main loop, hence
+	// the mutex.
+	downloadsMu sync.Mutex
+	downloads   map[api.MessageID]*downloadCall
+	// spinning holds the messages whose chips show the download spinner,
+	// spinTimers the delays before it appears; savingAll the messages whose
+	// Save All runs. Main loop only.
+	spinning   map[api.MessageID]bool
+	spinTimers map[api.MessageID]glib.SourceHandle
+	savingAll  map[api.MessageID]bool
 
 	// markReadSource is the pending mark-as-read timer, 0 when none;
 	// markReadID is the message it will mark.
@@ -207,6 +220,10 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		composing:         make(map[api.MessageID]bool),
 		openMessages:      make(map[api.MessageID]*MessageWindow),
 		openEmbedded:      make(map[embeddedKey]*EmbeddedWindow),
+		downloads:         make(map[api.MessageID]*downloadCall),
+		spinning:          make(map[api.MessageID]bool),
+		spinTimers:        make(map[api.MessageID]glib.SourceHandle),
+		savingAll:         make(map[api.MessageID]bool),
 		syncStates:        make(map[api.AccountID]api.SyncState),
 		actions:           make(map[string]*gio.SimpleAction),
 		// Until the client reports a state, the first attempt is underway.
@@ -268,11 +285,16 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 			w.trustSender(s.ID)
 		}
 	}
+	w.pane.pictures = func() {
+		if s, ok := w.selectedMessage(); ok {
+			w.downloadPictures(s.ID, w.Toast)
+		}
+	}
 	w.pane.toast = w.Toast
 	w.registerActions()
 	w.messageStack.SetVisibleChildName(w.emptyPageName())
-	// The HTML views scale with the text-zoom setting; the plain-text label
-	// follows it through internal/style.
+	w.bindGeometry()
+	// HTML views scale with text-zoom; the plain-text label follows internal/style.
 	s.OnChanged(settings.KeyTextZoom, func() {
 		z := s.TextZoom()
 		w.pane.setZoom(z)

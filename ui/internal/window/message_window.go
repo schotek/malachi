@@ -72,6 +72,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.view.load = func() { w.loadRemoteImages(id) }
 	mw.view.trust = func() { w.trustSender(id) }
 	mw.view.toast = func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) }
+	mw.view.pictures = func() { w.downloadPictures(id, mw.view.say) }
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the
@@ -111,7 +112,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 		kind compose.Kind
 	}{{"reply_button", compose.KindReply}, {"reply_all_button", compose.KindReplyAll}, {"forward_button", compose.KindForward}} {
 		r := r
-		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openCompose(r.kind, id) })
+		b.GetObject(r.id).Cast().(*gtk.Button).ConnectClicked(func() { w.openComposeFrom(mw, r.kind, id) })
 	}
 
 	// Single-letter shortcuts are safe here: the window has no text entry,

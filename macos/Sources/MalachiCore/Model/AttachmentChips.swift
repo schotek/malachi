@@ -9,7 +9,8 @@ import UniformTypeIdentifiers
 // are server data and are shown as plain text; programs and scripts are
 // never opened directly (docs/security.md §4); the content comes through
 // message.part, so a part over `API.Limits.maxAttachmentDataBytes` is out
-// of reach.
+// of reach, and a part kept on the mail server comes after message.download
+// (`partState`, Model/Download.swift).
 
 /// How long a file written for opening is kept before the next open sweeps
 /// it: the viewer may still be reading it lazily (attachments.go
@@ -35,31 +36,78 @@ public func chipAttachments(_ atts: [Attachment], _ b: MessageBodyResult?) -> [A
     }
 }
 
-/// Whether message.part can deliver `a`, and if not why, as the chip's
-/// tooltip (empty while the body is still on its way; attachments.go
-/// `partAvailable`). The daemon reads parts from the stored raw message
-/// only, and never beyond `API.Limits.maxAttachmentDataBytes`.
-public func partAvailable(_ a: Attachment, _ b: MessageBodyResult?) -> (ok: Bool, why: String) {
+/// What a chip can do with its part (attachments.go `partState`).
+public enum PartState: Sendable, Equatable {
+    /// Nothing is known yet: the body is still on its way.
+    case waiting
+    /// Stored on this device: message.part delivers it.
+    case local
+    /// On the mail server only (`Attachment.remote`), or the body is not
+    /// downloaded yet: message.download fetches it first.
+    case remote
+    /// Out of reach: the message is too large or unreadable, or the part
+    /// is over `API.Limits.maxAttachmentDataBytes`.
+    case unavailable
+}
+
+/// The state of `a` and, for the chip's tooltip, why (attachments.go
+/// `partState`): empty while the body is on its way and for a stored
+/// part. The daemon reads parts from the stored raw message only, never
+/// beyond `API.Limits.maxAttachmentDataBytes`; a part kept on the server,
+/// or any part of a body not downloaded yet, comes after message.download.
+/// Whether a part is on the server is the daemon's word (`remote`); the
+/// size is exact once the body is fetched (before that it is the transfer
+/// size from BODYSTRUCTURE).
+public func partState(_ a: Attachment, _ b: MessageBodyResult?) -> (state: PartState, why: String) {
     guard let b else {
-        return (false, "")
+        return (.waiting, "")
     }
     switch b.bodyState {
-    case .fetched:
-        break
-    case .pending:
-        return (false, L10n.T("This message has not been downloaded yet."))
     case .tooBig:
-        return (false, L10n.T("This message is too large to download."))
+        return (.unavailable, L10n.T("This message is too large to download."))
     case .failed:
-        return (false, L10n.T("This message could not be read."))
+        return (.unavailable, L10n.T("This message could not be read."))
     default:
-        return (false, "")
+        break
     }
     if a.size > API.Limits.maxAttachmentDataBytes {
         // TRANSLATORS: %s is a size such as "16.0 MiB".
-        return (false, L10n.T("Attachments over %s cannot be opened or saved yet.", formatSize(API.Limits.maxAttachmentDataBytes)))
+        return (.unavailable, L10n.T("Attachments over %s cannot be opened or saved yet.", formatSize(API.Limits.maxAttachmentDataBytes)))
     }
-    return (true, "")
+    if a.isRemote || b.bodyState == .pending {
+        return (.remote, L10n.T("On the server only; it is downloaded when you open it"))
+    }
+    if b.bodyState == .fetched {
+        return (.local, "")
+    }
+    return (.waiting, "")
+}
+
+/// Whether any of `atts` has to be downloaded first (attachments.go
+/// `anyRemote`): Save All then downloads the message once.
+public func anyRemote(_ atts: [Attachment], _ b: MessageBodyResult?) -> Bool {
+    atts.contains { partState($0, b).state == .remote }
+}
+
+/// The attachment `a` stands for in `m`, the message a download answered
+/// with (download.go `partAfterDownload`): Microsoft 365 rebuilds the
+/// message, so a part id may have moved, and a stale id could hand back
+/// another part. The attachment of `m` with `a`'s part id, file name and
+/// type; else the only one with `a`'s file name and type; else nil, not
+/// found: nothing may be fetched under `a`'s old id (the MCP bridge
+/// refuses the same way). Without a message (nothing was downloaded), `a`.
+public func partAfterDownload(_ a: Attachment, _ m: Message?) -> Attachment? {
+    guard let m else {
+        return a
+    }
+    if let same = m.attachments.first(where: { $0.partId == a.partId && $0.filename == a.filename && $0.contentType == a.contentType }) {
+        return same
+    }
+    let named = m.attachments.filter { $0.filename == a.filename && $0.contentType == a.contentType }
+    if named.count == 1 {
+        return named[0]
+    }
+    return nil
 }
 
 /// Extensions the UI refuses to hand to the default application: anything

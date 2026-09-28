@@ -5,10 +5,13 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -334,4 +337,212 @@ func TestSearchMessages(t *testing.T) {
 
 	h.fb.setFail(api.MethodSearchQuery, api.NewError(api.CodeInvalidArgument, "query is longer than 1024 bytes"))
 	h.fail(t, "search_messages", map[string]any{"query": "x"}, "invalidArgument (1001): query is longer than 1024 bytes")
+}
+
+// calls snapshots the order of message.get, message.download and
+// message.part calls and the downloads asked for.
+func (h *harness) calls() ([]string, []api.MessageDownloadParams) {
+	h.fb.mu.Lock()
+	defer h.fb.mu.Unlock()
+	return append([]string(nil), h.fb.order...), append([]api.MessageDownloadParams(nil), h.fb.downloadCalls...)
+}
+
+// read_message marks an attachment kept on the mail server and counts
+// them in a trusted line; a name cannot forge the marker, being quoted.
+func TestReadMessageMarksRemote(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "read_message", map[string]any{"accountId": "a1", "messageId": "m7"})
+	head, _, _ := strings.Cut(out, "--- BEGIN UNTRUSTED")
+	mustContain(t, head, "remote-attachments: 2 (on the mail server only; get_attachment downloads them first)")
+	body := fencedBody(t, out)
+	mustContain(t, body,
+		`partId=2 filename="data.csv" type=text/csv size=204800 remote`,
+		`partId=3 filename="scan.pdf" type=application/pdf size=5242880 remote`,
+		`partId=4 filename="notes.txt\" remote" type=text/plain size=12`+"\n")
+	if _, downloads := h.calls(); len(downloads) != 0 {
+		t.Fatalf("reading downloaded: %+v", downloads)
+	}
+	out = h.ok(t, "read_message", map[string]any{"accountId": "a1", "messageId": "m1"})
+	mustNotContain(t, out, "remote")
+}
+
+// A text attachment on the mail server is downloaded, then returned.
+func TestGetAttachmentDownloadsRemote(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	res := callRaw(t, h.cs, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2", "limit": 64})
+	if res.IsError || len(res.Content) != 2 {
+		t.Fatalf("unexpected result: err=%v %s", res.IsError, textOf(res))
+	}
+	meta := res.Content[0].(*mcp.TextContent).Text
+	mustContain(t, meta, `partId=2 filename="data.csv" contentType=text/csv size=204800`,
+		"downloaded: fetched from the mail server first", "truncated; call again with offset=64")
+	mustContain(t, res.Content[1].(*mcp.TextContent).Text, "id,value\n1,remote data line")
+	order, downloads := h.calls()
+	if !reflect.DeepEqual(order, []string{"get", "part", "download", "part"}) || len(downloads) != 1 || downloads[0].MessageID != "m7" {
+		t.Fatalf("calls %v, downloads %+v", order, downloads)
+	}
+	// Whole now: the next call reads the part at once.
+	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"})
+	if order, _ := h.calls(); !reflect.DeepEqual(order[4:], []string{"get", "part"}) {
+		t.Fatalf("second call: %v", order)
+	}
+}
+
+// A type that is never returned is never downloaded either.
+func TestGetAttachmentRemoteWithheldTypeNoDownload(t *testing.T) {
+	h := newHarness(t, newFixture(), false, false)
+	out := h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "3"})
+	mustContain(t, out, "content not returned: unsupported type application/pdf")
+	if order, downloads := h.calls(); len(downloads) != 0 || !reflect.DeepEqual(order, []string{"get"}) {
+		t.Fatalf("calls %v, downloads %+v", order, downloads)
+	}
+}
+
+// A local part the daemon answers partNotDownloaded for (reduced after
+// message.get) gets one download and one retry.
+func TestGetAttachmentReducedMeanwhile(t *testing.T) {
+	fb := newFixture()
+	fb.reduced["m7"] = true
+	h := newHarness(t, fb, false, false)
+	out := h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "4"})
+	mustContain(t, out, "downloaded: fetched from the mail server first", "hello, notes")
+	if order, _ := h.calls(); !reflect.DeepEqual(order, []string{"get", "part", "download", "part"}) {
+		t.Fatalf("calls %v", order)
+	}
+}
+
+func TestGetAttachmentDownloadTimeout(t *testing.T) {
+	defer func(d time.Duration) { downloadTimeout = d }(downloadTimeout)
+	downloadTimeout = 50 * time.Millisecond
+	fb := newFixture()
+	fb.delay = map[string]time.Duration{api.MethodMessageDownload: 300 * time.Millisecond}
+	h := newHarness(t, fb, false, false)
+	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"},
+		"did not finish within 50ms; the daemon keeps going, call again in a few minutes")
+	if order, _ := h.calls(); !reflect.DeepEqual(order, []string{"get", "part", "download"}) {
+		t.Fatalf("part read after a timed-out download: %v", order)
+	}
+}
+
+// One process makes the daemon download at most maxSessionDownloadBytes;
+// a download that fetched nothing does not count.
+func TestGetAttachmentDownloadBudget(t *testing.T) {
+	fb := newFixture()
+	big := fb.messages["m7"]
+	big.Size = maxSessionDownloadBytes/2 + 1
+	fb.messages["m7"] = big
+	second := big
+	second.ID = "m8"
+	fb.messages["m8"] = second
+	fb.parts["m8/2"] = fb.parts["m7/2"]
+	fb.setFail(api.MethodMessageDownload, api.NewError(api.CodeOffline, "no network"))
+	h := newHarness(t, fb, false, false)
+
+	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"}, "offline (1300)")
+	fb.setFail(api.MethodMessageDownload, nil)
+	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"})
+	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m8", "partId": "2"}, "this session already had 256 MiB downloaded")
+	if _, downloads := h.calls(); len(downloads) != 2 {
+		t.Fatalf("downloads %+v", downloads)
+	}
+}
+
+// A part message.get calls remote is asked for first: while the daemon
+// holds its message in memory (neverStoreAttachments) it is served without
+// a download and costs nothing; once the daemon let go of the copy, the
+// message is downloaded again, and every such download counts.
+func TestGetAttachmentPartFirst(t *testing.T) {
+	fb := newFixture()
+	fb.holdOnDownload = true
+	fb.held["m7"] = true
+	h := newHarness(t, fb, false, false)
+	args := map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"}
+	size := fb.messages["m7"].Size
+
+	out := h.ok(t, "get_attachment", args)
+	mustContain(t, out, "id,value\n1,remote data line")
+	mustNotContain(t, out, "downloaded: fetched from the mail server first")
+	if order, downloads := h.calls(); !reflect.DeepEqual(order, []string{"get", "part"}) || len(downloads) != 0 || h.usedBudget() != 0 {
+		t.Fatalf("held: calls %v, downloads %+v, %d counted", order, downloads, h.usedBudget())
+	}
+
+	for i := int64(1); i <= 2; i++ {
+		fb.mu.Lock()
+		delete(fb.held, "m7") // dropped: 30 minutes unused, evicted, the daemon restarted
+		fb.mu.Unlock()
+		mustContain(t, h.ok(t, "get_attachment", args), "downloaded: fetched from the mail server first")
+		if _, downloads := h.calls(); len(downloads) != int(i) || h.usedBudget() != i*size {
+			t.Fatalf("download %d: %d downloads, %d counted", i, len(downloads), h.usedBudget())
+		}
+	}
+	if order, _ := h.calls(); !reflect.DeepEqual(order[2:], []string{"get", "part", "download", "part", "get", "part", "download", "part"}) {
+		t.Fatalf("calls %v", order)
+	}
+}
+
+// usedBudget is what the bridge has counted as downloaded so far.
+func (h *harness) usedBudget() int64 {
+	h.b.downloads.mu.Lock()
+	defer h.b.downloads.mu.Unlock()
+	return h.b.downloads.used
+}
+
+// A download the bridge stops waiting for keeps its size counted, the
+// daemon finishing it: a tool call cancelled by the client, and the
+// daemon's own cancelled (its caller gave up while the download goes on).
+// Only an error that means nothing was fetched gives the size back.
+func TestDownloadBudgetKeptWhenCancelled(t *testing.T) {
+	fb := newFixture()
+	fb.delay = map[string]time.Duration{api.MethodMessageDownload: 300 * time.Millisecond}
+	h := newHarness(t, fb, false, false)
+	m := fb.messages["m7"].MessageSummary
+
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	if _, fail := h.b.download(ctx, "a1", m); fail == nil {
+		t.Fatal("a cancelled call reported a download")
+	}
+	if used := h.usedBudget(); used != m.Size {
+		t.Fatalf("after a cancelled call: %d counted, want %d", used, m.Size)
+	}
+
+	fb.mu.Lock()
+	fb.delay = nil
+	fb.mu.Unlock()
+	fb.setFail(api.MethodMessageDownload, api.NewError(api.CodeCancelled, "the call ended; the download goes on"))
+	if _, fail := h.b.download(context.Background(), "a1", m); fail == nil {
+		t.Fatal("cancelled by the daemon: no failure")
+	}
+	if used := h.usedBudget(); used != 2*m.Size {
+		t.Fatalf("after the daemon's cancelled: %d counted, want %d", used, 2*m.Size)
+	}
+
+	fb.setFail(api.MethodMessageDownload, api.NewError(api.CodeMessageGone, "the server no longer has message m7"))
+	if _, fail := h.b.download(context.Background(), "a1", m); fail == nil {
+		t.Fatal("gone: no failure")
+	}
+	if used := h.usedBudget(); used != 2*m.Size {
+		t.Fatalf("after a download that fetched nothing: %d counted, want %d", used, 2*m.Size)
+	}
+}
+
+func TestGetAttachmentMessageGone(t *testing.T) {
+	fb := newFixture()
+	fb.setFail(api.MethodMessageDownload, api.NewError(api.CodeMessageGone, "the server no longer has message m7"))
+	h := newHarness(t, fb, false, false)
+	h.fail(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "2"},
+		"messageGone (1305): the server no longer has message m7; the mail server no longer has this message")
+}
+
+func TestErrorHints(t *testing.T) {
+	for code, want := range map[api.ErrorCode]string{
+		api.CodePartNotDownloaded: "kept on the mail server only",
+		api.CodeMessageGone:       "the next sync removes it here",
+		api.CodeOffline:           "no network connection",
+		api.CodeUnavailable:       "try again later",
+	} {
+		if got := errorText(api.NewError(code, "x")); !strings.Contains(got, want) {
+			t.Errorf("%s: %q", code, got)
+		}
+	}
 }

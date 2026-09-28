@@ -27,7 +27,7 @@ const DefaultBaseURL = "https://graph.microsoft.com/v1.0"
 
 const (
 	// requestTimeout bounds one JSON round trip; bodyTimeout one $value
-	// download (the raw cap is maxRawMessageBytes).
+	// download (the raw cap is ingest.MaxMessageBytes).
 	requestTimeout = 60 * time.Second
 	bodyTimeout    = 5 * time.Minute
 	// maxConcurrent is the Outlook service's per-mailbox concurrency limit.

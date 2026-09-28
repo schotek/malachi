@@ -60,4 +60,17 @@ import Testing
             #expect(indexOfRetention(days) == i, "retentionChoices[\(i)]=\(days) maps back")
         }
     }
+
+    /// preferences.go `indexOfAttachmentDays`: -1 small only, 0 everything,
+    /// otherwise the nearest, a tie going to the smaller.
+    @Test func indexOfAttachmentDaysTest() {
+        let cases = [-1: 0, -7: 0, 0: 4, 1: 1, 7: 1, 18: 1, 19: 2, 30: 2, 59: 2, 60: 2, 61: 3, 90: 3, 365: 3, 3650: 3]
+        for (input, want) in cases {
+            #expect(indexOfAttachmentDays(input) == want, "indexOfAttachmentDays(\(input))")
+        }
+        for (i, days) in attachmentChoices.enumerated() {
+            #expect(indexOfAttachmentDays(days) == i, "attachmentChoices[\(i)]=\(days) maps back")
+        }
+        #expect(attachmentChoices == [-1, 7, 30, 90, 0])
+    }
 }

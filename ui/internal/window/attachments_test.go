@@ -59,31 +59,61 @@ func TestChipAttachments(t *testing.T) {
 	}
 }
 
-func TestPartAvailable(t *testing.T) {
+func TestPartState(t *testing.T) {
 	small := api.Attachment{Size: 1024}
+	remote := api.Attachment{Size: 512 << 10, Remote: true}
 	huge := api.Attachment{Size: api.MaxAttachmentDataBytes + 1}
+	hugeRemote := api.Attachment{Size: api.MaxAttachmentDataBytes + 1, Remote: true}
 	edge := api.Attachment{Size: api.MaxAttachmentDataBytes}
 	fetched := &api.MessageBodyResult{BodyState: api.BodyFetched}
+	pending := &api.MessageBodyResult{BodyState: api.BodyPending}
+	const onServer = "On the server only; it is downloaded when you open it"
 	cases := []struct {
 		name string
 		a    api.Attachment
 		b    *api.MessageBodyResult
-		ok   bool
+		st   partAvailability
 		why  string
 	}{
-		{"no body", small, nil, false, ""},
-		{"pending", small, &api.MessageBodyResult{BodyState: api.BodyPending}, false, "This message has not been downloaded yet."},
-		{"tooBig", small, &api.MessageBodyResult{BodyState: api.BodyTooBig}, false, "This message is too large to download."},
-		{"failed", small, &api.MessageBodyResult{BodyState: api.BodyFailed}, false, "This message could not be read."},
-		{"fetched", small, fetched, true, ""},
-		{"at the cap", edge, fetched, true, ""},
-		{"over the cap", huge, fetched, false, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"no body", small, nil, partWaiting, ""},
+		{"no body, remote", remote, nil, partWaiting, ""},
+		{"pending: message.download fetches the body", small, pending, partRemote, onServer},
+		{"tooBig", small, &api.MessageBodyResult{BodyState: api.BodyTooBig}, partUnavailable, "This message is too large to download."},
+		{"failed", small, &api.MessageBodyResult{BodyState: api.BodyFailed}, partUnavailable, "This message could not be read."},
+		{"fetched", small, fetched, partLocal, ""},
+		{"fetched, on the server only", remote, fetched, partRemote, onServer},
+		{"at the cap", edge, fetched, partLocal, ""},
+		{"over the cap", huge, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"over the cap beats remote", hugeRemote, fetched, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"over the cap while pending", huge, pending, partUnavailable, "Attachments over 16.0 MiB cannot be opened or saved yet."},
+		{"unknown body state", small, &api.MessageBodyResult{BodyState: "brandNew"}, partWaiting, ""},
 	}
 	for _, c := range cases {
-		ok, why := partAvailable(c.a, c.b)
-		if ok != c.ok || why != c.why {
-			t.Errorf("%s: got (%v, %q), want (%v, %q)", c.name, ok, why, c.ok, c.why)
+		st, why := partState(c.a, c.b)
+		if st != c.st || why != c.why {
+			t.Errorf("%s: got (%v, %q), want (%v, %q)", c.name, st, why, c.st, c.why)
 		}
+	}
+}
+
+func TestAnyRemote(t *testing.T) {
+	local := api.Attachment{PartID: "2", Size: 1024}
+	remote := api.Attachment{PartID: "3", Size: 512 << 10, Remote: true}
+	fetched := &api.MessageBodyResult{BodyState: api.BodyFetched}
+	if anyRemote([]api.Attachment{local, local}, fetched) {
+		t.Error("all local")
+	}
+	if !anyRemote([]api.Attachment{local, remote}, fetched) {
+		t.Error("one on the server")
+	}
+	if !anyRemote([]api.Attachment{local}, &api.MessageBodyResult{BodyState: api.BodyPending}) {
+		t.Error("a body not downloaded yet is fetched by the download too")
+	}
+	if anyRemote([]api.Attachment{remote}, nil) {
+		t.Error("no body loaded: nothing to decide yet")
+	}
+	if anyRemote(nil, fetched) {
+		t.Error("no attachments")
 	}
 }
 
@@ -225,4 +255,69 @@ func TestSweepOpenDir(t *testing.T) {
 		t.Error("the fresh entry should stay")
 	}
 	sweepOpenDir(filepath.Join(dir, "missing"), time.Hour) // no directory: no-op
+}
+
+// purgeOpenDir takes the directory openDirFor names with everything in it,
+// and refuses every other path without touching it.
+func TestPurgeOpenDir(t *testing.T) {
+	base := t.TempDir()
+	dir := openDirFor(base, "", "")
+	file := filepath.Join(dir, "x1", "report.pdf")
+	keep := filepath.Join(base, "malachi", "keep")
+	for _, d := range []string{filepath.Dir(file), keep} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(file, []byte("%PDF-1.7"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{
+		"", ".", "/", "malachi/open", // relative: runtime and cache dir unset
+		base, filepath.Join(base, "malachi"), keep,
+		filepath.Join(base, "open"), filepath.Join(dir, "x1"),
+		filepath.Join(dir, ".."),
+	} {
+		if err := purgeOpenDir(bad); err == nil {
+			t.Errorf("purgeOpenDir(%q) should refuse", bad)
+		}
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("a refused purge removed something: %v", err)
+	}
+
+	if err := purgeOpenDir(dir + string(filepath.Separator)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("the directory for opening should be gone")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Error("its sibling should stay")
+	}
+	if err := purgeOpenDir(dir); err != nil {
+		t.Errorf("a missing directory: %v", err)
+	}
+
+	// A link in its place goes; what it points to stays.
+	target := filepath.Join(base, "elsewhere")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "notes.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := purgeOpenDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
+		t.Error("the link should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(target, "notes.txt")); err != nil {
+		t.Error("the link's target should stay")
+	}
 }

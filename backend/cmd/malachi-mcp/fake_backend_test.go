@@ -10,6 +10,7 @@ import (
 	"html"
 	"image"
 	"image/png"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +59,11 @@ type fakeBackend struct {
 	listCalls         []api.MessageListParams
 	bodyCalls         []api.MessageBodyParams
 	partCalls         []api.MessagePartParams
+	downloadCalls     []api.MessageDownloadParams
+	order             []string        // "get", "download" and "part" as they were called
+	reduced           map[string]bool // messages whose parts answer partNotDownloaded until a download
+	held              map[string]bool // messages held in memory (neverStoreAttachments): remote parts are served
+	holdOnDownload    bool            // a download holds the message, its parts staying remote
 	flagCalls         []api.MessageFlagParams
 	moveCalls         []api.MessageMoveParams
 	deleteCalls       []api.MessageDeleteParams
@@ -187,15 +193,48 @@ func (s fakeMessages) List(_ context.Context, p api.MessageListParams) (*api.Mes
 }
 
 func (s fakeMessages) Get(_ context.Context, p api.MessageGetParams) (*api.MessageGetResult, error) {
-	s.f.record(func() { s.f.getCalls++ })
+	s.f.record(func() { s.f.getCalls++; s.f.order = append(s.f.order, "get") })
 	if err := s.f.gate(api.MethodMessageGet); err != nil {
 		return nil, err
 	}
+	s.f.mu.Lock()
 	m, ok := s.f.messages[p.MessageID]
+	s.f.mu.Unlock()
 	if !ok {
 		return nil, api.NewError(api.CodeMessageNotFound, "message %s not found", p.MessageID)
 	}
 	return &api.MessageGetResult{Message: m}, nil
+}
+
+// Download makes the message whole as the daemon does: no attachment is
+// remote afterwards, and the parts are served; with holdOnDownload it is
+// held in memory instead, as under neverStoreAttachments, its parts
+// still remote and served.
+func (s fakeMessages) Download(_ context.Context, p api.MessageDownloadParams) (*api.MessageDownloadResult, error) {
+	s.f.record(func() {
+		s.f.downloadCalls = append(s.f.downloadCalls, p)
+		s.f.order = append(s.f.order, "download")
+	})
+	if err := s.f.gate(api.MethodMessageDownload); err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	m, ok := s.f.messages[p.MessageID]
+	if !ok {
+		return nil, api.NewError(api.CodeMessageNotFound, "message %s not found", p.MessageID)
+	}
+	delete(s.f.reduced, string(p.MessageID))
+	if s.f.holdOnDownload {
+		s.f.held[string(p.MessageID)] = true
+		return &api.MessageDownloadResult{Message: m}, nil
+	}
+	m.Attachments = slices.Clone(m.Attachments)
+	for i := range m.Attachments {
+		m.Attachments[i].Remote = false
+	}
+	s.f.messages[p.MessageID] = m
+	return &api.MessageDownloadResult{Message: m}, nil
 }
 
 func (s fakeMessages) Body(_ context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
@@ -211,9 +250,22 @@ func (s fakeMessages) Body(_ context.Context, p api.MessageBodyParams) (*api.Mes
 }
 
 func (s fakeMessages) Part(_ context.Context, p api.MessagePartParams) (*api.MessagePartResult, error) {
-	s.f.record(func() { s.f.partCalls = append(s.f.partCalls, p) })
+	s.f.record(func() {
+		s.f.partCalls = append(s.f.partCalls, p)
+		s.f.order = append(s.f.order, "part")
+	})
 	if err := s.f.gate(api.MethodMessagePart); err != nil {
 		return nil, err
+	}
+	s.f.mu.Lock()
+	remote := s.f.reduced[string(p.MessageID)]
+	for _, a := range s.f.messages[p.MessageID].Attachments {
+		remote = remote || (a.PartID == p.PartID && a.Remote)
+	}
+	remote = remote && !s.f.held[string(p.MessageID)]
+	s.f.mu.Unlock()
+	if remote {
+		return nil, api.NewError(api.CodePartNotDownloaded, "part %s is on the mail server only", p.PartID)
 	}
 	r, ok := s.f.parts[string(p.MessageID)+"/"+p.PartID]
 	if !ok {
@@ -359,6 +411,14 @@ func (s fakeDrafts) Create(_ context.Context, p api.DraftCreateParams) (*api.Dra
 	if forward && p.MessageID == "m1" {
 		res.Skipped = []api.Attachment{{PartID: "6", Filename: "big.png", ContentType: "image/png", Size: maxAttachmentImageBytes + 1}}
 	}
+	if forward {
+		// The daemon never imports a part kept on the mail server only.
+		for _, a := range m.Attachments {
+			if a.Remote {
+				res.Skipped = append(res.Skipped, a)
+			}
+		}
+	}
 	s.f.record(func() {
 		for _, a := range d.Attachments {
 			s.f.attMeta[a.ID] = a
@@ -482,6 +542,15 @@ func newFixture() *fakeBackend {
 	m5 := api.Message{MessageSummary: summary("m5", fxOutbox, bob, "Queued")}
 	m5.Outbox = &api.OutboxInfo{State: api.OutboxFailed, Attempts: 3, Error: api.NewError(api.CodeServerError, "550 no")}
 	m6 := api.Message{MessageSummary: summary("m6", fxInbox, alice, "Withheld html"), CC: []api.Address{carol}}
+	// m7 is an older message whose large attachments are on the mail
+	// server only; one of its names tries to forge the marker. It is not
+	// listed, only read.
+	m7 := api.Message{MessageSummary: summary("m7", fxInbox, alice, "Archived reports"), Attachments: []api.Attachment{
+		{PartID: "2", Filename: "data.csv", ContentType: "text/csv", Size: 200 << 10, Remote: true},
+		{PartID: "3", Filename: "scan.pdf", ContentType: "application/pdf", Size: 5 << 20, Remote: true},
+		{PartID: "4", Filename: `notes.txt" remote`, ContentType: "text/plain", Size: 12},
+	}}
+	m7.HasAttachments, m7.Size = true, 6<<20
 
 	body := func(id api.MessageID, state api.BodyState, text string) api.MessageBodyResult {
 		return api.MessageBodyResult{
@@ -517,7 +586,7 @@ func newFixture() *fakeBackend {
 			fxTrash:  {m4.MessageSummary},
 			fxOutbox: {m5.MessageSummary},
 		},
-		messages: map[api.MessageID]api.Message{"m1": m1, "m2": m2, "m3": m3, "m4": m4, "m5": m5, "m6": m6},
+		messages: map[api.MessageID]api.Message{"m1": m1, "m2": m2, "m3": m3, "m4": m4, "m5": m5, "m6": m6, "m7": m7},
 		searchResults: []api.SearchResult{
 			{Message: m1.MessageSummary, Snippet: "Hello Bob,\nnumbers attached.", Ranges: []api.MatchRange{{Start: 11, End: 18}}},
 			{Message: m3.MessageSummary, Snippet: fxFakeEnd + " numbers"},
@@ -530,6 +599,7 @@ func newFixture() *fakeBackend {
 			"m4": body("m4", api.BodyFetched, "trash"),
 			"m5": body("m5", api.BodyFetched, "queued"),
 			"m6": b6,
+			"m7": body("m7", api.BodyFetched, "The reports are attached.\n"),
 		},
 		parts: map[string]api.MessagePartResult{
 			"m1/2":  {PartID: "2", ContentType: "text/plain", Filename: "notes.txt", Size: 12, Data: []byte("hello, notes")},
@@ -540,6 +610,8 @@ func newFixture() *fakeBackend {
 			"m1/10": {PartID: "10", ContentType: "text/plain", Filename: "nul.txt", Size: 7, Data: []byte("abc\x00def")},
 			"m1/12": {PartID: "12", ContentType: "text/plain", Filename: "long.txt", Size: 100 << 10, Data: bytes.Repeat([]byte("x"), 100<<10)},
 			"m1/13": {PartID: "13", ContentType: "image/png", Filename: "svgbytes.png", Size: 60, Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`)},
+			"m7/2":  {PartID: "2", ContentType: "text/csv", Filename: "data.csv", Size: 200 << 10, Data: fxRemoteCSV},
+			"m7/4":  {PartID: "4", ContentType: "text/plain", Filename: "notes.txt", Size: 12, Data: []byte("hello, notes")},
 		},
 		states: []api.SyncState{{
 			AccountID: fxAccount, Status: api.SyncError, Progress: -1, PendingOutbox: 1, FailedOutbox: 2,
@@ -547,6 +619,12 @@ func newFixture() *fakeBackend {
 		}},
 		quoteForm: map[api.MessageID]api.QuoteForm{},
 		attMeta:   map[string]api.DraftAttachment{},
+		reduced:   map[string]bool{},
+		held:      map[string]bool{},
 	}
 	return f
 }
+
+// fxRemoteCSV is the content of m7's data.csv, which is on the mail
+// server only until a download.
+var fxRemoteCSV = append([]byte("id,value\n"), bytes.Repeat([]byte("1,remote data line\n"), (200<<10)/18)...)

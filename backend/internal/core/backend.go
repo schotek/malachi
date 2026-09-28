@@ -13,6 +13,7 @@ import (
 	"io"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/auth"
@@ -36,11 +37,6 @@ import (
 // attachmentSweepAge is how long an imported attachment may stay unbound
 // (never listed by a draft.save) before the sweep deletes it.
 const attachmentSweepAge = 24 * time.Hour
-
-// messageSweepAge is how old a raw message file without a message row must
-// be before the sweep deletes it. Only an outgoing message is written
-// before its row, a moment before; the margin is for clocks and crashes.
-const messageSweepAge = 24 * time.Hour
 
 // Backend is the production api.Backend.
 type Backend struct {
@@ -132,6 +128,33 @@ type Backend struct {
 	// draft upload (scheduleDraftSync), per account, under draftMu.
 	draftMu     sync.Mutex
 	draftTimers map[string]*time.Timer
+
+	// rawSteps are the background jobs of the raw maintenance loop
+	// (raw_maintenance.go), in the order AddRawStep registered them.
+	rawSteps []RawStep
+
+	// dl is the state of message.download (download.go).
+	dl downloadState
+	// mem holds the messages message.download keeps in memory under
+	// Preferences.NeverStoreAttachments (memcache.go).
+	mem memCache
+
+	// rawKick wakes the raw maintenance loop (kickRaw; capacity 1), and
+	// rawNoSpace is set while the loop waits after a full disk.
+	rawKick    chan struct{}
+	rawNoSpace atomic.Bool
+	// rawRestart names the steps the loop is to run from the start
+	// although they are done for their key (restartRawStep), under
+	// rawRestartMu.
+	rawRestartMu sync.Mutex
+	rawRestart   map[string]bool
+	// runtimeDefaults are the preference defaults of this run
+	// (SetRuntimeDefaults); nil until set.
+	runtimeDefaults atomic.Pointer[RuntimeDefaults]
+	// prefMu orders writing the preferences with applying them
+	// (config.set, StartSync), so that what applies is what was written
+	// last.
+	prefMu sync.Mutex
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -167,6 +190,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		tokenSources:      map[string]*oauth2flow.TokenSource{},
 		draftTimers:       map[string]*time.Timer{},
 		oauthSessions:     map[string]oauthSession{},
+		rawKick:           make(chan struct{}, 1),
 	}
 	b.OAuth = oauth2flow.NewManager(oauth2flow.Options{
 		Log:      log,
@@ -188,11 +212,14 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() imap.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
+			pol := b.attachmentPolicy()
+			return imap.SyncPrefs{IntervalSeconds: interval, OfflineDays: days,
+				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
+		Stored:     b.storedUnder,
 	})
 	graphSync := graph.NewSupervisor(graph.SupervisorDeps{
 		Store:      st,
@@ -201,11 +228,14 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Notifier:   notifier,
 		Prefs: func() graph.SyncPrefs {
 			interval, days := b.SyncPrefs()
-			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days}
+			pol := b.attachmentPolicy()
+			return graph.SyncPrefs{IntervalSeconds: interval, OfflineDays: days,
+				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
 		},
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
+		Stored:     b.storedUnder,
 	})
 	b.Supervisor = newKindSupervisor(imapSync, graphSync)
 	// Through b.Supervisor, not the values above: tests swap it.
@@ -232,6 +262,10 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Log:              log,
 	})
 	b.Delivery = newKindOutbox(imapOutbox, graphOutbox)
+	// The raw maintenance steps in the order they run: the conversion to
+	// the store's codec, then the attachments kept on the server only.
+	b.AddRawStep(newCodecStep(b))
+	b.AddRawStep(newAttachmentStep(b))
 	return b
 }
 
@@ -378,10 +412,13 @@ func (b *Backend) SyncPrefs() (intervalSeconds, offlineDays int) {
 }
 
 // StartSync runs both supervisors and starts a syncer and an outbox worker
-// for every enabled account in the store. The returned channel is closed
-// when both Run methods have returned, i.e. after ctx is cancelled and
-// every syncer and worker has stopped.
+// for every enabled account in the store. Before that it stores the
+// runtime defaults that have no preference yet (SetRuntimeDefaults) and
+// sets the codec of new raw files. The returned channel is closed when
+// both Run methods have returned, i.e. after ctx is cancelled and every
+// syncer and worker has stopped.
 func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
+	b.applyStoredPreferences(ctx)
 	done := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -430,8 +467,9 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link and index
-// the messages stored before threading and search existed, then the
-// orphan sweeps (sweepFiles) at start and hourly.
+// the messages stored before threading and search existed, then the raw
+// maintenance loop (maintainRaw) beside the orphan attachment sweep at
+// start and hourly. It returns once all of it has stopped.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
@@ -442,7 +480,23 @@ func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillSearch(ctx); err != nil && !isCancelled(err) {
 		b.log.Warn("backfill search index", "err", err)
 	}
-	b.sweepFiles(ctx)
+	// The raw maintenance loop runs beside the attachment sweep; Maintain
+	// returns once it has stopped too.
+	rawDone := make(chan struct{})
+	go func() {
+		defer close(rawDone)
+		b.maintainRaw(ctx)
+	}()
+	defer func() { <-rawDone }()
+	sweep := func() {
+		n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
+		if err != nil {
+			b.log.Warn("attachment sweep", "err", err)
+		} else if n > 0 {
+			b.log.Info("attachment sweep", "removed", n)
+		}
+	}
+	sweep()
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -450,30 +504,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			b.sweepFiles(ctx)
+			sweep()
 		}
-	}
-}
-
-// sweepFiles deletes the files the store keeps for nothing: unbound
-// attachments and data files without a row, raw message files without a
-// row (a deletion that failed, as Windows refuses to delete an open file,
-// or a crash), and stale temporary files of both.
-func (b *Backend) sweepFiles(ctx context.Context) {
-	n, err := b.store.SweepAttachments(ctx, attachmentSweepAge)
-	if err != nil {
-		if !isCancelled(err) {
-			b.log.Warn("attachment sweep", "err", err)
-		}
-	} else if n > 0 {
-		b.log.Info("attachment sweep", "removed", n)
-	}
-	n, err = b.store.SweepMessageFiles(ctx, messageSweepAge)
-	if err != nil {
-		if !isCancelled(err) {
-			b.log.Warn("message file sweep", "err", err)
-		}
-	} else if n > 0 {
-		b.log.Info("message file sweep", "removed", n)
 	}
 }

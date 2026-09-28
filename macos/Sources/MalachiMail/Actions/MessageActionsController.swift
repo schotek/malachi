@@ -52,8 +52,16 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     /// outbox banner.
     private func installHooks() {
         let alerts = state.alerts
+        let mainWindow = mainWindow
         actions.confirm = { parent, heading, body, label in
-            await alerts.confirmDestructive(on: parent as? NSWindow, heading: heading, body: body, confirmLabel: label)
+            // A message window closed while its request ran (a forward
+            // waiting for the download): the main window asks instead
+            // (compose_open.go, `Mapped`).
+            var window = parent as? NSWindow
+            if let w = window, !w.isVisible {
+                window = mainWindow()
+            }
+            return await alerts.confirmDestructive(on: window, heading: heading, body: body, confirmLabel: label)
         }
         actions.openCompose = { [weak self] params in
             guard let self, let open = self.state.hooks.openCompose else { return }
@@ -100,8 +108,9 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         forSelected { actions.openCompose(.replyAll, $0) }
     }
 
+    /// "Forward Without Attachments?" goes on the main window.
     func forward() {
-        forSelected { actions.openCompose(.forward, $0) }
+        forSelected { actions.openCompose(.forward, $0, from: mainWindow()) }
     }
 
     func trash() {
@@ -170,8 +179,8 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.openCompose(.replyAll, id)
     }
 
-    func forward(_ id: MessageID) {
-        actions.openCompose(.forward, id)
+    func forward(_ id: MessageID, from window: NSWindow?) {
+        actions.openCompose(.forward, id, from: window)
     }
 
     func trash(_ id: MessageID, from window: NSWindow?) {
@@ -204,6 +213,12 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func trustSender(_ id: MessageID) {
         actions.trustSender(id)
+    }
+
+    func downloadPictures(_ id: MessageID, from window: NSWindow?) {
+        actions.downloadPictures(id) { [weak self] text in
+            self?.toast(text, in: window)
+        }
     }
 
     func retryOutbox(_ id: MessageID) {
@@ -321,23 +336,23 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     // MARK: Attachments (attachments.go)
 
-    func previewAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?, source: NSView?) {
-        attachments.preview(attachment, of: summary, from: window, source: source)
-    }
-
-    func openAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?) {
-        attachments.open(attachment, of: summary, from: window)
-    }
-
-    func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?) {
-        attachments.saveAs(attachment, of: summary, from: window)
-    }
-
-    func saveAllAttachments(
-        _ attachments: [Attachment], of summary: MessageSummary, from window: NSWindow?,
-        done: @escaping @MainActor () -> Void
+    func previewAttachment(
+        _ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?,
+        source: @escaping @MainActor (_ partId: String) -> NSView?
     ) {
-        self.attachments.saveAll(attachments, of: summary, from: window, done: done)
+        attachments.preview(attachment, of: summary, remote: remote, from: window, source: source)
+    }
+
+    func openAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        attachments.open(attachment, of: summary, remote: remote, from: window)
+    }
+
+    func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        attachments.saveAs(attachment, of: summary, remote: remote, from: window)
+    }
+
+    func saveAllAttachments(_ attachments: [Attachment], of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        self.attachments.saveAll(attachments, of: summary, remote: remote, from: window)
     }
 
     // MARK: Helpers

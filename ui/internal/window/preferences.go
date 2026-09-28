@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -28,7 +29,8 @@ import (
 // data/ui/preferences.blp. UI-only rows are bound to the settings store;
 // "Launch at Login" goes through the Background portal; the Mail group and
 // the Accounts page are owned by the daemon (config.get / config.set,
-// account.*); the AI page shows what the malachi-mcp bridge reports.
+// system.storage, account.*); the AI page shows what the malachi-mcp
+// bridge reports.
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
 
@@ -46,11 +48,16 @@ type PreferencesDialog struct {
 	desktopNotifications *adw.SwitchRow
 	notificationSound    *adw.SwitchRow
 
-	mailGroup     *adw.PreferencesGroup
-	mcpGroup      *adw.PreferencesGroup
-	checkInterval *adw.ComboRow
-	remoteImages  *adw.ComboRow
-	offlineDays   *adw.ComboRow
+	mailGroup      *adw.PreferencesGroup
+	mcpGroup       *adw.PreferencesGroup
+	checkInterval  *adw.ComboRow
+	remoteImages   *adw.ComboRow
+	offlineDays    *adw.ComboRow
+	attachmentDays *adw.ComboRow
+	neverStore     *adw.SwitchRow // never_store_attachments
+	compressStore  *adw.SwitchRow
+	storageRow     *adw.ActionRow
+	storageSize    *gtk.Label
 
 	colorScheme         *adw.ComboRow
 	density             *adw.ComboRow
@@ -81,7 +88,14 @@ var (
 	// retentionChoices are Preferences.OfflineDays per row: 1 week, 1 month,
 	// 3 months, 1 year, Everything (0).
 	retentionChoices = []int{7, 30, 90, 365, 0}
+	// attachmentChoices are Preferences.AttachmentOfflineDays per row: Small
+	// Attachments Only (-1), 1 week, 1 month, 3 months, Everything (0).
+	attachmentChoices = []int{api.AttachmentOfflineNone, 7, 30, 90, 0}
 )
+
+// storagePollSeconds is how often the Disk Space Used row asks again while
+// the dialog is open: the numbers move while stored mail is converted.
+const storagePollSeconds = 5
 
 // NewPreferences builds the dialog bound to s and, for the Mail group and
 // the Accounts page, to the daemon through c. Present it with
@@ -108,6 +122,11 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		checkInterval:        b.GetObject("check_interval").Cast().(*adw.ComboRow),
 		remoteImages:         b.GetObject("remote_images").Cast().(*adw.ComboRow),
 		offlineDays:          b.GetObject("offline_days").Cast().(*adw.ComboRow),
+		attachmentDays:       b.GetObject("attachment_days").Cast().(*adw.ComboRow),
+		neverStore:           b.GetObject("never_store_attachments").Cast().(*adw.SwitchRow),
+		compressStore:        b.GetObject("compress_store").Cast().(*adw.SwitchRow),
+		storageRow:           b.GetObject("storage_row").Cast().(*adw.ActionRow),
+		storageSize:          b.GetObject("storage_size").Cast().(*gtk.Label),
 		colorScheme:          b.GetObject("color_scheme").Cast().(*adw.ComboRow),
 		density:              b.GetObject("list_density").Cast().(*adw.ComboRow),
 		showPreview:          b.GetObject("show_preview_line").Cast().(*adw.SwitchRow),
@@ -122,6 +141,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 
 	// The dialog is rebuilt on every open while the store lives for the whole
 	// process, so every binding is undone when the dialog closes.
+	refreshStorage, unbindStorage := d.bindStorage(c)
 	cleanup := []func(){
 		s.Bind(settings.KeyRunInBackground, d.runInBackground.Object, "active"),
 		s.Bind(settings.KeyMarkReadDelay, d.markReadDelay.Object, "value"),
@@ -137,7 +157,8 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		bindChoice(s, settings.KeyColorScheme, d.colorScheme, colorSchemeChoices, s.ColorScheme, s.SetColorScheme),
 		bindChoice(s, settings.KeyDensity, d.density, densityChoices, s.Density, s.SetDensity),
 		d.bindLaunchAtLogin(s),
-		d.bindMail(c),
+		d.bindMail(c, refreshStorage),
+		unbindStorage,
 		d.bindAccounts(c),
 		d.bindMCP(),
 	}
@@ -153,11 +174,18 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 
 // bindMail loads the daemon preferences with config.get and writes every
 // change back with config.set. The group stays insensitive until the load
-// succeeds; a failed save shows a toast and reverts the combos.
-func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
+// succeeds; a failed save shows a toast and reverts the rows. A preference
+// the daemon does not report (an older one: the field is absent) hides its
+// row and is left absent in config.set, which leaves it unchanged; the
+// attachment days go back as confirmed unless their row was changed
+// (attachmentDaysToSave). While the daemon confirms that attachments are
+// never stored, the attachment days do not apply and their row is
+// insensitive (attachmentDaysApply). After a saved change refreshStorage
+// asks for the disk space again.
+func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (unbind func()) {
 	var (
 		current api.Preferences
-		syncing bool // set while combos are updated programmatically
+		syncing bool // set while rows are updated programmatically
 	)
 	d.mailGroup.SetSensitive(false)
 
@@ -166,12 +194,29 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 		d.checkInterval.SetSelected(nearestInterval(p.SyncIntervalSeconds))
 		d.remoteImages.SetSelected(indexOfPolicy(p.RemoteContent))
 		d.offlineDays.SetSelected(indexOfRetention(p.OfflineDays))
+		d.attachmentDays.SetVisible(p.AttachmentOfflineDays != nil)
+		if p.AttachmentOfflineDays != nil {
+			d.attachmentDays.SetSelected(indexOfAttachmentDays(*p.AttachmentOfflineDays))
+		}
+		// From what the daemon confirmed, so a failed save reverts it too.
+		d.attachmentDays.SetSensitive(attachmentDaysApply(p))
+		d.neverStore.SetVisible(p.NeverStoreAttachments != nil)
+		if p.NeverStoreAttachments != nil {
+			d.neverStore.SetActive(*p.NeverStoreAttachments)
+		}
+		d.compressStore.SetVisible(p.CompressStore != nil)
+		if p.CompressStore != nil {
+			d.compressStore.SetActive(*p.CompressStore)
+		}
 		syncing = false
 	}
 	save := func() {
 		if syncing {
 			return
 		}
+		// A copy of the last effective set: its pointers are shared with
+		// current, so the optional fields get fresh ones and current keeps
+		// what the daemon said, for reverting after a failure.
 		want := current
 		if i := d.checkInterval.Selected(); i < uint(len(intervalChoices)) {
 			want.SyncIntervalSeconds = intervalChoices[i]
@@ -181,6 +226,15 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 		}
 		if i := d.offlineDays.Selected(); i < uint(len(retentionChoices)) {
 			want.OfflineDays = retentionChoices[i]
+		}
+		if current.AttachmentOfflineDays != nil {
+			want.AttachmentOfflineDays = api.Ptr(attachmentDaysToSave(*current.AttachmentOfflineDays, d.attachmentDays.Selected()))
+		}
+		if current.NeverStoreAttachments != nil {
+			want.NeverStoreAttachments = api.Ptr(d.neverStore.Active())
+		}
+		if current.CompressStore != nil {
+			want.CompressStore = api.Ptr(d.compressStore.Active())
 		}
 		d.mailGroup.SetSensitive(false)
 		go func() {
@@ -200,12 +254,18 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 				}
 				current = res.Preferences
 				apply(current)
+				// Compression or the attachments changed what the store
+				// holds (or is about to, in the background).
+				refreshStorage()
 			})
 		}()
 	}
 	h1 := d.checkInterval.NotifyProperty("selected", save)
 	h2 := d.remoteImages.NotifyProperty("selected", save)
 	h3 := d.offlineDays.NotifyProperty("selected", save)
+	h4 := d.attachmentDays.NotifyProperty("selected", save)
+	h5 := d.compressStore.NotifyProperty("active", save)
+	h6 := d.neverStore.NotifyProperty("active", save)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -230,7 +290,105 @@ func (d *PreferencesDialog) bindMail(c *client.Client) (unbind func()) {
 		d.checkInterval.HandlerDisconnect(h1)
 		d.remoteImages.HandlerDisconnect(h2)
 		d.offlineDays.HandlerDisconnect(h3)
+		d.attachmentDays.HandlerDisconnect(h4)
+		d.compressStore.HandlerDisconnect(h5)
+		d.neverStore.HandlerDisconnect(h6)
 	}
+}
+
+// bindStorage fills the Disk Space Used row from system.storage: now, every
+// storagePollSeconds while the dialog is open, and when refresh is called
+// (after a saved preference). One call at a time; a refresh asked for
+// while one runs follows it. A daemon without the method hides the row for
+// good; any other failure takes the subtitle until the next answer, the
+// size stays what it was.
+func (d *PreferencesDialog) bindStorage(c *client.Client) (refresh func(), unbind func()) {
+	var (
+		inFlight, again, stopped bool
+		timer                    glib.SourceHandle
+	)
+	stopTimer := func() {
+		if timer != 0 {
+			glib.SourceRemove(timer)
+			timer = 0
+		}
+	}
+	refresh = func() {
+		if stopped || d.closed {
+			return
+		}
+		if inFlight {
+			again = true
+			return
+		}
+		inFlight = true
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+			defer cancel()
+			var res api.SystemStorageResult
+			err := c.Call(ctx, api.MethodSystemStorage, api.SystemStorageParams{}, &res)
+			glib.IdleAdd(func() {
+				inFlight = false
+				if stopped || d.closed {
+					return
+				}
+				switch {
+				case methodUnsupported(err):
+					stopped = true
+					stopTimer()
+					d.storageRow.SetVisible(false)
+					return
+				case err != nil:
+					d.log.Debug("system.storage", "err", err)
+					d.storageRow.SetSubtitle(widget.RPCErrorText(i18n.T("Measuring the disk space"), err))
+				default:
+					value, details := storageTexts(res)
+					d.storageSize.SetLabel(value)
+					d.storageRow.SetSubtitle(details)
+				}
+				if again {
+					again = false
+					refresh()
+				}
+			})
+		}()
+	}
+	timer = glib.TimeoutSecondsAdd(storagePollSeconds, func() bool {
+		if stopped || d.closed {
+			timer = 0
+			return false
+		}
+		refresh()
+		return true
+	})
+	refresh()
+	return refresh, func() {
+		stopped = true
+		stopTimer()
+	}
+}
+
+// storageTexts is the Disk Space Used row for a system.storage answer: the
+// total as its value, and as its details what compression saves and how
+// much of the attachments is on the server only, one line each and only
+// when there is any.
+func storageTexts(r api.SystemStorageResult) (value, details string) {
+	var lines []string
+	switch r.Conversion {
+	case api.StorageConversionRunning:
+		lines = append(lines, i18n.T("Converting the stored mail in the background"))
+	case api.StorageConversionNoSpace:
+		lines = append(lines, i18n.T("Converting stopped: the disk is full"))
+	}
+	if r.SavedBytes > 0 {
+		// TRANSLATORS: %s is a size such as "1.2 GiB".
+		lines = append(lines, fmt.Sprintf(i18n.T("Compression saves %s"), widget.FormatSize(r.SavedBytes)))
+	}
+	if r.RemoteAttachmentBytes > 0 {
+		// TRANSLATORS: %s is a size such as "1.2 GiB".
+		lines = append(lines, fmt.Sprintf(i18n.T("%s of attachments are on the server only"), widget.FormatSize(r.RemoteAttachmentBytes)))
+	}
+	return widget.FormatSize(r.TotalBytes), strings.Join(lines, "\n")
 }
 
 // nearestInterval maps a sync interval in seconds to the closest combo
@@ -273,6 +431,54 @@ func indexOfRetention(days int) uint {
 		}
 	}
 	return best
+}
+
+// indexOfAttachmentDays maps Preferences.AttachmentOfflineDays to the
+// closest combo position: a negative value selects "Small Attachments
+// Only", 0 (keep every attachment) "Everything", a number of days the
+// nearest of the offered ones, a tie going to the shorter.
+func indexOfAttachmentDays(days int) uint {
+	switch {
+	case days < 0:
+		return 0
+	case days == 0:
+		return uint(len(attachmentChoices) - 1)
+	}
+	best, bestDiff := uint(0), -1
+	for i, v := range attachmentChoices {
+		if v <= 0 {
+			continue
+		}
+		diff := v - days
+		if diff < 0 {
+			diff = -diff
+		}
+		if bestDiff < 0 || diff < bestDiff {
+			best, bestDiff = uint(i), diff
+		}
+	}
+	return best
+}
+
+// attachmentDaysToSave is Preferences.AttachmentOfflineDays for config.set
+// when the row shows position selected and current is what the daemon
+// last confirmed: current unchanged while the row still shows it (the
+// position indexOfAttachmentDays gives it), else the value of the chosen
+// row. A value between the offered ones (14 days from config.toml) is thus
+// never rounded to its nearest row by a save of another row.
+func attachmentDaysToSave(current int, selected uint) int {
+	if selected == indexOfAttachmentDays(current) || selected >= uint(len(attachmentChoices)) {
+		return current
+	}
+	return attachmentChoices[selected]
+}
+
+// attachmentDaysApply reports whether Preferences.AttachmentOfflineDays
+// decides which attachments are stored: not while none is stored at all
+// (NeverStoreAttachments overrides it, docs/api.md §4.8). A daemon that
+// does not report the latter never overrides.
+func attachmentDaysApply(p api.Preferences) bool {
+	return p.NeverStoreAttachments == nil || !*p.NeverStoreAttachments
 }
 
 func indexOfPolicy(p api.RemoteContentPolicy) uint {

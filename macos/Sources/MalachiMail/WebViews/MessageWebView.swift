@@ -282,14 +282,17 @@ final class MessageWebView: NSView {
     /// the sanitiser's output and nothing else may ever be passed here.
     /// Until the rule list is installed the body waits; should the list
     /// fail to compile, it is dropped and `onUnavailable` is called.
-    func load(body: String) {
+    /// The body already on display is not loaded again unless `reload`
+    /// says so: its pictures kept on the mail server were downloaded, and
+    /// the same `malachi-cid:` URLs now have something to serve.
+    func load(body: String, reload: Bool = false) {
         showStatus("")
         guard rulesReady else {
             pendingBody = body
             ensureRules()
             return
         }
-        if !needsReload, loadedBody == body {
+        if !needsReload, !reload, loadedBody == body {
             return
         }
         needsReload = false

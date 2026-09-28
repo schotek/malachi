@@ -149,7 +149,7 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
     }
 
     @objc func forward(_ sender: Any?) {
-        delegate?.forward(id)
+        delegate?.forward(id, from: window)
     }
 
     @objc func markAsRead(_ sender: Any?) {

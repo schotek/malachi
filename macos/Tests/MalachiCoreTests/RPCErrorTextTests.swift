@@ -33,6 +33,24 @@ import Testing
         #expect(rpcErrorText("Testing", RPCError(code: .draftNotFound, message: "")) == "The draft no longer exists")
         #expect(rpcErrorText("Testing the connection", RPCError(code: .authRequired, message: "no stored password"))
             == "Testing the connection failed: sign-in required")
+        // Attachments on demand (message.download, message.part).
+        #expect(rpcErrorText("Opening the attachment", RPCError(code: .offline, message: "x"))
+            == "Opening the attachment failed: no network connection")
+        #expect(rpcErrorText("Opening the attachment", RPCError(code: .unavailable, message: "x"))
+            == "Opening the attachment failed: try again in a moment")
+        #expect(rpcErrorText("Saving the attachment", RPCError(code: .partNotDownloaded, message: "x"))
+            == "Saving the attachment failed: the attachment is not on this computer")
+        #expect(rpcErrorText("Downloading the attachments", RPCError(code: .messageGone, message: "x"))
+            == "Downloading the attachments failed: the message is no longer on the server")
+        // An older daemon without the method reads like one with a stub.
+        for code in [ErrorCode.notImplemented, .methodNotFound] {
+            #expect(rpcErrorText("Measuring the disk space", RPCError(code: code, message: "x"))
+                == "Measuring the disk space is not available yet", "\(code)")
+        }
+        // A part of a message is an attachment too.
+        for code in [ErrorCode.attachmentNotFound, .partNotFound] {
+            #expect(rpcErrorText("Opening the attachment", RPCError(code: code, message: "x")) == "The attachment no longer exists", "\(code)")
+        }
     }
 
     @Test func tlsErrorTexts() throws {

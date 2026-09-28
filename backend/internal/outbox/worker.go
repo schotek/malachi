@@ -230,17 +230,14 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		w.missing(ctx, id, "message row", err)
 		return
 	}
-	// The raw file is closed before the outcome is recorded, not deferred:
-	// a delivery can delete it at once (succeed), and Windows refuses to
-	// delete a file that is still open.
 	f, err := w.deps.Store.OpenMessageRaw(ctx, w.account.ID, id)
 	if err != nil {
 		w.missing(ctx, id, "raw message", err)
 		return
 	}
-	info, err := f.Stat()
+	defer f.Close()
+	size, err := f.Size()
 	if err != nil {
-		f.Close()
 		w.missing(ctx, id, "raw message", err)
 		return
 	}
@@ -250,9 +247,8 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		smtpCfg = *w.account.Config.SMTP
 	}
 	dctx, cancel := context.WithTimeout(ctx, deliverTimeout)
-	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, info.Size())
+	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, size)
 	cancel()
-	f.Close()
 	if err == nil {
 		w.succeed(ctx, e)
 		return

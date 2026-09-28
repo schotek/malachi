@@ -310,7 +310,9 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}
-	s.removeAttachmentFiles(files...)
+	for _, aid := range files {
+		s.removeAttachmentFile(aid)
+	}
 	s.removeMessageDir(id)
 	return nil
 }

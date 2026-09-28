@@ -10,6 +10,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"errors"
 	"fmt"
@@ -20,6 +21,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -39,6 +43,17 @@ var (
 	ErrBadOrder        = errors.New("store: bad account order")
 	ErrOutboxBusy      = errors.New("store: outbox message is being sent")
 	ErrOutbox          = errors.New("store: not allowed for an outbox message")
+	// ErrRawCorrupt: a stored raw message file cannot be read back intact
+	// (a .zst file that is not one whole frame of this store's).
+	ErrRawCorrupt = errors.New("store: raw message file is damaged")
+	// ErrNoSpace: a raw file could not be written because the disk (or the
+	// user's quota) is full. The error also wraps the system's own
+	// (syscall.ENOSPC, syscall.EDQUOT).
+	ErrNoSpace = errors.New("store: no space left on the device")
+	// ErrConflict: the message changed under a raw-file operation that
+	// expected an earlier state (CommitMessageRaw's Expect, or a codec
+	// change during ConvertRawBatch).
+	ErrConflict = errors.New("store: message changed")
 )
 
 // Store wraps the database handle.
@@ -46,6 +61,26 @@ type Store struct {
 	db   *sql.DB
 	path string
 	log  *slog.Logger
+
+	// Raw message files (raw.go): the codec new files are written in, and
+	// the per-message locks, reference-counted under rawMu.
+	rawCodec atomic.Int32
+	rawMu    sync.Mutex
+	rawLocks map[string]*rawLock
+
+	// foreignDirs are the message directories of accounts this store does
+	// not know that the sweep has reported (SweepMessageFiles), by account.
+	foreignDirs sync.Map
+
+	// Test hooks; nil in the daemon. createFile makes every file the raw
+	// writers and the staging area write (a test runs it out of space),
+	// phaseACommit runs inside CommitMessageRaw's phase A just before a
+	// commit that widens the remote set, afterPhaseA between its two
+	// database phases and betweenConvertPhases between ConvertRawBatch's.
+	createFile           func(path string) (rawFile, error)
+	phaseACommit         func(tx *sql.Tx) error
+	afterPhaseA          func() error
+	betweenConvertPhases func()
 }
 
 // Open creates the parent directory if needed, opens the database with the
@@ -73,7 +108,7 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 	}
 	_ = os.Chmod(path, 0o600)
 
-	s := &Store{db: db, path: path, log: log.With("component", "store")}
+	s := &Store{db: db, path: path, log: log.With("component", "store"), rawLocks: map[string]*rawLock{}}
 	if err := s.migrate(ctx); err != nil {
 		db.Close()
 		return nil, err
@@ -86,7 +121,75 @@ func Open(ctx context.Context, path string, log *slog.Logger) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("create message directory: %w", err)
 	}
+	if err := os.MkdirAll(s.stagingDir(), 0o700); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create staging directory: %w", err)
+	}
+	// Whatever is staged belongs to a process that is gone: the daemon
+	// holds the store lock (Lock) before it opens the store.
+	if n := s.sweepStaging(time.Time{}); n > 0 {
+		s.log.Info("removed staged messages of an earlier run", "files", n)
+	}
 	return s, nil
+}
+
+// beginTx begins a transaction; with durable, one whose commit is on disk
+// when Commit returns (beginDurable). end rolls back what was not
+// committed and, for a durable one, gives its connection back.
+func (s *Store) beginTx(ctx context.Context, durable bool) (tx *sql.Tx, end func(), err error) {
+	if durable {
+		return s.beginDurable(ctx)
+	}
+	if tx, err = s.db.BeginTx(ctx, nil); err != nil {
+		return nil, nil, err
+	}
+	return tx, func() { _ = tx.Rollback() }, nil
+}
+
+// beginDurable begins a transaction whose commit is flushed to disk before
+// Commit returns. The store commits with synchronous NORMAL (Open): in WAL
+// mode a commit reaches the disk with the next checkpoint, and a crash of
+// the system (not of the daemon) may lose the last ones, which leaves the
+// database consistent and is all the store needs. A commit that a change
+// outside the database relies on is different: CommitMessageRaw's phase A
+// must be on disk before a stored file is replaced, or a power loss could
+// keep the new file and lose the row that describes it. The transaction
+// runs on a connection of its own set to synchronous FULL (the WAL is
+// flushed at every commit) and fullfsync (F_FULLFSYNC where the system has
+// it, macOS; elsewhere the pragma does nothing). end rolls back whatever
+// was not committed and puts the connection's settings back before the
+// pool gets it again, or closes the connection when they cannot be put
+// back.
+func (s *Store) beginDurable(ctx context.Context) (*sql.Tx, func(), error) {
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	release := func() {
+		bg := context.WithoutCancel(ctx)
+		_, err := conn.ExecContext(bg, `PRAGMA synchronous = NORMAL`)
+		if err == nil {
+			_, err = conn.ExecContext(bg, `PRAGMA fullfsync = 0`)
+		}
+		if err != nil {
+			s.log.Warn("restore a connection after a flushed commit; closing it", "err", err)
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+		_ = conn.Close()
+	}
+	// Neither setting can change inside a transaction.
+	for _, pragma := range []string{`PRAGMA synchronous = FULL`, `PRAGMA fullfsync = 1`} {
+		if _, err := conn.ExecContext(ctx, pragma); err != nil {
+			release()
+			return nil, nil, err
+		}
+	}
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return tx, func() { _ = tx.Rollback(); release() }, nil
 }
 
 // Path returns the database file location.
@@ -107,10 +210,17 @@ func (s *Store) AttachmentDir() string {
 }
 
 // MessageDir is where raw RFC 822 messages live, one 0600 file per message
-// under a 0700 per-account subdirectory (MessageRawPath); headers and text
-// bodies are in the messages table.
+// under a 0700 per-account subdirectory (MessageRawPath, plain or
+// compressed); headers and text bodies are in the messages table.
 func (s *Store) MessageDir() string {
 	return filepath.Join(filepath.Dir(s.path), "messages")
+}
+
+// stagingDir holds messages being received before they are committed
+// (StageRaw): 0600 files in a 0700 directory next to the database, on the
+// file system of MessageDir, so that committing one is a rename.
+func (s *Store) stagingDir() string {
+	return filepath.Join(filepath.Dir(s.path), "staging")
 }
 
 // DB exposes the handle for internal packages. TODO: remove once all queries

@@ -64,6 +64,14 @@ public enum API {
         public static let timeout = RPCTimeouts.handshake
     }
 
+    /// How much disk the mail store uses; cheap, the settings window asks
+    /// every few seconds while it is open.
+    public enum SystemStorage: RPCMethod {
+        public typealias Params = EmptyParams
+        public typealias Result = SystemStorageResult
+        public static let name = "system.storage"
+    }
+
     // MARK: Accounts
 
     public enum AccountList: RPCMethod {
@@ -195,6 +203,16 @@ public enum API {
         public typealias Result = MessageEmbeddedResult
         public static let name = "message.embedded"
         public static let timeout = RPCTimeouts.remote
+    }
+
+    /// Fetches the parts of a message kept on the server (and a body not
+    /// downloaded yet); the daemon's budget is 4 minutes, one download per
+    /// message shared by every caller.
+    public enum MessageDownload: RPCMethod {
+        public typealias Params = MessageDownloadParams
+        public typealias Result = MessageDownloadResult
+        public static let name = "message.download"
+        public static let timeout = RPCTimeouts.download
     }
 
     public enum MessageFlag: RPCMethod {
@@ -366,13 +384,13 @@ public enum API {
 
     /// Every method type, in the order of methods.go.
     public static let methods: [any RPCMethod.Type] = [
-        SystemInfo.self, SystemHello.self, SystemAuthenticate.self,
+        SystemInfo.self, SystemHello.self, SystemAuthenticate.self, SystemStorage.self,
         AccountList.self, AccountAdd.self, AccountRemove.self, AccountSetEnabled.self,
         AccountUpdate.self, AccountDiscover.self, AccountTest.self, AccountLinked.self,
         AccountReorder.self, AccountOAuthStart.self, AccountOAuthWait.self, AccountOAuthCancel.self,
         FolderList.self, FolderSubscribe.self,
         MessageList.self, MessageGet.self, MessageBody.self, MessagePart.self,
-        MessageEmbedded.self, MessageFlag.self, MessageMove.self, MessageDelete.self,
+        MessageEmbedded.self, MessageDownload.self, MessageFlag.self, MessageMove.self, MessageDelete.self,
         MessageSend.self,
         OutboxRetry.self,
         ThreadList.self, ThreadGet.self,
@@ -426,6 +444,13 @@ public enum API {
         /// The smallest non-zero `Preferences.syncIntervalSeconds`.
         public static let syncIntervalMin = 60
         public static let offlineDaysMax = 3650
+        /// `Preferences.attachmentOfflineDays`: the largest number of days,
+        /// and the value that keeps no large attachment locally.
+        public static let attachmentOfflineDaysMax = 3650
+        public static let attachmentOfflineNone = -1
+        /// The decoded size from which an attachment may be kept on the
+        /// server only; smaller parts are always stored.
+        public static let largeAttachmentMinBytes = 100 << 10
         /// `messageIds` in message.flag, message.move and message.delete.
         public static let maxMessageIDsPerCall = 1000
         public static let defaultContactLimit = 10

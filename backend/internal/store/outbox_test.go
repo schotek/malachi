@@ -221,6 +221,29 @@ func TestEnqueueOutbox(t *testing.T) {
 	}
 }
 
+// The outbox is the only copy of unsent mail: stored plain whatever the
+// codec, and accounted for in the enqueue transaction.
+func TestEnqueueOutboxStaysPlain(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	s.SetRawCodec(RawZstd)
+	raw := "From: me@example.invalid\r\nSubject: queued\r\n\r\nhello"
+	m, err := s.EnqueueOutbox(ctx, enqueueInput(seedDraft(t, s, "acc"), raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(s.MessageRawPath("acc", m.ID))
+	if err != nil || info.Size() != int64(len(raw)) || fileExists(t, s.MessageRawPath("acc", m.ID)+RawZstSuffix) {
+		t.Fatalf("outbox file: %v %v", info, err)
+	}
+	if c, b, d, ok := fileRow(t, s, m.ID); !ok || c != "plain" || b != int64(len(raw)) || d != int64(len(raw)) {
+		t.Errorf("accounting %s %d %d %v", c, b, d, ok)
+	}
+	if got := readRaw(t, s, "acc", m.ID); string(got) != raw {
+		t.Errorf("raw %q", got)
+	}
+}
+
 func TestEnqueueOutboxFailuresLeaveNothing(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)

@@ -10,14 +10,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/internal/thread"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -37,6 +33,12 @@ const (
 // server's opaque message id for backends that have one (Microsoft Graph);
 // IMAP rows leave it empty. The "unread" column is derived from Flags (no
 // "seen") and has no field of its own.
+//
+// RawState and the fields after it describe the raw file (offline.go) and
+// are written only through CommitMessageRaw: RawPartial when the large
+// attachments in RemoteParts (RemoteBytes decoded) stayed on the server.
+// Reading a fetched row sets Attachments[i].Remote from RemoteParts; the
+// flag is never stored with the attachments.
 type Message struct {
 	ID        string
 	AccountID string
@@ -62,15 +64,24 @@ type Message struct {
 	BodyState                  BodyState
 	ThreadID                   string
 	CreatedAt, UpdatedAt       time.Time
+
+	RawState        RawState
+	RemoteParts     []string // part ids, sorted
+	RemoteBytes     int64
+	StrippableBytes int64     // StrippableUnknown, StrippableNever, 0 nothing to leave on the server, >0 bytes
+	HydratedAt      time.Time // last made whole by message.download; zero = never
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by
-// UID (IMAP) or RemoteID (Graph).
+// UID (IMAP) or RemoteID (Graph), with the dates that tell its age
+// (InternalDate, the server's; else the Date header; zero when unknown).
 type MessageRef struct {
-	ID       string
-	UID      uint32
-	RemoteID string
-	Size     int64
+	ID           string
+	UID          uint32
+	RemoteID     string
+	Size         int64
+	InternalDate time.Time
+	Date         time.Time
 }
 
 // BodyUpdate is what SetMessageBody stores after the raw message was
@@ -146,7 +157,7 @@ func (s *Store) UpsertMessages(ctx context.Context, msgs []*Message) error {
 		}
 		id := m.ID
 		if id == "" {
-			id = newID(messageIDPrefix)
+			id = newID("m_")
 		}
 		enc, err := encodeMessage(m)
 		if err != nil {
@@ -284,7 +295,7 @@ func (s *Store) ListUnfetched(ctx context.Context, folderID string, limit int) (
 		limit = 100
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, uid, remote_id, size FROM messages
+		SELECT id, uid, remote_id, size, internal_date, date FROM messages
 		WHERE folder_id = ? AND body_state = 'none' AND (uid > 0 OR remote_id != '')
 		ORDER BY date DESC, id DESC LIMIT ?`, folderID, limit)
 	if err != nil {
@@ -295,10 +306,12 @@ func (s *Store) ListUnfetched(ctx context.Context, folderID string, limit int) (
 	for rows.Next() {
 		var r MessageRef
 		var uid int64
-		if err := rows.Scan(&r.ID, &uid, &r.RemoteID, &r.Size); err != nil {
+		var internalDate, date string
+		if err := rows.Scan(&r.ID, &uid, &r.RemoteID, &r.Size, &internalDate, &date); err != nil {
 			return nil, fmt.Errorf("scan unfetched: %w", err)
 		}
 		r.UID = uint32(uid)
+		r.InternalDate, r.Date = parseStamp(internalDate), parseStamp(date)
 		out = append(out, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -690,13 +703,35 @@ func (s *Store) DeleteStalePending(ctx context.Context, folderID string, before 
 // SetMessageBody stores the parse result of a fetched message; see
 // BodyUpdate for which fields replace and which only fill in. The message
 // is then linked into its conversation again, since the body may be the
-// first to carry References. ErrNotFound for an unknown id.
+// first to carry References. The raw file's state is not touched (a
+// download that decides about attachments commits through
+// CommitMessageRaw). ErrNotFound for an unknown id.
 func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("set message body: %w", err)
+	}
+	defer tx.Rollback()
+	if err := setBodyTx(ctx, tx, id, u); err != nil {
+		return err
+	}
+	if _, err := relinkTx(ctx, tx, id); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("set message body: %w", err)
+	}
+	return nil
+}
+
+// setBodyTx writes the body columns of SetMessageBody; ErrNotFound when
+// the row is gone. The caller relinks the message.
+func setBodyTx(ctx context.Context, tx *sql.Tx, id string, u BodyUpdate) error {
 	state := u.State
 	if state == "" {
 		state = BodyFetched
 	}
-	attachments, err := encodeJSON(u.Attachments, "[]")
+	attachments, err := encodeJSON(withoutRemote(u.Attachments), "[]")
 	if err != nil {
 		return fmt.Errorf("encode attachments: %w", err)
 	}
@@ -712,11 +747,6 @@ func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) err
 	if err != nil {
 		return fmt.Errorf("encode from: %w", err)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("set message body: %w", err)
-	}
-	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx, `
 		UPDATE messages SET
 			text_body = ?, has_html = ?, snippet = ?, attachments_json = ?, has_attachments = ?,
@@ -738,19 +768,17 @@ func (s *Store) SetMessageBody(ctx context.Context, id string, u BodyUpdate) err
 	if n, _ := res.RowsAffected(); n == 0 {
 		return ErrNotFound
 	}
-	if _, err := relinkTx(ctx, tx, id); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("set message body: %w", err)
-	}
 	return nil
 }
 
 // MarkBodyState records why a body is (not) available without touching
-// the content columns. ErrNotFound for an unknown id.
+// the content columns. The raw file's state starts over: whatever it said
+// about attachments on the server no longer applies. ErrNotFound for an
+// unknown id.
 func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE messages SET body_state = ?, updated_at = ? WHERE id = ?`,
+	res, err := s.db.ExecContext(ctx, `UPDATE messages SET body_state = ?, updated_at = ?,
+			raw_state = 'full', remote_parts = '[]', remote_bytes = 0, strippable_bytes = -1, hydrated_at = ''
+		WHERE id = ?`,
 		string(state), nowStamp(), id)
 	if err != nil {
 		return fmt.Errorf("mark body state: %w", err)
@@ -873,133 +901,6 @@ func (s *Store) GetMessageText(ctx context.Context, accountID, id string) (text 
 	return text, html != 0, BodyState(st), nil
 }
 
-// MessageRawPath is the raw RFC 822 file of a message:
-// MessageDir()/<accountID>/<id>.
-func (s *Store) MessageRawPath(accountID, id string) string {
-	return filepath.Join(s.MessageDir(), accountID, id)
-}
-
-// WriteMessageRaw stores the raw message read from r (at most limit bytes,
-// otherwise ErrTooBig and nothing is kept) as a 0600 file, written to a
-// temporary name and renamed into place; an existing file is replaced. It
-// returns the number of bytes written.
-func (s *Store) WriteMessageRaw(ctx context.Context, accountID, id string, r io.Reader, limit int64) (int64, error) {
-	return s.WriteMessageRawFunc(ctx, accountID, id, limit, func(w io.Writer) error {
-		_, err := io.Copy(w, r)
-		return err
-	})
-}
-
-// WriteMessageRawFunc is WriteMessageRaw for a producer: fn streams the
-// raw message into the writer it is given. The writer refuses the first
-// byte past limit with ErrTooBig, so a runaway builder stops early; the
-// result is then ErrTooBig (whatever fn returned) and nothing is kept. Any
-// other error from fn is returned wrapped, again with nothing kept.
-func (s *Store) WriteMessageRawFunc(ctx context.Context, accountID, id string, limit int64, fn func(w io.Writer) error) (int64, error) {
-	if err := checkPathSegment(accountID); err != nil {
-		return 0, fmt.Errorf("write message file: %w", err)
-	}
-	if err := checkPathSegment(id); err != nil {
-		return 0, fmt.Errorf("write message file: %w", err)
-	}
-	if fn == nil {
-		return 0, fmt.Errorf("write message file: nil producer")
-	}
-	final := s.MessageRawPath(accountID, id)
-	if err := os.MkdirAll(filepath.Dir(final), 0o700); err != nil {
-		return 0, fmt.Errorf("create message directory: %w", err)
-	}
-	tmp := final + ".tmp"
-	// A crashed earlier attempt may have left the temporary file behind;
-	// O_EXCL then only guards against a concurrent writer. Removals and
-	// the rename wait out a moment's hold of the file by another handle
-	// (fsretry), which Windows would refuse them.
-	_ = fsretry.Remove(tmp)
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-	if err != nil {
-		return 0, fmt.Errorf("create message file: %w", err)
-	}
-	cleanup := func() {
-		f.Close()
-		_ = fsretry.Remove(tmp)
-	}
-	lw := &limitedWriter{w: f, limit: limit}
-	err = fn(lw)
-	switch {
-	case lw.exceeded || errors.Is(err, ErrTooBig):
-		// The limit is checked first: a producer that swallows the write
-		// error must not be able to store a truncated message.
-		cleanup()
-		return 0, ErrTooBig
-	case err != nil:
-		cleanup()
-		return 0, fmt.Errorf("write message: %w", err)
-	}
-	if err := ctx.Err(); err != nil {
-		cleanup()
-		return 0, err
-	}
-	if err := f.Close(); err != nil {
-		_ = fsretry.Remove(tmp)
-		return 0, fmt.Errorf("close message file: %w", err)
-	}
-	if err := fsretry.Rename(tmp, final); err != nil {
-		_ = fsretry.Remove(tmp)
-		return 0, fmt.Errorf("finalise message file: %w", err)
-	}
-	return lw.n, nil
-}
-
-// limitedWriter counts what it passes on and fails with ErrTooBig as soon
-// as a write would take the total past limit (nothing of that write is
-// stored). exceeded stays set even if the producer ignores the error.
-type limitedWriter struct {
-	w        io.Writer
-	n, limit int64
-	exceeded bool
-}
-
-func (l *limitedWriter) Write(p []byte) (int, error) {
-	if l.exceeded || l.n+int64(len(p)) > l.limit {
-		l.exceeded = true
-		return 0, ErrTooBig
-	}
-	n, err := l.w.Write(p)
-	l.n += int64(n)
-	return n, err
-}
-
-// OpenMessageRaw opens the raw file of a message for reading; ErrNotFound
-// when there is none.
-func (s *Store) OpenMessageRaw(ctx context.Context, accountID, id string) (*os.File, error) {
-	if err := checkPathSegment(accountID); err != nil {
-		return nil, fmt.Errorf("open message file: %w", err)
-	}
-	if err := checkPathSegment(id); err != nil {
-		return nil, fmt.Errorf("open message file: %w", err)
-	}
-	f, err := os.Open(s.MessageRawPath(accountID, id))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("open message file: %w", err)
-	}
-	return f, nil
-}
-
-// checkPathSegment rejects ids that could escape their directory. Ids are
-// generated here, account ids may come from config.toml.
-func checkPathSegment(seg string) error {
-	if seg == "" || seg == "." || seg == ".." || strings.ContainsAny(seg, "/\x00") {
-		return fmt.Errorf("invalid path segment %q", seg)
-	}
-	return nil
-}
-
-// messageFile locates one raw message file.
-type messageFile struct{ accountID, id string }
-
 func listMessageFiles(ctx context.Context, q querier, query string, args ...any) ([]messageFile, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -1042,35 +943,11 @@ func deleteMessageRowsTx(ctx context.Context, tx *sql.Tx, files []messageFile) e
 	return nil
 }
 
-// removeMessageFiles unlinks raw files after their rows are gone; a missing
-// file is not an error (the row is authoritative). A file that cannot go
-// now is the orphan sweep's (SweepMessageFiles).
-func (s *Store) removeMessageFiles(files []messageFile) {
-	var b fsretry.Batch
-	for _, mf := range files {
-		if checkPathSegment(mf.accountID) != nil || checkPathSegment(mf.id) != nil {
-			continue
-		}
-		if err := b.Remove(s.MessageRawPath(mf.accountID, mf.id)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			s.log.Warn("remove message file", "id", mf.id, "err", err)
-		}
-	}
-}
-
-// removeMessageDir drops the whole raw-message directory of an account.
-func (s *Store) removeMessageDir(accountID string) {
-	if checkPathSegment(accountID) != nil {
-		return
-	}
-	if err := fsretry.RemoveAll(filepath.Join(s.MessageDir(), accountID)); err != nil {
-		s.log.Warn("remove message directory", "account", accountID, "err", err)
-	}
-}
-
 const messageColumns = `id, account_id, folder_id, uid, remote_id, modseq, flags,
 	from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 	rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
-	attachments_json, headers_json, has_html, body_state, thread_id, created_at, updated_at`
+	attachments_json, headers_json, has_html, body_state, thread_id, created_at, updated_at,
+	raw_state, remote_parts, remote_bytes, strippable_bytes, hydrated_at`
 
 func scanMessage(row scanner) (Message, error) {
 	m, _, err := scanMessageStamp(row)
@@ -1083,11 +960,13 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 	var m Message
 	var uid, modseq int64
 	var flags, from, to, cc, bcc, replyTo, date, internalDate, references, attachments, headers, state, created, updated string
+	var rawState, remoteParts, hydrated string
 	var hasAttachments, hasHTML int
 	if err := row.Scan(&m.ID, &m.AccountID, &m.FolderID, &uid, &m.RemoteID, &modseq, &flags,
 		&from, &to, &cc, &bcc, &replyTo, &m.Subject, &date, &internalDate,
 		&m.RFCMessageID, &m.InReplyTo, &references, &m.Size, &m.Snippet, &hasAttachments,
-		&attachments, &headers, &hasHTML, &state, &m.ThreadID, &created, &updated); err != nil {
+		&attachments, &headers, &hasHTML, &state, &m.ThreadID, &created, &updated,
+		&rawState, &remoteParts, &m.RemoteBytes, &m.StrippableBytes, &hydrated); err != nil {
 		return Message{}, "", err
 	}
 	m.UID, m.ModSeq = uint32(uid), uint64(modseq)
@@ -1112,10 +991,15 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 	if err := json.Unmarshal([]byte(headers), &m.Headers); err != nil {
 		return Message{}, "", fmt.Errorf("decode headers of %s: %w", m.ID, err)
 	}
+	if err := json.Unmarshal([]byte(remoteParts), &m.RemoteParts); err != nil {
+		return Message{}, "", fmt.Errorf("decode remote parts of %s: %w", m.ID, err)
+	}
 	m.Date, m.InternalDate = parseStamp(date), parseStamp(internalDate)
 	m.HasAttachments, m.HasHTML = hasAttachments != 0, hasHTML != 0
 	m.BodyState = BodyState(state)
 	m.CreatedAt, m.UpdatedAt = parseStamp(created), parseStamp(updated)
+	m.RawState, m.HydratedAt = RawState(rawState), parseStamp(hydrated)
+	overlayRemote(&m)
 	return m, date, nil
 }
 
@@ -1141,7 +1025,7 @@ func encodeMessage(m *Message) (encodedMessage, error) {
 	if e.references, err = encodeJSON(m.References, "[]"); err != nil {
 		return e, fmt.Errorf("encode references: %w", err)
 	}
-	if e.attachments, err = encodeJSON(m.Attachments, "[]"); err != nil {
+	if e.attachments, err = encodeJSON(withoutRemote(m.Attachments), "[]"); err != nil {
 		return e, fmt.Errorf("encode attachments: %w", err)
 	}
 	if e.headers, err = encodeJSON(m.Headers, "{}"); err != nil {

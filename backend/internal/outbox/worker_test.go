@@ -312,6 +312,26 @@ func TestWorkerDeliversWithoutSentFolder(t *testing.T) {
 	}
 }
 
+// A compressed store keeps the outbox plain; the SMTP session gets the
+// message's own length and bytes either way.
+func TestWorkerDeliversFromCompressedStore(t *testing.T) {
+	h := newHarness(t)
+	h.s.SetRawCodec(store.RawZstd)
+	id := h.enqueue("one")
+	raw, err := h.s.OpenMessageRaw(context.Background(), h.account.ID, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, _ := io.ReadAll(raw)
+	raw.Close()
+	h.run()
+
+	waitFor(t, "message delivered and dropped", func() bool { return h.gone(id) })
+	if d := h.deliver.last(); d.size != int64(len(want)) || d.body != string(want) {
+		t.Fatalf("delivered %d bytes (size %d), want %d", len(d.body), d.size, len(want))
+	}
+}
+
 // A delivery records every recipient, with the display name the draft
 // carried, for recipient completion; the sender is not a recipient.
 func TestWorkerCollectsRecipients(t *testing.T) {

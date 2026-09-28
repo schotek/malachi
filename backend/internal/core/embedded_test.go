@@ -197,3 +197,24 @@ func TestMessageEmbeddedHostile(t *testing.T) {
 		t.Fatal("the bomb did not finish")
 	}
 }
+
+// An attached message kept on the server is partNotDownloaded until
+// message.download fetched it; then it renders.
+func TestMessageEmbeddedRemote(t *testing.T) {
+	m := seedMailbox(t)
+	srv := m.fakeServer()
+	ctx := context.Background()
+	msg := m.seedLarge(t, 7, time.Now().AddDate(-1, 0, 0), smallOnly)
+	p := api.MessageEmbeddedParams{AccountID: m.acc, MessageID: api.MessageID(msg.ID), PartID: "4"}
+	if _, err := m.b.Messages().Embedded(ctx, p); errCode(t, err) != api.CodePartNotDownloaded {
+		t.Fatalf("remote attached message: %v", err)
+	}
+	srv.put("INBOX", 7, largeMessage("report@example.org"))
+	if _, err := m.download(ctx, msg.ID); err != nil {
+		t.Fatal(err)
+	}
+	res, err := m.b.Messages().Embedded(ctx, p)
+	if err != nil || res.Message.Subject != "The attached one" || !strings.HasPrefix(res.Body.Text, "attached text line") {
+		t.Fatalf("after the download: %+v, %v", res, err)
+	}
+}

@@ -96,7 +96,9 @@ protocol MessageActionDelegate: AnyObject {
 
     func reply(_ id: MessageID)
     func replyAll(_ id: MessageID)
-    func forward(_ id: MessageID)
+    /// compose_open.go `openComposeFrom`: `window` receives "Forward
+    /// Without Attachments?" when the download of the attachments fails.
+    func forward(_ id: MessageID, from window: NSWindow?)
     /// Moves to Trash, or cancels the send of an outbox message
     /// (`window` receives the confirmation sheet).
     func trash(_ id: MessageID, from window: NSWindow?)
@@ -109,6 +111,9 @@ protocol MessageActionDelegate: AnyObject {
     /// through the message cache's `onLoaded`.
     func loadImages(_ id: MessageID)
     func trustSender(_ id: MessageID)
+    /// remote.go `downloadPictures`: the pictures bar's Download Pictures;
+    /// a failure toasts in `window` (the one the click came from).
+    func downloadPictures(_ id: MessageID, from window: NSWindow?)
     /// outbox.go `retryOutbox`.
     func retryOutbox(_ id: MessageID)
     /// model.go `inDrafts`: the message lies in its account's Drafts folder
@@ -122,17 +127,21 @@ protocol MessageActionDelegate: AnyObject {
     /// addresses.go: an address chip's New Message, written from
     /// `account` (that of the message the chip sits on).
     func newMessage(to address: Address, account: AccountID)
-    /// attachments.go: Preview (a click on the chip; `source` is the chip
-    /// the panel zooms out of), Open (never for executables), Save As…,
-    /// Save All.
-    func previewAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?, source: NSView?)
-    func openAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)
-    func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, from window: NSWindow?)
-    /// Save All reports its end through `done`, so the button that
-    /// started it stays disabled meanwhile (attachments.go `SetSensitive`).
-    func saveAllAttachments(
-        _ attachments: [Attachment], of summary: MessageSummary, from window: NSWindow?,
-        done: @escaping @MainActor () -> Void)
+    /// attachments.go: Preview (a click on the chip; `source` finds the
+    /// chip of the part actually fetched, for the panel to zoom out of,
+    /// once the file is ready: the chips are drawn again while a download
+    /// runs), Open (never for executables), Save As…, Save All. `remote`
+    /// is what the chip showed (`partState`): the part is on the mail
+    /// server, so the message is downloaded first; for Save All, that any
+    /// of them is (`anyRemote`), and the message is downloaded once.
+    func previewAttachment(
+        _ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?,
+        source: @escaping @MainActor (_ partId: String) -> NSView?)
+    func openAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?)
+    func saveAttachment(_ attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?)
+    /// While it runs the message's Save All buttons stay disabled
+    /// (`MessageCache.isSavingAll`, attachments.go `savingAll`).
+    func saveAllAttachments(_ attachments: [Attachment], of summary: MessageSummary, remote: Bool, from window: NSWindow?)
 }
 
 /// The formatted-text editor of a compose window (ui/internal/editor

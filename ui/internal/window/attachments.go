@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	"github.com/diamondburned/gotk4/pkg/core/gerror"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
@@ -32,7 +34,9 @@ import (
 // server data and are shown as plain text (CLAUDE.md rule 3); programs and
 // scripts are previewed but never opened directly (docs/security.md §4);
 // the content comes through message.part, so a part over
-// api.MaxAttachmentDataBytes is out of reach.
+// api.MaxAttachmentDataBytes is out of reach. A part kept on the mail
+// server only carries the server icon, and every action on it downloads
+// the message first (download.go).
 
 // partTimeout bounds one message.part call: the part may be 16 MiB of
 // base64 on the socket, far more than rpcTimeout allows for.
@@ -49,10 +53,29 @@ const openMaxAge = time.Hour
 // (.attachment-chip in ui/internal/style).
 const chipNameChars = 14
 
+// remoteIconNames is the icon of a part on the mail server only, then the
+// one an icon theme without it shows instead.
+var remoteIconNames = []string{"network-server-symbolic", "folder-remote-symbolic"}
+
 // renderAttachments rebuilds the chips for what lm holds: nothing until
 // message.get answered, otherwise every attachment except the pictures the
 // HTML body on display already shows.
 func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage) {
+	// The chip that holds the focus (one clicked a moment ago, whose
+	// download starts or ends now) goes with the rest. Simply removed, it
+	// would let GTK hand the focus to the selectable header labels (see
+	// newMessageView); the focus goes to the chip in its place instead, or
+	// to the body when there is none.
+	if at := v.focusedChip(); at >= 0 {
+		v.parent.SetFocus(nil)
+		defer func() {
+			if at < len(v.chips) {
+				gtk.BaseWidget(v.chips[at]).GrabFocus()
+			} else {
+				v.stack.GrabFocus()
+			}
+		}()
+	}
 	for _, c := range v.chips {
 		v.attachments.Remove(c)
 	}
@@ -66,19 +89,20 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 		v.attachments.SetVisible(false)
 		return
 	}
+	downloading := v.win.spinning[s.ID]
 	allOK := true
 	for _, a := range atts {
-		ok, why := partAvailable(a, lm.body)
+		st, why := partState(a, lm.body)
 		if v.nested {
 			// The parts of an attached message have no numbers; nothing
 			// can fetch them (message.embedded in docs/api.md).
-			ok, why = false, i18n.T("Files inside an attached message cannot be opened or saved yet.")
+			st, why = partUnavailable, i18n.T("Files inside an attached message cannot be opened or saved yet.")
 		}
-		allOK = allOK && ok
-		v.addChip(v.buildChip(s.AccountID, s.ID, a, ok, why))
+		allOK = allOK && (st == partLocal || st == partRemote)
+		v.addChip(v.buildChip(s.AccountID, s.ID, a, st, why, downloading))
 	}
 	if len(atts) >= 2 && allOK {
-		v.addChip(v.buildSaveAll(s.AccountID, s.ID, atts))
+		v.addChip(v.buildSaveAll(s.AccountID, s.ID, atts, anyRemote(atts, lm.body)))
 	}
 	v.attachments.SetVisible(true)
 }
@@ -87,6 +111,25 @@ func (v *messageView) renderAttachments(s api.MessageSummary, lm *loadedMessage)
 func (v *messageView) addChip(c gtk.Widgetter) {
 	v.attachments.Append(c)
 	v.chips = append(v.chips, c)
+}
+
+// focusedChip is the position of the chip (or Save All) that holds the
+// focus of the view's window, -1 when none does.
+func (v *messageView) focusedChip() int {
+	f := v.parent.Focus()
+	if f == nil {
+		return -1
+	}
+	focus := gtk.BaseWidget(f)
+	if !focus.IsAncestor(v.attachments) {
+		return -1
+	}
+	for i, c := range v.chips {
+		if focus.Eq(c) || focus.IsAncestor(c) {
+			return i
+		}
+	}
+	return -1
 }
 
 // say shows a toast in the window that owns the view, if it wired one.
@@ -99,15 +142,19 @@ func (v *messageView) say(text string) {
 // buildChip is one attachment: a button (icon, name, size) that previews
 // it, linked to an arrow with the Open / Save As… menu. The actions live in
 // a group on the chip itself and close over the attachment, so a chip never
-// acts on a message other than the one it was built for. An unavailable
-// part (ok false) leaves the chip insensitive with why as its tooltip; an
-// attached message is viewed in its own window on click (embedded.go), the
-// menu adding View; an executable is previewed like any file but keeps
-// Open disabled.
-func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attachment, ok bool, why string) gtk.Widgetter {
+// acts on a message other than the one it was built for. A part that
+// cannot be had (partWaiting, partUnavailable) leaves the chip insensitive
+// with why as its tooltip; a part on the mail server only (partRemote)
+// shows the server icon with why as its tooltip, or a spinner while the
+// message is downloading, and its actions download it first. An attached
+// message is viewed in its own window on click (embedded.go), the menu
+// adding View; an executable is previewed like any file but keeps Open
+// disabled.
+func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attachment, st partAvailability, why string, downloading bool) gtk.Widgetter {
 	name := chipName(a)
 	exe := executableAttachment(a.Filename, a.ContentType)
 	nested := attachedMessage(a)
+	remote := st == partRemote
 
 	icon := gtk.NewImageFromGIcon(gio.ContentTypeGetSymbolicIcon(chipIconType(a)))
 	label := gtk.NewLabel(name)
@@ -125,6 +172,9 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 		size.AddCSSClass("dim-label")
 		inner.Append(size)
 	}
+	if remote {
+		inner.Append(remoteIndicator(why, downloading))
+	}
 	button := gtk.NewButton()
 	button.SetChild(inner)
 	arrow := gtk.NewMenuButton()
@@ -139,10 +189,10 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	box.Append(button)
 	box.Append(arrow)
 
-	open := func() { v.openAttachment(acc, id, a) }
-	showPreview := func() { v.previewAttachment(acc, id, a) }
-	save := func() { v.saveAttachment(acc, id, a) }
-	view := func() { v.openEmbeddedWindow(acc, id, a) }
+	open := func() { v.openAttachment(acc, id, a, remote) }
+	showPreview := func() { v.previewAttachment(acc, id, a, remote) }
+	save := func() { v.saveAttachment(acc, id, a, remote) }
+	view := func() { v.openEmbeddedWindow(acc, id, a, remote) }
 	g := gio.NewSimpleActionGroup()
 	openAction := gio.NewSimpleAction("open", nil)
 	openAction.SetEnabled(!exe)
@@ -159,7 +209,7 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	box.InsertActionGroup("att", g)
 
 	switch {
-	case !ok:
+	case st != partLocal && st != partRemote:
 		box.SetSensitive(false)
 		button.SetTooltipText(why)
 		arrow.SetTooltipText(why)
@@ -191,9 +241,25 @@ func chipMenu(nested bool) *gio.Menu {
 	return m
 }
 
+// remoteIndicator is what the chip of a part on the mail server only shows
+// after the size: the server icon with why as its tooltip, or a spinner
+// while the message is being downloaded.
+func remoteIndicator(why string, downloading bool) gtk.Widgetter {
+	if downloading {
+		spinner := adw.NewSpinner()
+		spinner.SetVAlign(gtk.AlignCenter)
+		return spinner
+	}
+	icon := gtk.NewImageFromGIcon(gio.NewThemedIconFromNames(remoteIconNames))
+	icon.SetTooltipText(why)
+	icon.AddCSSClass("dim-label")
+	return icon
+}
+
 // buildSaveAll is the button after the chips that saves all of them into
-// one folder.
-func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []api.Attachment) gtk.Widgetter {
+// one folder; remote says that some are on the mail server only. It stays
+// insensitive while a Save All of the message runs (Window.savingAll).
+func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []api.Attachment, remote bool) gtk.Widgetter {
 	button := gtk.NewButton()
 	button.AddCSSClass("flat")
 	button.AddCSSClass("chip-action") // as dense as the chips beside it
@@ -203,7 +269,8 @@ func (v *messageView) buildSaveAll(acc api.AccountID, id api.MessageID, atts []a
 	content.Append(label)
 	button.SetChild(content)
 	label.SetMnemonicWidget(button)
-	button.ConnectClicked(func() { v.saveAllAttachments(acc, id, atts, button) })
+	button.SetSensitive(!v.win.savingAll[id])
+	button.ConnectClicked(func() { v.saveAllAttachments(acc, id, atts, remote, button) })
 	return button
 }
 
@@ -228,31 +295,61 @@ func chipAttachments(atts []api.Attachment, b *api.MessageBodyResult) []api.Atta
 	return out
 }
 
-// partAvailable reports whether message.part can deliver a, and if not
-// why, as the chip's tooltip (empty while the body is still on its way).
-// The daemon reads parts from the stored raw message only, and never
-// beyond api.MaxAttachmentDataBytes; the size is exact once the body is
-// fetched (before that it is the transfer size from BODYSTRUCTURE).
-func partAvailable(a api.Attachment, b *api.MessageBodyResult) (bool, string) {
+// partAvailability is what a chip can do with its part (partState).
+type partAvailability int
+
+const (
+	// partWaiting: the body has not been loaded yet; nothing to say.
+	partWaiting partAvailability = iota
+	// partLocal: message.part delivers it.
+	partLocal
+	// partRemote: on the mail server only, or the message's body has not
+	// been downloaded yet; message.download fetches it first.
+	partRemote
+	// partUnavailable: out of reach; the tooltip says why.
+	partUnavailable
+)
+
+// partState tells what message.part can do for a, and why when it cannot
+// deliver it at once, as the chip's tooltip (empty while the body is still
+// on its way). The daemon says which parts are on the mail server only
+// (Attachment.Remote); message.download fetches them, and a body not
+// downloaded yet, on request. It never serves a part beyond
+// api.MaxAttachmentDataBytes; the size is exact once the body is fetched
+// (before that it is the transfer size from BODYSTRUCTURE).
+func partState(a api.Attachment, b *api.MessageBodyResult) (partAvailability, string) {
 	if b == nil {
-		return false, ""
+		return partWaiting, ""
 	}
 	switch b.BodyState {
-	case api.BodyFetched:
-	case api.BodyPending:
-		return false, i18n.T("This message has not been downloaded yet.")
 	case api.BodyTooBig:
-		return false, i18n.T("This message is too large to download.")
+		return partUnavailable, i18n.T("This message is too large to download.")
 	case api.BodyFailed:
-		return false, i18n.T("This message could not be read.")
-	default:
-		return false, ""
+		return partUnavailable, i18n.T("This message could not be read.")
 	}
 	if a.Size > api.MaxAttachmentDataBytes {
 		// TRANSLATORS: %s is a size such as "16.0 MiB".
-		return false, fmt.Sprintf(i18n.T("Attachments over %s cannot be opened or saved yet."), widget.FormatSize(api.MaxAttachmentDataBytes))
+		return partUnavailable, fmt.Sprintf(i18n.T("Attachments over %s cannot be opened or saved yet."), widget.FormatSize(api.MaxAttachmentDataBytes))
 	}
-	return true, ""
+	switch {
+	case a.Remote || b.BodyState == api.BodyPending:
+		// TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
+		return partRemote, i18n.T("On the server only; it is downloaded when you open it")
+	case b.BodyState == api.BodyFetched:
+		return partLocal, ""
+	}
+	return partWaiting, ""
+}
+
+// anyRemote reports whether a chip of atts is on the mail server only
+// (partRemote), so that Save All downloads the message first.
+func anyRemote(atts []api.Attachment, b *api.MessageBodyResult) bool {
+	for _, a := range atts {
+		if st, _ := partState(a, b); st == partRemote {
+			return true
+		}
+	}
+	return false
 }
 
 // executableExtensions and executableTypes are what the UI refuses to hand
@@ -393,9 +490,10 @@ func (w *Window) fetchAttachment(ctx context.Context, acc api.AccountID, id api.
 // openAttachment writes the part to a private file and hands it to the
 // default application (the OpenURI portal under Flatpak): the menu's Open.
 // A part the server names as a program or script is refused here too, so
-// the check does not rest on the listed name alone.
-func (v *messageView) openAttachment(acc api.AccountID, id api.MessageID, a api.Attachment) {
-	v.writeAttachment(acc, id, a, func(path string, exe bool) {
+// the check does not rest on the listed name alone. remote downloads the
+// message first (partData).
+func (v *messageView) openAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
+	v.writeAttachment(acc, id, a, remote, func(path string, exe bool) {
 		if exe {
 			v.say(i18n.T("Programs and scripts are not opened directly; save the file and decide yourself."))
 			return
@@ -409,8 +507,8 @@ func (v *messageView) openAttachment(acc api.AccountID, id api.MessageID, a api.
 // Where there is none (no Sushi, another desktop), the default application
 // opens the file instead, as Open would, except a program or script,
 // which is never opened (docs/security.md §4).
-func (v *messageView) previewAttachment(acc api.AccountID, id api.MessageID, a api.Attachment) {
-	v.writeAttachment(acc, id, a, func(path string, exe bool) {
+func (v *messageView) previewAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
+	v.writeAttachment(acc, id, a, remote, func(path string, exe bool) {
 		preview.Show(gio.NewFileForPath(path).URI(), func(err error) {
 			if err == nil {
 				return
@@ -425,16 +523,15 @@ func (v *messageView) previewAttachment(acc api.AccountID, id api.MessageID, a a
 	})
 }
 
-// writeAttachment fetches the part and writes it to a private file
-// (writeOpenFile), then calls then on the main loop with its path and
-// whether the listed or the served name and type make it a program or
-// script. A failure is a toast and then never runs.
-func (v *messageView) writeAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, then func(path string, exe bool)) {
+// writeAttachment fetches the part (partData: downloading the message
+// first when remote) and writes it to a private file (writeOpenFile), then
+// calls then on the main loop with its path and whether the listed or the
+// served name and type make it a program or script. A failure is a toast
+// and then never runs.
+func (v *messageView) writeAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool, then func(path string, exe bool)) {
 	w := v.win
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
-		defer cancel()
-		res, err := w.fetchAttachment(ctx, acc, id, a.PartID)
+		res, err := w.partData(acc, id, a, remote)
 		if err != nil {
 			w.log.Warn("message.part", "part", a.PartID, "err", err)
 			glib.IdleAdd(func() { v.say(widget.RPCErrorText(i18n.T("Opening the attachment"), err)) })
@@ -464,9 +561,10 @@ func (v *messageView) launchFile(path string) {
 }
 
 // saveAttachment asks where to put the part (the FileChooser portal under
-// Flatpak), then fetches and writes it. The dialog already confirmed an
-// overwrite, so the write replaces; only a failure gets a toast.
-func (v *messageView) saveAttachment(acc api.AccountID, id api.MessageID, a api.Attachment) {
+// Flatpak), then fetches it (downloading the message first when remote)
+// and writes it. The dialog already confirmed an overwrite, so the write
+// replaces; only a failure gets a toast.
+func (v *messageView) saveAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
 	w := v.win
 	dlg := gtk.NewFileDialog()
 	dlg.SetTitle(i18n.T("Save Attachment"))
@@ -477,11 +575,11 @@ func (v *messageView) saveAttachment(acc api.AccountID, id api.MessageID, a api.
 			return // dismissed
 		}
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
-			defer cancel()
-			res, err := w.fetchAttachment(ctx, acc, id, a.PartID)
+			res, err := w.partData(acc, id, a, remote)
 			if err == nil {
+				ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
 				err = writeGFile(ctx, f, res.Data, true)
+				cancel()
 			}
 			if err != nil {
 				w.log.Warn("saving an attachment", "part", a.PartID, "err", err)
@@ -493,24 +591,46 @@ func (v *messageView) saveAttachment(acc api.AccountID, id api.MessageID, a api.
 
 // saveAllAttachments asks for a folder and writes every attachment into
 // it, one message.part at a time, never overwriting: a name that exists
-// gets " (2)" and so on. One toast sums it up; button is disabled while it
-// runs.
-func (v *messageView) saveAllAttachments(acc api.AccountID, id api.MessageID, atts []api.Attachment, button *gtk.Button) {
+// gets " (2)" and so on. One toast sums it up. When some are on the mail
+// server only (remote) the message is downloaded once first; if that
+// fails, nothing is written and the toast says why. The Save All buttons
+// of the message stay insensitive while it runs (Window.savingAll; the
+// chips may be rebuilt meanwhile, button is the one clicked).
+func (v *messageView) saveAllAttachments(acc api.AccountID, id api.MessageID, atts []api.Attachment, remote bool, button *gtk.Button) {
 	w := v.win
 	dlg := gtk.NewFileDialog()
 	dlg.SetTitle(i18n.T("Save Attachments"))
 	dlg.SelectFolder(context.Background(), v.parent, func(r gio.AsyncResulter) {
 		folder, err := dlg.SelectFolderFinish(r)
-		if err != nil {
-			return // dismissed
+		if err != nil || w.savingAll[id] {
+			return // dismissed, or another Save All of the message runs
 		}
+		w.savingAll[id] = true
 		button.SetSensitive(false)
+		w.refreshChips(id)
+		finish := func(text string) {
+			delete(w.savingAll, id)
+			button.SetSensitive(true)
+			w.refreshChips(id)
+			v.say(text)
+		}
 		go func() {
+			var m *api.Message // the message after the download, if there was one
+			if remote {
+				var err error
+				if m, err = w.download(acc, id); err != nil {
+					glib.IdleAdd(func() { finish(widget.RPCErrorText(i18n.T("Saving the attachments"), err)) })
+					return
+				}
+			}
 			saved, failed := 0, 0
 			for _, a := range atts {
-				ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
-				err := w.saveInto(ctx, folder, acc, id, a)
-				cancel()
+				// Microsoft 365 may have renumbered the parts; one the
+				// downloaded message no longer lists is not fetched.
+				err := errPartNotFound
+				if now, ok := partAfterDownload(a, m); ok {
+					err = w.saveInto(folder, acc, id, now)
+				}
 				if err != nil {
 					w.log.Warn("saving an attachment", "part", a.PartID, "err", err)
 					failed++
@@ -518,21 +638,21 @@ func (v *messageView) saveAllAttachments(acc api.AccountID, id api.MessageID, at
 					saved++
 				}
 			}
-			glib.IdleAdd(func() {
-				button.SetSensitive(true)
-				v.say(saveAllSummary(saved, failed))
-			})
+			glib.IdleAdd(func() { finish(saveAllSummary(saved, failed)) })
 		}()
 	})
 }
 
-// saveInto fetches a and creates it in folder under a name that is not
-// taken yet. Off the main loop.
-func (w *Window) saveInto(ctx context.Context, folder *gio.File, acc api.AccountID, id api.MessageID, a api.Attachment) error {
-	res, err := w.fetchAttachment(ctx, acc, id, a.PartID)
+// saveInto fetches a (partData, the message downloaded already) and
+// creates it in folder under a name that is not taken yet. Off the main
+// loop.
+func (w *Window) saveInto(folder *gio.File, acc api.AccountID, id api.MessageID, a api.Attachment) error {
+	res, err := w.partData(acc, id, a, false)
 	if err != nil {
 		return err
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), partTimeout)
+	defer cancel()
 	name := fileName(res, a)
 	// Create fails on an existing file; a name that appeared between the
 	// check and the create is tried again, a few times.
@@ -650,8 +770,27 @@ func sweepOpenDir(dir string, maxAge time.Duration) {
 	}
 }
 
-// SweepOpenedAttachments removes every file written for opening; main.go
-// calls it when the application starts and when it exits.
-func SweepOpenedAttachments() {
-	_ = os.RemoveAll(openDir())
+// SweepOpenedAttachments removes every file written for opening
+// (purgeOpenDir). main.go calls it when the application starts and when it
+// exits, whatever the preferences say: nothing opened or previewed
+// outlives the session, which is also what neverStoreAttachments promises,
+// and whatever a crash left behind goes at the next start. A failure is
+// logged.
+func SweepOpenedAttachments(log *slog.Logger) {
+	if err := purgeOpenDir(openDir()); err != nil {
+		log.Warn("removing the attachments written for opening", "err", err)
+	}
+}
+
+// purgeOpenDir removes dir with everything in it, and refuses any
+// directory but the one openDirFor names: dir must be an absolute path
+// ending in malachi/open, so an unset runtime and cache dir (a relative
+// path) or a slip cannot take anything else with it. A symbolic link in
+// its place is removed, never followed; a missing directory is no error.
+func purgeOpenDir(dir string) error {
+	clean := filepath.Clean(dir)
+	if !filepath.IsAbs(clean) || filepath.Base(clean) != "open" || filepath.Base(filepath.Dir(clean)) != "malachi" {
+		return fmt.Errorf("not the directory for opened attachments: %q", dir)
+	}
+	return os.RemoveAll(clean)
 }

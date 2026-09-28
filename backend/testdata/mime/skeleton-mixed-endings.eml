@@ -1,0 +1,32 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.net>
+Subject: Mixed line endings
+Date: Sun, 27 Sep 2026 10:05:00 +0200
+Message-ID: <skeleton-mixed@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary=mixed
+
+--mixed
+Content-Type: text/plain; charset=utf-8
+
+CRLF line
+LF line
+bare CR linelast line
+--mixed
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="mixed.pdf"
+
+%PDF-1.4 not really
+the next line is no delimiter in CRLF mode:
+--mixed
+still the same part
+--mixed
+Content-Type: multipart/alternative; boundary=inner
+
+--inner
+Content-Type: text/html; charset=utf-8
+
+<p>LF-only alternative inside a CRLF multipart</p>
+--inner--
+
+--mixed--

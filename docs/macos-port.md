@@ -45,6 +45,17 @@ Mail/`) as flags and keeps its own default socket path, so `malachi-mcp`
 and `.mcp.json` work unchanged (`MalachiCore/Daemon/Paths.swift`,
 `DaemonSupervisor.swift`).
 
+Like the GTK UI (`SweepOpenedAttachments`), the app removes the directory
+it writes attachments to for opening and previewing
+(`MalachiCore/Platform/OpenDir.swift`, `~/Library/Caches/Malachi
+Mail/open`) when it starts and when it quits, whatever the preferences
+say, so nothing opened outlives the session, which is also what *Never
+Store Attachments* promises. At quit it goes before the daemon is stopped,
+which can take 15 s, and once more in `applicationWillTerminate` for a
+file whose write was still in flight; `OpenDir.removeAll` refuses any path
+but an absolute one ending in `Malachi Mail/open`, as `purgeOpenDir` does
+in Go, and a failure is logged.
+
 Every connection to the socket is authenticated before it is used
 ([api.md §1.4](api.md#14-handshake)), by `RPCClient.connect()` itself,
 the Swift port of `api.ClientHandshake`: between Network.framework's
@@ -66,7 +77,19 @@ The daemon's keyring on macOS is the helper keyring
 (`backend/internal/auth/helper`, [security.md §6](security.md#6-credentials)):
 `MALACHI_KEYRING=helper` and `MALACHI_KEYRING_HELPER` pointing at the
 bundled `malachi-keychain`, set by `DaemonSupervisor.environment` unless
-`MALACHI_KEYRING` is already in the environment. The helper is a separate
+`MALACHI_KEYRING` is already in the environment. Before that decision, and
+whatever it is, the same function sets the daemon's storage defaults,
+`MALACHI_DEFAULT_COMPRESS_STORE=1` and
+`MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`, each unless the environment
+has it with a value ([api.md §4.8](api.md#48-config)): the store is compressed and the
+large attachments of messages older than 30 days stay on the mail server.
+`neverStoreAttachments` has no such default; only Settings switches it on.
+The daemon stores a default as the preference the first time it applies
+it, so Settings overrides them and a daemon started otherwise keeps them;
+it is the second run-time extension point of the daemon the client uses,
+chosen by the environment, never a build tag, and on Linux nothing sets it
+(a listed deviation, [macos/README.md](../macos/README.md#disk-space)). A
+daemon the app adopts gets no environment from it. The helper is a separate
 executable target (`MalachiKeychain`) with no dependency on the rest of
 the package: `Request.swift` is the protocol (parsed and validated without
 touching the Keychain, so it is testable without prompts),
@@ -97,15 +120,22 @@ check), `MailboxController` (accounts, folders, the list and its threads),
 `SyncController` (the status line from `sync.status`, `notify.syncState`
 and the connection, the rows of its popover, the sign-in and certificate
 banners), `MessageCache` (`message.get`/`message.body`/
-`message.part` with a bounded cache), `ActionsController` (flags, moves,
-trash, archive, junk, outbox retry, remote images, trusted senders,
-reply/forward through `draft.create`), `ComposeController` and
+`message.part` with a bounded cache, and `message.download` for the
+attachments kept on the mail server: one per message, the chips' spinner
+after 0.4 s; the pictures bar's download asks for the body again),
+`ActionsController` (flags, moves,
+trash, archive, junk, outbox retry, remote images, pictures kept on the
+server, trusted senders, reply/forward through `draft.create`, a forward
+downloading the attachments first, a reply the pictures it quotes),
+`ComposeController` and
 `ComposeDraftController` (recipients, autosave, send, discard),
 `WizardController` (discover → the browser sign-in or a password →
 test → add/update; a refused server certificate offers trust through
 `CertTrust`, the port of `ui/internal/certtrust`, and the pin rides along
 in the endpoint fields until the host or port changes),
 `MailPreferencesController` (`config.get`/`config.set`),
+`StorageUsageController` (`system.storage` every 5 s while Settings is
+open),
 `MCPRegistrationController` (runs the bundled `malachi-mcp status` /
 `install` / `uninstall --json` through `BridgeRunner` for Settings → AI).
 Each is a `@MainActor` class over an injected `RPCClient` (or a process
@@ -190,7 +220,7 @@ Rules that keep it honest against a daemon it did not ship with:
   level once per distinct reason until the next connection. No new
   strings: both are the GTK msgids;
 - `system.hello` and `system.authenticate` are in the method table like
-  every method (46, in the order of `api.AllMethods`), but only
+  every method (48, in the order of `api.AllMethods`), but only
   `RPCClient.connect()` sends them; `ErrorCode.unauthenticated` (1005) is
   what the daemon answers anything else before the handshake;
 - timeouts are the GTK UI's (`Platform/RPCTimeouts.swift`): 5 s by
@@ -200,7 +230,9 @@ Rules that keep it honest against a daemon it did not ship with:
   `message.embedded`, `draft.create`, `account.add`/`update`, 15 s for
   `account.discover`, 45 s for `account.test`, 10 s for
   `account.oauthStart` and 75 s for each `account.oauthWait` (the daemon
-  answers `pending` after a minute and the wizard asks again).
+  answers `pending` after a minute and the wizard asks again), 300 s for
+  `message.download` (`download`: the daemon's budget is 4 minutes, and
+  it finishes a download its caller gave up on).
 
 `docs/api.md` and `backend/pkg/api` are not changed from here. A feature
 that needs a new method is added to the daemon and the document first
@@ -347,7 +379,7 @@ format in one place for both clients.
 - `Tests/MalachiCoreTests/` (Swift Testing): the ports of the Go UI tests
   (`MailModelTests`, `ThreadModelTests`, `CollapseStateTests`,
   `FavouriteStateTests`, `FolderTreeTests`, `ActionHelpersTests`,
-  `AttachmentsTests`, `AccountsPageTests`, `NotificationTextTests`,
+  `AttachmentsTests`, `DownloadTests`, `AccountsPageTests`, `NotificationTextTests`,
   `OutboxTests`, `SyncStatusTests`, `ComposeSourceTests`,
   `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
   `BlockedSummaryTests`, `HTMLLinksTests`, `CIDRegistryTests`,
@@ -365,8 +397,8 @@ format in one place for both clients.
   controllers (`ConnectionControllerTests`, `MailboxControllerFoldersTests`,
   `MailboxControllerListTests`, `MessageCacheTests`, `SyncControllerTests`,
   `ActionsControllerTests`, `ComposeControllerTests`, `DraftStateTests`,
-  `WizardControllerTests`, `MailPreferencesTests`, `MCPRegistrationTests`
-  with a `#!/bin/sh` fake bridge).
+  `WizardControllerTests`, `MailPreferencesTests`, `StorageUsageTests`,
+  `MCPRegistrationTests` with a `#!/bin/sh` fake bridge).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
   `malachid` on a real unix socket speaking the same newline-delimited
   JSON-RPC, with per-method handlers. It plays the daemon's side of the
@@ -455,7 +487,10 @@ Linux-bound pieces sat behind interfaces. Of the three, the keyring
 keyring of §1; the XDG paths are handed to the daemon as flags by the
 app; the address books (`contacts.Directory`, Evolution Data Server) are
 absent and the daemon degrades silently, so recipient completion runs on
-the collected addresses alone. No `//go:build darwin` exists anywhere,
+the collected addresses alone. A second, smaller one followed with the
+compressed store (2026-09-27): the run-time defaults of two preferences
+(`MALACHI_DEFAULT_*`, §1), which the app sets for its daemon because Macs
+often have small disks. No `//go:build darwin` exists anywhere,
 which is what CLAUDE.md rule 4 asks for. One Go test still fails on
 macOS and is unrelated to the client: the timing-sensitive
 `TestWorkerAuthFailureDefersQueue`. `TestAttachmentImportMetadata` failed

@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-26 15:02+0200\n"
+"POT-Creation-Date: 2026-09-28 10:01+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -149,7 +149,7 @@ msgstr "Připojeno za %d ms"
 msgid "No password is stored for this account. Enter it to continue."
 msgstr "Pro tento účet není uložené heslo. Zadejte ho a pokračujte."
 
-#: ui/internal/accountwizard/results.go:88 ui/internal/widget/rpc.go:90
+#: ui/internal/accountwizard/results.go:88 ui/internal/widget/rpc.go:100
 msgid "The server rejected the user name or password"
 msgstr "Server odmítl uživatelské jméno nebo heslo"
 
@@ -344,60 +344,60 @@ msgstr "Přidání účtu"
 msgid "Check for new mail and show notifications in the background"
 msgstr "Kontrolovat novou poštu a zobrazovat oznámení na pozadí"
 
-#: ui/internal/compose/compose.go:140
+#: ui/internal/compose/compose.go:146
 msgid "The editor crashed; your last text was restored"
 msgstr "Editor spadl; poslední text byl obnoven"
 
-#: ui/internal/compose/compose.go:240 ui/internal/compose/draft.go:150
+#: ui/internal/compose/compose.go:253 ui/internal/compose/draft.go:150
 msgid "Using placeholder account"
 msgstr "Používá se zástupný účet"
 
-#: ui/internal/compose/compose.go:305 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:328 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr "Nová zpráva"
 
-#: ui/internal/compose/compose.go:432 ui/data/ui/compose.ui:283
+#: ui/internal/compose/compose.go:455 ui/data/ui/compose.ui:283
 #: ui/data/ui/compose.ui:476
 msgid "Paragraph"
 msgstr "Odstavec"
 
-#: ui/internal/compose/compose.go:435
+#: ui/internal/compose/compose.go:458
 #, c-format
 msgid "Heading %s"
 msgstr "Nadpis %s"
 
-#: ui/internal/compose/compose.go:464 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:487 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr "Přiložit soubory"
 
-#: ui/internal/compose/compose.go:487
+#: ui/internal/compose/compose.go:510
 msgid "Only local files can be attached"
 msgstr "Přiložit lze jen místní soubory"
 
-#: ui/internal/compose/compose.go:496 ui/data/ui/compose.ui:376
+#: ui/internal/compose/compose.go:519 ui/data/ui/compose.ui:376
 msgid "Insert Image"
 msgstr "Vložit obrázek"
 
-#: ui/internal/compose/compose.go:498
+#: ui/internal/compose/compose.go:521
 msgid "Images"
 msgstr "Obrázky"
 
-#: ui/internal/compose/compose.go:512
+#: ui/internal/compose/compose.go:535
 msgid "Only local images can be inserted"
 msgstr "Vložit lze jen místní obrázky"
 
-#: ui/internal/compose/compose.go:526
+#: ui/internal/compose/compose.go:549
 #, c-format
 msgid "Attaching %s…"
 msgstr "Přikládá se %s…"
 
-#: ui/internal/compose/compose.go:535
+#: ui/internal/compose/compose.go:558
 #, c-format
 msgid "Attaching %s"
 msgstr "Přiložení souboru %s"
 
-#: ui/internal/compose/compose.go:567
+#: ui/internal/compose/compose.go:590
 msgid "Remove"
 msgstr "Odebrat"
 
@@ -462,8 +462,8 @@ msgstr "Za_hodit"
 msgid "Save changes to this draft?"
 msgstr "Uložit změny v tomto konceptu?"
 
-#: ui/internal/compose/draft.go:397 ui/internal/widget/rpc.go:183
-#: ui/internal/window/remote.go:261 ui/data/ui/account_wizard.ui:401
+#: ui/internal/compose/draft.go:397 ui/internal/widget/rpc.go:193
+#: ui/internal/window/remote.go:262 ui/data/ui/account_wizard.ui:401
 msgid "_Cancel"
 msgstr "_Zrušit"
 
@@ -479,38 +479,47 @@ msgstr[0] "%d nebezpečný prvek byl ze zprávy odstraněn"
 msgstr[1] "%d nebezpečné prvky byly ze zprávy odstraněny"
 msgstr[2] "%d nebezpečných prvků bylo ze zprávy odstraněno"
 
+#. TRANSLATORS: %d is the number of files of the forwarded (or quoted) message that the new one lacks.
+#: ui/internal/compose/draft.go:463
+#, c-format
+msgid "%d attachment of the original could not be attached"
+msgid_plural "%d attachments of the original could not be attached"
+msgstr[0] "%d přílohu originálu se nepodařilo připojit"
+msgstr[1] "%d přílohy originálu se nepodařilo připojit"
+msgstr[2] "%d příloh originálu se nepodařilo připojit"
+
 #. TRANSLATORS: quote header without a date; %s is the sender.
-#: ui/internal/compose/prefill.go:150
+#: ui/internal/compose/prefill.go:154
 #, c-format
 msgid "%s wrote:"
 msgstr "%s napsal(a):"
 
 #. TRANSLATORS: quote header; %s are the date and the sender.
-#: ui/internal/compose/prefill.go:153
+#: ui/internal/compose/prefill.go:157
 #, c-format
 msgid "On %s, %s wrote:"
 msgstr "Dne %s %s napsal(a):"
 
-#: ui/internal/compose/prefill.go:157
+#: ui/internal/compose/prefill.go:161
 msgid "---------- Forwarded message ----------"
 msgstr "---------- Přeposlaná zpráva ----------"
 
-#: ui/internal/compose/prefill.go:158
+#: ui/internal/compose/prefill.go:162
 #, c-format
 msgid "From: %s"
 msgstr "Od: %s"
 
-#: ui/internal/compose/prefill.go:161
+#: ui/internal/compose/prefill.go:165
 #, c-format
 msgid "Date: %s"
 msgstr "Datum: %s"
 
-#: ui/internal/compose/prefill.go:163
+#: ui/internal/compose/prefill.go:167
 #, c-format
 msgid "Subject: %s"
 msgstr "Předmět: %s"
 
-#: ui/internal/compose/prefill.go:165
+#: ui/internal/compose/prefill.go:169
 #, c-format
 msgid "To: %s"
 msgstr "Komu: %s"
@@ -560,20 +569,26 @@ msgstr "%H:%M"
 msgid "%a, %-d %b %Y at %H:%M"
 msgstr "%a %-d. %-m. %Y v %H:%M"
 
+#. TRANSLATORS: file size in gibibytes.
+#: ui/internal/widget/format.go:122
+#, c-format
+msgid "%.1f GiB"
+msgstr "%.1f GiB"
+
 #. TRANSLATORS: file size in mebibytes.
-#: ui/internal/widget/format.go:121
+#: ui/internal/widget/format.go:125
 #, c-format
 msgid "%.1f MiB"
 msgstr "%.1f MiB"
 
 #. TRANSLATORS: file size in kibibytes.
-#: ui/internal/widget/format.go:124
+#: ui/internal/widget/format.go:128
 #, c-format
 msgid "%.0f KiB"
 msgstr "%.0f KiB"
 
 #. TRANSLATORS: file size in bytes.
-#: ui/internal/widget/format.go:127
+#: ui/internal/widget/format.go:131
 #, c-format
 msgid "%d B"
 msgstr "%d B"
@@ -589,7 +604,7 @@ msgstr[0] "%d zpráva"
 msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
-#: ui/internal/widget/message_row.go:195 ui/internal/window/message_view.go:330
+#: ui/internal/widget/message_row.go:195 ui/internal/window/message_view.go:376
 #: ui/internal/window/notify.go:90
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
@@ -685,103 +700,124 @@ msgstr "%s selhalo: zabezpečené spojení se nepodařilo navázat"
 msgid "%s failed: the server did not respond in time"
 msgstr "%s selhalo: server včas neodpověděl"
 
+#. TRANSLATORS: %s is an action such as "Opening the attachment".
 #: ui/internal/widget/rpc.go:77
+#, c-format
+msgid "%s failed: no network connection"
+msgstr "%s selhalo: není připojení k síti"
+
+#: ui/internal/widget/rpc.go:80
+#, c-format
+msgid "%s failed: try again in a moment"
+msgstr "%s selhalo: zkuste to za chvíli znovu"
+
+#: ui/internal/widget/rpc.go:82
+#, c-format
+msgid "%s failed: the attachment is not on this computer"
+msgstr "%s selhalo: příloha není v tomto počítači"
+
+#: ui/internal/widget/rpc.go:84
+#, c-format
+msgid "%s failed: the message is no longer on the server"
+msgstr "%s selhalo: zpráva už na serveru není"
+
+#: ui/internal/widget/rpc.go:87
 #, c-format
 msgid "%s failed"
 msgstr "%s selhalo"
 
-#: ui/internal/widget/rpc.go:86
+#: ui/internal/widget/rpc.go:96
 msgid "Failed"
 msgstr "Selhalo"
 
-#: ui/internal/widget/rpc.go:92
+#: ui/internal/widget/rpc.go:102
 msgid "The server could not be reached"
 msgstr "Server je nedostupný"
 
-#: ui/internal/widget/rpc.go:94
+#: ui/internal/widget/rpc.go:104
 msgid "The server returned an error"
 msgstr "Server vrátil chybu"
 
-#: ui/internal/widget/rpc.go:99
+#: ui/internal/widget/rpc.go:109
 msgid "The secure connection could not be established"
 msgstr "Zabezpečené spojení se nepodařilo navázat"
 
-#: ui/internal/widget/rpc.go:101
+#: ui/internal/widget/rpc.go:111
 msgid "The server did not respond in time"
 msgstr "Server včas neodpověděl"
 
-#: ui/internal/widget/rpc.go:103
+#: ui/internal/widget/rpc.go:113
 msgid "Not supported yet"
 msgstr "Zatím není podporováno"
 
 #
-#: ui/internal/widget/rpc.go:105
+#: ui/internal/widget/rpc.go:115
 msgid "Sign in to this account again"
 msgstr "Přihlaste se k tomuto účtu znovu"
 
 #
-#: ui/internal/widget/rpc.go:107
+#: ui/internal/widget/rpc.go:117
 msgid "The sign-in service is not available"
 msgstr "Přihlašovací služba není dostupná"
 
 #. TRANSLATORS: why an endpoint or an account failed
-#: ui/internal/widget/rpc.go:110
+#: ui/internal/widget/rpc.go:120
 msgid "The system keyring is unavailable"
 msgstr "Systémová klíčenka není dostupná"
 
 #. TRANSLATORS: why an endpoint or an account failed
-#: ui/internal/widget/rpc.go:113
+#: ui/internal/widget/rpc.go:123
 msgid "No network connection"
 msgstr "Není připojení k síti"
 
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:116
+#: ui/internal/widget/rpc.go:126
 #, c-format
 msgid "Rejected: %s"
 msgstr "Odmítnuto: %s"
 
 #. TRANSLATORS: %s is a technical message from the mail backend.
-#: ui/internal/widget/rpc.go:119
+#: ui/internal/widget/rpc.go:129
 #, c-format
 msgid "Failed: %s"
 msgstr "Selhalo: %s"
 
-#: ui/internal/widget/rpc.go:133
+#: ui/internal/widget/rpc.go:143
 msgid "The server's certificate is not from a trusted authority"
 msgstr "Certifikát serveru nepochází od důvěryhodné autority"
 
-#: ui/internal/widget/rpc.go:135
+#: ui/internal/widget/rpc.go:145
 msgid "The server's certificate is for another name"
 msgstr "Certifikát serveru je vystaven pro jiné jméno"
 
-#: ui/internal/widget/rpc.go:137
+#: ui/internal/widget/rpc.go:147
 msgid "The server's certificate has expired"
 msgstr "Platnost certifikátu serveru vypršela"
 
-#: ui/internal/widget/rpc.go:139
+#: ui/internal/widget/rpc.go:149
 msgid "The server's certificate is not valid yet"
 msgstr "Certifikát serveru ještě není platný"
 
-#: ui/internal/widget/rpc.go:141
+#: ui/internal/widget/rpc.go:151
 msgid "The server's certificate is not valid"
 msgstr "Certifikát serveru není platný"
 
-#: ui/internal/widget/rpc.go:143
+#: ui/internal/widget/rpc.go:153
 msgid "The server presented a different certificate than the one you trust"
 msgstr "Server předložil jiný certifikát než ten, kterému důvěřujete"
 
-#: ui/internal/widget/rpc.go:145
+#: ui/internal/widget/rpc.go:155
 msgid "The server does not offer STARTTLS"
 msgstr "Server nenabízí STARTTLS"
 
-#: ui/internal/widget/rpc.go:147
+#: ui/internal/widget/rpc.go:157
 msgid "The server requires TLS before signing in"
 msgstr "Server vyžaduje TLS před přihlášením"
 
 #. TRANSLATORS: the system's certificate check refused the server's
 #. certificate for a reason it does not name (e.g. "not standards
 #. compliant" on macOS).
-#: ui/internal/widget/rpc.go:154
+#: ui/internal/widget/rpc.go:164
 msgid "The system does not accept the server's certificate"
 msgstr "Systém certifikát serveru nepřijímá"
 
@@ -1040,7 +1076,7 @@ msgstr "Adresa zkopírována"
 msgid "_Copy Address"
 msgstr "_Kopírovat adresu"
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:795
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:825
 msgid "_New Message"
 msgstr "_Nová zpráva"
 
@@ -1054,62 +1090,63 @@ msgstr[0] "+%d další"
 msgstr[1] "+%d další"
 msgstr[2] "+%d dalších"
 
-#: ui/internal/window/attachments.go:75
+#: ui/internal/window/attachments.go:99
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr "Soubory uvnitř přiložené zprávy zatím nelze otevřít ani uložit."
 
-#: ui/internal/window/attachments.go:133 ui/data/ui/message_window.ui:56
+#: ui/internal/window/attachments.go:183 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:435
 msgid "More Actions"
 msgstr "Další akce"
 
-#: ui/internal/window/attachments.go:173 ui/internal/window/attachments.go:400
+#: ui/internal/window/attachments.go:223 ui/internal/window/attachments.go:498
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 "Programy a skripty se neotevírají přímo; soubor uložte a rozhodněte se sami."
 
-#: ui/internal/window/attachments.go:187
+#: ui/internal/window/attachments.go:237
 msgid "_View"
 msgstr "_Zobrazit"
 
-#: ui/internal/window/attachments.go:189
+#: ui/internal/window/attachments.go:239
 msgid "_Open"
 msgstr "_Otevřít"
 
-#: ui/internal/window/attachments.go:190
+#: ui/internal/window/attachments.go:240
 msgid "Save _As…"
 msgstr "Uložit _jako…"
 
-#: ui/internal/window/attachments.go:202
+#: ui/internal/window/attachments.go:268
 msgid "Save _All"
 msgstr "Uložit _vše"
 
-#: ui/internal/window/attachments.go:243
-msgid "This message has not been downloaded yet."
-msgstr "Tato zpráva ještě nebyla stažena."
-
-#: ui/internal/window/attachments.go:245 ui/internal/window/message_view.go:342
+#: ui/internal/window/attachments.go:326 ui/internal/window/message_view.go:388
 msgid "This message is too large to download."
 msgstr "Tato zpráva je příliš velká ke stažení."
 
-#: ui/internal/window/attachments.go:247 ui/internal/window/message_view.go:344
+#: ui/internal/window/attachments.go:328 ui/internal/window/message_view.go:390
 msgid "This message could not be read."
 msgstr "Tuto zprávu se nepodařilo přečíst."
 
 #. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:253
+#: ui/internal/window/attachments.go:332
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr "Přílohy větší než %s zatím nelze otevřít ani uložit."
 
-#: ui/internal/window/attachments.go:320
+#. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
+#: ui/internal/window/attachments.go:337
+msgid "On the server only; it is downloaded when you open it"
+msgstr "Jen na serveru; stáhne se, až ji otevřete"
+
+#: ui/internal/window/attachments.go:417
 msgid "Attachment"
 msgstr "Příloha"
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:377
+#: ui/internal/window/attachments.go:474
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -1118,37 +1155,53 @@ msgstr[1] "Uloženy %d přílohy"
 msgstr[2] "Uloženo %d příloh"
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:380
+#: ui/internal/window/attachments.go:477
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr "%d z %d příloh se nepodařilo uložit"
 
-#: ui/internal/window/attachments.go:420 ui/internal/window/attachments.go:448
-#: ui/internal/window/attachments.go:461
+#: ui/internal/window/attachments.go:518 ui/internal/window/attachments.go:545
+#: ui/internal/window/attachments.go:558
 msgid "The attachment could not be opened"
 msgstr "Přílohu se nepodařilo otevřít"
 
-#: ui/internal/window/attachments.go:440
+#: ui/internal/window/attachments.go:537
 msgid "Opening the attachment"
 msgstr "Otevírání přílohy"
 
-#: ui/internal/window/attachments.go:472
+#: ui/internal/window/attachments.go:570
 msgid "Save Attachment"
 msgstr "Uložit přílohu"
 
-#: ui/internal/window/attachments.go:488
+#: ui/internal/window/attachments.go:586
 msgid "Saving the attachment"
 msgstr "Ukládání přílohy"
 
-#: ui/internal/window/attachments.go:501
+#: ui/internal/window/attachments.go:602
 msgid "Save Attachments"
 msgstr "Uložit přílohy"
 
-#: ui/internal/window/compose_open.go:99
+#: ui/internal/window/attachments.go:622
+msgid "Saving the attachments"
+msgstr "Ukládání příloh"
+
+#: ui/internal/window/compose_open.go:131
+msgid "Forward Without Attachments?"
+msgstr "Přeposlat bez příloh?"
+
+#: ui/internal/window/compose_open.go:132
+msgid "Downloading the attachments"
+msgstr "Stahování příloh"
+
+#: ui/internal/window/compose_open.go:133
+msgid "_Forward Without Attachments"
+msgstr "_Přeposlat bez příloh"
+
+#: ui/internal/window/compose_open.go:219
 msgid "Preparing the forwarded message"
 msgstr "Příprava přeposílané zprávy"
 
-#: ui/internal/window/compose_open.go:101
+#: ui/internal/window/compose_open.go:221
 msgid "Preparing the reply"
 msgstr "Příprava odpovědi"
 
@@ -1168,17 +1221,17 @@ msgstr[0] "%d přílohu konceptu se nepodařilo otevřít"
 msgstr[1] "%d přílohy konceptu se nepodařilo otevřít"
 msgstr[2] "%d příloh konceptu se nepodařilo otevřít"
 
-#: ui/internal/window/embedded.go:97
+#: ui/internal/window/embedded.go:98
 msgid "Opening the attached message"
 msgstr "Otevírání přiložené zprávy"
 
 #. TRANSLATORS: window subtitle; %s is the subject of the message this one was attached to.
-#: ui/internal/window/embedded.go:149
+#: ui/internal/window/embedded.go:158
 #, c-format
 msgid "Attached to “%s”"
 msgstr "Přiloženo ke zprávě „%s“"
 
-#: ui/internal/window/embedded.go:174 ui/internal/window/remote.go:140
+#: ui/internal/window/embedded.go:183 ui/internal/window/remote.go:141
 msgid "Loading the images"
 msgstr "Načtení obrázků"
 
@@ -1257,7 +1310,7 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:542
+#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:572
 msgid "No Accounts"
 msgstr "Žádné účty"
 
@@ -1281,7 +1334,7 @@ msgstr "Zatím žádné složky"
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
-#: ui/internal/window/message_view.go:148
+#: ui/internal/window/message_view.go:174
 msgid ""
 "The formatted version of this message could not be shown safely; this is its "
 "plain text."
@@ -1289,16 +1342,16 @@ msgstr ""
 "Formátovanou podobu této zprávy nešlo bezpečně zobrazit; toto je její prostý "
 "text."
 
-#: ui/internal/window/message_view.go:265
+#: ui/internal/window/message_view.go:307
 msgid "Loading the message"
 msgstr "Načtení zprávy"
 
-#: ui/internal/window/message_view.go:336
-#: ui/internal/window/message_view.go:348
+#: ui/internal/window/message_view.go:382
+#: ui/internal/window/message_view.go:394
 msgid "(Empty message)"
 msgstr "(Prázdná zpráva)"
 
-#: ui/internal/window/message_view.go:340
+#: ui/internal/window/message_view.go:386
 msgid "Downloading…"
 msgstr "Stahuje se…"
 
@@ -1414,62 +1467,86 @@ msgstr "Zrušit odeslání"
 msgid "Move to Trash"
 msgstr "Přesunout do koše"
 
-#: ui/internal/window/preferences.go:197
+#: ui/internal/window/preferences.go:251
 msgid "Saving mail settings"
 msgstr "Uložení nastavení pošty"
 
-#: ui/internal/window/preferences.go:220
+#: ui/internal/window/preferences.go:280
 msgid "Loading mail settings"
 msgstr "Načtení nastavení pošty"
 
-#: ui/internal/window/preferences.go:321
+#: ui/internal/window/preferences.go:343
+msgid "Measuring the disk space"
+msgstr "Zjišťování obsazeného místa"
+
+#: ui/internal/window/preferences.go:379
+msgid "Converting the stored mail in the background"
+msgstr "Uložená pošta se převádí na pozadí"
+
+#: ui/internal/window/preferences.go:381
+msgid "Converting stopped: the disk is full"
+msgstr "Převod se zastavil: disk je plný"
+
+#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#: ui/internal/window/preferences.go:385
+#, c-format
+msgid "Compression saves %s"
+msgstr "Komprese šetří %s"
+
+#. TRANSLATORS: %s is a size such as "1.2 GiB".
+#: ui/internal/window/preferences.go:389
+#, c-format
+msgid "%s of attachments are on the server only"
+msgstr "%s příloh je jen na serveru"
+
+#: ui/internal/window/preferences.go:527
 msgid "The desktop portal refused to change autostart"
 msgstr "Portál pracovní plochy odmítl změnit automatické spouštění"
 
-#: ui/internal/window/preferences.go:324
+#: ui/internal/window/preferences.go:530
 msgid "Autostart needs xdg-desktop-portal"
 msgstr "Automatické spouštění vyžaduje xdg-desktop-portal"
 
-#: ui/internal/window/preferences.go:327
+#: ui/internal/window/preferences.go:533
 msgid "Autostart was not granted"
 msgstr "Automatické spouštění nebylo povoleno"
 
-#: ui/internal/window/preferences.go:352
+#: ui/internal/window/preferences.go:558
 msgid "Not available in the Flatpak build"
 msgstr "V sestavení Flatpak není k dispozici"
 
-#: ui/internal/window/preferences.go:358
+#: ui/internal/window/preferences.go:564
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr "Most MCP (malachi-mcp) nebyl nalezen"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:373
+#: ui/internal/window/preferences.go:579
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr "Most MCP neodpověděl: %s"
 
-#: ui/internal/window/preferences.go:409
+#: ui/internal/window/preferences.go:615
 msgid "No Claude app was found on this computer"
 msgstr "Na tomto počítači nebyla nalezena žádná aplikace Claude"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:412
+#: ui/internal/window/preferences.go:618
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr "Most MCP se nepodařilo zaregistrovat: %s"
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:415
+#: ui/internal/window/preferences.go:621
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr "Most MCP se nepodařilo odregistrovat: %s"
 
-#: ui/internal/window/remote.go:67
+#: ui/internal/window/remote.go:68
 msgid "Loading remote images…"
 msgstr "Načítají se vzdálené obrázky…"
 
 #. TRANSLATORS: %d is the number of remote images the message tried to load.
-#: ui/internal/window/remote.go:70
+#: ui/internal/window/remote.go:71
 #, c-format
 msgid "%d remote image was blocked"
 msgid_plural "%d remote images were blocked"
@@ -1477,27 +1554,44 @@ msgstr[0] "%d vzdálený obrázek byl blokován"
 msgstr[1] "%d vzdálené obrázky byly blokovány"
 msgstr[2] "%d vzdálených obrázků bylo blokováno"
 
-#: ui/internal/window/remote.go:202
+#: ui/internal/window/remote.go:203
 msgid "Trusting the sender"
 msgstr "Přidání odesílatele mezi známé"
 
-#: ui/internal/window/remote.go:225
+#: ui/internal/window/remote.go:226
 msgid "Changing the remote content preference"
 msgstr "Změna předvolby vzdáleného obsahu"
 
-#: ui/internal/window/remote.go:256
+#: ui/internal/window/remote.go:257
 msgid "Open This Link?"
 msgstr "Otevřít tento odkaz?"
 
 #. TRANSLATORS: %s are the link's visible text and its real destination.
-#: ui/internal/window/remote.go:258
+#: ui/internal/window/remote.go:259
 #, c-format
 msgid "The link is shown as “%s” but leads to %s."
 msgstr "Odkaz se zobrazuje jako „%s“, ale vede na %s."
 
-#: ui/internal/window/remote.go:262
+#: ui/internal/window/remote.go:263
 msgid "_Open Link"
 msgstr "_Otevřít odkaz"
+
+#: ui/internal/window/remote.go:387
+msgid "Downloading the pictures"
+msgstr "Stahování obrázků"
+
+#: ui/internal/window/remote.go:434
+msgid "Downloading pictures…"
+msgstr "Stahují se obrázky…"
+
+#. TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+#: ui/internal/window/remote.go:437
+#, c-format
+msgid "%d picture of this message is on the server only"
+msgid_plural "%d pictures of this message are on the server only"
+msgstr[0] "%d obrázek této zprávy je jen na serveru"
+msgstr[1] "%d obrázky této zprávy jsou jen na serveru"
+msgstr[2] "%d obrázků této zprávy je jen na serveru"
 
 #: ui/internal/window/search.go:244
 msgid "Loading more results"
@@ -1802,15 +1896,15 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:537
+#: ui/internal/window/window.go:559
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:603 ui/data/ui/window.ui:207
+#: ui/internal/window/window.go:625 ui/data/ui/window.ui:207
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:609 ui/data/ui/window.ui:177
+#: ui/internal/window/window.go:631 ui/data/ui/window.ui:177
 msgid "Messages"
 msgstr "Zprávy"
 
@@ -1993,12 +2087,12 @@ msgid "Draft Menu"
 msgstr "Nabídka konceptu"
 
 #: ui/data/ui/compose.ui:105 ui/data/ui/embedded_window.ui:104
-#: ui/data/ui/message_window.ui:160 ui/data/ui/window.ui:593
+#: ui/data/ui/message_window.ui:190 ui/data/ui/window.ui:623
 msgid "From"
 msgstr "Od"
 
 #: ui/data/ui/compose.ui:133 ui/data/ui/embedded_window.ui:130
-#: ui/data/ui/message_window.ui:186 ui/data/ui/window.ui:619
+#: ui/data/ui/message_window.ui:216 ui/data/ui/window.ui:649
 msgid "To"
 msgstr "Komu"
 
@@ -2007,7 +2101,7 @@ msgid "Cc/Bcc"
 msgstr "Kopie/Skrytá"
 
 #: ui/data/ui/compose.ui:171 ui/data/ui/embedded_window.ui:158
-#: ui/data/ui/message_window.ui:214 ui/data/ui/window.ui:647
+#: ui/data/ui/message_window.ui:244 ui/data/ui/window.ui:677
 msgid "Cc"
 msgstr "Kopie"
 
@@ -2108,13 +2202,13 @@ msgid "Attached Message"
 msgstr "Přiložená zpráva"
 
 #: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:115
-#: ui/data/ui/message_window.ui:361 ui/data/ui/window.ui:506
-#: ui/data/ui/window.ui:827
+#: ui/data/ui/message_window.ui:391 ui/data/ui/window.ui:506
+#: ui/data/ui/window.ui:857
 msgid "Load _Images"
 msgstr "Načíst _obrázky"
 
-#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:323
-#: ui/data/ui/window.ui:755
+#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:353
+#: ui/data/ui/window.ui:785
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr "Načítání zprávy"
@@ -2151,15 +2245,19 @@ msgstr "Vždy od tohoto _odesílatele"
 msgid "Load remote images now and whenever this sender writes"
 msgstr "Načíst vzdálené obrázky teď a vždy, když tento odesílatel napíše"
 
-#: ui/data/ui/message_window.ui:351 ui/data/ui/window.ui:817
+#: ui/data/ui/message_window.ui:152 ui/data/ui/window.ui:543
+msgid "_Download Pictures"
+msgstr "_Stáhnout obrázky"
+
+#: ui/data/ui/message_window.ui:381 ui/data/ui/window.ui:847
 msgid "Mark as _Unread"
 msgstr "Označit jako _nepřečtené"
 
-#: ui/data/ui/message_window.ui:355 ui/data/ui/window.ui:821
+#: ui/data/ui/message_window.ui:385 ui/data/ui/window.ui:851
 msgid "Mark as _Read"
 msgstr "Označit jako _přečtené"
 
-#: ui/data/ui/message_window.ui:365 ui/data/ui/window.ui:831
+#: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:861
 msgid "Always Load Images From This _Sender"
 msgstr "Vždy načítat obrázky od tohoto _odesílatele"
 
@@ -2299,15 +2397,15 @@ msgstr "Uchovávat poštu offline po dobu"
 msgid "Older messages stay on the server and are not shown"
 msgstr "Starší zprávy zůstávají na serveru a nezobrazují se"
 
-#: ui/data/ui/preferences.ui:152
+#: ui/data/ui/preferences.ui:152 ui/data/ui/preferences.ui:172
 msgid "1 week"
 msgstr "1 týden"
 
-#: ui/data/ui/preferences.ui:153
+#: ui/data/ui/preferences.ui:153 ui/data/ui/preferences.ui:173
 msgid "1 month"
 msgstr "1 měsíc"
 
-#: ui/data/ui/preferences.ui:154
+#: ui/data/ui/preferences.ui:154 ui/data/ui/preferences.ui:174
 msgid "3 months"
 msgstr "3 měsíce"
 
@@ -2315,99 +2413,137 @@ msgstr "3 měsíce"
 msgid "1 year"
 msgstr "1 rok"
 
-#: ui/data/ui/preferences.ui:156
+#: ui/data/ui/preferences.ui:156 ui/data/ui/preferences.ui:175
 msgid "Everything"
 msgstr "Vše"
 
-#: ui/data/ui/preferences.ui:169
+#: ui/data/ui/preferences.ui:164
+msgid "Keep Attachments Offline For"
+msgstr "Uchovávat přílohy offline po dobu"
+
+#: ui/data/ui/preferences.ui:165
+msgid ""
+"Large attachments of older messages stay on the server and are downloaded "
+"when you open them"
+msgstr ""
+"Velké přílohy starších zpráv zůstávají na serveru a stáhnou se, až je "
+"otevřete"
+
+#: ui/data/ui/preferences.ui:171
+msgid "Small Attachments Only"
+msgstr "Jen malé přílohy"
+
+#: ui/data/ui/preferences.ui:183
+msgid "Never Store Attachments"
+msgstr "Nikdy neukládat přílohy"
+
+#: ui/data/ui/preferences.ui:184
+msgid ""
+"Attachments are downloaded whenever you open them and are gone when you quit"
+msgstr ""
+"Přílohy se stáhnou pokaždé, když je otevřete, a po ukončení aplikace zmizí"
+
+#: ui/data/ui/preferences.ui:190
+msgid "Compress Stored Mail"
+msgstr "Komprimovat uloženou poštu"
+
+#: ui/data/ui/preferences.ui:191
+msgid "Uses less disk space; stored mail is converted in the background"
+msgstr "Šetří místo na disku; uložená pošta se převede na pozadí"
+
+#: ui/data/ui/preferences.ui:197
+msgid "Disk Space Used"
+msgstr "Obsazené místo na disku"
+
+#: ui/data/ui/preferences.ui:217
 msgid "Appearance"
 msgstr "Vzhled"
 
-#: ui/data/ui/preferences.ui:173
+#: ui/data/ui/preferences.ui:221
 msgid "Theme"
 msgstr "Motiv"
 
-#: ui/data/ui/preferences.ui:176
+#: ui/data/ui/preferences.ui:224
 msgid "Color Scheme"
 msgstr "Barevné schéma"
 
-#: ui/data/ui/preferences.ui:180
+#: ui/data/ui/preferences.ui:228
 msgid "Follow System"
 msgstr "Podle systému"
 
-#: ui/data/ui/preferences.ui:181
+#: ui/data/ui/preferences.ui:229
 msgid "Light"
 msgstr "Světlé"
 
-#: ui/data/ui/preferences.ui:182
+#: ui/data/ui/preferences.ui:230
 msgid "Dark"
 msgstr "Tmavé"
 
-#: ui/data/ui/preferences.ui:192
+#: ui/data/ui/preferences.ui:240
 msgid "Message List"
 msgstr "Seznam zpráv"
 
-#: ui/data/ui/preferences.ui:195
+#: ui/data/ui/preferences.ui:243
 msgid "Density"
 msgstr "Hustota"
 
-#: ui/data/ui/preferences.ui:199
+#: ui/data/ui/preferences.ui:247
 msgid "Comfortable"
 msgstr "Pohodlná"
 
-#: ui/data/ui/preferences.ui:200
+#: ui/data/ui/preferences.ui:248
 msgid "Compact"
 msgstr "Kompaktní"
 
-#: ui/data/ui/preferences.ui:208
+#: ui/data/ui/preferences.ui:256
 msgid "Group by Conversation"
 msgstr "Seskupovat podle konverzací"
 
-#: ui/data/ui/preferences.ui:209
+#: ui/data/ui/preferences.ui:257
 msgid "One row per conversation; expand it to see its messages"
 msgstr "Jeden řádek na konverzaci; po rozbalení zobrazí její zprávy"
 
-#: ui/data/ui/preferences.ui:214
+#: ui/data/ui/preferences.ui:262
 msgid "Show Preview Line"
 msgstr "Zobrazit řádek s náhledem"
 
-#: ui/data/ui/preferences.ui:220
+#: ui/data/ui/preferences.ui:268
 msgid "Show Avatars"
 msgstr "Zobrazit avatary"
 
-#: ui/data/ui/preferences.ui:226
+#: ui/data/ui/preferences.ui:274
 msgid "Monochrome Avatars"
 msgstr "Jednobarevné avatary"
 
-#: ui/data/ui/preferences.ui:227
+#: ui/data/ui/preferences.ui:275
 msgid "Neutral grey instead of a colour per sender"
 msgstr "Neutrální šedá místo barvy pro každého odesílatele"
 
-#: ui/data/ui/preferences.ui:234
+#: ui/data/ui/preferences.ui:282
 msgid "Message View"
 msgstr "Zobrazení zprávy"
 
-#: ui/data/ui/preferences.ui:237
+#: ui/data/ui/preferences.ui:285
 msgid "Use Monospace Font for Plain Text"
 msgstr "Pro prostý text použít neproporcionální písmo"
 
-#: ui/data/ui/preferences.ui:242
+#: ui/data/ui/preferences.ui:290
 msgid "Text Zoom"
 msgstr "Přiblížení textu"
 
-#: ui/data/ui/preferences.ui:243
+#: ui/data/ui/preferences.ui:291
 msgid "Percent"
 msgstr "Procenta"
 
-#: ui/data/ui/preferences.ui:261
+#: ui/data/ui/preferences.ui:309
 msgid "AI"
 msgstr "AI"
 
-#: ui/data/ui/preferences.ui:265
+#: ui/data/ui/preferences.ui:313
 msgid "MCP"
 msgstr "MCP"
 
-#: ui/data/ui/preferences.ui:266
+#: ui/data/ui/preferences.ui:314
 msgid ""
 "Lets AI assistants read your mail and prepare drafts through the Model "
 "Context Protocol."
@@ -2415,11 +2551,11 @@ msgstr ""
 "Umožňuje asistentům AI číst vaši poštu a připravovat koncepty přes Model "
 "Context Protocol."
 
-#: ui/data/ui/preferences.ui:269
+#: ui/data/ui/preferences.ui:317
 msgid "Register with Claude"
 msgstr "Registrovat v Claude"
 
-#: ui/data/ui/preferences.ui:270
+#: ui/data/ui/preferences.ui:318
 msgid ""
 "Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this "
 "computer"
@@ -2489,31 +2625,31 @@ msgstr "Tato zpráva je koncept"
 msgid "Edit"
 msgstr "Upravit"
 
-#: ui/data/ui/window.ui:530
+#: ui/data/ui/window.ui:560
 msgid "No Message Selected"
 msgstr "Není vybrána žádná zpráva"
 
-#: ui/data/ui/window.ui:531
+#: ui/data/ui/window.ui:561
 msgid "Select a message to read it here."
 msgstr "Vyberte zprávu a přečtěte si ji zde."
 
-#: ui/data/ui/window.ui:543
+#: ui/data/ui/window.ui:573
 msgid "Add a mail account to start reading and sending mail."
 msgstr "Přidejte poštovní účet a začněte číst a posílat poštu."
 
-#: ui/data/ui/window.ui:546
+#: ui/data/ui/window.ui:576
 msgid "_Add Account…"
 msgstr "_Přidat účet…"
 
-#: ui/data/ui/window.ui:801
+#: ui/data/ui/window.ui:831
 msgid "_Preferences"
 msgstr "_Předvolby"
 
-#: ui/data/ui/window.ui:805
+#: ui/data/ui/window.ui:835
 msgid "_Keyboard Shortcuts"
 msgstr "_Klávesové zkratky"
 
-#: ui/data/ui/window.ui:809
+#: ui/data/ui/window.ui:839
 msgid "_About Malachi Mail"
 msgstr "_O aplikaci Malachi Mail"
 
@@ -2671,6 +2807,9 @@ msgstr ""
 #: data/io.github.schotek.Malachi.metainfo.xml.in:30
 msgid "Malachi Mail contributors"
 msgstr "Přispěvatelé Malachi Mail"
+
+#~ msgid "This message has not been downloaded yet."
+#~ msgstr "Tato zpráva ještě nebyla stažena."
 
 #, c-format
 #~ msgid "Cc: %s"

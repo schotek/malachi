@@ -61,6 +61,8 @@ enum Icon {
         "network-offline": "network.slash",
         "network-idle": "arrow.triangle.2.circlepath",
         "network-transmit-receive": "network",
+        // An attachment kept on the mail server (attachments.go `buildChip`).
+        "network-server": "icloud.and.arrow.down",
         "dialog-warning": "exclamationmark.triangle",
         "dialog-error": "xmark.octagon",
         "dialog-question": "questionmark.circle",

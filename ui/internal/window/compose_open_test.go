@@ -6,6 +6,7 @@ package window
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -37,6 +38,99 @@ func TestComposeSource(t *testing.T) {
 	lm.body = &api.MessageBodyResult{BodyState: api.BodyFetched, Text: "hello"}
 	if src = composeSource("m_1", s, lm); src.Text != "hello" {
 		t.Errorf("from body: %+v", src)
+	}
+}
+
+// A forward downloads first when the daemon would otherwise leave
+// something of the original behind, or when the cache cannot tell
+// (message.download answers at once when nothing is missing).
+func TestForwardNeedsDownload(t *testing.T) {
+	fetched := &api.MessageBodyResult{BodyState: api.BodyFetched}
+	msg := func(atts ...api.Attachment) *api.Message { return &api.Message{Attachments: atts} }
+	local := api.Attachment{PartID: "2", Filename: "a.pdf"}
+	remote := api.Attachment{PartID: "3", Filename: "b.pdf", Remote: true}
+	cases := []struct {
+		name string
+		lm   *loadedMessage
+		want bool
+	}{
+		{"nothing loaded", nil, true},
+		{"no full message yet", &loadedMessage{body: &api.MessageBodyResult{BodyState: api.BodyPending}}, true},
+		{"message.get failed", &loadedMessage{body: fetched}, true},
+		{"all local", &loadedMessage{msg: msg(local), body: fetched}, false},
+		{"one on the server", &loadedMessage{msg: msg(local, remote), body: fetched}, true},
+		{"on the server, body not loaded here", &loadedMessage{msg: msg(remote)}, true},
+		{"body not downloaded yet", &loadedMessage{msg: msg(), body: &api.MessageBodyResult{BodyState: api.BodyPending}}, true},
+		{"a remote inline picture is downloaded too", &loadedMessage{msg: msg(api.Attachment{PartID: "1.2", Inline: true, Remote: true}), body: fetched}, true},
+		{"too big to download anyway", &loadedMessage{msg: msg(local), body: &api.MessageBodyResult{BodyState: api.BodyTooBig}}, false},
+	}
+	for _, c := range cases {
+		if got := forwardNeedsDownload(c.lm); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+}
+
+// A reply downloads first only when the body on display counts pictures on
+// the mail server only (the daemon's remotePictures); an attachment there,
+// even one with a Content-ID, or a message the cache has no body of, is no
+// reason to.
+func TestReplyNeedsDownload(t *testing.T) {
+	fetched := &api.MessageBodyResult{BodyState: api.BodyFetched, HTML: "<p>x</p>"}
+	counted := &api.MessageBodyResult{BodyState: api.BodyFetched, HTML: "<p>x</p>", RemotePictures: 2}
+	msg := func(atts ...api.Attachment) *api.Message { return &api.Message{Attachments: atts} }
+	file := api.Attachment{PartID: "2", Filename: "a.pdf", Remote: true}
+	picture := api.Attachment{PartID: "1.2", Filename: "p.png", ContentID: "p@x", Inline: true}
+	remotePicture := picture
+	remotePicture.Remote = true
+	// Outlook and Apple Mail give ordinary attachments a Content-ID.
+	remoteCID := api.Attachment{PartID: "3", Filename: "q.png", ContentID: "q@x", Remote: true}
+	cases := []struct {
+		name string
+		lm   *loadedMessage
+		want bool
+	}{
+		{"nothing loaded", nil, false},
+		{"body not loaded yet", &loadedMessage{msg: msg(remotePicture)}, false},
+		{"no attachments", &loadedMessage{msg: msg(), body: fetched}, false},
+		{"picture stored", &loadedMessage{msg: msg(picture), body: fetched}, false},
+		{"only a file on the server", &loadedMessage{msg: msg(file), body: fetched}, false},
+		{"content-id part on the server", &loadedMessage{msg: msg(remoteCID), body: fetched}, false},
+		{"picture on the server, held by the daemon", &loadedMessage{msg: msg(file, remotePicture), body: fetched}, false},
+		{"pictures counted", &loadedMessage{msg: msg(file, remotePicture), body: counted}, true},
+		{"counted, message.get failed", &loadedMessage{body: counted}, true},
+		{"counted in a text-only body", &loadedMessage{body: &api.MessageBodyResult{BodyState: api.BodyFetched, Text: "x", RemotePictures: 2}}, false},
+	}
+	for _, c := range cases {
+		if got := replyNeedsDownload(c.lm); got != c.want {
+			t.Errorf("%s: got %v", c.name, got)
+		}
+	}
+}
+
+// A failed download asks, unless asking would change nothing: no daemon,
+// one that cannot download at all, or a message it can never download.
+func TestAskForwardWithout(t *testing.T) {
+	if askForwardWithout(nil) {
+		t.Error("no error, no question")
+	}
+	for _, err := range []error{
+		api.NewError(api.CodeMethodNotFound, "x"), api.ErrNotImplemented,
+		client.ErrDisconnected, fmt.Errorf("call: %w", client.ErrDisconnected),
+		api.NewError(api.CodeAttachmentTooBig, "over the cap"),
+	} {
+		if askForwardWithout(err) {
+			t.Errorf("%v: should forward at once", err)
+		}
+	}
+	for _, err := range []error{
+		api.NewError(api.CodeOffline, "x"), api.NewError(api.CodeMessageGone, "x"),
+		api.NewError(api.CodeUnavailable, "x"), api.NewError(api.CodeServerTimeout, "x"),
+		api.NewError(api.CodeCancelled, "x"), context.DeadlineExceeded, errors.New("boom"),
+	} {
+		if !askForwardWithout(err) {
+			t.Errorf("%v: should ask", err)
+		}
 	}
 }
 

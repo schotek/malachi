@@ -64,6 +64,14 @@ const (
 	KeyFavouriteFolders  = "favourite-folders"
 )
 
+// Keys of the main window's geometry, bound to its default-width,
+// default-height and maximized properties. They must match the gschema.
+const (
+	KeyWindowWidth     = "window-width"
+	KeyWindowHeight    = "window-height"
+	KeyWindowMaximized = "window-maximized"
+)
+
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
 type ColorScheme string
 
@@ -113,6 +121,10 @@ var defaults = map[string]any{
 	KeyCollapsedFolders:  []string(nil),
 	KeyCollapsedAccounts: []string(nil),
 	KeyFavouriteFolders:  []string(nil),
+
+	KeyWindowWidth:     1200,
+	KeyWindowHeight:    760,
+	KeyWindowMaximized: false,
 }
 
 // Store reads and writes preferences. All methods must be called from the
