@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Compose/ComposeWindowController.swift
+(buildContent, ComposeToolbar); GTK: ui/data/ui/compose.blp
+(compose_window, compose_menu) and ui/data/ui/editor.blp (the editor view).
+A compose window, top to bottom as compose.blp:
+
+- the header bar as the window's title bar (docs/windows-port.md §11.3): Attach
+  at the start, the title (the subject, or "New Message"), the Draft Menu
+  (Save Draft, Attach Files…, Insert Image…, Discard) and the accented Send
+  at the end, on Mica;
+- under the toast overlay: the card of header fields (margins 12, 12, 12, 6),
+  the formatting bar (margins 6), the plain-text hint (hidden while rich text
+  is sent), the editor filling the rest, the attachment chips (margins 12, 6,
+  hidden while there are none);
+- the status line at the bottom (margins 12, 4).
+-->
+<Window
+    x:Class="Malachi.App.Compose.ComposeWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Malachi.App.Controls"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Compose"
+    xmlns:res="using:Malachi.App.Resources">
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+    <Grid x:Name="Root">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Where Mica is not available the window paints itself. -->
+        <Border
+            x:Name="SolidBackground"
+            Grid.RowSpan="3"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+            Visibility="Collapsed" />
+
+        <!-- compose.blp's Adw.HeaderBar. -->
+        <TitleBar
+            x:Name="ComposeTitleBar"
+            Grid.Row="0"
+            IsBackButtonVisible="False"
+            IsPaneToggleButtonVisible="False">
+            <TitleBar.IconSource>
+                <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
+            </TitleBar.IconSource>
+            <TitleBar.LeftHeader>
+                <!-- [start] attach_button -->
+                <Button
+                    x:Name="AttachButton"
+                    Width="40"
+                    Height="32"
+                    Margin="4,0,0,0"
+                    Padding="0"
+                    AutomationProperties.AutomationId="ComposeAttach"
+                    AutomationProperties.Name="{l:T Msgid='Attach Files'}"
+                    Click="OnAttachClick"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    ToolTipService.ToolTip="{l:T Msgid='Attach Files'}">
+                    <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-attachment')}" />
+                </Button>
+            </TitleBar.LeftHeader>
+            <TitleBar.RightHeader>
+                <StackPanel
+                    Margin="0,0,4,0"
+                    Orientation="Horizontal"
+                    Spacing="6">
+                    <!-- [end] the Draft Menu (compose_menu) -->
+                    <Button
+                        x:Name="DraftMenuButton"
+                        Width="40"
+                        Height="32"
+                        Padding="0"
+                        AutomationProperties.AutomationId="ComposeDraftMenu"
+                        AutomationProperties.Name="{l:T Msgid='Draft Menu'}"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        ToolTipService.ToolTip="{l:T Msgid='Draft Menu'}">
+                        <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more')}" />
+                        <Button.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem
+                                    x:Name="SaveDraftItem"
+                                    Click="OnSaveDraftClick"
+                                    l:MnemonicLabel.Text="{l:T Msgid='_Save Draft'}" />
+                                <MenuFlyoutItem
+                                    x:Name="AttachFilesItem"
+                                    Click="OnAttachClick"
+                                    l:MnemonicLabel.Text="{l:T Msgid='Attach _Files…'}" />
+                                <MenuFlyoutItem
+                                    x:Name="InsertImageItem"
+                                    Click="OnInsertImageClick"
+                                    l:MnemonicLabel.Text="{l:T Msgid='Insert _Image…'}" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem
+                                    x:Name="DiscardItem"
+                                    Click="OnDiscardClick"
+                                    l:MnemonicLabel.Text="{l:T Msgid='_Discard'}" />
+                            </MenuFlyout>
+                        </Button.Flyout>
+                    </Button>
+                    <!-- [end] send_button: suggested-action, Ctrl+Enter -->
+                    <Button
+                        x:Name="SendButton"
+                        Height="32"
+                        Padding="12,0,14,0"
+                        AutomationProperties.AutomationId="ComposeSend"
+                        Click="OnSendClick"
+                        Style="{StaticResource AccentButtonStyle}"
+                        ToolTipService.ToolTip="{l:T Msgid='Send (Ctrl+Enter)'}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-send')}" />
+                            <TextBlock x:Name="SendLabel" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </TitleBar.RightHeader>
+        </TitleBar>
+
+        <!-- toast_overlay over the content. -->
+        <Grid x:Name="ContentHost" Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- header_rows -->
+            <local:ComposeHeader
+                x:Name="Header"
+                Grid.Row="0"
+                Margin="12,12,12,6" />
+
+            <!-- format_toolbar -->
+            <local:FormatToolbar
+                x:Name="FormatBar"
+                Grid.Row="1"
+                Margin="6,0,6,0" />
+
+            <!-- plain_text_hint: shown instead of the bar while only plain
+                 text is sent (compose/draft.go richText). -->
+            <TextBlock
+                x:Name="PlainTextHint"
+                Grid.Row="2"
+                Margin="12,4,12,4"
+                Style="{StaticResource DimCaptionLabelStyle}"
+                Text="{l:T Msgid='This message will be sent as plain text.'}"
+                TextWrapping="Wrap"
+                Visibility="Collapsed" />
+
+            <!-- editor_slot: the view background until the editor paints;
+                 files dropped on it are attached. -->
+            <Border
+                x:Name="EditorSlot"
+                Grid.Row="3"
+                Margin="0,4,0,0"
+                AllowDrop="True"
+                DragOver="OnEditorDragOver"
+                Drop="OnEditorDrop"
+                Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,1" />
+
+            <!-- attachments_box -->
+            <local:AttachmentChipsView
+                x:Name="Chips"
+                Grid.Row="4"
+                Margin="12,6,12,6" />
+
+            <controls:ToastHost x:Name="ToastsHost" Grid.RowSpan="5" />
+        </Grid>
+
+        <!-- [bottom] draft_status -->
+        <TextBlock
+            x:Name="StatusText"
+            Grid.Row="2"
+            Margin="12,4,12,4"
+            AutomationProperties.AutomationId="ComposeStatus"
+            AutomationProperties.LiveSetting="Polite"
+            MaxLines="1"
+            Style="{StaticResource DimCaptionLabelStyle}"
+            TextTrimming="CharacterEllipsis"
+            TextWrapping="NoWrap" />
+    </Grid>
+</Window>

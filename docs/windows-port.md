@@ -655,7 +655,9 @@ file read off the UI thread when it is a regular file within the cap, a
 fetcher bounded by `FetchTimeout`, then `checkInline`). File drops go
 through the bridge (`postMessageWithAdditionalObjects` →
 `CoreWebView2File.Path` → `FilesDropped`, which the compose window hands to
-`attachment.import`); the page never sees them. Every navigation but the
+`attachment.import`); the page never sees them. WinUI's WebView2 hands a
+drop from the shell to its host instead (measured), where the compose
+window's editor slot takes it (§11.3). Every navigation but the
 pending document is cancelled, links of a quoted original included; new
 windows are refused. The context menu keeps Undo, Redo, Cut, Copy, Paste,
 Paste as plain text and Select All (`ContextMenuPolicy`; GTK and macOS have
@@ -1495,6 +1497,67 @@ the part again with remote images allowed. Links go through `LinkOpener`
 destination alone for an unlisted link. The folder is `Windows/`, the
 namespace `Malachi.App.MessageWindows`: a namespace `Malachi.App.Windows`
 would hide the `Windows.*` namespaces from every file of the app.
+
+The compose window as built (phase E wave 2, `Malachi.App/Compose`):
+`ComposeManager` makes the windows `ComposeController` asks for
+(`Integration.InstallComposeWindows`, before the first activation, so a
+cold `mailto:` opens its composer at once) and cascades them 32 px from a
+first one centred on the active window's display. `ComposeWindow` is
+compose.blp top to bottom: its header bar as the window's tall `TitleBar` on
+Mica (Attach at the start; the Draft Menu and the accented Send, tooltip
+*Send (Ctrl+Enter)*, at the end), then under the toast overlay
+`ComposeHeader` (the card: one 30 px line per field, the labels in one
+column, flat fields whose own template lets the invalid state be a style
+with red text and underline), `FormatToolbar` (flat buttons that never take
+the focus, the checked toggles in the accent colour, the link popover whose
+entry turns red for a refused link, the text colour as a `ColorPicker` in a
+flyout sent when it closes with another colour), the plain-text hint, the
+`ComposeWebView` in the editor slot and `AttachmentChipsView` (six chips to
+a line, `ChipWrapPanel`), and the status line at the bottom. 760×640, at
+least 360×420 (`OverlappedPresenter.PreferredMinimumWidth/Height` at the
+window's scale). The logic is Core's: the draft controller, and the
+presentation classes `ComposeAttachmentsController` (imports, removal, the
+list the backend kept, the `cid:` registrations, the chips),
+`SuggestionsController` (one per recipient row; the 150 ms pause, the
+generation, the keys), `ComposeHeaderRules` (the From row, the Cc/Bcc
+button, the title) and `FormatBarState` (applyState and the commands). The
+recipient popup (`RecipientSuggestions`) is a `Popup` constrained to the
+window under the row, as wide as it, whose 36 px rows never take the focus;
+the row's `PreviewKeyDown` hands it Down, Up, Enter, Tab and Escape. Keys:
+the window's `CommandRouter` runs Ctrl+Enter, Ctrl+S, and Escape and Ctrl+W
+(the close request, not while a popup of the window is open), and lets
+`EditorKeys.BridgeHandles` through to the page (Ctrl+Shift+I is italic
+there, as in GTK); the bridge posts Escape (the close request) and Ctrl+K
+(the link popover). The editor's WebView2 is marked
+`KeyboardRouting.IsEditor` and named *Message body* (a Windows-only string;
+GTK names it nothing), again after a failed browser process replaced it.
+The open dialogs are the shell's `IFileOpenDialog`, owned by the window, on
+an STA thread of their own, with GTK's titles and the named *Images*
+filter; an item without a file-system path is refused with *Only local
+files can be attached*, where a local path is drive-absolute or a share's,
+never the `\\?\` and `\\.\` namespaces. Measured: WinUI's WebView2 hands a
+shell drop of files to its host, not to its page, so the editor slot takes
+it (`AllowDrop`, the storage items' paths); the bridge's drop path of §6.5
+stays for a runtime that hands it on. Closing (the caption, Alt+F4, Escape,
+Ctrl+W) is draft.go's close request through `AlertService`; Quit saves
+without asking and only a failed save asks (`CloseForQuitAsync`). Three
+fixes of what GTK and macOS leave as it is: the placeholder account's
+status goes when the real accounts arrive; a template's inline picture is
+fetched from the account the window has when the editor asks for it
+(read when it is registered, the first window of a run asked with the
+placeholder identity and got `attachmentNotFound`), and while the From row
+still lists the placeholder the window's own calls use the account it was
+opened for; and a composer made before the connection (a cold `mailto:`)
+asks for the accounts again once connected. Verified against devmail with
+real input: a message with bold text, a Cc, a picked and a dropped
+attachment and an inserted picture autosaved (and uploaded to the server's
+Drafts), sent with Ctrl+Enter from the editor and delivered; recipient
+suggestions after that send (Enter and Tab accept, Escape hides); reply and
+forward through `draft.create` with the quoted original, its inline picture
+and the forwarded file; a draft reopened through `draft.open` and raised
+when opened again; the close question; Quit saving a dirty draft without
+asking; a cold `mailto:` showing only its composer, and the app ending with
+it.
 
 ### 11.4 Banners, toasts, alerts
 

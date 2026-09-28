@@ -153,6 +153,8 @@ public partial class App : Application
         var integration = new Integration(s, main);
         s.Integration = integration;
         main.Attach(integration);
+        // The compose windows (wave 2, E5): before the first activation, which may be a mailto:.
+        global::Malachi.App.Compose.ComposeManager.Install(s, integration);
 
         quit = new QuitSequence(
             new QuitSteps

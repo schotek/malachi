@@ -38,3 +38,13 @@ GetCurrentThreadId
 GetFocus
 IsChild
 GetKeyState
+// The compose window (Compose/): the open dialogs of Attach Files and
+// Insert Image (IFileOpenDialog with its owner, title and named filter).
+FileOpenDialog
+IFileOpenDialog
+IShellItemArray
+IShellItem
+SIGDN
+FILEOPENDIALOGOPTIONS
+COMDLG_FILTERSPEC
+CoTaskMemFree

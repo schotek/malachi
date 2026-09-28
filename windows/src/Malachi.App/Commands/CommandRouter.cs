@@ -215,6 +215,21 @@ internal sealed partial class CommandRouter : IDisposable
         return ShortcutMap.Resolve(chord, context);
     }
 
+    // The keys of EditorKeys.BridgeHandles belong to the compose editor's
+    // page while it has the focus (Ctrl+B, I, U with or without Shift,
+    // Ctrl+K, Escape): no command runs, and none is swallowed as a browser
+    // key (Ctrl+Shift+I is italic there, as in GTK).
+    private bool EditorKeeps(KeyChord chord)
+    {
+        if (root?.XamlRoot is not { } xamlRoot || !KeyboardRouting.IsEditor(FocusManager.GetFocusedElement(xamlRoot)))
+        {
+            return false;
+        }
+        var m = chord.Modifiers;
+        return EditorKeys.BridgeHandles(
+            chord.Key, m.HasFlag(KeyModifiers.Control), m.HasFlag(KeyModifiers.Shift), m.HasFlag(KeyModifiers.Alt), m.HasFlag(KeyModifiers.Windows));
+    }
+
     // A TextBox consumes Ctrl+Q before the accelerators: Quit from there.
     private void OnPreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -238,6 +253,13 @@ internal sealed partial class CommandRouter : IDisposable
             return swallowed.KeyUp(key.VirtualKey, key.Window);
         }
         var chord = new KeyChord(key.VirtualKey, FromSource(key.Modifiers));
+        if (EditorKeeps(chord))
+        {
+            // The compose editor's bridge formats with these, and posts
+            // Ctrl+K and Escape back to the window (§6.5).
+            swallowed.KeyDown(key.VirtualKey, key.Window, false);
+            return false;
+        }
         var command = Resolve(chord);
         var swallow = command is not null || ShortcutMap.IsBrowserKey(chord);
         swallowed.KeyDown(key.VirtualKey, key.Window, swallow);
