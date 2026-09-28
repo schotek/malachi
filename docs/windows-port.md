@@ -442,13 +442,15 @@ summarised in §16. What it established:
 
 The code is `Malachi.App/WebViews` (`WebViewEnvironment`, `HardenedWebView`
 and the three views over it) and its pure rules in `Malachi.Core.Presentation`
-(`RequestGate`, `NavigationPolicy`, `LinkProbe`, `ContextMenuPolicy`,
-`HoverLabel`, `ViewerZoom`, `PreviewContent`, `PreviewDocument`,
-`PreviewPanel`, `EditorKeys`), which have their tests. The views are built
-in code, not XAML, and use nothing else of the app, so the network canary
-(§12) compiles the same files into its host. A view initialises when it is
-first loaded into a window and is closed with `Close()` when its window
-goes; `Unavailable` says it will show nothing.
+(`RequestGate`, `ResponseHeaders`, `NavigationPolicy`, `LinkProbe`,
+`ContextMenuPolicy`, `RendererRecovery`, `HoverLabel`, `ViewerZoom`,
+`PreviewContent`, `PreviewDocument`, `PreviewPanel`, `EditorKeys`), which
+have their tests. The views are built in code, not XAML, and use nothing
+else of the app, so the network canary (§12) compiles the same files into
+its host. A view initialises when it is first loaded into a window and is
+closed with `Close()` when its window goes; `CoreWebViewInitialized` says
+it has a control (again after a failed process replaced it), `Unavailable`
+that it will show nothing.
 
 ### 6.1 One environment
 
@@ -488,9 +490,32 @@ authoritative):
   old for it), the view loads nothing and raises `Unavailable`: the reader
   shows the plain text with the existing hint, the editor reports its
   failure, the previewer shows its panel. Fail closed. A failure is not
-  remembered: the next document tries again. A dead browser process
-  (`ProcessFailed` `BrowserProcessExited`) retires the environment, and
-  the view builds a new control in a new one and reloads.
+  remembered: the next document tries again. A document whose own
+  navigation fails (`Navigate` throws, or `NavigationCompleted` reports an
+  error that no process report explains within a second) raises
+  `Unavailable` the same way.
+- A failed process is handled as `RendererRecovery` (Core) says, once per
+  document (a hash of the bytes it is served from): a dead renderer
+  (`RenderProcessExited`) shows the document again in the same control; a
+  dead browser process (`BrowserProcessExited`) retires the environment and
+  shows it again in a new control; a hang (`RenderProcessUnresponsive`,
+  which Chromium's hang monitor reports about 15 s after unanswered input
+  and repeats only for more input, measured) is acted on only when the
+  renderer has not answered a host script 5 s later, or is reported again,
+  and then gets a new control, which ends the hung renderer. When the same
+  document fails again, whoever loaded it again (the editor's window
+  reloads its text after `Crashed`), the view gives up: it drops the
+  document and raises `Unavailable` (the reader shows the plain text, the
+  previewer its panel, the editor stays blank and keeps its text).
+  Neither reference reloads by itself (GTK only logs, macOS reloads on the
+  next `load(body:)`), and an unbounded reload would let a body that
+  reliably kills the renderer (a Chromium or PDFium bug) loop for as long
+  as it is shown, writing a crash dump of the mail each time and giving an
+  exploit unlimited retries; a listed deviation. The canary's recovery run
+  crashes each view's renderer (DevTools `Page.crash`) and hangs the
+  viewer's (§12).
+  Other kinds (a frame's renderer, the GPU and utility processes) are left
+  to WebView2.
 
 `WebViewEnvironment.LoggerFactory` is set by the shell; the views log kinds,
 statuses and counts, never a URL or any other content.
@@ -499,7 +524,9 @@ statuses and counts, never a URL or any other content.
 
 Before the first navigation every view adds
 `AddWebResourceRequestedFilter("*", All, SourceKinds.All)` and answers every
-request with what `RequestGate` decides: its current document once
+request, with a response of the requesting view's own environment
+(`sender.Environment`; an unanswered request would go on to the network
+stack), with what `RequestGate` decides: its current document once
 (`malachi-doc://<view>/<generation>-<nonce>`, 128 random bits of nonce, the
 bytes forgotten when served), with the CSP as a response header **and** as a
 `<meta>`, `nosniff`, `no-store` and `no-referrer` (`ResponseHeaders`); its
@@ -536,8 +563,11 @@ of `htmlview.Document` (`ViewerDocument`) with the GTK/macOS CSP
 `default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'`.
 `malachi-cid:` is the port of `PartSchemeHandler` (`parsePartPath`,
 `message.part` through `PartFetcher`, which the reader sets with
-`UseCache(MessageCache)`; images only, never SVG). The same body is not
-reloaded (macOS `loadedBody`); `Clear()` loads an empty one.
+`UseCache(MessageCache)`; images only, never SVG; a type that is not
+`token/token`, a CR or LF in it included, is answered 404 rather than put
+into the header block, `ResponseHeaders.Picture`, as the editor's `cid:`).
+The same body is not reloaded (macOS `loadedBody`); `Clear()` loads an
+empty one.
 
 Hover: `StatusBarTextChanged` still fires with the status bar off; its text
 is capped at 512 characters (`HoverLabel.Cap`, macOS) and shown in the
@@ -547,14 +577,18 @@ characters (`HoverLabel.Display`), as plain text; `HoveredLink` and
 
 Links (`NavigationPolicy`, `LinkProbe`): `NavigationStarting` allows only
 the pending document, once, not as a redirect; anything else is cancelled for
-the view (the gate keeps its request off the network). An http, https or
-mailto target may be a link: a host script (`ExecuteScriptAsync` runs with
-page script off) reads the focused element through the prototypes' own
-accessors, which a named element of the page cannot shadow, and the
-attribute of the link it is in is taken only when that link resolves to
-exactly the navigation's URL. A meta refresh or a form submit arrives as a
-user navigation too, and the focus then is on no such link: nothing is
-handed on. `NewWindowRequested` (middle, Ctrl, Shift click, `target=_blank`)
+the view (the gate keeps its request off the network). A user-initiated
+navigation (as GTK's `IsUserGesture`; WebView2 calls a click, a script
+click and a host `Navigate` user-initiated and a meta refresh not,
+measured) to an http, https or mailto target may be a link: a host script
+(`ExecuteScriptAsync` runs with page script off) reads the focused element
+through the prototypes' own accessors, which a named element of the page
+cannot shadow, and the attribute of the link it is in is taken only when
+that link resolves to exactly the navigation's URL. A form submit arrives as
+a user navigation too, and the focus then is on its button, not a link;
+a meta refresh is never probed, so a refresh to the link the focus stayed on
+after an earlier, cancelled click is not taken for it: nothing is handed
+on. `NewWindowRequested` (middle, Ctrl, Shift click, `target=_blank`)
 opens nothing; a user's request is a link activation as in GTK, confirmed
 with the URL alone when the focus did not follow and no form control made
 it. The result is `LinkActivated(ActivatedLink)`, which the reader decides
@@ -566,9 +600,10 @@ separators only between kept groups; every item read in `try`, `Handled`
 set in `finally`, a menu that could not be reduced is not shown). Text zoom
 (the `text-zoom` setting, `Zoom`) is CSS `zoom` on the document's root, set
 as the document is served and by a host script when the setting changes
-(`ViewerZoom`); the WinUI control has no `ZoomFactor`. A crashed renderer
-reloads the last body, a hung one or a dead browser gets a new control.
-One view per pane, reused. Automation name *Message*.
+(`ViewerZoom`); the WinUI control has no `ZoomFactor`. A failed process
+shows the body again once (§6.1); the same body failing again raises
+`Unavailable`, and the reader shows the plain text. One view per pane,
+reused. Automation name *Message*.
 
 ### 6.4 Links
 
@@ -619,7 +654,9 @@ Paste as plain text and Select All (`ContextMenuPolicy`; GTK and macOS have
 none, a listed deviation). A dead renderer, and a document that could not
 be loaded, raise `Crashed` (the latter once until a document loads, as
 macOS's `reportedUnavailable`): the compose window shows its toast and
-loads `Html` again.
+loads `Html` again. That reload is the document's one (§6.1): when the same
+text fails again the view stays blank, raises only `Unavailable` and keeps
+`Html` for a save, so the window's reload cannot loop.
 
 Flushes use macOS's sequence numbers **and** an order-independent echo rule:
 WebView2 delivers the changed message before the `ExecuteScriptAsync`
@@ -669,7 +706,9 @@ Windows-1252 otherwise; bytes with a NUL are not text. Nothing is written
 to disk. Links in a PDF or a text are not followed (every navigation is
 cancelled, as in the editor). Other types, everything the platform would
 run (`DangerousTypes`, and `FileTypePolicy` when the reader sets
-`TypePolicy`), and everything when the view is unavailable get a panel
+`TypePolicy`), and everything when the view is unavailable (an attachment
+whose renderer, PDFium's included, died again after it was shown again
+once, §6.1) get a panel
 (`PreviewPanel`): the icon Windows has for the extension, the name, the
 size and the type name. `ShellFileTypes` asks by the extension alone
 (`AssocQueryString` for the name, `SHGetFileInfo` with

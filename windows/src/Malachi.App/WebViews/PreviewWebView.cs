@@ -14,8 +14,10 @@
 // Anything else, and everything when the view is unavailable, gets the
 // panel: Windows' icon for the extension, the name, the size and the type.
 // Links in a PDF or text are not followed (every navigation is cancelled,
-// as in the editor). The window around it (title, Open, Save As…, Escape)
-// is the reader's.
+// as in the editor). A renderer that dies or hangs under an attachment (the
+// PDF viewer hands PDFium its bytes) shows it again once; the same
+// attachment failing again gets the panel (RendererRecovery). The window
+// around it (title, Open, Save As…, Escape) is the reader's.
 
 using System;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -166,6 +168,7 @@ public sealed partial class PreviewWebView : HardenedWebView
         panelView.Visibility = Visibility.Collapsed;
     }
 
+    // Also when the attachment failed again after it was shown again once.
     private protected override void OnUnavailable()
     {
         if (shown is { } s)
@@ -174,6 +177,7 @@ public sealed partial class PreviewWebView : HardenedWebView
         }
     }
 
+    // The attachment's one reload (RendererRecovery): the same bytes again.
     private protected override void OnRendererLost()
     {
         if (shown is { } s && Shown != PreviewKind.None)

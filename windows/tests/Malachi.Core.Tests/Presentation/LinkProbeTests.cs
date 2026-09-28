@@ -49,8 +49,9 @@ public sealed class LinkProbeTests
             LinkProbe.Activation(probe, "https://example.com/", newWindow: true));
     }
 
-    // A meta refresh or a form submit arrives as a user navigation too: the
-    // focus is on no link that leads there, and nothing is handed on.
+    // A form submit arrives as a user navigation too (a meta refresh is not
+    // even probed, NavigationPolicy): the focus is on no link that leads
+    // there, and nothing is handed on.
     [Fact]
     public void NavigationsOfThePageAreNotLinks()
     {

@@ -8,7 +8,9 @@
 // (docs/windows-port.md §3.1).
 
 using System;
+using Malachi.Core.Presentation;
 using Microsoft.Extensions.Logging;
+using Microsoft.Web.WebView2.Core;
 
 namespace Malachi.App.WebViews;
 
@@ -24,7 +26,7 @@ internal static partial class WebViewLog
     [LoggerMessage(Level = LogLevel.Debug, Message = "request refused with {Status}")]
     public static partial void Refused(ILogger logger, int status);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "request gate failed; refused")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "request gate failed; refused if it could still answer")]
     public static partial void GateFailed(ILogger logger, Exception error);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "navigation to the view's document failed")]
@@ -41,6 +43,15 @@ internal static partial class WebViewLog
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "web view process failed: {Kind}")]
     public static partial void ProcessFailed(ILogger logger, string kind);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "web view recovery: {Action}")]
+    public static partial void Recovery(ILogger logger, RecoveryAction action);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the document failed again after its reload; not loaded again")]
+    public static partial void GaveUp(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "the view's document did not load: {Status}")]
+    public static partial void DocumentFailed(ILogger logger, CoreWebView2WebErrorStatus status);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "picture not served")]
     public static partial void PictureFailed(ILogger logger, Exception? error);

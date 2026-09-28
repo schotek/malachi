@@ -23,13 +23,16 @@ public sealed class NavigationPolicyTests
     [InlineData(WebViewKind.Preview)]
     public void OnlyThePendingDocumentLoads(WebViewKind kind)
     {
-        Assert.Equal(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, Pending, isRedirected: false));
+        // The host's own Navigate is user-initiated for WebView2 (SPIKES.md
+        // §2h); the flag does not matter for the pending document.
+        Assert.Equal(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, Pending, isRedirected: false, isUserInitiated: true));
+        Assert.Equal(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, Pending, isRedirected: false, isUserInitiated: false));
         // Not as the target of a redirect, not without a pending document,
         // not another one.
-        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, Pending, isRedirected: true));
-        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, null, isRedirected: false));
-        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, "malachi-doc://viewer/2-00ff", Pending, isRedirected: false));
-        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, "MALACHI-DOC://viewer/3-00ff", Pending, isRedirected: false));
+        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, Pending, isRedirected: true, isUserInitiated: true));
+        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, Pending, null, isRedirected: false, isUserInitiated: true));
+        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, "malachi-doc://viewer/2-00ff", Pending, isRedirected: false, isUserInitiated: true));
+        Assert.NotEqual(NavigationAction.Allow, NavigationPolicy.Starting(kind, "MALACHI-DOC://viewer/3-00ff", Pending, isRedirected: false, isUserInitiated: true));
     }
 
     // A navigation the viewer could have taken from a link: http, https,
@@ -45,7 +48,18 @@ public sealed class NavigationPolicyTests
     [InlineData("malachi-doc://viewer/2-00ff", NavigationAction.Cancel)]
     [InlineData("ms-settings:", NavigationAction.Cancel)]
     public void TheViewerProbesPossibleLinks(string uri, NavigationAction expected) =>
-        Assert.Equal(expected, NavigationPolicy.Starting(WebViewKind.Viewer, uri, Pending, isRedirected: false));
+        Assert.Equal(expected, NavigationPolicy.Starting(WebViewKind.Viewer, uri, Pending, isRedirected: false, isUserInitiated: true));
+
+    // Only a navigation the user started can be a link (GTK:
+    // action.IsUserGesture()): a meta refresh, which WebView2 reports as not
+    // user-initiated, is cancelled without a probe, even to a link the
+    // focus stayed on after an earlier, cancelled click.
+    [Theory]
+    [InlineData("http://example.org/")]
+    [InlineData("https://example.org/x?y#z")]
+    [InlineData("mailto:a@example.org")]
+    public void OnlyTheUserActivatesLinks(string uri) =>
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Starting(WebViewKind.Viewer, uri, Pending, isRedirected: false, isUserInitiated: false));
 
     // The editor and the previewer follow nothing (editor.go decidePolicy;
     // the previewer's PDF links too).
@@ -54,8 +68,8 @@ public sealed class NavigationPolicyTests
     [InlineData(WebViewKind.Preview)]
     public void TheOthersCancelEverything(WebViewKind kind)
     {
-        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Starting(kind, "https://example.org/", Pending, isRedirected: false));
-        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Starting(kind, "mailto:a@example.org", Pending, isRedirected: false));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Starting(kind, "https://example.org/", Pending, isRedirected: false, isUserInitiated: true));
+        Assert.Equal(NavigationAction.Cancel, NavigationPolicy.Starting(kind, "mailto:a@example.org", Pending, isRedirected: false, isUserInitiated: true));
         Assert.Equal(NavigationAction.Cancel, NavigationPolicy.NewWindow(kind, "https://example.org/", isUserInitiated: true));
     }
 

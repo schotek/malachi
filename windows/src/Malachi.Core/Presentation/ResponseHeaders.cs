@@ -37,13 +37,22 @@ public static class ResponseHeaders
     /// <summary>
     /// A picture: its claimed <paramref name="contentType"/> without
     /// parameters, trimmed and lower-cased (PartSchemeHandler.mediaType,
-    /// CIDSchemeHandler.mediaType), and its length.
+    /// CIDSchemeHandler.mediaType), and its length; null (the caller answers
+    /// 404) when that type is not <c>token/token</c>. The type comes from the
+    /// daemon or the CID registry, ultimately from the mail, and goes into a
+    /// CRLF-separated header block: a CR, an LF or anything else outside
+    /// RFC 9110's token characters would add header lines of its own.
     /// </summary>
-    public static string Picture(string contentType, long length)
+    public static string? Picture(string contentType, long length)
     {
         ArgumentNullException.ThrowIfNull(contentType);
         ArgumentOutOfRangeException.ThrowIfNegative(length);
-        return "Content-Type: " + PartPath.BareMediaType(contentType)
+        var type = PartPath.BareMediaType(contentType);
+        if (!IsMediaType(type))
+        {
+            return null;
+        }
+        return "Content-Type: " + type
             + "\r\nContent-Length: " + length.ToString(CultureInfo.InvariantCulture)
             + "\r\nX-Content-Type-Options: nosniff"
             + "\r\nCache-Control: no-store";
@@ -51,4 +60,30 @@ public static class ResponseHeaders
 
     /// <summary>An error response: no body, nothing cached.</summary>
     public const string Refused = "Cache-Control: no-store";
+
+    // type "/" subtype, each a non-empty RFC 9110 token.
+    private static bool IsMediaType(string type)
+    {
+        var slash = type.IndexOf('/', StringComparison.Ordinal);
+        return slash > 0 && slash < type.Length - 1
+            && IsToken(type.AsSpan(0, slash)) && IsToken(type.AsSpan(slash + 1));
+    }
+
+    private static bool IsToken(ReadOnlySpan<char> s)
+    {
+        foreach (var c in s)
+        {
+            if (!IsTokenChar(c))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // tchar: "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
+    // "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA.
+    private static bool IsTokenChar(char c) =>
+        c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')
+            or '!' or '#' or '$' or '%' or '&' or '\'' or '*' or '+' or '-' or '.' or '^' or '_' or '`' or '|' or '~';
 }

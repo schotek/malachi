@@ -30,7 +30,10 @@
 //   a new-window request (target, middle, Ctrl or Shift click) the same.
 // - The link under the pointer shown as plain text at the bottom left
 //   (StatusBarTextChanged, which fires with the status bar off).
-// - One view per pane, reused; a crashed renderer reloads the last body.
+// - One view per pane, reused. A renderer that dies (or hangs, or takes the
+//   browser with it) under a body reloads that body once; the same body
+//   failing again is given up: Unavailable, and the reader shows the plain
+//   text (RendererRecovery; GTK only logs, macOS reloads on the next Load).
 // - The context menu keeps Copy and Copy Link.
 //
 // Dark theme: the page stays on a white canvas (baseCSS, PreferredColorScheme
@@ -179,12 +182,16 @@ public sealed partial class MessageWebView : HardenedWebView
         return Task.CompletedTask;
     }
 
+    // Also when the body failed again after it was shown again once: the
+    // reader shows the plain text; its next Load loads, the same body too
+    // (macOS needsReload), without a further automatic reload.
     private protected override void OnUnavailable()
     {
         loadedBody = null;
         ShowStatus("");
     }
 
+    // The body's one reload (RendererRecovery).
     private protected override void OnRendererLost()
     {
         ShowStatus("");
@@ -201,28 +208,29 @@ public sealed partial class MessageWebView : HardenedWebView
 
     // PartSchemeHandler.start: the part the URL names, if it is a picture and
     // the view still shows the document that asked for it.
-    private protected override async Task ServePictureAsync(GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
+    private protected override async Task ServePictureAsync(CoreWebView2Environment environment, GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
     {
         if (decision is not GateDecision.Part part || Parts is not { } fetch)
         {
-            Respond(args, GateDecision.Refused.NotFound);
+            Respond(environment, args, GateDecision.Refused.NotFound);
             return;
         }
         var deferral = args.GetDeferral();
         try
         {
             var (contentType, data) = await fetch(part.Reference, GenerationToken);
-            if (!Gate.IsCurrent(part.Generation) || IsClosed || !PartPath.IsImageType(contentType))
+            if (!Gate.IsCurrent(part.Generation) || IsClosed || !PartPath.IsImageType(contentType)
+                || ResponseHeaders.Picture(contentType, data.LongLength) is not { } headers)
             {
-                Respond(args, GateDecision.Refused.NotFound);
+                Respond(environment, args, GateDecision.Refused.NotFound);
                 return;
             }
-            Respond(args, data, ResponseHeaders.Picture(contentType, data.LongLength));
+            Respond(environment, args, data, headers);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             WebViewLog.PictureFailed(Log, e);
-            Respond(args, GateDecision.Refused.NotFound);
+            Respond(environment, args, GateDecision.Refused.NotFound);
         }
         finally
         {

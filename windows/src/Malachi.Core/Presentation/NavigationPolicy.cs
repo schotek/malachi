@@ -7,13 +7,16 @@
 // ui/internal/editor/editor.go (decidePolicy).
 //
 // GTK and macOS allow the initial about:blank load and nothing else, and the
-// viewer hands a link activation to its link handler. WebView2 cannot say
-// which navigation is a link: IsUserInitiated is true for a click, a script
-// click, a meta refresh and a host Navigate alike (measured), so the view
-// allows exactly the one document it is loading, cancels everything else,
-// and for the viewer asks the page afterwards which link was activated
-// (LinkProbe, docs/windows-port.md §6.3). Cancelling only stops the view:
-// the request itself is kept off the network by the gate and the
+// viewer hands a link activation to its link handler; GTK only one the user
+// made (action.IsUserGesture()). WebView2 cannot say which navigation is a
+// link: IsUserInitiated is true for a click, a script click and a host
+// Navigate alike, false for a meta refresh (SPIKES.md §2h, measured), so the
+// view allows exactly the one document it is loading, cancels everything
+// else, and for the viewer asks the page afterwards which link was activated
+// (LinkProbe, docs/windows-port.md §6.3), for a user-initiated navigation
+// only, as GTK: a meta refresh is never a link, even one to the link the
+// focus stayed on after an earlier, cancelled click. Cancelling only stops
+// the view: the request itself is kept off the network by the gate and the
 // environment's resolver rule. A new-window request (target=_blank, a
 // middle, Ctrl or Shift click) opens nothing; in the viewer it is a link
 // activation as in GTK, where decidePolicy treats NewWindowAction like a
@@ -30,20 +33,22 @@ public static class NavigationPolicy
     /// <summary>
     /// NavigationStarting of the main frame: <see cref="NavigationAction.Allow"/>
     /// for the view's pending document (not a redirect), and only for it;
-    /// in the viewer a navigation to a target <see cref="Links.AllowedLink"/>
-    /// accepts may be a link the user activated
-    /// (<see cref="NavigationAction.CancelAndProbe"/>); everything else,
-    /// every navigation of the editor and the previewer included, is
-    /// cancelled.
+    /// in the viewer a user-initiated navigation to a target
+    /// <see cref="Links.AllowedLink"/> accepts may be a link the user
+    /// activated (<see cref="NavigationAction.CancelAndProbe"/>); everything
+    /// else, a meta refresh and every navigation of the editor and the
+    /// previewer included, is cancelled.
     /// </summary>
-    public static NavigationAction Starting(WebViewKind kind, string uri, string? pendingDocument, bool isRedirected)
+    public static NavigationAction Starting(WebViewKind kind, string uri, string? pendingDocument, bool isRedirected, bool isUserInitiated)
     {
         ArgumentNullException.ThrowIfNull(uri);
         if (pendingDocument is not null && !isRedirected && string.Equals(uri, pendingDocument, StringComparison.Ordinal))
         {
             return NavigationAction.Allow;
         }
-        return kind == WebViewKind.Viewer && Links.AllowedLink(uri) ? NavigationAction.CancelAndProbe : NavigationAction.Cancel;
+        return kind == WebViewKind.Viewer && isUserInitiated && Links.AllowedLink(uri)
+            ? NavigationAction.CancelAndProbe
+            : NavigationAction.Cancel;
     }
 
     /// <summary>

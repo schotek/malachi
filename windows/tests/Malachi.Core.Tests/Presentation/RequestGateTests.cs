@@ -196,5 +196,28 @@ public sealed class RequestGateTests
         Assert.Equal(
             "Content-Type: image/png\r\nContent-Length: 42\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store",
             ResponseHeaders.Picture(" Image/PNG; name=\"x.png\" ", 42));
+        Assert.Equal(
+            "Content-Type: image/vnd.microsoft.icon\r\nContent-Length: 0\r\nX-Content-Type-Options: nosniff\r\nCache-Control: no-store",
+            ResponseHeaders.Picture("image/vnd.microsoft.icon", 0));
     }
+
+    // The type comes from the mail: one that would add a header line (a CR
+    // or LF inside it, which Trim leaves where it is) or is not type/subtype
+    // gets no picture header at all, so the handler answers 404.
+    [Theory]
+    [InlineData("image/png\rX-Foo: y")]
+    [InlineData("image/png\nX-Foo: y")]
+    [InlineData("image/png\r\nSet-Cookie: a=b")]
+    [InlineData("image/p\u0000ng")]
+    [InlineData("image/p ng")]
+    [InlineData("image/png x")]
+    [InlineData("image/p:ng")]
+    [InlineData("image/pñg")]
+    [InlineData("image/")]
+    [InlineData("/png")]
+    [InlineData("image")]
+    [InlineData("image/png/x")]
+    [InlineData("")]
+    public void PictureHeadersRefuseWhatIsNotAMediaType(string contentType) =>
+        Assert.Null(ResponseHeaders.Picture(contentType, 1));
 }

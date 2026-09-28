@@ -22,8 +22,15 @@
 //   gate keeps its request off the network), frames, new windows, downloads,
 //   external schemes, permissions, authentication and certificates refused;
 // - the context menu reduced to ContextMenuPolicy's items;
-// - a crashed renderer or browser process handled per view; a dead browser
-//   process means a new environment and a new control.
+// - a failed process handled as RendererRecovery says: the document shown
+//   again once (a dead browser process means a new environment and a new
+//   control; a hang is acted on, with a new control, only when the renderer
+//   has not answered a host script 5 s after its report, or is reported
+//   again), the same document failing again given up (Unavailable), never
+//   a reload loop; windows/README.md lists it as a deviation;
+// - a document that could not be loaded (Navigate threw, or its navigation
+//   ended in an error no process report explains) raises Unavailable, as a
+//   failed initialisation.
 //
 // A view is a UserControl hosting a WebView2 in a Grid (Root), built in code
 // so the canary (tests/Malachi.App.Canary.Host) compiles the same files.
@@ -52,12 +59,21 @@ public abstract partial class HardenedWebView : UserControl
         CoreWebView2PdfToolbarItems.Save | CoreWebView2PdfToolbarItems.SaveAs | CoreWebView2PdfToolbarItems.Print
         | CoreWebView2PdfToolbarItems.FullScreen | CoreWebView2PdfToolbarItems.MoreSettings;
 
+    // How long a failed navigation of the document waits for a report of
+    // the renderer that took it down (OnNavigationCompleted).
+    private static readonly TimeSpan ProcessReportGrace = TimeSpan.FromSeconds(1);
+
     private readonly ILogger log;
+    private readonly RendererRecovery recovery = new();
     private CoreWebView2Environment? environment;
     private CoreWebView2? core;
     private Task? initializing;
     private string? pendingUri;
     private string? pendingContentUri;
+
+    // The navigation of the current document once it was allowed; its
+    // failure is the document's.
+    private ulong? documentNavigation;
     private byte[]? documentBytes;
     private string documentHeaders = "";
     private byte[]? contentBytes;
@@ -82,11 +98,22 @@ public abstract partial class HardenedWebView : UserControl
 
     /// <summary>
     /// The view has no document and will get none until it is loaded again:
-    /// the environment could not be created or a protection could not be
-    /// applied (macOS <c>onUnavailable</c>). The caller shows what it shows
-    /// without HTML.
+    /// the environment could not be created, a protection could not be
+    /// applied (macOS <c>onUnavailable</c>), the document could not be
+    /// loaded, or its renderer failed again after the view had shown it
+    /// again once (<see cref="RendererRecovery"/>). The caller shows what it
+    /// shows without HTML, and does not load the same document again by
+    /// itself.
     /// </summary>
     public event EventHandler? Unavailable;
+
+    /// <summary>
+    /// The view initialised a control and loads documents: the first one, or
+    /// a new one after a dead browser process or a hung renderer (then
+    /// <see cref="Web"/> and <see cref="CoreWebView"/> are new). Raised
+    /// before a document that waited for it is loaded.
+    /// </summary>
+    public event EventHandler? CoreWebViewInitialized;
 
     /// <summary>Which view this is.</summary>
     public WebViewKind Kind { get; }
@@ -108,9 +135,6 @@ public abstract partial class HardenedWebView : UserControl
 
     /// <summary>The view's request gate.</summary>
     private protected RequestGate Gate { get; }
-
-    /// <summary>The environment, once initialised.</summary>
-    private protected CoreWebView2Environment? Environment => environment;
 
     /// <summary>A token cancelled whenever the view's generation moves on (a new document, a close).</summary>
     private protected CancellationToken GenerationToken => closed ? new CancellationToken(canceled: true) : generationCancel.Token;
@@ -196,6 +220,10 @@ public abstract partial class HardenedWebView : UserControl
         contentHeaders = document.Content is null ? "" : ResponseHeaders.Document(document.ContentType!, csp);
         pendingUri = uri;
         pendingContentUri = Gate.ContentUri;
+        documentNavigation = null;
+        // Known by what it shows: the previewer's PDF page carries its URL,
+        // the PDF is the same every time.
+        recovery.Loading(document.Content ?? documentBytes);
         try
         {
             core.Navigate(uri);
@@ -203,10 +231,8 @@ public abstract partial class HardenedWebView : UserControl
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             WebViewLog.NavigateFailed(log, e);
-            pendingUri = null;
-            pendingContentUri = null;
-            documentBytes = null;
-            contentBytes = null;
+            DropDocument();
+            Fail(e);
         }
     }
 
@@ -216,10 +242,12 @@ public abstract partial class HardenedWebView : UserControl
         waiting = null;
         NextGeneration();
         Gate.Retire();
+        recovery.Dropped();
         documentBytes = null;
         contentBytes = null;
         pendingUri = null;
         pendingContentUri = null;
+        documentNavigation = null;
     }
 
     /// <summary>Runs a host script, ignoring its result and its failure.</summary>
@@ -255,10 +283,18 @@ public abstract partial class HardenedWebView : UserControl
     {
     }
 
-    /// <summary>The view cannot show documents (after <see cref="Unavailable"/> was raised).</summary>
+    /// <summary>The view cannot show documents (before <see cref="Unavailable"/> is raised).</summary>
     private protected virtual void OnUnavailable()
     {
     }
+
+    /// <summary>
+    /// The renderer failed again on the document it had been shown again
+    /// for (<see cref="RecoveryAction.GiveUp"/>): the document is dropped
+    /// and <see cref="Unavailable"/> follows. By default what a view does
+    /// when it is unavailable.
+    /// </summary>
+    private protected virtual void OnGaveUp() => OnUnavailable();
 
     /// <summary>
     /// A cancelled navigation or new-window request the policy says may be a
@@ -268,32 +304,41 @@ public abstract partial class HardenedWebView : UserControl
     {
     }
 
-    /// <summary>Serves a picture of the view's own scheme; the default answers 404.</summary>
-    private protected virtual Task ServePictureAsync(GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
+    /// <summary>
+    /// Serves a picture of the view's own scheme, answering with responses
+    /// of <paramref name="environment"/> (the requesting view's); the default
+    /// answers 404.
+    /// </summary>
+    private protected virtual Task ServePictureAsync(CoreWebView2Environment environment, GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
     {
-        Respond(args, GateDecision.Refused.NotFound);
+        Respond(environment, args, GateDecision.Refused.NotFound);
         return Task.CompletedTask;
     }
 
-    /// <summary>The page's renderer died or hung; the view has a fresh one (or a new control).</summary>
+    /// <summary>
+    /// The page's renderer or browser was lost while the document was on
+    /// display, for the first time (<see cref="RecoveryAction.Reload"/>):
+    /// the view shows the same document again (the editor asks its window
+    /// to, with <c>Crashed</c>). The old document is already dropped; the
+    /// control may be a new one, still initialising.
+    /// </summary>
     private protected abstract void OnRendererLost();
 
-    /// <summary>Answers <paramref name="args"/> with an error response.</summary>
-    private protected void Respond(CoreWebView2WebResourceRequestedEventArgs args, GateDecision.Refused refused)
+    /// <summary>Answers <paramref name="args"/> with an error response of <paramref name="environment"/>.</summary>
+    private protected static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs args, GateDecision.Refused refused)
     {
-        if (environment is { } env)
-        {
-            args.Response = env.CreateWebResourceResponse(null, refused.Status, refused.ReasonPhrase, ResponseHeaders.Refused);
-        }
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(args);
+        ArgumentNullException.ThrowIfNull(refused);
+        args.Response = environment.CreateWebResourceResponse(null, refused.Status, refused.ReasonPhrase, ResponseHeaders.Refused);
     }
 
     /// <summary>Answers <paramref name="args"/> with <paramref name="bytes"/> and <paramref name="headers"/>.</summary>
-    private protected void Respond(CoreWebView2WebResourceRequestedEventArgs args, byte[] bytes, string headers)
+    private protected static void Respond(CoreWebView2Environment environment, CoreWebView2WebResourceRequestedEventArgs args, byte[] bytes, string headers)
     {
-        if (environment is { } env)
-        {
-            args.Response = env.CreateWebResourceResponse(new MemoryStream(bytes, writable: false).AsRandomAccessStream(), 200, "OK", headers);
-        }
+        ArgumentNullException.ThrowIfNull(environment);
+        ArgumentNullException.ThrowIfNull(args);
+        args.Response = environment.CreateWebResourceResponse(new MemoryStream(bytes, writable: false).AsRandomAccessStream(), 200, "OK", headers);
     }
 
     private WebView2 NewWebView()
@@ -305,7 +350,7 @@ public abstract partial class HardenedWebView : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
             VerticalAlignment = VerticalAlignment.Stretch,
         };
-        web.CoreProcessFailed += (_, args) => ProcessFailed(args.ProcessFailedKind);
+        web.CoreProcessFailed += (sender, args) => ProcessFailed(sender, args.ProcessFailedKind);
         return web;
     }
 
@@ -357,8 +402,8 @@ public abstract partial class HardenedWebView : UserControl
                 return;
             }
             var c = web.CoreWebView2;
-            // Before the gate is attached: it answers with this environment's
-            // responses from its first request on.
+            // The environment a dead browser process retires (the gate
+            // answers with the requesting view's own, sender.Environment).
             environment = env;
             Harden(c);
             await ConfigureAsync(c);
@@ -374,7 +419,8 @@ public abstract partial class HardenedWebView : UserControl
             return;
         }
         OnReady();
-        if (waiting is { } w)
+        CoreWebViewInitialized?.Invoke(this, EventArgs.Empty);
+        if (waiting is { } w && core is not null)
         {
             waiting = null;
             Load(w);
@@ -425,6 +471,7 @@ public abstract partial class HardenedWebView : UserControl
         c.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All, CoreWebView2WebResourceRequestSourceKinds.All);
         c.WebResourceRequested += OnWebResourceRequested;
         c.NavigationStarting += OnNavigationStarting;
+        c.NavigationCompleted += OnNavigationCompleted;
         c.FrameNavigationStarting += OnFrameNavigationStarting;
         c.NewWindowRequested += OnNewWindowRequested;
         c.DownloadStarting += (_, e) =>
@@ -463,9 +510,25 @@ public abstract partial class HardenedWebView : UserControl
         };
     }
 
+    // Every request is answered with a response of the requesting view's own
+    // environment (sender.Environment), never through a field that is empty
+    // between two controls: an unanswered request goes on to the network
+    // stack.
     private void OnWebResourceRequested(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
+        CoreWebView2Environment env;
         GateDecision decision;
+        try
+        {
+            env = sender.Environment;
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            // Only a view already torn down gets here; what it asked for
+            // meets the environment's resolver rule and dead proxy.
+            WebViewLog.GateFailed(log, e);
+            return;
+        }
         try
         {
             decision = Gate.Decide(args.Request.Uri);
@@ -473,7 +536,7 @@ public abstract partial class HardenedWebView : UserControl
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             WebViewLog.GateFailed(log, e);
-            Respond(args, GateDecision.Refused.Forbidden);
+            Respond(env, args, GateDecision.Refused.Forbidden);
             return;
         }
         switch (decision)
@@ -481,21 +544,21 @@ public abstract partial class HardenedWebView : UserControl
             case GateDecision.Document when documentBytes is { } bytes:
                 // Served once: the bytes are forgotten with it.
                 documentBytes = null;
-                Respond(args, bytes, documentHeaders);
+                Respond(env, args, bytes, documentHeaders);
                 break;
             case GateDecision.Content when contentBytes is { } content:
                 contentBytes = null;
-                Respond(args, content, contentHeaders);
+                Respond(env, args, content, contentHeaders);
                 break;
             case GateDecision.Part or GateDecision.InlineImage:
-                _ = ServePictureAsync(decision, args);
+                _ = ServePictureAsync(env, decision, args);
                 break;
             case GateDecision.Refused refused:
                 WebViewLog.Refused(log, refused.Status);
-                Respond(args, refused);
+                Respond(env, args, refused);
                 break;
             default:
-                Respond(args, GateDecision.Refused.Forbidden);
+                Respond(env, args, GateDecision.Refused.Forbidden);
                 break;
         }
     }
@@ -503,11 +566,12 @@ public abstract partial class HardenedWebView : UserControl
     private void OnNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
     {
         var uri = args.Uri;
-        var action = NavigationPolicy.Starting(Kind, uri, pendingUri, args.IsRedirected);
+        var action = NavigationPolicy.Starting(Kind, uri, pendingUri, args.IsRedirected, args.IsUserInitiated);
         if (action == NavigationAction.Allow)
         {
             // Once: a second navigation to the same URL is not ours.
             pendingUri = null;
+            documentNavigation = args.NavigationId;
             return;
         }
         args.Cancel = true;
@@ -516,6 +580,42 @@ public abstract partial class HardenedWebView : UserControl
         {
             OnLinkCandidate(uri, newWindow: false);
         }
+    }
+
+    // The document's own navigation ended in an error: nothing is shown, and
+    // the view says so, as when it could not be initialised. A navigation
+    // the view cancelled or a newer document replaced is not the document's.
+    // A renderer that dies while the document loads fails the navigation
+    // too (ConnectionAborted), sometimes just before ProcessFailed reports
+    // it (measured: 12 ms) and sometimes not at all, so the failure waits a
+    // moment for that report, which then decides (RendererRecovery: the
+    // document shown again once).
+    private void OnNavigationCompleted(CoreWebView2 sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        if (documentNavigation != args.NavigationId)
+        {
+            return;
+        }
+        documentNavigation = null;
+        if (args.IsSuccess)
+        {
+            return;
+        }
+        WebViewLog.DocumentFailed(log, args.WebErrorStatus);
+        _ = DocumentFailedAsync(Web, Gate.Generation);
+    }
+
+    private async Task DocumentFailedAsync(WebView2 web, long generation)
+    {
+        await Task.Delay(ProcessReportGrace);
+        if (closed || !ReferenceEquals(web, Web) || Gate.Generation != generation)
+        {
+            // Recovered, replaced or superseded meanwhile.
+            return;
+        }
+        DropDocument();
+        OnUnavailable();
+        Unavailable?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnFrameNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs args)
@@ -580,13 +680,18 @@ public abstract partial class HardenedWebView : UserControl
         }
     }
 
-    private void ProcessFailed(CoreWebView2ProcessFailedKind kind)
+    // RendererRecovery decides; a report of a control already replaced is
+    // its last word and changes nothing. Other kinds (a frame's renderer,
+    // the GPU and utility processes) leave the page to WebView2, which
+    // replaces a lost frame with an error page and restarts the others.
+    private void ProcessFailed(WebView2 web, CoreWebView2ProcessFailedKind kind)
     {
-        if (closed)
+        if (closed || !ReferenceEquals(web, Web))
         {
             return;
         }
         WebViewLog.ProcessFailed(log, kind.ToString());
+        RendererFailure failure;
         switch (kind)
         {
             case CoreWebView2ProcessFailedKind.BrowserProcessExited:
@@ -594,28 +699,111 @@ public abstract partial class HardenedWebView : UserControl
                 {
                     WebViewEnvironment.Invalidate(env);
                 }
-                Recreate();
+                failure = RendererFailure.BrowserExited;
                 break;
             case CoreWebView2ProcessFailedKind.RenderProcessUnresponsive:
-                Recreate();
+                failure = RendererFailure.Unresponsive;
                 break;
             case CoreWebView2ProcessFailedKind.RenderProcessExited:
+                failure = RendererFailure.RendererExited;
+                break;
+            default:
+                return;
+        }
+        var action = recovery.Failed(failure);
+        if (action == RecoveryAction.None && failure == RendererFailure.Unresponsive)
+        {
+            // The first report of a hang: is it one?
+            _ = WatchAnswerAsync(web);
+        }
+        Recover(action);
+    }
+
+    // Does what RendererRecovery said about a failure of the current control.
+    private void Recover(RecoveryAction action)
+    {
+        WebViewLog.Recovery(log, action);
+        switch (action)
+        {
+            case RecoveryAction.None:
+                break;
+            case RecoveryAction.Reload:
                 DropDocument();
                 OnRendererLost();
+                break;
+            case RecoveryAction.GiveUp:
+                DropDocument();
+                GiveUp();
+                break;
+            case RecoveryAction.Replace:
+                DropDocument();
+                ReplaceWebView();
+                EnsureInitialized();
+                break;
+            case RecoveryAction.ReplaceAndReload:
+                // A new control in place of one whose browser (or hung
+                // renderer) is gone; the document loads once it is ready.
+                DropDocument();
+                ReplaceWebView();
+                OnRendererLost();
+                EnsureInitialized();
+                break;
+            case RecoveryAction.ReplaceAndGiveUp:
+                DropDocument();
+                ReplaceWebView();
+                GiveUp();
+                EnsureInitialized();
                 break;
             default:
                 break;
         }
     }
 
-    // A new control in place of one whose browser (or hung renderer) is
-    // gone; the view reloads what it showed once it is initialised.
-    private void Recreate()
+    // After the first report of a hang: a renderer that runs a host script
+    // is not hung (a large message laid out while the user types); one that
+    // has not within the timeout is, since Chromium reports again only for
+    // more input.
+    private async Task WatchAnswerAsync(WebView2 web)
     {
-        DropDocument();
-        ReplaceWebView();
-        OnRendererLost();
-        EnsureInitialized();
+        if (CoreWebView is not { } c)
+        {
+            return;
+        }
+        Task<string> answer;
+        try
+        {
+            answer = c.ExecuteScriptAsync("0").AsTask();
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            WebViewLog.ScriptFailed(log, e);
+            return;
+        }
+        // A script of a control closed meanwhile fails; that is no answer.
+        _ = answer.ContinueWith(t => WebViewLog.ScriptFailed(log, t.Exception!), CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        var answered = await Task.WhenAny(answer, Task.Delay(RendererRecovery.AnswerTimeout)) == answer;
+        if (closed || !ReferenceEquals(web, Web))
+        {
+            return;
+        }
+        if (!answered)
+        {
+            Recover(recovery.Unanswered());
+        }
+        else if (answer.IsCompletedSuccessfully)
+        {
+            recovery.Responsive();
+        }
+    }
+
+    // The document failed again after it had been shown again once: it is
+    // not loaded again automatically.
+    private void GiveUp()
+    {
+        WebViewLog.GaveUp(log);
+        OnGaveUp();
+        Unavailable?.Invoke(this, EventArgs.Empty);
     }
 
     private void ReplaceWebView()

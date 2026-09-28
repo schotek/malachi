@@ -14,9 +14,10 @@
 // NewWindowRequested (docs/windows-port.md §6.3). The script reads only
 // through the prototypes' own accessors, so a named element of the page
 // cannot stand in for document.activeElement or an anchor's href. The
-// attribute counts only for the navigation it explains: a meta refresh or a
-// form submit also arrives as a user-initiated NavigationStarting, and the
-// focus then is on no link (or on the form's button).
+// attribute counts only for the navigation it explains: a form submit also
+// arrives as a user-initiated NavigationStarting, and the focus then is on
+// the form's button, not a link. A meta refresh is not user-initiated
+// (SPIKES.md §2h) and is never probed (NavigationPolicy.Starting).
 
 using System;
 using System.Text.Json;

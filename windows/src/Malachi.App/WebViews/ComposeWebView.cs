@@ -90,6 +90,10 @@ public sealed partial class ComposeWebView : HardenedWebView
     /// The editor's page died, or its document could not be loaded; the view
     /// is blank until <see cref="Load"/> is called again (editor.OnCrashed:
     /// the compose window shows its toast and reloads <see cref="Html"/>).
+    /// Raised once per text: when the text the window reloaded fails the
+    /// same way, the view stays blank and only
+    /// <see cref="HardenedWebView.Unavailable"/> follows, so the reload
+    /// cannot loop; <see cref="Html"/> keeps the text for a save.
     /// </summary>
     public event EventHandler? Crashed;
 
@@ -186,19 +190,31 @@ public sealed partial class ComposeWebView : HardenedWebView
         Crashed?.Invoke(this, EventArgs.Empty);
     }
 
+    // The first loss of the document's renderer: the window reloads Html
+    // (the view's one reload, RendererRecovery).
     private protected override void OnRendererLost()
     {
         Channel.Crashed();
         Crashed?.Invoke(this, EventArgs.Empty);
     }
 
+    // The same text failed again after the window reloaded it: nothing more
+    // is said, so the window's reload cannot loop (as a document refused
+    // twice, macOS reportedUnavailable); Html keeps the text, so a save
+    // loses nothing. Unavailable still follows.
+    private protected override void OnGaveUp()
+    {
+        Channel.Crashed();
+        reportedUnavailable = true;
+    }
+
     // CIDSchemeHandler.start: a registered id only, through checkInline; a
     // file is read off the UI thread, a fetcher is bounded by the timeout.
-    private protected override async Task ServePictureAsync(GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
+    private protected override async Task ServePictureAsync(CoreWebView2Environment environment, GateDecision decision, CoreWebView2WebResourceRequestedEventArgs args)
     {
         if (decision is not GateDecision.InlineImage image || Registry.Lookup(image.Id) is not { } entry)
         {
-            Respond(args, GateDecision.Refused.NotFound);
+            Respond(environment, args, GateDecision.Refused.NotFound);
             return;
         }
         var deferral = args.GetDeferral();
@@ -206,17 +222,18 @@ public sealed partial class ComposeWebView : HardenedWebView
         {
             var picture = await Fetch(entry, GenerationToken);
             CidRegistry.CheckInline(picture.Data.Span, picture.ContentType);
-            if (!Gate.IsCurrent(image.Generation) || IsClosed)
+            if (!Gate.IsCurrent(image.Generation) || IsClosed
+                || ResponseHeaders.Picture(picture.ContentType, picture.Data.Length) is not { } headers)
             {
-                Respond(args, GateDecision.Refused.NotFound);
+                Respond(environment, args, GateDecision.Refused.NotFound);
                 return;
             }
-            Respond(args, picture.Data.ToArray(), ResponseHeaders.Picture(picture.ContentType, picture.Data.Length));
+            Respond(environment, args, picture.Data.ToArray(), headers);
         }
         catch (Exception e) when (e is not OutOfMemoryException)
         {
             WebViewLog.PictureFailed(Log, e);
-            Respond(args, GateDecision.Refused.NotFound);
+            Respond(environment, args, GateDecision.Refused.NotFound);
         }
         finally
         {
