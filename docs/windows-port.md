@@ -570,6 +570,17 @@ authoritative):
   viewer's (§12).
   Other kinds (a frame's renderer, the GPU and utility processes) are left
   to WebView2.
+- Known limit of the recovery: Chromium starts the renderer of a document
+  shown again after a crash at idle priority until the page commits. On a
+  machine whose every core is busy, an idle process gets no CPU at all
+  (measured while the other test assemblies ran), so that reload can stall
+  until Chromium's commit timeout of 30 s, and the view then gives up as
+  for a document that failed to load (the reader shows the plain text with
+  its hint). The app leaves Chromium's priorities alone. The canary does
+  not see it because its host puts itself, and so the browser and all its
+  processes, into a job object that pins the priority class to normal
+  (§12), which is what keeps its recovery run from stalling under the
+  same load.
 
 `WebViewEnvironment.LoggerFactory` is set by the shell; the views log kinds,
 statuses and counts, never a URL or any other content.
@@ -2040,7 +2051,8 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   Chromium starts the renderer of a page shown again after a crash at idle
   priority until it commits, and while the other test assemblies keep
   every core busy an idle process gets no CPU at all (measured), so the
-  reload stalled until Chromium's 30 s commit timeout. The three runs
+  reload stalled until Chromium's 30 s commit timeout (the app keeps that
+  limit, §6.1). The three runs
   go side by side in about 50 s; without a desktop session or the WebView2
   runtime, and on a CI runner (`GITHUB_ACTIONS=true`) unless
   `MALACHI_CANARY=1`, the tests are skipped with that reason (§13);
