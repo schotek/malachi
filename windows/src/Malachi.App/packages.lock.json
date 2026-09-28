@@ -2,16 +2,6 @@
   "version": 2,
   "dependencies": {
     "net10.0-windows10.0.26100": {
-      "CommunityToolkit.WinUI.Controls.Segmented": {
-        "type": "Direct",
-        "requested": "[8.2.251219, )",
-        "resolved": "8.2.251219",
-        "contentHash": "HobW6MT+WpEvLSmjcSEw84lAxk4XYxI7v1a4ZWjva5lfz1W2kAXenWWlRl+Kypaod8axcy+m3Gw9iHoHm9/M4g==",
-        "dependencies": {
-          "CommunityToolkit.WinUI.Extensions": "8.2.251219",
-          "Microsoft.WindowsAppSDK": "1.6.250108002"
-        }
-      },
       "CommunityToolkit.WinUI.Controls.SettingsControls": {
         "type": "Direct",
         "requested": "[8.2.251219, )",

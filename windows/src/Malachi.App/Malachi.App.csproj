@@ -50,7 +50,6 @@ App SDK and .NET travel in the app folder, nothing is installed.
          for held at 2.5.1 with nothing of it used, so that neither the
          monolithic 1.6 nor the 2.5.1 AI and ML runtime comes in. -->
     <PackageReference Include="Microsoft.WindowsAppSDK" ExcludeAssets="all" />
-    <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" IncludeAssets="compile;runtime" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" IncludeAssets="compile;runtime" />
     <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" IncludeAssets="compile;runtime" />
     <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
