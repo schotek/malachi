@@ -22,7 +22,8 @@
 //   point of no return (the windows hide, the supervisor starts no daemon,
 //   the platform services stop), the connection closed and the daemon this
 //   app started stopped (never one it adopted), the open directory swept,
-//   the settings let go, Application.Exit. Ctrl+C in the terminal is Quit;
+//   the settings let go, the WebView2 crash dumps removed,
+//   Application.Exit. Ctrl+C in the terminal is Quit;
 //   the terminal closing, and the session ending (WM_ENDSESSION), stop the
 //   daemon without saving or asking.
 
@@ -174,7 +175,11 @@ public partial class App : Application
                     }
                 },
                 StopDaemon = s.Connection.StopAsync,
-                Release = s.Dispose,
+                Release = () =>
+                {
+                    s.Dispose();
+                    global::Malachi.App.WebViews.WebViewEnvironment.SweepCrashDumps();
+                },
                 Exit = () =>
                 {
                     console?.ShutdownCompleted();
@@ -235,6 +240,7 @@ public partial class App : Application
             LogSessionStopFailed(logger, e.InnerException ?? e);
         }
         s.OpenDir.RemoveAll();
+        global::Malachi.App.WebViews.WebViewEnvironment.SweepCrashDumps();
         _ = QuitAsync(QuitReason.SessionEnd);
     }
 

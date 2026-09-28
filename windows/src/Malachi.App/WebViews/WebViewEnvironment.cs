@@ -26,7 +26,8 @@
 //   (pictures; secure, no authority), malachi-doc (documents; secure, with
 //   an authority, so each view's documents are an origin of their own);
 // - no browser extensions; crash dumps kept local (a renderer's dump can
-//   hold mail).
+//   hold mail), and removed at start, before the environment exists, and at
+//   quit (Core's CrashDumps, SweepCrashDumps).
 //
 // Every WEBVIEW2_* variable of the process is cleared first: WebView2 appends
 // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS to the app's arguments and honours
@@ -47,6 +48,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Malachi.Core.Daemon;
 using Malachi.Core.Html;
+using Malachi.Core.Platform;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Web.WebView2.Core;
@@ -69,6 +71,7 @@ public static partial class WebViewEnvironment
 
     private static Task<CoreWebView2Environment?>? pending;
     private static string? userDataFolder;
+    private static bool sweptAtStart;
 
     /// <summary>Where the views log (method names and kinds only, never content); the shell sets it at start.</summary>
     public static ILoggerFactory LoggerFactory { get; set; } = NullLoggerFactory.Instance;
@@ -112,6 +115,20 @@ public static partial class WebViewEnvironment
     }
 
     /// <summary>
+    /// Removes the renderers' crash dumps from the user data folder
+    /// (CrashDumps), best effort and logged by count; the shell calls it when
+    /// the app quits. Nothing before the folder is known. Synchronous file
+    /// work, over in a moment for the few dumps there are.
+    /// </summary>
+    public static void SweepCrashDumps()
+    {
+        if (userDataFolder is { } folder)
+        {
+            Sweep(folder, LoggerFactory.CreateLogger("Malachi.App.WebViews"));
+        }
+    }
+
+    /// <summary>
     /// Forgets <paramref name="environment"/> after its browser process died
     /// (ProcessFailed, BrowserProcessExited): the next <see cref="GetAsync"/>
     /// creates a new one.
@@ -147,6 +164,13 @@ public static partial class WebViewEnvironment
             }
             var folder = userDataFolder ??= Path.Combine(Paths.Resolve().DataDir, UserDataFolderName);
             Directory.CreateDirectory(folder);
+            if (!sweptAtStart)
+            {
+                // Before the browser and its crash handler run, so nothing
+                // holds the dumps of the last run yet; off the UI thread.
+                sweptAtStart = true;
+                await Task.Run(() => Sweep(folder, log));
+            }
             var environment = await CoreWebView2Environment.CreateWithOptionsAsync("", folder, Options());
             LogCreated(log, environment.BrowserVersionString);
             return environment;
@@ -183,6 +207,19 @@ public static partial class WebViewEnvironment
         return options;
     }
 
+    private static void Sweep(string folder, ILogger log)
+    {
+        var (removed, failed) = CrashDumps.Sweep(folder);
+        if (failed > 0)
+        {
+            LogCrashDumpsKept(log, removed, failed);
+        }
+        else if (removed > 0)
+        {
+            LogCrashDumpsRemoved(log, removed);
+        }
+    }
+
     // Every WEBVIEW2_* variable of this process: the loader reads them when
     // the environment is created.
     private static void ClearWebView2Variables()
@@ -209,4 +246,10 @@ public static partial class WebViewEnvironment
 
     [LoggerMessage(Level = LogLevel.Error, Message = "the WebView2 environment could not be created; HTML is shown as text")]
     private static partial void LogCreateFailed(ILogger logger, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "removed {Removed} entries of the WebView2 crash reports")]
+    private static partial void LogCrashDumpsRemoved(ILogger logger, int removed);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "removed {Removed} entries of the WebView2 crash reports; {Failed} stay until the next sweep (in use or refused)")]
+    private static partial void LogCrashDumpsKept(ILogger logger, int removed, int failed);
 }

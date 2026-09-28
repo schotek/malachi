@@ -188,9 +188,11 @@ fetch a page, both unseen by the filter:
   and every IP literal unreachable (WebView2's own background calls and
   SmartScreen included), and a proxy nothing answers on (`127.0.0.1:1`)
   as a second barrier; each view has an InPrivate profile, extensions and
-  single sign-on with the Windows account are off, crash dumps (which can
-  hold mail) stay on the machine instead of going to Microsoft, and the
-  `WEBVIEW2_*` variables of the process are cleared first;
+  single sign-on with the Windows account are off, crash dumps (a dead
+  renderer's memory holds the message it showed, or a draft) stay on the
+  machine instead of going to Microsoft and are deleted when the app
+  starts and when it quits, and the `WEBVIEW2_*` variables of the process
+  are cleared first;
 - script off in the viewer and the previewer (`IsScriptEnabled=false`:
   measured, no page listener, timer or message ever runs), no web
   messages, host objects, script dialogs, DevTools, status bar, browser

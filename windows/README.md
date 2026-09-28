@@ -309,7 +309,7 @@ from `backend\`.
 | RPC socket | `%USERPROFILE%\.cache\malachi\run\rpc.sock`, the daemon's own default (`MALACHI_SOCKET` overrides); outside AppData on purpose, so `malachi-mcp` and `.mcp.json` find it, and nothing under AppData is redirected for a process started by an MSIX app |
 | RPC key | `rpc.sock.key` beside the socket: a new key at every daemon start, removed when it stops cleanly, read afresh for every connection and kept nowhere ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Logs | `%LOCALAPPDATA%\Malachi Mail\logs\`: `MalachiMail.log` (the app, `MALACHI_LOG_LEVEL`) and `malachid.log` (the daemon), each rotated at 4 MiB; also the terminal under `make run-windows` |
-| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written) |
+| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written; the crash dumps of dead renderers, which can hold a message or a draft, are deleted at start and exit) |
 | Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit, entries older than an hour swept) |
 | Preferences | `HKCU\Software\io.github.schotek.Malachi` (`MALACHI_SETTINGS_KEY` names another key of that family), the gschema's keys plus `ctrl-r`; a `reg add` reaches the running app |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |

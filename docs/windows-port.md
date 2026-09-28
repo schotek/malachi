@@ -98,7 +98,7 @@ GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 | RPC socket | `%USERPROFILE%\.cache\malachi\run\rpc.sock`, the daemon's own default (`MALACHI_SOCKET` overrides). Outside AppData on purpose: `malachi-mcp` and `.mcp.json` work unchanged, and nothing under AppData is exposed to MSIX redirection (Claude Desktop is itself MSIX, and its children see a virtualised AppData) |
 | RPC key | `rpc.sock.key` beside the socket; read afresh per connection with `FileShare.ReadWrite \| FileShare.Delete` |
 | Daemon and app logs | `%LOCALAPPDATA%\Malachi Mail\logs\` (and the terminal under `make run-windows`) |
-| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written) |
+| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written; the renderers' crash dumps removed at start and exit, §6.1) |
 | Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (protected DACL, cleared at start and exit, entries older than an hour swept) |
 | Preferences | `HKCU\Software\io.github.schotek.Malachi` |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
@@ -520,6 +520,18 @@ authoritative):
   (renderer dumps can hold mail; they stay local),
   `AllowSingleSignOnUsingOSPrimaryAccount=false`,
   `ExclusiveUserDataFolderAccess=true`;
+- the renderers' crash dumps do not stay either: the browser's Crashpad
+  handler writes one per dead renderer into
+  `<user data folder>\EBWebView\Crashpad\reports` (and `attachments`), a
+  renderer's memory holds the message it showed or the draft being written,
+  nothing uploads or ever deletes them, and a hostile body can crash a
+  renderer once per document. Core's `CrashDumps.Sweep` empties both
+  folders (never following a link or junction on the way, the database's
+  own files left) before the environment is first created, off the UI
+  thread, and `WebViewEnvironment.SweepCrashDumps` again at Quit and at the
+  session's end; best effort, logged by count, an entry still in use stays
+  for the next sweep (verified with planted reports: removed at exit and
+  at the next start, before the environment);
 - each view gets `IsInPrivateModeEnabled=true` with its own profile name
   (`viewer`, `editor`, `preview`) through
   `EnsureCoreWebView2Async(env, controllerOptions)`, checked on the profile
@@ -1247,12 +1259,13 @@ nothing any more, the window geometry is kept, `PlatformServices.Stop`,
 every window hides and no activation shows one again),
 `ConnectionController.StopAsync` (the daemon this app started is stopped,
 never one it adopted), `AppState.Dispose` (controllers, open directory,
-settings), `Application.Exit`. `WM_ENDSESSION` (a subclass of the main
-window's procedure) stops the daemon before it returns and then quits as
-a session end. The platform services get their moments through
-`Malachi.App/Platform/PlatformServices` (`InitializeEarly`, `Start`,
-`NewMessage` before the list, `MainWindowVisibilityChanged`, `Stop`,
-`Shutdown`).
+settings), the WebView2 crash dumps removed (§6.1), `Application.Exit`.
+`WM_ENDSESSION` (a subclass of the main window's procedure) stops the
+daemon before it returns, empties the open directory and removes the crash
+dumps, and then quits as a session end. The platform services get their
+moments through `Malachi.App/Platform/PlatformServices` (`InitializeEarly`,
+`Start`, `NewMessage` before the list, `MainWindowVisibilityChanged`,
+`Stop`, `Shutdown`).
 
 **`mailto:` and the default mail app.** The app writes its HKCU
 registration at start when it is missing or stale (the app folder can
@@ -1937,7 +1950,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   results, sign-in, format, error texts, provider; the transport (framing,
   JSON-RPC, the §1.4 vectors, Go's handshake failure table, the client);
   API coding and notifications; settings, localisation (the Czech cases
-  read `po/cs.po`), printf, plural rules, strftime; the controllers against
+  read `po/cs.po`), printf, plural rules, strftime; the WebView2
+  crash-dump sweep (links on the way never followed, a dump in use kept);
+  the controllers against
   the C# **FakeDaemon** (an in-process daemon on a real AF_UNIX socket with
   a short path, playing the handshake with all of macOS's modes) and
   **MailFixture**, with `FakeTimeProvider` and `IdleAsync`. They run on any
