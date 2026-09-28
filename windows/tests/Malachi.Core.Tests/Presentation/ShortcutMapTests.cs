@@ -77,6 +77,25 @@ public sealed class ShortcutMapTests
     }
 
     [Fact]
+    public void F10OpensThePrimaryMenuOfTheMainWindowOnly()
+    {
+        // GtkWindow's F10 pops up window.blp's primary MenuButton, which
+        // only the main window has, from anywhere in it: a text input
+        // types nothing for F10.
+        Assert.Equal(C.MainMenu, Resolve(KeyChord.Bare(K.F10)));
+        Assert.Equal(C.MainMenu, Resolve(KeyChord.Bare(K.F10), Main with { TextInputFocused = true }));
+        Assert.False(ShortcutMap.IsSingleKey(C.MainMenu));
+        Assert.Contains(KeyChord.Bare(K.F10), ShortcutMap.Chords(WindowKind.Main));
+        foreach (var window in Enum.GetValues<WindowKind>().Where(w => w != WindowKind.Main))
+        {
+            Assert.Null(ShortcutMap.Resolve(KeyChord.Bare(K.F10), new ShortcutContext(window)));
+            Assert.DoesNotContain(KeyChord.Bare(K.F10), ShortcutMap.Chords(window));
+        }
+        // Shift+F10 is the context menu's key, never the primary menu's.
+        Assert.Null(Resolve(new KeyChord(K.F10, KeyModifiers.Shift)));
+    }
+
+    [Fact]
     public void SingleKeysTypeWhileATextInputHasTheFocus()
     {
         var typing = Main with { TextInputFocused = true };

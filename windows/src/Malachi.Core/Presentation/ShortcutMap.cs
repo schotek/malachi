@@ -8,9 +8,11 @@
 // Delete, a, j, u, s, Ctrl+R, Ctrl+F), message_window.go messageShortcuts
 // (msg.*: Delete, a, j, u, s), the Escape shortcut controllers of
 // message_window.blp, embedded_window.blp and compose.blp, compose.blp's
-// compose.send (Ctrl+Return) and compose.save (Ctrl+S), and
-// accounts_reorder.go (Ctrl+Up, Ctrl+Down); macOS: App/MainMenu.swift's
-// key table with command-r and Actions.swift's bareKeyActions.
+// compose.send (Ctrl+Return) and compose.save (Ctrl+S),
+// accounts_reorder.go (Ctrl+Up, Ctrl+Down) and F10, which GtkWindow gives
+// to the primary menu (window.blp's MenuButton with primary: true); macOS:
+// App/MainMenu.swift's key table with command-r and Actions.swift's
+// bareKeyActions.
 //
 // The Windows keys: Ctrl+R replies (the ctrl-r setting, default "reply",
 // gives it to Check for New Mail instead, as macOS's command-r does),
@@ -52,11 +54,14 @@ public static class ShortcutMap
         (KeyChord.Bare(VirtualKey.S), ShortcutCommand.ToggleFlag),
     ];
 
+    // F10 opens the primary menu from anywhere in the window, a text input
+    // included (gtk_window_activate_menubar), where it types nothing.
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Main =
     [
         (KeyChord.Bare(VirtualKey.F5), ShortcutCommand.CheckForNewMail),
         (KeyChord.Ctrl(VirtualKey.F), ShortcutCommand.Search),
         (KeyChord.Ctrl(VirtualKey.E), ShortcutCommand.Search),
+        (KeyChord.Bare(VirtualKey.F10), ShortcutCommand.MainMenu),
     ];
 
     private static readonly (KeyChord Chord, ShortcutCommand Command)[] Close =

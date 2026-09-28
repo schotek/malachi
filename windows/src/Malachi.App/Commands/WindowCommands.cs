@@ -9,10 +9,11 @@
 // Message, Preferences, Add Account, About, Quit), the per-message ones
 // (enabled from the ActionFlags of what the window shows,
 // actions.go setMessageActionsSensitive), the main window's (Check for
-// New Mail, Search), Close for a secondary window, Send and Save Draft of
-// a compose window, the Preferences' reordering. The screens bind their
-// buttons and menu items to these and set the handlers of their own; the
-// CommandRouter runs the ones with keys (docs/windows-port.md §11.5).
+// New Mail, Search, the primary menu's F10), Close for a secondary
+// window, Send and Save Draft of a compose window, the Preferences'
+// reordering. The screens bind their buttons and menu items to these and
+// set the handlers of their own; the CommandRouter runs the ones with keys
+// (docs/windows-port.md §11.5).
 
 using System.Collections.Generic;
 using Malachi.Core.Model;
@@ -36,6 +37,7 @@ public sealed class WindowCommands
             [ShortcutCommand.Quit] = Quit,
             [ShortcutCommand.CheckForNewMail] = CheckForNewMail,
             [ShortcutCommand.Search] = Search,
+            [ShortcutCommand.MainMenu] = MainMenu,
             [ShortcutCommand.Reply] = Reply,
             [ShortcutCommand.ReplyAll] = ReplyAll,
             [ShortcutCommand.Forward] = Forward,
@@ -84,6 +86,9 @@ public sealed class WindowCommands
 
     /// <summary>win.search (Ctrl+F, Ctrl+E): the search box.</summary>
     public AppCommand Search { get; } = new(nameof(Search));
+
+    /// <summary>The main window's primary menu (F10), while its button is shown.</summary>
+    public AppCommand MainMenu { get; } = new(nameof(MainMenu));
 
     /// <summary>Reply (Ctrl+R).</summary>
     public AppCommand Reply { get; } = new(nameof(Reply));

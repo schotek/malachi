@@ -74,6 +74,9 @@ public static class VirtualKey
     /// <summary>VK_F7.</summary>
     public const int F7 = 0x76;
 
+    /// <summary>VK_F10, which Windows sends as a system key (WM_SYSKEYDOWN).</summary>
+    public const int F10 = 0x79;
+
     /// <summary>VK_F12.</summary>
     public const int F12 = 0x7B;
 

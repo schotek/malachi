@@ -84,6 +84,19 @@ public sealed partial class SidebarPane : UserControl
         ShowStatus(controller.SidebarStatus);
     }
 
+    /// <summary>
+    /// Opens the primary menu under its button, as F10 does in GTK
+    /// (gtk_window_activate_menubar: the primary MenuButton pops up). The
+    /// caller knows whether the sidebar is shown; a menu already open stays.
+    /// </summary>
+    public void ShowPrimaryMenu()
+    {
+        if (!PrimaryMenu.IsOpen)
+        {
+            PrimaryMenu.ShowAt(MainMenuButton);
+        }
+    }
+
     /// <summary>A heading's or a folder's fold arrow (collapse.go toggleAccount, toggleFolder).</summary>
     internal void ToggleFold(SidebarRow row)
     {

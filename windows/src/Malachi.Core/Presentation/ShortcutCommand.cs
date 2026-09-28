@@ -8,8 +8,9 @@
 // win.archive, win.junk, win.mark-unread, win.toggle-flag; the msg.* of
 // message_window.go; compose.blp's compose.send and compose.save; the
 // window.close of the Escape shortcut controllers; accounts_reorder.go's
-// Ctrl+Up/Down), plus the Windows keys for Reply, Reply All and Forward
-// (macOS's reply:, replyAll:, forward:).
+// Ctrl+Up/Down; the primary menu's F10, GtkWindow's own key), plus the
+// Windows keys for Reply, Reply All and Forward (macOS's reply:, replyAll:,
+// forward:).
 
 namespace Malachi.Core.Presentation;
 
@@ -30,6 +31,9 @@ public enum ShortcutCommand
 
     /// <summary>Search (win.search, Ctrl+F, Ctrl+E).</summary>
     Search,
+
+    /// <summary>Opens the primary menu (window.blp's MenuButton with primary: true, F10).</summary>
+    MainMenu,
 
     /// <summary>Reply (Ctrl+R with ctrl-r = reply).</summary>
     Reply,

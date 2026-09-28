@@ -1833,6 +1833,7 @@ shown first. Mnemonics: `{l:T}` returns the msgid with its `_`, and
 | Search | Ctrl+F, Ctrl+E; Enter first result, Escape closes | Ctrl+F |
 | Trash / Archive / Junk / Unread / Star | Delete / A / J / U / S, also with the message's WebView2 focused, never while a text input has focus (GTK `setTypingAccels`) | Delete / a / j / u / s |
 | Quit | Ctrl+Q | Ctrl+Q |
+| The primary menu | F10 in the main window, also from a text input or the message view, while the sidebar shows the menu's button | F10 (`primary: true`), while the button is mapped |
 | Close a secondary window | Escape, Ctrl+W | Escape |
 | An attachment chip's menu (View, Open, Save As…) | F4 or Alt+Down on the chip (`SplitButton`); Enter or Space previews | Tab to the chip's arrow, then Enter |
 | Send / Save draft / Bold, Italic, Underline | Ctrl+Enter / Ctrl+S / Ctrl+B, I, U | same |
@@ -1861,8 +1862,9 @@ never hosted in a raw HWND controller.
 In the code (`Commands/`): every tracked window has a `WindowCommands` (named
 `XamlUICommand`s: the application's, the per-message ones enabled from
 `Flags`, an `ActionFlags` the screen sets, Check for New Mail, Search,
-Close, Send, Save Draft, the reordering) and a `CommandRouter` that runs
-them for Core's `ShortcutMap` (the `ctrl-r` setting read at each key). The
+the primary menu, Close, Send, Save Draft, the reordering) and a
+`CommandRouter` that runs them for Core's `ShortcutMap` (the `ctrl-r`
+setting read at each key). The
 XAML side is `KeyboardAccelerator`s on the window's root (placement
 hidden), plus the root's `PreviewKeyDown` for Ctrl+Q, which a `TextBox`
 consumes before any accelerator; the WebView2 side is
@@ -1894,7 +1896,17 @@ Ctrl+Enter from the editor).
 In phase F the same was done on the real reader (§12, the end-to-end
 walk): with an HTML message's viewer focused by a click, Ctrl+R opens the
 reply, S and U toggle the star and the unread state, A archives (the
-neighbour takes the selection), J and Delete ask their questions. The
+neighbour takes the selection), J and Delete ask their questions. F10
+(GtkWindow's key for the primary MenuButton, `gtk_window_activate_menubar`,
+which passes over a button that is not mapped) is the main window's
+`MainMenu` command: it opens the primary menu under its button while the
+sidebar is shown, inline or as the open overlay, and does nothing while
+the sidebar is folded away. Verified with real input: F10 with the list
+focused and with an HTML message's viewer focused (the Win32 focus on
+`Chrome_WidgetWin_0`) opens the menu with the keyboard on its first item,
+Escape closes it and gives the keyboard back to the list or the viewer; in
+the open overlay it opens there; with the sidebar folded it opens nothing
+and leaves no menu mode behind (Down still moves in the list). The
 automated UI tests (§12) use UI Automation's patterns only, never
 synthetic keys (they run beside other windows and never need the
 foreground).

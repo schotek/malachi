@@ -32,7 +32,9 @@
 // first focus goes to the sidebar's first tab stop (GTK's first focusable
 // widget, the sidebar header's New Message), not to the search box, which
 // WinUI would pick as the first tab stop now that the title bar is none: the
-// letters of the single-key shortcuts would type there.
+// letters of the single-key shortcuts would type there. F10 opens the
+// sidebar's primary menu while the sidebar is shown (GTK: window.blp's
+// primary MenuButton, which F10 opens only while it is mapped).
 
 using System;
 using System.Collections.Generic;
@@ -76,6 +78,11 @@ public sealed partial class MainWindow
         SearchBox.TextChanged += OnSearchTextChanged;
         SearchBox.QuerySubmitted += OnSearchSubmitted;
         SearchBox.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(OnSearchKeyDown), handledEventsToo: true);
+        // F10: the primary menu, while the sidebar that holds its button is
+        // shown (inline, or its overlay open); GTK's F10 passes over a menu
+        // button that is not mapped, as in a collapsed window's content page.
+        Commands.MainMenu.Handler = SidebarPane.ShowPrimaryMenu;
+        Commands.MainMenu.CanExecute = () => PaneSplit.IsPaneOpen;
         Closed += (_, _) =>
         {
             foreach (var t in paneTokens)
