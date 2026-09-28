@@ -24,9 +24,6 @@ import (
 // discard of the rest of the literal would read the connection alongside
 // it (a data race under go test -race).
 func TestFetchBodyBatchDrainBreaks(t *testing.T) {
-	if os.Geteuid() == 0 {
-		t.Skip("root writes into a read-only directory")
-	}
 	h := newHarness(t, harnessOptions{})
 	ctx := context.Background()
 	body := strings.Repeat("0123456789abcdef", 16<<10) // 256 KiB each
@@ -49,12 +46,21 @@ func TestFetchBodyBatchDrainBreaks(t *testing.T) {
 	if err != nil || len(refs) != 3 {
 		t.Fatalf("unfetched %+v %v", refs, err)
 	}
-	// Nothing can be staged: every body fails in the store.
+	// Nothing can be staged: every body fails in the store. A file where
+	// the staging directory was fails the staging on any system, for root
+	// too; a read-only directory would not on Windows, which ignores the
+	// read-only attribute of a directory when files are created in it.
 	staging := filepath.Join(filepath.Dir(h.st.Path()), "staging")
-	if err := os.Chmod(staging, 0o500); err != nil {
+	if err := os.Remove(staging); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(staging, 0o700) })
+	if err := os.WriteFile(staging, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Remove(staging)
+		os.Mkdir(staging, 0o700)
+	})
 
 	// The connection breaks in the middle of the second message.
 	cut := *h.acc.Config.IMAP
