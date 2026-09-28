@@ -18,6 +18,12 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    # The other clients cannot change a Linux package. Path filters do not
+    # apply to tags, so a release still builds.
+    paths-ignore:
+      - windows/**
+      - macos/**
+      - .github/workflows/windows.yml
   pull_request:
     paths:
       - packaging/debian/**
