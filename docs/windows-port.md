@@ -2187,8 +2187,8 @@ foreground).
 
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs six test projects, 4,040
-tests in about two minutes on the development machine (2026-09-28): 3,193
+`make test-windows` (`build.ps1 test`) runs six test projects, 4,139
+tests in about two minutes on the development machine (2026-09-28): 3,292
 in `Malachi.Core.Tests`, 623 in `Malachi.Platform.Windows.Tests`, 159 in
 `Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 26 in
 the canary and 12 UI tests (4 of them opt-in). The tests that need a
