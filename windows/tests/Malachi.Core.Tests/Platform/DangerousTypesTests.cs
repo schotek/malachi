@@ -182,6 +182,7 @@ public sealed class DangerousTypesTests
     [InlineData("a.accdu")]
     [InlineData("a.accdt")]
     [InlineData("a.accdc")]
+    [InlineData("a.accdw")]
     // Disk images: mounting one skipped the Mark of the Web.
     [InlineData("a.iso")]
     [InlineData("a.img")]

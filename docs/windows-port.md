@@ -1351,11 +1351,13 @@ over it is double-clicked, past one warning, which delivered malware in
 contact's link can run a program, a report Microsoft declined to service;
 an address book is imported by the same `wab.exe`), and Access's
 formats since 2007 (`.accdb`, `.accde`, `.accdr`, `.accda`, `.accdu`,
-`.accdt`, `.accdc`). Outlook's list and the shell name the Jet-era Access
-types (`.mdb`, `.mde`, `.mda`, `.mdt`, `.mdz`, `.ade`, `.adp`), the database
-itself included, but none of their successors, which run the same VBA and
-macros when they open, so the successors are listed too; none of these is
-flagged by `AssocIsDangerous`, even with Office installed (measured). A
+`.accdt`, `.accdc`, and the web app reference `.accdw`, whose web apps are
+retired but which is still registered to Access). Outlook's list and the
+shell name the Jet-era Access types (`.mdb`, `.mde`, `.mda`, `.mdt`,
+`.mdz`, `.ade`, `.adp`), the database itself included, but none of their
+successors, which run the same VBA and macros when they open, so the
+successors are listed too; none of these is flagged by `AssocIsDangerous`,
+even with Office installed (measured). A
 vCard (`.vcf`) still opens: it is an everyday attachment, and GTK and macOS
 open it. Opening
 anything else uses `ShellExecuteEx` (through `Process.Start` on an STA

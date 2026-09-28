@@ -88,7 +88,8 @@ public static class DangerousTypes
     /// stores (they open the import wizard), themes and visual styles
     /// (their pictures can be fetched from a share), invitations that open
     /// a connection, OneNote's sections and packages, Windows Contacts'
-    /// files, and Access's databases, add-ins and templates.
+    /// files, and Access's databases, add-ins, templates and web app
+    /// references.
     /// </summary>
     public static readonly IReadOnlySet<string> WindowsExtensions = Set(
         // Remote sessions, remote assistance, RemoteApp.
@@ -129,8 +130,11 @@ public static class DangerousTypes
         // Outlook's list and of the shell's (.mdb, .mde, .mda, .mdt, .mdz),
         // each able to run its VBA and macros as it opens (a database, its
         // compiled and runtime forms, add-ins and their wizard data,
-        // templates, signed packages, which unpack into a database).
-        "accdb", "accde", "accdr", "accda", "accdu", "accdt", "accdc");
+        // templates, signed packages, which unpack into a database), and
+        // the web app reference, which sends Access to the site of a web
+        // app: the web apps are retired, but the type is still registered
+        // to Access (measured with Office 16).
+        "accdb", "accde", "accdr", "accda", "accdu", "accdt", "accdc", "accdw");
 
     /// <summary>
     /// Disk images Windows mounts on a double click; mounting one has been

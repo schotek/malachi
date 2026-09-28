@@ -351,7 +351,8 @@ into it as well.
   Web), OneNote's `.one` and `.onepkg`, Windows Contacts' `.contact` and
   `.wab`, Access's formats since 2007 (`.accdb`, `.accde`, `.accdr`,
   `.accda`, `.accdu`, `.accdt`, `.accdc`, the successors of the Access
-  types Outlook's list names), and anything the shell's
+  types Outlook's list names, and the web app reference `.accdw`), and
+  anything the shell's
   `AssocIsDangerous` or the attachment policy flags
   (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`), judged on
   the listed, the served and the written name. Its Save All leaves these

@@ -70,6 +70,7 @@ public sealed class FileTypePolicyTests
     [InlineData(".wab", false)]
     [InlineData(".accdb", false)]
     [InlineData(".accde", false)]
+    [InlineData(".accdw", false)]
     public void TheShellsOwnVerdict(string? extension, bool want)
     {
         Assert.Equal(want, FileTypePolicy.IsDangerousToTheShell(extension));
