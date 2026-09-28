@@ -388,7 +388,11 @@ the daemon's output pipe, and the daemon's exit would wait for the
 bridge's. Both starts therefore take one lock, Core's `SpawnGate`
 (`Malachi.Core.Platform`, no Windows API): the daemon's for that window,
 inside the console gate, the bridge's around `Process.Start`; each is held
-for the synchronous start alone. The environment is the app's plus
+for the synchronous start alone. The launcher's `ShellExecuteEx` (§10)
+takes no gate: it hands its child no handle of the app (measured: an
+inheritable pipe that `Process.Start` without the shell passes on does not
+arrive), and it can wait on the shell's dialogs, which must never hold up
+the daemon's start. The environment is the app's plus
 `MALACHI_KEYRING=helper`/`MALACHI_KEYRING_HELPER` (or `none` without the
 helper) and `DBUS_SESSION_BUS_ADDRESS=disabled:`, each left alone when
 already set. The lines go to `logs\malachid.log` (rotated at 4 MiB, two
