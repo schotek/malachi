@@ -15,7 +15,9 @@
 #   icons    render the application icon from docs\malachi_icon.png
 #   app      go, then publish the app and the keyring helper self-contained and assemble
 #            build\windows\<arch>\Malachi Mail\ (Release)
-#   test     every test project of the solution (Debug)
+#   test     every test project of the solution (Debug); the UI smoke tests
+#            (tests\Malachi.App.UiTests) drive the app folder of 'app' and are
+#            skipped without it; MALACHI_DEVMAIL adds their mail-server suite
 #   run      app for the host's architecture, then MalachiMail.exe in this terminal until it quits
 #            (Ctrl+C quits it and the daemon it started)
 #   lint     dotnet format --verify-no-changes and the conventions tests

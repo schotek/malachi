@@ -40,11 +40,13 @@ test.
       <Platform Solution="*|x64" Project="x64" />
       <Platform Solution="*|ARM64" Project="ARM64" />
     </Project>
+    <Project Path="tests/Malachi.App.UiTests/Malachi.App.UiTests.csproj" />
     <Project Path="tests/Malachi.Conventions.Tests/Malachi.Conventions.Tests.csproj" />
     <Project Path="tests/Malachi.Core.TestDaemon/Malachi.Core.TestDaemon.csproj" />
     <Project Path="tests/Malachi.Core.Tests/Malachi.Core.Tests.csproj" />
     <Project Path="tests/Malachi.Credentials.Tests/Malachi.Credentials.Tests.csproj" />
     <Project Path="tests/Malachi.FakeBridge/Malachi.FakeBridge.csproj" />
+    <Project Path="tests/Malachi.FakeKeyring/Malachi.FakeKeyring.csproj" />
     <Project Path="tests/Malachi.Platform.Windows.Tests/Malachi.Platform.Windows.Tests.csproj" />
   </Folder>
 </Solution>

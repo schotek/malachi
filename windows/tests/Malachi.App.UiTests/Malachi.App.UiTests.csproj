@@ -1,0 +1,49 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+UI smoke tests (docs/windows-port.md §12): the published app
+(build\windows\<arch>\Malachi Mail\, build.ps1 app) started with a data
+directory and a socket of its own and driven through UI Automation: the
+main window, a composer, the Preferences, the account wizard's first page,
+About, and a clean Quit (the daemon gone, the socket and its key removed).
+With MALACHI_DEVMAIL naming a devmail folder, also against a local mail
+server: the account, the list, the reader, a reply and a message sent.
+Skipped with the reason where there is no desktop session or no built app.
+UI Automation is the Windows Desktop framework's (UIAutomationClient,
+UIAutomationTypes): no package.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.App.UiTests</RootNamespace>
+    <!-- For System.Windows.Automation, the managed UI Automation client. -->
+    <UseWPF>true</UseWPF>
+    <!-- LibraryImport: the windows of a process and a posted message. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The typed API and the transport, to add the devmail account the
+         way a client does (the opt-in suite). -->
+    <ProjectReference Include="..\..\src\Malachi.Core\Malachi.Core.csproj" />
+    <!-- The keyring helper the app's daemon is given: no Credential Manager. -->
+    <ProjectReference Include="..\Malachi.FakeKeyring\Malachi.FakeKeyring.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Where build.ps1 app assembles the app (-BuildDir moves it). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MalachiBuildPath</_Parameter1>
+      <_Parameter2>$(MalachiBuildPath)</_Parameter2>
+    </AssemblyAttribute>
+    <!-- The MIME corpus devmail is seeded with (backend\testdata\mime). -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>MalachiRoot</_Parameter1>
+      <_Parameter2>$(MalachiRoot)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+</Project>

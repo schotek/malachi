@@ -96,7 +96,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `build` | `dotnet build` of the solution (Debug) |
 | `icons` | renders `Malachi.ico` from `docs\malachi_icon.png`, cropped as `macos/Makefile` crops it (the build does this by itself) |
 | `app` | `go`, then publishes and assembles `build\windows\<arch>\Malachi Mail\` (Release) |
-| `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug) |
+| `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug); the UI smoke tests drive the app folder `app` assembled and are skipped without it (docs/windows-port.md §12) |
 | `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
 | `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` |
@@ -182,6 +182,10 @@ windows/
                                   editor and previewer against hostile documents and the raw
                                   MIME corpus, with loopback listeners and a NetLog
     Malachi.App.Canary.Host/      its WinUI host, compiling src/Malachi.App/WebViews
+    Malachi.App.UiTests/          UI smoke tests: the published app (build.ps1 app) driven
+                                  through UI Automation on a data folder of its own; with
+                                  MALACHI_DEVMAIL also against the local devmail server
+    Malachi.FakeKeyring/          a keyring helper over a JSON file for the UI tests
 ```
 
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
