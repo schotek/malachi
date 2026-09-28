@@ -56,7 +56,7 @@ except for the Windows CI job of the backend row and what §17 lists.
 | Settings store | *architecture*: `HKCU\Software\io.github.schotek.Malachi`, the gschema keys, change notification through `RegNotifyChangeKeyValue` (the counterpart of GSettings signals and macOS KVO) | Built: `SettingsStore` (Core), `RegistrySettingsBackend`, §8 |
 | Data | *architecture*: `%LOCALAPPDATA%\Malachi Mail\` for `config.toml`, `store.db`, logs, the WebView2 data and the open directory; the socket stays at the daemon's default outside AppData | Built: `Paths` (Core), §1 |
 | Translations | *architecture*: `po/*.po` parsed at run time (no generator, no Python in the Windows build), GTK msgids as keys as on macOS | Built: `Malachi.Core/I18n`, `{l:T}`, §9 |
-| Tests | *architecture*: xUnit v3 on Microsoft.Testing.Platform; the Core tests run on any OS; the Go UI and Swift tests ported 1:1 | Built: the five test projects of §12 and their three helpers |
+| Tests | *architecture*: xUnit v3 on Microsoft.Testing.Platform; the Core tests run on any OS; the Go UI and Swift tests ported 1:1 | Built: the six test projects of §12 and their four helpers |
 | Preferences | *architecture*: named *Preferences* (the translated GTK msgid), no search field in v1 (as macOS) | Built: `PreferencesWindow`, §11.3 |
 
 ## 1. Process model
@@ -1797,11 +1797,11 @@ foreground).
 
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs five test projects, 3,574
+`make test-windows` (`build.ps1 test`) runs six test projects, 3,585
 tests in about two minutes on the development machine (2026-09-28): 2,773
 in `Malachi.Core.Tests`, 590 in `Malachi.Platform.Windows.Tests`, 159 in
-`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests` and 25 in
-the canary. The tests that need a built `malachid.exe` skip without one
+`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 25 in
+the canary and 11 UI tests (4 of them opt-in). The tests that need a built `malachid.exe` skip without one
 (`make windows` or `build.ps1 go` builds it, `MALACHI_TEST_MALACHID`
 names another), and the Credential Manager round trips run only on
 request. The `.trx` reports land in `build\windows\TestResults\`.
