@@ -18,7 +18,10 @@
 // install or uninstall runs to its end, as Swift's does. A process that
 // was killed exits with -1 and a crash with its NTSTATUS (ExitStatus),
 // where Swift reports a signal. The reason is cut as Go's reason cuts it
-// (FirstLine). The Swift callbacks are events of the same
+// (FirstLine); the bridge's own name before it ("malachi-mcp: ") is
+// skipped when it is compared with "no Claude app found", which GTK and
+// Swift compare with the whole line and so never match the real bridge's
+// wording. The Swift callbacks are events of the same
 // words (onRegistered is RegisteredChanged, onEnabled EnabledChanged,
 // onToast ToastRequested), and DescriptionChanged is Windows' own.
 
@@ -75,6 +78,9 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     // How install says that neither Claude app is installed: the start of
     // its one-line reason on stderr, compared case-insensitively.
     private const string NoClaudeAppPrefix = "no claude app found";
+
+    // How the bridge starts every error line on stderr (main.go).
+    private const string ProgramPrefix = "malachi-mcp:";
 
     private readonly string? bridge;
     private readonly BridgeRunner runner;
@@ -426,7 +432,12 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         var reason = FirstLine(output.Stderr.Span);
         if (output.Status != 0)
         {
-            if (reason.StartsWith(NoClaudeAppPrefix, StringComparison.OrdinalIgnoreCase))
+            // The bridge prints its own name before the reason (main.go:
+            // "malachi-mcp: " and the error), which GTK's and Swift's prefix
+            // test do not expect, so "no Claude app found" never matched
+            // there (measured with the real bridge).
+            var bare = reason.StartsWith(ProgramPrefix, StringComparison.Ordinal) ? reason[ProgramPrefix.Length..].TrimStart() : reason;
+            if (bare.StartsWith(NoClaudeAppPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return (null, new McpCallFailure.NoClaudeApp());
             }

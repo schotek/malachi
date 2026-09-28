@@ -212,6 +212,24 @@ public sealed class McpRegistrationTests
         Assert.Equal([true, false, true], rec.Enabled);
     }
 
+    /// <summary>
+    /// The real bridge names itself before its reason (main.go prints
+    /// "malachi-mcp: " and the error; measured on Windows with no Claude app):
+    /// the reason still counts as "no Claude app found".
+    /// </summary>
+    [Fact]
+    public async Task TheBridgesOwnNameBeforeTheReasonIsSkipped()
+    {
+        using var h = new Harness(new(
+            Prints(false),
+            install: FakeBridgeStep.Fails("malachi-mcp: no Claude app found (Claude Desktop or Claude Code)")));
+        var (c, rec) = await h.LoadedControllerAsync();
+        await h.Ui.RunAsync(() => c.SetRegistered(true));
+        await h.IdleAsync();
+        Assert.Equal(["No Claude app was found on this computer"], rec.Toasts);
+        Assert.False(c.IsRegistered);
+    }
+
     [Fact]
     public async Task AFailedCallToastsTheBridgesReasonAndReverts()
     {
