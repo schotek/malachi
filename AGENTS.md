@@ -5,10 +5,10 @@ Instrukce pro AI asistenty pracující na tomto repozitáři.
 ## Co je tento projekt
 
 **Malachi Mail** — desktopový emailový klient: jedno jádro v Go s veškerou
-logikou (démon `malachid` v `backend/`) a nativní UI pro každou platformu,
-dnes GTK4 pro Linux (`ui/`) a Swift/AppKit pro macOS (`macos/`), Windows
-(WinUI 3) přijde. UI a démon jsou dva samostatné procesy komunikující přes
-JSON-RPC na unix socketu.
+logikou (démon `malachid` v `backend/`) a nativní UI pro každou platformu:
+GTK4 pro Linux (`ui/`), Swift/AppKit pro macOS (`macos/`) a C#/WinUI 3 pro
+Windows (`windows/`). UI a démon jsou dva samostatné procesy komunikující
+přes JSON-RPC na unix socketu (na Windows AF_UNIX).
 
 ### Názvosloví — dodržuj důsledně
 
@@ -37,19 +37,24 @@ běžících proti reálné schránce. Stub v `internal/sanitize` selhává
 Každý parser MIME, každý renderer, každý handler odkazu vychází z předpokladu,
 že vstup je záměrně poškozený. Testy pro nový parsovací kód musí obsahovat
 patologické případy (do `backend/testdata/mime`), ne jen šťastnou cestu.
-V UI: `SetUseMarkup(false)` na všem, co zobrazuje data ze serveru.
+V UI: `SetUseMarkup(false)` na všem, co zobrazuje data ze serveru (na macOS
+`stringValue`, na Windows `TextBlock.Text`/`TextBox.Text`; nikdy
+`NSAttributedString(html:)`, XAML ani RTF nad čímkoli ze zprávy, HTML jen
+v uzamčených webových pohledech).
 
 ### 4. Jeden kód na platformu, žádné větvení
 Jádro (`backend/`) je platformně neutrální Go: týž strom se beze změny
-staví pro Linux i do macOS aplikace, linuxové služby přes D-Bus jsou jen
-volitelné za běhu. GTK UI je linuxový kód. Do žádného z nich nepřidávej
-build tagy, podmíněnou kompilaci ani abstrakce „pro jistotu“ pro Windows
-a macOS; co se jinde liší, řeší démon neutrálním bodem rozšíření voleným
-za běhu (jako `MALACHI_KEYRING=helper`), ne platformním kódem ve stromu.
-Jiné platformy dostanou vlastní nativní UI (Swift/AppKit pro macOS, WinUI 3
-pro Windows) jako samostatné klienty nad API démona, přičemž GTK UI je
-mustr, který zrcadlí; nikdy větvení tohoto kódu. Přenositelnost je
-zajištěná hranicí na API, ne podmíněnou kompilací.
+staví pro Linux i do aplikací pro macOS a Windows, linuxové služby přes
+D-Bus jsou jen volitelné za běhu. GTK UI je linuxový kód. Do žádného
+z nich nepřidávej build tagy, podmíněnou kompilaci ani abstrakce „pro
+jistotu“ pro Windows a macOS; co se jinde liší, řeší démon neutrálním
+bodem rozšíření voleným za běhu (jako `MALACHI_KEYRING=helper`) nebo
+parametrem, který mu předá klient (jako `malachi-mcp --claude-desktop-config`),
+ne platformním kódem ve stromu. Ostatní platformy mají vlastní nativní UI
+(Swift/AppKit v `macos/`, C#/WinUI 3 ve `windows/`) jako samostatné
+klienty nad API démona, přičemž GTK UI je mustr, který zrcadlí; nikdy
+větvení tohoto kódu. Platformní kód patří jen do stromu svého klienta.
+Přenositelnost je zajištěná hranicí na API, ne podmíněnou kompilací.
 
 ### 5. Neměň API kontrakt bez aktualizace docs/api.md
 Kontrakt (`backend/pkg/api/`) a dokumentace (`docs/api.md`) se mění současně,
@@ -88,10 +93,23 @@ Nekompatibilní změna = bump `ProtocolVersion`.
   `po/POTFILES`, katalogy vznikají z `po/` při buildu); řetězce jen pro macOS
   zůstávají anglicky s komentářem `// macOS-only string`; `.blp` a Go UI jsou
   reference parity, `docs/screenshots` nikdy.
+- Windows klient: texty přes `L10n.T/N/C` (C#) a `{l:T Msgid=…}` (XAML)
+  s klíčem = GTK msgid (nic do `po/POTFILES`, `po/*.po` se čtou za běhu
+  z `locale\` vedle exe); řetězce jen pro Windows zůstávají anglicky
+  s komentářem `// Windows-only string` (v XAML `<!-- Windows-only string -->`);
+  msgid šablony, který klient nepoužívá, patří s důvodem do
+  `windows/parity-exclusions.txt`; `.blp` a Go UI jsou reference parity,
+  macOS klient zdroj portu. Konvence C# kódu jsou v `docs/windows-port.md`
+  §3.1 (hlavička souboru jmenuje portovaný Swift a Go soubor).
 - Licence: `backend/` je AGPL-3.0-only (duálně licencované jádro, viz
   `LICENSING.md`), vše ostatní GPL-3.0-or-later. Každý nový zdrojový soubor
-  (`.go`, `.swift`, `.py`, `.blp`, `.sql`, `.sh`) začíná hlavičkou `SPDX-FileCopyrightText`
-  a `SPDX-License-Identifier` podle toho, ve které části leží. Do `backend/`
+  (`.go`, `.swift`, `.py`, `.blp`, `.sql`, `.sh`, ve `windows/` také `.cs`,
+  `.xaml`, `.csproj`/`.props`/`.targets`/`.slnx`, `.manifest`, `.config`,
+  `.ps1`, `.js`, `.css`, `.html`, `.xml`, `.resw`) začíná hlavičkou `SPDX-FileCopyrightText`
+  a `SPDX-License-Identifier` podle toho, ve které části leží; XML typy ji
+  mají jako komentář za XML deklarací, JSON a Markdown žádnou. Ve `windows/`
+  ji u C# hlídá kompilátor (IDE0073 podle `windows/.editorconfig`), u
+  ostatních typů `Malachi.Conventions.Tests`. Do `backend/`
   nepřidávej závislosti pod copyleftem silnějším než MPL/LGPL, jinak by
   komerční licence jádra nebyla udělitelná
 
@@ -126,6 +144,22 @@ GSK. `MALACHI_WEBKIT_DMABUF=1` ho pro test zase zapne. Ladění sandboxu:
 `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` jen pokud bwrap selže (v tomto
 Toolbxu není potřeba).
 
+Windows klient se staví a testuje přímo na Windows 11 (ověřeno 2026-09-28 na
+Windows 11 Pro 26100 x64): .NET SDK 10.0.4xx (`windows/global.json`,
+`rollForward: latestFeature`), Go 1.25+ (`C:\Program Files\Go\bin\go.exe`
+se najde i mimo `PATH`, tady go1.27), Git for Windows (`git describe` a jeho
+`sh.exe` pro recepty kořenového Makefilu), GNU make 4.4 z winget
+`ezwinports.make` (volitelný, bez něj `windows\build.ps1`), Windows
+PowerShell 5.1. Visual Studio 2026 je volitelné (otevře `windows\Malachi.slnx`),
+ale `malachi-credentials.exe` je NativeAOT a linkuje se MSVC nástroji
+(Visual Studio nebo jeho Build Tools, „Desktop development with C++“, pro
+ARM64 i ARM64 build tools, které tu nejsou). Backend se na Windows staví
+beze změn a jeho `go vet` / `go test ./...` jsou zelené. Klon z doby před
+`.gitattributes` (LF pro všechno, `testdata` beze změn) je potřeba jednou
+znovu checkoutnout na čistém stromu: `git rm -r --cached -q . && git reset
+--hard`; nikdy `git add --renormalize` na starém CRLF worktree (zapsal by
+CRLF do LF fixtur).
+
 ## Stav a priority
 
 Aktuální fáze: IMAP čtení i odesílání fungují. Účty (registr, keyring přes
@@ -150,7 +184,10 @@ verze rulesetu `"1"`) sanitizuje na vyžádání ze surového souboru;
 části zprávy pro schéma `malachi-cid:`; `message.embedded` vykreslí
 přiloženou zprávu (`message/rfc822`, `.eml`) jen pro čtení a jen na
 vyžádání, obrázky vloží jako `data:`, parser nerekurzuje, nic se neukládá
-(UI ji otevře z chipu přílohy v samostatném okně). UI je vykresluje ve WebKitGTK 6.0
+(UI ji otevře z chipu přílohy v samostatném okně); klik na jinou přílohu
+ji ukáže v náhledu (GNOME Sushi přes `ui/internal/preview`, bez Sushi
+výchozí aplikace; na macOS Quick Look, na Windows vlastní náhled ve
+WebView2), Otevřít a Uložit jako jsou v menu chipu. UI je vykresluje ve WebKitGTK 6.0
 bez JavaScriptu (`ui/internal/htmlview`, CSP, síť odříznutá), lišta nabízí
 načtení obrázků a důvěru odesílateli. Compose posílá formátovaný text
 (`richText = true`), odchozí zprávy jsou `multipart/alternative`
@@ -160,7 +197,15 @@ adresáti, `Re:`/`Fwd:`, originál citovaný jako sanitizované HTML v compose
 režimu (první `draft.save` je identita), jeho `cid:` obrázky zkopírované do
 úložiště příloh pod novými id (`attachment.get` je vrací editoru); UI dodá
 jen lokalizovanou hlavičku citace (`attribution`), `compose.Prefill` je
-fallback bez démona. Doplňování příjemců: `contact.search` slévá
+fallback bez démona. Koncepty na serveru: uložený koncept po 30 s klidu
+nahraje syncer do složky Koncepty (IMAP `APPEND` s `\Draft`, Graph
+`POST me/messages`), každá verze s novým Message-ID, předchozí kopie jde
+přes `OpDelete` (`store/draft_sync.go`, `core/draft_sync.go`, migrace 0012);
+odeslání, `draft.delete` a koš/přesun kopie mažou druhou stranu;
+`draft.open` otevře zprávu ze složky Koncepty jako koncept (vlastní, nebo
+převzatý od jiného klienta přes `replaces` jen bez ztráty); všechna tři UI ji
+otevírají dvojklikem a pruhem „Upravit“. Trvalé smazání na Gmailu jde přes
+Koš. Doplňování příjemců: `contact.search` slévá
 sebrané adresy (`collected_addresses`, plní outbox worker po doručení a
 jednorázový backfill ze složek Odeslané, nikdy z příchozího `From`)
 s knihami EDS účtu odesílatele (`internal/contacts/eds`, D-Bus `Sources5`
@@ -180,7 +225,22 @@ Předvolby → Seznam zpráv → Seskupovat podle konverzací (GSettings
 (`ui/internal/window/thread_model.go` čistý model, `threads.go` zrcadlení
 do ListBoxu podle klíčů), rozbalení volá `thread.get {folderId}`, akce na
 sbaleném řádku jdou na všechny členy ve složce, Outbox se neseskupuje.
-Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
+Vyhledávání: `search.query` jen nad lokálním úložištěm (okno
+`offlineDays`), contentless FTS5 `messages_fts` s prefixy 2 a 3 a
+`search_docs` (migrace 0013, triggery na `messages`, backfill v
+`core.Maintain` pod `search.indexed`), `internal/search` = čistý parser
+syntaxe, FTS5 výraz s každou hodnotou v uvozovkách a výřez se zvýrazněním;
+rozsahy složka / účet / všechny povolené účty, koš a nevyžádaná jen jako
+vybraná složka nebo přes `in:`, řazení podle data, `total` do 1000.
+GTK: lišta hledání nad seznamem (Ctrl+F, `window/search.go`,
+`search_model.go`, GSettings `search-scope`), hledá při psaní od 2 znaků,
+výsledky ploše se složkou/účtem a tučnými shodami, jednopísmenné zkratky
+se při psaní do pole vypínají; MCP nástroj `search_messages`; macOS:
+hledací pole v toolbaru (⌘F), pruh rozsahu nad seznamem jako v Mailu,
+logika v `MalachiCore` (`SearchModel.swift`,
+`MailboxController+Search.swift`); Windows: hledací pole uprostřed titulkové
+lišty (Ctrl+F, Ctrl+E), pruh rozsahu nad seznamem, logika v `Malachi.Core`
+(`SearchModel.cs`, `MailboxController.Search.cs`). MCP most pro AI agenty
 (`backend/cmd/malachi-mcp`, stdio server, klient socketu importující jen
 `pkg/api`; `.mcp.json` v kořeni ho registruje pro Claude Code; výchozí jen
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
@@ -188,8 +248,10 @@ Vyhledávání zatím `notImplemented`. MCP most pro AI agenty
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
 obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
 --json` zapisují registraci do konfigurace Claude Desktop a Claude Code a
-Předvolby → AI → MCP je v obou UI jen přepínač nad nimi (GTK
-`ui/internal/mcpsetup`, macOS `MCPRegistrationController`); viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
+Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
+`ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows
+`McpRegistrationController`, který předá `--command` a u MSIX Claude Desktop
+`--claude-desktop-config`); viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
 GPL-3.0-or-later): plné zrcadlo GTK UI — průvodce účtem, sidebar,
 seznam (plochý i vlákna), čtení s uzamčeným WKWebView (JS vypnutý,
 stejná CSP, scheme handler `malachi-cid:`, síť odříznutá proxy i content
@@ -208,15 +270,75 @@ app spouští `malachid` z bundlu s `--config`/`--store` v
 `~/Library/Application Support/Malachi Mail/`, socket na výchozí cestě
 démona, `malachi-mcp` je v bundlu. Gmail a Microsoft 365 jdou přes
 vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
-doplňování příjemců jen ze sebraných adres, vyhledávání nikde. Odchylky od GTK jen z tabulky
+doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
-hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
 Kontributorský popis `docs/macos-port.md`. `make macos` / `run-macos` /
 `test-macos` jsou jen na Darwinu.
+
+Windows klient (`windows/`, C#/.NET 10, WinUI 3 na Windows App SDK 2.5
+z komponentových balíčků, ne z metabalíčku, Windows 11, x64 a ARM64,
+nebalený a self-contained, GPL-3.0-or-later): plné zrcadlo GTK UI, port
+macOS klienta — průvodce účtem, sidebar s oblíbenými, seznam (plochý
+i vlákna, stránkuje se sám), hledání, čtení v uzamčeném WebView2 (skript
+vypnutý, stejná CSP, síť odříznutá pravidlem resolveru `MAP * ~NOTFOUND`
+a mrtvou proxy, každý požadavek odpovídá brána `WebResourceRequested`,
+schéma `malachi-cid:` a dokument přes `malachi-doc:`), okna zpráv
+a přiložených zpráv, vlastní náhled příloh (obrázky, PDF a text ve
+WebView2, programy nikdy), Mark of the Web na přílohách, akce
+s kontextovými menu, compose s contenteditable editorem a bridge skriptem,
+koncepty, `draft.create`, `mailto:` a registrace pro Výchozí aplikace,
+Předvolby, notifikace se systémovým zvukem pošty, ikona v oznamovací
+oblasti při běhu na pozadí, spuštění po přihlášení (klíč Run), čeština.
+Tři projekty a helper: `Malachi.Core` (net10.0 bez WinUI a P/Invoke,
+testovatelný na jakémkoli OS: API typy přepsané z `docs/api.md`, transport
+s handshakem, supervisor démona, 1:1 porty čisté logiky Go UI a Swiftu
+i jejich testů, kontrolery na UI vlákně, prezentační třídy, které macOS
+drží netestované v AppKitu, nastavení s klíči gschema + `ctrl-r`
+v `HKCU\Software\io.github.schotek.Malachi`, `L10n` nad `po/*.po` čtenými
+za běhu), `Malachi.Platform.Windows` (služby Windows přes CsWin32: proces
+démona a konzole, politika souboru s klíčem, registr, Mark of the Web,
+launcher, Run, `mailto:`, tray), `Malachi.App` (WinUI 3, `MalachiMail.exe`,
+tenké: okna, XAML, vrstva WebView2) a `Malachi.Credentials`
+(`malachi-credentials.exe`, NativeAOT helper keyringu démona nad Credential
+Managerem, hodnota nad 2560 B po kusech ověřených SHA-256). Testy: xUnit v3
+na Microsoft.Testing.Platform, ~3 600 (Core s FakeDaemon a MailFixture,
+služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
+hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
+pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
+korpusu `testdata/mime` a z NetLogu Chromia ověřuje, že neodešel žádný
+požadavek; UI se ověřovalo ručně přes UI Automation proti lokálnímu IMAP/SMTP
+serveru. Build: `make windows` / `run-windows` / `test-windows` (jen na
+Windows, z PowerShellu i Git Bashe) delegují na `windows/build.ps1` (`app`,
+`test`, `lint`, `package`, …); výstup `build\windows\<arch>\Malachi Mail\`
+s `malachid.exe`, `malachi-mcp.exe` a `malachi-credentials.exe`. App spouští
+démona sama (`--config`/`--store` v `%LOCALAPPDATA%\Malachi Mail\`,
+`MALACHI_DATA_DIR` přebíjí, socket na výchozí cestě démona
+`%USERPROFILE%\.cache\malachi\run\rpc.sock` v adresáři s DACL jen pro
+uživatele a SYSTEM, `MALACHI_KEYRING=helper`), zastavuje ho
+`CTRL_BREAK_EVENT` (Go ho bere jako přerušení), po 15 s kill; C# `RpcClient`
+kontroluje u souboru s klíčem navíc vlastníka a DACL. Démon dostal jen
+platformně neutrální opravy (`exec.LookPath` pro helper, zavírání surových
+souborů před smazáním, `malachi-mcp --claude-desktop-config/--command`,
+`.gitattributes` a přenositelné Go testy). Odchylky od GTK jen z tabulky
+ve `windows/README.md` (hledání v titulkové liště, stavový pruh přes spodek
+okna, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
+s Přidat účet a Konec, klávesy Windows s volbou `ctrl-r`, přístupové
+klávesy místo mnemonik, pořadí tlačítek ContentDialog, bannery InfoBar,
+kontextová menu, vlastní náhled příloh, Mark of the Web, potvrzení
+nevypsaných odkazů, obnova WebView2 jednou na dokument, uložení konceptů
+při Konci, tray, zvuk `MailBeep`, průvodce jako modální okno, Předvolby
+jako okno s navigací a bez hledání, Výchozí aplikace, klíč Run, vlastník
+a DACL souboru s klíčem); `.blp` jsou reference, nová funkce jde nejdřív
+do backendu a GTK, pak do macOS a Windows. Před veřejným vydáním zbývá
+(`docs/windows-port.md` §17): licenční výjimka GPLv3 §7 pro komponenty
+Microsoftu (rozhodnutí vlastníka), podpis kódu, instalátor (Velopack,
+winget), běh ARM64 na skutečném hardwaru, CI (`windows.yml`) a automatické
+UI testy. Kontributorský popis `docs/windows-port.md`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo
@@ -227,7 +349,9 @@ Pořadí prací:
    (vlastní sanitizér, `htmlWithheld`, `message.part`, stahování obrázků
    démonem, multipart/alternative)
 5. ~~Threading~~ hotovo (backend i seskupený seznam v UI)
-6. Vyhledávání
+6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
+7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
+   `docs/windows-port.md` §17)
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
@@ -255,9 +379,9 @@ klienti pin nikdy nemají). S pinem `transport.EndpointTLSConfig` přijme
 právě ten certifikát (jediné `InsecureSkipVerify` v backendu, porovnání
 ve `VerifyConnection`). `tlsError` nese `error.data` (`api.TLSErrorData`:
 důvod, vyčištěné údaje certifikátu, `expectedSha256` u `pinMismatch`).
-Průvodce v obou UI nabízí „Důvěřovat certifikátu…“ až po výslovném
-potvrzení s otiskem (pravidla v `ui/internal/certtrust`, zrcadlo
-`MalachiCore/Wizard/CertTrust.swift`), změna hosta nebo portu pin zahodí,
+Průvodce ve všech třech UI nabízí „Důvěřovat certifikátu…“ až po výslovném
+potvrzení s otiskem (pravidla v `ui/internal/certtrust`, zrcadla
+`MalachiCore/Wizard/CertTrust.swift` a `Malachi.Core/Wizard/CertTrust.cs`), změna hosta nebo portu pin zahodí,
 stránka Servery ho ukáže se Zapomenout, účet s odmítnutým nebo změněným
 certifikátem má stav a banner s „Upravit účet…“. Žádné obecné
 „ignorovat certifikát“ (`docs/security.md` §7).
@@ -272,7 +396,8 @@ klienta; do té doby démon nespustí kód backendu, nepošle notifikaci a na
 jiný požadavek odpoví 1005 `unauthenticated` a spojení zavře (4 KiB, 10 s,
 nejvýš 32 takových spojení). Go klienti (GTK UI, MCP most) volají
 `api.ClientHandshake`, Swift `RPCClient` dělá totéž a navíc kontroluje
-vlastníka a práva souboru s klíčem. Co to chrání a co ne:
+vlastníka a práva souboru s klíčem, C# `RpcClient` také a na Windows místo
+práv DACL (`WindowsKeyFilePolicy`). Co to chrání a co ne:
 `docs/security.md` §8.
 
 Otevřená rozhodnutí: viz `docs/architecture.md` §7 (jazyk UI, sanitizační
@@ -314,3 +439,30 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
   out of date“), dokud neproběhne `make po` (v Toolbxu). Kde to nejde, nech
   řádky s texty na stejných číslech (nový kód pod poslední text nebo do nového
   souboru bez textů).
+- Nový msgid v `po/malachi.pot` (práce na GTK a `make po`) musí Windows klient
+  použít, nebo ho zapsat s důvodem do `windows/parity-exclusions.txt`: test
+  pokrytí (`StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`) ho jinak
+  hlásí, se `CoverageEnforced` nebo `MALACHI_MSGID_COVERAGE=strict` jako
+  chybu. Zrušený msgid, který v exclusions zůstal, a msgid z exclusions, který
+  klient začal používat, shodí `build.ps1 lint` vždy. msgid použitý ve
+  `windows/src` musí v šabloně být (s kontextem i plurálem).
+- Windows: XAML kompilátor je nástroj .NET Frameworku bez podpory dlouhých
+  cest a na cestě přes 260 znaků padá (`MSB3073`, `XamlCompiler.exe`,
+  `MSB3106`), i se zapnutými dlouhými cestami ve Windows. Klon drž na krátké
+  cestě (`D:\src\malachi`) a NuGet cache ve výchozím `%USERPROFILE%\.nuget`.
+- Windows: Claude Desktop je balíček MSIX a každý proces, který spustí (i agent
+  a to, co agent spustí), vidí virtualizovaný AppData i HKCU: nové soubory
+  pod `%APPDATA%`/`%LOCALAPPDATA%` a zápisy do HKCU (nastavení, Run,
+  `mailto:`, registrace notifikací) skončí v úložišti balíčku Claude, jinde
+  neviditelné. Agent proto pouští app s `MALACHI_DATA_DIR` a krátkým
+  `MALACHI_SOCKET` v `%TEMP%` (taková kopie nechá uživatelovy registrace
+  `mailto:` a Run být); co musí dojít do skutečného registru, spouští mimo
+  strom Claude (WMI `Win32_Process.Create`) a po sobě uklidí.
+- Windows: cesta AF_UNIX socketu má nejvýš 107 bajtů UTF-8 (macOS 103); app ji
+  ověří při startu a zprávou jmenuje `MALACHI_SOCKET`. Soubor s klíčem na
+  Windows dědí ACL adresáře: `MALACHI_SOCKET` v adresáři, kam smějí jiní
+  (`D:\…` mimo profil), skončí „Backend unavailable“ s důvodem v logu.
+- Windows: každý `dotnet` příkaz běží z `windows\` (tam `global.json` vybírá
+  SDK a Microsoft.Testing.Platform; jinde `dotnet test` spadne na VSTest).
+  Varování jsou chyby, `build.ps1 lint` je `dotnet format --verify-no-changes`
+  plus konvenční testy.
