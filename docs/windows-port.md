@@ -146,6 +146,8 @@ windows/
     Malachi.Conventions.Tests/  msgid and gschema coverage, the strings check, SPDX headers
     Malachi.App.Canary/         the network canary (§12) over the WebView2 layer
     Malachi.App.Canary.Host/    its WinUI host, compiling src/Malachi.App/WebViews
+    Malachi.App.UiTests/        UI smoke tests over the published app (UI Automation), devmail opt-in
+    Malachi.FakeKeyring/        a keyring helper over a JSON file for the UI tests
 ```
 
 | Project | May use | Holds |
@@ -1087,7 +1089,15 @@ that shows the main window (tray, notification, redirected launch,
 background start) calls `AppWindow.Show()`, `Activate()` and then
 `SetForegroundWindow(hwnd)`: without the last, the window stays behind
 (measured with `ForegroundLockTimeout` at its maximum); WinAppSDK's
-`RedirectActivationToAsync` already grants the foreground right. Launch at
+`RedirectActivationToAsync` already grants the foreground right. Shown
+again after `AppWindow.Hide()`, the window came back with the keyboard on
+its caption's input window instead of the XAML island, so no key worked
+until a click, and its first show after `--background` put WinUI's first
+focus in the search box (measured in phase F); every show therefore gives
+the island the keyboard (`InputFocusController.TrySetFocus`, XAML restoring
+the element that had it) and falls back to the sidebar's first tab stop
+(`MainWindow.TakeKeyboard`). A `--background` start shows the icon at
+once, since the window it never shows raises no visibility change. Launch at
 login is the Run value with `--background`, which starts hidden; a
 `StartupApproved\Run` value whose first byte is odd means the user disabled
 it in Windows Settings, which is shown as such, never overwritten
@@ -1759,8 +1769,13 @@ the test (the reader, E4, is not built yet): a letter reaches the page
 down and up; F5, Ctrl+Comma, Ctrl+N and A run their commands and the page
 sees none of them (F5 no reload); Ctrl+F moves the focus to the search box
 before its key up, and the next F typed in the page arrives down and up;
-Ctrl+Q quits. The FlaUI smoke tests repeat this on the real reader and
-editor once they exist.
+Ctrl+Q quits. In phase F the same was done on the real reader (§12, the
+end-to-end walk): with an HTML message's viewer focused by a click, Ctrl+R
+opens the reply, S and U toggle the star and the unread state, A archives
+(the neighbour takes the selection), J and Delete ask their questions; in
+the compose editor Ctrl+Enter sends. The automated UI tests use UI
+Automation's patterns only, never synthetic keys (they run beside other
+windows and never need the foreground).
 
 ## 12. Tests
 
@@ -1857,9 +1872,95 @@ editor once they exist.
   keeps the runs' files, and each run's `results.json.progress` shows how
   far a run that never finished got. It runs in `make test-windows` and on
   every WebView2 runtime bump.
-- UI smoke tests with FlaUI (UIA3) for the main flows, against a local IMAP
-  and SMTP test server (the go-imap and go-smtp servers the backend's own
-  tests use).
+- The **UI smoke tests** (`Malachi.App.UiTests`, xUnit v3 over the Windows
+  Desktop framework's own UI Automation client, `UIAutomationClient` and
+  `UIAutomationTypes` through `UseWPF`; no FlaUI, no package) start the
+  published app, the folder `build.ps1 app` assembled
+  (`build\windows\<arch>\Malachi Mail\`, or the one `MALACHI_UITEST_APP`
+  names), as a user would, with a temporary folder of their own for the
+  data (`MALACHI_DATA_DIR`) and the socket (`MALACHI_SOCKET`, a short path),
+  the bundled daemon and `Malachi.FakeKeyring`, a keyring helper over a JSON
+  file in that folder (`MALACHI_FAKE_KEYRING_FILE`): no password reaches
+  Credential Manager. The app's terminal log is its stderr, a pipe the test
+  reads. They find every element by AutomationId (the names follow the
+  user's language) and use UI Automation's patterns only, never synthetic
+  input, so they need no foreground. Checked on an empty data folder: the
+  main window with its New Message and primary menu and, once the daemon
+  answered, its No Accounts page; the sidebar's New Message opens a
+  composer (To, Subject, the editor) that closes without a question; the
+  primary menu's Preferences (its navigation), Add Account… (the wizard on
+  its identity page, modal, the main window enabled again after it) and
+  About (the executable's version); the No Accounts page's Add Account…;
+  and Quit from the primary menu: the app exits with 0, the daemon it
+  started exits with 0, and the socket and its key are gone. The classes
+  share one collection without parallelism (the app is one instance per
+  executable); one app serves the window checks, another the Quit; about
+  25 s. **Opt-in**, `MALACHI_DEVMAIL=<folder with devmail.exe>` (the local
+  IMAP and SMTP server of the port's research, outside the repository)
+  adds a suite against a mail server: devmail started on free ports of
+  127.0.0.1 and seeded with `backend/testdata/mime`, the account added over
+  the app's socket as a client adds one (`account.add` through Core's
+  `RpcClient`), then the Inbox listed, a message selected and shown in the
+  reader (its subject and sender), Reply opening a composer the daemon
+  prepared (`Re:` and the sender; the quote itself is inside WebView2,
+  which UI Automation does not reach), and a message sent from a composer
+  arriving in the server's INBOX with its copy in Sent; about 45 s with the
+  smoke tests. Skipped with the reason: not Windows, no interactive
+  desktop, the app not built, or `MalachiMail.exe` of that folder running
+  already (a test's launch would only activate it). Not isolated: the
+  preferences, which the app reads from the user's
+  `HKCU\Software\io.github.schotek.Malachi` (a Quit writes back the window
+  geometry it read). They run in `build.ps1 test` with the rest of the
+  solution (a stale app folder tests the old app: `build.ps1 app` first),
+  or alone:
+  `dotnet test --project tests\Malachi.App.UiTests\Malachi.App.UiTests.csproj -p:Platform=x64`
+  from `windows\`.
+- **End to end, by hand** (phase F1, 2026-09-28, against devmail with real
+  input where keys matter; the app from a temporary data folder): New
+  Message from the sidebar, Ctrl+N and the primary menu; Reply from the
+  command row, Reply All and Forward from the context menu (right click
+  and Shift+F10), Reply All (with its Cc) from a message window's row,
+  Ctrl+R, Ctrl+Shift+R and Ctrl+Shift+F from the list, Ctrl+Shift+F in a
+  message window and Ctrl+R with the viewer focused, each composer
+  addressed and titled by the daemon (`draft.create`; the quote looked at
+  in a reply); a draft opened by the Edit banner, Enter
+  (raising the composer already editing it) and a double click; the primary
+  menu's Add Account… (and a whole account added through the wizard),
+  Preferences (also Ctrl+Comma), About and Quit, labelled with the
+  Windows-only *Quit* (no msgid in `po/malachi.pot` fits); the No Accounts
+  page's Add Account… (fixed); the sign-in banner's and the status
+  flyout's Edit Account… with a changed server password (the wizard asking
+  for it, the banner gone after the save); a second launch with a
+  `mailto:` URI opening only a composer, also with the main window hidden;
+  F5 and the status line; search from Ctrl+F and Ctrl+E with the three
+  scopes, Enter to the first result and Escape back; Trash, Archive, Junk
+  (their questions) and the Star toggle from the command row, Mark as
+  Unread and Unstar from the context menu, and A, J, U, S and Delete with
+  the viewer focused, not while typing in the search box; an attachment
+  previewed, opened (the open directory's copy in zone 4; a `.log` has no
+  association: *Open With*) and saved (zone 4); a message to
+  test@example.test sent with Ctrl+Enter, delivered and in Sent (it shows
+  in the Inbox after F5: the daemon's known missed EXISTS after its own
+  APPEND, devmail README); autosave to the Drafts folder on the server and
+  the close question; Quit with a dirty composer saving it without asking
+  and stopping the daemon (socket and key gone; on a machine starved of
+  CPU the daemon once took 74 s over a `draft.save`, the save timed out
+  and Quit asked the close question instead, whose Save Draft then saved
+  it as a new draft and quit, as `draft.go` does); Run in Background (the
+  window hides, the icon's Open, New Message, Check for New Mail and Quit,
+  a second launch shows the window), a `--background` start (fixed: no
+  icon) and the keyboard after the window came back (fixed). Not
+  confirmed: a notification's click. Run outside Claude Desktop's process
+  tree (§1) with the main window hidden, the app registered (its
+  `AppUserModelId` and activator keys appeared and were removed afterwards)
+  and took the new message, but no banner could be found to click: UI
+  Automation in that session did not see a toast that Windows PowerShell
+  posted as a control either, so the check needs a person's eyes. The
+  click's own path is phase E's (verified there with the notification
+  service in a probe) and ends in the same activation as a second launch,
+  which was walked. The certificate banner was not walked either (devmail
+  has no TLS; its button is the same `EditAccount` hook as the sign-in
+  banner's).
 - The Go side on Windows: `go vet ./...` and `go test ./...` of `backend/`
   green (§14), the helper's real round trip with `malachi-credentials.exe`.
 
