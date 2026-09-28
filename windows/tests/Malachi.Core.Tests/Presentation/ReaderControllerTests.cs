@@ -203,7 +203,8 @@ public sealed class ReaderControllerTests
     /// The body asked for again once its pictures were downloaded carries
     /// the same HTML, whose pictures load now: the viewer is told to load it
     /// again (MessageViewController.swift <c>picturesArrived</c>); a render
-    /// of the same body, or another HTML, is no reason to.
+    /// of the same body, the same body read again (equal by value, as
+    /// Swift compares it), or another HTML, is no reason to.
     /// </summary>
     [Fact]
     public void TheSameHtmlIsLoadedAgainOnceItsPicturesArrived()
@@ -214,11 +215,21 @@ public sealed class ReaderControllerTests
         var s = Summary("m1");
         var lm = cache.Entry("m1");
         lm.Msg = Message(s);
-        var counted = HtmlBody("m1", "<p><img src=\"malachi-cid:acc/m1/2\"></p>") with { RemotePictures = 1 };
+        const string html = "<p><img src=\"malachi-cid:acc/m1/2\"></p>";
+        var inline = new Dictionary<string, string> { ["pic@x"] = "2" };
+        var counted = HtmlBody("m1", html, inline: inline) with { RemotePictures = 1 };
         lm.Body = counted;
         r.Show(s);
         r.Render(s, lm);
         Assert.Equal(0, reloads); // the same body again
+
+        // Read again, unchanged: a new body whose lists are new as well,
+        // equal by value, with its pictures still on the server.
+        lm.Body = HtmlBody("m1", html, inline: new Dictionary<string, string>(inline)) with { RemotePictures = 1 };
+        Assert.NotEqual(counted, lm.Body); // the record's equality compares the lists by reference
+        r.Render(s, lm);
+        Assert.Equal(0, reloads);
+        Assert.True(r.PicturesBarVisible);
 
         // The pictures arrived: the same HTML, a new body.
         lm.Body = counted with { RemotePictures = null };

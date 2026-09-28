@@ -632,10 +632,14 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
 
     // Whether now is the body on display (before) asked for again after its
     // pictures kept on the mail server were downloaded: the HTML may be the
-    // same, but its malachi-cid: pictures load now (macOS picturesArrived;
-    // a body is a new object whenever the daemon answered again).
+    // same, but its malachi-cid: pictures load now (macOS picturesArrived,
+    // before != now). Compared by value, as Swift's Equatable body is: the
+    // record's own equality compares its lists by reference, so a body read
+    // again unchanged would differ. What tells the download apart is the
+    // count of pictures still on the server, and the HTML.
     private static bool PicturesArrived(MessageBodyResult? before, MessageBodyResult now) =>
-        before is not null && before.MessageId == now.MessageId && before.RemotePictureCount > 0 && !ReferenceEquals(before, now);
+        before is not null && before.MessageId == now.MessageId && before.RemotePictureCount > 0
+        && (before.RemotePictureCount != now.RemotePictureCount || !string.Equals(before.Html, now.Html, StringComparison.Ordinal));
 
     private void ShowPlainInsteadOfHtml(MessageBodyResult b)
     {
