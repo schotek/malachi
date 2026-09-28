@@ -10,7 +10,8 @@
 // NTSTATUS); a timeout ends the whole tree at once, which the child that
 // holds the pipes shows. Added: both streams at their cap at once (they
 // are read concurrently), an orphan holding the pipes after a normal exit
-// (the EOF grace), the caller's cancellation, and the stand-in's own rules.
+// (the EOF grace), the caller's cancellation, the spawn gate the start
+// waits at, and the stand-in's own rules.
 
 using System;
 using System.Diagnostics;
@@ -235,6 +236,55 @@ public sealed class BridgeRunnerTests
         var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => new BridgeRunner().RunAsync(
             Path.Combine(dir.Path, "malachi-mcp"), StatusJson, TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken));
         Assert.NotEqual(BridgeRunnerFailure.Timeout, e.Failure);
+    }
+
+    [Fact]
+    public async Task TheBridgeStartsOnlyWhileTheSpawnGateIsFree()
+    {
+        // The daemon's start holds the gate while its NUL and its pipe are
+        // inheritable (ChildProcess, DaemonProcessHostTests), and
+        // Process.Start would hand them to the bridge; it waits.
+        using var dir = new TemporaryDirectory();
+        var bridge = Bridge(dir, new([FakeBridgeStep.Exit(0)]));
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var held = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using (SpawnGate.Enter())
+            {
+                held.Set();
+                release.Wait();
+            }
+        });
+        holder.Start();
+        try
+        {
+            held.Wait(cancellationToken);
+            var run = Task.Run(() => new BridgeRunner().RunAsync(bridge, StatusJson, TimeSpan.FromSeconds(30), cancellationToken), cancellationToken);
+            await Task.Delay(300, cancellationToken);
+            Assert.False(run.IsCompleted, "the bridge ran while the gate was held");
+            Assert.Empty(FakeBridgeScript.Calls(dir.Path));
+
+            release.Set();
+            var r = await run;
+            Assert.Equal(0, r.Status);
+            Assert.Equal(["status --json"], FakeBridgeScript.Calls(dir.Path));
+        }
+        finally
+        {
+            release.Set();
+            holder.Join();
+        }
+
+        // The gate is let go after a start and after a failed one; both
+        // happen on this thread, before the run's first await.
+        var again = new BridgeRunner().RunAsync(bridge, StatusJson, TimeSpan.FromSeconds(30), cancellationToken);
+        Assert.False(SpawnGate.IsHeldByCurrentThread);
+        await again;
+        var missing = new BridgeRunner().RunAsync(Path.Combine(dir.Path, "missing.exe"), StatusJson, TimeSpan.FromSeconds(5), cancellationToken);
+        Assert.False(SpawnGate.IsHeldByCurrentThread);
+        await Assert.ThrowsAsync<BridgeRunnerException>(() => missing);
     }
 
     [Fact]

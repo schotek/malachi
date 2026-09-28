@@ -380,7 +380,15 @@ child: `CreateProcessW` with `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` passes
 exactly NUL as stdin and one pipe as stdout and stderr (the daemon's lines
 stay in order), `CREATE_NEW_PROCESS_GROUP`, `CREATE_NO_WINDOW` only when the
 app has no console, the arguments `--socket --config --store` quoted as the C
-runtimes parse them. The environment is the app's plus
+runtimes parse them. NUL and the pipe's write end are inheritable from
+their creation to their close after `CreateProcessW`, and the MCP bridge
+is started with `Process.Start` (§10), which hands its child every
+inheritable handle of the app: a bridge started in that window would hold
+the daemon's output pipe, and the daemon's exit would wait for the
+bridge's. Both starts therefore take one lock, Core's `SpawnGate`
+(`Malachi.Core.Platform`, no Windows API): the daemon's for that window,
+inside the console gate, the bridge's around `Process.Start`; each is held
+for the synchronous start alone. The environment is the app's plus
 `MALACHI_KEYRING=helper`/`MALACHI_KEYRING_HELPER` (or `none` without the
 helper) and `DBUS_SESSION_BUS_ADDRESS=disabled:`, each left alone when
 already set. The lines go to `logs\malachid.log` (rotated at 4 MiB, two
@@ -1318,7 +1326,9 @@ since it opens the user's browser.
 uninstall --json` beside the app, 15 s timeout, output capped (1 MiB per
 stream, both drained at once), the process tree killed on timeout, the
 drains given up 500 ms after the exit (`Malachi.Core.Platform.BridgeRunner`;
-a kill reads as status -1, a crash as its NTSTATUS, `ExitStatus.Describe`);
+a kill reads as status -1, a crash as its NTSTATUS, `ExitStatus.Describe`;
+started at the `SpawnGate` of §5, so it never inherits the handles the
+daemon's start makes inheritable);
 the MSIX Claude Desktop's configuration path and the app folder's bridge
 path are passed with the new flags (§14) on every call: `--command` with
 the bridge's canonical path (absolute, short names expanded, each component

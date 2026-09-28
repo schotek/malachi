@@ -11,7 +11,10 @@
 // passes PROC_THREAD_ATTRIBUTE_HANDLE_LIST with exactly two handles: NUL as
 // stdin (the daemon never reads it; Go's nil Stdin) and the write end of
 // one pipe as both stdout and stderr, so the daemon's lines stay in their
-// order. The pipe's read end is the parent's and never inheritable. The
+// order. The pipe's read end is the parent's and never inheritable. Those
+// two handles are inheritable while the start lasts, so it holds Core's
+// SpawnGate, which the bridge's Process.Start (BridgeRunner) takes too:
+// the bridge never inherits them. The
 // command line follows the rules every Windows C runtime and Go parse it
 // by (argv[0] quoted, the other arguments escaped only where they need it),
 // and the environment block is sorted as CreateProcess expects. The
@@ -25,6 +28,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using Malachi.Core.Platform;
 using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
 using Windows.Win32.Foundation;
@@ -80,6 +84,11 @@ internal sealed class ChildProcess : IDisposable
             nLength = (uint)sizeof(SECURITY_ATTRIBUTES),
             bInheritHandle = true,
         };
+        // NUL and the pipe are inheritable from their creation to their
+        // close at the end of this method; a start that hands on every
+        // inheritable handle (the bridge's Process.Start) waits at the gate
+        // meanwhile. Declared first, it is released last.
+        using var gate = SpawnGate.Enter();
         using var input = PInvoke.CreateFile(
             "NUL",
             (uint)GENERIC_ACCESS_RIGHTS.GENERIC_READ,

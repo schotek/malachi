@@ -13,6 +13,9 @@
 // the bridge that inherited the pipes cannot hold the result back: the
 // drains give up EofGrace after the exit. The caller's cancellation, which
 // Swift has no counterpart of (Go's context), kills the run the same way.
+// Process.Start hands the bridge every inheritable handle of the app, which
+// Go and Foundation never do; it runs at the SpawnGate, so the handles the
+// daemon's start makes inheritable for a moment are not among them.
 
 using System;
 using System.Buffers;
@@ -80,17 +83,7 @@ public sealed class BridgeRunner
             start.ArgumentList.Add(argument);
         }
         cancellationToken.ThrowIfCancellationRequested();
-        Process process;
-        try
-        {
-            process = Process.Start(start) ?? throw BridgeRunnerException.Launch("no process was started");
-        }
-        catch (Win32Exception e)
-        {
-            // The system's reason alone; .NET's message repeats the path
-            // and the working directory.
-            throw BridgeRunnerException.Launch(new Win32Exception(e.NativeErrorCode).Message, e);
-        }
+        var process = Start(start);
         using (process)
         {
             try
@@ -134,6 +127,27 @@ public sealed class BridgeRunner
                 Stderr = collectedErr,
                 Status = process.ExitCode,
             };
+        }
+    }
+
+    // Process.Start at the spawn gate: .NET creates every child with
+    // bInheritHandles and no list of them, so the bridge would also get
+    // what the daemon's start (ChildProcess) makes inheritable for its own
+    // child while it runs.
+    private static Process Start(ProcessStartInfo start)
+    {
+        try
+        {
+            using (SpawnGate.Enter())
+            {
+                return Process.Start(start) ?? throw BridgeRunnerException.Launch("no process was started");
+            }
+        }
+        catch (Win32Exception e)
+        {
+            // The system's reason alone; .NET's message repeats the path
+            // and the working directory.
+            throw BridgeRunnerException.Launch(new Win32Exception(e.NativeErrorCode).Message, e);
         }
     }
 

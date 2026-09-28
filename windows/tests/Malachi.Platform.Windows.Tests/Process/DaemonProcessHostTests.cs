@@ -8,8 +8,9 @@
 // and killed when it ignores the request, no stop request to one that has
 // exited while its output drains, what the daemon gets (its
 // arguments exactly, its environment, NUL as stdin, no handle of the app
-// but its output pipe) and what comes back (UTF-8 lines, the exit code
-// after the last of them). The real daemon is MALACHI_TEST_MALACHID, else
+// but its output pipe), the spawn gate its start holds against the
+// bridge's, and what comes back (UTF-8 lines, the exit code after the last
+// of them). The real daemon is MALACHI_TEST_MALACHID, else
 // build\malachid.exe of the repository (make windows, build.ps1 go); the
 // tests that need it are skipped without. The stop's path here is the one
 // of the test process (a console or none); the console cases are
@@ -31,6 +32,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Daemon;
+using Malachi.Core.Platform;
 using Malachi.Core.TestDaemon;
 using Malachi.Platform.Windows.Files;
 using Malachi.Platform.Windows.Processes;
@@ -208,6 +210,66 @@ public sealed class DaemonProcessHostTests
         Assert.Equal(TestDaemonSettings.ProbeMarker, received);
         Assert.Contains(LogLines(log), line => line.StartsWith("testdaemon: probe handle " + value + " refused", StringComparison.Ordinal)
             || line == "testdaemon: probe handle " + value + " written");
+    }
+
+    [Fact]
+    public async Task TheStartHoldsTheSpawnGate()
+    {
+        // NUL and the output pipe are inheritable while the daemon starts,
+        // and the bridge's Process.Start (BridgeRunner) would hand them to
+        // the bridge: the start waits for the gate the bridge's start
+        // takes too, and lets it go after a start and after a failed one.
+        using var dir = new TestDirectory();
+        using var log = new RotatingLogFile(dir.Combine("malachid.log"));
+        var host = new DaemonProcessHost(log: log);
+        var start = new DaemonStartInfo
+        {
+            Executable = TestDaemonSettings.ExecutablePath,
+            Arguments = [],
+            Environment = Strict(EnvironmentWith((TestDaemonSettings.ModeEnv, TestDaemonSettings.Exit), (TestDaemonSettings.ExitCodeEnv, "0"))),
+        };
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var held = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var holder = new Thread(() =>
+        {
+            using (SpawnGate.Enter())
+            {
+                held.Set();
+                release.Wait();
+            }
+        });
+        holder.Start();
+        Task<IDaemonProcess> started;
+        try
+        {
+            held.Wait(cancellationToken);
+            started = Task.Run(() => host.Start(start), cancellationToken);
+            await Task.Delay(300, cancellationToken);
+            Assert.False(started.IsCompleted, "the daemon started while the gate was held");
+        }
+        finally
+        {
+            release.Set();
+            holder.Join();
+        }
+        using (var daemon = await started.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken))
+        {
+            Assert.Equal(0, await daemon.Exited.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken));
+        }
+
+        using (var daemon = host.Start(start))
+        {
+            Assert.False(SpawnGate.IsHeldByCurrentThread);
+            Assert.Equal(0, await daemon.Exited.WaitAsync(TimeSpan.FromSeconds(15), cancellationToken));
+        }
+        Assert.Throws<Win32Exception>(() => host.Start(new DaemonStartInfo
+        {
+            Executable = dir.Combine("malachid.exe"),
+            Arguments = [],
+            Environment = new Dictionary<string, string>(),
+        }));
+        Assert.False(SpawnGate.IsHeldByCurrentThread);
     }
 
     [Fact]
