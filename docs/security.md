@@ -420,9 +420,12 @@ into it as well.
   *(No subject)* or the address. This is display only: the recipients of
   a reply, a draft's subject, the names in a quote's header and what Copy
   Address copies are the text as received, and a message's body and the
-  excerpt of it in the list are its content, shown as written. The GTK
-  and macOS clients show these texts as received; the same rule is
-  proposed for them
+  excerpt of it in the list are its content, shown as written. So the
+  composer's To and Subject fields of a reply show the received name and
+  subject as they will be sent, an override included: cleaning them would
+  change the message, which is the daemon's to do in `draft.create`. The
+  GTK and macOS clients show these texts as received; the same rule is
+  proposed for them, and that cleaning for `draft.create`
   ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)

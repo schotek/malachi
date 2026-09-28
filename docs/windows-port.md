@@ -2352,10 +2352,12 @@ Proposed separately, not in this branch: canonical hrefs in the sanitiser
 plus GTK confirming unlisted links (the likely masked-link bypass),
 bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
-a runtime D-Bus opt-out, the display-text rule in GTK and macOS (bidi
-formatting and control characters out of the names, subjects and folder
-names they show, a name isolated from the address after it; security.md
-§4).
+a runtime D-Bus opt-out, the same display-text rule in GTK and macOS
+(bidi formatting and control characters out of the names, subjects and
+folder names they show, a name isolated from the address after it;
+security.md §4), and clean subjects and display names in `draft.create`
+(a reply's To and Subject fields show, and send, the received text, an
+override included; only the daemon can change what is sent).
 
 ## 15. How it was built
 
