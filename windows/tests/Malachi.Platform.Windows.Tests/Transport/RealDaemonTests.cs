@@ -6,7 +6,9 @@
 // phase C gate "the handshake against the real daemon"): the handshake, a
 // call, a notification the daemon sends, and a crashed daemon replaced by a
 // new one with a new key. The counterpart of the manual checks of
-// macos-port.md and of the research transcript (research 01 §7).
+// macos-port.md and of the research transcript (research 01 §7). A daemon
+// that has just started gets RealDaemon.HandshakeLimit for the handshake,
+// not the app's 5 s: on a busy machine the first handshake missed those.
 
 using System;
 using System.IO;
@@ -28,7 +30,7 @@ public sealed class RealDaemonTests
     {
         using var daemon = RealDaemon.CreateOrSkip();
         await daemon.StartAsync(Ct);
-        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy());
+        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy(), RealDaemon.HandshakeLimit);
         await client.ConnectAsync(Ct);
         Assert.Equal(new RpcClientState.Connected(), client.State);
 
@@ -79,7 +81,7 @@ public sealed class RealDaemonTests
     {
         using var daemon = RealDaemon.CreateOrSkip();
         await daemon.StartAsync(Ct);
-        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy());
+        using var client = new RpcClient(daemon.Socket, new WindowsKeyFilePolicy(), RealDaemon.HandshakeLimit);
         await client.ConnectAsync(Ct);
         var before = await File.ReadAllBytesAsync(RpcAuth.KeyPath(daemon.Socket), Ct);
 

@@ -37,6 +37,7 @@ using Malachi.Core.TestDaemon;
 using Malachi.Platform.Windows.Files;
 using Malachi.Platform.Windows.Processes;
 using Malachi.Platform.Windows.Tests.Files;
+using Malachi.Platform.Windows.Tests.Transport;
 using Xunit;
 
 namespace Malachi.Platform.Windows.Tests.Processes;
@@ -78,10 +79,13 @@ public sealed class DaemonProcessHostTests
         var directories = new PrivateDirectory();
         using var log = new RotatingLogFile(dir.Combine("logs", "malachid.log"));
         var host = new RecordingHost(new DaemonProcessHost(log: log));
+        // The real daemon has the tests' limit to start (RealDaemon), not
+        // the app's.
         using var supervisor = new DaemonSupervisor(Launch(malachid, dir, socket), socket, host)
         {
             BaseEnvironment = EnvironmentWith(("MALACHI_KEYRING", "none")),
             BeforeStart = () => directories.Ensure(run),
+            StartTimeout = RealDaemon.StartLimit,
         };
         try
         {
@@ -445,13 +449,14 @@ public sealed class DaemonProcessHostTests
     }
 
     // Waits for a line of the log (the daemon's output reaches it through
-    // the pump thread).
+    // the pump thread), one the real daemon writes while it starts: it has
+    // the tests' limit for that (RealDaemon).
     private static async Task WaitForLineAsync(RotatingLogFile log, Func<string, bool> match)
     {
         var clock = Stopwatch.StartNew();
         while (!(File.Exists(log.FilePath) && LogLines(log).Any(match)))
         {
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(15), "the line did not come: " + string.Join(" | ", File.Exists(log.FilePath) ? LogLines(log) : []));
+            Assert.True(clock.Elapsed < RealDaemon.StartLimit, "the line did not come: " + string.Join(" | ", File.Exists(log.FilePath) ? LogLines(log) : []));
             await Task.Delay(20, TestContext.Current.CancellationToken);
         }
     }

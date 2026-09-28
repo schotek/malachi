@@ -6,6 +6,8 @@
 // (--socket --config --store, the keyring switched off, D-Bus disabled).
 // The binary comes from MALACHI_TEST_MALACHID or build\malachid.exe of the
 // repository (make windows, build.ps1 go); without one the tests skip.
+// Every test that starts the real daemon waits for it by StartLimit and
+// HandshakeLimit, not by the app's own limits.
 
 using System;
 using System.Diagnostics;
@@ -14,6 +16,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
+using Malachi.Core.Daemon;
+using Malachi.Core.Platform;
 using Malachi.Core.Transport;
 using Xunit;
 
@@ -22,6 +26,23 @@ namespace Malachi.Platform.Windows.Tests.Transport;
 /// <summary>A running malachid.exe of its own, killed and cleaned up on dispose.</summary>
 internal sealed class RealDaemon : IDisposable
 {
+    /// <summary>
+    /// How long a test lets the real daemon take to listen: three times the
+    /// app's limit (<see cref="DaemonSupervisor.DefaultStartTimeout"/>). On
+    /// an idle machine it listens within a second; while the other test
+    /// assemblies and a build kept every core busy, four tests that waited
+    /// the app's 15 s for it failed together (docs/windows-port.md §13).
+    /// What the tests check is what the daemon does once it runs, not how
+    /// fast a loaded machine starts it.
+    /// </summary>
+    public static readonly TimeSpan StartLimit = 3 * DaemonSupervisor.DefaultStartTimeout;
+
+    /// <summary>
+    /// The handshake with a real daemon that has just started, for the same
+    /// reason three times the app's (<see cref="RpcTimeouts.Handshake"/>).
+    /// </summary>
+    public static readonly TimeSpan HandshakeLimit = 3 * RpcTimeouts.Handshake;
+
     private readonly StringBuilder log = new();
     private Process? process;
 
@@ -81,7 +102,8 @@ internal sealed class RealDaemon : IDisposable
 
     /// <summary>
     /// Starts the daemon and waits until its socket answers and a key file is
-    /// there. After a crash that may still be the old run's: the daemon
+    /// there, up to <see cref="StartLimit"/>. After a crash that may still be
+    /// the old run's: the daemon
     /// listens before it writes its key, and makes sure of the key before it
     /// answers <c>system.hello</c>.
     /// </summary>
@@ -112,16 +134,16 @@ internal sealed class RealDaemon : IDisposable
         started.BeginErrorReadLine();
         started.StandardInput.Close();
 
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        var clock = Stopwatch.StartNew();
         while (!(UnixSocketProbe.Answers(Socket) && File.Exists(RpcAuth.KeyPath(Socket))))
         {
             if (started.HasExited)
             {
                 throw new InvalidOperationException($"malachid exited with {started.ExitCode}:\n{Log}");
             }
-            if (DateTime.UtcNow > deadline)
+            if (clock.Elapsed > StartLimit)
             {
-                throw new TimeoutException($"malachid did not listen in 15 s:\n{Log}");
+                throw new TimeoutException($"malachid did not listen in {(int)StartLimit.TotalSeconds} s:\n{Log}");
             }
             await Task.Delay(50, cancellationToken);
         }

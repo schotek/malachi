@@ -2248,19 +2248,31 @@ margins that a busy machine missed while the workflow was checked locally
 9 to 22 s there), `internal/rpc` `TestCallsBeforeHandshakeAreRejected` (a
 rejected connection closed within 5 s) and `pkg/api`
 `TestHandshakeTimesOut` (a 150 ms context expiring before `system.hello`
-is written is reported as a plain deadline, not `timedOut`); in the
-client, `BridgeRunnerTests.ATimeoutKillsTheProcess` (a 3 s bound),
-`ComposeAttachmentsControllerTests.RemovingForgetsTheFileAndTellsTheBackend`
-(two imports in flight are listed in the order they complete),
-`ConnectionControllerTests.SystemInfoOfADroppedConnectionIsDropped`
-(`infoFailed` where `unavailable` was expected) and the tests against the
-real daemon (`RealDaemonTests`,
-`ConsoleAttachmentTests.AnAttachedAppStopsTheRealDaemonCleanly`,
-`DaemonProcessHostTests.TheRealDaemonStopsCleanlyInAPrivateRunDirectory`:
-`malachid.exe` listening within 15 s; these four failed together once,
-2026-09-28, while other builds kept the machine busy). A red run
+is written is reported as a plain deadline, not `timedOut`). A red run
 that names one of them is that, not a regression of the change it ran
 for; they are to be fixed where they live.
+
+The client's tests that a busy machine failed the same way no longer
+depend on its speed, and check what they checked: the bridge runner's
+timeout and cancellation pass on a fake clock, and a run that ends while
+the stand-in would still sleep is one whose process was killed
+(`BridgeRunnerTests`, which bounded a run by 3 s of wall clock, the
+stand-in's start included); the attachments test finds the picture by
+its name, whichever of the two imports in flight answers first
+(`ComposeAttachmentsControllerTests.RemovingForgetsTheFileAndTellsTheBackend`);
+the dropped connection's test stops the UI thread in the turn that starts
+the attempt, where a test thread held up by the machine let the
+connection be handled first
+(`ConnectionControllerTests.SystemInfoOfADroppedConnectionIsDropped`,
+`infoFailed` where `unavailable` was expected; with the test's thread
+paused 300 ms after the start, the old form failed 20 runs of 20, the
+new one none); and the tests against the real `malachid.exe`
+(`RealDaemonTests`, `ConsoleAttachmentTests.AnAttachedAppStopsTheRealDaemonCleanly`,
+`DaemonProcessHostTests.TheRealDaemonStopsCleanlyInAPrivateRunDirectory`,
+which failed together once while other builds kept the machine busy)
+give it three times the app's limits, 45 s to listen and 15 s for the
+first handshake (`RealDaemon.StartLimit` and `HandshakeLimit`), since only
+the start of a real process has to be waited for.
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in

@@ -11,7 +11,12 @@
 // holds the pipes shows. Added: both streams at their cap at once (they
 // are read concurrently), an orphan holding the pipes after a normal exit
 // (the EOF grace), the caller's cancellation, the spawn gate the start
-// waits at, and the stand-in's own rules.
+// waits at, and the stand-in's own rules. Swift bounds a run on the wall
+// clock (a 0.3 s timeout within 3 s), which times the stand-in's start as
+// much as the kill, and a .NET stand-in may take seconds to start on a busy
+// machine: here a timeout passes on the runner's fake clock, the stand-in
+// sleeps far longer than a test waits, and a run that ends in time is one
+// whose process was killed.
 
 using System;
 using System.Diagnostics;
@@ -126,15 +131,23 @@ public sealed class BridgeRunnerTests
     [Fact]
     public async Task ATimeoutKillsTheProcess()
     {
+        // Swift's "sleep 30" and 0.3 s deadline. The deadline passes on the
+        // runner's clock once the process was started (RunAsync starts it
+        // before it returns); the runner waits for the killed process to
+        // exit, so a run that ends while the stand-in would still sleep is
+        // one whose process was killed.
         using var dir = new TemporaryDirectory();
-        var bridge = Bridge(dir, new([FakeBridgeStep.Sleep(30_000)]));
-        var clock = Stopwatch.StartNew();
-        var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => new BridgeRunner().RunAsync(
-            bridge, StatusJson, TimeSpan.FromMilliseconds(300), TestContext.Current.CancellationToken));
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"took {clock.Elapsed}");
+        var bridge = Bridge(dir, new([FakeBridgeStep.Sleep(HeldFor)]));
+        var time = new FakeTimeProvider();
+        var deadline = TimeSpan.FromMilliseconds(300);
+        var run = new BridgeRunner(time).RunAsync(bridge, StatusJson, deadline, TestContext.Current.CancellationToken);
+        time.Advance(deadline);
+        var ended = await Task.WhenAny(run, Task.Delay(TreeEnd, TestContext.Current.CancellationToken)) == run;
+        Assert.True(ended, "the run did not end at its deadline: the process was not killed");
+        var e = await Assert.ThrowsAsync<BridgeRunnerException>(() => run);
         Assert.Equal(BridgeRunnerFailure.Timeout, e.Failure);
         Assert.Equal("malachi-mcp did not finish within 0.3 s", e.Message);
-        Assert.Equal(TimeSpan.FromMilliseconds(300), e.Timeout);
+        Assert.Equal(deadline, e.Timeout);
     }
 
     [Fact]
@@ -195,19 +208,26 @@ public sealed class BridgeRunnerTests
     [Fact]
     public async Task AChildHoldingThePipesDoesNotHoldTheResult()
     {
-        // The bridge answers and exits; its child keeps the pipes open. The
-        // drains give up EofGrace after the exit.
+        // The bridge answers and exits; its child keeps the pipes open until
+        // the test lets it go, after the result. The drains give up EofGrace
+        // after the exit, so the result is in while the child still holds
+        // them; a runner that waited for EOF would hand it over only when
+        // the child's hold ran out. The bridge has until ProcessStart to
+        // exit, which is two .NET processes starting (it waits for its child
+        // to run before it answers).
         using var dir = new TemporaryDirectory();
         var hold = Path.Combine(dir.Path, "hold");
         File.WriteAllBytes(hold, []);
-        var bridge = Bridge(dir, new([FakeBridgeStep.HoldingChild(hold), .. FakeBridgeStep.Prints("{\"command\":\"x\",\"clients\":[]}")]));
+        var bridge = Bridge(dir, new([FakeBridgeStep.HoldingChild(hold, HeldFor), .. FakeBridgeStep.Prints("{\"command\":\"x\",\"clients\":[]}")]));
         try
         {
-            var clock = Stopwatch.StartNew();
-            var r = await new BridgeRunner().RunAsync(bridge, StatusJson, TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-            Assert.True(clock.Elapsed < TimeSpan.FromSeconds(5), $"took {clock.Elapsed}");
+            var run = new BridgeRunner().RunAsync(bridge, StatusJson, ProcessStart, TestContext.Current.CancellationToken);
+            var ended = await Task.WhenAny(run, Task.Delay(ProcessStart + TreeEnd, TestContext.Current.CancellationToken)) == run;
+            Assert.True(ended, "the result waits for the bridge's child to let go of the pipes");
+            var r = await run;
             Assert.Equal(0, r.Status);
             Assert.Equal("{\"command\":\"x\",\"clients\":[]}\n", Text(r.Stdout));
+            Assert.True(IsRunning(await ChildPidAsync(hold)), "the bridge's child let go of the pipes before the result was in");
         }
         finally
         {
@@ -220,13 +240,17 @@ public sealed class BridgeRunnerTests
     [Fact]
     public async Task CancellationKillsTheRun()
     {
+        // The runner's clock stands still, so only the caller's
+        // cancellation can end the run while the stand-in sleeps; the
+        // runner waits for the killed process to exit.
         using var dir = new TemporaryDirectory();
-        var bridge = Bridge(dir, new([FakeBridgeStep.Sleep(30_000)]));
+        var bridge = Bridge(dir, new([FakeBridgeStep.Sleep(HeldFor)]));
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        cancel.CancelAfter(TimeSpan.FromMilliseconds(200));
-        var clock = Stopwatch.StartNew();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new BridgeRunner().RunAsync(bridge, StatusJson, TimeSpan.FromSeconds(30), cancel.Token));
-        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(3), $"took {clock.Elapsed}");
+        var run = new BridgeRunner(new FakeTimeProvider()).RunAsync(bridge, StatusJson, TimeSpan.FromSeconds(30), cancel.Token);
+        await cancel.CancelAsync();
+        var ended = await Task.WhenAny(run, Task.Delay(TreeEnd, TestContext.Current.CancellationToken)) == run;
+        Assert.True(ended, "the run did not end when it was cancelled: the process was not killed");
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => run);
     }
 
     [Fact]
@@ -333,6 +357,20 @@ public sealed class BridgeRunnerTests
             await Task.Delay(10, TestContext.Current.CancellationToken);
         }
         return int.Parse(File.ReadAllText(path), CultureInfo.InvariantCulture);
+    }
+
+    // Whether the process runs now, without waiting for anything.
+    private static bool IsRunning(int pid)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false; // gone
+        }
     }
 
     private static bool HasExited(int pid)

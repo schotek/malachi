@@ -470,14 +470,29 @@ public sealed class ConnectionControllerTests
             }
         };
         using var hold = new ManualResetEventSlim();
-        // Start posts the readers and the attempt; the hold comes after
-        // them, once the attempt is dialling.
-        await h.Ui.RunAsync(h.Cc.Start);
-        h.Ui.Post(_ => hold.Wait(TimeSpan.FromSeconds(10)), null);
-        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        fake.CloseAll();
-        await dropped.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
-        hold.Set();
+        try
+        {
+            // Start posts the readers and the attempt, and the hold is
+            // posted after them in the same turn: the UI thread stops once
+            // the attempt is dialling, before anything the connection brings.
+            // Posted by the test's thread after that turn, the hold could
+            // come too late on a busy machine: the UI thread had handled
+            // Connected and sent system.info, whose failure then arrived
+            // before the drop ("infoFailed"). The hold outlasts the waits
+            // below, which release it when they fail.
+            await h.Ui.RunAsync(() =>
+            {
+                h.Cc.Start();
+                h.Ui.Post(_ => hold.Wait(TimeSpan.FromMinutes(1)), null);
+            });
+            await connected.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+            fake.CloseAll();
+            await dropped.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
+        }
+        finally
+        {
+            hold.Set();
+        }
         await h.IdleAsync(fake);
 
         Assert.Equal(["connecting", "unavailable"], h.Log.States.Select(Kind));

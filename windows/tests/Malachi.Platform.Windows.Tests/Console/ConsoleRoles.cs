@@ -35,6 +35,7 @@ using Malachi.Core.Daemon;
 using Malachi.Core.TestDaemon;
 using Malachi.Platform.Windows.Consoles;
 using Malachi.Platform.Windows.Processes;
+using Malachi.Platform.Windows.Tests.Transport;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.System.Console;
@@ -69,6 +70,20 @@ internal static class ConsoleRoles
     public const string OwnConsoleEnv = "MALACHI_TEST_CONSOLE_OWN";
 
     private const string ParentEnv = "MALACHI_TEST_CONSOLE_PARENT";
+
+    // How long the app waits for its daemon's socket: the tests' limit for
+    // the real daemon (RealDaemon), which the stand-in never comes near.
+    // The waits around it grow with it, so that the innermost one fails
+    // first and says why.
+    private static readonly TimeSpan SocketLimit = RealDaemon.StartLimit;
+
+    // How long the terminal waits for the app to be ready for its Ctrl+C
+    // (the app's start and its daemon's socket), and for the app to exit
+    // (then also the Ctrl+C, the stop and a kill); how long a test waits
+    // for the terminal.
+    private static readonly TimeSpan ReadyLimit = SocketLimit + TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AppLimit = SocketLimit + TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan ScenarioLimit = AppLimit + TimeSpan.FromSeconds(30);
 
     /// <summary>The test binary, which plays the roles.</summary>
     public static string TestExecutable => Path.Combine(AppContext.BaseDirectory, "Malachi.Platform.Windows.Tests.exe");
@@ -130,7 +145,7 @@ internal static class ConsoleRoles
         using var terminal = Process.Start(start) ?? throw new InvalidOperationException("the terminal did not start");
         var stdout = terminal.StandardOutput.ReadToEndAsync();
         var stderr = terminal.StandardError.ReadToEndAsync();
-        if (!terminal.WaitForExit(TimeSpan.FromSeconds(90)))
+        if (!terminal.WaitForExit(ScenarioLimit))
         {
             terminal.Kill(entireProcessTree: true);
             throw new TimeoutException("the console scenario did not finish");
@@ -192,7 +207,7 @@ internal static class ConsoleRoles
         var report = Variable(ReportEnv);
         if (Variable(CtrlCEnv, "") == "1")
         {
-            var deadline = Environment.TickCount64 + 30_000;
+            var deadline = Environment.TickCount64 + (long)ReadyLimit.TotalMilliseconds;
             while (!File.Exists(report + ".ready") && !app.HasExited && Environment.TickCount64 < deadline)
             {
                 Thread.Sleep(20);
@@ -203,7 +218,7 @@ internal static class ConsoleRoles
             PInvoke.SetConsoleCtrlHandler(null, true);
             PInvoke.GenerateConsoleCtrlEvent(PInvoke.CTRL_C_EVENT, 0);
         }
-        if (!app.WaitForExit(TimeSpan.FromSeconds(60)))
+        if (!app.WaitForExit(AppLimit))
         {
             app.Kill(entireProcessTree: true);
             return 3;
@@ -285,7 +300,7 @@ internal static class ConsoleRoles
         Dictionary<string, object?> result)
     {
         result["daemonPid"] = daemon.Id;
-        result["answered"] = WaitForSocket(socket, daemon, TimeSpan.FromSeconds(20));
+        result["answered"] = WaitForSocket(socket, daemon, SocketLimit);
         result["sharesConsole"] = ConsoleAttachment.ConsoleProcesses().Contains((uint)daemon.Id);
 
         if (Variable(CtrlCEnv, "") == "1")
