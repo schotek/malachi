@@ -52,7 +52,7 @@ except for the Windows CI job of the backend row and what §17 lists.
 | Windows additions | Notification-area icon while running in the background; context menus on messages and folders; a *Default apps* button in Preferences; dirty drafts saved on Quit | Built: §10 (tray, *Default apps*, Quit), §11.2 (context menus) |
 | Unlisted links | Confirmed before opening, as on macOS (GTK opens them; see §6.4) | Built: `LinkDecision`, `LinkOpener`, §6.4 |
 | Dependencies | CsWin32, CommunityToolkit.WinUI Controls, CommunityToolkit.Mvvm, Microsoft.Extensions.Logging.Abstractions / TimeProvider.Testing; xUnit v3 for tests. Each justified in its commit (CLAUDE.md) | Built: `Directory.Packages.props`; besides these the Windows SDK build tools and, for the strings check (§9), Roslyn (`Microsoft.CodeAnalysis.CSharp`). Of the toolkit's controls the app uses SettingsControls and Sizers (Segmented, unused once the filter became a `SelectorBar`, §11.1, is no longer referenced) |
-| Backend changes | Four platform-neutral fixes on the branch, each its own commit (§14): the helper path check, the orphaned raw files after sending, `malachi-mcp --claude-desktop-config/--command`, and `.gitattributes` + portable Go tests + Windows CI | Built, except the Windows CI workflow (§13, §17) |
+| Backend changes | Four platform-neutral fixes on the branch, each its own commit (§14): the helper path check, the stored files that Windows will not rename or remove while open (after sending, and in main's raw store), `malachi-mcp --claude-desktop-config/--command`, and `.gitattributes` + portable Go tests + Windows CI | Built, except the Windows CI workflow (§13, §17) |
 | Settings store | *architecture*: `HKCU\Software\io.github.schotek.Malachi`, the gschema keys, change notification through `RegNotifyChangeKeyValue` (the counterpart of GSettings signals and macOS KVO) | Built: `SettingsStore` (Core), `RegistrySettingsBackend`, §8 |
 | Data | *architecture*: `%LOCALAPPDATA%\Malachi Mail\` for `config.toml`, `store.db`, logs, the WebView2 data and the open directory; the socket stays at the daemon's default outside AppData | Built: `Paths` (Core), §1 |
 | Translations | *architecture*: `po/*.po` parsed at run time (no generator, no Python in the Windows build), GTK msgids as keys as on macOS | Built: `Malachi.Core/I18n`, `{l:T}`, §9 |
@@ -2482,15 +2482,45 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
    `MALACHI_KEYRING=helper` refuses every helper and the daemon exits.
    `exec.LookPath` decides instead (execute bits on Unix, the extension on
    Windows); the helper tests stop using `syscall.Kill`.
-3. **Raw files after sending**: the outbox and the Sent `APPEND` delete the
-   raw message while their own handle is open, which Windows refuses, so
-   every sent message's full copy stays in `messages\`. Close before
-   delete; store renames and removes retry on sharing violations (the
-   daemon's `retryFileOp` moved to a shared package); `core.Maintain`
-   sweeps orphaned raw and `*.tmp` files.
-4. **Portable backend tests**: separators, modes, JSON-escaped paths,
-   closed handles, the FIFO and kill cases redesigned, so `go test ./...`
-   is green on Windows and a Windows CI job can gate the daemon.
+3. **Stored files on Windows**: the raw store (`internal/store/raw.go`,
+   `raw_maint.go`, from main) relies on POSIX, where a file that is open
+   can be renamed over or removed; Windows refuses both while any handle
+   of it is open (Go opens files without delete sharing), the process's
+   own included. Without platform code:
+   - nothing renames over or removes a file its own call path still has
+     open: the outbox worker and the Sent `APPEND` close before they drop
+     the copy, `ingest.Strip` before it commits the skeleton over the
+     file it read, the conversion before it removes its source, and a
+     commit closes the staged file before renaming it into place;
+   - every rename and removal of a message's file retries for about
+     1.3 s (`internal/fsretry`, once the daemon's `retryFileOp`) while
+     holding the message's names lock, so the readers that have the file
+     open (`message.body`, `message.part`, `draft.create`) finish and no
+     new one opens it; deletions of many files share an `fsretry.Batch`,
+     and the attachment files get the same (the merge of main had
+     dropped it);
+   - a reader that holds the file for longer makes the operation
+     `store.ErrBusy` (the store counts its open readers per message), the
+     file as it was: the conversion and the sweep count the message busy
+     and come back to it, a deletion leaves the file to the sweep, a
+     commit undoes phase A's widening of the remote parts, and the
+     attachment step passes the message over to its next pass, logged,
+     not as a failure;
+   - `os.SameFile` of an `os.Lstat` result reads the file's identity
+     lazily, by path, on Windows: the conversion's check that a writer
+     replaced neither file reads both identities at once;
+   - a file is flushed through a handle that may write, which
+     `FlushFileBuffers` requires.
+   On Linux and macOS these calls succeed at the first attempt; nothing
+   changes there but when a handle is closed.
+4. **Portable backend tests**: separators, modes (`permOf`), JSON-escaped
+   paths, closed handles, the FIFO and kill cases redesigned, a staging
+   area broken by a file in its place rather than a read-only directory
+   (Windows ignores a directory's read-only attribute when files are
+   created in it), so `go test ./...` is green on Windows and a Windows CI
+   job can gate the daemon. A race in the raw maintenance loop that ran a
+   restarted step twice, which Windows's timers made frequent, is fixed in
+   the loop.
 5. **`malachi-mcp status|install|uninstall`**: additive
    `--claude-desktop-config PATH` (the MSIX Claude Desktop reads
    `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\…`, which the

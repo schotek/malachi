@@ -974,9 +974,14 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   removes temporary files, files without a row in its own accounts'
   directories and the empty directories of unknown accounts once they are
   an hour old; a directory with files it leaves alone, since another store
-  in the same data directory shares `messages/`. Outbox messages are always
-  plain and flushed to disk, file and directory, before the draft they
-  replace is deleted, since until the send that file is the only copy.
+  in the same data directory shares `messages/`. Windows refuses to remove
+  or replace a file while it is open: there a removal or a replacement
+  waits a moment for the daemon's own readers of the file (`message.body`,
+  `message.part`), and a file one of them keeps open for longer stays as
+  it was, a deleted message's file until the sweep. Outbox messages are
+  always plain and flushed to disk, file and directory, before the draft
+  they replace is deleted, since until the send that file is the only
+  copy.
 - A message being received is staged in `<data dir>/staging/` (`0600`
   files with random names, created exclusively, in a `0700` directory)
   and reaches `messages/` only after the parse, a skeleton only once
@@ -989,11 +994,14 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   row names a part remote before the skeleton replaces the file (that
   commit flushed to disk first, even against a power loss) and drops the
   name only after a whole file is in place, so after a crash it may call a
-  stored part remote, never the reverse; `message.part` and
-  `message.embedded` answer `partNotDownloaded` for such a part rather
-  than return the empty body the skeleton holds. Should a part the row
-  calls stored, with a size, still read back empty (a leftover file), they
-  and `draft.create` treat it as remote too and record it so.
+  stored part remote, never the reverse (a skeleton that cannot replace
+  the file after all, on Windows while a reader of the daemon keeps it
+  open, has the name dropped again, the file being still whole);
+  `message.part` and `message.embedded` answer `partNotDownloaded` for
+  such a part rather than return the empty body the skeleton holds.
+  Should a part the row calls stored, with a size, still read back empty
+  (a leftover file), they and `draft.create` treat it as remote too and
+  record it so.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.

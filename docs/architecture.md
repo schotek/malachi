@@ -305,7 +305,12 @@ stored, with a size, that still reads back empty is answered and recorded
 as remote (`store.MarkPartsRemote`). Writers of one message take its lock in
 turn; a reader holds nothing once its file is open, since a rename or a
 removal leaves an open file's content alone, and the background passes only
-try the lock and skip a busy message. A deletion removes the files once
+try the lock and skip a busy message. Windows refuses to rename over or
+remove an open file: there a rename or a removal waits a moment
+(`internal/fsretry`) with the message's names locked, so its readers
+finish and no new one starts, and a file a reader keeps open for longer
+leaves the operation undone as busy (`store.ErrBusy`), for a later pass or
+the sweep. A deletion removes the files once
 its rows are committed, and a message a writer holds at that moment is
 removed by that writer before it lets go. A download is received into
 `<data dir>/staging/` first (random names, created exclusively, on the
