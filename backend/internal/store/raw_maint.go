@@ -197,6 +197,16 @@ func (s *Store) convertFirst(ctx context.Context, mf messageFile, to RawCodec, r
 	if err != nil {
 		return nil, fmt.Errorf("stat message file: %w", err)
 	}
+	// The second phase tells by os.SameFile whether a writer replaced
+	// either file meanwhile. Windows may read a file's identity lazily, by
+	// path, at the first SameFile, which would then take whatever file has
+	// the name by then for the one seen here: read both identities now,
+	// while the names are still these files. Without them the second phase
+	// could not tell, and the pair is left to the sweep.
+	if !os.SameFile(src, src) || !os.SameFile(dst, dst) {
+		s.log.Warn("cannot identify the converted message files; the sweep settles them", "id", mf.id)
+		return nil, nil
+	}
 	return &convertPending{messageFile: mf, from: from, to: to, src: src, dst: dst, info: info}, nil
 }
 

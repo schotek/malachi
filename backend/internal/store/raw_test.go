@@ -511,6 +511,9 @@ func TestReplaceRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	staged, _ := os.Stat(st.path)
+	// Windows may read a file's identity lazily, by path, at the first
+	// SameFile: read it while the path still names the staged file.
+	os.SameFile(staged, staged)
 	var info RawInfo
 	if err := s.WithMessageRaw(ctx, "acc", m.ID, func(tx *RawTx) error {
 		info, err = tx.Replace(RawWrite{}, st)
