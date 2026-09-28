@@ -143,6 +143,9 @@ public sealed class CanaryFixture : IAsyncLifetime
 
     private List<HostStep> ProtectedSteps(CanaryRun run)
     {
+        // How long a click may take to reach the reader as a link (the
+        // recovery run's Expect).
+        const int LinkLimit = 20_000;
         var passive = HostileDocuments.Passive(run.Canary, RunId);
         var active = HostileDocuments.Active(run.Canary);
         var refresh = HostileDocuments.Refresh(run.Canary);
@@ -152,24 +155,35 @@ public sealed class CanaryFixture : IAsyncLifetime
         void Show(string name, string type, byte[] data, int ms, string phase) =>
             steps.Add(new HostStep { View = "preview", Op = "show", Phase = phase, Name = name, ContentType = type, Data = Convert.ToBase64String(data), Ms = ms });
 
+        // A click that must reach the reader as a link: the step waits for
+        // the link, which a busy machine may bring later than any fixed
+        // pause (and a late one would count for the next phase), then as
+        // long as before for whatever must not follow.
+        void ClickForLink(string op, string phase, string target, int ms)
+        {
+            Add("viewer", op, phase, target: target);
+            steps.Add(new HostStep { View = "viewer", Op = "await", Phase = phase, Target = HostEvent.Kinds.Link, Ms = LinkLimit, InPhase = true });
+            Add("viewer", "wait", phase, ms: ms);
+        }
+
         // The viewer: everything passive, then every activation.
         Add("viewer", "load", "viewer-passive", passive, ms: 2500);
         Add("viewer", "load", "viewer-hover", active, ms: 200);
         Add("viewer", "hover", target: "hover", ms: 1200);
         Add("viewer", "press", target: "hover", ms: 600);
         // Every activation is cancelled, so the page stays for the next one.
-        Add("viewer", "click", "viewer-nav", target: "pinglink", ms: 1200);
+        ClickForLink("click", "viewer-nav", "pinglink", 1200);
         Add("viewer", "click", "viewer-form", target: "sub", ms: 1200);
         Add("viewer", "click", "viewer-blank", target: "blank", ms: 800);
-        Add("viewer", "middle", "viewer-middle", target: "middle", ms: 800);
-        Add("viewer", "click", "viewer-mailto", target: "mailto", ms: 600);
+        ClickForLink("middle", "viewer-middle", "middle", 800);
+        ClickForLink("click", "viewer-mailto", "mailto", 600);
         Add("viewer", "click", "viewer-download", target: "dl", ms: 800);
         Add("viewer", "click", "viewer-unc", target: "unc", ms: 800);
         // The security audit's masked links, one by one: each must reach
         // the reader as the link it is, and nothing else.
         foreach (var (id, _) in HostileDocuments.MaskedLinks)
         {
-            Add("viewer", "click", "viewer-masked-" + id, target: "masked-" + id, ms: 500);
+            ClickForLink("click", "viewer-masked-" + id, "masked-" + id, 500);
         }
         Add("viewer", "load", "viewer-refresh", refresh, ms: 2000);
 

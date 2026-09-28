@@ -25,9 +25,17 @@ public sealed record HostStep
     /// <c>hang</c> (a host script that never ends, and pointer input it
     /// leaves unanswered), <c>await</c> (until the view records an event of
     /// the kind <see cref="Target"/> whose detail contains <see cref="Html"/>,
-    /// at most <see cref="Ms"/>), or <c>wait</c>.
+    /// since the step began or, with <see cref="InPhase"/>, in its phase; at
+    /// most <see cref="Ms"/>), or <c>wait</c>.
     /// </summary>
     public required string Op { get; init; }
+
+    /// <summary>
+    /// For <c>await</c>: the event may be any of the phase's, also one the
+    /// step before it brought while it still ran (the link of a click, which
+    /// can come before the click's input is acknowledged).
+    /// </summary>
+    public bool InPhase { get; init; }
 
     /// <summary>A label the events of this step and the ones after it carry.</summary>
     public string? Phase { get; init; }

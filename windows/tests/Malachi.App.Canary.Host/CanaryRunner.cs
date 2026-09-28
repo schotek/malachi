@@ -423,7 +423,8 @@ internal sealed class CanaryRunner
     private void Crash(CoreWebView2 core) => _ = CrashAsync(core);
 
     // Until the view has recorded an event of the step's kind (Target) whose
-    // detail contains Html, since the step began; at most Ms.
+    // detail contains Html, since the step began (with InPhase, in the
+    // step's phase); at most Ms.
     private async Task AwaitAsync(HostStep step)
     {
         int start;
@@ -431,12 +432,14 @@ internal sealed class CanaryRunner
         {
             start = events.Count;
         }
+        var inPhase = phase;
         var deadline = clock.ElapsedMilliseconds + step.Ms;
         while (clock.ElapsedMilliseconds < deadline)
         {
             lock (events)
             {
-                if (events.Skip(start).Any(e => e.Kind == step.Target && e.View == step.View
+                var candidates = step.InPhase ? events.Where(e => e.Phase == inPhase) : events.Skip(start);
+                if (candidates.Any(e => e.Kind == step.Target && e.View == step.View
                     && (step.Html is null || (e.Detail?.Contains(step.Html, StringComparison.Ordinal) ?? false))))
                 {
                     return;
