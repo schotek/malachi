@@ -24,6 +24,10 @@ public sealed class ActionHelpersTests
     {
         Assert.Equal("Hello", LoadedMessageText.SubjectText("  Hello  "));
         Assert.Equal("(No subject)", LoadedMessageText.SubjectText(" \t"));
+        // Windows-only (DisplayText, docs/security.md §4): cleaned for the
+        // list, the reader, the captions and the questions.
+        Assert.Equal(Text.DisplayTextTests.CleanedSubject, LoadedMessageText.SubjectText(Text.DisplayTextTests.HostileSubject));
+        Assert.Equal("(No subject)", LoadedMessageText.SubjectText("\u202E\u0007\u2066"));
     }
 
     [Fact]

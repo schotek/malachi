@@ -139,6 +139,24 @@ public sealed class PrefillTests
         Assert.Equal(longText, Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(longText)));
     }
 
+    // Windows-only: the attribution goes into the draft, so its names are the
+    // received text, neither cleaned nor isolated as the screen shows them
+    // (DisplayText, docs/security.md §4).
+    [Fact]
+    public void TheAttributionKeepsTheNamesAsReceived()
+    {
+        var src = new ComposeSource
+        {
+            From = [new Address { Name = Text.DisplayTextTests.HostileName, Email = "admin@evil.example" }],
+            To = [new Address { Name = "Me", Email = "me@example.invalid" }],
+            Subject = "x",
+        };
+        Assert.Equal(Text.DisplayTextTests.HostileName + " wrote:", Prefill.Attribution(ComposeKind.Reply, src));
+        var lines = Prefill.Attribution(ComposeKind.Forward, src).Split('\n');
+        Assert.Contains("From: " + Text.DisplayTextTests.HostileName + " <admin@evil.example>", lines);
+        Assert.Contains("To: Me <me@example.invalid>", lines);
+    }
+
     [Fact]
     public void KindMode()
     {

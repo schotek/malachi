@@ -309,6 +309,11 @@ public sealed class SuggestionsControllerTests
         var unnamedBook = SuggestionRow.For(Andy with { Book = null });
         Assert.Equal("Address book", unnamedBook.Tooltip);
         Assert.Equal("", SuggestionRow.For(Ann with { Name = "" }).Secondary);
+        // Windows-only: cleaned for display (DisplayText); a name of nothing
+        // but controls is no name.
+        Assert.Equal(new SuggestionRow(Text.DisplayTextTests.CleanedName, "ann@example.org", "document-open-recent-symbolic", "Recently used"),
+            SuggestionRow.For(Ann with { Name = Text.DisplayTextTests.HostileName, Address = "ann@example.org\u202E" }));
+        Assert.Equal("ann@example.org", SuggestionRow.For(Ann with { Name = "\u202E\u0007" }).Primary);
     }
 
     /// <summary>What contact.search answers, and what it was asked.</summary>

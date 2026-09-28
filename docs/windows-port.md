@@ -192,7 +192,12 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
   the same shape (§12);
 - mail data is hostile input: `TextBlock.Text`/`TextBox.Text` only, never
   a XAML or RTF parser over anything from a message; HTML only in the
-  WebView2 views of §6;
+  WebView2 views of §6; and what the chrome shows of it (names, subjects,
+  captions, notifications, attachment names) passes `Text.DisplayText`
+  first: no bidi formatting or control character reaches the screen, and
+  a name composed with other text is isolated (U+2068 … U+2069), so it
+  cannot reorder the address after it ([security.md §4](security.md#4-message-parsing-mime);
+  Windows-only, a row of the deviation table);
 - where Windows differs, the row goes into the deviation table of
   `windows/README.md` and the code says why. A new deviation never lands
   silently.
@@ -860,8 +865,15 @@ behaviour is macOS's): `NotificationHub`, `SignInRepair`,
 `AddressHeader` (the From/To/Cc lines and their fold), `AttachmentChip`,
 `ChipText` (the chips' ellipses by characters) and `MessageActionRouter`
 (macOS `MessageActionsController`: the selection's and one message's
-commands). The rules of the WebView2
-layer, which macOS keeps in its web views, live there too
+commands). What these classes show of a message goes through
+`Text.DisplayText` (§3): `Format.DisplayName`, `FormatAddress` and
+`FormatParticipants` clean and isolate names,
+`LoadedMessageText.SubjectText` cleans the subject for the list, the
+reader, the captions and the questions, and `NotificationText` both lines
+of a toast. What is sent to the daemon stays as received: the quote
+headers of `Prefill` take `Format.NameAsReceived` and `AddressAsReceived`,
+GTK's forms, and Copy Address copies the address itself. The rules of the
+WebView2 layer, which macOS keeps in its web views, live there too
 (`Malachi.Core.Presentation`, §6).
 
 The shell's are in `Malachi.Core/Presentation`: the
@@ -2250,7 +2262,9 @@ Proposed separately, not in this branch: canonical hrefs in the sanitiser
 plus GTK confirming unlisted links (the likely masked-link bypass),
 bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
-a runtime D-Bus opt-out.
+a runtime D-Bus opt-out, the display-text rule in GTK and macOS (bidi
+formatting and control characters out of the names and subjects they
+show, a name isolated from the address after it; security.md §4).
 
 ## 15. How it was built
 

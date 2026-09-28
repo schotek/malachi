@@ -74,6 +74,21 @@ public sealed class AttachmentChipTests
     }
 
     [Fact]
+    public void ANameIsShownCleaned()
+    {
+        // The daemon's sanitiser removes control and bidi characters from
+        // names already; the chip cleans what it shows all the same
+        // (DisplayText, Windows-only), and judges the name as received.
+        var s = Summary("m1");
+        var lm = new LoadedMessage { Msg = Message(s, [Attachment("2", "photo\u202Egnp.exe\u0007")]), Body = TextBody("m1") };
+        var chip = AttachmentChip.For(s, lm, false, new Policy()).Chips[0];
+        Assert.Equal("photognp.exe", chip.Name);
+        Assert.Equal("photognp.exe", AttachmentChips.ChipName(chip.Attachment));
+        Assert.False(chip.CanOpen);
+        Assert.Equal("Attachment", AttachmentChips.ChipName(Attachment("3", "\u202E\u0007")));
+    }
+
+    [Fact]
     public void ThePlatformPolicyDisablesOpen()
     {
         var s = Summary("m1");

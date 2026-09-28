@@ -7,6 +7,7 @@
 
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
 
@@ -15,11 +16,14 @@ public static class LoadedMessageText
 {
     /// <summary>
     /// The subject to display; an empty one gets a placeholder
-    /// (message_view.go <c>subjectText</c>).
+    /// (message_view.go <c>subjectText</c>). Windows-only: cleaned first
+    /// (<see cref="DisplayText.Clean"/>, docs/security.md §4), so no control
+    /// or explicit bidi character reaches the list, the reader, a window's
+    /// caption or a question, and a subject of nothing else is "(No subject)".
     /// </summary>
     public static string SubjectText(string? subject)
     {
-        var s = (subject ?? "").Trim();
+        var s = DisplayText.Clean(subject).Trim();
         return s.Length > 0 ? s : L10n.T("(No subject)");
     }
 

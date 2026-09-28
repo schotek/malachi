@@ -20,6 +20,7 @@ using Malachi.Core.Api;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
+using Malachi.Core.Text;
 using Microsoft.UI.Xaml;
 
 namespace Malachi.App.MessageWindows;
@@ -45,8 +46,9 @@ public sealed partial class EmbeddedMessageWindow : Window, IMessageWindowHandle
         InitializeComponent();
         Title = L10n.T("Attached Message");
         WindowTitleBar.Title = Title;
+        // The subject isolated inside the sentence (DisplayText).
         // TRANSLATORS: window subtitle; %s is the subject of the message this one was attached to.
-        WindowTitleBar.Subtitle = L10n.T("Attached to “%s”", LoadedMessageText.SubjectText(containing.Subject));
+        WindowTitleBar.Subtitle = L10n.T("Attached to “%s”", DisplayText.Isolate(LoadedMessageText.SubjectText(containing.Subject)));
         frame = WindowFrame.Apply(this, WindowTitleBar, SolidBackground);
         Tracked = services.State.Windows.Track(this, WindowKind.Embedded, Root, ToastsHost);
         View = new MessageView(ReaderMode.Embedded, services, commands: null) { HostWindow = this };

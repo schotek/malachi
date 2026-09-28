@@ -24,10 +24,13 @@ public sealed record ComposeAttachmentChip(string Id, string Name, string FullNa
     public static ComposeAttachmentChip For(DraftAttachment a)
     {
         ArgumentNullException.ThrowIfNull(a);
+        // The daemon sanitised the name; cleaned for display all the same, as
+        // every name from a message (a forward's files come from one).
+        var name = DisplayText.Clean(a.Filename);
         return new ComposeAttachmentChip(
             a.Id,
-            ComposeAttachmentsController.ChipName(a.Filename),
-            a.Filename,
+            ComposeAttachmentsController.ChipName(name),
+            name,
             Format.FormatSize(a.Size),
             a.Inline ? "image-x-generic-symbolic" : "mail-attachment-symbolic");
     }

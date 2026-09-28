@@ -24,7 +24,8 @@ public static class ComposeHeaderRules
 {
     /// <summary>
     /// fromFactory's label: the account's display name (its name when it has
-    /// none) and address, "Name &lt;address&gt;", as plain text.
+    /// none) and address, "Name &lt;address&gt;", as plain text
+    /// (<see cref="Format.FormatAddress"/>: the name isolated).
     /// </summary>
     public static string FromLabel(Account account)
     {
@@ -78,11 +79,16 @@ public static class ComposeHeaderRules
     /// </summary>
     public static bool CcBccButtonVisible(bool ccShown, bool bccShown) => !ccShown || !bccShown;
 
-    /// <summary>updateTitle: the subject, trimmed, or "New Message".</summary>
+    /// <summary>
+    /// updateTitle: the subject, trimmed, or "New Message". Windows-only:
+    /// cleaned for display first (<see cref="DisplayText.Clean"/>), as a
+    /// reply's subject is the original sender's text; the Subject row itself
+    /// keeps what was typed or prefilled.
+    /// </summary>
     public static string WindowTitle(string subject)
     {
         ArgumentNullException.ThrowIfNull(subject);
-        var s = subject.Trim();
+        var s = DisplayText.Clean(subject).Trim();
         return s.Length > 0 ? s : L10n.T("New Message");
     }
 }

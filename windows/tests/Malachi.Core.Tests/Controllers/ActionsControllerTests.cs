@@ -237,7 +237,7 @@ public sealed class ActionsControllerTests
         await h.IdleAsync();
         Assert.Equal(3, log.Confirmations.Count);
         Assert.Equal(
-            new Confirmation("Cancel sending this message?", "“s-o1” will be removed from the outbox and not sent.", "Do Not _Send"),
+            new Confirmation("Cancel sending this message?", "“\u2068s-o1\u2069” will be removed from the outbox and not sent.", "Do Not _Send"),
             log.Confirmations[^1]);
         Assert.Empty(h.List.Rows);
         Assert.Equal("o1", log.ClosedWindows[^1].Value);

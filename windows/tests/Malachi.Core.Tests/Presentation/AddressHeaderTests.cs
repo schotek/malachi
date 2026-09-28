@@ -8,6 +8,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Xunit;
 
@@ -84,7 +85,7 @@ public sealed class AddressHeaderTests
     {
         var named = AddressChip.For(new Address { Name = " Alice ", Email = " alice@example.invalid " }, Acc);
         Assert.Equal("Alice", named.Label);
-        Assert.Equal("Alice <alice@example.invalid>", named.Tooltip);
+        Assert.Equal("\u2068Alice\u2069 <alice@example.invalid>", named.Tooltip);
         Assert.Equal("Alice", named.MenuName);
         Assert.Equal("alice@example.invalid", named.MenuAddress);
         Assert.Equal("alice@example.invalid", named.Email);
@@ -106,5 +107,27 @@ public sealed class AddressHeaderTests
         // A pathological address is cut in the menu.
         var huge = AddressChip.For(new Address { Email = new string('a', 100) + "@example.invalid" }, Acc);
         Assert.Equal(AddressChip.MenuChars, huge.MenuAddress.Length);
+    }
+
+    [Fact]
+    public void AnOverrideInTheNameCannotTurnTheAddressAround()
+    {
+        // Windows-only (DisplayText, docs/security.md §4): the review's From
+        // name drew "<admin@evil.example>" backwards in the tooltip. The
+        // texts shown are cleaned, the name isolated from the address; what
+        // Copy Address copies and New Message writes to is the address as
+        // received.
+        var chip = AddressChip.For(new Address { Name = Text.DisplayTextTests.HostileName, Email = "admin@evil.example\u202E" }, Acc);
+        Assert.Equal(ChipText.TailEllipsis(Text.DisplayTextTests.CleanedName, AddressChips.AddressNameChars), chip.Label);
+        Assert.Equal("\u2068" + Text.DisplayTextTests.CleanedName + "\u2069 <admin@evil.example>", chip.Tooltip);
+        Assert.Equal(Text.DisplayTextTests.CleanedName, chip.MenuName);
+        Assert.Equal("admin@evil.example", chip.MenuAddress);
+        Assert.Equal("admin@evil.example\u202E", chip.Email);
+
+        // A Hebrew name reads as written, and the address stays whole after it.
+        var hebrew = AddressChip.For(new Address { Name = "שלום כהן", Email = "shalom@example.org" }, Acc);
+        Assert.Equal("שלום כהן", hebrew.Label);
+        Assert.Equal("\u2068שלום כהן\u2069 <shalom@example.org>", hebrew.Tooltip);
+        Assert.Equal("shalom@example.org", hebrew.Email);
     }
 }

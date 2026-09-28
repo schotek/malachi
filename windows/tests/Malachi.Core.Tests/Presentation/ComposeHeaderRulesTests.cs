@@ -23,12 +23,13 @@ public sealed class ComposeHeaderRulesTests
     [Fact]
     public void TheFromLabelIsTheDisplayNameOrTheAccountsName()
     {
-        Assert.Equal("One <one@example.org>", ComposeHeaderRules.FromLabel(One));
+        // The name isolated from the address (DisplayText, Windows-only).
+        Assert.Equal("\u2068One\u2069 <one@example.org>", ComposeHeaderRules.FromLabel(One));
         var named = Two with { Config = Two.Config with { Name = "Work", DisplayName = null } };
-        Assert.Equal("Work <two@example.org>", ComposeHeaderRules.FromLabel(named));
+        Assert.Equal("\u2068Work\u2069 <two@example.org>", ComposeHeaderRules.FromLabel(named));
         var bare = Two with { Config = Two.Config with { Name = "", DisplayName = "" } };
         Assert.Equal("two@example.org", ComposeHeaderRules.FromLabel(bare));
-        Assert.Equal("Malachi User <me@example.invalid>", ComposeHeaderRules.FromLabel(Malachi.Core.Controllers.ComposeController.PlaceholderAccounts[0]));
+        Assert.Equal("\u2068Malachi User\u2069 <me@example.invalid>", ComposeHeaderRules.FromLabel(Malachi.Core.Controllers.ComposeController.PlaceholderAccounts[0]));
     }
 
     [Fact]
@@ -78,6 +79,10 @@ public sealed class ComposeHeaderRulesTests
     [InlineData("   ", "New Message")]
     [InlineData("  Hello  ", "Hello")]
     [InlineData("Re: Lunch", "Re: Lunch")]
+    // Windows-only: a reply's subject is the sender's text, cleaned for the
+    // caption (DisplayText).
+    [InlineData("Re: " + Text.DisplayTextTests.HostileSubject, "Re: " + Text.DisplayTextTests.CleanedSubject)]
+    [InlineData("\u202E\u0007", "New Message")]
     public void TheTitleIsTheSubject(string subject, string title) =>
         Assert.Equal(title, ComposeHeaderRules.WindowTitle(subject));
 }

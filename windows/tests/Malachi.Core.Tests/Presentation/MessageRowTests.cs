@@ -44,7 +44,7 @@ public sealed class MessageRowTests
         var row = Row(Plain(s));
         Assert.Equal("Alice", row.AvatarText);
         Assert.Equal("Alice", row.Sender);
-        Assert.Equal("Alice <alice@example.invalid>", row.SenderTooltip);
+        Assert.Equal("\u2068Alice\u2069 <alice@example.invalid>", row.SenderTooltip);
         Assert.Equal("Hello", row.Subject);
         Assert.Equal("p-m1", row.Preview);
         Assert.True(row.Unread);
@@ -59,6 +59,25 @@ public sealed class MessageRowTests
         Assert.Equal(MessageRow.AvatarComfortable, row.AvatarSize);
         Assert.Equal(MessageRow.MarginStartPlain, row.MarginStart);
         Assert.Equal(MessageRow.MarginComfortable, row.MarginTop);
+    }
+
+    [Fact]
+    public void TheReviewsHostileHeadersAreShownCleaned()
+    {
+        // Windows-only (DisplayText, docs/security.md §4): the override of
+        // the name and the subject and the subject's bell never reach the
+        // row, and neither does a subject of nothing else.
+        var s = Member("m1", null, 1, "x") with
+        {
+            From = [new Address { Name = Text.DisplayTextTests.HostileName, Email = "admin@evil.example" }],
+            Subject = Text.DisplayTextTests.HostileSubject,
+        };
+        var row = Row(Plain(s));
+        Assert.Equal(Text.DisplayTextTests.CleanedName, row.Sender);
+        Assert.Equal(Text.DisplayTextTests.CleanedName, row.AvatarText);
+        Assert.Equal("\u2068" + Text.DisplayTextTests.CleanedName + "\u2069 <admin@evil.example>", row.SenderTooltip);
+        Assert.Equal(Text.DisplayTextTests.CleanedSubject, row.Subject);
+        Assert.Equal("(No subject)", Row(Plain(s with { Subject = "\u202E\u0007" })).Subject);
     }
 
     [Fact]
@@ -84,8 +103,9 @@ public sealed class MessageRowTests
         var row = Row(r);
         Assert.True(row.IsThread);
         Assert.Equal("Bob", row.AvatarText);
-        Assert.Equal("Bob, Carol", row.Sender);
-        Assert.Equal("Bob <bob@example.invalid>\nCarol <carol@example.invalid>", row.SenderTooltip);
+        // Each name isolated (DisplayText, Windows-only).
+        Assert.Equal("\u2068Bob\u2069, \u2068Carol\u2069", row.Sender);
+        Assert.Equal("\u2068Bob\u2069 <bob@example.invalid>\n\u2068Carol\u2069 <carol@example.invalid>", row.SenderTooltip);
         Assert.Equal("3", row.CountText);
         Assert.Equal("3 messages", row.CountTooltip);
         Assert.True(row.Unread);

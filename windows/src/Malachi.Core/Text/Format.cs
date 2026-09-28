@@ -7,7 +7,13 @@
 // FormatDateTime, FormatSize, strftime).
 //
 // The small pure formatting helpers. Every input is attacker-controlled
-// text; callers show the results as plain text. Dates are formatted with the
+// text; callers show the results as plain text. Windows-only: names and
+// addresses go through DisplayText (docs/security.md §4), so a control or
+// an explicit bidi character never reaches the screen, and a name composed
+// with other text (the address, the other participants) is isolated, so a
+// right-to-left name cannot reorder them. What goes into a draft (a quote's
+// header) takes GTK's forms of the received text instead: NameAsReceived
+// and AddressAsReceived. Dates are formatted with the
 // strftime msgids the GTK UI translates (Strftime), in the given time zone,
 // with the day and month names of the given culture (the regional format,
 // as LC_TIME is for GLib); numbers are Go's, whatever the culture (3.0 MiB).
@@ -15,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
 
@@ -25,17 +32,59 @@ public static class Format
 {
     /// <summary>
     /// The short form of an address for lists and avatars: the name if the
-    /// backend parsed one, otherwise the bare address.
+    /// backend parsed one, otherwise the bare address; cleaned for display
+    /// (<see cref="DisplayText.Clean"/>), so a name of only control or bidi
+    /// characters counts as none.
     /// </summary>
     public static string DisplayName(Address a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        var name = DisplayText.Clean(a.Name).Trim();
+        return name.Length > 0 ? name : DisplayText.Clean(a.Email).Trim();
+    }
+
+    /// <summary>
+    /// The long form: "Name &lt;addr&gt;", or just the address (or just the
+    /// name), cleaned for display; with both, the name is isolated
+    /// (<see cref="DisplayText.Isolate"/>) so that it cannot reorder the
+    /// address after it. For display only: what is copied or written to is
+    /// the address as received.
+    /// </summary>
+    public static string FormatAddress(Address a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        var name = DisplayText.Clean(a.Name).Trim();
+        var addr = DisplayText.Clean(a.Email).Trim();
+        if (name.Length == 0)
+        {
+            return addr;
+        }
+        if (addr.Length == 0)
+        {
+            return name;
+        }
+        return DisplayText.Isolate(name) + " <" + addr + ">";
+    }
+
+    /// <summary>
+    /// GTK's <c>DisplayName</c> for text that goes into a draft rather than
+    /// onto the screen (the attribution and the forwarded header of a quote):
+    /// the name, trimmed, if the backend parsed one, otherwise the bare
+    /// address; the received text, not cleaned for display.
+    /// </summary>
+    public static string NameAsReceived(Address a)
     {
         ArgumentNullException.ThrowIfNull(a);
         var name = (a.Name ?? "").Trim();
         return name.Length > 0 ? name : (a.Email ?? "").Trim();
     }
 
-    /// <summary>The long form: "Name &lt;addr&gt;", or just the address.</summary>
-    public static string FormatAddress(Address a)
+    /// <summary>
+    /// GTK's <c>FormatAddress</c> for text that goes into a draft: "Name
+    /// &lt;addr&gt;", or just the address (or the name), the received text
+    /// without isolates.
+    /// </summary>
+    public static string AddressAsReceived(Address a)
     {
         ArgumentNullException.ThrowIfNull(a);
         var name = (a.Name ?? "").Trim();
@@ -54,7 +103,9 @@ public static class Format
     /// <summary>
     /// Joins the display names of a conversation's participants in the order
     /// given (newest first), each address once, compared case-insensitively;
-    /// entries with neither name nor address are skipped.
+    /// entries with neither name nor address are skipped. Of two or more,
+    /// each name is isolated (<see cref="DisplayText.Isolate"/>), so that a
+    /// right-to-left name cannot reorder the list.
     /// </summary>
     public static string FormatParticipants(IEnumerable<Address> list)
     {
@@ -72,10 +123,18 @@ public static class Format
             {
                 continue;
             }
-            names.Add(DisplayName(a));
+            var name = DisplayName(a);
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+        }
+        if (names.Count < 2)
+        {
+            return names.Count == 0 ? "" : names[0];
         }
         // TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
-        return string.Join(L10n.C("participant list separator", ", "), names);
+        return string.Join(L10n.C("participant list separator", ", "), names.Select(DisplayText.Isolate));
     }
 
     /// <summary>The badge of a conversation row: the member count from two on, nothing below.</summary>

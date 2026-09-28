@@ -552,8 +552,10 @@ public sealed partial class ActionsController
         {
             return;
         }
+        // The subject isolated inside the sentence, so that a right-to-left
+        // one keeps its quotes and the sentence its order (DisplayText).
         // TRANSLATORS: %s is the subject of the message.
-        var body = L10n.T("“%s” will be removed from the outbox and not sent.", LoadedMessageText.SubjectText(s.Subject));
+        var body = L10n.T("“%s” will be removed from the outbox and not sent.", DisplayText.Isolate(LoadedMessageText.SubjectText(s.Subject)));
         Ask(parent, L10n.T("Cancel sending this message?"), body, L10n.T("Do Not _Send"), () =>
         {
             var restore = List.RemoveRows([id]);

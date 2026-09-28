@@ -5,12 +5,16 @@
 // macos/Sources/MalachiMail/Compose/RecipientSuggestionsController.swift
 // draws (tableView(_:viewFor:row:)): what one suggestion shows. Every text is
 // untrusted (a name, an address, an address book's name) and is shown as
-// plain text. GTK's test for a name (non-empty) is kept; Swift trims it
-// first.
+// plain text, the name and the address cleaned for display (DisplayText,
+// Windows-only; a collected name can be one a sender chose). A name counts
+// when it is not empty once cleaned and trimmed, as Swift trims it (GTK
+// only tests for empty), so a name of controls shows the address.
+// Accepting a suggestion inserts the contact as received, not these texts.
 
 using System;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Presentation;
 
@@ -28,10 +32,12 @@ public sealed record SuggestionRow(string Primary, string Secondary, string Icon
     public static SuggestionRow For(Contact contact)
     {
         ArgumentNullException.ThrowIfNull(contact);
-        var named = !string.IsNullOrEmpty(contact.Name);
+        var name = DisplayText.Clean(contact.Name).Trim();
+        var address = DisplayText.Clean(contact.Address);
+        var named = name.Length > 0;
         return new SuggestionRow(
-            named ? contact.Name! : contact.Address,
-            named ? contact.Address : "",
+            named ? name : address,
+            named ? address : "",
             Suggest.SuggestionIcon(contact.Source),
             Suggest.SuggestionTooltip(contact));
     }

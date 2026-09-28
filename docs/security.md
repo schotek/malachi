@@ -390,6 +390,31 @@ into it as well.
   during the copy; the content type is sniffed, never taken from the client
   or the extension alone; the file name goes through the same sanitiser
   (`internal/safename`) as received names.
+- Display names and subjects are the sender's text, shown as plain text by
+  every client. Unicode lets such text reorder what is drawn after it:
+  U+202E (RIGHT-TO-LEFT OVERRIDE) in a `From` name turns the `<address>`
+  that follows it around in a tooltip, and in a subject draws `gnp.exe`
+  as `exe.png`; a control character is invalid in the XML of a Windows
+  toast, which then does not appear at all. The Windows client therefore
+  cleans every mail text its chrome shows before showing it
+  (`Malachi.Core.Text.DisplayText`): the list's senders and subjects, the
+  reader's subject and address chips, the captions of message windows,
+  notifications, the questions that quote a subject, attachment names and
+  recipient suggestions. The explicit bidi formatting characters (U+202A
+  to U+202E, U+2066 to U+2069) are removed; control characters (C0, DEL,
+  C1) and the line and paragraph separators become spaces, so what is
+  left is valid XML; and where a name is composed with other text
+  (*Name &lt;address&gt;*, a conversation's participants, a sentence that
+  quotes a subject) it is isolated between U+2068 and U+2069, so a
+  right-to-left name keeps its own direction and cannot move the address
+  after it. The bidi marks (U+200E, U+200F, U+061C) and the joiners stay,
+  so Hebrew, Arabic and Persian names read as written. This is display
+  only: the recipients of a reply, a draft's subject, the names in a
+  quote's header and what Copy Address copies are the text as received,
+  and a message's body and the excerpt of it in the list are its content,
+  shown as written. The GTK and macOS clients show these texts as
+  received; the same rule is proposed for them
+  ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)
 
@@ -997,7 +1022,8 @@ Advisories) rather than a public issue. No bug bounty.
       load nothing?
 - [ ] Windows client showing mail data: only `TextBlock.Text` /
       `TextBox.Text`, never XAML, RTF or a WebView2 other than the
-      hardened views?
+      hardened views, and a name, subject or caption through `DisplayText`
+      first (§4)?
 - [ ] File written out of a message on Windows: a Windows-safe name, a
       new file in a private directory, the Mark of the Web, opened only
       after the check passed and the zone read back, never a type of

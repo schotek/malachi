@@ -285,11 +285,13 @@ public static partial class Prefill
 
     private static string AddressKey(Address a) => (a.Email ?? "").Trim().ToLowerInvariant();
 
-    // compose.displayNames: widget.DisplayName of each, comma-separated.
-    private static string DisplayNames(IEnumerable<Address> list) => string.Join(", ", list.Select(Format.DisplayName));
+    // compose.displayNames: widget.DisplayName of each, comma-separated. The
+    // text goes into the draft, so it is the received one (Format's
+    // AsReceived forms), not what the screen shows of it.
+    private static string DisplayNames(IEnumerable<Address> list) => string.Join(", ", list.Select(Format.NameAsReceived));
 
-    // compose.formatAll: widget.FormatAddress of each, comma-separated.
-    private static string FormatAll(IEnumerable<Address> list) => string.Join(", ", list.Select(Format.FormatAddress));
+    // compose.formatAll: widget.FormatAddress of each, comma-separated, as received.
+    private static string FormatAll(IEnumerable<Address> list) => string.Join(", ", list.Select(Format.AddressAsReceived));
 
     // widget.FormatDateTime for the quote header, in the catalogue's
     // language, so day and month names match the sentence around them.

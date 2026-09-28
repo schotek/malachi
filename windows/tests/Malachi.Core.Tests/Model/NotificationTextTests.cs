@@ -9,6 +9,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using System.Xml;
 using Malachi.Core.Api;
 using Malachi.Core.Model;
 using Xunit;
@@ -56,6 +57,41 @@ public sealed class NotificationTextTests
         Assert.DoesNotContain("�", got.Title, StringComparison.Ordinal);
         n = n with { Message = n.Message with { From = [new Address { Name = new string('a', 200), Email = "x@example.invalid" }] } };
         Assert.Equal(200, Scalars(NotificationText.Of(n).Title)); // a title at the cap is not cut
+    }
+
+    // Windows-only (DisplayText, docs/security.md §4): the review's sender
+    // and subject. The bell made the toast's XML invalid, so Windows dropped
+    // the notification; the overrides turned the texts around.
+    [Fact]
+    public void NotificationTextIsCleaned()
+    {
+        var n = new NewMessageNotification
+        {
+            AccountId = new AccountId("a"),
+            FolderId = new FolderId("f"),
+            Message = Summary("m") with
+            {
+                From = [new Address { Name = Text.DisplayTextTests.HostileName, Email = "admin@evil.example" }],
+                Subject = Text.DisplayTextTests.HostileSubject,
+            },
+        };
+        var got = NotificationText.Of(n);
+        Assert.Equal(Text.DisplayTextTests.CleanedName, got.Title);
+        Assert.Equal(Text.DisplayTextTests.CleanedSubject, got.Body);
+        XmlConvert.VerifyXmlChars(got.Title);
+        XmlConvert.VerifyXmlChars(got.Body);
+
+        // Nothing but controls is nothing: the placeholders.
+        n = n with { Message = n.Message with { From = [new Address { Name = "\u202E", Email = "\u0007" }], Subject = "\u0007\u202E\r\n" } };
+        got = NotificationText.Of(n);
+        Assert.Equal("New message", got.Title);
+        Assert.Equal("(No subject)", got.Body);
+
+        // Cleaned before the cap: every control of a long subject is gone.
+        n = n with { Message = n.Message with { Subject = string.Concat(System.Linq.Enumerable.Repeat("a\u0001\u202E", 300)) } };
+        got = NotificationText.Of(n);
+        XmlConvert.VerifyXmlChars(got.Body);
+        Assert.DoesNotContain("\u202E", got.Body, StringComparison.Ordinal);
     }
 
     // A character outside the Basic Multilingual Plane is one scalar of four

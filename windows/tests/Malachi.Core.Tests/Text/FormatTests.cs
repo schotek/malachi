@@ -5,7 +5,10 @@
 // ui/internal/widget/format_test.go. Dates are rendered in the invariant
 // culture (Swift: en_US_POSIX) so that the month names are the English ones
 // the Go test expects whatever the machine's language, in the machine's
-// time zone as the Go and Swift tests do.
+// time zone as the Go and Swift tests do. Windows-only: a name composed with
+// other text is isolated (DisplayText, docs/security.md §4), so the long
+// form and a list of participants carry U+2068 … U+2069 around each name
+// where Go and Swift have the bare name.
 
 using System;
 using System.Collections.Generic;
@@ -42,7 +45,7 @@ public sealed class FormatTests
     {
         (Address Input, string Want)[] cases =
         [
-            (new Address { Name = "Alice", Email = "alice@example.invalid" }, "Alice <alice@example.invalid>"),
+            (new Address { Name = "Alice", Email = "alice@example.invalid" }, "\u2068Alice\u2069 <alice@example.invalid>"),
             (new Address { Email = "bob@example.invalid" }, "bob@example.invalid"),
             (new Address { Name = "Nameless", Email = "" }, "Nameless"),
             (new Address { Email = "" }, ""),
@@ -97,8 +100,41 @@ public sealed class FormatTests
             new Address { Email = "dave@example.invalid" },
             new Address { Name = "<b>x</b>", Email = "x@example.invalid" }, // markup is text
         ];
-        Assert.Equal("Bob, Alice, Carol, dave@example.invalid, <b>x</b>", Format.FormatParticipants(list));
+        Assert.Equal(
+            "\u2068Bob\u2069, \u2068Alice\u2069, \u2068Carol\u2069, \u2068dave@example.invalid\u2069, \u2068<b>x</b>\u2069",
+            Format.FormatParticipants(list));
         Assert.Equal("", Format.FormatParticipants([]));
+        // One name is not composed with anything: as it is.
+        Assert.Equal("Bob", Format.FormatParticipants([list[0]]));
+    }
+
+    // Windows-only (DisplayText, docs/security.md §4): the review's From
+    // name, whose override drew the address after it backwards, is cleaned
+    // and isolated from the address; a right-to-left name stays as written.
+    [Fact]
+    public void NamesAreCleanedAndIsolatedFromTheAddress()
+    {
+        var hostile = new Address { Name = DisplayTextTests.HostileName, Email = "admin@evil.example" };
+        Assert.Equal(DisplayTextTests.CleanedName, Format.DisplayName(hostile));
+        Assert.Equal("\u2068" + DisplayTextTests.CleanedName + "\u2069 <admin@evil.example>", Format.FormatAddress(hostile));
+
+        var hebrew = new Address { Name = "שלום כהן", Email = "shalom@example.org" };
+        Assert.Equal("שלום כהן", Format.DisplayName(hebrew));
+        Assert.Equal("\u2068שלום כהן\u2069 <shalom@example.org>", Format.FormatAddress(hebrew));
+
+        // A name of nothing but controls is no name; the address is cleaned too.
+        var controls = new Address { Name = "\u202E\u0007 ", Email = " bob@example.org\u202E" };
+        Assert.Equal("bob@example.org", Format.DisplayName(controls));
+        Assert.Equal("bob@example.org", Format.FormatAddress(controls));
+        Assert.Equal("", Format.DisplayName(new Address { Name = "\u2066", Email = "\r\n" }));
+
+        // An Arabic name first cannot turn the list of participants around.
+        List<Address> list =
+        [
+            new Address { Name = "محمد", Email = "m@example.org" },
+            new Address { Name = "Bob\u202E", Email = "bob@example.org" },
+        ];
+        Assert.Equal("\u2068محمد\u2069, \u2068Bob\u2069", Format.FormatParticipants(list));
     }
 
     [Theory]

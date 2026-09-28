@@ -15,6 +15,7 @@ using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Platform;
 
@@ -253,12 +254,13 @@ public static class WindowsFileNames
     }
 
     // safename bidiControl: the Unicode bidirectional formatting
-    // characters, which are not control characters to the category test.
+    // characters, which are not control characters to the category test:
+    // the marks, which a file name has no use for, besides the embeddings,
+    // overrides and isolates that the display rule removes from every text.
     private static bool BidiControl(int c) =>
         c == 0x061C // ARABIC LETTER MARK
         || c is 0x200E or 0x200F // LRM, RLM
-        || c is >= 0x202A and <= 0x202E // LRE, RLE, PDF, LRO, RLO
-        || c is >= 0x2066 and <= 0x2069; // LRI, RLI, FSI, PDI
+        || DisplayText.IsExplicitBidiControl(c); // LRE, RLE, PDF, LRO, RLO; LRI, RLI, FSI, PDI
 
     // Windows drops trailing dots and spaces from a name; so does this, and
     // any other white space they uncover.
