@@ -82,10 +82,13 @@ public sealed class SmokeTests(SmokeFixture fixture) : IClassFixture<SmokeFixtur
     [Fact]
     public void AboutShowsTheVersion()
     {
+        // The app first: where it is not built, that skips the test, before
+        // the version is read from an executable that is not there.
+        var app = App;
         var version = FileVersionInfo.GetVersionInfo(UiEnvironment.AppExecutable).ProductVersion;
         Assert.False(string.IsNullOrEmpty(version));
-        App.MenuItem("MenuAbout");
-        var main = App.MainWindow;
+        app.MenuItem("MenuAbout");
+        var main = app.MainWindow;
         var shown = Uia.Until(
             () => main.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, version)),
             null,
