@@ -7,7 +7,7 @@
 // overwritten, the outcome of a request (preferences.go bindLaunchAtLogin
 // flips the switch only when it was granted), the mirror key, and a Run
 // value left by a moved app folder. Every test works under its own
-// HKCU\Software\io.github.schotek.Malachi.Tests\<guid>.
+// HKCU\Software\io.github.schotek.Malachi.Tests.<guid> (TestRegistryRoot).
 
 using System;
 using System.Collections.Generic;

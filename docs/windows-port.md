@@ -1785,7 +1785,8 @@ editor once they exist.
   the notification-area icon on a hidden window (added, re-added after a
   simulated Explorer restart, removed), launch at login and the `mailto:`
   registration under a test key of their own
-  (`HKCU\Software\io.github.schotek.Malachi.Tests\<guid>`), the command
+  (`HKCU\Software\io.github.schotek.Malachi.Tests.<guid>`, one key per
+  test and no parent they share), the command
   line, the notification arguments, quiet hours and the sound. What only
   the real shell shows (a toast and its click, the handler list, the Run
   key, the icon's menu) is checked by hand from outside Claude's process

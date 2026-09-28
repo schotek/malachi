@@ -7,8 +7,9 @@
 // second instance, reg.exe, a deleted key) reach the running app once, on
 // its UI context, as gsettings set and defaults write do on GNOME and macOS.
 // Also ui/internal/settings/store_test.go TestOpenFallsBack for the
-// registry. Every test works under
-// HKCU\Software\io.github.schotek.Malachi.Tests\<guid> and deletes it.
+// registry. Every test works under a key of its own,
+// HKCU\Software\io.github.schotek.Malachi.Tests.<guid> (TestRegistryRoot),
+// and deletes it.
 
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Settings;
 using Malachi.Platform.Windows.Settings;
+using Malachi.Platform.Windows.Tests.Startup;
 using Microsoft.Win32;
 using Xunit;
 
@@ -24,10 +26,9 @@ namespace Malachi.Platform.Windows.Tests.Settings;
 
 public sealed class RegistrySettingsBackendTests : IDisposable
 {
-    private const string TestsRoot = @"Software\io.github.schotek.Malachi.Tests";
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
 
-    private readonly string path = TestsRoot + @"\" + Guid.NewGuid().ToString("N");
+    private readonly string path = TestRegistryRoot.NewPath();
     private readonly Stack<IDisposable> owned = new();
     private int sentinel;
 
@@ -44,15 +45,6 @@ public sealed class RegistrySettingsBackendTests : IDisposable
         finally
         {
             Registry.CurrentUser.DeleteSubKeyTree(path, throwOnMissingSubKey: false);
-            try
-            {
-                // Other tests may be using it at the same time.
-                Registry.CurrentUser.DeleteSubKey(TestsRoot, throwOnMissingSubKey: false);
-            }
-            catch (InvalidOperationException)
-            {
-                // It still has subkeys.
-            }
         }
     }
 
