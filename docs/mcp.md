@@ -21,8 +21,9 @@ build/malachi-mcp -version
 build/malachi-mcp -h  # the server flags and the setup subcommands
 ```
 
-On Windows the binary is `build\malachi-mcp.exe`, which the extension-less
-`build/malachi-mcp` of the repository's `.mcp.json` (below) resolves to.
+On Windows the binary is `build\malachi-mcp.exe` (`make mcp`,
+`make windows`, or `windows\build.ps1 go`), and the Windows app carries its
+own `malachi-mcp.exe` in its folder ([windows/README.md](../windows/README.md)).
 
 Without a subcommand the binary is the stdio server. A first argument that
 does not start with `-` is one of the setup subcommands `status`, `install`
@@ -354,8 +355,11 @@ The repository root carries a project-scoped `.mcp.json`:
   if a different command line is wanted.
 - On a machine without the daemon (macOS, a checkout that was never built)
   the server simply fails to connect; that is harmless.
-- On Windows the same entry starts `build\malachi-mcp.exe`: the command
-  has no extension, and `.exe` is tried for it.
+- On Windows the entry names `build/malachi-mcp` without the `.exe` the
+  binary has there. A process spawner that tries `.exe` for a command
+  without an extension (as libuv's does) finds `build\malachi-mcp.exe`;
+  whether Claude Code on Windows does has not been verified yet. A
+  local-scope entry naming `build\malachi-mcp.exe` works either way.
 
 ### Claude Desktop and Claude Code: `status`, `install`, `uninstall`
 
