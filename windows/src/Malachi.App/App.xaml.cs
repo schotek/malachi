@@ -184,9 +184,12 @@ public partial class App : Application
             log.CreateLogger<QuitSequence>());
 
         Activate(initial);
-        if (initial.StartHidden)
+        if (initial.StartHidden && !main.AppWindow.IsVisible)
         {
             LogStartedHidden(logger);
+            // Never shown, the window raises no ShownChanged: the icon in the
+            // notification area is the way back to it (launch at login).
+            PlatformServices.SetRunningInBackground(true);
         }
         Program.AppLaunched(this);
         s.Connection.Start();
