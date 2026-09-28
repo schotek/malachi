@@ -342,9 +342,19 @@ function Invoke-AppBuild {
         Invoke-Native $dotnet (@('publish', 'src\Malachi.Credentials\Malachi.Credentials.csproj', '-c', $Configuration,
                 '-r', "win-$Arch", '-o', $helperOut) + $MsbuildProperties)
     } catch {
-        throw ("$($_.Exception.Message); malachi-credentials is NativeAOT and links with the MSVC build tools " +
-            "for $Arch (Visual Studio or its Build Tools, 'Desktop development with C++'; for arm64 on an x64 " +
-            "machine also the ARM64 build tools)")
+        # The app is published by now; only the helper failed, typically
+        # for want of a linker ("Platform linker not found" above).
+        $tools = "Visual Studio or its Build Tools with 'Desktop development with C++'"
+        if ($Arch -ne $HostArch) {
+            $component = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+            if ($Arch -eq 'arm64') {
+                $component = 'Microsoft.VisualStudio.Component.VC.Tools.ARM64'
+            }
+            $tools += ", and for $Arch on this $HostArch machine the MSVC $Arch build tools ($component)"
+        }
+        throw ("$($_.Exception.Message): malachi-credentials.exe did not publish, so $AppDir is incomplete. " +
+            "The keyring helper is NativeAOT and links with the MSVC build tools for ${Arch}: $tools; " +
+            "see windows\README.md, Troubleshooting.")
     }
     Copy-Item -LiteralPath (Join-Path $helperOut 'malachi-credentials.exe') -Destination $AppDir
     foreach ($command in 'malachid', 'malachi-mcp') {

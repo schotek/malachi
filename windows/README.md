@@ -130,8 +130,11 @@ platform and run `Malachi.App` (unpackaged). Before the first run,
 for this machine copies them beside `MalachiMail.exe`.
 
 All build output goes to `build\windows\` (`UseArtifactsOutput`: `bin`, `obj`
-and `publish` of every project under `build\windows\artifacts\`), never
-beside the sources. Warnings are errors. Package versions are central
+and `publish` of every project under `build\windows\artifacts\`, a folder
+per configuration and, for what is built for x64 or ARM64, per
+architecture: `debug\`, `release_win-x64\`, `release_win-arm64\`), never
+beside the sources, so one build tree takes both architectures. Warnings
+are errors. Package versions are central
 (`Directory.Packages.props`), each project's `packages.lock.json` is
 committed, and a CI build (`CI=true`, or GitHub Actions) restores in
 locked mode.
@@ -482,7 +485,10 @@ features, not deviations.
 - **`malachi-credentials` does not publish (`Platform linker not found`,
   `link.exe`, `vswhere.exe` is not recognized).** NativeAOT links with the
   MSVC tools; install them as under [Requirements](#requirements) (for
-  `-Arch arm64` the ARM64 build tools too). `build.ps1` puts the Visual
+  `-Arch arm64` on an x64 machine the ARM64 build tools too, the
+  component `Microsoft.VisualStudio.Component.VC.Tools.ARM64`). The app
+  itself is published by then; `build.ps1` says which tools it lacks and
+  that the app folder is incomplete without the helper. It puts the Visual
   Studio Installer directory on `PATH` for `vswhere.exe`, which Visual
   Studio 2026's `vcvarsall.bat` needs.
 - **`dotnet test` says "Testing with VSTest target is no longer supported"
@@ -491,14 +497,17 @@ features, not deviations.
 - **make from PowerShell runs `cmd.exe` recipes ("'sed' is not
   recognized").** Git for Windows is missing or elsewhere; the Makefile
   finds its `usr\bin` through `git --exec-path`, or set `GIT_USR_BIN`.
-- **`error CS8012` (a referenced assembly targets a different processor)
-  when the app is built for one architecture after the other.** A publish
-  for x64 leaves `Malachi.Core` and `Malachi.Platform.Windows` compiled
-  for x64 in the Release output both architectures share
-  (`build\windows\artifacts\bin\<project>\release\`), and a publish for
-  ARM64 afterwards takes them as up to date (and the other way round).
-  Run `build.ps1 clean` between the two; CI builds them on separate
-  runners.
+- **`error CS8012` (a referenced assembly targets a different processor).**
+  A publish of the app compiles `Malachi.Core` and
+  `Malachi.Platform.Windows` for its architecture, so every project built
+  for x64 or ARM64 has output folders of its own for that architecture
+  (`build\windows\artifacts\bin\<project>\release_win-x64\` and
+  `release_win-arm64\`, `Directory.Build.props`), and `build.ps1 app -Arch
+  x64` and `-Arch arm64` follow each other in one build tree. When the two
+  shared a folder, the second took the first one's libraries as up to
+  date and failed with CS8012. Should it come back (a build given an
+  `ArtifactsPivots` of its own), `build.ps1 clean` clears the stale
+  libraries.
 - **`build\malachid.exe is in use`.** A daemon started from `build\` is
   running (`make run-backend`); that copy is left as it is, and the app
   folder gets its own.

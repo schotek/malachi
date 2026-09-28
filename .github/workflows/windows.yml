@@ -266,9 +266,12 @@ jobs:
     # An x64 runner: the build, the Go cross-compiler and NativeAOT (with the
     # image's MSVC ARM64 build tools) all target ARM64 from x64. Nothing
     # ARM64 is run, so there are no tests here. A job of its own, not steps
-    # after the x64 package: an x64 publish leaves x64-targeted libraries
-    # in the Release output both architectures share, and the ARM64
-    # publish then fails with CS8012.
+    # after the x64 package (which the build tree allows: every project
+    # built for an architecture has output folders of its own,
+    # windows/Directory.Build.props): it runs beside the client job instead
+    # of after it, has a NuGet cache of its own, and when the ARM64 link
+    # fails (an image without the ARM64 build tools) the x64 results stay
+    # green and apart.
     runs-on: windows-2025
     timeout-minutes: 60
     steps:

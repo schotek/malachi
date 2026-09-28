@@ -44,6 +44,27 @@ It also passes MalachiBuildDir when -BuildDir moves the output elsewhere.
     <ArtifactsPath>$(MalachiBuildPath)windows\artifacts</ArtifactsPath>
   </PropertyGroup>
 
+  <!-- One output folder per architecture. The SDK's pivot (the folder
+       under bin\<project>\ and obj\<project>\) is the configuration, and
+       the RuntimeIdentifier where a project has one: the app and the
+       canary host get release_win-x64 or release_win-arm64 from theirs.
+       The libraries they reference have none, but outside a solution
+       build (build.ps1 app publishes the app's project) they inherit its
+       platform and are compiled for it; an x64 publish then left
+       Malachi.Core compiled for x64 in bin\Malachi.Core\release\, and an
+       ARM64 publish afterwards took it as up to date and failed with
+       CS8012. So a project built for x64 or ARM64 gets the pivot of that
+       architecture's RuntimeIdentifier, the one the app and the host have
+       anyway; Any CPU (every project of a solution build but those two)
+       keeps the SDK's. Configuration and Platform are global properties
+       here or not set yet (the SDK defaults them after this file), hence
+       Debug, the SDK's default. -->
+  <PropertyGroup Condition="'$(ArtifactsPivots)' == '' and ('$(Platform)' == 'x64' or '$(Platform)' == 'ARM64')">
+    <_MalachiPivotConfiguration>$(Configuration)</_MalachiPivotConfiguration>
+    <_MalachiPivotConfiguration Condition="'$(_MalachiPivotConfiguration)' == ''">Debug</_MalachiPivotConfiguration>
+    <ArtifactsPivots>$(_MalachiPivotConfiguration.ToLowerInvariant())_win-$(Platform.ToLowerInvariant())</ArtifactsPivots>
+  </PropertyGroup>
+
   <PropertyGroup>
     <MalachiVersion Condition="'$(MalachiVersion)' == ''">dev</MalachiVersion>
     <MalachiNumericVersion Condition="'$(MalachiNumericVersion)' == ''">0.0.0.0</MalachiNumericVersion>
