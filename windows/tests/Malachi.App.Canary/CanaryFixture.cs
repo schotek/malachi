@@ -62,11 +62,29 @@ public sealed class CanaryFixture : IAsyncLifetime
     /// <summary>The repository root baked in at build time.</summary>
     internal static string RepositoryRoot => Metadata("MalachiRoot");
 
+    // A GitHub-hosted runner may well have a desktop session
+    // (Environment.UserInteractive cannot tell), but it is a Windows Server
+    // image whose desktop, graphics and WebView2 runtime change with the
+    // image, not the desktop the canary's expectations were measured on
+    // (docs/windows-port.md §12: the runtime's own background requests, the
+    // NetLog's event types, the windows WebView2 draws in). A red canary
+    // there would say more about the runner than about the app, and a green
+    // one would not replace the run on a desktop, so CI skips it by name;
+    // .github/workflows/windows.yml runs it on request (workflow_dispatch
+    // with canary).
+    private static bool OnCiRunner => Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
+
     public async ValueTask InitializeAsync()
     {
         if (!OperatingSystem.IsWindows())
         {
             SkipReason = "the network canary needs Windows";
+            return;
+        }
+        if (OnCiRunner && Environment.GetEnvironmentVariable("MALACHI_CANARY") != "1")
+        {
+            SkipReason = "the network canary is not run on CI runners (MALACHI_CANARY=1 runs it there): it needs a "
+                + "desktop session with the WebView2 runtime; make test-windows on a Windows desktop runs it";
             return;
         }
         if (!Environment.UserInteractive)

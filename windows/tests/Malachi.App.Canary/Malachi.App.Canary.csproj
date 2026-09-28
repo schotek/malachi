@@ -9,7 +9,8 @@ loopback listener per vector and a NetLog, and asserts that nothing
 connected, resolved, navigated, opened a window or downloaded; and that the
 same document in an unprotected WebView2 does leak, so the harness itself
 is known to see leaks. Needs a desktop session and the WebView2 runtime;
-skipped with the reason otherwise.
+skipped with the reason otherwise, and on a CI runner unless
+MALACHI_CANARY=1 (CanaryFixture.OnCiRunner).
 -->
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
