@@ -7,10 +7,13 @@
 // chipIconType). On Windows the chip shows the shell's icon for the
 // extension, as Explorer does, looked up by the extension alone
 // (ShellFileTypes: no file exists and no icon handler reads an attachment)
-// and cached per extension; a name without a plain extension gets the
-// generic attachment glyph. Call on the UI thread.
+// and remembered per extension; a name without a plain extension gets the
+// generic attachment glyph. The lookup is synchronous (the shell's image
+// lists want the UI thread), so one set of chips looks up a limited number
+// of extensions it has not seen and gives the rest the glyph (Core's
+// IconLookups): a message listing hundreds of parts with as many
+// extensions does not stall its first render. Call on the UI thread.
 
-using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
 using Malachi.App.Resources;
@@ -31,20 +34,21 @@ public sealed class ChipIcons
     // Rendered at twice the chip's size, so a scaled display stays sharp.
     private const int Pixels = 32;
 
-    private readonly IFileTypeInfo? types;
-    private readonly Dictionary<string, ImageSource?> cache = [];
+    private readonly IconLookups<ImageSource> lookups;
 
     /// <summary>Icons from <paramref name="types"/>; glyphs only without it.</summary>
     public ChipIcons(IFileTypeInfo? types)
     {
-        this.types = types;
+        lookups = new IconLookups<ImageSource>(extension => Source(types, extension));
     }
 
+    /// <summary>The lookups of one set of chips, which <see cref="For"/> draws on.</summary>
+    public IconLookups<ImageSource>.Batch StartBatch() => lookups.StartBatch();
+
     /// <summary>The chip's icon for a file named <paramref name="fileName"/>, at <paramref name="size"/> effective pixels.</summary>
-    public FrameworkElement For(string? fileName, double size = Icons.Small)
+    public static FrameworkElement For(IconLookups<ImageSource>.Batch batch, string? fileName, double size = Icons.Small)
     {
-        var extension = PreviewPanel.IconExtensionOf(fileName);
-        FrameworkElement icon = extension.Length > 0 && Source(extension) is { } source
+        FrameworkElement icon = batch.For(PreviewPanel.IconExtensionOf(fileName)) is { } source
             ? new Image { Source = source, Width = size, Height = size, Stretch = Stretch.Uniform }
             : Icons.Create("mail-attachment", size);
         // Decoration: Narrator reads the chip's name.
@@ -52,25 +56,19 @@ public sealed class ChipIcons
         return icon;
     }
 
-    private ImageSource? Source(string extension)
+    private static WriteableBitmap? Source(IFileTypeInfo? types, string extension)
     {
-        if (cache.TryGetValue(extension, out var known))
+        if (types?.Icon(extension, Pixels) is not { } icon || icon.Width <= 0 || icon.Height <= 0
+            || icon.Pixels.Length != icon.Width * icon.Height * 4)
         {
-            return known;
+            return null;
         }
-        ImageSource? source = null;
-        if (types?.Icon(extension, Pixels) is { } icon && icon.Width > 0 && icon.Height > 0
-            && icon.Pixels.Length == icon.Width * icon.Height * 4)
+        var bitmap = new WriteableBitmap(icon.Width, icon.Height);
+        using (var pixels = bitmap.PixelBuffer.AsStream())
         {
-            var bitmap = new WriteableBitmap(icon.Width, icon.Height);
-            using (var pixels = bitmap.PixelBuffer.AsStream())
-            {
-                pixels.Write(icon.Pixels.Span);
-            }
-            bitmap.Invalidate();
-            source = bitmap;
+            pixels.Write(icon.Pixels.Span);
         }
-        cache[extension] = source;
-        return source;
+        bitmap.Invalidate();
+        return bitmap;
     }
 }

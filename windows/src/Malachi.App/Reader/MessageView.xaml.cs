@@ -19,15 +19,23 @@
 // Text property; no markup is ever parsed.
 //
 // Windows differences: the chips are split buttons (the click previews, the
-// arrow's menu has View, Open, Save As…), a chip GTK makes insensitive shows
-// its reason in a tooltip on a wrapper (a disabled WinUI control shows
-// none), and the remote bar's and "+N more"'s buttons take no focus on a
-// click (GTK SetFocusOnClick(false)) but are reached by Tab (GTK; macOS
-// keeps them out of the key loop).
+// arrow's menu has View, Open, Save As…; from the keyboard F4 or Alt+Down,
+// SplitButton's keys, where GTK's arrow is a button of its own), a chip GTK
+// makes insensitive shows its reason in a tooltip on a wrapper (a disabled
+// WinUI control shows none), the remote bar's and "+N more"'s buttons take
+// no focus on a click (GTK SetFocusOnClick(false)) but are reached by Tab
+// (GTK; macOS keeps them out of the key loop), headers taller than two
+// thirds of the page scroll (GTK's grow), Copy Address can fail while
+// another program holds the clipboard (GTK's cannot) and says so, and Save
+// All stays disabled while its run lasts even when a re-render rebuilds the
+// button (the run is AttachmentOpener's, by message).
 
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
+using Malachi.App.Attachments;
 using Malachi.App.Commands;
 using Malachi.App.Localization;
 using Malachi.App.Resources;
@@ -56,11 +64,30 @@ public sealed partial class MessageView : UserControl
     // libadwaita's body text, which the text-zoom setting scales (.message-body).
     private const double BodyFontSize = 14;
 
+    // The headers take at most this share of the message page; past it they
+    // scroll, and the body keeps the rest.
+    private const double HeaderShare = 2.0 / 3.0;
+
+    // Copy Address: another program may hold the clipboard open for a moment
+    // (a clipboard manager, a remote desktop session); tried this many times,
+    // this far apart, as WinForms' Clipboard.SetDataObject does.
+    private const int ClipboardAttempts = 5;
+    private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(50);
+
     private readonly ReaderServices services;
     private readonly WindowCommands? commands;
+    private readonly ILogger logger;
     private readonly List<SettingsChangeToken> tokens = [];
     private MessageWebView? web;
     private bool closed;
+
+    // The message whose headers are on display: another one starts them at
+    // their top.
+    private MessageId? headersOf;
+
+    // Save All of the message on display, following AttachmentOpener's run.
+    private Button? saveAllButton;
+    private MessageId? saveAllOf;
 
     /// <summary>A view of <paramref name="mode"/>; <paramref name="commands"/> drive its command row (none for an attached message).</summary>
     public MessageView(ReaderMode mode, ReaderServices services, WindowCommands? commands)
@@ -68,6 +95,7 @@ public sealed partial class MessageView : UserControl
         ArgumentNullException.ThrowIfNull(services);
         this.services = services;
         this.commands = commands;
+        logger = services.State.Logs.CreateLogger<MessageView>();
         Reader = new ReaderController(
             mode, services.Cache, services.FileTypes, logger: services.State.Logs.CreateLogger<ReaderController>())
         {
@@ -76,7 +104,9 @@ public sealed partial class MessageView : UserControl
         Reader.Toast = text => services.ToastIn(HostWindow, text);
         Reader.PropertyChanged += OnReaderChanged;
         Reader.ScrollToTopRequested += (_, _) => TextScroller.ChangeView(null, 0, null, disableAnimation: true);
+        Reader.Rendered += OnRendered;
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
+        services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
 
         WireCommands();
@@ -130,6 +160,7 @@ public sealed partial class MessageView : UserControl
             t.Cancel();
         }
         tokens.Clear();
+        services.Attachments.SavingAllChanged -= OnSavingAllChanged;
         Reader.Close();
         web?.Close();
     }
@@ -209,6 +240,10 @@ public sealed partial class MessageView : UserControl
                 FillAttachments();
                 break;
             case nameof(ReaderController.Page):
+                if (Reader.Page != ReaderPage.Message)
+                {
+                    headersOf = null; // the next message, even the same one, starts at the top
+                }
                 FadeIn(Reader.Page switch
                 {
                     ReaderPage.Empty => EmptyPage,
@@ -226,6 +261,22 @@ public sealed partial class MessageView : UserControl
         page.Opacity = 0;
         DispatcherQueue.TryEnqueue(() => page.Opacity = 1);
     }
+
+    // Another message's headers start at their top, as a new page of GTK's
+    // box would; a re-render of the same one leaves them where they are.
+    private void OnRendered(object? sender, ReaderRender r)
+    {
+        if (closed || headersOf == r.Summary.Id)
+        {
+            return;
+        }
+        headersOf = r.Summary.Id;
+        HeaderScroller.ChangeView(null, 0, null, disableAnimation: true);
+    }
+
+    // The headers' share of the page: past it they scroll.
+    private void OnMessagePageSizeChanged(object sender, SizeChangedEventArgs e) =>
+        HeaderScroller.MaxHeight = Math.Max(0, Math.Floor(e.NewSize.Height * HeaderShare));
 
     // htmlView: made on first use, so a plain-text mailbox never starts a
     // web process; one per view, reused.
@@ -404,7 +455,7 @@ public sealed partial class MessageView : UserControl
         }
         var copy = new MenuFlyoutItem { IsEnabled = chip.CanAct };
         MnemonicLabel.Apply(copy, L10n.T("_Copy Address"));
-        copy.Click += (_, _) => CopyAddress(chip);
+        copy.Click += (_, _) => _ = CopyAddressAsync(chip);
         var write = new MenuFlyoutItem { IsEnabled = chip.CanAct };
         MnemonicLabel.Apply(write, L10n.T("_New Message"));
         write.Click += (_, _) => services.Router.NewMessage(chip.Address, chip.Account);
@@ -413,17 +464,50 @@ public sealed partial class MessageView : UserControl
     }
 
     // The chip's Copy Address: the bare address on the clipboard, and a
-    // toast that says so.
-    private void CopyAddress(AddressChip chip)
+    // toast that says so. The clipboard is the system's: while another
+    // program holds it open, SetContent throws (CLIPBRD_E_CANT_OPEN), which in
+    // a menu item's handler would end the application. It is tried again a
+    // few times; failing that, a toast says so and the log has the kind only,
+    // never the address. Flushed, so the address stays on the clipboard after
+    // the application quits.
+    private async Task CopyAddressAsync(AddressChip chip)
     {
         if (!chip.CanAct)
         {
             return;
         }
-        var package = new DataPackage();
-        package.SetText(chip.Email);
-        Clipboard.SetContent(package);
-        services.ToastIn(HostWindow, L10n.T("Address copied"));
+        var window = HostWindow;
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                var package = new DataPackage();
+                package.SetText(chip.Email);
+                Clipboard.SetContent(package);
+                break;
+            }
+            catch (Exception e) when (e is COMException or UnauthorizedAccessException)
+            {
+                if (attempt >= ClipboardAttempts)
+                {
+                    LogCopyFailed(logger, e.GetType().Name, e.HResult);
+                    // Windows-only string: GTK's clipboard cannot refuse.
+                    services.ToastIn(window, L10n.T("The address could not be copied"));
+                    return;
+                }
+            }
+            await Task.Delay(ClipboardRetryDelay);
+        }
+        try
+        {
+            Clipboard.Flush();
+        }
+        catch (Exception e) when (e is COMException or UnauthorizedAccessException)
+        {
+            // On the clipboard all the same, until the application quits.
+            LogFlushFailed(logger, e.GetType().Name, e.HResult);
+        }
+        services.ToastIn(window, L10n.T("Address copied"));
     }
 
     // addresses.go moreChip: "+N more" unfolds every line of the message; a
@@ -461,14 +545,18 @@ public sealed partial class MessageView : UserControl
             FocusBody();
         }
         AttachmentChips.Children.Clear();
+        saveAllButton = null;
+        saveAllOf = null;
+        var icons = services.Icons.StartBatch();
         foreach (var chip in Reader.Chips)
         {
-            AttachmentChips.Children.Add(AttachmentButton(chip));
-
+            AttachmentChips.Children.Add(AttachmentButton(chip, icons));
         }
         if (Reader.SaveAll.Count > 0 && Reader.Current is { } s)
         {
-            AttachmentChips.Children.Add(SaveAllButton(s, Reader.SaveAll));
+            saveAllButton = SaveAllButton(s, Reader.SaveAll);
+            saveAllOf = s.Id;
+            AttachmentChips.Children.Add(saveAllButton);
         }
         AttachmentChips.Visibility = ReaderBind.Visible(AttachmentChips.Children.Count > 0);
     }
@@ -476,10 +564,10 @@ public sealed partial class MessageView : UserControl
     // One attachment: the click previews it (an attached message opens in
     // its own window), the arrow offers View, Open and Save As…. The
     // actions close over the chip, so it never acts on another message.
-    private FrameworkElement AttachmentButton(AttachmentChip chip)
+    private FrameworkElement AttachmentButton(AttachmentChip chip, IconLookups<ImageSource>.Batch icons)
     {
         var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        var icon = services.Icons.For(chip.Attachment.Filename);
+        var icon = ChipIcons.For(icons, chip.Attachment.Filename);
         icon.VerticalAlignment = VerticalAlignment.Center;
         content.Children.Add(icon);
         content.Children.Add(new TextBlock { Text = chip.Label, Style = Look("ChipNameStyle") });
@@ -496,7 +584,13 @@ public sealed partial class MessageView : UserControl
             IsEnabled = chip.Available,
         };
         AutomationProperties.SetName(button, chip.Name);
-        AutomationProperties.SetHelpText(button, chip.Tooltip);
+        // The reason of a chip that cannot be used is "" until message.body
+        // answered: no tooltip, rather than an empty one.
+        var tooltip = chip.Tooltip.Length > 0 ? chip.Tooltip : null;
+        if (tooltip is not null)
+        {
+            AutomationProperties.SetHelpText(button, tooltip);
+        }
 
         var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
         if (chip.Nested)
@@ -528,12 +622,18 @@ public sealed partial class MessageView : UserControl
         };
         if (chip.Available)
         {
-            ToolTipService.SetToolTip(button, chip.Tooltip);
+            if (tooltip is not null)
+            {
+                ToolTipService.SetToolTip(button, tooltip);
+            }
             return button;
         }
         // A disabled control shows no tooltip: the reason goes on a wrapper.
         var wrapper = new Border { Child = button, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        ToolTipService.SetToolTip(wrapper, chip.Tooltip);
+        if (tooltip is not null)
+        {
+            ToolTipService.SetToolTip(wrapper, tooltip);
+        }
         return wrapper;
     }
 
@@ -544,7 +644,9 @@ public sealed partial class MessageView : UserControl
         _ = services.Windows.OpenEmbeddedAsync(chip.Message, chip.Attachment.PartId, HostWindow);
 
     // buildSaveAll: flat, as dense as the chips beside it; disabled while
-    // the run lasts.
+    // the run lasts, which AttachmentOpener keeps by message, so a button
+    // rebuilt by a re-render, or the same message's in another window, is
+    // disabled too.
     private Button SaveAllButton(MessageSummary s, IReadOnlyList<Attachment> atts)
     {
         var mnemonic = Mnemonic.Parse(L10n.T("Save _All"));
@@ -556,21 +658,25 @@ public sealed partial class MessageView : UserControl
             Content = content,
             Style = Look("ChipActionStyle"),
             AccessKey = mnemonic.AccessKey ?? "",
+            IsEnabled = !services.Attachments.IsSavingAll(s.Id),
         };
         AutomationProperties.SetName(button, mnemonic.Label);
         AutomationProperties.SetAutomationId(button, "SaveAllButton");
-        button.Click += async (_, _) =>
-        {
-            button.IsEnabled = false;
-            try
-            {
-                await services.Attachments.SaveAllAsync(atts, s, HostWindow);
-            }
-            finally
-            {
-                button.IsEnabled = true;
-            }
-        };
+        button.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, HostWindow);
         return button;
     }
+
+    private void OnSavingAllChanged(object? sender, MessageId id)
+    {
+        if (!closed && saveAllButton is { } button && saveAllOf == id)
+        {
+            button.IsEnabled = !services.Attachments.IsSavingAll(id);
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "copying an address failed: {Kind} 0x{HResult:X8}")]
+    private static partial void LogCopyFailed(ILogger logger, string kind, int hResult);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "flushing the clipboard failed: {Kind} 0x{HResult:X8}")]
+    private static partial void LogFlushFailed(ILogger logger, string kind, int hResult);
 }

@@ -249,6 +249,9 @@ phases that implement them.
 | The headers of a message start 12 px below the top of the pane or window | 24 px (`margin-top` of the header box) | The command row above already sets them apart; as macOS (docs/windows-port.md §11.3) |
 | A message window shows the subject in its title bar and its buttons in a row below it; the star button shows the state by its icon and label (Star, Unstar), not as a pressed button | The buttons in the header bar around the subject; a toggle button | The main window's structure (a command row per pane under the title bar) in every window; a pressed WinUI button is an accent block |
 | Attachment chips show Windows' icon for the file's extension | The symbolic icon of the content type | What Explorer shows for the file; macOS shows the system's icon as well |
+| An attachment chip is one split button: Tab reaches it once, Enter previews, F4 or Alt+Down opens its menu | The chip and its arrow are two buttons, each reached by Tab | WinUI's `SplitButton` |
+| Headers taller than two thirds of the message pane or window (hundreds of attachments, every address unfolded) scroll on their own, and the body keeps the rest | The header box grows and pushes the body down | Email is hostile input: a message listing hundreds of parts would put its body and its last chips out of reach |
+| While another program holds the clipboard open, Copy Address tries again for a moment, then a toast says the address could not be copied | Always copied | The Windows clipboard is shared: a clipboard manager or a remote desktop session can hold it open |
 | The attachment previewer is one window titled with the file's name, with *Open* and *Save As…* in its title bar; Escape and Ctrl+W close it | Sushi's window with its *Open With* button | Where Windows apps keep a window's actions; Escape closes Sushi and Quick Look too |
 
 ## Troubleshooting

@@ -1459,15 +1459,31 @@ but are reached by Tab; then the No Message Selected and No Accounts pages
 24, top 12), the address chips as pill buttons whose `MenuFlyout` names the
 address and offers Copy Address and New Message, "+N more", the attachment
 chips as `SplitButton`s (the click previews, an attached message opens in
-its window; View, Open, Save As…) with Save All, the hint and a separator;
-below, the body as a selectable `TextBlock` in a clamp with the text-zoom
+its window; View, Open, Save As… from the arrow, or from the keyboard with
+F4 or Alt+Down) with Save All, the hint and a separator. The headers scroll
+on their own once they would take more than two thirds of the page (a
+hostile message listing hundreds of parts, every address unfolded), so the
+body and the last chips stay in reach; another message starts them at
+their top. Below, the body as a selectable `TextBlock` in the same clamp
+(a pane-wide `Grid` inside the `ScrollViewer` centres it, as the headers
+are: a scroller lays its content out from the left) with the text-zoom
 and monospace settings, the 32-pixel `ProgressRing` after 400 ms, or the
 viewer, made on first use and fed only `ReaderController.Html`. A body the
 viewer gave up on stays plain text with the hint for that message. The
 chips' looks are styles of the view's resources, so their theme brushes
 follow the window's colour scheme; a chip that cannot be used is disabled
 and shows its reason on a wrapper, since a disabled WinUI control shows no
-tooltip. Message windows (820×620, 360×294 at least) show the subject as the
+tooltip (none while `message.body` has not answered and the reason is
+still empty). A chip's icon is the shell's for its extension, and one set
+of chips looks up at most 24 extensions it has not seen (Core's
+`IconLookups`; the rest get the generic glyph), since the lookup runs on
+the UI thread. Save All is disabled while its run lasts, from the folder
+picker to the summary toast, by message (`AttachmentOpener.IsSavingAll`),
+so neither a re-rendered button nor the same message in another window
+starts a second run. Copy Address writes to the Windows clipboard, which
+another program may hold open (`CLIPBRD_E_CANT_OPEN`): it is tried five
+times 50 ms apart, then a toast says the address could not be copied (a
+Windows-only string) and the log has the error's kind only. Message windows (820×620, 360×294 at least) show the subject as the
 title, have their own toast overlay and `CommandRouter` (the per-message
 keys, Escape and Ctrl+W), give the body the first focus, and close with
 their attached messages' windows when the message leaves its folder
@@ -1512,6 +1528,7 @@ shown first. Mnemonics: `{l:T}` returns the msgid with its `_`, and
 | Trash / Archive / Junk / Unread / Star | Delete / A / J / U / S, also with the message's WebView2 focused, never while a text input has focus (GTK `setTypingAccels`) | Delete / a / j / u / s |
 | Quit | Ctrl+Q | Ctrl+Q |
 | Close a secondary window | Escape, Ctrl+W | Escape |
+| An attachment chip's menu (View, Open, Save As…) | F4 or Alt+Down on the chip (`SplitButton`); Enter or Space previews | Tab to the chip's arrow, then Enter |
 | Send / Save draft / Bold, Italic, Underline | Ctrl+Enter / Ctrl+S / Ctrl+B, I, U | same |
 | Reorder accounts | Ctrl+Up / Ctrl+Down | same |
 

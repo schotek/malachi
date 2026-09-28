@@ -15,9 +15,10 @@ end, GTK packing [end] from the right), the outbox and draft banners
 (InfoBars), the remote-image bar (a bar of its own, as in GTK: two
 buttons, reachable by Tab), and the message stack: No Message Selected
 and No Accounts (the pane only) or the message, whose headers stay put in
-a clamp of 900 (sides 24, top 12, docs/windows-port.md §11.3) while the
-body below scrolls on its own: the plain text, the spinner after 400 ms,
-or the viewer. Everything shown is server data and set as plain text
+a clamp of 900 (sides 24, top 12, docs/windows-port.md §11.3), scrolling
+on their own only past two thirds of the page, while the body below
+scrolls on its own in the same clamp: the plain text, the spinner after
+400 ms, or the viewer. Everything shown is server data and set as plain text
 (Text properties only); the viewer gets the sanitiser's output only.
 -->
 <UserControl
@@ -262,11 +263,15 @@ or the viewer. Everything shown is server data and set as plain text
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
+                <!-- Named with the bar's sentence (Loading remote images…),
+                     as the body's spinner is named. -->
                 <ProgressRing
                     x:Name="RemoteSpinner"
                     Width="16"
                     Height="16"
                     VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="RemoteSpinner"
+                    AutomationProperties.Name="{x:Bind Reader.RemoteBarText, Mode=OneWay}"
                     IsActive="{x:Bind Reader.RemoteBarLoading, Mode=OneWay}"
                     Visibility="{x:Bind local:ReaderBind.Visible(Reader.RemoteBarLoading), Mode=OneWay}" />
                 <TextBlock
@@ -361,126 +366,154 @@ or the viewer. Everything shown is server data and set as plain text
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below
-                 scrolls on its own. -->
+                 scrolls on its own. Email is hostile input: headers that
+                 would take more than two thirds of the page (a message
+                 listing hundreds of parts, every address unfolded) scroll
+                 on their own instead of pushing the body out of reach
+                 (MessagePage.SizeChanged sets HeaderScroller.MaxHeight);
+                 GTK's box just grows. -->
             <Grid
                 x:Name="MessagePage"
                 AutomationProperties.AutomationId="MessagePage"
+                SizeChanged="OnMessagePageSizeChanged"
                 Visibility="{x:Bind local:ReaderBind.PageVisible(Reader.Page, 'Message'), Mode=OneWay}">
                 <Grid.OpacityTransition>
                     <ScalarTransition Duration="0:0:0.2" />
                 </Grid.OpacityTransition>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
-                <!-- The Adw.Clamp of 900 (min(width, 900), the width the
-                     viewer's CSS gives an HTML body, so its text lines up). -->
-                <StackPanel
-                    x:Name="Headers"
-                    MaxWidth="900"
-                    Padding="24,12,24,0"
-                    HorizontalAlignment="Stretch"
-                    Spacing="12">
-                    <TextBlock
-                        x:Name="SubjectLabel"
-                        AutomationProperties.AutomationId="MessageSubject"
-                        IsTextSelectionEnabled="True"
-                        Style="{StaticResource Title2LabelStyle}"
-                        Text="{x:Bind Reader.Subject, Mode=OneWay}"
-                        TextWrapping="Wrap" />
+                <ScrollViewer
+                    x:Name="HeaderScroller"
+                    AutomationProperties.AutomationId="MessageHeaderScroller"
+                    HorizontalScrollBarVisibility="Disabled"
+                    IsTabStop="False"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollMode="Auto">
+                    <!-- A panel as wide as the pane, so the clamp below is
+                         centred in it: a scroller lays its content out from
+                         the left. -->
+                    <Grid>
+                        <!-- The Adw.Clamp of 900 (min(width, 900), the width the
+                             viewer's CSS gives an HTML body, so its text lines up). -->
+                        <StackPanel
+                            x:Name="Headers"
+                            MaxWidth="900"
+                            Padding="24,12,24,12"
+                            HorizontalAlignment="Stretch"
+                            Spacing="12">
+                            <TextBlock
+                                x:Name="SubjectLabel"
+                                AutomationProperties.AutomationId="MessageSubject"
+                                IsTextSelectionEnabled="True"
+                                Style="{StaticResource Title2LabelStyle}"
+                                Text="{x:Bind Reader.Subject, Mode=OneWay}"
+                                TextWrapping="Wrap" />
 
-                    <!-- message_addresses: From, To, Cc; a line without
-                         addresses is hidden (window/addresses.go). -->
-                    <Grid
-                        x:Name="AddressGrid"
-                        ColumnSpacing="12"
-                        RowSpacing="6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock
-                            x:Name="FromLabel"
-                            MinHeight="24"
-                            VerticalAlignment="Top"
-                            Padding="0,4,0,0"
-                            Style="{StaticResource DimCaptionLabelStyle}"
-                            Text="{l:T Msgid='From'}" />
-                        <local:WrapBox
-                            x:Name="FromChips"
-                            Grid.Column="1"
-                            AutomationProperties.Name="{l:T Msgid='From'}"
-                            ChildSpacing="4"
-                            LineSpacing="4" />
-                        <TextBlock
-                            x:Name="ToLabel"
-                            Grid.Row="1"
-                            MinHeight="24"
-                            VerticalAlignment="Top"
-                            Padding="0,4,0,0"
-                            Style="{StaticResource DimCaptionLabelStyle}"
-                            Text="{l:T Msgid='To'}"
-                            Visibility="Collapsed" />
-                        <local:WrapBox
-                            x:Name="ToChips"
-                            Grid.Row="1"
-                            Grid.Column="1"
-                            AutomationProperties.Name="{l:T Msgid='To'}"
-                            ChildSpacing="4"
-                            LineSpacing="4"
-                            Visibility="Collapsed" />
-                        <TextBlock
-                            x:Name="CcLabel"
-                            Grid.Row="2"
-                            MinHeight="24"
-                            VerticalAlignment="Top"
-                            Padding="0,4,0,0"
-                            Style="{StaticResource DimCaptionLabelStyle}"
-                            Text="{l:T Msgid='Cc'}"
-                            Visibility="Collapsed" />
-                        <local:WrapBox
-                            x:Name="CcChips"
-                            Grid.Row="2"
-                            Grid.Column="1"
-                            AutomationProperties.Name="{l:T Msgid='Cc'}"
-                            ChildSpacing="4"
-                            LineSpacing="4"
-                            Visibility="Collapsed" />
+                            <!-- message_addresses: From, To, Cc; a line without
+                                 addresses is hidden (window/addresses.go). -->
+                            <Grid
+                                x:Name="AddressGrid"
+                                ColumnSpacing="12"
+                                RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <TextBlock
+                                    x:Name="FromLabel"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='From'}" />
+                                <local:WrapBox
+                                    x:Name="FromChips"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='From'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4" />
+                                <TextBlock
+                                    x:Name="ToLabel"
+                                    Grid.Row="1"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='To'}"
+                                    Visibility="Collapsed" />
+                                <local:WrapBox
+                                    x:Name="ToChips"
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='To'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4"
+                                    Visibility="Collapsed" />
+                                <TextBlock
+                                    x:Name="CcLabel"
+                                    Grid.Row="2"
+                                    MinHeight="24"
+                                    VerticalAlignment="Top"
+                                    Padding="0,4,0,0"
+                                    Style="{StaticResource DimCaptionLabelStyle}"
+                                    Text="{l:T Msgid='Cc'}"
+                                    Visibility="Collapsed" />
+                                <local:WrapBox
+                                    x:Name="CcChips"
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="{l:T Msgid='Cc'}"
+                                    ChildSpacing="4"
+                                    LineSpacing="4"
+                                    Visibility="Collapsed" />
+                            </Grid>
+
+                            <TextBlock
+                                x:Name="DateLabel"
+                                AutomationProperties.AutomationId="MessageDate"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{x:Bind Reader.DateText, Mode=OneWay}"
+                                Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.DateText), Mode=OneWay}" />
+
+                            <!-- message_attachments (window/attachments.go). -->
+                            <local:WrapBox
+                                x:Name="AttachmentChips"
+                                ChildSpacing="6"
+                                LineSpacing="6"
+                                Visibility="Collapsed" />
+
+                            <!-- body_hint: why only the plain text is shown. -->
+                            <TextBlock
+                                x:Name="BodyHint"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{l:T Msgid='The formatted version of this message could not be shown safely; this is its plain text.'}"
+                                TextWrapping="Wrap"
+                                Visibility="{x:Bind local:ReaderBind.Visible(Reader.HintVisible), Mode=OneWay}" />
+                        </StackPanel>
                     </Grid>
+                </ScrollViewer>
 
-                    <TextBlock
-                        x:Name="DateLabel"
-                        AutomationProperties.AutomationId="MessageDate"
-                        Style="{StaticResource DimCaptionLabelStyle}"
-                        Text="{x:Bind Reader.DateText, Mode=OneWay}"
-                        Visibility="{x:Bind local:ReaderBind.VisibleIfText(Reader.DateText), Mode=OneWay}" />
-
-                    <!-- message_attachments (window/attachments.go). -->
-                    <local:WrapBox
-                        x:Name="AttachmentChips"
-                        ChildSpacing="6"
-                        LineSpacing="6"
-                        Visibility="Collapsed" />
-
-                    <!-- body_hint: why only the plain text is shown. -->
-                    <TextBlock
-                        x:Name="BodyHint"
-                        Style="{StaticResource DimCaptionLabelStyle}"
-                        Text="{l:T Msgid='The formatted version of this message could not be shown safely; this is its plain text.'}"
-                        TextWrapping="Wrap"
-                        Visibility="{x:Bind local:ReaderBind.Visible(Reader.HintVisible), Mode=OneWay}" />
-
+                <!-- The separator under the headers, in the same clamp; it
+                     stays in place when the headers scroll. -->
+                <Border
+                    Grid.Row="1"
+                    MaxWidth="900"
+                    Padding="24,0"
+                    HorizontalAlignment="Stretch">
                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                </StackPanel>
+                </Border>
 
                 <!-- body_stack: "text", "loading", "html". -->
-                <Grid x:Name="BodyArea" Grid.Row="1">
+                <Grid x:Name="BodyArea" Grid.Row="2">
                     <ScrollViewer
                         x:Name="TextScroller"
                         AutomationProperties.AutomationId="MessageBodyScroller"
@@ -489,15 +522,19 @@ or the viewer. Everything shown is server data and set as plain text
                         IsTabStop="True"
                         VerticalScrollBarVisibility="Auto"
                         Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Text'), Mode=OneWay}">
-                        <TextBlock
-                            x:Name="BodyLabel"
-                            MaxWidth="900"
-                            Padding="24,12,24,24"
-                            HorizontalAlignment="Stretch"
-                            AutomationProperties.AutomationId="MessageBody"
-                            IsTextSelectionEnabled="True"
-                            Text="{x:Bind Reader.BodyText, Mode=OneWay}"
-                            TextWrapping="Wrap" />
+                        <!-- The same clamp as the headers: a panel as wide
+                             as the pane centres the text in it. -->
+                        <Grid>
+                            <TextBlock
+                                x:Name="BodyLabel"
+                                MaxWidth="900"
+                                Padding="24,12,24,24"
+                                HorizontalAlignment="Stretch"
+                                AutomationProperties.AutomationId="MessageBody"
+                                IsTextSelectionEnabled="True"
+                                Text="{x:Bind Reader.BodyText, Mode=OneWay}"
+                                TextWrapping="Wrap" />
+                        </Grid>
                     </ScrollViewer>
                     <ProgressRing
                         x:Name="BodySpinner"
