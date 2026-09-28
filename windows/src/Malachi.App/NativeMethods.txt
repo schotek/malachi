@@ -48,3 +48,6 @@ SIGDN
 FILEOPENDIALOGOPTIONS
 COMDLG_FILTERSPEC
 CoTaskMemFree
+// The account wizard (Wizard/): its owner window, which a modal
+// OverlappedPresenter needs before IsModal.
+SetWindowLongPtr

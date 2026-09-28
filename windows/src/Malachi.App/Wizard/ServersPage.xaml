@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/ServersPageController.swift;
+GTK: account_wizard.blp servers_page. An Adw.PreferencesPage
+(servers_prefs) with its three groups in order: Account (Account Name),
+Incoming Mail (IMAP) and Outgoing Mail (SMTP), each with Server, Port
+(1 to 65535; 993 and 587 by default), Security (TLS, STARTTLS, None), User
+Name, and Pinned Certificate with its fingerprint (selectable) and Forget,
+shown only while a certificate is pinned; at the bottom, right-aligned
+with 12 px margins, Test Connection (servers_test_button, the suggested
+action). Return in a row does nothing (the GTK rows have no activation).
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.ServersPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer
+            x:Name="ServersPrefs"
+            Grid.Row="0"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+            <Grid>
+                <StackPanel
+                    MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                    Padding="{StaticResource SettingsPagePadding}"
+                    Spacing="{StaticResource SettingsGroupSpacing}">
+
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}"
+                            Text="{l:T Msgid='Account'}" />
+                        <tk:SettingsCard Header="{l:T Msgid='Account Name'}">
+                            <TextBox
+                                x:Name="AccountNameBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="AccountName"
+                                AutomationProperties.Name="{l:T Msgid='Account Name'}"
+                                TextChanged="OnTextChanged" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}"
+                            Text="{l:T Msgid='Incoming Mail (IMAP)'}" />
+                        <tk:SettingsCard x:Name="ImapHostRow" Header="{l:T Msgid='Server'}">
+                            <TextBox
+                                x:Name="ImapHost"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="ImapHost"
+                                AutomationProperties.Name="{l:T Msgid='Server'}"
+                                IsSpellCheckEnabled="False"
+                                TextChanged="OnTextChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard Header="{l:T Msgid='Port'}">
+                            <NumberBox
+                                x:Name="ImapPort"
+                                MinWidth="140"
+                                AutomationProperties.AutomationId="ImapPort"
+                                AutomationProperties.Name="{l:T Msgid='Port'}"
+                                Maximum="65535"
+                                Minimum="1"
+                                SmallChange="1"
+                                SpinButtonPlacementMode="Inline"
+                                ValidationMode="InvalidInputOverwritten"
+                                Value="993"
+                                ValueChanged="OnPortChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard Header="{l:T Msgid='Security'}">
+                            <ComboBox
+                                x:Name="ImapSecurity"
+                                MinWidth="140"
+                                AutomationProperties.AutomationId="ImapSecurity"
+                                AutomationProperties.Name="{l:T Msgid='Security'}"
+                                SelectedIndex="0"
+                                SelectionChanged="OnSecurityChanged">
+                                <ComboBoxItem Content="{l:T Msgid='TLS'}" />
+                                <ComboBoxItem Content="{l:T Msgid='STARTTLS'}" />
+                                <ComboBoxItem Content="{l:T Msgid='None'}" />
+                            </ComboBox>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="ImapUserRow" Header="{l:T Msgid='User Name'}">
+                            <TextBox
+                                x:Name="ImapUser"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="ImapUser"
+                                AutomationProperties.Name="{l:T Msgid='User Name'}"
+                                IsSpellCheckEnabled="False"
+                                TextChanged="OnTextChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard
+                            x:Name="ImapPinRow"
+                            Header="{l:T Msgid='Pinned Certificate'}"
+                            Visibility="Collapsed">
+                            <tk:SettingsCard.Description>
+                                <TextBlock
+                                    x:Name="ImapPin"
+                                    IsTextSelectionEnabled="True"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Description>
+                            <Button
+                                x:Name="ImapForget"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Forget'}"
+                                AutomationProperties.AutomationId="ImapForget"
+                                Click="OnForgetClick" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+
+                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                        <TextBlock
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}"
+                            Text="{l:T Msgid='Outgoing Mail (SMTP)'}" />
+                        <tk:SettingsCard x:Name="SmtpHostRow" Header="{l:T Msgid='Server'}">
+                            <TextBox
+                                x:Name="SmtpHost"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="SmtpHost"
+                                AutomationProperties.Name="{l:T Msgid='Server'}"
+                                IsSpellCheckEnabled="False"
+                                TextChanged="OnTextChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard Header="{l:T Msgid='Port'}">
+                            <NumberBox
+                                x:Name="SmtpPort"
+                                MinWidth="140"
+                                AutomationProperties.AutomationId="SmtpPort"
+                                AutomationProperties.Name="{l:T Msgid='Port'}"
+                                Maximum="65535"
+                                Minimum="1"
+                                SmallChange="1"
+                                SpinButtonPlacementMode="Inline"
+                                ValidationMode="InvalidInputOverwritten"
+                                Value="587"
+                                ValueChanged="OnPortChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard Header="{l:T Msgid='Security'}">
+                            <ComboBox
+                                x:Name="SmtpSecurity"
+                                MinWidth="140"
+                                AutomationProperties.AutomationId="SmtpSecurity"
+                                AutomationProperties.Name="{l:T Msgid='Security'}"
+                                SelectedIndex="1"
+                                SelectionChanged="OnSecurityChanged">
+                                <ComboBoxItem Content="{l:T Msgid='TLS'}" />
+                                <ComboBoxItem Content="{l:T Msgid='STARTTLS'}" />
+                                <ComboBoxItem Content="{l:T Msgid='None'}" />
+                            </ComboBox>
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="SmtpUserRow" Header="{l:T Msgid='User Name'}">
+                            <TextBox
+                                x:Name="SmtpUser"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="SmtpUser"
+                                AutomationProperties.Name="{l:T Msgid='User Name'}"
+                                IsSpellCheckEnabled="False"
+                                TextChanged="OnTextChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard
+                            x:Name="SmtpPinRow"
+                            Header="{l:T Msgid='Pinned Certificate'}"
+                            Visibility="Collapsed">
+                            <tk:SettingsCard.Description>
+                                <TextBlock
+                                    x:Name="SmtpPin"
+                                    IsTextSelectionEnabled="True"
+                                    TextWrapping="Wrap" />
+                            </tk:SettingsCard.Description>
+                            <Button
+                                x:Name="SmtpForget"
+                                l:MnemonicLabel.Text="{l:T Msgid='_Forget'}"
+                                AutomationProperties.AutomationId="SmtpForget"
+                                Click="OnForgetClick" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="1" Style="{StaticResource WizardButtonBarStyle}">
+            <Button
+                x:Name="TestButton"
+                l:MnemonicLabel.Text="{l:T Msgid='_Test Connection'}"
+                AutomationProperties.AutomationId="TestConnection"
+                Click="OnTestClick"
+                Style="{StaticResource AccentButtonStyle}" />
+        </StackPanel>
+    </Grid>
+</UserControl>
