@@ -332,8 +332,8 @@ ve `windows/README.md` (hledání v titulkové liště, stavový pruh přes spod
 okna, skládání panelů při 900/600 px s tlačítky v titulkové liště, menu `…`
 s Přidat účet a Konec, klávesy Windows s volbou `ctrl-r`, přístupové
 klávesy místo mnemonik, pořadí tlačítek ContentDialog, bannery InfoBar,
-kontextová menu, vlastní náhled příloh, Mark of the Web, potvrzení
-nevypsaných odkazů, obnova WebView2 jednou na dokument, uložení konceptů
+kontextová menu, vlastní náhled příloh, Mark of the Web, Uložit vše bez
+programů a zástupců, potvrzení nevypsaných odkazů, obnova WebView2 jednou na dokument, uložení konceptů
 při Konci, tray, zvuk `MailBeep`, průvodce jako modální okno, Předvolby
 jako okno s navigací a bez hledání, Výchozí aplikace, klíč Run, vlastník
 a DACL souboru s klíčem); `.blp` jsou reference, nová funkce jde nejdřív
@@ -445,8 +445,7 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
 - Nový msgid v `po/malachi.pot` (práce na GTK a `make po`) musí Windows klient
   použít, nebo ho zapsat s důvodem do `windows/parity-exclusions.txt`: test
   pokrytí (`StringsCheckTests.EveryTemplateMsgidIsUsedOrExcluded`) ho jinak
-  hlásí, se `CoverageEnforced` nebo `MALACHI_MSGID_COVERAGE=strict` jako
-  chybu. Zrušený msgid, který v exclusions zůstal, a msgid z exclusions, který
+  hlásí jako chybu (`CoverageEnforced` je zapnuté). Zrušený msgid, který v exclusions zůstal, a msgid z exclusions, který
   klient začal používat, shodí `build.ps1 lint` vždy. msgid použitý ve
   `windows/src` musí v šabloně být (s kontextem i plurálem).
 - Windows: XAML kompilátor je nástroj .NET Frameworku bez podpory dlouhých
@@ -459,8 +458,11 @@ knihovna, umístění definic účtů, uložení těl zpráv, Microsoft účty).
   `mailto:`, registrace notifikací) skončí v úložišti balíčku Claude, jinde
   neviditelné. Agent proto pouští app s `MALACHI_DATA_DIR` a krátkým
   `MALACHI_SOCKET` v `%TEMP%` (taková kopie nechá uživatelovy registrace
-  `mailto:` a Run být); co musí dojít do skutečného registru, spouští mimo
-  strom Claude (WMI `Win32_Process.Create`) a po sobě uklidí.
+  `mailto:` a Run být) a s vlastním `MALACHI_SETTINGS_KEY`
+  (`io.github.schotek.Malachi.<přípona>` pod `HKCU\Software`, po běhu
+  smazat), aby nesahal na uživatelovy předvolby; co musí dojít do
+  skutečného registru, spouští mimo strom Claude (WMI
+  `Win32_Process.Create`) a po sobě uklidí.
 - Windows: cesta AF_UNIX socketu má nejvýš 107 bajtů UTF-8 (macOS 103); app ji
   ověří při startu a zprávou jmenuje `MALACHI_SOCKET`. Soubor s klíčem na
   Windows dědí ACL adresáře: `MALACHI_SOCKET` v adresáři, kam smějí jiní
