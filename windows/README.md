@@ -3,45 +3,46 @@
 The Windows client of Malachi Mail: a native C#/WinUI 3 application over the
 `malachid` JSON-RPC socket, the fourth client of the daemon next to the GTK
 UI, the macOS app and the MCP bridge. It mirrors the GTK UI, which is the
-primary one and the template (CLAUDE.md rule 4); the macOS client is the
-source it is ported from, because it already solved the same problem. The
-daemon runs on Windows unchanged and does all the mail work. How the client
-is designed, built and kept in step with the GTK UI, and the decisions
-behind it, are in [docs/windows-port.md](../docs/windows-port.md).
+primary one and the template (CLAUDE.md rule 4): the same panes, the same
+behaviour, the same strings, native controls. The macOS client is the
+source it was ported from, because it had already solved the same problem.
+The daemon runs on Windows unchanged and does all the mail work; the few
+backend fixes the port needed are platform-neutral. How the client is
+built, how it stays in step with the GTK UI and the decisions behind it
+are in [docs/windows-port.md](../docs/windows-port.md).
 
-**Status: in progress, phase E of docs/windows-port.md §15.** The
-solution, its projects and packages, the build and test entry points
-(`make windows`, `run-windows`, `test-windows`, `windows/build.ps1`), the
-typed API layer, the transport and the daemon's supervisor, localisation
-from `po/`, the settings (registry), the attachment-safety services, the
-keyring helper `malachi-credentials.exe` and every ported controller of
-the Go UI and macOS exist (phases A to D). Of the app, the shell stands
-(phase E wave 1): it runs as a single instance, starts or adopts its
-daemon, connects, and shows the connection, the status line and what the
-mailbox loaded; it quits cleanly (drafts first, then the daemon it
-started), from its window, Ctrl+Q or Ctrl+C in the terminal; the keyboard,
-the dialogs, the toasts, the colour scheme and the strings check are in
-place. The main window's panes stand too (phase E wave 2): the folder
-sidebar with its Favourites, the message list (flat and by conversation,
-search with its scope, paging), the command rows of the three panes with
-their context menus, the status line with its flyout, and the narrow
-layouts. The other screens (reader, compose, wizard, preferences), the
-WebView2 layer and the platform services (notifications, the
-notification-area icon, launch at login, `mailto:` registration) follow in
-the rest of phase E. The rows below that describe them are the design those
-steps implement.
+**Status: the full mail UI of the GTK application.** Accounts (the setup
+assistant with autodetection and the browser sign-in for Gmail and
+Microsoft 365, editing, signing in again, pausing, reordering, removing,
+trusting a server's own certificate), the folder sidebar with favourites
+and folding, the message list (flat and grouped by conversation, with the
+All / Unread / Flagged filter, paging itself), search in the folder, the
+account or every account, the reader with a locked-down WebView2 view,
+message windows and attached messages, attachments with a previewer of
+the app's own, message actions with context menus, notifications with the
+system's new-mail sound, compose with the rich-text editor, drafts (kept
+in the Drafts folder and opened from it for editing), reply and forward
+with the quoted original, `mailto:` links and the *Default apps*
+registration, the Preferences window, launch at login, running in the
+background with a notification-area icon, Preferences → AI for the MCP
+bridge, and the Czech translation read from `po/`. What is missing is
+listed under [Not on Windows, not yet](#not-on-windows-not-yet).
 
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
-`malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). Every
-source file starts with the SPDX header: C# files are checked by the
-compiler (IDE0073 against `file_header_template` in `windows/.editorconfig`),
-every other type by `Malachi.Conventions.Tests`, in its own comment syntax
-(XML files carry it as a comment after the XML declaration; JSON and
-Markdown carry none).
+`malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). The
+built app folder also carries Microsoft's Windows App SDK and WebView2
+components, which are under Microsoft's terms: distributing it waits for
+the owner's decision on a GPLv3 §7 permission for them (LICENSING.md,
+docs/windows-port.md §17). Every source file starts with the SPDX header:
+C# files are checked by the compiler (IDE0073 against
+`file_header_template` in `windows/.editorconfig`), every other type by
+`Malachi.Conventions.Tests`, in its own comment syntax (XML files carry it
+as a comment after the XML declaration; JSON and Markdown carry none).
 
 ## Requirements
 
-- Windows 11 (the app's minimum is 10.0.22000), x64 or ARM64.
+- Windows 11 (the app's minimum is 10.0.22000), x64 or ARM64, with the
+  WebView2 runtime, which Windows 11 includes.
 - The .NET SDK 10.0.4xx (`windows/global.json`; a newer feature band is
   used when installed). Visual Studio is not needed to build the app.
 - For `malachi-credentials.exe`, which is compiled with NativeAOT: the MSVC
@@ -53,12 +54,15 @@ Markdown carry none).
   names another `go.exe`).
 - Git for Windows: `git describe` gives the version, and its `sh.exe` runs the
   root Makefile's recipes.
-- GNU make, optional: `winget install ezwinports.make`. Everything works
-  without it through `windows\build.ps1`.
-- Windows PowerShell 5.1, which every Windows has (`build.ps1` is written
-  for PowerShell 7 as well).
+- GNU make, optional: `winget install ezwinports.make` (4.4). Everything
+  works without it through `windows\build.ps1`.
+- Windows PowerShell 5.1, which every Windows has (`build.ps1` runs on
+  PowerShell 7 as well).
 
-Keep the clone's path short (see [Troubleshooting](#troubleshooting)).
+Keep the clone's path short (see [Troubleshooting](#troubleshooting)). A
+clone made before the repository had its `.gitattributes` holds CRLF
+copies of LF files; check it out again once on a clean tree
+(`git rm -r --cached -q . && git reset --hard`).
 
 ## Build and run
 
@@ -77,6 +81,10 @@ make run-windows    # the same, then runs MalachiMail.exe in the terminal until 
 make test-windows   # every test project of the solution
 ```
 
+A double click on `MalachiMail.exe` in the app folder runs it the Explorer
+way: no terminal, the logs in their files, the app registered for
+`mailto:` and notifications from where it lies.
+
 The three targets exist on Windows only; elsewhere they print a hint and
 exit. On Windows the root Makefile runs its recipes with the `sh.exe` of Git
 for Windows (found through `git --exec-path`; `GIT_USR_BIN` names another
@@ -94,12 +102,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 <target> [
 | `version` | the version (`git describe` with the leading `v` cut, as the root Makefile) and the file version (`Major.Minor.Patch.CommitsSinceTag`) |
 | `go` | `malachid.exe` and `malachi-mcp.exe` for `-Arch` into `build\windows\go\<arch>\` (`GOOS=windows`, `CGO_ENABLED=0`, `GOWORK=off`, `-trimpath`); for this machine's architecture also into `build\` |
 | `build` | `dotnet build` of the solution (Debug) |
-| `icons` | renders `Malachi.ico` from `docs\malachi_icon.png`, cropped as `macos/Makefile` crops it (the build does this by itself) |
-| `app` | `go`, then publishes and assembles `build\windows\<arch>\Malachi Mail\` (Release) |
+| `icons` | renders `Malachi.ico` from `docs\malachi_icon.png`, cropped as `macos/Makefile` crops it (the build renders it and the notification icon by itself) |
+| `app` | `go`, then publishes and assembles `build\windows\<arch>\Malachi Mail\` (Release) and checks that nothing is missing from it |
 | `test` | every test project, `.trx` reports in `build\windows\TestResults\` (Debug); the UI smoke tests drive the app folder `app` assembled and are skipped without it (docs/windows-port.md §12) |
 | `run` | `app` for this machine, then `MalachiMail.exe` in this terminal until it quits (Ctrl+C quits it and the daemon it started) |
 | `lint` | `dotnet format --verify-no-changes` and the conventions tests |
-| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` |
+| `package` | `app`, then `build\windows\Malachi-Mail-<version>-<arch>.zip` (unsigned; not a release yet, docs/releasing.md) |
 | `clean` | removes `build\windows\` |
 
 Options: `-Configuration Debug|Release`, `-Arch x64|arm64` (default: this
@@ -107,7 +115,13 @@ machine's), `-Version` (default: from git), `-BuildDir` (default: `build\`).
 `run` always builds for this machine. Every `dotnet` command runs from
 `windows\`: `global.json` there selects the SDK and Microsoft.Testing.Platform
 for `dotnet test` (run elsewhere, `dotnet test` falls back to VSTest and
-fails).
+fails). Quick iteration without the app folder:
+
+```powershell
+cd windows
+dotnet build Malachi.slnx -p:Platform=x64
+dotnet test --project tests\Malachi.Core.Tests\Malachi.Core.Tests.csproj
+```
 
 Visual Studio 2026: open `windows\Malachi.slnx`, pick the `x64` or `ARM64`
 platform and run `Malachi.App` (unpackaged). Before the first run,
@@ -117,8 +131,9 @@ for this machine copies them beside `MalachiMail.exe`.
 
 All build output goes to `build\windows\` (`UseArtifactsOutput`: `bin`, `obj`
 and `publish` of every project under `build\windows\artifacts\`), never
-beside the sources. Package versions are central (`Directory.Packages.props`),
-each project's `packages.lock.json` is committed, and a CI build restores in
+beside the sources. Warnings are errors. Package versions are central
+(`Directory.Packages.props`), each project's `packages.lock.json` is
+committed, and a CI build (`CI=true`, or GitHub Actions) restores in
 locked mode.
 
 CI (`.github/workflows/windows.yml`, docs/windows-port.md §13) runs the
@@ -137,6 +152,10 @@ components lack, `Microsoft.WindowsAppRuntime.Insights.Resource.dll`, is
 unpacked from the Runtime package's framework MSIX by the build
 (docs/windows-port.md §10: without it notifications cannot register).
 
+ARM64: `build.ps1 app -Arch arm64` cross-builds on an x64 machine; the
+keyring helper needs the MSVC ARM64 build tools for it. The ARM64 app has
+not been run on real hardware yet.
+
 ## Layout
 
 ```
@@ -149,40 +168,58 @@ windows/
   nuget.config                    nuget.org only, with package source mapping
   Directory.Build.props           nullable, warnings as errors, analyzers, code style in the
                                   build, lock files, output under build\windows, versions
-  Directory.Build.targets         locale\*.po beside the app, the icon, the daemon for F5,
+  Directory.Build.targets         locale\*.po beside the app, the icons, the daemon for F5,
                                   the SDK's own packages pinned
   Directory.Packages.props        every package version
   .editorconfig                   C# style; the SPDX header template (IDE0073)
   parity-exclusions.txt           the msgids of po/malachi.pot the client does not use, with
                                   the reason (the strings check's coverage)
-  scripts/make-icons.ps1          docs\malachi_icon.png -> multi-size Malachi.ico
+  scripts/make-icons.ps1          docs\malachi_icon.png -> multi-size Malachi.ico and
+                                  notification.png
   src/
-    Malachi.Core/                 net10.0: everything that needs neither WinUI nor P/Invoke
-                                  (API, transport, supervisor, ported logic, controllers,
-                                  settings, i18n); builds and is tested on any OS
-    Malachi.Platform.Windows/     Windows services behind Core's interfaces (CsWin32)
-    Malachi.App/                  WinUI 3 -> MalachiMail.exe; thin: windows, pages, XAML,
-                                  the WebView2 layer. Program.cs (console, single instance,
-                                  activation), App.xaml.cs (lifecycle, Quit), Shell/ (the
-                                  composition root AppState, the Integration, alerts, toasts,
-                                  window tracking and theme, the log), Commands/ (the command
-                                  router, the WebView2 keys through the island's pre-translate
-                                  source or a keyboard hook, the window commands), Controls/,
-                                  Localization/ ({l:T}, mnemonics), Resources/ (icons, text styles),
+    Malachi.Core/                 net10.0: everything that needs neither WinUI nor P/Invoke;
+                                  builds and is tested on any OS
+      Api/                        backend/pkg/api re-declared from docs/api.md: every method
+                                  with its params, result and timeout, the notifications,
+                                  the wire enums, the error codes, the handshake's proofs
+      Transport/                  RpcClient (AF_UNIX, the handshake, framing), DaemonKey
+      Daemon/                     DaemonSupervisor, Paths, the rotating logs
+      Model/, Compose/, Html/,    the pure logic of the GTK UI and macOS ported 1:1
+      Wizard/, Text/              (window model, threads, folding, favourites, search,
+                                  addresses, mailto:, quoting, wizard fields and results,
+                                  the viewer and editor documents and the bridge, formats)
+      Controllers/                the controllers over the RPC client, tested against an
+                                  in-process fake daemon
+      Presentation/               what macOS keeps untested in AppKit: the view models of
+                                  the panes, the reader, compose, the shell and the rules
+                                  of the WebView2 layer, each with its tests
+      I18n/, Settings/, Platform/ L10n over po/, the settings with the gschema's keys, the
+                                  open directory, the never-open list, the bridge runner
+    Malachi.Platform.Windows/     Windows services behind Core's interfaces (CsWin32): the
+                                  daemon's process host and the console, the key-file
+                                  policy, the registry settings, Mark of the Web and the
+                                  file-type policy, the launcher, launch at login, the
+                                  mailto: registration, notifications' arguments and quiet
+                                  hours, the new-mail sound, the tray icon
+    Malachi.App/                  WinUI 3 -> MalachiMail.exe; thin: Program.cs (console,
+                                  single instance, activation), App.xaml.cs (lifecycle,
+                                  Quit), Shell/ (the composition root AppState, the
+                                  Integration, alerts, toasts, window tracking and theme,
+                                  the log), Commands/ (the command router, the WebView2 keys),
+                                  Controls/, Localization/ ({l:T}, mnemonics), Resources/,
                                   Platform/ (the platform services' entry points), Main/ (the
-                                  main window's panes: sidebar, list and rows, the command rows,
-                                  the status line)
-
-                                  Platform/ (the platform services' entry points), Wizard/ (the
-                                  account wizard), Preferences/ (the Preferences window)
+                                  main window's panes, command rows, status line), Reader/,
+                                  Windows/ (message, attached-message and preview windows),
+                                  Attachments/, Compose/, Wizard/, Preferences/, WebViews/
+                                  (the hardened viewer, editor and previewer)
     Malachi.Credentials/          malachi-credentials.exe, the daemon's keyring helper over
                                   Credential Manager (NativeAOT); depends on nothing else
   tests/
     Malachi.Core.Tests/           the Go UI and Swift tests ported, FakeDaemon, MailFixture
     Malachi.Core.TestDaemon/      a stand-in daemon for the supervisor tests
     Malachi.FakeBridge/           a scripted malachi-mcp for the MCP registration tests
-    Malachi.Platform.Windows.Tests/
-    Malachi.Credentials.Tests/
+    Malachi.Platform.Windows.Tests/  the Windows services, some against the real malachid.exe
+    Malachi.Credentials.Tests/    the helper's protocol; Credential Manager on request
     Malachi.Conventions.Tests/    repository checks: SPDX headers, the gschema keys against
                                   the settings, the strings check and the msgid coverage
     Malachi.App.Canary/           the network canary over the WebView2 layer: the real viewer,
@@ -198,81 +235,190 @@ windows/
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
 nothing imports the Go modules (the API is re-declared from
 [docs/api.md](../docs/api.md), as on macOS). The tests are xUnit v3 on
-Microsoft.Testing.Platform.
+Microsoft.Testing.Platform: about 3,600 of them, two minutes for
+`make test-windows` (docs/windows-port.md §12).
+
+## How it runs the daemon
+
+Like the GTK UI: `malachid.exe` is looked for in `MALACHI_DAEMON` (a path;
+`none` or empty switches the automatic start off), else beside
+`MalachiMail.exe`, else on `PATH`. If nothing answers on the socket, the
+daemon is started with `--socket`, `--config` and `--store`, in a process
+group of its own and without a console window, and the app waits up to
+15 s for the socket. A daemon that already answers (`make run-backend`, a
+debugger, one a crashed app left behind) is used as is and never stopped.
+On Quit the app stops the daemon it started with `CTRL_BREAK_EVENT`, which
+Go takes as an interrupt, waits up to 15 s (the daemon gives its syncers
+10 s), then kills it; signing out of Windows stops it the same way. A
+daemon that exits is restarted: at once after a single exit, then with a
+backoff that doubles from 1 s to 60 s. Its output goes to
+`logs\malachid.log` and, under `make run-windows`, to the terminal.
+
+Before the first start the app creates the socket's directory
+(`%USERPROFILE%\.cache\malachi\run`) with a DACL for the user and SYSTEM
+alone: the daemon's `0600` means nothing on Windows, and the key file
+beside the socket inherits the directory's permissions. The daemon also
+gets `DBUS_SESSION_BUS_ADDRESS=disabled:`, so its optional Linux services
+(Secret Service, GNOME Online Accounts, Evolution Data Server) give up at
+once instead of looking for a session bus on every call.
+
+## Keyring
+
+Windows has no Secret Service, so the daemon gets the app's own helper:
+the app starts `malachid.exe` with `MALACHI_KEYRING=helper` and
+`MALACHI_KEYRING_HELPER=<app folder>\malachi-credentials.exe`. The daemon
+runs the helper once per operation, git-credential style
+(`malachi-credentials get|set|delete`, one JSON line on stdin, the value on
+stdout for `get`, the outcome in the exit status; the protocol is
+documented in `backend/internal/auth/helper`). Values never travel in
+arguments, files, the environment or logs.
+
+The helper keeps one generic credential per account and key in
+**Credential Manager** (*Control Panel → Credential Manager → Windows
+Credentials*), target `io.github.schotek.Malachi/<accountId>/<key>`,
+comment `Malachi Mail: <accountId> (<key>)`, local to the machine (not
+roaming). A value longer than Credential Manager's 2560 bytes (a
+Microsoft refresh token can be) is split into chunks `<target>#<n>`, each
+value checked against the SHA-256 the helper wrote with it, so a torn or
+edited item reads as corrupt (`keyringError`), never as a wrong token. An
+item edited with `cmdkey` or the Credential Manager dialog is corrupt for
+the same reason: sign in to the account again in the app. Runs of the
+helper take turns through a named mutex of the session, because Credential
+Manager loses updates when several processes use it at once.
+
+A `MALACHI_KEYRING` already in the environment wins over the bundled
+helper; without a helper beside the executable the daemon runs with
+`MALACHI_KEYRING=none`, where adding an account with a password fails with
+`keyringError`. The real round trips run only on request, since they write
+to Credential Manager: `MALACHI_CREDENTIALS_TEST=1` for
+`Malachi.Credentials.Tests`, and on the Go side
+`MALACHI_TEST_REAL_HELPER="<app folder>\malachi-credentials.exe" go test ./internal/auth/helper -run TestRealHelper`
+from `backend\`.
 
 ## Where things are
 
-The design of docs/windows-port.md §1. The app uses all of them but the
-WebView2 data, launch at login and the `mailto:` registration, which come
-with the rest of phase E.
-
 | What | Where |
 |---|---|
-| App folder (built here) | `build\windows\<arch>\Malachi Mail\`: `MalachiMail.exe`, `malachid.exe`, `malachi-mcp.exe`, `malachi-credentials.exe`, `locale\<lang>.po`, the licences |
+| App folder (built here) | `build\windows\<arch>\Malachi Mail\`: `MalachiMail.exe`, `malachid.exe`, `malachi-mcp.exe`, `malachi-credentials.exe`, `locale\<lang>.po`, `Assets\`, the licences |
 | Configuration | `%LOCALAPPDATA%\Malachi Mail\config.toml` (`--config`) |
-| Mail store | `%LOCALAPPDATA%\Malachi Mail\store.db` (`--store`), lock `store.db.daemon.lock` |
-| RPC socket | `%USERPROFILE%\.cache\malachi\run\rpc.sock`, the daemon's own default (`MALACHI_SOCKET` overrides); outside AppData on purpose |
-| RPC key | `rpc.sock.key` beside the socket, a new key at every daemon start, read afresh for every connection |
+| Mail store | `%LOCALAPPDATA%\Malachi Mail\store.db` (`--store`), lock `store.db.daemon.lock`: held by the running daemon, released by Windows with its process; a second daemon for the same store exits |
+| RPC socket | `%USERPROFILE%\.cache\malachi\run\rpc.sock`, the daemon's own default (`MALACHI_SOCKET` overrides); outside AppData on purpose, so `malachi-mcp` and `.mcp.json` find it, and nothing under AppData is redirected for a process started by an MSIX app |
+| RPC key | `rpc.sock.key` beside the socket: a new key at every daemon start, removed when it stops cleanly, read afresh for every connection and kept nowhere ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Logs | `%LOCALAPPDATA%\Malachi Mail\logs\`: `MalachiMail.log` (the app, `MALACHI_LOG_LEVEL`) and `malachid.log` (the daemon), each rotated at 4 MiB; also the terminal under `make run-windows` |
-| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` |
-| Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit) |
-| Preferences | `HKCU\Software\io.github.schotek.Malachi`, the gschema's keys plus `ctrl-r` |
+| WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written) |
+| Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit, entries older than an hour swept) |
+| Preferences | `HKCU\Software\io.github.schotek.Malachi`, the gschema's keys plus `ctrl-r`; a `reg add` reaches the running app |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
 | Launch at login | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Malachi Mail` = `"<exe>" --background`; the user's switch in Windows Settings (`...\Explorer\StartupApproved\Run`) is respected, never overwritten |
-| `mailto:` | `HKCU\Software\Classes\io.github.schotek.Malachi.mailto`, `HKCU\Software\Clients\Mail\Malachi Mail`, `HKCU\Software\RegisteredApplications`, written at start when missing or stale |
+| `mailto:` | `HKCU\Software\Classes\io.github.schotek.Malachi.mailto`, `HKCU\Software\Clients\Mail\Malachi Mail`, `HKCU\Software\RegisteredApplications`, written at start when missing or stale, so the app is offered in *Settings → Apps → Default apps* |
 | Notifications | registered as *Malachi Mail* with `Assets\notification.png` beside the executable; Windows keys the registration by the executable's path (`HKCU\Software\Classes\AppUserModelId\<path>`) |
+| MCP bridge | `malachi-mcp.exe` in the app folder, `build\malachi-mcp.exe` in a checkout |
+| Keyring helper | `malachi-credentials.exe` in the app folder |
 
 `MALACHI_DATA_DIR` replaces `%LOCALAPPDATA%\Malachi Mail` for tests and
-agents; `MALACHI_DAEMON`, `MALACHI_SOCKET`, `MALACHI_KEYRING`,
-`MALACHI_KEYRING_HELPER` and `MALACHI_LOCALE_DIR` work as on macOS.
+agents; a copy started with it leaves the user's `mailto:` registration
+and Run value alone (what is asked for in its Preferences is still
+written). `MALACHI_DAEMON`, `MALACHI_SOCKET`, `MALACHI_KEYRING`,
+`MALACHI_KEYRING_HELPER` and `MALACHI_LOCALE_DIR` work as on macOS. A
+socket path may have at most 107 bytes (AF_UNIX on Windows); the app
+checks it at start and says so, naming `MALACHI_SOCKET`.
+
+## Localisation
+
+The GTK catalogue in `po/` is the single source of truth. The build copies
+`po/<lang>.po` for every language of `po/LINGUAS` to `locale\` beside the
+executable, and the app parses them at start with the rules of the macOS
+catalogue generator (fuzzy, obsolete and untranslated entries left out, a
+translation whose printf directives differ from its msgid dropped). Keys
+are the GTK msgids verbatim, in C# through `L10n.T/N/C` and in XAML through
+`{l:T Msgid=…}`, so a string is translated once for all three desktop
+clients; GTK's `_` mnemonics become access keys. The language follows the
+Windows display languages (*Settings → Time & language → Language &
+region*), matched by the base language; `MALACHI_LOCALE_DIR` points at
+another directory of `.po` files (the repository's `po\` works).
+
+Strings that exist only on Windows (*Quit* and *Open Malachi Mail*, the
+*Keyboard* and *Default Mail App* groups, a few accessible names) stay
+English; they are marked `// Windows-only string` (or
+`<!-- Windows-only string -->`) in the sources, and nothing is added to
+`po/POTFILES`. `Malachi.Conventions.Tests` checks that every msgid the
+sources use is in `po/malachi.pot`, with its context and plural, and that
+every msgid of the template is used or listed with its reason in
+`windows/parity-exclusions.txt`. A new language needs only its
+`po/<lang>.po`, plus its plural rule in `Malachi.Core/I18n/PluralRules.cs`
+when the table does not know the language yet.
 
 ## Differences from the GTK UI
 
 The GTK UI is the template; the client deviates only where a Windows
-convention wins, and every deviation is a row here (docs/windows-port.md §3).
-These rows are decided (docs/windows-port.md §0 and §11) and land with the
-phases that implement them.
+convention wins, and every deviation is a row here (docs/windows-port.md
+§3). Everything else is meant to be the same, down to the strings and the
+confirmation dialogs.
 
 | On Windows | Instead of (GTK) | Why |
 |---|---|---|
-| The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); Enter opens the first result, Escape closes it | A search bar over the message list (Ctrl+F, the search button) | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
+| The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); the Folder / Account / All Accounts scope bar shows over the list while a search runs; Enter opens the first result, Escape closes the search | A search bar over the message list (Ctrl+F, the search button) with the entry and the scope toggles | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
 | The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
-| Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (`reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
-| Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
-| Files opened or saved from a message get the Mark of the Web through `IAttachmentExecute` (which also runs the antivirus check and the attachment policy): the Restricted zone, or the Internet zone for a program saved with Save As (Restricted would make Attachment Services delete it). A file for opening is opened only after a check that passed and a zone that reads back, unless an administrator turned zone information off (`SaveZoneInformation=1`) or Attachment Services is missing; a saved file stays the user's | No mark | The counterpart of the macOS quarantine attribute: SmartScreen and Office's Protected View treat the files as downloads |
-| A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk); other types offer Open and Save As…; programs are never opened | GNOME Sushi, the default application without it | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files |
-| While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
-| Context menus on messages and folders, with the actions that exist elsewhere | None | Windows convention |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
-| The primary menu `…` has New Message, Add Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing (research 05 W4) |
+| The primary menu `…` has New Message, Add Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
+| Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (*Preferences → General → Keyboard*: `reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
+| Mnemonics are WinUI access keys: Alt shows their key tips on the menus and buttons that carry a GTK mnemonic; a dialog's buttons have none | Underlined mnemonics | WinUI's form of mnemonics; a `ContentDialog`'s buttons take no access keys |
+| Alerts are `ContentDialog`s: the primary button on the left, Cancel on the right; the defaults and close responses stay GTK's (*Save Draft* is the default of the close question) | GTK's button order | WinUI's dialog |
+| Banners (the backend, sign-in and certificate banners over the list, the outbox and draft banners over a message) are `InfoBar`s: a warning's or an information's icon and tint, the text in the regular weight, the button at the end | `Adw.Banner`: an accent-tinted strip with a bold title | WinUI's notice bar |
+| Context menus on messages and folders, with the actions that exist elsewhere; a right click selects the row | None | Windows convention |
 | Left and Right fold an account's heading in the sidebar, as they fold a folder | Only a folder's; a heading folds with its arrow | A row's buttons are no tab stops in a Windows list, so the heading's arrow needs the keys |
-| *Preferences* has a *Default apps* button that opens Settings → Apps → Default apps | None | Windows does not let an app make itself the default mail app; the app registers itself in HKCU at start |
-| Quitting saves the unsaved changes of every message being written as drafts | The compose windows close; what was typed since the last automatic save is lost | Decided |
-| A link the daemon did not list in `links[]` is confirmed before it opens, as on macOS | Opened | WebView2 hands out normalised URLs, so an exact match with the daemon's raw hrefs can fail (docs/windows-port.md §6.4) |
-| The compose editor's context menu offers Undo, Redo, Cut, Copy, Paste, Paste as plain text and Select All (WebView2's own items, their labels the runtime's) | No context menu | WebView2's menu reduced to the editing commands; Windows users paste from it. Its navigation, printing, saving and inspection items are removed (docs/windows-port.md §6.5) |
-| A compose window narrower than about 500 px shows Send with its icon alone (its name and tooltip stay) and no app icon in the title bar; the subject shortens with an ellipsis | The header bar keeps the window from getting narrower than Attach, the title, the Draft Menu and Send with its label | The window keeps its smallest size of 360 px, and the caption buttons take room GTK's header bar does not |
-| In the compose window, *Text Colour* opens a colour picker in a flyout under its button (no transparency, opaque black at first); the colour is applied to the selection when the flyout closes with another colour | A colour dialog; the colour is applied when it is chosen there | WinUI has no colour dialog; a flyout keeps the compose window and the editor's selection in place (docs/windows-port.md §11.3) |
-| The attachment previewer does not follow links in a PDF or a text | Sushi | Every navigation of the previewer is cancelled, as in the editor (docs/windows-port.md §6.6) |
-| When a message's, an attachment's or the editor's web process dies, hangs (reported and not answering 5 s later) or takes the browser with it, the view shows the same document again once; when that document fails again, the reader shows the plain text, the previewer its panel, and the editor stays blank with its text kept for a save | GTK logs the terminated process and leaves the view blank; the compose window reloads the text on every report | WebView2 also reports hangs and loses the whole control with its browser, so the view must recover by itself; once per document, because a body that reliably kills the renderer (a Chromium or PDFium bug) would otherwise reload in a loop, writing a crash dump of the mail each time and giving an exploit unlimited retries (docs/windows-port.md §6.1) |
-| The new-mail sound is the user's system sound for mail (`MailBeep`, *Desktop Mail Notification* in Control Panel → Sound) at the system sounds' volume, silent when none is set, skipped under Do Not Disturb, in a presentation, a full-screen program, the screen saver or a locked session; notifications themselves are silent | The sound theme's `message-new-email` | Windows' own event for it |
-| *Preferences* has no search field | `Adw.PreferencesDialog` with search | Decided (as macOS) |
-| The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format. The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
 | The message list pages itself at its end; *Load More* appears only to retry a page that failed | The *Load More* button under the list | As macOS |
-| In *Preferences → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch | Ctrl+Up / Ctrl+Down reorder the selected row, so a click must select (as macOS) |
-| The account wizard is a window of its own, modal over the window it was opened from (520×640): its title bar carries Back and the page's title; its close button, Escape and Ctrl+W cancel it (and a sign-in waiting in the browser). The pages slide in; the result rows' icons are green for success and red for an error | An `Adw.Dialog` over its parent with a header bar on each page | A window shows one `ContentDialog` at a time, and the wizard asks *Trust This Certificate?* in one of its own (docs/windows-port.md §11.3); the colours are macOS's |
-| The wizard never shows the accounts of GNOME Online Accounts, and its GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again* | Both, for accounts GNOME Online Accounts holds | GNOME Online Accounts does not exist on Windows (as macOS); the daemon offers its own browser sign-in instead, so the page is normally not reached |
-| *Preferences* is one window for the app with a navigation pane (Accounts, General, Appearance, AI), only its icons below 720 px; the rows are Windows settings cards; *General* has a *Keyboard* group (the `ctrl-r` choice) and a *Default Mail App* group; *Accounts* follows the accounts and their state while it is open | `Adw.PreferencesDialog` with a view switcher, built anew on every open | Windows Settings' form; the two groups are Windows' own (the keys above, the default mail app below); the window stays open beside the main window, where accounts change |
-| *Launch at Login* is the Run value; when the user turned Malachi Mail off in Settings → Apps → Startup, the row says so and links there, and turning it on reports *Autostart was not granted* | The Background portal asks | Windows keeps that choice in Settings, where only the user changes it; the app never overwrites it |
 | The window's caption names the selected folder: *Inbox – Malachi Mail* | *Malachi Mail* (the folder is the list's header) | The taskbar and Alt+Tab tell windows apart by their captions; macOS shows the folder as the window's title too |
-| *About Malachi Mail* is a dialog with the name, icon, developer, version, licence, website and issue tracker; its description says *A native mail client.* | `Adw.AboutDialog` with *A native mail client for the GNOME desktop.* | GTK's text names GNOME; the fields are GTK's (research U8) |
 | The window's size, maximised state and pane widths are kept in the gschema's keys (`window-width`, `window-height`, `window-maximized`, `folder-pane-width`, `message-list-width`), written only from a wide layout | Declared in the gschema, never written | The keys exist; the window opens where it was left |
 | The headers of a message start 12 px below the top of the pane or window | 24 px (`margin-top` of the header box) | The command row above already sets them apart; as macOS (docs/windows-port.md §11.3) |
 | A message window shows the subject in its title bar and its buttons in a row below it; the star button shows the state by its icon and label (Star, Unstar), not as a pressed button | The buttons in the header bar around the subject; a toggle button | The main window's structure (a command row per pane under the title bar) in every window; a pressed WinUI button is an accent block |
-| Attachment chips show Windows' icon for the file's extension | The symbolic icon of the content type | What Explorer shows for the file; macOS shows the system's icon as well |
-| An attachment chip is one split button: Tab reaches it once, Enter previews, F4 or Alt+Down opens its menu | The chip and its arrow are two buttons, each reached by Tab | WinUI's `SplitButton` |
 | Headers taller than two thirds of the message pane or window (hundreds of attachments, every address unfolded) scroll on their own, and the body keeps the rest | The header box grows and pushes the body down | Email is hostile input: a message listing hundreds of parts would put its body and its last chips out of reach |
 | While another program holds the clipboard open, Copy Address tries again for a moment, then a toast says the address could not be copied | Always copied | The Windows clipboard is shared: a clipboard manager or a remote desktop session can hold it open |
-| The attachment previewer is one window titled with the file's name, with *Open* and *Save As…* in its title bar; Escape and Ctrl+W close it | Sushi's window with its *Open With* button | Where Windows apps keep a window's actions; Escape closes Sushi and Quick Look too |
+| A link the daemon did not list in `links[]` is confirmed before it opens, as on macOS | Opened | WebView2 hands out normalised URLs, so an exact match with the daemon's raw hrefs can fail (docs/windows-port.md §6.4) |
+| Attachment chips show Windows' icon for the file's extension | The symbolic icon of the content type | What Explorer shows for the file; macOS shows the system's icon as well |
+| An attachment chip is one split button: Tab reaches it once, Enter previews, F4 or Alt+Down opens its menu | The chip and its arrow are two buttons, each reached by Tab | WinUI's `SplitButton` |
+| A click on an attachment previews images, PDF and text in the app's own locked-down WebView2 window (no network, no script, nothing written to disk), one window titled with the file's name with *Open* and *Save As…* in its title bar, closed by Escape and Ctrl+W; it follows no link in a PDF or a text. Other types show a panel with Open and Save As…; programs are never opened | GNOME Sushi (its window with *Open With*), the default application without it | Windows has no Quick Look or Sushi, and shell preview handlers run third-party code over hostile files (docs/windows-port.md §6.6) |
+| Files opened or saved from a message get the Mark of the Web through `IAttachmentExecute` (which also runs the antivirus check and the attachment policy): the Restricted zone, or the Internet zone for a program saved with Save As (Restricted would make Attachment Services delete it). A file for opening is opened only after a check that passed and a zone that reads back, unless an administrator turned zone information off (`SaveZoneInformation=1`) or Attachment Services is missing; a saved file stays the user's | No mark | The counterpart of the macOS quarantine attribute: SmartScreen and Office's Protected View treat the files as downloads |
+| When a message's, an attachment's or the editor's web process dies, hangs (reported and not answering 5 s later) or takes the browser with it, the view shows the same document again once; when that document fails again, the reader shows the plain text, the previewer its panel, and the editor stays blank with its text kept for a save | GTK logs the terminated process and leaves the view blank; the compose window reloads the text on every report | WebView2 also reports hangs and loses the whole control with its browser, so the view must recover by itself; once per document, because a body that reliably kills the renderer (a Chromium or PDFium bug) would otherwise reload in a loop, writing a crash dump of the mail each time and giving an exploit unlimited retries (docs/windows-port.md §6.1) |
+| The compose editor's context menu offers Undo, Redo, Cut, Copy, Paste, Paste as plain text and Select All (WebView2's own items, their labels the runtime's) | No context menu | WebView2's menu reduced to the editing commands; Windows users paste from it. Its navigation, printing, saving and inspection items are removed (docs/windows-port.md §6.5) |
+| A compose window narrower than about 500 px shows Send with its icon alone (its name and tooltip stay) and no app icon in the title bar; the subject shortens with an ellipsis | The header bar keeps the window from getting narrower than Attach, the title, the Draft Menu and Send with its label | The window keeps its smallest size of 360 px, and the caption buttons take room GTK's header bar does not |
+| In the compose window, *Text Colour* opens a colour picker in a flyout under its button (no transparency, opaque black at first); the colour is applied to the selection when the flyout closes with another colour | A colour dialog; the colour is applied when it is chosen there | WinUI has no colour dialog; a flyout keeps the compose window and the editor's selection in place (docs/windows-port.md §11.3) |
+| Quitting saves the unsaved changes of every message being written as drafts; only a draft that cannot be saved asks | The compose windows close; what was typed since the last automatic save is lost | Decided (docs/windows-port.md §0) |
+| While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
+| The new-mail sound is the user's system sound for mail (`MailBeep`, *Desktop Mail Notification* in Control Panel → Sound) at the system sounds' volume, silent when none is set, skipped under Do Not Disturb, in a presentation, a full-screen program, the screen saver or a locked session; notifications themselves are silent | The sound theme's `message-new-email` | Windows' own event for it |
+| The account wizard is a window of its own, modal over the window it was opened from (520×640): its title bar carries Back (also Alt+Left and the mouse's back button) and the page's title; its close button, Escape and Ctrl+W cancel it (and a sign-in waiting in the browser). The pages slide in; the result rows' icons are green for success and red for an error | An `Adw.Dialog` over its parent with a header bar on each page | A window shows one `ContentDialog` at a time, and the wizard asks *Trust This Certificate?* in one of its own (docs/windows-port.md §11.3); the colours are macOS's |
+| The wizard never shows the accounts of GNOME Online Accounts, and its GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again* | Both, for accounts GNOME Online Accounts holds | GNOME Online Accounts does not exist on Windows (as macOS); the daemon offers its own browser sign-in instead, so the page is normally not reached |
+| *Preferences* is one window for the app with a navigation pane (Accounts, General, Appearance, AI), only its icons below 720 px; the rows are Windows settings cards; *General* has a *Keyboard* group (the `ctrl-r` choice) and a *Default Mail App* group; *Accounts* follows the accounts and their state while it is open | `Adw.PreferencesDialog` with a view switcher, built anew on every open | Windows Settings' form; the two groups are Windows' own; the window stays open beside the main window, where accounts change |
+| *Preferences* has no search field | `Adw.PreferencesDialog` with search | Decided (as macOS) |
+| *Preferences → General → Default Mail App* has a *Default apps* button that opens *Settings → Apps → Default apps* for Malachi Mail | None | Windows does not let an app make itself the default mail app; the app registers itself in HKCU at start, the user chooses it there |
+| In *Preferences → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch | Ctrl+Up / Ctrl+Down reorder the selected row, so a click must select (as macOS) |
+| *Launch at Login* is the Run value; when the user turned Malachi Mail off in *Settings → Apps → Startup*, the row says so and links there, and turning it on reports *Autostart was not granted* | The Background portal asks | Windows keeps that choice in Settings, where only the user changes it; the app never overwrites it |
+| *About Malachi Mail* is a dialog with the name, icon, developer, version, licence, website and issue tracker; its description says *A native mail client.* | `Adw.AboutDialog` with *A native mail client for the GNOME desktop.* | GTK's text names GNOME; the fields are GTK's |
+| The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log). The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
+
+The link under the pointer is shown at the bottom of the message view as
+in GTK, and a masked link is confirmed before it opens; those are security
+features, not deviations.
+
+## Not on Windows, not yet
+
+- **Gmail needs an app password or an OAuth client of your own.** No
+  Google client is shipped (the [root README](../README.md#oauth-clients-for-gmail-and-microsoft-365)
+  says why and how to register one): the assistant offers an app password
+  (IMAP/SMTP), or signs in through the browser once a client ID is in
+  `%LOCALAPPDATA%\Malachi Mail\config.toml` (`[oauth2.google]`).
+  **Microsoft 365 / Outlook.com** sign in through the browser with the
+  client Malachi Mail ships; organisations that restrict consent approve
+  the app once.
+- **Recipient completion** comes from the addresses you have written to
+  only. The GTK UI also searches the system address books through
+  Evolution Data Server; there is no equivalent here and the daemon
+  degrades silently.
+- **Distribution**: the app folder is unsigned and has no installer or
+  updater; ARM64 has not run on real hardware; the Microsoft components'
+  licence permission is the owner's decision; there is no Windows CI job
+  yet ([docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
+  [docs/releasing.md](../docs/releasing.md)).
 
 ## Troubleshooting
 
@@ -282,20 +428,63 @@ phases that implement them.
   long-path support, and enabling long paths in Windows does not help it.
   Keep the clone's path short (`D:\src\malachi`) and the NuGet cache at its
   default (`%USERPROFILE%\.nuget\packages`).
-- **Run from Claude Desktop, or from an agent it started, the app's data is
-  somewhere else.** Claude Desktop is an MSIX package, and every process it
-  starts sees a virtualised AppData: files created under `%APPDATA%` and
-  `%LOCALAPPDATA%` land in Claude's package store, invisible to the same
+- **Run from Claude Desktop, or from an agent it started, the app's data
+  and settings are somewhere else.** Claude Desktop is an MSIX package, and
+  every process it starts sees a virtualised AppData and HKCU: files
+  created under `%APPDATA%` and `%LOCALAPPDATA%` and values written to HKCU
+  (the preferences, launch at login, the `mailto:` and notification
+  registrations) land in Claude's package store, invisible to the same
   program started from Explorer. Set `MALACHI_DATA_DIR` to a directory
-  outside AppData for such runs (the socket is outside AppData already).
+  outside AppData for such runs (the socket is outside AppData already,
+  and a short `MALACHI_SOCKET` under `%TEMP%` keeps a test apart from the
+  real daemon); test what must reach the real registry from a process
+  started outside Claude's tree.
+- **The message shows as plain text with "could not be shown safely", the
+  previewer shows only a panel, the editor stays blank.** WebView2 could
+  not start: the WebView2 runtime is missing or broken (Windows 11 ships
+  it; *Settings → Apps* lists it as *Microsoft Edge WebView2 Runtime*, and
+  Microsoft's Evergreen installer repairs it), or the runtime is too old
+  for a setting the views require. The views fail closed; the app log
+  says why.
+- **No desktop notifications, or a click on one does nothing.** Nothing is
+  shown while the main window is the active window, as in GTK. Otherwise
+  check *Settings → System → Notifications* (Malachi Mail on, Do Not
+  Disturb off: under it the toast goes silently to the notification
+  centre), start the app from outside Claude Desktop's process tree
+  (above), and look for `Register` in `MalachiMail.log`: an app folder not
+  assembled by the build lacks
+  `Microsoft.WindowsAppRuntime.Insights.Resource.dll`, and then toasts may
+  show but their clicks are lost.
+- **The status line says "Protocol mismatch: UI 2, backend 1".** An older
+  `malachid.exe` still answers on the socket, one from before the
+  authenticated connections: typically `make run-backend` in another
+  terminal from an older checkout, or a daemon left running by an older
+  build. The app uses a running daemon and never stops somebody else's, so
+  stop that one (Ctrl+C in its terminal, or end `malachid.exe` in Task
+  Manager); the app then starts its own at its next attempt, a few seconds
+  later. A backend number higher than the UI's means the app is the older
+  one: rebuild it.
+- **"Backend unavailable" although malachid.exe runs.** The connection was
+  refused in the handshake; `MalachiMail.log` (or the terminal under
+  `make run-windows`) says why once. Usually the key file's policy: with
+  `MALACHI_SOCKET` in a directory outside your profile (`D:\…`, where
+  Authenticated Users may modify by default) the key inherits that ACL and
+  the app refuses it as *accessible to other users*; use a directory of
+  your own (under `%USERPROFILE%` or `%TEMP%`), or make it private. *belongs
+  to another user* means the key was written by another account, and a
+  failed proof means the process on the socket is not your daemon.
+- **A different socket.** `MALACHI_SOCKET=C:\path\rpc.sock` for the app and
+  the daemon it starts; `malachi-mcp` reads the same variable. Keep it
+  under 107 bytes.
 - **"Running scripts is disabled on this system".** `build.ps1` is not
   signed; run it as `powershell -ExecutionPolicy Bypass -File windows\build.ps1`
   (make does), or allow local scripts for your user.
 - **`malachi-credentials` does not publish (`Platform linker not found`,
   `link.exe`, `vswhere.exe` is not recognized).** NativeAOT links with the
-  MSVC tools; install them as under [Requirements](#requirements).
-  `build.ps1` puts the Visual Studio Installer directory on `PATH` for
-  `vswhere.exe`, which Visual Studio 2026's `vcvarsall.bat` needs.
+  MSVC tools; install them as under [Requirements](#requirements) (for
+  `-Arch arm64` the ARM64 build tools too). `build.ps1` puts the Visual
+  Studio Installer directory on `PATH` for `vswhere.exe`, which Visual
+  Studio 2026's `vcvarsall.bat` needs.
 - **`dotnet test` says "Testing with VSTest target is no longer supported"
   or does not know `--solution`.** It ran outside `windows\`, without its
   `global.json`; use `build.ps1 test` or run it from `windows\`.
@@ -325,11 +514,31 @@ phases that implement them.
   pinned in `Directory.Packages.props` (`MalachiSdkPackVersion`) so that a
   newer SDK does not change them. Commit a change only together with the
   package change that caused it.
+- **English although Windows is Czech.** The app follows the Windows
+  display language, not the regional format; and it needs `locale\cs.po`
+  beside `MalachiMail.exe`, which every build of the app puts there
+  (`MALACHI_LOCALE_DIR` names another directory of `.po` files).
 
 ## AI agents
 
-The repository's `.mcp.json` starts `build/malachi-mcp`, which connects to
-the daemon's socket; on Windows that binary is `build\malachi-mcp.exe`
-(`make mcp`, `make windows` or `build.ps1 go`). Whether Claude Code on
-Windows finds it under the name without `.exe` is not verified yet. Tools,
-flags and the security model are in [docs/mcp.md](../docs/mcp.md).
+While the app runs, the repository's `.mcp.json` works against its daemon:
+Claude Code spawns `build/malachi-mcp`, which is `build\malachi-mcp.exe` on
+Windows (`make mcp`, `make windows` or `build.ps1 go`), and it connects to
+the same socket. Whether Claude Code on Windows finds the `.exe` under the
+name without the extension has not been verified yet; a local-scope entry
+naming `build\malachi-mcp.exe` works either way. Another MCP client points
+at `malachi-mcp.exe` in the app folder. Tools, flags and the security
+model are in [docs/mcp.md](../docs/mcp.md).
+
+*Preferences → AI → Register with Claude* puts the app folder's
+`malachi-mcp.exe` into the MCP configuration of Claude Desktop and Claude
+Code on this computer, or takes it out again: the switch runs
+`malachi-mcp status`, `install` and `uninstall` and shows what the bridge
+reports, so the app never edits those files itself. The app passes the
+bridge's canonical path (`--command`), and for the packaged (MSIX) Claude
+Desktop, which keeps its configuration inside its package, that file's
+path (`--claude-desktop-config`; [docs/mcp.md](../docs/mcp.md)).
+Restart Claude Desktop afterwards. The AI page exists in all three desktop
+UIs with the same strings, so it is not a deviation; without a bridge
+beside the executable, or when its status fails, the page says so in the
+group's description, as in GTK.
