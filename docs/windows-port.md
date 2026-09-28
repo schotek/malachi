@@ -2584,19 +2584,47 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
      and the attachment files get the same (the merge of main had
      dropped it);
    - a reader that holds the file for longer makes the operation
-     `store.ErrBusy` (the store counts its open readers per message), the
-     file as it was: the conversion and the sweep count the message busy
-     and come back to it, a deletion leaves the file to the sweep, a
-     commit undoes phase A's widening of the remote parts, and the
-     attachment step passes the message over to its next pass, logged,
-     not as a failure;
+     `store.ErrBusy` (the store counts its open readers per message, at
+     every attempt, so that one that lets go just after the last attempt
+     still counts), the file as it was: the conversion and the sweep count
+     the message busy and come back to it, a deletion leaves the file to
+     the sweep, a commit undoes phase A's widening of the remote parts,
+     the attachment step passes the message over to its next pass, logged,
+     not as a failure, and `message.download` answers `unavailable`, to be
+     tried again;
+   - a commit whose rename fails for any cause, a reader the store does
+     not count included (another program, a virus scanner), undoes phase A
+     as well, since a failed rename leaves the stored file whole; only the
+     error is then not busy (the attachment step tries the message once
+     more before it keeps it whole). An account deleted while a reader
+     holds one of its files keeps its directory until the sweep, which
+     removes it whole: `store.DeleteAccount` records it in `meta` until it
+     is gone, since the sweep otherwise leaves a directory with files of an
+     account it does not know to the other store that may share
+     `messages/`. Of a message left with both variants (a replacement
+     whose removal of the other was busy) a reader takes the newer, the one
+     the sweep keeps, so a codec switched back before the sweep serves no
+     replaced content;
+   - a failure that lasts (a directory without write permission, `EACCES`;
+     a read-only file system, `EROFS`) now takes the retries, about 1.3 s,
+     on every system, holding the message's names lock, so its readers
+     wait with it. Rule 4 leaves no other way: the refusal a handle causes
+     has no portable error value (a sharing violation, or access denied,
+     which a lasting failure also is), and telling the systems apart would
+     take a build tag or a platform check. It is acceptable because such a
+     failure is rare and already an error that the operation reports, the
+     wait is bounded, and a deletion of many files gives the retries up
+     after the first failure that outlasts them (`fsretry.Batch`), so it
+     costs one wait, not one per file;
    - `os.SameFile` of an `os.Lstat` result reads the file's identity
      lazily, by path, on Windows: the conversion's check that a writer
      replaced neither file reads both identities at once;
    - a file is flushed through a handle that may write, which
      `FlushFileBuffers` requires.
-   On Linux and macOS these calls succeed at the first attempt; nothing
-   changes there but when a handle is closed.
+   On Linux and macOS these calls succeed at the first attempt unless a
+   lasting failure refuses them (above); nothing else changes there but
+   when a handle is closed, which of two variants a reader takes, and the
+   sweep's removal of a deleted account's directory that a crash left.
 4. **Portable backend tests**: separators, modes (`permOf`), JSON-escaped
    paths, closed handles, the FIFO and kill cases redesigned, a staging
    area broken by a file in its place rather than a read-only directory

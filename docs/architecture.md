@@ -308,13 +308,19 @@ removal leaves an open file's content alone, and the background passes only
 try the lock and skip a busy message. Windows refuses to rename over or
 remove an open file: there a rename or a removal waits a moment
 (`internal/fsretry`) with the message's names locked, so its readers
-finish and no new one starts, and a file a reader keeps open for longer
-leaves the operation undone as busy (`store.ErrBusy`), for a later pass or
-the sweep. A deletion removes the files once
-its rows are committed, and a message a writer holds at that moment is
-removed by that writer before it lets go. A download is received into
-`<data dir>/staging/` first (random names, created exclusively, on the
-file system of `messages/` so that a commit is a rename), which the daemon
+finish and no new one starts, and a file one of them keeps open for
+longer leaves the operation undone as busy (`store.ErrBusy`, told by
+whether a reader had the file open at the last attempt), for a later pass
+or the sweep. A commit whose new file did not take the stored one's name,
+whatever the cause (a reader the daemon does not count, such as another
+program or a virus scanner, or a new file that could not be written),
+undoes its first phase, the stored file being as it was; and of a
+message left with both variants a reader takes the newer, the one the
+sweep keeps. A deletion removes the files once its rows are committed,
+and a message a writer holds at that moment is removed by that writer
+before it lets go. A download is received into `<data dir>/staging/`
+first (random names, created exclusively, on the file system of
+`messages/` so that a commit is a rename), which the daemon
 empties whenever it opens the store; under `neverStoreAttachments` it is
 received into memory instead (`store.StageMemory`), and only the file the
 commit writes from there reaches the disk (§3.2).
@@ -325,10 +331,14 @@ Background work on the files is the raw maintenance loop that
 (`store.SweepMessageFiles`): temporary and staged files, the files of
 messages without a row and the empty directories of unknown accounts go
 once they are an hour old (a directory with files stays: two stores in one
-data directory share `messages/`); of a message left with both variants
-the newer valid one stays; missing accounting rows are added and wrong
-ones corrected, which on the first start after migration 0014 accounts for
-every older file (`meta` `raw.accounted`; until then `system.storage`
+data directory share `messages/`; but the directory of an account this
+store deleted goes whole, whatever its age, since `store.DeleteAccount`
+records it in `meta` under `raw.deleted.<account>` until it is gone, which
+a reader holding one of its files on Windows, or a crash, can delay); of
+a message left with both variants the newer valid one stays; missing
+accounting rows are added and wrong ones corrected, which on the first
+start after migration 0014 accounts for every older file
+(`meta` `raw.accounted`; until then `system.storage`
 estimates those files from the message sizes). Then it runs its steps in
 order, each a `RawStep` with its progress in `meta` under
 `raw.step.<name>` (`<key>|<cursor>`, or `<key>|done`), restarted from the

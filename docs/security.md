@@ -985,11 +985,14 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   removes temporary files, files without a row in its own accounts'
   directories and the empty directories of unknown accounts once they are
   an hour old; a directory with files it leaves alone, since another store
-  in the same data directory shares `messages/`. Windows refuses to remove
-  or replace a file while it is open: there a removal or a replacement
-  waits a moment for the daemon's own readers of the file (`message.body`,
-  `message.part`), and a file one of them keeps open for longer stays as
-  it was, a deleted message's file until the sweep. Outbox messages are
+  in the same data directory shares `messages/`, unless it is that of an
+  account this store deleted, which the deletion records until the
+  directory is gone and the sweep then removes whole. Windows refuses to
+  remove or replace a file while it is open: there a removal or a
+  replacement waits a moment for the daemon's own readers of the file
+  (`message.body`, `message.part`), and a file one of them, or another
+  program, keeps open for longer stays as it was, a deleted message's file
+  and a deleted account's directory until the sweep. Outbox messages are
   always plain and flushed to disk, file and directory, before the draft
   they replace is deleted, since until the send that file is the only
   copy.
@@ -1006,8 +1009,10 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   commit flushed to disk first, even against a power loss) and drops the
   name only after a whole file is in place, so after a crash it may call a
   stored part remote, never the reverse (a skeleton that cannot replace
-  the file after all, on Windows while a reader of the daemon keeps it
-  open, has the name dropped again, the file being still whole);
+  the file after all, on Windows while a reader keeps it open, the
+  daemon's or another program's, has the name dropped again, the file
+  being still whole; of a message left with both variants a reader takes
+  the newer);
   `message.part` and `message.embedded` answer `partNotDownloaded` for
   such a part rather than return the empty body the skeleton holds.
   Should a part the row calls stored, with a size, still read back empty
