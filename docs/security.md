@@ -175,6 +175,72 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
 - WebKit's separate content process; one view per pane, reused between
   messages with the document replaced whole.
 
+Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
+`Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
+is re-established for WebView2, from measurements rather than
+documentation, because WebView2 behaves unlike both WebKits: a cancelled
+navigation still sends its request, and a CSP plus a request filter still
+let `<link rel=preconnect>` open a connection and `<link rel=prerender>`
+fetch a page, both unseen by the filter:
+
+- no network at all: every view runs in one browser environment started
+  with `--host-resolver-rules="MAP * ~NOTFOUND"`, which makes every name
+  and every IP literal unreachable (WebView2's own background calls and
+  SmartScreen included), and a proxy nothing answers on (`127.0.0.1:1`)
+  as a second barrier; each view has an InPrivate profile, extensions and
+  single sign-on with the Windows account are off, crash dumps (which can
+  hold mail) stay on the machine instead of going to Microsoft, and the
+  `WEBVIEW2_*` variables of the process are cleared first;
+- script off in the viewer and the previewer (`IsScriptEnabled=false`:
+  measured, no page listener, timer or message ever runs), no web
+  messages, host objects, script dialogs, DevTools, status bar, browser
+  keys, autofill or password saving, and no SmartScreen reputation check,
+  which by default posts every clicked link to Microsoft;
+- a request gate: every request of every kind is answered by the app
+  (`WebResourceRequested`, never the network stack): the view's own
+  document once, from `malachi-doc://` under a 128-bit nonce, with the
+  same Content-Security-Policy as GTK as a header and as a `<meta>`,
+  `nosniff`, `no-store` and `no-referrer`; its own picture scheme only
+  (`malachi-cid:` through `message.part`, images only, never SVG, a type
+  that is not `token/token` refused); 403 for everything else, the
+  document a second time and `data:` included;
+- navigation: only the pending document, once. A link activation is
+  cancelled; a host script reads the focused link through the
+  prototypes' own accessors, which a named element of the page cannot
+  shadow, and its `href` as written counts only when it resolves to
+  exactly the navigation's URL; the reader then opens the link, confirms
+  it (a masked link with its text and real target; a link the daemon did
+  not list, or one known only by the URL WebView2 normalised, with its
+  destination) or composes for `mailto:`.
+  New windows, downloads, external schemes, frames, permissions,
+  authentication, client certificates, certificate errors, screen capture
+  and Save As are refused; the context menu keeps Copy and Copy Link;
+- a fixed document title: WebView2 draws a view through a top-level
+  window of the browser process titled after the document, which other
+  programs can read, so no message, picture or PDF names that window;
+- a renderer that dies or hangs gets the same document once more, and
+  when it fails again the view drops it (the reader shows the plain text
+  with the "could not be shown safely" hint), so a body that reliably
+  crashes Chromium or PDFium cannot loop, writing a crash dump of the
+  mail each time and giving an exploit unlimited retries; a runtime that
+  is missing, or cannot take one of these settings, loads nothing, fail
+  closed;
+- attachments are previewed by the app's own previewer in such a view,
+  never by the shell's preview handlers (third-party code in process over
+  hostile files): pictures by their signature, never SVG; PDF in the
+  runtime's viewer inside a page of the app's own; text, HTML, SVG, XML
+  and messages as escaped source; nothing written to disk, no link
+  followed;
+- the **network canary** (`Malachi.App.Canary`, part of `make
+  test-windows`) runs the real viewer, editor and previewer against a
+  hostile document, its active twin (hover, clicks, forms, a refresh) and
+  every HTML part of `backend/testdata/mime` raw, without the sanitiser,
+  with a loopback listener per vector and Chromium's NetLog: no listener
+  reached, no name resolved, no TCP connection attempted, no URL request
+  but WebView2's own, nothing navigated, opened or downloaded; a control
+  run without the protections must leak, so the harness is known to see
+  leaks.
+
 ### 3.3 Composed HTML
 
 HTML written in the compose editor is hostile too: a paste from a web page
@@ -203,7 +269,22 @@ then reports a failure and the compose window shows its editor-failure
 toast; the text it was given stays saveable), every navigation after the
 initial load cancelled, no context menu, dropped files taken away from
 WebKit and handed to attachment import so a `file:` URL never reaches
-the page.
+the page. The Windows editor (`WebViews/ComposeWebView.cs`) needs page
+script on, since with script off not even an injected bridge's listener
+runs, and WebView2 has no content world of its own: the bridge shares the
+page's world. The CSP carries no `script-src`, so every script, handler
+and `javascript:` URL of pasted or quoted HTML is blocked while the
+bridge, injected before the first navigation and bound to the top frame
+and the document's URL, uses the `Document` and `EventTarget` accessors
+it captured at document start (a pasted `<img name="body">` cannot
+clobber them). Its messages are accepted only as strings from the current
+document in a shape that parses; the request gate, the resolver rule and
+the dead proxy keep it offline as the viewer; its `cid:` serves only ids
+the window registered, as on the other platforms; every navigation but
+its own document is cancelled; a drop of files reaches the host as paths
+for `attachment.import`, never the page; its context menu keeps only the
+editing commands. The canary loads its hostile document and the corpus
+into it as well.
 
 ## 4. Message parsing (MIME)
 
@@ -253,7 +334,19 @@ the page.
   on the name and type `message.part` served, which are what the file
   gets. The client repeats the name sanitiser on every name it writes
   (`safeFileName`: last path component, no control or bidi characters,
-  no leading dots, 255 bytes, and `:` to `_`).
+  no leading dots, 255 bytes, and `:` to `_`). The Windows client
+  previews in its own locked-down previewer (§3.2) and never opens what
+  Windows runs, installs or mounts: besides the GTK list and the macOS
+  additions, Outlook's Level-1 list, `.rdp`, `.appinstaller`, `.msix`,
+  `.ppkg`, `.searchconnector-ms` and friends, disk images (`.iso`,
+  `.img`, `.vhd`, `.vhdx`, whose mounting has bypassed the Mark of the
+  Web), and anything the shell's `AssocIsDangerous` or the attachment
+  policy flags (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`),
+  judged on the listed, the served and the written name. It writes names
+  that are safe on Windows (reserved characters and their ANSI best-fit
+  look-alikes, device names, trailing dots and spaces, streams, the path
+  length, a cut to length never adding an extension), and opens only
+  local files through the shell, never a share, a link or a stream.
 - An attached message (`message/rfc822`, or a part named `.eml`) is never
   parsed during sync. `message.embedded` renders it only when the user
   opens it, from the part's bytes, through the same parser, limits and
@@ -342,8 +435,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   10 minutes, at most 8 run at once, and the backend closes all of them
   on shutdown. The UI opens the authorisation URL — the GTK UI through
   `gtk.URILauncher` (the OpenURI portal inside Flatpak, the desktop's
-  default handler otherwise), the macOS UI through `NSWorkspace`; the
-  backend never launches a browser.
+  default handler otherwise), the macOS UI through `NSWorkspace`, the
+  Windows UI through `ShellExecuteEx` (https only); the backend never
+  launches a browser.
 - The code goes to the provider's token endpoint through a hardened
   client: TLS 1.2+ with the system trust store (the transport policy),
   30 s per request, no redirects followed, no keep-alive. Before anything
@@ -478,6 +572,25 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   files the items as `<accountId>/<key>` with a label naming the same, and
   prints the value only as the answer to `get`. The app sets the two
   variables only when `MALACHI_KEYRING` is not already in its environment.
+- On Windows the app sets the helper to its bundled
+  `malachi-credentials.exe` (`windows/src/Malachi.Credentials`, NativeAOT,
+  no console window), which keeps one generic credential per account id
+  and key in Credential Manager, target
+  `io.github.schotek.Malachi/<accountId>/<key>`, persisted for this
+  machine only (it never roams with the profile), with the same identifier
+  rule and stdin cap as `malachi-keychain`. The value stays bytes, never a
+  string, and every buffer that held it is zeroed. Every value `get` hands
+  over matches a SHA-256 the helper wrote with it, so a torn, mixed or
+  edited item (`cmdkey` and the Credential Manager dialogs store UTF-16
+  without the hash) is a `keyringError`, never a wrong token. A value above
+  Credential Manager's 2560-byte limit is split into at most 16 chunks,
+  written to the slot the current header does not name before the header
+  that names them, so a `set` that fails or is killed leaves the previous
+  value readable; `delete` removes every chunk. Credential Manager loses
+  updates when several processes use it at once, so every run holds a
+  named mutex of the session around its store operation. The trust model
+  is the Secret Service's: any process of the user can read the user's
+  generic credentials, as it can read `store.db` and the RPC key.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 
@@ -611,7 +724,17 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   after the daemon has answered `system.hello`, and accept only a regular
   file of the exact format; the macOS client also requires the user as
   its owner and no group or other permission bits (`macos/README.md`), a
-  check the Go clients cannot make without platform-specific code.
+  check the Go clients cannot make without platform-specific code. The
+  Windows client makes the same check in the form Windows has
+  (`WindowsKeyFilePolicy`, `windows/README.md`): it opens the key file as
+  itself (a link or junction is refused, never followed), requires a disk
+  file owned by the user (or by the token's default owner of an elevated
+  run) whose DACL lets nobody but the user, SYSTEM, Administrators and
+  OWNER RIGHTS read, write or append its data, change its DACL or take it
+  (a NULL DACL is refused), and before it starts a daemon it creates the
+  socket's directory, `%USERPROFILE%\.cache\malachi\run`, with a
+  protected DACL for the user and SYSTEM, since the key file inherits its
+  directory's permissions there.
 - The table in §2 lists, attacker by attacker, what the handshake
   protects against: a peer that reaches the socket but not the key file
   beside it is refused, a process on the socket's path that cannot prove
@@ -639,7 +762,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   (`--socket` or `MALACHI_SOCKET` pointing into `/tmp`, or on Windows
   outside the user's profile) is not supported: whoever can write there
   can put a socket and a key of their own in place, and on Windows
-  whoever can read there can read the key.
+  whoever can read there can read the key. The Windows client refuses such
+  a key file (*Backend unavailable*, the reason in its log); the Go clients
+  cannot tell.
 - An attachment being opened or previewed is written by the UI to a
   private `0700` directory under `$XDG_RUNTIME_DIR/malachi/open` (or
   `$XDG_CACHE_HOME/malachi/open` without a runtime dir) as a `0600` file
@@ -661,7 +786,21 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   opened); a
   file the user saved is theirs regardless. Log lines about these files
   carry an error's domain and code in the open and its description, which
-  names the file, as private.
+  names the file, as private. On Windows the directory is
+  `%LOCALAPPDATA%\Malachi Mail\open` with a protected DACL for the user
+  and SYSTEM, emptied at start and exit, each file in a fresh random
+  subdirectory, created new, never over an existing one. Every file the
+  client writes out of a message, opened or saved, gets the Mark of the
+  Web through `IAttachmentExecute`, which also runs the antivirus check
+  and the attachment policy: the Restricted zone, as Microsoft advises
+  mail clients, or the Internet zone for a program the user saves (the
+  Restricted zone's policy would delete it). A file for opening is opened
+  only when that check passed and the zone reads back (unless an
+  administrator switched zone information off); a failed check never
+  opens. No exception of these services names the path of a file written
+  out of a message. The data directory, `%LOCALAPPDATA%\Malachi Mail`,
+  lies in the user's profile, whose permissions admit the user, SYSTEM
+  and Administrators; the daemon's `0600` and `0700` mean nothing there.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.
@@ -832,3 +971,23 @@ Advisories) rather than a public issue. No bug bounty.
       of api.md §1.4, read the key only after the `system.hello` answer
       and afresh for every connection, and send nothing before
       `system.authenticate` is answered?
+- [ ] Change to the Windows client's WebView2 layer
+      (`windows/src/Malachi.App/WebViews`, the gate, navigation, link,
+      context-menu and recovery rules in `Malachi.Core.Presentation`), or
+      a new WebView2 runtime or Windows App SDK: does the network canary
+      pass (`make test-windows`), with its control run still leaking? Is
+      every request still answered by the gate, every setting applied
+      before the first navigation, and does a view that cannot apply one
+      load nothing?
+- [ ] Windows client showing mail data: only `TextBlock.Text` /
+      `TextBox.Text`, never XAML, RTF or a WebView2 other than the
+      hardened views?
+- [ ] File written out of a message on Windows: a Windows-safe name, a
+      new file in a private directory, the Mark of the Web, opened only
+      after the check passed and the zone read back, never a type of
+      `DangerousTypes` or what `AssocIsDangerous` flags, and no path in an
+      exception or a log line?
+- [ ] Change to `malachi-credentials` or to `WindowsKeyFilePolicy`: does a
+      value stay bytes that are zeroed, is every value handed out checked
+      against its SHA-256, does a failed `set` leave the previous value,
+      and are the owner and DACL checks unchanged or stricter?
