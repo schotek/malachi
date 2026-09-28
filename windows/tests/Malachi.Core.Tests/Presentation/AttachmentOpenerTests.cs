@@ -222,6 +222,48 @@ public sealed class AttachmentOpenerTests : IDisposable
         await opener.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m1"), null);
         Assert.Empty(cache.PartCalls);
         Assert.Empty(toasts);
+        Assert.False(opener.IsSavingAll("m1"));
+    }
+
+    [Fact]
+    public async Task SaveAllRunsOncePerMessageAtATime()
+    {
+        var folder = Path.Combine(temp.Path, "folder");
+        Directory.CreateDirectory(folder);
+        Serve("2", "a.pdf", "application/pdf", [1]);
+        var changes = new List<(MessageId Id, bool Saving)>();
+        opener.SavingAllChanged += (_, id) => changes.Add((id, opener.IsSavingAll(id)));
+        var answer = new TaskCompletionSource<string?>();
+        pickers.FolderGate = answer.Task;
+
+        // The first run waits in its folder picker.
+        var first = opener.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m1"), "w");
+        Assert.False(first.IsCompleted);
+        Assert.True(opener.IsSavingAll("m1"));
+        Assert.Equal([((MessageId)"m1", true)], changes);
+
+        // A rebuilt button's click, or another view of the same message: nothing.
+        await opener.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m1"), "w2");
+        Assert.Single(pickers.FolderAsked);
+
+        // Another message is not held up.
+        pickers.FolderGate = null;
+        pickers.FolderAnswer = null;
+        await opener.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m2"), "w");
+        Assert.Equal(2, pickers.FolderAsked.Count);
+        Assert.False(opener.IsSavingAll("m2"));
+
+        answer.SetResult(folder);
+        await first;
+        Assert.False(opener.IsSavingAll("m1"));
+        Assert.Equal(((MessageId)"m1", false), changes[^1]);
+        Assert.Equal([("w", "Saved 1 attachment")], toasts);
+        Assert.True(File.Exists(Path.Combine(folder, "a.pdf")));
+
+        // And the next run of the first message goes ahead.
+        pickers.FolderAnswer = folder;
+        await opener.SaveAllAsync([Attachment("2", "a.pdf")], Summary("m1"), "w");
+        Assert.True(File.Exists(Path.Combine(folder, "a (2).pdf")));
     }
 
     // DangerousTypes, as FileTypePolicy starts from.
@@ -249,6 +291,9 @@ public sealed class AttachmentOpenerTests : IDisposable
 
         public string? FolderAnswer { get; set; }
 
+        // When set, the folder picker answers when this does.
+        public Task<string?>? FolderGate { get; set; }
+
         public List<(object? Window, string Title, string Name)> SaveAsked { get; } = [];
 
         public List<(object? Window, string Title)> FolderAsked { get; } = [];
@@ -262,7 +307,7 @@ public sealed class AttachmentOpenerTests : IDisposable
         public Task<string?> PickFolderAsync(object? window, string title)
         {
             FolderAsked.Add((window, title));
-            return Task.FromResult(FolderAnswer);
+            return FolderGate ?? Task.FromResult(FolderAnswer);
         }
     }
 }

@@ -23,7 +23,10 @@
 //   written over the chosen file and marked (a program saved gets the
 //   Internet zone, MarkOfTheWeb); only a failure gets a toast.
 // - Save All: a folder, then every part one message.part at a time, never
-//   overwriting (" (2)", " (3)", …), marked; one summary toast.
+//   overwriting (" (2)", " (3)", …), marked; one summary toast. One run per
+//   message at a time: the button is disabled while it lasts (buildSaveAll),
+//   and since a re-render rebuilds the button and another view may show the
+//   same message, the run is kept here, by message, not on the button.
 //
 // A file an antivirus or the attachment policy removed counts as not saved.
 // Log lines carry part ids and exception types only: a file's path carries
@@ -59,6 +62,10 @@ public sealed partial class AttachmentOpener
     private readonly IAttachmentPickers pickers;
     private readonly IReadOnlySet<char>? lookAlikes;
     private readonly ILogger logger;
+
+    // The messages whose Save All is on its way (from the folder picker to
+    // the summary toast).
+    private readonly HashSet<MessageId> savingAll = [];
 
     /// <param name="parts">Fetches the parts (<c>message.part</c>).</param>
     /// <param name="openDir">Where a part is written for opening.</param>
@@ -99,6 +106,12 @@ public sealed partial class AttachmentOpener
 
     /// <summary>The native handle of a window, for the shell's dialogs; 0 for none.</summary>
     public Func<object?, nint>? Owner { get; set; }
+
+    /// <summary>A Save All began or ended for the message with this id (<see cref="IsSavingAll"/>).</summary>
+    public event EventHandler<MessageId>? SavingAllChanged;
+
+    /// <summary>Whether a Save All of message <paramref name="id"/> is on its way: its button stays disabled.</summary>
+    public bool IsSavingAll(MessageId id) => savingAll.Contains(id);
 
     /// <summary>Whether Open applies to <paramref name="a"/>: never to a program or script.</summary>
     public bool CanOpen(Attachment a)
@@ -230,12 +243,31 @@ public sealed partial class AttachmentOpener
     /// Save All (attachments.go <c>saveAllAttachments</c>): asks for a
     /// folder and writes every attachment into it, one <c>message.part</c> at
     /// a time, never overwriting: a name that exists gets " (2)" and so on.
-    /// One toast sums it up; nothing after a dismissal.
+    /// One toast sums it up; nothing after a dismissal. A second Save All of
+    /// the same message while the first lasts does nothing.
     /// </summary>
     public async Task SaveAllAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
     {
         ArgumentNullException.ThrowIfNull(atts);
         ArgumentNullException.ThrowIfNull(s);
+        if (!savingAll.Add(s.Id))
+        {
+            return; // one run per message
+        }
+        SavingAllChanged?.Invoke(this, s.Id);
+        try
+        {
+            await SaveAllOnceAsync(atts, s, window);
+        }
+        finally
+        {
+            savingAll.Remove(s.Id);
+            SavingAllChanged?.Invoke(this, s.Id);
+        }
+    }
+
+    private async Task SaveAllOnceAsync(IReadOnlyList<Attachment> atts, MessageSummary s, object? window)
+    {
         var folder = await pickers.PickFolderAsync(window, L10n.T("Save Attachments"));
         if (string.IsNullOrEmpty(folder))
         {
