@@ -239,11 +239,13 @@ button with what Windows opens mailto: links with (windows/README.md).
                             Toggled="OnMailToggled" />
                     </tk:SettingsCard>
                     <!-- The total as the value; what compression saves and what stays on the server as the description (StorageUsage.StorageTexts). -->
+                    <!-- Tabular figures, as GTK's numeric class and macOS's monospacedDigitSystemFont: the value is measured again every 5 s and should not jitter (Segoe UI Variable's 1 is narrower otherwise). -->
                     <tk:SettingsCard x:Name="StorageRow" Header="{l:T Msgid='Disk Space Used'}">
                         <TextBlock
                             x:Name="StorageValue"
                             AutomationProperties.AutomationId="DiskSpaceUsed"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Typography.NumeralAlignment="Tabular" />
                     </tk:SettingsCard>
                 </StackPanel>
 
