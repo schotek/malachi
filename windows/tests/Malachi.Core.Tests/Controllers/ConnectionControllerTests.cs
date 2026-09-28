@@ -611,9 +611,14 @@ public sealed class ConnectionControllerTests
         var later = API.ProtocolVersion + 1;
         var protocolLater = $"Protocol mismatch: UI {API.ProtocolVersion}, backend {later}";
         await using var fake = await MakeFakeAsync(start: false);
-        // A silent daemon times the handshake out in a second of real time
-        // (the client's clock), not the 5 s of the app.
-        await using var h = await Harness.CreateAsync(fake.Path, handshakeTimeout: TimeSpan.FromSeconds(1));
+        // The client's handshake timeout runs on a clock of its own, moved
+        // only for the silent daemon once its hello arrived: a daemon that
+        // answers is never timed out, however busy the machine. With a real
+        // second, an old daemon's refusal under load sometimes came late and
+        // the attempt ended as unavailable instead of the mismatch.
+        var handshakeTimeout = TimeSpan.FromSeconds(1);
+        var clientTime = new FakeTimeProvider();
+        await using var h = await Harness.CreateAsync(fake.Path, handshakeTimeout: handshakeTimeout, clientTime: clientTime);
         async Task<string> Line() => SyncController.StatusLineFor(new ConnView(await h.StateAsync()), "Up to date", false).Text;
 
         await h.StartAsync(fake); // nothing listens
@@ -626,7 +631,11 @@ public sealed class ConnectionControllerTests
         Assert.Equal(protocol1, await Line());
         // An attempt that ends otherwise replaces the mismatch.
         fake.SetHandshake(new HandshakeMode.Silent());
-        await h.TickAsync(fake);
+        var hellos = fake.Handshakes.Count;
+        h.Time.Advance(h.Cc.ReconnectInterval);
+        await Eventually.Holds(() => fake.Handshakes.Count > hellos, TimeSpan.FromSeconds(30), "the silent daemon got no hello");
+        clientTime.Advance(handshakeTimeout);
+        await h.IdleAsync(fake);
         Assert.Equal("Backend unavailable", await Line());
         fake.SetHandshake(new HandshakeMode.ProtocolVersion(later));
         await h.TickAsync(fake);
@@ -751,9 +760,15 @@ public sealed class ConnectionControllerTests
 
         public LevelLogger Logger { get; } = new();
 
-        public static async Task<Harness> CreateAsync(string path, DaemonSupervisor? supervisor = null, TimeSpan? handshakeTimeout = null)
+        /// <summary>
+        /// A harness over the daemon at <paramref name="path"/>; the client's
+        /// timeouts run on <paramref name="clientTime"/> (the system's clock
+        /// when null), the controller's retries on <see cref="Time"/>.
+        /// </summary>
+        public static async Task<Harness> CreateAsync(
+            string path, DaemonSupervisor? supervisor = null, TimeSpan? handshakeTimeout = null, TimeProvider? clientTime = null)
         {
-            var h = new Harness(new RpcClient(path, PortableKeyFilePolicy.Instance, handshakeTimeout));
+            var h = new Harness(new RpcClient(path, PortableKeyFilePolicy.Instance, handshakeTimeout, clientTime));
             h.Cc = await h.Ui.RunAsync(() => new ConnectionController(h.Client, supervisor, timeProvider: h.Time, logger: h.Logger, pending: h.Pending));
             h.Log.Attach(h.Cc);
             return h;
