@@ -14,7 +14,10 @@
 // snapshots keyed by SidebarKey, and the view hands each new entry to the
 // row of its key (KeyedListSync's view overload), which raises only what
 // changed. Every text is plain: a folder's and an account's names are the
-// server's and the user's.
+// server's and the user's. Windows-only, the server's name and path are
+// cleaned for display (FolderTree.FolderTitle, DisplayText.Clean;
+// docs/security.md §4): an override in a folder's name would turn it
+// around in the row and its tooltip.
 
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -22,6 +25,7 @@ using Malachi.Core.Api;
 using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Presentation;
 
@@ -181,7 +185,7 @@ public sealed partial class SidebarRow : ObservableObject
         Kind = SidebarRowKind.Folder;
         Title = FolderTree.FolderTitle(f);
         Subtitle = e.Favourite && several && e.Account is { } account ? FolderTree.AccountLabel(account) : "";
-        Tooltip = f.Path;
+        Tooltip = DisplayText.Clean(f.Path);
         Indent = IndentPerLevel * e.Depth;
         Icon = FolderTree.RoleIcon(f.Role);
         // Accounts without any nesting get no arrow column at all.

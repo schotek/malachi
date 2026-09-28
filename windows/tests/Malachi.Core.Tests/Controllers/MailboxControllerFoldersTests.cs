@@ -255,7 +255,8 @@ public sealed class MailboxControllerFoldersTests
 
         // Syncing → idle for the selected folder: folders and list reload.
         await h.On(() => h.Mailbox.HandleSyncState(new SyncState { AccountId = "acc1", Status = SyncStatus.Syncing, FolderId = "inbox" }));
-        Assert.Equal(("Syncing Inbox…", true), h.Sync.Footer);
+        // Windows-only: the folder is isolated in the sentence (DisplayText).
+        Assert.Equal(("Syncing \u2068Inbox\u2069…", true), h.Sync.Footer);
         Assert.Equal(1, log.Reloads);
         await h.On(() => h.Mailbox.HandleSyncState(new SyncState { AccountId = "acc1", Status = SyncStatus.Idle, FolderId = "inbox" }));
         await h.IdleAsync();
@@ -605,7 +606,7 @@ public sealed class MailboxControllerFoldersTests
 
         await h.Fixture.PushAsync(new DaemonNotification.SyncState(new SyncState { AccountId = "acc2", Status = SyncStatus.Syncing, FolderId = "in2", Progress = 10 }));
         await Settled();
-        Assert.Equal("Syncing Inbox… 10 %", h.Sync.Footer.Text);
+        Assert.Equal("Syncing \u2068Inbox\u2069… 10 %", h.Sync.Footer.Text);
         await h.Fixture.PushAsync(new DaemonNotification.NewMessage(new NewMessageNotification { AccountId = "acc2", FolderId = "in2", Message = Summary("n1") }));
         await Settled();
         Assert.Equal(1, EntryById(h.Mailbox.Model.Entries, "in2")?.Badge);

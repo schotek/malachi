@@ -130,11 +130,9 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>window.go refreshListTitle: the selected folder in the caption (the list's header shows it with its counts).</summary>
-    public void ShowListHeading(ListHeading heading)
-    {
-        // Windows-only string: the caption "<folder> – Malachi Mail" (docs/windows-port.md §11.1).
-        Title = string.IsNullOrEmpty(heading.Title) ? AppIdentity.DisplayName : heading.Title + " – " + AppIdentity.DisplayName;
-    }
+    public void ShowListHeading(ListHeading heading) =>
+        // "<folder> – Malachi Mail", the folder isolated (docs/windows-port.md §11.1).
+        Title = heading.Caption;
 
     /// <summary>
     /// Puts the keyboard in the search box and selects its text (win.search,

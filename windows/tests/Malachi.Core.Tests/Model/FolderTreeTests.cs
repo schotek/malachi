@@ -4,10 +4,11 @@
 // Port of macos/Tests/MalachiCoreTests/FolderTreeTests.swift, the
 // counterpart of ui/internal/window/folders_test.go (every test; the Swift
 // suite ports all of them): the sidebar layout the window relies on, where
-// ordering, depth and header placement must be exact. SortSiblingsGoOrder
-// and DeepChainDoesNotRecurse are Windows-only: they pin what the C# port
-// had to do on purpose (Go's case folding and byte order, a walk without
-// recursion over a hostile server's folder chain).
+// ordering, depth and header placement must be exact. SortSiblingsGoOrder,
+// DeepChainDoesNotRecurse and AFoldersNameIsCleanedForDisplay are
+// Windows-only: they pin what the C# port had to do on purpose (Go's case
+// folding and byte order, a walk without recursion over a hostile server's
+// folder chain, the display-text rule over a server's folder name).
 
 using System.Collections.Generic;
 using System.Linq;
@@ -230,5 +231,18 @@ public sealed class FolderTreeTests
         var entries = FolderTree.SortFolders([TestAccount("a")], new FolderMap { ["a"] = list }, collapsed, new FavouriteState());
         var root = Assert.Single(entries);
         Assert.Equal(n, root.Badge);
+    }
+
+    // Windows-only (DisplayText, docs/security.md §4): a server's name for
+    // a folder is cleaned for display, as a sender's subject is; a role
+    // folder keeps its localised name whatever the server calls it.
+    [Fact]
+    public void AFoldersNameIsCleanedForDisplay()
+    {
+        Assert.Equal("Invoices gnp.exe", FolderTree.FolderTitle(TestFolder("x", "x", name: "Invoices \u202Egnp.exe")));
+        Assert.Equal("a b", FolderTree.FolderTitle(TestFolder("x", "x", name: "a\u0007b")));
+        Assert.Equal("", FolderTree.FolderTitle(TestFolder("x", "x", name: "\u202E\u2066")));
+        Assert.Equal("חשבוניות", FolderTree.FolderTitle(TestFolder("x", "x", name: "חשבוניות")));
+        Assert.Equal("Inbox", FolderTree.FolderTitle(TestFolder("x", "INBOX", FolderRole.Inbox, name: "\u202EXOBNI")));
     }
 }

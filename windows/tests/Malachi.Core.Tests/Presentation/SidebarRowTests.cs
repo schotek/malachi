@@ -160,6 +160,19 @@ public sealed class SidebarRowTests
         Assert.Equal("Inbox, one@example.invalid, 2", Row(pinned, several: true).ToString());
     }
 
+    // Windows-only (DisplayText, docs/security.md §4): the server's name and
+    // path of a folder are cleaned, so an override cannot turn the row or
+    // its tooltip around.
+    [Fact]
+    public void AFoldersNameAndPathAreCleaned()
+    {
+        var accounts = new[] { TestAccount("a") };
+        var folders = new FolderMap { ["a"] = [TestFolder("x", "Archiv/\u202Egnp.exe\u0007", name: "\u202Egnp.exe\u0007")] };
+        var row = Row(FolderTree.SortFolders(accounts, folders, new CollapseState(), new FavouriteState())[0]);
+        Assert.Equal("gnp.exe ", row.Title);
+        Assert.Equal("Archiv/gnp.exe ", row.Tooltip);
+    }
+
     [Fact]
     public void AnUpdateRaisesOnlyWhatChanged()
     {

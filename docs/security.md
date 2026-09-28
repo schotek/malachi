@@ -402,24 +402,27 @@ into it as well.
   (`Malachi.Core.Text.DisplayText`): the list's senders and subjects, the
   reader's subject and address chips, the captions of message windows,
   notifications, the questions that quote a subject or a link's text,
-  attachment names and recipient suggestions. The explicit bidi
-  formatting characters (U+202A to U+202E, U+2066 to U+2069) are removed;
-  control characters (C0, DEL, C1) and the line and paragraph separators
-  become spaces, so what is left is valid XML; and where such text is
-  composed with other text (*Name &lt;address&gt;*, a conversation's
-  participants, a sentence that quotes a subject, the masked-link
-  question that quotes a link's text before its real destination) it is
-  isolated between U+2068 and U+2069, so a right-to-left text keeps its
-  own direction and cannot move what follows it. The bidi marks (U+200E,
-  U+200F, U+061C) and the joiners stay, so Hebrew, Arabic and Persian
-  names read as written; a subject or name of nothing but characters that
-  draw nothing (such a mark, U+200B, U+FEFF) counts as empty and shows its
-  fallback, *(No subject)* or the address. This is display only: the
-  recipients of a reply, a draft's subject, the names in a quote's header
-  and what Copy Address copies are the text as received, and a message's
-  body and the excerpt of it in the list are its content, shown as
-  written. The GTK and macOS clients show these texts as received; the
-  same rule is proposed for them
+  attachment names and recipient suggestions, and the names the server
+  gives its folders (the sidebar, the list's header, the main window's
+  caption, the origin of a search result, the status line). The explicit
+  bidi formatting characters (U+202A to U+202E, U+2066 to U+2069) are
+  removed; control characters (C0, DEL, C1) and the line and paragraph
+  separators become spaces, so what is left is valid XML; and where such
+  text is composed with other text (*Name &lt;address&gt;*, a
+  conversation's participants, a sentence that quotes a subject or a
+  folder, the masked-link question that quotes a link's text before its
+  real destination, *Folder – Malachi Mail*) it is isolated between
+  U+2068 and U+2069, so a right-to-left text keeps its own direction and
+  cannot move what follows it. The bidi marks (U+200E, U+200F, U+061C)
+  and the joiners stay, so Hebrew, Arabic and Persian names read as
+  written; a subject or name of nothing but characters that draw nothing
+  (such a mark, U+200B, U+FEFF) counts as empty and shows its fallback,
+  *(No subject)* or the address. This is display only: the recipients of
+  a reply, a draft's subject, the names in a quote's header and what Copy
+  Address copies are the text as received, and a message's body and the
+  excerpt of it in the list are its content, shown as written. The GTK
+  and macOS clients show these texts as received; the same rule is
+  proposed for them
   ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)

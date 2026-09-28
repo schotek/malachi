@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
 
@@ -406,7 +407,13 @@ public static class FolderTree
     /// <summary>
     /// The display name of a folder (folders.go <c>folderTitle</c>): the
     /// localised name for a role folder (whatever the server calls it), the
-    /// server's name otherwise. Plain text either way.
+    /// server's name otherwise. Plain text either way; Windows-only, the
+    /// server's name is cleaned for display (<see cref="DisplayText.Clean"/>,
+    /// docs/security.md §4), since a server can name a folder with an
+    /// override or a control character as a sender names a subject, and the
+    /// sidebar, the list's header, the window's caption, the search results
+    /// and the status line show it. Where it is composed with other text
+    /// the caller isolates it (<see cref="DisplayText.Isolate"/>).
     /// </summary>
     public static string FolderTitle(Folder f)
     {
@@ -421,7 +428,7 @@ public static class FolderTree
             FolderRole.Archive => L10n.C("folder", "Archive"),
             FolderRole.All => L10n.C("folder", "All Mail"),
             FolderRole.Outbox => L10n.C("folder", "Outbox"),
-            _ => f.Name,
+            _ => DisplayText.Clean(f.Name),
         };
     }
 

@@ -17,6 +17,7 @@ using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
 using Malachi.Core.Settings;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
 
@@ -103,8 +104,11 @@ public sealed partial class MailModel
         {
             return ("", "");
         }
+        // Windows-only: the folder's name and path are the server's, cleaned
+        // for display (FolderTitle, DisplayText), and the name is isolated
+        // before the account, so a right-to-left name cannot move it.
         var label = FolderTree.FolderTitle(f);
-        var tooltip = (f.Path ?? "").Trim();
+        var tooltip = DisplayText.Clean(f.Path).Trim();
         if (tooltip.Length == 0)
         {
             tooltip = label;
@@ -116,7 +120,7 @@ public sealed partial class MailModel
             {
                 // TRANSLATORS: where a search result lies, shown in its row:
                 // the folder, then the account.
-                label = L10n.Format(L10n.C("search result origin", "%s · %s"), label, FolderTree.AccountLabel(a));
+                label = L10n.Format(L10n.C("search result origin", "%s · %s"), DisplayText.Isolate(label), FolderTree.AccountLabel(a));
             }
         }
         return (label, tooltip);
@@ -127,7 +131,7 @@ public sealed partial class MailModel
     {
         var f = Selected is { } k ? Folder(k) : null;
         var folderTip = f is not null
-            ? L10n.T("Search in %s", FolderTree.FolderTitle(f))
+            ? L10n.T("Search in %s", DisplayText.Isolate(FolderTree.FolderTitle(f)))
             : L10n.T("Select a folder to search in it");
         var accountTip = Selected is { } sk && Account(sk.Account) is { } a
             ? L10n.T("Search every folder of %s except Trash and Junk", FolderTree.AccountLabel(a))

@@ -90,9 +90,10 @@ public sealed class SearchModelTests
         var row = m.RowMessage(m.Messages[0]);
         Assert.Equal("…a přílohy", row.Snippet);
         Assert.Equal(hit, row.Highlights);
-        Assert.Equal("Faktury · Work", row.Origin);
+        // Windows-only: the folder is isolated before the account (DisplayText).
+        Assert.Equal("\u2068Faktury\u2069 · Work", row.Origin);
         Assert.Equal("Archiv/Faktury\nWork", row.OriginTooltip);
-        Assert.Equal("Inbox · me@home.example", m.RowMessage(m.Messages[1]).Origin);
+        Assert.Equal("\u2068Inbox\u2069 · me@home.example", m.RowMessage(m.Messages[1]).Origin);
 
         m.Search.Effective = SearchScope.Account;
         Assert.Equal("Faktury", m.RowMessage(m.Messages[0]).Origin);
@@ -118,7 +119,8 @@ public sealed class SearchModelTests
         m.Search.Scope = SearchScope.Account;
         var bar = m.SearchBar();
         Assert.True(bar.Scope == SearchScope.Account && bar.NarrowEnabled);
-        Assert.Equal("Search in Inbox", bar.FolderTooltip);
+        // Windows-only: the folder is isolated in the sentence (DisplayText).
+        Assert.Equal("Search in \u2068Inbox\u2069", bar.FolderTooltip);
         Assert.Equal("Search every folder of Work except Trash and Junk", bar.AccountTooltip);
         m.Selected = null;
         bar = m.SearchBar();
@@ -160,6 +162,26 @@ public sealed class SearchModelTests
         }
         MatchRange[] many = [.. Enumerable.Range(0, 50).Select(i => R(i, i + 1))];
         Assert.Equal(SearchModel.MaxHighlights, SearchModel.HighlightRanges(new string('x', 60), many).Count);
+    }
+
+    // Windows-only (DisplayText, docs/security.md §4): a result's origin
+    // shows the server's name and path of its folder cleaned, the name
+    // isolated before the account.
+    [Fact]
+    public void TheOriginOfAResultIsCleaned()
+    {
+        var m = NewSearchModel();
+        m.Folders["a1"] = [TestFolder("f_in", "INBOX", FolderRole.Inbox, name: "INBOX"), TestFolder("f_x", "Archiv/\u202Egnp.exe\u0007", name: "\u202Egnp.exe")];
+        m.Search.Active = true;
+        m.Search.Effective = SearchScope.All;
+        m.SetSearchResults(new SearchQueryResult
+        {
+            Results = [new() { Message = Summary("m1", "a1", "f_x"), Snippet = "x", Score = 0 }],
+            Page = new PageInfo { Total = 1 },
+        });
+        var row = m.RowMessage(m.Messages[0]);
+        Assert.Equal("\u2068gnp.exe\u2069 · Work", row.Origin);
+        Assert.Equal("Archiv/gnp.exe\nWork", row.OriginTooltip);
     }
 
     private static MailModel NewSearchModel()

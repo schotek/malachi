@@ -113,7 +113,10 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         settingsTokens.Add(settings.OnChange(SettingsKey.CollapsedAccounts, OnCollapseChanged));
         settingsTokens.Add(settings.OnChange(SettingsKey.FavouriteFolders, OnFavouritesChanged));
         sync.Accounts = () => Model.Accounts;
-        sync.FolderName = (acc, id) => Model.Folder(new FolderKey(acc, id)) is { } f ? FolderTree.FolderTitle(f) : "";
+        // The status line puts the name into a sentence ("Syncing %s… %d %%"):
+        // Windows-only, the server's name is isolated there (DisplayText), so
+        // a right-to-left name cannot move the progress after it.
+        sync.FolderName = (acc, id) => Model.Folder(new FolderKey(acc, id)) is { } f ? DisplayText.Isolate(FolderTree.FolderTitle(f)) : "";
     }
 
     // Callbacks (the sidebar)

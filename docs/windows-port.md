@@ -193,11 +193,11 @@ source. "Mirror" means what it means in [macos-port.md §3](macos-port.md#3-the-
 - mail data is hostile input: `TextBlock.Text`/`TextBox.Text` only, never
   a XAML or RTF parser over anything from a message; HTML only in the
   WebView2 views of §6; and what the chrome shows of it (names, subjects,
-  captions, notifications, attachment names) passes `Text.DisplayText`
-  first: no bidi formatting or control character reaches the screen, a
-  subject or name that draws nothing takes its fallback, and a name
-  composed with other text is isolated (U+2068 … U+2069), so it cannot
-  reorder the address after it ([security.md §4](security.md#4-message-parsing-mime);
+  a server's folder names, captions, notifications, attachment names)
+  passes `Text.DisplayText` first: no bidi formatting or control character
+  reaches the screen, a subject or name that draws nothing takes its
+  fallback, and a name composed with other text is isolated (U+2068 …
+  U+2069), so it cannot reorder the address after it ([security.md §4](security.md#4-message-parsing-mime);
   Windows-only, a row of the deviation table);
 - where Windows differs, the row goes into the deviation table of
   `windows/README.md` and the code says why. A new deviation never lands
@@ -900,8 +900,10 @@ commands). What these classes show of a message goes through
 `Text.DisplayText` (§3): `Format.DisplayName`, `FormatAddress` and
 `FormatParticipants` clean and isolate names,
 `LoadedMessageText.SubjectText` cleans the subject for the list, the
-reader, the captions and the questions, and `NotificationText` both lines
-of a toast. What is sent to the daemon stays as received: the quote
+reader, the captions and the questions, `NotificationText` both lines
+of a toast, and `FolderTree.FolderTitle` a server's name for a folder,
+which `ListHeading.Caption`, the status line and a search result's origin
+isolate. What is sent to the daemon stays as received: the quote
 headers of `Prefill` take `Format.NameAsReceived` and `AddressAsReceived`,
 GTK's forms, and Copy Address copies the address itself. The rules of the
 WebView2 layer, which macOS keeps in its web views, live there too
@@ -1447,7 +1449,8 @@ for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
 searching), message (Reply, Reply All, Forward, Trash, Junk, Archive, Star,
 More). The status line runs across the bottom edge (26 px, spinner,
 connection glyph, caption) and opens the per-account flyout. 1200×760,
-minimum 360×294. The caption is *Folder – Malachi Mail*. The `TitleBar` is
+minimum 360×294. The caption is *Folder – Malachi Mail*, the folder's name
+cleaned and isolated (`ListHeading.Caption`, §3). The `TitleBar` is
 set with `SetTitleBar`, `PreferredHeightOption=Tall`; the colour scheme sets
 `RequestedTheme` on every window root **and**
 `AppWindow.TitleBar.PreferredTheme` (the caption buttons ignore
@@ -2350,8 +2353,9 @@ plus GTK confirming unlisted links (the likely masked-link bypass),
 bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
 a runtime D-Bus opt-out, the display-text rule in GTK and macOS (bidi
-formatting and control characters out of the names and subjects they
-show, a name isolated from the address after it; security.md §4).
+formatting and control characters out of the names, subjects and folder
+names they show, a name isolated from the address after it; security.md
+§4).
 
 ## 15. How it was built
 
