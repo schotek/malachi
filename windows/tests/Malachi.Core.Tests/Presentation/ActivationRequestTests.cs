@@ -7,6 +7,7 @@
 // window) and docs/windows-port.md §10 (the arguments COM adds for a
 // notification's click are ignored).
 
+using System.Linq;
 using Malachi.Core.Presentation;
 using Xunit;
 
@@ -36,12 +37,34 @@ public sealed class ActivationRequestTests
     }
 
     [Fact]
-    public void SeveralMailtoUrisKeepTheirOrder()
+    public void OnlyTheFirstMailtoUriOpensAComposer()
     {
-        var r = ActivationRequest.FromArguments(ActivationKind.Launch, ["mailto:a@example.com", "mailto:b@example.com"], redirected: true);
-        Assert.Equal(["mailto:a@example.com", "mailto:b@example.com"], r.MailtoUris);
+        // One compose window per activation (docs/windows-port.md §10): the rest
+        // join the ignored arguments, which the app logs by count.
+        var r = ActivationRequest.FromArguments(ActivationKind.Launch, ["mailto:a@example.com", "--verbose", "MAILTO:b@example.com"], redirected: true);
+        Assert.Equal(["mailto:a@example.com"], r.MailtoUris);
+        Assert.Equal(["--verbose", "MAILTO:b@example.com"], r.Ignored);
         Assert.True(r.Redirected);
         Assert.False(r.ShowMainWindow);
+    }
+
+    [Fact]
+    public void AMailtoLinkSplitAcrossWordsOpensOneComposer()
+    {
+        // A second launch as a caller that does not escape the quotes of a
+        // link it hands to "%1" makes it: the link falls apart into several
+        // arguments, and each piece that starts like a mailto: URI would
+        // have opened a composer.
+        const string line = Exe + """ "mailto:victim@example.test?subject=hi" --background "mailto:x@y.test?body=%3Cscript%3E&subject=%E2%80%AEtxt.exe" --unknown C:/secret/path -Embedding""";
+        var r = ActivationRequest.FromCommandLine(ActivationKind.Launch, line, redirected: true);
+        Assert.Equal(["mailto:victim@example.test?subject=hi"], r.MailtoUris);
+        Assert.Equal(["mailto:x@y.test?body=%3Cscript%3E&subject=%E2%80%AEtxt.exe", "--unknown", "C:/secret/path"], r.Ignored);
+        Assert.False(r.ShowMainWindow);
+        Assert.False(r.StartHidden);
+
+        var many = ActivationRequest.FromArguments(ActivationKind.Launch, [.. Enumerable.Range(0, 500).Select(i => "mailto:a" + i + "@example.com")], redirected: false);
+        Assert.Single(many.MailtoUris);
+        Assert.Equal(499, many.Ignored.Count);
     }
 
     [Fact]

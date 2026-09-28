@@ -11,8 +11,13 @@
 //
 // - a launch without arguments, a click on a notification, or any other
 //   kind shows the main window;
-// - mailto: arguments open a compose window each and nothing else, as the
-//   GTK open signal does (a cold start shows no main window);
+// - a mailto: argument opens a compose window and nothing else, as the GTK
+//   open signal does (a cold start shows no main window). Only the first
+//   one of an activation does: the ProgID's "%1" passes one link, and a
+//   caller that splits a link with a quote in it across words, or a
+//   command line that lists hundreds, would otherwise open a compose
+//   window, with its WebView2 editor, for every one (GTK and macOS open
+//   each). The others join the ignored arguments, logged by count;
 // - --background (the Run key's launch at login) starts the app with no
 //   window, as --gapplication-service does; a second launch with it does
 //   nothing;
@@ -53,10 +58,16 @@ public sealed record ActivationRequest
     /// <summary>The first launch asked to run in the background with no window (<see cref="BackgroundOption"/>).</summary>
     public bool StartHidden { get; init; }
 
-    /// <summary>The <c>mailto:</c> URIs to open a compose window for, in order.</summary>
+    /// <summary>
+    /// The <c>mailto:</c> URI to open a compose window for: at most one, the
+    /// activation's first (<see cref="FromArguments"/>).
+    /// </summary>
     public IReadOnlyList<string> MailtoUris { get; init => field = value ?? []; } = [];
 
-    /// <summary>The arguments nothing here knows: logged (by count: they may be addresses) and dropped.</summary>
+    /// <summary>
+    /// The arguments nothing here knows, and the <c>mailto:</c> URIs after
+    /// the first: logged (by count: they may be addresses) and dropped.
+    /// </summary>
     public IReadOnlyList<string> Ignored { get; init => field = value ?? []; } = [];
 
     /// <summary>
@@ -71,7 +82,11 @@ public sealed record ActivationRequest
         return FromArguments(kind, arguments, redirected);
     }
 
-    /// <summary>The request of the arguments, without the program.</summary>
+    /// <summary>
+    /// The request of the arguments, without the program: the first
+    /// <c>mailto:</c> URI in <see cref="MailtoUris"/>, later ones in
+    /// <see cref="Ignored"/>.
+    /// </summary>
     public static ActivationRequest FromArguments(ActivationKind kind, IEnumerable<string> arguments, bool redirected)
     {
         ArgumentNullException.ThrowIfNull(arguments);
@@ -96,7 +111,15 @@ public sealed record ActivationRequest
             }
             if (argument.StartsWith(MailtoScheme, StringComparison.OrdinalIgnoreCase))
             {
-                mailto.Add(argument);
+                // One composer per activation; the rest are only counted.
+                if (mailto.Count == 0)
+                {
+                    mailto.Add(argument);
+                }
+                else
+                {
+                    ignored.Add(argument);
+                }
                 continue;
             }
             ignored.Add(argument);

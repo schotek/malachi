@@ -1218,7 +1218,11 @@ thread (`ActivationRequest`, Core). An unpackaged launch carries its whole
 command line (split as the C runtime splits it). Kinds: launch (shows the
 window), `mailto:` (the composer only, as GTK; a cold `mailto:` shows no
 main window, and one that no compose window can take yet brings the main
-window up instead), a notification (the window), `--background` (nothing;
+window up instead; only the activation's first link opens one, the others
+are logged by count with the unknown arguments, since the ProgID passes
+one link and a caller that splits a quoted link into several arguments
+would otherwise open a window, with its WebView2 editor, for every
+piece), a notification (the window), `--background` (nothing;
 the first launch holds the app without a window, GTK's service hold),
 `----AppNotificationActivated:` and `-Embedding` ignored, anything else
 logged by count and ignored.
