@@ -538,6 +538,39 @@ Adw.ApplicationWindow main_window {
               }
             }
 
+            // Pictures the HTML shows that are kept on the mail server only
+            // (neverStoreAttachments; window/remote.go): the count and a
+            // button that has the daemon download the message, after which
+            // the body is asked for again. The spinner replaces the button
+            // meanwhile. Shown under remote_bar when both apply.
+            [top]
+            Box pictures_bar {
+              orientation: horizontal;
+              spacing: 12;
+              visible: false;
+
+              styles [
+                "toolbar",
+                "remote-bar",
+              ]
+
+              Adw.Spinner pictures_spinner {
+                visible: false;
+                valign: center;
+              }
+
+              Label pictures_label {
+                xalign: 0;
+                wrap: true;
+                hexpand: true;
+              }
+
+              Button pictures_download {
+                label: _("_Download Pictures");
+                use-underline: true;
+              }
+            }
+
             content: Adw.ToastOverlay toast_overlay {
               child: Stack message_stack {
                 transition-type: crossfade;

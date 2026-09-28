@@ -61,6 +61,16 @@ type loadedMessage struct {
 	// images (Load Images, Always From This Sender) until the daemon has
 	// answered; the bar shows it instead of the buttons (remote.go).
 	loadingImages bool
+
+	// loadingPictures is the same for the pictures kept on the mail server
+	// only (Download Pictures): from the click until the message is
+	// downloaded and its body asked for again (remote.go).
+	loadingPictures bool
+
+	// picturesRechecked is set once a picture of the body went missing and
+	// the body was asked for again, until the next download of the message
+	// (recheckPictures in remote.go): never more than once in between.
+	picturesRechecked bool
 }
 
 // complete reports whether nothing is left to fetch.
@@ -120,6 +130,16 @@ type messageView struct {
 	loadButton, trustButton *gtk.Button
 	load, trust             func()
 
+	// The bar of the pictures kept on the mail server only, built the same
+	// way: the count, the button whose work the owner supplies as pictures,
+	// and the spinner that stands in for it. picturesBar is nil on the view
+	// of an attached message, whose pictures arrive inlined.
+	picturesBar      *gtk.Box
+	picturesLabel    *gtk.Label
+	picturesSpinner  *adw.Spinner
+	picturesDownload *gtk.Button
+	pictures         func()
+
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
 
@@ -131,7 +151,7 @@ type messageView struct {
 
 // newMessageView binds the widgets of one message display from a builder;
 // the object IDs are the same in window.blp, message_window.blp and
-// embedded_window.blp.
+// embedded_window.blp, except pictures_bar, which the last one lacks.
 func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView {
 	v := &messageView{
 		win:         w,
@@ -173,6 +193,20 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 	// care of the keyboard, which has to focus the button to press it.
 	load.SetFocusOnClick(false)
 	trust.SetFocusOnClick(false)
+	if bar := b.GetObject("pictures_bar"); bar != nil {
+		v.picturesBar = bar.Cast().(*gtk.Box)
+		v.picturesLabel = b.GetObject("pictures_label").Cast().(*gtk.Label)
+		v.picturesSpinner = b.GetObject("pictures_spinner").Cast().(*adw.Spinner)
+		v.picturesDownload = b.GetObject("pictures_download").Cast().(*gtk.Button)
+		v.picturesLabel.SetUseMarkup(false)
+		v.picturesDownload.ConnectClicked(func() {
+			if v.pictures != nil {
+				v.pictures()
+			}
+		})
+		// Like the buttons above: the bar goes away once the pictures are in.
+		v.picturesDownload.SetFocusOnClick(false)
+	}
 	return v
 }
 
@@ -259,8 +293,9 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
 
 // renderBody shows the body, its state, or the error that prevented it:
 // the sanitised HTML in the web view when there is one, the plain text
-// otherwise, with a hint when the HTML was withheld and the banner when
-// remote images were removed.
+// otherwise, with a hint when the HTML was withheld, the banner when
+// remote images were removed and the one for pictures kept on the mail
+// server only.
 func (v *messageView) renderBody(lm *loadedMessage) {
 	v.cancelSpinner()
 	b, err := lm.body, lm.err
@@ -268,6 +303,7 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 	if err != nil {
 		v.hint.SetVisible(false)
 		v.setBarVisible(false)
+		v.showPicturesBar(picturesBarState{})
 		v.showText(widget.RPCErrorText(i18n.T("Loading the message"), err))
 		return
 	}
@@ -277,10 +313,12 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 		v.htmlView().Load(b.HTML)
 		v.stack.SetVisibleChildName("html")
 		renderRemoteBar(v, lm)
+		renderPicturesBar(v, lm)
 		return
 	}
 	v.hint.SetVisible(b != nil && b.HTMLWithheld)
 	v.setBarVisible(false)
+	v.showPicturesBar(picturesBarState{})
 	v.showText(bodyText(b))
 }
 
@@ -311,6 +349,7 @@ func (v *messageView) loading() {
 	v.links = nil
 	v.hint.SetVisible(false)
 	v.setBarVisible(false)
+	v.showPicturesBar(picturesBarState{})
 	// Blank at once: this also drops the pictures of the message before.
 	v.showText("")
 	v.spinner = glib.TimeoutAdd(bodySpinnerDelay, func() bool {

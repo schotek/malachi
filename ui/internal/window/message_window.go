@@ -72,6 +72,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.view.load = func() { w.loadRemoteImages(id) }
 	mw.view.trust = func() { w.trustSender(id) }
 	mw.view.toast = func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) }
+	mw.view.pictures = func() { w.downloadPictures(id, mw.view.say) }
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the

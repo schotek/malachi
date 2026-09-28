@@ -2698,3 +2698,31 @@ msgstr ""
 #: ui/internal/window/preferences.go:0
 msgid "Converting stopped: the disk is full"
 msgstr ""
+
+#: ui/data/ui/preferences.ui:0
+msgid "Never Store Attachments"
+msgstr ""
+
+#: ui/data/ui/preferences.ui:0
+msgid "Attachments are downloaded whenever you open them and are gone when you quit"
+msgstr ""
+
+#. TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+#: ui/internal/window/remote.go:0
+#, c-format
+msgid "%d picture of this message is on the server only"
+msgid_plural "%d pictures of this message are on the server only"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/data/ui/window.ui:0
+msgid "_Download Pictures"
+msgstr ""
+
+#: ui/internal/window/remote.go:0
+msgid "Downloading pictures…"
+msgstr ""
+
+#: ui/internal/window/remote.go:0
+msgid "Downloading the pictures"
+msgstr ""

@@ -22,9 +22,10 @@ import (
 
 // Remote content and links of an HTML message: the banner that says what
 // the sanitiser removed, loading those images through the daemon, trusting
-// a sender, fetching inline pictures for the web view, and opening a link
-// the user activated. The daemon decides everything about the content;
-// this file only asks and shows.
+// a sender, fetching inline pictures for the web view, downloading the ones
+// kept on the mail server only, and opening a link the user activated. The
+// daemon decides everything about the content; this file only asks and
+// shows.
 
 // remoteTimeout bounds a message.body call that lets the daemon fetch
 // remote images: several seconds is normal, the usual rpcTimeout is not
@@ -90,11 +91,11 @@ func loadableImages(b *api.MessageBodyResult) int {
 }
 
 // fetchPart serves the web view's malachi-cid: pictures through
-// message.part. It runs off the main loop.
+// message.part, off the main loop; a failure goes by pictureFailed.
 func (w *Window) fetchPart(ctx context.Context, acc api.AccountID, id api.MessageID, part string) (string, []byte, error) {
 	res, err := w.fetchAttachment(ctx, acc, id, part)
 	if err != nil {
-		return "", nil, err
+		return "", nil, w.pictureFailed(acc, id, part, err)
 	}
 	return res.ContentType, res.Data, nil
 }
@@ -291,4 +292,252 @@ func (w *Window) launchURI(parent *gtk.Window, uri string) {
 			w.Toast(widget.LaunchErrorText(err))
 		}
 	})
+}
+
+// Pictures kept on the mail server only. Under neverStoreAttachments the
+// daemon does not store the pictures the HTML shows of
+// api.LargeAttachmentMinBytes and more: message.body counts them
+// (RemotePictures), message.part answers partNotDownloaded for them, and a
+// second bar under the remote-image one offers to download them. The daemon
+// then fetches the whole message into its memory (message.download), and
+// the body asked for again shows them. Only that click contacts the mail
+// server, never showing a message.
+
+// picturesBarState is what the pictures bar shows: nothing, how many
+// pictures of the body are on the mail server only with the button that
+// downloads them, or the notice that they are on their way.
+type picturesBarState struct {
+	visible bool
+	loading bool
+	remote  int
+}
+
+// picturesBarStateFor derives the bar from what is known about the message.
+func picturesBarStateFor(lm *loadedMessage) picturesBarState {
+	if lm == nil {
+		return picturesBarState{}
+	}
+	if lm.loadingPictures {
+		return picturesBarState{visible: true, loading: true}
+	}
+	n := remotePictures(lm.body)
+	return picturesBarState{visible: n > 0, remote: n}
+}
+
+// remotePictures is how many pictures of the body on display are on the
+// mail server only. Only an HTML body shown as such misses any: the plain
+// text has no pictures.
+func remotePictures(b *api.MessageBodyResult) int {
+	if !showsHTML(b) || b.RemotePictures < 0 {
+		return 0
+	}
+	return b.RemotePictures
+}
+
+// picturesPolicy is the remote-content override for the body asked for
+// again once the pictures are downloaded: allow when the remote images of
+// the body on display were loaded, or are being loaded, so that the new
+// body does not take them away again; otherwise none, and the stored
+// preference applies as it did for the body on display.
+func picturesPolicy(lm *loadedMessage) api.RemoteContentPolicy {
+	if lm.loadingImages || (lm.body != nil && lm.body.RemoteContent == api.RemoteAllow) {
+		return api.RemoteAllow
+	}
+	return ""
+}
+
+// renderPicturesBar shows how many pictures of the body on display are on
+// the mail server only, with the button that downloads them, or the
+// spinner while they download.
+func renderPicturesBar(v *messageView, lm *loadedMessage) {
+	v.showPicturesBar(picturesBarStateFor(lm))
+}
+
+// refreshPicturesBar redraws the pictures bar of message id wherever it is
+// on display and leaves the body alone.
+func (w *Window) refreshPicturesBar(id api.MessageID, lm *loadedMessage) {
+	if s, ok := w.selectedMessage(); ok && s.ID == id {
+		renderPicturesBar(w.pane, lm)
+	}
+	if mw, ok := w.openMessages[id]; ok {
+		renderPicturesBar(mw.view, lm)
+	}
+}
+
+// downloadPictures is the bar's Download Pictures for message id: the
+// message is downloaded (joining a download of it already running, so the
+// chips show the wait as well), then its body is asked for again and shown
+// wherever the message is on display. The bar shows the wait from the
+// click on; a failure is a toast through say, in the window the click came
+// from, and the bar offers the pictures again.
+func (w *Window) downloadPictures(id api.MessageID, say func(string)) {
+	s, ok := w.summary(id)
+	if !ok {
+		return
+	}
+	lm := w.loadedFor(id)
+	if lm.loadingPictures {
+		return
+	}
+	lm.loadingPictures = true
+	w.refreshPicturesBar(id, lm)
+	acc := s.AccountID
+	failed := func(err error) {
+		lm.loadingPictures = false
+		say(widget.RPCErrorText(i18n.T("Downloading the pictures"), err))
+		w.refreshPicturesBar(id, lm)
+	}
+	go func() {
+		_, err := w.download(acc, id) // logs its own failure
+		glib.IdleAdd(func() {
+			if err != nil {
+				failed(err)
+				return
+			}
+			// Decided on the main loop, where the body on display is.
+			policy := picturesPolicy(lm)
+			go func() {
+				// The policy may let the daemon fetch remote images first.
+				ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
+				defer cancel()
+				var res api.MessageBodyResult
+				err := w.client.Call(ctx, api.MethodMessageBody,
+					api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy}, &res)
+				glib.IdleAdd(func() {
+					if err != nil {
+						w.log.Warn("message.body (pictures)", "err", err)
+						failed(err)
+						return
+					}
+					lm.loadingPictures = false
+					lm.body, lm.err = &res, nil
+					if w.loaded[id] == nil {
+						w.storeLoaded(id, lm)
+					}
+					w.showLoaded(id, lm)
+				})
+			}()
+		})
+	}()
+}
+
+// showPicturesBar puts the pictures bar in state st. The focus leaves the
+// bar before its button or the bar itself is hidden, for the reason given
+// in newMessageView. A view without the bar (an attached message) has
+// nothing to show.
+func (v *messageView) showPicturesBar(st picturesBarState) {
+	if v.picturesBar == nil {
+		return
+	}
+	switch {
+	case st.loading:
+		v.picturesLabel.SetLabel(i18n.T("Downloading pictures…"))
+	case st.remote > 0:
+		// TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+		v.picturesLabel.SetLabel(fmt.Sprintf(i18n.N("%d picture of this message is on the server only", "%d pictures of this message are on the server only", st.remote), st.remote))
+	}
+	if (st.loading || !st.visible) && v.picturesBar.FocusChild() != nil {
+		v.stack.GrabFocus()
+	}
+	v.picturesSpinner.SetVisible(st.loading)
+	v.picturesDownload.SetVisible(!st.loading)
+	v.picturesBar.SetVisible(st.visible)
+}
+
+// The count going out of date. A body cached while the daemon held the
+// message in memory counts no picture on the server; once the daemon has
+// dropped that copy (30 minutes unused, its memory cap, the switch turned
+// off, a restart) the same body shown again asks for pictures that
+// message.part answers partNotDownloaded for, and without a new count there
+// would be no bar to get them back. The first such answer for a picture
+// the body lists asks for the body again (store and memory only, never the
+// mail server), whose count brings the bar back. The other way round, a
+// download of the message for anything else (a chip, a reply, a forward)
+// asks again for a body that counts pictures on the server, so that they
+// show and the bar goes (endDownload).
+
+// pictureFailed is fetchPart's failure err for picture part of message id,
+// returned as it is; a partNotDownloaded goes to lostPicture on the main
+// loop first. Off the main loop.
+func (w *Window) pictureFailed(acc api.AccountID, id api.MessageID, part string, err error) error {
+	if partNotDownloaded(err) {
+		glib.IdleAdd(func() { w.lostPicture(acc, id, part) })
+	}
+	return err
+}
+
+// lostPicture asks for the body of message id again when picture part,
+// which the cached body counts as here, turned out to be on the mail server
+// only (recheckPictures). Main loop.
+func (w *Window) lostPicture(acc api.AccountID, id api.MessageID, part string) {
+	lm := w.loaded[id]
+	if !recheckPictures(lm, part) {
+		return
+	}
+	lm.picturesRechecked = true
+	w.reloadPictures(acc, id, lm)
+}
+
+// recheckPictures reports whether a partNotDownloaded for picture part
+// says that the cached body lm is out of date: the body lists the part
+// among the pictures it shows (InlineParts) yet counts none on the server,
+// and nothing that brings a newer body is on its way (the body itself,
+// the remote images, Download Pictures). Once until the next download of
+// the message (picturesRechecked): a body that still counts none while
+// the daemon will not serve the picture is not asked for in a loop.
+func recheckPictures(lm *loadedMessage, part string) bool {
+	if lm == nil || lm.picturesRechecked || lm.fetching || lm.loadingImages || lm.loadingPictures {
+		return false
+	}
+	if !showsHTML(lm.body) || lm.body.RemotePictures > 0 {
+		return false
+	}
+	for _, p := range lm.body.InlineParts {
+		if p == part {
+			return true
+		}
+	}
+	return false
+}
+
+// reloadAfterDownload reports whether a download of the message lm holds
+// should ask for its body again: the body on display counts pictures on
+// the mail server, which the daemon now holds, and neither Download
+// Pictures (which asks for the body itself) nor a body is on its way.
+func reloadAfterDownload(lm *loadedMessage) bool {
+	return lm != nil && !lm.loadingPictures && !lm.fetching && remotePictures(lm.body) > 0
+}
+
+// reloadPictures asks for the body of message id again, under the policy
+// of the body on display (picturesPolicy: remote images the user loaded
+// stay), and shows it wherever the message is on display. The daemon
+// answers from its store and memory. A body that replaced the one on
+// display meanwhile, or Download Pictures started meanwhile, wins over the
+// answer; a failure is only logged and the body on display stays. Main
+// loop.
+func (w *Window) reloadPictures(acc api.AccountID, id api.MessageID, lm *loadedMessage) {
+	shown := lm.body
+	policy := picturesPolicy(lm)
+	go func() {
+		// The policy may let the daemon fetch remote images first.
+		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
+		defer cancel()
+		var res api.MessageBodyResult
+		err := w.client.Call(ctx, api.MethodMessageBody,
+			api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy}, &res)
+		glib.IdleAdd(func() {
+			if err != nil {
+				w.log.Warn("message.body (pictures again)", "err", err)
+				return
+			}
+			if lm.body != shown || lm.loadingPictures {
+				return
+			}
+			lm.body, lm.err = &res, nil
+			if w.loaded[id] == nil {
+				w.storeLoaded(id, lm)
+			}
+			w.showLoaded(id, lm)
+		})
+	}()
 }

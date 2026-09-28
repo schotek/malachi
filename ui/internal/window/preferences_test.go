@@ -47,3 +47,23 @@ func TestStorageTexts(t *testing.T) {
 		}
 	}
 }
+
+// The Keep Attachments Offline For row is insensitive only while the
+// daemon confirms that attachments are never stored.
+func TestAttachmentDaysApply(t *testing.T) {
+	cases := []struct {
+		name string
+		p    api.Preferences
+		want bool
+	}{
+		{"older daemon, field absent", api.Preferences{AttachmentOfflineDays: api.Ptr(30)}, true},
+		{"never store off", api.Preferences{AttachmentOfflineDays: api.Ptr(30), NeverStoreAttachments: api.Ptr(false)}, true},
+		{"never store on", api.Preferences{AttachmentOfflineDays: api.Ptr(30), NeverStoreAttachments: api.Ptr(true)}, false},
+		{"on, days unknown", api.Preferences{NeverStoreAttachments: api.Ptr(true)}, false},
+	}
+	for _, c := range cases {
+		if got := attachmentDaysApply(c.p); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}

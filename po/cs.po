@@ -2775,6 +2775,35 @@ msgstr "Uložená pošta se převádí na pozadí"
 msgid "Converting stopped: the disk is full"
 msgstr "Převod se zastavil: disk je plný"
 
+#: ui/data/ui/preferences.ui:0
+msgid "Never Store Attachments"
+msgstr "Nikdy neukládat přílohy"
+
+#: ui/data/ui/preferences.ui:0
+msgid "Attachments are downloaded whenever you open them and are gone when you quit"
+msgstr "Přílohy se stáhnou pokaždé, když je otevřete, a po ukončení aplikace zmizí"
+
+#. TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+#: ui/internal/window/remote.go:0
+#, c-format
+msgid "%d picture of this message is on the server only"
+msgid_plural "%d pictures of this message are on the server only"
+msgstr[0] "%d obrázek této zprávy je jen na serveru"
+msgstr[1] "%d obrázky této zprávy jsou jen na serveru"
+msgstr[2] "%d obrázků této zprávy je jen na serveru"
+
+#: ui/data/ui/window.ui:0
+msgid "_Download Pictures"
+msgstr "_Stáhnout obrázky"
+
+#: ui/internal/window/remote.go:0
+msgid "Downloading pictures…"
+msgstr "Stahují se obrázky…"
+
+#: ui/internal/window/remote.go:0
+msgid "Downloading the pictures"
+msgstr "Stahování obrázků"
+
 #, c-format
 #~ msgid "Cc: %s"
 #~ msgstr "Kopie: %s"

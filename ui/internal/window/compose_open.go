@@ -24,7 +24,8 @@ import (
 // Without a backend the window opens at once with the UI's own plain-text
 // quote (compose.Prefill). A forward of a message whose attachments are on
 // the mail server only downloads it first (message.download), since the
-// backend never forwards what it does not have.
+// backend never forwards what it does not have; so does a reply whose
+// quote would show pictures kept there.
 
 // composeTimeout bounds draft.create: the backend re-reads the original
 // and copies its pictures, which can take longer than an ordinary call.
@@ -42,8 +43,10 @@ func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
 // nothing (one window will appear). A forward that needs the original
 // downloaded first (forwardNeedsDownload) waits for message.download; when
 // that fails, the user is asked whether to forward without the
-// attachments (askForwardWithout), and Cancel leaves it there. Only when
-// the backend cannot answer does the window open from what the pane knows.
+// attachments (askForwardWithout), and Cancel leaves it there. A reply
+// whose pictures are on the mail server only (replyNeedsDownload) waits for
+// the download too, but goes on whatever its outcome. Only when the
+// backend cannot answer does the window open from what the pane knows.
 func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api.MessageID) {
 	s, ok := w.summary(id)
 	if !ok || w.composing[id] {
@@ -93,7 +96,22 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 	}
 
 	w.composing[id] = true
-	if kind != compose.KindForward || !forwardNeedsDownload(lm) {
+	if kind != compose.KindForward {
+		if !replyNeedsDownload(lm) {
+			create()
+			return
+		}
+		// The quote takes its pictures from what the daemon has: those on
+		// the mail server only are downloaded first, without a question.
+		// Should that fail the reply goes on all the same, and the compose
+		// window says what the quote lacks (draft.create's skipped).
+		go func() {
+			_, _ = w.download(s.AccountID, id) // logs its own failure
+			glib.IdleAdd(create)
+		}()
+		return
+	}
+	if !forwardNeedsDownload(lm) {
 		create()
 		return
 	}
@@ -124,9 +142,10 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 }
 
 // forwardNeedsDownload reports whether a forward of the message lm holds
-// should download it first: an attachment is on the mail server only, or
-// the body has not been downloaded yet (draft.create would forward
-// nothing of it). Without the full message in the cache nothing is known,
+// should download it first: an attachment is on the mail server only (an
+// inline picture too: under neverStoreAttachments the large ones the HTML
+// shows stay there, and the forward would lose them), or the body has not
+// been downloaded yet (draft.create would forward nothing of it). Without the full message in the cache nothing is known,
 // so it downloads as well: message.download answers at once when nothing
 // is missing.
 func forwardNeedsDownload(lm *loadedMessage) bool {
@@ -137,11 +156,24 @@ func forwardNeedsDownload(lm *loadedMessage) bool {
 		return true
 	}
 	for _, a := range lm.msg.Attachments {
-		if a.Remote && !a.Inline {
+		if a.Remote {
 			return true
 		}
 	}
 	return false
+}
+
+// replyNeedsDownload reports whether a reply (or reply all) to the message
+// lm holds should download it first: the body on display counts pictures
+// the quote would show that are on the mail server only (remotePictures;
+// under neverStoreAttachments the large ones stay there). The count is the
+// daemon's: a part on the server with a Content-ID is no reason by itself
+// (Outlook and Apple Mail give ordinary attachments one, and a quote never
+// copies those), nor is a picture the daemon holds in memory from an
+// earlier download. Without a body in the cache nothing is known and the
+// reply goes on at once: draft.create lists what it could not take.
+func replyNeedsDownload(lm *loadedMessage) bool {
+	return lm != nil && remotePictures(lm.body) > 0
 }
 
 // askForwardWithout reports whether a failed download before a forward is

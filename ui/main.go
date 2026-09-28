@@ -69,7 +69,7 @@ func main() {
 	)
 	app.ConnectStartup(func() {
 		// Attachments a previous run wrote for opening (docs/security.md §8).
-		window.SweepOpenedAttachments()
+		window.SweepOpenedAttachments(log)
 		addUninstalledIconPath()
 		prefs = settings.Open(log)
 		style.Apply(prefs)
@@ -124,7 +124,7 @@ func main() {
 		}
 	})
 	app.ConnectShutdown(func() {
-		window.SweepOpenedAttachments()
+		window.SweepOpenedAttachments(log)
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in
 		// Background" keeps the application (and so the daemon) alive by

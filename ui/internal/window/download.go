@@ -15,8 +15,9 @@ import (
 
 // Attachments on demand. Under Preferences.AttachmentOfflineDays the large
 // attachments of older messages stay on the mail server (Attachment.Remote),
-// and a message whose body the syncer has not downloaded yet has no parts
-// on this computer at all. Opening, previewing or saving such a part, Save
+// under Preferences.NeverStoreAttachments all of them, and a message whose
+// body the syncer has not downloaded yet has no parts on this computer at
+// all. Opening, previewing or saving such a part, Save
 // All, an attached message and a forward therefore first ask the daemon to
 // fetch the whole message (message.download), then do what was asked. The
 // daemon decides what is stored and fetches only on these clicks; the UI
@@ -93,10 +94,14 @@ func (w *Window) beginDownload(id api.MessageID) {
 
 // endDownload ends the wait for message id on the main loop. After a
 // success m, the message as the daemon reports it now, replaces the cached
-// one: none of its attachments is remote any more, and on Microsoft 365
+// one: none of its attachments is remote any more (under
+// neverStoreAttachments they stay remote, held in the daemon's memory for
+// a while, and the next action downloads again), and on Microsoft 365
 // their part ids may have changed. The chips are rebuilt wherever the
 // message is shown; a body that had not been downloaded is fetched again
-// and shown.
+// and shown, and so is one that counts pictures on the mail server only
+// (reloadAfterDownload), which the daemon holds now: they show and the
+// pictures bar goes, whatever the download was for.
 func (w *Window) endDownload(acc api.AccountID, id api.MessageID, m *api.Message) {
 	if t := w.spinTimers[id]; t != 0 {
 		glib.SourceRemove(t)
@@ -106,9 +111,15 @@ func (w *Window) endDownload(acc api.AccountID, id api.MessageID, m *api.Message
 	if lm := w.loaded[id]; lm != nil && m != nil {
 		msg := *m // the callers of download read m off the main loop
 		lm.msg = &msg
-		if lm.body != nil && lm.body.BodyState != api.BodyFetched && !lm.fetching {
+		// Pictures that go missing from now on may ask for the body once
+		// more (recheckPictures).
+		lm.picturesRechecked = false
+		switch {
+		case lm.body != nil && lm.body.BodyState != api.BodyFetched && !lm.fetching:
 			lm.body, lm.err = nil, nil
 			w.fetchMessage(acc, id, func(lm *loadedMessage) { w.showLoaded(id, lm) })
+		case reloadAfterDownload(lm):
+			w.reloadPictures(acc, id, lm)
 		}
 	}
 	w.refreshChips(id)

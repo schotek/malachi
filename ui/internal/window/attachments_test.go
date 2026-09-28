@@ -256,3 +256,68 @@ func TestSweepOpenDir(t *testing.T) {
 	}
 	sweepOpenDir(filepath.Join(dir, "missing"), time.Hour) // no directory: no-op
 }
+
+// purgeOpenDir takes the directory openDirFor names with everything in it,
+// and refuses every other path without touching it.
+func TestPurgeOpenDir(t *testing.T) {
+	base := t.TempDir()
+	dir := openDirFor(base, "", "")
+	file := filepath.Join(dir, "x1", "report.pdf")
+	keep := filepath.Join(base, "malachi", "keep")
+	for _, d := range []string{filepath.Dir(file), keep} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(file, []byte("%PDF-1.7"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, bad := range []string{
+		"", ".", "/", "malachi/open", // relative: runtime and cache dir unset
+		base, filepath.Join(base, "malachi"), keep,
+		filepath.Join(base, "open"), filepath.Join(dir, "x1"),
+		filepath.Join(dir, ".."),
+	} {
+		if err := purgeOpenDir(bad); err == nil {
+			t.Errorf("purgeOpenDir(%q) should refuse", bad)
+		}
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Fatalf("a refused purge removed something: %v", err)
+	}
+
+	if err := purgeOpenDir(dir + string(filepath.Separator)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("the directory for opening should be gone")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Error("its sibling should stay")
+	}
+	if err := purgeOpenDir(dir); err != nil {
+		t.Errorf("a missing directory: %v", err)
+	}
+
+	// A link in its place goes; what it points to stays.
+	target := filepath.Join(base, "elsewhere")
+	if err := os.Mkdir(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(target, "notes.txt"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := purgeOpenDir(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(dir); !os.IsNotExist(err) {
+		t.Error("the link should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(target, "notes.txt")); err != nil {
+		t.Error("the link's target should stay")
+	}
+}

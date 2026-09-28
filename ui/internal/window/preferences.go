@@ -54,6 +54,7 @@ type PreferencesDialog struct {
 	remoteImages   *adw.ComboRow
 	offlineDays    *adw.ComboRow
 	attachmentDays *adw.ComboRow
+	neverStore     *adw.SwitchRow // never_store_attachments
 	compressStore  *adw.SwitchRow
 	storageRow     *adw.ActionRow
 	storageSize    *gtk.Label
@@ -122,6 +123,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		remoteImages:         b.GetObject("remote_images").Cast().(*adw.ComboRow),
 		offlineDays:          b.GetObject("offline_days").Cast().(*adw.ComboRow),
 		attachmentDays:       b.GetObject("attachment_days").Cast().(*adw.ComboRow),
+		neverStore:           b.GetObject("never_store_attachments").Cast().(*adw.SwitchRow),
 		compressStore:        b.GetObject("compress_store").Cast().(*adw.SwitchRow),
 		storageRow:           b.GetObject("storage_row").Cast().(*adw.ActionRow),
 		storageSize:          b.GetObject("storage_size").Cast().(*gtk.Label),
@@ -176,8 +178,10 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 // the daemon does not report (an older one: the field is absent) hides its
 // row and is left absent in config.set, which leaves it unchanged; the
 // attachment days go back as confirmed unless their row was changed
-// (attachmentDaysToSave). After a saved change refreshStorage asks for the
-// disk space again.
+// (attachmentDaysToSave). While the daemon confirms that attachments are
+// never stored, the attachment days do not apply and their row is
+// insensitive (attachmentDaysApply). After a saved change refreshStorage
+// asks for the disk space again.
 func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (unbind func()) {
 	var (
 		current api.Preferences
@@ -193,6 +197,12 @@ func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (u
 		d.attachmentDays.SetVisible(p.AttachmentOfflineDays != nil)
 		if p.AttachmentOfflineDays != nil {
 			d.attachmentDays.SetSelected(indexOfAttachmentDays(*p.AttachmentOfflineDays))
+		}
+		// From what the daemon confirmed, so a failed save reverts it too.
+		d.attachmentDays.SetSensitive(attachmentDaysApply(p))
+		d.neverStore.SetVisible(p.NeverStoreAttachments != nil)
+		if p.NeverStoreAttachments != nil {
+			d.neverStore.SetActive(*p.NeverStoreAttachments)
 		}
 		d.compressStore.SetVisible(p.CompressStore != nil)
 		if p.CompressStore != nil {
@@ -219,6 +229,9 @@ func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (u
 		}
 		if current.AttachmentOfflineDays != nil {
 			want.AttachmentOfflineDays = api.Ptr(attachmentDaysToSave(*current.AttachmentOfflineDays, d.attachmentDays.Selected()))
+		}
+		if current.NeverStoreAttachments != nil {
+			want.NeverStoreAttachments = api.Ptr(d.neverStore.Active())
 		}
 		if current.CompressStore != nil {
 			want.CompressStore = api.Ptr(d.compressStore.Active())
@@ -252,6 +265,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (u
 	h3 := d.offlineDays.NotifyProperty("selected", save)
 	h4 := d.attachmentDays.NotifyProperty("selected", save)
 	h5 := d.compressStore.NotifyProperty("active", save)
+	h6 := d.neverStore.NotifyProperty("active", save)
 
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
@@ -278,6 +292,7 @@ func (d *PreferencesDialog) bindMail(c *client.Client, refreshStorage func()) (u
 		d.offlineDays.HandlerDisconnect(h3)
 		d.attachmentDays.HandlerDisconnect(h4)
 		d.compressStore.HandlerDisconnect(h5)
+		d.neverStore.HandlerDisconnect(h6)
 	}
 }
 
@@ -456,6 +471,14 @@ func attachmentDaysToSave(current int, selected uint) int {
 		return current
 	}
 	return attachmentChoices[selected]
+}
+
+// attachmentDaysApply reports whether Preferences.AttachmentOfflineDays
+// decides which attachments are stored: not while none is stored at all
+// (NeverStoreAttachments overrides it, docs/api.md §4.8). A daemon that
+// does not report the latter never overrides.
+func attachmentDaysApply(p api.Preferences) bool {
+	return p.NeverStoreAttachments == nil || !*p.NeverStoreAttachments
 }
 
 func indexOfPolicy(p api.RemoteContentPolicy) uint {

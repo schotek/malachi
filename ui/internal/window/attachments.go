@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -769,8 +770,27 @@ func sweepOpenDir(dir string, maxAge time.Duration) {
 	}
 }
 
-// SweepOpenedAttachments removes every file written for opening; main.go
-// calls it when the application starts and when it exits.
-func SweepOpenedAttachments() {
-	_ = os.RemoveAll(openDir())
+// SweepOpenedAttachments removes every file written for opening
+// (purgeOpenDir). main.go calls it when the application starts and when it
+// exits, whatever the preferences say: nothing opened or previewed
+// outlives the session, which is also what neverStoreAttachments promises,
+// and whatever a crash left behind goes at the next start. A failure is
+// logged.
+func SweepOpenedAttachments(log *slog.Logger) {
+	if err := purgeOpenDir(openDir()); err != nil {
+		log.Warn("removing the attachments written for opening", "err", err)
+	}
+}
+
+// purgeOpenDir removes dir with everything in it, and refuses any
+// directory but the one openDirFor names: dir must be an absolute path
+// ending in malachi/open, so an unset runtime and cache dir (a relative
+// path) or a slip cannot take anything else with it. A symbolic link in
+// its place is removed, never followed; a missing directory is no error.
+func purgeOpenDir(dir string) error {
+	clean := filepath.Clean(dir)
+	if !filepath.IsAbs(clean) || filepath.Base(clean) != "open" || filepath.Base(filepath.Dir(clean)) != "malachi" {
+		return fmt.Errorf("not the directory for opened attachments: %q", dir)
+	}
+	return os.RemoveAll(clean)
 }
