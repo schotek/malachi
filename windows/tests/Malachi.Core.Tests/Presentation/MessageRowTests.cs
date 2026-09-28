@@ -192,8 +192,19 @@ public sealed class MessageRowTests
     [Fact]
     public void TheAccessibleNameIsTheShownTexts()
     {
-        var s = Member("m1", null, 1, "Alice") with { Subject = "Hello" };
+        var s = Member("m1", null, 1, "Alice") with { Subject = "Hello", Flags = [Flag.Seen] };
         var row = Row(Plain(s));
         Assert.Equal(string.Join(", ", "Alice", "Hello", row.DateText, "p-m1"), row.ToString());
+    }
+
+    [Fact]
+    public void TheAccessibleNameSaysWhatTheIconsShow()
+    {
+        var s = Member("m1", null, 1, "Alice") with { Subject = "Hello", Flags = [Flag.Flagged], HasAttachments = true };
+        var row = Row(Plain(s));
+        Assert.True(row.Unread);
+        Assert.Equal(string.Join(", ", "Alice", "Hello", "Unread", "Flagged", "Attachment", row.DateText, "p-m1"), row.ToString());
+        row.Update(Plain(s with { Flags = [Flag.Seen] }), MailModel.SummaryMessage(s with { Flags = [Flag.Seen] }), Comfortable, s.Date);
+        Assert.Equal(string.Join(", ", "Alice", "Hello", "Attachment", row.DateText, "p-m1"), row.ToString());
     }
 }

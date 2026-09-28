@@ -10,12 +10,15 @@
 // StatusBarView.xaml. The line cannot be clicked without a connection or
 // without an account (StatusLine.Active), and an open flyout closes then;
 // while it is open its rows follow every change of the line. A screen
-// reader reads the line itself (window.blp: labelled by sync_label).
+// reader reads the line itself (window.blp: labelled by sync_label), or
+// the button's tooltip while the line is empty (no account), where GTK's
+// label would leave the button nameless.
 
 using System;
 using Malachi.App.Resources;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers;
+using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
@@ -79,7 +82,7 @@ public sealed partial class StatusBarView : UserControl
     private void Show(StatusLine line)
     {
         SyncLabel.Text = line.Text;
-        AutomationProperties.SetName(StatusButton, line.Text);
+        AutomationProperties.SetName(StatusButton, line.Text.Length > 0 ? line.Text : L10n.T("Sync Status"));
         SyncSpinner.IsActive = line.Spinning;
         SyncSpinner.Visibility = line.Spinning ? Visibility.Visible : Visibility.Collapsed;
         if (line.Icon.Length > 0)

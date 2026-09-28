@@ -22,7 +22,17 @@
 //
 // Windows addition (windows/README.md): a context menu on a message offers
 // the actions of the message pane's header (a right click selects the row
-// first, as Windows lists do).
+// first, as Windows lists do, without showing the message in a folded
+// window, where the list stays in sight under the menu; a click on the row
+// selected so shows it there, as a click on any other row does).
+//
+// The keyboard goes to the list on request (the end of a search, the back
+// button): the request waits until rows are shown and their containers are
+// realised, since after a search the folder's rows come with the daemon's
+// reply, and a container that is not there yet cannot take the focus. It
+// lapses when the focus is placed, when the user selects a row or takes the
+// keyboard elsewhere, when a new search starts, and when the list ends on a
+// status page instead of rows.
 
 using System;
 using System.Collections.ObjectModel;
@@ -38,6 +48,7 @@ using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Malachi.Core.Settings;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
@@ -52,6 +63,9 @@ public sealed partial class MessageListPane : UserControl
     private static readonly MessageFilter[] Filters = [MessageFilter.All, MessageFilter.Unread, MessageFilter.Flagged];
     private static readonly SearchScope[] Scopes = [SearchScope.Folder, SearchScope.Account, SearchScope.All];
 
+    // Layout passes a waiting focus request survives without its container.
+    private const int MaxFocusAttempts = 8;
+
     private readonly Button retryButton;
     private ListController? list;
     private MailboxController? mailbox;
@@ -60,12 +74,19 @@ public sealed partial class MessageListPane : UserControl
     private ScrollViewer? scroller;
     private bool reselecting;
     private bool settingFilter;
+    private bool selectingForMenu;
     private bool focusPending;
+    private bool focusWaitsForLayout;
+    private int focusAttempts;
+    private DependencyObject? focusFrom;
 
     /// <summary>An empty list; <see cref="Attach"/> connects it.</summary>
     public MessageListPane()
     {
         InitializeComponent();
+        NameSelectorList(FilterBar);
+        NameSelectorList(ScopeBar);
+        MessageList.AddHandler(TappedEvent, new TappedEventHandler(OnRowTapped), handledEventsToo: true);
         // list_retry_button: a pill under the status page's texts.
         retryButton = new Button
         {
@@ -171,25 +192,19 @@ public sealed partial class MessageListPane : UserControl
     }
 
     /// <summary>
-    /// Puts the keyboard on the selected row, or on the list; while a status
-    /// page shows (the folder reloading after a search), as soon as the
-    /// rows are back.
+    /// Puts the keyboard on the selected row, or on the first (search.go
+    /// onSearchModeChanged: messageList.GrabFocus); while the rows are not
+    /// shown yet (the folder reloading after a search), as soon as they are.
     /// </summary>
     public void FocusList()
     {
-        if (MessagesPage.Visibility != Visibility.Visible)
-        {
-            focusPending = true;
-            return;
-        }
-        focusPending = false;
-        if (MessageList.SelectedIndex >= 0 && MessageList.ContainerFromIndex(MessageList.SelectedIndex) is ListViewItem item)
-        {
-            item.Focus(FocusState.Keyboard);
-            return;
-        }
-        MessageList.Focus(FocusState.Keyboard);
+        focusPending = true;
+        focusFrom = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        TryFocusPending();
     }
+
+    /// <summary>A request of <see cref="FocusList"/> still waiting lapses (the search box took the keyboard again).</summary>
+    public void CancelFocusList() => EndFocusRequest();
 
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
@@ -261,6 +276,7 @@ public sealed partial class MessageListPane : UserControl
             reselecting = false;
         }
         SyncSelection();
+        TryFocusPending();
         // After the layout: the rows' extent moved (fillPane).
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ReportViewport);
     }
@@ -298,13 +314,92 @@ public sealed partial class MessageListPane : UserControl
             retryButton.Visibility = page.Retry ? Visibility.Visible : Visibility.Collapsed;
             ListStatusPage.Visibility = Visibility.Visible;
             MessagesPage.Visibility = Visibility.Collapsed;
+            if (page.Icon.Length > 0)
+            {
+                // No rows to come: the keyboard stays where it is.
+                EndFocusRequest();
+            }
             return;
         }
         ListStatusPage.Visibility = Visibility.Collapsed;
         MessagesPage.Visibility = Visibility.Visible;
-        if (focusPending)
+        TryFocusPending();
+    }
+
+    // FocusList's request, once rows are shown: the selected row's
+    // container, or the first's, realised by a layout pass. A container not
+    // there yet, or refusing the focus, keeps the request for the next pass
+    // (a few at most).
+    private void TryFocusPending()
+    {
+        if (!focusPending || Rows.Count == 0 || MessagesPage.Visibility != Visibility.Visible || Visibility != Visibility.Visible)
         {
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, FocusList);
+            return;
+        }
+        if (!FocusStillWanted() || ++focusAttempts > MaxFocusAttempts)
+        {
+            EndFocusRequest();
+            return;
+        }
+        var index = Math.Clamp(MessageList.SelectedIndex, 0, Rows.Count - 1);
+        MessageList.UpdateLayout();
+        if (MessageList.ContainerFromIndex(index) is not ListViewItem)
+        {
+            MessageList.ScrollIntoView(Rows[index]);
+            MessageList.UpdateLayout();
+        }
+        if (MessageList.ContainerFromIndex(index) is ListViewItem item && item.Focus(FocusState.Keyboard))
+        {
+            EndFocusRequest();
+            return;
+        }
+        if (!focusWaitsForLayout)
+        {
+            focusWaitsForLayout = true;
+            MessageList.LayoutUpdated += OnLayoutForFocus;
+        }
+    }
+
+    private void OnLayoutForFocus(object? sender, object e)
+    {
+        MessageList.LayoutUpdated -= OnLayoutForFocus;
+        focusWaitsForLayout = false;
+        // Not from inside the layout pass.
+        DispatcherQueue.TryEnqueue(TryFocusPending);
+    }
+
+    // The keyboard is still where it was asked from (or nowhere, or already
+    // in the list): the user has not taken it elsewhere meanwhile.
+    private bool FocusStillWanted()
+    {
+        if (XamlRoot is not { } root)
+        {
+            return false;
+        }
+        var now = FocusManager.GetFocusedElement(root) as DependencyObject;
+        if (now is null || ReferenceEquals(now, focusFrom))
+        {
+            return true;
+        }
+        for (var d = now; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, this))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void EndFocusRequest()
+    {
+        focusPending = false;
+        focusFrom = null;
+        focusAttempts = 0;
+        if (focusWaitsForLayout)
+        {
+            MessageList.LayoutUpdated -= OnLayoutForFocus;
+            focusWaitsForLayout = false;
         }
     }
 
@@ -413,6 +508,11 @@ public sealed partial class MessageListPane : UserControl
                 ShowFilter();
                 break;
             case nameof(ListController.SearchActive):
+                if (list?.SearchActive == true)
+                {
+                    // The search box keeps the keyboard.
+                    EndFocusRequest();
+                }
                 ShowFilter();
                 // A search result's excerpt always shows.
                 ApplyRows();
@@ -432,10 +532,22 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        focusPending = false;
+        EndFocusRequest();
         var row = MessageList.SelectedItem as MessageRow;
         list.Select(row?.Key);
-        if (row is not null)
+        if (row is not null && !selectingForMenu)
+        {
+            MessageChosen?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // Windows addition: a click on the row already selected shows it too,
+    // which a folded window needs for a row a context menu selected (or one
+    // left selected by the back button); a click that selects shows it
+    // through OnSelectionChanged, and a second MessageChosen is harmless.
+    private void OnRowTapped(object sender, TappedRoutedEventArgs e)
+    {
+        if (RowAt(e.OriginalSource as DependencyObject, out var inButton) is { } row && !inButton && ReferenceEquals(MessageList.SelectedItem, row))
         {
             MessageChosen?.Invoke(this, EventArgs.Empty);
         }
@@ -515,7 +627,17 @@ public sealed partial class MessageListPane : UserControl
         }
         if (!ReferenceEquals(MessageList.SelectedItem, row))
         {
-            MessageList.SelectedItem = row;
+            // The actions act on the selection, so the row is selected; a
+            // folded window stays on the list, under the menu.
+            selectingForMenu = true;
+            try
+            {
+                MessageList.SelectedItem = row;
+            }
+            finally
+            {
+                selectingForMenu = false;
+            }
         }
         var flags = c.Flags;
         var menu = new MenuFlyout();
@@ -566,7 +688,7 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
-        scroller = FindScroller(MessageList);
+        scroller = FindDescendant<ScrollViewer>(MessageList);
         if (scroller is null)
         {
             return;
@@ -588,19 +710,39 @@ public sealed partial class MessageListPane : UserControl
         list.ViewportChanged(scrollable, atEnd);
     }
 
-    private static ScrollViewer? FindScroller(DependencyObject root)
+    // Windows-only: what UI Automation announces of a SelectorBar is the
+    // ItemsView of its template, a list without a name. The bar's name and
+    // id go to that list once the template is applied (a bar collapsed at
+    // first gets them when it is first laid out); the bar itself is Raw in
+    // the XAML, so the list is not announced twice.
+    private static void NameSelectorList(SelectorBar bar)
+    {
+        void Apply()
+        {
+            if (FindDescendant<ItemsView>(bar) is { } view)
+            {
+                AutomationProperties.SetName(view, AutomationProperties.GetName(bar));
+                AutomationProperties.SetAutomationId(view, AutomationProperties.GetAutomationId(bar));
+            }
+        }
+        bar.Loaded += (_, _) => Apply();
+        bar.SizeChanged += (_, _) => Apply();
+    }
+
+    private static T? FindDescendant<T>(DependencyObject root)
+        where T : DependencyObject
     {
         var count = VisualTreeHelper.GetChildrenCount(root);
         for (var i = 0; i < count; i++)
         {
             var child = VisualTreeHelper.GetChild(root, i);
-            if (child is ScrollViewer sv)
-            {
-                return sv;
-            }
-            if (FindScroller(child) is { } found)
+            if (child is T found)
             {
                 return found;
+            }
+            if (FindDescendant<T>(child) is { } deeper)
+            {
+                return deeper;
             }
         }
         return null;

@@ -1274,10 +1274,13 @@ overlay (opaque) opened by the title bar's pane button at 900 or less
 (window.blp's `max-width` conditions, so 900 itself folds), closed by a
 folder chosen with a click or Enter (not by the arrow keys, which move the
 selection), a click outside or Escape. inner_split is the grid's two
-columns: at 600 or less they are one stack, choosing a message shows it,
-the title bar's back button returns to the list (as does the Search
-command, search.go `startSearch`), and a folder chosen shows its list
-rather than the emptied message page a GTK stack keeps. Core's
+columns: at 600 or less they are one stack, choosing a message shows it
+(and, beyond GTK, a click on the row already selected, which a context
+menu or the back button leaves selected; the right click itself keeps the
+list), the title bar's back button returns to the list with the keyboard
+on the selected row (as does the Search command, search.go
+`startSearch`), and a folder chosen shows its list rather than the
+emptied message page a GTK stack keeps. Core's
 `PaneLayout` decides all of this and the widths: the stored ones clamped to
 window.blp's ranges, the list narrowed first so that the message keeps 300.
 The sidebar is dragged with the toolkit's `PropertySizer` on the
@@ -1285,7 +1288,12 @@ The sidebar is dragged with the toolkit's `PropertySizer` on the
 only (GTK has no handle, macOS no keyboard one: not tab stops, and hidden
 from UI Automation, where the toolkit's own name does not resolve in this
 package set); the widths go to the gschema keys when a drag ends and with
-the window's geometry, only from the wide layout. The command rows are 44
+the window's geometry, only from the wide layout. The title bar itself is
+no tab stop (its buttons and the search box are), so WinUI's own first
+focus of the window would land in the search box, where the single-key
+shortcuts type; `MainWindow.Panes` hands that one focus to the sidebar's
+first tab stop (GTK's first focusable widget, New Message), and a click or
+Ctrl+F that comes first stays the user's. The command rows are 44
 px under the tall title bar: the sidebar's accent New Message and the
 primary menu `…` (`_New Message`, `_Add Account…`, `_Preferences`, `_About
 Malachi Mail` and a Windows-only *Quit*, with the keys beside them; GTK's
@@ -1302,7 +1310,8 @@ command's `XamlUICommand` itself: assigned to `Button.Command` it replaces
 the button's content with the command's empty label (measured: the header
 icons came out blank), so `Main/CommandBinding` wires the click and the
 enabled state. The status line (`StatusBarView`) is the bar across the
-bottom with the flyout of status.go (`StatusPopover` in Core: rows rebuilt
+bottom (named by its text, or by its Sync Status tooltip while it is
+empty) with the flyout of status.go (`StatusPopover` in Core: rows rebuilt
 only when the accounts change, the buttons changed only with the action,
 the unsent row leading to the outbox; the actions run after the flyout
 closed). The banners' buttons and the flyout's actions are
@@ -1346,23 +1355,41 @@ by the setting, always in search, its matched words as bold runs; the
 members of an unfolded conversation on a 3 % tint; the hairline under every
 row but the last), shown by `MessageRowView` with `Avatar` (Core's
 `AvatarPalette`: `g_str_hash % 14 + 1`, the libadwaita gradients, the
-initials; the monochrome variant). Double click and Enter activate (a
-conversation folds, a draft goes to `draft.open`, a message to the message
-windows of E4), Left and Right fold, a right click selects the row and
-opens the header's actions (Reply, Reply All, Forward; Mark as Unread,
-Mark as Read, Star or Unstar; Archive, Mark as Junk, Move to Trash or
-Cancel Sending). The view reports the viewport after every change of the
-rows' extent or the pane's size and on every scroll (the list's
-`ScrollViewer` exists only once its template was applied, which a list
-under a status page has not had: it is looked up again with every size
-change). Verified against devmail: mark-as-read, S, U, A (the neighbour
+initials; the monochrome variant). A row's accessible name is what it
+shows, with Unread, Flagged and Attachment (msgids GTK has for the filter
+and the attachment chip) after the subject where its icons say so. Double
+click and Enter activate (a conversation folds, a draft goes to
+`draft.open`, a message to the message windows of E4), Left and Right
+fold, a right click selects the row (without the navigation of a folded
+window) and opens the header's actions (Reply, Reply All, Forward; Mark as
+Unread, Mark as Read, Star or Unstar; Archive, Mark as Junk, Move to Trash
+or Cancel Sending). The filter and the scope bar are `SelectorBar`s, whose
+template's list is what UI Automation announces: it carries the bar's name
+(Windows-only *Filter* and *Search Scope*; the bar itself is Raw, or a
+named bar would be announced as a group around the list). The end of a
+search, and the back button, ask for the keyboard on the list: the request
+waits until rows are shown and their containers realised (the folder's
+rows come with the daemon's reply), puts it on the selected row or the
+first without selecting it, and lapses when the user selects a row or
+takes the keyboard elsewhere, when a search starts again, or when the list
+ends on a status page. The sidebar star's fade keeps its target beside it,
+since the opacity reads the running fade's value (a star could stay lit
+after a quick pass of the pointer), and lets go when it ends. The view
+reports the viewport after every change of the rows' extent or the pane's
+size and on every scroll (the list's `ScrollViewer` exists only once its
+template was applied, which a list under a status page has not had: it is
+looked up again with every size change). Verified against devmail: mark-as-read, S, U, A (the neighbour
 takes the selection), J and Delete (their confirmations), a conversation
 unfolded and folded with its member selected, a search in every account
 with the origins and bold matches, Enter to its first result and Escape
-back to the folder with the list focused, a page past the first, and Load
-More appearing only after a page request timed out (the daemon suspended),
-then paging on. WinUI keeps the selection through the in-place updates of
-the view overload and restores it where the controller moves it.
+back to the folder with the list focused (in all 22 runs that kept the
+foreground, with and without a result selected, one with no results; A,
+J, U, S and Delete then act on the list, and do not while the box is
+typed into), a right click at 500 px keeping the list, a page past the
+first, and Load More appearing only after a page request timed out (the
+daemon suspended), then paging on. WinUI keeps the selection through the
+in-place updates of the view overload and restores it where the controller
+moves it.
 
 ### 11.3 Reader, windows, compose, wizard, preferences
 

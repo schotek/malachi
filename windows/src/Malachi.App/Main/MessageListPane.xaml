@@ -84,12 +84,17 @@ that failed (as macOS).
             <Border Grid.Column="2" Width="40" />
         </Grid>
 
-        <!-- search_scope: where a search looks; only while one runs. -->
+        <!-- search_scope: where a search looks; only while one runs.
+             Windows-only string: the name UI Automation gives the bar's
+             list (GTK's toggle group has none); the bar itself is Raw, so
+             the list is not announced twice (MessageListPane.xaml.cs). -->
         <SelectorBar
             x:Name="ScopeBar"
             Grid.Row="1"
             HorizontalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
             AutomationProperties.AutomationId="SearchScope"
+            AutomationProperties.Name="Search Scope"
             SelectionChanged="OnScopeChanged"
             Visibility="Collapsed">
             <SelectorBarItem x:Name="ScopeFolder" Text="{l:T Msgid='Folder', Context='search scope'}" />
@@ -135,13 +140,18 @@ that failed (as macOS).
         </InfoBar>
 
         <!-- message_filter: all, unread or flagged, applied by the daemon;
-             hidden while searching (search.go). -->
+             hidden while searching (search.go). Windows-only string: the
+             name UI Automation gives the bar's list (macOS's toolbar item
+             says Filter, GTK's toggle group has none); the bar itself is
+             Raw, so the list is not announced twice. -->
         <SelectorBar
             x:Name="FilterBar"
             Grid.Row="5"
             Margin="0,4"
             HorizontalAlignment="Center"
+            AutomationProperties.AccessibilityView="Raw"
             AutomationProperties.AutomationId="MessageFilter"
+            AutomationProperties.Name="Filter"
             SelectionChanged="OnFilterChanged">
             <SelectorBarItem x:Name="FilterAll" Text="{l:T Msgid='All'}" />
             <SelectorBarItem x:Name="FilterUnread" Text="{l:T Msgid='Unread'}" />

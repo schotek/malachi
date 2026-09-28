@@ -27,7 +27,12 @@
 // Core's PaneLayout decides; this applies it. The search box of the title
 // bar drives the list's search (ListController.SearchFieldChanged: the
 // 300 ms pause is Core's): Enter selects the first result, Escape empties
-// the box and ends the search, and the keyboard goes to the list.
+// the box and ends the search, and the keyboard goes to the list as soon as
+// the folder's rows are back (MessageListPane.FocusList). The window's
+// first focus goes to the sidebar's first tab stop (GTK's first focusable
+// widget, the sidebar header's New Message), not to the search box, which
+// WinUI would pick as the first tab stop now that the title bar is none: the
+// letters of the single-key shortcuts would type there.
 
 using System;
 using System.Collections.Generic;
@@ -55,6 +60,7 @@ public sealed partial class MainWindow
     private void InitializePanes()
     {
         Root.SizeChanged += (_, e) => OnWidthChanged(e.NewSize.Width);
+        Root.GettingFocus += OnFirstFocus;
         ListSplitter.IsTabStop = false;
         SidebarSizer.IsTabStop = false;
         ListSplitter.ManipulationCompleted += (_, _) => SavePaneWidths();
@@ -115,11 +121,39 @@ public sealed partial class MainWindow
     private void BeginSearch()
     {
         Navigate(layout.ShowList);
+        ListPane.CancelFocusList();
         SearchBox.Focus(FocusState.Keyboard);
         if (FindDescendant<TextBox>(SearchBox) is { } box)
         {
             box.SelectAll();
         }
+    }
+
+    // The window's first focus, which WinUI gives itself (programmatic,
+    // nothing focused before; measured: it reports the keyboard as its
+    // device), goes past the search box to the sidebar. A click or Ctrl+F
+    // first is the user's and stays.
+    private void OnFirstFocus(UIElement sender, GettingFocusEventArgs args)
+    {
+        Root.GettingFocus -= OnFirstFocus;
+        if (args.OldFocusedElement is null && args.FocusState == FocusState.Programmatic
+            && IsWithin(args.NewFocusedElement, SearchBox)
+            && FocusManager.FindFirstFocusableElement(SidebarPane) is { } first)
+        {
+            args.TrySetNewFocusedElement(first);
+        }
+    }
+
+    private static bool IsWithin(DependencyObject? element, DependencyObject ancestor)
+    {
+        for (var d = element; d is not null; d = VisualTreeHelper.GetParent(d))
+        {
+            if (ReferenceEquals(d, ancestor))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void OnSearchTextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)

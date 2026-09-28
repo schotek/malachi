@@ -9,7 +9,11 @@
 // Sidebar/FolderCellView.swift (the star also on the selected row, a
 // 150 ms fade). The view of Core's SidebarRow (FolderRowView.xaml); its
 // buttons take the click themselves, so pressing them does not select the
-// row, and hand it to the sidebar.
+// row, and hand it to the sidebar. The star's opacity is always the local
+// value it ends at, kept beside it (the property reads the fade's current
+// value while one runs); the fade is one storyboard per row that runs over
+// it and lets go when it ends (FillBehavior.Stop), so no finished fade holds
+// an old value over a later change.
 
 using System.ComponentModel;
 using Malachi.Core.Presentation;
@@ -28,7 +32,10 @@ public sealed partial class FolderRowView : UserControl
     public static readonly DependencyProperty RowProperty = DependencyProperty.Register(
         nameof(Row), typeof(SidebarRow), typeof(FolderRowView), new PropertyMetadata(null, OnRowChanged));
 
+    private readonly Storyboard fade;
+    private readonly DoubleAnimation fadeAnimation;
     private SelectorItem? container;
+    private double starTarget;
     private long selectedToken;
     private bool hovered;
     private bool focusWithin;
@@ -38,6 +45,11 @@ public sealed partial class FolderRowView : UserControl
     {
         InitializeComponent();
         Star.Opacity = 0;
+        fadeAnimation = new DoubleAnimation { Duration = new Duration(System.TimeSpan.FromMilliseconds(150)) };
+        Storyboard.SetTarget(fadeAnimation, Star);
+        Storyboard.SetTargetProperty(fadeAnimation, nameof(Opacity));
+        fade = new Storyboard { FillBehavior = FillBehavior.Stop };
+        fade.Children.Add(fadeAnimation);
         RowRoot.PointerEntered += (_, _) => SetHovered(true);
         RowRoot.PointerExited += (_, _) => SetHovered(false);
         RowRoot.PointerCanceled += (_, _) => SetHovered(false);
@@ -136,23 +148,27 @@ public sealed partial class FolderRowView : UserControl
     }
 
     // style.go: opacity rather than visibility, so nothing moves under the
-    // pointer; a 150 ms fade.
+    // pointer; a 150 ms fade. A change while a fade runs stops it: the new
+    // value shows at once, or fades from where the running fade got to.
     private void UpdateStar(bool animated)
     {
         var show = Row is { } row && (row.StarPinned || hovered || focusWithin || container?.IsSelected == true);
         var target = show ? 1.0 : 0.0;
-        if (!animated || Star.Opacity == target)
+        if (target == starTarget)
         {
-            Star.Opacity = target;
+            // There already, or fading there.
             return;
         }
-        var fade = new DoubleAnimation { To = target, Duration = new Duration(System.TimeSpan.FromMilliseconds(150)) };
-        Storyboard.SetTarget(fade, Star);
-        Storyboard.SetTargetProperty(fade, nameof(Opacity));
-        var story = new Storyboard();
-        story.Children.Add(fade);
-        story.Completed += (_, _) => Star.Opacity = target;
-        story.Begin();
+        var from = Star.Opacity;
+        starTarget = target;
+        fade.Stop();
+        Star.Opacity = target;
+        if (animated && from != target)
+        {
+            fadeAnimation.From = from;
+            fadeAnimation.To = target;
+            fade.Begin();
+        }
     }
 
     private void OnTwistyClick(object sender, RoutedEventArgs e)

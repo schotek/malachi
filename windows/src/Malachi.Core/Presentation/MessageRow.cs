@@ -281,7 +281,12 @@ public sealed partial class MessageRow : ObservableObject
         ApplyLead(thread, loading, reserve: !thread && look.Grouped, look.ShowAvatars);
     }
 
-    /// <summary>What a screen reader names the row: the texts it shows, in order.</summary>
+    /// <summary>
+    /// What a screen reader names the row: the texts it shows, in order,
+    /// with what its unread dot, star and paper clip show said after the
+    /// subject (the list filter's Unread and Flagged, the attachment chip's
+    /// fallback name: the words GTK has for them).
+    /// </summary>
     public override string ToString()
     {
         var parts = new List<string> { Sender };
@@ -290,6 +295,18 @@ public sealed partial class MessageRow : ObservableObject
             parts.Add(CountTooltip);
         }
         parts.Add(Subject);
+        if (Unread)
+        {
+            parts.Add(L10n.T("Unread"));
+        }
+        if (Flagged)
+        {
+            parts.Add(L10n.T("Flagged"));
+        }
+        if (HasAttachments)
+        {
+            parts.Add(L10n.T("Attachment"));
+        }
         if (Origin.Length > 0)
         {
             parts.Add(Origin);

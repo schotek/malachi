@@ -47,13 +47,15 @@ PaneLayout). The pane widths are dragged with the toolkit's sizers
         <!-- The title bar: icon, title, and the search box in the middle
              (Ctrl+F, Ctrl+E; window.blp search_entry); the pane button
              opens the folded sidebar, the back button leaves the message
-             of the narrow stack. -->
+             of the narrow stack. The bar itself is no tab stop: it has no
+             action, its buttons and the box are the stops. -->
         <TitleBar
             x:Name="AppTitleBar"
             Grid.Row="0"
             BackRequested="OnBackRequested"
             IsBackButtonVisible="False"
             IsPaneToggleButtonVisible="False"
+            IsTabStop="False"
             PaneToggleRequested="OnPaneToggleRequested">
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
