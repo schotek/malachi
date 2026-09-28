@@ -1475,7 +1475,11 @@ More Actions (`message_menu_model`; `MessageCommandBar`). Every button runs
 a `WindowCommands` command (the per-message ones are `SelectionActions`,
 the port of the selection half of `MessageActionsController.swift`) and is
 enabled while it is; the star and the trash follow the flags (Star or
-Unstar, Move to Trash or Cancel Sending). A control is not given the
+Unstar, Move to Trash or Cancel Sending). The star is a flat toggle whose
+checked state is the filled star in the accent colour, as in a message
+window; its glyph is set in code only, since a one-time `x:Bind` of it
+runs when the control loads and would put the empty star back over a
+flagged message's (it did in a message window). A control is not given the
 command's `XamlUICommand` itself: assigned to `Button.Command` it replaces
 the button's content with the command's empty label (measured: the header
 icons came out blank), so `Main/CommandBinding` wires the click and the
@@ -1596,10 +1600,13 @@ commands their handlers, the selection's actions through
 Forward; Trash, Junk, Archive, Star, More with `message_menu_model`),
 40-pixel `AppBarButton`s bound to the window's `WindowCommands`, the star
 and the trash button showing the flags (Star/Unstar, Move to Trash/Cancel
-Sending); in the pane the main window's `MessageCommandBar` above the
-reader's region is that row (§11.1), level with the other panes' header
-rows as window.blp's message header bar is, and the view shows none of
-its own; the outbox and draft
+Sending); the star is an `AppBarToggleButton` with the main window's look
+(the filled star in the accent colour, no accent block: theme resources
+of the view), its click runs the command and then shows the flags, and
+its glyph is set in code only (§11.1); in the pane the main window's
+`MessageCommandBar` above the reader's region is that row (§11.1), level
+with the other panes' header rows as window.blp's message header bar is,
+and the view shows none of its own; the outbox and draft
 `InfoBar`s (Retry, Edit); the remote-image bar, a bar of its own with Load
 Images and Always From This Sender as buttons that take no focus on a click
 but are reached by Tab; then the No Message Selected and No Accounts pages

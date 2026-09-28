@@ -30,6 +30,7 @@ public sealed partial class MessageCommandBar : UserControl
     {
         InitializeComponent();
         StarButton.IsEnabled = false;
+        StarGlyph.Glyph = Icons.Glyph("non-starred-symbolic");
         StarButton.Click += OnStarClick;
     }
 

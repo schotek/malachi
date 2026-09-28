@@ -23,8 +23,9 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
     <UserControl.Resources>
         <ResourceDictionary>
             <!-- The star is a flat toggle (GTK's flat header button): the
-                 filled star in the accent colour says it is on. High
-                 contrast keeps WinUI's own. -->
+                 filled star in the accent colour says it is on, as in a
+                 message window (MessageView.xaml). High contrast keeps
+                 WinUI's own. -->
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
                     <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
@@ -38,6 +39,7 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                     <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
                     <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
                     <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
@@ -59,6 +61,7 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                     <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
                     <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
                     <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
                     <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
@@ -144,7 +147,9 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 ToolTipService.ToolTip="{l:T Msgid='Archive'}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('folder-download-symbolic')}" />
             </Button>
-            <!-- star_button: a toggle showing the selection's flagged state. -->
+            <!-- star_button: a toggle showing the selection's flagged state;
+                 its glyph is set in code only (ShowFlags), so no one-time
+                 binding puts the empty star back when the bar loads. -->
             <ToggleButton
                 x:Name="StarButton"
                 Width="36"
@@ -153,7 +158,7 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 AutomationProperties.AutomationId="StarButton"
                 AutomationProperties.Name="{l:T Msgid='Star'}"
                 ToolTipService.ToolTip="{l:T Msgid='Star'}">
-                <FontIcon x:Name="StarGlyph" FontSize="16" Glyph="{x:Bind res:Icons.Glyph('non-starred-symbolic')}" />
+                <FontIcon x:Name="StarGlyph" FontSize="16" />
             </ToggleButton>
             <Button
                 x:Name="MoreButton"

@@ -30,56 +30,99 @@ scrolls on its own in the same clamp: the plain text, the spinner after
     xmlns:res="using:Malachi.App.Resources"
     IsTabStop="False">
     <UserControl.Resources>
-        <!-- The header bar's buttons: icon only, 40 px, as dense as GTK's. -->
-        <Style x:Key="CommandRowButtonStyle" TargetType="AppBarButton">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="LabelPosition" Value="Collapsed" />
-        </Style>
-        <!-- The chips are built in code; their looks are here, so that the
-             theme resources follow the window's colour scheme (style.go:
-             .address-chip, .address-more, .attachment-chip, .chip-action). -->
-        <Style
-            x:Key="AddressChipStyle"
-            BasedOn="{StaticResource DefaultButtonStyle}"
-            TargetType="Button">
-            <Setter Property="MinHeight" Value="24" />
-            <Setter Property="Padding" Value="10,2,10,3" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-        </Style>
-        <Style
-            x:Key="MoreChipStyle"
-            BasedOn="{StaticResource DefaultButtonStyle}"
-            TargetType="Button">
-            <Setter Property="MinHeight" Value="24" />
-            <Setter Property="Padding" Value="10,2,10,3" />
-            <Setter Property="CornerRadius" Value="12" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        </Style>
-        <Style
-            x:Key="ChipActionStyle"
-            BasedOn="{StaticResource DefaultButtonStyle}"
-            TargetType="Button">
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="Padding" Value="8,3,8,3" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style x:Key="ChipNameStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-        <Style x:Key="ChipSizeStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-        </Style>
+        <ResourceDictionary>
+            <!-- The star is a flat toggle with the main window's look
+                 (MessageCommandBar.xaml, GTK's flat header button in both):
+                 the filled star in the accent colour says it is on, where
+                 WinUI's checked AppBarToggleButton is an accent block. High
+                 contrast keeps WinUI's own. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="AppBarToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast" />
+            </ResourceDictionary.ThemeDictionaries>
+            <!-- The header bar's buttons: icon only, 40 px, as dense as GTK's. -->
+            <Style x:Key="CommandRowButtonStyle" TargetType="AppBarButton">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="LabelPosition" Value="Collapsed" />
+            </Style>
+            <Style x:Key="CommandRowToggleStyle" TargetType="AppBarToggleButton">
+                <Setter Property="Width" Value="40" />
+                <Setter Property="Height" Value="40" />
+                <Setter Property="LabelPosition" Value="Collapsed" />
+            </Style>
+            <!-- The chips are built in code; their looks are here, so that the
+                 theme resources follow the window's colour scheme (style.go:
+                 .address-chip, .address-more, .attachment-chip, .chip-action). -->
+            <Style
+                x:Key="AddressChipStyle"
+                BasedOn="{StaticResource DefaultButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Padding" Value="10,2,10,3" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+            </Style>
+            <Style
+                x:Key="MoreChipStyle"
+                BasedOn="{StaticResource DefaultButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="Padding" Value="10,2,10,3" />
+                <Setter Property="CornerRadius" Value="12" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+            <Style
+                x:Key="ChipActionStyle"
+                BasedOn="{StaticResource DefaultButtonStyle}"
+                TargetType="Button">
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="8,3,8,3" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+            </Style>
+            <Style x:Key="ChipNameStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="ChipSizeStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+            </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
     <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}">
         <Grid.RowDefinitions>
@@ -168,16 +211,19 @@ scrolls on its own in the same clamp: the plain text, the spinner after
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('folder-download')}" />
                     </AppBarButton.Icon>
                 </AppBarButton>
-                <!-- GTK's star ToggleButton: the icon and the label show the
-                     state (starred / Star, Unstar), not a pressed look. -->
-                <AppBarButton
+                <!-- GTK's star ToggleButton: its state, icon (starred or
+                     not) and label (Star, Unstar) follow the flags. The
+                     glyph is set in code only (ShowFlags): a one-time
+                     binding here would put the empty star back when the
+                     view loads, over a flagged message's. -->
+                <AppBarToggleButton
                     x:Name="StarButton"
                     AutomationProperties.AutomationId="StarButton"
-                    Style="{StaticResource CommandRowButtonStyle}">
-                    <AppBarButton.Icon>
-                        <FontIcon x:Name="StarGlyph" Glyph="{x:Bind res:Icons.Glyph('non-starred')}" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
+                    Style="{StaticResource CommandRowToggleStyle}">
+                    <AppBarToggleButton.Icon>
+                        <FontIcon x:Name="StarGlyph" />
+                    </AppBarToggleButton.Icon>
+                </AppBarToggleButton>
                 <AppBarButton
                     x:Name="MoreButton"
                     AutomationProperties.AutomationId="MessageMenuButton"

@@ -191,7 +191,14 @@ public sealed partial class MessageView : UserControl
         TrashButton.Command = commands.Trash.Command;
         JunkButton.Command = commands.Junk.Command;
         ArchiveButton.Command = commands.Archive.Command;
-        StarButton.Command = commands.ToggleFlag.Command;
+        // A toggle is not given the command: its click flips it before the
+        // command runs, so the click runs the command and the button then
+        // shows the flags (as the main window's MessageCommandBar).
+        StarButton.Click += (_, _) =>
+        {
+            commands.ToggleFlag.TryExecute();
+            ShowFlags();
+        };
         MarkUnreadItem.Command = commands.MarkUnread.Command;
         MarkReadItem.Command = commands.MarkRead.Command;
         LoadImagesItem.Command = commands.LoadImages.Command;
@@ -212,6 +219,8 @@ public sealed partial class MessageView : UserControl
         }
         var f = commands.Flags;
         var star = f.Flagged ? L10n.T("Unstar") : L10n.T("Star");
+        StarButton.IsEnabled = commands.ToggleFlag.IsEnabled;
+        StarButton.IsChecked = f.Flagged;
         StarButton.Label = star;
         StarGlyph.Glyph = Icons.Glyph(f.Flagged ? "starred" : "non-starred");
         ToolTipService.SetToolTip(StarButton, star);
