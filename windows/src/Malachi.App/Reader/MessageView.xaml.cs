@@ -172,6 +172,14 @@ public sealed partial class MessageView : UserControl
     // window.blp's message header bar is, so the view shows none there.
     private void WireCommands()
     {
+        if (commands is not null)
+        {
+            // The No Accounts page's button (window.blp no_accounts_page,
+            // app.add-account), which only the pane shows. Its click and
+            // enabled state are wired, not a Command: a XamlUICommand
+            // would replace the label with its own empty one.
+            Main.CommandBinding.Bind(AddAccountButton, commands.AddAccount);
+        }
         if (commands is null || Reader.Mode == ReaderMode.Pane)
         {
             CommandRow.Visibility = Visibility.Collapsed;
@@ -188,7 +196,6 @@ public sealed partial class MessageView : UserControl
         MarkReadItem.Command = commands.MarkRead.Command;
         LoadImagesItem.Command = commands.LoadImages.Command;
         TrustSenderItem.Command = commands.TrustSender.Command;
-        AddAccountButton.Command = commands.AddAccount.Command;
         // The star shows the flagged state and the trash button says what it
         // does (actions.go setStar, outbox.go trashTooltip): both follow the
         // flags, whose change re-validates these commands.
