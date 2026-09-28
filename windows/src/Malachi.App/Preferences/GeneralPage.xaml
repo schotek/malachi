@@ -7,13 +7,13 @@ Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift;
 GTK: preferences.blp general_page. The Blueprint's groups in its order:
 Startup (launch_at_login, run_in_background), Reading (mark_read_delay,
 0 to 60 s), Deleting (confirm_delete), Notifications
-(desktop_notifications, notification_sound), then two groups of Windows'
-own (Windows-only strings): Keyboard, the ctrl-r setting as macOS's
-⌘R group (Ctrl+R replies, or checks for new mail as in GTK), and Default
-Mail App, the Default apps button with what Windows opens mailto: links
-with (windows/README.md); last the daemon's Mail group (mail_group:
-check_interval, remote_images, offline_days), insensitive until the
-daemon answered, its description replaced by a failed load's reason.
+(desktop_notifications, notification_sound) and the daemon's Mail group
+(mail_group: check_interval, remote_images, offline_days), insensitive
+until the daemon answered, its description replaced by a failed load's
+reason; after them two groups of Windows' own (Windows-only strings):
+Keyboard, the ctrl-r setting as macOS's ⌘R group (Ctrl+R replies, or
+checks for new mail as in GTK), and Default Mail App, the Default apps
+button with what Windows opens mailto: links with (windows/README.md).
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.GeneralPage"
@@ -136,39 +136,6 @@ daemon answered, its description replaced by a failed load's reason.
                     </tk:SettingsCard>
                 </StackPanel>
 
-                <!-- Windows-only strings: the keyboard group (macOS's ⌘R group); the choices are GTK's msgids. -->
-                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
-                    <TextBlock
-                        AutomationProperties.HeadingLevel="Level2"
-                        Style="{StaticResource SettingsGroupHeaderStyle}"
-                        Text="Keyboard" />
-                    <tk:SettingsCard Description="F5 always checks for new mail" Header="Ctrl+R">
-                        <ComboBox
-                            x:Name="CtrlRBox"
-                            MinWidth="200"
-                            AutomationProperties.AutomationId="CtrlR"
-                            AutomationProperties.Name="Ctrl+R">
-                            <ComboBoxItem Content="{l:T Msgid='Reply'}" />
-                            <ComboBoxItem Content="{l:T Msgid='Check for New Mail'}" />
-                        </ComboBox>
-                    </tk:SettingsCard>
-                </StackPanel>
-
-                <!-- Windows-only strings: Windows does not let an app make itself the default mail app. -->
-                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
-                    <TextBlock
-                        AutomationProperties.HeadingLevel="Level2"
-                        Style="{StaticResource SettingsGroupHeaderStyle}"
-                        Text="Default Mail App" />
-                    <tk:SettingsCard x:Name="DefaultAppsRow" Header="Open e-mail links with Malachi Mail">
-                        <Button
-                            x:Name="DefaultAppsButton"
-                            AutomationProperties.AutomationId="DefaultApps"
-                            Click="OnDefaultAppsClick"
-                            Content="Default apps" />
-                    </tk:SettingsCard>
-                </StackPanel>
-
                 <StackPanel x:Name="MailGroup" Spacing="{StaticResource SettingsCardSpacing}">
                     <TextBlock
                         AutomationProperties.HeadingLevel="Level2"
@@ -222,6 +189,39 @@ daemon answered, its description replaced by a failed load's reason.
                             <ComboBoxItem Content="{l:T Msgid='1 year'}" />
                             <ComboBoxItem Content="{l:T Msgid='Everything'}" />
                         </ComboBox>
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- Windows-only strings: the keyboard group (macOS's ⌘R group); the choices are GTK's msgids. -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="Keyboard" />
+                    <tk:SettingsCard Description="F5 always checks for new mail" Header="Ctrl+R">
+                        <ComboBox
+                            x:Name="CtrlRBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="CtrlR"
+                            AutomationProperties.Name="Ctrl+R">
+                            <ComboBoxItem Content="{l:T Msgid='Reply'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Check for New Mail'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- Windows-only strings: Windows does not let an app make itself the default mail app. -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="Default Mail App" />
+                    <tk:SettingsCard x:Name="DefaultAppsRow" Header="Open e-mail links with Malachi Mail">
+                        <Button
+                            x:Name="DefaultAppsButton"
+                            AutomationProperties.AutomationId="DefaultApps"
+                            Click="OnDefaultAppsClick"
+                            Content="Default apps" />
                     </tk:SettingsCard>
                 </StackPanel>
             </StackPanel>

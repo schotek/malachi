@@ -1586,7 +1586,8 @@ question only of the windows it returns. The account wizard is an owned modal wi
 allows one `ContentDialog` at a time and the wizard nests the certificate
 prompt), five pages as GTK/macOS. Preferences is a single-instance window
 with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the
-row), General (startup, reading, deleting, notifications, the `ctrl-r`
+row), General (startup, reading, deleting, notifications and the daemon's
+mail settings in GTK's order, then Windows' own groups: the `ctrl-r`
 choice, *Default apps*), Appearance and AI, built with `SettingsCard`s.
 
 The reader (`Malachi.App/Reader`, `Windows`, `Attachments`):
