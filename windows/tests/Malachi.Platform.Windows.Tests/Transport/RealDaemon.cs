@@ -28,12 +28,12 @@ internal sealed class RealDaemon : IDisposable
 {
     /// <summary>
     /// How long a test lets the real daemon take to listen: three times the
-    /// app's limit (<see cref="DaemonSupervisor.DefaultStartTimeout"/>). On
-    /// an idle machine it listens within a second; while the other test
-    /// assemblies and a build kept every core busy, four tests that waited
-    /// the app's 15 s for it failed together (docs/windows-port.md §13).
-    /// What the tests check is what the daemon does once it runs, not how
-    /// fast a loaded machine starts it.
+    /// app's limit (<see cref="DaemonSupervisor.DefaultStartTimeout"/>). It
+    /// wrote its key within about two seconds even with every core busy
+    /// (measured 2026-09-28), yet four tests that waited the app's 15 s for
+    /// it failed together once while other builds kept the machine busy
+    /// (docs/windows-port.md §13). What the tests check is what the daemon
+    /// does once it runs, not how fast a loaded machine starts it.
     /// </summary>
     public static readonly TimeSpan StartLimit = 3 * DaemonSupervisor.DefaultStartTimeout;
 

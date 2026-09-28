@@ -2286,7 +2286,11 @@ lasts long enough to meet, waits up to 120 s for its browser to end
 (more than 60 s once with every core busy and the solution being rebuilt
 beside it), and waits for each click that must reach the reader as a
 link to do so before the next (a fixed 500 ms let a masked link's click
-count for the next one).
+count for the next one). With a busy loop per logical processor, and in
+half the runs the solution rebuilt in a loop beside them, three of six
+runs of `build.ps1 test` failed in the canary before these changes;
+three runs with all of them, the rebuild loop included, passed
+(2026-09-28).
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in
