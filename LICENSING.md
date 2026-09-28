@@ -4,11 +4,17 @@ Malachi Mail is made of two independently licensed parts.
 
 | Part | Path | Licence |
 |---|---|---|
-| Core (the `malachid` daemon and the `pkg/api` contract) | `backend/` | [AGPL-3.0-only](backend/LICENSE) |
-| Reference GTK4 user interface | `ui/`, `data/`, `packaging/`, everything else | [GPL-3.0-or-later](LICENSE) |
+| Core (the `malachid` daemon, the `pkg/api` contract and the `malachi-mcp` bridge) | `backend/` | [AGPL-3.0-only](backend/LICENSE) |
+| Reference GTK4 user interface | `ui/`, `data/`, `packaging/` | [GPL-3.0-or-later](LICENSE) |
+| macOS client (Swift/AppKit, with its keyring helper `malachi-keychain`) | `macos/` | [GPL-3.0-or-later](LICENSE) |
+| Windows client (C#/WinUI 3, with its keyring helper `malachi-credentials`) | `windows/` | [GPL-3.0-or-later](LICENSE) |
+| Everything else (translations, documentation, scripts, the build) | `po/`, `docs/`, `scripts/`, … | [GPL-3.0-or-later](LICENSE) |
 
 Every source file carries an `SPDX-License-Identifier` header saying which
-of the two applies to it.
+of the two applies to it. The built macOS app and Windows app folder carry
+`malachid` and `malachi-mcp` beside the client, each under its own licence
+(the Windows folder has `LICENSE.txt`, `LICENSE-backend.txt` and this
+file).
 
 ## The core is dual-licensed
 
@@ -43,6 +49,27 @@ which is AGPL-3.0, so it cannot be offered under any other terms. The
 commercial licence covers the core only. Anyone building a proprietary
 client needs to write their own UI, which is exactly what the process
 boundary is for.
+
+## Microsoft components in the Windows client
+
+The source of the Windows client is GPL-3.0-or-later like everything
+outside `backend/`, and building and changing it is unaffected by what
+follows. The app folder that `make windows` builds, however, also carries
+components that are not the project's and not under the GPL: Microsoft's
+Windows App SDK (WinUI 3 and its runtime libraries) and the WebView2 SDK's
+assemblies, under Microsoft's licence terms, next to the .NET runtime and
+the Windows Community Toolkit, which are MIT-licensed. Whether the
+GPLv3's exception for System Libraries covers components that travel with
+the application rather than with Windows is not something this document
+settles.
+
+Binary distribution of the Windows client therefore waits for a licence
+decision, which the owner makes after a legal check: an explicit
+additional permission under GPLv3 §7 that allows the client to be combined
+with and distributed together with these Microsoft platform components,
+added here, with the notices of those components in the app folder.
+Until then there is no published Windows binary, and the client is built
+from source (`windows/README.md`).
 
 ## Contributions
 

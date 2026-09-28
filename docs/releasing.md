@@ -31,7 +31,11 @@ Nothing hard-codes the number. `make` derives it with
 `git describe --tags --always --dirty`, cutting the leading `v`, so a
 tagged tree builds `0.1.0`, three commits later `0.1.0-3-gabc1234`, and an
 untagged clone the bare commit. It reaches the About dialog through
-`-X main.version` and clients through `system.info`.
+`-X main.version` and clients through `system.info`. The macOS and Windows
+builds take the same string (`VERSION` from the root Makefile); the
+Windows client also gets a numeric file version,
+`MAJOR.MINOR.PATCH.<commits since the tag>`, with the full string as its
+product version.
 
 ## 2. Release notes
 
@@ -163,19 +167,53 @@ ccache) is cached.
 
 ## 7. Windows
 
-`.github/workflows/windows.yml` tests the daemon on Windows, builds,
-tests and lints the Windows client, and zips its app folder for **x64**
-and **arm64** (`Malachi-Mail-<version>-<arch>.zip`, the output of
-`windows/build.ps1 package`), on pushes to `main`, on `v*` tags, by hand
-and on pull requests that touch what the client is built from; what each
-job does is in [windows-port.md §13](windows-port.md#13-build-and-ci). A
-tag build attaches both zips to the tag's release like the packages above.
+`windows/build.ps1` builds the Windows client (the root Makefile's
+`make windows` runs its `app` target), and its `package` target makes the
+artefact a release would carry:
 
-Until [windows-port.md §17](windows-port.md#17-before-a-public-release)
-is done, those zips are test builds, not something to publish: they are
-unsigned, have no installer or updates, and `LICENSING.md` does not yet
-carry the permission for the Microsoft components they contain (the
-Windows App SDK, WebView2). Delete them from the draft before publishing
-the release (`gh release delete-asset v0.1.0 Malachi-Mail-0.1.0-x64.zip`,
-and the same for arm64). The arm64 zip is cross-built and has not run
-anywhere.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package            # this machine's architecture
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package -Arch arm64
+# -> build\windows\Malachi-Mail-<version>-<arch>.zip
+```
+
+`package` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
+architecture with `-X main.version`, the app published self-contained in
+Release, `malachi-credentials.exe` with NativeAOT, the translations and the
+licences, checked for completeness, then zipped as one `Malachi Mail\`
+folder with `/` separators, so that every unzip tool reads it. The tree
+must be clean, or the version says `-dirty`, as for the other builds. An
+ARM64 package needs the MSVC ARM64 build tools for the keyring helper;
+nothing ARM64 has run on real hardware yet.
+
+`.github/workflows/windows.yml` does the same in CI: it tests the daemon
+on Windows, builds, tests and lints the Windows client, and zips its app
+folder for **x64** and **arm64**, on pushes to `main`, on `v*` tags, by
+hand and on pull requests that touch what the client is built from; what
+each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
+A tag build attaches both zips to the tag's release like the packages
+above, to a draft when the tag has none yet.
+
+Those zips are **not** release artefacts yet. Before a Windows build is
+published with a release
+([windows-port.md §17](windows-port.md#17-before-a-public-release)):
+
+- **The licence.** The folder carries Microsoft's Windows App SDK and
+  WebView2 components, which are not under the GPL; distributing it
+  needs the additional permission [LICENSING.md](../LICENSING.md)
+  describes, which the owner decides after a legal check.
+- **Code signing** of the four executables (and of an installer):
+  unsigned, SmartScreen warns on every machine that downloads them. The
+  owner decides how (SignPath Foundation, an OV certificate, signing as an
+  organisation).
+- **An installer and updates**: Velopack (per user, updates from GitHub
+  Releases) and a winget manifest, the update stopping the daemon
+  gracefully first, the uninstall removing what the app registered in
+  HKCU.
+
+Until then, delete the zips from the draft before publishing the release
+(`gh release delete-asset v0.1.0 Malachi-Mail-0.1.0-x64.zip`, and the
+same for arm64). The arm64 zip is cross-built and has not run anywhere.
+
+Release notes stay in `NEWS` for every platform; the AppStream metainfo
+it feeds is Linux's.
