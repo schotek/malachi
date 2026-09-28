@@ -108,6 +108,12 @@ type Window struct {
 
 	// syncStates is the last notify.syncState / sync.status per account.
 	syncStates map[api.AccountID]api.SyncState
+	// notified is the messages whose desktop notification may still show
+	// (notified.go). verifying holds the accounts whose notifications are
+	// being checked with the daemon; true asks for one more check after
+	// the running one (notify.go verifyNotifications).
+	notified  notifiedSet
+	verifying map[api.AccountID]bool
 	// outboxSeen is the last known size of each account's outbox folder and
 	// outboxCancelled the drops the user caused (outbox.go: sent toast).
 	outboxSeen      map[api.AccountID]int
@@ -225,6 +231,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		spinTimers:        make(map[api.MessageID]glib.SourceHandle),
 		savingAll:         make(map[api.MessageID]bool),
 		syncStates:        make(map[api.AccountID]api.SyncState),
+		verifying:         make(map[api.AccountID]bool),
 		actions:           make(map[string]*gio.SimpleAction),
 		// Until the client reports a state, the first attempt is underway.
 		conn:       connView{State: client.Connecting},
@@ -326,6 +333,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		w.SetVisible(false)
 		return true
 	})
+	// The user came to the window: the selected folder's notifications are
+	// outdated (notify.go withdrawViewedNotifications).
+	w.NotifyProperty("is-active", w.withdrawViewedNotifications)
 
 	// Sidebar rows mirror model.entries one to one (rebuildFolderList).
 	// Programmatic selection (w.reselecting) is handled by selectFolder

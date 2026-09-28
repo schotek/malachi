@@ -287,15 +287,29 @@ final class Integration {
         }
     }
 
-    /// window/notify.go `handleNotification`.
+    /// window/notify.go `handleNotification`, and the withdrawal of
+    /// outdated desktop notifications: the mailbox decides which, the
+    /// service removes them; the main window becoming key counts as viewing
+    /// the selected folder (window.go, `is-active`).
     private func wireNotifications() {
         let hub = state.notifications
         tokens.append(hub.addNewMessage { [weak self] n in
             guard let self else { return }
             // GTK order: the desktop notification first, then the list.
-            self.notifications.deliver(n)
+            if self.notifications.deliver(n) {
+                self.mailbox.recordNotification(n)
+            }
             self.mailbox.handleNewMessage(n)
         })
+        mailbox.onWithdrawNotifications = { [weak self] identifiers in
+            self?.notifications.withdraw(identifiers)
+        }
+        mailbox.isMainWindowKey = { [weak self] in
+            self?.mainWindow?.window?.isKeyWindow ?? false
+        }
+        mainWindow?.onBecomeKey = { [weak self] in
+            self?.mailbox.withdrawViewedNotifications()
+        }
         tokens.append(hub.addSyncState { [weak self] s in
             self?.mailbox.handleSyncState(s)
         })

@@ -163,6 +163,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     func windowDidBecomeKey(_ notification: Foundation.Notification) {
         state.toasts.presenter = toasts
+        onBecomeKey?()
     }
 
     // MARK: Actions
@@ -208,6 +209,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     @objc func checkForNewMail(_ sender: Any?) {
         state.hooks.checkForNewMail?()
     }
+
+    /// The window became key: the user looks at the selected folder, whose
+    /// desktop notifications the app withdraws (window.go, `is-active`).
+    var onBecomeKey: (@MainActor () -> Void)?
 
     /// The toolbar search field's text (after the typing pause; "" when
     /// cleared) and Return in it; the app hands both to the list.

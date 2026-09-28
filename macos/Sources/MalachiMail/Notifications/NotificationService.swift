@@ -12,7 +12,10 @@ import os
 /// `UNUserNotificationCenter` needs a bundle: run as a bare executable
 /// (`swift run`) the service logs once and skips the notification; the
 /// sound still plays. A notification is skipped while the main window is
-/// key (the GTK `IsActive` check). Clicking one calls `onActivate`.
+/// key (the GTK `IsActive` check) and for a message read elsewhere before it
+/// arrived. Clicking one calls `onActivate`. Which notifications may still
+/// show, and when they are outdated, the mailbox controller keeps
+/// (`MailboxController+Notifications.swift`); `withdraw` removes them.
 @MainActor
 final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     private let settings: Settings
@@ -44,17 +47,31 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Shows a desktop notification (and plays the sound) for a new
-    /// message unless the user is looking at the main window right now.
-    func deliver(_ n: NewMessageNotification) {
-        if isMainWindowKey() {
-            return
+    /// message unless the user is looking at the main window right now, or
+    /// has read the message elsewhere before it arrived here. True when a
+    /// notification was requested, for the caller to remember
+    /// (`MailboxController.recordNotification`).
+    @discardableResult
+    func deliver(_ n: NewMessageNotification) -> Bool {
+        if isMainWindowKey() || hasFlag(n.message.flags, .seen) {
+            return false
         }
-        if settings.desktopNotifications {
+        let posted = settings.desktopNotifications
+        if posted {
             post(n)
         }
         if settings.notificationSound {
             playSound()
         }
+        return posted
+    }
+
+    /// Removes the delivered notifications with the given identifiers
+    /// (`notificationID`; the GTK `WithdrawNotification`). An identifier
+    /// with nothing delivered under it is ignored.
+    func withdraw(_ identifiers: [String]) {
+        guard let center, !identifiers.isEmpty else { return }
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     private func post(_ n: NewMessageNotification) {
@@ -72,7 +89,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         content.threadIdentifier = n.accountId.rawValue
         content.userInfo = ["accountId": n.accountId.rawValue, "messageId": n.message.id.rawValue]
         // The sound is the app's own (`playSound`), gated by its own setting.
-        let request = UNNotificationRequest(identifier: "message-" + n.message.id.rawValue, content: content, trigger: nil)
+        let request = UNNotificationRequest(identifier: notificationID(n.message.id), content: content, trigger: nil)
         let log = log
         Task {
             var status = await center.notificationSettings().authorizationStatus

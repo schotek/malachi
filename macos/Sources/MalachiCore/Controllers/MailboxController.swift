@@ -86,6 +86,20 @@ public final class MailboxController {
     /// The backend went away: fold a conversation waiting for its members
     /// back (window.go `showConnectionState`, `collapseLoading` + `syncRows`).
     public var collapseLoading: (@MainActor () -> Void)?
+    /// Removes the delivered desktop notifications with these request
+    /// identifiers (`MailboxController+Notifications.swift`; the GTK
+    /// window's `WithdrawNotification`).
+    public var onWithdrawNotifications: (@MainActor ([String]) -> Void)?
+    /// Whether the main window is key right now (the GTK window's
+    /// `IsActive`); without it no folder counts as viewed.
+    public var isMainWindowKey: (@MainActor () -> Bool)?
+
+    /// The messages whose desktop notification may still show
+    /// (window.go `notified`). `verifyingNotifications` holds the accounts
+    /// whose notifications are being checked with the daemon; true asks
+    /// for one more check after the running one (`verifyNotifications`).
+    var notified = NotifiedMessages()
+    var verifyingNotifications: [AccountID: Bool] = [:]
 
     let toast: @MainActor (String) -> Void
     let log = Logger(subsystem: "io.github.schotek.Malachi", category: "mailbox")
@@ -94,7 +108,7 @@ public final class MailboxController {
     private var savingCollapse = false
     private var savingFavourites = false
     private var settingsTokens: [Settings.ChangeToken] = []
-    private var closed = false
+    private(set) var closed = false
 
     /// - Parameters:
     ///   - client: the transport; calls fail with `notConnected` until the
@@ -201,6 +215,7 @@ public final class MailboxController {
                 self.model.folders = [:]
                 self.model.folderErr = [:]
                 self.hasAccounts = !res.accounts.isEmpty
+                self.withdrawAccountNotifications()
                 self.onAccountsLoaded?(res.accounts)
                 // sync.status may have answered before the accounts were
                 // known, and the status line and its popover follow the
@@ -392,6 +407,7 @@ public final class MailboxController {
         onFolderSelected?(k, model.selectedFav)
         onSelectionChanged?(k, model.selectedFav)
         requestReloadMessages()
+        withdrawViewedNotifications()
     }
 
     /// Nothing selected any more: clears the highlight and the list.
@@ -621,13 +637,15 @@ public final class MailboxController {
 
     /// Runs when an account leaves the syncing state (folders.go
     /// `onSyncFinished`): folders are reloaded and, when the synced folder is
-    /// the selected one (or the whole account was synced), the list.
+    /// the selected one (or the whole account was synced), the list; the
+    /// account's notifications are checked (`verifyNotifications`).
     func onSyncFinished(_ prev: SyncState?, _ cur: SyncState) {
         guard let prev, prev.status == .syncing, cur.status != .syncing else { return }
         loadFolders(cur.accountId, model.foldersGen)
         if let sel = model.selected, sel.account == cur.accountId, cur.folderId == nil || cur.folderId == sel.folder {
             reloadMessages?()
         }
+        verifyNotifications(cur.accountId)
     }
 
     /// Runs when the account's number of pending or failed outgoing
