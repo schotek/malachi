@@ -135,14 +135,17 @@ public sealed class LinkOpenerTests
 
         answer = true;
         await opener.OpenAsync(link, links, "w");
-        Assert.Empty(toasts);
         if (destination is null)
         {
-            // Not offered: nothing to ask about, nothing opened.
+            // Not offered: nothing to ask about, nothing opened, and each
+            // click says so with GTK's toast for a link that could not be
+            // opened, rather than doing nothing anyone can see.
             Assert.Empty(asked);
             Assert.Empty(launcher.Links);
+            Assert.Equal([RefusedToast, RefusedToast], toasts);
             return;
         }
+        Assert.Empty(toasts);
         Assert.Equal([("w", Bank, destination), ("w", Bank, destination)], asked);
         Assert.Equal([destination], launcher.Links);
     }
@@ -216,6 +219,28 @@ public sealed class LinkOpenerTests
         Assert.Empty(launcher.Links);
         Assert.Empty(asked);
         Assert.Single(composed);
+    }
+
+    /// <summary>The toast for a link the launcher refuses (GTK's msgid, macOS's technical detail).</summary>
+    private const string RefusedToast = "The link could not be opened: invalid URL";
+
+    // A link the launcher refuses (no host it can tell, a backslash before
+    // the "@") is never handed to it, whatever its text: the click is a
+    // toast in the window it came from, as a failed launch is.
+    [Theory]
+    [InlineData("click here")]
+    [InlineData("")]
+    [InlineData(Bank)]
+    public async Task ALinkTheLauncherRefusesIsAToast(string text)
+    {
+        foreach (var href in new[] { "https:///evil.example/triple", "https://www.mojebanka.example\\@evil.example/bs2" })
+        {
+            Link[] links = [new() { Text = text, Href = href }];
+            await Make().OpenAsync(new ActivatedLink(href, href), links, "w");
+        }
+        Assert.Equal([RefusedToast, RefusedToast], toasts);
+        Assert.Empty(asked);
+        Assert.Empty(launcher.Links);
     }
 
     [Fact]

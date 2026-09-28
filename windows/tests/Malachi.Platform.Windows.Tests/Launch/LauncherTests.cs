@@ -243,7 +243,8 @@ public sealed class LauncherTests
 
     // The reader's LinkOpener over this launcher, as the app wires them:
     // every shape is asked about, the question names the address the shell
-    // then gets, and the shell never gets one without a yes.
+    // then gets, and the shell never gets one without a yes; one the
+    // launcher refuses is a toast per click instead.
     [Theory]
     [MemberData(nameof(MaskedLinkBypasses))]
     public async Task MaskedLinksAreAskedAboutWithTheAddressTheShellGets(string href, string? destination)
@@ -251,6 +252,7 @@ public sealed class LauncherTests
         const string Text = "https://www.mojebanka.example/login";
         var shell = new StandInShell();
         var asked = new List<(string Text, string Destination)>();
+        var toasts = new List<string>();
         var answer = false;
         var opener = new LinkOpener(shell.Launcher)
         {
@@ -259,7 +261,7 @@ public sealed class LauncherTests
                 asked.Add((c.Text, d));
                 return Task.FromResult(answer);
             },
-            Toast = (_, t) => Assert.Fail("toast: " + t),
+            Toast = (_, t) => toasts.Add(t),
         };
         Link[] links = [new() { Text = Text, Href = href }];
 
@@ -272,8 +274,10 @@ public sealed class LauncherTests
         {
             Assert.Empty(asked);
             Assert.Empty(shell.Launches);
+            Assert.Equal(["The link could not be opened: invalid URL", "The link could not be opened: invalid URL"], toasts);
             return;
         }
+        Assert.Empty(toasts);
         Assert.Equal([(Text, destination), (Text, destination)], asked);
         Assert.Equal(destination, Assert.Single(shell.Launches).Target);
     }

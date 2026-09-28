@@ -13,8 +13,9 @@
 // daemon did not list. The address the browser would get
 // (ILauncher.LinkTarget: escaped, the host as DNS gets it, no userinfo) is
 // what the decision judges a listed link's text against, what the
-// question names, and what is opened. The links are server data; nothing
-// here logs them.
+// question names, and what is opened; a link for which there is none, the
+// launcher refuses, and the click is a toast, as a failed launch is. The
+// links are server data; nothing here logs them.
 
 using System;
 using System.Collections.Generic;
@@ -82,10 +83,10 @@ public sealed partial class LinkOpener
                 return;
             case LinkDecision.Confirm c:
                 // The address the browser would get; a link it would refuse
-                // is not asked about.
+                // is not asked about, only reported.
                 if (launcher.LinkTarget(c.Href) is not { } destination)
                 {
-                    LogRefused(logger);
+                    Refused(window);
                     return;
                 }
                 if (Confirm is not { } confirm)
@@ -123,6 +124,11 @@ public sealed partial class LinkOpener
     // remote.go launchURI: the desktop's handler; a failure is a toast.
     private async Task LaunchAsync(string href, object? window)
     {
+        if (launcher.LinkTarget(href) is null)
+        {
+            Refused(window);
+            return;
+        }
         try
         {
             await launcher.OpenLinkAsync(href, Owner?.Invoke(window) ?? 0);
@@ -134,6 +140,19 @@ public sealed partial class LinkOpener
             // TRANSLATORS: %s is a technical error message.
             Toast?.Invoke(window, L10n.T("The link could not be opened: %s", e.Message));
         }
+    }
+
+    // A link the launcher refuses (Launcher.WebLinkTarget: no host it can
+    // tell, as in "https:///evil.example/", or a backslash before the "@")
+    // is never handed to it, nor asked about, since there is nothing it
+    // could open; the click says so with GTK's toast for a link that could
+    // not be opened (LaunchErrorText), where it did nothing anyone could
+    // see, and the detail is macOS's for an address it cannot read.
+    private void Refused(object? window)
+    {
+        LogRefused(logger);
+        // TRANSLATORS: %s is a technical error message.
+        Toast?.Invoke(window, L10n.T("The link could not be opened: %s", "invalid URL")); // Windows-only string (the technical detail, as on macOS)
     }
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "mailto link refused: {Reason}")]
