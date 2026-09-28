@@ -1,0 +1,358 @@
+# The Windows client and the daemon on Windows.
+#
+# Three jobs on the windows-2025 image, side by side:
+#
+#   go      go vet and go test of backend/ on Windows (CGO_ENABLED=0, as the
+#           daemon is built there), which gates the daemon the app carries
+#   client  the solution built for x64 with warnings as errors, the tests,
+#           the lint, and the x64 app folder zipped
+#   arm64   the same solution cross-built for ARM64 and its zip; nothing of
+#           it runs here (docs/windows-port.md §17: ARM64 is run on real
+#           hardware before a release)
+#
+# Every client step is a target of windows/build.ps1 (docs/windows-port.md
+# §13), run as make runs it, so what CI does is what `make windows` and
+# `make test-windows` do on a desktop. The image is named, not
+# windows-latest, so the move to the next Windows Server is an edit here;
+# its tools are still updated with the image every week or two. It has
+# what the build needs beyond the SDKs set up below: Git for describing the
+# version, Visual Studio 2022 with the MSVC build tools for x64 and ARM64
+# (the NativeAOT keyring helper links with them) and the WebView2 runtime.
+#
+# pwsh runs the steps and judges a step by the exit status of the last
+# program it ran, so no step runs more than one. Tags and a manual run go
+# through the same jobs; a tag also attaches the zips to its release.
+name: Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - windows/**
+      - backend/**
+      - po/**
+      - docs/malachi_icon.png
+      - Makefile
+      - .github/workflows/windows.yml
+      # What else the build and the tests read outside windows/: the GTK
+      # UI's sources (the drift tests compare timeouts, the editor bridge,
+      # the viewer's document and the icon names with them), the gschema
+      # (the settings' keys and defaults), the API document, the licences
+      # that go into the app folder, and the line endings of the checkout.
+      - ui/**
+      - data/io.github.schotek.Malachi.gschema.xml
+      - docs/api.md
+      - LICENSE
+      - LICENSING.md
+      - .gitattributes
+  workflow_dispatch:
+    inputs:
+      canary:
+        description: Run the WebView2 network canary on the runner too (CI skips it otherwise)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  go:
+    name: backend (go vet, go test)
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      # As build.ps1 builds the daemon: pure Go (modernc.org/sqlite, so no
+      # C compiler and no -race) and the backend module alone, outside the
+      # go.work workspace, whose ui/ module is GTK.
+      CGO_ENABLED: '0'
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the Go version of backend/go.mod
+        # Its minor version, set up at the newest patch release, as the
+        # Linux workflows' '1.25'. setup-go's go-version-file would take
+        # "go 1.25.0" literally, and the binaries built here go into the
+        # zips, which must carry the patch releases' security fixes.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: backend/go.sum
+
+      - name: go vet
+        working-directory: backend
+        run: go vet ./...
+
+      - name: go test
+        working-directory: backend
+        run: go test -count=1 ./...
+
+  client:
+    name: client (x64)
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # As in the go job.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          # Two binaries for one architecture; restoring a Go cache on
+          # Windows takes about as long as building them.
+          cache: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          # The SDK global.json asks for (10.0.4xx, or a later feature band).
+          global-json-file: windows/global.json
+
+      - name: Restore the NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          # The lock files hold every package and its content hash, so a
+          # partial hit is safe: the locked restore checks what it takes.
+          key: nuget-x64-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-x64-
+
+      - name: Record the version
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 version
+
+      - name: Restore, locked to the lock files
+        # CI=true on the runner makes every later restore locked as well
+        # (Directory.Build.props); this one fails first and says why when a
+        # lock file does not match the packages.
+        working-directory: windows
+        run: dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode
+
+      - name: Build
+        # Debug, as build.ps1 build; every warning is an error
+        # (TreatWarningsAsErrors in Directory.Build.props).
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 build -Arch x64
+
+      - name: Build the daemon for the tests
+        # As make test-windows does: with build\malachid.exe the tests of
+        # the process host, the console and the handshake run against the
+        # real daemon instead of skipping.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 go -Arch x64
+
+      - name: Test
+        # The network canary (Malachi.App.Canary) needs a desktop session
+        # with the WebView2 runtime and is skipped here with that reason
+        # unless the run was started with canary (MALACHI_CANARY=1); tests
+        # that need a taskbar, symbolic links or the Credential Manager
+        # round trip (MALACHI_CREDENTIALS_TEST) skip themselves likewise.
+        # The next step lists every skip with its reason.
+        working-directory: windows
+        env:
+          MALACHI_CANARY: ${{ inputs.canary && '1' || '' }}
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 test -Arch x64
+
+      - name: Summarise the tests
+        if: ${{ !cancelled() }}
+        run: |
+          $files = @(Get-ChildItem -Path build/windows/TestResults -Filter *.trx -Recurse -ErrorAction SilentlyContinue)
+          if ($files.Count -eq 0) {
+            Write-Output '::warning title=Tests::no .trx report was written'
+            exit 0
+          }
+          $rows = @()
+          $skips = @{}
+          $skipped = 0
+          foreach ($file in $files) {
+            [xml] $trx = [System.IO.File]::ReadAllText($file.FullName)
+            $ns = New-Object System.Xml.XmlNamespaceManager $trx.NameTable
+            $ns.AddNamespace('t', $trx.DocumentElement.NamespaceURI)
+            $results = @($trx.SelectNodes('//t:UnitTestResult', $ns))
+            $source = $trx.SelectSingleNode('//t:UnitTest/t:TestMethod', $ns)
+            $project = $file.BaseName
+            if ($source -ne $null) {
+              $project = [System.IO.Path]::GetFileNameWithoutExtension($source.GetAttribute('codeBase'))
+            }
+            $passed = @($results | Where-Object { $_.outcome -eq 'Passed' }).Count
+            $failed = @($results | Where-Object { $_.outcome -eq 'Failed' -or $_.outcome -eq 'Error' -or $_.outcome -eq 'Timeout' }).Count
+            $notRun = @($results | Where-Object { $_.outcome -eq 'NotExecuted' })
+            foreach ($result in $notRun) {
+              # xUnit's skip reason: StdOut in the report of
+              # Microsoft.Testing.Platform, ErrorInfo in VSTest's.
+              $reason = '(no reason given)'
+              foreach ($path in 't:Output/t:StdOut', 't:Output/t:ErrorInfo/t:Message') {
+                $node = $result.SelectSingleNode($path, $ns)
+                if ($node -ne $null -and $node.InnerText.Trim()) {
+                  $reason = ($node.InnerText.Trim() -split "`r?`n")[0]
+                  break
+                }
+              }
+              if ($reason.Length -gt 240) { $reason = $reason.Substring(0, 240) + '...' }
+              $key = "$project`t$reason"
+              if ($skips.ContainsKey($key)) { $skips[$key] += 1 } else { $skips[$key] = 1 }
+            }
+            $skipped += $notRun.Count
+            $rows += "| $project | $($results.Count) | $passed | $failed | $($notRun.Count) |"
+          }
+          $summary = @('### Windows client tests', '', '| Project | Tests | Passed | Failed | Skipped |', '|---|---:|---:|---:|---:|')
+          $summary += $rows | Sort-Object
+          if ($skips.Count -gt 0) {
+            $summary += @('', '#### Skipped', '', '| Project | Tests | Reason |', '|---|---:|---|')
+            foreach ($key in ($skips.Keys | Sort-Object)) {
+              $project, $reason = $key -split "`t", 2
+              $summary += "| $project | $($skips[$key]) | $($reason.Replace('|', '\|')) |"
+            }
+            Write-Output "::notice title=Skipped tests::$skipped tests were skipped; the job summary lists them with their reasons"
+          }
+          if ($env:GITHUB_STEP_SUMMARY) {
+            [System.IO.File]::AppendAllText($env:GITHUB_STEP_SUMMARY, ($summary -join "`n") + "`n")
+          }
+          $summary | Write-Output
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: windows-test-results
+          path: build/windows/TestResults/**/*.trx
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Lint
+        # dotnet format --verify-no-changes and the conventions tests.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 lint
+
+      - name: Package
+        # The Release app folder (the daemon, the MCP bridge and the
+        # NativeAOT keyring helper inside), checked for completeness and
+        # zipped: build\windows\Malachi-Mail-<version>-x64.zip.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 package -Arch x64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malachi-windows-x64
+          path: build/windows/Malachi-Mail-*-x64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  arm64:
+    name: client (ARM64, cross-built)
+    # An x64 runner: the build, the Go cross-compiler and NativeAOT (with the
+    # image's MSVC ARM64 build tools) all target ARM64 from x64. Nothing
+    # ARM64 is run, so there are no tests here. A job of its own, not steps
+    # after the x64 package: an x64 publish leaves x64-targeted libraries
+    # in the Release output both architectures share, and the ARM64
+    # publish then fails with CS8012.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # As in the go job.
+        id: go
+        run: |
+          $minor = [regex]::Match([System.IO.File]::ReadAllText('backend/go.mod'), '(?m)^go (\d+\.\d+)').Groups[1].Value
+          if (-not $minor) { throw 'backend/go.mod has no go directive' }
+          [System.IO.File]::AppendAllText($env:GITHUB_OUTPUT, "version=$minor`n")
+          Write-Output "Go $minor"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: windows/global.json
+
+      - name: Restore the NuGet cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-arm64-${{ hashFiles('windows/**/packages.lock.json', 'windows/Directory.Packages.props') }}
+          restore-keys: |
+            nuget-arm64-
+
+      - name: Record the version
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 version
+
+      - name: Restore, locked to the lock files
+        working-directory: windows
+        run: dotnet restore Malachi.slnx -p:Platform=ARM64 --locked-mode
+
+      - name: Build
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 build -Arch arm64
+
+      - name: Package
+        # malachi-credentials.exe is NativeAOT for ARM64, linked with the
+        # image's MSVC ARM64 build tools (Visual Studio 2022's
+        # Microsoft.VisualStudio.Component.VC.Tools.ARM64). An image without
+        # them fails here with build.ps1's hint; the helper is never
+        # published without NativeAOT.
+        working-directory: windows
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 package -Arch arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: malachi-windows-arm64
+          path: build/windows/Malachi-Mail-*-arm64.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Attach the zips to the release
+    needs: [go, client, arm64]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: malachi-windows-*
+          merge-multiple: true
+      - name: Upload
+        # As in the Flatpak, Debian and RPM workflows: the release notes stay
+        # manual, this only creates a draft if the tag has no release yet.
+        # Until docs/windows-port.md §17 is done (the licence permission for
+        # the Microsoft components, signing), the zips are for testing and
+        # come off the draft before it is published (docs/releasing.md §7).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*.zip \
+            --clobber --repo "$GITHUB_REPOSITORY"

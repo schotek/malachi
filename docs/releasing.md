@@ -106,7 +106,8 @@ falls back to the `.version` file that `make flatpak` writes.
 ## 5. Builds from CI
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
-**aarch64** on every push to `main`, on `v*` tags, on a manual
+**aarch64** on every push to `main` (except one that changes nothing but
+the Windows or macOS client), on `v*` tags, on a manual
 `workflow_dispatch`, and on pull requests that touch the packaging. Each job
 attaches a `malachi-<version>-<arch>.flatpak` bundle as a workflow artifact
 (kept 30 days); installable with
@@ -159,3 +160,22 @@ The Go build cache lives inside the sandbox and is not carried between runs,
 so cgo (gotk4, WebKitGTK) is recompiled every time; a run takes tens of
 minutes. Only flatpak-builder's own state (downloaded module sources,
 ccache) is cached.
+
+## 7. Windows
+
+`.github/workflows/windows.yml` tests the daemon on Windows, builds,
+tests and lints the Windows client, and zips its app folder for **x64**
+and **arm64** (`Malachi-Mail-<version>-<arch>.zip`, the output of
+`windows/build.ps1 package`), on pushes to `main`, on `v*` tags, by hand
+and on pull requests that touch what the client is built from; what each
+job does is in [windows-port.md §13](windows-port.md#13-build-and-ci). A
+tag build attaches both zips to the tag's release like the packages above.
+
+Until [windows-port.md §17](windows-port.md#17-before-a-public-release)
+is done, those zips are test builds, not something to publish: they are
+unsigned, have no installer or updates, and `LICENSING.md` does not yet
+carry the permission for the Microsoft components they contain (the
+Windows App SDK, WebView2). Delete them from the draft before publishing
+the release (`gh release delete-asset v0.1.0 Malachi-Mail-0.1.0-x64.zip`,
+and the same for arm64). The arm64 zip is cross-built and has not run
+anywhere.

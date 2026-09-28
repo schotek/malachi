@@ -1868,9 +1868,10 @@ windows and never need the foreground).
   every core busy an idle process gets no CPU at all (measured), so the
   reload stalled until Chromium's 30 s commit timeout. The three runs
   go side by side in about 50 s; without a desktop session or the WebView2
-  runtime the tests are skipped with that reason; `MALACHI_CANARY_KEEP=1`
-  keeps the runs' files, and each run's `results.json.progress` shows how
-  far a run that never finished got. It runs in `make test-windows` and on
+  runtime, and on a CI runner (`GITHUB_ACTIONS=true`) unless
+  `MALACHI_CANARY=1`, the tests are skipped with that reason (§13);
+  `MALACHI_CANARY_KEEP=1` keeps the runs' files, and each run's
+  `results.json.progress` shows how far a run that never finished got. It runs in `make test-windows` and on
   every WebView2 runtime bump.
 - The **UI smoke tests** (`Malachi.App.UiTests`, xUnit v3 over the Windows
   Desktop framework's own UI Automation client, `UIAutomationClient` and
@@ -1983,9 +1984,65 @@ copies the catalogues and licences, and assembles
 Version: `git describe` as in the Makefile; `Major.Minor.Patch.Commits` for
 the file version, the full string as `InformationalVersion`.
 
-CI: `.github/workflows/windows.yml` on `windows-2025`: the Go job (`go vet`,
-`go test` of `backend/`), and the client job (build, test, lint, package for
-x64; cross-build and package for ARM64), zips and `.trx` uploaded.
+**CI** is `.github/workflows/windows.yml`, on the `windows-2025` runner
+image: Windows Server 2025 with Git, the WebView2 runtime and Visual
+Studio 2022, whose C++ workload includes the MSVC build tools for x64 and
+ARM64 (`Microsoft.VisualStudio.Component.VC.Tools.ARM64`, in the image's
+toolset as of 2026-09-28), which is what the NativeAOT keyring helper links
+with. The label is named, not `windows-latest`, so the move to the next
+Windows Server is an edit of the workflow; the image's tools (Visual
+Studio, the WebView2 runtime) are still updated with it every week or two.
+The workflow runs on pushes to `main`, on `v*` tags, by hand
+(`workflow_dispatch`) and on pull requests that touch `windows/`,
+`backend/`, `po/`, `docs/malachi_icon.png`, the Makefile or the workflow,
+or what the tests read outside `windows/`: the GTK UI's sources (the drift
+tests compare the timeouts, the editor bridge, the viewer's document and
+the icon names with them), the gschema, `docs/api.md`, the licences that
+go into the app folder, `.gitattributes`. Its jobs:
+
+| Job | Steps | Uploads (30 days) |
+|---|---|---|
+| `go` | `go vet ./...` and `go test -count=1 ./...` in `backend/` with `CGO_ENABLED=0` and `GOWORK=off`, as the daemon is built | |
+| `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; `build.ps1 package -Arch x64` | `malachi-windows-x64` (the zip), `windows-test-results` (the `.trx` files, also when a test failed) |
+| `arm64` | the locked restore and `build.ps1 build` for ARM64, then `build.ps1 package -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own because an ARM64 publish after an x64 one in the same build tree fails with CS8012 (`windows/README.md`, Troubleshooting) | `malachi-windows-arm64` |
+| `release` | on a `v*` tag, once the three jobs pass: the zips attached to the tag's release, a draft created when there is none, as the Flatpak, Debian and RPM workflows do | |
+
+Every client step is a `build.ps1` target started as make starts it
+(`powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 …`), so CI
+builds what a desktop builds; pwsh judges a step by the exit status of its
+last program, so each step runs one. Go is the minor version of
+`backend/go.mod`'s `go` directive at its newest patch release (`go 1.25.0`
+→ the newest 1.25.x, as the Linux workflows' `'1.25'`): setup-go's
+`go-version-file` would install 1.25.0 itself, without the security fixes
+the zips must carry. The .NET SDK comes from `windows/global.json` through
+`setup-dotnet`. The NuGet packages folder is cached per architecture, keyed
+by the lock files and `Directory.Packages.props`; the runner sets `CI=true`,
+which makes every restore locked (`Directory.Build.props`), and the
+explicit `--locked-mode` restore fails first, naming the project, when a
+lock file does not match.
+
+What CI leaves out, and says so: the network canary skips itself on a
+runner (`GITHUB_ACTIONS=true`) with the reason that it needs a desktop
+session with the WebView2 runtime; a hosted runner may have a desktop, but
+its Server image, graphics and runtime change with the image, so a verdict
+there would be about the runner. A manual run with `canary` set passes
+`MALACHI_CANARY=1` to try it anyway (not yet tried on the hosted image).
+The Credential Manager round trip needs `MALACHI_CREDENTIALS_TEST=1`; tests
+that find no taskbar or may not create symbolic links skip themselves with
+the reason; the job summary lists every skip, and a notice on the run
+points to it. Nothing ARM64 runs (§17), and FlaUI smoke tests do not exist
+yet (§12). The Linux packaging workflows ignore pushes that change nothing
+but `windows/`, `macos/` or this workflow; tags always build everything
+(GitHub does not apply path filters to tags).
+
+The zips are test builds until §17 is done (no signature, no installer,
+the licence permission for the Microsoft components not yet in
+`LICENSING.md`); [releasing.md §7](releasing.md#7-windows) has what that
+means for a release. Every step of the three jobs was run locally in
+order from a fresh build tree, on Windows 11 x64 with `CI=true` and
+`GITHUB_ACTIONS=true`, before the workflow was committed; the one step
+that could not pass there is the ARM64 helper's NativeAOT link, for want
+of the MSVC ARM64 build tools on that machine.
 
 ## 14. Backend and repository changes
 

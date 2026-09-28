@@ -121,6 +121,13 @@ beside the sources. Package versions are central (`Directory.Packages.props`),
 each project's `packages.lock.json` is committed, and a CI build restores in
 locked mode.
 
+CI (`.github/workflows/windows.yml`, docs/windows-port.md §13) runs the
+daemon's Go tests on Windows and `build.ps1 build`, `test`, `lint` and
+`package` for x64, and `build` and `package` for ARM64, on the
+`windows-2025` image; the zips and the `.trx` reports are the run's
+artifacts. With `CI=true`, as there, every restore is locked and a stale
+lock file fails the build.
+
 The app folder is self-contained (the .NET runtime and the Windows App SDK
 travel with it, nothing is installed): about 215 MB for x64, the daemon and
 the MCP bridge included. The Windows App SDK comes as its component packages
@@ -295,12 +302,21 @@ phases that implement them.
 - **make from PowerShell runs `cmd.exe` recipes ("'sed' is not
   recognized").** Git for Windows is missing or elsewhere; the Makefile
   finds its `usr\bin` through `git --exec-path`, or set `GIT_USR_BIN`.
+- **`error CS8012` (a referenced assembly targets a different processor)
+  when the app is built for one architecture after the other.** A publish
+  for x64 leaves `Malachi.Core` and `Malachi.Platform.Windows` compiled
+  for x64 in the Release output both architectures share
+  (`build\windows\artifacts\bin\<project>\release\`), and a publish for
+  ARM64 afterwards takes them as up to date (and the other way round).
+  Run `build.ps1 clean` between the two; CI builds them on separate
+  runners.
 - **`build\malachid.exe is in use`.** A daemon started from `build\` is
   running (`make run-backend`); that copy is left as it is, and the app
   folder gets its own.
 - **The network canary is skipped or fails.** `Malachi.App.Canary` starts
   its WinUI host beyond the edge of the screen, so it needs an interactive
-  desktop session and the WebView2 runtime; without either its tests are
+  desktop session and the WebView2 runtime; without either, and on a CI
+  runner (`GITHUB_ACTIONS=true`) unless `MALACHI_CANARY=1`, its tests are
   skipped with that reason. `MALACHI_CANARY_KEEP=1` keeps each run's
   configuration, results and NetLog under `%TEMP%\malachi-canary-<id>\`
   for a look after a failure (docs/windows-port.md §12).
