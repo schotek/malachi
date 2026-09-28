@@ -730,6 +730,16 @@ in-process-adjacent code over hostile files, and Windows itself stopped
 previewing internet files in Explorer in October 2025 because previews
 leaked NTLM hashes.
 
+As built, the window is `Malachi.App/Windows/PreviewWindow` with
+`Attachments/AttachmentPreview`: one window, made on the first click on a
+chip, its content swapped by the next while it is open, gone when closed.
+Nothing changes on screen while the part is fetched (`message.part`, through
+`AttachmentOpener.PreviewAsync`); a failure is GTK's toast where the chip
+was. A program's bytes are not even fetched: its panel shows what the chip
+lists. The title bar carries the attachment's name and *Open* (disabled for
+a program) and *Save As…*, which act as the chip's menu does; Escape and
+Ctrl+W close it (`WindowKind.Other`), as Escape closes Sushi and Quick Look.
+
 ## 7. Concurrency
 
 ### 7.1 Controllers are UI-thread-affine
@@ -791,7 +801,11 @@ behaviour is macOS's): `NotificationHub`, `SignInRepair`,
 `AccountsPageController`, `ComposeAttachmentsController`,
 `SuggestionsController`, `Debouncer`, `FlushEcho`, `AvatarPalette`
 (`g_str_hash % 14 + 1`, initials), `AttachmentOpener`, `LinkOpener`,
-`NotificationPolicy`, `MessageWindowRegistry`. The rules of the WebView2
+`NotificationPolicy`, `MessageWindowRegistry`. The reader's come with
+`AddressHeader` (the From/To/Cc lines and their fold), `AttachmentChip`,
+`ChipText` (the chips' ellipses by characters) and `MessageActionRouter`
+(macOS `MessageActionsController`: the selection's and one message's
+commands). The rules of the WebView2
 layer, which macOS keeps in its web views, live there too
 (`Malachi.Core.Presentation`, §6).
 
@@ -1205,7 +1219,19 @@ shows. No exception of these services names the path of a file written
 out of a message, which carries the attachment's name. `attachment.import` is only
 ever given local paths the user picked. The code: `Malachi.Core.Platform`
 (`DangerousTypes`, `WindowsFileNames`, `OpenDir`, the interfaces) and
-`Malachi.Platform.Windows` `Attachments/`, `Files/`, `Launch/`.
+`Malachi.Platform.Windows` `Attachments/`, `Files/`, `Launch/`. The flows
+are Core's `AttachmentOpener` (§7.4): Open refuses a program with GTK's
+toast (*Programs and scripts are not opened directly; save the file and
+decide yourself.*), judged on what the message lists, again on the name and
+type the daemon served and on the name the file got, writes into the open
+directory, marks (`AttachmentUse.Open`) and opens only when
+`ZoneMark.MayOpen`; Save As and Save All write where the user chose, never
+overwriting in Save All (" (2)"), mark (`AttachmentUse.Save`), and count a
+file the check removed as not saved. The pickers are the Windows App SDK's
+`FileSavePicker` and `FolderPicker`, owned by the window of the click
+(`Malachi.App/Attachments/AttachmentPickers`), titled *Save Attachment* and
+*Save Attachments*, starting in Downloads; the save picker offers the
+attachment's own extension as its file type.
 
 **Sign-in.** The daemon owns the `127.0.0.1` listener; the app opens the
 `https` URL through the launcher (`ILauncher.OpenUrlAsync`: `ShellExecuteEx`,
@@ -1414,6 +1440,45 @@ prompt), five pages as GTK/macOS. Preferences is a single-instance window
 with Accounts (reorder by handle or Ctrl+Up/Ctrl+Down, a click selects the
 row), General (startup, reading, deleting, notifications, the `ctrl-r`
 choice, *Default apps*), Appearance and AI, built with `SettingsCard`s.
+
+As built, the reader (phase E wave 2, `Malachi.App/Reader`, `Windows`,
+`Attachments`): `Reader/MessageView` is the one view, its state Core's
+`ReaderController` (§7.4), in the pane (`Reader/ReaderHub` puts it into the
+main window's Reader region and gives the main window's per-message
+commands their handlers, the selection's actions through
+`MessageActionRouter`), in `Windows/MessageWindow` and in
+`Windows/EmbeddedMessageWindow`. From the top, as `window.blp`'s
+`message_page`: the command row (Reply, Reply All, Forward; Trash, Junk,
+Archive, Star, More with `message_menu_model`), 40-pixel `AppBarButton`s bound
+to the window's `WindowCommands`, the star and the trash button showing the
+flags (Star/Unstar, Move to Trash/Cancel Sending); the outbox and draft
+`InfoBar`s (Retry, Edit); the remote-image bar, a bar of its own with Load
+Images and Always From This Sender as buttons that take no focus on a click
+but are reached by Tab; then the No Message Selected and No Accounts pages
+(the pane, faded in) or the message: the headers in a clamp of 900 (sides
+24, top 12), the address chips as pill buttons whose `MenuFlyout` names the
+address and offers Copy Address and New Message, "+N more", the attachment
+chips as `SplitButton`s (the click previews, an attached message opens in
+its window; View, Open, Save As…) with Save All, the hint and a separator;
+below, the body as a selectable `TextBlock` in a clamp with the text-zoom
+and monospace settings, the 32-pixel `ProgressRing` after 400 ms, or the
+viewer, made on first use and fed only `ReaderController.Html`. A body the
+viewer gave up on stays plain text with the hint for that message. The
+chips' looks are styles of the view's resources, so their theme brushes
+follow the window's colour scheme; a chip that cannot be used is disabled
+and shows its reason on a wrapper, since a disabled WinUI control shows no
+tooltip. Message windows (820×620, 360×294 at least) show the subject as the
+title, have their own toast overlay and `CommandRouter` (the per-message
+keys, Escape and Ctrl+W), give the body the first focus, and close with
+their attached messages' windows when the message leaves its folder
+(`MessageWindowRegistry`, which also fans out what the cache and the actions
+learn to every view). An attached message's window has the containing
+message's subject as its subtitle and no command row; Load Images renders
+the part again with remote images allowed. Links go through `LinkOpener`
+(§6.4); the question is `IAlerts.OpenLinkQuestionAsync`, with the
+destination alone for an unlisted link. The folder is `Windows/`, the
+namespace `Malachi.App.MessageWindows`: a namespace `Malachi.App.Windows`
+would hide the `Windows.*` namespaces from every file of the app.
 
 ### 11.4 Banners, toasts, alerts
 

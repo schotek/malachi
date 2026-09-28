@@ -246,6 +246,10 @@ phases that implement them.
 | The window's caption names the selected folder: *Inbox – Malachi Mail* | *Malachi Mail* (the folder is the list's header) | The taskbar and Alt+Tab tell windows apart by their captions; macOS shows the folder as the window's title too |
 | *About Malachi Mail* is a dialog with the name, icon, developer, version, licence, website and issue tracker; its description says *A native mail client.* | `Adw.AboutDialog` with *A native mail client for the GNOME desktop.* | GTK's text names GNOME; the fields are GTK's (research U8) |
 | The window's size, maximised state and pane widths are kept in the gschema's keys (`window-width`, `window-height`, `window-maximized`, `folder-pane-width`, `message-list-width`), written only from a wide layout | Declared in the gschema, never written | The keys exist; the window opens where it was left |
+| The headers of a message start 12 px below the top of the pane or window | 24 px (`margin-top` of the header box) | The command row above already sets them apart; as macOS (docs/windows-port.md §11.3) |
+| A message window shows the subject in its title bar and its buttons in a row below it; the star button shows the state by its icon and label (Star, Unstar), not as a pressed button | The buttons in the header bar around the subject; a toggle button | The main window's structure (a command row per pane under the title bar) in every window; a pressed WinUI button is an accent block |
+| Attachment chips show Windows' icon for the file's extension | The symbolic icon of the content type | What Explorer shows for the file; macOS shows the system's icon as well |
+| The attachment previewer is one window titled with the file's name, with *Open* and *Save As…* in its title bar; Escape and Ctrl+W close it | Sushi's window with its *Open With* button | Where Windows apps keep a window's actions; Escape closes Sushi and Quick Look too |
 
 ## Troubleshooting
 
