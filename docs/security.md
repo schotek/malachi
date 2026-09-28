@@ -939,11 +939,13 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   promises; the macOS and Windows clients remove it before they stop the
   daemon and once more as the process ends. The removal refuses any path
   but an absolute one ending in `malachi/open` (`Malachi Mail/open` on
-  macOS), so an unset runtime or cache directory cannot aim it at anything
-  else, removes a symbolic link in its place without following it, and
-  logs a failure. On Windows the directory lies in the data directory,
-  which `MALACHI_DATA_DIR` may name for tests and agents, so the rule
-  cannot name the parent: the removal refuses any path but a fully
+  macOS, `open` in the data directory on Windows, below), so an unset
+  runtime or cache directory cannot aim it at anything else, removes a
+  symbolic link in its place without following it, and logs a failure. On
+  Windows the directory is `open` in the data directory,
+  `%LOCALAPPDATA%\Malachi Mail\open` unless `MALACHI_DATA_DIR` names
+  another data directory for tests and agents, so the rule cannot require
+  `Malachi Mail` as the parent: the removal refuses any path but a fully
   qualified one ending in `\open`, with `.` and `..` resolved as written,
   that is no device path (`\\?\`, `\\.\`) and does not lie directly under
   the root of a drive or share, and removes a symbolic link or junction in

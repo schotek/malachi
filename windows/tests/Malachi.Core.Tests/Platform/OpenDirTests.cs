@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Tests/MalachiCoreTests/AttachmentsTests.swift (sweepOpenDir,
-// openDirWrite); GTK: ui/internal/window/attachments_test.go
-// (TestSweepOpenDir). What Swift checks with POSIX modes is checked here as
+// openDirWrite, purgeOpenDir); GTK: ui/internal/window/attachments_test.go
+// (TestSweepOpenDir, TestPurgeOpenDir, against the Windows rule of
+// OpenDir.Purgeable). What Swift checks with POSIX modes is checked here as
 // the calls to the private-directory factory (the real one and its DACL are
 // tested in Malachi.Platform.Windows.Tests); the cases of locked files,
 // links and long names are new. One part of the split of
@@ -13,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Malachi.Core.Daemon;
 using Malachi.Core.Platform;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -374,6 +376,7 @@ public sealed class OpenDirTests
         var refused = new List<string>
         {
             "", ".", "open", Path.Combine("Malachi Mail", "open"), // relative: the working directory's
+            "/", @"\", // a root: on Windows the working directory's drive's
             root, Path.Combine(root, "open"), // a root, and an open directly under it
             temp.Path, data, keep, Path.Combine(dir, "x1"), Path.Combine(dir, ".."),
             Path.Combine(data, "Open"), Path.Combine(data, "opened"),
@@ -404,6 +407,30 @@ public sealed class OpenDirTests
         Assert.True(Directory.Exists(keep), "its sibling should stay");
         new OpenDir(dir, new FakePrivateDirectories(), new FakeTimeProvider(Now)).RemoveAll(); // a missing directory: no error
         Assert.Equal(Path.Combine(temp.Path, "open"), OpenDir.Purgeable(Path.Combine(temp.Path, "open"))); // MALACHI_DATA_DIR's
+    }
+
+    /// <summary>
+    /// The application's own directory passes the check (the end of the
+    /// Swift purgeOpenDir test): <c>%LOCALAPPDATA%\Malachi Mail\open</c>,
+    /// and the open directory of the data directory
+    /// <c>MALACHI_DATA_DIR</c> names instead.
+    /// </summary>
+    [Fact]
+    public void TheApplicationsOwnDirectoryPasses()
+    {
+        using var temp = new TemporaryDirectory();
+        var local = Path.Combine(temp.Path, "Local");
+        var agent = Path.Combine(temp.Path, "agent");
+        var env = new Dictionary<string, string?> { ["USERPROFILE"] = temp.Path, ["LOCALAPPDATA"] = local };
+
+        var own = OpenDir.InDataDirectory(Paths.Resolve(env, null).DataDir, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+        env["MALACHI_DATA_DIR"] = agent;
+        var agents = OpenDir.InDataDirectory(Paths.Resolve(env, null).DataDir, new FakePrivateDirectories(), new FakeTimeProvider(Now));
+
+        Assert.Equal(Path.Combine(local, "Malachi Mail", "open"), own.Path);
+        Assert.Equal(own.Path, OpenDir.Purgeable(own.Path));
+        Assert.Equal(Path.Combine(agent, "open"), agents.Path);
+        Assert.Equal(agents.Path, OpenDir.Purgeable(agents.Path));
     }
 
     [Fact]

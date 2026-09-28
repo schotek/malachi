@@ -10,13 +10,14 @@
 // suites of that Swift file test Malachi.Core.Platform and are ported there
 // (DangerousTypesTests: executableAttachmentTest; WindowsFileNamesTests:
 // safeFileNameTest, uniqueNameTest, fileNameTest; OpenDirTests:
-// sweepOpenDir, openDirWrite); claimedTypesTest, the UTType conformance
-// check, is the Windows file-type policy's (Malachi.Platform.Windows.Tests
-// FileTypePolicyTests); TestOpenDirFor is the Linux and Flatpak path of the
-// open directory, which Windows places elsewhere (docs/windows-port.md §1),
-// and TestPurgeOpenDir (Swift purgeOpenDir) the check of that path before
-// it is removed, which Windows makes by construction (OpenDir takes a fully
-// qualified path, and RemoveAll removes that one directory).
+// sweepOpenDir, openDirWrite, and purgeOpenDir with Go's TestPurgeOpenDir
+// as RemoveAllRefusesAnyOtherDirectory, TheApplicationsOwnDirectoryPasses
+// and RemoveAllRemovesALinkInPlaceOfTheDirectoryNotWhatItPointsTo, against
+// the Windows rule of OpenDir.Purgeable); claimedTypesTest, the UTType
+// conformance check, is the Windows file-type policy's
+// (Malachi.Platform.Windows.Tests FileTypePolicyTests); TestOpenDirFor is
+// the Linux and Flatpak path of the open directory, which Windows places
+// elsewhere (docs/windows-port.md §1).
 
 using System;
 using System.Collections.Generic;
