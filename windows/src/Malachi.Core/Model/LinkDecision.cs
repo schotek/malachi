@@ -18,10 +18,16 @@
 // (ILauncher.LinkTarget, passed in as launched) is on the site its text
 // names, besides Go's reading of the href agreeing (Links.IsMasked, which
 // fails closed). Where the parsers disagree, the browser goes where the
-// launcher's address says, so that address is what is judged.
+// launcher's address says, so that address is what is judged. And every
+// listed link the activation matches is judged, where GTK's linkTextFor
+// and macOS take the first with the href: an activation carries the href,
+// not the anchor, so a body that lists one href twice, an empty anchor
+// before the one that wears the bank's address, would otherwise open
+// without the question.
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.Html;
 using Malachi.Core.I18n;
@@ -47,7 +53,10 @@ public abstract record LinkDecision
     /// attribute as written, not a URL WebView2 normalised. A listed link
     /// opens only when its text is not masked (<see cref="Links.IsMasked"/>)
     /// and does not name another site than <paramref name="launched"/> of it
-    /// (<see cref="Links.LeadsElsewhere"/>).
+    /// (<see cref="Links.LeadsElsewhere"/>). Every listed link with this
+    /// href is judged, not the first alone as in GTK and macOS: the click
+    /// reports the href, not the anchor, so an empty anchor listed before
+    /// the one that wears the bank's address must not speak for it.
     /// </summary>
     /// <param name="href">The link.</param>
     /// <param name="links">The body's links as the daemon listed them.</param>
@@ -68,24 +77,12 @@ public abstract record LinkDecision
         {
             return new Mailto(href);
         }
-        Link? listed = null;
-        foreach (var l in links)
+        var (matched, misleading) = Judge(links, l => string.Equals(l.Href, href, StringComparison.Ordinal), l => Misleads(l, launched));
+        if (misleading is not null)
         {
-            if (string.Equals(l.Href, href, StringComparison.Ordinal))
-            {
-                listed = l;
-                break;
-            }
+            return new Confirm(misleading.Text, href);
         }
-        if (listed is null)
-        {
-            return new Confirm("", href);
-        }
-        if (Misleads(listed, launched(href)))
-        {
-            return new Confirm(listed.Text, href);
-        }
-        return new Open(href);
+        return matched ? new Open(href) : new Confirm("", href);
     }
 
     /// <summary>
@@ -127,43 +124,55 @@ public abstract record LinkDecision
         }
         var key = ChromiumUrl.Canonicalize(resolved) ?? resolved;
         var target = launched(resolved);
-        var matched = false;
-        var anyMasked = false;
-        Link? masked = null;
-        foreach (var l in links)
+        // A listed link that matches is masked by its own href as it would
+        // be opened with its attribute, and also by this navigation's
+        // address, which is what would be opened now.
+        var (matched, misleading) = Judge(
+            links,
+            l => string.Equals(ChromiumUrl.Canonicalize(l.Href), key, StringComparison.Ordinal),
+            l => Misleads(l, launched) || Links.LeadsElsewhere(l.Text, target));
+        if (misleading is not null)
         {
-            // A listed link is masked by its own href as it would be opened
-            // with its attribute; one that matches, also by this
-            // navigation's address, which is what would be opened now.
-            var isMasked = !IsMailto(l.Href) && Misleads(l, launched(l.Href));
-            if (string.Equals(ChromiumUrl.Canonicalize(l.Href), key, StringComparison.Ordinal))
-            {
-                matched = true;
-                isMasked = isMasked || Links.LeadsElsewhere(l.Text, target);
-                if (isMasked && masked is null)
-                {
-                    masked = l;
-                }
-            }
-            anyMasked |= isMasked;
+            return new Confirm(misleading.Text, resolved);
         }
-        if (masked is not null)
-        {
-            return new Confirm(masked.Text, resolved);
-        }
-        if (!matched || anyMasked)
+        if (!matched || links.Any(l => Misleads(l, launched)))
         {
             return new Confirm("", resolved);
         }
         return new Open(resolved);
     }
 
+    // The rule both paths share: every listed link the activation matches
+    // is judged, since a body may list one href under several texts and
+    // the activation cannot tell which anchor it came from; the first whose
+    // text misleads is the one the question quotes, and one is enough.
+    // Returns whether any link matched, and that first misleading one.
+    private static (bool Matched, Link? Misleading) Judge(IReadOnlyList<Link> links, Func<Link, bool> matches, Func<Link, bool> misleads)
+    {
+        var matched = false;
+        foreach (var l in links)
+        {
+            if (!matches(l))
+            {
+                continue;
+            }
+            matched = true;
+            if (misleads(l))
+            {
+                return (true, l);
+            }
+        }
+        return (matched, null);
+    }
+
     // Whether a listed link's text pretends to lead elsewhere: by Go's
     // reading of its href, as GTK judges it but failing closed, or by the
-    // host of the address that would be opened for it (target, null when
-    // the launcher refuses it).
-    private static bool Misleads(Link listed, string? target) =>
-        Links.IsMasked(listed.Text, listed.Href) || Links.LeadsElsewhere(listed.Text, target);
+    // host of the address that would be opened for it (launched of its
+    // href, null when the launcher refuses it). A mailto: link goes to the
+    // composer, which shows its address, so its text never misleads.
+    private static bool Misleads(Link listed, Func<string, string?> launched) =>
+        !IsMailto(listed.Href)
+        && (Links.IsMasked(listed.Text, listed.Href) || Links.LeadsElsewhere(listed.Text, launched(listed.Href)));
 
     // Whether the attribute read by the viewer is the one of the navigation:
     // its canonical form is the resolved URL's, or it has none that is

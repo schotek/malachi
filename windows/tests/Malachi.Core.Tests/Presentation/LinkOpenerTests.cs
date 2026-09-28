@@ -147,6 +147,18 @@ public sealed class LinkOpenerTests
         Assert.Equal([destination], launcher.Links);
     }
 
+    // One href under two texts, the bank's second: the click is asked about
+    // with the bank's text, whichever anchor it came from.
+    [Fact]
+    public async Task AnHrefListedUnderTwoTextsIsAskedAboutWhenEitherMisleads()
+    {
+        const string Href = "https://evil.example/dup";
+        Link[] links = [new() { Text = "", Href = Href }, new() { Text = Bank, Href = Href }];
+        await Make().OpenAsync(new ActivatedLink(Href, Href), links, "w");
+        Assert.Equal([("w", Bank, Href)], asked);
+        Assert.Empty(launcher.Links);
+    }
+
     // Without the attribute, the URL WebView2 made of the link: it carries
     // the userinfo too, so it matches no listed href (no certain canonical
     // form) and is asked about with the destination alone, which is the

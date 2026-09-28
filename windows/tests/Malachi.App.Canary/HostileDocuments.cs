@@ -96,10 +96,13 @@ internal static class HostileDocuments
     /// (a space, "%", "[", a soft hyphen, "。", "^", "|", "{", a quote), in
     /// one it accepts, before a backslash, and an empty authority. Chromium
     /// goes to the host after the "@" (the canary's), except for the
-    /// backslash, which ends its authority.
+    /// backslash, which ends its authority. And the adversarial review's
+    /// pair: <c>dup</c> follows an empty anchor with the same href
+    /// (<see cref="DuplicatedHref"/>), which the daemon lists first.
     /// </summary>
     public static readonly (string Id, string Href)[] MaskedLinks =
     [
+        ("dup", DuplicatedHref),
         ("space", "http:// www.mojebanka.example@{A}/space"),
         ("pct", "http://%www.mojebanka.example@{A}/pct"),
         ("bracket", "http://[www.mojebanka.example@{A}/bracket"),
@@ -113,6 +116,14 @@ internal static class HostileDocuments
         ("plainuserinfo", "http://www.mojebanka.example@{A}/plainuserinfo"),
         ("triple", "http:///{A}/triple"),
     ];
+
+    /// <summary>
+    /// The href of the pair: an empty anchor, then one that wears
+    /// <see cref="MaskedLinkText"/>. A click on the second reports the same
+    /// attribute as the first would, so the decision cannot tell them apart
+    /// and judges both (LinkDecisionTests.EveryListedLinkWithTheClickedHrefIsJudged).
+    /// </summary>
+    public const string DuplicatedHref = "http://{A}/dup";
 
     /// <summary>A masked link's href over <paramref name="canary"/>, as the document carries it.</summary>
     public static string MaskedHref(string href, CanaryListener canary) =>
@@ -171,8 +182,9 @@ internal static class HostileDocuments
             "position:absolute;left:" + left.ToString(CultureInfo.InvariantCulture) + "px;top:" + top.ToString(CultureInfo.InvariantCulture)
             + "px;display:block;width:260px;height:26px";
         var masked = canary("masked-links");
-        var maskedLinks = string.Concat(MaskedLinks.Select((m, i) =>
-            "<a id='masked-" + m.Id + "' href='" + MaskedHref(m.Href, masked) + "' style='" + Box(20 + (32 * i), 320) + "'>" + MaskedLinkText + "</a>"));
+        var maskedLinks = "<a id='masked-dup-empty' href='" + MaskedHref(DuplicatedHref, masked) + "'></a>"
+            + string.Concat(MaskedLinks.Select((m, i) =>
+                "<a id='masked-" + m.Id + "' href='" + MaskedHref(m.Href, masked) + "' style='" + Box(20 + (32 * i), 320) + "'>" + MaskedLinkText + "</a>"));
         return "<!doctype html><html><head><meta charset=utf-8><title>active</title></head><body>"
             + "<a id=pinglink href='" + canary("nav").Origin + "/nav' ping='" + canary("ping").Origin + "/ping' style='" + Box(20) + "'>ping link</a>"
             + "<form id=f action='" + canary("form").Origin + "/submit' method=get><input type=hidden name=q value=secret></form>"

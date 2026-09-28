@@ -241,6 +241,35 @@ public sealed class LinkDecisionTests
         Assert.Equal(new LinkDecision.Open(href), LinkDecision.For(href, plain, Launched));
     }
 
+    // A body may list one href under several texts, and a click reports the
+    // href, not the anchor: every listed link with the clicked href is
+    // judged, and the first whose text misleads is the one the question
+    // quotes, wherever it stands in the list (the adversarial review's
+    // shape: an empty anchor first, the bank's address second). Both paths,
+    // with the attribute and without it, apply the one rule.
+    [Fact]
+    public void EveryListedLinkWithTheClickedHrefIsJudged()
+    {
+        const string Href = "https://evil.example/dup";
+        foreach (var first in new[] { "", "x", "click here", "Unsubscribe", "https://evil.example/" })
+        {
+            foreach (var links in new[] { new[] { Link(first, Href), Link(Bank, Href) }, [Link(Bank, Href), Link(first, Href)] })
+            {
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(Href, links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(new ActivatedLink(Href, Href), links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(new ActivatedLink(null, Href), links, Launched));
+            }
+        }
+        // Of several that mislead, the first is quoted.
+        Link[] two = [Link("x", Href), Link("www.bank-one.example", Href), Link("www.bank-two.example", Href)];
+        Assert.Equal(new LinkDecision.Confirm("www.bank-one.example", Href), LinkDecision.For(Href, two, Launched));
+        Assert.Equal(new LinkDecision.Confirm("www.bank-one.example", Href), LinkDecision.For(new ActivatedLink(null, Href), two, Launched));
+        // Where none misleads, the link opens.
+        Link[] plain = [Link("", Href), Link("click here", Href), Link("https://evil.example/", Href)];
+        Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(Href, plain, Launched));
+        Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(new ActivatedLink(null, Href), plain, Launched));
+    }
+
     // What the launcher would open decides, not only Go's reading of the
     // href: where the two disagree about the host, the link is confirmed.
     [Fact]

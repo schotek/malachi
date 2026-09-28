@@ -264,7 +264,10 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
     // one); the navigation it reports goes to the host after the "@", the
     // canary's, which is why each must be asked about. Nothing reached the
     // canary (NoCanaryWasReached). LinkDecisionTests.Bypasses carries these
-    // pairs over to the decision.
+    // pairs over to the decision. The click on "dup", the second of two
+    // anchors with one href, reports exactly the attribute the empty first
+    // one carries: nothing in the report tells the anchors apart, which is
+    // why the decision judges every listed link with the href.
     [Fact]
     public void MaskedLinksReachTheReaderAsWritten()
     {
