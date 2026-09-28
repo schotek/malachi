@@ -80,8 +80,11 @@ func TestSystemStorage(t *testing.T) {
 	p := basePrefs()
 	p.CompressStore = api.Ptr(true)
 	setPrefs(t, b, p)
-	if got := storageOf(t, b); got.Conversion != api.StorageConversionRunning {
-		t.Fatalf("after compressStore: conversion %s, want running", got.Conversion)
+	// Running until every message is converted; the loop, on a 1 ms tick
+	// here, may already have converted the one message when the test asks,
+	// so idle is right then, and only then.
+	if got := storageOf(t, b); got.Conversion != api.StorageConversionRunning && got.CompressedMessages != got.Messages {
+		t.Fatalf("after compressStore: conversion %s with %d of %d messages compressed, want running", got.Conversion, got.CompressedMessages, got.Messages)
 	}
 	waitIdle(t, b)
 	zst := storageOf(t, b)
