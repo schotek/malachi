@@ -35,9 +35,11 @@ import (
 // where it replaces a file and is renamed into place, so a crash leaves the
 // old or the new file whole; a .zst file is decoded and checked before its
 // rename. Two variants of one message exist only for a moment (a
-// conversion between its two phases) or after a crash; readers then prefer
-// the store's codec, and RawTx.Stat and the sweep keep the newest valid
-// one. message_files accounts for every file (migration 0014).
+// conversion between its two phases), after a crash, or on Windows while a
+// reader holds the replaced one open; readers then take the newer (the
+// store codec's when their times are equal), and RawTx.Stat and the sweep
+// keep the newest valid one. message_files accounts for every file
+// (migration 0014).
 //
 // Locks, per message (rawLock): its writers go one at a time (mutate), and
 // the short names lock orders a reader's choice of file against renames
@@ -299,27 +301,11 @@ func (s *Store) OpenMessageRaw(ctx context.Context, accountID, id string) (RawMe
 	return s.openRaw(key, l, s.accountDir(accountID), id)
 }
 
-// openRaw opens message id in dir, trying the store codec's name first.
-// The reader counts among the file's readers (rawLock.readers) until it is
-// closed.
+// openRaw opens message id in dir (openNewest). The reader counts among
+// the file's readers (rawLock.readers) until it is closed.
 func (s *Store) openRaw(key string, l *rawLock, dir, id string) (RawMessage, error) {
-	first := s.RawCodec()
-	var (
-		f     *os.File
-		codec RawCodec
-		err   error
-	)
 	l.names.RLock()
-	for _, c := range []RawCodec{first, first.other()} {
-		f, err = os.Open(filepath.Join(dir, rawName(id, c)))
-		if err == nil {
-			codec = c
-			break
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			break
-		}
-	}
+	f, codec, err := s.openNewest(dir, id)
 	if err == nil {
 		// Counted before the names lock goes, so that a writer that finds
 		// the file held can tell whose it is.
@@ -345,6 +331,41 @@ func (s *Store) openRaw(key string, l *rawLock, dir, id string) (RawMessage, err
 		return &countedRaw{RawMessage: z, release: release}, nil
 	}
 	return &countedRaw{RawMessage: &plainRaw{f: f}, release: release}, nil
+}
+
+// openNewest opens the file of message id in dir: its only one, or of
+// both variants (a conversion between its phases, a crash between a rename
+// and a removal, or a replaced file whose removal a reader held up on
+// Windows) the newer, the store codec's when their times are equal, which
+// is the one resolveLocked keeps. So a reader never gets the replaced
+// content of a message whose codec was switched back before the pair was
+// settled. The caller holds the names lock at least for reading.
+func (s *Store) openNewest(dir, id string) (*os.File, RawCodec, error) {
+	first := s.RawCodec()
+	second := first.other()
+	f, err := os.Open(filepath.Join(dir, rawName(id, first)))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		f, err = os.Open(filepath.Join(dir, rawName(id, second)))
+		return f, second, err
+	case err != nil:
+		return nil, first, err
+	}
+	path := filepath.Join(dir, rawName(id, second))
+	other, err := os.Lstat(path)
+	if err != nil || !other.Mode().IsRegular() {
+		return f, first, nil
+	}
+	mine, err := f.Stat()
+	if err != nil || !other.ModTime().After(mine.ModTime()) {
+		return f, first, nil
+	}
+	g, err := os.Open(path)
+	if err != nil {
+		return f, first, nil
+	}
+	f.Close()
+	return g, second, nil
 }
 
 // countedRaw is a stored message being read that counts among its file's

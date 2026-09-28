@@ -507,3 +507,72 @@ func TestDownloadAndReductionKeepRowAndFileInStep(t *testing.T) {
 		t.Errorf("%d locks, %d readers left", locks, readers)
 	}
 }
+
+// Of both variants of a message a reader takes the newer, as the sweep and
+// RawTx.Stat keep it: a message replaced while a reader held its other
+// variant (Windows keeps that file then) reads as replaced even once its
+// codec is switched back, before the pair is settled as after. With equal
+// times it takes the store codec's, which is again the one they keep.
+func TestReadersTakeTheNewerVariant(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	asOnWindows(t, s)
+	s.SetRawCodec(RawZstd)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	dir := filepath.Join(s.MessageDir(), "acc")
+	settled := func(id string) []byte {
+		t.Helper()
+		if err := s.WithMessageRaw(ctx, "acc", id, func(tx *RawTx) error { _, _, err := tx.Stat(); return err }); err != nil {
+			t.Fatal(err)
+		}
+		if files, _ := statRaw(dir, id); files.both() {
+			t.Fatalf("%s: both files after Stat", id)
+		}
+		return readRaw(t, s, "acc", id)
+	}
+
+	m := seedMessage(t, s, inbox, 1, "old", time.Now())
+	release := openReader(t, s, "acc", m.ID)
+	s.SetRawCodec(RawPlain)
+	if _, err := s.WriteMessageRaw(ctx, "acc", m.ID, strings.NewReader("new"), 10); err != nil {
+		t.Fatalf("replace while a reader holds the other variant: %v", err)
+	}
+	release()
+	if files, _ := statRaw(dir, m.ID); !files.both() {
+		t.Fatalf("files %+v, want the held one beside the new one", files)
+	}
+	// Older by a minute: a coarse clock may give both files one time.
+	past := time.Now().Add(-time.Minute)
+	if err := os.Chtimes(s.MessageRawPath("acc", m.ID)+RawZstSuffix, past, past); err != nil {
+		t.Fatal(err)
+	}
+	s.SetRawCodec(RawZstd)
+	if got := readRaw(t, s, "acc", m.ID); string(got) != "new" {
+		t.Errorf("read with the codec switched back: %q, want the replacement", got)
+	}
+	if got := settled(m.ID); string(got) != "new" {
+		t.Errorf("read once settled: %q", got)
+	}
+
+	for _, codec := range []RawCodec{RawPlain, RawZstd} {
+		s.SetRawCodec(RawZstd)
+		twin := seedMessage(t, s, inbox, uint32(2+codec), "compressed", time.Now())
+		path := s.MessageRawPath("acc", twin.ID)
+		if err := os.WriteFile(path, []byte("plain twin"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range []string{path, path + RawZstSuffix} {
+			if err := os.Chtimes(p, past, past); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s.SetRawCodec(codec)
+		read := readRaw(t, s, "acc", twin.ID)
+		if want := (codec == RawPlain); bytes.Equal(read, []byte("plain twin")) != want {
+			t.Errorf("equal times, codec %s: read %q", codec, read)
+		}
+		if got := settled(twin.ID); !bytes.Equal(got, read) {
+			t.Errorf("equal times, codec %s: read %q, kept %q", codec, read, got)
+		}
+	}
+}

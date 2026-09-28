@@ -387,8 +387,15 @@ func TestOpenMessageRawOrder(t *testing.T) {
 	if err := os.WriteFile(s.MessageRawPath("acc", "m_1"), []byte("plain"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Both exist (a conversion between its phases): the store codec's
-	// name first.
+	// Both exist (a conversion between its phases) from one moment: the
+	// store codec's name first.
+	plain := s.MessageRawPath("acc", "m_1")
+	same := time.Now().Add(-time.Minute)
+	for _, path := range []string{plain, plain + RawZstSuffix} {
+		if err := os.Chtimes(path, same, same); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
 		t.Errorf("zstd first: %q", got)
 	}
@@ -396,6 +403,22 @@ func TestOpenMessageRawOrder(t *testing.T) {
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "plain" {
 		t.Errorf("plain first: %q", got)
 	}
+	// Otherwise the newer, whatever the store's codec (as the sweep keeps
+	// it).
+	if err := os.Chtimes(plain+RawZstSuffix, same.Add(time.Second), same.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
+		t.Errorf("the newer, plain codec: %q", got)
+	}
+	if err := os.Chtimes(plain, same.Add(2*time.Second), same.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	s.SetRawCodec(RawZstd)
+	if got := readRaw(t, s, "acc", "m_1"); string(got) != "plain" {
+		t.Errorf("the newer, zstd codec: %q", got)
+	}
+	s.SetRawCodec(RawPlain)
 	os.Remove(s.MessageRawPath("acc", "m_1"))
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
 		t.Errorf("the other when the first is missing: %q", got)
