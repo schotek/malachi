@@ -49,5 +49,9 @@ FILEOPENDIALOGOPTIONS
 COMDLG_FILTERSPEC
 CoTaskMemFree
 // The account wizard (Wizard/): its owner window, which a modal
-// OverlappedPresenter needs before IsModal.
+// OverlappedPresenter needs before IsModal, and the owner enabled and
+// activated again before the wizard goes.
 SetWindowLongPtr
+EnableWindow
+GetForegroundWindow
+IsWindowVisible

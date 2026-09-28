@@ -21,6 +21,16 @@
 // certificate confirmation is the shell's ContentDialog on this window.
 // Nothing here logs a field: the password goes from its box to the
 // controller only.
+//
+// A modal window disables its owner, and Windows activates the next
+// enabled window when the active one goes away: the owner is enabled
+// again and brought to the front before the wizard goes (Closed), as a
+// Win32 dialog hands back its owner, so the keyboard returns to the window
+// the wizard was opened from. The window's name stays the wizard's title
+// (Add Account, Edit Account, Sign In) while the header shows the page's.
+// It cannot be minimised or maximised, whatever asks (UIA exposes the
+// caption buttons a dialog presenter hides); Alt+Left and the mouse's
+// back button go back a page, as in Adw.NavigationView.
 
 using System;
 using Malachi.App.Shell;
@@ -38,6 +48,8 @@ using Windows.Graphics;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.UI.WindowsAndMessaging;
+using VirtualKey = Windows.System.VirtualKey;
+using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 using WizardPage = Malachi.Core.Controllers.WizardController.WizardPage;
 
 namespace Malachi.App.Wizard;
@@ -62,8 +74,14 @@ public sealed partial class AccountWizardWindow : Window
     private readonly TestingPage testing;
     private WizardPage? visible;
 
+    // The window the wizard is modal over.
+    private HWND owner;
+
     // A focus the controller asked for before the identity page was shown.
     private WizardController.IdentityField? focusRequest;
+
+    // The page whose Loaded will place the focus (FocusPage).
+    private UserControl? focusOnLoad;
 
     private AccountWizardWindow(
         AppState state, Account? editing, bool signIn, ErrorCode? requestPassword, Action<AccountId, AccountConfig>? done)
@@ -86,6 +104,10 @@ public sealed partial class AccountWizardWindow : Window
         Title = wizard.Title;
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(Header);
+        // The TitleBar names the window after its title when it comes up
+        // and whenever the title changes: the window keeps the wizard's
+        // (Alt+Tab, the UIA window name), the header shows the page's.
+        Header.Loaded += (_, _) => Title = wizard.Title;
         var icon = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Malachi.ico");
         if (System.IO.File.Exists(icon))
         {
@@ -117,7 +139,13 @@ public sealed partial class AccountWizardWindow : Window
             }
         };
         Pages.Navigated += (_, _) => DispatcherQueue.TryEnqueue(FocusPage);
-        Closed += (_, _) => wizard.Close();
+        AddBackKeys();
+        AppWindow.Changed += (sender, _) => KeepRestored(sender);
+        Closed += (_, _) =>
+        {
+            ReturnToOwner();
+            wizard.Close();
+        };
     }
 
     /// <summary>The window as the shell tracks it.</summary>
@@ -169,6 +197,7 @@ public sealed partial class AccountWizardWindow : Window
     {
         var hwnd = (HWND)WindowPresenter.Handle(this);
         var ownerHwnd = WindowPresenter.Handle(owner);
+        this.owner = (HWND)ownerHwnd;
         PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWLP_HWNDPARENT, ownerHwnd);
         var presenter = OverlappedPresenter.CreateForDialog();
         presenter.IsModal = true;
@@ -209,6 +238,7 @@ public sealed partial class AccountWizardWindow : Window
         }
         var top = pages[^1];
         Header.Title = PageTitle(top);
+        Title = wizard.Title;
         Header.IsBackButtonVisible = wizard.CanGoBack;
         if (top == visible)
         {
@@ -257,9 +287,25 @@ public sealed partial class AccountWizardWindow : Window
 
     // After a page came in: the identity page's requested field or its
     // address (focus-widget: email_row), else the first control of the
-    // page, so the keyboard stays in the wizard.
+    // page, so the keyboard stays in the wizard. The Frame reports the
+    // navigation before the page is in the tree, where it cannot take the
+    // focus yet: then once it is loaded.
     private void FocusPage()
     {
+        var view = PageView(visible ?? WizardPage.Identity);
+        if (!view.IsLoaded)
+        {
+            if (!ReferenceEquals(focusOnLoad, view))
+            {
+                if (focusOnLoad is { } earlier)
+                {
+                    earlier.Loaded -= OnPageLoaded;
+                }
+                focusOnLoad = view;
+                view.Loaded += OnPageLoaded;
+            }
+            return;
+        }
         if (visible == WizardPage.Identity)
         {
             if (focusRequest is { } field)
@@ -271,22 +317,100 @@ public sealed partial class AccountWizardWindow : Window
             identity.InitialFocus.Focus(FocusState.Programmatic);
             return;
         }
-        var page = PageView(visible ?? WizardPage.Identity);
         Control? target = visible switch
         {
             WizardPage.OAuth => oauth.InitialFocus,
             WizardPage.Testing => testing.InitialFocus,
             _ => null,
         };
-        if (target is null && FocusManager.FindFirstFocusableElement(page) is Control first)
+        if (target is null && FocusManager.FindFirstFocusableElement(view) is Control first)
         {
             target = first;
         }
         target?.Focus(FocusState.Programmatic);
     }
 
+    private void OnPageLoaded(object sender, RoutedEventArgs e)
+    {
+        if (focusOnLoad is { } page)
+        {
+            page.Loaded -= OnPageLoaded;
+            focusOnLoad = null;
+        }
+        FocusPage();
+    }
+
     private void OnBackRequested(TitleBar sender, object args) => wizard.Back();
+
+    // Adw.NavigationView's other ways back: Alt+Left and the mouse's back
+    // button, while there is a page to go back to.
+    private void AddBackKeys()
+    {
+        var back = new KeyboardAccelerator { Key = VirtualKey.Left, Modifiers = VirtualKeyModifiers.Menu };
+        back.Invoked += (_, e) =>
+        {
+            e.Handled = true;
+            GoBack();
+        };
+        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        Root.KeyboardAccelerators.Add(back);
+        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) =>
+        {
+            if (e.GetCurrentPoint(Root).Properties.IsXButton1Pressed)
+            {
+                e.Handled = true;
+                GoBack();
+            }
+        }), handledEventsToo: true);
+    }
+
+    private void GoBack()
+    {
+        if (wizard.CanGoBack)
+        {
+            wizard.Back();
+        }
+    }
+
+    // A modal dialog stays as it was placed: minimised or maximised (by UIA
+    // or a system command, the presenter hides those buttons only), it is
+    // restored.
+    private void KeepRestored(AppWindow window)
+    {
+        if (window.Presenter is OverlappedPresenter { State: not OverlappedPresenterState.Restored } p)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (p.State != OverlappedPresenterState.Restored)
+                {
+                    p.Restore();
+                }
+            });
+        }
+    }
+
+    // The wizard is going: its owner is enabled again first and, if the
+    // wizard had the keyboard, activated, so that Windows does not hand the
+    // activation to another window (the owner is still disabled when the
+    // modal window is destroyed).
+    private void ReturnToOwner()
+    {
+        if (owner == HWND.Null)
+        {
+            return;
+        }
+        var wasActive = PInvoke.GetForegroundWindow() == (HWND)WindowPresenter.Handle(this);
+        PInvoke.EnableWindow(owner, true);
+        if (wasActive && PInvoke.IsWindowVisible(owner))
+        {
+            PInvoke.SetForegroundWindow(owner);
+        }
+        LogReturned(logger, wasActive);
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "account wizard opened on {Page}, edit {Editing}, sign-in {SignIn}")]
     private static partial void LogPresented(ILogger logger, WizardPage page, bool editing, bool signIn);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "account wizard closed, its owner enabled, activated {Activated}")]
+    private static partial void LogReturned(ILogger logger, bool activated);
 }
