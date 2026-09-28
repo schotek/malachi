@@ -109,9 +109,8 @@ public sealed partial class MainWindow
                 Navigate(layout.FolderChosen);
             }
         };
-        // window.go row-activated: a draft opens in the compose window.
-        integration.List.ActivateDraft += (_, s) => integration.Actions.OpenDraft(s.Id);
-        // After the mailbox's own handler: the backend banner.
+        // After the mailbox's own handler: the backend banner. (A draft's
+        // activation, window.go row-activated, is the reader's: ReaderHub.)
         paneTokens.Add(state.Notifications.AddConnectionState(ListPane.ShowConnectionState));
         ListPane.ShowConnectionState(state.Notifications.ConnectionState);
     }
