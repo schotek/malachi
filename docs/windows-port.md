@@ -1504,16 +1504,24 @@ The compose window as built (phase E wave 2, `Malachi.App/Compose`):
 cold `mailto:` opens its composer at once) and cascades them 32 px from a
 first one centred on the active window's display. `ComposeWindow` is
 compose.blp top to bottom: its header bar as the window's tall `TitleBar` on
-Mica (Attach at the start; the Draft Menu and the accented Send, tooltip
-*Send (Ctrl+Enter)*, at the end), then under the toast overlay
+Mica (Attach at the start; the subject, or *New Message*, as a `TextBlock`
+in the bar's middle column, shortened with an ellipsis, since the
+`TitleBar.Title` column never shrinks and a long subject pushed Send under
+the caption buttons; the Draft Menu and the accented Send, tooltip
+*Send (Ctrl+Enter)*, at the end; below about 500 px, where the title would
+get less than a few characters, Send shows only its icon and the app icon
+goes, from Core's `HeaderBarFit` over the wide layout's measures, and the
+bar is asked to recompute its drag regions), then under the toast overlay
 `ComposeHeader` (the card: one 30 px line per field, the labels in one
 column, flat fields whose own template lets the invalid state be a style
 with red text and underline), `FormatToolbar` (flat buttons that never take
 the focus, the checked toggles in the accent colour, the link popover whose
 entry turns red for a refused link, the text colour as a `ColorPicker` in a
 flyout sent when it closes with another colour), the plain-text hint, the
-`ComposeWebView` in the editor slot and `AttachmentChipsView` (six chips to
-a line, `ChipWrapPanel`), and the status line at the bottom. 760×640, at
+`ComposeWebView` in the editor slot (the view background, no lines of its
+own) and `AttachmentChipsView` (six chips to a line, `ChipWrapPanel`; each
+chip a UIA group named after its file, `ChipGroup`, so that Narrator says
+whose *Remove* it is), and the status line at the bottom. 760×640, at
 least 360×420 (`OverlappedPresenter.PreferredMinimumWidth/Height` at the
 window's scale). The logic is Core's: the draft controller, and the
 presentation classes `ComposeAttachmentsController` (imports, removal, the
@@ -1523,9 +1531,12 @@ generation, the keys), `ComposeHeaderRules` (the From row, the Cc/Bcc
 button, the title) and `FormatBarState` (applyState and the commands). The
 recipient popup (`RecipientSuggestions`) is a `Popup` constrained to the
 window under the row, as wide as it, whose 36 px rows never take the focus;
-the row's `PreviewKeyDown` hands it Down, Up, Enter, Tab and Escape. Keys:
-the window's `CommandRouter` runs Ctrl+Enter, Ctrl+S, and Escape and Ctrl+W
-(the close request, not while a popup of the window is open), and lets
+the row's `PreviewKeyDown` hands it Down, Up, Enter, Tab and Escape. UI
+Automation does not find the popup, and the keyboard stays in the row, so
+the row raises a polite notification with the selected suggestion (name and
+address) when the popup opens and when the selection moves to another one.
+Keys: the window's `CommandRouter` runs Ctrl+Enter, Ctrl+S, and Escape and
+Ctrl+W (the close request, not while a popup of the window is open), and lets
 `EditorKeys.BridgeHandles` through to the page (Ctrl+Shift+I is italic
 there, as in GTK); the bridge posts Escape (the close request) and Ctrl+K
 (the link popover). The editor's WebView2 is marked
@@ -1539,9 +1550,21 @@ never the `\\?\` and `\\.\` namespaces. Measured: WinUI's WebView2 hands a
 shell drop of files to its host, not to its page, so the editor slot takes
 it (`AllowDrop`, the storage items' paths); the bridge's drop path of §6.5
 stays for a runtime that hands it on. Closing (the caption, Alt+F4, Escape,
-Ctrl+W) is draft.go's close request through `AlertService`; Quit saves
-without asking and only a failed save asks (`CloseForQuitAsync`). Three
-fixes of what GTK and macOS leave as it is: the placeholder account's
+Ctrl+W) is draft.go's close request through `AlertService`; as Swift's
+`windowShouldClose`, `AppWindow.Closing` lets a close with nothing at stake
+go on and cancels only to ask, the window closing after the answer (never
+`Close()` inside `Closing`); the question is asked once, a second request
+waits for its answer, and one that ends at once leaves nothing behind. Quit
+saves without asking and only a failed save asks (`CloseForQuitAsync`).
+Measured: a window closed while inactive (its caption button invoked
+through UI Automation, a composer closing itself after Send) reports an
+activation after `Closed`; `WindowTracker` ignores it, since the stale last
+active window without an `AppWindow` made the next composer's placement
+throw, and the app ended (`0xc000027b`). A window the factory cannot make
+is logged by `ComposeController.Open` and leaves nothing open (a window made
+but not shown closes, so it holds no app); one that cannot be placed opens
+where Windows puts it. Three fixes of what GTK and macOS leave as it is:
+the placeholder account's
 status goes when the real accounts arrive; a template's inline picture is
 fetched from the account the window has when the editor asks for it
 (read when it is registered, the first window of a run asked with the
@@ -1557,7 +1580,12 @@ forward through `draft.create` with the quoted original, its inline picture
 and the forwarded file; a draft reopened through `draft.open` and raised
 when opened again; the close question; Quit saving a dirty draft without
 asking; a cold `mailto:` showing only its composer, and the app ending with
-it.
+it. Again after the review of the header bar and the close: a subject of
+117 characters at 760, 470 and 360 px (Send, Minimize, Maximize and Close
+apart, the title a drag region); the caption's Close invoked through UI
+Automation on a composer with nothing at stake, then a `mailto:` composer,
+four times without a failure; the notification of a suggestion as a UIA
+client receives it; the chips as named groups.
 
 ### 11.4 Banners, toasts, alerts
 
