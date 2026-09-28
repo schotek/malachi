@@ -170,6 +170,18 @@ public sealed class DangerousTypesTests
     [InlineData("a.sst")]
     [InlineData("a.spc")]
     [InlineData("a.stl")]
+    // OneNote, Windows Contacts, Access since 2007: missed by the shell.
+    [InlineData("a.one")]
+    [InlineData("a.onepkg")]
+    [InlineData("a.contact")]
+    [InlineData("a.wab")]
+    [InlineData("a.accdb")]
+    [InlineData("a.accde")]
+    [InlineData("a.ACCDR")]
+    [InlineData("a.accda")]
+    [InlineData("a.accdu")]
+    [InlineData("a.accdt")]
+    [InlineData("a.accdc")]
     // Disk images: mounting one skipped the Mark of the Web.
     [InlineData("a.iso")]
     [InlineData("a.img")]
@@ -178,6 +190,22 @@ public sealed class DangerousTypesTests
     public void WindowsTypesAreNeverOpened(string name)
     {
         Assert.True(DangerousTypes.IsDangerous(name, "application/octet-stream"));
+    }
+
+    [Theory]
+    // Outlook's list names Access's Jet-era types; their successors since
+    // Access 2007 hold the same code and are never opened either.
+    [InlineData("mdb", "accdb")]
+    [InlineData("mde", "accde")]
+    [InlineData("mda", "accda")]
+    [InlineData("mdt", "accdu")]
+    [InlineData("mdz", "accdt")]
+    public void AccessTypesAreNeverOpenedInEitherForm(string jet, string successor)
+    {
+        Assert.Contains(jet, DangerousTypes.OutlookExtensions);
+        Assert.Contains(successor, DangerousTypes.WindowsExtensions);
+        Assert.True(DangerousTypes.IsDangerous("database." + jet, ""));
+        Assert.True(DangerousTypes.IsDangerous("database." + successor, ""));
     }
 
     [Theory]
@@ -233,6 +261,9 @@ public sealed class DangerousTypesTests
     [InlineData("application/x-rdp", true)]
     [InlineData("application/x-iso9660-image", true)]
     [InlineData("text/vbscript", true)]
+    [InlineData("application/onenote", true)]
+    [InlineData("application/msaccess", true)]
+    [InlineData("application/vnd.ms-access; name=db.accdb", true)]
     [InlineData("application/octet-stream", false)]
     [InlineData("application/pdf", false)]
     [InlineData("text/plain", false)]

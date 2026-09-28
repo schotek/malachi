@@ -38,6 +38,8 @@ public sealed class FileTypePolicyTests
     [InlineData("photo.jpg", false)]
     [InlineData("connect.rdp", true)]
     [InlineData("setup.exe.", true)]
+    [InlineData("notes.one", true)]
+    [InlineData("orders.accdb", true)]
     [InlineData("", false)]
     [InlineData(null, false)]
     public void IsDangerous(string? name, bool want)
@@ -62,6 +64,12 @@ public sealed class FileTypePolicyTests
     [InlineData(".msix", false)]
     [InlineData(".xll", false)]
     [InlineData(".jar", false)]
+    [InlineData(".one", false)]
+    [InlineData(".onepkg", false)]
+    [InlineData(".contact", false)]
+    [InlineData(".wab", false)]
+    [InlineData(".accdb", false)]
+    [InlineData(".accde", false)]
     public void TheShellsOwnVerdict(string? extension, bool want)
     {
         Assert.Equal(want, FileTypePolicy.IsDangerousToTheShell(extension));

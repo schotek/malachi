@@ -79,13 +79,16 @@ public static class DangerousTypes
     /// silent (measured: <c>.rdp</c>, <c>.search-ms</c>,
     /// <c>.searchconnector-ms</c>, <c>.settingcontent-ms</c>,
     /// <c>.appinstaller</c>, <c>.msix</c>, <c>.xll</c>, <c>.jar</c>,
-    /// <c>.py</c>, <c>.sh</c>): remote-session files, app packages and
-    /// their installers, provisioning packages, search and settings
-    /// shortcuts that reach out to other hosts, Office add-ins, web queries
-    /// and data connections, the script hosts, installers, drivers,
-    /// certificate stores (they open the import wizard), themes and visual
-    /// styles (their pictures can be fetched from a share), and
-    /// invitations that open a connection.
+    /// <c>.py</c>, <c>.sh</c>, <c>.one</c>, <c>.onepkg</c>,
+    /// <c>.contact</c>, <c>.wab</c> and the <c>.accd*</c> types, with
+    /// Access installed): remote-session files, app packages and their
+    /// installers, provisioning packages, search and settings shortcuts
+    /// that reach out to other hosts, Office add-ins, web queries and data
+    /// connections, the script hosts, installers, drivers, certificate
+    /// stores (they open the import wizard), themes and visual styles
+    /// (their pictures can be fetched from a share), invitations that open
+    /// a connection, OneNote's sections and packages, Windows Contacts'
+    /// files, and Access's databases, add-ins and templates.
     /// </summary>
     public static readonly IReadOnlySet<string> WindowsExtensions = Set(
         // Remote sessions, remote assistance, RemoteApp.
@@ -113,7 +116,21 @@ public static class DangerousTypes
         // Certificate stores and lists, beside .cer .crt .der of Outlook's list.
         "p7b", "p7c", "pfx", "p12", "sst", "spc", "stl",
         // Themes and visual styles.
-        "theme", "themepack", "deskthemepack", "msstyles");
+        "theme", "themepack", "deskthemepack", "msstyles",
+        // OneNote sections and packages: a file embedded in a page runs
+        // when the picture laid over it is double-clicked, past one
+        // warning, which delivered malware in 2023.
+        "one", "onepkg",
+        // Windows Contacts: a click on a crafted contact's link can run a
+        // program (reported, not serviced), and an address book goes to
+        // wab.exe /Import, the same unmaintained program.
+        "contact", "wab",
+        // Access's own formats since 2007: the successors of the types of
+        // Outlook's list and of the shell's (.mdb, .mde, .mda, .mdt, .mdz),
+        // each able to run its VBA and macros as it opens (a database, its
+        // compiled and runtime forms, add-ins and their wizard data,
+        // templates, signed packages, which unpack into a database).
+        "accdb", "accde", "accdr", "accda", "accdu", "accdt", "accdc");
 
     /// <summary>
     /// Disk images Windows mounts on a double click; mounting one has been
@@ -197,7 +214,12 @@ public static class DangerousTypes
         "application/x-cd-image",
         "application/x-raw-disk-image",
         "application/x-vhd-disk",
-        "application/x-vhdx-disk");
+        "application/x-vhdx-disk",
+        "application/onenote",
+        "application/msonenote",
+        "application/msaccess",
+        "application/x-msaccess",
+        "application/vnd.ms-access");
 
     /// <summary>Every claimed type above.</summary>
     public static readonly IReadOnlySet<string> MediaTypes = Set(

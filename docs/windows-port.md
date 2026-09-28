@@ -1250,8 +1250,21 @@ trimmed publish would have to replace with its source-generated COM.
 Never opened, only saved: the
 GTK list, the macOS additions, Outlook's Level-1 list, `.rdp`,
 `.appinstaller`, `.msix`, `.ppkg`, `.searchconnector-ms` and friends, anything
-`AssocIsDangerous` or `CheckPolicy` flags, and disk images (`.iso`, `.img`,
-`.vhd`, `.vhdx`: mounting them has been a Mark-of-the-Web bypass). Opening
+`AssocIsDangerous` or `CheckPolicy` flags, disk images (`.iso`, `.img`,
+`.vhd`, `.vhdx`: mounting them has been a Mark-of-the-Web bypass), OneNote's
+`.one` and `.onepkg` (a file embedded in a page runs when the picture laid
+over it is double-clicked, past one warning, which delivered malware in
+2023), Windows Contacts' `.contact` and `.wab` (a click on a crafted
+contact's link can run a program, a report Microsoft declined to service;
+an address book is imported by the same `wab.exe`), and Access's
+formats since 2007 (`.accdb`, `.accde`, `.accdr`, `.accda`, `.accdu`,
+`.accdt`, `.accdc`). Outlook's list and the shell name the Jet-era Access
+types (`.mdb`, `.mde`, `.mda`, `.mdt`, `.mdz`, `.ade`, `.adp`), the database
+itself included, but none of their successors, which run the same VBA and
+macros when they open, so the successors are listed too; none of these is
+flagged by `AssocIsDangerous`, even with Office installed (measured). A
+vCard (`.vcf`) still opens: it is an everyday attachment, and GTK and macOS
+open it. Opening
 anything else uses `ShellExecuteEx` (through `Process.Start` on an STA
 thread, zone checks on, the shell's dialogs owned by the window) and *Open
 With…* `SHOpenWithDialog` (this once, never the default); only files on a

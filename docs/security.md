@@ -340,9 +340,13 @@ into it as well.
   additions, Outlook's Level-1 list, `.rdp`, `.appinstaller`, `.msix`,
   `.ppkg`, `.searchconnector-ms` and friends, disk images (`.iso`,
   `.img`, `.vhd`, `.vhdx`, whose mounting has bypassed the Mark of the
-  Web), and anything the shell's `AssocIsDangerous` or the attachment
-  policy flags (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`),
-  judged on the listed, the served and the written name. It writes names
+  Web), OneNote's `.one` and `.onepkg`, Windows Contacts' `.contact` and
+  `.wab`, Access's formats since 2007 (`.accdb`, `.accde`, `.accdr`,
+  `.accda`, `.accdu`, `.accdt`, `.accdc`, the successors of the Access
+  types Outlook's list names), and anything the shell's
+  `AssocIsDangerous` or the attachment policy flags
+  (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`), judged on
+  the listed, the served and the written name. It writes names
   that are safe on Windows (reserved characters and their ANSI best-fit
   look-alikes, device names, trailing dots and spaces, streams, the path
   length, a cut to length never adding an extension), and opens only

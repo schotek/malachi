@@ -10,7 +10,10 @@
 // exactly what the attachment policy of the Restricted sites zone blocks
 // (CheckPolicy), all of it in DangerousTypes already; both miss .rdp,
 // .search-ms, .searchconnector-ms, .settingcontent-ms, .appinstaller,
-// .msix, .xll, .jar, .py and .sh, which DangerousTypes lists.
+// .msix, .xll, .jar, .py and .sh, and also .one, .onepkg, .contact, .wab
+// and Access's formats since 2007 (.accdb and the rest, measured with
+// Office installed, while the older .mdb, .mde, .mda, .ade and .adp are
+// named), all of which DangerousTypes lists.
 
 using System;
 using Malachi.Core.Platform;
