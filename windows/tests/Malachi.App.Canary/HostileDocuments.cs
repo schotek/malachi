@@ -7,9 +7,10 @@
 // <link> hints, prerender and speculation rules, frames, plugins, media,
 // SVG, forms, pings, refresh), host-name variants for the DNS check, UNC
 // paths, and the active document whose links, form, new-window, download
-// and UNC targets the host clicks and hovers. Plus what the previewer gets:
-// an SVG that references the canaries and a PDF whose link and open action
-// point at them.
+// and UNC targets the host clicks and hovers, with the security audit's
+// masked links (a bank's name in the userinfo). Plus what the previewer
+// gets: an SVG that references the canaries and a PDF whose link and open
+// action point at them.
 
 using System;
 using System.Collections.Generic;
@@ -82,7 +83,40 @@ internal static class HostileDocuments
     ];
 
     /// <summary>The vectors of the active document (clicked, hovered, submitted, refreshed).</summary>
-    public static readonly string[] ActiveVectors = ["hover", "nav", "ping", "form", "blank", "middle", "download", "refresh", "unc-link"];
+    public static readonly string[] ActiveVectors =
+        ["hover", "nav", "ping", "form", "blank", "middle", "download", "refresh", "unc-link", "masked-links"];
+
+    /// <summary>The text the masked links wear: the bank's address.</summary>
+    public const string MaskedLinkText = "https://www.mojebanka.example/login";
+
+    /// <summary>
+    /// The masked-link shapes of the security audit (F3 §1), each wearing
+    /// <see cref="MaskedLinkText"/>, with <c>{A}</c> for the masked-links
+    /// canary's authority: the bank's name in a userinfo Go's parser refuses
+    /// (a space, "%", "[", a soft hyphen, "。", "^", "|", "{", a quote), in
+    /// one it accepts, before a backslash, and an empty authority. Chromium
+    /// goes to the host after the "@" (the canary's), except for the
+    /// backslash, which ends its authority.
+    /// </summary>
+    public static readonly (string Id, string Href)[] MaskedLinks =
+    [
+        ("space", "http:// www.mojebanka.example@{A}/space"),
+        ("pct", "http://%www.mojebanka.example@{A}/pct"),
+        ("bracket", "http://[www.mojebanka.example@{A}/bracket"),
+        ("shy", "http://­www.mojebanka.example@{A}/shy"),
+        ("ideo", "http://。www.mojebanka.example@{A}/ideo"),
+        ("caret", "http://www.mojebanka.example^@{A}/caret"),
+        ("pipe", "http://www.mojebanka.example|@{A}/pipe"),
+        ("brace", "http://www.mojebanka.example{x}@{A}/brace"),
+        ("quote", "http://www.mojebanka.example\"@{A}/quote"),
+        ("bs2", "http://www.mojebanka.example\\@{A}/bs2"),
+        ("plainuserinfo", "http://www.mojebanka.example@{A}/plainuserinfo"),
+        ("triple", "http:///{A}/triple"),
+    ];
+
+    /// <summary>A masked link's href over <paramref name="canary"/>, as the document carries it.</summary>
+    public static string MaskedHref(string href, CanaryListener canary) =>
+        href.Replace("{A}", "127.0.0.1:" + canary.Port.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal);
 
     /// <summary>The previewer's vectors (an SVG's references, a PDF's link and open action).</summary>
     public static readonly string[] PreviewVectors = ["svg-preview", "pdf-link", "pdf-open"];
@@ -128,12 +162,17 @@ internal static class HostileDocuments
 
     /// <summary>
     /// The active document: links, a form and a download target at fixed
-    /// places, each with an id the host points at.
+    /// places, each with an id the host points at; the masked links in a
+    /// column of their own.
     /// </summary>
     public static string Active(Func<string, CanaryListener> canary)
     {
-        static string Box(int top) =>
-            "position:absolute;left:20px;top:" + top.ToString(CultureInfo.InvariantCulture) + "px;display:block;width:260px;height:26px";
+        static string Box(int top, int left = 20) =>
+            "position:absolute;left:" + left.ToString(CultureInfo.InvariantCulture) + "px;top:" + top.ToString(CultureInfo.InvariantCulture)
+            + "px;display:block;width:260px;height:26px";
+        var masked = canary("masked-links");
+        var maskedLinks = string.Concat(MaskedLinks.Select((m, i) =>
+            "<a id='masked-" + m.Id + "' href='" + MaskedHref(m.Href, masked) + "' style='" + Box(20 + (32 * i), 320) + "'>" + MaskedLinkText + "</a>"));
         return "<!doctype html><html><head><meta charset=utf-8><title>active</title></head><body>"
             + "<a id=pinglink href='" + canary("nav").Origin + "/nav' ping='" + canary("ping").Origin + "/ping' style='" + Box(20) + "'>ping link</a>"
             + "<form id=f action='" + canary("form").Origin + "/submit' method=get><input type=hidden name=q value=secret></form>"
@@ -145,6 +184,7 @@ internal static class HostileDocuments
             + "<a id=dl download href='" + canary("download").Origin + "/file.bin' style='" + Box(320) + "'>download</a>"
             + "<a id=unc href='file://127.0.0.1@" + canary("unc-link").Port.ToString(CultureInfo.InvariantCulture)
             + "/share/link.txt' style='" + Box(370) + "'>unc</a>"
+            + maskedLinks
             + "</body></html>";
     }
 

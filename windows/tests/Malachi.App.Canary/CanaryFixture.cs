@@ -8,9 +8,10 @@
 // - protected: the app's viewer, editor and previewer (MessageWebView,
 //   ComposeWebView, PreviewWebView in the app's WebViewEnvironment) over the
 //   hostile document, its active twin (hover, press, link, form, target,
-//   middle click, mailto, download), a meta refresh, the previewer's SVG,
-//   PDF (its link clicked, its open action), picture and text, and every
-//   HTML part of backend/testdata/mime raw in the viewer and the editor;
+//   middle click, mailto, download, the security audit's masked links), a
+//   meta refresh, the previewer's SVG, PDF (its link clicked, its open
+//   action), picture and text, and every HTML part of backend/testdata/mime
+//   raw in the viewer and the editor;
 // - control: the same hostile document in a WebView2 without any
 //   protection (only its reach beyond the machine cut off: a dead proxy and
 //   no name but 127.0.0.1 resolved), which must reach the canaries: the
@@ -164,6 +165,12 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("viewer", "click", "viewer-mailto", target: "mailto", ms: 600);
         Add("viewer", "click", "viewer-download", target: "dl", ms: 800);
         Add("viewer", "click", "viewer-unc", target: "unc", ms: 800);
+        // The security audit's masked links, one by one: each must reach
+        // the reader as the link it is, and nothing else.
+        foreach (var (id, _) in HostileDocuments.MaskedLinks)
+        {
+            Add("viewer", "click", "viewer-masked-" + id, target: "masked-" + id, ms: 500);
+        }
         Add("viewer", "load", "viewer-refresh", refresh, ms: 2000);
 
         // The editor: the same content pasted, with page script on.

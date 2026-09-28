@@ -674,7 +674,11 @@ host the browser goes to first, where GTK names the href as written. A
 link the launcher refuses (the backslash and empty-authority shapes) is
 decided as masked and then not offered, as there is nothing it could
 open. `LinkDecisionTests`, `LinkOpenerTests` and, over the real launcher,
-`LauncherTests` hold the audit's shapes. GTK (`htmlview.Masked`) and
+`LauncherTests` hold the audit's shapes; the network canary (§12) clicks
+each in the real viewer and checks that it reaches the reader with its
+attribute as written and resolves to the host after the `@` (the
+backslash shape to the bank: Chromium ends the authority there), the
+input the decision is tested with. GTK (`htmlview.Masked`) and
 macOS (`Links.swift`) keep the bypass until they get the same rule or the
 backend's canonical hrefs.
 
@@ -1929,8 +1933,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   takes the focus, and plays the spike's hostile document (every vector
   with its own loopback listener in the test process, DNS-only host names,
   UNC paths), its active twin (hover, press, a link with `ping`, a form,
-  `target=_blank`, a middle click, `mailto:`, `download`, a UNC link, a
-  meta refresh; pointer input through the DevTools protocol), the
+  `target=_blank`, a middle click, `mailto:`, `download`, a UNC link, the
+  security audit's masked links, a meta refresh; pointer input through the
+  DevTools protocol), the
   previewer's HTML, SVG, PDF (its link clicked, its open action), picture
   and text, and every HTML part of `backend/testdata/mime` **raw**, without
   the sanitiser, in the viewer and the editor. Chromium writes a NetLog
@@ -1951,7 +1956,10 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   aside, titled *Malachi Mail* throughout, also while the previewer shows a
   PDF whose metadata has a title of its own); nothing downloaded; the gate
   answered 403 to everything not the view's own; and that clicks reached
-  the reader as links (forms and refreshes not); and, as checks of the
+  the reader as links (forms and refreshes not), each masked link once,
+  with its attribute as written, resolved to the host after its `@` (but
+  for the backslash, which ends Chromium's authority first; §6.4); and,
+  as checks of the
   views themselves, that the editor's bridge types, formats and flushes
   under its CSP, a dropped file arrives as a path, and the viewer zooms.
   A control run of the same document in a WebView2 without protection

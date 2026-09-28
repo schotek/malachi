@@ -201,8 +201,10 @@ public sealed class LinkDecisionTests
     /// <summary>
     /// The security audit's bypass (F3 §1): hrefs whose userinfo Go's parser
     /// refuses, a backslash before the "@", a userinfo it accepts and an
-    /// empty authority, with the URL WebView2 resolves each to (measured in
-    /// the real viewer, which hands on the attribute as written besides).
+    /// empty authority, with the URL WebView2 resolves each to, as the
+    /// network canary reports the viewer's links
+    /// (NetworkCanaryTests.MaskedLinksReachTheReaderAsWritten, which also
+    /// shows that the viewer hands on the attribute as written).
     /// </summary>
     public static readonly TheoryData<string, string> Bypasses = new()
     {

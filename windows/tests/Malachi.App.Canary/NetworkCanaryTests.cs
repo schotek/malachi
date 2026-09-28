@@ -251,6 +251,28 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
             && e.Detail is { Length: > 0 } d && d.Contains("/hover", StringComparison.Ordinal));
     }
 
+    // The security audit's masked links (F3 §1): the viewer hands each to
+    // the reader once, with its attribute as written, the string the
+    // daemon lists and LinkDecision judges (which fails closed on every
+    // one); the navigation it reports goes to the host after the "@", the
+    // canary's, which is why each must be asked about. Nothing reached the
+    // canary (NoCanaryWasReached). LinkDecisionTests.Bypasses carries these
+    // pairs over to the decision.
+    [Fact]
+    public void MaskedLinksReachTheReaderAsWritten()
+    {
+        var results = ProtectedResults();
+        var canary = fixture.Protected!.Canary("masked-links");
+        foreach (var (id, href) in HostileDocuments.MaskedLinks)
+        {
+            var written = HostileDocuments.MaskedHref(href, canary);
+            var link = Assert.Single(results.Events, e => e.Kind == HostEvent.Kinds.Link && e.Phase == "viewer-masked-" + id);
+            Assert.True(written == link.Detail, id + ": the attribute " + link.Detail + " for " + written + " (resolved " + link.Uri + ")");
+            Assert.True(Uri.TryCreate(link.Uri, UriKind.Absolute, out var resolved), id + ": resolved " + link.Uri);
+            Assert.Equal(id == "bs2" ? "www.mojebanka.example" : "127.0.0.1", resolved.Host);
+        }
+    }
+
     // The bridge runs under the editor's CSP (script on, page script
     // blocked): it reports ready, formats, and a flush returns the typed
     // content (docs/windows-port.md §6.5).
