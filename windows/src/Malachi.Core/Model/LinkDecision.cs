@@ -23,7 +23,11 @@
 // and macOS take the first with the href: an activation carries the href,
 // not the anchor, so a body that lists one href twice, an empty anchor
 // before the one that wears the bank's address, would otherwise open
-// without the question.
+// without the question. With the attribute, the listed links whose
+// canonical form is the navigation's are judged as well, as without it:
+// hrefs that differ only in case, a default port or escaping are one
+// address, and the attribute may be read from another anchor than the
+// one activated.
 
 using System;
 using System.Collections.Generic;
@@ -69,27 +73,19 @@ public abstract record LinkDecision
         ArgumentNullException.ThrowIfNull(href);
         ArgumentNullException.ThrowIfNull(links);
         ArgumentNullException.ThrowIfNull(launched);
-        if (!Links.AllowedLink(href))
-        {
-            return new Refused();
-        }
-        if (IsMailto(href))
-        {
-            return new Mailto(href);
-        }
-        var (matched, misleading) = Judge(links, l => string.Equals(l.Href, href, StringComparison.Ordinal), l => Misleads(l, launched));
-        if (misleading is not null)
-        {
-            return new Confirm(misleading.Text, href);
-        }
-        return matched ? new Open(href) : new Confirm("", href);
+        return ForAttribute(href, null, links, launched);
     }
 
     /// <summary>
     /// Decides an activated link. With its attribute, as
     /// <see cref="For(string, IReadOnlyList{Link}, Func{string, string})"/>
     /// does, unless the attribute leads somewhere else than the navigation
-    /// (it was read from another element than the one activated). Without
+    /// (it was read from another element than the one activated); besides
+    /// the listed links with that href, every one whose canonical form is
+    /// the navigation's is judged too, against its own href and the
+    /// address the attribute would be opened as, since hrefs that differ
+    /// only in case, a default port or escaping lead to one address and the
+    /// attribute may be another anchor's than the one activated. Without
     /// it, the resolved URL is compared with the canonical form of every
     /// listed href (<see cref="ChromiumUrl"/>): a match whose text is masked,
     /// by its href or by <paramref name="launched"/> of the resolved URL, is
@@ -111,7 +107,7 @@ public abstract record LinkDecision
         ArgumentNullException.ThrowIfNull(launched);
         if (link.Raw is { } raw && Agrees(raw, link.Resolved))
         {
-            return For(raw, links, launched);
+            return ForAttribute(raw, ChromiumUrl.Canonicalize(link.Resolved) ?? link.Resolved, links, launched);
         }
         var resolved = link.Resolved;
         if (!Links.AllowedLink(resolved))
@@ -140,6 +136,34 @@ public abstract record LinkDecision
             return new Confirm("", resolved);
         }
         return new Open(resolved);
+    }
+
+    // A link decided by its attribute (href as written): every listed link
+    // with that href is judged and, where the navigation's canonical form
+    // is known (key), so is every listed link whose canonical form it is,
+    // also against what opening href would open (launched of href); only a
+    // listed href opens without the question.
+    private static LinkDecision ForAttribute(string href, string? key, IReadOnlyList<Link> links, Func<string, string?> launched)
+    {
+        if (!Links.AllowedLink(href))
+        {
+            return new Refused();
+        }
+        if (IsMailto(href))
+        {
+            return new Mailto(href);
+        }
+        var target = launched(href);
+        var (_, misleading) = Judge(
+            links,
+            l => string.Equals(l.Href, href, StringComparison.Ordinal)
+                || (key is not null && string.Equals(ChromiumUrl.Canonicalize(l.Href), key, StringComparison.Ordinal)),
+            l => Misleads(l, launched) || (!IsMailto(l.Href) && Links.LeadsElsewhere(l.Text, target)));
+        if (misleading is not null)
+        {
+            return new Confirm(misleading.Text, href);
+        }
+        return links.Any(l => string.Equals(l.Href, href, StringComparison.Ordinal)) ? new Open(href) : new Confirm("", href);
     }
 
     // The rule both paths share: every listed link the activation matches

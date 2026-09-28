@@ -270,6 +270,36 @@ public sealed class LinkDecisionTests
         Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(new ActivatedLink(null, Href), plain, Launched));
     }
 
+    // The second review (N2): hrefs that differ only in case, a default
+    // port or escaping lead to one address, and the viewer may report the
+    // attribute of another anchor than the one clicked (its focus, a middle
+    // click). With the attribute, every listed link whose canonical form is
+    // the navigation's is judged too, as without it; what opens is still
+    // the attribute, and only a listed attribute opens without a question.
+    [Fact]
+    public void AnchorsWithOneCanonicalFormAreJudgedTogether()
+    {
+        foreach (var bankHref in new[] { "HTTPS://EVIL.EXAMPLE/dup", "https://Evil.Example:443/dup", " https://evil.example/dup", "https://évil.example/dup" })
+        {
+            // The other anchor's attribute is the canonical form itself.
+            var resolved = ChromiumUrl.Canonicalize(bankHref);
+            Assert.NotNull(resolved);
+            var raw = resolved;
+            foreach (var links in new[] { new[] { Link("", raw), Link(Bank, bankHref) }, [Link(Bank, bankHref), Link("click here", raw)] })
+            {
+                Assert.Equal(new LinkDecision.Confirm(Bank, raw), LinkDecision.For(new ActivatedLink(raw, resolved), links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, resolved), LinkDecision.For(new ActivatedLink(null, resolved), links, Launched));
+            }
+            // Nothing misleads: the attribute opens, as before.
+            Link[] plain = [Link("", raw), Link("click here", bankHref)];
+            Assert.Equal(new LinkDecision.Open(raw), LinkDecision.For(new ActivatedLink(raw, resolved), plain, Launched));
+        }
+        // A canonical match alone does not make an unlisted attribute listed.
+        Link[] other = [Link("click here", "HTTPS://EVIL.EXAMPLE/dup")];
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/dup"),
+            LinkDecision.For(new ActivatedLink("https://evil.example/dup", "https://evil.example/dup"), other, Launched));
+    }
+
     // The text side (HtmlLinksTests.TextsOfTheBank): a text a reader takes
     // for the bank's address, over a link to evil.example, is confirmed
     // with the text as the mail wrote it, with the attribute or without.
