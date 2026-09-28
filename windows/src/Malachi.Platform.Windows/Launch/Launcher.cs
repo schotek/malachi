@@ -112,16 +112,22 @@ public sealed class Launcher : ILauncher
     /// <summary>
     /// Whether <see cref="OpenLinkAsync"/> takes <paramref name="url"/>:
     /// an absolute http or https address with a host (htmlview.AllowedLink
-    /// without <c>mailto:</c>), and no control characters.
+    /// without <c>mailto:</c>), and no control characters. Userinfo is
+    /// taken, and dropped (<see cref="WebLinkTarget"/>).
     /// </summary>
     public static bool IsWebLink(string? url) => WebLinkTarget(url) is not null;
 
     /// <summary>
     /// The address <see cref="OpenLinkAsync"/> hands the browser for
-    /// <paramref name="url"/>, null when it refuses it: escaped, and with
-    /// the host as DNS gets it (IDNA: "。" is a dot, a soft hyphen is
-    /// nothing, a Cyrillic "а" is punycode), so a confirmation that shows
-    /// this shows exactly where the browser goes, not the message's href.
+    /// <paramref name="url"/>, null when it refuses it: escaped, with the
+    /// host as DNS gets it (IDNA: "。" is a dot, a soft hyphen is nothing, a
+    /// Cyrillic "а" is punycode), and without userinfo, so a confirmation
+    /// that shows this shows exactly where the browser goes, not the
+    /// message's href. A link in a mail never needs a name or a password in
+    /// its address, and one before an "@" is how a link spells a bank
+    /// before the host it really leads to
+    /// ("https://bank.example@evil.example/"); the browser would hide it
+    /// from sight anyway.
     /// </summary>
     public static string? WebLinkTarget(string? url)
     {
@@ -174,14 +180,15 @@ public sealed class Launcher : ILauncher
 
     // The address as .NET escapes it, with the host as DNS gets it (.NET
     // keeps "。", U+00AD and the like in AbsoluteUri, and the browser maps
-    // them after the fact); what reaches the browser's command line is
-    // ASCII, never a space or a quote to split it at.
+    // them after the fact) and no userinfo (a sign-in page has none, and a
+    // link's is dropped: WebLinkTarget); what reaches the browser's command
+    // line is ASCII, never a space or a quote to split it at.
     private static string? Escaped(Uri uri)
     {
         string s;
         try
         {
-            s = new UriBuilder(uri) { Host = uri.IdnHost }.Uri.AbsoluteUri;
+            s = new UriBuilder(uri) { Host = uri.IdnHost, UserName = "", Password = "" }.Uri.AbsoluteUri;
         }
         catch (Exception e) when (e is UriFormatException or ArgumentException)
         {

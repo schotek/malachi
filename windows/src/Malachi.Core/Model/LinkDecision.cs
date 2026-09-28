@@ -12,6 +12,13 @@
 // href attribute, the resolved URL is compared with the canonical form of
 // the listed hrefs (ChromiumUrl) instead of failing every comparison.
 // Swift's free function linkDecision is For(string, links).
+//
+// Also stricter than GTK and macOS: a listed link opens without the
+// question only when the address the launcher would hand the browser
+// (ILauncher.LinkTarget, passed in as launched) is on the site its text
+// names, besides Go's reading of the href agreeing (Links.IsMasked, which
+// fails closed). Where the parsers disagree, the browser goes where the
+// launcher's address says, so that address is what is judged.
 
 using System;
 using System.Collections.Generic;
@@ -36,12 +43,22 @@ public abstract record LinkDecision
     /// Decides <paramref name="href"/> against the body's links as the daemon
     /// listed them (Swift <c>linkDecision</c>). <paramref name="href"/> is
     /// compared exactly, as the daemon's own list is built, so it must be the
-    /// attribute as written, not a URL WebView2 normalised.
+    /// attribute as written, not a URL WebView2 normalised. A listed link
+    /// opens only when its text is not masked (<see cref="Links.IsMasked"/>)
+    /// and does not name another site than <paramref name="launched"/> of it
+    /// (<see cref="Links.LeadsElsewhere"/>).
     /// </summary>
-    public static LinkDecision For(string href, IReadOnlyList<Link> links)
+    /// <param name="href">The link.</param>
+    /// <param name="links">The body's links as the daemon listed them.</param>
+    /// <param name="launched">
+    /// The address the browser would get for a link
+    /// (<c>ILauncher.LinkTarget</c>), null when the launcher refuses it.
+    /// </param>
+    public static LinkDecision For(string href, IReadOnlyList<Link> links, Func<string, string?> launched)
     {
         ArgumentNullException.ThrowIfNull(href);
         ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(launched);
         if (!Links.AllowedLink(href))
         {
             return new Refused();
@@ -63,7 +80,7 @@ public abstract record LinkDecision
         {
             return new Confirm("", href);
         }
-        if (Links.IsMasked(listed.Text, href))
+        if (Misleads(listed, launched(href)))
         {
             return new Confirm(listed.Text, href);
         }
@@ -72,23 +89,31 @@ public abstract record LinkDecision
 
     /// <summary>
     /// Decides an activated link. With its attribute, as
-    /// <see cref="For(string, IReadOnlyList{Link})"/> does, unless the
-    /// attribute leads somewhere else than the navigation (it was read from
-    /// another element than the one activated). Without it, the resolved URL
-    /// is compared with the canonical form of every listed href
-    /// (<see cref="ChromiumUrl"/>): a match whose text is masked is
+    /// <see cref="For(string, IReadOnlyList{Link}, Func{string, string})"/>
+    /// does, unless the attribute leads somewhere else than the navigation
+    /// (it was read from another element than the one activated). Without
+    /// it, the resolved URL is compared with the canonical form of every
+    /// listed href (<see cref="ChromiumUrl"/>): a match whose text is masked,
+    /// by its href or by <paramref name="launched"/> of the resolved URL, is
     /// confirmed with that text; so is, with no text, every link of a body
     /// that carries a masked link at all, since a link whose canonical form
     /// is not certain could be the one activated; otherwise a match opens
     /// and anything else is confirmed. The answer names the resolved URL.
     /// </summary>
-    public static LinkDecision For(ActivatedLink link, IReadOnlyList<Link> links)
+    /// <param name="link">The activated link.</param>
+    /// <param name="links">The body's links as the daemon listed them.</param>
+    /// <param name="launched">
+    /// The address the browser would get for a link
+    /// (<c>ILauncher.LinkTarget</c>), null when the launcher refuses it.
+    /// </param>
+    public static LinkDecision For(ActivatedLink link, IReadOnlyList<Link> links, Func<string, string?> launched)
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentNullException.ThrowIfNull(links);
+        ArgumentNullException.ThrowIfNull(launched);
         if (link.Raw is { } raw && Agrees(raw, link.Resolved))
         {
-            return For(raw, links);
+            return For(raw, links, launched);
         }
         var resolved = link.Resolved;
         if (!Links.AllowedLink(resolved))
@@ -100,21 +125,26 @@ public abstract record LinkDecision
             return new Mailto(resolved);
         }
         var key = ChromiumUrl.Canonicalize(resolved) ?? resolved;
+        var target = launched(resolved);
         var matched = false;
         var anyMasked = false;
         Link? masked = null;
         foreach (var l in links)
         {
-            var isMasked = Links.IsMasked(l.Text, l.Href);
-            anyMasked |= isMasked;
+            // A listed link is masked by its own href as it would be opened
+            // with its attribute; one that matches, also by this
+            // navigation's address, which is what would be opened now.
+            var isMasked = !IsMailto(l.Href) && Misleads(l, launched(l.Href));
             if (string.Equals(ChromiumUrl.Canonicalize(l.Href), key, StringComparison.Ordinal))
             {
                 matched = true;
+                isMasked = isMasked || Links.LeadsElsewhere(l.Text, target);
                 if (isMasked && masked is null)
                 {
                     masked = l;
                 }
             }
+            anyMasked |= isMasked;
         }
         if (masked is not null)
         {
@@ -127,9 +157,17 @@ public abstract record LinkDecision
         return new Open(resolved);
     }
 
+    // Whether a listed link's text pretends to lead elsewhere: by Go's
+    // reading of its href, as GTK judges it but failing closed, or by the
+    // host of the address that would be opened for it (target, null when
+    // the launcher refuses it).
+    private static bool Misleads(Link listed, string? target) =>
+        Links.IsMasked(listed.Text, listed.Href) || Links.LeadsElsewhere(listed.Text, target);
+
     // Whether the attribute read by the viewer is the one of the navigation:
     // its canonical form is the resolved URL's, or it has none that is
-    // certain (then it is trusted, as on macOS).
+    // certain (then it is trusted, as on macOS: the attribute is what is
+    // judged and opened).
     private static bool Agrees(string raw, string resolved) =>
         ChromiumUrl.Canonicalize(raw) is not { } canonical
         || string.Equals(canonical, ChromiumUrl.Canonicalize(resolved) ?? resolved, StringComparison.Ordinal);
@@ -164,8 +202,11 @@ public abstract record LinkDecision
         /// <summary>
         /// The question's body, naming <paramref name="destination"/>: where
         /// the browser really goes (<c>ILauncher.LinkTarget</c> of
-        /// <see cref="Href"/>), beside the text the link wore; for an
-        /// unlisted link the destination alone.
+        /// <see cref="Href"/>, which carries no userinfo, so the host the
+        /// browser goes to is what follows the scheme), beside the text the
+        /// link wore; for an unlisted link the destination alone. GTK names
+        /// the href as written, where "https://bank.example@evil.example/"
+        /// reads as the bank.
         /// </summary>
         public string Body(string destination)
         {

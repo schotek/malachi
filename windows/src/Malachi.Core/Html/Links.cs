@@ -9,6 +9,12 @@
 // semantics throughout, as in Go: a combining mark after a separator must
 // not change what a prefix check sees. URLs are read by the port of Go's
 // net/url (UrlSyntax), never by System.Uri.
+//
+// Stricter than GTK (windows/README.md): IsMasked fails closed where Go's
+// parser finds no host or finds userinfo, because the browser reads such an
+// href its own way (Chromium and System.Uri accept a userinfo with a space,
+// "%", "[" or a soft hyphen that Go refuses, and go to the host after the
+// "@"); and LeadsElsewhere judges the address the launcher really opens.
 
 using System;
 using Malachi.Core.Compose;
@@ -37,7 +43,13 @@ public static class Links
     /// of a different site than the link really leads to
     /// ("https://bank.example" over a link to evil.example), which is the
     /// shape of a phishing link. Text that is not an address ("click here")
-    /// is never masked.
+    /// is never masked, nor is a <c>mailto:</c> link, which goes to the
+    /// composer. Unlike GTK, which then opens, an href whose host Go's
+    /// parser cannot tell (an error) or that has none is masked under such
+    /// a text, and so is one that carries userinfo: what Go cannot read,
+    /// the browser still reads, to the host after the last "@"
+    /// ("https:// bank.example@evil.example/"), and a host spelled in the
+    /// userinfo is itself the disguise.
     /// </summary>
     public static bool IsMasked(string text, string href)
     {
@@ -48,12 +60,43 @@ public static class Links
         {
             return false;
         }
-        if (UrlSyntax.Hostname(href.Trim()) is not { } target)
+        var trimmed = href.Trim();
+        // Lowered as AllowedLink lowers it, so that what is a mailto: link
+        // here is one for the decision too.
+        if (trimmed.ToLowerInvariant().StartsWith("mailto:", StringComparison.Ordinal))
         {
             return false;
         }
-        var real = target.ToLowerInvariant();
-        return real.Length != 0 && !SameSite(shown, real);
+        if (UrlSyntax.Parse(trimmed) is not { } parsed || parsed.Rest.HasUserinfo)
+        {
+            return true;
+        }
+        var real = (UrlSyntax.Hostname(trimmed) ?? "").ToLowerInvariant();
+        return real.Length == 0 || !SameSite(shown, real);
+    }
+
+    /// <summary>
+    /// Windows: whether a link's visible text names a site other than the
+    /// one <paramref name="target"/> leads to, where
+    /// <paramref name="target"/> is the address the launcher hands the
+    /// browser for the link (<c>ILauncher.LinkTarget</c>: escaped, the host
+    /// as DNS gets it, no userinfo), null when it refuses the link. This
+    /// judges what is opened rather than how Go reads the href, so a
+    /// parser that reads the href otherwise cannot open a link without
+    /// the question. A target that is refused or has no host leads
+    /// nowhere the text could name; text that is not an address never
+    /// leads elsewhere.
+    /// </summary>
+    public static bool LeadsElsewhere(string text, string? target)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        var shown = HostOfText(text);
+        if (shown.Length == 0)
+        {
+            return false;
+        }
+        var real = (target is null ? null : UrlSyntax.Hostname(target))?.ToLowerInvariant();
+        return string.IsNullOrEmpty(real) || !SameSite(shown, real);
     }
 
     /// <summary>

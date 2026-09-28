@@ -107,7 +107,7 @@ public sealed partial class MessageWebView : HardenedWebView
     /// A link the user activated, an http(s) or mailto target that
     /// <see cref="Links.AllowedLink"/> accepts (macOS <c>onLink</c>, GTK
     /// <c>OnLink</c>). The view itself never follows one: the reader decides
-    /// it with <see cref="LinkDecision.For(ActivatedLink, System.Collections.Generic.IReadOnlyList{Core.Api.Link})"/>
+    /// it with <see cref="LinkDecision.For(ActivatedLink, System.Collections.Generic.IReadOnlyList{Core.Api.Link}, System.Func{string, string})"/>
     /// and opens, confirms (through its alerts) or composes.
     /// </summary>
     public event EventHandler<ActivatedLink>? LinkActivated;

@@ -49,7 +49,7 @@ does about the local attackers:
 | Tracking pixels | remote `<img>`, CSS `url()`, `@import`, `@font-face`, `<link>`, `srcset`, `<video poster>` | confirms address is live, leaks IP, time, client, sometimes read-receipts of forwarded mail |
 | CSS exfiltration | attribute selectors + `url()` (`input[value^="a"] { background: url(https://x/a) }`), `@font-face` unicode-range | leak of page content character by character |
 | Content spoofing / overlay | `position: fixed/absolute` overlays, z-index tricks, hidden text, `<form>` with our styling | phishing that looks like client UI |
-| Masked links | link text ≠ href, IDN homographs, `data:` and `blob:` URLs | phishing |
+| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), `data:` and `blob:` URLs | phishing |
 | Frame / navigation | `<iframe>`, `<meta http-equiv=refresh>`, `<base href>` | loading arbitrary origins, rewriting relative links |
 | Resource exhaustion | deeply nested tags, huge documents, billion-laughs-style entity tricks, giant images | UI hang, memory exhaustion |
 | Mixed-content reference | `cid:` pointing to non-existent or foreign parts | confusion, occasional parser bugs |
@@ -211,7 +211,13 @@ fetch a page, both unseen by the filter:
   exactly the navigation's URL; the reader then opens the link, confirms
   it (a masked link with its text and real target; a link the daemon did
   not list, or one known only by the URL WebView2 normalised, with its
-  destination) or composes for `mailto:`.
+  destination) or composes for `mailto:`. Stricter than GTK, which reads
+  the href with Go's parser alone: under a text that names a host, a link
+  is masked when that parser cannot tell its host, finds none, or finds
+  userinfo, and a listed link opens without the question only when the
+  address the browser will get has its host on the text's site; that
+  address never carries userinfo, so the question names the real host
+  first ([windows-port.md §6.4](windows-port.md#64-links)).
   New windows, downloads, external schemes, frames, permissions,
   authentication, client certificates, certificate errors, screen capture
   and Save As are refused; the context menu keeps Copy and Copy Link;

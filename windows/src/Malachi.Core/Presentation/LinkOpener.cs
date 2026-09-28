@@ -10,9 +10,11 @@
 // browser for a listed link whose text does not pretend to lead
 // elsewhere, and a question first for a masked link and, as on macOS and
 // unlike GTK (docs/windows-port.md §6.4, windows/README.md), for a link the
-// daemon did not list. The question names where the browser really goes
-// (ILauncher.LinkTarget: escaped, the host as DNS gets it), and that is
-// what is opened. The links are server data; nothing here logs them.
+// daemon did not list. The address the browser would get
+// (ILauncher.LinkTarget: escaped, the host as DNS gets it, no userinfo) is
+// what the decision judges a listed link's text against, what the
+// question names, and what is opened. The links are server data; nothing
+// here logs them.
 
 using System;
 using System.Collections.Generic;
@@ -68,12 +70,14 @@ public sealed partial class LinkOpener
     {
         ArgumentNullException.ThrowIfNull(link);
         ArgumentNullException.ThrowIfNull(links);
-        switch (LinkDecision.For(link, links))
+        switch (LinkDecision.For(link, links, launcher.LinkTarget))
         {
             case LinkDecision.Mailto m:
                 OpenMailto(m.Href);
                 return;
             case LinkDecision.Open o:
+                // The decision judged launcher.LinkTarget of this href, which
+                // is what the launcher hands the browser.
                 await LaunchAsync(o.Href, window);
                 return;
             case LinkDecision.Confirm c:

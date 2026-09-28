@@ -38,8 +38,9 @@ public interface ILauncher
 
     /// <summary>
     /// The address <see cref="OpenLinkAsync"/> would hand the browser for
-    /// <paramref name="url"/> (escaped, the host as DNS gets it), or null
-    /// when it refuses <paramref name="url"/>: what a confirmation of the
+    /// <paramref name="url"/> (escaped, the host as DNS gets it, without
+    /// userinfo), or null when it refuses <paramref name="url"/>: what the
+    /// reader judges a link's text against and what a confirmation of the
     /// link shows, so the user judges exactly the address that is opened.
     /// </summary>
     string? LinkTarget(string? url);

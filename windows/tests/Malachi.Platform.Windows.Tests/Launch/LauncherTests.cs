@@ -5,9 +5,10 @@
 // port of ui/internal/signin/signin_test.go (TestBrowserURL) and
 // macos/Tests/MalachiCoreTests/SignInTests.swift (the isBrowserURL cases),
 // and the link rule of macos/Tests/MalachiCoreTests/HTMLLinksTests.swift
-// (allowedLinks) without mailto:. Nothing here reaches the shell: the
-// launcher runs over a stand-in that records what it would have launched,
-// so no browser and no application opens.
+// (allowedLinks) without mailto:; the reader's LinkOpener runs over it
+// with the security audit's masked-link bypasses. Nothing here reaches the
+// shell: the launcher runs over a stand-in that records what it would have
+// launched, so no browser and no application opens.
 
 using System;
 using System.Collections.Generic;
@@ -16,6 +17,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
+using Malachi.Core.Model;
+using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Attachments;
 using Malachi.Platform.Windows.Launch;
 using Malachi.Platform.Windows.Tests.Files;
@@ -152,15 +156,35 @@ public sealed class LauncherTests
     [InlineData("https://example.com/\u202Egnp.exe", "https://example.com/%E2%80%AEgnp.exe")]
     [InlineData("HTTPS://EXAMPLE.com:443/Path", "https://example.com/Path")]
     [InlineData("https://[::1]:8443/x?y#z", "https://[::1]:8443/x?y#z")]
-    [InlineData("https://user@example.com/", "https://user@example.com/")]
-    [InlineData("https://paypal.com@evil.example/", "https://paypal.com@evil.example/")]
     [InlineData("https://x/", "https://x/")]
+    // Userinfo never reaches the browser: the host after the "@" is where
+    // it goes, and the address shown in a question starts with it.
+    [InlineData("https://user@example.com/", "https://example.com/")]
+    [InlineData("https://paypal.com@evil.example/", "https://evil.example/")]
+    [InlineData("https://user:pw@EVIL.example:8443/x?y#z", "https://evil.example:8443/x?y#z")]
+    [InlineData("https://@example.com/a", "https://example.com/a")]
+    [InlineData("https://:@example.com/a", "https://example.com/a")]
+    [InlineData("https://www.mojebanka.example:443@evil.example/", "https://evil.example/")]
+    // The security audit's userinfo that Go's parser refuses (F3 §1).
+    [InlineData("https:// www.mojebanka.example@evil.example/space", "https://evil.example/space")]
+    [InlineData("https://%www.mojebanka.example@evil.example/pct", "https://evil.example/pct")]
+    [InlineData("https://[www.mojebanka.example@evil.example/bracket", "https://evil.example/bracket")]
+    [InlineData("https://­www.mojebanka.example@evil.example/shy", "https://evil.example/shy")]
+    [InlineData("https://。www.mojebanka.example@evil.example/ideo", "https://evil.example/ideo")]
+    [InlineData("https://www.mojebanka.example^@evil.example/caret", "https://evil.example/caret")]
+    [InlineData("https://www.mojebanka.example|@evil.example/pipe", "https://evil.example/pipe")]
+    [InlineData("https://www.mojebanka.example{x}@evil.example/brace", "https://evil.example/brace")]
+    [InlineData("https://www.mojebanka.example\"@evil.example/quote", "https://evil.example/quote")]
+    [InlineData("https://www.mojebanka.example@evil.example/plainuserinfo", "https://evil.example/plainuserinfo")]
     // Refused.
     [InlineData("mailto:a@b", null)]
     [InlineData("javascript:alert(1)", null)]
     [InlineData("https:x", null)]
     [InlineData("", null)]
     [InlineData(null, null)]
+    [InlineData("https://www.mojebanka.example\\@evil.example/bs2", null)]
+    [InlineData("https:///evil.example/triple", null)]
+    [InlineData("https://a@b@evil.example/x", null)]
     public async Task LinkTargetIsWhatTheBrowserGets(string? url, string? want)
     {
         var shell = new StandInShell();
@@ -193,6 +217,65 @@ public sealed class LauncherTests
         var target = Launcher.WebLinkTarget(url);
 
         Assert.True(target is null || target.All(c => c > ' ' && c < '\x7F' && c != '"'), target);
+    }
+
+    /// <summary>
+    /// The security audit's bypass of the masked-link question (F3 §1), each
+    /// href under a text that names the bank, with what the question names
+    /// and a yes opens (null: the launcher refuses it and nothing is
+    /// offered).
+    /// </summary>
+    public static readonly TheoryData<string, string?> MaskedLinkBypasses = new()
+    {
+        { "https:// www.mojebanka.example@evil.example/space", "https://evil.example/space" },
+        { "https://%www.mojebanka.example@evil.example/pct", "https://evil.example/pct" },
+        { "https://[www.mojebanka.example@evil.example/bracket", "https://evil.example/bracket" },
+        { "https://­www.mojebanka.example@evil.example/shy", "https://evil.example/shy" },
+        { "https://。www.mojebanka.example@evil.example/ideo", "https://evil.example/ideo" },
+        { "https://www.mojebanka.example^@evil.example/caret", "https://evil.example/caret" },
+        { "https://www.mojebanka.example|@evil.example/pipe", "https://evil.example/pipe" },
+        { "https://www.mojebanka.example{x}@evil.example/brace", "https://evil.example/brace" },
+        { "https://www.mojebanka.example\"@evil.example/quote", "https://evil.example/quote" },
+        { "https://www.mojebanka.example\\@evil.example/bs2", null },
+        { "https://www.mojebanka.example@evil.example/plainuserinfo", "https://evil.example/plainuserinfo" },
+        { "https:///evil.example/triple", null },
+    };
+
+    // The reader's LinkOpener over this launcher, as the app wires them:
+    // every shape is asked about, the question names the address the shell
+    // then gets, and the shell never gets one without a yes.
+    [Theory]
+    [MemberData(nameof(MaskedLinkBypasses))]
+    public async Task MaskedLinksAreAskedAboutWithTheAddressTheShellGets(string href, string? destination)
+    {
+        const string Text = "https://www.mojebanka.example/login";
+        var shell = new StandInShell();
+        var asked = new List<(string Text, string Destination)>();
+        var answer = false;
+        var opener = new LinkOpener(shell.Launcher)
+        {
+            Confirm = (_, c, d) =>
+            {
+                asked.Add((c.Text, d));
+                return Task.FromResult(answer);
+            },
+            Toast = (_, t) => Assert.Fail("toast: " + t),
+        };
+        Link[] links = [new() { Text = Text, Href = href }];
+
+        await opener.OpenAsync(new ActivatedLink(href, href), links, null);
+        Assert.Empty(shell.Launches);
+        answer = true;
+        await opener.OpenAsync(new ActivatedLink(href, href), links, null);
+
+        if (destination is null)
+        {
+            Assert.Empty(asked);
+            Assert.Empty(shell.Launches);
+            return;
+        }
+        Assert.Equal([(Text, destination), (Text, destination)], asked);
+        Assert.Equal(destination, Assert.Single(shell.Launches).Target);
     }
 
     [Fact]

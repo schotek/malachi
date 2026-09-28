@@ -34,11 +34,84 @@ public sealed class HtmlLinksTests
     // Port, userinfo, upper case and a malformed target.
     [InlineData("https://bank.example.org", "https://user:pw@EVIL.example.net:8443/x?y#z", true)]
     [InlineData("https://bank.example.org:8443", "https://bank.example.org/", false)]
-    [InlineData("bank.example.org", "https://evil.example.net/%zz", false)]
+    // Windows: true, where GTK and macOS say false (see HostNotCertain).
+    [InlineData("bank.example.org", "https://evil.example.net/%zz", true)]
     [InlineData("bank.example.org", "https://[::1]/", true)]
     public void Masked(string text, string href, bool want)
     {
         Assert.Equal(want, Links.IsMasked(text, href));
+    }
+
+    // Windows: IsMasked fails closed where GTK's Masked opens
+    // (windows/README.md). Under a text that names a host, an href whose
+    // host Go's parser cannot tell (it refuses the userinfo, the escape, the
+    // backslash), whose host is empty, or that carries userinfo at all is
+    // masked: the browser reads such an href its own way and goes to the
+    // host after the "@" (the security audit's bypass, whose hrefs these
+    // are). Text that names no host still never is.
+    [Theory]
+    [InlineData("https:// www.mojebanka.example@evil.example/space")]
+    [InlineData("https://%www.mojebanka.example@evil.example/pct")]
+    [InlineData("https://[www.mojebanka.example@evil.example/bracket")]
+    [InlineData("https://­www.mojebanka.example@evil.example/shy")]
+    [InlineData("https://。www.mojebanka.example@evil.example/ideo")]
+    [InlineData("https://www.mojebanka.example^@evil.example/caret")]
+    [InlineData("https://www.mojebanka.example|@evil.example/pipe")]
+    [InlineData("https://www.mojebanka.example{x}@evil.example/brace")]
+    [InlineData("https://www.mojebanka.example\"@evil.example/quote")]
+    [InlineData("https://www.mojebanka.example\\@evil.example/bs2")]
+    [InlineData("https://www.mojebanka.example@evil.example/plainuserinfo")]
+    [InlineData("https:///evil.example/triple")]
+    // Userinfo over the very host the text names, or empty.
+    [InlineData("https://www.mojebanka.example@www.mojebanka.example/login")]
+    [InlineData("https://@www.mojebanka.example/login")]
+    [InlineData("https://user:pw@www.mojebanka.example/login")]
+    // No host, or none Go can tell.
+    [InlineData("https:")]
+    [InlineData("https:www.mojebanka.example")]
+    [InlineData("https://www.mojebanka.example/%zz")]
+    [InlineData("/login")]
+    public void HostNotCertain(string href)
+    {
+        Assert.True(Links.IsMasked("https://www.mojebanka.example/login", href));
+        Assert.True(Links.IsMasked("www.mojebanka.example", href));
+        Assert.False(Links.IsMasked("click here", href));
+        Assert.False(Links.IsMasked("", href));
+    }
+
+    // A mailto: link goes to the composer, which shows its address, never to
+    // the browser: it has no host to judge, however it is written.
+    [Theory]
+    [InlineData("mailto:a@example.net")]
+    [InlineData("MAILTO:a@example.net")]
+    [InlineData("mailto:%zz")]
+    [InlineData(" mailto:a@www.mojebanka.example@evil.example ")]
+    public void MailtoIsNeverMasked(string href)
+    {
+        Assert.False(Links.IsMasked("https://www.mojebanka.example/login", href));
+    }
+
+    // Windows: the address the launcher would open (ILauncher.LinkTarget:
+    // escaped, the host as DNS gets it, no userinfo) against the text; an
+    // address it refuses (null) or cannot be read leads nowhere the text
+    // could name. Text that names no host never leads elsewhere.
+    [Theory]
+    [InlineData("https://www.mojebanka.example/login", "https://www.mojebanka.example/login", false)]
+    [InlineData("https://www.mojebanka.example/login", "https://mojebanka.example/", false)]
+    [InlineData("https://www.mojebanka.example/login", "https://ib.mojebanka.example:8443/x?y#z", false)]
+    [InlineData("mojebanka.example", "http://www.mojebanka.example/", false)]
+    [InlineData("https://www.mojebanka.example/login", "https://evil.example/space", true)]
+    [InlineData("https://www.mojebanka.example/login", "https://mojebanka.example.evil.example/", true)]
+    [InlineData("https://www.mojebanka.example/login", "https://xn--mojebank-8za.example/", true)]
+    [InlineData("https://www.mojebanka.example/login", "https://[::1]/", true)]
+    [InlineData("https://www.mojebanka.example/login", "https:///x", true)]
+    [InlineData("https://www.mojebanka.example/login", "https://%zz/", true)]
+    [InlineData("https://www.mojebanka.example/login", null, true)]
+    [InlineData("click here", "https://evil.example/", false)]
+    [InlineData("click here", null, false)]
+    public void LeadsElsewhere(string text, string? target, bool want)
+    {
+        Assert.Equal(want, Links.LeadsElsewhere(text, target));
     }
 
     [Fact]
@@ -129,23 +202,29 @@ public sealed class HtmlLinksTests
     }
 
     // Windows: the hosts net/url reads and System.Uri would not (or would
-    // read otherwise); IsMasked must agree with the GTK UI.
+    // read otherwise). Where Go reads a host, IsMasked agrees with the GTK
+    // UI; where url.Parse fails, GTK says false and Windows fails closed
+    // (HostNotCertain). An IPv6 host is never the site of a text, so the
+    // zone cases are masked whether Go reads them or not
+    // (SignInTests.BrowserUrlZones checks those rules).
     [Theory]
-    [InlineData("bank.example.org", "https://evil.example.net\\@bank.example.org/", false)] // url.Parse: a backslash is no separator, and no userinfo either
-    [InlineData("bank.example.org", "https://bank.example.org@evil.example.net/", true)] // userinfo before the last @
-    [InlineData("bank.example.org", "https://evil.example.net:80:80/", true)] // only the last port is split off
-    [InlineData("bank.example.org", "https://%65vil.example.net/", false)] // host escapes are only for bytes beyond ASCII
+    [InlineData("bank.example.org", "https://evil.example.net\\@bank.example.org/", true)] // url.Parse: a backslash is no separator, and no userinfo either
+    [InlineData("evil.example.net", "https://bank.example.org@evil.example.net/", true)] // userinfo before the last @ (masked whatever the host)
+    [InlineData("evil.example.net", "https://evil.example.net:80:80/", true)] // only the last port is split off: the host is evil.example.net:80
+    [InlineData("evil.example.net", "https://%65vil.example.net/", true)] // host escapes are only for bytes beyond ASCII
     [InlineData("bank.example.org", "https://ex%C3%A4mple.net/", true)] // a non-ASCII escape decodes
-    [InlineData("bank.example.org", "  https://evil.example.net/  ", true)] // the href is trimmed
-    [InlineData("bank.example.org", "//evil.example.net/", true)] // a network-path reference has a host
-    [InlineData("bank.example.org", "https://evil.example.net/\x0001", false)] // a control byte fails the parse
+    [InlineData("evil.example.net", "  https://evil.example.net/  ", false)] // the href is trimmed
+    [InlineData("bank.example.org", "  https://evil.example.net/  ", true)]
+    [InlineData("evil.example.net", "//evil.example.net/", false)] // a network-path reference has a host
+    [InlineData("bank.example.org", "//evil.example.net/", true)]
+    [InlineData("evil.example.net", "https://evil.example.net/\x0001", true)] // a control byte fails the parse
     [InlineData("bank.example.org", "https://[fe80::1%25%41]/", true)] // a zone may escape a byte a host could carry
     [InlineData("bank.example.org", "https://[fe80::1%25%20x]/", true)] // or a space
     [InlineData("bank.example.org", "https://[fe80::1%25en%30]/", true)]
-    [InlineData("bank.example.org", "https://[fe80::1%25%C3%A4]/", false)] // but no byte beyond ASCII
-    [InlineData("bank.example.org", "https://[fe80::1%25%2F]/", false)] // nor one a host may not carry
-    [InlineData("bank.example.org", "https://[fe80::%41%25x]/", false)] // before the zone, the host's rules
-    [InlineData("bank.example.org", "https://[fe80::1%25en0]:%38/", false)] // and after it
+    [InlineData("bank.example.org", "https://[fe80::1%25%C3%A4]/", true)] // but no byte beyond ASCII
+    [InlineData("bank.example.org", "https://[fe80::1%25%2F]/", true)] // nor one a host may not carry
+    [InlineData("bank.example.org", "https://[fe80::%41%25x]/", true)] // before the zone, the host's rules
+    [InlineData("bank.example.org", "https://[fe80::1%25en0]:%38/", true)] // and after it
     public void GoHostRules(string text, string href, bool want)
     {
         Assert.Equal(want, Links.IsMasked(text, href));

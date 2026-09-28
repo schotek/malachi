@@ -83,6 +83,97 @@ public sealed class LinkOpenerTests
         Assert.Equal("https://elsewhere.example/x", asked[0].Destination);
     }
 
+    // A listed link whose text names the site it opens opens at once: the
+    // host of the address the browser gets is the text's (www. aside).
+    [Fact]
+    public async Task ALinkThatLeadsWhereItsTextSaysOpensAtOnce()
+    {
+        Link[] links = [new() { Text = "https://www.example.org/", Href = "https://example.org/x?y=1" }];
+        await Make().OpenAsync(new ActivatedLink("https://example.org/x?y=1", "https://example.org/x?y=1"), links, "w");
+        Assert.Equal(["https://example.org/x?y=1"], launcher.Links);
+        Assert.Empty(asked);
+    }
+
+    /// <summary>The text the security audit's links wear.</summary>
+    private const string Bank = "https://www.mojebanka.example/login";
+
+    /// <summary>
+    /// The security audit's bypass (F3 §1): an href whose userinfo Go's
+    /// parser refuses (a space, "%", "[", a soft hyphen, "。", "^", "|", "{",
+    /// a quote, a backslash before the "@"), one it accepts, and an empty
+    /// authority, each under a text that names the bank; beside it what the
+    /// question names and a yes opens: the host after the "@", without the
+    /// userinfo, or nothing where the launcher refuses the href.
+    /// </summary>
+    public static readonly TheoryData<string, string?> Bypasses = new()
+    {
+        { "https:// www.mojebanka.example@evil.example/space", "https://evil.example/space" },
+        { "https://%www.mojebanka.example@evil.example/pct", "https://evil.example/pct" },
+        { "https://[www.mojebanka.example@evil.example/bracket", "https://evil.example/bracket" },
+        { "https://­www.mojebanka.example@evil.example/shy", "https://evil.example/shy" },
+        { "https://。www.mojebanka.example@evil.example/ideo", "https://evil.example/ideo" },
+        { "https://www.mojebanka.example^@evil.example/caret", "https://evil.example/caret" },
+        { "https://www.mojebanka.example|@evil.example/pipe", "https://evil.example/pipe" },
+        { "https://www.mojebanka.example{x}@evil.example/brace", "https://evil.example/brace" },
+        { "https://www.mojebanka.example\"@evil.example/quote", "https://evil.example/quote" },
+        { "https://www.mojebanka.example\\@evil.example/bs2", null },
+        { "https://www.mojebanka.example@evil.example/plainuserinfo", "https://evil.example/plainuserinfo" },
+        { "https:///evil.example/triple", null },
+        // Userinfo over the bank itself is asked about all the same.
+        { "https://www.mojebanka.example@www.mojebanka.example/login", "https://www.mojebanka.example/login" },
+    };
+
+    [Theory]
+    [MemberData(nameof(Bypasses))]
+    public async Task AnHrefWithUserinfoOrWithoutACertainHostIsAskedAbout(string href, string? destination)
+    {
+        Link[] links = [new() { Text = Bank, Href = href }];
+        var link = new ActivatedLink(href, href);
+        var opener = Make();
+        await opener.OpenAsync(link, links, "w");
+        Assert.Empty(launcher.Links);
+
+        answer = true;
+        await opener.OpenAsync(link, links, "w");
+        Assert.Empty(toasts);
+        if (destination is null)
+        {
+            // Not offered: nothing to ask about, nothing opened.
+            Assert.Empty(asked);
+            Assert.Empty(launcher.Links);
+            return;
+        }
+        Assert.Equal([("w", Bank, destination), ("w", Bank, destination)], asked);
+        Assert.Equal([destination], launcher.Links);
+    }
+
+    // Without the attribute, the URL WebView2 made of the link: it carries
+    // the userinfo too, so it matches no listed href (no certain canonical
+    // form) and is asked about with the destination alone, which is the
+    // host after the "@".
+    [Fact]
+    public async Task WithoutTheAttributeTheQuestionNamesTheHostAfterTheAt()
+    {
+        Link[] links = [new() { Text = Bank, Href = "https:// www.mojebanka.example@evil.example/space" }];
+        answer = true;
+        await Make().OpenAsync(new ActivatedLink(null, "https://%20www.mojebanka.example@evil.example/space"), links, "w");
+        Assert.Equal([("w", "", "https://evil.example/space")], asked);
+        Assert.Equal(["https://evil.example/space"], launcher.Links);
+    }
+
+    // The empty authority as Chromium resolves it: its canonical form is the
+    // listed href's, which Go reads without a host, so it is asked about
+    // with the text it wore.
+    [Fact]
+    public async Task AnEmptyAuthorityResolvedByTheViewIsAskedAbout()
+    {
+        const string Text = "https://www.mojebanka.example/triple";
+        Link[] links = [new() { Text = Text, Href = "https:///evil.example/triple" }];
+        await Make().OpenAsync(new ActivatedLink(null, "https://evil.example/triple"), links, "w");
+        Assert.Equal([("w", Text, "https://evil.example/triple")], asked);
+        Assert.Empty(launcher.Links);
+    }
+
     [Fact]
     public async Task MailtoComposesAndOtherSchemesDoNothing()
     {

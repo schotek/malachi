@@ -653,6 +653,31 @@ href whose canonical form is not certain could be the one clicked. The research
 found that the GTK check is likely bypassable with a non-canonical href;
 that is a separate GTK/backend task (§14), not part of this port.
 
+The security audit of the finished client found that bypass, with shapes
+of its own: an href that spells the bank in a userinfo Go's `net/url`
+refuses (a space, `%`, `[`, `^`, `|`, `{`, `"`, a soft hyphen, `。`:
+`https:// www.bank.example@evil.example/`) or leaves the authority empty
+(`https:///evil.example/`) has no host for GTK's `Masked`, which then
+opens without a question, while Chromium and `System.Uri` read it and go
+to the host after the `@`. The Windows check is therefore stricter than
+GTK's (a row of the deviation table): under a text that names a host,
+`Links.IsMasked` **fails closed** where Go cannot tell the href's host,
+finds none, or finds userinfo at all; and a listed link opens without the
+question only when the address the launcher hands the browser
+(`ILauncher.LinkTarget`) has a host on the site the text names
+(`Links.LeadsElsewhere`), so the decision judges what is opened, not how
+one parser reads the href (`LinkDecision.For` takes the launcher's
+function). That address never carries userinfo (`Launcher.WebLinkTarget`
+drops it: a mail link never needs credentials, and the browser would hide
+them anyway), so *The link is shown as “%s” but leads to %s.* names the
+host the browser goes to first, where GTK names the href as written. A
+link the launcher refuses (the backslash and empty-authority shapes) is
+decided as masked and then not offered, as there is nothing it could
+open. `LinkDecisionTests`, `LinkOpenerTests` and, over the real launcher,
+`LauncherTests` hold the audit's shapes. GTK (`htmlview.Masked`) and
+macOS (`Links.swift`) keep the bypass until they get the same rule or the
+backend's canonical hrefs.
+
 ### 6.5 Editor (`ComposeWebView`)
 
 `IsScriptEnabled=true` (required: with script off no listener fires),
@@ -1281,9 +1306,10 @@ anything else uses `ShellExecuteEx` (through `Process.Start` on an STA
 thread, zone checks on, the shell's dialogs owned by the window) and *Open
 With…* `SHOpenWithDialog` (this once, never the default); only files on a
 local drive, never a share (nor a drive mapped to one), a link or a
-stream. A link of a message goes to the browser escaped and with its host
-as DNS gets it (`ILauncher.LinkTarget`), which is what its confirmation
-shows. No exception of these services names the path of a file written
+stream. A link of a message goes to the browser escaped, with its host
+as DNS gets it and without userinfo (`ILauncher.LinkTarget`), which is
+what the reader judges its text against and what its confirmation shows
+(§6.4). No exception of these services names the path of a file written
 out of a message, which carries the attachment's name. `attachment.import` is only
 ever given local paths the user picked. The code: `Malachi.Core.Platform`
 (`DangerousTypes`, `WindowsFileNames`, `OpenDir`, the interfaces) and

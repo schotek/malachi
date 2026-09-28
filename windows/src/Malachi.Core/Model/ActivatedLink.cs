@@ -19,7 +19,7 @@ namespace Malachi.Core.Model;
 /// and host lower-cased, an internationalised host in punycode, a trailing
 /// slash added, characters escaped), so the two rarely compare equal.
 /// <see cref="Raw"/> is null when the attribute could not be read, and only
-/// the resolved URL is known; <see cref="LinkDecision.For(ActivatedLink, System.Collections.Generic.IReadOnlyList{Api.Link})"/>
+/// the resolved URL is known; <see cref="LinkDecision.For(ActivatedLink, System.Collections.Generic.IReadOnlyList{Api.Link}, System.Func{string, string})"/>
 /// then compares canonical forms.
 /// </summary>
 /// <param name="Raw">The attribute as written, when it could be read.</param>
