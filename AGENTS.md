@@ -430,7 +430,7 @@ spojením jen pro čtení (IMAP EXAMINE + `BODY.PEEK[]`, Graph `$value`; 1305
 hodinový úklid souborů, kroky `codec` (převod oběma směry) a `attachments`
 (ořez stárnoucí pošty bez sítě) s kurzory v `meta` `raw.step.*`; uvolnění
 nastavení nic zpětně nestahuje; `system.storage` hlásí obsazené místo a
-stav převodu. Obě UI: Předvolby → Obecné → Pošta (*Keep Attachments
+stav převodu. Všechna tři UI: Předvolby → Obecné → Pošta (*Keep Attachments
 Offline For*, *Compress Stored Mail*, *Disk Space Used*), čip vzdálené
 přílohy stáhne zprávu před otevřením, uložením i přeposláním; MCP
 `get_attachment` a přeposlání v `create_draft` stahují z vlastního serveru
@@ -446,9 +446,13 @@ stažené), příjem staguje v paměti (`store.StageMemory`) a
 (`core/memcache.go`: LRU 256 MiB, 30 min nečinnosti, zahozená při
 ukončení, vypnutí režimu a pozastavení či odebrání účtu), ze které
 `message.part`/`message.embedded`/`draft.create`/`draft.open` obslouží
-vzdálené části, takže stažená zpráva na disk nejde; obě UI mají
+vzdálené části, takže stažená zpráva na disk nejde; všechna tři UI mají
 přepínač *Never Store Attachments* a adresář pro otevření a náhled mažou
-při každém startu i ukončení.
+při každém startu i ukončení. Na Windows nový úložný kód přejmenování
+přes otevřený soubor a mazání otevřeného souboru řeší přenositelně:
+zavřít před náhradou či smazáním, `fsretry` pod zámkem jmen zprávy
+a soubor držený čtenářem déle je `store.ErrBusy` (převod a ořez se k němu
+vrátí), žádný platformní kód (`docs/windows-port.md` §14).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
