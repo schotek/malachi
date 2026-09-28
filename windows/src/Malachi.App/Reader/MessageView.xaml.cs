@@ -167,9 +167,12 @@ public sealed partial class MessageView : UserControl
 
     // The command row: the window's commands (window.blp's action-name and
     // the msg.* group of message_window.go), none for an attached message.
+    // In the main window's pane the row is the main window's own
+    // MessageCommandBar, level with the other panes' header rows as
+    // window.blp's message header bar is, so the view shows none there.
     private void WireCommands()
     {
-        if (commands is null)
+        if (commands is null || Reader.Mode == ReaderMode.Pane)
         {
             CommandRow.Visibility = Visibility.Collapsed;
             return;
