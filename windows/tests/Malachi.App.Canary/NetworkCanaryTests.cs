@@ -353,6 +353,23 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.DoesNotContain(loading, e => e.Kind == HostEvent.Kinds.Unavailable);
     }
 
+    // A document whose navigation fails with no process report to explain
+    // it (here a stopped load) raises Unavailable about a second later, as
+    // a view that could not be initialised: the reader shows the plain text
+    // rather than a blank pane. Nothing is loaded again.
+    [Fact]
+    public void ADocumentThatDidNotLoadMakesTheViewUnavailable()
+    {
+        var results = RecoveryResults();
+        var stopped = results.Events.Where(e => e.Phase == "viewer-loadstop").ToList();
+        Assert.Contains(stopped, e => e.View == "viewer" && e.Kind == HostEvent.Kinds.Completed
+            && e.Detail!.StartsWith("False", StringComparison.Ordinal));
+        Assert.Contains(stopped, e => e.Kind == HostEvent.Kinds.Log && e.Detail!.Contains("did not load", StringComparison.Ordinal));
+        Assert.Single(stopped, e => e.View == "viewer" && e.Kind == HostEvent.Kinds.Unavailable);
+        Assert.DoesNotContain(stopped, e => e.Kind == HostEvent.Kinds.ProcessFailed);
+        Assert.Single(stopped, e => IsOwnDocument(e, "viewer"));
+    }
+
     // A hung renderer is acted on once Chromium reported it and it has not
     // answered the view's script within RendererRecovery.AnswerTimeout: a
     // new control shows the document again, and the view goes on.

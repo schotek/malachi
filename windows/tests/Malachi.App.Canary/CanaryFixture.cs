@@ -243,10 +243,15 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("viewer", "load", "viewer-crash", "<p>crash</p>", 300);
         CrashTwice("viewer");
         Add("viewer", "load", "viewer-after", "<p>after</p>", 300);
-        // A body large enough to be still loading when its renderer dies.
-        Add("viewer", "loadcrash", "viewer-loadcrash", "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>");
+        // A body large enough to be still loading when its renderer dies, or
+        // when its load is stopped (a failed navigation, no process report).
+        var large = "<p>" + string.Concat(Enumerable.Repeat("lorem ipsum dolor sit amet ", 100_000)) + "</p>";
+        Add("viewer", "loadcrash", "viewer-loadcrash", large);
         Add("viewer", "await", "viewer-loadcrash", Loaded, Expect, HostEvent.Kinds.Completed);
         Add("viewer", "wait", "viewer-loadcrash", ms: Settle);
+        Add("viewer", "loadstop", "viewer-loadstop", large + "<p>stopped</p>");
+        Add("viewer", "await", "viewer-loadstop", null, Expect, HostEvent.Kinds.Unavailable);
+        Add("viewer", "wait", "viewer-loadstop", ms: Settle);
 
         Add("editor", "load", "editor-crash", "<p>text</p>", 300);
         CrashTwice("editor");

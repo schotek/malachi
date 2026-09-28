@@ -1380,7 +1380,9 @@ editor once they exist.
   viewer's once (a host script that never ends): each document is shown
   again exactly once, the second crash raises `Unavailable` with no
   further load (the editor's `Crashed` once), and the hung renderer gets a
-  new control once its report went 5 s unanswered (§6.1). The three runs
+  new control once its report went 5 s unanswered (§6.1); a load stopped
+  half-way (a failed navigation with no process to blame) raises
+  `Unavailable` a second later. The three runs
   go side by side in about 50 s; without a desktop session or the WebView2
   runtime the tests are skipped with that reason; `MALACHI_CANARY_KEEP=1`
   keeps the runs' files, and each run's `results.json.progress` shows how

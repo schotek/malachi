@@ -339,7 +339,11 @@ internal sealed class CanaryRunner
                 }
                 break;
             case "loadcrash":
-                await LoadAndCrashAsync(step, core!);
+                await LoadAndThenAsync(step, core!, () => Crash(core!));
+                break;
+            case "loadstop":
+                // A document whose navigation fails with no process to blame.
+                await LoadAndThenAsync(step, core!, core!.Stop);
                 break;
             default:
                 throw new InvalidOperationException("unknown step " + step.Op);
@@ -374,11 +378,11 @@ internal sealed class CanaryRunner
         }
     }
 
-    // A load, and the renderer's crash as soon as the document committed,
-    // while it still loads (a large one parses for about a second). A crash
-    // sent at a fixed time after the load could reach no renderer at all,
-    // the navigation between two.
-    private async Task LoadAndCrashAsync(HostStep step, CoreWebView2 core)
+    // A load, and then an action (the renderer's crash, a stop) as soon as
+    // the document committed, while it still loads (a large one parses for
+    // about a second). An action at a fixed time after the load could hit
+    // no renderer at all, the navigation between two.
+    private async Task LoadAndThenAsync(HostStep step, CoreWebView2 core, Action then)
     {
         var committed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         void OnSource(CoreWebView2 sender, CoreWebView2SourceChangedEventArgs args) => committed.TrySetResult();
@@ -395,7 +399,7 @@ internal sealed class CanaryRunner
         {
             core.SourceChanged -= OnSource;
         }
-        Crash(core);
+        then();
     }
 
     // The DevTools protocol's Page.crash ends the page's renderer at once

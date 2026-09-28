@@ -20,6 +20,8 @@ public sealed record HostStep
     /// <see cref="X"/>/<see cref="Y"/>, <c>crash</c> (the page's renderer,
     /// through the DevTools protocol), <c>loadcrash</c> (a load, and the
     /// crash once the document committed, while it still loads),
+    /// <c>loadstop</c> (the same with a stop, which fails the document's
+    /// navigation),
     /// <c>hang</c> (a host script that never ends, and pointer input it
     /// leaves unanswered), <c>await</c> (until the view records an event of
     /// the kind <see cref="Target"/> whose detail contains <see cref="Html"/>,
