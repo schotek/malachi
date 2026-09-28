@@ -67,10 +67,10 @@ public sealed partial class ServersPage : UserControl
 
     private void ShowProblems(ServerProblems p)
     {
-        WizardRows.SetError(imap.HostRow, p.ImapHost);
-        WizardRows.SetError(imap.UserRow, p.ImapUser);
-        WizardRows.SetError(smtp.HostRow, p.SmtpHost);
-        WizardRows.SetError(smtp.UserRow, p.SmtpUser);
+        WizardRows.SetError(this, imap.HostRow, p.ImapHost);
+        WizardRows.SetError(this, imap.UserRow, p.ImapUser);
+        WizardRows.SetError(this, smtp.HostRow, p.SmtpHost);
+        WizardRows.SetError(this, smtp.UserRow, p.SmtpUser);
     }
 
     // wizard.go setBusy: the page and its button wait for the call.
@@ -101,11 +101,11 @@ public sealed partial class ServersPage : UserControl
         {
             if (ReferenceEquals(sender, rows.Host))
             {
-                WizardRows.SetError(rows.HostRow, false);
+                WizardRows.SetError(this, rows.HostRow, false);
             }
             else if (ReferenceEquals(sender, rows.User))
             {
-                WizardRows.SetError(rows.UserRow, false);
+                WizardRows.SetError(this, rows.UserRow, false);
             }
         }
         Sync();

@@ -10,7 +10,8 @@ title, "This can take a moment.") and results (testing_results: the
 outcome's icon, title and description over result_rows, clamped to 480
 px: Incoming (IMAP) and Outgoing (SMTP), each with its status icon, its
 text and Trust Certificate… when the certificate may be trusted, and
-Microsoft 365 for a Graph account); at the bottom (testing_buttons,
+Microsoft 365 for a Graph account; each named by its title and described
+by its result for Narrator); at the bottom (testing_buttons,
 right-aligned, 12 px margins, 8 px apart) Edit Servers or Sign In Again,
 Retry, Add Anyway or Save Anyway, and Add Account or Save (the suggested
 action), each shown as the outcome allows.
@@ -51,6 +52,7 @@ action), each shown as the outcome allows.
                     <tk:SettingsCard
                         x:Name="ImapResultRow"
                         AutomationProperties.AutomationId="ImapResult"
+                        AutomationProperties.Name="{l:T Msgid='Incoming (IMAP)'}"
                         Header="{l:T Msgid='Incoming (IMAP)'}">
                         <tk:SettingsCard.HeaderIcon>
                             <FontIcon x:Name="ImapResultIcon" />
@@ -69,6 +71,7 @@ action), each shown as the outcome allows.
                     <tk:SettingsCard
                         x:Name="SmtpResultRow"
                         AutomationProperties.AutomationId="SmtpResult"
+                        AutomationProperties.Name="{l:T Msgid='Outgoing (SMTP)'}"
                         Header="{l:T Msgid='Outgoing (SMTP)'}">
                         <tk:SettingsCard.HeaderIcon>
                             <FontIcon x:Name="SmtpResultIcon" />
@@ -86,6 +89,7 @@ action), each shown as the outcome allows.
                     <tk:SettingsCard
                         x:Name="GraphResultRow"
                         AutomationProperties.AutomationId="GraphResult"
+                        AutomationProperties.Name="{l:T Msgid='Microsoft 365'}"
                         Header="{l:T Msgid='Microsoft 365'}"
                         Visibility="Collapsed">
                         <tk:SettingsCard.HeaderIcon>

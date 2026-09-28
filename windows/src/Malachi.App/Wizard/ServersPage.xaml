@@ -12,6 +12,8 @@ Name, and Pinned Certificate with its fingerprint (selectable) and Forget,
 shown only while a certificate is pinned; at the bottom, right-aligned
 with 12 px margins, Test Connection (servers_test_button, the suggested
 action). Return in a row does nothing (the GTK rows have no activation).
+Each group is named by its title for Narrator (an Adw.PreferencesGroup's
+label), since both endpoints have rows of the same names.
 -->
 <UserControl
     x:Class="Malachi.App.Wizard.ServersPage"
@@ -47,7 +49,7 @@ action). Return in a row does nothing (the GTK rows have no activation).
                     Padding="{StaticResource SettingsPagePadding}"
                     Spacing="{StaticResource SettingsGroupSpacing}">
 
-                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <StackPanel AutomationProperties.Name="{l:T Msgid='Account'}" Spacing="{StaticResource SettingsCardSpacing}">
                         <TextBlock
                             AutomationProperties.HeadingLevel="Level2"
                             Style="{StaticResource SettingsGroupHeaderStyle}"
@@ -62,7 +64,7 @@ action). Return in a row does nothing (the GTK rows have no activation).
                         </tk:SettingsCard>
                     </StackPanel>
 
-                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <StackPanel AutomationProperties.Name="{l:T Msgid='Incoming Mail (IMAP)'}" Spacing="{StaticResource SettingsCardSpacing}">
                         <TextBlock
                             AutomationProperties.HeadingLevel="Level2"
                             Style="{StaticResource SettingsGroupHeaderStyle}"
@@ -130,7 +132,7 @@ action). Return in a row does nothing (the GTK rows have no activation).
                         </tk:SettingsCard>
                     </StackPanel>
 
-                    <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <StackPanel AutomationProperties.Name="{l:T Msgid='Outgoing Mail (SMTP)'}" Spacing="{StaticResource SettingsCardSpacing}">
                         <TextBlock
                             AutomationProperties.HeadingLevel="Level2"
                             Style="{StaticResource SettingsGroupHeaderStyle}"

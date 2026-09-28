@@ -10,8 +10,6 @@
 using CommunityToolkit.WinUI.Controls;
 using Malachi.Core.Controllers;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 
 namespace Malachi.App.Wizard;
 
@@ -20,16 +18,18 @@ internal static class WizardRows
 {
     /// <summary>
     /// Flags <paramref name="row"/> as the thing to fix (the GTK error
-    /// class): its title in the critical colour. Typing in it clears it.
+    /// class): its title in the critical colour of its window's theme
+    /// (<c>WizardErrorCardStyle</c> of <paramref name="page"/>'s resources).
+    /// Typing in it clears it.
     /// </summary>
-    public static void SetError(SettingsCard row, bool on)
+    public static void SetError(FrameworkElement page, SettingsCard row, bool on)
     {
-        if (on && Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) && brush is Brush critical)
+        if (on && page.Resources.TryGetValue("WizardErrorCardStyle", out var style) && style is Style error)
         {
-            row.Foreground = critical;
+            row.Style = error;
             return;
         }
-        row.ClearValue(Control.ForegroundProperty);
+        row.ClearValue(FrameworkElement.StyleProperty);
     }
 
     /// <summary>

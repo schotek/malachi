@@ -86,8 +86,8 @@ public sealed partial class IdentityPage : UserControl
 
     private void ShowProblems(IdentityProblems p, string? banner)
     {
-        WizardRows.SetError(EmailRow, p.Email);
-        WizardRows.SetError(PasswordRow, p.Password);
+        WizardRows.SetError(this, EmailRow, p.Email);
+        WizardRows.SetError(this, PasswordRow, p.Password);
         Banner.Message = banner ?? "";
         Banner.IsOpen = banner is not null;
     }
