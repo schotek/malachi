@@ -10,8 +10,8 @@
 // delay; here the answers are held until the test lets them go, the
 // spinner's delay runs on a fake clock the test advances, and the tests
 // wait for quiescence instead of polling. saveAllIsOnePerMessage is
-// AttachmentOpenerTests.SaveAllIsOnePerMessage: Windows keeps the run of
-// Save All with the attachment actions (AttachmentOpener). Added:
+// AttachmentOpenerTests.SaveAllRunsOncePerMessageAtATime: Windows keeps
+// the run of Save All with the attachment actions (AttachmentOpener). Added:
 // AFastFailingCallReleasesTheWaiters, the trap of docs/windows-port.md §7.2
 // (a call that fails before its first await must not settle the entry
 // while its other half has not started), and AThrowingViewStrandsNothing,

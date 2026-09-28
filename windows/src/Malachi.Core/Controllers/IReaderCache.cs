@@ -3,11 +3,12 @@
 
 // Windows-only seam: what the reader asks of the loaded-message cache
 // (macos/Sources/MalachiMail/MessageView/MessageViewController.swift,
-// Windows/EmbeddedWindowController.swift and Attachments/AttachmentActions.swift
-// use MessageCache directly: loaded, fetch, fetchEmbedded, partData,
-// embeddedData, download, showsDownload; GTK: message_view.go fetchMessage,
-// embedded.go fetchEmbedded and download.go on the Window). MessageCache
-// implements it; the reader's tests answer it without a daemon.
+// Windows/EmbeddedWindowController.swift and
+// Attachments/AttachmentActions.swift use MessageCache directly: loaded,
+// fetch, fetchEmbedded, partData, embeddedData, download, showsDownload;
+// GTK: message_view.go fetchMessage, embedded.go fetchEmbedded and
+// download.go on the Window). MessageCache implements it; the reader's
+// tests answer it without a daemon.
 
 using System;
 using System.Threading;

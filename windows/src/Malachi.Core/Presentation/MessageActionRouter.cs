@@ -5,14 +5,15 @@
 // (the MessageActions of the selection and the MessageActionDelegate of one
 // message: flags, reply, replyAll, forward, trash, junk, archive,
 // toggleFlag, markRead, markUnread, loadImages, trustSender,
-// downloadPictures, retryOutbox, isDraft, editDraft, newMessage); GTK: the win.* actions of window.go
-// registerActions acting on the selected row, and the msg.* actions of
-// message_window.go acting on the window's message. Everything that touches
-// the model or the daemon is the ActionsController's; this only resolves
-// the selection (a conversation row's members, its subject for the
-// confirmation, its star's target) and the window a confirmation goes on.
-// The links and attachments, which macOS handles here too, are LinkOpener's
-// and AttachmentOpener's. UI-thread-affine.
+// downloadPictures, retryOutbox, isDraft, editDraft, newMessage); GTK: the
+// win.* actions of window.go registerActions acting on the selected row,
+// and the msg.* actions of message_window.go acting on the window's
+// message. Everything that touches the model or the daemon is the
+// ActionsController's; this only resolves the selection (a conversation
+// row's members, its subject for the confirmation, its star's target) and
+// the window a confirmation goes on. The links and attachments, which
+// macOS handles here too, are LinkOpener's and AttachmentOpener's.
+// UI-thread-affine.
 
 using System;
 using Malachi.Core.Api;

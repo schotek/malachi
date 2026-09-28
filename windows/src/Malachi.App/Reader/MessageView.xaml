@@ -13,15 +13,16 @@ the top: the command row of the pane or window (the Adw.HeaderBar: Reply,
 Reply All, Forward at the start; Trash, Junk, Archive, Star and More at the
 end, GTK packing [end] from the right), the outbox and draft banners
 (InfoBars), the remote-image bar (a bar of its own, as in GTK: two
-buttons, reachable by Tab), the pictures bar under it (pictures of the HTML
-kept on the mail server only, Download Pictures; not in an attached
-message's window, whose pictures arrive inlined), and the message stack: No Message Selected
-and No Accounts (the pane only) or the message, whose headers stay put in
-a clamp of 900 (sides 24, top 12, docs/windows-port.md §11.3), scrolling
-on their own only past two thirds of the page, while the body below
-scrolls on its own in the same clamp: the plain text, the spinner after
-400 ms, or the viewer. Everything shown is server data and set as plain text
-(Text properties only); the viewer gets the sanitiser's output only.
+buttons, reachable by Tab), the pictures bar under it (pictures of the
+HTML kept on the mail server only, Download Pictures; not in an attached
+message's window, whose pictures arrive inlined), and the message stack:
+No Message Selected and No Accounts (the pane only) or the message, whose
+headers stay put in a clamp of 900 (sides 24, top 12,
+docs/windows-port.md §11.3), scrolling on their own only past two thirds
+of the page, while the body below scrolls on its own in the same clamp:
+the plain text, the spinner after 400 ms, or the viewer. Everything shown
+is server data and set as plain text (Text properties only); the viewer
+gets the sanitiser's output only.
 -->
 <UserControl
     x:Class="Malachi.App.Reader.MessageView"

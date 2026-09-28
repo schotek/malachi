@@ -8,10 +8,11 @@
 // program) and MessageViewController.swift (renderAttachments); GTK:
 // ui/internal/window/attachments.go (renderAttachments, buildChip,
 // remoteIndicator, chipMenu, buildSaveAll). What one chip shows and allows,
-// decided here so the WinUI split button only draws it. Names and types are server data:
-// plain text. A program is judged by the platform's policy (DangerousTypes
-// and AssocIsDangerous, IFileTypePolicy) where GTK has
-// executableAttachment and macOS its name lists and UTType conformance.
+// decided here so the WinUI split button only draws it. Names and types
+// are server data: plain text. A program is judged by the platform's
+// policy (DangerousTypes and AssocIsDangerous, IFileTypePolicy) where GTK
+// has executableAttachment and macOS its name lists and UTType
+// conformance.
 
 using System;
 using System.Collections.Generic;

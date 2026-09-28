@@ -9,12 +9,13 @@
 // message_view.go (openMessageWindow, closeMessageWindow), embedded.go
 // (openEmbeddedWindow, closeEmbeddedWindows), remote.go (showLoaded,
 // refreshRemoteBar, refreshPicturesBar), download.go (refreshChips),
-// outbox.go (showOutboxState) and actions.go (refreshStars, refreshSeen). One window per message, one per attached
-// message, and the fan-out of what the cache and the actions learn to every
-// view showing a message (the pane's included); a view of an attached
-// message carries the containing message's id and is left out of the
-// fan-out. The windows themselves are the app's (MakeMessageWindow,
-// MakeEmbeddedWindow), which report their close (Closed). UI-thread-affine.
+// outbox.go (showOutboxState) and actions.go (refreshStars, refreshSeen).
+// One window per message, one per attached message, and the fan-out of
+// what the cache and the actions learn to every view showing a message
+// (the pane's included); a view of an attached message carries the
+// containing message's id and is left out of the fan-out. The windows
+// themselves are the app's (MakeMessageWindow, MakeEmbeddedWindow), which
+// report their close (Closed). UI-thread-affine.
 
 using System;
 using System.Collections.Generic;

@@ -10,15 +10,16 @@
 // remote-image bar and the pictures bar); GTK:
 // ui/internal/window/message_view.go (newMessageView, setBarVisible,
 // setBarLoading, htmlView, setZoom), remote.go (showPicturesBar),
-// addresses.go (chip, addressMenu, moreChip), attachments.go (buildChip,
-// remoteIndicator, chipMenu, buildSaveAll) and style.go (.message-body: the
-// text-zoom and monospace settings). The state is Core's ReaderController; this view
-// draws it and sends the clicks back: to the window's commands (the
-// command row and its menu), the MessageActionRouter (the banners, the
-// bar, an address's New Message), the AttachmentOpener and previewer (the
-// chips), the LinkOpener (the viewer's links) and the registry (an
-// attached message's window). Every text of a message is set through a
-// Text property; no markup is ever parsed.
+// addresses.go (chip, addressMenu, moreChip), attachments.go
+// (renderAttachments, buildChip, remoteIndicator, chipMenu, buildSaveAll)
+// and style.go (.message-body: the text-zoom and monospace settings). The
+// state is Core's ReaderController; this view draws it and sends the clicks
+// back: to the window's commands (the command row and its menu), the
+// MessageActionRouter (the banners, the bar, an address's New Message),
+// the AttachmentOpener and previewer (the chips), the LinkOpener (the
+// viewer's links) and the registry (an attached message's window). Every
+// text of a message is set through a Text property; no markup is ever
+// parsed.
 //
 // Windows differences: the chips are split buttons (the click previews, the
 // arrow's menu has View, Open, Save As…; from the keyboard F4 or Alt+Down,
@@ -31,10 +32,11 @@
 // another program holds the clipboard (GTK's cannot) and says so, and Save
 // All stays disabled while its run lasts even when a re-render rebuilds the
 // button (the run is AttachmentOpener's, by message). A part kept on the
-// mail server shows the server glyph (GTK's network-server icon, Segoe
-// Fluent's download from the cloud) after the size, with the reason as its
-// tooltip, or a ProgressRing while the message downloads, inside the split
-// button's main part (GTK and macOS put it beside the arrow).
+// mail server shows the server glyph (Segoe Fluent's download from the
+// cloud for GTK's network-server icon) with the reason as its tooltip, or a
+// ProgressRing while the message downloads, after the size inside the
+// split button's main part, as GTK has it inside the chip's button (macOS
+// puts it after the control).
 
 using System;
 using System.Collections.Generic;

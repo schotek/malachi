@@ -22,9 +22,10 @@
 // known as the message's download before it can end, and it ends the
 // cache's side (EndDownload) before any caller resumes, as Swift's does.
 // The spinner's delay runs on the TimeProvider, so the tests control it.
-// The cache has no closed flag, as in Swift: it lives as long as the app. Swift's callbacks cannot throw; a view's handler or waiter
-// here can, and is isolated (ControllerEvents), so that one view's failure
-// strands neither the other views nor the request it came with.
+// The cache has no closed flag, as in Swift: it lives as long as the app.
+// Swift's callbacks cannot throw; a view's handler or waiter here can, and
+// is isolated (ControllerEvents), so that one view's failure strands
+// neither the other views nor the request it came with.
 
 using System;
 using System.Collections.Generic;

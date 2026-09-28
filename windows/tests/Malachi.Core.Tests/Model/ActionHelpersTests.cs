@@ -6,8 +6,8 @@
 // TestBodyText, TestFlagChange, TestPruneLoaded, TestLoadedMessageState,
 // TestLoadableImages, TestRemoteBarState, TestPicturesBarState,
 // TestPicturesPolicy, TestRecheckPictures, TestReloadAfterDownload): the
-// pure helpers behind the message pane and the actions. The catalogue is English in tests, so the
-// msgids come back verbatim.
+// pure helpers behind the message pane and the actions. The catalogue is
+// English in tests, so the msgids come back verbatim.
 
 using System;
 using System.Collections.Generic;
