@@ -11,8 +11,10 @@
 // not tested here (CDP keys bypass AreBrowserAcceleratorKeysEnabled,
 // INPUT-SPIKES.md). A view that replaces its control after a failed process
 // is observed again from the new one on (CoreWebViewInitialized). The
-// counting of connections and lookups is the test's, from its listeners and
-// the NetLog this run makes the browser write.
+// browser's processes keep the normal priority class whatever Chromium sets
+// (ProcessPriority). The counting of connections and lookups is the
+// test's, from its listeners and the NetLog this run makes the browser
+// write.
 
 using System;
 using System.Collections.Generic;
@@ -75,6 +77,11 @@ internal sealed class CanaryRunner
         var exited = false;
         try
         {
+            // Before the browser starts: it and its processes inherit the job.
+            if (ProcessPriority.PinNormal() is { } unpinned)
+            {
+                Add(HostEvent.Kinds.Log, "", null, detail: "priorities not pinned: " + unpinned);
+            }
             Directory.CreateDirectory(config.Downloads);
             window = new Window { Title = "Malachi Mail canary" };
             var grid = new Grid();

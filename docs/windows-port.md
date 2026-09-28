@@ -1845,7 +1845,12 @@ editor once they exist.
   further load (the editor's `Crashed` once), and the hung renderer gets a
   new control once its report went 5 s unanswered (§6.1); a load stopped
   half-way (a failed navigation with no process to blame) raises
-  `Unavailable` a second later. The three runs
+  `Unavailable` a second later. The host puts itself, and so the browser
+  and all its processes, in a job that pins the priority class to normal:
+  Chromium starts the renderer of a page shown again after a crash at idle
+  priority until it commits, and while the other test assemblies keep
+  every core busy an idle process gets no CPU at all (measured), so the
+  reload stalled until Chromium's 30 s commit timeout. The three runs
   go side by side in about 50 s; without a desktop session or the WebView2
   runtime the tests are skipped with that reason; `MALACHI_CANARY_KEEP=1`
   keeps the runs' files, and each run's `results.json.progress` shows how

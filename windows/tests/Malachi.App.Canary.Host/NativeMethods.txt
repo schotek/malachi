@@ -2,11 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
 // The Win32 functions CsWin32 generates for the canary host: the window is
-// placed beyond the virtual screen, and new top-level windows of the
-// browser process are counted.
+// placed beyond the virtual screen, new top-level windows of the browser
+// process are counted, and the host's processes are kept at normal
+// priority in a job (ProcessPriority.cs).
 GetSystemMetrics
 EnumWindows
 GetWindowThreadProcessId
 IsWindowVisible
 GetClassName
 GetWindowText
+CreateJobObject
+SetInformationJobObject
+AssignProcessToJobObject
+GetCurrentProcess
+JOBOBJECT_BASIC_LIMIT_INFORMATION
