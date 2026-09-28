@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of one account's rows of the status popover (ui/internal/window/
+status.go newStatusRow: an Adw.ActionRow with the account as its title, the
+state as its subtitle, and as suffixes the check icon, view-refresh with
+the tooltip Check for New Mail, or a labelled button; under it an
+activatable row with the unsent messages and a go-next arrow, hidden while
+there are none); macOS: StatusPopoverViewController.swift (StatusRowViews,
+StatusLinkRow: without a target the arrow goes and the row is only text).
+What the rows show is Core's StatusPopoverRow; the name and the detail are
+plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Main.StatusRowView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <StackPanel>
+        <Rectangle
+            Height="1"
+            Fill="{ThemeResource CardStrokeColorDefaultBrush}"
+            Visibility="{x:Bind main:MessageRowView.NotLast(Row.IsFirst), Mode=OneWay}" />
+        <Grid
+            MinHeight="52"
+            Padding="12,6"
+            ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock
+                    MaxLines="1"
+                    Style="{StaticResource BodyLabelStyle}"
+                    Text="{x:Bind Row.Title, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Style="{StaticResource DimCaptionLabelStyle}"
+                    Text="{x:Bind Row.Detail, Mode=OneWay}"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+            <Button
+                x:Name="CheckButton"
+                Grid.Column="1"
+                Width="36"
+                Height="32"
+                Padding="0"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="{l:T Msgid='Check for New Mail'}"
+                Click="OnActionClick"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Check for New Mail'}"
+                Visibility="{x:Bind res:Bind.Visible(Row.CheckVisible), Mode=OneWay}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-refresh-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="ActionButton"
+                Grid.Column="2"
+                VerticalAlignment="Center"
+                Click="OnActionClick"
+                Visibility="{x:Bind res:Bind.Visible(Row.ButtonVisible), Mode=OneWay}" />
+        </Grid>
+        <!-- The unsent messages: a link to the account's outbox. -->
+        <Rectangle
+            Height="1"
+            Fill="{ThemeResource CardStrokeColorDefaultBrush}"
+            Visibility="{x:Bind res:Bind.Visible(Row.FailedVisible), Mode=OneWay}" />
+        <Button
+            x:Name="FailedButton"
+            MinHeight="44"
+            Padding="12,0"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Click="OnFailedClick"
+            CornerRadius="0"
+            IsHitTestVisible="{x:Bind Row.FailedActivatable, Mode=OneWay}"
+            IsTabStop="{x:Bind Row.FailedActivatable, Mode=OneWay}"
+            Style="{StaticResource SubtleButtonStyle}"
+            Visibility="{x:Bind res:Bind.Visible(Row.FailedVisible), Mode=OneWay}">
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    MaxLines="1"
+                    Text="{x:Bind Row.FailedText, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+                <FontIcon
+                    Grid.Column="1"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="12"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="{x:Bind res:Icons.Glyph('go-next-symbolic')}"
+                    Visibility="{x:Bind res:Bind.Visible(Row.FailedActivatable), Mode=OneWay}" />
+            </Grid>
+        </Button>
+    </StackPanel>
+</UserControl>

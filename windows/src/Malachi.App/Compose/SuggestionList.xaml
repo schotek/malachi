@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the panel of macos/Sources/MalachiMail/Compose/
+RecipientSuggestionsController.swift (the table and its rows); GTK:
+ui/internal/compose/suggest.go (the popover's list, suggestionRow) and
+ui/internal/style (popover.recipient-suggestions: the list flush with the
+edges, compact two-line rows, 16 px icons). The content of the recipient
+popup: a list to pick from, never focused (the keyboard stays in the row),
+36 px rows with the source icon, the name over the address (or the address
+alone) and where it comes from as the tooltip. Every text is plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.SuggestionList"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:p="using:Malachi.Core.Presentation"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Border
+        Background="{ThemeResource AcrylicBackgroundFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource SurfaceStrokeColorFlyoutBrush}"
+        BorderThickness="1"
+        CornerRadius="{StaticResource OverlayCornerRadius}">
+        <ListView
+            x:Name="Rows"
+            MaxHeight="290"
+            Padding="0,1,0,1"
+            AllowFocusOnInteraction="False"
+            IsItemClickEnabled="True"
+            IsTabStop="False"
+            ItemClick="OnItemClick"
+            SelectionMode="Single">
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="36" />
+                    <Setter Property="Height" Value="36" />
+                    <Setter Property="Padding" Value="10,0,10,0" />
+                    <Setter Property="AllowFocusOnInteraction" Value="False" />
+                    <Setter Property="IsTabStop" Value="False" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="p:SuggestionRow">
+                    <Grid
+                        Background="Transparent"
+                        ColumnSpacing="8"
+                        ToolTipService.ToolTip="{x:Bind Tooltip}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <FontIcon
+                            VerticalAlignment="Center"
+                            AutomationProperties.AccessibilityView="Raw"
+                            FontSize="16"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="{x:Bind res:Icons.Glyph(Icon)}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock
+                                MaxLines="1"
+                                Style="{StaticResource BodyLabelStyle}"
+                                Text="{x:Bind Primary}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                            <TextBlock
+                                MaxLines="1"
+                                Style="{StaticResource DimCaptionLabelStyle}"
+                                Text="{x:Bind Secondary}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap"
+                                Visibility="{x:Bind res:Bind.VisibleIfText(Secondary)}" />
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Border>
+</UserControl>

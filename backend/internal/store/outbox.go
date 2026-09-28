@@ -162,9 +162,7 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 		s.removeMessageFiles([]messageFile{{accountID: accountID, id: id}})
 		return Message{}, err
 	}
-	for _, aid := range attachments {
-		s.removeAttachmentFile(aid)
-	}
+	s.removeAttachmentFiles(attachments...)
 	s.removeMessageFiles(gone)
 	return m, nil
 }

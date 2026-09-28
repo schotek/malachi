@@ -81,14 +81,19 @@ func (s *Syncer) appendOne(ctx context.Context, sess *session, mailbox string, e
 	if err != nil {
 		return false, storageError(err)
 	}
-	defer raw.Close()
+	// Closed before every dropSent below, not deferred: dropping the local
+	// copy deletes this file, and Windows refuses to delete a file that is
+	// still open.
+	//
 	// The message's own length whatever the codec it is stored in: the
 	// literal below must carry exactly that many bytes.
 	size, err := raw.Size()
 	if err != nil {
+		raw.Close()
 		return false, storageError(err)
 	}
 	if size <= 0 {
+		raw.Close()
 		s.log.Warn("sent message file empty, dropping local copy", "message", e.MessageID)
 		return false, s.dropSent(ctx, e.MessageID)
 	}
@@ -116,6 +121,7 @@ func (s *Syncer) appendOne(ctx context.Context, sess *session, mailbox string, e
 		_, err := cmd.Wait()
 		return err
 	})
+	raw.Close()
 	switch {
 	case err == nil:
 		s.log.Info("sent copy stored", "message", e.MessageID, "mailbox", mailbox)

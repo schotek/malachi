@@ -257,7 +257,8 @@ func (s *Store) SetAccountEnabled(ctx context.Context, id string, enabled bool) 
 
 // DeleteAccount removes the account row together with its mail cache
 // (folders, messages, pending operations — always, they are worthless
-// without the account; raw message files after the commit). With
+// without the account; raw message files after the commit, and what a
+// reader keeps open on Windows with the next sweep). With
 // deleteLocalData it also deletes the account's drafts and attachments (rows
 // in the same transaction, files afterwards). ErrNotFound for an unknown id.
 func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bool) error {
@@ -280,6 +281,15 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	// Messages go with their folders (ON DELETE CASCADE).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM folders WHERE account_id = ?`, id); err != nil {
 		return fmt.Errorf("delete account folders: %w", err)
+	}
+	if checkPathSegment(id) == nil {
+		// The raw files go after the commit, and what a reader keeps open
+		// (Windows) or a crash leaves goes with the sweep: the record says
+		// the directory is this store's to remove whole (removeMessageDir).
+		if _, err := tx.ExecContext(ctx, `INSERT INTO meta (key, value) VALUES (?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value`, metaDeletedDir+id, nowStamp()); err != nil {
+			return fmt.Errorf("delete account: %w", err)
+		}
 	}
 
 	var files []string
@@ -310,10 +320,8 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("delete account: %w", err)
 	}
-	for _, aid := range files {
-		s.removeAttachmentFile(aid)
-	}
-	s.removeMessageDir(id)
+	s.removeAttachmentFiles(files...)
+	s.removeMessageDir(ctx, id)
 	return nil
 }
 

@@ -1,6 +1,7 @@
 # Architecture
 
-Malachi Mail is a desktop email client for Linux. This document explains the
+Malachi Mail is a desktop email client, Linux first, with native clients
+for macOS and Windows over the same daemon. This document explains the
 shape of the system and the reasoning behind it. The RPC contract is in
 [api.md](api.md); the threat model is in [security.md](security.md).
 
@@ -56,6 +57,17 @@ defaults for the two storage preferences (`MALACHI_DEFAULT_COMPRESS_STORE`,
 `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS`, §3.1), which its daemon gets
 because many Macs have small disks. Neither added anything
 macOS-specific to the contract.
+
+A fourth client, the Windows application (`windows/`, C#/WinUI 3, §6 and
+[windows-port.md](windows-port.md)), speaks the same protocol over the same
+kind of socket (AF_UNIX, which Windows has had since 2018) and mirrors the
+GTK UI the same way. It needed no new extension point: it uses the helper
+keyring as macOS does, with a helper of its own over Credential Manager.
+What the daemon did need were fixes that Windows showed up but that are
+platform-neutral (the helper's executable check through `exec.LookPath`,
+raw message files closed before they are deleted, file operations that
+outlast a reader, two path flags of `malachi-mcp`), and no change to the
+contract.
 
 ### Why two processes and not one binary with a clean package boundary?
 
@@ -145,7 +157,9 @@ backend/
                       source; account.oauthStart), auth/helper the
                       platform-neutral keyring over an external program
                       (MALACHI_KEYRING=helper; the macOS app supplies
-                      malachi-keychain over the login keychain)
+                      malachi-keychain over the login keychain, the
+                      Windows app malachi-credentials over Credential
+                      Manager)
   internal/transport  TLS policy, dialling, timeouts, error classification
   internal/discover   account.discover: GNOME Online Accounts, ISPDB, provider
                       autoconfig, SRV, Microsoft 365 / Google provider answer
@@ -291,11 +305,22 @@ stored, with a size, that still reads back empty is answered and recorded
 as remote (`store.MarkPartsRemote`). Writers of one message take its lock in
 turn; a reader holds nothing once its file is open, since a rename or a
 removal leaves an open file's content alone, and the background passes only
-try the lock and skip a busy message. A deletion removes the files once
-its rows are committed, and a message a writer holds at that moment is
-removed by that writer before it lets go. A download is received into
-`<data dir>/staging/` first (random names, created exclusively, on the
-file system of `messages/` so that a commit is a rename), which the daemon
+try the lock and skip a busy message. Windows refuses to rename over or
+remove an open file: there a rename or a removal waits a moment
+(`internal/fsretry`) with the message's names locked, so its readers
+finish and no new one starts, and a file one of them keeps open for
+longer leaves the operation undone as busy (`store.ErrBusy`, told by
+whether a reader had the file open at the last attempt), for a later pass
+or the sweep. A commit whose new file did not take the stored one's name,
+whatever the cause (a reader the daemon does not count, such as another
+program or a virus scanner, or a new file that could not be written),
+undoes its first phase, the stored file being as it was; and of a
+message left with both variants a reader takes the newer, the one the
+sweep keeps. A deletion removes the files once its rows are committed,
+and a message a writer holds at that moment is removed by that writer
+before it lets go. A download is received into `<data dir>/staging/`
+first (random names, created exclusively, on the file system of
+`messages/` so that a commit is a rename), which the daemon
 empties whenever it opens the store; under `neverStoreAttachments` it is
 received into memory instead (`store.StageMemory`), and only the file the
 commit writes from there reaches the disk (§3.2).
@@ -306,10 +331,14 @@ Background work on the files is the raw maintenance loop that
 (`store.SweepMessageFiles`): temporary and staged files, the files of
 messages without a row and the empty directories of unknown accounts go
 once they are an hour old (a directory with files stays: two stores in one
-data directory share `messages/`); of a message left with both variants
-the newer valid one stays; missing accounting rows are added and wrong
-ones corrected, which on the first start after migration 0014 accounts for
-every older file (`meta` `raw.accounted`; until then `system.storage`
+data directory share `messages/`; but the directory of an account this
+store deleted goes whole, whatever its age, since `store.DeleteAccount`
+records it in `meta` under `raw.deleted.<account>` until it is gone, which
+a reader holding one of its files on Windows, or a crash, can delay); of
+a message left with both variants the newer valid one stays; missing
+accounting rows are added and wrong ones corrected, which on the first
+start after migration 0014 accounts for every older file
+(`meta` `raw.accounted`; until then `system.storage`
 estimates those files from the message sizes). Then it runs its steps in
 order, each a `RawStep` with its progress in `meta` under
 `raw.step.<name>` (`<key>|<cursor>`, or `<key>|done`), restarted from the
@@ -1026,13 +1055,14 @@ an absolute path ending in `malachi/open`).
 
 ## 6. Platform
 
-One core, a native UI per platform. The daemon and the GTK UI in this tree
-are Linux code: no Windows/macOS code paths, build tags or "just in case"
-abstractions in either. Other platforms get their own native UI as a
-separate client of the daemon's API (Swift/AppKit on macOS, WinUI 3 on
-Windows); the GTK UI is the template they mirror feature for feature, and
-[macos-port.md](macos-port.md) describes how the macOS one is built and
-kept in step.
+One core, a native UI per platform. The daemon is platform-neutral Go
+and the GTK UI is Linux code: no Windows/macOS code paths, build tags or
+"just in case" abstractions in either. Other platforms get their own
+native UI as a separate client of the daemon's API (Swift/AppKit on macOS,
+C#/WinUI 3 on Windows); the GTK UI is the template they mirror feature for
+feature, and [macos-port.md](macos-port.md) and
+[windows-port.md](windows-port.md) describe how they are built and kept in
+step.
 Portability of the *architecture* is provided by the socket boundary, not
 by conditional compilation.
 
@@ -1066,24 +1096,61 @@ two storage preferences (compressed, attachments of 30 days kept;
 `MALACHI_DEFAULT_*`, §3.1), and keeps the daemon's default socket path so
 the MCP bridge needs no configuration.
 
-What macOS cannot have follows from the daemon, not from the client:
-Gmail and Microsoft 365 sign in through GNOME Online Accounts (§7), so
-without it only IMAP/SMTP accounts with a password can be added, and
-recipient completion runs on the collected addresses alone because there
-is no Evolution Data Server. The deliberate deviations from the GTK UI
+The Windows client is `windows/`, a .NET solution of three projects and a
+helper ([windows-port.md](windows-port.md)), ported from the macOS client
+and validated against the GTK UI. `Malachi.Core` has neither WinUI nor
+platform calls in it and is tested on any OS: the API types re-declared
+from `docs/api.md`, the transport over an AF_UNIX socket with the same
+handshake, the daemon supervision (locate → probe → spawn → poll → stop,
+where the stop is a `CTRL_BREAK_EVENT` that Go takes as an interrupt and a
+kill after 15 s), the pure logic of the Go UI and of the macOS client
+ported with their tests, the controllers, and the presentation logic macOS
+keeps in AppKit, now with tests of its own; settings with the GSettings
+keys live in the registry and strings are read from `po/` at run time with
+the GTK msgids as keys. `Malachi.Platform.Windows` holds the Windows
+services behind Core's interfaces (the process host, the key file's owner
+and DACL check, the registry, the Mark of the Web on attachments, launch
+at login, the `mailto:` registration, the notification-area icon).
+`Malachi.App` is the WinUI 3 shell, whose viewer, editor and previewer
+re-establish layer 2 of [security.md §3.2](security.md#32-defences) for
+WebView2 (script off where it can be, the same CSP, no network through a
+resolver rule and a dead proxy, every request answered by the app).
+`Malachi.Credentials` is `malachi-credentials.exe`, the daemon's keyring
+helper over Credential Manager (`MALACHI_KEYRING=helper`, §3). `make
+windows` assembles a self-contained, unpackaged folder with `malachid.exe`,
+`malachi-mcp.exe` and the helper beside `MalachiMail.exe`; the app hands
+the daemon `%LOCALAPPDATA%\Malachi Mail\` for the config and the store and
+keeps the daemon's default socket path, whose directory it creates with a
+DACL for the user alone.
+
+What macOS and Windows cannot have follows from the daemon, not from the
+clients: without GNOME Online Accounts, Gmail and Microsoft 365 sign in
+through the daemon's own browser sign-in (§7; Gmail needs a Google client
+of the user's own, or an app password), and recipient completion runs on
+the collected addresses alone because there is no Evolution Data Server.
+The deliberate deviations from the GTK UI are listed in `macos/README.md`
 (one toolbar, pane folding instead of back navigation, ⌥⌘↑/↓ for
 reordering, a ⌘R setting, `NSAlert` button order, the quarantine
-attribute on attachments, the system new-mail sound) are listed in
-`macos/README.md`; everything else is meant to match, and the `.blp`
-files are the reference when it does not.
+attribute on attachments, the system new-mail sound) and in
+`windows/README.md` (search in the title bar, pane folding with the title
+bar's pane and back buttons, Windows keys with a Ctrl+R setting,
+`ContentDialog` button order, an own attachment previewer, the Mark of the
+Web, the notification-area icon, drafts saved on Quit); everything else is
+meant to match, and the `.blp` files are the reference when it does not.
 
 Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
-(`make deb` / `make rpm`). No Snap.
+(`make deb` / `make rpm`). No Snap. The macOS and Windows clients are built
+from source for now; their distribution (signing, notarisation or an
+installer, and for Windows a licence permission for Microsoft's platform
+components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-and-what-is-still-open),
+[windows-port.md §17](windows-port.md#17-before-a-public-release)).
 
 ## 7. Open decisions
 
 - UI language: Go + gotk4 for phase 1; Rust + gtk4-rs or Python + PyGObject
-  remain possible because the backend does not care.
+  remain possible because the backend does not care. The other platforms'
+  clients are settled: Swift/AppKit on macOS (2026-09-24) and C#/WinUI 3 on
+  Windows (2026-09-27, below).
 - Sanitiser library: **decided**, own code over `golang.org/x/net/html`
   (already a dependency), with an own minimal CSS filter. E-mail depends on
   `<style>` blocks and inline CSS that general-purpose sanitisers drop, and
@@ -1186,7 +1253,8 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   window exists.
 - Message body storage: **decided**. The raw RFC 822 message is a file
   under `<data dir>/messages/<account>/<id>` (`0600` in a `0700` per-account
-  directory, removed with the folder or the account); the parsed plain
+  directory, removed with the folder or the account; one that outlives its
+  row is swept by `core.Maintain` once it is a day old); the parsed plain
   text, the curated headers and the attachment metadata live in SQLite
   (`messages.text_body` and friends). HTML is never stored separately:
   `message.body` re-parses the raw file and sanitises on demand, so a
@@ -1306,9 +1374,11 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   the OS reports them (no protection on Windows); kernel peer credentials
   (`SO_PEERCRED`, `LOCAL_PEERCRED`, `SIO_AF_UNIX_GETPEERPID`: code per
   platform); named pipes on Windows (a second transport); TCP on loopback
-  with a token (a socket every local user can reach). Complementary,
-  later: a native Windows client that creates the socket's directory with
-  an ACL for the user alone.
+  with a token (a socket every local user can reach). Complementary, and
+  done since 2026-09-27: the Windows client creates the socket's directory
+  with a protected DACL for the user and SYSTEM, and uses a key file only
+  when the user owns it and its DACL lets nobody else read or change it
+  ([windows-port.md §5](windows-port.md#5-transport-handshake-daemon-supervisor)).
 - One daemon per store: **decided** (2026-09-27) — the daemon takes an
   exclusive lock on its store before it touches the store or the socket:
   an EXCLUSIVE SQLite transaction, never committed, on
@@ -1329,3 +1399,30 @@ Distribution on Linux: Flatpak (`packaging/flatpak/`) and native packages
   directly (code per platform); a PID file (a liveness check per platform,
   reused PIDs); the socket as the lock (a flood cannot be told from a dead
   daemon).
+- Windows client: **decided** (2026-09-27) — C# on .NET 10 (LTS) with
+  WinUI 3 on the Windows App SDK 2.5, taken as its component packages
+  (the metapackage adds some 60 MB of AI libraries); Windows 11, x64 and
+  ARM64; unpackaged and self-contained, per user, registering itself in
+  HKCU for `mailto:`, notifications and launch at login; secrets through
+  the helper keyring over Credential Manager; the UI a mirror of the GTK
+  UI ported from the macOS client (windows-port.md §0). Rejected: MSIX,
+  whose AppData virtualisation hides `config.toml` and the store from the
+  user and breaks the registration with the Claude apps, the reason macOS
+  has no App Sandbox either. Open before a public binary: code signing, an
+  installer, and a GPLv3 §7 permission for the Microsoft components the
+  app folder carries ([LICENSING.md](../LICENSING.md)).
+- Stopping the daemon on Windows: **decided** (2026-09-27) — the client
+  starts the daemon in a process group of its own and stops it with
+  `CTRL_BREAK_EVENT` (the app attaching to the daemon's console when it
+  has none of its own), which Go delivers as an interrupt, the path
+  SIGTERM takes
+  elsewhere; a kill after 15 s, as SIGKILL is on the other platforms. No
+  backend change, and the GTK semantics stay (a daemon a crashed UI left
+  behind is adopted, never stopped). Rejected: an authenticated
+  `system.shutdown` method (the supervisors are process management and
+  never speak the protocol, and any client, the MCP bridge included,
+  could stop the daemon); a flag that stops the daemon at the end of its
+  stdin (it would die with a crashed UI, unlike on GTK); a named event
+  (Windows code in `backend/`, rule 4); a stop file (polling); a kill
+  alone (no clean shutdown, and a message killed between SMTP `DATA` and
+  its bookkeeping may be sent twice at the next start).

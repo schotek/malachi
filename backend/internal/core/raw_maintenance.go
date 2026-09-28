@@ -236,6 +236,10 @@ func (l *rawLoop) runStep(ctx context.Context, s RawStep) (r roundResult, again 
 		}
 		if cursor == "" {
 			l.passes[name] = 0
+			// A pass from the start is what a restart asks for. One asked
+			// for since the check above cleared the progress just read, and
+			// this pass is it: its flag must not start another.
+			l.b.takeRawRestart(name)
 		}
 		start := time.Now()
 		next, err := s.Batch(ctx, cursor)

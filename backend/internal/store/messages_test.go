@@ -555,11 +555,11 @@ func TestWriteMessageRaw(t *testing.T) {
 		t.Errorf("path = %s", path)
 	}
 	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
+	if err != nil || info.Mode().Perm() != permOf(t, 0o600, false) {
 		t.Fatalf("file: %v %v", info, err)
 	}
 	dir, _ := os.Stat(filepath.Dir(path))
-	if dir.Mode().Perm() != 0o700 {
+	if dir.Mode().Perm() != permOf(t, 0o700, true) {
 		t.Errorf("dir mode = %v", dir.Mode().Perm())
 	}
 	f, err := s.OpenMessageRaw(ctx, "acc", "m_1")
@@ -604,5 +604,44 @@ func TestWriteMessageRaw(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(s.MessageDir()), "x")); err == nil {
 		t.Error("escaped the message directory")
+	}
+}
+
+// A reader holding a raw file for a moment (message.body, a virus
+// scanner) neither fails the file's replacement nor keeps it when its
+// message goes: Windows refuses both while the handle is open, and the
+// store waits it out.
+func TestRawFileOutlastsAReader(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	m := seedMessage(t, s, inbox, 1, "held", time.Now())
+	hold := func() {
+		t.Helper()
+		f, err := s.OpenMessageRaw(ctx, "acc", m.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		released := make(chan struct{})
+		time.AfterFunc(100*time.Millisecond, func() {
+			f.Close()
+			close(released)
+		})
+		t.Cleanup(func() { <-released })
+	}
+
+	hold()
+	if _, err := s.WriteMessageRaw(ctx, "acc", m.ID, strings.NewReader("new"), 10); err != nil {
+		t.Fatalf("replace while a reader holds the file: %v", err)
+	}
+	if b, err := os.ReadFile(s.MessageRawPath("acc", m.ID)); err != nil || string(b) != "new" {
+		t.Fatalf("after the replacement: %q %v", b, err)
+	}
+	hold()
+	if err := s.DeleteMessagesByUID(ctx, inbox.ID, []uint32{1}); err != nil {
+		t.Fatal(err)
+	}
+	if fileExists(t, s.MessageRawPath("acc", m.ID)) {
+		t.Error("the raw file of a deleted message stayed")
 	}
 }

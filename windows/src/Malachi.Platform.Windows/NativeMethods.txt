@@ -1,0 +1,125 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for Malachi.Platform.Windows, one
+// per line. Scaffold: one harmless entry that NativeProbe uses.
+GetCurrentProcessId
+// Settings and languages (Settings/, I18n/).
+RegNotifyChangeKeyValue
+GetUserPreferredUILanguages
+MUI_LANGUAGE_NAME
+// Files: private directories (Files/).
+CreateDirectory
+CreateFile
+WIN32_ERROR
+// Attachments: the Mark of the Web and the file-type policy (Attachments/).
+AttachmentServices
+IAttachmentExecute
+AssocIsDangerous
+INET_E_SECURITY_PROBLEM
+// Launch: Open With (Launch/); ShellExecuteEx comes through Process.Start.
+SHOpenWithDialog
+// The notification-area icon (Tray/, docs/windows-port.md §10): a hidden
+// top-level tool window, Shell_NotifyIcon version 4, the native menu.
+// NIN_KEYSELECT and the TPM_* flags are C macros, not in the metadata;
+// Shell_NotifyIcon, Shell_NotifyIconGetRect and their structures differ
+// by architecture, which an Any CPU library cannot generate (PInvoke005):
+// Tray/NotifyIconInterop.cs declares them for 64-bit processes.
+NOTIFYICON_VERSION_4
+NIN_SELECT
+RegisterWindowMessage
+RegisterClassEx
+CreateWindowEx
+DefWindowProc
+DestroyWindow
+GetModuleHandle
+SHDefExtractIcon
+GetDpiForWindow
+GetDpiForSystem
+GetSystemMetricsForDpi
+LoadIcon
+IDI_APPLICATION
+DestroyIcon
+CreatePopupMenu
+AppendMenu
+SetMenuDefaultItem
+TrackPopupMenuEx
+DestroyMenu
+PostMessage
+SendMessage
+SetForegroundWindow
+WM_APP
+WM_NULL
+WM_CONTEXTMENU
+// The tray tests: whether a taskbar runs, whether a window is gone, the
+// size of an icon (FindWindow also finds the taskbar for its DPI).
+FindWindow
+IsWindow
+GetIconInfo
+GetObject
+DeleteObject
+BITMAP
+// Notifications and sound (Notifications/, Sound/): quiet hours, the
+// new-mail sound.
+SHQueryUserNotificationState
+PlaySound
+// mailto: registration and the default mail app (Registration/).
+SHChangeNotify
+AssocQueryString
+SHAssocEnumHandlersForProtocolByApplication
+IEnumAssocHandlers
+IAssocHandler
+// Files: the best-fit look-alikes of the ANSI code page (Files/AnsiLookAlikes).
+WideCharToMultiByte
+GetACP
+// Transport: the key-file policy (Transport/WindowsKeyFilePolicy).
+GetFileType
+// Console: the attach recipe of make run-windows and the control handler
+// (Console/, docs/windows-port.md §5).
+AttachConsole
+FreeConsole
+GetConsoleProcessList
+GenerateConsoleCtrlEvent
+SetConsoleCtrlHandler
+GetStdHandle
+SetHandleInformation
+WriteConsole
+WriteFile
+GENERIC_ACCESS_RIGHTS
+ATTACH_PARENT_PROCESS
+CTRL_C_EVENT
+CTRL_BREAK_EVENT
+CTRL_CLOSE_EVENT
+CTRL_LOGOFF_EVENT
+CTRL_SHUTDOWN_EVENT
+// Process: the daemon, started with an explicit list of inherited handles
+// (Process/).
+CreatePipe
+CreateProcess
+InitializeProcThreadAttributeList
+UpdateProcThreadAttribute
+DeleteProcThreadAttributeList
+PROC_THREAD_ATTRIBUTE_HANDLE_LIST
+STARTUPINFOEXW
+CloseHandle
+GetExitCodeProcess
+TerminateProcess
+// The daemon's exit seen on its handle, before its output has drained
+// (Process/DaemonProcess.HasExited).
+WaitForSingleObject
+// Files: the previewer's panel, a type's name and icon by its extension
+// alone (Files/ShellFileTypes; SHGetFileInfo, which CsWin32 generates only
+// for a specific architecture, is in Files/ShellFileInfoInterop).
+AssocQueryString
+SHGetImageList
+Windows.Win32.UI.Controls.IImageList
+IMAGE_LIST_DRAW_STYLE
+SHIL_JUMBO
+SHIL_EXTRALARGE
+DestroyIcon
+DrawIconEx
+CreateCompatibleDC
+CreateDIBSection
+SelectObject
+DeleteObject
+DeleteDC

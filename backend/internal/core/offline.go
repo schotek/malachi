@@ -99,10 +99,12 @@ func (s *attachmentStep) Key(_ context.Context, now time.Time) (string, error) {
 // nothing to leave on the server; under NeverStoreAttachments, once per
 // switch-on, it first makes the messages settled while their file still
 // holds an attachment be judged again (reevaluateOnce). A message that changed or went meanwhile (a download,
-// a deletion) is passed over, as the next listing shows it as it is now;
-// one whose reduction fails is retried once, in the next pass, then kept
-// whole for good (store.StrippableNever). The pass ends when nothing is
-// left, or when a batch could do nothing with what it found.
+// a deletion) is passed over, as the next listing shows it as it is now,
+// and so is one whose file a reader kept open (store.ErrBusy, Windows),
+// for the next pass; one whose reduction fails is retried once, in the
+// next pass, then kept whole for good (store.StrippableNever). The pass
+// ends when nothing is left, or when a batch could do nothing with what it
+// found.
 func (s *attachmentStep) Batch(ctx context.Context, cursor string) (string, error) {
 	pol := s.b.attachmentPolicy()
 	st := s.b.store
@@ -155,6 +157,11 @@ func (s *attachmentStep) Batch(ctx context.Context, cursor string) (string, erro
 				progress++
 			}
 		case errors.Is(err, store.ErrConflict), errors.Is(err, store.ErrNotFound):
+		case errors.Is(err, store.ErrBusy):
+			// A reader kept the message's file open all the while (Windows
+			// refuses to replace an open file): nothing changed, and the
+			// next pass tries again. Not a failure of the reduction.
+			s.b.log.Info("attachments kept for now: the message's file is in use; the next pass reduces it", "message", c.ID)
 		case errors.Is(err, store.ErrNoSpace), ctx.Err() != nil:
 			return cursor, err
 		case s.failedBefore(c.ID):

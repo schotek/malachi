@@ -53,8 +53,12 @@ const (
 // message) is marked Whole, as never to be reduced
 // (store.StrippableNever), so the pass does not come back to it under any
 // policy; a partial message with nothing left to omit is marked Whole with
-// 0. Under pol.NeverStore the skeleton is staged in memory. Nothing about
-// the content is logged.
+// 0. A reader that keeps the stored file open for longer than the store
+// waits (Windows refuses to replace an open file) leaves the message as it
+// was, its row included: store.ErrBusy when the reader is the store's, for
+// a later pass, and the error of the rename when it is another process's.
+// Under pol.NeverStore the skeleton is staged in memory. Nothing about the
+// content is logged.
 func Strip(ctx context.Context, st *store.Store, m store.Message, pol Policy, now time.Time, log *slog.Logger) (Outcome, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -112,6 +116,10 @@ func Strip(ctx context.Context, st *store.Store, m store.Message, pol Policy, no
 			return err
 		}
 		skel, omitted, err := reduce(ctx, st, raw, parsed, plan.Omit, MaxMessageBytes, pol)
+		// That was the last read of the stored file: it is closed before the
+		// commit renames the skeleton over it, which Windows refuses while a
+		// handle of the file is open, this one included.
+		raw.Close()
 		switch {
 		case errors.Is(err, mime.ErrNotReducible), errors.Is(err, store.ErrRawCorrupt):
 			log.Info("message kept as stored: its parts cannot be left on the server safely", "message", m.ID)

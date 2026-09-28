@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the message page's header bar of ui/data/ui/window.blp: Reply,
+Reply All and Forward at the start; at the end, packed right to left, More
+Actions (message_menu_model), the Star toggle, Archive, Mark as Junk and
+Move to Trash, so that they read Trash, Junk, Archive, Star, More; and of
+ui/internal/window/actions.go (setMessageActionsSensitive, setStar: the
+star's icon and tooltip, the trash's tooltip for an outbox message);
+macOS: MainWindow/MainToolbar.swift (the message section). Every button
+runs a command of the main window (WindowCommands), enabled from the
+selection's ActionFlags; icon-only buttons are named by their tooltips.
+-->
+<UserControl
+    x:Class="Malachi.App.Main.MessageCommandBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!-- The star is a flat toggle (GTK's flat header button): the
+                 filled star in the accent colour says it is on, as in a
+                 message window (MessageView.xaml). High contrast keeps
+                 WinUI's own. -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundChecked" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedPointerOver" ResourceKey="AccentTextFillColorPrimaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedPressed" ResourceKey="AccentTextFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonForegroundCheckedDisabled" ResourceKey="TextFillColorDisabledBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushChecked" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushCheckedDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast" />
+            </ResourceDictionary.ThemeDictionaries>
+            <Style x:Key="HeaderButtonStyle" BasedOn="{StaticResource SubtleButtonStyle}" TargetType="Button">
+                <Setter Property="Width" Value="36" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid
+        Height="44"
+        Padding="6,0"
+        ColumnSpacing="4">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <StackPanel
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="2">
+            <Button
+                x:Name="ReplyButton"
+                AutomationProperties.AutomationId="ReplyButton"
+                AutomationProperties.Name="{l:T Msgid='Reply'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Reply'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-reply-sender-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="ReplyAllButton"
+                AutomationProperties.AutomationId="ReplyAllButton"
+                AutomationProperties.Name="{l:T Msgid='Reply All'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Reply All'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-reply-all-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="ForwardButton"
+                AutomationProperties.AutomationId="ForwardButton"
+                AutomationProperties.Name="{l:T Msgid='Forward'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Forward'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-forward-symbolic')}" />
+            </Button>
+        </StackPanel>
+        <StackPanel
+            Grid.Column="2"
+            VerticalAlignment="Center"
+            Orientation="Horizontal"
+            Spacing="2">
+            <Button
+                x:Name="TrashButton"
+                AutomationProperties.AutomationId="TrashButton"
+                AutomationProperties.Name="{l:T Msgid='Move to Trash'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Move to Trash'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('user-trash-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="JunkButton"
+                AutomationProperties.AutomationId="JunkButton"
+                AutomationProperties.Name="{l:T Msgid='Mark as Junk'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Mark as Junk'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-mark-junk-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="ArchiveButton"
+                AutomationProperties.AutomationId="ArchiveButton"
+                AutomationProperties.Name="{l:T Msgid='Archive'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Archive'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('folder-download-symbolic')}" />
+            </Button>
+            <!-- star_button: a toggle showing the selection's flagged state;
+                 its glyph is set in code only (ShowFlags), so no one-time
+                 binding puts the empty star back when the bar loads. -->
+            <ToggleButton
+                x:Name="StarButton"
+                Width="36"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="StarButton"
+                AutomationProperties.Name="{l:T Msgid='Star'}"
+                ToolTipService.ToolTip="{l:T Msgid='Star'}">
+                <FontIcon x:Name="StarGlyph" FontSize="16" />
+            </ToggleButton>
+            <Button
+                x:Name="MoreButton"
+                AutomationProperties.AutomationId="MoreButton"
+                AutomationProperties.Name="{l:T Msgid='More Actions'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='More Actions'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                <Button.Flyout>
+                    <!-- message_menu_model. -->
+                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <MenuFlyoutItem x:Name="MenuMarkUnread" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Unread'}" />
+                        <MenuFlyoutItem x:Name="MenuMarkRead" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Read'}" />
+                        <MenuFlyoutSeparator />
+                        <MenuFlyoutItem x:Name="MenuLoadImages" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
+                        <MenuFlyoutItem x:Name="MenuTrustSender" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+        </StackPanel>
+    </Grid>
+</UserControl>

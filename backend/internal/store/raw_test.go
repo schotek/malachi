@@ -144,6 +144,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := openTestStore(t)
 	dir := filepath.Join(s.MessageDir(), "acc")
+	filePerm, dirPerm := permOf(t, 0o600, false), permOf(t, 0o700, true)
 	lengths := []int{0, 1, 255, 256, 1 << 10, 128<<10 - 1, 128 << 10, 128<<10 + 1, 1 << 20}
 	for _, codec := range []RawCodec{RawPlain, RawZstd} {
 		for _, known := range []bool{false, true} {
@@ -164,7 +165,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Fatalf("%s: %v", id, err)
 				}
-				if info.Codec != codec || info.Bytes != int64(n) || info.DiskBytes != st.Size() || st.Mode().Perm() != 0o600 {
+				if info.Codec != codec || info.Bytes != int64(n) || info.DiskBytes != st.Size() || st.Mode().Perm() != filePerm {
 					t.Errorf("%s: info %+v, file %d bytes mode %v", id, info, st.Size(), st.Mode().Perm())
 				}
 				if _, err := os.Stat(filepath.Join(dir, rawName(id, codec.other()))); !errors.Is(err, fs.ErrNotExist) {
@@ -193,7 +194,7 @@ func TestPutMessageRawRoundTrip(t *testing.T) {
 			t.Errorf("left behind: %s", name)
 		}
 	}
-	if st, _ := os.Stat(dir); st.Mode().Perm() != 0o700 {
+	if st, _ := os.Stat(dir); st.Mode().Perm() != dirPerm {
 		t.Errorf("dir mode %v", st.Mode().Perm())
 	}
 	// No row, no accounting.
@@ -386,8 +387,15 @@ func TestOpenMessageRawOrder(t *testing.T) {
 	if err := os.WriteFile(s.MessageRawPath("acc", "m_1"), []byte("plain"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	// Both exist (a conversion between its phases): the store codec's
-	// name first.
+	// Both exist (a conversion between its phases) from one moment: the
+	// store codec's name first.
+	plain := s.MessageRawPath("acc", "m_1")
+	same := time.Now().Add(-time.Minute)
+	for _, path := range []string{plain, plain + RawZstSuffix} {
+		if err := os.Chtimes(path, same, same); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
 		t.Errorf("zstd first: %q", got)
 	}
@@ -395,6 +403,22 @@ func TestOpenMessageRawOrder(t *testing.T) {
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "plain" {
 		t.Errorf("plain first: %q", got)
 	}
+	// Otherwise the newer, whatever the store's codec (as the sweep keeps
+	// it).
+	if err := os.Chtimes(plain+RawZstSuffix, same.Add(time.Second), same.Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
+		t.Errorf("the newer, plain codec: %q", got)
+	}
+	if err := os.Chtimes(plain, same.Add(2*time.Second), same.Add(2*time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	s.SetRawCodec(RawZstd)
+	if got := readRaw(t, s, "acc", "m_1"); string(got) != "plain" {
+		t.Errorf("the newer, zstd codec: %q", got)
+	}
+	s.SetRawCodec(RawPlain)
 	os.Remove(s.MessageRawPath("acc", "m_1"))
 	if got := readRaw(t, s, "acc", "m_1"); string(got) != "compressed" {
 		t.Errorf("the other when the first is missing: %q", got)
@@ -511,6 +535,9 @@ func TestReplaceRules(t *testing.T) {
 		t.Fatal(err)
 	}
 	staged, _ := os.Stat(st.path)
+	// Windows may read a file's identity lazily, by path, at the first
+	// SameFile: read it while the path still names the staged file.
+	os.SameFile(staged, staged)
 	var info RawInfo
 	if err := s.WithMessageRaw(ctx, "acc", m.ID, func(tx *RawTx) error {
 		info, err = tx.Replace(RawWrite{}, st)
@@ -661,6 +688,34 @@ func TestCodecChangeDuringWrite(t *testing.T) {
 	})
 	if err != nil || info.Codec != RawPlain || !fileExists(t, s.MessageRawPath("acc", "m_out")) {
 		t.Errorf("plain write: %+v %v", info, err)
+	}
+}
+
+// A replacement is flushed before it counts. When the codec turns plain
+// while a compressed write of unknown size is being spooled, the spool
+// becomes the new file and is flushed by name (syncFile), through a handle
+// that may write: Windows flushes through no other, and the replacement
+// failed there with "access denied".
+func TestReplacementSpoolFlushed(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	s.SetRawCodec(RawZstd)
+	if _, err := s.PutMessageRaw(ctx, "acc", "m_spool", RawWrite{}, chunked([]byte("Subject: first\r\n\r\nbody"))); err != nil {
+		t.Fatal(err)
+	}
+	info, err := s.PutMessageRaw(ctx, "acc", "m_spool", RawWrite{}, func(w io.Writer) error {
+		s.SetRawCodec(RawPlain)
+		_, err := w.Write([]byte("Subject: second\r\n\r\nbody"))
+		return err
+	})
+	if err != nil || info.Codec != RawPlain {
+		t.Fatalf("replacement: %+v %v", info, err)
+	}
+	if got := readRaw(t, s, "acc", "m_spool"); string(got) != "Subject: second\r\n\r\nbody" {
+		t.Errorf("replaced content %q", got)
+	}
+	if err := syncFile(filepath.Join(t.TempDir(), "missing")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("flush of a missing file: %v", err)
 	}
 }
 

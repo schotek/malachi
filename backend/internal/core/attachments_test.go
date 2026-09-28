@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
+	"mime"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -26,30 +29,28 @@ func TestAttachmentImportRejects(t *testing.T) {
 
 	empty := filepath.Join(dir, "empty")
 	os.WriteFile(empty, nil, 0o600)
-	fifo := filepath.Join(dir, "fifo")
-	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	dirLink := filepath.Join(dir, "dirlink")
-	os.Symlink(dir, dirLink)
 	pdf := writeTestFile(t, "doc.pdf", []byte("%PDF-1.4 fake"))
 
-	cases := map[string]struct {
+	type importCase struct {
 		p    api.AttachmentImportParams
 		code api.ErrorCode
-	}{
+	}
+	cases := map[string]importCase{
 		"no account":       {api.AttachmentImportParams{Path: pdf}, api.CodeInvalidArgument},
 		"relative path":    {api.AttachmentImportParams{AccountID: "acc", Path: "doc.pdf"}, api.CodeInvalidArgument},
 		"missing":          {api.AttachmentImportParams{AccountID: "acc", Path: filepath.Join(dir, "nope")}, api.CodeInvalidArgument},
 		"directory":        {api.AttachmentImportParams{AccountID: "acc", Path: dir}, api.CodeInvalidArgument},
-		"symlink to dir":   {api.AttachmentImportParams{AccountID: "acc", Path: dirLink}, api.CodeInvalidArgument},
-		"fifo":             {api.AttachmentImportParams{AccountID: "acc", Path: fifo}, api.CodeInvalidArgument},
 		"empty file":       {api.AttachmentImportParams{AccountID: "acc", Path: empty}, api.CodeInvalidArgument},
 		"neither":          {api.AttachmentImportParams{AccountID: "acc"}, api.CodeInvalidArgument},
 		"both":             {api.AttachmentImportParams{AccountID: "acc", Path: pdf, Data: []byte("x")}, api.CodeInvalidArgument},
 		"data no name":     {api.AttachmentImportParams{AccountID: "acc", Data: []byte("x")}, api.CodeInvalidArgument},
 		"inline non-image": {api.AttachmentImportParams{AccountID: "acc", Path: pdf, Inline: true}, api.CodeInvalidArgument},
 		"data too big":     {api.AttachmentImportParams{AccountID: "acc", Data: make([]byte, api.MaxAttachmentDataBytes+1), Filename: "big"}, api.CodeAttachmentTooBig},
+	}
+	// Where this process may make symbolic links (on Windows that takes a
+	// privilege or developer mode).
+	if dirLink := filepath.Join(dir, "dirlink"); os.Symlink(dir, dirLink) == nil {
+		cases["symlink to dir"] = importCase{api.AttachmentImportParams{AccountID: "acc", Path: dirLink}, api.CodeInvalidArgument}
 	}
 	for name, c := range cases {
 		done := make(chan error, 1)
@@ -84,10 +85,57 @@ func TestAttachmentImportRejects(t *testing.T) {
 	}
 }
 
+// A named pipe is refused at once: the import opens without waiting for a
+// writer, and a pipe is not a regular file.
+func TestAttachmentImportRejectsNamedPipe(t *testing.T) {
+	ctx := context.Background()
+	b := newTestBackend(t, config.Default())
+	fifo := filepath.Join(t.TempDir(), "fifo")
+	mkfifo(t, fifo)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := b.Attachments().Import(ctx, api.AttachmentImportParams{AccountID: "acc", Path: fifo})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if code := errCode(t, err); code != api.CodeInvalidArgument {
+			t.Errorf("code %d, want %d", code, api.CodeInvalidArgument)
+		}
+	case <-time.After(5 * time.Second):
+		// A writer lets the import go on, so it does not outlive the test.
+		if w, err := os.OpenFile(fifo, os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+			w.Close()
+		}
+		t.Fatal("import hung on a named pipe")
+	}
+}
+
+// mkfifo makes a named pipe at path, or skips the test where it cannot. On
+// Windows, Git's mkfifo writes a Cygwin shortcut beside path, which Go does
+// not see as anything.
+func mkfifo(t *testing.T, path string) {
+	t.Helper()
+	if out, err := exec.Command("mkfifo", path).CombinedOutput(); err != nil {
+		t.Skipf("cannot make a named pipe here: %v %s", err, out)
+	}
+	if fi, err := os.Lstat(path); err != nil || fi.Mode().Type() != fs.ModeNamedPipe {
+		t.Skipf("mkfifo made no named pipe here (%v)", err)
+	}
+}
+
 func TestAttachmentImportMetadata(t *testing.T) {
 	ctx := context.Background()
 	b := newTestBackend(t, config.Default())
 	a := b.Attachments()
+	// The extension decides only when sniffing is inconclusive, and then
+	// through the host's type database: Linux has .md as text/markdown,
+	// the Windows registry and macOS's mime.types have no .md at all. The
+	// test pins the one type it relies on.
+	if err := mime.AddExtensionType(".md", "text/markdown"); err != nil {
+		t.Fatal(err)
+	}
 
 	png := append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 32)...)
 	cases := []struct {
@@ -110,12 +158,17 @@ func TestAttachmentImportMetadata(t *testing.T) {
 		}
 	}
 
-	// Symlink to a regular file is followed.
+	// Symlink to a regular file is followed, where this process may make
+	// one (on Windows that takes a privilege or developer mode); the file
+	// itself otherwise, for what follows.
 	target := writeTestFile(t, "real.txt", []byte("hello"))
-	link := filepath.Join(filepath.Dir(target), "link.txt")
-	os.Symlink(target, link)
-	res, err := a.Import(ctx, api.AttachmentImportParams{AccountID: "acc", Path: link})
-	if err != nil || res.Attachment.Filename != "link.txt" || res.Attachment.Size != 5 {
+	path, wantName := filepath.Join(filepath.Dir(target), "link.txt"), "link.txt"
+	if err := os.Symlink(target, path); err != nil {
+		t.Logf("no symbolic link here, importing the file itself: %v", err)
+		path, wantName = target, "real.txt"
+	}
+	res, err := a.Import(ctx, api.AttachmentImportParams{AccountID: "acc", Path: path})
+	if err != nil || res.Attachment.Filename != wantName || res.Attachment.Size != 5 {
 		t.Errorf("symlink: %+v %v", res, err)
 	}
 

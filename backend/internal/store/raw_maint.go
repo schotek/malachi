@@ -27,7 +27,7 @@ import (
 type ConvertResult struct {
 	Visited   int // accounting rows dealt with
 	Converted int // files now in the target codec
-	Busy      int // skipped: a writer held the message (the sweep counts it as misplaced)
+	Busy      int // skipped: a writer held the message, or a reader its file (ErrBusy); the sweep counts it as misplaced
 	Corrupt   int // skipped: the source is damaged and stays as it is
 	Missing   int // rows whose file was gone; the row went too
 	Failed    int // skipped after another error (logged)
@@ -45,8 +45,9 @@ const convertDefaultBatch = 64
 // of every message: first each new file is written beside the old one,
 // checked, flushed and renamed into place, then the touched directories
 // are flushed once, and only then does each old file go, unless a writer
-// replaced either file meanwhile (os.SameFile). A busy message is skipped
-// and a damaged one kept, both counted. The batch stops at a full disk
+// replaced either file meanwhile (os.SameFile). A busy message (a writer
+// holds it, or on Windows a reader has a file open that must go) is
+// skipped and a damaged one kept, both counted. The batch stops at a full disk
 // (ErrNoSpace), when ctx ends, and when the store's codec is no longer to
 // (ErrConflict); last is then the last id dealt with, and what was
 // converted so far is finished.
@@ -104,7 +105,14 @@ func (s *Store) ConvertRawBatch(ctx context.Context, afterID string, to RawCodec
 			stop = err
 			break
 		}
-		if err != nil {
+		switch {
+		case errors.Is(err, ErrBusy):
+			// A reader held a file the conversion had to replace or
+			// remove (Windows); the sweep finds the message misplaced and
+			// the conversion comes back to it.
+			s.log.Info("message file in use by a reader: converted in a later pass", "id", mf.id)
+			res.Busy++
+		case err != nil:
 			s.log.Warn("convert message file", "id", mf.id, "err", err)
 			res.Failed++
 		}
@@ -196,6 +204,16 @@ func (s *Store) convertFirst(ctx context.Context, mf messageFile, to RawCodec, r
 	if err != nil {
 		return nil, fmt.Errorf("stat message file: %w", err)
 	}
+	// The second phase tells by os.SameFile whether a writer replaced
+	// either file meanwhile. Windows may read a file's identity lazily, by
+	// path, at the first SameFile, which would then take whatever file has
+	// the name by then for the one seen here: read both identities now,
+	// while the names are still these files. Without them the second phase
+	// could not tell, and the pair is left to the sweep.
+	if !os.SameFile(src, src) || !os.SameFile(dst, dst) {
+		s.log.Warn("cannot identify the converted message files; the sweep settles them", "id", mf.id)
+		return nil, nil
+	}
 	return &convertPending{messageFile: mf, from: from, to: to, src: src, dst: dst, info: info}, nil
 }
 
@@ -219,9 +237,16 @@ func (s *Store) convertSecond(ctx context.Context, p convertPending, res *Conver
 		return
 	}
 	h.l.names.Lock()
-	err = os.Remove(srcPath)
+	err = s.removeRaw(h.l, p.from, srcPath, nil)
 	h.l.names.Unlock()
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if errors.Is(err, ErrBusy) {
+		// A reader still has the old file open (Windows): the new one is
+		// in place and read first, and the sweep settles the pair.
+		s.log.Info("converted message's old file in use by a reader: left for the sweep", "id", p.id)
+		res.Busy++
+		return
+	}
+	if err != nil {
 		s.log.Warn("remove converted message file", "id", p.id, "err", err)
 		return
 	}
@@ -249,14 +274,14 @@ type SweepResult struct {
 	Temps      int // stale temporary files removed
 	Staged     int // stale staged files removed
 	Orphans    int // files of messages without a row removed
-	Dirs       int // empty directories of unknown accounts removed
+	Dirs       int // empty directories of unknown accounts, and those of accounts this store deleted, removed
 	Resolved   int // messages that had both a plain and a .zst file
 	Backfilled int // accounting rows added for files that had none
 	Fixed      int // accounting rows corrected
 	Dropped    int // accounting rows without a file removed
 	Misplaced  int // files not in the store's codec (outbox messages are not counted)
 	Corrupt    int // .zst files whose frame header is damaged (kept)
-	Busy       int // skipped: a writer held the message
+	Busy       int // skipped: a writer held the message, or a reader the file to remove (ErrBusy) or one in a deleted account's directory
 }
 
 // metaRawAccounted marks the first complete sweep: from then on every raw
@@ -270,7 +295,10 @@ const metaRawAccounted = "raw.accounted"
 //   - stale temporary and staged files go, and so do the files of messages
 //     without a row in the directories of the store's own accounts and
 //     the empty directories of unknown accounts (a directory with files
-//     may belong to another store beside this one, and stays);
+//     may belong to another store beside this one, and stays), except
+//     the directory of an account this store deleted, which goes whole
+//     whatever its age (what a reader kept open, on Windows, when the
+//     account was deleted, or what a crash left: metaDeletedDir);
 //   - of a message with both a plain and a .zst file the newer stays, a
 //     damaged .zst losing;
 //   - files without an accounting row get one (in batches), rows without a
@@ -283,6 +311,10 @@ func (s *Store) SweepMessageFiles(ctx context.Context, olderThan time.Duration) 
 	var res SweepResult
 	cutoff := time.Now().Add(-olderThan)
 	res.Staged = s.sweepStaging(cutoff)
+	deleted, err := s.deletedDirs(ctx)
+	if err != nil {
+		return res, err
+	}
 	entries, err := os.ReadDir(s.MessageDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return res, fmt.Errorf("read message directory: %w", err)
@@ -297,8 +329,16 @@ func (s *Store) SweepMessageFiles(ctx context.Context, olderThan time.Duration) 
 			continue
 		}
 		withDir[acc] = true
-		if err := s.sweepAccount(ctx, acc, cutoff, &res); err != nil {
+		if err := s.sweepAccount(ctx, acc, deleted[acc], cutoff, &res); err != nil {
 			return res, err
+		}
+	}
+	for acc := range deleted {
+		if !withDir[acc] {
+			// Removed since, or never there.
+			if err := s.forgetDeletedDir(ctx, acc); err != nil {
+				return res, err
+			}
 		}
 	}
 	accounts, err := s.accountsWithRawRows(ctx)
@@ -326,13 +366,40 @@ type sweepRow struct {
 	diskBytes int64
 }
 
-// sweepAccount sweeps one account's directory.
-func (s *Store) sweepAccount(ctx context.Context, accountID string, cutoff time.Time, res *SweepResult) error {
+// sweepAccount sweeps one account's directory; deleted says that this
+// store deleted the account (metaDeletedDir).
+func (s *Store) sweepAccount(ctx context.Context, accountID string, deleted bool, cutoff time.Time, res *SweepResult) error {
 	dir := s.accountDir(accountID)
 	var known bool
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM accounts WHERE id = ?)
 		OR EXISTS (SELECT 1 FROM messages WHERE account_id = ?)`, accountID, accountID).Scan(&known); err != nil {
 		return fmt.Errorf("sweep message files: %w", err)
+	}
+	switch {
+	case deleted && known:
+		// Added again under the same id since: what the deleted one left
+		// are orphans in its directory, which the sweep of a known account
+		// removes as any.
+		if err := s.forgetDeletedDir(ctx, accountID); err != nil {
+			return err
+		}
+	case deleted:
+		// This store deleted the account and could not remove all of its
+		// directory then: a reader of the daemon kept a file open
+		// (Windows), or the daemon stopped first. Its files are this
+		// store's, and nothing writes there any more.
+		if err := s.removeAccountDir(accountID); err != nil {
+			if s.accountRead(accountID) {
+				s.log.Info("message directory of a deleted account in use by a reader; the next sweep removes it",
+					"account", accountID, "err", err)
+				res.Busy++
+			} else {
+				s.log.Warn("remove message directory of a deleted account", "account", accountID, "err", err)
+			}
+			return nil
+		}
+		res.Dirs++
+		return s.forgetDeletedDir(ctx, accountID)
 	}
 	if !known {
 		// Not necessarily a leftover of an account deleted here: two
@@ -512,8 +579,12 @@ func (s *Store) sweepOrphan(ctx context.Context, accountID, id string, f rawFile
 	if exists, err := s.messageExists(ctx, accountID, id); err != nil || exists {
 		return
 	}
-	s.unlinkRaw(h.l, h.dir, id)
-	res.Orphans++
+	switch err := s.unlinkRaw(h.l, h.dir, id, nil); {
+	case errors.Is(err, ErrBusy):
+		res.Busy++
+	case err == nil:
+		res.Orphans++
+	}
 }
 
 // sweepPair settles a message with both files; false when it was busy or
@@ -531,7 +602,12 @@ func (s *Store) sweepPair(ctx context.Context, accountID, id string, res *SweepR
 		return rawFiles{}, false
 	}
 	if files.both() {
-		if files, err = s.resolveLocked(ctx, h, files); err != nil {
+		files, err = s.resolveLocked(ctx, h, files)
+		switch {
+		case errors.Is(err, ErrBusy):
+			res.Busy++
+			return rawFiles{}, false
+		case err != nil:
 			s.log.Warn("settle message files", "id", id, "err", err)
 			return rawFiles{}, false
 		}

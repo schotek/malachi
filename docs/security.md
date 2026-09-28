@@ -60,7 +60,7 @@ does about the local attackers:
 | Tracking pixels | remote `<img>`, CSS `url()`, `@import`, `@font-face`, `<link>`, `srcset`, `<video poster>` | confirms address is live, leaks IP, time, client, sometimes read-receipts of forwarded mail |
 | CSS exfiltration | attribute selectors + `url()` (`input[value^="a"] { background: url(https://x/a) }`), `@font-face` unicode-range | leak of page content character by character |
 | Content spoofing / overlay | `position: fixed/absolute` overlays, z-index tricks, hidden text, `<form>` with our styling | phishing that looks like client UI |
-| Masked links | link text ≠ href, IDN homographs, `data:` and `blob:` URLs | phishing |
+| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), a text that reads as the bank's address to a person but not to a parser (a soft hyphen, zero-width or bidi character in its host, a space around an inline element, a trailing dot, a homoglyph, a backslash or fullwidth slash before the path, a colon another script draws or none at all, `https//bank.example`, a dot another script draws, userinfo in the text), a text the view draws otherwise than the daemon lists it (CSS that hides or clips part of it, markup that draws it right to left, padding past the daemon's cap on the listed text), one href listed under two texts, or under two spellings of one address (an empty anchor, then the bank's), `data:` and `blob:` URLs | phishing |
 | Frame / navigation | `<iframe>`, `<meta http-equiv=refresh>`, `<base href>` | loading arbitrary origins, rewriting relative links |
 | Resource exhaustion | deeply nested tags, huge documents, billion-laughs-style entity tricks, giant images | UI hang, memory exhaustion |
 | Mixed-content reference | `cid:` pointing to non-existent or foreign parts | confusion, occasional parser bugs |
@@ -198,6 +198,125 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
 - WebKit's separate content process; one view per pane, reused between
   messages with the document replaced whole.
 
+Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
+`Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
+is re-established for WebView2, from measurements rather than
+documentation, because WebView2 behaves unlike both WebKits: a cancelled
+navigation still sends its request, and a CSP plus a request filter still
+let `<link rel=preconnect>` open a connection and `<link rel=prerender>`
+fetch a page, both unseen by the filter:
+
+- no network at all: every view runs in one browser environment started
+  with `--host-resolver-rules="MAP * ~NOTFOUND"`, which makes every name
+  and every IP literal unreachable (WebView2's own background calls and
+  SmartScreen included), and a proxy nothing answers on (`127.0.0.1:1`)
+  as a second barrier; each view has an InPrivate profile, extensions and
+  single sign-on with the Windows account are off, crash dumps (a dead
+  renderer's memory holds the message it showed, or a draft) stay on the
+  machine instead of going to Microsoft and are deleted when the app
+  starts and when it quits, and the `WEBVIEW2_*` variables of the process
+  are cleared first;
+- script off in the viewer and the previewer (`IsScriptEnabled=false`:
+  measured, no page listener, timer or message ever runs), no web
+  messages, host objects, script dialogs, DevTools, status bar, browser
+  keys, autofill or password saving, and no SmartScreen reputation check,
+  which by default posts every clicked link to Microsoft;
+- a request gate: every request of every kind is answered by the app
+  (`WebResourceRequested`, never the network stack): the view's own
+  document once, from `malachi-doc://` under a 128-bit nonce, with the
+  same Content-Security-Policy as GTK as a header and as a `<meta>`,
+  `nosniff`, `no-store` and `no-referrer`; its own picture scheme only
+  (`malachi-cid:` through `message.part`, images only, never SVG, a type
+  that is not `token/token` refused); 403 for everything else, the
+  document a second time and `data:` included;
+- navigation: only the pending document, once. A link activation is
+  cancelled; a host script reads the focused link through the
+  prototypes' own accessors, which a named element of the page cannot
+  shadow, and its `href` as written counts only when it resolves to
+  exactly the navigation's URL; the reader then opens the link, confirms
+  it (a masked link with its text and real target; a link the daemon did
+  not list, or one known only by the URL WebView2 normalised, with its
+  destination) or composes for `mailto:`. Stricter than GTK, which reads
+  the href with Go's parser alone: under a text that names a host, a link
+  is masked when that parser cannot tell its host, finds none, or finds
+  userinfo, and a listed link opens without the question only when the
+  address the browser will get has its host on the text's site; that
+  address never carries userinfo, so the question names the real host
+  first. Every listed link with the clicked href is judged, not the
+  first, since a click cannot tell two anchors with one href apart, and
+  so is every listed link whose canonical form is the navigation's
+  (hrefs that differ only in case, a default port or escaping). The
+  text judged is the daemon's `links[].text`, which is not what the view
+  draws: the anchor's text nodes and image alts, joined with a space each
+  and cut at 200 runes. The client takes out of it what is invisible
+  (format and other default-ignorable characters), reads it in NFKC with
+  the ideographic full stop as a dot, compares hosts in punycode without
+  a trailing dot, and counts every address in it: a scheme with its colon
+  (or one another script draws) and a slash, http and https without one,
+  `www.`, and two slashes wherever they stand, after a letter too
+  (`https//bank.example`, and `…//:sptth`, an address markup draws right
+  to left); a start of an address the daemon's spaces split (`w ww.`,
+  `https :/ /`) is read without them. In a text that begins with an
+  address, a space ends the host unless the host visibly goes on after it
+  (the next word begins with a dot that begins no ellipsis, has one
+  before its first slash or ends with one, or the word before the space
+  ends with one; two dots in a row end a host):
+  `www.shop.example for details` names www.shop.example,
+  `https://moje banka.example/login` no host that can be read. An
+  address whose host cannot be read
+  (a space inside it, userinfo, an escape) names a host no link leads to,
+  so it is asked about. A text that holds no address is read as a host
+  whole, as in GTK (after a word and a colon, what follows the colon), and
+  one word with a dot another script draws between its labels or more
+  than one dot at its end names a host that cannot be read. A
+  single-label host (a top-level domain, an intranet name) is no site of
+  the hosts under it; multi-label public suffixes such as `co.uk` are not
+  known without a public-suffix list, so `https://co.uk/` still counts as
+  the site of a text that names `bank.co.uk`. What the client cannot see
+  still opens without the question, as known limits that need the daemon
+  to report what the view draws: part of the link's text that CSS hides
+  or clips (a hidden word before a bare host, a clipped address before
+  the one shown, padding that pushes the shown address past the 200-rune
+  cap), a bare host with a path that markup draws right to left
+  (`<bdo dir=rtl>`, `unicode-bidi: bidi-override`), a host an inline
+  element splits right after a host of the link's own site (drawn as
+  `https://evil.examplebank.example`) or in its last label (drawn as
+  `https://www.bank.com` over a link to `www.bank.co`), one word whose
+  labels a middle or raised dot parts (left out for Catalan, Japanese
+  and the scripts that write such dots between syllables), and a host without a
+  scheme or `www.` after words (`Log in at bank.example`), which GTK does
+  not read either; an e-mail address names no host. A link the launcher
+  refuses is never offered and says so in a toast
+  ([windows-port.md §6.4](windows-port.md#64-links)).
+  New windows, downloads, external schemes, frames, permissions,
+  authentication, client certificates, certificate errors, screen capture
+  and Save As are refused; the context menu keeps Copy and Copy Link;
+- a fixed document title: WebView2 draws a view through a top-level
+  window of the browser process titled after the document, which other
+  programs can read, so no message, picture or PDF names that window;
+- a renderer that dies or hangs gets the same document once more, and
+  when it fails again the view drops it (the reader shows the plain text
+  with the "could not be shown safely" hint), so a body that reliably
+  crashes Chromium or PDFium cannot loop, writing a crash dump of the
+  mail each time and giving an exploit unlimited retries; a runtime that
+  is missing, or cannot take one of these settings, loads nothing, fail
+  closed;
+- attachments are previewed by the app's own previewer in such a view,
+  never by the shell's preview handlers (third-party code in process over
+  hostile files): pictures by their signature, never SVG; PDF in the
+  runtime's viewer inside a page of the app's own; text, HTML, SVG, XML
+  and messages as escaped source; nothing written to disk, no link
+  followed;
+- the **network canary** (`Malachi.App.Canary`, part of `make
+  test-windows`) runs the real viewer, editor and previewer against a
+  hostile document, its active twin (hover, clicks, forms, a refresh) and
+  every HTML part of `backend/testdata/mime` raw, without the sanitiser,
+  with a loopback listener per vector and Chromium's NetLog: no listener
+  reached, no name resolved, no TCP connection attempted, no URL request
+  but WebView2's own, nothing navigated, opened or downloaded; a control
+  run without the protections must leak, so the harness is known to see
+  leaks.
+
 ### 3.3 Composed HTML
 
 HTML written in the compose editor is hostile too: a paste from a web page
@@ -226,7 +345,22 @@ then reports a failure and the compose window shows its editor-failure
 toast; the text it was given stays saveable), every navigation after the
 initial load cancelled, no context menu, dropped files taken away from
 WebKit and handed to attachment import so a `file:` URL never reaches
-the page.
+the page. The Windows editor (`WebViews/ComposeWebView.cs`) needs page
+script on, since with script off not even an injected bridge's listener
+runs, and WebView2 has no content world of its own: the bridge shares the
+page's world. The CSP carries no `script-src`, so every script, handler
+and `javascript:` URL of pasted or quoted HTML is blocked while the
+bridge, injected before the first navigation and bound to the top frame
+and the document's URL, uses the `Document` and `EventTarget` accessors
+it captured at document start (a pasted `<img name="body">` cannot
+clobber them). Its messages are accepted only as strings from the current
+document in a shape that parses; the request gate, the resolver rule and
+the dead proxy keep it offline as the viewer; its `cid:` serves only ids
+the window registered, as on the other platforms; every navigation but
+its own document is cancelled; a drop of files reaches the host as paths
+for `attachment.import`, never the page; its context menu keeps only the
+editing commands. The canary loads its hostile document and the corpus
+into it as well.
 
 ## 4. Message parsing (MIME)
 
@@ -300,7 +434,30 @@ the page.
   on the name and type `message.part` served, which are what the file
   gets. The client repeats the name sanitiser on every name it writes
   (`safeFileName`: last path component, no control or bidi characters,
-  no leading dots, 255 bytes, and `:` to `_`).
+  no leading dots, 255 bytes, and `:` to `_`). The Windows client
+  previews in its own locked-down previewer (§3.2) and never opens what
+  Windows runs, installs or mounts: besides the GTK list and the macOS
+  additions, Outlook's Level-1 list, `.rdp`, `.appinstaller`, `.msix`,
+  `.ppkg`, `.searchconnector-ms` and friends, disk images (`.iso`,
+  `.img`, `.vhd`, `.vhdx`, whose mounting has bypassed the Mark of the
+  Web), OneNote's `.one` and `.onepkg`, Windows Contacts' `.contact` and
+  `.wab`, Access's formats since 2007 (`.accdb`, `.accde`, `.accdr`,
+  `.accda`, `.accdu`, `.accdt`, `.accdc`, the successors of the Access
+  types Outlook's list names, and the web app reference `.accdw`), and
+  anything the shell's
+  `AssocIsDangerous` or the attachment policy flags
+  (`Malachi.Core.Platform.DangerousTypes`, `FileTypePolicy`), judged on
+  the listed, the served and the written name. Its Save All leaves these
+  types out, unlike GTK and macOS: Explorer parses a shortcut
+  (`.url`, `.lnk`), `.scf`, `.library-ms` or `.searchConnector-ms` file
+  for its icon and location as soon as its folder is shown, whatever its
+  Mark of the Web, and has sent the user's NTLM hash to another host that
+  way (CVE-2025-24054); a toast says how many were left out, and Save As
+  saves one on the user's explicit choice. It writes names
+  that are safe on Windows (reserved characters and their ANSI best-fit
+  look-alikes, device names, trailing dots and spaces, streams, the path
+  length, a cut to length never adding an extension), and opens only
+  local files through the shell, never a share, a link or a stream.
 - An attached message (`message/rfc822`, or a part named `.eml`) is never
   parsed during sync. `message.embedded` renders it only when the user
   opens it, from the part's bytes, through the same parser, limits and
@@ -328,6 +485,41 @@ the page.
   during the copy; the content type is sniffed, never taken from the client
   or the extension alone; the file name goes through the same sanitiser
   (`internal/safename`) as received names.
+- Display names and subjects are the sender's text, shown as plain text by
+  every client. Unicode lets such text reorder what is drawn after it:
+  U+202E (RIGHT-TO-LEFT OVERRIDE) in a `From` name turns the `<address>`
+  that follows it around in a tooltip, and in a subject draws `gnp.exe`
+  as `exe.png`; a control character is invalid in the XML of a Windows
+  toast, which then does not appear at all. The Windows client therefore
+  cleans every mail text its chrome shows before showing it
+  (`Malachi.Core.Text.DisplayText`): the list's senders and subjects, the
+  reader's subject and address chips, the captions of message windows,
+  notifications, the questions that quote a subject or a link's text,
+  attachment names and recipient suggestions, and the names the server
+  gives its folders (the sidebar, the list's header, the main window's
+  caption, the origin of a search result, the status line). The explicit
+  bidi formatting characters (U+202A to U+202E, U+2066 to U+2069) are
+  removed; control characters (C0, DEL, C1) and the line and paragraph
+  separators become spaces, so what is left is valid XML; and where such
+  text is composed with other text (*Name &lt;address&gt;*, a
+  conversation's participants, a sentence that quotes a subject or a
+  folder, the masked-link question that quotes a link's text before its
+  real destination, *Folder – Malachi Mail*) it is isolated between
+  U+2068 and U+2069, so a right-to-left text keeps its own direction and
+  cannot move what follows it. The bidi marks (U+200E, U+200F, U+061C)
+  and the joiners stay, so Hebrew, Arabic and Persian names read as
+  written; a subject or name of nothing but characters that draw nothing
+  (such a mark, U+200B, U+FEFF) counts as empty and shows its fallback,
+  *(No subject)* or the address. This is display only: the recipients of
+  a reply, a draft's subject, the names in a quote's header and what Copy
+  Address copies are the text as received, and a message's body and the
+  excerpt of it in the list are its content, shown as written. So the
+  composer's To and Subject fields of a reply show the received name and
+  subject as they will be sent, an override included: cleaning them would
+  change the message, which is the daemon's to do in `draft.create`. The
+  GTK and macOS clients show these texts as received; the same rule is
+  proposed for them, and that cleaning for `draft.create`
+  ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)
 
@@ -389,8 +581,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   10 minutes, at most 8 run at once, and the backend closes all of them
   on shutdown. The UI opens the authorisation URL — the GTK UI through
   `gtk.URILauncher` (the OpenURI portal inside Flatpak, the desktop's
-  default handler otherwise), the macOS UI through `NSWorkspace`; the
-  backend never launches a browser.
+  default handler otherwise), the macOS UI through `NSWorkspace`, the
+  Windows UI through `ShellExecuteEx` (https only); the backend never
+  launches a browser.
 - The code goes to the provider's token endpoint through a hardened
   client: TLS 1.2+ with the system trust store (the transport policy),
   30 s per request, no redirects followed, no keep-alive. Before anything
@@ -512,15 +705,38 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   model equals the Secret Service's: a process running as the same user
   could already read `store.db` and the RPC key, so being able to run
   the helper gives it nothing new. On the daemon's side the helper path
-  must be absolute and name an executable regular file, one call is
-  bounded by 30 s (a Keychain prompt waits for the user), stdout and
-  stderr are capped, exit 2 is "no such item" and exit 3 a request the
-  helper refused. `malachi-keychain` itself accepts only account ids and
-  keys matching `[A-Za-z0-9._-]{1,128}` before anything reaches a
-  Keychain attribute, refuses more than 1 MiB on stdin, files the items as
-  `<accountId>/<key>` with a label naming the same, and prints the value
-  only as the answer to `get`. The app sets the two variables only when
-  `MALACHI_KEYRING` is not already in its environment.
+  must be absolute and name a regular file that is a program by the
+  platform's rule, which `exec.LookPath` applies: execute permission for
+  the daemon's user on Linux and macOS, a name with an extension on
+  Windows. The check catches a wrong path at start; it is no trust
+  boundary, since whoever sets the daemon's environment runs as the same
+  user anyway. One call is bounded by 30 s (a Keychain prompt waits for
+  the user), stdout and stderr are capped, exit 2 is "no such item" and
+  exit 3 a request the helper refused. `malachi-keychain` itself accepts
+  only account ids and keys matching `[A-Za-z0-9._-]{1,128}` before
+  anything reaches a Keychain attribute, refuses more than 1 MiB on stdin,
+  files the items as `<accountId>/<key>` with a label naming the same, and
+  prints the value only as the answer to `get`. The app sets the two
+  variables only when `MALACHI_KEYRING` is not already in its environment.
+- On Windows the app sets the helper to its bundled
+  `malachi-credentials.exe` (`windows/src/Malachi.Credentials`, NativeAOT,
+  no console window), which keeps one generic credential per account id
+  and key in Credential Manager, target
+  `io.github.schotek.Malachi/<accountId>/<key>`, persisted for this
+  machine only (it never roams with the profile), with the same identifier
+  rule and stdin cap as `malachi-keychain`. The value stays bytes, never a
+  string, and every buffer that held it is zeroed. Every value `get` hands
+  over matches a SHA-256 the helper wrote with it, so a torn, mixed or
+  edited item (`cmdkey` and the Credential Manager dialogs store UTF-16
+  without the hash) is a `keyringError`, never a wrong token. A value above
+  Credential Manager's 2560-byte limit is split into at most 16 chunks,
+  written to the slot the current header does not name before the header
+  that names them, so a `set` that fails or is killed leaves the previous
+  value readable; `delete` removes every chunk. Credential Manager loses
+  updates when several processes use it at once, so every run holds a
+  named mutex of the session around its store operation. The trust model
+  is the Secret Service's: any process of the user can read the user's
+  generic credentials, as it can read `store.db` and the RPC key.
 - If the keyring is unavailable, the account goes to `authRequired`; we do
   not fall back to plaintext storage.
 
@@ -654,7 +870,17 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   after the daemon has answered `system.hello`, and accept only a regular
   file of the exact format; the macOS client also requires the user as
   its owner and no group or other permission bits (`macos/README.md`), a
-  check the Go clients cannot make without platform-specific code.
+  check the Go clients cannot make without platform-specific code. The
+  Windows client makes the same check in the form Windows has
+  (`WindowsKeyFilePolicy`, `windows/README.md`): it opens the key file as
+  itself (a link or junction is refused, never followed), requires a disk
+  file owned by the user (or by the token's default owner of an elevated
+  run) whose DACL lets nobody but the user, SYSTEM, Administrators and
+  OWNER RIGHTS read, write or append its data, change its DACL or take it
+  (a NULL DACL is refused), and before it starts a daemon it creates the
+  socket's directory, `%USERPROFILE%\.cache\malachi\run`, with a
+  protected DACL for the user and SYSTEM, since the key file inherits its
+  directory's permissions there.
 - The table in §2 lists, attacker by attacker, what the handshake
   protects against: a peer that reaches the socket but not the key file
   beside it is refused, a process on the socket's path that cannot prove
@@ -682,7 +908,9 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   (`--socket` or `MALACHI_SOCKET` pointing into `/tmp`, or on Windows
   outside the user's profile) is not supported: whoever can write there
   can put a socket and a key of their own in place, and on Windows
-  whoever can read there can read the key.
+  whoever can read there can read the key. The Windows client refuses such
+  a key file (*Backend unavailable*, the reason in its log); the Go clients
+  cannot tell.
 - An attachment being opened or previewed is written by the UI to a
   private `0700` directory under `$XDG_RUNTIME_DIR/malachi/open` (or
   `$XDG_CACHE_HOME/malachi/open` without a runtime dir) as a `0600` file
@@ -704,18 +932,46 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   opened); a
   file the user saved is theirs regardless. Log lines about these files
   carry an error's domain and code in the open and its description, which
-  names the file, as private. On both platforms, and whatever the
+  names the file, as private. On every platform, and whatever the
   preferences, the whole directory is removed when the UI quits and again
   when it starts (what a crash left), so nothing opened or previewed
   outlives the session, which is also what `neverStoreAttachments`
-  promises; the macOS client removes it before it stops the daemon and
-  once more as the process ends. The removal refuses any path but an
-  absolute one ending in `malachi/open` (`Malachi Mail/open` on macOS), so
-  an unset runtime or cache directory cannot aim it at anything else,
-  removes a symbolic link in its place without following it, and logs a
-  failure. On Linux the runtime dir is normally a `tmpfs` in memory; the
-  fallback cache dir and the macOS directory are on disk until the
-  removal.
+  promises; the macOS and Windows clients remove it before they stop the
+  daemon and once more as the process ends. The removal refuses any path
+  but an absolute one ending in `malachi/open` (`Malachi Mail/open` on
+  macOS, `open` in the data directory on Windows, below), so an unset
+  runtime or cache directory cannot aim it at anything else, removes a
+  symbolic link in its place without following it, and logs a failure. On
+  Windows the directory is `open` in the data directory,
+  `%LOCALAPPDATA%\Malachi Mail\open` unless `MALACHI_DATA_DIR` names
+  another data directory for tests and agents, so the rule cannot require
+  `Malachi Mail` as the parent: the removal refuses any path but a fully
+  qualified one ending in `\open`, with `.` and `..` resolved as written,
+  that is no device path (`\\?\`, `\\.\`) and does not lie directly under
+  the root of a drive or share, and removes a symbolic link or junction in
+  its place without following it. On Linux the runtime dir is normally a
+  `tmpfs` in memory; the fallback cache dir and the macOS and Windows
+  directories are on disk until the removal.
+  On Windows the directory is
+  `%LOCALAPPDATA%\Malachi Mail\open` with a protected DACL for the user
+  and SYSTEM, emptied at start and exit (a file a viewer still holds open
+  cannot be deleted there and goes at the next start), each file in a
+  fresh random subdirectory, created new, never over an existing one. Every file the
+  client writes out of a message, opened or saved, gets the Mark of the
+  Web through `IAttachmentExecute`, which also runs the antivirus check
+  and the attachment policy: the Restricted zone, as Microsoft advises
+  mail clients, or the Internet zone for a program the user saves (the
+  Restricted zone's policy would delete it). A file for opening is opened
+  only when that check passed and the zone reads back (unless an
+  administrator switched zone information off); a failed check never
+  opens. No exception of these services names the path of a file written
+  out of a message. Its previewer holds the part in memory and writes
+  nothing, so an attachment kept on the mail server under
+  `neverStoreAttachments` reaches the disk only when the user opens it
+  (into this directory, gone at exit) or saves it. The data directory,
+  `%LOCALAPPDATA%\Malachi Mail`, lies in the user's profile, whose
+  permissions admit the user, SYSTEM and Administrators; the daemon's
+  `0600` and `0700` mean nothing there.
 - Raw messages are `<data dir>/messages/<account>/<id>`, or `<id>.zst`
   when compressed (`0600` files, `0700` directories). The name decides how
   a file is read, never its content, so a message that begins with zstd's
@@ -731,9 +987,17 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   removes temporary files, files without a row in its own accounts'
   directories and the empty directories of unknown accounts once they are
   an hour old; a directory with files it leaves alone, since another store
-  in the same data directory shares `messages/`. Outbox messages are always
-  plain and flushed to disk, file and directory, before the draft they
-  replace is deleted, since until the send that file is the only copy.
+  in the same data directory shares `messages/`, unless it is that of an
+  account this store deleted, which the deletion records until the
+  directory is gone and the sweep then removes whole. Windows refuses to
+  remove or replace a file while it is open: there a removal or a
+  replacement waits a moment for the daemon's own readers of the file
+  (`message.body`, `message.part`), and a file one of them, or another
+  program, keeps open for longer stays as it was, a deleted message's file
+  and a deleted account's directory until the sweep. Outbox messages are
+  always plain and flushed to disk, file and directory, before the draft
+  they replace is deleted, since until the send that file is the only
+  copy.
 - A message being received is staged in `<data dir>/staging/` (`0600`
   files with random names, created exclusively, in a `0700` directory)
   and reaches `messages/` only after the parse, a skeleton only once
@@ -746,11 +1010,16 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   row names a part remote before the skeleton replaces the file (that
   commit flushed to disk first, even against a power loss) and drops the
   name only after a whole file is in place, so after a crash it may call a
-  stored part remote, never the reverse; `message.part` and
-  `message.embedded` answer `partNotDownloaded` for such a part rather
-  than return the empty body the skeleton holds. Should a part the row
-  calls stored, with a size, still read back empty (a leftover file), they
-  and `draft.create` treat it as remote too and record it so.
+  stored part remote, never the reverse (a skeleton that cannot replace
+  the file after all, on Windows while a reader keeps it open, the
+  daemon's or another program's, has the name dropped again, the file
+  being still whole; of a message left with both variants a reader takes
+  the newer);
+  `message.part` and `message.embedded` answer `partNotDownloaded` for
+  such a part rather than return the empty body the skeleton holds.
+  Should a part the row calls stored, with a size, still read back empty
+  (a leftover file), they and `draft.create` treat it as remote too and
+  record it so.
 - Compose attachments live in `<data dir>/attachments/<id>` (`0600` files,
   `0700` directory); imports that never reach a saved draft are swept
   after 24 h.
@@ -975,3 +1244,25 @@ Advisories) rather than a public issue. No bug bounty.
       of api.md §1.4, read the key only after the `system.hello` answer
       and afresh for every connection, and send nothing before
       `system.authenticate` is answered?
+- [ ] Change to the Windows client's WebView2 layer
+      (`windows/src/Malachi.App/WebViews`, the gate, navigation, link,
+      context-menu and recovery rules in `Malachi.Core.Presentation`), or
+      a new WebView2 runtime or Windows App SDK: does the network canary
+      pass (`make test-windows`), with its control run still leaking? Is
+      every request still answered by the gate, every setting applied
+      before the first navigation, and does a view that cannot apply one
+      load nothing?
+- [ ] Windows client showing mail data: only `TextBlock.Text` /
+      `TextBox.Text`, never XAML, RTF or a WebView2 other than the
+      hardened views, and a name, subject or caption through `DisplayText`
+      first (§4)?
+- [ ] File written out of a message on Windows: a Windows-safe name, a
+      new file in a private directory, the Mark of the Web, opened only
+      after the check passed and the zone read back, never a type of
+      `DangerousTypes` or what `AssocIsDangerous` flags (nor written by
+      Save All, only by an explicit Save As), and no path in an
+      exception or a log line?
+- [ ] Change to `malachi-credentials` or to `WindowsKeyFilePolicy`: does a
+      value stay bytes that are zeroed, is every value handed out checked
+      against its SHA-256, does a failed `set` leave the previous value,
+      and are the owner and DACL checks unchanged or stricter?

@@ -189,7 +189,7 @@ func TestImportAttachment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 || info.Size() != 5 || a.Size != 5 {
+	if info.Mode().Perm() != permOf(t, 0o600, false) || info.Size() != 5 || a.Size != 5 {
 		t.Errorf("file: mode=%v size=%d a.Size=%d", info.Mode().Perm(), info.Size(), a.Size)
 	}
 	if a.SHA256 != "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824" {

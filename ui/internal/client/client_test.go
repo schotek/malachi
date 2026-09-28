@@ -3,7 +3,10 @@
 
 package client
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 // The UI must dial where the daemon listens (backend/internal/config).
 func TestDefaultSocketPath(t *testing.T) {
@@ -11,9 +14,11 @@ func TestDefaultSocketPath(t *testing.T) {
 	for _, tc := range []struct {
 		name, override, rt, flatpak, want string
 	}{
-		{"session", "", "/run/user/1000", "", "/run/user/1000/malachi/rpc.sock"},
-		{"flatpak", "", "/run/user/1000", "io.github.schotek.Malachi", "/run/user/1000/app/io.github.schotek.Malachi/malachi/rpc.sock"},
-		{"no runtime dir", "", "", "", "/home/u/.cache/malachi/run/rpc.sock"},
+		// A computed path is joined with the system's separator; the
+		// override is used as it is.
+		{"session", "", "/run/user/1000", "", filepath.FromSlash("/run/user/1000/malachi/rpc.sock")},
+		{"flatpak", "", "/run/user/1000", "io.github.schotek.Malachi", filepath.FromSlash("/run/user/1000/app/io.github.schotek.Malachi/malachi/rpc.sock")},
+		{"no runtime dir", "", "", "", filepath.FromSlash("/home/u/.cache/malachi/run/rpc.sock")},
 		{"override", "/tmp/x.sock", "/run/user/1000", "io.github.schotek.Malachi", "/tmp/x.sock"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,0 +1,501 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Tests/MalachiCoreTests/HTMLLinksTests.swift (linkDecisions),
+// the decision of ui/internal/window/remote.go (openLink), which GTK does
+// not test. The Windows cases are new: an activated link without its
+// attribute (ActivatedLink.Raw null) compared after Chromium's
+// canonicalisation (ChromiumUrl), and the canonicaliser itself; and a
+// listed link judged by the address the launcher would open for it
+// (launched), with the security audit's bypass of the masked-link check.
+// The helpers of HTMLLinksTests.swift (AllowedLink, IsMasked, the hosts)
+// are tested with Malachi.Core.Html.Links.
+
+using System;
+using Malachi.Core.Api;
+using Malachi.Core.Model;
+using Malachi.Core.Tests.Presentation;
+using Xunit;
+
+namespace Malachi.Core.Tests.Model;
+
+public sealed class LinkDecisionTests
+{
+    private static readonly Link[] Masked = [Link("https://bank.example", "https://evil.example")];
+    private static readonly Link[] Plain = [Link("click here", "https://evil.example")];
+
+    // What the launcher would hand the browser: the real one's rule.
+    private static readonly Func<string, string?> Launched = FakeLauncher.Target;
+
+    // The href a click reports is the attribute as written, which is what
+    // the daemon lists, so it must be matched, not the normalised URL.
+    [Fact]
+    public void LinkDecisions()
+    {
+        // The attribute lacks the slash the engine adds: still matched by Raw.
+        var noSlash = new ActivatedLink("https://evil.example", "https://evil.example/");
+        Assert.Equal("https://evil.example", noSlash.Href);
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://evil.example"), LinkDecision.For(noSlash.Href, Masked, Launched));
+        Assert.Equal(new LinkDecision.Open("https://evil.example"), LinkDecision.For(noSlash.Href, Plain, Launched));
+
+        // Only the navigation saw it: the resolved URL is unlisted.
+        var policyOnly = new ActivatedLink(null, "https://evil.example/");
+        Assert.Equal("https://evil.example/", policyOnly.Href);
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/"), LinkDecision.For(policyOnly.Href, Masked, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/"), LinkDecision.For(policyOnly.Href, Plain, Launched));
+
+        // Upper-case host, which the engine lower-cases.
+        Link[] upper = [Link("https://bank.example", "https://EVIL.example/x")];
+        var upperLink = new ActivatedLink("https://EVIL.example/x", "https://evil.example/x");
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://EVIL.example/x"), LinkDecision.For(upperLink.Href, upper, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/x"), LinkDecision.For(upperLink.Resolved, upper, Launched));
+
+        // An IDN host, which the engine turns into punycode.
+        Link[] idn = [Link("Bücher", "https://bücher.example/")];
+        var idnLink = new ActivatedLink("https://bücher.example/", "https://xn--bcher-kva.example/");
+        Assert.Equal(new LinkDecision.Open("https://bücher.example/"), LinkDecision.For(idnLink.Href, idn, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://xn--bcher-kva.example/"), LinkDecision.For(idnLink.Resolved, idn, Launched));
+
+        // Not on the list at all: confirmed, never opened silently.
+        Assert.Equal(new LinkDecision.Confirm("", "https://other.example/"), LinkDecision.For("https://other.example/", Masked, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://other.example/"), LinkDecision.For("https://other.example/", [], Launched));
+
+        // mailto: goes to the composer, listed or not; the rest is refused.
+        Assert.Equal(new LinkDecision.Mailto("mailto:a@example.org"), LinkDecision.For("mailto:a@example.org", [], Launched));
+        Assert.Equal(new LinkDecision.Mailto("MAILTO:a@example.org"), LinkDecision.For("MAILTO:a@example.org", Masked, Launched));
+    }
+
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("JavaScript:alert(1)")]
+    [InlineData("vbscript:msgbox")]
+    [InlineData("data:text/html,<script>alert(1)</script>")]
+    [InlineData("file:///C:/Windows/System32/calc.exe")]
+    [InlineData("file://server/share/x.exe")]
+    [InlineData("ftp://x/")]
+    [InlineData("")]
+    [InlineData("malachi-cid:a/b/1")]
+    [InlineData("malachi-doc://viewer/1-x")]
+    [InlineData(" https://evil.example")]
+    [InlineData("/relative/path")]
+    [InlineData("relative/path")]
+    [InlineData("//evil.example/x")]
+    [InlineData("#top")]
+    [InlineData("?q=1")]
+    [InlineData("ms-settings:privacy")]
+    [InlineData("search-ms:query=x")]
+    public void RefusedLinks(string href)
+    {
+        Assert.Equal(new LinkDecision.Refused(), LinkDecision.For(href, Masked, Launched));
+        // Whether read as the attribute or reported as the navigation.
+        Assert.Equal(new LinkDecision.Refused(), LinkDecision.For(new ActivatedLink(href, href), Masked, Launched));
+        Assert.Equal(new LinkDecision.Refused(), LinkDecision.For(new ActivatedLink(null, href), Masked, Launched));
+    }
+
+    // A relative attribute resolves against the viewer's own document; the
+    // resolved URL is no web address either.
+    [Fact]
+    public void RelativeAttributeIsRefused()
+    {
+        Assert.Equal(new LinkDecision.Refused(), LinkDecision.For(new ActivatedLink("x.html", "malachi-doc://viewer/x.html"), [], Launched));
+        Assert.Equal(new LinkDecision.Refused(), LinkDecision.For(new ActivatedLink("x.html", "https://evil.example/x.html"), Plain, Launched));
+    }
+
+    // With the attribute, an ActivatedLink is decided as on macOS: by the
+    // attribute, and the answer names it.
+    [Fact]
+    public void WithTheAttributeTheAttributeDecides()
+    {
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://evil.example"),
+            LinkDecision.For(new ActivatedLink("https://evil.example", "https://evil.example/"), Masked, Launched));
+        Assert.Equal(new LinkDecision.Open("https://evil.example"),
+            LinkDecision.For(new ActivatedLink("https://evil.example", "https://evil.example/"), Plain, Launched));
+        Link[] idn = [Link("Bücher", "https://bücher.example/")];
+        Assert.Equal(new LinkDecision.Open("https://bücher.example/"),
+            LinkDecision.For(new ActivatedLink("https://bücher.example/", "https://xn--bcher-kva.example/"), idn, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://unlisted.example/"),
+            LinkDecision.For(new ActivatedLink("https://unlisted.example/", "https://unlisted.example/"), Plain, Launched));
+        Assert.Equal(new LinkDecision.Mailto("mailto:a@example.org"),
+            LinkDecision.For(new ActivatedLink("mailto:a@example.org", "mailto:a@example.org"), Masked, Launched));
+    }
+
+    // Without the attribute (Windows): the resolved URL is compared with the
+    // canonical form of every listed href, and the answer names the
+    // resolved URL.
+    [Fact]
+    public void WithoutTheAttributeCanonicalFormsAreCompared()
+    {
+        // The masked link is found, and confirmed with its text.
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://evil.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/"), Masked, Launched));
+        // A plain link in a body without a masked one opens.
+        Assert.Equal(new LinkDecision.Open("https://evil.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/"), Plain, Launched));
+        // Upper case, a default port, dot segments, backslashes, spaces:
+        // the listed href as written, the navigation as Chromium makes it.
+        Link[] odd = [Link("click", "HTTPS://Evil.Example:443\\a\\..\\b c?q=a b")];
+        Assert.Equal(new LinkDecision.Open("https://evil.example/b%20c?q=a%20b"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/b%20c?q=a%20b"), odd, Launched));
+        Link[] oddMasked = [Link("www.bank.example", "HTTPS://Evil.Example:443/a/../b c?q=a b")];
+        Assert.Equal(new LinkDecision.Confirm("www.bank.example", "https://evil.example/b%20c?q=a%20b"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/b%20c?q=a%20b"), oddMasked, Launched));
+        // An internationalised host, listed in Unicode, reported in punycode.
+        Link[] idn = [Link("Bücher", "https://bücher.example/")];
+        Assert.Equal(new LinkDecision.Open("https://xn--bcher-kva.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://xn--bcher-kva.example/"), idn, Launched));
+        Link[] idnMasked = [Link("https://bank.example", "https://bücher.example/")];
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://xn--bcher-kva.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://xn--bcher-kva.example/"), idnMasked, Launched));
+        // Unlisted, or listed elsewhere: confirmed with no text.
+        Assert.Equal(new LinkDecision.Confirm("", "https://other.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://other.example/"), Plain, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/x"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/x"), Plain, Launched));
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/"), [], Launched));
+        // mailto: still goes to the composer.
+        Assert.Equal(new LinkDecision.Mailto("mailto:a@example.org"),
+            LinkDecision.For(new ActivatedLink(null, "mailto:a@example.org"), Masked, Launched));
+    }
+
+    // In a body that carries a masked link, a click without its attribute
+    // is never opened silently, even where it matches a plain link: the
+    // masked one may have an href whose canonical form is not certain.
+    [Fact]
+    public void AMaskedLinkKeepsEveryClickWithoutTheAttributeConfirmed()
+    {
+        Link[] links =
+        [
+            Link("https://bank.example", "https://evil.example/{x}"),
+            Link("click here", "https://evil.example/"),
+        ];
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/"),
+            LinkDecision.For(new ActivatedLink(null, "https://evil.example/"), links, Launched));
+        // With the attribute, the plain link is itself.
+        Assert.Equal(new LinkDecision.Open("https://evil.example/"),
+            LinkDecision.For(new ActivatedLink("https://evil.example/", "https://evil.example/"), links, Launched));
+    }
+
+    // An attribute that leads somewhere else than the navigation was read
+    // from another element: the navigation decides.
+    [Fact]
+    public void AnAttributeOfAnotherLinkIsIgnored()
+    {
+        Link[] links =
+        [
+            Link("click here", "https://good.example/"),
+            Link("https://bank.example", "https://evil.example/"),
+        ];
+        Assert.Equal(new LinkDecision.Confirm("https://bank.example", "https://evil.example/"),
+            LinkDecision.For(new ActivatedLink("https://good.example/", "https://evil.example/"), links, Launched));
+        // An attribute whose canonical form is not certain is trusted, as on
+        // macOS.
+        Link[] braces = [Link("click here", "https://good.example/{x}")];
+        Assert.Equal(new LinkDecision.Open("https://good.example/{x}"),
+            LinkDecision.For(new ActivatedLink("https://good.example/{x}", "https://good.example/%7Bx%7D"), braces, Launched));
+    }
+
+    /// <summary>The text the security audit's links wear.</summary>
+    private const string Bank = "https://www.mojebanka.example/login";
+
+    /// <summary>
+    /// The security audit's bypass (F3 §1): hrefs whose userinfo Go's parser
+    /// refuses, a backslash before the "@", a userinfo it accepts and an
+    /// empty authority, with the URL WebView2 resolves each to, as the
+    /// network canary reports the viewer's links
+    /// (NetworkCanaryTests.MaskedLinksReachTheReaderAsWritten, which also
+    /// shows that the viewer hands on the attribute as written).
+    /// </summary>
+    public static readonly TheoryData<string, string> Bypasses = new()
+    {
+        { "https:// www.mojebanka.example@evil.example/space", "https://%20www.mojebanka.example@evil.example/space" },
+        { "https://%www.mojebanka.example@evil.example/pct", "https://%www.mojebanka.example@evil.example/pct" },
+        { "https://[www.mojebanka.example@evil.example/bracket", "https://%5Bwww.mojebanka.example@evil.example/bracket" },
+        { "https://­www.mojebanka.example@evil.example/shy", "https://%C2%ADwww.mojebanka.example@evil.example/shy" },
+        { "https://。www.mojebanka.example@evil.example/ideo", "https://%E3%80%82www.mojebanka.example@evil.example/ideo" },
+        { "https://www.mojebanka.example^@evil.example/caret", "https://www.mojebanka.example%5E@evil.example/caret" },
+        { "https://www.mojebanka.example|@evil.example/pipe", "https://www.mojebanka.example%7C@evil.example/pipe" },
+        { "https://www.mojebanka.example{x}@evil.example/brace", "https://www.mojebanka.example%7Bx%7D@evil.example/brace" },
+        { "https://www.mojebanka.example\"@evil.example/quote", "https://www.mojebanka.example%22@evil.example/quote" },
+        { "https://www.mojebanka.example\\@evil.example/bs2", "https://www.mojebanka.example/@evil.example/bs2" },
+        { "https://www.mojebanka.example@evil.example/plainuserinfo", "https://www.mojebanka.example@evil.example/plainuserinfo" },
+        { "https:///evil.example/triple", "https://evil.example/triple" },
+    };
+
+    // With its attribute, each is confirmed with the text it wore: Go
+    // cannot tell its host, or finds userinfo, or none, and the launcher
+    // would open the host after the "@" (or nothing).
+    [Theory]
+    [MemberData(nameof(Bypasses))]
+    public void TheAuditsBypassesAreConfirmed(string href, string resolved)
+    {
+        Link[] links = [Link(Bank, href), Link("click here", "https://www.mojebanka.example/")];
+        Assert.Equal(new LinkDecision.Confirm(Bank, href), LinkDecision.For(href, links, Launched));
+        Assert.Equal(new LinkDecision.Confirm(Bank, href), LinkDecision.For(new ActivatedLink(href, resolved), links, Launched));
+        // Without it, the resolved URL is confirmed too, with the text where
+        // it is the listed href's certain canonical form.
+        var decision = Assert.IsType<LinkDecision.Confirm>(LinkDecision.For(new ActivatedLink(null, resolved), links, Launched));
+        Assert.Equal(resolved, decision.Href);
+        // Under text that names no host, each is itself.
+        Link[] plain = [Link("click here", href)];
+        Assert.Equal(new LinkDecision.Open(href), LinkDecision.For(href, plain, Launched));
+    }
+
+    // A body may list one href under several texts, and a click reports the
+    // href, not the anchor: every listed link with the clicked href is
+    // judged, and the first whose text misleads is the one the question
+    // quotes, wherever it stands in the list (the adversarial review's
+    // shape: an empty anchor first, the bank's address second). Both paths,
+    // with the attribute and without it, apply the one rule.
+    [Fact]
+    public void EveryListedLinkWithTheClickedHrefIsJudged()
+    {
+        const string Href = "https://evil.example/dup";
+        foreach (var first in new[] { "", "x", "click here", "Unsubscribe", "https://evil.example/" })
+        {
+            foreach (var links in new[] { new[] { Link(first, Href), Link(Bank, Href) }, [Link(Bank, Href), Link(first, Href)] })
+            {
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(Href, links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(new ActivatedLink(Href, Href), links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, Href), LinkDecision.For(new ActivatedLink(null, Href), links, Launched));
+            }
+        }
+        // Of several that mislead, the first is quoted.
+        Link[] two = [Link("x", Href), Link("www.bank-one.example", Href), Link("www.bank-two.example", Href)];
+        Assert.Equal(new LinkDecision.Confirm("www.bank-one.example", Href), LinkDecision.For(Href, two, Launched));
+        Assert.Equal(new LinkDecision.Confirm("www.bank-one.example", Href), LinkDecision.For(new ActivatedLink(null, Href), two, Launched));
+        // Where none misleads, the link opens.
+        Link[] plain = [Link("", Href), Link("click here", Href), Link("https://evil.example/", Href)];
+        Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(Href, plain, Launched));
+        Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(new ActivatedLink(null, Href), plain, Launched));
+    }
+
+    // The second review (N2): hrefs that differ only in case, a default
+    // port or escaping lead to one address, and the viewer may report the
+    // attribute of another anchor than the one clicked (its focus, a middle
+    // click). With the attribute, every listed link whose canonical form is
+    // the navigation's is judged too, as without it; what opens is still
+    // the attribute, and only a listed attribute opens without a question.
+    [Fact]
+    public void AnchorsWithOneCanonicalFormAreJudgedTogether()
+    {
+        foreach (var bankHref in new[] { "HTTPS://EVIL.EXAMPLE/dup", "https://Evil.Example:443/dup", " https://evil.example/dup", "https://évil.example/dup" })
+        {
+            // The other anchor's attribute is the canonical form itself.
+            var resolved = ChromiumUrl.Canonicalize(bankHref);
+            Assert.NotNull(resolved);
+            var raw = resolved;
+            foreach (var links in new[] { new[] { Link("", raw), Link(Bank, bankHref) }, [Link(Bank, bankHref), Link("click here", raw)] })
+            {
+                Assert.Equal(new LinkDecision.Confirm(Bank, raw), LinkDecision.For(new ActivatedLink(raw, resolved), links, Launched));
+                Assert.Equal(new LinkDecision.Confirm(Bank, resolved), LinkDecision.For(new ActivatedLink(null, resolved), links, Launched));
+            }
+            // Nothing misleads: the attribute opens, as before.
+            Link[] plain = [Link("", raw), Link("click here", bankHref)];
+            Assert.Equal(new LinkDecision.Open(raw), LinkDecision.For(new ActivatedLink(raw, resolved), plain, Launched));
+        }
+        // A canonical match alone does not make an unlisted attribute listed.
+        Link[] other = [Link("click here", "HTTPS://EVIL.EXAMPLE/dup")];
+        Assert.Equal(new LinkDecision.Confirm("", "https://evil.example/dup"),
+            LinkDecision.For(new ActivatedLink("https://evil.example/dup", "https://evil.example/dup"), other, Launched));
+    }
+
+    // The text side (HtmlLinksTests.TextsOfTheBank): a text a reader takes
+    // for the bank's address, over a link to evil.example, is confirmed
+    // with the text as the mail wrote it, with the attribute or without.
+    [Theory]
+    [MemberData(nameof(Html.HtmlLinksTests.TextsOfTheBank), MemberType = typeof(Html.HtmlLinksTests))]
+    public void ATextThatReadsAsTheBankIsConfirmed(string text)
+    {
+        const string Href = "https://evil.example/t";
+        Link[] links = [Link(text, Href)];
+        Assert.Equal(new LinkDecision.Confirm(text, Href), LinkDecision.For(Href, links, Launched));
+        Assert.Equal(new LinkDecision.Confirm(text, Href), LinkDecision.For(new ActivatedLink(null, Href), links, Launched));
+    }
+
+    // And texts that name the link's own site, or none, still open.
+    [Theory]
+    [InlineData("www.mojebanka.example", "https://www.mojebanka.example/")]
+    [InlineData("https://www.mojebanka.example/login", "https://ib.mojebanka.example/login")]
+    [InlineData("WWW.MOJEBANKA.EXAMPLE/LOGIN", "https://www.mojebanka.example/login")]
+    [InlineData("https://bücher.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://www.mojebanka.example /login", "https://www.mojebanka.example/login")]
+    [InlineData("Click here", "https://evil.example/t")]
+    [InlineData("", "https://evil.example/t")]
+    public void ATextThatNamesItsOwnSiteOpens(string text, string href)
+    {
+        Link[] links = [Link(text, href)];
+        Assert.Equal(new LinkDecision.Open(href), LinkDecision.For(href, links, Launched));
+    }
+
+    // What the launcher would open decides, not only Go's reading of the
+    // href: where the two disagree about the host, the link is confirmed.
+    [Fact]
+    public void TheLaunchedAddressIsJudged()
+    {
+        Link[] links = [Link("https://www.example.org/", "https://example.org/x")];
+        Assert.Equal(new LinkDecision.Open("https://example.org/x"), LinkDecision.For("https://example.org/x", links, Launched));
+        Assert.Equal(new LinkDecision.Confirm("https://www.example.org/", "https://example.org/x"),
+            LinkDecision.For("https://example.org/x", links, _ => "https://evil.example/x"));
+        // A link the launcher refuses has no host to show the text is true.
+        Assert.Equal(new LinkDecision.Confirm("https://www.example.org/", "https://example.org/x"),
+            LinkDecision.For("https://example.org/x", links, _ => null));
+        // Text that names no host has nothing to be judged against.
+        Link[] plain = [Link("click here", "https://example.org/x")];
+        Assert.Equal(new LinkDecision.Open("https://example.org/x"), LinkDecision.For("https://example.org/x", plain, _ => null));
+    }
+
+    // Without the attribute, the address the resolved URL would be opened
+    // as is judged against the text of the listed href it matches, besides
+    // that href's own.
+    [Fact]
+    public void WithoutTheAttributeTheResolvedUrlsAddressIsJudged()
+    {
+        Link[] links = [Link("https://www.example.org/", "https://WWW.example.org/x")];
+        var link = new ActivatedLink(null, "https://www.example.org/x");
+        Assert.Equal(new LinkDecision.Open("https://www.example.org/x"), LinkDecision.For(link, links, Launched));
+        Func<string, string?> elsewhere = u => u == "https://www.example.org/x" ? "https://evil.example/x" : Launched(u);
+        Assert.Equal(new LinkDecision.Confirm("https://www.example.org/", "https://www.example.org/x"), LinkDecision.For(link, links, elsewhere));
+    }
+
+    // A mailto: link goes to the composer: whatever its text, it is no
+    // masked link that would keep every other click confirmed.
+    [Fact]
+    public void AMailtoLinkIsNeverMasked()
+    {
+        Link[] links = [Link("www.example.org", "mailto:a@example.org"), Link("click here", "https://example.net/")];
+        Assert.Equal(new LinkDecision.Open("https://example.net/"), LinkDecision.For(new ActivatedLink(null, "https://example.net/"), links, Launched));
+        Assert.Equal(new LinkDecision.Mailto("mailto:a@example.org"), LinkDecision.For("mailto:a@example.org", links, Launched));
+    }
+
+    [Fact]
+    public void ConfirmTexts()
+    {
+        Assert.Equal("Open This Link?", LinkDecision.Confirm.Title);
+        Assert.Equal("The link is shown as “\u2068https://bank.example\u2069” but leads to https://evil.example/.",
+            new LinkDecision.Confirm("https://bank.example", "https://evil.example").Body("https://evil.example/"));
+        // Windows-only (DisplayText): an override in the link's text would
+        // have drawn the rest of the sentence, the destination included,
+        // backwards; it goes, and the text stays inside its isolate.
+        Assert.Equal("The link is shown as “\u2068https://bank.example/moc.live\u2069” but leads to https://evil.example/.",
+            new LinkDecision.Confirm("https://bank.example/\u202Emoc.live", "https://evil.example").Body("https://evil.example/"));
+        Assert.Equal("This link leads to https://xn--bcher-kva.example/.",
+            new LinkDecision.Confirm("", "https://bücher.example/").Body("https://xn--bcher-kva.example/"));
+    }
+
+    [Theory]
+    // Scheme and host in lower case, the default port dropped, "/" for an
+    // empty path.
+    [InlineData("https://Example.COM", "https://example.com/")]
+    [InlineData("HTTP://example.com:80/a", "http://example.com/a")]
+    [InlineData("http://example.com:443/a", "http://example.com:443/a")]
+    [InlineData("https://example.com:443", "https://example.com/")]
+    [InlineData("https://example.com:0443/", "https://example.com/")]
+    [InlineData("https://example.com:8443/", "https://example.com:8443/")]
+    [InlineData("https://example.com./", "https://example.com./")]
+    // Slashes and backslashes after the scheme, backslashes in the path.
+    [InlineData("https:example.com", "https://example.com/")]
+    [InlineData("https:///example.com/", "https://example.com/")]
+    [InlineData("https:\\\\example.com\\a\\b", "https://example.com/a/b")]
+    // What an HTML parser strips.
+    [InlineData("  https://exa\tmple.com/a\n ", "https://example.com/a")]
+    // Dot segments.
+    [InlineData("https://example.com/a/./b/../c", "https://example.com/a/c")]
+    [InlineData("https://example.com/a/..", "https://example.com/")]
+    [InlineData("https://example.com/a/.", "https://example.com/a/")]
+    [InlineData("https://example.com/../a", "https://example.com/a")]
+    [InlineData("https://example.com/a//b/", "https://example.com/a//b/")]
+    // Escapes in the path and the query.
+    [InlineData("https://example.com/a b\"<>", "https://example.com/a%20b%22%3C%3E")]
+    [InlineData("https://example.com/ž", "https://example.com/%C5%BE")]
+    [InlineData("https://example.com/😀", "https://example.com/%F0%9F%98%80")]
+    [InlineData("https://example.com/a'b(c)*;=:@!$&+,~", "https://example.com/a'b(c)*;=:@!$&+,~")]
+    [InlineData("https://example.com/%2F%20", "https://example.com/%2F%20")]
+    [InlineData("https://example.com/?q=a b&r=ž", "https://example.com/?q=a%20b&r=%C5%BE")]
+    [InlineData("https://example.com?q=1", "https://example.com/?q=1")]
+    [InlineData("https://example.com/?", "https://example.com/?")]
+    [InlineData("https://example.com/?a=/b?c", "https://example.com/?a=/b?c")]
+    [InlineData("https://example.com/#top", "https://example.com/#top")]
+    [InlineData("https://example.com/#", "https://example.com/#")]
+    // Hosts: punycode, dotted IPv4.
+    [InlineData("https://bücher.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://BÜCHER.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://xn--bcher-kva.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://127.0.0.1/", "https://127.0.0.1/")]
+    [InlineData("https://192.168.100.200:8080/x", "https://192.168.100.200:8080/x")]
+    public void CanonicalizeTest(string input, string want)
+    {
+        Assert.Equal(want, ChromiumUrl.Canonicalize(input));
+        // A canonical form is its own.
+        Assert.Equal(want, ChromiumUrl.Canonicalize(want));
+    }
+
+    [Theory]
+    // Not http or https.
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("mailto:a@example.org")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("data:text/html,x")]
+    [InlineData("file:///C:/x")]
+    [InlineData("ftp://example.com/")]
+    [InlineData("/relative")]
+    [InlineData("relative")]
+    [InlineData("//example.com/")]
+    [InlineData("https:")]
+    [InlineData("https://")]
+    [InlineData("https:///")]
+    [InlineData("https://exa\u0001mple.com/")]
+    // User information, IPv6, ports that are not certain.
+    [InlineData("https://user@example.com/")]
+    [InlineData("https://user:pw@example.com/")]
+    [InlineData("https://bank.example@evil.example/")]
+    [InlineData("https://[::1]/")]
+    [InlineData("https://example.com:/")]
+    [InlineData("https://example.com:65536/")]
+    [InlineData("https://example.com:x/")]
+    // Hosts whose canonical form is not certain.
+    [InlineData("https://127.1/")]
+    [InlineData("https://0x7f.0.0.1/")]
+    [InlineData("https://2130706433/")]
+    [InlineData("https://1.2.3.4./")]
+    [InlineData("https://01.2.3.4/")]
+    [InlineData("https://256.2.3.4/")]
+    [InlineData("https://example.123/")]
+    [InlineData("https://example.0x1f/")]
+    [InlineData("https://a..b/")]
+    [InlineData("https://exa_mple.com/")]
+    [InlineData("https://exa%6Dple.com/")]
+    [InlineData("https://faß.example/")]
+    [InlineData("https://a\u200Db.example/")]
+    // Escapes and characters engines have treated differently.
+    [InlineData("https://example.com/%2f")]
+    [InlineData("https://example.com/%41")]
+    [InlineData("https://example.com/%2E%2E/x")]
+    [InlineData("https://example.com/%zz")]
+    [InlineData("https://example.com/100%")]
+    [InlineData("https://example.com/{x}")]
+    [InlineData("https://example.com/a|b")]
+    [InlineData("https://example.com/a^b")]
+    [InlineData("https://example.com/a`b")]
+    [InlineData("https://example.com/[x]")]
+    [InlineData("https://example.com/?a='b'")]
+    [InlineData("https://example.com/?a={b}")]
+    [InlineData("https://example.com/#a b")]
+    [InlineData("https://example.com/#ž")]
+    public void CanonicalizeRefusesWhatIsNotCertain(string? input)
+    {
+        Assert.Null(ChromiumUrl.Canonicalize(input));
+    }
+
+    // A lone surrogate (built here: test data would not carry it intact)
+    // has no UTF-8 form to escape.
+    [Fact]
+    public void CanonicalizeRefusesALoneSurrogate()
+    {
+        Assert.Null(ChromiumUrl.Canonicalize("https://example.com/" + '\uD800'));
+        Assert.Null(ChromiumUrl.Canonicalize("https://example.com/?q=" + '\uDC00' + "x"));
+    }
+
+    private static Link Link(string text, string href) => new() { Text = text, Href = href };
+}

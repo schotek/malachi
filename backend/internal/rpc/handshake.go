@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -288,31 +289,6 @@ func warnLimited(log *slog.Logger, l *logLimiter, msg string, args ...any) {
 	log.Warn(msg, args...)
 }
 
-// fileRetryWaits are the pauses of retryFileOp between its attempts: ten
-// attempts over about 1.3 s. A variable so that tests can shorten it.
-var fileRetryWaits = []time.Duration{
-	20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond, 160 * time.Millisecond,
-	200 * time.Millisecond, 200 * time.Millisecond, 200 * time.Millisecond, 200 * time.Millisecond,
-	200 * time.Millisecond,
-}
-
-// retryFileOp runs op until it succeeds, fails because the file does not
-// exist, or has failed len(fileRetryWaits)+1 times. Windows refuses to
-// open, replace or remove a file in a way that conflicts with another
-// process's open handle of it (os.Open does not share deletion): a client
-// reading the key file holds up its replacement for a moment.
-func retryFileOp(op func() error) error {
-	err := op()
-	for _, wait := range fileRetryWaits {
-		if err == nil || errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		time.Sleep(wait)
-		err = op()
-	}
-	return err
-}
-
 // keyShaped reports whether b could be a key file or a torn one: nothing
 // but lowercase hex digits and newlines.
 func keyShaped(b []byte) bool {
@@ -342,8 +318,10 @@ func keyReplaceable(path string) error {
 	case fi.Size() > api.KeyFileSize:
 		return errors.New("larger than a key file")
 	}
+	// Retried: Windows refuses the open while another process holds the
+	// file in a conflicting way.
 	var f *os.File
-	err = retryFileOp(func() error {
+	err = fsretry.Do(func() error {
 		var err error
 		f, err = openNoWait(path)
 		return err
@@ -415,7 +393,7 @@ func writeKeyFile(path string, key api.AuthKey) (err error) {
 	if err != nil {
 		return fmt.Errorf("write key file %s: %w", tmp, err)
 	}
-	if err = retryFileOp(func() error { return os.Rename(tmp, path) }); err != nil {
+	if err = fsretry.Rename(tmp, path); err != nil {
 		return fmt.Errorf("install key file: %w", err)
 	}
 	return nil
@@ -472,7 +450,7 @@ func (s *Server) retireKeyFile() {
 		s.log.Info("key file left in place: it holds another daemon's key", "path", s.keyPath)
 		return
 	}
-	if err := retryFileOp(func() error { return os.Remove(s.keyPath) }); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := fsretry.Remove(s.keyPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		s.log.Warn("cannot remove the key file", "path", s.keyPath, "err", err)
 	}
 }

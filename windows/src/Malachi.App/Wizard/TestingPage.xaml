@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/TestingPageController.swift;
+GTK: account_wizard.blp testing_page. The two children of testing_stack:
+progress (testing_progress: a spinner, "Testing Connection…" or the save's
+title, "This can take a moment.") and results (testing_results: the
+outcome's icon, title and description over result_rows, clamped to 480
+px: Incoming (IMAP) and Outgoing (SMTP), each with its status icon, its
+text and Trust Certificate… when the certificate may be trusted, and
+Microsoft 365 for a Graph account; each named by its title and described
+by its result for Narrator); at the bottom (testing_buttons,
+right-aligned, 12 px margins, 8 px apart) Edit Servers or Sign In Again,
+Retry, Add Anyway or Save Anyway, and Add Account or Save (the suggested
+action), each shown as the outcome allows.
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.TestingPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Wizard"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid x:Name="TestingStack" Grid.Row="0">
+            <local:StatusPage
+                x:Name="ProgressPage"
+                Title="{l:T Msgid='Testing Connection…'}"
+                Description="{l:T Msgid='This can take a moment.'}"
+                Spinning="True" />
+
+            <local:StatusPage x:Name="ResultsPage" Visibility="Collapsed">
+                <StackPanel
+                    x:Name="ResultRows"
+                    MaxWidth="480"
+                    Spacing="{StaticResource SettingsCardSpacing}">
+                    <tk:SettingsCard
+                        x:Name="ImapResultRow"
+                        AutomationProperties.AutomationId="ImapResult"
+                        AutomationProperties.Name="{l:T Msgid='Incoming (IMAP)'}"
+                        Header="{l:T Msgid='Incoming (IMAP)'}">
+                        <tk:SettingsCard.HeaderIcon>
+                            <FontIcon x:Name="ImapResultIcon" />
+                        </tk:SettingsCard.HeaderIcon>
+                        <tk:SettingsCard.Description>
+                            <TextBlock x:Name="ImapResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <!-- TRANSLATORS: button in a test result row -->
+                        <Button
+                            x:Name="ImapTrustButton"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Trust Certificate…'}"
+                            AutomationProperties.AutomationId="ImapTrust"
+                            Click="OnTrustClick"
+                            Visibility="Collapsed" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard
+                        x:Name="SmtpResultRow"
+                        AutomationProperties.AutomationId="SmtpResult"
+                        AutomationProperties.Name="{l:T Msgid='Outgoing (SMTP)'}"
+                        Header="{l:T Msgid='Outgoing (SMTP)'}">
+                        <tk:SettingsCard.HeaderIcon>
+                            <FontIcon x:Name="SmtpResultIcon" />
+                        </tk:SettingsCard.HeaderIcon>
+                        <tk:SettingsCard.Description>
+                            <TextBlock x:Name="SmtpResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <Button
+                            x:Name="SmtpTrustButton"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Trust Certificate…'}"
+                            AutomationProperties.AutomationId="SmtpTrust"
+                            Click="OnTrustClick"
+                            Visibility="Collapsed" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard
+                        x:Name="GraphResultRow"
+                        AutomationProperties.AutomationId="GraphResult"
+                        AutomationProperties.Name="{l:T Msgid='Microsoft 365'}"
+                        Header="{l:T Msgid='Microsoft 365'}"
+                        Visibility="Collapsed">
+                        <tk:SettingsCard.HeaderIcon>
+                            <FontIcon x:Name="GraphResultIcon" />
+                        </tk:SettingsCard.HeaderIcon>
+                        <tk:SettingsCard.Description>
+                            <TextBlock x:Name="GraphResultText" IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                    </tk:SettingsCard>
+                </StackPanel>
+            </local:StatusPage>
+        </Grid>
+
+        <StackPanel
+            x:Name="TestingButtons"
+            Grid.Row="1"
+            Style="{StaticResource WizardButtonBarStyle}">
+            <Button
+                x:Name="EditButton"
+                AutomationProperties.AutomationId="EditServers"
+                Click="OnEditClick"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="RetryButton"
+                l:MnemonicLabel.Text="{l:T Msgid='_Retry'}"
+                AutomationProperties.AutomationId="Retry"
+                Click="OnRetryClick"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="AddAnywayButton"
+                AutomationProperties.AutomationId="AddAnyway"
+                Click="OnAddAnywayClick"
+                Visibility="Collapsed" />
+            <Button
+                x:Name="AddButton"
+                AutomationProperties.AutomationId="AddAccount"
+                Click="OnAddClick"
+                Style="{StaticResource AccentButtonStyle}"
+                Visibility="Collapsed" />
+        </StackPanel>
+    </Grid>
+</UserControl>

@@ -1,0 +1,327 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Compose/FormatToolbar.swift; GTK:
+ui/data/ui/compose.blp (format_toolbar, block_menu, align_menu,
+link_popover) and ui/internal/compose/compose.go (wireActions' block and
+align, wireToolbar, applyState). The formatting bar over the editor, in the
+Blueprint's order: Bold, Italic, Underline | Paragraph Style, Alignment |
+Bulleted List, Numbered List, Quote | Insert Link, Text Colour, Insert
+Image, Clear Formatting. Flat buttons (.toolbar) 2 px apart; a checked
+toggle keeps WinUI's accent fill. Every control keeps the keyboard in the
+editor (focus-on-click: false), so the commands act on the page's
+selection; the keyboard still reaches them with Tab.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.FormatToolbar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- .toolbar: flat buttons, a tint under the pointer. -->
+                <ResourceDictionary x:Key="Default">
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <StaticResource x:Key="ButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackground" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="SubtleFillColorTertiaryBrush" />
+                    <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrush" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPointerOver" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushPressed" ResourceKey="SubtleFillColorTransparentBrush" />
+                    <StaticResource x:Key="ToggleButtonBorderBrushDisabled" ResourceKey="SubtleFillColorTransparentBrush" />
+                </ResourceDictionary>
+                <!-- High contrast keeps the system's own look. -->
+                <ResourceDictionary x:Key="HighContrast" />
+            </ResourceDictionary.ThemeDictionaries>
+
+            <Style x:Key="FormatToggleStyle" TargetType="ToggleButton">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+            </Style>
+
+            <Style x:Key="FormatButtonStyle" TargetType="Button">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+            </Style>
+
+            <Style x:Key="FormatDropDownStyle" TargetType="DropDownButton">
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="8,0,4,0" />
+                <Setter Property="AllowFocusOnInteraction" Value="False" />
+            </Style>
+
+            <!-- link_entry: a framed entry whose text and frame turn red for
+                 a link it refused (the .error class). Its own template: the
+                 default TextBox's states paint the focused text with a brush
+                 that no lightweight resource of the entry reaches (measured),
+                 so the colours are the entry's own properties here. -->
+            <Style x:Key="LinkEntryStyle" TargetType="TextBox">
+                <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
+                <Setter Property="Background" Value="{ThemeResource TextControlBackground}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource TextControlBorderBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                <Setter Property="Padding" Value="10,5,6,6" />
+                <Setter Property="MinHeight" Value="32" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Grid>
+                                <Border
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                    CornerRadius="{TemplateBinding CornerRadius}" />
+                                <ScrollViewer
+                                    x:Name="ContentElement"
+                                    Padding="{TemplateBinding Padding}"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    HorizontalScrollBarVisibility="Hidden"
+                                    HorizontalScrollMode="Auto"
+                                    IsDeferredScrollingEnabled="False"
+                                    IsTabStop="False"
+                                    VerticalScrollBarVisibility="Disabled"
+                                    VerticalScrollMode="Disabled"
+                                    ZoomMode="Disabled" />
+                                <TextBlock
+                                    x:Name="PlaceholderTextContentPresenter"
+                                    Padding="{TemplateBinding Padding}"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextControlPlaceholderForeground}"
+                                    IsHitTestVisible="False"
+                                    Text="{TemplateBinding PlaceholderText}"
+                                    TextWrapping="NoWrap" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
+            <Style x:Key="LinkEntryInvalidStyle" TargetType="TextBox" BasedOn="{StaticResource LinkEntryStyle}">
+                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+            </Style>
+
+            <Style x:Key="FormatSeparatorStyle" TargetType="Rectangle">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Height" Value="18" />
+                <Setter Property="Margin" Value="4,0,4,0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Fill" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- A window narrower than the bar scrolls it rather than cutting it. -->
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Auto"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled">
+        <StackPanel
+            x:Name="Bar"
+            Orientation="Horizontal"
+            Spacing="2">
+            <ToggleButton
+                x:Name="BoldButton"
+                AutomationProperties.Name="{l:T Msgid='Bold (Ctrl+B)'}"
+                Click="OnBoldClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Bold (Ctrl+B)'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('format-text-bold')}" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="ItalicButton"
+                AutomationProperties.Name="{l:T Msgid='Italic (Ctrl+I)'}"
+                Click="OnItalicClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Italic (Ctrl+I)'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('format-text-italic')}" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="UnderlineButton"
+                AutomationProperties.Name="{l:T Msgid='Underline (Ctrl+U)'}"
+                Click="OnUnderlineClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Underline (Ctrl+U)'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('format-text-underline')}" />
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource FormatSeparatorStyle}" />
+
+            <DropDownButton
+                x:Name="BlockButton"
+                AutomationProperties.Name="{l:T Msgid='Paragraph Style'}"
+                Content="{l:T Msgid='Paragraph'}"
+                Style="{StaticResource FormatDropDownStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Paragraph Style'}">
+                <DropDownButton.Flyout>
+                    <MenuFlyout x:Name="BlockMenu" Placement="BottomEdgeAlignedLeft" />
+                </DropDownButton.Flyout>
+            </DropDownButton>
+            <DropDownButton
+                x:Name="AlignButton"
+                AutomationProperties.Name="{l:T Msgid='Alignment'}"
+                Style="{StaticResource FormatDropDownStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Alignment'}">
+                <!-- The alignment at the caret; its glyph is set in code only
+                     (ApplyState, from the constructor on), so no one-time
+                     binding puts the left-aligned glyph back when the bar
+                     loads, over the state the page reported. -->
+                <FontIcon x:Name="AlignIcon" FontSize="16" />
+                <DropDownButton.Flyout>
+                    <MenuFlyout x:Name="AlignMenu" Placement="BottomEdgeAlignedLeft" />
+                </DropDownButton.Flyout>
+            </DropDownButton>
+
+            <Rectangle Style="{StaticResource FormatSeparatorStyle}" />
+
+            <ToggleButton
+                x:Name="BulletedListButton"
+                AutomationProperties.Name="{l:T Msgid='Bulleted List'}"
+                Click="OnBulletedListClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Bulleted List'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-list-bullet')}" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="NumberedListButton"
+                AutomationProperties.Name="{l:T Msgid='Numbered List'}"
+                Click="OnNumberedListClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Numbered List'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-list-ordered')}" />
+            </ToggleButton>
+            <ToggleButton
+                x:Name="QuoteButton"
+                AutomationProperties.Name="{l:T Msgid='Quote'}"
+                Click="OnQuoteClick"
+                Style="{StaticResource FormatToggleStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Quote'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('format-indent-more')}" />
+            </ToggleButton>
+
+            <Rectangle Style="{StaticResource FormatSeparatorStyle}" />
+
+            <Button
+                x:Name="LinkButton"
+                AutomationProperties.Name="{l:T Msgid='Insert Link'}"
+                Style="{StaticResource FormatButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Insert Link'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('insert-link')}" />
+                <Button.Flyout>
+                    <!-- link_popover: an entry and Insert. -->
+                    <Flyout
+                        x:Name="LinkFlyout"
+                        Closed="OnLinkFlyoutClosed"
+                        Opened="OnLinkFlyoutOpened"
+                        Placement="Bottom">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <!-- Windows-only string: the placeholder is compose.blp's
+                                 "https://", a scheme, not translated. -->
+                            <TextBox
+                                x:Name="LinkEntry"
+                                Style="{StaticResource LinkEntryStyle}"
+                                Width="260"
+                                AutomationProperties.Name="{l:T Msgid='Insert Link'}"
+                                IsSpellCheckEnabled="False"
+                                PreviewKeyDown="OnLinkEntryKeyDown"
+                                PlaceholderText="https://" />
+                            <Button
+                                x:Name="LinkApply"
+                                Click="OnLinkApplyClick"
+                                Content="{l:T Msgid='Insert'}"
+                                Style="{StaticResource AccentButtonStyle}" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <DropDownButton
+                x:Name="ColorButton"
+                AutomationProperties.Name="{l:T Msgid='Text Colour'}"
+                Style="{StaticResource FormatDropDownStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Text Colour'}">
+                <!-- ColorDialogButton: the colour chosen last, opaque black at first. -->
+                <Border
+                    x:Name="ColorSwatch"
+                    Width="16"
+                    Height="16"
+                    Background="Black"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3" />
+                <DropDownButton.Flyout>
+                    <Flyout
+                        x:Name="ColorFlyout"
+                        Closed="OnColorFlyoutClosed"
+                        Placement="Bottom">
+                        <!-- ColorDialog { with-alpha: false; } -->
+                        <ColorPicker
+                            x:Name="ColorChooser"
+                            ColorSpectrumShape="Box"
+                            IsAlphaEnabled="False"
+                            IsColorChannelTextInputVisible="False"
+                            IsColorSliderVisible="True"
+                            IsHexInputVisible="True"
+                            IsMoreButtonVisible="False" />
+                    </Flyout>
+                </DropDownButton.Flyout>
+            </DropDownButton>
+            <Button
+                x:Name="ImageButton"
+                AutomationProperties.Name="{l:T Msgid='Insert Image'}"
+                Click="OnImageClick"
+                Style="{StaticResource FormatButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Insert Image'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('insert-image')}" />
+            </Button>
+            <Button
+                x:Name="ClearButton"
+                AutomationProperties.Name="{l:T Msgid='Clear Formatting'}"
+                Click="OnClearClick"
+                Style="{StaticResource FormatButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Clear Formatting'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('edit-clear')}" />
+            </Button>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

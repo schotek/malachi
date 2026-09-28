@@ -54,6 +54,12 @@ var (
 	// expected an earlier state (CommitMessageRaw's Expect, or a codec
 	// change during ConvertRawBatch).
 	ErrConflict = errors.New("store: message changed")
+	// ErrBusy: a message's file could not be replaced or removed because
+	// one of the store's readers kept it open for longer than the store
+	// waits. Windows refuses both while a handle of the file is open;
+	// Linux and macOS never do. The file is as it was, and a later
+	// attempt, once the reader is done, goes through.
+	ErrBusy = errors.New("store: message file in use by a reader")
 )
 
 // Store wraps the database handle.
@@ -77,10 +83,18 @@ type Store struct {
 	// phaseACommit runs inside CommitMessageRaw's phase A just before a
 	// commit that widens the remote set, afterPhaseA between its two
 	// database phases and betweenConvertPhases between ConvertRawBatch's.
+	// refuseOpen makes the store refuse, as Windows does, to rename over
+	// or remove a message's file while one of its readers has it open, on
+	// any system (refused), and so to remove the directory of an account
+	// while one of them has a file of it open (removeAccountDir).
+	// attemptFailed runs after every failed attempt of such a rename or
+	// removal (fileOp), with the file's path.
 	createFile           func(path string) (rawFile, error)
 	phaseACommit         func(tx *sql.Tx) error
 	afterPhaseA          func() error
 	betweenConvertPhases func()
+	refuseOpen           bool
+	attemptFailed        func(path string)
 }
 
 // Open creates the parent directory if needed, opens the database with the

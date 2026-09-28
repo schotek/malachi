@@ -31,7 +31,11 @@ Nothing hard-codes the number. `make` derives it with
 `git describe --tags --always --dirty`, cutting the leading `v`, so a
 tagged tree builds `0.1.0`, three commits later `0.1.0-3-gabc1234`, and an
 untagged clone the bare commit. It reaches the About dialog through
-`-X main.version` and clients through `system.info`.
+`-X main.version` and clients through `system.info`. The macOS and Windows
+builds take the same string (`VERSION` from the root Makefile); the
+Windows client also gets a numeric file version,
+`MAJOR.MINOR.PATCH.<commits since the tag>`, with the full string as its
+product version.
 
 ## 2. Release notes
 
@@ -106,7 +110,8 @@ falls back to the `.version` file that `make flatpak` writes.
 ## 5. Builds from CI
 
 `.github/workflows/flatpak.yml` builds the Flatpak for **x86_64** and
-**aarch64** on every push to `main`, on `v*` tags, on a manual
+**aarch64** on every push to `main` (except one that changes nothing but
+the Windows or macOS client), on `v*` tags, on a manual
 `workflow_dispatch`, and on pull requests that touch the packaging. Each job
 attaches a `malachi-<version>-<arch>.flatpak` bundle as a workflow artifact
 (kept 30 days); installable with
@@ -159,3 +164,62 @@ The Go build cache lives inside the sandbox and is not carried between runs,
 so cgo (gotk4, WebKitGTK) is recompiled every time; a run takes tens of
 minutes. Only flatpak-builder's own state (downloaded module sources,
 ccache) is cached.
+
+## 7. Windows
+
+`windows/build.ps1` builds the Windows client (the root Makefile's
+`make windows` runs its `app` target), and its `package` target makes the
+artefact a release would carry:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package            # this machine's architecture
+powershell -NoProfile -ExecutionPolicy Bypass -File windows\build.ps1 package -Arch arm64
+# -> build\windows\Malachi-Mail-<version>-<arch>.zip
+```
+
+`package` runs `app` first: `malachid.exe` and `malachi-mcp.exe` for the
+architecture with `-X main.version`, the app published self-contained in
+Release, `malachi-credentials.exe` with NativeAOT, the translations and the
+licences, checked for completeness, then zipped as one `Malachi Mail\`
+folder with `/` separators, so that every unzip tool reads it. The tree
+must be clean, or the version says `-dirty`, as for the other builds. An
+ARM64 package needs the MSVC ARM64 build tools for the keyring helper;
+nothing ARM64 has run on real hardware yet.
+
+`.github/workflows/windows.yml` does the same in CI: it tests the daemon
+on Windows, builds, tests and lints the Windows client, and zips its app
+folder for **x64** and **arm64**, on pushes to `main`, on `v*` tags, by
+hand and on pull requests that touch what the client is built from; what
+each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
+A tag build keeps both zips as the run's artifacts (30 days) and attaches
+them to the tag's release, like the packages above and to a draft when the
+tag has none yet, **only when the repository variable
+`WINDOWS_RELEASE_ZIPS` is `true`**; without it the workflow's `release`
+job is skipped and the release gets no Windows zips.
+
+Those zips are **not** release artefacts yet, which is why the variable is
+not set. Before a Windows build is published with a release
+([windows-port.md §17](windows-port.md#17-before-a-public-release)):
+
+- **The licence.** The folder carries Microsoft's Windows App SDK and
+  WebView2 components, which are not under the GPL; distributing it
+  needs the additional permission [LICENSING.md](../LICENSING.md)
+  describes, which the owner decides after a legal check.
+- **Code signing** of the four executables (and of an installer):
+  unsigned, SmartScreen warns on every machine that downloads them. The
+  owner decides how (SignPath Foundation, an OV certificate, signing as an
+  organisation).
+- **An installer and updates**: Velopack (per user, updates from GitHub
+  Releases) and a winget manifest, the update stopping the daemon
+  gracefully first, the uninstall removing what the app registered in
+  HKCU.
+
+Once the licence permission is in `LICENSING.md` and the workflow signs
+the executables, the owner sets the variable, in the repository's *Settings →
+Secrets and variables → Actions → Variables* or with
+`gh variable set WINDOWS_RELEASE_ZIPS --body true`, and the next tag's
+release carries the zips (`gh variable delete WINDOWS_RELEASE_ZIPS` stops
+it again). The arm64 zip is cross-built and has not run anywhere.
+
+Release notes stay in `NEWS` for every platform; the AppStream metainfo
+it feeds is Linux's.

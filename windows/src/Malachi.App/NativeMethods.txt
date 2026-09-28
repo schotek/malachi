@@ -1,0 +1,59 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for Malachi.App, one per line
+// (docs/windows-port.md §3.1: never hand-written where CsWin32 can
+// generate them). The WebView2 layer and the platform services keep their
+// own entries below their own headings.
+//
+// The shell (Shell/): the show path (§10), the main window's session end
+// and minimum size (a subclass of its window procedure), the size it
+// restores to (kept while it is maximised), the wait of a second instance
+// while it redirects its activation (Program).
+SetForegroundWindow
+SetWindowSubclass
+DefSubclassProc
+RemoveWindowSubclass
+GetDpiForWindow
+GetWindowPlacement
+WM_ENDSESSION
+WM_GETMINMAXINFO
+MINMAXINFO
+CoWaitForMultipleObjects
+CWMO_FLAGS
+INFINITE
+OpenProcess
+// The command router (Commands/): the class of the window a key was sent
+// to (the WebView2's Chrome_WidgetWin_0), and the key messages; the
+// thread-local keyboard hook where the island has no pre-translate source.
+GetClassName
+MSG
+WM_KEYDOWN
+WM_KEYUP
+WM_SYSKEYDOWN
+WM_SYSKEYUP
+SetWindowsHookEx
+CallNextHookEx
+UnhookWindowsHookEx
+HC_ACTION
+GetCurrentThreadId
+GetFocus
+IsChild
+GetKeyState
+// The compose window (Compose/): the open dialogs of Attach Files and
+// Insert Image (IFileOpenDialog with its owner, title and named filter).
+FileOpenDialog
+IFileOpenDialog
+IShellItemArray
+IShellItem
+SIGDN
+FILEOPENDIALOGOPTIONS
+COMDLG_FILTERSPEC
+CoTaskMemFree
+// The account wizard (Wizard/): its owner window, which a modal
+// OverlappedPresenter needs before IsModal, and the owner enabled and
+// activated again before the wizard goes.
+SetWindowLongPtr
+EnableWindow
+GetForegroundWindow
+IsWindowVisible

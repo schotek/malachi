@@ -1,0 +1,52 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+The Windows client. The platforms are the architectures the app ships for;
+without them "dotnet build -p:Platform=x64" fails with MSB4126. Only the app
+is built per platform (it maps each to its RuntimeIdentifier); everything
+else is Any CPU. Build and test through build.ps1 or from this directory:
+global.json here selects the SDK and Microsoft.Testing.Platform for dotnet
+test.
+-->
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="ARM64" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="build.ps1" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="global.json" />
+    <File Path="nuget.config" />
+    <File Path="README.md" />
+    <File Path="scripts/make-icons.ps1" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Malachi.App/Malachi.App.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
+    <Project Path="src/Malachi.Core/Malachi.Core.csproj" />
+    <Project Path="src/Malachi.Credentials/Malachi.Credentials.csproj" />
+    <Project Path="src/Malachi.Platform.Windows/Malachi.Platform.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Malachi.App.Canary/Malachi.App.Canary.csproj" />
+    <Project Path="tests/Malachi.App.Canary.Host/Malachi.App.Canary.Host.csproj">
+      <Platform Solution="*|x64" Project="x64" />
+      <Platform Solution="*|ARM64" Project="ARM64" />
+    </Project>
+    <Project Path="tests/Malachi.App.UiTests/Malachi.App.UiTests.csproj" />
+    <Project Path="tests/Malachi.Conventions.Tests/Malachi.Conventions.Tests.csproj" />
+    <Project Path="tests/Malachi.Core.TestDaemon/Malachi.Core.TestDaemon.csproj" />
+    <Project Path="tests/Malachi.Core.Tests/Malachi.Core.Tests.csproj" />
+    <Project Path="tests/Malachi.Credentials.Tests/Malachi.Credentials.Tests.csproj" />
+    <Project Path="tests/Malachi.FakeBridge/Malachi.FakeBridge.csproj" />
+    <Project Path="tests/Malachi.FakeKeyring/Malachi.FakeKeyring.csproj" />
+    <Project Path="tests/Malachi.Platform.Windows.Tests/Malachi.Platform.Windows.Tests.csproj" />
+  </Folder>
+</Solution>

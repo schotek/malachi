@@ -1,0 +1,30 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Tests of Malachi.Platform.Windows: the process host against the stand-in
+daemon, the key-file policy, the registry settings and their watcher,
+file-name rules, the Mark of the Web (docs/windows-port.md §12). Windows
+only.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.Platform.Windows.Tests</RootNamespace>
+    <!-- The tray tests read the interop structures' layout and drive a
+         window procedure with CsWin32's handles. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="Microsoft.Testing.Extensions.TrxReport" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Malachi.Platform.Windows\Malachi.Platform.Windows.csproj" />
+    <!-- The stand-in daemon the process host tests start. -->
+    <ProjectReference Include="..\Malachi.Core.TestDaemon\Malachi.Core.TestDaemon.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+A keyring helper for the UI tests (MALACHI_KEYRING_HELPER): the protocol of
+backend/internal/auth/helper over a JSON file the test names, so that the
+password of a test account never reaches Credential Manager
+(docs/windows-port.md §12).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.FakeKeyring</RootNamespace>
+  </PropertyGroup>
+</Project>

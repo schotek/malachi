@@ -1,0 +1,124 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// Port of macos/Sources/MalachiMail/Compose/ComposeHeaderView.swift
+// (setCcBccVisible, setInvalid, setAccounts, selectedAccountIndex, the
+// From pop-up's action); GTK: ui/internal/compose/compose.go
+// (setCcBccVisible, showCcBcc, validateRow's error class, setAccounts'
+// drop-down, the From row's "selected" notification). The rules are Core's
+// (ComposeHeaderRules); the compose window reads the fields and decides.
+
+using System;
+using System.Collections.Generic;
+using Malachi.Core.Presentation;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+
+namespace Malachi.App.Compose;
+
+/// <summary>The card of header fields of a compose window.</summary>
+public sealed partial class ComposeHeader : UserControl
+{
+    // The window's own changes of the From row, which are no choice.
+    private bool settingFrom;
+
+    /// <summary>An empty card: Cc and Bcc hidden, nothing to choose from.</summary>
+    public ComposeHeader()
+    {
+        InitializeComponent();
+    }
+
+    /// <summary>The user picked another identity in From.</summary>
+    public event EventHandler? FromChanged;
+
+    /// <summary>The To row.</summary>
+    public TextBox To => ToBox;
+
+    /// <summary>The Cc row.</summary>
+    public TextBox Cc => CcBox;
+
+    /// <summary>The Bcc row.</summary>
+    public TextBox Bcc => BccBox;
+
+    /// <summary>The Subject row.</summary>
+    public TextBox Subject => SubjectBox;
+
+    /// <summary>The recipient rows, in order (compose.go <c>suggest</c>'s rows).</summary>
+    public IReadOnlyList<TextBox> RecipientFields => [ToBox, CcBox, BccBox];
+
+    /// <summary>The selected identity's index (<c>from.Selected()</c>), 0 when none is.</summary>
+    public int SelectedAccountIndex => Math.Max(FromBox.SelectedIndex, 0);
+
+    /// <summary>Whether the From drop-down is open (the window's Escape must not close the window then).</summary>
+    public bool IsFromOpen => FromBox.IsDropDownOpen;
+
+    /// <summary>
+    /// setAccounts' row: the identities' labels (plain text), the selected
+    /// one, and whether there is a choice at all.
+    /// </summary>
+    public void SetAccounts(IReadOnlyList<string> labels, int selected, bool enabled)
+    {
+        ArgumentNullException.ThrowIfNull(labels);
+        settingFrom = true;
+        try
+        {
+            FromBox.ItemsSource = labels;
+            FromBox.SelectedIndex = selected >= 0 && selected < labels.Count ? selected : -1;
+            FromBox.IsEnabled = enabled;
+        }
+        finally
+        {
+            settingFrom = false;
+        }
+    }
+
+    /// <summary>
+    /// setCcBccVisible: reveals the lines asked for, each with the separator
+    /// above it, and keeps the Cc/Bcc button only while one of them is still
+    /// hidden. A reply carrying only a Cc therefore opens no empty Bcc line.
+    /// </summary>
+    public void SetCcBccVisible(bool cc, bool bcc)
+    {
+        if (cc)
+        {
+            CcLabel.Visibility = CcBox.Visibility = CcSeparator.Visibility = Visibility.Visible;
+        }
+        if (bcc)
+        {
+            BccLabel.Visibility = BccBox.Visibility = BccSeparator.Visibility = Visibility.Visible;
+        }
+        var shown = ComposeHeaderRules.CcBccButtonVisible(CcBox.Visibility == Visibility.Visible, BccBox.Visibility == Visibility.Visible);
+        if (!shown && CcBccButton.FocusState != FocusState.Unfocused)
+        {
+            // The button goes away under the keyboard: Cc takes it.
+            CcBox.Focus(FocusState.Programmatic);
+        }
+        CcBccButton.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>validateRow's look: red text and underline while <paramref name="field"/> holds an unparsable token.</summary>
+    public void SetInvalid(TextBox field, bool invalid)
+    {
+        ArgumentNullException.ThrowIfNull(field);
+        var style = (Style)Resources[invalid ? "ComposeInvalidFieldTextBoxStyle" : "ComposeFieldTextBoxStyle"];
+        if (!ReferenceEquals(field.Style, style))
+        {
+            field.Style = style;
+        }
+    }
+
+    /// <summary>compose.blp's focus-widget: the To row.</summary>
+    public void FocusTo() => ToBox.Focus(FocusState.Programmatic);
+
+    private void OnFromSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (settingFrom || FromBox.SelectedIndex < 0)
+        {
+            return;
+        }
+        FromChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // showCcBcc: both lines at once.
+    private void OnCcBccClick(object sender, RoutedEventArgs e) => SetCcBccVisible(cc: true, bcc: true);
+}

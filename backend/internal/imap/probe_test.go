@@ -82,14 +82,37 @@ func code(t *testing.T, err error) api.ErrorCode {
 	return e.Code
 }
 
+// slowListener hands every connection to the server a delay after it was
+// accepted, so the greeting comes at least that long after the dial.
+type slowListener struct {
+	net.Listener
+	delay time.Duration
+}
+
+func (l slowListener) Accept() (net.Conn, error) {
+	c, err := l.Listener.Accept()
+	if err == nil {
+		time.Sleep(l.delay)
+	}
+	return c, err
+}
+
 func TestProbeSuccess(t *testing.T) {
-	port := startServer(t, nil, true)
+	// A loopback probe can take less than one tick of a coarse clock
+	// (Windows: up to 15.6 ms) and measure 0. The greeting delay is far
+	// above that, and the latency has to cover it.
+	const greetingDelay = 100 * time.Millisecond
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := serve(t, slowListener{ln, greetingDelay}, nil, true)
 	res, err := Probe(context.Background(), cfg(port, api.SecurityNone), password)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Latency <= 0 {
-		t.Fatalf("latency = %v", res.Latency)
+	if res.Latency < greetingDelay/2 {
+		t.Fatalf("latency = %v, but the greeting alone took %v", res.Latency, greetingDelay)
 	}
 	found := false
 	for _, c := range res.Capabilities {

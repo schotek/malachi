@@ -86,8 +86,8 @@ type Keyring struct {
 var _ auth.Keyring = (*Keyring)(nil)
 
 // New validates the helper path — absolute, and after following symlinks
-// a regular file with an execute bit — and returns the keyring. The error
-// names PathEnv so the operator knows what to fix.
+// a regular file that exec.LookPath accepts as a program — and returns the
+// keyring. The error names PathEnv so the operator knows what to fix.
 func New(path string, log *slog.Logger) (*Keyring, error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
@@ -112,7 +112,14 @@ func checkPath(path string) error {
 	if !fi.Mode().IsRegular() {
 		return fmt.Errorf("%s: %s is not a regular file", PathEnv, path)
 	}
-	if fi.Mode().Perm()&0o111 == 0 {
+	// What counts as a program is the platform's rule, and exec.LookPath
+	// applies it without platform code here: execute permission for the
+	// daemon's user on Unix; on Windows, which has no execute bits, a name
+	// with an extension (any: CreateProcess has the last word at the first
+	// call). LookPath hands an absolute path it accepts back unchanged; any
+	// other answer is a sibling Windows would start instead, like tool.exe
+	// for tool.
+	if lp, err := exec.LookPath(path); err != nil || lp != path {
 		return fmt.Errorf("%s: %s is not executable", PathEnv, path)
 	}
 	return nil

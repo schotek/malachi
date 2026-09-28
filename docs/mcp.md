@@ -21,6 +21,10 @@ build/malachi-mcp -version
 build/malachi-mcp -h  # the server flags and the setup subcommands
 ```
 
+On Windows the binary is `build\malachi-mcp.exe` (`make mcp`,
+`make windows`, or `windows\build.ps1 go`), and the Windows app carries its
+own `malachi-mcp.exe` in its folder ([windows/README.md](../windows/README.md)).
+
 Without a subcommand the binary is the stdio server. A first argument that
 does not start with `-` is one of the setup subcommands `status`, `install`
 and `uninstall`, which register the binary with the Claude apps and exit
@@ -31,7 +35,8 @@ Flags and environment of the server:
 
 | Flag / variable | Meaning |
 |---|---|
-| `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` |
+| `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` (`~/.cache/malachi/run/rpc.sock` without it) |
+| `-socket` on Windows | the same rules; Windows sets neither XDG variable, so the default is `%USERPROFILE%\.cache\malachi\run\rpc.sock`, as for the daemon and the Windows app. It is outside `AppData` on purpose: a bridge started by the MSIX Claude Desktop sees a redirected `AppData` (see [below](#claude-desktop-and-claude-code-status-install-uninstall)) but the same socket |
 | `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
@@ -432,6 +437,11 @@ The repository root carries a project-scoped `.mcp.json`:
   if a different command line is wanted.
 - On a machine without the daemon (macOS, a checkout that was never built)
   the server simply fails to connect; that is harmless.
+- On Windows the entry names `build/malachi-mcp` without the `.exe` the
+  binary has there. A process spawner that tries `.exe` for a command
+  without an extension (as libuv's does) finds `build\malachi-mcp.exe`;
+  whether Claude Code on Windows does has not been verified yet. A
+  local-scope entry naming `build\malachi-mcp.exe` works either way.
 
 ### Claude Desktop and Claude Code: `status`, `install`, `uninstall`
 
@@ -447,16 +457,51 @@ malachi-mcp install [--json]     # register with every Claude app found
 malachi-mcp uninstall [--json]   # remove the registration
 ```
 
+All three take the same flags:
+
+| Flag | Meaning |
+|---|---|
+| `--json` | print the report as one JSON object (below) |
+| `--claude-desktop-config PATH` | use `PATH` as Claude Desktop's configuration file instead of `<UserConfigDir>/Claude/claude_desktop_config.json`, for a Claude Desktop that keeps it elsewhere (the MSIX package on Windows, below); Claude Desktop is present when the file's directory exists |
+| `--command PATH` | register `PATH` and compare against it instead of this binary's own path: a launcher that has to stay put across updates, or the bridge as the calling app knows it. The path is only cleaned: symlinks are not resolved, and it need not exist yet |
+
+The two path flags take absolute paths only (a relative one is refused
+before any file is read) and are not remembered: a caller that uses them
+passes them to every call, `status` included, or the report describes the
+defaults. Without them the subcommands behave as they always have. The
+Windows app passes them ([windows-port.md §10](windows-port.md#10-platform-services));
+the GTK and macOS apps need neither. The bridge itself knows no platform's
+packaging; that knowledge stays in the app that calls it.
+
 The clients, in the order the report lists them:
 
 | `id` | `name` | file | `present` when |
 |---|---|---|---|
-| `claude-desktop` | Claude Desktop | `<UserConfigDir>/Claude/claude_desktop_config.json` (macOS `~/Library/Application Support/Claude/…`, Linux `~/.config/Claude/…` or `$XDG_CONFIG_HOME`) | the `Claude` directory exists |
+| `claude-desktop` | Claude Desktop | `--claude-desktop-config`, else `<UserConfigDir>/Claude/claude_desktop_config.json` | the file's directory exists |
 | `claude-code` | Claude Code | `~/.claude.json` (Claude Code's user scope) | that file exists or `~/.claude/` exists |
 
-- `command` is this binary's own absolute path (`os.Executable`, symlinks
-  resolved). It is what gets written and what `registered` compares
-  against.
+Where the files are:
+
+| Platform | Claude Desktop | Claude Code |
+|---|---|---|
+| Linux | `~/.config/Claude/claude_desktop_config.json` (under `$XDG_CONFIG_HOME` when set) | `~/.claude.json` |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.claude.json` |
+| Windows, classic install | `%APPDATA%\Claude\claude_desktop_config.json` | `%USERPROFILE%\.claude.json` |
+| Windows, MSIX package | `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Roaming\Claude\claude_desktop_config.json`, passed with `--claude-desktop-config` | `%USERPROFILE%\.claude.json` |
+
+The MSIX Claude Desktop keeps its file in the package's private copy of
+`AppData`. Outside its process tree `%APPDATA%\Claude` is not its
+directory: usually it does not exist, and without the flag the bridge
+reports Claude Desktop as not installed; where a classic install left it,
+the bridge would edit a file the packaged app never reads. A process that
+Claude Desktop started (its own Claude Code sessions, say) sees the
+redirected `AppData`, so there the default path happens to reach the
+packaged file; nowhere else does. Run by hand for the MSIX Claude Desktop,
+pass `--claude-desktop-config` yourself.
+
+- `command` is `--command` when given, else this binary's own absolute
+  path (`os.Executable`, symlinks resolved). It is what gets written and
+  what `registered` compares against.
 - `registered` is true when the file exists, parses as a JSON object and
   holds `mcpServers.malachi` whose `command` equals `command`. An entry
   that names another command is *not* registered; the report carries it
@@ -465,7 +510,7 @@ The clients, in the order the report lists them:
 - `install` sets `mcpServers.malachi` to
   `{"type": "stdio", "command": "<command>", "args": []}` in every present
   client, creating the file when only the directory exists; it never
-  creates `~/.claude/` or the `Claude` directory, so an app that is not
+  creates `~/.claude/` or Claude Desktop's directory, so an app that is not
   installed is reported rather than configured. Every other key of the
   file is kept, numbers are written back exactly as read, the file is
   indented with two spaces and replaced atomically (temporary file in the
@@ -482,7 +527,9 @@ The clients, in the order the report lists them:
   Desktop or Claude Code)`), when a present client's file cannot be parsed
   or written (the message names the file; nothing is written to any file
   in that case, and `status` refuses the same file rather than calling it
-  "not registered"), or on an unknown subcommand.
+  "not registered"), or on an unknown subcommand. A malformed flag (a
+  relative path, say) exits 1 too, with its reason on the first line of
+  stderr and the usage after it.
 
 `--json` prints one object; the field names are a contract with the
 desktop UIs (`other` appears only when it is set):
@@ -511,10 +558,11 @@ wins over the user-scope entry; elsewhere the registered binary is used.
 
 ### Any other stdio client
 
-Register the command `build/malachi-mcp` with the flags you want. The
-bridge speaks MCP over newline-delimited JSON-RPC on stdin/stdout, logs to
-stderr, and needs to reach the daemon socket and read the key file beside
-it (`rpc.sock.key`) as the same user.
+Register the command `build/malachi-mcp` (`build\malachi-mcp.exe` on
+Windows) with the flags you want. The bridge speaks MCP over
+newline-delimited JSON-RPC on stdin/stdout, logs to stderr, and needs to
+reach the daemon socket and read the key file beside it (`rpc.sock.key`)
+as the same user.
 
 ## Not in this version
 

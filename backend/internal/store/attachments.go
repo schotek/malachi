@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/schotek/malachi/backend/internal/fsretry"
 )
 
 // Attachment is a row of the attachments table. Data lives in
@@ -51,9 +53,11 @@ func (s *Store) ImportAttachment(ctx context.Context, a *Attachment, r io.Reader
 	if err != nil {
 		return fmt.Errorf("create attachment file: %w", err)
 	}
+	// Removals and the rename wait out a moment's hold of the file by
+	// another handle (fsretry), which Windows would refuse them.
 	cleanup := func() {
 		f.Close()
-		os.Remove(tmp)
+		_ = fsretry.Remove(tmp)
 	}
 
 	h := sha256.New()
@@ -73,11 +77,11 @@ func (s *Store) ImportAttachment(ctx context.Context, a *Attachment, r io.Reader
 		return fmt.Errorf("import attachment: empty file")
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(tmp)
+		_ = fsretry.Remove(tmp)
 		return fmt.Errorf("close attachment file: %w", err)
 	}
-	if err := os.Rename(tmp, final); err != nil {
-		os.Remove(tmp)
+	if err := fsretry.Rename(tmp, final); err != nil {
+		_ = fsretry.Remove(tmp)
 		return fmt.Errorf("finalise attachment file: %w", err)
 	}
 
@@ -88,7 +92,7 @@ func (s *Store) ImportAttachment(ctx context.Context, a *Attachment, r io.Reader
 		INSERT INTO attachments (id, account_id, draft_id, position, filename, content_type, size, sha256, inline, content_id, created_at)
 		VALUES (?, ?, NULL, 0, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.AccountID, a.Filename, a.ContentType, a.Size, a.SHA256, boolInt(a.Inline), a.ContentID, now); err != nil {
-		os.Remove(final)
+		_ = fsretry.Remove(final)
 		return fmt.Errorf("insert attachment: %w", err)
 	}
 	a.DraftID = ""
@@ -134,7 +138,7 @@ func (s *Store) RemoveAttachment(ctx context.Context, accountID, id string) erro
 		return fmt.Errorf("delete attachment: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
-		s.removeAttachmentFile(id)
+		s.removeAttachmentFiles(id)
 	}
 	return nil
 }
@@ -161,18 +165,22 @@ func (s *Store) SweepAttachments(ctx context.Context, olderThan time.Duration) (
 		orphans = append(orphans, id)
 	}
 	rows.Close()
+	var gone []string
 	for _, id := range orphans {
 		if _, err := s.db.ExecContext(ctx, `DELETE FROM attachments WHERE id = ?`, id); err != nil {
-			return removed, fmt.Errorf("delete orphan attachment: %w", err)
+			s.removeAttachmentFiles(gone...)
+			return len(gone), fmt.Errorf("delete orphan attachment: %w", err)
 		}
-		s.removeAttachmentFile(id)
-		removed++
+		gone = append(gone, id)
 	}
+	s.removeAttachmentFiles(gone...)
+	removed = len(gone)
 
 	entries, err := os.ReadDir(s.AttachmentDir())
 	if err != nil {
 		return removed, fmt.Errorf("read attachment directory: %w", err)
 	}
+	var b fsretry.Batch
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -184,8 +192,7 @@ func (s *Store) SweepAttachments(ctx context.Context, olderThan time.Duration) (
 		name := e.Name()
 		switch {
 		case strings.HasSuffix(name, ".tmp"):
-			if time.Since(info.ModTime()) > time.Hour {
-				os.Remove(filepath.Join(s.AttachmentDir(), name))
+			if time.Since(info.ModTime()) > time.Hour && b.Remove(filepath.Join(s.AttachmentDir(), name)) == nil {
 				removed++
 			}
 		default:
@@ -196,8 +203,7 @@ func (s *Store) SweepAttachments(ctx context.Context, olderThan time.Duration) (
 			if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM attachments WHERE id = ?`, name).Scan(&n); err != nil {
 				continue
 			}
-			if n == 0 {
-				os.Remove(filepath.Join(s.AttachmentDir(), name))
+			if n == 0 && b.Remove(filepath.Join(s.AttachmentDir(), name)) == nil {
 				removed++
 			}
 		}

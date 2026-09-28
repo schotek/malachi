@@ -15,7 +15,9 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -34,15 +36,23 @@ import (
 // where it replaces a file and is renamed into place, so a crash leaves the
 // old or the new file whole; a .zst file is decoded and checked before its
 // rename. Two variants of one message exist only for a moment (a
-// conversion between its two phases) or after a crash; readers then prefer
-// the store's codec, and RawTx.Stat and the sweep keep the newest valid
-// one. message_files accounts for every file (migration 0014).
+// conversion between its two phases), after a crash, or on Windows while a
+// reader holds the replaced one open; readers then take the newer (the
+// store codec's when their times are equal), and RawTx.Stat and the sweep
+// keep the newest valid one. message_files accounts for every file
+// (migration 0014).
 //
 // Locks, per message (rawLock): its writers go one at a time (mutate), and
 // the short names lock orders a reader's choice of file against renames
 // and removals. A reader holds nothing once its file is open, because a
 // rename or a removal leaves an open file's contents alone, so a reader
-// never blocks a writer. The rules:
+// never blocks a writer. That is POSIX: Windows refuses to rename over or
+// to remove a file while any handle of it is open (Go opens files without
+// delete sharing). There a rename or a removal is retried for a moment
+// (fsretry) under the names lock, so that the readers that have the file
+// open finish meanwhile and no new one opens it; and nothing in the store
+// or its callers renames over or removes a file it still has open itself.
+// The rules:
 //  1. never take a raw lock while a store transaction is open;
 //  2. never hold two messages' locks at once;
 //  3. WithMessageRaw is not re-entrant: no PutMessageRaw or WithMessageRaw
@@ -278,7 +288,10 @@ func (s *Store) PutMessageRaw(ctx context.Context, accountID, id string, w RawWr
 // OpenMessageRaw opens the raw file of a message for reading, whichever
 // codec it is stored in; ErrNotFound when there is none. The reader holds
 // no lock: the file may be replaced or removed meanwhile, and the reader
-// keeps reading what it opened.
+// keeps reading what it opened. On Windows, where an open file can be
+// neither, a writer waits a moment for the reader to close it and then
+// gives up (ErrBusy): a reader closes the file as soon as it has read what
+// it needs.
 func (s *Store) OpenMessageRaw(ctx context.Context, accountID, id string) (RawMessage, error) {
 	if err := checkMessagePath(accountID, id); err != nil {
 		return nil, fmt.Errorf("open message file: %w", err)
@@ -286,27 +299,21 @@ func (s *Store) OpenMessageRaw(ctx context.Context, accountID, id string) (RawMe
 	key := rawKey(accountID, id)
 	l := s.rawEntry(key)
 	defer s.rawRelease(key, l)
-	return s.openRaw(l, s.accountDir(accountID), id)
+	return s.openRaw(key, l, s.accountDir(accountID), id)
 }
 
-// openRaw opens message id in dir, trying the store codec's name first.
-func (s *Store) openRaw(l *rawLock, dir, id string) (RawMessage, error) {
-	first := s.RawCodec()
-	var (
-		f     *os.File
-		codec RawCodec
-		err   error
-	)
+// openRaw opens message id in dir (openNewest). The reader counts among
+// the file's readers (rawLock.readers) until it is closed.
+func (s *Store) openRaw(key string, l *rawLock, dir, id string) (RawMessage, error) {
 	l.names.RLock()
-	for _, c := range []RawCodec{first, first.other()} {
-		f, err = os.Open(filepath.Join(dir, rawName(id, c)))
-		if err == nil {
-			codec = c
-			break
-		}
-		if !errors.Is(err, fs.ErrNotExist) {
-			break
-		}
+	f, codec, err := s.openNewest(dir, id)
+	if err == nil {
+		// Counted before the names lock goes, so that a writer that finds
+		// the file held can tell whose it is.
+		s.rawMu.Lock()
+		l.readers[codec]++
+		l.refs++
+		s.rawMu.Unlock()
 	}
 	l.names.RUnlock()
 	switch {
@@ -314,10 +321,183 @@ func (s *Store) openRaw(l *rawLock, dir, id string) (RawMessage, error) {
 		return nil, ErrNotFound
 	case err != nil:
 		return nil, fmt.Errorf("open message file: %w", err)
-	case codec == RawZstd:
-		return openZstdRaw(f)
 	}
-	return &plainRaw{f: f}, nil
+	release := func() { s.readerDone(key, l, codec) }
+	if codec == RawZstd {
+		z, err := openZstdRaw(f)
+		if err != nil {
+			release()
+			return nil, err
+		}
+		return &countedRaw{RawMessage: z, release: release}, nil
+	}
+	return &countedRaw{RawMessage: &plainRaw{f: f}, release: release}, nil
+}
+
+// openNewest opens the file of message id in dir: its only one, or of
+// both variants (a conversion between its phases, a crash between a rename
+// and a removal, or a replaced file whose removal a reader held up on
+// Windows) the newer, the store codec's when their times are equal, which
+// is the one resolveLocked keeps. So a reader never gets the replaced
+// content of a message whose codec was switched back before the pair was
+// settled. The caller holds the names lock at least for reading.
+func (s *Store) openNewest(dir, id string) (*os.File, RawCodec, error) {
+	first := s.RawCodec()
+	second := first.other()
+	f, err := os.Open(filepath.Join(dir, rawName(id, first)))
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		f, err = os.Open(filepath.Join(dir, rawName(id, second)))
+		return f, second, err
+	case err != nil:
+		return nil, first, err
+	}
+	path := filepath.Join(dir, rawName(id, second))
+	other, err := os.Lstat(path)
+	if err != nil || !other.Mode().IsRegular() {
+		return f, first, nil
+	}
+	mine, err := f.Stat()
+	if err != nil || !other.ModTime().After(mine.ModTime()) {
+		return f, first, nil
+	}
+	g, err := os.Open(path)
+	if err != nil {
+		return f, first, nil
+	}
+	f.Close()
+	return g, second, nil
+}
+
+// countedRaw is a stored message being read that counts among its file's
+// readers until it is closed.
+type countedRaw struct {
+	RawMessage
+	release func() // nil once closed
+}
+
+// Close closes the file and counts the reader out; closing twice is
+// harmless.
+func (r *countedRaw) Close() error {
+	err := r.RawMessage.Close()
+	if r.release != nil {
+		r.release()
+		r.release = nil
+	}
+	return err
+}
+
+// readerDone counts a reader of the message's file in codec c out, and
+// the caller out of the message's lock (rawRelease).
+func (s *Store) readerDone(key string, l *rawLock, c RawCodec) {
+	s.rawMu.Lock()
+	defer s.rawMu.Unlock()
+	l.readers[c]--
+	l.refs--
+	if l.refs == 0 {
+		delete(s.rawLocks, key)
+	}
+}
+
+// fileOp runs op, a rename over or a removal of path, the message's file
+// in codec c, through retry (fsretry.Do, or a batch's Do). The caller holds
+// the names lock, so the retries wait for the readers that have the file
+// open while no new one opens it: their count only falls meanwhile. Each
+// attempt counts them as it starts, and a failure that outlasts the
+// retries is ErrBusy when one of them had the file open at the last
+// attempt: Windows refuses both while a handle of the file is open, and
+// that reader is the cause (a message.part streaming a large attachment,
+// say), however soon after the attempt it lets go; the next attempt, once
+// it is done, goes through. Any other failure is returned as it is: one
+// that lasts (a directory without write permission), or a handle the store
+// does not count (another process, a virus scanner). Elsewhere a reader
+// stops neither, and such a failure is a coincidence that the next attempt
+// settles as well.
+func (s *Store) fileOp(l *rawLock, c RawCodec, path string, retry func(func() error) error, op func() error) error {
+	held := 0
+	err := retry(func() error {
+		s.rawMu.Lock()
+		n := l.readers[c]
+		s.rawMu.Unlock()
+		err := s.refused(n)
+		if err == nil {
+			err = op()
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			held = n
+			if s.attemptFailed != nil {
+				s.attemptFailed(path)
+			}
+		}
+		return err
+	})
+	if err == nil || errors.Is(err, fs.ErrNotExist) || held == 0 {
+		return err
+	}
+	return fmt.Errorf("%w (%d readers): %w", ErrBusy, held, err)
+}
+
+// renameRaw renames tmp over final, the message's file in codec c, and
+// removeRaw removes path, its file in codec c, as part of b (nil: on its
+// own; a missing file is not an error), both through fileOp: the caller
+// holds the names lock, and a reader that outlasts the retries makes it
+// ErrBusy. A rename that fails leaves final as it was.
+func (s *Store) renameRaw(l *rawLock, c RawCodec, tmp, final string) error {
+	return s.fileOp(l, c, final, fsretry.Do, func() error { return os.Rename(tmp, final) })
+}
+
+func (s *Store) removeRaw(l *rawLock, c RawCodec, path string, b *fsretry.Batch) error {
+	retry := fsretry.Do
+	if b != nil {
+		retry = b.Do
+	}
+	err := s.fileOp(l, c, path, retry, func() error { return os.Remove(path) })
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// errNotReplaced is in the failure of a write that left the message's
+// stored file as it was, because the new file never took its name: the
+// write failed before it renamed the new file into place, or that rename
+// failed, which leaves the file it would have replaced whole. On Windows a
+// reader the store does not count (another process, a virus scanner)
+// causes that as well as one of its own (ErrBusy). CommitMessageRaw undoes
+// its phase A on it, whatever the cause. A write that fails after the
+// rename (the directory's flush) is not one: the new file is in place.
+var errNotReplaced = errors.New("store: the stored message file stays as it was")
+
+// notReplaced wraps the failure err of a write that left the stored file
+// as it was (errNotReplaced), keeping err's text.
+type notReplaced struct{ err error }
+
+func (e notReplaced) Error() string        { return e.err.Error() }
+func (e notReplaced) Unwrap() error        { return e.err }
+func (e notReplaced) Is(target error) bool { return target == errNotReplaced }
+
+// errRefused is the refusal of refused.
+var errRefused = errors.New("store test: the file is open")
+
+// refused is what a test that has the store behave as on Windows
+// (Store.refuseOpen) gets for a rename over or a removal of a message's
+// file while readers of the store have it open, on any system; nil
+// otherwise.
+func (s *Store) refused(readers int) error {
+	if s.refuseOpen && readers > 0 {
+		return errRefused
+	}
+	return nil
+}
+
+// logRemoval logs a file of message id that what could not remove: a
+// reader's (ErrBusy) is left to the sweep, anything else is a warning.
+func (s *Store) logRemoval(what, id string, err error) {
+	if errors.Is(err, ErrBusy) {
+		s.log.Info(what+": in use by a reader, left for the sweep", "id", id, "err", err)
+		return
+	}
+	s.log.Warn(what, "id", id, "err", err)
 }
 
 // plainRaw is a stored plain message being read (RawMessage).
@@ -387,7 +567,7 @@ func (tx *RawTx) Open() (RawMessage, error) {
 	if tx.done {
 		return nil, errRawTxDone
 	}
-	return tx.s.openRaw(tx.h.l, tx.h.dir, tx.h.id)
+	return tx.s.openRaw(tx.h.key, tx.h.l, tx.h.dir, tx.h.id)
 }
 
 // Stat describes the message's raw file; false when it has none. A message
@@ -440,7 +620,9 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 	case errors.Is(err, sql.ErrNoRows):
 		return RawInfo{}, ErrNotFound
 	case err != nil:
-		return RawInfo{}, fmt.Errorf("replace message file: %w", err)
+		// Nothing is written yet (a context that ended, a database
+		// error): the stored file stays as it was.
+		return RawInfo{}, notReplaced{fmt.Errorf("replace message file: %w", err)}
 	case role == string(api.RoleOutbox):
 		return RawInfo{}, ErrOutbox
 	}
@@ -461,7 +643,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 	}
 	existing, err := statRaw(h.dir, h.id)
 	if err != nil {
-		return RawInfo{}, err
+		return RawInfo{}, notReplaced{err}
 	}
 	created := false
 	if existing.any() {
@@ -471,7 +653,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 		// there a moment ago, so the account was too; an account deleted
 		// since is caught below.
 		if err := os.MkdirAll(h.dir, 0o700); err != nil {
-			return RawInfo{}, noSpace(fmt.Errorf("create message directory: %w", err))
+			return RawInfo{}, notReplaced{noSpace(fmt.Errorf("create message directory: %w", err))}
 		}
 		created = true
 	}
@@ -480,7 +662,7 @@ func (tx *RawTx) Replace(w RawWrite, src RawSource) (RawInfo, error) {
 		if ok, _ := s.messageExists(context.WithoutCancel(tx.ctx), h.accountID, h.id); !ok {
 			// DeleteAccount removed the directory in between; do not
 			// leave it behind.
-			s.unlinkRaw(h.l, h.dir, h.id)
+			s.unlinkRaw(h.l, h.dir, h.id, nil)
 			os.Remove(h.dir)
 			return RawInfo{}, ErrNotFound
 		}
@@ -505,15 +687,16 @@ type rawJob struct {
 // written beside the old, checked, and renamed into place, the other
 // variant removed and the accounting updated. A codec change during the
 // write converts the new file at once, since the background conversion
-// may already have passed the message.
+// may already have passed the message. A failure before the new file is
+// in place leaves the stored one as it was (errNotReplaced).
 func (s *Store) writeLocked(ctx context.Context, h *rawHold, j rawJob) (RawInfo, error) {
 	tmp, info, err := s.produceTemp(ctx, h, j)
 	if err != nil {
-		return RawInfo{}, noSpace(err)
+		return RawInfo{}, notReplaced{noSpace(err)}
 	}
 	if err := ctx.Err(); err != nil {
 		os.Remove(tmp)
-		return RawInfo{}, err
+		return RawInfo{}, notReplaced{err}
 	}
 	if j.requireRow {
 		ok, err := s.messageExists(ctx, h.accountID, h.id)
@@ -522,7 +705,7 @@ func (s *Store) writeLocked(ctx context.Context, h *rawHold, j rawJob) (RawInfo,
 			if err != nil {
 				return RawInfo{}, err
 			}
-			s.unlinkRaw(h.l, h.dir, h.id)
+			s.unlinkRaw(h.l, h.dir, h.id, nil)
 			return RawInfo{}, ErrNotFound
 		}
 	}
@@ -605,12 +788,27 @@ func (s *Store) tempFromStaged(h *rawHold, j rawJob) (string, RawInfo, error) {
 	}
 	tmp := filepath.Join(h.dir, h.id+tmpSuffix)
 	_ = os.Remove(tmp)
+	// The staged file's own handle goes first: Windows refuses to rename a
+	// file that is open, even by the process renaming it.
+	if err := st.closeFile(); err != nil {
+		return "", RawInfo{}, err
+	}
 	if err := os.Rename(st.path, tmp); err != nil {
 		// The message directory is on another file system than the
 		// staging area (a linked directory): copy instead.
+		if err := st.reopen(); err != nil {
+			return "", RawInfo{}, err
+		}
 		return s.writeTemp(h, RawPlain, n, n, fromStaged, j.syncFile)
 	}
 	st.consumed = true
+	// The file keeps the time it was received; it takes the time it is
+	// placed, since a reader and the sweep take the newer of a message's
+	// two files (openNewest, resolveLocked) and a variant written while it
+	// downloaded (the codec step) must not pass for the newer one. Best
+	// effort: a file that keeps its old time is what a copy would not be.
+	now := time.Now()
+	_ = os.Chtimes(tmp, now, now)
 	return tmp, RawInfo{Codec: RawPlain, Bytes: n, DiskBytes: n}, nil
 }
 
@@ -678,15 +876,18 @@ func fillTemp(f rawFile, codec RawCodec, size, limit int64, produce func(io.Writ
 // for codec and removes the other variant, flushing the directory first so
 // that a crash cannot lose both; syncDir flushes it even when nothing else
 // goes. keepOther leaves the other variant (the conversion's first phase).
-// A reader choosing a file waits for all of it.
+// A reader choosing a file waits for all of it. A reader that has the old
+// file open holds the rename up on Windows: renameRaw waits for it, and
+// when it outlasts the wait the write fails with ErrBusy. A failed rename,
+// whatever the cause, leaves the old file as it was (errNotReplaced).
 func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, keepOther bool) error {
 	final := filepath.Join(h.dir, rawName(h.id, codec))
 	other := filepath.Join(h.dir, rawName(h.id, codec.other()))
 	h.l.names.Lock()
 	defer h.l.names.Unlock()
-	if err := os.Rename(tmp, final); err != nil {
+	if err := s.renameRaw(h.l, codec, tmp, final); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("finalise message file: %w", err)
+		return notReplaced{fmt.Errorf("finalise message file: %w", err)}
 	}
 	otherExists := false
 	if !keepOther {
@@ -702,8 +903,8 @@ func (s *Store) placeLocked(h *rawHold, tmp string, codec RawCodec, syncDir, kee
 		}
 	}
 	if otherExists {
-		if err := os.Remove(other); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			s.log.Warn("remove replaced message file", "id", h.id, "err", err)
+		if err := s.removeRaw(h.l, codec.other(), other, nil); err != nil {
+			s.logRemoval("remove replaced message file", h.id, err)
 		}
 	}
 	return nil
@@ -739,6 +940,10 @@ func (s *Store) convertLocked(ctx context.Context, h *rawHold, from, to RawCodec
 		_, err := io.Copy(w, r)
 		return err
 	}, true)
+	// The source is read in full: closed before placeLocked removes it
+	// (unless keepSource), which Windows refuses while it is open, even by
+	// the process removing it.
+	r.Close()
 	if err != nil {
 		if errors.Is(err, ErrRawCorrupt) {
 			return RawInfo{}, err
@@ -772,10 +977,7 @@ func (s *Store) resolveLocked(ctx context.Context, h *rawHold, files rawFiles) (
 	h.l.names.Lock()
 	err := syncDirectory(h.dir)
 	if err == nil {
-		err = os.Remove(filepath.Join(h.dir, rawName(h.id, keep.other())))
-		if errors.Is(err, fs.ErrNotExist) {
-			err = nil
-		}
+		err = s.removeRaw(h.l, keep.other(), filepath.Join(h.dir, rawName(h.id, keep.other())), nil)
 	}
 	h.l.names.Unlock()
 	if err != nil {
@@ -991,9 +1193,12 @@ func (s *Store) createRawFile(path string) (rawFile, error) {
 	return os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 }
 
-// syncFile flushes the file at path to disk.
+// syncFile flushes the file at path to disk. The handle is opened for
+// writing, though nothing is written: Windows flushes only through a
+// handle that may write (FlushFileBuffers), and denies it to a read-only
+// one.
 func syncFile(path string) error {
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("flush message file: %w", err)
 	}
@@ -1064,10 +1269,11 @@ func checkMessagePath(accountID, id string) error {
 
 // rawLock orders the writers and readers of one message's files.
 type rawLock struct {
-	mutate chan struct{} // holds one token while a writer changes the files
-	names  sync.RWMutex  // write-held around renames and removals, read-held while a reader picks a name
-	refs   int           // under Store.rawMu
-	doomed bool          // under Store.rawMu: the row is gone; the holder removes the files
+	mutate  chan struct{} // holds one token while a writer changes the files
+	names   sync.RWMutex  // write-held around renames and removals, read-held while a reader picks a name
+	refs    int           // under Store.rawMu
+	readers [2]int        // under Store.rawMu: open readers of the file of each codec (openRaw)
+	doomed  bool          // under Store.rawMu: the row is gone; the holder removes the files
 }
 
 // rawHold is a held write lock of one message.
@@ -1155,21 +1361,31 @@ func (h *rawHold) unlock() {
 	}
 	s.rawMu.Unlock()
 	if doomed {
-		s.unlinkRaw(h.l, h.dir, h.id)
+		s.unlinkRaw(h.l, h.dir, h.id, nil)
 		<-h.l.mutate
 	}
 	s.rawRelease(h.key, h.l)
 }
 
-// unlinkRaw removes both variants of a message; a missing file is fine.
-func (s *Store) unlinkRaw(l *rawLock, dir, id string) {
+// unlinkRaw removes both variants of a message; a missing file is fine. The
+// removals wait out a reader that has a file open (removeRaw) as part of
+// b, the batch of removals they belong to (nil: a batch of their own). A
+// file that stays is the sweep's, as an orphan; the error says why
+// (ErrBusy: a reader held it).
+func (s *Store) unlinkRaw(l *rawLock, dir, id string, b *fsretry.Batch) error {
+	if b == nil {
+		b = new(fsretry.Batch)
+	}
 	l.names.Lock()
 	defer l.names.Unlock()
+	var errs []error
 	for _, c := range []RawCodec{RawPlain, RawZstd} {
-		if err := os.Remove(filepath.Join(dir, rawName(id, c))); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			s.log.Warn("remove message file", "id", id, "err", err)
+		if err := s.removeRaw(l, c, filepath.Join(dir, rawName(id, c)), b); err != nil {
+			s.logRemoval("remove message file", id, err)
+			errs = append(errs, err)
 		}
 	}
+	return errors.Join(errs...)
 }
 
 // messageFile locates one raw message file.
@@ -1177,8 +1393,13 @@ type messageFile struct{ accountID, id string }
 
 // removeMessageFiles unlinks raw files, both variants, after their rows
 // are gone; a missing file is not an error (the row is authoritative). A
-// message a writer holds is left to that writer (doomed, see unlock).
+// message a writer holds is left to that writer (doomed, see unlock). The
+// removals share an fsretry.Batch: once one fails even after the retries,
+// which points at something lasting such as a directory without write
+// permission rather than at a reader, the rest get a single attempt each,
+// so that a folder of many messages does not wait for every one.
 func (s *Store) removeMessageFiles(files []messageFile) {
+	var b fsretry.Batch
 	for _, mf := range files {
 		if checkMessagePath(mf.accountID, mf.id) != nil {
 			continue
@@ -1199,20 +1420,96 @@ func (s *Store) removeMessageFiles(files []messageFile) {
 			continue
 		}
 		h := s.newHold(key, l, mf.accountID, mf.id)
-		s.unlinkRaw(l, h.dir, mf.id)
+		s.unlinkRaw(l, h.dir, mf.id, &b)
 		h.unlock()
 	}
 }
 
-// removeMessageDir drops the whole raw-message directory of an account.
+// removeMessageDir drops the whole raw-message directory of an account
+// DeleteAccount deleted, which recorded it for the sweep in the same
+// transaction (metaDeletedDir); once it is gone, the record goes too.
 // Background writers never create one (RawTx.Replace makes it only for a
 // message's first file and removes it again if the row is gone), so none
-// comes back.
-func (s *Store) removeMessageDir(accountID string) {
+// comes back. A reader that still has a file open holds the removal up on
+// Windows (removeAccountDir); what one keeps for longer stays, and the
+// sweep removes it once the reader is done.
+func (s *Store) removeMessageDir(ctx context.Context, accountID string) {
 	if checkPathSegment(accountID) != nil {
 		return
 	}
-	if err := os.RemoveAll(s.accountDir(accountID)); err != nil {
-		s.log.Warn("remove message directory", "account", accountID, "err", err)
+	if err := s.removeAccountDir(accountID); err != nil {
+		if s.accountRead(accountID) {
+			s.log.Info("message directory in use by a reader: left for the sweep", "account", accountID, "err", err)
+		} else {
+			s.log.Warn("remove message directory; the sweep tries again", "account", accountID, "err", err)
+		}
+		return
 	}
+	if err := s.forgetDeletedDir(context.WithoutCancel(ctx), accountID); err != nil {
+		s.log.Warn("forget removed message directory", "account", accountID, "err", err)
+	}
+}
+
+// removeAccountDir removes the directory of an account's raw files and all
+// in it: an attempt removes what it can, the next (fsretry) what a reader
+// held up on Windows. Under Store.refuseOpen it refuses, as that reader
+// would, while one of the store's readers has a file of the account open.
+func (s *Store) removeAccountDir(accountID string) error {
+	dir := s.accountDir(accountID)
+	return fsretry.Do(func() error {
+		if s.refuseOpen && s.accountRead(accountID) {
+			return errRefused
+		}
+		return os.RemoveAll(dir)
+	})
+}
+
+// accountRead reports whether one of the store's readers has a file of the
+// account open.
+func (s *Store) accountRead(accountID string) bool {
+	prefix := rawKey(accountID, "")
+	s.rawMu.Lock()
+	defer s.rawMu.Unlock()
+	for key, l := range s.rawLocks {
+		if strings.HasPrefix(key, prefix) && l.readers[RawPlain]+l.readers[RawZstd] > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// metaDeletedDir prefixes the meta keys of the accounts DeleteAccount
+// deleted whose directory may still hold files (removeMessageDir), by
+// account id: the sweep removes those directories whole, which it never
+// does for an unknown account's, and forgets them once they are gone.
+const metaDeletedDir = "raw.deleted."
+
+// deletedDirs lists the accounts recorded under metaDeletedDir.
+func (s *Store) deletedDirs(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT substr(key, ?) FROM meta WHERE substr(key, 1, ?) = ?`,
+		len(metaDeletedDir)+1, len(metaDeletedDir), metaDeletedDir)
+	if err != nil {
+		return nil, fmt.Errorf("list deleted message directories: %w", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var acc string
+		if err := rows.Scan(&acc); err != nil {
+			return nil, fmt.Errorf("list deleted message directories: %w", err)
+		}
+		out[acc] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list deleted message directories: %w", err)
+	}
+	return out, nil
+}
+
+// forgetDeletedDir drops the account's metaDeletedDir record.
+func (s *Store) forgetDeletedDir(ctx context.Context, accountID string) error {
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM meta WHERE key = ?`, metaDeletedDir+accountID); err != nil {
+		return fmt.Errorf("forget deleted message directory: %w", err)
+	}
+	return nil
 }

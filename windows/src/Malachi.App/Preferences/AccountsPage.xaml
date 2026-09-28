@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/AccountsPaneViewController.swift,
+AccountRowCell.swift and AccountsTableView.swift; GTK: preferences.blp
+accounts_page and the rows of ui/internal/window/accounts_page.go. The
+group Mail Accounts (accounts_group) with its header suffix, the add
+button (add_account_button: list-add, "Add Account"), its description
+(a failed load), the accounts' rows and the empty row (accounts_empty_row:
+"No accounts yet", "Use the + button to add one", insensitive). A row, in
+the order of the GTK row: the drag handle (its tooltip names the keys),
+the provider's icon, the name over the address, the status (dim caption,
+cut with its whole text as tooltip), Sign In… (an account of the browser
+sign-in that needs it), the Enabled switch, Edit and Remove. The rows are
+a ListView of cards: a click selects the row (windows/README.md, M21),
+Ctrl+Up and Ctrl+Down move the selected one, and a row is dragged by its
+handle only. Where the page is too narrow for a row on one line, the
+status and the controls go to a second line (AccountRowPanel).
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.AccountsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Preferences"
+    xmlns:res="using:Malachi.App.Resources"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+                <StackPanel x:Name="AccountsGroup">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            AutomationProperties.HeadingLevel="Level2"
+                            Style="{StaticResource SettingsGroupHeaderStyle}"
+                            Text="{l:T Msgid='Mail Accounts'}" />
+                        <Button
+                            x:Name="AddAccountButton"
+                            Grid.Column="1"
+                            Margin="0,0,0,4"
+                            VerticalAlignment="Center"
+                            AutomationProperties.AutomationId="AddAccount"
+                            AutomationProperties.Name="{l:T Msgid='Add Account'}"
+                            Click="OnAddClick"
+                            IsEnabled="{x:Bind Controller.IsEnabled, Mode=OneWay}"
+                            Style="{StaticResource SubtleButtonStyle}"
+                            ToolTipService.ToolTip="{l:T Msgid='Add Account'}">
+                            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('list-add')}" />
+                        </Button>
+                    </Grid>
+                    <TextBlock
+                        x:Name="GroupDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Text="{x:Bind Controller.Description, Mode=OneWay}"
+                        Visibility="{x:Bind res:Bind.VisibleIfText(Controller.Description), Mode=OneWay}" />
+
+                    <ListView
+                        x:Name="AccountList"
+                        AllowDrop="True"
+                        AutomationProperties.AutomationId="AccountList"
+                        AutomationProperties.Name="{l:T Msgid='Mail Accounts'}"
+                        CanDragItems="True"
+                        CanReorderItems="True"
+                        DragItemsCompleted="OnDragItemsCompleted"
+                        DragItemsStarting="OnDragItemsStarting"
+                        ItemsSource="{x:Bind Rows}"
+                        ScrollViewer.VerticalScrollMode="Disabled"
+                        SelectionChanged="OnSelectionChanged"
+                        SelectionMode="Single">
+                        <ListView.ItemContainerStyle>
+                            <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                <Setter Property="BorderThickness" Value="1" />
+                                <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+                                <Setter Property="Margin" Value="0,0,0,4" />
+                                <Setter Property="Padding" Value="12,0,12,0" />
+                                <Setter Property="MinHeight" Value="64" />
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:AccountRowView">
+                                <local:AccountRowPanel
+                                    MinHeight="62"
+                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
+                                    <Border
+                                        x:Name="DragHandle"
+                                        Padding="2,12"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        Tag="DragHandle"
+                                        ToolTipService.ToolTip="{l:T Msgid='Drag to reorder, or press Ctrl+Up and Ctrl+Down'}">
+                                        <FontIcon
+                                            FontSize="16"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Glyph="{x:Bind res:Icons.Glyph('list-drag-handle')}" />
+                                    </Border>
+                                    <FontIcon
+                                        VerticalAlignment="Center"
+                                        FontSize="16"
+                                        Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
+                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Email, Mode=OneWay}">
+                                        <TextBlock
+                                            MaxLines="1"
+                                            Style="{StaticResource BodyLabelStyle}"
+                                            Text="{x:Bind Title, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            MaxLines="1"
+                                            Style="{StaticResource DimCaptionLabelStyle}"
+                                            Text="{x:Bind Email, Mode=OneWay}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <TextBlock
+                                        MaxWidth="180"
+                                        VerticalAlignment="Center"
+                                        MaxLines="1"
+                                        Style="{StaticResource DimCaptionLabelStyle}"
+                                        Text="{x:Bind Status, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis"
+                                        ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}"
+                                        Visibility="{x:Bind StatusVisibility, Mode=OneWay}" />
+                                    <Button
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="SignIn"
+                                        Click="OnSignInClick"
+                                        Content="{l:T Msgid='Sign In…'}"
+                                        IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
+                                        Visibility="{x:Bind SignInVisibility, Mode=OneWay}" />
+                                    <ToggleSwitch
+                                        MinWidth="0"
+                                        VerticalAlignment="Center"
+                                        AutomationProperties.AutomationId="Enabled"
+                                        AutomationProperties.Name="{l:T Msgid='Enabled'}"
+                                        IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
+                                        IsOn="{x:Bind IsOn, Mode=OneWay}"
+                                        OffContent="{x:Null}"
+                                        OnContent="{x:Null}"
+                                        ToolTipService.ToolTip="{l:T Msgid='Enabled'}"
+                                        Toggled="OnRowToggled" />
+                                    <StackPanel
+                                        VerticalAlignment="Center"
+                                        Orientation="Horizontal"
+                                        Spacing="2">
+                                        <Button
+                                            AutomationProperties.AutomationId="EditAccount"
+                                            AutomationProperties.Name="{l:T Msgid='Edit Account'}"
+                                            Click="OnEditClick"
+                                            IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            ToolTipService.ToolTip="{l:T Msgid='Edit Account'}">
+                                            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('document-edit')}" />
+                                        </Button>
+                                        <Button
+                                            AutomationProperties.AutomationId="RemoveAccount"
+                                            AutomationProperties.Name="{l:T Msgid='Remove Account'}"
+                                            Click="OnRemoveClick"
+                                            IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
+                                            Style="{StaticResource SubtleButtonStyle}"
+                                            ToolTipService.ToolTip="{l:T Msgid='Remove Account'}">
+                                            <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('user-trash')}" />
+                                        </Button>
+                                    </StackPanel>
+                                </local:AccountRowPanel>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <tk:SettingsCard
+                        x:Name="EmptyRow"
+                        Description="{l:T Msgid='Use the + button to add one'}"
+                        Header="{l:T Msgid='No accounts yet'}"
+                        IsEnabled="False"
+                        Visibility="{x:Bind res:Bind.Visible(Controller.IsEmpty), Mode=OneWay}" />
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

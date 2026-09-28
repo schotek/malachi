@@ -1,0 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// The Win32 functions CsWin32 generates for malachi-credentials, one per
+// line: the generic credentials of Credential Manager (Win32CredentialManager).
+CredReadW
+CredWriteW
+CredDeleteW
+CredEnumerateW
+CredFree
+CRED_MAX_CREDENTIAL_BLOB_SIZE
+CRED_MAX_STRING_LENGTH
+CRED_MAX_VALUE_SIZE
+WIN32_ERROR

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Windows-only file: the page the wizard's Frame navigates to for each of
+its pages, so that the slide transition of a navigation plays (the
+counterpart of AdwNavigationView's push and pop, and of the macOS root's
+transition(from:to:)). The wizard's pages themselves are made once, with
+the window, and keep what was typed; a host shows the one it is given
+and lets go of it when the Frame leaves it.
+-->
+<Page
+    x:Class="Malachi.App.Wizard.WizardPageHost"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    NavigationCacheMode="Disabled" />

@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the sidebar of ui/data/ui/window.blp (the Folders navigation page:
+its header bar with New Message at the start and the primary menu at the
+end, and folder_stack: folder_list, or folder_status_page while there is
+nothing to list) and of ui/internal/window/folders.go; macOS:
+Sidebar/FolderSidebarViewController.swift. The status line GTK keeps at
+the sidebar's bottom runs across the window's bottom edge (StatusBarView;
+windows/README.md). The primary menu is GTK's with Windows' order of the
+application's entries (docs/windows-port.md §11.1): New Message and Add
+Account…, Preferences and About, Quit (Windows-only; GTK quits with Ctrl+Q
+and the window, macOS from its menu bar); the dead Keyboard Shortcuts item
+is left out (research 05 W4). The folder list is a flat ListView over the
+mailbox's entries (research 03 D-L5), its headings not selectable.
+-->
+<UserControl
+    x:Class="Malachi.App.Main.SidebarPane"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:main="using:Malachi.App.Main"
+    xmlns:p="using:Malachi.Core.Presentation"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- The sidebar's header bar. -->
+        <Grid
+            x:Name="HeaderRow"
+            Height="44"
+            Padding="8,0">
+            <Button
+                x:Name="NewMessageButton"
+                Width="40"
+                Height="32"
+                Padding="0"
+                HorizontalAlignment="Left"
+                AutomationProperties.AutomationId="NewMessageButton"
+                AutomationProperties.Name="{l:T Msgid='New Message'}"
+                Style="{StaticResource AccentButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='New Message (Ctrl+N)'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-message-new-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="MainMenuButton"
+                Width="40"
+                Height="32"
+                Padding="0"
+                HorizontalAlignment="Right"
+                AutomationProperties.AutomationId="MainMenuButton"
+                AutomationProperties.Name="{l:T Msgid='Main Menu'}"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Main Menu'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('view-more-symbolic')}" />
+                <Button.Flyout>
+                    <MenuFlyout x:Name="PrimaryMenu" Placement="BottomEdgeAlignedRight">
+                        <!-- Windows-only strings: the key names beside the items. -->
+                        <MenuFlyoutItem
+                            x:Name="MenuNewMessage"
+                            l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
+                            KeyboardAcceleratorTextOverride="Ctrl+N" />
+                        <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                        <MenuFlyoutSeparator />
+                        <!-- Windows-only string: the key name beside the item. -->
+                        <MenuFlyoutItem
+                            x:Name="MenuPreferences"
+                            l:MnemonicLabel.Text="{l:T Msgid='_Preferences'}"
+                            KeyboardAcceleratorTextOverride="Ctrl+," />
+                        <MenuFlyoutItem x:Name="MenuAbout" l:MnemonicLabel.Text="{l:T Msgid='_About Malachi Mail'}" />
+                        <MenuFlyoutSeparator />
+                        <!-- Windows-only strings: Quit has no GTK msgid (the tray's too). -->
+                        <MenuFlyoutItem
+                            x:Name="MenuQuit"
+                            l:MnemonicLabel.Text="_Quit"
+                            KeyboardAcceleratorTextOverride="Ctrl+Q" />
+                    </MenuFlyout>
+                </Button.Flyout>
+            </Button>
+        </Grid>
+
+        <!-- folder_stack: "folders" is the list, "status" replaces it
+             while there is nothing to list. -->
+        <ListView
+            x:Name="FolderList"
+            Grid.Row="1"
+            Padding="0,3"
+            AutomationProperties.AutomationId="FolderList"
+            AutomationProperties.Name="{l:T Msgid='Folders'}"
+            ContextRequested="OnContextRequested"
+            IsItemClickEnabled="True"
+            ItemClick="OnItemClick"
+            ItemsSource="{x:Bind Rows}"
+            PreviewKeyDown="OnListKeyDown"
+            SelectionChanged="OnSelectionChanged"
+            SelectionMode="Single">
+            <ListView.ItemContainerStyle>
+                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                    <Setter Property="MinHeight" Value="0" />
+                    <Setter Property="Padding" Value="8,0,8,0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="p:SidebarRow">
+                    <main:FolderRowView Row="{x:Bind}" />
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+        <main:PaneStatusPage
+            x:Name="FolderStatusPage"
+            Grid.Row="1"
+            Compact="True"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

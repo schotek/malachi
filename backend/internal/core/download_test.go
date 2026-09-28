@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/ingest"
 	"github.com/schotek/malachi/backend/internal/store"
@@ -479,6 +480,53 @@ func TestMessageDownloadFailures(t *testing.T) {
 	defer close(srv.gate)
 	if _, err := m.download(ctx, msg.ID); errCode(t, err) != api.CodeServerTimeout {
 		t.Fatalf("timeout: %v", err)
+	}
+}
+
+// A download whose commit a reader of the stored file holds up past the
+// store's retries (Windows refuses to replace an open file) is
+// unavailable, to be tried again, as one the syncer raced is: the row and
+// the file stay partial, and the next call goes through. Elsewhere the
+// reader holds nothing up, and the first call goes through.
+func TestMessageDownloadWhileTheFileIsRead(t *testing.T) {
+	saved := fsretry.Waits
+	fsretry.Waits = []time.Duration{time.Millisecond}
+	t.Cleanup(func() { fsretry.Waits = saved })
+	m := seedMailbox(t)
+	srv := m.fakeServer()
+	ctx := context.Background()
+	msg := m.seedLarge(t, 7, time.Now().AddDate(-1, 0, 0), smallOnly)
+	srv.put("INBOX", 7, largeMessage("report@example.org"))
+
+	r, err := m.b.store.OpenMessageRaw(ctx, string(m.acc), msg.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.download(ctx, msg.ID)
+	r.Close()
+	if err != nil {
+		if code := errCode(t, err); code != api.CodeUnavailable {
+			t.Fatalf("download while the file is read: %v", err)
+		}
+		if got := m.row(t, msg.ID); got.RawState != store.RawPartial {
+			t.Fatalf("row after the refused download %+v", got)
+		}
+		if _, err := m.download(ctx, msg.ID); err != nil {
+			t.Fatalf("download once the reader is done: %v", err)
+		}
+	}
+	if got := m.row(t, msg.ID); got.RawState != store.RawFull {
+		t.Fatalf("row after the download %+v", got)
+	}
+
+	// The answer itself, on every system.
+	a, err := m.b.store.GetAccount(ctx, string(m.acc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	busy := fmt.Errorf("ingest: finalise message file: %w", store.ErrBusy)
+	if err := m.b.downloadError(ctx, a, m.row(t, msg.ID), store.ServerLocation{}, busy); errCode(t, err) != api.CodeUnavailable {
+		t.Fatalf("busy: %v", err)
 	}
 }
 

@@ -491,12 +491,13 @@ the collected addresses alone. A second, smaller one followed with the
 compressed store (2026-09-27): the run-time defaults of two preferences
 (`MALACHI_DEFAULT_*`, §1), which the app sets for its daemon because Macs
 often have small disks. No `//go:build darwin` exists anywhere,
-which is what CLAUDE.md rule 4 asks for. Two Go tests still fail on macOS
-and are unrelated to the client: `TestAttachmentImportMetadata`, because
-`internal/core/attachments.go` asks the host MIME database about `.md`
-and macOS answers `text/plain` (a content-type table of our own would fix
-that on every platform), and the timing-sensitive
-`TestWorkerAuthFailureDefersQueue`.
+which is what CLAUDE.md rule 4 asks for. One Go test still fails on
+macOS and is unrelated to the client: the timing-sensitive
+`TestWorkerAuthFailureDefersQueue`. `TestAttachmentImportMetadata` failed
+too until it pinned the type it relies on: `internal/core/attachments.go`
+asks the host MIME database about an extension, and macOS has no `.md`,
+so a Markdown attachment still goes out as `text/plain` there (a
+content-type table of our own would fix that on every platform).
 
 **GNOME Online Accounts is no longer the limit; distribution is.** At
 first Gmail and Microsoft 365 could not be added here: their tokens came

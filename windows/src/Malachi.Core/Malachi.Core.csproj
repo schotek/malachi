@@ -1,0 +1,24 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Malachi.Core: everything of the client that needs neither WinUI nor
+P/Invoke (the API, the transport, the supervisor's state machine, the pure
+logic ported from the Go UI and macOS, the controllers, settings, i18n), so
+that it builds and is tested on any OS (docs/windows-port.md §2).
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Malachi.Core</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- Restored for the app's runtimes as well: a publish of the app with
+         -r restores its references with that runtime, and the lock file
+         must not change with it. -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

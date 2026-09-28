@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/Preferences/GeneralPaneViewController.swift;
+GTK: preferences.blp general_page. The Blueprint's groups in its order:
+Startup (launch_at_login, run_in_background), Reading (mark_read_delay,
+0 to 60 s), Deleting (confirm_delete), Notifications
+(desktop_notifications, notification_sound) and the daemon's Mail group
+(mail_group: check_interval, remote_images, offline_days, attachment_days,
+never_store_attachments, compress_store, storage_row), insensitive until
+the daemon answered, its description replaced by a failed load's reason;
+attachment_days, never_store_attachments and compress_store stay hidden
+until config.get reports them (a daemon that does not know them never
+does), and storage_row shows what system.storage says, asked again every
+few seconds while the window is open (hidden for a daemon without it);
+after them two groups of Windows' own (Windows-only strings):
+Keyboard, the ctrl-r setting as macOS's ⌘R group (Ctrl+R replies, or
+checks for new mail as in GTK), and Default Mail App, the Default apps
+button with what Windows opens mailto: links with (windows/README.md).
+-->
+<UserControl
+    x:Class="Malachi.App.Preferences.GeneralPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto">
+        <!-- A Grid between the ScrollViewer and the clamped column: a ScrollViewer centres a child with a MaxWidth of its own off to the side. -->
+        <Grid>
+            <StackPanel
+                MaxWidth="{StaticResource SettingsPageMaxWidth}"
+                Padding="{StaticResource SettingsPagePadding}"
+                Spacing="{StaticResource SettingsGroupSpacing}">
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Startup'}" />
+                    <tk:SettingsCard x:Name="LaunchAtLoginRow" Header="{l:T Msgid='Launch at Login'}">
+                        <tk:SettingsCard.Description>
+                            <StackPanel>
+                                <TextBlock Text="{l:T Msgid='Start hidden in the background when you log in'}" TextWrapping="Wrap" />
+                                <!-- Windows-only strings: turned off in Windows Settings, where only the user turns it on again. -->
+                                <StackPanel
+                                    x:Name="StartupApproval"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    Visibility="Collapsed">
+                                    <TextBlock
+                                        x:Name="StartupApprovalText"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                        TextWrapping="Wrap" />
+                                    <HyperlinkButton
+                                        x:Name="StartupSettingsLink"
+                                        Padding="0"
+                                        AutomationProperties.AutomationId="StartupApps"
+                                        Click="OnStartupSettingsClick"
+                                        Content="Startup apps" />
+                                </StackPanel>
+                            </StackPanel>
+                        </tk:SettingsCard.Description>
+                        <ToggleSwitch
+                            x:Name="LaunchAtLoginSwitch"
+                            AutomationProperties.AutomationId="LaunchAtLogin"
+                            AutomationProperties.Name="{l:T Msgid='Launch at Login'}"
+                            Toggled="OnLaunchAtLoginToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Closing the window keeps Malachi Mail running for notifications'}" Header="{l:T Msgid='Run in Background'}">
+                        <ToggleSwitch
+                            x:Name="RunInBackgroundSwitch"
+                            AutomationProperties.AutomationId="RunInBackground"
+                            AutomationProperties.Name="{l:T Msgid='Run in Background'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Reading'}" />
+                    <tk:SettingsCard Description="{l:T Msgid='Seconds a message must be shown before it is marked as read; 0 marks it immediately'}" Header="{l:T Msgid='Mark as Read After'}">
+                        <NumberBox
+                            x:Name="MarkReadDelayBox"
+                            MinWidth="120"
+                            AutomationProperties.AutomationId="MarkReadDelay"
+                            AutomationProperties.Name="{l:T Msgid='Mark as Read After'}"
+                            LargeChange="10"
+                            Maximum="60"
+                            Minimum="0"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Inline"
+                            ValidationMode="InvalidInputOverwritten" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Deleting'}" />
+                    <tk:SettingsCard Description="{l:T Msgid='Ask before moving a message to Trash'}" Header="{l:T Msgid='Confirm Before Deleting'}">
+                        <ToggleSwitch
+                            x:Name="ConfirmDeleteSwitch"
+                            AutomationProperties.AutomationId="ConfirmDelete"
+                            AutomationProperties.Name="{l:T Msgid='Confirm Before Deleting'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Notifications'}" />
+                    <tk:SettingsCard Header="{l:T Msgid='Show Desktop Notifications'}">
+                        <ToggleSwitch
+                            x:Name="DesktopNotificationsSwitch"
+                            AutomationProperties.AutomationId="DesktopNotifications"
+                            AutomationProperties.Name="{l:T Msgid='Show Desktop Notifications'}" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard Description="{l:T Msgid='Play the system new-mail sound'}" Header="{l:T Msgid='Play Sound'}">
+                        <ToggleSwitch
+                            x:Name="NotificationSoundSwitch"
+                            AutomationProperties.AutomationId="NotificationSound"
+                            AutomationProperties.Name="{l:T Msgid='Play Sound'}" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel x:Name="MailGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="{l:T Msgid='Mail'}" />
+                    <TextBlock
+                        x:Name="MailDescription"
+                        Style="{StaticResource SettingsGroupDescriptionStyle}"
+                        Text="{l:T Msgid='Stored by the mail daemon.'}" />
+                    <tk:SettingsCard x:Name="CheckIntervalRow" Header="{l:T Msgid='Check for New Mail'}">
+                        <ComboBox
+                            x:Name="CheckIntervalBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="CheckInterval"
+                            AutomationProperties.Name="{l:T Msgid='Check for New Mail'}"
+                            SelectedIndex="1"
+                            SelectionChanged="OnMailChanged">
+                            <ComboBoxItem Content="{l:T Msgid='Manually'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Every 5 minutes'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Every 15 minutes'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Every 30 minutes'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="RemoteImagesRow" Header="{l:T Msgid='Load Remote Images'}">
+                        <ComboBox
+                            x:Name="RemoteImagesBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="RemoteImages"
+                            AutomationProperties.Name="{l:T Msgid='Load Remote Images'}"
+                            SelectedIndex="0"
+                            SelectionChanged="OnMailChanged">
+                            <ComboBoxItem Content="{l:T Msgid='Never'}" />
+                            <ComboBoxItem Content="{l:T Msgid='From Known Senders'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Always'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard
+                        x:Name="OfflineDaysRow"
+                        Description="{l:T Msgid='Older messages stay on the server and are not shown'}"
+                        Header="{l:T Msgid='Keep Mail Offline For'}">
+                        <ComboBox
+                            x:Name="OfflineDaysBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="OfflineDays"
+                            AutomationProperties.Name="{l:T Msgid='Keep Mail Offline For'}"
+                            SelectedIndex="0"
+                            SelectionChanged="OnMailChanged">
+                            <ComboBoxItem Content="{l:T Msgid='1 week'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 month'}" />
+                            <ComboBoxItem Content="{l:T Msgid='3 months'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 year'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Everything'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <!-- Preferences.attachmentOfflineDays per row (PreferenceChoices.AttachmentChoices): -1, 7, 30, 90, 0. -->
+                    <tk:SettingsCard
+                        x:Name="AttachmentDaysRow"
+                        Description="{l:T Msgid='Large attachments of older messages stay on the server and are downloaded when you open them'}"
+                        Header="{l:T Msgid='Keep Attachments Offline For'}"
+                        Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="AttachmentDaysBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AttachmentDays"
+                            AutomationProperties.Name="{l:T Msgid='Keep Attachments Offline For'}"
+                            SelectedIndex="4"
+                            SelectionChanged="OnMailChanged">
+                            <ComboBoxItem Content="{l:T Msgid='Small Attachments Only'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 week'}" />
+                            <ComboBoxItem Content="{l:T Msgid='1 month'}" />
+                            <ComboBoxItem Content="{l:T Msgid='3 months'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Everything'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                    <!-- While on, AttachmentDaysRow does not apply and is insensitive (PreferenceChoices.AttachmentDaysApply). -->
+                    <tk:SettingsCard
+                        x:Name="NeverStoreRow"
+                        Description="{l:T Msgid='Attachments are downloaded whenever you open them and are gone when you quit'}"
+                        Header="{l:T Msgid='Never Store Attachments'}"
+                        Visibility="Collapsed">
+                        <ToggleSwitch
+                            x:Name="NeverStoreSwitch"
+                            AutomationProperties.AutomationId="NeverStoreAttachments"
+                            AutomationProperties.Name="{l:T Msgid='Never Store Attachments'}"
+                            Toggled="OnMailToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard
+                        x:Name="CompressStoreRow"
+                        Description="{l:T Msgid='Uses less disk space; stored mail is converted in the background'}"
+                        Header="{l:T Msgid='Compress Stored Mail'}"
+                        Visibility="Collapsed">
+                        <ToggleSwitch
+                            x:Name="CompressStoreSwitch"
+                            AutomationProperties.AutomationId="CompressStore"
+                            AutomationProperties.Name="{l:T Msgid='Compress Stored Mail'}"
+                            Toggled="OnMailToggled" />
+                    </tk:SettingsCard>
+                    <!-- The total as the value; what compression saves and what stays on the server as the description (StorageUsage.StorageTexts). -->
+                    <!-- Tabular figures, as GTK's numeric class and macOS's monospacedDigitSystemFont: the value is measured again every 5 s and should not jitter (Segoe UI Variable's 1 is narrower otherwise). -->
+                    <tk:SettingsCard x:Name="StorageRow" Header="{l:T Msgid='Disk Space Used'}">
+                        <TextBlock
+                            x:Name="StorageValue"
+                            AutomationProperties.AutomationId="DiskSpaceUsed"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Typography.NumeralAlignment="Tabular" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- Windows-only strings: the keyboard group (macOS's ⌘R group); the choices are GTK's msgids. -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="Keyboard" />
+                    <tk:SettingsCard Description="F5 always checks for new mail" Header="Ctrl+R">
+                        <ComboBox
+                            x:Name="CtrlRBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="CtrlR"
+                            AutomationProperties.Name="Ctrl+R">
+                            <ComboBoxItem Content="{l:T Msgid='Reply'}" />
+                            <ComboBoxItem Content="{l:T Msgid='Check for New Mail'}" />
+                        </ComboBox>
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <!-- Windows-only strings: Windows does not let an app make itself the default mail app. -->
+                <StackPanel Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}"
+                        Text="Default Mail App" />
+                    <tk:SettingsCard x:Name="DefaultAppsRow" Header="Open e-mail links with Malachi Mail">
+                        <Button
+                            x:Name="DefaultAppsButton"
+                            AutomationProperties.AutomationId="DefaultApps"
+                            Click="OnDefaultAppsClick"
+                            Content="Default apps" />
+                    </tk:SettingsCard>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+    </ScrollViewer>
+</UserControl>

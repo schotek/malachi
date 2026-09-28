@@ -4,7 +4,7 @@
 
 <h1 align="center">Malachi Mail</h1>
 
-<p align="center">A native email client: one Go core with all the logic, a native UI for each platform. Linux and macOS today, Windows to follow.</p>
+<p align="center">A native email client: one Go core with all the logic, a native UI for each platform: Linux, macOS and Windows.</p>
 
 Built because the existing options are either showing their age or do not
 work reliably anymore, and on Linux that is worse than anywhere else.
@@ -33,7 +33,7 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **Accounts.** IMAP/SMTP with a setup assistant that finds the server
   settings for most providers. Microsoft 365 / Outlook.com and Gmail /
   Google Workspace through GNOME Online Accounts; without them (macOS,
-  other desktops) Microsoft 365 and Outlook.com sign in in your browser
+  Windows, other desktops) Microsoft 365 and Outlook.com sign in in your browser
   out of the box, and Gmail uses an app password or a Google client of
   your own ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)).
   Passwords and tokens live in the system keyring.
@@ -82,9 +82,10 @@ work reliably anymore, and on Linux that is worse than anywhere else.
   compilation.
 - **A native UI on every platform, no web technology for the chrome.**
   GTK 4 / libadwaita on Linux is the primary UI and the template the
-  others mirror feature for feature; the Swift/AppKit UI for macOS mirrors
-  it today (see [docs/macos-port.md](docs/macos-port.md)) and a WinUI 3 UI
-  for Windows is planned.
+  others mirror feature for feature; the Swift/AppKit UI for macOS and the
+  C#/WinUI 3 UI for Windows mirror it today (see
+  [docs/macos-port.md](docs/macos-port.md) and
+  [docs/windows-port.md](docs/windows-port.md)).
 - **Linux first.** GNOME desktop conventions, portals for everything that
   leaves the sandbox, Flatpak and native packages.
 - **Lean.** A native toolkit and one small daemon: a mail client should
@@ -109,8 +110,8 @@ store, speaks IMAP and SMTP (and Microsoft Graph for Microsoft 365),
 synchronises, sanitises HTML, manages credentials and threads
 conversations, and searches the store. `malachi` is the GTK 4
 application for Linux: it connects to the daemon over a local unix socket
-and displays what it is given. The macOS application does the same over
-the same socket and the same contract, and the Windows one will.
+and displays what it is given. The macOS and Windows applications do the
+same over the same socket (AF_UNIX on Windows too) and the same contract.
 
 ```
 ┌──────────────────┐
@@ -129,7 +130,9 @@ The boundary between them is deliberately hard: it is a socket, not a
 package import. Anything the UI needs has to be added to the documented API,
 which keeps business logic and security decisions in one place. The MCP
 bridge is the proof that it holds: a second client, written against the same
-contract, that needed no change in the daemon.
+contract, that needed no change in the daemon. The macOS and Windows clients
+are the third and the fourth, in Swift and C#, each with the API re-declared
+from the document rather than imported.
 
 Details: [docs/architecture.md](docs/architecture.md), the RPC contract in
 [docs/api.md](docs/api.md), the MCP bridge in [docs/mcp.md](docs/mcp.md),
@@ -149,7 +152,9 @@ flatpak install --user ./malachi-<version>-x86_64.flatpak
 ```
 
 Tagged versions will have their bundles attached to the GitHub release.
-The bundle pulls the GNOME 48 runtime from Flathub.
+The bundle pulls the GNOME 48 runtime from Flathub. There are no macOS or
+Windows binaries yet; build those clients from source ([macOS](#macos),
+[Windows](#windows)).
 
 Ubuntu does not ship Flatpak any more, so it takes one step first:
 
@@ -242,7 +247,8 @@ hands secrets to an external program instead, named by an absolute path in
 `MALACHI_KEYRING_HELPER`: one process per operation, git-credential style,
 the request as a JSON line on stdin, the value on stdout (the protocol is
 documented in `backend/internal/auth/helper`). The macOS app uses it for
-its bundled `malachi-keychain`. `MALACHI_DEFAULT_COMPRESS_STORE` (a
+its bundled `malachi-keychain`, the Windows app for its bundled
+`malachi-credentials.exe`. `MALACHI_DEFAULT_COMPRESS_STORE` (a
 boolean) and `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS` (`-1` small
 attachments only, `0` all, or a number of days) give the daemon defaults
 for the two storage preferences where none is stored yet; it stores them
@@ -286,6 +292,38 @@ that). Paths, the keyring, localisation, the deliberate differences from
 the GTK UI and what is still missing: [macos/README.md](macos/README.md);
 how the client is put together and kept in step with the GTK UI:
 [docs/macos-port.md](docs/macos-port.md).
+
+### Windows
+
+The Windows client lives in [windows/](windows/): a native C#/WinUI 3
+application over the same daemon and the same contract, mirroring the GTK
+UI screen for screen. It reads, writes and sends mail, renders HTML in a
+locked-down WebView2 view with its network cut off, previews attachments
+in a viewer of its own and gives the files it writes out the Mark of the
+Web, keeps passwords in Credential Manager through a bundled helper, and
+carries the Czech translation read from `po/`. Microsoft 365 and
+Outlook.com sign in in the browser with the client Malachi Mail ships;
+Gmail through an app password, or the browser sign-in with a Google client
+of your own ([OAuth clients](#oauth-clients-for-gmail-and-microsoft-365)).
+Needs Windows 11, the .NET 10 SDK, the MSVC build tools (Visual Studio or
+its Build Tools) for the keyring helper, Go and Git for Windows; GNU make
+is optional (`winget install ezwinports.make`):
+
+```sh
+make windows        # build\windows\<arch>\Malachi Mail\ with malachid.exe, malachi-mcp.exe and malachi-credentials.exe
+make run-windows    # run it from the terminal so the daemon log stays visible
+make test-windows   # the tests, the network canary of the WebView2 layer included
+```
+
+The targets work from PowerShell and Git Bash alike; without make,
+`windows\build.ps1 app`, `run` and `test` do the same. The app folder is
+self-contained and unsigned, with no installer yet, and handing it to
+others waits for a licence decision on the Microsoft components it
+carries ([LICENSING.md](LICENSING.md)). Keep the clone's path short: the
+XAML compiler has no long-path support. Paths, the keyring, localisation,
+the deliberate differences from the GTK UI and what is still missing:
+[windows/README.md](windows/README.md); how the client is put together and
+kept in step with the GTK UI: [docs/windows-port.md](docs/windows-port.md).
 
 ### Flatpak
 
@@ -336,6 +374,7 @@ committed template matches the sources.
 | RPC key | beside the socket, its path plus `.key` (`rpc.sock.key`): the daemon's connection key for the current run, `0600`, replaced at every start and removed on a clean exit (after a crash it stays until the next start replaces it); every client reads it when it connects |
 | MCP bridge | `build/malachi-mcp`, spawned by the agent's client over stdio; connects to the socket above |
 | macOS | config and store in `~/Library/Application Support/Malachi Mail/`, the socket as above, attachments being opened in `~/Library/Caches/Malachi Mail/open/`, passwords in the login keychain (see [macos/README.md](macos/README.md)) |
+| Windows | config, store, logs and attachments being opened in `%LOCALAPPDATA%\Malachi Mail\`, the socket at `%USERPROFILE%\.cache\malachi\run\rpc.sock`, preferences in `HKCU\Software\io.github.schotek.Malachi`, passwords in Credential Manager (see [windows/README.md](windows/README.md)) |
 | Secrets | system keyring (libsecret), never on disk in the clear |
 
 The store is not encrypted at rest. Use full-disk encryption.
@@ -379,7 +418,7 @@ is accepted there. In `config.toml` the same pin is
 ### OAuth clients for Gmail and Microsoft 365
 
 On GNOME, Gmail and Microsoft 365 sign in through GNOME Online Accounts
-and need nothing here. Elsewhere — macOS, KDE, any desktop without GNOME
+and need nothing here. Elsewhere — macOS, Windows, KDE, any desktop without GNOME
 Online Accounts, or an address not signed in there — the daemon signs in
 itself: the assistant opens your browser, you sign in with the provider,
 and the refresh token goes to the keyring. That needs an OAuth client
@@ -397,7 +436,8 @@ registration:
 
 A client of your own, for either provider, goes into `config.toml` —
 `~/.config/malachi/config.toml` on Linux (`$XDG_CONFIG_HOME`),
-`~/Library/Application Support/Malachi Mail/config.toml` on macOS — and
+`~/Library/Application Support/Malachi Mail/config.toml` on macOS,
+`%LOCALAPPDATA%\Malachi Mail\config.toml` on Windows — and
 takes precedence over the shipped one:
 
 ```toml
@@ -508,8 +548,10 @@ touching anything that parses or renders mail. Conventional commits, `gofmt`,
 
 The core (`backend/`, the `malachid` daemon and its API) is
 [AGPL-3.0-only](backend/LICENSE) and is also available under a commercial
-licence for use in proprietary clients. The reference GTK user interface and
-everything else is [GPL-3.0-or-later](LICENSE). See
+licence for use in proprietary clients. The reference GTK user interface, the
+macOS and Windows clients and everything else is
+[GPL-3.0-or-later](LICENSE); distributing a built Windows client waits for a
+licence decision on the Microsoft components it carries. See
 [LICENSING.md](LICENSING.md) for the details and
 [CLA.md](CLA.md) before contributing.
 
