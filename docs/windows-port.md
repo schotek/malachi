@@ -736,7 +736,8 @@ hyphen, U+200B, U+2060 or U+FEFF in the host; a trailing dot; a Cyrillic
 homoglyph; an RLO, NBSP or `。` before the path; a backslash, fullwidth
 solidus or `%2F` as the separator; `//www.mojebanka.example/login`), and
 reads evil.example for `https://www.mojebanka.example@evil.example/login`.
-`Links.HostsOfText` reads the text as it is seen: format characters (Cf:
+`Links.HostsOfText` reads the daemon's text of the link cleaned and
+normalised: format characters (Cf:
 the soft hyphen, the zero-width characters, the bidi controls) and the
 other default-ignorable code points go, the rest is read in NFKC with
 `。` as a dot, hosts are compared as the launcher hands them to the
@@ -757,6 +758,85 @@ case, an IDN text over its punycode href, a subdomain href). GTK
 (`htmlview.Masked`, `linkTextFor`) and macOS (`Links.swift`,
 `linkDecision`) keep these bypasses until they get the same rules or the
 backend's canonical hrefs.
+
+A second review of those rules found more. Two slashes after a letter or
+a mark began no address, so a colon another script draws as a letter or a
+mark (U+02D0, which the scheme took in before its colon test saw it,
+U+02D1, U+A4FD, U+0903, U+0A83) or no colon at all (`https//mojebanka.example/login`)
+named no host, and the link to evil.example opened. Two slashes now begin
+an address wherever they stand, and the scheme ends at a colon lookalike
+before a letter could take it in (the list gained the other four and the
+Syriac, runic and Ethiopic colons); that also closes a scheme address that
+markup draws right to left (`<bdo dir=rtl>`, `unicode-bidi:
+bidi-override`), whose listed text `nigol/elpmaxe.aknabejom//:sptth` has
+`:sptth` after its slashes, a host that cannot be read. The price is that
+`Tips//Tricks` and a bare `shop.example//sale` ask. A text that begins
+with an address and goes on in words asked over its own link, since a
+space in such a text made the host unreadable (`www.shop.example for
+details`, `https://www.shop.example Shop now`, `www.shop.example Logo`
+with the alt the daemon appends); now a space there ends the host unless
+the host visibly goes on after it (`HostGoesOn`: the next word begins with
+a dot, has one before its first slash or ends with one, or the word before
+the space ends with one; a dot between digits or after another dot, as in
+a date or an ellipsis, is no host's), which keeps `https://www.moje banka
+.example/login`, `https://mojebanka .example` and a hidden first address
+before `mojebanka.example/login` asking, and costs `www. shop .example`
+and `www. shop.example` (from `www.<b>shop</b>.example` and
+`<span>www.</span>shop.example`) a question over their own link. A start
+of an address the daemon's spaces split (`<b>w</b>ww.`, `https<b>:/</b>/`,
+listed as `w ww.` and `https :/ /`) is read as drawn, without them
+(`SpacedPrefix`; of every text with one or two such spaces in the bank's
+address, 842 of 2956 opened over evil.example before, none now). A text
+that holds no address is read whole as a host, as in GTK, now from its
+first letter or digit (a mark before it is no part of it) and past a word
+and a colon (`Login:mojebanka.example/login`); a word with a dot another
+script draws between its labels (U+A4F8, U+06D4, U+0701, U+0702, U+A60E,
+not the middle dots of Catalan and Japanese) or more than one dot at its
+end (`mojebanka.example…`) names a host that cannot be read, and `_` is
+taken in a host's labels as browsers take it (`https://shop_name.example/`
+over itself no longer asks). With the attribute, the decision now
+also judges every listed link whose canonical form is the navigation's,
+as it did without the attribute: hrefs that differ only in case, a default
+port or escaping (`HTTPS://EVIL.EXAMPLE/dup` beside `https://evil.example/dup`)
+lead to one address, and the attribute may be another anchor's.
+
+What the client judges is the daemon's `links[].text`, not what the view
+draws, and some shapes stay beyond it. They open without the question,
+as known limits (`HtmlLinksTests.TheKnownLimitsStillOpen` holds them):
+text that CSS hides or clips inside the link (`<span
+style="font-size:0">x</span>mojebanka.example/login`, a `text-indent` that
+clips `https://evil.example/xxx` off `https://evil.example/xxxhttps://mojebanka.example/login`,
+hidden padding that pushes the shown address past the daemon's 200-rune
+cap); a bare host with a path that markup draws right to left
+(`nigol/elpmaxe.aknabejom`, shown as `mojebanka.example/login`; without a
+path the reversed host still reads as one and asks); a host an inline
+element splits right after a host of the link's own site
+(`https://evil.example<b>moje</b>banka.example`, drawn as
+`https://evil.examplemojebanka.example`, listed as `https://evil.example
+moje banka.example`), which reads as that first host, since the space
+cannot be told from one before words; and a host without a scheme or
+`www.` after words (`Log in at mojebanka.example`), which GTK does not
+read either and whose reading would ask over every file name and
+abbreviation in prose. Reading on inside a path for a further address
+would not help: a clipped prefix ends with `/` or `?` as easily, and such
+an address is also what archive and redirect links show
+(`https://web.archive.org/web/2020/https://example.com/`), which would ask.
+Closing them needs the daemon (proposed, §14): a link text without a space
+between inline elements that touch; a flag when it cut the text at its
+cap, or the last address of the text kept rather than the first 200 runes;
+the text of nodes that CSS hides (`display:none`, `visibility:hidden`,
+`font-size:0`, a transparent colour, `text-indent` or overflow clipping)
+left out or flagged; and a `<bdo>` or a `direction`/`unicode-bidi`
+override inside a link reported, or the link's text given in the order it
+is drawn. GTK's `hostOfText` and macOS's `Links.swift` also open the
+text shapes this section closes: the colon lookalikes and the missing
+colon, the reversed scheme address, the split prefix, the lookalike dots
+and extra dots, `Login:` or a mark before a bare host. GTK matches the
+URL WebKit resolved (`action.Request().URI()`) against the listed hrefs
+and takes the first equal one, so of anchors whose hrefs differ only in
+case or escaping the one written as WebKit resolves it speaks for all;
+macOS reads the clicked anchor's own attribute, which avoids that shape
+but not the one href listed twice.
 
 ### 6.5 Editor (`ComposeWebView`)
 
@@ -2396,8 +2476,11 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
 Proposed separately, not in this branch: canonical hrefs in the sanitiser
 plus GTK confirming unlisted links (the likely masked-link bypass), the
 Windows masked-link rules in GTK and macOS (every listed link with the
-clicked href judged, the text read as it is seen; §6.4), a link text in
-the sanitiser that does not put a space between inline elements,
+clicked href judged, the text cleaned, normalised and read as §6.4
+reads it), a link text in the sanitiser that does not put a space
+between inline elements, flags when it cut the text at its cap and
+leaves out (or flags) what CSS hides, and a report of a bidi override
+inside a link (§6.4's known limits),
 bridge DOM-clobbering hardening in GTK and macOS, the macOS flush-echo
 order, portable names in `safename`, an own extension→content-type table,
 a runtime D-Bus opt-out, the same display-text rule in GTK and macOS
