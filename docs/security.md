@@ -399,21 +399,23 @@ into it as well.
   cleans every mail text its chrome shows before showing it
   (`Malachi.Core.Text.DisplayText`): the list's senders and subjects, the
   reader's subject and address chips, the captions of message windows,
-  notifications, the questions that quote a subject, attachment names and
-  recipient suggestions. The explicit bidi formatting characters (U+202A
-  to U+202E, U+2066 to U+2069) are removed; control characters (C0, DEL,
-  C1) and the line and paragraph separators become spaces, so what is
-  left is valid XML; and where a name is composed with other text
-  (*Name &lt;address&gt;*, a conversation's participants, a sentence that
-  quotes a subject) it is isolated between U+2068 and U+2069, so a
-  right-to-left name keeps its own direction and cannot move the address
-  after it. The bidi marks (U+200E, U+200F, U+061C) and the joiners stay,
-  so Hebrew, Arabic and Persian names read as written. This is display
-  only: the recipients of a reply, a draft's subject, the names in a
-  quote's header and what Copy Address copies are the text as received,
-  and a message's body and the excerpt of it in the list are its content,
-  shown as written. The GTK and macOS clients show these texts as
-  received; the same rule is proposed for them
+  notifications, the questions that quote a subject or a link's text,
+  attachment names and recipient suggestions. The explicit bidi
+  formatting characters (U+202A to U+202E, U+2066 to U+2069) are removed;
+  control characters (C0, DEL, C1) and the line and paragraph separators
+  become spaces, so what is left is valid XML; and where such text is
+  composed with other text (*Name &lt;address&gt;*, a conversation's
+  participants, a sentence that quotes a subject, the masked-link
+  question that quotes a link's text before its real destination) it is
+  isolated between U+2068 and U+2069, so a right-to-left text keeps its
+  own direction and cannot move what follows it. The bidi marks (U+200E,
+  U+200F, U+061C) and the joiners stay, so Hebrew, Arabic and Persian
+  names read as written. This is display only: the recipients of a
+  reply, a draft's subject, the names in a quote's header and what Copy
+  Address copies are the text as received, and a message's body and the
+  excerpt of it in the list are its content, shown as written. The GTK
+  and macOS clients show these texts as received; the same rule is
+  proposed for them
   ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
 ## 5. Signatures and encryption (EFAIL and friends)

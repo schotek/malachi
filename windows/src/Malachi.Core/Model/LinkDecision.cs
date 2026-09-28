@@ -25,6 +25,7 @@ using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.Html;
 using Malachi.Core.I18n;
+using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
 
@@ -206,7 +207,10 @@ public abstract record LinkDecision
         /// browser goes to is what follows the scheme), beside the text the
         /// link wore; for an unlisted link the destination alone. GTK names
         /// the href as written, where "https://bank.example@evil.example/"
-        /// reads as the bank.
+        /// reads as the bank. The text is the mail's and is isolated in the
+        /// sentence (<see cref="DisplayText.Isolate"/>), so an override in it
+        /// cannot draw the destination after it backwards, nor a
+        /// right-to-left text move it.
         /// </summary>
         public string Body(string destination)
         {
@@ -216,7 +220,7 @@ public abstract record LinkDecision
                 return L10n.T("This link leads to %s.", destination); // Windows-only string
             }
             // TRANSLATORS: %s are the link's visible text and its real destination.
-            return L10n.T("The link is shown as “%s” but leads to %s.", Text, destination);
+            return L10n.T("The link is shown as “%s” but leads to %s.", DisplayText.Isolate(Text), destination);
         }
     }
 }

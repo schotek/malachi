@@ -285,8 +285,13 @@ public sealed class LinkDecisionTests
     public void ConfirmTexts()
     {
         Assert.Equal("Open This Link?", LinkDecision.Confirm.Title);
-        Assert.Equal("The link is shown as “https://bank.example” but leads to https://evil.example/.",
+        Assert.Equal("The link is shown as “\u2068https://bank.example\u2069” but leads to https://evil.example/.",
             new LinkDecision.Confirm("https://bank.example", "https://evil.example").Body("https://evil.example/"));
+        // Windows-only (DisplayText): an override in the link's text would
+        // have drawn the rest of the sentence, the destination included,
+        // backwards; it goes, and the text stays inside its isolate.
+        Assert.Equal("The link is shown as “\u2068https://bank.example/moc.live\u2069” but leads to https://evil.example/.",
+            new LinkDecision.Confirm("https://bank.example/\u202Emoc.live", "https://evil.example").Body("https://evil.example/"));
         Assert.Equal("This link leads to https://xn--bcher-kva.example/.",
             new LinkDecision.Confirm("", "https://bücher.example/").Body("https://xn--bcher-kva.example/"));
     }
