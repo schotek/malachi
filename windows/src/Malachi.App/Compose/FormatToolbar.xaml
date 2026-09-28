@@ -203,10 +203,11 @@ selection; the keyboard still reaches them with Tab.
                 AutomationProperties.Name="{l:T Msgid='Alignment'}"
                 Style="{StaticResource FormatDropDownStyle}"
                 ToolTipService.ToolTip="{l:T Msgid='Alignment'}">
-                <FontIcon
-                    x:Name="AlignIcon"
-                    FontSize="16"
-                    Glyph="{x:Bind res:Icons.Glyph('format-justify-left')}" />
+                <!-- The alignment at the caret; its glyph is set in code only
+                     (ApplyState, from the constructor on), so no one-time
+                     binding puts the left-aligned glyph back when the bar
+                     loads, over the state the page reported. -->
+                <FontIcon x:Name="AlignIcon" FontSize="16" />
                 <DropDownButton.Flyout>
                     <MenuFlyout x:Name="AlignMenu" Placement="BottomEdgeAlignedLeft" />
                 </DropDownButton.Flyout>

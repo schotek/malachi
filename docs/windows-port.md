@@ -940,8 +940,13 @@ keeps its containers and scroll. WinUI and UWP have been reported to turn
 a `Move` into a removal and an insertion, which may deselect the moved row:
 a list controller re-applies its selection by key after a sync that moved
 entries (the main window's lists select their key after every apply, with
-their own handler suppressed; §11.2). `{x:Bind}` only. Dialogs are async hooks
-(`IAlerts`), never a `ContentDialog` created by a controller.
+their own handler suppressed; §11.2). `{x:Bind}` only, and never on a
+property that code sets too: a one-time binding runs when the control
+loads, after its constructor, and puts its value back over what code set
+there (a message window's star showed the empty star over a flagged
+message; the compose bar's alignment glyph is set in code only for the
+same reason). Dialogs are async hooks (`IAlerts`), never a `ContentDialog`
+created by a controller.
 
 A Swift callback cannot throw; a C# handler can, and inside a controller
 its exception would leave a state change half done or end a loop that
