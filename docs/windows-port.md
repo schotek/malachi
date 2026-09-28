@@ -2109,9 +2109,16 @@ margins that a busy machine missed while the workflow was checked locally
 rejected connection closed within 5 s) and `pkg/api`
 `TestHandshakeTimesOut` (a 150 ms context expiring before `system.hello`
 is written is reported as a plain deadline, not `timedOut`); in the
-client, `BridgeRunnerTests.ATimeoutKillsTheProcess` (a 3 s bound) and
+client, `BridgeRunnerTests.ATimeoutKillsTheProcess` (a 3 s bound),
 `ComposeAttachmentsControllerTests.RemovingForgetsTheFileAndTellsTheBackend`
-(two imports in flight are listed in the order they complete). A red run
+(two imports in flight are listed in the order they complete),
+`ConnectionControllerTests.SystemInfoOfADroppedConnectionIsDropped`
+(`infoFailed` where `unavailable` was expected) and the tests against the
+real daemon (`RealDaemonTests`,
+`ConsoleAttachmentTests.AnAttachedAppStopsTheRealDaemonCleanly`,
+`DaemonProcessHostTests.TheRealDaemonStopsCleanlyInAPrivateRunDirectory`:
+`malachid.exe` listening within 15 s; these four failed together once,
+2026-09-28, while other builds kept the machine busy). A red run
 that names one of them is that, not a regression of the change it ran
 for; they are to be fixed where they live.
 
