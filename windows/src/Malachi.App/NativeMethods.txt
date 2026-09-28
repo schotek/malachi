@@ -7,13 +7,15 @@
 // own entries below their own headings.
 //
 // The shell (Shell/): the show path (§10), the main window's session end
-// and minimum size (a subclass of its window procedure), the wait of a
-// second instance while it redirects its activation (Program).
+// and minimum size (a subclass of its window procedure), the size it
+// restores to (kept while it is maximised), the wait of a second instance
+// while it redirects its activation (Program).
 SetForegroundWindow
 SetWindowSubclass
 DefSubclassProc
 RemoveWindowSubclass
 GetDpiForWindow
+GetWindowPlacement
 WM_ENDSESSION
 WM_GETMINMAXINFO
 MINMAXINFO

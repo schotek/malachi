@@ -255,8 +255,9 @@ description as GTK does (U2, U3); a cold `mailto:` launch opens only the
 composer as GTK does (U4); the sidebar star is keyboard-reachable (U5);
 provider rows use the generic icon (U6) and notification titles are capped
 (U7), both rows of the deviation table; About carries the GTK fields (U8);
-there is no Help item (U9); the unused gschema geometry keys are used
-(U10); the window is *Preferences* (U11).
+there is no Help item (U9); the gschema's geometry keys are used, the
+pane widths, which GTK leaves unused, as well (U10); the window is
+*Preferences* (U11).
 
 ## 4. The API layer
 
@@ -1176,13 +1177,18 @@ can never point the app's writes at another program's key or a parent of
 one; nothing else moves with it (the Run value, the `mailto:` registration
 and the notification registration are `MALACHI_DATA_DIR`'s and §10's).
 
-Window geometry uses the gschema keys GTK declares but never writes
-(`window-width`, `window-height`, `window-maximized`, `folder-pane-width`,
-`message-list-width`). One Windows-only key: `ctrl-r` (`reply` default,
-`refresh`), the counterpart of macOS's `command-r`. `launch-at-login` only
-mirrors the Run key and `StartupApproved`, which are authoritative. As in
-GTK, only presentation lives here; mail handling is the daemon's
-(`config.get`/`config.set`).
+Window geometry uses the gschema keys: `window-width`, `window-height`
+and `window-maximized` as GTK, which binds them to the main window's
+default size and maximized state (`ui/internal/window/geometry.go`), so the
+size is the one the window restores to, also while it is maximised (here
+the placement's normal rectangle, `GetWindowPlacement`), written when the
+window closes or hides and at Quit where GTK writes every change; and
+`folder-pane-width` and `message-list-width`, which GTK declares but never
+writes (a row of the deviation table). One Windows-only key: `ctrl-r`
+(`reply` default, `refresh`), the counterpart of macOS's `command-r`.
+`launch-at-login` only mirrors the Run key and `StartupApproved`, which are
+authoritative. As in GTK, only presentation lives here; mail handling is
+the daemon's (`config.get`/`config.set`).
 
 ## 9. Localisation
 

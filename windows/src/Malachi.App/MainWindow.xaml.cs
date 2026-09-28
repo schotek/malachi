@@ -38,6 +38,7 @@ using Microsoft.UI.Xaml.Input;
 using Windows.Graphics;
 using Windows.Win32;
 using Windows.Win32.Foundation;
+using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace Malachi.App;
 
@@ -156,7 +157,10 @@ public sealed partial class MainWindow : Window
     /// <summary>
     /// Keeps the size and the maximised state (window-width, window-height,
     /// window-maximized) and the pane widths of a wide layout
-    /// (folder-pane-width, message-list-width); a minimised window keeps
+    /// (folder-pane-width, message-list-width). The size is the one the
+    /// window restores to, so a maximised window still remembers the size
+    /// it unmaximises to, as GTK's binding of default-width and
+    /// default-height does (window/geometry.go); a minimised window keeps
     /// what it had.
     /// </summary>
     public void SaveGeometry()
@@ -170,14 +174,35 @@ public sealed partial class MainWindow : Window
         {
             case OverlappedPresenterState.Maximized:
                 state.Settings.WindowMaximized = true;
+                SaveRestoredSize();
                 break;
             case OverlappedPresenterState.Restored:
-                var scale = Scale();
                 state.Settings.WindowMaximized = false;
-                state.Settings.WindowWidth = (int)Math.Round(AppWindow.Size.Width / scale);
-                state.Settings.WindowHeight = (int)Math.Round(AppWindow.Size.Height / scale);
+                SaveRestoredSize();
                 break;
         }
+    }
+
+    // The size the window restores to, in effective pixels: the placement's
+    // normal rectangle (the window's own size while it is restored), or the
+    // current size when Windows does not give it.
+    private void SaveRestoredSize()
+    {
+        var scale = Scale();
+        var width = (double)AppWindow.Size.Width;
+        var height = (double)AppWindow.Size.Height;
+        var placement = new WINDOWPLACEMENT { length = (uint)System.Runtime.InteropServices.Marshal.SizeOf<WINDOWPLACEMENT>() };
+        if (PInvoke.GetWindowPlacement((HWND)WindowPresenter.Handle(this), ref placement))
+        {
+            var normal = placement.rcNormalPosition;
+            if (normal.right > normal.left && normal.bottom > normal.top)
+            {
+                width = normal.right - normal.left;
+                height = normal.bottom - normal.top;
+            }
+        }
+        state.Settings.WindowWidth = (int)Math.Round(width / scale);
+        state.Settings.WindowHeight = (int)Math.Round(height / scale);
     }
 
     // The size of last time, in effective pixels at this window's DPI,
