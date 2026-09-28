@@ -2103,11 +2103,12 @@ foreground).
 
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs six test projects, 3,611
-tests in about two minutes on the development machine (2026-09-28): 2,798
-in `Malachi.Core.Tests`, 590 in `Malachi.Platform.Windows.Tests`, 159 in
-`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 25 in
-the canary and 12 UI tests (4 of them opt-in). The tests that need a built `malachid.exe` skip without one
+`make test-windows` (`build.ps1 test`) runs six test projects, 4,040
+tests in about two minutes on the development machine (2026-09-28): 3,193
+in `Malachi.Core.Tests`, 623 in `Malachi.Platform.Windows.Tests`, 159 in
+`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 26 in
+the canary and 12 UI tests (4 of them opt-in). The tests that need a
+built `malachid.exe` skip without one
 (`make windows` or `build.ps1 go` builds it, `MALACHI_TEST_MALACHID`
 names another), and the Credential Manager round trips run only on
 request. The `.trx` reports land in `build\windows\TestResults\`.

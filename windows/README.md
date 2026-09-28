@@ -239,7 +239,7 @@ windows/
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
 nothing imports the Go modules (the API is re-declared from
 [docs/api.md](../docs/api.md), as on macOS). The tests are xUnit v3 on
-Microsoft.Testing.Platform: about 3,600 of them, two minutes for
+Microsoft.Testing.Platform: about 4,000 of them, two minutes for
 `make test-windows` (docs/windows-port.md §12).
 
 ## How it runs the daemon

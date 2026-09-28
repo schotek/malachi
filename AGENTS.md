@@ -306,7 +306,7 @@ launcher, Run, `mailto:`, tray), `Malachi.App` (WinUI 3, `MalachiMail.exe`,
 tenké: okna, XAML, vrstva WebView2) a `Malachi.Credentials`
 (`malachi-credentials.exe`, NativeAOT helper keyringu démona nad Credential
 Managerem, hodnota nad 2560 B po kusech ověřených SHA-256). Testy: xUnit v3
-na Microsoft.Testing.Platform, ~3 600 (Core s FakeDaemon a MailFixture,
+na Microsoft.Testing.Platform, ~4 000 (Core s FakeDaemon a MailFixture,
 služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
 hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
 pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
