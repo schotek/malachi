@@ -204,6 +204,7 @@ import Testing
                        "trackingPixels": 1 },
           "links": [ { "text": "Click here", "href": "https://real.destination/x" } ],
           "inlineParts": { "image001@example.org": "2.1" },
+          "remotePictures": 1,
           "remoteContent": "block",
           "sanitizerVersion": "1"
         }
@@ -214,6 +215,7 @@ import Testing
         #expect(!r.blocked.isEmpty && BlockedContent().isEmpty)
         #expect(r.links == [Link(text: "Click here", href: "https://real.destination/x")])
         #expect(r.inlineParts == ["image001@example.org": "2.1"])
+        #expect(r.remotePictures == 1 && r.remotePictureCount == 1)
         #expect(r.remoteContent == .block && r.sanitizerVersion == "1")
 
         let text = try decode(MessageBodyResult.self, #"""
@@ -222,6 +224,7 @@ import Testing
          "links":null,"remoteContent":"allow","sanitizerVersion":"1"}
         """#)
         #expect(text.html == nil && text.htmlWithheld == nil && text.inlineParts == nil)
+        #expect(text.remotePictures == nil && text.remotePictureCount == 0, "absent is 0")
         #expect(text.links.isEmpty && text.bodyState == .pending)
     }
 
@@ -486,7 +489,35 @@ import Testing
             syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true)))
         let partial = try #require(one["preferences"] as? [String: Any])
         #expect(partial["compressStore"] as? Bool == true && partial["attachmentOfflineDays"] == nil)
+        #expect(partial["neverStoreAttachments"] == nil)
         #expect(API.Limits.attachmentOfflineDaysMax == 3650 && API.Limits.largeAttachmentMinBytes == 100 << 10)
+
+        // docs/api.md §4.8: neverStoreAttachments, added after the two; a
+        // daemon without it (the two above) decodes it as nil.
+        #expect(full.preferences.neverStoreAttachments == nil && small.preferences.neverStoreAttachments == nil)
+        let never = try decode(ConfigGetResult.self, #"""
+        {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,
+                        "compressStore":true,"attachmentOfflineDays":30,"neverStoreAttachments":true}}
+        """#)
+        #expect(never.preferences == Preferences(
+            syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true, attachmentOfflineDays: 30,
+            neverStoreAttachments: true))
+        let keep = try decode(ConfigSetResult.self, #"""
+        {"preferences":{"syncIntervalSeconds":300,"remoteContent":"block","offlineDays":30,"compressStore":false,"attachmentOfflineDays":0,"neverStoreAttachments":false}}
+        """#)
+        #expect(keep.preferences.neverStoreAttachments == false)
+        // false goes over the wire; nil never does.
+        let offNever = try encodeObject(ConfigSetParams(preferences: keep.preferences))
+        let sentNever = try #require(offNever["preferences"] as? [String: Any])
+        #expect(sentNever["neverStoreAttachments"] as? Bool == false)
+        #expect(sentNever.keys.sorted() == [
+            "attachmentOfflineDays", "compressStore", "neverStoreAttachments", "offlineDays", "remoteContent", "syncIntervalSeconds",
+        ])
+        let onlyNever = try encodeObject(ConfigSetParams(preferences: Preferences(
+            syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, neverStoreAttachments: true)))
+        let sentOnly = try #require(onlyNever["preferences"] as? [String: Any])
+        #expect(sentOnly["neverStoreAttachments"] as? Bool == true)
+        #expect(sentOnly["compressStore"] == nil && sentOnly["attachmentOfflineDays"] == nil)
     }
 
     /// docs/api.md §4.0 `system.storage`.

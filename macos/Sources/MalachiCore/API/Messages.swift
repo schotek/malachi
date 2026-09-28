@@ -90,7 +90,9 @@ public struct Attachment: Codable, Sendable, Equatable {
     /// The part's data is not stored on this device, only on the mail
     /// server (`Preferences.attachmentOfflineDays`); `message.download`
     /// fetches it. Set only once the body is fetched; name, type and size
-    /// are those of the original part. Absent means false.
+    /// are those of the original part. Absent means false. Under
+    /// `Preferences.neverStoreAttachments` it stays set after the download,
+    /// which the daemon holds in memory only.
     public var remote: Bool?
 
     public init(
@@ -308,6 +310,13 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
     @NullAsEmpty public var links: [Link]
     /// Content-IDs whose cid: references survived, to their part ids.
     public var inlineParts: [String: String]?
+    /// How many pictures of `inlineParts` are kept on the mail server only
+    /// and not available on this device now
+    /// (`Preferences.neverStoreAttachments` leaves those of 100 KiB and
+    /// more there): message.part answers partNotDownloaded for them until
+    /// message.download has fetched the message, after which the body is
+    /// asked for again. Absent means 0 (`remotePictureCount`).
+    public var remotePictures: Int?
     /// The policy that was applied: `block` or `allow`, never `knownSenders`.
     /// A client offers to load images only under `block`.
     public var remoteContent: RemoteContentPolicy
@@ -316,7 +325,8 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
     public init(
         messageId: MessageID, bodyState: BodyState, hasHtml: Bool, html: String? = nil, htmlWithheld: Bool? = nil,
         text: String, blocked: BlockedContent = BlockedContent(), links: [Link] = [],
-        inlineParts: [String: String]? = nil, remoteContent: RemoteContentPolicy, sanitizerVersion: String
+        inlineParts: [String: String]? = nil, remotePictures: Int? = nil, remoteContent: RemoteContentPolicy,
+        sanitizerVersion: String
     ) {
         self.messageId = messageId
         self.bodyState = bodyState
@@ -327,9 +337,13 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
         self.blocked = blocked
         self.links = links
         self.inlineParts = inlineParts
+        self.remotePictures = remotePictures
         self.remoteContent = remoteContent
         self.sanitizerVersion = sanitizerVersion
     }
+
+    /// `remotePictures` as Go reads it: absent is 0.
+    public var remotePictureCount: Int { max(remotePictures ?? 0, 0) }
 }
 
 /// api.MessagePartParams: one MIME part by the `partId` an `Attachment`
@@ -411,9 +425,11 @@ public struct MessageDownloadParams: Codable, Sendable, Equatable {
 }
 
 /// api.MessageDownloadResult: the message as `message.get` reports it after
-/// the download, no attachment `remote` any more. Part ids may differ from
-/// before on Microsoft 365 accounts, whose server rebuilds the MIME: a
-/// client replaces the message it shows with this one.
+/// the download, no attachment `remote` any more, except under
+/// `Preferences.neverStoreAttachments`, where the parts stay `remote` and
+/// are served from the daemon's memory while it holds the message. Part
+/// ids may differ from before on Microsoft 365 accounts, whose server
+/// rebuilds the MIME: a client replaces the message it shows with this one.
 public struct MessageDownloadResult: Codable, Sendable, Equatable {
     public var message: Message
 

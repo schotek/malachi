@@ -45,6 +45,17 @@ Mail/`) as flags and keeps its own default socket path, so `malachi-mcp`
 and `.mcp.json` work unchanged (`MalachiCore/Daemon/Paths.swift`,
 `DaemonSupervisor.swift`).
 
+Like the GTK UI (`SweepOpenedAttachments`), the app removes the directory
+it writes attachments to for opening and previewing
+(`MalachiCore/Platform/OpenDir.swift`, `~/Library/Caches/Malachi
+Mail/open`) when it starts and when it quits, whatever the preferences
+say, so nothing opened outlives the session, which is also what *Never
+Store Attachments* promises. At quit it goes before the daemon is stopped,
+which can take 15 s, and once more in `applicationWillTerminate` for a
+file whose write was still in flight; `OpenDir.removeAll` refuses any path
+but an absolute one ending in `Malachi Mail/open`, as `purgeOpenDir` does
+in Go, and a failure is logged.
+
 Every connection to the socket is authenticated before it is used
 ([api.md §1.4](api.md#14-handshake)), by `RPCClient.connect()` itself,
 the Swift port of `api.ClientHandshake`: between Network.framework's
@@ -72,6 +83,7 @@ whatever it is, the same function sets the daemon's storage defaults,
 `MALACHI_DEFAULT_ATTACHMENT_OFFLINE_DAYS=30`, each unless the environment
 has it with a value ([api.md §4.8](api.md#48-config)): the store is compressed and the
 large attachments of messages older than 30 days stay on the mail server.
+`neverStoreAttachments` has no such default; only Settings switches it on.
 The daemon stores a default as the preference the first time it applies
 it, so Settings overrides them and a daemon started otherwise keeps them;
 it is the second run-time extension point of the daemon the client uses,
@@ -110,10 +122,12 @@ and the connection, the rows of its popover, the sign-in and certificate
 banners), `MessageCache` (`message.get`/`message.body`/
 `message.part` with a bounded cache, and `message.download` for the
 attachments kept on the mail server: one per message, the chips' spinner
-after 0.4 s), `ActionsController` (flags, moves,
-trash, archive, junk, outbox retry, remote images, trusted senders,
-reply/forward through `draft.create`, a forward downloading the
-attachments first), `ComposeController` and
+after 0.4 s; the pictures bar's download asks for the body again),
+`ActionsController` (flags, moves,
+trash, archive, junk, outbox retry, remote images, pictures kept on the
+server, trusted senders, reply/forward through `draft.create`, a forward
+downloading the attachments first, a reply the pictures it quotes),
+`ComposeController` and
 `ComposeDraftController` (recipients, autosave, send, discard),
 `WizardController` (discover → the browser sign-in or a password →
 test → add/update; a refused server certificate offers trust through

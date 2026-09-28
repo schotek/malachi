@@ -215,6 +215,12 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         actions.trustSender(id)
     }
 
+    func downloadPictures(_ id: MessageID, from window: NSWindow?) {
+        actions.downloadPictures(id) { [weak self] text in
+            self?.toast(text, in: window)
+        }
+    }
+
     func retryOutbox(_ id: MessageID) {
         actions.retryOutbox(id)
     }

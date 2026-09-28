@@ -111,6 +111,9 @@ protocol MessageActionDelegate: AnyObject {
     /// through the message cache's `onLoaded`.
     func loadImages(_ id: MessageID)
     func trustSender(_ id: MessageID)
+    /// remote.go `downloadPictures`: the pictures bar's Download Pictures;
+    /// a failure toasts in `window` (the one the click came from).
+    func downloadPictures(_ id: MessageID, from window: NSWindow?)
     /// outbox.go `retryOutbox`.
     func retryOutbox(_ id: MessageID)
     /// model.go `inDrafts`: the message lies in its account's Drafts folder

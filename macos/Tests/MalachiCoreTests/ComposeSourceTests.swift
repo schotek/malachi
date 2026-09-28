@@ -76,9 +76,9 @@ private struct Boom: Error {}
     }
 
     /// compose_open.go `forwardNeedsDownload`: a forward downloads first
-    /// when an attachment other than the HTML's pictures is on the server,
-    /// or the body is not downloaded yet, or the cache cannot tell
-    /// (message.download answers at once when nothing is missing).
+    /// when any part is on the server (an attachment, or a picture the
+    /// HTML shows), or the body is not downloaded yet, or the cache cannot
+    /// tell (message.download answers at once when nothing is missing).
     @Test func forwardNeedsDownloadTest() {
         func att(_ id: String, inline: Bool = false, remote: Bool? = nil) -> MalachiCore.Attachment {
             MalachiCore.Attachment(partId: id, filename: id + ".bin", contentType: "application/octet-stream", size: 200_000,
@@ -99,8 +99,40 @@ private struct Boom: Error {}
         #expect(forwardNeedsDownload(LoadedMessage(msg: remote)), "on the server, body not loaded here")
         #expect(!forwardNeedsDownload(LoadedMessage(msg: local, body: body(.tooBig))), "too big to download anyway")
         let picture = Message(summary: summary("m_1"), attachments: [att("2", inline: true, remote: true)])
-        #expect(!forwardNeedsDownload(LoadedMessage(msg: picture, body: body(.fetched))), "an inline part is never waited for")
+        #expect(forwardNeedsDownload(LoadedMessage(msg: picture, body: body(.fetched))), "a picture the HTML shows, on the server")
+        let storedPicture = Message(summary: summary("m_1"), attachments: [att("2", inline: true)])
+        #expect(!forwardNeedsDownload(LoadedMessage(msg: storedPicture, body: body(.fetched))), "a stored picture")
         #expect(!forwardNeedsDownload(LoadedMessage(msg: Message(summary: summary("m_1")), body: body(.failed))))
+    }
+
+    /// compose_open.go `replyNeedsDownload`: a reply downloads first only
+    /// when the body on display counts pictures kept on the mail server
+    /// only (the daemon's `remotePictures`); an attachment there, even one
+    /// with a Content-ID, or a message the cache has no body of, is no
+    /// reason to.
+    @Test func replyNeedsDownloadTest() {
+        func att(_ id: String, cid: String? = nil, inline: Bool = false, remote: Bool? = nil) -> MalachiCore.Attachment {
+            MalachiCore.Attachment(partId: id, filename: id + ".png", contentType: "image/png", size: 200_000,
+                                   inline: inline, contentId: cid, remote: remote)
+        }
+        func body(html: String? = "<p>x</p>", remotePictures: Int? = nil) -> MessageBodyResult {
+            MessageBodyResult(messageId: "m_1", bodyState: .fetched, hasHtml: html != nil, html: html, text: "x",
+                              remotePictures: remotePictures, remoteContent: .block, sanitizerVersion: "1")
+        }
+        func loaded(_ atts: [MalachiCore.Attachment], _ b: MessageBodyResult? = body()) -> LoadedMessage {
+            LoadedMessage(msg: Message(summary: summary("m_1"), attachments: atts), body: b)
+        }
+        let picture = att("2", cid: "p@x", inline: true, remote: true)
+        #expect(!replyNeedsDownload(nil), "not in the cache")
+        #expect(!replyNeedsDownload(LoadedMessage()), "nothing known yet")
+        #expect(!replyNeedsDownload(loaded([picture], nil)), "body not loaded yet")
+        #expect(!replyNeedsDownload(loaded([])))
+        #expect(!replyNeedsDownload(loaded([att("2", cid: "p@x", remote: true)])), "a Content-ID is no reason")
+        #expect(!replyNeedsDownload(loaded([att("2", remote: true)])), "an attachment is not quoted")
+        #expect(!replyNeedsDownload(loaded([picture])), "a picture the daemon holds is not counted")
+        #expect(replyNeedsDownload(loaded([att("2", remote: true), picture], body(remotePictures: 2))))
+        #expect(replyNeedsDownload(LoadedMessage(body: body(remotePictures: 1))), "counted, message.get failed")
+        #expect(!replyNeedsDownload(loaded([picture], body(html: nil, remotePictures: 2))), "text only")
     }
 
     /// A failed download asks, unless asking would change nothing: no

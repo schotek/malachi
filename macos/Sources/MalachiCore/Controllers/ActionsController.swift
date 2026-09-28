@@ -478,6 +478,17 @@ public final class ActionsController {
         cache.loadImages(s) { _ in }
     }
 
+    /// Downloads the pictures of `id` kept on the mail server only and
+    /// shows the message again wherever it is on display (remote.go
+    /// `downloadPictures`, through the cache: the bars show the wait from
+    /// the click on, a request already running is left alone, a failure is
+    /// a toast through `toast`, or the controller's own when nil, with the
+    /// bar back as it was).
+    public func downloadPictures(_ id: MessageID, toast: (@MainActor (String) -> Void)? = nil) {
+        guard let s = summary(id) else { return }
+        cache.downloadPictures(s, toast: toast ?? self.toast) { _ in }
+    }
+
     /// Puts the sender of `id` on the daemon's known-senders list
     /// (sender.add), switches the stored remote-content preference to
     /// "from known senders" when it was "never" (otherwise the list would
@@ -559,9 +570,23 @@ public final class ActionsController {
     /// The question has no answer for Cancel: the request ends when it is
     /// asked, and a confirmation starts it again (unless another one for
     /// the message runs by then).
+    ///
+    /// A reply or reply to all of a message whose pictures are kept on the
+    /// mail server only downloads it first as well (`replyNeedsDownload`),
+    /// so the quote has them; a failure is only logged and the reply goes
+    /// on (the compose window says what draft.create left out).
     public func openCompose(_ kind: ComposeKind, _ id: MessageID, from parent: AnyObject? = nil) {
         guard let s = summary(id), !composing.contains(id) else { return }
         composing.insert(id)
+        if kind == .reply || kind == .replyAll, replyNeedsDownload(cache.loaded(id)) {
+            let cache = cache
+            Task { @MainActor [weak self] in
+                // download() logs a failure; the reply goes on without.
+                _ = try? await cache.download(accountID: s.accountId, messageID: id)
+                self?.createDraft(kind, s)
+            }
+            return
+        }
         guard kind == .forward, forwardNeedsDownload(cache.loaded(id)) else {
             createDraft(kind, s)
             return

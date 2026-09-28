@@ -9,11 +9,12 @@ import Foundation
 /// in the daemon, not in the app's own settings. `config.set` is
 /// read-modify-write: echo the whole set from `config.get`.
 ///
-/// `compressStore` and `attachmentOfflineDays` were added later and follow
-/// other rules: in `config.set` an absent (nil) one is left unchanged, so
-/// an older daemon's answer, which lacks them, goes back without them;
-/// `config.get` and the `config.set` result of a daemon that knows them
-/// always carry both. nil is never encoded (Go's `omitempty` pointers).
+/// `compressStore`, `attachmentOfflineDays` and `neverStoreAttachments`
+/// were added later and follow other rules: in `config.set` an absent
+/// (nil) one is left unchanged, so an older daemon's answer, which lacks
+/// them, goes back without them; `config.get` and the `config.set` result
+/// of a daemon that knows them always carry them all. nil is never encoded
+/// (Go's `omitempty` pointers).
 public struct Preferences: Codable, Sendable, Equatable {
     /// 0 = manual sync only; otherwise at least `API.Limits.syncIntervalMin`.
     public var syncIntervalSeconds: Int
@@ -30,16 +31,22 @@ public struct Preferences: Codable, Sendable, Equatable {
     /// none; the others stay on the server (`Attachment.remote`). nil: a
     /// daemon that does not know it.
     public var attachmentOfflineDays: Int?
+    /// No attachment of any size is stored (the pictures the HTML shows
+    /// are); `message.download` then holds the message in the daemon's
+    /// memory only, until it quits. Overrides `attachmentOfflineDays`.
+    /// nil: a daemon that does not know it.
+    public var neverStoreAttachments: Bool?
 
     public init(
         syncIntervalSeconds: Int, remoteContent: RemoteContentPolicy, offlineDays: Int,
-        compressStore: Bool? = nil, attachmentOfflineDays: Int? = nil
+        compressStore: Bool? = nil, attachmentOfflineDays: Int? = nil, neverStoreAttachments: Bool? = nil
     ) {
         self.syncIntervalSeconds = syncIntervalSeconds
         self.remoteContent = remoteContent
         self.offlineDays = offlineDays
         self.compressStore = compressStore
         self.attachmentOfflineDays = attachmentOfflineDays
+        self.neverStoreAttachments = neverStoreAttachments
     }
 }
 

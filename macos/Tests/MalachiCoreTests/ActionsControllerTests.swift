@@ -71,6 +71,14 @@ private actor Recorder {
     func addDraft(_ d: DraftCreateParams) { drafts.append(d) }
 }
 
+/// Whether message.download has run, for a body that changes with it.
+private actor Downloads {
+    var done = false
+
+    func finish() { done = true }
+    func reset() { done = false }
+}
+
 private let account: AccountID = "a"
 private let inbox = FolderKey(account: "a", folder: "in")
 private let trash = FolderKey(account: "a", folder: "trash")
@@ -606,6 +614,152 @@ private final class Harness {
         #expect(h.log.toasts == ["Loading the images failed: the server could not be reached"])
         #expect(h.log.bars == ["m1:true", "m1:true", "m1:false"])
         #expect(h.cache.loaded("m1")?.body?.html == "<p>with pictures</p>")
+    }
+
+    /// remote.go `downloadPictures` through the controller: unknown ids do
+    /// nothing, the download and the body again go through the cache, and a
+    /// failure is said through the toast of the window the click came
+    /// from, or the controller's own.
+    @Test func downloadPicturesGoesThroughTheCache() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen)]])
+        defer { Task { await h.stop() } }
+        let rec = Recorder()
+        let script = Downloads()
+        var shown = body("m1", html: "<p>pictures</p>", remote: .block)
+        shown.remotePictures = 2
+        let before = try encode(shown)
+        shown.remotePictures = nil
+        let after = try encode(shown)
+        let downloaded = try encode(MessageDownloadResult(message: Message(summary: try h.summary("m1"))))
+        await h.fixture.on(API.MessageBody.name) { _ in await script.done ? after : before }
+        await h.fixture.on(API.MessageDownload.name) { params in
+            await rec.addDownload(try decode(MessageDownloadParams.self, params))
+            if let err = await rec.downloadError {
+                throw err
+            }
+            await script.finish()
+            return downloaded
+        }
+        try await h.load("m1")
+        #expect(remotePictures(h.cache.loaded("m1")?.body) == 2)
+
+        h.actions.downloadPictures("nope")
+        h.actions.downloadPictures("m1")
+        #expect(h.cache.loaded("m1")?.loadingPictures == true)
+        try await waitUntil { remotePictures(h.cache.loaded("m1")?.body) == 0 }
+        #expect(h.cache.loaded("m1")?.loadingPictures == false)
+        #expect(await rec.downloads == [MessageDownloadParams(accountId: "a", messageId: "m1")])
+        #expect(await h.fixture.callCount(API.MessageBody.name) == 2)
+        #expect(h.log.toasts.isEmpty)
+
+        // A failure, said where the click came from.
+        await script.reset()
+        h.cache.loaded("m1")?.body?.remotePictures = 2
+        await rec.set(downloadError: RPCError(code: .offline, message: "no network"))
+        var said: [String] = []
+        h.actions.downloadPictures("m1") { said.append($0) }
+        try await waitUntil { !said.isEmpty }
+        #expect(said == ["Downloading the pictures failed: no network connection"])
+        #expect(h.log.toasts.isEmpty)
+        #expect(h.cache.loaded("m1")?.loadingPictures == false)
+        #expect(remotePictures(h.cache.loaded("m1")?.body) == 2, "the body on display stays")
+
+        // Without a toast of its own the controller's is used.
+        h.actions.downloadPictures("m1")
+        try await waitUntil { !h.log.toasts.isEmpty }
+        #expect(h.log.toasts == ["Downloading the pictures failed: no network connection"])
+    }
+
+    /// compose_open.go `replyNeedsDownload`: a reply or reply all to a
+    /// message whose body counts pictures on the mail server only downloads
+    /// it first, once however often asked, and goes on without a word when
+    /// that fails; the download asks for the body again (`endDownload`). A
+    /// body that counts none, an attachment with a Content-ID on the server
+    /// notwithstanding, or an unknown message does not wait for anything. A
+    /// forward downloads them too (`forwardNeedsDownload`).
+    @Test func replyDownloadsThePicturesOnTheServerFirst() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen), msg("m2", 2, .seen)]])
+        defer { Task { await h.stop() } }
+        let picture = MalachiCore.Attachment(
+            partId: "2", filename: "photo.jpg", contentType: "image/jpeg", size: 300_000, inline: true,
+            contentId: "photo@x", remote: true)
+        // Outlook and Apple Mail give ordinary attachments a Content-ID too.
+        let report = MalachiCore.Attachment(
+            partId: "3", filename: "report.pdf", contentType: "application/pdf", size: 300_000, inline: false,
+            contentId: "report@x", remote: true)
+        let original = Message(summary: try h.summary("m1"), attachments: [picture, report])
+        await h.fixture.setDetail(original)
+        var counted = body("m1", html: "<p><img src=\"malachi-cid:a/m1/2\"></p>", remote: .block)
+        counted.inlineParts = ["photo@x": "2"]
+        counted.remotePictures = 1
+        await h.fixture.setBody(counted)
+        let rec = Recorder()
+        let downloaded = try encode(MessageDownloadResult(message: original))
+        await h.fixture.on(API.MessageDownload.name) { params in
+            await rec.addDownload(try decode(MessageDownloadParams.self, params))
+            try await Task.sleep(for: .milliseconds(30))
+            if let err = await rec.downloadError {
+                throw err
+            }
+            return downloaded
+        }
+        let draft = Draft(accountId: "a", subject: "Re: s-m1", textBody: "q", htmlBody: "<p>q</p>", inReplyTo: "m1")
+        let created = try encode(DraftCreateResult(draft: draft, quoted: .html))
+        await h.fixture.on(API.DraftCreate.name) { params in
+            await rec.addDraft(try decode(DraftCreateParams.self, params))
+            return created
+        }
+        try await h.load("m1")
+        let base = await h.fixture.calls().count
+        #expect(await h.fixture.callCount(API.MessageBody.name) == 1)
+
+        // The body asked for again after the download runs beside
+        // draft.create, in either order.
+        func calls(after n: Int) async -> [String] {
+            Array(await h.fixture.calls().dropFirst(n)).filter { $0 != API.MessageBody.name }
+        }
+        h.actions.openCompose(.reply, "m1")
+        h.actions.openCompose(.reply, "m1")
+        try await waitUntil { h.log.composed.count == 1 }
+        #expect(await calls(after: base) == [API.MessageDownload.name, API.DraftCreate.name])
+        #expect(await rec.downloads == [MessageDownloadParams(accountId: "a", messageId: "m1")])
+        #expect(h.log.composed[0].kind == .reply)
+        try await waitUntil { await h.fixture.callCount(API.MessageBody.name) == 2 }
+
+        // A failed download: the reply all the same, nothing asked or said,
+        // and no body asked for again.
+        await rec.set(downloadError: RPCError(code: .offline, message: "no network"))
+        h.actions.openCompose(.replyAll, "m1")
+        try await waitUntil { h.log.composed.count == 2 }
+        #expect(await rec.downloads.count == 2)
+        #expect(h.log.composed[1].kind == .replyAll)
+        #expect(h.log.confirmations.isEmpty && h.log.toasts.isEmpty)
+        #expect(await rec.drafts.count == 2)
+        #expect(await h.fixture.callCount(API.MessageBody.name) == 2)
+
+        // A forward downloads the pictures the HTML shows as well.
+        await rec.set(downloadError: nil)
+        let before = await h.fixture.calls().count
+        h.actions.openCompose(.forward, "m1")
+        try await waitUntil { h.log.composed.count == 3 }
+        #expect(await calls(after: before) == [API.MessageDownload.name, API.DraftCreate.name])
+        #expect(await rec.downloads.count == 3)
+        try await waitUntil { await h.fixture.callCount(API.MessageBody.name) == 3 }
+
+        // A body that counts no picture on the server (the daemon holds
+        // them): straight to draft.create, the attachments on the server
+        // with their Content-IDs notwithstanding.
+        h.cache.loaded("m1")?.body?.remotePictures = nil
+        h.actions.openCompose(.reply, "m1")
+        try await waitUntil { h.log.composed.count == 4 }
+        #expect(await rec.downloads.count == 3)
+
+        // Nothing known about the message: straight to draft.create.
+        #expect(h.cache.loaded("m2") == nil)
+        h.actions.openCompose(.reply, "m2")
+        try await waitUntil { h.log.composed.count == 5 }
+        #expect(await rec.downloads.count == 3)
+        #expect(await rec.drafts.last?.messageId == "m2")
     }
 
     @Test func trustSenderAddsThenRaisesThePolicyThenLoads() async throws {

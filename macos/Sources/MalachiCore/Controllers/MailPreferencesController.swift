@@ -14,10 +14,13 @@ import os
 /// failed save shows a toast and reverts the pop-ups to the last state the
 /// daemon confirmed. The pane renders from `onPreferences` (nil until the
 /// daemon answered) and `onEnabled`, and maps values onto pop-up positions
-/// with `MailSelection`. Keep Attachments Offline For and Compress Stored
-/// Mail exist only when the daemon reports them: an older daemon's rows are
-/// hidden (`MailSelection` nil) and their setters do nothing, so what goes
-/// back leaves the fields out, which config.set reads as unchanged.
+/// with `MailSelection`. Keep Attachments Offline For, Never Store
+/// Attachments and Compress Stored Mail exist only when the daemon reports
+/// them: an older daemon's rows are hidden (`MailSelection` nil) and their
+/// setters do nothing, so what goes back leaves the fields out, which
+/// config.set reads as unchanged. While the daemon confirms that no
+/// attachment is stored, Keep Attachments Offline For does not apply and
+/// the pane greys it out (`attachmentDaysApply`).
 @MainActor
 public final class MailPreferencesController {
     /// The pop-up positions of a preference set, in the order of the
@@ -29,14 +32,20 @@ public final class MailPreferencesController {
         public var retention: Int
         /// The position in `attachmentChoices`; nil hides the row.
         public var attachments: Int?
-        /// The switch; nil hides the row.
+        /// The Never Store Attachments switch; nil hides the row.
+        public var neverStore: Bool?
+        /// The Compress Stored Mail switch; nil hides the row.
         public var compress: Bool?
 
-        public init(interval: Int, remoteContent: Int, retention: Int, attachments: Int? = nil, compress: Bool? = nil) {
+        public init(
+            interval: Int, remoteContent: Int, retention: Int, attachments: Int? = nil, neverStore: Bool? = nil,
+            compress: Bool? = nil
+        ) {
             self.interval = interval
             self.remoteContent = remoteContent
             self.retention = retention
             self.attachments = attachments
+            self.neverStore = neverStore
             self.compress = compress
         }
 
@@ -46,6 +55,7 @@ public final class MailPreferencesController {
             remoteContent = indexOfPolicy(p.remoteContent)
             retention = indexOfRetention(p.offlineDays)
             attachments = p.attachmentOfflineDays.map(indexOfAttachmentDays)
+            neverStore = p.neverStoreAttachments
             compress = p.compressStore
         }
     }
@@ -155,6 +165,14 @@ public final class MailPreferencesController {
     public func set(attachmentOfflineDays days: Int) {
         guard var want = preferences, want.attachmentOfflineDays != nil else { return }
         want.attachmentOfflineDays = days
+        save(want)
+    }
+
+    /// Never Store Attachments; nothing while the daemon does not report
+    /// it. Keep Attachments Offline For goes back as confirmed either way.
+    public func set(neverStoreAttachments on: Bool) {
+        guard var want = preferences, want.neverStoreAttachments != nil else { return }
+        want.neverStoreAttachments = on
         save(want)
     }
 

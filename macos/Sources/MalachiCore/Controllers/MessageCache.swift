@@ -7,7 +7,8 @@ import os
 /// The loaded-message cache and its fetching: ui/internal/window/
 /// message_view.go (`fetchMessage`, `settleLoaded`, `loadedFor`,
 /// `storeLoaded`), remote.go (`loadRemoteImages`, `fetchRemoteImages`,
-/// `imagesDone`, `refreshRemoteBar`, `showLoaded`), outbox.go
+/// `imagesDone`, `refreshRemoteBar`, `showLoaded`, `downloadPictures`,
+/// `lostPicture`, `reloadPictures`), outbox.go
 /// (`refetchMessage`), attachments.go (`fetchAttachment`) and embedded.go
 /// (`fetchEmbedded`), minus the widgets. The pane, every message window and
 /// the compose prefill share one cache; the views register for the answers
@@ -283,6 +284,122 @@ public final class MessageCache {
         onRemoteBar?(id, lm)
     }
 
+    // MARK: Pictures on the server
+
+    /// Downloads the pictures of `s` kept on the mail server only
+    /// (`remotePictures`) and shows the message again wherever it is on
+    /// display (remote.go `downloadPictures`): message.download (joining
+    /// one already running, `download`, so the chips spin too), then
+    /// message.body again under `picturesPolicy`, so remote images loaded
+    /// for it stay. The bars show the wait from the click on
+    /// (`onRemoteBar`, `loadingPictures`). A request already running is
+    /// left alone and `then` is not called.
+    ///
+    /// A failure of either call is toasted through `toast` (the window the
+    /// click came from; the cache's own when nil) and the bar offers the
+    /// pictures again. `then` gets the entry with the new body, or the
+    /// error.
+    public func downloadPictures(
+        _ s: MessageSummary, toast: (@MainActor (String) -> Void)? = nil,
+        _ then: @escaping @MainActor (Result<LoadedMessage, any Error>) -> Void
+    ) {
+        let id = s.id
+        let lm = cache.loadedFor(id)
+        if lm.loadingPictures {
+            return
+        }
+        lm.loadingPictures = true
+        refreshRemoteBar(id, lm)
+        let client = client
+        Task { [weak self] in
+            let outcome: Result<MessageBodyResult, any Error>
+            do {
+                guard let self else { return }
+                try await self.download(accountID: s.accountId, messageID: id)
+                // Back on the main actor after the download: the policy of
+                // the body on display now.
+                let params = MessageBodyParams(accountId: s.accountId, messageId: id, remoteContent: picturesPolicy(lm))
+                outcome = .success(try await client.call(API.MessageBody.self, params))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            lm.loadingPictures = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("download pictures: \(String(describing: err), privacy: .public)")
+                (toast ?? self.toast)(rpcErrorText(L10n.T("Downloading the pictures"), err))
+                self.refreshRemoteBar(id, lm)
+                then(.failure(err))
+            case .success(let res):
+                lm.body = res
+                lm.err = nil
+                if self.cache[id] == nil {
+                    self.cache.store(id, lm)
+                }
+                self.onLoaded?(id, lm)
+                then(.success(lm))
+            }
+        }
+    }
+
+    // MARK: The count going out of date
+
+    // A body cached while the daemon held the message in memory counts no
+    // picture on the server; once the daemon has dropped that copy (30
+    // minutes unused, its memory cap, the switch turned off, a restart) the
+    // same body shown again asks for pictures that message.part answers
+    // partNotDownloaded for, and without a new count there would be no bar
+    // to get them back. The first such answer for a picture the body lists
+    // asks for the body again (store and memory only, never the mail
+    // server), whose count brings the bar back. The other way round, a
+    // download of the message for anything else (a chip, a reply, a
+    // forward) asks again for a body that counts pictures on the server, so
+    // that they show and the bar goes (`endDownload`).
+
+    /// Asks for the body of message `id` again when picture `partID`, which
+    /// the cached body counts as here, turned out to be on the mail server
+    /// only (remote.go `lostPicture`, `recheckPictures`).
+    func lostPicture(_ accountID: AccountID, _ id: MessageID, _ partID: String) {
+        guard let lm = cache[id], recheckPictures(lm, partID) else { return }
+        lm.picturesRechecked = true
+        reloadPictures(accountID, id, lm)
+    }
+
+    /// Asks for the body of message `id` again, under the policy of the
+    /// body on display (`picturesPolicy`: remote images the user loaded
+    /// stay), and shows it wherever the message is on display (`onLoaded`;
+    /// remote.go `reloadPictures`). The daemon answers from its store and
+    /// memory. A body that replaced the one on display meanwhile, or
+    /// Download Pictures started meanwhile, wins over the answer; a failure
+    /// is only logged and the body on display stays.
+    private func reloadPictures(_ accountID: AccountID, _ id: MessageID, _ lm: LoadedMessage) {
+        let shown = lm.body
+        let params = MessageBodyParams(accountId: accountID, messageId: id, remoteContent: picturesPolicy(lm))
+        let client = client
+        Task { [weak self] in
+            let outcome: Result<MessageBodyResult, any Error>
+            do {
+                outcome = .success(try await client.call(API.MessageBody.self, params))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("message.body (pictures again): \(String(describing: err), privacy: .public)")
+            case .success(let res):
+                guard lm.body == shown, !lm.loadingPictures else { return }
+                lm.body = res
+                lm.err = nil
+                if self.cache[id] == nil {
+                    self.cache.store(id, lm)
+                }
+                self.onLoaded?(id, lm)
+            }
+        }
+    }
+
     // MARK: Parts and attached messages
 
     /// message.part for one attachment (attachments.go `fetchAttachment`):
@@ -297,10 +414,19 @@ public final class MessageCache {
 
     /// Serves the web view's malachi-cid: pictures through message.part
     /// (remote.go `fetchPart`): the claimed type and the bytes; whether the
-    /// type may be shown is the caller's check (`isImageType`).
+    /// type may be shown is the caller's check (`isImageType`). A picture
+    /// the daemon answers partNotDownloaded for goes to `lostPicture`
+    /// before the error is thrown (remote.go `pictureFailed`).
     public func fetchPart(accountID: AccountID, messageID: MessageID, partID: String) async throws -> (contentType: String, data: Data) {
-        let res = try await fetchAttachment(accountID: accountID, messageID: messageID, partID: partID)
-        return (res.contentType, res.data)
+        do {
+            let res = try await fetchAttachment(accountID: accountID, messageID: messageID, partID: partID)
+            return (res.contentType, res.data)
+        } catch {
+            if isPartNotDownloaded(error) {
+                lostPicture(accountID, messageID, partID)
+            }
+            throw error
+        }
     }
 
     /// message.embedded for one part (embedded.go `fetchEmbedded`); the
@@ -410,7 +536,7 @@ public final class MessageCache {
             }
             // Before any caller resumes, so every one of them finds the
             // cache as the download left it.
-            self?.endDownload(id, outcome)
+            self?.endDownload(accountID, id, outcome)
             return try outcome.get()
         }
         downloads[id] = task
@@ -433,8 +559,11 @@ public final class MessageCache {
     /// The download of `id` ended (`endDownload`): no spinner, the cached
     /// message replaced with the downloaded one, a body that was not
     /// fetched dropped and fetched again (every view re-renders through
-    /// `onLoaded`), and the chips drawn again.
-    private func endDownload(_ id: MessageID, _ outcome: Result<Message, any Error>) {
+    /// `onLoaded`), and so is one that counts pictures on the mail server
+    /// only (`reloadAfterDownload`), which the daemon holds now: they show
+    /// and the pictures bar goes, whatever the download was for. The chips
+    /// are drawn again.
+    private func endDownload(_ accountID: AccountID, _ id: MessageID, _ outcome: Result<Message, any Error>) {
         downloads[id] = nil
         spinning.remove(id)
         let lm = cache[id]
@@ -444,10 +573,15 @@ public final class MessageCache {
         case .success(let m):
             if let lm {
                 lm.msg = m
+                // Pictures that go missing from now on may ask for the body
+                // once more (`recheckPictures`).
+                lm.picturesRechecked = false
                 if let b = lm.body, b.bodyState != .fetched, !lm.fetching {
                     lm.body = nil
                     lm.err = nil
                     fetch(m.summary) { _ in }
+                } else if reloadAfterDownload(lm) {
+                    reloadPictures(accountID, id, lm)
                 }
             }
         }

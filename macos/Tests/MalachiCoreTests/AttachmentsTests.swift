@@ -306,7 +306,7 @@ private func part(filename: String) -> MessagePartResult {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("malachi-open-\(UUID().uuidString.prefix(8))", isDirectory: true)
         defer { try? fm.removeItem(at: root) }
-        let open = OpenDir(url: root.appendingPathComponent("open", isDirectory: true))
+        let open = OpenDir(url: root.appendingPathComponent("Malachi Mail/open", isDirectory: true))
         let url = try open.write(name: "a.txt", data: Data("hello".utf8))
         #expect(url.lastPathComponent == "a.txt")
         #expect(try Data(contentsOf: url) == Data("hello".utf8))
@@ -320,8 +320,60 @@ private func part(filename: String) -> MessagePartResult {
         let again = try open.write(name: "a.txt", data: Data())
         #expect(again != url)
         #expect(again.deletingLastPathComponent() != url.deletingLastPathComponent())
-        open.removeAll()
+        try open.removeAll()
         #expect(!fm.fileExists(atPath: open.url.path))
+    }
+
+    /// removeAll takes the open directory with everything in it, and
+    /// refuses every other path without touching it (attachments.go
+    /// `purgeOpenDir`, attachments_test.go TestPurgeOpenDir).
+    @Test func purgeOpenDir() throws {
+        let fm = FileManager.default
+        let base = fm.temporaryDirectory.appendingPathComponent("malachi-purge-\(UUID().uuidString.prefix(8))", isDirectory: true)
+        defer { try? fm.removeItem(at: base) }
+        let parent = base.appendingPathComponent("Malachi Mail", isDirectory: true)
+        let dir = parent.appendingPathComponent("open", isDirectory: true)
+        let file = dir.appendingPathComponent("x1", isDirectory: true).appendingPathComponent("report.pdf")
+        let keep = parent.appendingPathComponent("keep", isDirectory: true)
+        for d in [file.deletingLastPathComponent(), keep] {
+            try fm.createDirectory(at: d, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        }
+        try Data("%PDF-1.7".utf8).write(to: file)
+
+        let bad: [URL] = [
+            URL(fileURLWithPath: ""), URL(fileURLWithPath: "."), URL(fileURLWithPath: "/"),
+            URL(fileURLWithPath: "Malachi Mail/open"), // relative: never resolved against the working directory
+            base, parent, keep,
+            base.appendingPathComponent("open", isDirectory: true),
+            dir.appendingPathComponent("x1", isDirectory: true),
+            dir.appendingPathComponent("..", isDirectory: true),
+            try #require(URL(string: "https://example.org/Malachi%20Mail/open")),
+        ]
+        for u in bad {
+            #expect(throws: OpenDir.NotTheOpenDirectory.self, "removeAll(\(u.absoluteString)) should refuse") {
+                try OpenDir(url: u).removeAll()
+            }
+        }
+        #expect(fm.fileExists(atPath: file.path), "a refused purge removed something")
+
+        try OpenDir(url: URL(fileURLWithPath: dir.path + "/")).removeAll()
+        #expect(!fm.fileExists(atPath: dir.path), "the open directory should be gone")
+        #expect(fm.fileExists(atPath: keep.path), "its sibling should stay")
+        try OpenDir(url: dir).removeAll() // a missing directory: no error
+
+        // A link in its place goes; what it points to stays.
+        let target = base.appendingPathComponent("elsewhere", isDirectory: true)
+        try fm.createDirectory(at: target, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        let notes = target.appendingPathComponent("notes.txt")
+        try Data("x".utf8).write(to: notes)
+        try fm.createSymbolicLink(at: dir, withDestinationURL: target)
+        try OpenDir(url: dir).removeAll()
+        #expect((try? fm.attributesOfItem(atPath: dir.path)) == nil, "the link should be gone")
+        #expect(fm.fileExists(atPath: notes.path), "the link's target should stay")
+
+        // The application's own directory passes the check.
+        #expect(OpenDir.purgeable(OpenDir.default.url) != nil)
+        #expect(Array(OpenDir.default.url.pathComponents.suffix(2)) == ["Malachi Mail", "open"])
     }
 
     @Test func chipIconTypeTest() {

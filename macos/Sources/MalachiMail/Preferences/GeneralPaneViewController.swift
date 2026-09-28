@@ -11,10 +11,12 @@ import MalachiCore
 /// through `LoginItemService` (the Background portal's place, `SMAppService`
 /// being authoritative); the Mail group is the daemon's, through
 /// `MailPreferencesController` (config.get / config.set), and stays
-/// insensitive until the daemon answered. Keep Attachments Offline For and
-/// Compress Stored Mail are shown only when the daemon reports them, Disk
-/// Space Used only while it answers system.storage
-/// (`StorageUsageController`, every 5 s while the window is open).
+/// insensitive until the daemon answered. Keep Attachments Offline For,
+/// Never Store Attachments and Compress Stored Mail are shown only when the
+/// daemon reports them, the first greyed out while the daemon confirms that
+/// no attachment is stored (`attachmentDaysApply`); Disk Space Used only
+/// while it answers system.storage (`StorageUsageController`, every 5 s
+/// while the window is open).
 ///
 /// The pane needs the settings, the client and a toast sink; they come
 /// with `init` or later through `configure`, and the bindings start once
@@ -40,6 +42,7 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     let remoteImages = NSPopUpButton(frame: .zero, pullsDown: false)
     let offlineDays = NSPopUpButton(frame: .zero, pullsDown: false)
     let attachmentDays = NSPopUpButton(frame: .zero, pullsDown: false)
+    let neverStore = NSSwitch()
     let compressStore = NSSwitch()
     /// The Disk Space Used row's value (`storage_size`: dim, numeric).
     let storageValue = NSTextField(labelWithString: "")
@@ -70,6 +73,7 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
     private let bindings = PreferenceBindingSet()
     private var launchAtLoginRow: PreferenceRowView?
     private var attachmentDaysRow: PreferenceRowView?
+    private var neverStoreRow: PreferenceRowView?
     private var compressStoreRow: PreferenceRowView?
     private var storageRow: PreferenceRowView?
     private var bound = false
@@ -164,12 +168,18 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             title: L10n.T("Keep Attachments Offline For"),
             subtitle: L10n.T("Large attachments of older messages stay on the server and are downloaded when you open them"),
             trailing: attachmentDays)
+        // While on, the row above does not apply and is greyed out.
+        let neverRow = PreferenceRowView(
+            title: L10n.T("Never Store Attachments"),
+            subtitle: L10n.T("Attachments are downloaded whenever you open them and are gone when you quit"),
+            trailing: neverStore)
         let compressRow = PreferenceRowView(
             title: L10n.T("Compress Stored Mail"),
             subtitle: L10n.T("Uses less disk space; stored mail is converted in the background"),
             trailing: compressStore)
         let usageRow = PreferenceRowView(title: L10n.T("Disk Space Used"), trailing: storageValue)
         attachmentDaysRow = attachmentsRow
+        neverStoreRow = neverRow
         compressStoreRow = compressRow
         storageRow = usageRow
         mailGroup.setRows([
@@ -177,11 +187,13 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             PreferenceRowView(title: L10n.T("Load Remote Images"), trailing: remoteImages),
             PreferenceRowView(title: L10n.T("Keep Mail Offline For"), subtitle: L10n.T("Older messages stay on the server and are not shown"), trailing: offlineDays),
             attachmentsRow,
+            neverRow,
             compressRow,
             usageRow,
         ])
         // Until the daemon says it knows them (an older one does not).
         mailGroup.setRow(attachmentsRow, hidden: true)
+        mailGroup.setRow(neverRow, hidden: true)
         mailGroup.setRow(compressRow, hidden: true)
         mailGroup.isEnabled = false
         addGroup(mailGroup)
@@ -305,13 +317,18 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             popup.target = self
             popup.action = #selector(mailChanged(_:))
         }
-        compressStore.target = self
-        compressStore.action = #selector(mailChanged(_:))
+        for toggle in [neverStore, compressStore] {
+            toggle.target = self
+            toggle.action = #selector(mailChanged(_:))
+        }
         mail.load()
     }
 
     /// The values the daemon confirmed, into the controls; a row whose
     /// field the daemon does not report is hidden (preferences.go `apply`).
+    /// Keep Attachments Offline For is greyed out (its own sensitivity,
+    /// under the group's) while the confirmed set stores no attachment,
+    /// so a failed save reverts that too; it keeps showing its value.
     private func renderMail(_ p: Preferences?) {
         guard let p else { return }
         let sel = MailPreferencesController.MailSelection(p)
@@ -322,12 +339,19 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
         if let i = sel.attachments {
             attachmentDays.selectItem(at: i)
         }
+        if let on = sel.neverStore {
+            neverStore.state = on ? .on : .off
+        }
         if let on = sel.compress {
             compressStore.state = on ? .on : .off
         }
         syncingMail = false
         if let row = attachmentDaysRow {
+            row.isEnabled = attachmentDaysApply(p)
             mailGroup.setRow(row, hidden: sel.attachments == nil)
+        }
+        if let row = neverStoreRow {
+            mailGroup.setRow(row, hidden: sel.neverStore == nil)
         }
         if let row = compressStoreRow {
             mailGroup.setRow(row, hidden: sel.compress == nil)
@@ -344,6 +368,8 @@ final class GeneralPaneViewController: PreferencesPaneViewController {
             mail.selectRetention(at: offlineDays.indexOfSelectedItem)
         } else if sender as AnyObject === attachmentDays {
             mail.selectAttachmentDays(at: attachmentDays.indexOfSelectedItem)
+        } else if sender as AnyObject === neverStore {
+            mail.set(neverStoreAttachments: neverStore.state == .on)
         } else if sender as AnyObject === compressStore {
             mail.set(compressStore: compressStore.state == .on)
         }

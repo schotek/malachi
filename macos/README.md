@@ -198,7 +198,20 @@ A chip of an attachment on the server shows a cloud symbol; opening,
 previewing or saving it downloads the message first (a spinner after
 0.4 s), and so does a forward, which asks whether to go on without them
 only when the download fails (a message too large to download is
-forwarded at once).
+forwarded at once). *Never Store Attachments*, in the same group, is off
+until you switch it on (the app gives the daemon no default for it): then
+no attachment of any size is stored (the pictures a message shows still
+are when smaller than 100 KiB, and so are the messages the daemon never
+reduces, such as drafts or signed and encrypted mail), *Keep Attachments
+Offline For* is greyed out, and every chip keeps its cloud, since a
+download goes into the daemon's memory only (30 minutes unused at most,
+never past its quit). The larger pictures stay on the server: a bar above
+the message counts them and offers *Download Pictures*, and a reply
+downloads the ones it quotes by itself (going on without them should
+that fail). The copies
+written for opening or previewing
+are removed when the app quits, with or without the switch, and at the
+next start after a crash.
 
 ## Where things are
 
@@ -260,7 +273,7 @@ the strings and the confirmation dialogs.
 | The status line is a bar across the whole bottom edge of the window, under all three panes (sync state, unsent messages, the connection; a click opens the popover with each account's state and action) | The status line at the bottom of the sidebar, with the same popover | It stays in sight when the sidebar is folded away, which a narrow window does by itself |
 | A narrow window folds the sidebar (< 900 pt) and then the list (< 600 pt); *View → Show Sidebar* (⌃⌘S) and *Show Message List* (⌥⌘L) bring them back, and widening restores what folded by itself | Breakpoints with back navigation between panes | Decided; there is no navigation stack in AppKit's split view |
 | When the list pane is folded, its toolbar items merge into the message section | — | How tracking separators behave |
-| Banners (backend, sign-in, certificate, draft, outbox), the remote-image bar and the account wizard's notice are rounded cards inset from the pane's edges, in a subtle system fill, with an SF Symbol (orange for a problem, grey for information) and the text in the regular weight | `Adw.Banner`: an accent-tinted strip across the whole width with a bold title; the remote-image bar a grey strip | The Mac's own notices |
+| Banners (backend, sign-in, certificate, draft, outbox), the remote-image and pictures bars and the account wizard's notice are rounded cards inset from the pane's edges, in a subtle system fill, with an SF Symbol (orange for a problem, grey for information) and the text in the regular weight; the bars' spinner takes the buttons' place at the end | `Adw.Banner`: an accent-tinted strip across the whole width with a bold title; the remote-image and pictures bars grey strips with the spinner at their start | The Mac's own notices |
 | The message list pages itself: reaching its end, or rows too few to fill the pane, loads the next page, a small spinner at the foot while it loads; *Load More*, a standard small button, appears only to retry a page that failed | The flat *Load More* button under the list when the rows do not fill it (the scroll edge loads by itself as well) | The Mac's lists page themselves, as Mail's |
 | The All / Unread / Flagged filter is a button in the list's section of the toolbar with a menu, its icon filled while the list is filtered, and the same three items in *View*, as in Mail | A toggle group above the list | The Mac's filter, as Mail's; the list keeps the row |
 | No main menu button in the toolbar: New Message, Settings… and About are in the menu bar, and New Message opens the list's section, before the folder's name | The primary menu button in the sidebar's header bar, New Message at its start | The menu bar is the Mac's main menu |
@@ -278,7 +291,7 @@ the strings and the confirmation dialogs.
 | One WebKit view per pane, reused between messages | A view per message | Without network nothing persists; the document is replaced |
 | The assistant's GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again*, and the identity page never shows *Signed In on This Computer*; the sign-in banner's *Open Online Accounts* for an account of GNOME Online Accounts opens *Settings* | Both, for accounts of GNOME Online Accounts; the banner's button opens *Online Accounts* in GNOME Settings | GNOME Online Accounts does not exist on macOS; without it the daemon offers its own browser sign-in instead, so the page is normally not reached; the Settings are where such an account is edited or removed |
 | In *Settings → Accounts*, clicking a row selects it; *Enabled* is the switch alone | The row activates its switch (`SetActivatableWidget`) | ⌥⌘↑ / ⌥⌘↓ reorder the selected row, so a click must select |
-| The buttons of the remote-images bar are not reached by Tab (`refusesFirstResponder`) | Focusable | The bar is transient; Tab moves through the message |
+| The buttons of the remote-images and pictures bars are not reached by Tab (`refusesFirstResponder`) | Focusable | The bars are transient; Tab moves through the message |
 | WebKitGTK's feature switches of `html_view.blp` (smooth scrolling, media, WebGL, WebAudio, page cache, DNS prefetch, hyperlink auditing) have no `WKWebView` equivalent | Each switched off in the Blueprint | Covered by the CSP, the content rule list and the non-persistent data store: the document has no script, no network and nothing to store |
 | The pane widths are kept in the app's own defaults keys (`main-sidebar-width`, `main-list-width`), written from a visible window with nothing collapsed | `Adw.NavigationSplitView` fractions in GSettings | `NSSplitView`'s autosave restores before the window has its frame and records the panes at their minimums |
 | The message header keeps 12 pt above the subject, the same as below the date | `margin-top: 24` above the subject, 12 below the date | Equal margins were asked for; the pane already sits below the toolbar |

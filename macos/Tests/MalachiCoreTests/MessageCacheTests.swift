@@ -51,6 +51,8 @@ private final class Log {
     var toasts: [String] = []
     var loaded: [MessageID] = []
     var bars: [(MessageID, Bool)] = []
+    /// Every `onRemoteBar`, with whether the pictures were on their way.
+    var pictureBars: [Bool] = []
     /// Every `onChips`, with whether the spinner showed then.
     var chips: [(MessageID, Bool)] = []
 }
@@ -109,6 +111,13 @@ private actor DownloadScript {
     }
 }
 
+/// The policies message.body was asked with, in order.
+private actor Policies {
+    var all: [RemoteContentPolicy?] = []
+
+    func add(_ p: RemoteContentPolicy?) { all.append(p) }
+}
+
 private func bigAttachment(_ id: String = "2", remote: Bool? = true) -> MalachiCore.Attachment {
     MalachiCore.Attachment(partId: id, filename: "big.pdf", contentType: "application/pdf", size: 300_000, inline: false, remote: remote)
 }
@@ -129,7 +138,10 @@ private final class Harness {
         let cache = MessageCache(client: client, spinnerDelay: spinnerDelay) { log.toasts.append($0) }
         self.cache = cache
         cache.onLoaded = { id, _ in log.loaded.append(id) }
-        cache.onRemoteBar = { id, lm in log.bars.append((id, lm.loadingImages)) }
+        cache.onRemoteBar = { id, lm in
+            log.bars.append((id, lm.loadingImages))
+            log.pictureBars.append(lm.loadingPictures)
+        }
         cache.onChips = { [weak cache] id, _ in log.chips.append((id, cache?.showsDownload(id) ?? false)) }
     }
 
@@ -543,6 +555,227 @@ private final class Harness {
         await script.set(delay: .zero)
         _ = try await h.cache.download(accountID: account, messageID: s.id)
         #expect(await script.log == ["message.download", "message.download"])
+    }
+
+    /// remote.go `downloadPictures`: message.download (the shared one, so
+    /// the chips hear about it), then message.body again, which now counts
+    /// no picture on the server; the bar shows the wait from the click on
+    /// and a second click meanwhile is ignored. Remote images shown stay
+    /// shown (`picturesPolicy`).
+    @Test func downloadPicturesDownloadsThenAsksForTheBodyAgain() async throws {
+        let h = try await Harness(spinnerDelay: .milliseconds(300))
+        let html = "<p><img src=\"malachi-cid:acc_1/m20/2\"></p>"
+        let get = try encode(MessageGetResult(message: message("m20")))
+        let script = DownloadScript(message: message("m20"))
+        await script.set(delay: .milliseconds(50))
+        await h.serveDownloads(script)
+        let policies = Policies()
+        await h.daemon.on(API.MessageGet.name) { _ in get }
+        await h.daemon.on(API.MessageBody.name) { params in
+            let p = try JSONCoding.decoder().decode(MessageBodyParams.self, from: params)
+            await policies.add(p.remoteContent)
+            let n = await script.downloaded ? 0 : 2
+            return try encode(MessageBodyResult(
+                messageId: "m20", bodyState: .fetched, hasHtml: true, html: html, text: "text of m20",
+                remotePictures: n == 0 ? nil : n, remoteContent: p.remoteContent ?? .block, sanitizerVersion: "1"))
+        }
+        try await h.start()
+        defer { Task { await h.stop() } }
+        let s = summary("m20")
+        h.cache.fetch(s) { _ in }
+        try await waitUntil { h.cache.loaded(s.id)?.complete == true }
+        let lm = try #require(h.cache.loaded(s.id))
+        #expect(remotePictures(lm.body) == 2)
+        #expect(picturesBarState(for: lm) == PicturesBarState(visible: true, remote: 2))
+        let loadedBefore = h.log.loaded.count
+
+        var outcome: Result<LoadedMessage, any Error>?
+        h.cache.downloadPictures(s) { outcome = $0 }
+        #expect(lm.loadingPictures)
+        #expect(h.log.pictureBars == [true])
+        #expect(picturesBarState(for: lm) == PicturesBarState(visible: true, loading: true))
+        h.cache.downloadPictures(s) { _ in Issue.record("a second request was started") }
+
+        try await waitUntil { outcome != nil }
+        guard case .success(let got)? = outcome else {
+            Issue.record("downloadPictures failed")
+            return
+        }
+        #expect(got === lm)
+        #expect(!lm.loadingPictures)
+        #expect(remotePictures(lm.body) == 0)
+        #expect(picturesBarState(for: lm) == PicturesBarState())
+        #expect(await script.log == ["message.download"])
+        #expect(await policies.all == [nil, nil], "the stored preference, twice")
+        #expect(h.log.loaded.count == loadedBefore + 1)
+        #expect(h.log.chips.map(\.0) == [s.id], "the chips heard about the download")
+        #expect(h.log.pictureBars == [true], "the new body redraws the rest")
+        #expect(h.log.toasts.isEmpty)
+
+        // Remote images on display: the body comes under allow again.
+        lm.body?.remoteContent = .allow
+        outcome = nil
+        h.cache.downloadPictures(s) { outcome = $0 }
+        try await waitUntil { outcome != nil }
+        #expect(await policies.all == [nil, nil, .allow])
+        #expect(lm.body?.remoteContent == .allow)
+    }
+
+    /// A failed download (or body) is toasted where the click came from,
+    /// the body on display stays and the bar offers the pictures again.
+    @Test func downloadPicturesFailureToastsAndOffersThemAgain() async throws {
+        let h = try await Harness(spinnerDelay: .milliseconds(300))
+        let get = try encode(MessageGetResult(message: message("m21")))
+        let before = MessageBodyResult(
+            messageId: "m21", bodyState: .fetched, hasHtml: true, html: "<p>x</p>", text: "x", remotePictures: 1,
+            remoteContent: .block, sanitizerVersion: "1")
+        let served = try encode(before)
+        let script = DownloadScript(message: message("m21"))
+        await script.set(failure: RPCError(code: .offline, message: "no network"))
+        await h.serveDownloads(script)
+        await h.daemon.on(API.MessageGet.name) { _ in get }
+        await h.daemon.on(API.MessageBody.name) { _ in served }
+        try await h.start()
+        defer { Task { await h.stop() } }
+        let s = summary("m21")
+        h.cache.fetch(s) { _ in }
+        try await waitUntil { h.cache.loaded(s.id)?.complete == true }
+        let lm = try #require(h.cache.loaded(s.id))
+
+        var toasts: [String] = []
+        var outcome: Result<LoadedMessage, any Error>?
+        h.cache.downloadPictures(s, toast: { toasts.append($0) }) { outcome = $0 }
+        try await waitUntil { outcome != nil }
+        guard case .failure(let err)? = outcome else {
+            Issue.record("downloadPictures succeeded")
+            return
+        }
+        #expect((err as? RPCError)?.code == .offline)
+        #expect(toasts == ["Downloading the pictures failed: no network connection"])
+        #expect(h.log.toasts.isEmpty, "not the cache's own toast")
+        #expect(lm.body == before)
+        #expect(!lm.loadingPictures)
+        #expect(h.log.pictureBars == [true, false])
+        #expect(picturesBarState(for: lm) == PicturesBarState(visible: true, remote: 1))
+        #expect(await h.calls(API.MessageBody.name) == 1, "no body without the download")
+
+        // Without a toast of its own the cache's is used.
+        outcome = nil
+        h.cache.downloadPictures(s) { outcome = $0 }
+        try await waitUntil { outcome != nil }
+        #expect(h.log.toasts == ["Downloading the pictures failed: no network connection"])
+    }
+
+    /// remote.go `lostPicture` and download.go `endDownload`: a body cached
+    /// while the daemon held the message counts no picture on the server;
+    /// once the daemon dropped its copy, the first partNotDownloaded for a
+    /// picture the body lists asks for the body again (the bar comes back),
+    /// never more than once until the next download. A download for
+    /// anything else asks for a body that counts pictures again, so they
+    /// show and the bar goes; the next loss may ask once more.
+    @Test func lostPicturesAskForTheBodyAgain() async throws {
+        let h = try await Harness(spinnerDelay: .milliseconds(300))
+        let html = "<p><img src=\"malachi-cid:acc_1/m22/2\"></p>"
+        let get = try encode(MessageGetResult(message: message("m22")))
+        let script = DownloadScript(message: message("m22"))
+        await script.set(downloaded: true) // the daemon holds the message
+        await h.serveDownloads(script)
+        let policies = Policies()
+        await h.daemon.on(API.MessageGet.name) { _ in get }
+        await h.daemon.on(API.MessageBody.name) { params in
+            let p = try JSONCoding.decoder().decode(MessageBodyParams.self, from: params)
+            await policies.add(p.remoteContent)
+            let n = await script.downloaded ? 0 : 1
+            return try encode(MessageBodyResult(
+                messageId: "m22", bodyState: .fetched, hasHtml: true, html: html, text: "text of m22",
+                inlineParts: ["p@x": "2"], remotePictures: n == 0 ? nil : n,
+                remoteContent: p.remoteContent ?? .block, sanitizerVersion: "1"))
+        }
+        try await h.start()
+        defer { Task { await h.stop() } }
+        let s = summary("m22")
+        h.cache.fetch(s) { _ in }
+        try await waitUntil { h.cache.loaded(s.id)?.complete == true }
+        let lm = try #require(h.cache.loaded(s.id))
+        #expect(picturesBarState(for: lm) == PicturesBarState())
+        let loadedBefore = h.log.loaded.count
+
+        // The daemon dropped its copy. A part the body does not show as a
+        // picture is not a reason to ask.
+        await script.set(downloaded: false)
+        await #expect(throws: RPCError.self) {
+            try await h.cache.fetchPart(accountID: account, messageID: s.id, partID: "9")
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.calls(API.MessageBody.name) == 1)
+
+        // The picture: the error reaches the web view, the body is asked
+        // for again and brings the bar back.
+        do {
+            _ = try await h.cache.fetchPart(accountID: account, messageID: s.id, partID: "2")
+            Issue.record("the picture was served")
+        } catch {
+            #expect(isPartNotDownloaded(error))
+        }
+        try await waitUntil { remotePictures(lm.body) == 1 }
+        #expect(picturesBarState(for: lm) == PicturesBarState(visible: true, remote: 1))
+        #expect(lm.picturesRechecked)
+        #expect(h.log.loaded.count == loadedBefore + 1, "every view shows the new body")
+
+        // The same body shown again: no second question.
+        _ = try? await h.cache.fetchPart(accountID: account, messageID: s.id, partID: "2")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.calls(API.MessageBody.name) == 2)
+
+        // A download for anything else (a chip): the body again, which now
+        // counts none; the bar goes and the question is allowed once more.
+        _ = try await h.cache.download(accountID: account, messageID: s.id)
+        #expect(!lm.picturesRechecked)
+        try await waitUntil { remotePictures(lm.body) == 0 }
+        #expect(await h.calls(API.MessageBody.name) == 3)
+        #expect(picturesBarState(for: lm) == PicturesBarState())
+
+        // Remote images on display stay on display when the copy goes again.
+        lm.body?.remoteContent = .allow
+        await script.set(downloaded: false)
+        _ = try? await h.cache.fetchPart(accountID: account, messageID: s.id, partID: "2")
+        try await waitUntil { remotePictures(lm.body) == 1 }
+        #expect(await policies.all == [nil, nil, nil, .allow])
+        #expect(lm.body?.remoteContent == .allow)
+        #expect(await script.log.filter { $0 == "message.download" }.count == 1)
+        #expect(h.log.toasts.isEmpty)
+    }
+
+    /// A download with a body that counts no picture on the server asks
+    /// for nothing more; a failed one neither.
+    @Test func aDownloadAsksForTheBodyOnlyWhenPicturesAreCounted() async throws {
+        let h = try await Harness(spinnerDelay: .milliseconds(300))
+        let html = "<p><img src=\"malachi-cid:acc_1/m23/2\"></p>"
+        let get = try encode(MessageGetResult(message: message("m23")))
+        let script = DownloadScript(message: message("m23"))
+        await script.set(failure: RPCError(code: .offline, message: "no network"))
+        await h.serveDownloads(script)
+        await h.daemon.on(API.MessageGet.name) { _ in get }
+        let counted = try encode(MessageBodyResult(
+            messageId: "m23", bodyState: .fetched, hasHtml: true, html: html, text: "x", inlineParts: ["p@x": "2"],
+            remotePictures: 1, remoteContent: .block, sanitizerVersion: "1"))
+        await h.daemon.on(API.MessageBody.name) { _ in counted }
+        try await h.start()
+        defer { Task { await h.stop() } }
+        let s = summary("m23")
+        h.cache.fetch(s) { _ in }
+        try await waitUntil { h.cache.loaded(s.id)?.complete == true }
+        let lm = try #require(h.cache.loaded(s.id))
+
+        _ = try? await h.cache.download(accountID: account, messageID: s.id)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.calls(API.MessageBody.name) == 1, "a failed download asks for nothing")
+
+        await script.set(failure: nil)
+        lm.body?.remotePictures = nil
+        _ = try await h.cache.download(accountID: account, messageID: s.id)
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.calls(API.MessageBody.name) == 1, "nothing counted, nothing to ask")
     }
 
     /// download.go `partData`: a remote part downloads first; a part the

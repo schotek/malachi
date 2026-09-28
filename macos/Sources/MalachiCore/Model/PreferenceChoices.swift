@@ -89,6 +89,15 @@ public func indexOfAttachmentDays(_ days: Int) -> Int {
     return best
 }
 
+/// Whether `Preferences.attachmentOfflineDays` decides which attachments
+/// are stored (preferences.go `attachmentDaysApply`): not while none is
+/// stored at all (`neverStoreAttachments` overrides it, docs/api.md §4.8).
+/// A daemon that does not report the latter never overrides. Keep
+/// Attachments Offline For is greyed out while it does not apply.
+public func attachmentDaysApply(_ p: Preferences) -> Bool {
+    p.neverStoreAttachments != true
+}
+
 /// The pop-up position of a remote-content policy, 0 for an unknown one
 /// (preferences.go `indexOfPolicy`).
 public func indexOfPolicy(_ p: RemoteContentPolicy) -> Int {

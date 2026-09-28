@@ -56,6 +56,10 @@ private let stored = Preferences(syncIntervalSeconds: 300, remoteContent: .block
 /// What a daemon that knows the storage preferences reports.
 private let storedFull = Preferences(
     syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true, attachmentOfflineDays: 30)
+/// What a daemon that also knows neverStoreAttachments reports.
+private let storedAll = Preferences(
+    syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, compressStore: true, attachmentOfflineDays: 30,
+    neverStoreAttachments: false)
 
 /// A daemon that serves `initial` from config.get and echoes config.set
 /// (after `normalise`, the daemon's validation) into `log`.
@@ -420,6 +424,135 @@ private func loadedController(_ fake: FakeDaemon) async throws -> (MailPreferenc
         try await waitUntil { c.isEnabled }
         #expect(await log.keys == [["offlineDays", "remoteContent", "syncIntervalSeconds"]])
         #expect(rec.saved == 1)
+    }
+
+    // MARK: Never Store Attachments (neverStoreAttachments)
+
+    /// preferences_test.go TestAttachmentDaysApply: Keep Attachments
+    /// Offline For is greyed out only while the daemon confirms that
+    /// attachments are never stored.
+    @Test func attachmentDaysApplyTest() {
+        let cases: [(String, Preferences, Bool)] = [
+            ("older daemon, field absent", Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, attachmentOfflineDays: 30), true),
+            ("never store off", Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, attachmentOfflineDays: 30, neverStoreAttachments: false), true),
+            ("never store on", Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, attachmentOfflineDays: 30, neverStoreAttachments: true), false),
+            ("on, days unknown", Preferences(syncIntervalSeconds: 300, remoteContent: .block, offlineDays: 30, neverStoreAttachments: true), false),
+        ]
+        for (name, p, want) in cases {
+            #expect(attachmentDaysApply(p) == want, "\(name)")
+        }
+    }
+
+    @Test func selectionMapsNeverStore() {
+        #expect(MailPreferencesController.MailSelection(storedAll)
+            == .init(interval: 1, remoteContent: 0, retention: 1, attachments: 2, neverStore: false, compress: true))
+        var on = storedAll
+        on.neverStoreAttachments = true
+        #expect(MailPreferencesController.MailSelection(on).neverStore == true)
+        #expect(MailPreferencesController.MailSelection(on).attachments == 2, "the pop-up keeps its value while greyed out")
+        // The daemons before it: the row is hidden.
+        #expect(MailPreferencesController.MailSelection(storedFull).neverStore == nil)
+        #expect(MailPreferencesController.MailSelection(stored).neverStore == nil)
+    }
+
+    @Test func neverStoreIsSentWithTheWholeSet() async throws {
+        let log = SetLog()
+        let fake = try await makeFake(log: log, initial: storedAll)
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        #expect(c.preferences == storedAll)
+
+        c.set(neverStoreAttachments: true)
+        #expect(!c.isEnabled, "insensitive while the save is in flight")
+        try await waitUntil { c.isEnabled }
+        var want = storedAll
+        want.neverStoreAttachments = true
+        #expect(await log.sent == [want], "the attachment days go back as confirmed")
+        #expect(c.preferences == want)
+        #expect(rec.preferences.last == want)
+        #expect(!attachmentDaysApply(try #require(rec.preferences.last ?? nil)))
+        #expect(rec.saved == 1)
+
+        // Another row keeps it as confirmed.
+        c.set(checkInterval: 900)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.sent.last?.neverStoreAttachments == true)
+        #expect(await log.sent.last?.attachmentOfflineDays == 30)
+
+        c.set(neverStoreAttachments: false)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.sent.last?.neverStoreAttachments == false)
+        #expect(await log.keys.last == [
+            "attachmentOfflineDays", "compressStore", "neverStoreAttachments", "offlineDays", "remoteContent", "syncIntervalSeconds",
+        ], "false goes over the wire")
+        #expect(rec.saved == 3)
+        #expect(rec.toasts.isEmpty)
+        #expect(attachmentDaysApply(try #require(c.preferences)))
+    }
+
+    /// The daemon's echo decides, not what was sent: a daemon that keeps
+    /// it off shows it off, with the attachment days applying.
+    @Test func neverStoreShowsTheDaemonsEcho() async throws {
+        let log = SetLog()
+        let fake = try await makeFake(log: log, initial: storedAll, normalise: { p in
+            var p = p
+            p.neverStoreAttachments = false
+            return p
+        })
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        c.set(neverStoreAttachments: true)
+        try await waitUntil { c.isEnabled }
+        #expect(await log.sent.last?.neverStoreAttachments == true)
+        #expect(c.preferences?.neverStoreAttachments == false)
+        #expect(rec.preferences.last??.neverStoreAttachments == false)
+    }
+
+    /// A failed save reverts the switch, and with it the greyed-out
+    /// attachment days, to what the daemon confirmed last.
+    @Test func aFailedNeverStoreSaveReverts() async throws {
+        let log = SetLog()
+        var initial = storedAll
+        initial.neverStoreAttachments = true
+        let fake = try await makeFake(log: log, initial: initial)
+        await fake.on(API.ConfigSet.name) { _ in
+            throw RPCError(code: .internalError, message: "store busy")
+        }
+        defer { Task { await fake.stop() } }
+        let (c, rec) = try await loadedController(fake)
+        c.set(neverStoreAttachments: false)
+        #expect(!c.isEnabled)
+        try await waitUntil { c.isEnabled }
+        #expect(rec.toasts == ["Saving mail settings failed"])
+        #expect(rec.saved == 0)
+        #expect(c.preferences == initial)
+        #expect(rec.preferences == [initial, initial], "rendered again: the switch on, the attachment days greyed out")
+        #expect(!attachmentDaysApply(initial))
+    }
+
+    /// The daemons before it (with or without the other storage
+    /// preferences) do not report it: its setter does nothing and the
+    /// field never goes back, which a newer daemon reads as unchanged.
+    @Test func aDaemonWithoutNeverStoreIsSentWithoutIt() async throws {
+        for initial in [storedFull, stored] {
+            let log = SetLog()
+            let fake = try await makeFake(log: log, initial: initial)
+            defer { Task { await fake.stop() } }
+            let (c, rec) = try await loadedController(fake)
+            c.set(neverStoreAttachments: true)
+            c.set(neverStoreAttachments: false)
+            #expect(c.isEnabled)
+            try await Task.sleep(for: .milliseconds(30))
+            #expect(await log.sent.isEmpty)
+
+            c.set(offlineDays: 90)
+            try await waitUntil { c.isEnabled }
+            #expect(await log.keys.count == 1)
+            #expect(await log.keys.last?.contains("neverStoreAttachments") == false)
+            #expect(c.preferences?.neverStoreAttachments == nil)
+            #expect(rec.saved == 1)
+            c.close()
+        }
     }
 
     @Test func aFailedSaveIsNotReportedAsSaved() async throws {

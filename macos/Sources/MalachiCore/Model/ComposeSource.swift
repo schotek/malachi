@@ -62,10 +62,11 @@ public func composeFallbackText(_ what: String, _ error: any Error) -> String {
 
 /// Whether a forward of the loaded message downloads it first
 /// (compose_open.go `forwardNeedsDownload`): draft.create imports only what
-/// is stored, so a body not downloaded yet, or an attachment kept on the
-/// mail server, is fetched before the template is asked for. The pictures
-/// the HTML shows are always stored. Without the full message in the
-/// cache nothing is known, so it downloads as well: message.download
+/// is stored, so a body not downloaded yet, or any part kept on the mail
+/// server (an attachment, or a picture the HTML shows, which
+/// `Preferences.neverStoreAttachments` leaves there from 100 KiB), is
+/// fetched before the template is asked for. Without the full message in
+/// the cache nothing is known, so it downloads as well: message.download
 /// answers at once when nothing is missing.
 @MainActor
 public func forwardNeedsDownload(_ lm: LoadedMessage?) -> Bool {
@@ -75,7 +76,26 @@ public func forwardNeedsDownload(_ lm: LoadedMessage?) -> Bool {
     if lm.body?.bodyState == .pending {
         return true
     }
-    return m.attachments.contains { !$0.inline && $0.isRemote }
+    return m.attachments.contains { $0.isRemote }
+}
+
+/// Whether a reply (or reply to all) of the loaded message downloads it
+/// first (compose_open.go `replyNeedsDownload`): the quote copies the
+/// pictures the original shows, and draft.create imports only what the
+/// daemon has, so when the body on display counts pictures kept on the
+/// mail server only (`remotePictures`;
+/// `Preferences.neverStoreAttachments` leaves the large ones there) they
+/// are fetched before the template is asked for. The count is the
+/// daemon's: a part on the server with a Content-ID is no reason by itself
+/// (Outlook and Apple Mail give ordinary attachments one, and a quote
+/// never copies those), nor is a picture the daemon holds in memory from
+/// an earlier download. A failed download is not asked about: the reply
+/// goes on, and the compose window says what draft.create left out
+/// (`skipped`). Without a body in the cache nothing is known and nothing
+/// is downloaded.
+@MainActor
+public func replyNeedsDownload(_ lm: LoadedMessage?) -> Bool {
+    remotePictures(lm?.body) > 0
 }
 
 /// Whether a failed download before a forward asks "Forward Without

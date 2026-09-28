@@ -8,7 +8,8 @@ import os
 /// One message display (ui/internal/window/message_view.go `messageView`,
 /// window.blp lines 372–605), shared in shape by the main pane, the
 /// stand-alone message window and the window of an attached message: the
-/// outbox banner, the remote-image bar, the header labels, the attachment
+/// outbox banner, the remote-image bar, the pictures bar (not for an
+/// attached message, whose pictures come inlined), the header labels, the attachment
 /// chips, the plain-text body and the HTML view (created when the first
 /// HTML message is shown). Everything shown is server data: the labels
 /// never interpret markup, and the HTML view only ever gets the sanitiser's
@@ -85,6 +86,9 @@ final class MessageViewController: NSViewController {
         title: L10n.T("This message is a draft"), buttonTitle: L10n.T("Edit"), symbol: "square.and.pencil"
     )
     private let remoteBar: RemoteBarView
+    /// The pictures kept on the mail server only (window.blp
+    /// `pictures_bar`), below the remote-image bar; both may show.
+    private let picturesBar = RemoteBarView.pictures()
     private let textScroll = NSScrollView()
     private let textClamp: ClampView
     private let loadingPage = NSView()
@@ -186,6 +190,7 @@ final class MessageViewController: NSViewController {
             self.delegate?.editDraft(id)
         }
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
+        picturesBar.onLoad = { [weak self] in self?.downloadPictures() }
         header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
         header.addresses.onWrite = { [weak self] address, account in
             self?.delegate?.newMessage(to: address, account: account)
@@ -204,6 +209,9 @@ final class MessageViewController: NSViewController {
             root.addArrangedSubview(draftBanner)
         }
         root.addArrangedSubview(remoteBar)
+        if mode != .embedded {
+            root.addArrangedSubview(picturesBar)
+        }
         root.addArrangedSubview(pages)
         // In the main window the pane runs under the unified toolbar
         // (fullSizeContentView); the content starts below it, at the safe
@@ -290,7 +298,7 @@ final class MessageViewController: NSViewController {
         cancelSpinner()
         banner.reveal(false)
         draftBanner.reveal(false)
-        setBarVisible(false)
+        hideBars()
         webView?.clear() // drop the pictures of the message before
         setPage(message: false)
     }
@@ -329,10 +337,11 @@ final class MessageViewController: NSViewController {
         onRender?(s, lm)
     }
 
-    /// Redraws the remote-image bar for `lm` and leaves the body alone
-    /// (remote.go `refreshRemoteBar`).
+    /// Redraws the remote-image bar and the pictures bar for `lm` and
+    /// leaves the body alone (remote.go `refreshRemoteBar`).
     func refreshRemoteBar(_ lm: LoadedMessage) {
         renderRemoteBar(lm)
+        renderPicturesBar(lm)
     }
 
     /// Redraws the attachment chips of the message on display from `lm`
@@ -371,30 +380,42 @@ final class MessageViewController: NSViewController {
 
     /// The body, its state, or the error that prevented it: the sanitised
     /// HTML in the web view when there is one, the plain text otherwise,
-    /// with a hint when the HTML was withheld and the bar when remote
-    /// images were removed.
+    /// with a hint when the HTML was withheld, the bar when remote images
+    /// were removed and the pictures bar when pictures are on the mail
+    /// server only.
     private func renderBody(_ lm: LoadedMessage) {
         cancelSpinner()
         links = []
+        let before = renderedBody
         renderedBody = lm.body
         if let err = lm.err {
             header.hintVisible = false
-            setBarVisible(false)
+            hideBars()
             showText(rpcErrorText(L10n.T("Loading the message"), err))
             return
         }
         let b = lm.body
-        if showsHTML(b), let html = b?.html {
-            links = b?.links ?? []
+        if showsHTML(b), let b, let html = b.html {
+            links = b.links
             header.hintVisible = false
-            htmlView().load(body: html)
+            htmlView().load(body: html, reload: picturesArrived(before, b))
             setBodyPage(.html)
             renderRemoteBar(lm)
+            renderPicturesBar(lm)
             return
         }
         header.hintVisible = b?.htmlWithheld == true
-        setBarVisible(false)
+        hideBars()
         showText(bodyText(b))
+    }
+
+    /// Whether `now` is the body on display (`before`) asked for again
+    /// after its pictures kept on the mail server were downloaded: the
+    /// HTML is the same, but its `malachi-cid:` pictures load now, so the
+    /// web view must load it again (GTK loads every render anyway).
+    private func picturesArrived(_ before: MessageBodyResult?, _ now: MessageBodyResult) -> Bool {
+        guard let before, before.messageId == now.messageId else { return false }
+        return before.remotePictureCount > 0 && before != now
     }
 
     /// Empties the body area while the body is on its way and, if it takes
@@ -404,7 +425,7 @@ final class MessageViewController: NSViewController {
         links = []
         renderedBody = nil
         header.hintVisible = false
-        setBarVisible(false)
+        hideBars()
         // Blank at once: this also drops the pictures of the message before.
         showText("")
         let work = DispatchWorkItem { [weak self] in
@@ -454,7 +475,7 @@ final class MessageViewController: NSViewController {
         log.error("HTML body not shown: the web view has no content rule list")
         links = []
         header.hintVisible = true
-        setBarVisible(false)
+        hideBars()
         showText(bodyText(b))
     }
 
@@ -524,25 +545,66 @@ final class MessageViewController: NSViewController {
     /// is somewhere harmless to put it, unlike the selectable label AppKit
     /// might pick (message_view.go `setBarVisible`).
     private func setBarVisible(_ show: Bool) {
-        if !show {
-            moveFocusOutOfBar()
-        }
-        remoteBar.isHidden = !show
+        setVisible(remoteBar, show)
     }
 
     /// Switches the bar between offering the images and showing that they
     /// are on their way; hiding a focused button would move the focus, so
     /// it leaves the bar first (message_view.go `setBarLoading`).
     private func setBarLoading(_ loading: Bool) {
-        if loading {
-            moveFocusOutOfBar()
-        }
-        remoteBar.setLoading(loading)
+        setLoading(remoteBar, loading)
     }
 
-    private func moveFocusOutOfBar() {
-        guard let window = view.window, remoteBar.holdsFirstResponder(of: window) else { return }
+    /// Hides the remote-image bar and the pictures bar (a body that is not
+    /// in the HTML view, or none).
+    private func hideBars() {
+        setVisible(remoteBar, false)
+        setVisible(picturesBar, false)
+    }
+
+    private func setVisible(_ bar: RemoteBarView, _ show: Bool) {
+        if !show {
+            moveFocus(outOf: bar)
+        }
+        bar.isHidden = !show
+    }
+
+    private func setLoading(_ bar: RemoteBarView, _ loading: Bool) {
+        if loading {
+            moveFocus(outOf: bar)
+        }
+        bar.setLoading(loading)
+    }
+
+    private func moveFocus(outOf bar: RemoteBarView) {
+        guard let window = view.window, bar.holdsFirstResponder(of: window) else { return }
         window.makeFirstResponder(bodyTextView)
+    }
+
+    // MARK: Pictures bar
+
+    /// The pictures bar for what is known about the message (remote.go
+    /// `renderPicturesBar`); an attached message's view has none.
+    func renderPicturesBar(_ lm: LoadedMessage) {
+        guard mode != .embedded else { return }
+        let st = picturesBarState(for: lm)
+        if st.loading {
+            picturesBar.text = L10n.T("Downloading pictures…")
+        } else if st.remote > 0 {
+            // TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
+            picturesBar.text = L10n.N(
+                "%d picture of this message is on the server only", "%d pictures of this message are on the server only",
+                st.remote)
+        }
+        setLoading(picturesBar, st.loading)
+        setVisible(picturesBar, st.visible)
+    }
+
+    /// The pictures bar's Download Pictures (remote.go `downloadPictures`):
+    /// through the actions, which toast a failure in this view's window.
+    private func downloadPictures() {
+        guard mode != .embedded, let id = current?.id else { return }
+        delegate?.downloadPictures(id, from: view.window)
     }
 
     /// The bar's Load Images: the message's images through the actions

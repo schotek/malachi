@@ -34,9 +34,21 @@ public final class LoadedMessage {
     /// bar shows it instead of the buttons (`remoteBarState`).
     public var loadingImages: Bool
 
+    /// Set from the moment the user asks for the pictures kept on the mail
+    /// server (Download Pictures) until the message was downloaded and its
+    /// body asked for again; the pictures bar shows it instead of the
+    /// button (`picturesBarState`).
+    public var loadingPictures: Bool
+
+    /// Set once a picture of the body went missing and the body was asked
+    /// for again, until the next download of the message
+    /// (`recheckPictures`): never more than once in between.
+    public var picturesRechecked: Bool
+
     public init(
         msg: Message? = nil, body: MessageBodyResult? = nil, err: (any Error)? = nil, seq: UInt64 = 0,
-        getting: Bool = false, fetching: Bool = false, loadingImages: Bool = false
+        getting: Bool = false, fetching: Bool = false, loadingImages: Bool = false, loadingPictures: Bool = false,
+        picturesRechecked: Bool = false
     ) {
         self.msg = msg
         self.body = body
@@ -45,6 +57,8 @@ public final class LoadedMessage {
         self.getting = getting
         self.fetching = fetching
         self.loadingImages = loadingImages
+        self.loadingPictures = loadingPictures
+        self.picturesRechecked = picturesRechecked
     }
 
     /// Nothing is left to fetch.
