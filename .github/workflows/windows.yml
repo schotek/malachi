@@ -21,7 +21,8 @@
 #
 # pwsh runs the steps and judges a step by the exit status of the last
 # program it ran, so no step runs more than one. Tags and a manual run go
-# through the same jobs; a tag also attaches the zips to its release.
+# through the same jobs; a tag also attaches the zips to its release, once
+# the repository variable WINDOWS_RELEASE_ZIPS says so (the release job).
 name: Windows
 
 on:
@@ -336,7 +337,15 @@ jobs:
   release:
     name: Attach the zips to the release
     needs: [go, client, arm64]
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Only once the repository variable WINDOWS_RELEASE_ZIPS is 'true'. The
+    # zips carry Microsoft's Windows App SDK and WebView2 components, which
+    # may be distributed only with the GPLv3 §7 permission LICENSING.md does
+    # not have yet, and their executables are unsigned
+    # (docs/windows-port.md §17). Until the owner has settled both and set
+    # the variable (docs/releasing.md §7), a tag builds and tests the zips
+    # and keeps them as the run's artifacts, but attaches nothing to its
+    # release, so no public release can carry them by an oversight.
+    if: startsWith(github.ref, 'refs/tags/v') && vars.WINDOWS_RELEASE_ZIPS == 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -348,9 +357,6 @@ jobs:
       - name: Upload
         # As in the Flatpak, Debian and RPM workflows: the release notes stay
         # manual, this only creates a draft if the tag has no release yet.
-        # Until docs/windows-port.md §17 is done (the licence permission for
-        # the Microsoft components, signing), the zips are for testing and
-        # come off the draft before it is published (docs/releasing.md §7).
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

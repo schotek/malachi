@@ -191,11 +191,14 @@ on Windows, builds, tests and lints the Windows client, and zips its app
 folder for **x64** and **arm64**, on pushes to `main`, on `v*` tags, by
 hand and on pull requests that touch what the client is built from; what
 each job does is in [windows-port.md §13](windows-port.md#13-build-and-ci).
-A tag build attaches both zips to the tag's release like the packages
-above, to a draft when the tag has none yet.
+A tag build keeps both zips as the run's artifacts (30 days) and attaches
+them to the tag's release, like the packages above and to a draft when the
+tag has none yet, **only when the repository variable
+`WINDOWS_RELEASE_ZIPS` is `true`**; without it the workflow's `release`
+job is skipped and the release gets no Windows zips.
 
-Those zips are **not** release artefacts yet. Before a Windows build is
-published with a release
+Those zips are **not** release artefacts yet, which is why the variable is
+not set. Before a Windows build is published with a release
 ([windows-port.md §17](windows-port.md#17-before-a-public-release)):
 
 - **The licence.** The folder carries Microsoft's Windows App SDK and
@@ -211,9 +214,12 @@ published with a release
   gracefully first, the uninstall removing what the app registered in
   HKCU.
 
-Until then, delete the zips from the draft before publishing the release
-(`gh release delete-asset v0.1.0 Malachi-Mail-0.1.0-x64.zip`, and the
-same for arm64). The arm64 zip is cross-built and has not run anywhere.
+Once the licence permission is in `LICENSING.md` and the workflow signs
+the executables, the owner sets the variable, in the repository's *Settings →
+Secrets and variables → Actions → Variables* or with
+`gh variable set WINDOWS_RELEASE_ZIPS --body true`, and the next tag's
+release carries the zips (`gh variable delete WINDOWS_RELEASE_ZIPS` stops
+it again). The arm64 zip is cross-built and has not run anywhere.
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.

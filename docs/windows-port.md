@@ -2046,7 +2046,7 @@ go into the app folder, `.gitattributes`. Its jobs:
 | `go` | `go vet ./...` and `go test -count=1 ./...` in `backend/` with `CGO_ENABLED=0` and `GOWORK=off`, as the daemon is built | |
 | `client` | `dotnet restore Malachi.slnx -p:Platform=x64 --locked-mode`; `build.ps1 build -Arch x64` (Debug; every warning is an error through `TreatWarningsAsErrors`); `build.ps1 go`, so that the tests against the real daemon run, as under `make test-windows`; `build.ps1 test`; a job summary of every project's counts and of every skipped test with its reason; `build.ps1 lint`; `build.ps1 package -Arch x64` | `malachi-windows-x64` (the zip), `windows-test-results` (the `.trx` files, also when a test failed) |
 | `arm64` | the locked restore and `build.ps1 build` for ARM64, then `build.ps1 package -Arch arm64`: Go cross-compiles, the app is published for `win-arm64`, the helper is NativeAOT cross-linked with the image's ARM64 tools. Nothing ARM64 runs on the x64 runner, so there are no tests. A job of its own, though one build tree takes both architectures one after the other (every project built for an architecture has output folders of its own, `Directory.Build.props`): it runs beside `client` rather than after it, has its own NuGet cache, and a failed ARM64 link leaves the x64 results apart | `malachi-windows-arm64` |
-| `release` | on a `v*` tag, once the three jobs pass: the zips attached to the tag's release, a draft created when there is none, as the Flatpak, Debian and RPM workflows do | |
+| `release` | on a `v*` tag, once the three jobs pass, and only when the repository variable `WINDOWS_RELEASE_ZIPS` is `true`: the zips attached to the tag's release, a draft created when there is none, as the Flatpak, Debian and RPM workflows do. Unset, the job is skipped and the release gets no Windows zips (below) | |
 
 Every client step is a `build.ps1` target started as make starts it
 (`powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1 …`), so CI
@@ -2095,7 +2095,13 @@ for; they are to be fixed where they live.
 
 The zips are test builds until §17 is done (no signature, no installer,
 the licence permission for the Microsoft components not yet in
-`LICENSING.md`); [releasing.md §7](releasing.md#7-windows) has what that
+`LICENSING.md`), so a tag keeps them as the run's artifacts and attaches
+nothing to its release: the `release` job runs only when the repository
+variable `WINDOWS_RELEASE_ZIPS` is `true`, which nothing sets by
+default. The owner sets it (*Settings → Secrets and variables → Actions →
+Variables*, or `gh variable set WINDOWS_RELEASE_ZIPS --body true`) once
+the permission is in `LICENSING.md` and the workflow signs the
+executables; [releasing.md §7](releasing.md#7-windows) has what that
 means for a release. Every step of the three jobs was run locally in
 order from a fresh build tree, on Windows 11 x64 with `CI=true` and
 `GITHUB_ACTIONS=true`, before the workflow was committed; the one step
