@@ -458,6 +458,12 @@ func (b *Backend) downloadError(ctx context.Context, a store.Account, m store.Me
 		return api.NewError(api.CodeServerError, "the server's copy of message %s is not the stored one", m.ID)
 	case errors.Is(err, store.ErrConflict):
 		return api.NewError(api.CodeUnavailable, "message %s changed during the download; try again", m.ID)
+	case errors.Is(err, store.ErrBusy):
+		// A reader of the daemon kept the stored file open for longer than
+		// the store waits to replace it (Windows): the file and its row are
+		// as they were. Not retried here, which would fetch the whole
+		// message again at once while that reader is likely still at it.
+		return api.NewError(api.CodeUnavailable, "the stored file of message %s is in use; try again", m.ID)
 	case errors.Is(err, store.ErrNotFound):
 		return api.NewError(api.CodeMessageNotFound, "unknown message %q", m.ID)
 	case errors.As(err, &apiErr):

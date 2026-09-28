@@ -1155,8 +1155,10 @@ images. Under `allow` the call may take several seconds, as `message.body`.
 - errors: invalidArgument, accountNotFound, messageNotFound, unavailable
   (the account is paused, or a local move of the message has not reached
   the server yet: retry after the next sync; or the message changed twice
-  while the download was being stored, or the server refused it for the
-  moment, IMAP `[UNAVAILABLE]`, `[INUSE]` or `[LIMIT]`: try again),
+  while the download was being stored, the stored file was being read for
+  longer than the daemon waits to replace it (Windows), or the server
+  refused it for the moment, IMAP `[UNAVAILABLE]`, `[INUSE]` or `[LIMIT]`:
+  try again),
   messageGone (the server no longer has it: its mailbox or UID does not
   exist, or its UIDVALIDITY changed; any other refusal is serverError),
   attachmentTooBig (over the daemon's raw-message cap, `bodyState: tooBig`,
