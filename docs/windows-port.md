@@ -1615,25 +1615,58 @@ client receives it; the chips as named groups.
 As built (`Malachi.App/Wizard`, `Malachi.App/Preferences`): the wizard
 (`AccountWizardWindow`) is owned by the window it opens from
 (`GWLP_HWNDPARENT`) with a modal dialog `OverlappedPresenter`, 520×640
-effective pixels with its title bar, centred on its owner. Its title bar is
-the WinUI `TitleBar` with Back (`WizardController.CanGoBack`) and the
-visible page's title; below it a `Frame` navigates to a host page per
+effective pixels with its title bar, centred on its owner. A modal window
+disables its owner, and Windows gives the activation to the next enabled
+window when the active one goes away (measured: another app, the main
+window instead of the Preferences, or none), so the wizard enables its
+owner again and activates it in `Closed`, as a Win32 dialog hands back its
+owner; every way out (Escape, Ctrl+W, Alt+F4, the close button, a save)
+returns the keyboard to the control that opened it (measured from the
+Preferences and from the main window). It is restored whenever something
+minimises or maximises it (UIA still exposes the caption buttons the
+dialog presenter hides). Its title bar is
+the WinUI `TitleBar` with Back (`WizardController.CanGoBack`, also
+Alt+Left and the mouse's back button, as `Adw.NavigationView`) and the
+visible page's title; the `TitleBar` names the window after its title
+when it loads and when the title changes, so the window's own name is set
+back to the wizard's (*Add Account*, *Edit Account*, *Sign In*) for
+Alt+Tab and UIA. Below it a `Frame` navigates to a host page per
 wizard page, sliding in from the right for a later page and from the left
 for an earlier one (`WizardController.Rank`), while the five pages are
-made once and keep what was typed. The pages are `UserControl`s over the
+made once and keep what was typed; the `Frame` reports a navigation
+before the page is in the tree, so a page takes the focus once it is
+loaded. The pages are `UserControl`s over the
 controller's events; the identity and Servers rows are `SettingsCard`s,
-a flagged row's title turns critical red (the GTK `error` class), the
+a flagged row's title turns the critical colour (the GTK `error` class)
+and the test's rows show green or red icons. Those colours are
+`{ThemeResource}` setters of styles in `Preferences/SettingsStyles.xaml`,
+resolved in the theme of the element's window: a brush looked up in
+`Application.Resources` has Windows' theme, not the colour scheme a window
+root's `RequestedTheme` carries (measured: `#C42B1C` on a dark card,
+2.5:1), and does not follow a change. For Narrator the result rows are
+named by their title and described (`HelpText`) by their result, the
+Servers groups are named by their headings, and the results announce
+their title and focus the suggested button. The
 status pages are `Wizard/StatusPage` (Adw.StatusPage's margins). The
 certificate confirmation is the shell's ContentDialog on the wizard's
 window. Entry points: `AccountWizardWindow.Show` (add, edit, sign in again,
 ask for the password), and the hooks `AddAccount`, `EditAccount` and
 `OpenPreferences` (`Preferences/PreferencesEntryPoints`). Preferences
 (`PreferencesWindow.Show`, one instance) is a Mica window with a
-`NavigationView` pane and a page column clamped to 600 px; its settings are
+`NavigationView` pane (its labels from 720 px up, only its icons and the
+button that opens it below: `PaneDisplayMode="Auto"`, never hidden) and a
+page column clamped to 600 px, down to 480 px wide; its settings are
 bound two-way (`Preferences/SettingBindings`), the Mail group is
 `MailPreferencesController`, the AI page `McpRegistrationController`, the
 Accounts page Core's `AccountsPageController` (§7.4) rendered with
-`KeyedListSync`. A `ListView` takes Ctrl+Up and Ctrl+Down for its own
+`KeyedListSync`; a row too wide for the page puts its status and its
+controls on a second line (`Preferences/AccountRowPanel`), as a
+`SettingsCard` wraps. The window stays open beside the main window, where
+accounts can be added and edited and change their state, so the page
+follows `notify.accountsChanged` (a reload, after an order being saved)
+and `notify.syncState` (the row's status), which GTK's dialog, built on
+every open, does without. A drag takes its row out of the collection and
+puts it back: that deselection is not sent to the controller. A `ListView` takes Ctrl+Up and Ctrl+Down for its own
 focus before the window's accelerators (measured), so the list asks the
 controller first in its `PreviewKeyDown`; the window's `MoveUp` and
 `MoveDown` commands cover the rest. A `ScrollViewer` places a direct child
