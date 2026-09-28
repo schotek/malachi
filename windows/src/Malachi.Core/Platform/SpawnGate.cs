@@ -9,11 +9,13 @@
 // start lists them (Malachi.Platform.Windows ChildProcess), but it has to
 // make NUL and one pipe end inheritable while CreateProcess runs, and
 // Process.Start, which starts the MCP bridge (BridgeRunner), lists nothing:
-// a bridge started in that window would hold the daemon's output pipe, and
-// the daemon's exit would wait for the bridge's. Both starts take this gate,
-// so neither comes in between the other. It lives in Core, beside
-// BridgeRunner, and holds no Windows API; Malachi.Platform.Windows takes it
-// inside the console gate of the daemon's start, never the other way round.
+// a bridge started in that window would hold the daemon's output pipe, so
+// the pipe would not end with the daemon, and its exit would be seen only
+// when DaemonProcess gives up waiting for the last lines, DrainGrace (2 s)
+// late (measured). Both starts take this gate, so neither comes in between
+// the other. It lives in Core, beside BridgeRunner, and holds no Windows
+// API; Malachi.Platform.Windows takes it inside the console gate of the
+// daemon's start, never the other way round.
 
 using System.Threading;
 

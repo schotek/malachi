@@ -390,11 +390,13 @@ runtimes parse them. NUL and the pipe's write end are inheritable from
 their creation to their close after `CreateProcessW`, and the MCP bridge
 is started with `Process.Start` (§10), which hands its child every
 inheritable handle of the app: a bridge started in that window would hold
-the daemon's output pipe, and the daemon's exit would wait for the
-bridge's. Both starts therefore take one lock, Core's `SpawnGate`
-(`Malachi.Core.Platform`, no Windows API): the daemon's for that window,
-inside the console gate, the bridge's around `Process.Start`; each is held
-for the synchronous start alone. The launcher's `ShellExecuteEx` (§10)
+the daemon's output pipe, so the pipe would not end with the daemon, and
+its exit would be seen only when the wait for its last lines gives up,
+`DrainGrace` (2 s) late (measured). Both starts therefore take one lock,
+Core's `SpawnGate` (`Malachi.Core.Platform`, no Windows API): the daemon's
+for that window, inside the console gate, the bridge's around
+`Process.Start`; each is held for the synchronous start alone. The
+launcher's `ShellExecuteEx` (§10)
 takes no gate: it hands its child no handle of the app (measured: an
 inheritable pipe that `Process.Start` without the shell passes on does not
 arrive), and it can wait on the shell's dialogs, which must never hold up
