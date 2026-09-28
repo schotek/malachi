@@ -311,8 +311,11 @@ služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
 hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
 pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
 korpusu `testdata/mime` a z NetLogu Chromia ověřuje, že neodešel žádný
-požadavek; UI se ověřovalo ručně přes UI Automation proti lokálnímu IMAP/SMTP
-serveru. Build: `make windows` / `run-windows` / `test-windows` (jen na
+požadavek; UI smoke testy (`Malachi.App.UiTests`, UI Automation nad
+publikovanou aplikací s dočasnými daty a falešným keyringem, volitelně
+proti lokálnímu IMAP/SMTP serveru `MALACHI_DEVMAIL`) a ruční průchod celým
+UI. CI `.github/workflows/windows.yml` (Go testy démona na Windows, build,
+testy, lint a zipy x64 a ARM64). Build: `make windows` / `run-windows` / `test-windows` (jen na
 Windows, z PowerShellu i Git Bashe) delegují na `windows/build.ps1` (`app`,
 `test`, `lint`, `package`, …); výstup `build\windows\<arch>\Malachi Mail\`
 s `malachid.exe`, `malachi-mcp.exe` a `malachi-credentials.exe`. App spouští
@@ -337,8 +340,8 @@ a DACL souboru s klíčem); `.blp` jsou reference, nová funkce jde nejdřív
 do backendu a GTK, pak do macOS a Windows. Před veřejným vydáním zbývá
 (`docs/windows-port.md` §17): licenční výjimka GPLv3 §7 pro komponenty
 Microsoftu (rozhodnutí vlastníka), podpis kódu, instalátor (Velopack,
-winget), běh ARM64 na skutečném hardwaru, CI (`windows.yml`) a automatické
-UI testy. Kontributorský popis `docs/windows-port.md`.
+winget), běh ARM64 na skutečném hardwaru, první běh CI na GitHubu a ruční
+ověření kliknutí na notifikaci. Kontributorský popis `docs/windows-port.md`.
 
 Pořadí prací:
 1. ~~IMAP — čtení, synchronizace, offline store~~ hotovo

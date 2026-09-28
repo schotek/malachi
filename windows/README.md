@@ -416,8 +416,8 @@ features, not deviations.
   degrades silently.
 - **Distribution**: the app folder is unsigned and has no installer or
   updater; ARM64 has not run on real hardware; the Microsoft components'
-  licence permission is the owner's decision; there is no Windows CI job
-  yet ([docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
+  licence permission is the owner's decision; the Windows CI workflow has
+  not had its first run on GitHub yet ([docs/windows-port.md §17](../docs/windows-port.md#17-before-a-public-release),
   [docs/releasing.md](../docs/releasing.md)).
 
 ## Troubleshooting

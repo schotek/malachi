@@ -2071,13 +2071,13 @@ there would be about the runner. A manual run with `canary` set passes
 The Credential Manager round trip needs `MALACHI_CREDENTIALS_TEST=1`; tests
 that find no taskbar or may not create symbolic links skip themselves with
 the reason; the job summary lists every skip, and a notice on the run
-points to it. Nothing ARM64 runs (§17). The UI smoke tests
-(§12) skip themselves with the reason that the app is not built: the
-test step runs before the package step assembles the app folder, and
-whether the hosted image's session can drive a WinUI window through UI
-Automation is not tried yet. The Linux packaging workflows ignore pushes that change nothing
-but `windows/`, `macos/` or this workflow; tags always build everything
-(GitHub does not apply path filters to tags).
+points to it. Nothing ARM64 runs (§17). The UI smoke tests (§12) skip
+themselves with the reason that the app is not built: the test step runs
+before the package step assembles the app folder, and whether the hosted
+image's session can drive a WinUI window through UI Automation is not
+tried yet. The Linux packaging workflows ignore pushes that change
+nothing but `windows/`, `macos/` or this workflow; tags always build
+everything (GitHub does not apply path filters to tags).
 
 The jobs run the tests as they are, without retries, and a few have
 margins that a busy machine missed while the workflow was checked locally
@@ -2134,7 +2134,10 @@ Each its own commit on `feat/windows`, platform-neutral, no build tags:
    supplies the Windows knowledge; `backend/` keeps none.
 6. The root **Makefile**: the Windows block, the `.exe` suffix, the three
    targets.
-7. **`.github/workflows/windows.yml`**: not written yet (§13, §17).
+7. **`.github/workflows/windows.yml`**: the backend's `go vet` and
+   `go test` on Windows beside the client's jobs (§13); the Linux
+   packaging workflows skip pushes that change only `windows/`, `macos/`
+   or that workflow.
 
 Proposed separately, not in this branch: canonical hrefs in the sanitiser
 plus GTK confirming unlisted links (the likely masked-link bypass),
@@ -2160,8 +2163,8 @@ phase's `feat(windows):` ones.
 | **B** Scaffold and spikes | solution, props, packages, `.editorconfig`, projects, `build.ps1`, icons, manifest, make targets; spikes: the WinAppSDK 2.5 package set with `AppNotificationManager.Register` unpackaged, CommunityToolkit controls on 2.5, `TitleBar`, keyboard with a focused WebView2, `ContentDialog`/`Flyout` over WebView2 | `make windows`, `run-windows`, `test-windows` from PowerShell and Git Bash; a window opens | Done |
 | **C** Core foundation | C1 API layer; C2 i18n, text, settings; C3 Platform.Windows services; C4 `malachi-credentials`; then C5 transport and FakeDaemon; C6 supervisor, paths, bridge runner | all Core tests; the handshake against the real daemon; `account.add` with a password stored through the helper | Done |
 | **D** Core logic | D1 models; D2 compose, HTML (bridge), wizard; D3 connection, sync, message cache, mailbox controllers; D4 actions, compose, draft, wizard, preferences, MCP controllers | every ported Go and Swift test green; conventions tests green | Done |
-| **E** WinUI app | wave 1: E1 shell (`Main` with the console, notifications and single instance; lifecycle and Quit; integration; toasts, alerts, icons, theme, `{l:T}`; the command router; the package set of §10), E2 WebView2 layer and the canary, E7 platform services (tray, launch at login, `mailto:` registration, notifications and sound); wave 2: E3 main window, E4 reader, message and attached-message windows, attachment actions and the previewer, E5 compose, E6 wizard and preferences. Each screen's agent also wrote the presentation classes of §7.4 it needed, in Core with tests | release build without warnings; all tests; the canary; FlaUI smoke tests; a run against the local test mail server | Done; the UI checked by hand through UI Automation instead of FlaUI tests (§12) |
-| **F** Verification and docs | end-to-end against local IMAP/SMTP servers; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone | Done but for CI (§13) |
+| **E** WinUI app | wave 1: E1 shell (`Main` with the console, notifications and single instance; lifecycle and Quit; integration; toasts, alerts, icons, theme, `{l:T}`; the command router; the package set of §10), E2 WebView2 layer and the canary, E7 platform services (tray, launch at login, `mailto:` registration, notifications and sound); wave 2: E3 main window, E4 reader, message and attached-message windows, attachment actions and the previewer, E5 compose, E6 wizard and preferences. Each screen's agent also wrote the presentation classes of §7.4 it needed, in Core with tests | release build without warnings; all tests; the canary; FlaUI smoke tests; a run against the local test mail server | Done; the UI checked by hand through UI Automation, the smoke tests written in phase F (without FlaUI, §12) |
+| **F** Verification and docs | end-to-end against local IMAP/SMTP servers and the UI smoke tests; the parity matrix walked with evidence; security review; `windows/README.md`, this document, CLAUDE.md/AGENTS.md, README, architecture, security, mcp, releasing, LICENSING; CI | everything above, on a clean clone | Done; CI checked locally step by step, not yet on GitHub (§13) |
 
 ## 16. Research summary
 
@@ -2232,11 +2235,12 @@ needs them:
   ARM64 build tools are installed, which the development machine lacks,
   so no ARM64 app folder has been assembled and none has run. It needs a
   build with those tools and a run on real ARM64 hardware.
-- **CI.** `.github/workflows/windows.yml` (§13): the backend's Go tests on
-  Windows and the client's build, tests, lint and packages for both
-  architectures.
-- **Automated UI tests** over UI Automation for the main flows (§12),
-  which today are checked by hand.
+- **CI on GitHub.** `.github/workflows/windows.yml` (§13) was run step by
+  step on the development machine, not yet on the hosted runner; its first
+  run there, and whether the UI smoke tests (§12) can drive the app in the
+  runner's session, are open.
+- **A notification's click** checked by a person (§12: UI Automation did
+  not see the toast).
 
 Later tracks: MSIX (virtualisation disabled, an execution alias for
 `malachi-mcp`), Windows Web Account Manager as a daemon extension point, a
