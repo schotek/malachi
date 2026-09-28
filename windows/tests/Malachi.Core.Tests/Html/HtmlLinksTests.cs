@@ -8,6 +8,7 @@
 
 using System;
 using Malachi.Core.Html;
+using Malachi.Core.Tests.Presentation;
 using Xunit;
 
 namespace Malachi.Core.Tests.Html;
@@ -184,12 +185,11 @@ public sealed class HtmlLinksTests
     [Fact]
     public void HostsOfText()
     {
-        Assert.Equal("bank.example.org", Links.HostOfText("HTTPS://Bank.Example.org/x"));
-        Assert.Equal("bank.example.org", Links.HostOfText("bank.example.org"));
-        Assert.Equal("", Links.HostOfText("http://"));
-        Assert.Equal("", Links.HostOfText("a b.example.org"));
-        Assert.Equal("", Links.HostOfText("example.o"));
-        Assert.Equal("", Links.HostOfText("192.168.0.1"));
+        Assert.Equal(["bank.example.org"], Links.HostsOfText("HTTPS://Bank.Example.org/x"));
+        Assert.Equal(["bank.example.org"], Links.HostsOfText("bank.example.org"));
+        Assert.Empty(Links.HostsOfText("a b.example.org"));
+        Assert.Empty(Links.HostsOfText("example.o"));
+        Assert.Empty(Links.HostsOfText("192.168.0.1"));
         Assert.True(Links.LooksLikeHost("a-b.example"));
         Assert.False(Links.LooksLikeHost("example"));
         Assert.False(Links.LooksLikeHost("a..example"));
@@ -199,6 +199,158 @@ public sealed class HtmlLinksTests
         Assert.True(Links.SameSite("www.example.org", "example.org"));
         Assert.True(Links.SameSite("a.b.example.org", "example.org"));
         Assert.False(Links.SameSite("notexample.org", "example.org"));
+    }
+
+    // Windows: what a reader takes a link's text to name, where GTK's
+    // hostOfText reads "" and the link opens. Every host is ASCII (an
+    // internationalised one in punycode), lower case, without its trailing
+    // dot; "" is a host that cannot be read, which no link leads to.
+    [Fact]
+    public void HostsOfTextAsAReaderSeesThem()
+    {
+        // An address with no host, or one whose host cannot be read: spaces
+        // in it (the daemon puts one around each inline element of a link's
+        // text), userinfo, an escape, an IP address, a port that is none.
+        Assert.Equal([""], Links.HostsOfText("http://"));
+        Assert.Equal([""], Links.HostsOfText("https://www.moje banka .example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://www.mojebanka.example@evil.example/login"));
+        Assert.Equal([""], Links.HostsOfText("https://www.mojebanka.example%2Flogin"));
+        Assert.Equal([""], Links.HostsOfText("https://192.168.0.1/"));
+        Assert.Equal([""], Links.HostsOfText("https://[::1]/"));
+        Assert.Equal([""], Links.HostsOfText("https://www.mojebanka.example:x/"));
+        // Invisible characters go before the host is read; the dots and
+        // slashes of other scripts and widths are read as dots and slashes;
+        // a trailing dot is no part of the site.
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("\u202Ehttps://www.moje\u00AD\u200B\u2060\uFEFFbanka.example/login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("https://www.mojebanka\u3002example\u3002/login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("ＨＴＴＰＳ：／／ｗｗｗ．ｍｏｊｅｂａｎｋａ．ｅｘａｍｐｌｅ／ｌｏｇｉｎ"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("https:\u2215\u2215www.mojebanka.example\u2044login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("https://www.mojebanka.example./login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("https://www.mojebanka.example\u00A0/login"));
+        // Another script's letters are read as the host they spell.
+        Assert.Equal(["www.xn--mojbanka-e8g.example"], Links.HostsOfText("https://www.moj\u0435banka.example/login"));
+        Assert.Equal(["xn--bcher-kva.example"], Links.HostsOfText("bücher.example"));
+        Assert.Equal(["xn--e1afmkfd.xn--p1ai"], Links.HostsOfText("https://пример.рф/"));
+        // An address after words, or after another address, is read too; it
+        // ends at the next space, where a text that begins as an address
+        // must be one whole.
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Log in at https://www.mojebanka.example/login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Login:https://www.mojebanka.example/login"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("Visit www.mojebanka.example for more"));
+        Assert.Equal([""], Links.HostsOfText("www.mojebanka.example for more"));
+        Assert.Equal(["evil.example", "www.mojebanka.example"], Links.HostsOfText("https://evil.example/ https://www.mojebanka.example/login"));
+        // What encloses an address in prose is no part of it.
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("(https://www.mojebanka.example)"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("<https://www.mojebanka.example/login>"));
+        Assert.Equal(["www.mojebanka.example"], Links.HostsOfText("\u2800https://www.mojebanka.example/login"));
+        // Plain words, an e-mail address and a mailto: text name no host.
+        foreach (var plain in new[] { "", "Click here", "Unsubscribe", "Read more", "v1.2", "e.g.", "support@example.org", "mailto:a@example.org", "/login", "Bücher" })
+        {
+            Assert.Empty(Links.HostsOfText(plain));
+        }
+        // An internationalised top-level domain is a host's.
+        Assert.True(Links.LooksLikeHost("xn--e1afmkfd.xn--p1ai"));
+        Assert.False(Links.LooksLikeHost("example.xn--"));
+    }
+
+    /// <summary>
+    /// The adversarial review's texts, each of which a reader takes for the
+    /// bank's address and GTK's hostOfText does not read (so the link to
+    /// evil.example opened without the question), and a few more of the
+    /// same kind.
+    /// </summary>
+    public static readonly TheoryData<string> TextsOfTheBank = new()
+    {
+        "https://www.moje banka .example/login", // <b>banka</b> inside the text
+        "https://www.mojebanka.example/ login",
+        "https://www.moje\u00ADbanka.example/login", // soft hyphen
+        "https://www.moje\u200Bbanka.example/login", // zero width space
+        "https://www.moje\u2060banka.example/login", // word joiner
+        "https://www.moje\uFEFFbanka.example/login", // byte order mark
+        "https://www.mojebanka.example./login",
+        "https://www.moj\u0435banka.example/login", // U+0435, a Cyrillic "e"
+        "\u202Ehttps://www.mojebanka.example/login", // right-to-left override
+        "https://www.mojebanka.example\u202E/login",
+        "https://www.mojebanka.example\u00A0/login", // no-break space
+        "https://www.mojebanka.example\u3002/login", // ideographic full stop
+        "https://www.mojebanka\u3002example/login",
+        "https://www.mojebanka.example\\login",
+        "https://www.mojebanka.example／login", // fullwidth solidus
+        "https://www.mojebanka.example%2Flogin",
+        "//www.mojebanka.example/login",
+        "https://www.mojebanka.example@evil.example/login",
+        // More of the kind: other slashes and colons, fullwidth letters,
+        // enclosing punctuation, an address after words or after another.
+        "https:\u2215\u2215www.mojebanka.example/login",
+        "https\u2236//www.mojebanka.example/login",
+        "ＨＴＴＰＳ：／／ｗｗｗ．ｍｏｊｅｂａｎｋａ．ｅｘａｍｐｌｅ／ｌｏｇｉｎ",
+        "<https://www.mojebanka.example/login>",
+        "\u2800https://www.mojebanka.example/login",
+        "Log in at https://www.mojebanka.example/login",
+        "Login:https://www.mojebanka.example/login",
+        "https://evil.example/ https://www.mojebanka.example/login",
+        "https://evil.example https://www.mojebanka.example/login",
+        "www.mojebanka.example:443/login",
+        "https://[www.mojebanka.example]/login",
+        "http://",
+    };
+
+    [Theory]
+    [MemberData(nameof(TextsOfTheBank))]
+    public void ATextThatReadsAsTheBankIsMasked(string text)
+    {
+        Assert.True(Links.IsMasked(text, "https://evil.example/t"));
+        Assert.True(Links.LeadsElsewhere(text, "https://evil.example/t"));
+    }
+
+    // What must not ask: a text that names the site its link leads to,
+    // however it is written, and a text that names no site at all.
+    [Theory]
+    [InlineData("www.mojebanka.example", "https://www.mojebanka.example/")]
+    [InlineData("https://www.mojebanka.example/login", "https://www.mojebanka.example/login")]
+    [InlineData("www.mojebanka.example/login", "https://www.mojebanka.example/login?x=1")]
+    [InlineData("WWW.MOJEBANKA.EXAMPLE/LOGIN", "https://www.mojebanka.example/login")]
+    [InlineData("https://www.mojebanka.example/login", "https://ib.mojebanka.example/x")]
+    [InlineData("mojebanka.example", "https://www.mojebanka.example./")]
+    [InlineData("https://www.mojebanka.example./login", "https://www.mojebanka.example/login")]
+    [InlineData("https://www.mojebanka.example /login", "https://www.mojebanka.example/login")]
+    [InlineData("https://www.moje\u00ADbanka.example/login", "https://www.mojebanka.example/login")]
+    [InlineData("https://www.mojebanka.example:8443/x", "https://www.mojebanka.example/")]
+    [InlineData("(https://www.mojebanka.example)", "https://www.mojebanka.example/")]
+    [InlineData("Visit www.mojebanka.example", "https://www.mojebanka.example/")]
+    [InlineData("https://bücher.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://BÜCHER.example/", "https://bücher.example/")]
+    [InlineData("bücher.example", "https://xn--bcher-kva.example/x")]
+    [InlineData("https://пример.рф/", "https://xn--e1afmkfd.xn--p1ai/")]
+    [InlineData("Click here", "https://evil.example/")]
+    [InlineData("Unsubscribe", "https://evil.example/")]
+    [InlineData("", "https://evil.example/")]
+    [InlineData("support@example.org", "https://evil.example/")]
+    public void ATextThatNamesItsOwnSiteIsNotMasked(string text, string href)
+    {
+        Assert.False(Links.IsMasked(text, href));
+        Assert.False(Links.LeadsElsewhere(text, FakeLauncher.Target(href)));
+    }
+
+    // A single-label host (a top-level domain, an intranet name) is no site
+    // of the hosts under it, "www." aside; a trailing dot is no part of a
+    // site. Multi-label public suffixes are not known (no public-suffix
+    // list): "co.uk" still counts as a parent site of "bank.co.uk".
+    [Fact]
+    public void SameSiteRules()
+    {
+        Assert.False(Links.SameSite("www.mojebanka.cz", "cz"));
+        Assert.False(Links.SameSite("mojebanka.cz", "cz."));
+        Assert.False(Links.SameSite("www.bank.example", "www.example"));
+        Assert.False(Links.SameSite("www.example", "bank.example"));
+        Assert.True(Links.SameSite("www.cz", "cz"));
+        Assert.True(Links.SameSite("www.mojebanka.example.", "www.mojebanka.example"));
+        Assert.True(Links.SameSite("mojebanka.example", "ib.mojebanka.example."));
+        Assert.False(Links.SameSite("", ""));
+        Assert.True(Links.SameSite("bank.co.uk", "co.uk")); // the known limit
+        Assert.True(Links.IsMasked("www.mojebanka.cz", "https://cz/"));
+        Assert.True(Links.IsMasked("https://www.mojebanka.cz/login", "https://cz./"));
+        Assert.True(Links.LeadsElsewhere("www.mojebanka.cz", "https://cz/"));
     }
 
     // Windows: the hosts net/url reads and System.Uri would not (or would

@@ -159,6 +159,22 @@ public sealed class LinkOpenerTests
         Assert.Empty(launcher.Links);
     }
 
+    // A text that reads as the bank's address only once its invisible
+    // characters are gone, or with a space inside its host, is asked about
+    // with the text as the mail wrote it (the question isolates it).
+    [Theory]
+    [InlineData("https://www.moje\u00ADbanka.example/login")]
+    [InlineData("https://www.moje banka .example/login")]
+    [InlineData("https://www.mojebanka.example@evil.example/login")]
+    public async Task ATextThatReadsAsTheBankIsAskedAboutAsWritten(string text)
+    {
+        const string Href = "https://evil.example/t";
+        Link[] links = [new() { Text = text, Href = Href }];
+        await Make().OpenAsync(new ActivatedLink(Href, Href), links, "w");
+        Assert.Equal([("w", text, Href)], asked);
+        Assert.Empty(launcher.Links);
+    }
+
     // Without the attribute, the URL WebView2 made of the link: it carries
     // the userinfo too, so it matches no listed href (no certain canonical
     // form) and is asked about with the destination alone, which is the

@@ -270,6 +270,34 @@ public sealed class LinkDecisionTests
         Assert.Equal(new LinkDecision.Open(Href), LinkDecision.For(new ActivatedLink(null, Href), plain, Launched));
     }
 
+    // The text side (HtmlLinksTests.TextsOfTheBank): a text a reader takes
+    // for the bank's address, over a link to evil.example, is confirmed
+    // with the text as the mail wrote it, with the attribute or without.
+    [Theory]
+    [MemberData(nameof(Html.HtmlLinksTests.TextsOfTheBank), MemberType = typeof(Html.HtmlLinksTests))]
+    public void ATextThatReadsAsTheBankIsConfirmed(string text)
+    {
+        const string Href = "https://evil.example/t";
+        Link[] links = [Link(text, Href)];
+        Assert.Equal(new LinkDecision.Confirm(text, Href), LinkDecision.For(Href, links, Launched));
+        Assert.Equal(new LinkDecision.Confirm(text, Href), LinkDecision.For(new ActivatedLink(null, Href), links, Launched));
+    }
+
+    // And texts that name the link's own site, or none, still open.
+    [Theory]
+    [InlineData("www.mojebanka.example", "https://www.mojebanka.example/")]
+    [InlineData("https://www.mojebanka.example/login", "https://ib.mojebanka.example/login")]
+    [InlineData("WWW.MOJEBANKA.EXAMPLE/LOGIN", "https://www.mojebanka.example/login")]
+    [InlineData("https://bücher.example/", "https://xn--bcher-kva.example/")]
+    [InlineData("https://www.mojebanka.example /login", "https://www.mojebanka.example/login")]
+    [InlineData("Click here", "https://evil.example/t")]
+    [InlineData("", "https://evil.example/t")]
+    public void ATextThatNamesItsOwnSiteOpens(string text, string href)
+    {
+        Link[] links = [Link(text, href)];
+        Assert.Equal(new LinkDecision.Open(href), LinkDecision.For(href, links, Launched));
+    }
+
     // What the launcher would open decides, not only Go's reading of the
     // href: where the two disagree about the host, the link is confirmed.
     [Fact]
