@@ -43,7 +43,10 @@ public sealed partial class PreferencesWindow : Window
     /// <summary>Its height the first time it opens.</summary>
     public const int DefaultHeight = 680;
 
-    /// <summary>The narrowest it gets (the pages' rows wrap below that).</summary>
+    /// <summary>
+    /// The narrowest it gets: the pane shows its icons only below 720, the
+    /// settings cards and the account rows wrap.
+    /// </summary>
     public const int MinWidth = 480;
 
     /// <summary>The lowest it gets.</summary>
@@ -137,8 +140,9 @@ public sealed partial class PreferencesWindow : Window
         return created;
     }
 
-    // The default size at the display's scale, centred on the window it
-    // was opened from; never smaller than the minimum.
+    // The default size at the display's scale, centred in the work area of
+    // the display the window it was opened from is on; never smaller than
+    // the minimum.
     private void Place(Window? near)
     {
         var from = near ?? this;
@@ -155,6 +159,27 @@ public sealed partial class PreferencesWindow : Window
             Math.Min((int)Math.Round(DefaultHeight * scale), area.Height));
         AppWindow.MoveAndResize(new RectInt32(
             area.X + ((area.Width - size.Width) / 2), area.Y + ((area.Height - size.Height) / 2), size.Width, size.Height));
+    }
+
+    // The pane is its icons only (Auto below 720 px): its button opens it
+    // over the page with the labels. Expanded, the pane has no button and
+    // is open, also after it was closed over the page while compact (the
+    // NavigationView would keep it closed then, measured), once the view
+    // has applied the mode.
+    private void OnNavigationDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
+    {
+        var expanded = args.DisplayMode == NavigationViewDisplayMode.Expanded;
+        Navigation.IsPaneToggleButtonVisible = !expanded;
+        if (expanded)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (Navigation.DisplayMode == NavigationViewDisplayMode.Expanded)
+                {
+                    Navigation.IsPaneOpen = true;
+                }
+            });
+        }
     }
 
     private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

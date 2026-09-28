@@ -12,7 +12,11 @@ GTK names (Accounts: system-users, General: preferences-system,
 Appearance: applications-graphics, AI: applications-science), and the
 visible page with the toast overlay over it. There is no search field
 (windows/README.md, as macOS) and no Settings item of the NavigationView's
-own.
+own. As Windows Settings does, the pane keeps its labels while the window
+is at least 720 px wide and shrinks to its icons below that (the
+NavigationView's Auto mode, never hidden), so that a narrow window leaves
+the page its width; the button that opens it over the page is shown only
+then.
 -->
 <Window
     x:Class="Malachi.App.Preferences.PreferencesWindow"
@@ -52,11 +56,14 @@ own.
             x:Name="Navigation"
             Grid.Row="1"
             AutomationProperties.AutomationId="PreferencesNavigation"
+            CompactModeThresholdWidth="0"
+            DisplayModeChanged="OnNavigationDisplayModeChanged"
+            ExpandedModeThresholdWidth="720"
             IsBackButtonVisible="Collapsed"
             IsPaneToggleButtonVisible="False"
             IsSettingsVisible="False"
             OpenPaneLength="220"
-            PaneDisplayMode="Left"
+            PaneDisplayMode="Auto"
             SelectionChanged="OnNavigationSelectionChanged">
             <NavigationView.Resources>
                 <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />

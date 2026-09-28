@@ -21,8 +21,16 @@
 // window's MoveUp and MoveDown commands take them elsewhere in the list. A
 // row is dragged by its handle only (DragItemsStarting refuses any other
 // press), with the ListView's own insertion gap; foreign data dropped on
-// the list is not a reorder and does nothing.
+// the list is not a reorder and does nothing. While a row is dragged the
+// list takes it out of its collection and puts it back: the deselection
+// that makes is the list's, not the user's, and never reaches the
+// controller (docs/windows-port.md §7.5). The page follows the daemon's
+// notify.accountsChanged and notify.syncState while the window is open
+// (AccountsPageController), because the main window stays usable beside
+// it.
 
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using Malachi.App.Shell;
@@ -58,8 +66,11 @@ public sealed partial class AccountsPage : UserControl
     // The last press in the list was on a row's drag handle.
     private bool pressedOnHandle;
 
-    // The row being dragged.
+    // The row being dragged (from DragItemsStarting to DragItemsCompleted).
     private AccountRowView? dragged;
+
+    // The daemon's notifications the page follows.
+    private readonly List<IDisposable> subscriptions = [];
 
     /// <summary>The page of the preferences window <paramref name="window"/>.</summary>
     public AccountsPage(AppState state, Window window, IToasts toasts)
@@ -83,6 +94,8 @@ public sealed partial class AccountsPage : UserControl
         // A ListView takes Ctrl+Up and Ctrl+Down for moving its focus before
         // the window's accelerators see them (measured): the list asks first.
         AccountList.PreviewKeyDown += OnListPreviewKeyDown;
+        subscriptions.Add(state.Notifications.AddAccountsChanged(Controller.HandleAccountsChanged));
+        subscriptions.Add(state.Notifications.AddSyncState(Controller.HandleSyncState));
         Controller.Load();
     }
 
@@ -101,8 +114,16 @@ public sealed partial class AccountsPage : UserControl
     /// <summary>Moves the selected row by <paramref name="delta"/> (Ctrl+Up, Ctrl+Down).</summary>
     public void MoveSelected(int delta) => Controller.MoveSelected(delta);
 
-    /// <summary>The window closed: the page's calls are dropped.</summary>
-    public void Close() => Controller.Close();
+    /// <summary>The window closed: the page's calls and notifications are dropped.</summary>
+    public void Close()
+    {
+        foreach (var s in subscriptions)
+        {
+            s.Dispose();
+        }
+        subscriptions.Clear();
+        Controller.Close();
+    }
 
     private void Apply(System.Collections.Generic.IReadOnlyList<AccountRow> rows)
     {
@@ -155,10 +176,12 @@ public sealed partial class AccountsPage : UserControl
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!syncing)
+        // A drag moves its row out of the collection and back in.
+        if (syncing || (dragged is not null && e.AddedItems.Count == 0))
         {
-            Controller.Select((AccountList.SelectedItem as AccountRowView)?.Id);
+            return;
         }
+        Controller.Select((AccountList.SelectedItem as AccountRowView)?.Id);
     }
 
     private void OnAddClick(object sender, RoutedEventArgs e) =>

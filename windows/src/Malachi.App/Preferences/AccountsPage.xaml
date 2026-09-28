@@ -16,7 +16,8 @@ cut with its whole text as tooltip), Sign In… (an account of the browser
 sign-in that needs it), the Enabled switch, Edit and Remove. The rows are
 a ListView of cards: a click selects the row (windows/README.md, M21),
 Ctrl+Up and Ctrl+Down move the selected one, and a row is dragged by its
-handle only.
+handle only. Where the page is too narrow for a row on one line, the
+status and the controls go to a second line (AccountRowPanel).
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.AccountsPage"
@@ -103,22 +104,11 @@ handle only.
                         </ListView.ItemContainerStyle>
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:AccountRowView">
-                                <Grid
+                                <local:AccountRowPanel
                                     MinHeight="62"
-                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}"
-                                    ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" MinWidth="80" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
+                                    AutomationProperties.Name="{x:Bind Title, Mode=OneWay}">
                                     <Border
                                         x:Name="DragHandle"
-                                        Grid.Column="0"
                                         Padding="2,12"
                                         VerticalAlignment="Center"
                                         Background="Transparent"
@@ -130,14 +120,10 @@ handle only.
                                             Glyph="{x:Bind res:Icons.Glyph('list-drag-handle')}" />
                                     </Border>
                                     <FontIcon
-                                        Grid.Column="1"
                                         VerticalAlignment="Center"
                                         FontSize="16"
                                         Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
-                                    <StackPanel
-                                        Grid.Column="2"
-                                        VerticalAlignment="Center"
-                                        ToolTipService.ToolTip="{x:Bind Email, Mode=OneWay}">
+                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Email, Mode=OneWay}">
                                         <TextBlock
                                             MaxLines="1"
                                             Style="{StaticResource BodyLabelStyle}"
@@ -150,7 +136,6 @@ handle only.
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                     <TextBlock
-                                        Grid.Column="3"
                                         MaxWidth="180"
                                         VerticalAlignment="Center"
                                         MaxLines="1"
@@ -160,7 +145,6 @@ handle only.
                                         ToolTipService.ToolTip="{x:Bind Status, Mode=OneWay}"
                                         Visibility="{x:Bind StatusVisibility, Mode=OneWay}" />
                                     <Button
-                                        Grid.Column="4"
                                         VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="SignIn"
                                         Click="OnSignInClick"
@@ -168,19 +152,17 @@ handle only.
                                         IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
                                         Visibility="{x:Bind SignInVisibility, Mode=OneWay}" />
                                     <ToggleSwitch
-                                        Grid.Column="5"
                                         MinWidth="0"
                                         VerticalAlignment="Center"
                                         AutomationProperties.AutomationId="Enabled"
                                         AutomationProperties.Name="{l:T Msgid='Enabled'}"
                                         IsEnabled="{x:Bind IsInteractive, Mode=OneWay}"
                                         IsOn="{x:Bind IsOn, Mode=OneWay}"
-                                    OffContent="{x:Null}"
-                                    OnContent="{x:Null}"
+                                        OffContent="{x:Null}"
+                                        OnContent="{x:Null}"
                                         ToolTipService.ToolTip="{l:T Msgid='Enabled'}"
                                         Toggled="OnRowToggled" />
                                     <StackPanel
-                                        Grid.Column="6"
                                         VerticalAlignment="Center"
                                         Orientation="Horizontal"
                                         Spacing="2">
@@ -203,7 +185,7 @@ handle only.
                                             <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('user-trash')}" />
                                         </Button>
                                     </StackPanel>
-                                </Grid>
+                                </local:AccountRowPanel>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
