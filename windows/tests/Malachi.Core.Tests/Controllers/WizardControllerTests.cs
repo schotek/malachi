@@ -1792,6 +1792,8 @@ public sealed class WizardControllerTests
 
         public string? LinkTarget(string? url) => throw new NotSupportedException();
 
+        public Task<bool> OpenAssistantLinkAsync(string link, nint owner, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<bool> OpenFileAsync(string path, nint owner, CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<bool> OpenWithAsync(string path, nint owner, CancellationToken cancellationToken = default) => throw new NotSupportedException();

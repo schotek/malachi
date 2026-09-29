@@ -21,6 +21,9 @@ internal sealed class FakeLauncher : ILauncher
 
     public List<string> Files { get; } = [];
 
+    /// <summary>The Assistant's links handed to the shell.</summary>
+    public List<string> AssistantLinks { get; } = [];
+
     /// <summary>What a launch throws, when set.</summary>
     public Exception? Failure { get; set; }
 
@@ -52,6 +55,16 @@ internal sealed class FakeLauncher : ILauncher
     }
 
     public Task<bool> OpenUrlAsync(string url, nint owner, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+    public Task<bool> OpenAssistantLinkAsync(string link, nint owner, CancellationToken cancellationToken = default)
+    {
+        if (Failure is { } e)
+        {
+            return Task.FromException<bool>(e);
+        }
+        AssistantLinks.Add(link);
+        return Task.FromResult(true);
+    }
 
     public Task<bool> OpenLinkAsync(string url, nint owner, CancellationToken cancellationToken = default)
     {

@@ -84,6 +84,49 @@ public sealed class Launcher : ILauncher
     public string? LinkTarget(string? url) => WebLinkTarget(url);
 
     /// <inheritdoc/>
+    public Task<bool> OpenAssistantLinkAsync(string link, nint owner, CancellationToken cancellationToken = default)
+    {
+        if (!IsAssistantLink(link))
+        {
+            throw new ArgumentException("not a link of the Assistant", nameof(link));
+        }
+        return StaThread.RunAsync(() => shell(link, owner, false), cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether <see cref="OpenAssistantLinkAsync"/> takes
+    /// <paramref name="link"/>: it starts with one of the Assistant's three
+    /// forms (assistant.Link, FileLink) and holds only what they are made
+    /// of, the characters encodeURIComponent keeps, the percent signs of
+    /// its escapes and the separators of the query, so nothing splits the
+    /// handler's command line; at most <see cref="ILauncher.MaxAssistantLink"/>
+    /// characters.
+    /// </summary>
+    public static bool IsAssistantLink(string? link)
+    {
+        if (string.IsNullOrEmpty(link) || link.Length > ILauncher.MaxAssistantLink)
+        {
+            return false;
+        }
+        if (!link.StartsWith("claude://claude.ai/new?q=", StringComparison.Ordinal)
+            && !link.StartsWith("claude://cowork/new?q=", StringComparison.Ordinal)
+            && !link.StartsWith("claude-cli://open?", StringComparison.Ordinal))
+        {
+            return false;
+        }
+        foreach (var c in link)
+        {
+            var ok = c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9')
+                || "-_.!~*'()%&=?/:".Contains(c, StringComparison.Ordinal);
+            if (!ok)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <inheritdoc/>
     public Task<bool> OpenFileAsync(string path, nint owner, CancellationToken cancellationToken = default)
     {
         var file = CheckFile(path);
