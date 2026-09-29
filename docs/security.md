@@ -1227,7 +1227,12 @@ while the bridge is registered in a Claude client:
   opened only after `draft.list` has it. The first question asks whether
   mail may be sent to Claude (`assistant-consent`). The app never reads,
   stores or offers credentials: it asks `claude auth status --json` for
-  `loggedIn` only.
+  `loggedIn` only. On Windows the panel runs only a `claude.exe` (npm's
+  `claude.cmd` would pass the command line through `cmd.exe`, whose
+  parsing cannot carry its JSON arguments safely), keeps of the
+  environment only what a Windows program needs to start (matched without
+  case), and ends Claude Code by closing its input and killing its process
+  tree, the bridge included, where macOS and Linux send SIGTERM.
 - **One-shot requests** (In App only: the compose window's rewrite, the
   search in your own words): the same Claude Code without the bridge, so
   the model has no tool at all; only the passage (the selection, or the

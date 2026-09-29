@@ -904,12 +904,23 @@ it). The bridge (`EditorBridge.Script`) is the GTK/macOS bridge with a
 guarded by `window.top` and the document URL, using
 `Document.prototype`/`EventTarget.prototype` accessors captured at document
 start (a pasted `<img name="body">` clobbers `document.body` otherwise;
-verified in Chromium). `WebMessageReceived` accepts only strings whose
+verified in Chromium), and, for the assistant's rewrite, the `Node.prototype`
+getters `parentNode`, `previousSibling`, `nodeType` and `childNodes`: its
+walk up and back from the attribution's `div` may meet a `<form>`, whose
+named controls override its own properties as named elements do the
+document's (reasoned from the HTML specification, not measured). `WebMessageReceived` accepts only strings whose
 `Source` is the current document and whose shape parses; they go to Core's
 `EditorChannel` (`Channel`: `Ready`, `Changed`, `StateChanged`,
-`KeyPressed`, `Html`, `Text`). Host to page is `ExecuteScriptAsync`:
+`KeyPressed`, `Html`, `Text`, and the rewrite's passage from its
+`rewrite` message). Host to page is `ExecuteScriptAsync`:
 `Flush(done)` (the flush script, its `seq` handed back to the channel),
-`Exec(command, argument)`, `FocusStart()`. `cid:` is the port of
+`Exec(command, argument)`, `FocusStart()`, and the assistant's rewrite
+(`RewriteTarget(attribution, done)`, whose passage comes back as GTK's
+posted `rewrite` message rather than as the script's value, so the bridge
+keeps GTK's shape; `ApplyRewrite(text, below)`, one step the page's undo
+takes back). A rewrite never hangs: a bridge that does not run, a new
+document, a dead renderer and a failed evaluation answer with the empty
+passage. `cid:` is the port of
 `CIDSchemeHandler` (only ids in the window's `CidRegistry`, a registered
 file read off the UI thread when it is a regular file within the cap, a
 fetcher bounded by `FetchTimeout`, then `checkInline`). File drops go
@@ -1640,6 +1651,70 @@ against the bundled bridge with `USERPROFILE`, `APPDATA` and
 `LOCALAPPDATA` in a temporary folder (registered in both files, removed
 again, and the toast with neither Claude app).
 
+**The Assistant** (`ui/internal/assistant`; [mcp.md](mcp.md), *Hand-off
+from the app* and *The panel in the app*; [security.md §10.1](security.md#101-the-assistant)),
+built on `feat/assistant-menu` (2026-09-29) as a port of the macOS client.
+Core has the Go package's pure half as `Malachi.Core.Assistants` (the
+static class `Assistant` in partial files per Swift file: texts, prompts,
+links, the command line, the child's environment, the stream-json events
+read as Go reads JSON, the Markdown subset, the rewrite's and the search's
+prompts and answers; byte offsets into UTF-8 and Go's character classes as
+in Swift's port; the namespace is plural because a namespace `Assistant`
+would hide the class from every other `Malachi.Core` namespace) and the
+controllers of Swift: `AssistantController` (the link handlers are the
+shell's default ProgIDs of `claude` and `claude-cli`, `AssocQueryString`;
+the bridge's registration its own status), `ClaudeCodeLocator`,
+`ClaudeCodeProcess`, `AssistantPanelController`, `AssistantRequest`,
+`ComposeRewriteController`, `SearchConversion` and `ClaudeDesktopController`,
+with the Swift and Go tests against a stand-in `claude.exe`
+(`tests/Malachi.FakeClaude`, scripted by a JSON file beside it: turns,
+stderr, exits, a process that never ends). What is Windows' own:
+
+- **Claude Code is `claude.exe` only** (decided): the native installer's
+  `%USERPROFILE%\.local\bin\claude.exe`, then every directory of the
+  `PATH`, after the path of *Preferences → AI*; npm's `claude.cmd` would
+  run through `cmd.exe`, whose parsing of a command line cannot carry the
+  JSON arguments (`--mcp-config`, `--json-schema`) safely. Paths are
+  cleaned in pure string code (drive-absolute only; UNC, relative and
+  forbidden characters refused).
+- **The process** (`ClaudeCodeProcess`): `Process` at the `SpawnGate`,
+  no window, the three pipes as raw bytes, the environment of
+  `Assistant.ChildEnv` (what a Windows program needs to start, matched
+  without case, and a `PATH` of claude's folder and the system's; no
+  `CLAUDE*`, `ANTHROPIC*` or `MALACHI_*`), the working directory
+  `%LOCALAPPDATA%\Malachi Mail\assistant` made private by
+  `PrivateDirectory`. There is no SIGTERM: ending a conversation closes
+  stdin (`claude -p` ends at the end of its input) and kills the process
+  tree, the bridge Claude Code started included, 2 s later; the end is
+  reported once, after every event. Measured with Claude Code 2.1.72 on
+  this machine: the command line's flags exist and `system/init` comes in
+  that environment (the machine's own login had expired, so no answer came:
+  `claude auth status` still said `loggedIn: true`, and Claude Code retried
+  the API eleven times).
+- **Claude Desktop** is the MSIX package `Claude_pzs8sxrjxfjjc`
+  (`Malachi.Platform.Windows.Claude.ClaudeDesktopApp`): it runs while a
+  `claude.exe` of that package family runs (`GetPackageFamilyName`; the
+  name alone would match Claude Code, and the package's `RuntimeBroker`
+  outlives it). Closing its window only hides it in the notification area,
+  so the restart asks the root `claude.exe` of each instance to quit the
+  way Windows does at sign-out (the Restart Manager's shutdown without
+  force: `WM_QUERYENDSESSION` and `WM_ENDSESSION`), waits up to 45 s for
+  the processes (measured with GitHub Desktop, another Electron app: gone
+  after 20 s, and once only after `RmShutdown` had given up at its own
+  30 s), and starts it again by its application user model id
+  (`IApplicationActivationManager`). While a change is pending the app
+  waits for its processes to go and then writes the change once more
+  (macOS hears of the termination from `NSWorkspace`). The quit was never
+  run against Claude Desktop in development: this port was written in a
+  Claude Code session that runs inside Claude Desktop.
+- **The links** go through `ILauncher.OpenAssistantLinkAsync`, which takes
+  only the three forms `Assistant.Link` and `FileLink` build (the
+  characters `encodeURIComponent` keeps and the query's separators), at
+  most 32 000 characters (Windows' limit of a command line, which the
+  handler's must fit). An attachment for Claude is written as Open writes
+  it (`AttachmentOpener.WriteForHandOffAsync`: the open directory, the Mark
+  of the Web, never a program).
+
 ## 11. UI
 
 ### 11.1 Main window
@@ -2185,11 +2260,95 @@ automated UI tests (§12) use UI Automation's patterns only, never
 synthetic keys (they run beside other windows and never need the
 foreground).
 
+### 11.6 The Assistant
+
+The ✦ button of the message pane's command bar (`MessageCommandBar`,
+window.blp `assistant_button`) carries the Assistant menu
+(`Assistants/AssistantMenu.cs`, a `MenuFlyout` built again each time it
+opens, as GTK's model is: the four message actions, *Summarize Unread in
+This Folder* while the folder has unread mail, *Open In* with the three
+targets as radio items, and, while the chosen Claude app cannot take the
+request, its problem and *Set Up…*, which opens *Preferences → AI*). The
+same menu sits in a message window's command bar, without *Summarize
+Unread*. The attachment chip's menu has *Ask Claude about This
+Attachment*. Every action goes through `AssistantActions` (the port of
+GTK's `assistant.go` and macOS `AssistantActions.swift`): a hand-off
+builds the link in Core and opens it with `ILauncher.OpenAssistantLinkAsync`,
+In App runs in the panel.
+
+The panel (`Assistants/AssistantPanel.xaml`, the port of macOS
+`AssistantPanelViewController`) is the pane of a second `SplitView`
+(`AssistantSplit`, pane on the right) around the three panes, with its
+toggle beside the ✦ button while In App is chosen. Wider than
+`PaneLayout.AssistantBreakpoint` (1180 px) it is a pane of its own beside
+the others, narrower an overlay that a click outside or Escape closes;
+its width is 28 % of the window's between 280 and 480 px (GTK's
+`Adw.OverlaySplitView` with the same numbers; not resized by dragging).
+Its rows are a header with *New Conversation*, the context chip (its ✕
+removes the context), the quick actions, the bar shown when the list
+selects another message than the conversation's (*New Conversation* or
+*Add to Conversation*), the transcript (user, answer, activity, draft,
+error and note rows in a `StackPanel`, kept in step with the controller's
+`Items` by its `Changed` indexes), the waiting action with its ✕, the input (a `TextBox`: Enter sends, Shift+Enter and
+Alt+Enter start a new line, Escape drops a waiting action) with
+Send/Stop, and the footer. An answer is Core's Markdown subset rendered by
+`AnswerRenderer` into a `RichTextBlock` (paragraphs, headings as bold
+runs, lists with a hanging indent, code in the monospace font, links as
+`Hyperlink`s whose click goes to the reader's link opener with no listed
+link, so *Open This Link?* names the destination); nothing of an answer is
+ever markup. The consent question (`assistant-consent`) is a
+`ContentDialog` on the window that asks (`IAlerts.ConfirmAsync`).
+
+The compose window's header has the rewrite's ✦ button while the one-shot
+requests can run (`ComposeWindow.Rewrite.cs`): its flyout has the four
+rewrites, an instruction field (Enter sends; with no words, Enter takes
+the answer), the answer as plain text in a read-only box, and *Discard*,
+*Insert Below* and *Replace*; the editor's passage and the answer go
+through the bridge (§6.5). The main window's search box has the ✦ of
+*Search in Your Own Words* and Alt+Enter (`MainWindow.OwnWords.cs`); while
+the words are converted the box is disabled and says so. *Preferences →
+AI* (`AiPage`) has GTK's rows: *Register with Claude* (with Claude
+Desktop's restart question), *Assistant Menu*, *Open In*, and for In App
+*Claude Code* (the path found or chosen, its version and whether it is
+signed in, and *Choose…*, whose file dialog takes a `claude.exe`) and
+*Model*.
+
+An open inline panel takes its width from the three panes, which are laid
+out for what it leaves (Core's `PaneLayout.Resize` gets the window's width
+less the panel's, so the sidebar folds below 900 px of it), and the list
+narrows, not below its minimum, so that the message pane keeps the width
+its buttons need (`PaneLayout.Widths` with the command bar's measured
+width): GTK's breakpoints follow the window and its panes' minimum widths
+keep the header bar whole, where WinUI would cut off the last buttons.
+
+Walked through on 2026-09-29 with the published app on its own data,
+socket, preferences key, fake keyring and home folder, against devmail and
+a scripted stand-in `claude.exe` (Malachi.FakeClaude, set as the path in
+*Preferences → AI*): registering with Claude Code in that home folder,
+*Open In → In App*, the Claude Code row (path, version, signed in), the ✦
+menu (the four actions, *Summarize Unread*, *Open In*), the consent
+question, the panel inline and as an overlay, *Summarize* with the
+activity row and the streamed answer rendered (heading, emphasis, list,
+code, a link and a literal `<script>`), the link's *Open This Link?*
+naming the destination, the bar for another selected message and *Add to
+Conversation*, a typed question stopped with *Stop*, an attachment's *Ask
+the Assistant…* waiting for words (enabled only for the types the bridge
+can read), the rewrite of a new message (a preset, the preview while it
+streams, *Replace*, one Ctrl+Z back) and of a reply (a custom instruction
+over the text above the quote only, *Insert Below* above the
+attribution), and the search in your own words (the box read-only while
+converting, the query searched). The child's command line, environment,
+working directory and stdin were read back from the stand-in's records.
+Not walked: the hand-off links (they would open the Claude apps of the
+machine the session ran in), Claude Desktop's restart (the same reason),
+and a real Claude Code, whose login on the development machine had
+expired.
+
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs six test projects, 4,139
-tests in about two minutes on the development machine (2026-09-28): 3,292
-in `Malachi.Core.Tests`, 623 in `Malachi.Platform.Windows.Tests`, 159 in
+`make test-windows` (`build.ps1 test`) runs six test projects, 5,064
+tests in about two minutes on the development machine (2026-09-29): 4,189
+in `Malachi.Core.Tests`, 651 in `Malachi.Platform.Windows.Tests`, 159 in
 `Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 26 in
 the canary and 12 UI tests (4 of them opt-in). The tests that need a
 built `malachid.exe` skip without one
@@ -2208,6 +2367,11 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   API coding and notifications; settings, localisation (the Czech cases
   read `po/cs.po`), printf, plural rules, strftime; the WebView2
   crash-dump sweep (links on the way never followed, a dump in use kept);
+  the Assistant's pure package (Go's `ui/internal/assistant` cases and
+  Swift's) and its process, locator, one-shot requests and panel against
+  a stand-in `claude.exe` (`tests/Malachi.FakeClaude`: a small program
+  copied into a fresh folder beside the JSON script of its turns, which
+  records its command line, environment, working directory and stdin);
   the controllers against
   the C# **FakeDaemon** (an in-process daemon on a real AF_UNIX socket with
   a short path, playing the handshake with all of macOS's modes) and

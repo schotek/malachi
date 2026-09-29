@@ -560,8 +560,11 @@ its next write. Quit Claude Desktop, run `install` or `uninstall`, then
 start it again. The macOS app does that for the user: flipping *Register
 with Claude* while Claude Desktop runs offers to restart it (quit, wait,
 write, start), and after *Later* it writes the change again as soon as
-Claude Desktop quits by itself; the Windows app follows. The GTK app
-does not hand mail to Claude Desktop (below), so it offers no restart. Claude
+Claude Desktop quits by itself. The Windows app does the same; it asks
+Claude Desktop to quit as Windows does at sign-out (closing its window
+only hides it in the notification area) and waits up to 45 s for it. The
+GTK app does not hand mail to Claude Desktop (below), so it offers no
+restart. Claude
 Code also writes `~/.claude.json` while it runs, but kept the entry in the
 same test, and picks the user-scope entry up on its next start
 and shows it under `/mcp`. Inside this repository the project-scoped
@@ -579,8 +582,8 @@ as the same user.
 ## Hand-off from the app: the Assistant menu
 
 The desktop apps can hand the selected mail to Claude without running a
-model themselves. The Assistant menu (macOS and GTK; the Windows client
-follows, the shared logic and texts are `ui/internal/assistant`) opens
+model themselves. The Assistant menu (macOS, GTK and Windows; the shared
+logic and texts are `ui/internal/assistant`) opens
 Claude Desktop or Claude Code on the same
 computer through its link scheme, with a prepared question in the input
 field. Nothing is sent: the user reads the question, completes it and
@@ -596,7 +599,11 @@ The GTK app opens Claude Code only: Claude Desktop for Linux is a preview
 the project does not support, so the menu and the settings list it
 insensitive, and whatever `assistant-target` holds reads as Claude Code
 there. Which terminal opens is Claude Code's choice: its handler honours
-`$TERMINAL`, then `x-terminal-emulator`, then a list of common emulators.
+`$TERMINAL`, then `x-terminal-emulator`, then a list of common emulators
+(on Windows it prefers Windows Terminal, then PowerShell, then
+`cmd.exe`). The Windows app hands a link over only in the three forms
+above and at most 32 000 characters long, Windows' limit of a command
+line.
 
 - The question carries opaque ids and an instruction only: the account id
   and the message ids (a folded conversation's members in the folder,
@@ -628,13 +635,15 @@ user typing a question in Claude, with the ids filled in.
 ### The panel in the app (experimental)
 
 The third target, *In App*, runs the conversation in a panel of the main
-window (macOS and GTK; the pure parts are `ui/internal/assistant`: the
-command line, the system prompt, the stream-json events, the Markdown
-subset the panel renders; the GTK app's conversation, process and
-locator are `ui/internal/assistantpanel`, ported from the macOS client). The
+window (macOS, GTK and Windows; the pure parts are
+`ui/internal/assistant`: the command line, the system prompt, the
+stream-json events, the Markdown subset the panel renders; the GTK app's
+conversation, process and locator are `ui/internal/assistantpanel`, ported
+from the macOS client, and the Windows app's are in `Malachi.Core`). The
 app starts the user's own Claude Code CLI, one process per conversation,
-in an empty private directory (`~/.cache/malachi/assistant` on Linux), and
-talks to it over stdin and stdout:
+in an empty private directory (`~/.cache/malachi/assistant` on Linux,
+`%LOCALAPPDATA%\Malachi Mail\assistant` on Windows), and talks to it over
+stdin and stdout:
 
 ```
 claude -p --verbose --output-format stream-json --include-partial-messages

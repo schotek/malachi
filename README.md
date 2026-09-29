@@ -541,11 +541,17 @@ Unread in This Folder*, and an attachment's menu gets *Ask the Assistant…*.
 
 - **Claude Code** opens in a terminal (the one its `claude-cli://` handler
   picks: `$TERMINAL`, then `x-terminal-emulator`, then the common
-  emulators) with the question typed in and not sent. The question names
-  the mail by opaque ids only; Claude reads it through the bridge.
+  emulators; on Windows, Windows Terminal, then PowerShell) with the
+  question typed in and not sent. The question names the mail by opaque
+  ids only; Claude reads it through the bridge.
+- **Claude Desktop** (macOS and Windows) opens a new chat with the question
+  typed in, and an attachment as a Cowork task that asks you to confirm
+  the file. It rewrites its configuration while it runs, so flipping
+  *Register with Claude* then offers to restart it.
 - **In App (Experimental)** keeps the conversation in a panel on the right
   of the main window. It runs your own `claude` (signed in as you, billed
-  as your Claude Code usage) with only the bridge's read and draft tools,
+  as your Claude Code usage; on Windows the native `claude.exe` only)
+  with only the bridge's read and draft tools,
   none of your Claude Code settings, and nothing written to disk; the
   first question asks whether mail may be sent to Claude. *Preferences →
   AI* shows which `claude` it runs and chooses the model.
@@ -560,7 +566,7 @@ what you typed ("invoices from Jana in March") into a search. Only the
 passage or the typed words go to Claude.
 
 Claude Desktop for Linux is a preview the project does not support: it is
-listed, but cannot be chosen (the macOS app offers it). How it works and why
+listed, but cannot be chosen (the macOS and Windows apps offer it). How it works and why
 it is safe: [docs/mcp.md](docs/mcp.md#hand-off-from-the-app-the-assistant-menu),
 [docs/security.md](docs/security.md#101-the-assistant).
 

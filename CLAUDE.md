@@ -251,10 +251,10 @@ obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
 Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
 `ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows
 `McpRegistrationController`, který předá `--command` a u MSIX Claude Desktop
-`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (macOS
-a GTK `ui/internal/window/assistant.go`; čistá logika a texty
-v `ui/internal/assistant`, portovaná do `MalachiCore`, klíče gschema
-`assistant-menu` a `assistant-target`, Windows UI následuje) předá vybranou poštu do Claude Desktop
+`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (macOS,
+GTK `ui/internal/window/assistant.go` a Windows; čistá logika a texty
+v `ui/internal/assistant`, portovaná do `MalachiCore` a `Malachi.Core`,
+klíče gschema `assistant-menu` a `assistant-target`) předá vybranou poštu do Claude Desktop
 nebo Claude Code odkazem `claude://` / `claude-cli://` s předvyplněným,
 neodeslaným dotazem, který nese jen ID; existuje jen se zapnutým
 přepínačem Registrovat v Claude (`assistant.Shown`); poštu Claude čte přes most,
@@ -321,7 +321,7 @@ launcher, Run, `mailto:`, tray), `Malachi.App` (WinUI 3, `MalachiMail.exe`,
 tenké: okna, XAML, vrstva WebView2) a `Malachi.Credentials`
 (`malachi-credentials.exe`, NativeAOT helper keyringu démona nad Credential
 Managerem, hodnota nad 2560 B po kusech ověřených SHA-256). Testy: xUnit v3
-na Microsoft.Testing.Platform, ~4 000 (Core s FakeDaemon a MailFixture,
+na Microsoft.Testing.Platform, ~5 000 (Core s FakeDaemon a MailFixture,
 služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
 hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
 pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
@@ -372,9 +372,9 @@ Pořadí prací:
    `docs/windows-port.md` §17)
 8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK hotovo
    (A, B1 a B2; jen Claude Code, v terminálu nebo v aplikaci), Windows
-   doplňuje (viz předávka níže)
+   hotovo (A, B1 a B2; viz předávka níže)
 
-Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
+Asistent — předávka (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
 úroveň A (menu ✦ Asistent v toolbaru a menu Zpráva, položka „Zeptat se
 asistenta…“ na čipu přílohy, předání do Claude Desktop `claude://` a
@@ -434,11 +434,27 @@ editoru `rewriteTarget`/`rewriteApply` (pasáž posílá zprávou „rewrite“,
 hledání má tlačítko ✦ `search_own_words` vedle pole a Alt+Enter
 (`window/search_ownwords.go`). Handler Claude Code
 z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do terminálu
-zkoušet s aplikací nainstalovanou na hostiteli. Windows:
-klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené
-(na Macu není dotnet) — nejdřív `build.ps1 test` a `lint`, pak porty do
-`Malachi.Core` (1:1 ze Swiftu) a UI; msgid asistenta z exclusions při
-použití odebírat. Cíl „V aplikaci“ zůstává
+zkoušet s aplikací nainstalovanou na hostiteli. Windows: A, B1 i B2 jsou
+napsané jako port macOS (`Malachi.Core/Assistants/` = čistý balíček
+`ui/internal/assistant` včetně sémantiky bajtů UTF-8 a čtení JSON jako Go;
+kontrolery `AssistantController`, `ClaudeDesktopController`,
+`AssistantPanelController`, `AssistantRequest`, `ComposeRewriteController`,
+`SearchConversion`, `Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, testy
+proti falešnému `claude.exe` z `tests/Malachi.FakeClaude`; UI
+`Malachi.App/Assistants/`, `MainWindow.Assistant.cs`, `MainWindow.OwnWords.cs`,
+`Compose/ComposeWindow.Rewrite.cs`, `Preferences/AiPage`), msgid asistenta
+jsou z exclusions pryč. Odlišnosti: Claude Code jen jako `claude.exe`
+(nativní instalátor `%USERPROFILE%\.local\bin`, pak `PATH`; npm
+`claude.cmd` ne, `cmd.exe` by JSON argumenty nepřenesl bezpečně), konec
+procesu zavřením stdin a zabitím stromu procesů po 2 s (žádný SIGTERM),
+pracovní adresář `%LOCALAPPDATA%\Malachi Mail\assistant`; Claude Desktop je
+MSIX `Claude_pzs8sxrjxfjjc`, restart ho požádá o ukončení Restart
+Managerem jako při odhlášení (zavření okna ho jen schová do oznamovací
+oblasti), čeká 45 s a spustí ho podle AUMID (`ClaudeDesktopApp`). Ověřeno
+automaticky a v UI proti falešnému `claude.exe` a devmailu; neověřené
+zůstává: skutečné ukončení a restart Claude Desktop (session agenta
+v něm běží) a živé odpovědi skutečného Claude Code (přihlášení
+`claude.exe` na vývojovém stroji vypršelo). Cíl „V aplikaci“ zůstává
 experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
 Code z aplikace.
 
