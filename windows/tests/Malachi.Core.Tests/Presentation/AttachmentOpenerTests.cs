@@ -116,6 +116,31 @@ public sealed class AttachmentOpenerTests : IDisposable
         Assert.Equal(["The attachment could not be opened"], toasts.Select(t => t.Text));
     }
 
+    // The Assistant's "Ask the Assistant…" (macOS writeForHandOff): Open's
+    // file, marked, without the launch; never a program.
+    [Fact]
+    public async Task WriteForHandOffWritesAndMarksWithoutOpening()
+    {
+        Serve("2", "report.pdf", "application/pdf", [1, 2, 3]);
+        var path = await opener.WriteForHandOffAsync(Attachment("2", "report.pdf"), Summary("m1"), remote: false, "w");
+        Assert.NotNull(path);
+        Assert.StartsWith(openDir.Path, path, StringComparison.Ordinal);
+        Assert.Equal([1, 2, 3], File.ReadAllBytes(path));
+        Assert.Equal([(path, AttachmentUse.Open)], mark.Marked);
+        Assert.Empty(launcher.Files);
+        Assert.Empty(toasts);
+
+        Serve("3", "setup.exe", "application/x-msdownload", [0x4D, 0x5A]);
+        Assert.Null(await opener.WriteForHandOffAsync(Attachment("3", "setup.exe", "application/x-msdownload"), Summary("m1"), remote: false, "w"));
+        Assert.StartsWith("Programs and scripts", Assert.Single(toasts).Text);
+
+        toasts.Clear();
+        mark.Outcome = ZoneMarkOutcome.Rejected;
+        Serve("4", "b.pdf", "application/pdf", [1]);
+        Assert.Null(await opener.WriteForHandOffAsync(Attachment("4", "b.pdf"), Summary("m1"), remote: false, null));
+        Assert.Equal(["The attachment could not be opened"], toasts.Select(t => t.Text));
+    }
+
     [Fact]
     public async Task AFailedFetchOrLaunchIsAToast()
     {
