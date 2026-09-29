@@ -5,15 +5,14 @@
 // (SearchConversion: today, running, convert, cancel, outcome); GTK:
 // ui/internal/assistantpanel/oneshot.go (Searcher, NewSearcher, Today,
 // Running, Convert, Cancel, searchOutcome). Swift's completion is an
-// Action parameter. Today's default is the day on the request's clock in
-// the user's time zone, Swift's AssistantPanelController.localDate
-// (yyyy-MM-dd, Gregorian); the failure of words that are too long is
-// reported after the caller's turn, as Swift's Task does, through the
-// controller infrastructure (docs/windows-port.md §7.2). Dispose (the
-// window closed: Cancel, and that failure dropped) is Windows' own.
+// Action parameter. Today's default is AssistantPanelController.LocalDate
+// (Swift's localDate) on the request's clock; the failure of words that
+// are too long is reported after the caller's turn, as Swift's Task does,
+// through the controller infrastructure (docs/windows-port.md §7.2).
+// Dispose (the window closed: Cancel, and that failure dropped) is Windows'
+// own.
 
 using System;
-using System.Globalization;
 using System.Threading.Tasks;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers.Infrastructure;
@@ -49,13 +48,13 @@ public sealed partial class SearchConversion : IDisposable
         ArgumentNullException.ThrowIfNull(request);
         Request = request;
         scope = new ControllerScope(pending);
-        Today = () => request.Time.GetLocalNow().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        Today = () => AssistantPanelController.LocalDate(request.Time);
     }
 
     /// <summary>The conversion's request.</summary>
     public AssistantRequest Request { get; }
 
-    /// <summary>The date for the system prompt, YYYY-MM-DD.</summary>
+    /// <summary>The date for the system prompt, YYYY-MM-DD: <see cref="AssistantPanelController.LocalDate"/> on the request's clock by default.</summary>
     public Func<string> Today { get; set; }
 
     /// <summary>A conversion is under way.</summary>
