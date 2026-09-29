@@ -22,7 +22,8 @@ forward with the quoted original, `mailto:` links, the settings
 window, launch at login, running in the background, the Assistant menu
 that hands mail to Claude Desktop or Claude Code and the experimental
 assistant panel that asks the user's own Claude Code inside the main
-window ([AI agents](#ai-agents)), and the Czech translation generated
+window, with the rewrite in the compose window and the search in your
+own words ([AI agents](#ai-agents)), and the Czech translation generated
 from `po/` at build time. What is missing is listed
 under [Not on macOS, not yet](#not-on-macos-not-yet).
 
@@ -117,7 +118,8 @@ macos/
                                 quoting, wizard fields and results, the viewer and editor
                                 documents, formatting, error texts, the Assistant's prompts
                                 and links, the panel's command line, stream events and
-                                Markdown subset from ui/internal/assistant)
+                                Markdown subset, the rewrite's and the search's prompts
+                                and answers from ui/internal/assistant)
     Controllers/                @MainActor view models over the RPC client, tested against
                                 an in-process fake daemon
     I18n/                       L10n (T/N/C), the catalogue loader, plural rules, strftime
@@ -502,3 +504,36 @@ Conversation*, *Stop* (the next question starts a new one) or quitting the
 app ends Claude Code. As with the menu, macOS is the first client to show
 the panel (the logic and the strings are `ui/internal/assistant`'s), not a
 deviation.
+
+Two more uses of the same Claude Code exist while the panel could run
+(the Assistant shown, In App chosen and `claude` found): one-shot requests
+that read no mail, without the bridge and without any tool (one message
+on stdin, the answer in the result; `AssistantRequest`), under the same
+consent (*Send Mail to Claude?* on the window that asks, the first time
+ever; `assistant-consent`) and the model of *Settings → AI*. The
+**rewrite** is the compose window's ✦ *Assistant* button before the draft
+menu: its popover works on the selection (*Rewrite Selection*) or, with
+nothing selected, on your own text, which is what the editor holds above
+the line the window put over the quoted original of a reply or a forward
+(the whole text when there is no such line, as in a new message or a
+draft reopened from Drafts; *Rewrite Your Text*). *More Polite*,
+*Shorter*, *Fix Mistakes* and *Translate to English* ask at once, *Your
+own instruction…* on Return; the answer streams in under *Rewriting…*
+and is shown as plain text; *Replace* (the default button) puts it in
+place of the passage and *Insert Below* after it, both as plain text
+through the editor bridge, one edit that ⌘Z takes back, and the draft
+counts as changed; *Discard*, Escape, a click elsewhere or closing the
+window ends a running request. Only the passage and the instruction go
+to Claude. The **search in your own words** is the search field's
+magnifier menu, *Search in Your Own Words*, or ⌥↩ in the field: the
+typed words go to Claude Code with the search syntax of `search.query`
+(the answer in a JSON shape, `--json-schema`), the field says
+*Converting the search…* and takes no typing meanwhile, and the query
+that comes back replaces the words and is searched as if typed and
+Return pressed, in the current scope (a list folded by a narrow window
+unfolds); a failure is the toast *The search could not be converted: …*
+and the words stay. Only the typed words go to Claude, no mail. The
+editor bridge carries two macOS additions for the rewrite
+(`rewriteTarget`, `rewriteApply`), and the compose window keeps the
+attribution line it asked `draft.create` for (`ComposeParams.attribution`);
+the GTK widgets follow this port.

@@ -95,6 +95,19 @@ Conversation about %d message	Assistant menu (hand-off to Claude): macOS first, 
 Another message is selected	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
 Add to Conversation	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
 This link leads to %s.	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+More Polite	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Shorter	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Fix Mistakes	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Translate to English	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Rewrite Selection	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Rewrite Your Text	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Your own instruction…	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Rewriting…	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Replace	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Insert Below	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Search in Your Own Words	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+Converting the search…	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
+The search could not be converted: %s	Assistant menu (hand-off to Claude): macOS first, the Windows UI follows
 Check for new mail and show notifications in the background	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
 The desktop portal refused to change autostart	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key
 Autostart needs xdg-desktop-portal	xdg-desktop-portal: the Background portal's reason; Windows launches at login through its Run key

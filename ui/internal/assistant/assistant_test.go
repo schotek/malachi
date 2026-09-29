@@ -813,3 +813,85 @@ func TestAttachmentPrompt(t *testing.T) {
 		}
 	}
 }
+
+func TestRewriteLabel(t *testing.T) {
+	tests := []struct {
+		r    Rewrite
+		want string
+	}{
+		{Politer, "More Polite"},
+		{Shorter, "Shorter"},
+		{Fix, "Fix Mistakes"},
+		{ToEnglish, "Translate to English"},
+		{Custom, ""},
+		{Rewrite("louder"), ""},
+		{Rewrite(""), ""},
+	}
+	for _, tt := range tests {
+		if got := RewriteLabel(identity{}, tt.r); got != tt.want {
+			t.Errorf("RewriteLabel(%q) = %q, want %q", tt.r, got, tt.want)
+		}
+	}
+	for _, r := range Rewrites {
+		if RewriteLabel(identity{}, r) == "" {
+			t.Errorf("the preset %q has no label", r)
+		}
+	}
+	cs := catalog{"Fix Mistakes": "Opravit chyby"}
+	if got := RewriteLabel(cs, Fix); got != "Opravit chyby" {
+		t.Errorf("RewriteLabel(cs) = %q", got)
+	}
+}
+
+func TestComposeTexts(t *testing.T) {
+	want := ComposeStrings{
+		RewriteSelection: "Rewrite Selection",
+		RewriteText:      "Rewrite Your Text",
+		Custom:           "Your own instruction…",
+		Rewriting:        "Rewriting…",
+		Replace:          "Replace",
+		InsertBelow:      "Insert Below",
+	}
+	if got := ComposeTexts(identity{}); got != want {
+		t.Errorf("ComposeTexts =\n%+v\nwant\n%+v", got, want)
+	}
+	cs := catalog{"Replace": "Nahradit", "Insert Below": "Vložit pod"}
+	if got := ComposeTexts(cs); got.Replace != "Nahradit" || got.InsertBelow != "Vložit pod" {
+		t.Errorf("ComposeTexts(cs) = %+v", got)
+	}
+}
+
+func TestSearchTexts(t *testing.T) {
+	want := SearchStrings{OwnWords: "Search in Your Own Words", Converting: "Converting the search…"}
+	if got := SearchTexts(identity{}); got != want {
+		t.Errorf("SearchTexts = %+v, want %+v", got, want)
+	}
+	cs := catalog{"Search in Your Own Words": "Hledat vlastními slovy"}
+	if got := SearchTexts(cs); got.OwnWords != "Hledat vlastními slovy" {
+		t.Errorf("SearchTexts(cs) = %+v", got)
+	}
+}
+
+func TestSearchFailedText(t *testing.T) {
+	long := strings.Repeat("a", 199) + "č" // 201 bytes: the č does not fit
+	tests := []struct {
+		name, reason, want string
+	}{
+		{"plain", "Claude Code was not found on this computer", "The search could not be converted: Claude Code was not found on this computer"},
+		{"first line", "API Error: 401\nat line 2\n", "The search could not be converted: API Error: 401"},
+		{"first non-empty line", "\n  \n\ttimed out \nmore", "The search could not be converted: timed out"},
+		{"control characters", "bad\x1b[31m red\x07", "The search could not be converted: bad[31m red"},
+		{"percent signs are data", "100% %s", "The search could not be converted: 100% %s"},
+		{"cut at a character", long, "The search could not be converted: " + strings.Repeat("a", 199)},
+		{"empty", "", "The search could not be converted: unknown"},
+	}
+	for _, tt := range tests {
+		if got := SearchFailedText(identity{}, tt.reason); got != tt.want {
+			t.Errorf("%s: SearchFailedText = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	cs := catalog{"The search could not be converted: %s": "Hledání se nepodařilo převést: %s"}
+	if got := SearchFailedText(cs, "x"); got != "Hledání se nepodařilo převést: x" {
+		t.Errorf("SearchFailedText(cs) = %q", got)
+	}
+}

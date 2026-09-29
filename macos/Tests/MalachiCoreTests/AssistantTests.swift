@@ -468,5 +468,18 @@ struct AssistantTranslationTests {
         ] {
             #expect(cs.translate(msgid) != msgid, "\(msgid)")
         }
+        // The compose window's rewrite and the search in the user's own
+        // words.
+        let oneShot = [
+            ("More Polite", "Zdvořileji"), ("Shorter", "Stručněji"), ("Fix Mistakes", "Opravit chyby"),
+            ("Translate to English", "Přeložit do angličtiny"), ("Your own instruction…", "Vlastní pokyn…"),
+            ("Rewrite Selection", "Upravit výběr"), ("Rewrite Your Text", "Upravit váš text"),
+            ("Rewriting…", "Přepisuje se…"), ("Replace", "Nahradit"), ("Insert Below", "Vložit pod"),
+            ("Search in Your Own Words", "Hledat vlastními slovy"), ("Converting the search…", "Převádí se hledání…"),
+        ]
+        for (msgid, want) in oneShot {
+            #expect(cs.translate(msgid) == want, "\(msgid)")
+        }
+        #expect(cs.translate("The search could not be converted: %s", ["x"]) == "Hledání se nepodařilo převést: x")
     }
 }

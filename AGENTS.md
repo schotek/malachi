@@ -370,9 +370,9 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Asistent (Claude) — macOS hotovo (úroveň A a panel B1), GTK úroveň A
-   a B1 (jen Claude Code, v terminálu nebo v panelu), Windows doplňuje,
-   macOS rozpracovává B2 (viz předávka níže)
+8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK úroveň A
+   a B1 (jen Claude Code, v terminálu nebo v panelu), GTK B2 a Windows
+   doplňují (viz předávka níže)
 
 Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
@@ -385,14 +385,23 @@ konfiguraci) a B1 (třetí cíl „V aplikaci (experimentální)“: panel vprav
 v hlavním okně nad `claude -p` se stream-json, souhlas při prvním dotazu,
 rychlé akce, odpověď jako podmnožina Markdownu bez HTML, karta
 „Otevřít koncept“, rozhovor drží kontext s lištou „Vybrali jste jinou
-zprávu“). Referencí pro port je čistý Go balíček `ui/internal/assistant`
+zprávu“) a B2 (jen s cílem „V aplikaci“: tlačítko ✦ v okně Nová zpráva
+upraví výběr, jinak vlastní text nad hlavičkou citace — Zdvořileji,
+Stručněji, Opravit chyby, Přeložit do angličtiny, vlastní pokyn; náhled
+a Nahradit / Vložit pod / Zahodit jedním krokem zpět; „Hledat vlastními
+slovy“ v nabídce lupy pole hledání a ⌥↩ převede napsaná slova na dotaz
+v syntaxi hledání přes `--json-schema`; obě žádosti jsou jednorázové
+a bez nástrojů). Referencí pro port je čistý Go balíček `ui/internal/assistant`
 (texty, dotazy, příkazová řádka, události, Markdown, pravidla dostupnosti;
 testovaný), chování UI popisuje `docs/mcp.md` (Hand-off, The panel in the
 app) a macOS: `MalachiCore/Assistant/`, `Controllers/AssistantController`,
 `ClaudeDesktopController`, `AssistantPanelController`,
-`Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `MalachiMail/Assistant/`,
-`Preferences/AIPaneViewController`. GTK: úroveň A je napsaná
-(`ui/internal/window/assistant.go`: stav `Assistant` pro celou aplikaci
+`Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `Controllers/AssistantRequest`,
+`ComposeRewriteController`, `SearchConversion`, `MalachiMail/Assistant/`,
+`Preferences/AIPaneViewController`; editor bridge má dva doplňky
+(`rewriteTarget`, `rewriteApply`) a okno Nová zpráva si pamatuje svou
+hlavičku citace (`ComposeParams.attribution`). GTK: úroveň A a panel B1
+jsou hotové a uživatelem otestované (`ui/internal/window/assistant.go`: stav `Assistant` pro celou aplikaci
 nad `mcpsetup` a výchozím handlerem schématu z GIO, `MenuButton`
 `assistant_button` vedle `message_menu` v `window.blp` i
 `message_window.blp` s akcemi `win.assistant`/`msg.assistant`,
@@ -413,16 +422,16 @@ Linux je preview, které nepodporujeme: menu i Předvolby ho ukazují
 zašedlé (`supportedTarget`), uložené `desktop` se čte jako Claude Code,
 výchozí hodnota gschema zůstává referenční (`desktop`), proto žádná
 nabídka restartu Claude Desktop (který i na Linuxu za běhu přepisuje
-konfiguraci, „Config file written“ v `~/.config/Claude/logs/main.log`).
-Zbývá opakování neúspěšného dotazu na stav po 1, 2 a 4 s. Handler Claude
-Code z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do
-terminálu zkoušet s aplikací nainstalovanou na hostiteli. Windows:
+konfiguraci, „Config file written“ v `~/.config/Claude/logs/main.log`);
+stránka AI opakuje neúspěšný dotaz na stav po 1, 2 a 4 s. Zbývá B2
+(úprava textu v okně Nová zpráva, hledání vlastními slovy; reference
+`ui/internal/assistant` `rewrite.go` a `search.go`). Handler Claude Code
+z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do terminálu
+zkoušet s aplikací nainstalovanou na hostiteli. Windows:
 klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené
 (na Macu není dotnet) — nejdřív `build.ps1 test` a `lint`, pak porty do
 `Malachi.Core` (1:1 ze Swiftu) a UI; msgid asistenta z exclusions při
-použití odebírat. Rozpracováno na macOS (neportovat, texty a klíče se
-ještě mohou změnit): B2 — úprava vybraného či vlastního textu v okně Nová
-zpráva a hledání vlastními slovy v poli hledání. Cíl „V aplikaci“ zůstává
+použití odebírat. Cíl „V aplikaci“ zůstává
 experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
 Code z aplikace.
 

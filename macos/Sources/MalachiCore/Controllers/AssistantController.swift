@@ -70,6 +70,9 @@ public final class AssistantController {
     /// Whether an app handles each target's links, as last looked up; a
     /// target not looked up yet has none.
     public private(set) var handlers: [Assistant.Target: Bool] = [:]
+    /// Whether the `ClaudeCodeLocator` found Claude Code when the handlers
+    /// were last looked up (`canRunInApp`).
+    public private(set) var claudeFound = false
     /// Nothing is emitted afterwards and replies are dropped.
     public private(set) var closed = false
 
@@ -136,16 +139,18 @@ public final class AssistantController {
     /// the panel finds Claude Code and the bridge.
     public func refreshHandlers() {
         guard !closed else { return }
+        let claude = locator?.locate() != nil
         var found: [Assistant.Target: Bool] = [:]
         for t in Self.targets {
             if t == .app {
-                found[t] = bridge != nil && locator?.locate() != nil
+                found[t] = bridge != nil && claude
             } else {
                 found[t] = lookup(t.scheme)
             }
         }
-        guard found != handlers else { return }
+        guard found != handlers || claude != claudeFound else { return }
         handlers = found
+        claudeFound = claude
         notify()
     }
 
@@ -199,6 +204,16 @@ public final class AssistantController {
     /// In App target chosen. Whether it can run is `pick`'s.
     public var panelShown: Bool {
         shown && settings.assistantTarget == .app
+    }
+
+    /// Whether the In App target's one-shot requests exist: the compose
+    /// window's rewrite and the search in the user's own words, which read
+    /// no mail and need no bridge (`AssistantRequest`). The same condition
+    /// as the panel's (`panelShown`), and Claude Code found (as last looked
+    /// up); whether it is signed in is asked when a request runs. Its
+    /// changes come through `onChange` and `Settings.onChange(.assistantTarget)`.
+    public var canRunInApp: Bool {
+        panelShown && claudeFound
     }
 
     /// Why target `t` cannot run the message actions; "" when it can

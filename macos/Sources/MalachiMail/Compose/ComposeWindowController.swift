@@ -14,8 +14,19 @@ import os
 /// `ComposeWindowHandle`. The menu bar's compose and Format items reach the
 /// controller through the responder chain (`MalachiActions`). Every string
 /// shown from mail data is plain text.
+///
+/// With the assistant's In App target (ui/internal/assistant rewrite.go,
+/// while `AssistantController.canRunInApp`) the toolbar has an Assistant
+/// button before the draft menu: its popover (`ComposeRewriteViewController`)
+/// rewrites the selection, or the user's own text above the quoted
+/// original (what the editor holds before the attribution line of
+/// `params.attribution`), with the user's Claude Code, and puts the answer
+/// in its place or below it as plain text through the editor bridge, one
+/// edit ⌘Z takes back. The first request ever asks for consent on this
+/// window (the panel's sheet, `assistant-consent`). Closing the popover
+/// or the window ends a running request.
 @MainActor
-final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate, ToastHosting {
+final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTextFieldDelegate, ToastHosting, NSPopoverDelegate {
     static let defaultSize = NSSize(width: 760, height: 640)
     static let minimumSize = NSSize(width: 360, height: 420)
     static let toolbarIdentifier = NSToolbar.Identifier("compose")
@@ -57,6 +68,15 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     private var closing = false
     /// The close question is up; a second close request waits for it.
     private var closeQuestionPending = false
+    /// The assistant's rewrite (the In App target): its controller, made
+    /// on first use, and the popover while it is shown.
+    private var rewrite: ComposeRewriteController?
+    private var rewritePopover: NSPopover?
+    /// The Assistant button was clicked and the popover is on its way
+    /// (consent, the editor's passage).
+    private var openingRewrite = false
+    private var assistantToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "compose")
 
     /// - Parameters:
@@ -74,6 +94,10 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
             controller?.placeholder ?? true
         }
         toolbarDelegate = ComposeToolbar()
+        // Whether Claude Code is there is looked up now (a few stat calls),
+        // so the Assistant button reflects it from the start.
+        state.assistant.refreshHandlers()
+        toolbarDelegate.showsAssistant = state.assistant.canRunInApp
 
         plainHint.font = Typo.caption
         plainHint.textColor = Tint.secondary
@@ -129,6 +153,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         wireRows()
         wireToolbar()
         wireDraft()
+        wireAssistant()
         escape = EscapeCloser.install(on: w)
         escape?.shouldClose = { [weak self] in
             guard let self else { return true }
@@ -311,6 +336,116 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         }
     }
 
+    // MARK: Assistant
+
+    /// The Assistant button follows `canRunInApp`: the Assistant shown, In
+    /// App chosen and Claude Code found.
+    private func wireAssistant() {
+        assistantToken = state.assistant.onChange { [weak self] in
+            self?.updateAssistant()
+        }
+        assistantTargetToken = state.settings.onChange(.assistantTarget) { [weak self] in
+            self?.updateAssistant()
+        }
+    }
+
+    private func updateAssistant() {
+        let available = state.assistant.canRunInApp
+        if let toolbar = window?.toolbar {
+            toolbarDelegate.setAssistant(visible: available, in: toolbar)
+        }
+        if !available {
+            rewritePopover?.performClose(nil)
+        }
+    }
+
+    /// The toolbar's Assistant button: the rewrite's popover, or it closes.
+    /// The first request ever asks for consent first, so that the sheet
+    /// does not close the popover under it.
+    @objc func showAssistantRewrite(_ sender: Any?) {
+        if let p = rewritePopover, p.isShown {
+            p.performClose(sender)
+            return
+        }
+        guard state.assistant.canRunInApp, !openingRewrite, !closing else { return }
+        openingRewrite = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            if !self.state.settings.assistantConsent {
+                guard await self.askConsent() else {
+                    self.openingRewrite = false
+                    return
+                }
+                self.state.settings.assistantConsent = true
+            }
+            self.editor.rewriteTarget(attribution: self.params.attribution) { [weak self] target in
+                guard let self else { return }
+                self.openingRewrite = false
+                self.presentRewrite(target ?? RewriteTarget(selected: false, text: ""))
+            }
+        }
+    }
+
+    /// "Send Mail to Claude?" on this window (the panel's consent).
+    private func askConsent() async -> Bool {
+        let t = Assistant.panelTexts()
+        return await state.alerts.confirm(
+            on: window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow, declineLabel: t.cancel)
+    }
+
+    private func rewriteController() -> ComposeRewriteController {
+        if let rewrite {
+            return rewrite
+        }
+        let request = AssistantRequest(settings: state.settings, locator: state.claudeCode)
+        request.consent = { [weak self] in
+            await self?.askConsent() ?? false
+        }
+        let c = ComposeRewriteController(request: request)
+        rewrite = c
+        return c
+    }
+
+    private func presentRewrite(_ target: RewriteTarget) {
+        guard state.assistant.canRunInApp, !closing, let window, window.isVisible else { return }
+        let controller = rewriteController()
+        controller.cancel()
+        let vc = ComposeRewriteViewController(controller: controller, target: target)
+        vc.onClose = { [weak self] in
+            self?.rewritePopover?.performClose(nil)
+        }
+        vc.onApply = { [weak self] text, below in
+            self?.applyRewrite(text, below: below)
+        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentViewController = vc
+        popover.delegate = self
+        rewritePopover = popover
+        if window.toolbar?.isVisible == true, let item = toolbarDelegate.assistantItem, item.isVisible {
+            popover.show(relativeTo: item)
+        } else {
+            let anchor = editor.view
+            popover.show(relativeTo: NSRect(x: anchor.bounds.midX, y: anchor.bounds.minY, width: 1, height: 1), of: anchor, preferredEdge: .maxY)
+        }
+    }
+
+    /// Replace or Insert Below: the popover goes, the editor takes the
+    /// keyboard (so that ⌘Z reaches its undo) and the answer as plain text.
+    private func applyRewrite(_ text: String, below: Bool) {
+        rewritePopover?.performClose(nil)
+        focusEditor()
+        editor.applyRewrite(text, below: below)
+    }
+
+    /// The popover went (Discard, a click elsewhere, Escape, an apply):
+    /// a running request ends.
+    func popoverDidClose(_ notification: Foundation.Notification) {
+        guard let popover = notification.object as? NSPopover, popover === rewritePopover else { return }
+        rewritePopover = nil
+        rewrite?.cancel()
+    }
+
     // MARK: Rows
 
     /// compose.go `validateRow`: flags a recipient row with unparsable
@@ -395,6 +530,13 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         closing = true
         escape?.uninstall()
         escape = nil
+        assistantToken?.cancel()
+        assistantToken = nil
+        assistantTargetToken?.cancel()
+        assistantTargetToken = nil
+        rewritePopover?.close()
+        rewritePopover = nil
+        rewrite?.cancel()
         for s in suggestions {
             s.cleanup() // a pending search must not touch the rows after this
         }
@@ -646,16 +788,39 @@ extension ComposeWindowController: NSToolbarItemValidation {
 // MARK: - Toolbar
 
 /// The header bar of compose.blp as a unified toolbar: Attach, the draft
-/// menu and Send. Items act through the responder chain.
+/// menu and Send. Items act through the responder chain. With the
+/// assistant's In App target the Assistant button (ui/internal/assistant;
+/// no Blueprint yet) sits before the draft menu while `showsAssistant`.
 @MainActor
 private final class ComposeToolbar: NSObject, NSToolbarDelegate {
     enum ID {
         static let attach = NSToolbarItem.Identifier("composeAttach")
+        static let assistant = NSToolbarItem.Identifier("composeAssistant")
         static let draftMenu = NSToolbarItem.Identifier("composeDraftMenu")
         static let send = NSToolbarItem.Identifier("composeSend")
     }
 
-    static let items: [NSToolbarItem.Identifier] = [ID.attach, .flexibleSpace, ID.draftMenu, ID.send]
+    static let items: [NSToolbarItem.Identifier] = [ID.attach, .flexibleSpace, ID.assistant, ID.draftMenu, ID.send]
+
+    /// Whether the Assistant button is in the toolbar
+    /// (`AssistantController.canRunInApp`).
+    var showsAssistant = false
+    /// The Assistant button, once made (the rewrite's popover points at it).
+    private(set) var assistantItem: NSToolbarItem?
+
+    /// Puts the Assistant button into `toolbar` (right before the draft
+    /// menu) or takes it out.
+    func setAssistant(visible: Bool, in toolbar: NSToolbar) {
+        showsAssistant = visible
+        let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.assistant }
+        if visible {
+            guard current == nil else { return }
+            let at = toolbar.items.firstIndex { $0.itemIdentifier == ID.draftMenu } ?? toolbar.items.count
+            toolbar.insertItem(withItemIdentifier: ID.assistant, at: at)
+        } else if let current {
+            toolbar.removeItem(at: current)
+        }
+    }
 
     /// `send_button`: the suggested action, ⌘↩.
     let sendButton: NSButton
@@ -683,7 +848,7 @@ private final class ComposeToolbar: NSObject, NSToolbarDelegate {
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        Self.items
+        showsAssistant ? Self.items : Self.items.filter { $0 != ID.assistant }
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -703,6 +868,22 @@ private final class ComposeToolbar: NSObject, NSToolbarDelegate {
             it.isBordered = true
             it.target = nil
             it.action = Action.attachFiles
+            return it
+        case ID.assistant:
+            // The assistant's rewrite (ui/internal/assistant, In App).
+            if let assistantItem {
+                return assistantItem
+            }
+            let label = Assistant.texts().assistant
+            let it = NSToolbarItem(itemIdentifier: id)
+            it.image = Icon.symbol("sparkles", size: .toolbar, description: label)
+            it.label = label
+            it.paletteLabel = label
+            it.toolTip = label
+            it.isBordered = true
+            it.target = nil
+            it.action = #selector(ComposeWindowController.showAssistantRewrite(_:))
+            assistantItem = it
             return it
         case ID.draftMenu:
             let it = NSMenuToolbarItem(itemIdentifier: id)

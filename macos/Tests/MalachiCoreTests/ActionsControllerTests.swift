@@ -875,6 +875,8 @@ private final class Harness {
         #expect(requests.first?.mode == .reply)
         #expect(requests.first?.messageId == "m1")
         #expect(requests.first?.attribution?.hasSuffix("alice wrote:") == true)
+        // The window knows the line above the quote (the rewrite's own text).
+        #expect(p.attribution == requests.first?.attribution)
         try await Task.sleep(for: .milliseconds(30))
         #expect(await rec.drafts.count == 1)
         #expect(h.log.toasts.isEmpty)
@@ -893,6 +895,8 @@ private final class Harness {
         #expect(f.inReplyTo == nil)
         #expect(f.bodyHTML.contains("---------- Forwarded message ----------"))
         #expect(f.bodyHTML.hasSuffix("body of m1"))
+        #expect(f.attribution.hasPrefix("---------- Forwarded message ----------\nFrom: "))
+        #expect(f.bodyHTML.contains(escapeText(f.attribution)))
         #expect(h.log.toasts.isEmpty)
 
         // Another failure is said; the fallback is the same. Reply all
@@ -909,6 +913,8 @@ private final class Harness {
         #expect(r.inReplyTo == "m1")
         #expect(r.bodyHTML.contains("<blockquote type=\"cite\">body of m1</blockquote>"))
         #expect(r.bodyHTML.contains("alice wrote:"))
+        #expect(r.attribution.hasSuffix("alice wrote:"))
+        #expect(r.bodyHTML.contains("<div>" + escapeText(r.attribution) + "</div>"))
     }
 
     @Test func flagsFollowTheRowAndTheMessage() async throws {
