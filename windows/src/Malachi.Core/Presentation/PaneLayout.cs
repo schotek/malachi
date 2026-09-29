@@ -3,7 +3,8 @@
 
 // Port of the layout of ui/data/ui/window.blp (outer_split: the sidebar at
 // 200 to 320; inner_split: the list at 280 to 460; the breakpoints at 900sp
-// and 600sp) and of window.go's navigation between its pages
+// and 600sp; assistant_split: the assistant panel, 0.28 of the width at 280
+// to 480, an overlay at 1180sp or less) and of window.go's navigation between its pages
 // (outerSplit.SetShowContent after a folder was chosen, innerSplit
 // .SetShowContent after a message was, search.go startSearch back to the
 // list); macOS keeps the same in AppKit (MainSplitViewController.swift:
@@ -51,6 +52,22 @@ public sealed class PaneLayout
     /// <summary>The message pane's minimum (MainSplitViewController: 300, the rest of the window).</summary>
     public const int MessageMinimum = 300;
 
+    /// <summary>
+    /// window.blp's breakpoint of the assistant panel (max-width: 1180sp): at
+    /// this width or less the panel only overlays the panes, wider it is a
+    /// pane of its own on the right (assistant_split).
+    /// </summary>
+    public const double AssistantBreakpoint = 1180;
+
+    /// <summary>assistant_split min-sidebar-width.</summary>
+    public const int AssistantMinimum = 280;
+
+    /// <summary>assistant_split max-sidebar-width.</summary>
+    public const int AssistantMaximum = 480;
+
+    /// <summary>assistant_split sidebar-width-fraction.</summary>
+    public const double AssistantFraction = 0.28;
+
     /// <summary>The layout for the window's width (wide until the first <see cref="Resize"/>).</summary>
     public PaneMode Mode { get; private set; } = PaneMode.Wide;
 
@@ -88,6 +105,22 @@ public sealed class PaneLayout
     /// <summary>The layout for a window <paramref name="width"/> effective pixels wide (window.blp's max-width conditions).</summary>
     public static PaneMode ModeFor(double width) =>
         width <= ListBreakpoint ? PaneMode.Narrow : width <= SidebarBreakpoint ? PaneMode.Medium : PaneMode.Wide;
+
+    /// <summary>
+    /// Whether the assistant panel of a window <paramref name="width"/> wide
+    /// is a pane beside the others (wider than <see cref="AssistantBreakpoint"/>)
+    /// rather than an overlay; the panes' own layout still follows the
+    /// window's width, as window.blp's breakpoints do.
+    /// </summary>
+    public static bool AssistantInline(double width) => width > AssistantBreakpoint;
+
+    /// <summary>
+    /// The assistant panel's width in a window <paramref name="width"/> wide
+    /// (Adw.OverlaySplitView's sidebar: the fraction of the width within its
+    /// range, and never wider than the window).
+    /// </summary>
+    public static double AssistantWidth(double width) =>
+        Math.Max(0, Math.Min(Math.Clamp(width * AssistantFraction, AssistantMinimum, AssistantMaximum), width));
 
     /// <summary>A stored sidebar width within outer_split's range (a width not yet stored, 0, is the minimum).</summary>
     public static int ClampSidebar(int width) => Math.Clamp(width, SidebarMinimum, SidebarMaximum);
