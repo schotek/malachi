@@ -973,9 +973,7 @@ public sealed partial class ActionsController
             }
             if (draft is null)
             {
-                // Swift and GTK take it from the Assistant's panel texts
-                // (Assistant.PanelTexts().DraftGone), the same msgid.
-                toast(L10n.T("The draft is no longer there"));
+                toast(Assistants.Assistant.PanelTexts().DraftGone);
                 return;
             }
             if (RaiseDraft?.Invoke(draft) == true)
