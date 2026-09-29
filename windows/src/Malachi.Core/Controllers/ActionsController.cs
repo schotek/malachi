@@ -7,8 +7,8 @@
 // confirmTrash, trackMoves, archiveIDs, junkFrom, junkIDs, moveIDsToRole,
 // call, callThen), outbox.go (retryOutbox, cancelSendFrom), remote.go
 // (loadRemoteImages, trustSender, ensureKnownSendersPolicy,
-// downloadPictures), compose_open.go (openCompose, openComposeFrom) and
-// drafts.go (openDraft).
+// downloadPictures), compose_open.go (openCompose, openComposeFrom),
+// drafts.go (openDraft) and assistant_panel.go (openSavedDraft, findDraft).
 //
 // The per-message actions of the main window and the message windows,
 // minus the widgets: an optimistic change in the model and the rows,
@@ -38,6 +38,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
+using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Platform;
@@ -55,6 +56,12 @@ namespace Malachi.Core.Controllers;
 /// </summary>
 public sealed partial class ActionsController
 {
+    /// <summary>The page size of the <c>draft.list</c> calls of <see cref="OpenSavedDraft"/>.</summary>
+    public const int DraftListPageLimit = 500;
+
+    /// <summary>The most pages of <c>draft.list</c> one <see cref="OpenSavedDraft"/> reads.</summary>
+    public const int DraftListMaxPages = 20;
+
     private readonly Action<string> toast;
     private readonly ILogger logger;
 
@@ -62,6 +69,10 @@ public sealed partial class ActionsController
     // (compose_open.go composing): a second click while it runs does
     // nothing.
     private readonly HashSet<MessageId> composing = [];
+
+    // The drafts the assistant panel's Open Draft is looking up
+    // (assistant_panel.go findingDrafts).
+    private readonly HashSet<DraftId> findingDrafts = [];
 
     /// <param name="mailbox">The folder half (the model, the badges, the RPC plumbing).</param>
     /// <param name="list">The list half (the rows).</param>
@@ -848,9 +859,15 @@ public sealed partial class ActionsController
             : Mailbox.Model.EnabledAccounts is { Count: > 0 } enabled
                 ? FolderTree.SelfAddress(enabled[0])
                 : new Address { Email = "" };
-        void Fallback() => OpenComposeRequested?.Invoke(this, Prefill.Create(kind, src, me) with { AccountId = s.AccountId });
-
+        // The line above the quote, which the window keeps for the
+        // assistant's rewrite (the user's own text is what is above it).
         var attribution = Prefill.Attribution(kind, src);
+        void Fallback() => OpenComposeRequested?.Invoke(this, Prefill.Create(kind, src, me) with
+        {
+            AccountId = s.AccountId,
+            Attribution = attribution,
+        });
+
         var parameters = new DraftCreateParams
         {
             AccountId = s.AccountId,
@@ -876,6 +893,7 @@ public sealed partial class ActionsController
             {
                 AccountId = s.AccountId,
                 Skipped = res.Skipped?.Count ?? 0,
+                Attribution = attribution,
             });
         }, RpcTimeouts.Compose);
     }
@@ -919,6 +937,81 @@ public sealed partial class ActionsController
                 toast(DraftOpen.DraftSkippedText(skipped.Count));
             }
         }, RpcTimeouts.Compose);
+    }
+
+    // The assistant panel
+
+    /// <summary>
+    /// The assistant panel's Open Draft (ui/internal/assistant, the In App
+    /// target; assistant_panel.go <c>openSavedDraft</c>): the draft
+    /// <paramref name="draftId"/> of account <paramref name="accountId"/>,
+    /// which Claude Code saved through the bridge's create_draft, opens in the
+    /// compose window, or the window already editing it comes to the front
+    /// (<see cref="RaiseDraft"/>). The ids come from the bridge's own line of
+    /// the tool result, so the draft is looked up with <c>draft.list</c>
+    /// first (pages of <see cref="DraftListPageLimit"/>, the cursor followed,
+    /// at most <see cref="DraftListMaxPages"/> pages), and only a draft the
+    /// daemon lists is opened; one that is gone (sent, deleted, or never
+    /// there) says so. A second request for the draft while one runs does
+    /// nothing.
+    /// </summary>
+    public void OpenSavedDraft(AccountId accountId, DraftId draftId)
+    {
+        Mailbox.Scope.VerifyAccess();
+        if (string.IsNullOrEmpty(draftId.Value) || !findingDrafts.Add(draftId))
+        {
+            return;
+        }
+        FindDraft(accountId, draftId, null, 0, outcome =>
+        {
+            findingDrafts.Remove(draftId);
+            if (!outcome.TryGetValue(out var draft, out var error))
+            {
+                LogCallFailed(logger, API.DraftList.Name, error!);
+                toast(RpcErrorText.Text(L10n.T("Opening the draft"), error));
+                return;
+            }
+            if (draft is null)
+            {
+                // Swift and GTK take it from the Assistant's panel texts
+                // (Assistant.PanelTexts().DraftGone), the same msgid.
+                toast(L10n.T("The draft is no longer there"));
+                return;
+            }
+            if (RaiseDraft?.Invoke(draft) == true)
+            {
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Edit, draft, new BlockedContent()));
+        });
+    }
+
+    // assistant_panel.go findDraft: pages draft.list of account for draft
+    // id: the draft, null when the last page (or the page limit) came
+    // without it, or the error.
+    private void FindDraft(AccountId account, DraftId id, string? cursor, int page, Action<Outcome<Draft?>> done)
+    {
+        var parameters = new DraftListParams { AccountId = account, Page = new Page { Cursor = cursor, Limit = DraftListPageLimit } };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftList, parameters, outcome =>
+        {
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                done(Outcome.Failure<Draft?>(error!));
+                return;
+            }
+            if (res.Drafts.FirstOrDefault(d => d.Id == id) is { } found)
+            {
+                done(Outcome.Success<Draft?>(found));
+            }
+            else if (res.Page.NextCursor is { Length: > 0 } next && next != cursor && page + 1 < DraftListMaxPages)
+            {
+                FindDraft(account, id, next, page + 1, done);
+            }
+            else
+            {
+                done(Outcome.Success<Draft?>(null));
+            }
+        });
     }
 
     // Plumbing

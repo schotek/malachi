@@ -2,14 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/HTML/EditorBridge.swift (bridgeJS,
-// jsString) and of the scripts macos/Sources/MalachiMail/Compose/
-// ComposeEditorView.swift evaluates; GTK: ui/internal/editor/bridge.go
-// (bridgeJS, jsString) and editor.go (Flush, Exec, FocusStart).
+// jsString, rewriteInsertion, rewriteApplyScript, RewriteTarget.script) and
+// of the scripts macos/Sources/MalachiMail/Compose/ComposeEditorView.swift
+// evaluates; GTK: ui/internal/editor/bridge.go (bridgeJS, jsString,
+// RewriteInsertion) and editor.go (Flush, Exec, FocusStart, RewriteTarget,
+// ApplyRewrite).
 //
 // The script that runs in the compose editor's page (docs/windows-port.md
-// §6.5), a third copy beside bridge.go and the Swift one. It is GTK's
-// script with these deltas, each checked by EditorBridgeDriftTests against
-// ui/internal/editor/bridge.go:
+// §6.5), a third copy beside bridge.go and the Swift one. The assistant's
+// rewrite (rewriteTarget, rewriteApply) is GTK's: the passage is posted as a
+// "rewrite" message. WebView2's ExecuteScriptAsync could return it, as
+// macOS's bridge does, but staying in GTK's shape keeps the drift from
+// bridge.go to the deltas below. It is GTK's script with these deltas, each
+// checked by EditorBridgeDriftTests against ui/internal/editor/bridge.go:
 //   1. It is injected with AddScriptToExecuteOnDocumentCreatedAsync, so it
 //      runs in every frame and on every navigation, before the document
 //      exists: it returns unless it is the top frame on a document under
@@ -18,11 +23,20 @@
 //   2. WebView2 has no isolated world: the bridge shares the page's, whose
 //      named elements shadow document properties (a pasted <img
 //      name="body"> makes document.body that image, and flush() would post
-//      its empty innerHTML as the draft). Every Document, EventTarget and
-//      Node accessor the bridge uses (body, getSelection, queryCommandState,
-//      queryCommandValue, execCommand, createRange, addEventListener,
-//      parentElement, Element.closest) is captured from the prototypes
-//      before any content exists and called on the document.
+//      its empty innerHTML as the draft). A <form> does the same to its own
+//      properties with its named controls (Document and HTMLFormElement are
+//      the interfaces whose named properties override built-ins), and the
+//      nodes the bridge walks may be one: the caret's parent, and the
+//      rewrite's way up and back from the attribution's div (a <form><input
+//      name="parentNode"> would send it elsewhere). So every Document and
+//      EventTarget accessor the bridge uses (body, getSelection,
+//      queryCommandState, queryCommandValue, execCommand, createRange,
+//      addEventListener) and every accessor it reads of such a node
+//      (parentElement, parentNode, previousSibling, nodeType, childNodes,
+//      Element.closest) is captured from the prototypes before any content
+//      exists and called on the document or the node. What it reads of the
+//      body element, of a div, a text node, a range or the selection is
+//      called directly: none of them has named properties.
 //   3. Messages go to chrome.webview.postMessage (captured with the
 //      webview), not to WebKit's script message handler.
 //   4. Keys (docs/windows-port.md §11.5): GTK's Ctrl-only test stays (the
@@ -41,6 +55,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using Malachi.Core.Compose;
 
 namespace Malachi.Core.Html;
 
@@ -72,6 +87,17 @@ public static class EditorBridge
     /// only observes (content changes, the formatting at the caret) and
     /// handles the keys above; every other formatting command comes from the
     /// host through <c>window.malachi.exec</c>. Messages are JSON strings.
+    /// Two functions serve the assistant's rewrite:
+    /// <c>rewriteTarget(attribution)</c> notes the passage to rewrite and
+    /// posts it (<c>rewrite</c>: <c>selected</c>, <c>text</c>), the selection
+    /// when it holds more than white space, otherwise the user's own text,
+    /// everything before the first div whose text is the attribution line the
+    /// compose window put above the quoted original (white space compared
+    /// collapsed), or the whole body when there is none;
+    /// <c>rewriteApply(below, cmd, arg)</c> selects that passage again (its
+    /// end when <c>below</c>) and runs one editing command there
+    /// (<see cref="RewriteInsertion"/>), which the page's undo takes back as
+    /// one step, and reports the change as typing does.
     /// </summary>
     public const string Script = """
         (() => {
@@ -79,6 +105,10 @@ public static class EditorBridge
           const D = Document.prototype, E = EventTarget.prototype, N = Node.prototype;
           const getBody = Object.getOwnPropertyDescriptor(D, 'body').get;
           const getParent = Object.getOwnPropertyDescriptor(N, 'parentElement').get;
+          const getParentNode = Object.getOwnPropertyDescriptor(N, 'parentNode').get;
+          const getPrevious = Object.getOwnPropertyDescriptor(N, 'previousSibling').get;
+          const getNodeType = Object.getOwnPropertyDescriptor(N, 'nodeType').get;
+          const getChildNodes = Object.getOwnPropertyDescriptor(N, 'childNodes').get;
           const getSelection = D.getSelection, queryCommandState = D.queryCommandState, queryCommandValue = D.queryCommandValue;
           const execCommand = D.execCommand, createRange = D.createRange, addEventListener = E.addEventListener;
           const closest = Element.prototype.closest;
@@ -118,6 +148,8 @@ public static class EditorBridge
               const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
               if (cmd) { e.preventDefault(); execCommand.call(document, cmd); state(); }
             });
+            let passage = null;
+            const collapsed = s => String(s || '').replace(/\s+/g, ' ').trim();
             const hasFiles = e => !!e.dataTransfer && Array.prototype.includes.call(e.dataTransfer.types || [], 'Files');
             on('dragover', e => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } }, true);
             on('drop', e => {
@@ -135,6 +167,48 @@ public static class EditorBridge
                 r.setStart(body(), 0);
                 r.collapse(true);
                 sel.addRange(r);
+              },
+              rewriteTarget(attribution) {
+                const sel = selection();
+                passage = null;
+                if (sel.rangeCount && !sel.isCollapsed && body().contains(sel.getRangeAt(0).commonAncestorContainer) &&
+                    sel.toString().trim()) {
+                  passage = sel.getRangeAt(0).cloneRange();
+                  post({type: 'rewrite', selected: true, text: sel.toString()});
+                  return;
+                }
+                const r = createRange.call(document);
+                r.selectNodeContents(body());
+                const want = collapsed(attribution);
+                const mark = want && Array.from(body().querySelectorAll('div')).find(d => collapsed(d.innerText) === want);
+                if (mark) {
+                  let prev = mark;
+                  while (prev !== body() && !getPrevious.call(prev)) prev = getParentNode.call(prev);
+                  prev = prev === body() ? null : getPrevious.call(prev);
+                  if (prev) r.setEnd(prev, getNodeType.call(prev) === Node.TEXT_NODE ? prev.length : getChildNodes.call(prev).length);
+                  else r.collapse(true);
+                }
+                const saved = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+                sel.removeAllRanges();
+                sel.addRange(r);
+                const text = sel.toString();
+                sel.removeAllRanges();
+                if (saved) sel.addRange(saved);
+                passage = r;
+                post({type: 'rewrite', selected: false, text});
+              },
+              rewriteApply(below, c, a) {
+                if (!passage) return;
+                const r = passage.cloneRange();
+                passage = null;
+                if (below) r.collapse(false);
+                body().focus();
+                const sel = selection();
+                sel.removeAllRanges();
+                sel.addRange(r);
+                execCommand.call(document, c, false, a);
+                schedule();
+                state();
               }
             };
             window.malachi.exec = (c, a) => { execCommand.call(document, c, false, a == null ? null : a); state(); };
@@ -155,6 +229,56 @@ public static class EditorBridge
         ArgumentNullException.ThrowIfNull(command);
         var arg = string.IsNullOrEmpty(argument) ? "null" : JsString(argument);
         return "window.malachi.exec(" + JsString(command) + ", " + arg + ")";
+    }
+
+    /// <summary>
+    /// editor.RewriteTarget (macOS <c>RewriteTarget.script</c>): the script
+    /// that notes the passage and posts it, the selection or the text before
+    /// the div of <paramref name="attribution"/> (the whole body when "").
+    /// The attribution is mail data (a sender's name): a string literal.
+    /// </summary>
+    public static string RewriteTargetScript(string attribution)
+    {
+        ArgumentNullException.ThrowIfNull(attribution);
+        return "window.malachi.rewriteTarget(" + JsString(attribution) + ")";
+    }
+
+    /// <summary>
+    /// editor.RewriteInsertion (macOS <c>rewriteInsertion</c>): the editing
+    /// command that puts the rewrite's answer into the message as plain text:
+    /// in place of the passage one line with <c>insertText</c>, several lines
+    /// as escaped HTML (each line break a <c>&lt;br&gt;</c>) with
+    /// <c>insertHTML</c>; below the passage (<paramref name="below"/>) always
+    /// the latter, on a line of its own (a <c>&lt;br&gt;</c> before it, and
+    /// one after it that the page shows only when the passage's line goes
+    /// on). Nothing of <paramref name="text"/> is ever markup: the escaping
+    /// is html.EscapeString's (<see cref="Prefill.EscapeText"/>).
+    /// </summary>
+    public static (string Command, string Argument) RewriteInsertion(string text, bool below)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        text = text.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var escaped = Prefill.EscapeText(text);
+        if (below)
+        {
+            return ("insertHTML", "<br>" + escaped + "<br>");
+        }
+        if (!text.Contains('\n', StringComparison.Ordinal))
+        {
+            return ("insertText", text);
+        }
+        return ("insertHTML", escaped);
+    }
+
+    /// <summary>
+    /// editor.ApplyRewrite (macOS <c>rewriteApplyScript</c>): the script that
+    /// puts the rewrite's answer in place of the passage
+    /// <c>rewriteTarget</c> noted, or below it (<see cref="RewriteInsertion"/>).
+    /// </summary>
+    public static string RewriteApplyScript(string text, bool below)
+    {
+        var (command, argument) = RewriteInsertion(text, below);
+        return "window.malachi.rewriteApply(" + (below ? "true" : "false") + ", " + JsString(command) + ", " + JsString(argument) + ")";
     }
 
     /// <summary>

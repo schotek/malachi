@@ -3,8 +3,9 @@
 
 // Port of the bridge half of macos/Sources/MalachiMail/Compose/
 // ComposeEditorView.swift (load, flush, receive, flushed, resolveWaiters,
-// drainWaiters, crashed, exec, focusStart); GTK: ui/internal/editor/editor.go
-// (Load, Flush, onMessage, Exec, FocusStart).
+// drainWaiters, crashed, exec, focusStart, rewriteTarget, applyRewrite);
+// GTK: ui/internal/editor/editor.go (Load, Flush, onMessage, Exec,
+// FocusStart, RewriteTarget, ApplyRewrite, answerRewrites).
 //
 // What the compose editor view does with the bridge, without the WebView2:
 // the last content the page reported, the ready state, and the flush
@@ -23,6 +24,15 @@
 // is GTK's semantics (the record happens before OnChanged of the same
 // message) with macOS's seq precision. UI-thread-affine (§7.1): the view
 // calls it from the WebView2's events.
+//
+// The assistant's rewrite is GTK's: the page posts the passage as a
+// "rewrite" message, which answers every rewrite waiting (answerRewrites),
+// and a bridge that is not running answers at once with the empty target
+// (macOS answers nil there and when its evaluation failed). As the flush
+// waiters here, and beyond GTK, which answers them only when the web
+// process ends, the rewrites waiting are answered with the empty target
+// when the document goes (Load), when the page died (Crashed) and when the
+// evaluation failed (RewriteFailed): a rewrite must never hang.
 
 using System;
 using System.Collections.Generic;
@@ -34,6 +44,7 @@ namespace Malachi.Core.Html;
 public sealed class EditorChannel
 {
     private readonly List<Waiter> waiters = [];
+    private readonly List<Action<RewriteTarget>> rewrites = [];
     private long nextWaiterId;
     private int heldChanges;
 
@@ -70,7 +81,8 @@ public sealed class EditorChannel
     /// safe for the page) is being loaded; the view navigates to
     /// <see cref="EditorDocument.Document"/> of it. Callers waiting on a flush
     /// of the old document are released, as they would be were the page not
-    /// ready, and its held changes are dropped.
+    /// ready, rewrites waiting get the empty target, and its held changes are
+    /// dropped.
     /// </summary>
     public void Load(string bodyHtml)
     {
@@ -81,6 +93,7 @@ public sealed class EditorChannel
         LastSeq = 0;
         heldChanges = 0;
         Drain();
+        AnswerRewrites(new RewriteTarget());
     }
 
     /// <summary>
@@ -116,6 +129,9 @@ public sealed class EditorChannel
                 return message;
             case BridgeMessage.Kinds.State:
                 StateChanged?.Invoke(this, message.State);
+                return message;
+            case BridgeMessage.Kinds.Rewrite:
+                AnswerRewrites(new RewriteTarget { Selected = message.Selected, Text = message.Text });
                 return message;
             case BridgeMessage.Kinds.Key:
                 KeyPressed?.Invoke(this, message.Key);
@@ -196,15 +212,67 @@ public sealed class EditorChannel
     public string? FocusStartScript() => IsReady ? EditorBridge.FocusStartScript : null;
 
     /// <summary>
+    /// editor.RewriteTarget (macOS <c>rewriteTarget</c>): notes the passage
+    /// the assistant's rewrite works on, the selection or the user's own
+    /// text, everything above the line <paramref name="attribution"/> (the
+    /// whole body when "" or not found), and calls <paramref name="done"/>
+    /// with it. Returns the script the view evaluates
+    /// (<see cref="EditorBridge.RewriteTargetScript"/>); null after calling
+    /// <paramref name="done"/> at once with the empty target when the bridge
+    /// is not running. <paramref name="done"/> runs when the page's
+    /// <c>rewrite</c> arrives (every rewrite waiting gets it, as in GTK), or
+    /// with the empty target when the document goes (<see cref="Load"/>,
+    /// <see cref="Crashed"/>) or the evaluation failed
+    /// (<see cref="RewriteFailed"/>).
+    /// </summary>
+    public string? BeginRewriteTarget(string attribution, Action<RewriteTarget> done)
+    {
+        ArgumentNullException.ThrowIfNull(attribution);
+        ArgumentNullException.ThrowIfNull(done);
+        if (!IsReady)
+        {
+            done(new RewriteTarget());
+            return null;
+        }
+        rewrites.Add(done);
+        return EditorBridge.RewriteTargetScript(attribution);
+    }
+
+    /// <summary>
+    /// The evaluation of a <see cref="BeginRewriteTarget"/> script failed
+    /// (the view's <c>ExecuteScriptAsync</c> threw): the rewrites waiting get
+    /// the empty target. Its success says nothing: the passage comes as a
+    /// message, whichever of the two WebView2 delivers first.
+    /// </summary>
+    public void RewriteFailed() => AnswerRewrites(new RewriteTarget());
+
+    /// <summary>
+    /// editor.ApplyRewrite (macOS <c>applyRewrite</c>): the script that puts
+    /// <paramref name="text"/> in place of the passage
+    /// <see cref="BeginRewriteTarget"/> noted, or below it, as plain text
+    /// (<see cref="EditorBridge.RewriteApplyScript"/>): one step the page's
+    /// undo takes back, reported as typing is. Null until the bridge runs in
+    /// the current document, which ignores it as GTK and macOS do. The editor
+    /// should have the keyboard.
+    /// </summary>
+    public string? ApplyRewriteScript(string text, bool below)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        return IsReady ? EditorBridge.RewriteApplyScript(text, below) : null;
+    }
+
+    /// <summary>
     /// The page's process died, or its document was refused; the view is
     /// blank until <see cref="Load"/> is called again (the compose window
-    /// reloads <see cref="Html"/>). Waiters are released; held changes are
-    /// raised after them, their content is the latest known.
+    /// reloads <see cref="Html"/>). Waiters are released and rewrites waiting
+    /// get the empty target (editor.go's web process terminated); held
+    /// changes are raised after them, their content is the latest known.
     /// </summary>
     public void Crashed()
     {
         IsReady = false;
         Drain();
+        AnswerRewrites(new RewriteTarget());
         Release();
     }
 
@@ -278,6 +346,17 @@ public sealed class EditorChannel
         foreach (var waiter in all)
         {
             waiter.Done();
+        }
+    }
+
+    // editor.answerRewrites: every rewrite waiting gets t, in order.
+    private void AnswerRewrites(RewriteTarget t)
+    {
+        var waiting = rewrites.ToArray();
+        rewrites.Clear();
+        foreach (var done in waiting)
+        {
+            done(t);
         }
     }
 

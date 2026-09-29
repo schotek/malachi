@@ -31,6 +31,10 @@ public sealed class EditorBridgeDriftTests
         + "  const D = Document.prototype, E = EventTarget.prototype, N = Node.prototype;\n"
         + "  const getBody = Object.getOwnPropertyDescriptor(D, 'body').get;\n"
         + "  const getParent = Object.getOwnPropertyDescriptor(N, 'parentElement').get;\n"
+        + "  const getParentNode = Object.getOwnPropertyDescriptor(N, 'parentNode').get;\n"
+        + "  const getPrevious = Object.getOwnPropertyDescriptor(N, 'previousSibling').get;\n"
+        + "  const getNodeType = Object.getOwnPropertyDescriptor(N, 'nodeType').get;\n"
+        + "  const getChildNodes = Object.getOwnPropertyDescriptor(N, 'childNodes').get;\n"
         + "  const getSelection = D.getSelection, queryCommandState = D.queryCommandState, queryCommandValue = D.queryCommandValue;\n"
         + "  const execCommand = D.execCommand, createRange = D.createRange, addEventListener = E.addEventListener;\n"
         + "  const closest = Element.prototype.closest;\n"
@@ -59,14 +63,21 @@ public sealed class EditorBridgeDriftTests
             "2: Node.parentElement and Element.closest through the prototypes"),
         ("document.getSelection().anchorNode.parentElement", "parent(selection().anchorNode)", 1,
             "2: Node.parentElement through the prototype"),
-        ("document.getSelection()", "selection()", 2, "2: Document.getSelection captured"),
-        ("document.body", "body()", 4, "2: the Document.body getter captured"),
+        ("document.getSelection()", "selection()", 4, "2: Document.getSelection captured"),
+        ("document.body", "body()", 10, "2: the Document.body getter captured"),
         ("document.queryCommandState(c)", "queryCommandState.call(document, c)", 1, "2: Document.queryCommandState captured"),
         ("document.queryCommandValue('formatBlock')", "queryCommandValue.call(document, 'formatBlock')", 1,
             "2: Document.queryCommandValue captured"),
-        ("document.execCommand(", "execCommand.call(document, ", 2, "2: Document.execCommand captured"),
-        ("document.createRange()", "createRange.call(document)", 1, "2: Document.createRange captured"),
+        ("document.execCommand(", "execCommand.call(document, ", 3, "2: Document.execCommand captured"),
+        ("document.createRange()", "createRange.call(document)", 2, "2: Document.createRange captured"),
         ("document.addEventListener(", "on(", 3, "2: EventTarget.addEventListener captured"),
+        // The rewrite walks from the attribution's div up and back through
+        // nodes of the content, any of which may be a <form>, whose named
+        // controls override its own properties as the document's do.
+        ("prev.previousSibling", "getPrevious.call(prev)", 2, "2: Node.previousSibling through the prototype"),
+        ("prev.parentNode", "getParentNode.call(prev)", 1, "2: Node.parentNode through the prototype"),
+        ("prev.nodeType", "getNodeType.call(prev)", 1, "2: Node.nodeType through the prototype"),
+        ("prev.childNodes", "getChildNodes.call(prev)", 1, "2: Node.childNodes through the prototype"),
         ("    if (!e.ctrlKey || e.altKey || e.metaKey) return;\n",
             "    if (e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && !e.isComposing) {\n"
             + "      e.preventDefault(); post({type: 'key', key: 'escape'}); return;\n"

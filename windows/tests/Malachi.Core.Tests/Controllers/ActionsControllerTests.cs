@@ -20,9 +20,11 @@
 // ListController.activate; the model rule it goes by is checked instead.
 // Beyond Swift: the message windows hear of every seen change (SeenChanged,
 // GTK refreshSeen, which macOS leaves to AppKit's menu validation), and a
-// confirmation that fails runs nothing and is logged. The cache is the real
-// MessageCache, as in Swift, so the downloads of a forward or a reply and
-// Download Pictures go through it.
+// confirmation that fails runs nothing and is logged, and the assistant
+// panel's Open Draft stops at the last page and after the page limit
+// (assistant_panel.go findDraft). The cache is the real MessageCache, as in
+// Swift, so the downloads of a forward or a reply and Download Pictures go
+// through it.
 
 using System;
 using System.Collections.Generic;
@@ -713,6 +715,8 @@ public sealed class ActionsControllerTests
         Assert.Equal(ComposeMode.Reply, request.Mode.Value);
         Assert.Equal("m1", request.MessageId?.Value);
         Assert.EndsWith("alice wrote:", request.Attribution, StringComparison.Ordinal);
+        // The window knows the line above the quote (the rewrite's own text).
+        Assert.Equal(request.Attribution, p.Attribution);
         Assert.Empty(h.Log.Toasts);
 
         // notImplemented: no toast, the UI's own quote from what the pane
@@ -730,6 +734,8 @@ public sealed class ActionsControllerTests
         Assert.Null(f.InReplyTo);
         Assert.Contains("---------- Forwarded message ----------", f.BodyHtml, StringComparison.Ordinal);
         Assert.EndsWith("body of m1", f.BodyHtml, StringComparison.Ordinal);
+        Assert.StartsWith("---------- Forwarded message ----------\nFrom: ", f.Attribution, StringComparison.Ordinal);
+        Assert.Contains(Prefill.EscapeText(f.Attribution), f.BodyHtml, StringComparison.Ordinal);
         Assert.Empty(h.Log.Toasts);
 
         // Another failure is said; the fallback is the same. Reply all
@@ -746,6 +752,8 @@ public sealed class ActionsControllerTests
         Assert.Equal("m1", r.InReplyTo?.Value);
         Assert.Contains("<blockquote type=\"cite\">body of m1</blockquote>", r.BodyHtml, StringComparison.Ordinal);
         Assert.Contains("alice wrote:", r.BodyHtml, StringComparison.Ordinal);
+        Assert.EndsWith("alice wrote:", r.Attribution, StringComparison.Ordinal);
+        Assert.Contains("<div>" + Prefill.EscapeText(r.Attribution) + "</div>", r.BodyHtml, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -905,6 +913,114 @@ public sealed class ActionsControllerTests
         Assert.Equal(2, h.Log.Toasts.Count);
         Assert.Equal("The draft has not been downloaded yet; try again in a moment", h.Log.Toasts[^1]);
         Assert.Single(h.Log.Composed);
+    }
+
+    /// <summary>
+    /// The assistant panel's Open Draft (ui/internal/assistant, the In App
+    /// target): the draft is looked up with draft.list, page after page, and
+    /// opens for editing, or its window comes to the front; one that is not
+    /// listed says so; a failed list is the usual sentence.
+    /// </summary>
+    [Fact]
+    public async Task SavedDraftOpensAfterDraftList()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen)));
+        var first = new Draft { Id = "d_1", AccountId = "a", Version = 1, Subject = "older", TextBody = "x" };
+        var wanted = new Draft { Id = "d_9", AccountId = "a", Version = 2, Subject = "Re: s-m1", TextBody = "Yes", HtmlBody = "<p>Yes</p>", InReplyTo = "m1" };
+        var lists = new List<DraftListParams>();
+        h.Fixture.On(API.DraftList.Name, p =>
+        {
+            var request = JsonCoding.Decode<DraftListParams>(p);
+            lock (lists)
+            {
+                lists.Add(request);
+            }
+            return Task.FromResult(request.Page.Cursor is null
+                ? JsonCoding.EncodeToString(new DraftListResult { Drafts = [first], Page = new PageInfo { NextCursor = "c2", Total = 2 } })
+                : JsonCoding.EncodeToString(new DraftListResult { Drafts = [wanted], Page = new PageInfo { NextCursor = null, Total = 2 } }));
+        });
+        await h.Run(() =>
+        {
+            h.Actions.OpenSavedDraft("a", "d_9");
+            h.Actions.OpenSavedDraft("a", "d_9"); // once while it runs
+        });
+        await h.IdleAsync();
+        var p = Assert.Single(h.Log.Composed);
+        Assert.True(p.Kind == ComposeKind.Edit && p.DraftId?.Value == "d_9" && p.Version == 2 && p.Subject == "Re: s-m1");
+        Assert.Equal(["d_9"], h.Log.Raised.Select(d => d.Id?.Value ?? "").ToArray());
+        Assert.Equal(
+            [
+                new DraftListParams { AccountId = "a", Page = new Page { Cursor = null, Limit = 500 } },
+                new DraftListParams { AccountId = "a", Page = new Page { Cursor = "c2", Limit = 500 } },
+            ],
+            Locked(lists));
+        Assert.Empty(h.Log.Toasts);
+
+        // A window already editing it comes to the front.
+        h.Log.Raise = true;
+        await h.Run(() => h.Actions.OpenSavedDraft("a", "d_9"));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Raised.Count);
+        Assert.Single(h.Log.Composed);
+
+        // Not listed (sent, deleted, never there).
+        await h.Run(() => h.Actions.OpenSavedDraft("a", "d_404"));
+        await h.IdleAsync();
+        Assert.Equal(["The draft is no longer there"], h.Log.Toasts);
+
+        // The list fails.
+        Refuse(h, API.DraftList.Name, ErrorCode.StorageError, "disk");
+        await h.Run(() => h.Actions.OpenSavedDraft("a", "d_9"));
+        await h.IdleAsync();
+        Assert.Equal(2, h.Log.Toasts.Count);
+        Assert.StartsWith("Opening the draft", h.Log.Toasts[1], StringComparison.Ordinal);
+        Assert.Single(h.Log.Composed);
+    }
+
+    /// <summary>
+    /// Beyond Swift: the lookup ends at the last page (no cursor, or the one
+    /// it asked with) and after <see cref="ActionsController.DraftListMaxPages"/>
+    /// pages, as assistant_panel.go findDraft does; the draft is then gone.
+    /// An empty id asks nothing.
+    /// </summary>
+    [Fact]
+    public async Task SavedDraftLookupEndsAtTheLastPage()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1, flags: Seen)));
+        var cursors = new List<string?>();
+        var repeat = false;
+        h.Fixture.On(API.DraftList.Name, p =>
+        {
+            var request = JsonCoding.Decode<DraftListParams>(p);
+            string next;
+            lock (cursors)
+            {
+                cursors.Add(request.Page.Cursor);
+                next = repeat ? request.Page.Cursor ?? "c" : "c" + cursors.Count;
+            }
+            var other = new Draft { Id = "d_other", AccountId = "a", Version = 1, Subject = "s", TextBody = "x" };
+            return Task.FromResult(JsonCoding.EncodeToString(new DraftListResult { Drafts = [other], Page = new PageInfo { NextCursor = next, Total = -1 } }));
+        });
+        await h.Run(() => h.Actions.OpenSavedDraft("a", "d_9"));
+        await h.IdleAsync();
+        Assert.Equal(ActionsController.DraftListMaxPages, Locked(cursors).Count);
+        Assert.Equal(["The draft is no longer there"], h.Log.Toasts);
+
+        // A cursor that names the page it came with ends the lookup.
+        lock (cursors)
+        {
+            cursors.Clear();
+            repeat = true;
+        }
+        await h.Run(() => h.Actions.OpenSavedDraft("a", "d_9"));
+        await h.IdleAsync();
+        Assert.Equal([null, "c"], Locked(cursors));
+        Assert.Equal(2, h.Log.Toasts.Count);
+
+        await h.Run(() => h.Actions.OpenSavedDraft("a", ""));
+        await h.IdleAsync();
+        Assert.Equal(2, Locked(cursors).Count);
+        Assert.Empty(h.Log.Composed);
     }
 
     /// <summary>

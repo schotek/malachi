@@ -4,6 +4,9 @@
 // Port of macos/Sources/MalachiCore/HTML/EditorBridge.swift (BridgeMessage);
 // GTK: ui/internal/editor/bridge.go (bridgeMessage, decodeMessage).
 //
+// The "rewrite" message is GTK's (its selected and text); macOS has none,
+// its bridge returns the passage instead (RewriteTarget).
+//
 // Decoded as encoding/json and Swift's decoding read it: a missing or null
 // member is its zero value, an unknown one is ignored, a mistyped one fails
 // the whole message, and so does anything that is not a JSON object. A
@@ -33,8 +36,9 @@ namespace Malachi.Core.Html;
 /// editor.bridgeMessage: what the page posts: <c>ready</c>, <c>changed</c>
 /// (with <see cref="Seq"/>, <see cref="Html"/>, <see cref="Text"/>),
 /// <c>state</c> (the formatting, flattened into the same object as Go embeds
-/// it), and on Windows <c>key</c> (with <see cref="Key"/>) and <c>drop</c>
-/// (the files travel beside the message). A kind this client does not know
+/// it), <c>rewrite</c> (with <see cref="Selected"/> and <see cref="Text"/>),
+/// and on Windows <c>key</c> (with <see cref="Key"/>) and <c>drop</c> (the
+/// files travel beside the message). A kind this client does not know
 /// decodes, and the channel ignores it.
 /// </summary>
 public sealed record BridgeMessage
@@ -48,8 +52,11 @@ public sealed record BridgeMessage
     /// <summary>A <c>changed</c>'s <c>body.innerHTML</c>.</summary>
     public string Html { get; init => field = value ?? ""; } = "";
 
-    /// <summary>A <c>changed</c>'s <c>body.innerText</c>.</summary>
+    /// <summary>A <c>changed</c>'s <c>body.innerText</c>; a <c>rewrite</c>'s passage.</summary>
     public string Text { get; init => field = value ?? ""; } = "";
+
+    /// <summary>A <c>rewrite</c>'s: the passage is the selection.</summary>
+    public bool Selected { get; init; }
 
     /// <summary>A <c>key</c>'s key: <c>escape</c> or <c>link</c>.</summary>
     public string Key { get; init => field = value ?? ""; } = "";
@@ -85,7 +92,7 @@ public sealed record BridgeMessage
             }
             string type = "", html = "", text = "", key = "", block = "", align = "";
             long seq = 0;
-            bool bold = false, italic = false, underline = false, strike = false, ul = false, ol = false, link = false;
+            bool selected = false, bold = false, italic = false, underline = false, strike = false, ul = false, ol = false, link = false;
             foreach (var member in root.EnumerateObject())
             {
                 var v = member.Value;
@@ -105,6 +112,9 @@ public sealed record BridgeMessage
                         break;
                     case "key":
                         key = ReadString(v, "key");
+                        break;
+                    case "selected":
+                        selected = ReadBool(v, "selected");
                         break;
                     case "bold":
                         bold = ReadBool(v, "bold");
@@ -143,6 +153,7 @@ public sealed record BridgeMessage
                 Seq = seq,
                 Html = html,
                 Text = text,
+                Selected = selected,
                 Key = key,
                 State = new EditorState
                 {
@@ -186,7 +197,7 @@ public sealed record BridgeMessage
     {
         var kind = Type switch
         {
-            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Key or Kinds.Drop => Type,
+            Kinds.Ready or Kinds.Changed or Kinds.State or Kinds.Rewrite or Kinds.Key or Kinds.Drop => Type,
             "" => "\"\"",
             _ => "<other>",
         };
@@ -321,6 +332,9 @@ public sealed record BridgeMessage
 
         /// <summary>On every edit and selection change, after a formatting key and every exec.</summary>
         public const string State = "state";
+
+        /// <summary>The passage of the assistant's rewrite, once per <c>rewriteTarget</c>.</summary>
+        public const string Rewrite = "rewrite";
 
         /// <summary>Escape or Ctrl+K in the page (Windows).</summary>
         public const string Key = "key";
