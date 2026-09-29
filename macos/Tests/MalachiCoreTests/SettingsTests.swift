@@ -50,7 +50,10 @@ private final class Scratch {
         #expect(s.searchScope == .folder)
         #expect(s.assistantMenu)
         #expect(s.assistantTarget == .desktop)
-        #expect(Settings.Key.allCases.count == 21)
+        #expect(s.assistantModel == .sonnet)
+        #expect(s.assistantClaudePath == "")
+        #expect(!s.assistantConsent)
+        #expect(Settings.Key.allCases.count == 24)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -111,6 +114,26 @@ private final class Scratch {
         s.assistantMenu = false
         #expect(!s.assistantMenu)
         #expect(scratch.defaults.bool(forKey: "assistant-menu") == false)
+        scratch.defaults.set("app", forKey: "assistant-target")
+        #expect(s.assistantTarget == .app)
+        s.assistantTarget = .app
+        #expect(scratch.defaults.string(forKey: "assistant-target") == "app")
+
+        // The gschema's AssistantModel nicks; anything else is Sonnet.
+        for nick in ["sonnet", "haiku", "opus"] {
+            scratch.defaults.set(nick, forKey: "assistant-model")
+            #expect(s.assistantModel.rawValue == nick)
+        }
+        scratch.defaults.set("gpt", forKey: "assistant-model")
+        #expect(s.assistantModel == .sonnet)
+        s.assistantModel = .opus
+        #expect(scratch.defaults.string(forKey: "assistant-model") == "opus")
+        s.assistantModel = Assistant.Model("mythos")
+        #expect(scratch.defaults.string(forKey: "assistant-model") == "sonnet")
+        s.assistantClaudePath = "/opt/claude/bin/claude"
+        #expect(scratch.defaults.string(forKey: "assistant-claude-path") == "/opt/claude/bin/claude")
+        s.assistantConsent = true
+        #expect(scratch.defaults.bool(forKey: "assistant-consent"))
 
         scratch.defaults.set("dance", forKey: "command-r")
         #expect(s.commandR == .reply)

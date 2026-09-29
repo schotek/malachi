@@ -54,8 +54,13 @@ final class AppState {
     let windows: WindowRegistry
     let notifications: NotificationHub
     /// What the Assistant menu may use (ui/internal/assistant): the Claude
-    /// apps' link handlers and the bridge's registration in them.
+    /// apps' link handlers, the user's Claude Code for the panel and the
+    /// bridge's registration in them.
     let assistant: AssistantController
+    /// Finds the user's Claude Code and asks its version and sign-in, for
+    /// the assistant panel, its availability and Settings → AI (one
+    /// instance, so their answers are shared).
+    let claudeCode: ClaudeCodeLocator
     /// Claude Desktop around a change of "Register with Claude": the offer
     /// to restart it and the change it still has to pick up, for the
     /// application's run (docs/mcp.md; macOS leads, GTK follows).
@@ -79,7 +84,10 @@ final class AppState {
         windows = WindowRegistry()
         notifications = NotificationHub()
         notifications.attach(to: connection)
-        let assistant = AssistantController(bridge: paths.mcpBridge?.path, settings: settings, handler: Self.handlesScheme)
+        let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
+        self.claudeCode = claudeCode
+        let assistant = AssistantController(
+            bridge: paths.mcpBridge?.path, settings: settings, locator: claudeCode, handler: Self.handlesScheme)
         self.assistant = assistant
         let service = ClaudeDesktopService()
         claudeDesktopService = service

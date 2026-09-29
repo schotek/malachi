@@ -23,6 +23,13 @@ import os
 /// task in Claude Desktop, which asks the user to confirm it, or as the
 /// working directory of Claude Code.
 ///
+/// With In App chosen (the assistant panel) nothing leaves the
+/// application: the actions run in the panel (`AssistantPanelHost`), which
+/// unfolds, takes the selection (or a message window's message) as its
+/// context and asks the user's Claude Code; an attachment is asked about
+/// through the bridge's get_attachment, so only the types it reads
+/// (`Assistant.attachmentReadable`) can be.
+///
 /// `MessageActionsController` owns one and forwards the menus' and the
 /// chips' requests.
 @MainActor
@@ -30,6 +37,8 @@ final class AssistantActions {
     let state: AppState
     let list: ListController
     let attachments: AttachmentActions
+    /// The assistant panel of the main window; `Integration` sets it.
+    weak var panel: AssistantPanelHost?
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "assistant")
 
@@ -48,6 +57,13 @@ final class AssistantActions {
     /// them oldest first, fetched first when not known yet), or the one
     /// message. Never an Outbox message: it is not on the server yet.
     func ask(_ action: Assistant.Action, from window: NSWindow?) {
+        let (target, ok) = state.assistant.pick(needsBridge: true)
+        if target == .app {
+            if ok {
+                panel?.run(action)
+            }
+            return
+        }
         list.selectedIDs { [weak self] row, ids in
             guard let self, !self.model.inOutbox(row.message) else { return }
             let newestFirst = row.thread ? Array(ids.reversed()) : ids
@@ -58,6 +74,13 @@ final class AssistantActions {
     /// A message action on one message (a message window).
     func ask(_ action: Assistant.Action, about s: MessageSummary, from window: NSWindow?) {
         guard !model.inOutbox(s) else { return }
+        let (target, ok) = state.assistant.pick(needsBridge: true)
+        if target == .app {
+            if ok {
+                panel?.run(action, about: s)
+            }
+            return
+        }
         ask(action, account: s.accountId, ids: [s.id], from: window)
     }
 
@@ -91,6 +114,10 @@ final class AssistantActions {
         guard canSummarizeUnread, let k = model.selected else { return }
         let (target, ok) = state.assistant.pick(needsBridge: true)
         guard ok else { return }
+        if target == .app {
+            panel?.summarizeUnread(k)
+            return
+        }
         let prompt: String
         do {
             prompt = try Assistant.unreadPrompt(accountID: k.account.rawValue, folderID: k.folder.rawValue)
@@ -110,6 +137,11 @@ final class AssistantActions {
     /// of the fetch and the write have had their toasts.
     func ask(about a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?) {
         state.assistant.refreshHandlers()
+        if state.settings.assistantTarget == .app {
+            guard state.assistant.canAsk(about: a) else { return }
+            panel?.ask(about: a, of: s, from: window)
+            return
+        }
         guard state.assistant.pick(needsBridge: false).ok else { return }
         Task { @MainActor [weak self] in
             guard let self, let url = await self.attachments.writeForHandOff(a, of: s, remote: remote, from: window) else { return }
@@ -162,5 +194,19 @@ final class AssistantActions {
 
     private func toast(_ text: String, in window: NSWindow?) {
         windowToast(text, in: window, or: state.toasts)
+    }
+}
+
+extension AssistantController {
+    /// Whether an attachment's "Ask the Assistant…" can run: the chosen
+    /// Claude app is installed (the file goes without the bridge); for In
+    /// App, the panel can run (it reads the file through the bridge's
+    /// get_attachment) and the bridge returns this type's content
+    /// (`Assistant.attachmentReadable`).
+    func canAsk(about a: Attachment) -> Bool {
+        if settings.assistantTarget == .app {
+            return pick(needsBridge: true).ok && Assistant.attachmentReadable(a.contentType)
+        }
+        return pick(needsBridge: false).ok
     }
 }

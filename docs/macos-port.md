@@ -152,7 +152,13 @@ and updated by the AI page's switch),
 from memory while it runs, so a registration written then is lost: the
 AI page offers to restart it, quit through the injected platform, write,
 start again, and a change left for *Later* is written again when Claude
-Desktop quits by itself; the AppKit side is `ClaudeDesktopService`).
+Desktop quits by itself; the AppKit side is `ClaudeDesktopService`),
+`AssistantPanelController` (the in-app panel of phase B: consent, the
+signed-in check, one `ClaudeCodeProcess` per conversation fed by stdin
+and read as stream-json through `LineFramer`, the transcript items,
+pending actions, drafts offered after `openSavedDraft` finds them;
+`ClaudeCodeLocator` finds `claude` where a Finder-launched app's `PATH`
+does not reach).
 Each is a `@MainActor` class over an injected `RPCClient` (or a process
 runner) and a `toast` sink, tested against a scripted daemon or a fake
 bridge script (§9), with no view in sight.
@@ -355,9 +361,10 @@ GTK window sharing the profile would. `launch-at-login` only mirrors
 options live here; anything that affects mail handling (check interval,
 remote content, retention) is the daemon's, through `config.get`/`config.set`.
 
-The window frames (`Main`, `Settings`) and the two pane widths
-(`main-sidebar-width`, `main-list-width`) are AppKit state in the same
-domain, not settings.
+The window frames (`Main`, `Settings`) and the pane widths
+(`main-sidebar-width`, `main-list-width`, and the assistant panel's
+`main-assistant-width`) are AppKit state in the same domain, not
+settings.
 
 ## 8. Localisation
 

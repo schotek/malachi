@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearance: AppearanceController?
     private var commandRToken: Settings.ChangeToken?
     private var assistantMenuToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
     /// `mailto:` URLs AppKit delivered before the shell was wired (the
     /// open-URL event may arrive before `applicationDidFinishLaunching`
     /// returns); opened as soon as `hooks.openMailto` exists.
@@ -69,10 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainMenu.apply(commandR: settings.commandR)
         }
         // The Message menu's Assistant follows `AssistantController.shown`
-        // (the setting while the bridge is registered).
+        // (the setting while the bridge is registered), View ▸ Show
+        // Assistant `panelShown` (that, and In App chosen).
         let assistant = state.assistant
         assistantMenuToken = assistant.onChange {
             MainMenu.apply(assistantMenu: assistant.shown)
+            MainMenu.apply(assistantPanel: assistant.panelShown)
+        }
+        assistantTargetToken = settings.onChange(.assistantTarget) {
+            MainMenu.apply(assistantPanel: assistant.panelShown)
         }
         // What the Assistant menu may use: looked up once now, again
         // whenever one of its menus opens.
@@ -119,6 +125,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// takes one whose write was still in flight.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         purgeOpenDir()
+        // The assistant panel's Claude Code ends with the application.
+        integration?.assistantPanel.close()
         guard let state else {
             return .terminateNow
         }
@@ -262,7 +270,8 @@ extension AppDelegate: NSUserInterfaceValidations {
         case Action.showPreferences: return state?.hooks.openPreferences != nil
         case Action.setUpAssistant: return state?.hooks.openAISettings != nil
         case Action.setAssistantTarget:
-            // Checked: the preference; enabled: an app handles the links.
+            // Checked: the preference; enabled: an app handles the links,
+            // for In App: Claude Code was found (and the bridge is there).
             guard let state, let t = AssistantMenu.target(tag: (item as? NSMenuItem)?.tag) else { return false }
             (item as? NSMenuItem)?.state = state.settings.assistantTarget == t ? .on : .off
             return state.assistant.availability(t).handler

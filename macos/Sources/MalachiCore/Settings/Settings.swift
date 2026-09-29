@@ -37,6 +37,12 @@ public final class Settings {
         /// the Claude app it opens (Settings → AI → Assistant).
         case assistantMenu = "assistant-menu"
         case assistantTarget = "assistant-target"
+        /// The assistant panel (the In App target): the model, where
+        /// Claude Code is (empty: the usual places), and whether the user
+        /// allowed mail to go to Claude.
+        case assistantModel = "assistant-model"
+        case assistantClaudePath = "assistant-claude-path"
+        case assistantConsent = "assistant-consent"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
     }
@@ -90,6 +96,9 @@ public final class Settings {
             Key.favouriteFolders.rawValue: [String](),
             Key.assistantMenu.rawValue: true,
             Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
+            Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
+            Key.assistantClaudePath.rawValue: "",
+            Key.assistantConsent.rawValue: false,
             Key.commandR.rawValue: CommandR.reply.rawValue,
         ]
     }
@@ -261,6 +270,27 @@ public final class Settings {
     public var assistantTarget: Assistant.Target {
         get { Assistant.parseTarget(string(.assistantTarget)) }
         set { set(.assistantTarget, Assistant.parseTarget(newValue.rawValue).rawValue) }
+    }
+
+    /// The model of the assistant panel: the gschema enum AssistantModel's
+    /// nicks, read with `Assistant.parseModel` (an unknown nick is Sonnet).
+    public var assistantModel: Assistant.Model {
+        get { Assistant.parseModel(string(.assistantModel)) }
+        set { set(.assistantModel, Assistant.parseModel(newValue.rawValue).rawValue) }
+    }
+
+    /// The claude executable the panel runs; "" looks in the usual places
+    /// (`ClaudeCodeLocator`).
+    public var assistantClaudePath: String {
+        get { string(.assistantClaudePath) }
+        set { set(.assistantClaudePath, newValue) }
+    }
+
+    /// Whether the user allowed the panel to send mail to Claude (asked
+    /// before the first question).
+    public var assistantConsent: Bool {
+        get { bool(.assistantConsent) }
+        set { set(.assistantConsent, newValue) }
     }
 
     // MARK: Change notification

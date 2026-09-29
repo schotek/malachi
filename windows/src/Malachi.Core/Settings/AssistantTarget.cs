@@ -8,8 +8,8 @@
 namespace Malachi.Core.Settings;
 
 /// <summary>
-/// Where the Assistant menu opens Claude: Claude Desktop, or Claude Code in a
-/// terminal; stored as its gschema nick.
+/// Where the Assistant opens Claude: Claude Desktop, Claude Code in a
+/// terminal, or the panel in the app; stored as its gschema nick.
 /// </summary>
 public enum AssistantTarget
 {
@@ -18,4 +18,7 @@ public enum AssistantTarget
 
     /// <summary><c>code</c>.</summary>
     Code,
+
+    /// <summary><c>app</c>: the panel in the main window, which runs Claude Code itself.</summary>
+    App,
 }

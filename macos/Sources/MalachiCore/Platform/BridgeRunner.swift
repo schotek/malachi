@@ -49,12 +49,20 @@ public struct BridgeRunner: Sendable {
 
     /// Runs `executable` with `args` and waits for it. The status is the
     /// exit status, or the negated signal number when the process died of
-    /// a signal (-9 for SIGKILL).
-    public func run(_ executable: String, _ args: [String], timeout: Duration) async throws -> (stdout: Data, stderr: Data, status: Int32) {
+    /// a signal (-9 for SIGKILL). `environment` replaces the application's
+    /// (`ClaudeCodeLocator` runs `claude` with `Assistant.childEnv`), and
+    /// `directory` is the working directory, the application's when nil.
+    public func run(
+        _ executable: String, _ args: [String], timeout: Duration, environment: [String: String]? = nil,
+        directory: URL? = nil
+    ) async throws -> (stdout: Data, stderr: Data, status: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = args
-        process.environment = ProcessInfo.processInfo.environment
+        process.environment = environment ?? ProcessInfo.processInfo.environment
+        if let directory {
+            process.currentDirectoryURL = directory
+        }
         process.standardInput = FileHandle.nullDevice
         let out = Pipe()
         let err = Pipe()

@@ -311,6 +311,52 @@ private final class Handlers {
         #expect(bridge.calls.count == 1)
     }
 
+    /// The In App target: its "handler" is Claude Code found with the
+    /// bridge beside the application, its registration any client's; the
+    /// panel exists while the Assistant is shown and In App chosen.
+    @Test func theAppTargetNeedsClaudeCodeAndTheBridge() async throws {
+        let scratch = ScratchSettings()
+        let dir = try assistantScratchDir()
+        let claude = try writeScript(dir.appendingPathComponent("claude"), "exit 0")
+        let bridge = try StatusBridge(printing: statusJSON(desktop: false, code: true))
+        let prefix = dir.path + "/"
+        let locator = ClaudeCodeLocator(
+            settings: scratch.settings, environment: ["HOME": dir.path, "PATH": ""],
+            usable: { $0.hasPrefix(prefix) && ClaudeCodeLocator.isExecutableFile($0) })
+        let h = Handlers(["claude"])
+        let c = AssistantController(bridge: bridge.path, settings: scratch.settings, locator: locator) { h.lookup($0) }
+        scratch.settings.assistantTarget = .app
+        c.refresh()
+        #expect(h.asked == ["claude", "claude-cli"], "the panel has no link to look up")
+        #expect(c.availability(.app) == Assistant.Availability())
+        #expect(c.problem(.app) == "Claude Code was not found on this computer")
+        #expect(picked(c.pick(needsBridge: true)) == "app false")
+
+        scratch.settings.assistantClaudePath = claude
+        c.refresh()
+        try await waitUntil { c.status != nil }
+        #expect(c.availability(.app) == Assistant.Availability(handler: true, registered: true))
+        #expect(picked(c.pick(needsBridge: true)) == "app true")
+        #expect(c.problem(.app) == "")
+        #expect(c.shown && c.panelShown)
+        scratch.settings.assistantTarget = .code
+        #expect(!c.panelShown)
+        scratch.settings.assistantTarget = .app
+        scratch.settings.assistantMenu = false
+        #expect(!c.panelShown)
+        scratch.settings.assistantMenu = true
+
+        // Registered nowhere: the panel is gone with the Assistant.
+        c.apply(try status(desktop: false, code: false))
+        #expect(c.availability(.app) == Assistant.Availability(handler: true, registered: false))
+        #expect(!c.shown && !c.panelShown)
+
+        // No bridge beside the application: never available.
+        let bare = AssistantController(bridge: nil, settings: scratch.settings, locator: locator) { h.lookup($0) }
+        bare.refreshHandlers()
+        #expect(!bare.availability(.app).handler)
+    }
+
     @Test func aCancelledObserverIsNotCalled() {
         let scratch = ScratchSettings()
         let (c, h) = make(bridge: nil, installed: [], scratch: scratch)

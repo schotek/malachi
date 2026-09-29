@@ -12,7 +12,11 @@ import Quartz
 /// and the toast overlay. The panes' content is installed by the sidebar,
 /// list and reader parts (`install(sidebar:)`, `install(list:)`,
 /// `install(message:)`), the status bar by the app (`install(statusBar:)`),
-/// and so are the message actions (`messageActions`).
+/// and so are the message actions (`messageActions`) and the assistant
+/// panel (`install(assistant:)`), which exists while
+/// `AssistantController.panelShown` (the Assistant shown, In App chosen):
+/// the window follows that state with the split view's inspector and the
+/// toolbar's inspector section.
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
 @MainActor
@@ -49,6 +53,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// Unread in This Folder.
     private let assistantMenu: AssistantMenu
     private var assistantToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
 
     init(state: AppState) {
@@ -84,7 +89,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // toolbar comes after the content (the plan's ordering).
         assistantMenu = AssistantMenu(state: state, includesUnread: true)
         toolbarDelegate = MainToolbar(
-            splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown)
+            splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown,
+            showsPanel: state.assistant.panelShown)
         super.init(window: w)
         w.delegate = self
         w.toolbar = toolbarDelegate.makeToolbar()
@@ -110,10 +116,17 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         // The Assistant button follows `AssistantController.shown`: the
         // `assistant-menu` setting while the bridge is registered (the
         // window lives as long as the application).
+        // The assistant panel follows `panelShown`: the same, and the
+        // `assistant-target` preference.
         let assistant = state.assistant
+        split.assistantAllowed = assistant.panelShown
         assistantToken = assistant.onChange { [weak self] in
             guard let self, let toolbar = self.window?.toolbar else { return }
             self.toolbarDelegate.setAssistant(visible: assistant.shown, in: toolbar)
+            self.updateAssistantPanel()
+        }
+        assistantTargetToken = state.settings.onChange(.assistantTarget) { [weak self] in
+            self?.updateAssistantPanel()
         }
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
@@ -153,6 +166,26 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         content.install(statusBar: vc)
     }
 
+    /// The assistant panel's view (the split view's inspector).
+    func install(assistant vc: NSViewController) {
+        split.assistantContainer.install(vc)
+    }
+
+    /// Opens the assistant panel, while it exists.
+    func revealAssistant() {
+        split.revealAssistant()
+    }
+
+    /// The panel and its toolbar toggle exist while the Assistant is shown
+    /// and In App is chosen; otherwise the panel folds.
+    private func updateAssistantPanel() {
+        let allowed = state.assistant.panelShown
+        split.assistantAllowed = allowed
+        if let toolbar = window?.toolbar {
+            toolbarDelegate.setAssistantPanel(visible: allowed, in: toolbar)
+        }
+    }
+
     private func setListSeparator(visible: Bool) {
         guard let toolbar = window?.toolbar else { return }
         toolbarDelegate.setListSeparator(visible: visible, in: toolbar)
@@ -181,9 +214,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Actions
 
-    /// The split view's actions (⌃⌘S, ⌥⌘L) also while no view of the window
-    /// has the keyboard focus: the responder chain then starts at the window
-    /// and reaches this controller, not the split view controller.
+    /// The split view's actions (⌃⌘S, ⌥⌘L, the assistant panel's toggle)
+    /// also while no view of the window has the keyboard focus: the
+    /// responder chain then starts at the window and reaches this
+    /// controller, not the split view controller.
     override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
         if let target = MainContentViewController.splitTarget(split, forAction: action) {
             return target

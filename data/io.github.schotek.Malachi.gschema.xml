@@ -28,6 +28,12 @@
   <enum id="io.github.schotek.Malachi.AssistantTarget">
     <value nick="desktop" value="0"/>
     <value nick="code" value="1"/>
+    <value nick="app" value="2"/>
+  </enum>
+  <enum id="io.github.schotek.Malachi.AssistantModel">
+    <value nick="sonnet" value="0"/>
+    <value nick="haiku" value="1"/>
+    <value nick="opus" value="2"/>
   </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
@@ -149,7 +155,22 @@
     <key name="assistant-target" enum="io.github.schotek.Malachi.AssistantTarget">
       <default>'desktop'</default>
       <summary>Where the Assistant menu opens Claude</summary>
-      <description>Claude Desktop, or Claude Code in a terminal; the last choice made in the Assistant menu or in the settings.</description>
+      <description>Claude Desktop, Claude Code in a terminal, or the panel in the app; the last choice made in the Assistant menu or in the settings.</description>
+    </key>
+    <key name="assistant-model" enum="io.github.schotek.Malachi.AssistantModel">
+      <default>'sonnet'</default>
+      <summary>The model the assistant panel uses</summary>
+      <description>Sonnet, Haiku or Opus, passed to Claude Code.</description>
+    </key>
+    <key name="assistant-claude-path" type="s">
+      <default>''</default>
+      <summary>Where Claude Code is</summary>
+      <description>The claude executable the assistant panel runs; empty looks in the usual places.</description>
+    </key>
+    <key name="assistant-consent" type="b">
+      <default>false</default>
+      <summary>The assistant panel may send mail to Claude</summary>
+      <description>Set when the user allowed it the first time.</description>
     </key>
   </schema>
 </schemalist>

@@ -52,14 +52,17 @@ public sealed class SettingsTests
         Assert.Equal(SearchScope.Folder, s.SearchScope);
         Assert.True(s.AssistantMenu);
         Assert.Equal(AssistantTarget.Desktop, s.AssistantTarget);
+        Assert.Equal(AssistantModel.Sonnet, s.AssistantModel);
+        Assert.Equal("", s.AssistantClaudePath);
+        Assert.False(s.AssistantConsent);
         // The gschema's window geometry, which Windows uses (GTK does not).
         Assert.Equal(1200, s.WindowWidth);
         Assert.Equal(760, s.WindowHeight);
         Assert.False(s.WindowMaximized);
         Assert.Equal(240, s.FolderPaneWidth);
         Assert.Equal(380, s.MessageListWidth);
-        // The 25 gschema keys and ctrl-r.
-        Assert.Equal(26, SettingsStore.Schema.Count);
+        // The 28 gschema keys and ctrl-r.
+        Assert.Equal(29, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -120,6 +123,18 @@ public sealed class SettingsTests
         Assert.Equal(AssistantTarget.Desktop, s.AssistantTarget);
         s.AssistantTarget = AssistantTarget.Code;
         Assert.Equal(AssistantTarget.Code, s.AssistantTarget);
+        backend.SetString("assistant-target", "app");
+        Assert.Equal(AssistantTarget.App, s.AssistantTarget);
+        backend.SetString("assistant-model", "gpt");
+        Assert.Equal(AssistantModel.Sonnet, s.AssistantModel);
+        s.AssistantModel = AssistantModel.Opus;
+        Assert.Equal(AssistantModel.Opus, s.AssistantModel);
+        backend.SetString("assistant-model", "Haiku");
+        Assert.Equal(AssistantModel.Sonnet, s.AssistantModel);
+        backend.SetBoolean("assistant-claude-path", true);
+        Assert.Equal("", s.AssistantClaudePath);
+        backend.SetString("assistant-consent", "true");
+        Assert.False(s.AssistantConsent);
 
         backend.SetString("ctrl-r", "dance");
         Assert.Equal(CtrlR.Reply, s.CtrlR);
@@ -357,7 +372,9 @@ public sealed class SettingsTests
         Assert.Equal(["system", "light", "dark"], SettingsStore.Info(SettingsKey.ColorScheme).Choices);
         Assert.Equal(["comfortable", "compact"], SettingsStore.Info(SettingsKey.Density).Choices);
         Assert.Equal(["folder", "account", "all"], SettingsStore.Info(SettingsKey.SearchScope).Choices);
-        Assert.Equal(["desktop", "code"], SettingsStore.Info(SettingsKey.AssistantTarget).Choices);
+        Assert.Equal(["desktop", "code", "app"], SettingsStore.Info(SettingsKey.AssistantTarget).Choices);
+        Assert.Equal(["sonnet", "haiku", "opus"], SettingsStore.Info(SettingsKey.AssistantModel).Choices);
+        Assert.Empty(SettingsStore.Info(SettingsKey.AssistantClaudePath).Choices);
         Assert.Equal(["reply", "refresh"], SettingsStore.Info(SettingsKey.CtrlR).Choices);
         Assert.Equal([SettingsKey.CtrlR], SettingsStore.Schema.Where(k => k.WindowsOnly).Select(k => k.Key));
         var backend = new InMemorySettingsBackend();
@@ -365,17 +382,51 @@ public sealed class SettingsTests
         s.ColorScheme = ColorScheme.Light;
         s.Density = Density.Compact;
         s.SearchScope = SearchScope.Account;
-        s.AssistantTarget = AssistantTarget.Code;
+        s.AssistantTarget = AssistantTarget.App;
         s.AssistantMenu = false;
+        s.AssistantModel = AssistantModel.Haiku;
+        s.AssistantClaudePath = @"C:\Users\u\.local\bin\claude.exe";
+        s.AssistantConsent = true;
         s.CtrlR = CtrlR.Refresh;
         s.WindowMaximized = true;
         Assert.True(backend.TryGetString("color-scheme", out var scheme) && scheme == "light");
         Assert.True(backend.TryGetString("message-list-density", out var density) && density == "compact");
         Assert.True(backend.TryGetString("search-scope", out var scope) && scope == "account");
-        Assert.True(backend.TryGetString("assistant-target", out var target) && target == "code");
+        Assert.True(backend.TryGetString("assistant-target", out var target) && target == "app");
         Assert.True(backend.TryGetBoolean("assistant-menu", out var menu) && !menu);
+        Assert.True(backend.TryGetString("assistant-model", out var model) && model == "haiku");
+        Assert.True(backend.TryGetString("assistant-claude-path", out var claude) && claude == @"C:\Users\u\.local\bin\claude.exe");
+        Assert.True(backend.TryGetBoolean("assistant-consent", out var consent) && consent);
         Assert.True(backend.TryGetString("ctrl-r", out var ctrlR) && ctrlR == "refresh");
         Assert.True(backend.TryGetBoolean("window-maximized", out var maximized) && maximized);
+    }
+
+    // assistant-claude-path, the facade's only plain string key: stored as
+    // given, an equal write is no change, null is the empty string.
+    [Fact]
+    public void AssistantClaudePathRoundTrip()
+    {
+        var backend = new InMemorySettingsBackend();
+        var s = new SettingsStore(backend, null);
+        var calls = 0;
+        s.OnChange(SettingsKey.AssistantClaudePath, () => calls++);
+
+        s.AssistantClaudePath = "";
+        Assert.Equal(0, calls);
+        Assert.False(backend.TryGetString("assistant-claude-path", out _));
+
+        s.AssistantClaudePath = "/opt/homebrew/bin/claude";
+        Assert.Equal("/opt/homebrew/bin/claude", s.AssistantClaudePath);
+        Assert.Equal(1, calls);
+        s.AssistantClaudePath = "/opt/homebrew/bin/claude";
+        Assert.Equal(1, calls);
+        s.AssistantClaudePath = "/OPT/homebrew/bin/claude";
+        Assert.Equal(2, calls);
+
+        s.AssistantClaudePath = null!;
+        Assert.Equal("", s.AssistantClaudePath);
+        Assert.Equal(3, calls);
+        Assert.True(backend.TryGetString("assistant-claude-path", out var stored) && stored.Length == 0);
     }
 
     // The geometry keys have no range in the gschema: the window clamps.

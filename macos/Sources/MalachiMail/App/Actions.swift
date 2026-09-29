@@ -13,9 +13,10 @@ import MalachiCore
 ///
 /// Names follow the GTK actions (`app.compose` → `newMessage:`, `win.trash`
 /// → `moveToTrash:`, …). Standard AppKit selectors (`performClose:`,
-/// `toggleSidebar:`, `hide:`, `terminate:`, the Edit menu) are not repeated
-/// here. `openHelp:` is deliberately not `showHelp:`, which NSApplication
-/// implements itself (it would open a non-existent help book first).
+/// `toggleSidebar:`, `toggleInspector:`, `hide:`, `terminate:`, the Edit
+/// menu) are not repeated here. `openHelp:` is deliberately not
+/// `showHelp:`, which NSApplication implements itself (it would open a
+/// non-existent help book first).
 @MainActor
 @objc protocol MalachiActions {
     // Application (ui/main.go `addActions`).
@@ -132,6 +133,9 @@ enum Action {
     /// The native split-view action, sent by the toolbar's sidebar item and
     /// the View menu.
     static let toggleSidebar = #selector(NSSplitViewController.toggleSidebar(_:))
+    /// The native inspector toggle: the assistant panel of the main window
+    /// (the toolbar's inspector item, View ▸ Show/Hide Assistant).
+    static let toggleInspector = #selector(NSSplitViewController.toggleInspector(_:))
 
     /// The single-letter accelerators of the GTK UI (`a`, `j`, `u`, `s`,
     /// Delete): a menu item with one of these must not fire while the user

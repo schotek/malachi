@@ -74,6 +74,9 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.TextZoom, "text-zoom", "i", 100, minimum: TextZoomMin, maximum: TextZoomMax),
         new(SettingsKey.AssistantMenu, "assistant-menu", "b", true),
         new(SettingsKey.AssistantTarget, "assistant-target", "s", "desktop", choices: Nicks<AssistantTarget>.All),
+        new(SettingsKey.AssistantModel, "assistant-model", "s", "sonnet", choices: Nicks<AssistantModel>.All),
+        new(SettingsKey.AssistantClaudePath, "assistant-claude-path", "s", ""),
+        new(SettingsKey.AssistantConsent, "assistant-consent", "b", false),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -283,11 +286,35 @@ public sealed class SettingsStore : IDisposable
         set => SetBoolean(SettingsKey.AssistantMenu, value);
     }
 
-    /// <summary>Where the Assistant menu opens Claude, the last choice made in the menu or in the settings.</summary>
+    /// <summary>Where the Assistant opens Claude, the last choice made in the menu or in the settings.</summary>
     public AssistantTarget AssistantTarget
     {
         get => GetEnum<AssistantTarget>(SettingsKey.AssistantTarget);
         set => SetEnum(SettingsKey.AssistantTarget, value);
+    }
+
+    /// <summary>The model the assistant panel passes to Claude Code.</summary>
+    public AssistantModel AssistantModel
+    {
+        get => GetEnum<AssistantModel>(SettingsKey.AssistantModel);
+        set => SetEnum(SettingsKey.AssistantModel, value);
+    }
+
+    /// <summary>
+    /// The claude executable the assistant panel runs; empty looks in the
+    /// usual places. A null write stores the empty string.
+    /// </summary>
+    public string AssistantClaudePath
+    {
+        get => GetString(SettingsKey.AssistantClaudePath);
+        set => SetString(SettingsKey.AssistantClaudePath, value);
+    }
+
+    /// <summary>Whether the user allowed the assistant panel to send mail to Claude (asked before the first question).</summary>
+    public bool AssistantConsent
+    {
+        get => GetBoolean(SettingsKey.AssistantConsent);
+        set => SetBoolean(SettingsKey.AssistantConsent, value);
     }
 
     // Sidebar state
@@ -433,6 +460,8 @@ public sealed class SettingsStore : IDisposable
 
     private string RawString(SettingsKeyInfo info) => backend.TryGetString(info.Name, out var value) ? value : (string)info.Default;
 
+    private string GetString(SettingsKey key) => RawString(Info(key));
+
     private T GetEnum<T>(SettingsKey key)
         where T : struct, Enum
     {
@@ -468,6 +497,18 @@ public sealed class SettingsStore : IDisposable
             return;
         }
         backend.SetInt32(info.Name, value);
+        hub.Fire(key);
+    }
+
+    private void SetString(SettingsKey key, string? value)
+    {
+        value ??= "";
+        var info = Info(key);
+        if (string.Equals(value, RawString(info), StringComparison.Ordinal))
+        {
+            return;
+        }
+        backend.SetString(info.Name, value);
         hub.Fire(key);
     }
 

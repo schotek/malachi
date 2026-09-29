@@ -617,6 +617,68 @@ sends it in Claude.
 Neither the daemon nor the bridge changes for this: a hand-off is the
 user typing a question in Claude, with the ids filled in.
 
+### The panel in the app (experimental)
+
+The third target, *In App*, runs the conversation in a panel of the main
+window (macOS so far; the pure parts are `ui/internal/assistant`: the
+command line, the system prompt, the stream-json events, the Markdown
+subset the panel renders). The app starts the user's own Claude Code CLI,
+one process per conversation, and talks to it over stdin and stdout:
+
+```
+claude -p --verbose --output-format stream-json --include-partial-messages
+       --input-format stream-json
+       --tools "" --disallowedTools LSP --disable-slash-commands --setting-sources ""
+       --strict-mcp-config --mcp-config '{"mcpServers":{"malachi":{"type":"stdio","command":"<bundled malachi-mcp>","args":["--socket","<socket>"]}}}'
+       --allowedTools mcp__malachi__list_accounts,…,mcp__malachi__create_draft
+       --permission-mode dontAsk --no-session-persistence
+       --model sonnet|haiku|opus --system-prompt "<the panel's instructions>"
+```
+
+- **Only the bridge's read and draft tools.** `--tools ""` and
+  `--disallowedTools LSP` remove every built-in tool (shell, files, web,
+  LSP), `--strict-mcp-config` every other MCP server, and `dontAsk`
+  refuses whatever `--allowedTools` does not list (`list_accounts`,
+  `list_folders`, `list_messages`, `search_messages`, `read_message`,
+  `get_attachment`, `create_draft`). The exfiltration channels this
+  document otherwise leaves open (the host's web and shell tools) are
+  closed; what remains is the answer text and a draft the user sends.
+- **Nothing of the user's Claude Code setup.** `--setting-sources ""`
+  skips their settings, `CLAUDE.md`, plugins and hooks;
+  `--disable-slash-commands` skips skills. The child gets a minimal
+  environment (home, user, locale, temp dir and a `PATH` that starts with
+  the directory of `claude`, which may be a Node script) in an empty
+  private working directory.
+- **Nothing stored.** `--no-session-persistence` keeps the transcript,
+  tool results included, out of `~/.claude/projects/`; the conversation
+  lives in the process and ends with it.
+- **Sign-in is Claude Code's.** The app never reads, stores or offers
+  credentials; it asks `claude auth status --json` only for `loggedIn`
+  and otherwise tells the user to sign in in a terminal. Whatever Claude
+  Code uses (a Claude plan or an API key) is billed as Claude Code usage
+  to the user. Anthropic's terms for running Claude Code from another
+  product ([Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance))
+  are why the target is marked experimental: the project asks Anthropic
+  before it ships enabled.
+- **Consent first.** The first question asks whether mail may be sent to
+  Claude under the user's account; the answer is kept in
+  `assistant-consent`.
+- **The answer is untrusted text.** It may quote mail, so the panel shows
+  it without markup (a small Markdown subset turned into fonts, never
+  HTML) and every link goes through the same confirmation as a link in a
+  message. A draft the assistant saved is offered by its id from the
+  bridge's own result line and opened only after `draft.list` confirms it.
+
+The panel follows the selected message until the first question; from
+then on the conversation keeps what it is about. Selecting another
+message offers *New Conversation* or *Add to Conversation* (the next
+question then names the added message to the model); an Assistant-menu
+action on another message adds it by itself, its question naming the
+ids anyway.
+
+The panel, like the hand-offs, exists only while *Register with Claude*
+is on, although it brings its own `--mcp-config`.
+
 Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link),
 [Launch sessions from links](https://code.claude.com/docs/en/deep-links).
 

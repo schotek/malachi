@@ -12,7 +12,10 @@ import MalachiCore
 /// reports to the window, which hands the text to the list.
 /// The Assistant button (ui/internal/assistant; no Blueprint yet) sits
 /// right before More Actions while the `assistant-menu` setting is on;
-/// its menu is the window's `AssistantMenu`.
+/// its menu is the window's `AssistantMenu`. While the assistant panel
+/// exists (In App chosen), the main window's toolbar ends with AppKit's
+/// inspector section after the search field: the tracking separator on
+/// the panel's divider and the inspector toggle.
 @MainActor
 final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     enum ID {
@@ -57,6 +60,13 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions, ID.search,
     ]
 
+    /// The inspector section after the search field while the assistant
+    /// panel exists: AppKit's own items, which follow the split view
+    /// controller's inspector and send `toggleInspector:`.
+    static let panelItems: [NSToolbarItem.Identifier] = [
+        .inspectorTrackingSeparator, .flexibleSpace, .toggleInspector,
+    ]
+
     /// The items of the message section, for the message window's toolbar.
     static let messageSectionItems: [NSToolbarItem.Identifier] = [
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
@@ -69,6 +79,9 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     private let assistantMenu: AssistantMenu?
     /// Whether the Assistant button is in the toolbar (`assistant-menu`).
     private var showsAssistant: Bool
+    /// Whether the inspector section is in the toolbar (the assistant
+    /// panel exists); only a toolbar with sections has one.
+    private var showsPanel: Bool
 
     /// The search field's text once typing pauses, "" at once when it is
     /// cleared (search.go `onSearchChanged`); Return in the field
@@ -85,10 +98,13 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     ///     separators follow; nil for a toolbar without sections.
     ///   - assistantMenu: the Assistant button's menu, nil for none.
     ///   - showsAssistant: whether the button starts in the toolbar.
-    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false) {
+    ///   - showsPanel: whether the inspector section (the assistant
+    ///     panel's toggle) starts in the toolbar.
+    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false, showsPanel: Bool = false) {
         self.splitView = splitView
         self.assistantMenu = assistantMenu
         self.showsAssistant = showsAssistant
+        self.showsPanel = showsPanel && splitView != nil
     }
 
     /// A configured toolbar with this object as its delegate.
@@ -144,18 +160,46 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         }
     }
 
+    /// Puts the inspector section (the tracking separator, a flexible
+    /// space and the inspector toggle) after the search field, or takes it
+    /// out, as the assistant panel comes and goes. Only the main window's
+    /// toolbar has one.
+    func setAssistantPanel(visible: Bool, in toolbar: NSToolbar) {
+        guard splitView != nil else { return }
+        showsPanel = visible
+        let current = toolbar.items.firstIndex { $0.itemIdentifier == .inspectorTrackingSeparator }
+        if visible {
+            guard current == nil else { return }
+            var at = toolbar.items.firstIndex { $0.itemIdentifier == ID.search }.map { $0 + 1 } ?? toolbar.items.count
+            for id in Self.panelItems {
+                toolbar.insertItem(withItemIdentifier: id, at: at)
+                at += 1
+            }
+        } else if let current {
+            // The section is the toolbar's end: the separator and what follows.
+            for _ in current..<min(current + Self.panelItems.count, toolbar.items.count) {
+                toolbar.removeItem(at: current)
+            }
+        }
+    }
+
     // MARK: NSToolbarDelegate
 
-    /// Every item this toolbar can hold, the Assistant button included.
+    /// Every item this toolbar can hold, the Assistant button and the
+    /// inspector section included.
     private var allItems: [NSToolbarItem.Identifier] {
-        splitView == nil ? Self.messageSectionItems : Self.defaultItems
+        splitView == nil ? Self.messageSectionItems : Self.defaultItems + Self.panelItems
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        guard showsAssistant, assistantMenu != nil else {
-            return allItems.filter { $0 != ID.assistant }
+        var ids = splitView == nil ? Self.messageSectionItems : Self.defaultItems
+        if !showsAssistant || assistantMenu == nil {
+            ids.removeAll { $0 == ID.assistant }
         }
-        return allItems
+        if showsPanel {
+            ids += Self.panelItems
+        }
+        return ids
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {

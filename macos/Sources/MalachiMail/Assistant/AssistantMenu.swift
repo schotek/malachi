@@ -7,11 +7,14 @@ import MalachiCore
 /// The Assistant menu (ui/internal/assistant; there is no Blueprint yet,
 /// the GTK widgets follow this port): the four message actions on what the
 /// window shows (`Assistant.messageActions`), Summarize Unread in This
-/// Folder (the main window's only), "Open In" with Claude Desktop and
-/// Claude Code as a choice, and, while the chosen app cannot run the
-/// message actions (no handler, or the bridge not registered in its
-/// client; the other app is never used instead), a disabled item that says
-/// why (`Assistant.problem`) above "Set Up the Assistant…".
+/// Folder (the main window's only), "Open In" with Claude Desktop, Claude
+/// Code and In App (Experimental, the assistant panel; disabled while
+/// Claude Code is not found) as a choice, and, while the chosen target
+/// cannot run the message actions (no handler, or the bridge not
+/// registered in its client; another target is never used instead), a
+/// disabled item that says why (`Assistant.problem`) above "Set Up the
+/// Assistant…". With In App chosen the actions run in the panel
+/// (`AssistantActions`).
 ///
 /// One instance fills one menu, the toolbar button of the main window or
 /// of a message window or the Message menu's submenu. The items are built

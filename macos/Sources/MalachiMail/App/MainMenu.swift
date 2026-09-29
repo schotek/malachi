@@ -16,7 +16,9 @@ import MalachiCore
 ///
 /// The Message menu ends with the Assistant submenu (ui/internal/assistant,
 /// `AssistantMenu`), hidden while the `assistant-menu` setting is off
-/// (`apply(assistantMenu:)`).
+/// (`apply(assistantMenu:)`). The View menu's Show/Hide Assistant toggles
+/// the assistant panel of the main window and exists while the panel does
+/// (`apply(assistantPanel:)`: the Assistant shown and In App chosen).
 @MainActor
 enum MainMenu {
     /// The items whose key equivalents follow the `command-r` setting.
@@ -28,6 +30,8 @@ enum MainMenu {
         /// The Assistant submenu and the separator before it.
         static let assistant = NSUserInterfaceItemIdentifier("malachi.menu.assistant")
         static let assistantSeparator = NSUserInterfaceItemIdentifier("malachi.menu.assistantSeparator")
+        /// View ▸ Show/Hide Assistant: the assistant panel.
+        static let assistantPanel = NSUserInterfaceItemIdentifier("malachi.menu.assistantPanel")
     }
 
     struct KeyEquivalent: Equatable {
@@ -88,6 +92,7 @@ enum MainMenu {
         NSApp.helpMenu = help
         apply(commandR: state.settings.commandR, to: bar)
         apply(assistantMenu: state.assistant.shown, to: bar)
+        apply(assistantPanel: state.assistant.panelShown, to: bar)
         return bar
     }
 
@@ -106,6 +111,12 @@ enum MainMenu {
         guard let bar else { return }
         find(ItemID.assistant, in: bar)?.isHidden = !visible
         find(ItemID.assistantSeparator, in: bar)?.isHidden = !visible
+    }
+
+    /// Shows or hides View ▸ Show/Hide Assistant.
+    static func apply(assistantPanel visible: Bool, to bar: NSMenu? = NSApp.mainMenu) {
+        guard let bar else { return }
+        find(ItemID.assistantPanel, in: bar)?.isHidden = !visible
     }
 
     // MARK: Menus
@@ -196,6 +207,9 @@ enum MainMenu {
         // Titles alternate between Show and Hide in validation.
         m.addItem(item("Hide Sidebar", Action.toggleSidebar, key: "s", mods: [.command, .control])) // macOS-only string
         m.addItem(item("Hide Message List", Action.toggleMessageList, key: "l", mods: [.command, .option])) // macOS-only string
+        // The assistant panel (ui/internal/assistant); the split view
+        // validates the title.
+        m.addItem(item(Assistant.panelTexts().show, Action.toggleInspector, id: ItemID.assistantPanel))
         m.addItem(.separator())
         // The list's filter, the toolbar's filter menu too.
         FilterMenu.items().forEach { m.addItem($0) }

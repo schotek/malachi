@@ -58,6 +58,7 @@ private actor Recorder {
     var preferences: [Preferences] = []
     var drafts: [DraftCreateParams] = []
     var opens: [DraftOpenParams] = []
+    var lists: [DraftListParams] = []
     var downloads: [MessageDownloadParams] = []
     /// What the next message.download answers with, nil for success.
     var downloadError: RPCError?
@@ -67,6 +68,7 @@ private actor Recorder {
 
     func addSender(_ a: String) { senders.append(a) }
     func addOpen(_ p: DraftOpenParams) { opens.append(p) }
+    func addList(_ p: DraftListParams) { lists.append(p) }
     func addPreferences(_ p: Preferences) { preferences.append(p) }
     func addDraft(_ d: DraftCreateParams) { drafts.append(d) }
 }
@@ -1005,6 +1007,58 @@ private final class Harness {
         h.actions.openDraft("d1")
         try await waitUntil { h.log.toasts.count == 2 }
         #expect(h.log.toasts.last == "The draft has not been downloaded yet; try again in a moment")
+        #expect(h.log.composed.count == 1)
+    }
+
+    /// The assistant panel's Open Draft (ui/internal/assistant, the In App
+    /// target): the draft is looked up with draft.list, page after page,
+    /// and opens for editing, or its window comes to the front; one that
+    /// is not listed says so; a failed list is the usual sentence.
+    @Test func savedDraftOpensAfterDraftList() async throws {
+        let h = try await Harness(messages: [inbox: [msg("m1", 1, .seen)]])
+        defer { Task { await h.stop() } }
+        let first = Draft(id: "d_1", accountId: "a", version: 1, subject: "older", textBody: "x")
+        let wanted = Draft(id: "d_9", accountId: "a", version: 2, subject: "Re: s-m1", textBody: "Yes",
+                           htmlBody: "<p>Yes</p>", inReplyTo: "m1")
+        let rec = Recorder()
+        await h.fixture.on(API.DraftList.name) { params in
+            let p = try decode(DraftListParams.self, params)
+            await rec.addList(p)
+            if p.page.cursor == nil {
+                return try encode(DraftListResult(drafts: [first], page: PageInfo(nextCursor: "c2", total: 2)))
+            }
+            return try encode(DraftListResult(drafts: [wanted], page: PageInfo(nextCursor: nil, total: 2)))
+        }
+        h.actions.openSavedDraft(account: "a", id: "d_9")
+        h.actions.openSavedDraft(account: "a", id: "d_9") // once while it runs
+        try await waitUntil { h.log.composed.count == 1 }
+        let p = h.log.composed[0]
+        #expect(p.kind == .edit && p.draftID == "d_9" && p.version == 2 && p.subject == "Re: s-m1")
+        #expect(h.log.raised.map(\.id) == ["d_9"])
+        let lists = await rec.lists
+        #expect(lists == [
+            DraftListParams(accountId: "a", page: Page(cursor: nil, limit: 500)),
+            DraftListParams(accountId: "a", page: Page(cursor: "c2", limit: 500)),
+        ])
+        try await Task.sleep(for: .milliseconds(80))
+        #expect(h.log.composed.count == 1)
+
+        // A window already editing it comes to the front.
+        h.log.raise = true
+        h.actions.openSavedDraft(account: "a", id: "d_9")
+        try await waitUntil { h.log.raised.count == 2 }
+        #expect(h.log.composed.count == 1)
+
+        // Not listed (sent, deleted, never there).
+        h.actions.openSavedDraft(account: "a", id: "d_404")
+        try await waitUntil { h.log.toasts.count == 1 }
+        #expect(h.log.toasts == ["The draft is no longer there"])
+
+        // The list fails.
+        await h.fixture.on(API.DraftList.name) { _ in throw RPCError(code: .storageError, message: "disk") }
+        h.actions.openSavedDraft(account: "a", id: "d_9")
+        try await waitUntil { h.log.toasts.count == 2 }
+        #expect(h.log.toasts[1].hasPrefix("Opening the draft"))
         #expect(h.log.composed.count == 1)
     }
 

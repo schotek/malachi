@@ -30,6 +30,13 @@ import Foundation
 /// reports a change of that preference too, so the menus, the toolbars,
 /// the attachment chips and the settings follow one source.
 ///
+/// The third target, In App (the assistant panel), handles no link: its
+/// "handler" is the user's Claude Code found by the `ClaudeCodeLocator`
+/// with the bridge beside the application (the panel hands the bridge to
+/// Claude Code itself), and it counts as registered while the bridge is
+/// registered in any client, which is what `shown` asks anyway. The panel
+/// exists while `panelShown`: the Assistant is shown and In App chosen.
+///
 /// No texts and no AppKit here: the menus and the settings read
 /// `shown`, `availability`, `pick` and `Assistant.problem`.
 @MainActor
@@ -54,8 +61,8 @@ public final class AssistantController {
         }
     }
 
-    /// The two targets, in the order of the menu and the settings.
-    public static let targets: [Assistant.Target] = [.desktop, .code]
+    /// The targets, in the order of the menu and the settings.
+    public nonisolated static let targets: [Assistant.Target] = [.desktop, .code, .app]
 
     public let settings: Settings
     /// The last status the bridge reported; nil until one answered.
@@ -68,6 +75,11 @@ public final class AssistantController {
 
     private let registration: MCPRegistrationController
     private let lookup: HandlerLookup
+    /// The bridge beside the application, which the panel passes to
+    /// Claude Code; nil without one.
+    private let bridge: String?
+    /// Finds Claude Code for the panel; nil: the panel is never available.
+    public let locator: ClaudeCodeLocator?
     private var menuToken: Settings.ChangeToken?
     fileprivate var observers: [Int: @MainActor () -> Void] = [:]
     private var nextObserver = 0
@@ -77,12 +89,17 @@ public final class AssistantController {
     ///     when there is none beside the application.
     ///   - settings: where the `assistant-target` preference is read.
     ///   - runner, timeout: how the bridge is run (tests pass a script).
+    ///   - locator: finds Claude Code for the In App target; nil leaves
+    ///     it unavailable.
     ///   - handler: looks up whether an app handles a URL scheme.
     public init(
         bridge: String?, settings: Settings, runner: BridgeRunner = BridgeRunner(),
-        timeout: Duration = MCPRegistrationController.defaultTimeout, handler: @escaping HandlerLookup
+        timeout: Duration = MCPRegistrationController.defaultTimeout, locator: ClaudeCodeLocator? = nil,
+        handler: @escaping HandlerLookup
     ) {
         self.settings = settings
+        self.bridge = bridge
+        self.locator = locator
         lookup = handler
         registration = MCPRegistrationController(bridge: bridge, runner: runner, timeout: timeout)
         registration.onRegistered = { [weak self] _ in
@@ -115,12 +132,17 @@ public final class AssistantController {
         registration.load()
     }
 
-    /// Looks up whether an app handles each target's links.
+    /// Looks up whether an app handles each target's links, and whether
+    /// the panel finds Claude Code and the bridge.
     public func refreshHandlers() {
         guard !closed else { return }
         var found: [Assistant.Target: Bool] = [:]
         for t in Self.targets {
-            found[t] = lookup(t.scheme)
+            if t == .app {
+                found[t] = bridge != nil && locator?.locate() != nil
+            } else {
+                found[t] = lookup(t.scheme)
+            }
         }
         guard found != handlers else { return }
         handlers = found
@@ -151,19 +173,32 @@ public final class AssistantController {
 
     /// What is known about target `t`: an app handles its links, the bridge
     /// is registered in its client (`Assistant.Target.clientID`).
+    /// For the panel: Claude Code and the bridge were found, the bridge is
+    /// registered in any client.
     public func availability(_ t: Assistant.Target) -> Assistant.Availability {
         let t = Assistant.parseTarget(t.rawValue)
+        if t == .app {
+            return Assistant.Availability(handler: handlers[t] ?? false, registered: registered)
+        }
         let client = status?.clients.first { $0.id == t.clientID }
         return Assistant.Availability(handler: handlers[t] ?? false, registered: client?.registered ?? false)
     }
 
     /// The target of the `assistant-target` preference and whether it can
-    /// run the action (`Assistant.pick`, no fallback to the other app):
+    /// run the action (`Assistant.pick`, no fallback to another target):
     /// the message actions and Summarize Unread need the bridge, the file
-    /// hand-off does not.
+    /// hand-off does not (the panel's reads the attachment through it, so
+    /// it asks with `needsBridge`).
     public func pick(needsBridge: Bool) -> (target: Assistant.Target, ok: Bool) {
         Assistant.pick(
-            settings.assistantTarget, desktop: availability(.desktop), code: availability(.code), needsBridge: needsBridge)
+            settings.assistantTarget, desktop: availability(.desktop), code: availability(.code),
+            app: availability(.app), needsBridge: needsBridge)
+    }
+
+    /// Whether the assistant panel exists: the Assistant is shown and the
+    /// In App target chosen. Whether it can run is `pick`'s.
+    public var panelShown: Bool {
+        shown && settings.assistantTarget == .app
     }
 
     /// Why target `t` cannot run the message actions; "" when it can

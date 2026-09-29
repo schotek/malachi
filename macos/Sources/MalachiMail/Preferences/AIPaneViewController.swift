@@ -25,7 +25,13 @@ import MalachiCore
 ///
 /// Under it the Assistant group (ui/internal/assistant; no Blueprint yet,
 /// the GTK page follows): "Show the Assistant Menu" (`assistant-menu`) and
-/// "Open In" with Claude Desktop and Claude Code (`assistant-target`). The
+/// "Open In" with Claude Desktop, Claude Code and In App (Experimental)
+/// (`assistant-target`). While In App is chosen two more rows follow:
+/// "Claude Code", the executable the panel runs (its path, version and
+/// whether it is signed in, from the application's `ClaudeCodeLocator`,
+/// or that it was not found), with "Choose…" for one of the user's own
+/// (`assistant-claude-path`; choosing the one found automatically goes
+/// back to looking), and "Model" (`assistant-model`). The
 /// group depends on "Register with Claude" (`Assistant.shown`): while the
 /// bridge is registered in no client both rows are insensitive, the switch
 /// shows off whatever the preference holds and says why, so the Assistant
@@ -52,6 +58,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
 
     let assistantMenuSwitch = NSSwitch()
     let assistantTarget = NSPopUpButton(frame: .zero, pullsDown: false)
+    let assistantModel = NSPopUpButton(frame: .zero, pullsDown: false)
+    let claudeCodeChoose = NSButton(title: Assistant.panelTexts().choose, target: nil, action: nil)
     let assistantGroup = PreferencesGroupView(
         title: Assistant.texts().assistant,
         description: Assistant.texts().description
@@ -76,6 +84,14 @@ final class AIPaneViewController: PreferencesPaneViewController {
     private var assistantToken: AssistantController.Token?
     private var targetToken: Settings.ChangeToken?
     private var targetRow: PreferenceRowView?
+    /// The panel's rows (In App): Claude Code and the model.
+    private var claudeCodeRow: PreferenceRowView?
+    private var modelRow: PreferenceRowView?
+    private var claudePathToken: Settings.ChangeToken?
+    /// Bumped by every look at Claude Code: a late answer is dropped.
+    private var claudeCodeGen = 0
+    /// The open panel's filter while "Choose…" is up.
+    private var chooseFilter: ExecutableFilter?
     /// The application's Claude Desktop controller and its question; nil
     /// writes every change at once.
     private var claudeDesktop: ClaudeDesktopController?
@@ -151,7 +167,18 @@ final class AIPaneViewController: PreferencesPaneViewController {
         targetRow = target
         let menu = PreferenceRowView(title: texts.showMenu, trailing: assistantMenuSwitch)
         menuRow = menu
-        assistantGroup.setRows([menu, target])
+        let panelTexts = Assistant.panelTexts()
+        claudeCodeChoose.target = self
+        claudeCodeChoose.action = #selector(chooseClaudeCode(_:))
+        let claudeCode = PreferenceRowView(title: Assistant.targetName(.code), trailing: claudeCodeChoose)
+        claudeCode.setSubtitleSelectable()
+        claudeCodeRow = claudeCode
+        assistantModel.addItems(withTitles: Assistant.models.map(Assistant.modelName))
+        let model = PreferenceRowView(title: panelTexts.model, trailing: assistantModel)
+        modelRow = model
+        assistantGroup.setRows([menu, target, claudeCode, model])
+        assistantGroup.setRow(claudeCode, hidden: true)
+        assistantGroup.setRow(model, hidden: true)
         addGroup(assistantGroup)
     }
 
@@ -171,6 +198,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
     override func viewDidAppear() {
         super.viewDidAppear()
         registration?.load()
+        // Claude Code may have been installed or signed in meanwhile.
+        assistant?.locator?.refresh()
         assistant?.refreshHandlers()
         updateAssistantGroup()
     }
@@ -217,6 +246,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
             self.assistantToken = nil
             self.targetToken?.cancel()
             self.targetToken = nil
+            self.claudePathToken?.cancel()
+            self.claudePathToken = nil
         }
     }
 
@@ -231,6 +262,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
         assistantMenuSwitch.target = self
         assistantMenuSwitch.action = #selector(assistantMenuChanged(_:))
         bindings.add(.bind(assistantTarget, to: settings, .assistantTarget, choices: AssistantController.targets, \.assistantTarget))
+        bindings.add(.bind(assistantModel, to: settings, .assistantModel, choices: Assistant.models, \.assistantModel))
+        claudePathToken = settings.onChange(.assistantClaudePath) { [weak self] in self?.claudePathChanged() }
         assistantToken = assistant?.onChange { [weak self] in
             self?.followApplication()
             self?.updateAssistantGroup()
@@ -276,7 +309,110 @@ final class AIPaneViewController: PreferencesPaneViewController {
         let on = unknown ? settings.assistantMenu : Assistant.shown(menu: settings.assistantMenu, registered: registered)
         assistantMenuSwitch.state = on ? .on : .off
         menuRow?.subtitle = registered || unknown ? "" : Assistant.texts().registerFirst
-        targetRow?.subtitle = registered ? (assistant?.problem(settings.assistantTarget) ?? "") : ""
+        // In App: the Claude Code row says what is wrong with it.
+        let app = settings.assistantTarget == .app
+        targetRow?.subtitle = registered && !app ? (assistant?.problem(settings.assistantTarget) ?? "") : ""
+        for row in [claudeCodeRow, modelRow].compactMap({ $0 }) {
+            assistantGroup.setRow(row, hidden: !app)
+            row.isEnabled = registered
+        }
+        if app {
+            showClaudeCode()
+        }
+    }
+
+    // MARK: Claude Code (the In App target)
+
+    /// The Claude Code row's subtitle: the executable the panel runs, its
+    /// version and whether it is signed in (asked once, then kept by the
+    /// locator until the page comes up again or the path changes), or
+    /// that none was found.
+    private func showClaudeCode() {
+        guard let row = claudeCodeRow, !closed else { return }
+        claudeCodeGen += 1
+        let gen = claudeCodeGen
+        guard let locator = assistant?.locator, let path = locator.locate() else {
+            row.subtitle = Assistant.problem(.app, Assistant.Availability())
+            return
+        }
+        if !row.subtitle.hasPrefix(path) {
+            row.subtitle = path
+        }
+        Task { @MainActor [weak self] in
+            let version = await locator.version()
+            let signedIn = await locator.signedIn()
+            guard let self, !self.closed, gen == self.claudeCodeGen else { return }
+            self.claudeCodeRow?.subtitle = Self.claudeCodeState(path: path, version: version, signedIn: signedIn)
+        }
+    }
+
+    /// "path · version · Signed in"; what is not known is left out.
+    static func claudeCodeState(path: String, version: String?, signedIn: Bool?) -> String {
+        let texts = Assistant.panelTexts()
+        var parts = [path]
+        if let version {
+            parts.append(version)
+        }
+        switch signedIn {
+        case true?: parts.append(texts.signedIn)
+        case false?: parts.append(texts.notSignedInShort)
+        case nil: break
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    /// `assistant-claude-path` changed: Claude Code is looked for again,
+    /// and the Assistant menus learn whether the panel can run.
+    private func claudePathChanged() {
+        assistant?.locator?.refresh()
+        assistant?.refreshHandlers()
+        updateAssistantGroup()
+    }
+
+    /// "Choose…": the claude executable the panel should run, in an open
+    /// panel that offers executable files only (and keeps a symbolic link
+    /// as it is: an nvm `claude` is a link whose `node` sits beside it).
+    /// The file found automatically stores nothing, so choosing it goes
+    /// back to looking in the usual places.
+    @objc private func chooseClaudeCode(_ sender: Any?) {
+        guard let settings, let window = view.window, !closed else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.resolvesAliases = false
+        panel.showsHiddenFiles = true
+        panel.treatsFilePackagesAsDirectories = true
+        let filter = ExecutableFilter()
+        chooseFilter = filter
+        panel.delegate = filter
+        if let current = assistant?.locator?.locate() {
+            panel.directoryURL = URL(fileURLWithPath: current).deletingLastPathComponent()
+        }
+        Task { @MainActor [weak self] in
+            let response = await panel.beginSheetModal(for: window)
+            guard let self else { return }
+            self.chooseFilter = nil
+            guard response == .OK, let url = panel.url, url.isFileURL, !self.closed else { return }
+            let chosen = url.path
+            let value = chosen == Self.automaticClaudePath() ? "" : chosen
+            if settings.assistantClaudePath == value {
+                self.claudePathChanged()
+            } else {
+                // The change handler looks again.
+                settings.assistantClaudePath = value
+            }
+        }
+    }
+
+    /// The claude executable found without the setting, as
+    /// `ClaudeCodeLocator` looks: the usual places, then the PATH.
+    private static func automaticClaudePath() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
+        let nvm = (try? FileManager.default.contentsOfDirectory(atPath: home + "/.nvm/versions/node")) ?? []
+        return Assistant.candidatePaths(home: home, pathEnv: env["PATH"] ?? "", nvmVersions: nvm)
+            .first(where: ClaudeCodeLocator.isExecutableFile)
     }
 
     /// The user flipped "Show the Assistant Menu"; the row is insensitive
@@ -371,5 +507,17 @@ final class AIPaneViewController: PreferencesPaneViewController {
         Task { @MainActor in
             await desktop.restartPending(write: write)
         }
+    }
+}
+
+/// The open panel of "Choose…" offers folders to walk through and
+/// executable files to pick, nothing else.
+final class ExecutableFilter: NSObject, NSOpenSavePanelDelegate {
+    func panel(_ sender: Any, shouldEnable url: URL) -> Bool {
+        var directory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &directory), directory.boolValue {
+            return true
+        }
+        return ClaudeCodeLocator.isExecutableFile(url.path)
     }
 }

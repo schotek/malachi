@@ -743,11 +743,13 @@ final class MessageViewController: NSViewController {
         // The Assistant (ui/internal/assistant): hidden while it is not
         // shown (its menu off, or the bridge not registered), disabled while
         // no app handles the chosen Claude app's links (the file itself goes
-        // without the bridge, and never to the other app).
+        // without the bridge, and never to the other app); for the panel
+        // (In App), while it cannot run or the bridge does not read this
+        // type (`AssistantController.canAsk`).
         chip.assistantItem = { [weak self] in
             guard let self, self.state.assistant.shown else { return nil }
             self.state.assistant.refreshHandlers()
-            return self.state.assistant.pick(needsBridge: false).ok
+            return self.state.assistant.canAsk(about: a)
         }
         chip.onAskAssistant = { [weak self, weak chip] in
             guard let self else { return }
