@@ -18,6 +18,8 @@ import (
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
+
+	"github.com/schotek/malachi/ui/internal/assistant"
 )
 
 // SchemaID must match the gschema, desktop file and application ID.
@@ -70,6 +72,14 @@ const (
 	KeyWindowWidth     = "window-width"
 	KeyWindowHeight    = "window-height"
 	KeyWindowMaximized = "window-maximized"
+)
+
+// Keys of the Assistant menu (ui/internal/assistant): whether it is shown
+// (while the malachi-mcp bridge is registered, assistant.Shown) and where
+// it opens Claude. They must match the gschema.
+const (
+	KeyAssistantMenu   = "assistant-menu"
+	KeyAssistantTarget = "assistant-target"
 )
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
@@ -125,6 +135,9 @@ var defaults = map[string]any{
 	KeyWindowWidth:     1200,
 	KeyWindowHeight:    760,
 	KeyWindowMaximized: false,
+
+	KeyAssistantMenu:   true,
+	KeyAssistantTarget: string(assistant.Desktop),
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -255,6 +268,25 @@ func (s *Store) TextZoom() int { return s.integer(KeyTextZoom) }
 // SetTextZoom clamps v to [TextZoomMin, TextZoomMax].
 func (s *Store) SetTextZoom(v int) {
 	s.set(KeyTextZoom, min(max(v, TextZoomMin), TextZoomMax))
+}
+
+func (s *Store) AssistantMenu() bool     { return s.boolean(KeyAssistantMenu) }
+func (s *Store) SetAssistantMenu(v bool) { s.set(KeyAssistantMenu, v) }
+
+// AssistantTarget is the stored target as assistant.ParseTarget reads it:
+// an unknown nick is Desktop.
+func (s *Store) AssistantTarget() assistant.Target {
+	return assistant.ParseTarget(s.str(KeyAssistantTarget))
+}
+
+// SetAssistantTarget ignores values outside the enum.
+func (s *Store) SetAssistantTarget(v assistant.Target) {
+	for _, t := range assistant.Targets {
+		if v == t {
+			s.set(KeyAssistantTarget, string(v))
+			return
+		}
+	}
 }
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the

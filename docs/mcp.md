@@ -553,13 +553,15 @@ Without `--json` the same is printed as `command: …` followed by one
 Claude Desktop reads its file at start: restart it after `install` or
 `uninstall`. It also keeps its own `preferences` in that file and, while
 it runs, rewrites the whole file from memory many times a day (seen with
-Claude Desktop on macOS, 2026-09-29: "Config file written" in its
-`main.log`), so an entry written or removed while it runs is undone at
+Claude Desktop on macOS and on Linux, 2026-09-29: "Config file written"
+in its `main.log`, on Linux `~/.config/Claude/logs/main.log`), so an
+entry written or removed while it runs is undone at
 its next write. Quit Claude Desktop, run `install` or `uninstall`, then
 start it again. The macOS app does that for the user: flipping *Register
 with Claude* while Claude Desktop runs offers to restart it (quit, wait,
 write, start), and after *Later* it writes the change again as soon as
-Claude Desktop quits by itself; the GTK and Windows apps follow. Claude
+Claude Desktop quits by itself; the Windows app follows. The GTK app
+does not hand mail to Claude Desktop (below), so it offers no restart. Claude
 Code also writes `~/.claude.json` while it runs, but kept the entry in the
 same test, and picks the user-scope entry up on its next start
 and shows it under `/mcp`. Inside this repository the project-scoped
@@ -577,9 +579,9 @@ as the same user.
 ## Hand-off from the app: the Assistant menu
 
 The desktop apps can hand the selected mail to Claude without running a
-model themselves. The Assistant menu (macOS so far; the GTK widgets and
-the Windows client follow, the shared logic and texts are
-`ui/internal/assistant`) opens Claude Desktop or Claude Code on the same
+model themselves. The Assistant menu (macOS and GTK; the Windows client
+follows, the shared logic and texts are `ui/internal/assistant`) opens
+Claude Desktop or Claude Code on the same
 computer through its link scheme, with a prepared question in the input
 field. Nothing is sent: the user reads the question, completes it and
 sends it in Claude.
@@ -589,6 +591,12 @@ sends it in Claude.
 | Claude Desktop, new chat | `claude://claude.ai/new?q=…` | about 14 000 characters |
 | Claude Desktop, Cowork with a file | `claude://cowork/new?q=…&file=…` | the user confirms the file in Claude |
 | Claude Code in a terminal | `claude-cli://open?q=…`; with a file `claude-cli://open?cwd=…&q=…` | 5 000 characters; the handler exists once Claude Code has had its first interactive prompt |
+
+The GTK app opens Claude Code only: Claude Desktop for Linux is a preview
+the project does not support, so the menu and the settings list it
+insensitive, and whatever `assistant-target` holds reads as Claude Code
+there. Which terminal opens is Claude Code's choice: its handler honours
+`$TERMINAL`, then `x-terminal-emulator`, then a list of common emulators.
 
 - The question carries opaque ids and an instruction only: the account id
   and the message ids (a folded conversation's members in the folder,

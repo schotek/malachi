@@ -58,6 +58,13 @@ Adw.Window message_window {
         menu-model: message_menu_model;
       }
 
+      // The Assistant (ui/internal/assistant): icon, tooltip, menu and
+      // visibility come from Go (window/assistant.go).
+      [end]
+      MenuButton assistant_button {
+        visible: false;
+      }
+
       [end]
       ToggleButton star_button {
         icon-name: "non-starred-symbolic";

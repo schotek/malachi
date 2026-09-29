@@ -6,7 +6,7 @@ import MalachiCore
 import os
 
 /// What the Assistant menu and the attachment chips' "Ask the Assistant…"
-/// do (ui/internal/assistant; the GTK widgets follow this port): build the
+/// do (ui/internal/assistant; GTK window/assistant.go follows this port): build the
 /// prompt for what they act on, the link for the chosen Claude app (the
 /// `assistant-target` preference; `AssistantController.pick` says whether
 /// it can, and nothing goes to the other app instead), and hand the link

@@ -54,6 +54,10 @@ if [[ "${1:-}" == "install" ]]; then
         install -Dm644 "ui/data/icons/$APP_ID-symbolic.svg" \
             "$DESTDIR$PREFIX/share/icons/hicolor/symbolic/apps/$APP_ID-symbolic.svg"
     fi
+    # The Assistant button (ui/internal/window/assistant.go); the theme has
+    # no sparkle of its own.
+    install -Dm644 ui/data/icons/malachi-assistant-symbolic.svg \
+        "$DESTDIR$PREFIX/share/icons/hicolor/scalable/actions/malachi-assistant-symbolic.svg"
     # Staging for a package: the schema is compiled by the package manager
     # (dpkg triggers on /usr/share/glib-2.0/schemas), and a compiled cache
     # inside the package would collide with every other application's.

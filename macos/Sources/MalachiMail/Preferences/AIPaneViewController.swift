@@ -23,8 +23,9 @@ import MalachiCore
 /// with Restart; the switch and that button wait while a restart runs.
 /// GTK has no equivalent yet: this client leads.
 ///
-/// Under it the Assistant group (ui/internal/assistant; no Blueprint yet,
-/// the GTK page follows): "Show the Assistant Menu" (`assistant-menu`) and
+/// Under it the Assistant group (ui/internal/assistant; GTK preferences.blp
+/// `assistant_group`, preferences.go `bindAssistant`, without the In App
+/// rows): "Show the Assistant Menu" (`assistant-menu`) and
 /// "Open In" with Claude Desktop, Claude Code and In App (Experimental)
 /// (`assistant-target`). While In App is chosen two more rows follow:
 /// "Claude Code", the executable the panel runs (its path, version and

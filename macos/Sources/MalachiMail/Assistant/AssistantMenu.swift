@@ -4,8 +4,8 @@
 import AppKit
 import MalachiCore
 
-/// The Assistant menu (ui/internal/assistant; there is no Blueprint yet,
-/// the GTK widgets follow this port): the four message actions on what the
+/// The Assistant menu (ui/internal/assistant; GTK window/assistant.go
+/// `assistantMenu`, which follows this port): the four message actions on what the
 /// window shows (`Assistant.messageActions`), Summarize Unread in This
 /// Folder (the main window's only), "Open In" with Claude Desktop, Claude
 /// Code and In App (Experimental, the assistant panel; disabled while

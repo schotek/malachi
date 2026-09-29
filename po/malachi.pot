@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-29 18:25+0200\n"
+"POT-Creation-Date: 2026-09-29 18:58+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:184
+#: ui/main.go:192
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -1333,8 +1333,8 @@ msgstr ""
 msgid "Unstar"
 msgstr ""
 
-#: ui/internal/window/actions.go:63 ui/data/ui/message_window.ui:63
-#: ui/data/ui/window.ui:442
+#: ui/internal/window/actions.go:63 ui/data/ui/message_window.ui:68
+#: ui/data/ui/window.ui:447
 msgid "Star"
 msgstr ""
 
@@ -1447,7 +1447,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:825
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:830
 msgid "_New Message"
 msgstr ""
 
@@ -1460,62 +1460,62 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/attachments.go:99
+#: ui/internal/window/attachments.go:101
 msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
-#: ui/internal/window/attachments.go:183 ui/data/ui/message_window.ui:56
+#: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:56
 #: ui/data/ui/window.ui:435
 msgid "More Actions"
 msgstr ""
 
-#: ui/internal/window/attachments.go:223 ui/internal/window/attachments.go:498
+#: ui/internal/window/attachments.go:228 ui/internal/window/attachments.go:507
 msgid ""
 "Programs and scripts are not opened directly; save the file and decide "
 "yourself."
 msgstr ""
 
-#: ui/internal/window/attachments.go:237
+#: ui/internal/window/attachments.go:243
 msgid "_View"
 msgstr ""
 
-#: ui/internal/window/attachments.go:239
+#: ui/internal/window/attachments.go:245
 msgid "_Open"
 msgstr ""
 
-#: ui/internal/window/attachments.go:240
+#: ui/internal/window/attachments.go:249
 msgid "Save _As…"
 msgstr ""
 
-#: ui/internal/window/attachments.go:268
+#: ui/internal/window/attachments.go:277
 msgid "Save _All"
 msgstr ""
 
-#: ui/internal/window/attachments.go:326 ui/internal/window/message_view.go:388
+#: ui/internal/window/attachments.go:335 ui/internal/window/message_view.go:388
 msgid "This message is too large to download."
 msgstr ""
 
-#: ui/internal/window/attachments.go:328 ui/internal/window/message_view.go:390
+#: ui/internal/window/attachments.go:337 ui/internal/window/message_view.go:390
 msgid "This message could not be read."
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "16.0 MiB".
-#: ui/internal/window/attachments.go:332
+#: ui/internal/window/attachments.go:341
 #, c-format
 msgid "Attachments over %s cannot be opened or saved yet."
 msgstr ""
 
 #. TRANSLATORS: tooltip of the server icon on an attachment; "it" is the attachment.
-#: ui/internal/window/attachments.go:337
+#: ui/internal/window/attachments.go:346
 msgid "On the server only; it is downloaded when you open it"
 msgstr ""
 
-#: ui/internal/window/attachments.go:417
+#: ui/internal/window/attachments.go:426
 msgid "Attachment"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of files written.
-#: ui/internal/window/attachments.go:474
+#: ui/internal/window/attachments.go:483
 #, c-format
 msgid "Saved %d attachment"
 msgid_plural "Saved %d attachments"
@@ -1523,33 +1523,33 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: the first %d is how many failed, the second how many there were.
-#: ui/internal/window/attachments.go:477
+#: ui/internal/window/attachments.go:486
 #, c-format
 msgid "%d of %d attachments could not be saved"
 msgstr ""
 
-#: ui/internal/window/attachments.go:518 ui/internal/window/attachments.go:545
-#: ui/internal/window/attachments.go:558
+#: ui/internal/window/attachments.go:527 ui/internal/window/attachments.go:554
+#: ui/internal/window/attachments.go:567
 msgid "The attachment could not be opened"
 msgstr ""
 
-#: ui/internal/window/attachments.go:537
+#: ui/internal/window/attachments.go:546
 msgid "Opening the attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:570
+#: ui/internal/window/attachments.go:579
 msgid "Save Attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:586
+#: ui/internal/window/attachments.go:595
 msgid "Saving the attachment"
 msgstr ""
 
-#: ui/internal/window/attachments.go:602
+#: ui/internal/window/attachments.go:611
 msgid "Save Attachments"
 msgstr ""
 
-#: ui/internal/window/attachments.go:622
+#: ui/internal/window/attachments.go:631
 msgid "Saving the attachments"
 msgstr ""
 
@@ -1676,7 +1676,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:572
+#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:577
 msgid "No Accounts"
 msgstr ""
 
@@ -1824,81 +1824,81 @@ msgstr ""
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:81
-#: ui/data/ui/window.ui:463
+#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:86
+#: ui/data/ui/window.ui:468
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:251
+#: ui/internal/window/preferences.go:264
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:280
+#: ui/internal/window/preferences.go:293
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:343
+#: ui/internal/window/preferences.go:356
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:379
+#: ui/internal/window/preferences.go:392
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:381
+#: ui/internal/window/preferences.go:394
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:385
+#: ui/internal/window/preferences.go:398
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:389
+#: ui/internal/window/preferences.go:402
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:527
+#: ui/internal/window/preferences.go:540
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:530
+#: ui/internal/window/preferences.go:543
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:533
+#: ui/internal/window/preferences.go:546
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:558
+#: ui/internal/window/preferences.go:580
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:564
+#: ui/internal/window/preferences.go:586
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:579
+#: ui/internal/window/preferences.go:615
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:615
+#: ui/internal/window/preferences.go:657
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:618
+#: ui/internal/window/preferences.go:660
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:621
+#: ui/internal/window/preferences.go:663
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
@@ -2247,15 +2247,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:559
+#: ui/internal/window/window.go:585
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:625 ui/data/ui/window.ui:207
+#: ui/internal/window/window.go:651 ui/data/ui/window.ui:207
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:631 ui/data/ui/window.ui:177
+#: ui/internal/window/window.go:657 ui/data/ui/window.ui:177
 msgid "Messages"
 msgstr ""
 
@@ -2435,12 +2435,12 @@ msgid "Draft Menu"
 msgstr ""
 
 #: ui/data/ui/compose.ui:105 ui/data/ui/embedded_window.ui:104
-#: ui/data/ui/message_window.ui:190 ui/data/ui/window.ui:623
+#: ui/data/ui/message_window.ui:195 ui/data/ui/window.ui:628
 msgid "From"
 msgstr ""
 
 #: ui/data/ui/compose.ui:133 ui/data/ui/embedded_window.ui:130
-#: ui/data/ui/message_window.ui:216 ui/data/ui/window.ui:649
+#: ui/data/ui/message_window.ui:221 ui/data/ui/window.ui:654
 msgid "To"
 msgstr ""
 
@@ -2449,7 +2449,7 @@ msgid "Cc/Bcc"
 msgstr ""
 
 #: ui/data/ui/compose.ui:171 ui/data/ui/embedded_window.ui:158
-#: ui/data/ui/message_window.ui:244 ui/data/ui/window.ui:677
+#: ui/data/ui/message_window.ui:249 ui/data/ui/window.ui:682
 msgid "Cc"
 msgstr ""
 
@@ -2549,14 +2549,14 @@ msgstr ""
 msgid "Attached Message"
 msgstr ""
 
-#: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:115
-#: ui/data/ui/message_window.ui:391 ui/data/ui/window.ui:506
-#: ui/data/ui/window.ui:857
+#: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:120
+#: ui/data/ui/message_window.ui:396 ui/data/ui/window.ui:511
+#: ui/data/ui/window.ui:862
 msgid "Load _Images"
 msgstr ""
 
-#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:353
-#: ui/data/ui/window.ui:785
+#: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:358
+#: ui/data/ui/window.ui:790
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -2577,35 +2577,35 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:69 ui/data/ui/window.ui:449
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:454
 msgid "Archive"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:75 ui/data/ui/window.ui:456
+#: ui/data/ui/message_window.ui:80 ui/data/ui/window.ui:461
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:121 ui/data/ui/window.ui:512
+#: ui/data/ui/message_window.ui:126 ui/data/ui/window.ui:517
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:123 ui/data/ui/window.ui:514
+#: ui/data/ui/message_window.ui:128 ui/data/ui/window.ui:519
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:152 ui/data/ui/window.ui:543
+#: ui/data/ui/message_window.ui:157 ui/data/ui/window.ui:548
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:381 ui/data/ui/window.ui:847
+#: ui/data/ui/message_window.ui:386 ui/data/ui/window.ui:852
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:385 ui/data/ui/window.ui:851
+#: ui/data/ui/message_window.ui:390 ui/data/ui/window.ui:856
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:861
+#: ui/data/ui/message_window.ui:400 ui/data/ui/window.ui:866
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -2957,39 +2957,39 @@ msgstr ""
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:476
+#: ui/data/ui/window.ui:481
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:477
+#: ui/data/ui/window.ui:482
 msgid "Edit"
 msgstr ""
 
-#: ui/data/ui/window.ui:560
+#: ui/data/ui/window.ui:565
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:561
+#: ui/data/ui/window.ui:566
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:573
+#: ui/data/ui/window.ui:578
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:576
+#: ui/data/ui/window.ui:581
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:831
+#: ui/data/ui/window.ui:836
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:835
+#: ui/data/ui/window.ui:840
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:839
+#: ui/data/ui/window.ui:844
 msgid "_About Malachi Mail"
 msgstr ""
 

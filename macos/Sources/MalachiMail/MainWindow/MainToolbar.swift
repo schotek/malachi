@@ -10,7 +10,7 @@ import MalachiCore
 /// act through the responder chain and are validated by whichever
 /// responder owns the action (the window controller). The search field
 /// reports to the window, which hands the text to the list.
-/// The Assistant button (ui/internal/assistant; no Blueprint yet) sits
+/// The Assistant button (ui/internal/assistant; GTK `assistant_button`) sits
 /// right before More Actions while the `assistant-menu` setting is on;
 /// its menu is the window's `AssistantMenu`. While the assistant panel
 /// exists (In App chosen), the main window's toolbar ends with AppKit's

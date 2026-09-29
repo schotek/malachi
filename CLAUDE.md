@@ -251,10 +251,10 @@ obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
 Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
 `ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows
 `McpRegistrationController`, který předá `--command` a u MSIX Claude Desktop
-`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (zatím
-jen macOS; čistá logika a texty v `ui/internal/assistant`, portovaná do
-`MalachiCore`, klíče gschema `assistant-menu` a `assistant-target`, GTK
-widgety a Windows UI následují) předá vybranou poštu do Claude Desktop
+`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (macOS
+a GTK `ui/internal/window/assistant.go`; čistá logika a texty
+v `ui/internal/assistant`, portovaná do `MalachiCore`, klíče gschema
+`assistant-menu` a `assistant-target`, Windows UI následuje) předá vybranou poštu do Claude Desktop
 nebo Claude Code odkazem `claude://` / `claude-cli://` s předvyplněným,
 neodeslaným dotazem, který nese jen ID; existuje jen se zapnutým
 přepínačem Registrovat v Claude (`assistant.Shown`); poštu Claude čte přes most,
@@ -370,8 +370,9 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Asistent (Claude) — macOS hotovo (úroveň A a panel B1), GTK a Windows
-   doplňují, macOS rozpracovává B2 (viz předávka níže)
+8. Asistent (Claude) — macOS hotovo (úroveň A a panel B1), GTK úroveň A
+   (jen Claude Code), GTK (B1) a Windows doplňují, macOS rozpracovává B2
+   (viz předávka níže)
 
 Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
@@ -390,13 +391,25 @@ testovaný), chování UI popisuje `docs/mcp.md` (Hand-off, The panel in the
 app) a macOS: `MalachiCore/Assistant/`, `Controllers/AssistantController`,
 `ClaudeDesktopController`, `AssistantPanelController`,
 `Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `MalachiMail/Assistant/`,
-`Preferences/AIPaneViewController`. GTK: nejdřív v Toolbxu `make po`
-(položky asistenta v `po/malachi.pot` a `cs.po` jsou dopsané ručně bez
-čísel řádků), `make lint`, `make test`; pak widgety — `MenuButton` ✦ jako
-`[end]` vedle `message_menu` v `window.blp` i `message_window.blp`,
-skupina Asistent na `ai_page`, položka v menu čipu přílohy, panel jako
-`Adw.OverlaySplitView` na konci, klíče gschema už existují; ověřit, zda
-Claude Desktop pro Linux přepisuje konfiguraci jako na macOS. Windows:
+`Preferences/AIPaneViewController`. GTK: úroveň A je napsaná
+(`ui/internal/window/assistant.go`: stav `Assistant` pro celou aplikaci
+nad `mcpsetup` a výchozím handlerem schématu z GIO, `MenuButton`
+`assistant_button` vedle `message_menu` v `window.blp` i
+`message_window.blp` s akcemi `win.assistant`/`msg.assistant`,
+`win.assistant-unread`, `app.assistant-target`/`-setup`/`-problem`,
+položka `att.ask` v menu čipu přílohy, skupina Asistent na `ai_page`,
+ikona `malachi-assistant-symbolic` v `ui/data/icons`). Na Linuxu jen
+Claude Code v terminálu, který vybere jeho handler `claude-cli://`
+(`$TERMINAL`, `x-terminal-emulator`, běžné emulátory); Claude Desktop pro
+Linux je preview, které nepodporujeme: menu i Předvolby ho ukazují
+zašedlé (`supportedTarget`), cokoli uloženého v `assistant-target` se
+čte jako Claude Code, výchozí hodnota gschema zůstává referenční
+(`desktop`), proto žádná nabídka restartu Claude Desktop (který
+i na Linuxu za běhu přepisuje konfiguraci, „Config file written“
+v `~/.config/Claude/logs/main.log`). Zbývá opakování neúspěšného dotazu
+na stav po 1, 2 a 4 s a panel B1 jako `Adw.OverlaySplitView` na konci.
+Handler Claude Code z vývojového běhu v Toolbxu běží uvnitř kontejneru;
+předání zkoušet s aplikací nainstalovanou na hostiteli. Windows:
 klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené
 (na Macu není dotnet) — nejdřív `build.ps1 test` a `lint`, pak porty do
 `Malachi.Core` (1:1 ze Swiftu) a UI; msgid asistenta z exclusions při

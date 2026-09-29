@@ -22,6 +22,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -44,6 +45,8 @@ type Window struct {
 	log      *slog.Logger
 	settings *settings.Store
 	compose  *compose.Manager
+	// assist is the application's Assistant state (assistant.go).
+	assist *Assistant
 
 	// model caches what the backend returned; the widgets are built from it.
 	model mailModel
@@ -185,6 +188,7 @@ type Window struct {
 	junkButton     *gtk.Button
 	trashButton    *gtk.Button
 	messageMenu    *gtk.MenuButton
+	assistButton   *gtk.MenuButton
 	replyButton    *gtk.Button
 	replyAllButton *gtk.Button
 	forwardButton  *gtk.Button
@@ -201,8 +205,8 @@ type Starter interface {
 
 // New builds the window, registers its actions and starts connecting to
 // the backend, asking starter for a daemon first. Settings from s are
-// applied now and whenever they change.
-func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, cm *compose.Manager, starter Starter) *Window {
+// applied now and whenever they change; as is the Assistant's state as.
+func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.Store, as *Assistant, cm *compose.Manager, starter Starter) *Window {
 	b := data.Builder("window.ui")
 
 	w := &Window{
@@ -213,6 +217,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		log:               log.With("component", "window"),
 		settings:          s,
 		compose:           cm,
+		assist:            as,
 		hasAccounts:       true,
 		rows:              make(map[listKey]*widget.MessageRow),
 		folderRows:        make(map[rowKey]*folderRow),
@@ -267,6 +272,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		junkButton:     b.GetObject("junk_button").Cast().(*gtk.Button),
 		trashButton:    b.GetObject("trash_button").Cast().(*gtk.Button),
 		messageMenu:    b.GetObject("message_menu").Cast().(*gtk.MenuButton),
+		assistButton:   b.GetObject("assistant_button").Cast().(*gtk.MenuButton),
 		replyButton:    b.GetObject("reply_button").Cast().(*gtk.Button),
 		replyAllButton: b.GetObject("reply_all_button").Cast().(*gtk.Button),
 		forwardButton:  b.GetObject("forward_button").Cast().(*gtk.Button),
@@ -292,6 +298,14 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	}
 	w.pane.toast = w.Toast
 	w.registerActions()
+	// The main window lives as long as the application: no unbinding.
+	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions)
+	// A Claude app may have been installed or registered meanwhile.
+	w.NotifyProperty("is-active", func() {
+		if w.IsActive() {
+			as.Refresh()
+		}
+	})
 	w.messageStack.SetVisibleChildName(w.emptyPageName())
 	w.bindGeometry()
 	// HTML views scale with text-zoom; the plain-text label follows internal/style.
@@ -529,6 +543,18 @@ func (w *Window) registerActions() {
 	w.addAction("toggle-flag", false, forRows(func(row listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.model.flagTarget(row)) }))
 	w.addAction("load-images", false, forSelected(w.loadRemoteImages))
 	w.addAction("trust-sender", false, forSelected(w.trustSender))
+	// The Assistant menu (assistant.go), enabled as it opens
+	// (syncAssistantActions).
+	ask := gio.NewSimpleAction("assistant", glib.NewVariantType("s"))
+	ask.SetEnabled(false)
+	ask.ConnectActivate(func(v *glib.Variant) {
+		if v != nil {
+			w.askAssistant(assistant.Action(v.String()))
+		}
+	})
+	w.AddAction(ask)
+	w.actions["assistant"] = ask
+	w.addAction("assistant-unread", false, w.summarizeUnread)
 }
 
 // addAction registers one stateless win.<name> action.

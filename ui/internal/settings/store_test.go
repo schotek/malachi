@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+
+	"github.com/schotek/malachi/ui/internal/assistant"
 )
 
 func TestMemoryDefaults(t *testing.T) {
@@ -202,5 +204,29 @@ func TestStringListRoundTrip(t *testing.T) {
 	}
 	if changed != 2 {
 		t.Errorf("changed fired %d times, want 2", changed)
+	}
+}
+
+func TestAssistantKeys(t *testing.T) {
+	s := NewMemory()
+	if !s.AssistantMenu() {
+		t.Error("AssistantMenu default = false, want true (the gschema's)")
+	}
+	if got := s.AssistantTarget(); got != assistant.Desktop {
+		t.Errorf("AssistantTarget default = %q, want desktop", got)
+	}
+	s.SetAssistantTarget("elsewhere")
+	if got := s.AssistantTarget(); got != assistant.Desktop {
+		t.Errorf("invalid target accepted: %q", got)
+	}
+	for _, want := range assistant.Targets {
+		s.SetAssistantTarget(want)
+		if got := s.AssistantTarget(); got != want {
+			t.Errorf("AssistantTarget = %q, want %q", got, want)
+		}
+	}
+	s.SetAssistantMenu(false)
+	if s.AssistantMenu() {
+		t.Error("SetAssistantMenu(false) did not stick")
 	}
 }

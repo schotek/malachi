@@ -12,11 +12,13 @@ import (
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -30,11 +32,13 @@ import (
 // "Launch at Login" goes through the Background portal; the Mail group and
 // the Accounts page are owned by the daemon (config.get / config.set,
 // system.storage, account.*); the AI page shows what the malachi-mcp
-// bridge reports.
+// bridge reports, and the Assistant group under it follows the
+// application's Assistant state (assistant.go).
 type PreferencesDialog struct {
 	*adw.PreferencesDialog
 
-	log *slog.Logger
+	log    *slog.Logger
+	assist *Assistant
 
 	accountsGroup *adw.PreferencesGroup
 	addAccount    *gtk.Button
@@ -70,6 +74,10 @@ type PreferencesDialog struct {
 
 	mcpSwitch *adw.SwitchRow
 
+	assistantGroup  *adw.PreferencesGroup
+	assistantMenu   *adw.SwitchRow
+	assistantTarget *adw.ComboRow
+
 	closed bool
 }
 
@@ -97,10 +105,10 @@ var (
 // the dialog is open: the numbers move while stored mail is converted.
 const storagePollSeconds = 5
 
-// NewPreferences builds the dialog bound to s and, for the Mail group and
-// the Accounts page, to the daemon through c. Present it with
-// Present(parent).
-func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *PreferencesDialog {
+// NewPreferences builds the dialog bound to s, for the Mail group and the
+// Accounts page to the daemon through c, and for the AI page to the
+// Assistant state as. Present it with Present(parent).
+func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slog.Logger) *PreferencesDialog {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -109,6 +117,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 	d := &PreferencesDialog{
 		PreferencesDialog:    b.GetObject("preferences_dialog").Cast().(*adw.PreferencesDialog),
 		log:                  log.With("component", "preferences"),
+		assist:               as,
 		accountsGroup:        b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
 		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.Button),
 		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
@@ -137,6 +146,9 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		textZoom:             b.GetObject("text_zoom").Cast().(*adw.SpinRow),
 		mcpSwitch:            b.GetObject("mcp_switch").Cast().(*adw.SwitchRow),
 		mcpGroup:             b.GetObject("mcp_group").Cast().(*adw.PreferencesGroup),
+		assistantGroup:       b.GetObject("assistant_group").Cast().(*adw.PreferencesGroup),
+		assistantMenu:        b.GetObject("assistant_menu_switch").Cast().(*adw.SwitchRow),
+		assistantTarget:      b.GetObject("assistant_target").Cast().(*adw.ComboRow),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -161,6 +173,7 @@ func NewPreferences(s *settings.Store, c *client.Client, log *slog.Logger) *Pref
 		unbindStorage,
 		d.bindAccounts(c),
 		d.bindMCP(),
+		d.bindAssistant(s),
 	}
 	d.ConnectClosed(func() {
 		d.closed = true
@@ -540,10 +553,19 @@ func (d *PreferencesDialog) bindLaunchAtLogin(s *settings.Store) (unbind func())
 // bindMCP drives the "Register with Claude" switch through the malachi-mcp
 // bridge (status / install / uninstall). The Claude configuration files
 // are the only state: the switch shows what the bridge reports, stays
-// insensitive while a call runs and reverts when the change fails.
+// insensitive while a call runs and reverts when the change fails. The
+// application's last status is shown at once, so the switch does not show
+// "off" only because the dialog has not asked yet, and so is every newer
+// one it learns while no call of the dialog runs; every status the dialog
+// gets goes to the application (Assistant.Apply), whose menus follow it.
 func (d *PreferencesDialog) bindMCP() (unbind func()) {
 	row := d.mcpSwitch
-	var syncing bool // set while the switch is updated programmatically
+	var (
+		syncing bool // set while the switch is updated programmatically
+		// op is bumped by every call; the reply of an older one is dropped.
+		op       int
+		changing bool // an install or uninstall runs
+	)
 	set := func(v bool) {
 		syncing = true
 		row.SetActive(v)
@@ -565,20 +587,36 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 		return func() {}
 	}
 
+	a := d.assist
+	follow := func() {
+		if d.closed || changing || !a.known() {
+			return
+		}
+		set(a.registered())
+		row.SetSensitive(true)
+	}
+	follow()
+	removeFollow := a.OnChange(follow)
+
+	op++
+	query := op
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
 		defer cancel()
 		st, err := mcpsetup.Query(ctx, bridge)
 		glib.IdleAdd(func() {
-			if d.closed {
+			if d.closed || query != op {
 				return
 			}
 			if err != nil {
 				d.log.Warn("malachi-mcp status", "err", err)
-				// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-				d.mcpGroup.SetDescription(fmt.Sprintf(i18n.T("The MCP bridge did not answer: %s"), err))
+				if !a.known() {
+					// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+					d.mcpGroup.SetDescription(fmt.Sprintf(i18n.T("The MCP bridge did not answer: %s"), err))
+				}
 				return
 			}
+			a.Apply(st)
 			set(st.Registered())
 			row.SetSensitive(true)
 		})
@@ -590,6 +628,9 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 		}
 		want := row.Active()
 		row.SetSensitive(false)
+		op++
+		my := op
+		changing = true
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
 			defer cancel()
@@ -603,9 +644,10 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 				st, err = mcpsetup.Uninstall(ctx, bridge)
 			}
 			glib.IdleAdd(func() {
-				if d.closed {
+				if d.closed || my != op {
 					return
 				}
+				changing = false
 				row.SetSensitive(true)
 				if err != nil {
 					d.log.Warn("changing the MCP registration", "register", want, "err", err)
@@ -624,11 +666,175 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 				}
 				// The bridge's report is authoritative; it may differ from
 				// what was asked for (e.g. one client left registered).
+				a.Apply(st)
 				set(st.Registered())
 			})
 		}()
 	})
-	return func() { row.HandlerDisconnect(handle) }
+	return func() {
+		removeFollow()
+		row.HandlerDisconnect(handle)
+	}
+}
+
+// assistantGroupState is how the Assistant group shows: whether its rows
+// can be changed, what the switch shows, whether it says to register first
+// and what "Open In" says.
+type assistantGroupState struct {
+	sensitive, on, registerFirst bool
+	targetSubtitle               string
+}
+
+// assistantGroupFor is the Assistant group for the assistant-menu key,
+// the bridge's state (registered in a client; known: any status answered)
+// and problem, why the chosen target cannot run the message actions
+// (assistant.Problem). Registered, the switch shows the key and "Open In"
+// the problem; known not to be registered, both rows are insensitive and
+// the switch is off and says why, so the Assistant cannot be turned on
+// without the bridge (assistant.Shown; the key keeps its value); not known
+// yet, both rows are insensitive and the switch shows the key without a
+// reason, rather than an "off" that may not be true.
+func assistantGroupFor(menu, registered, known bool, problem string) assistantGroupState {
+	st := assistantGroupState{sensitive: registered}
+	switch {
+	case registered:
+		st.on = assistant.Shown(menu, true)
+		st.targetSubtitle = problem
+	case known:
+		st.registerFirst = true
+	default:
+		st.on = menu
+	}
+	return st
+}
+
+// bindAssistant fills the Assistant group (its texts are
+// ui/internal/assistant's) and keeps it with the assistant keys and the
+// application's Assistant state (assistantGroupFor). The switch is set by
+// hand, because what it shows depends on the bridge too; "Open In" is bound
+// to assistant-target and lists the targets this client does not support
+// insensitive (targetListFactory). Without a bridge (the Flatpak build) the
+// Assistant can never be shown, and the group is hidden.
+func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
+	a := d.assist
+	texts := assistant.Texts(tr)
+	d.assistantGroup.SetTitle(texts.Assistant)
+	d.assistantGroup.SetDescription(texts.Description)
+	d.assistantMenu.SetTitle(texts.ShowMenu)
+	d.assistantTarget.SetTitle(texts.OpenIn)
+	names := make([]string, len(assistantTargets))
+	for i, t := range assistantTargets {
+		names[i] = assistant.TargetName(tr, t)
+	}
+	d.assistantTarget.SetListFactory(&targetListFactory().ListItemFactory)
+	d.assistantTarget.SetModel(gtk.NewStringList(names))
+	if !a.hasBridge() {
+		d.assistantGroup.SetVisible(false)
+		return func() {}
+	}
+
+	var syncing bool
+	update := func() {
+		if d.closed {
+			return
+		}
+		st := assistantGroupFor(s.AssistantMenu(), a.registered(), a.known(), a.problem(a.target()))
+		d.assistantMenu.SetSensitive(st.sensitive)
+		d.assistantTarget.SetSensitive(st.sensitive)
+		syncing = true
+		d.assistantMenu.SetActive(st.on)
+		syncing = false
+		menuSubtitle := ""
+		if st.registerFirst {
+			menuSubtitle = texts.RegisterFirst
+		}
+		d.assistantMenu.SetSubtitle(menuSubtitle)
+		d.assistantTarget.SetSubtitle(st.targetSubtitle)
+	}
+	handle := d.assistantMenu.NotifyProperty("active", func() {
+		if syncing {
+			return
+		}
+		// The row is insensitive while the bridge is not registered.
+		if !a.registered() {
+			update()
+			return
+		}
+		s.SetAssistantMenu(d.assistantMenu.Active())
+	})
+	unbindTarget := bindChoice(s, settings.KeyAssistantTarget, d.assistantTarget, assistantTargets, a.target, s.SetAssistantTarget)
+	// The assistant keys are among the changes it reports.
+	remove := a.OnChange(update)
+	update()
+	// A Claude app may have been installed meanwhile.
+	a.refreshHandlers()
+	return func() {
+		remove()
+		unbindTarget()
+		d.assistantMenu.HandlerDisconnect(handle)
+	}
+}
+
+// targetListFactory renders the choices of "Open In" in its popup, in the
+// order of assistantTargets: the name and, on the chosen one, a check mark,
+// as the combo row's own factory does; a target this client does not
+// support (supportedTarget) is insensitive and cannot be chosen.
+func targetListFactory() *gtk.SignalListItemFactory {
+	f := gtk.NewSignalListItemFactory()
+	f.ConnectSetup(func(obj *coreglib.Object) {
+		item, ok := obj.Cast().(*gtk.ListItem)
+		if !ok {
+			return
+		}
+		l := gtk.NewLabel("")
+		l.SetUseMarkup(false)
+		l.SetXAlign(0)
+		l.SetHExpand(true)
+		check := gtk.NewImageFromIconName("object-select-symbolic")
+		box := gtk.NewBox(gtk.OrientationHorizontal, 6)
+		box.Append(l)
+		box.Append(check)
+		item.SetChild(box)
+		item.NotifyProperty("selected", func() { showCheck(check, item.Selected()) })
+	})
+	f.ConnectBind(func(obj *coreglib.Object) {
+		item, ok := obj.Cast().(*gtk.ListItem)
+		if !ok {
+			return
+		}
+		box, ok := item.Child().(*gtk.Box)
+		if !ok {
+			return
+		}
+		l, ok := box.FirstChild().(*gtk.Label)
+		if !ok {
+			return
+		}
+		check, ok := box.LastChild().(*gtk.Image)
+		if !ok {
+			return
+		}
+		if s, ok := item.Item().Cast().(*gtk.StringObject); ok {
+			l.SetLabel(s.String())
+		}
+		pos := item.Position()
+		supported := pos < uint(len(assistantTargets)) && supportedTarget(assistantTargets[pos])
+		box.SetSensitive(supported)
+		item.SetActivatable(supported)
+		item.SetSelectable(supported)
+		showCheck(check, item.Selected())
+	})
+	return f
+}
+
+// showCheck shows or hides a list item's check mark without moving the
+// label.
+func showCheck(check *gtk.Image, on bool) {
+	if on {
+		check.SetOpacity(1)
+	} else {
+		check.SetOpacity(0)
+	}
 }
 
 // bindChoice keeps a combo row and a string-enum setting in sync in both

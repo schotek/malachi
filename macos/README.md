@@ -442,8 +442,8 @@ it, or becomes Claude Code's working directory. *Settings → AI →
 Assistant* has *Show the Assistant Menu* (`assistant-menu`) and *Open
 In* (`assistant-target`, which the menu's choice changes too), whose
 subtitle says why the chosen app cannot be used. The shared logic and every string are GTK's
-(`ui/internal/assistant`, `po/`); the GTK widgets follow later, so this is
-the first client to show them, not a deviation. The link formats and the
+(`ui/internal/assistant`, `po/`), and GTK has the same menu behind its ✦
+button, so this is no deviation. The link formats and the
 limits are in [docs/mcp.md](../docs/mcp.md#hand-off-from-the-app-the-assistant-menu).
 
 The third choice under *Open In*, **In App (Experimental)**, keeps the
