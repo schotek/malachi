@@ -272,6 +272,32 @@ func (w *Window) openLink(parent *gtk.Window, uri string, links []api.Link) {
 	d.Present(parent)
 }
 
+// openAssistantAnswerLink opens a link of an answer in the assistant panel
+// (assistant_panel.go) only after "Open This Link?" has shown where it
+// leads: nothing is known of the text it wore, and the answer may quote
+// mail. Only http and https come here (assistant.Markdown).
+func (w *Window) openAssistantAnswerLink(uri string) {
+	if !htmlview.AllowedLink(uri) || strings.HasPrefix(strings.ToLower(uri), "mailto:") {
+		return
+	}
+	d := adw.NewAlertDialog(i18n.T("Open This Link?"),
+		// TRANSLATORS: %s is the link's real destination.
+		fmt.Sprintf(i18n.T("This link leads to %s."), uri))
+	d.SetHeadingUseMarkup(false)
+	d.SetBodyUseMarkup(false)
+	d.AddResponse("cancel", i18n.T("_Cancel"))
+	d.AddResponse("open", i18n.T("_Open Link"))
+	d.SetResponseAppearance("open", adw.ResponseSuggested)
+	d.SetDefaultResponse("cancel")
+	d.SetCloseResponse("cancel")
+	d.ConnectResponse(func(response string) {
+		if response == "open" {
+			w.launchURI(&w.ApplicationWindow.Window, uri)
+		}
+	})
+	d.Present(w)
+}
+
 // linkTextFor is the visible text of the first link in links with this
 // target, "" when the daemon listed none (the click came from somewhere
 // the list does not cover).

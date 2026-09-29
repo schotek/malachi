@@ -5,8 +5,8 @@ import AppKit
 import MalachiCore
 
 /// The assistant panel of the main window (ui/internal/assistant, the In
-/// App target; there is no Blueprint yet, the GTK widgets follow this
-/// port), the inspector of `MainSplitViewController`. It renders an
+/// App target; GTK assistant_panel.blp and window/assistant_panel.go follow
+/// this port), the inspector of `MainSplitViewController`. It renders an
 /// `AssistantPanelController` and sends the clicks back:
 ///
 /// - the header: "Assistant", the subtitle (Claude Code · the model) and

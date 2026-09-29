@@ -371,8 +371,8 @@ Pořadí prací:
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
 8. Asistent (Claude) — macOS hotovo (úroveň A a panel B1), GTK úroveň A
-   (jen Claude Code), GTK (B1) a Windows doplňují, macOS rozpracovává B2
-   (viz předávka níže)
+   a B1 (jen Claude Code, v terminálu nebo v panelu), Windows doplňuje,
+   macOS rozpracovává B2 (viz předávka níže)
 
 Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
@@ -398,18 +398,25 @@ nad `mcpsetup` a výchozím handlerem schématu z GIO, `MenuButton`
 `message_window.blp` s akcemi `win.assistant`/`msg.assistant`,
 `win.assistant-unread`, `app.assistant-target`/`-setup`/`-problem`,
 položka `att.ask` v menu čipu přílohy, skupina Asistent na `ai_page`,
-ikona `malachi-assistant-symbolic` v `ui/data/icons`). Na Linuxu jen
-Claude Code v terminálu, který vybere jeho handler `claude-cli://`
-(`$TERMINAL`, `x-terminal-emulator`, běžné emulátory); Claude Desktop pro
+ikona `malachi-assistant-symbolic` v `ui/data/icons`) i panel B1
+(`ui/internal/assistantpanel`: `Controller` jako port
+`AssistantPanelController`, `Process`, `Locator`, testy proti falešnému
+`claude` portované ze Swiftu; `window/assistant_panel.go` +
+`assistant_panel.blp` v `Adw.OverlaySplitView` `assistant_split` na
+konci hlavního okna s přepínačem `assistant_panel_button`, odpovědi jako
+`GtkTextView` se značkami z `assistant.Markdown`, odkazy vždy přes
+„Otevřít tento odkaz?“; Předvolby → AI řádky Claude Code a Model; pracovní
+adresář `~/.cache/malachi/assistant`). Na Linuxu jen Claude Code:
+v terminálu, který vybere jeho handler `claude-cli://` (`$TERMINAL`,
+`x-terminal-emulator`, běžné emulátory), nebo v panelu; Claude Desktop pro
 Linux je preview, které nepodporujeme: menu i Předvolby ho ukazují
-zašedlé (`supportedTarget`), cokoli uloženého v `assistant-target` se
-čte jako Claude Code, výchozí hodnota gschema zůstává referenční
-(`desktop`), proto žádná nabídka restartu Claude Desktop (který
-i na Linuxu za běhu přepisuje konfiguraci, „Config file written“
-v `~/.config/Claude/logs/main.log`). Zbývá opakování neúspěšného dotazu
-na stav po 1, 2 a 4 s a panel B1 jako `Adw.OverlaySplitView` na konci.
-Handler Claude Code z vývojového běhu v Toolbxu běží uvnitř kontejneru;
-předání zkoušet s aplikací nainstalovanou na hostiteli. Windows:
+zašedlé (`supportedTarget`), uložené `desktop` se čte jako Claude Code,
+výchozí hodnota gschema zůstává referenční (`desktop`), proto žádná
+nabídka restartu Claude Desktop (který i na Linuxu za běhu přepisuje
+konfiguraci, „Config file written“ v `~/.config/Claude/logs/main.log`).
+Zbývá opakování neúspěšného dotazu na stav po 1, 2 a 4 s. Handler Claude
+Code z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do
+terminálu zkoušet s aplikací nainstalovanou na hostiteli. Windows:
 klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené
 (na Macu není dotnet) — nejdřív `build.ps1 test` a `lint`, pak porty do
 `Malachi.Core` (1:1 ze Swiftu) a UI; msgid asistenta z exclusions při

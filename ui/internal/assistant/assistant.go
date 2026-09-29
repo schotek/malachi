@@ -349,6 +349,13 @@ func ConversationLabel(tr Translator, subject string, messages int) string {
 	return ContextLabel(tr, 1)
 }
 
+// SubjectLine is a subject as ConversationLabel shows it: one line, cut to
+// its limit (oneLine); "" when nothing is left, and ConversationLabel then
+// falls back to ContextLabel.
+func SubjectLine(subject string) string {
+	return oneLine(subject, maxSubject)
+}
+
 // oneLine is mail text (a subject, written by a third party) as one line
 // of a label: every run of white space (line breaks, tabs, U+2028 and
 // U+2029 among them) one space, the other control characters and the

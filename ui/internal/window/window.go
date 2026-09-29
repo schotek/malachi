@@ -45,8 +45,13 @@ type Window struct {
 	log      *slog.Logger
 	settings *settings.Store
 	compose  *compose.Manager
-	// assist is the application's Assistant state (assistant.go).
-	assist *Assistant
+	// assist is the application's Assistant state (assistant.go), and
+	// assistantPanel the panel it may show (assistant_panel.go).
+	assist         *Assistant
+	assistantPanel *assistantPanel
+	// findingDrafts are the drafts the panel's Open Draft looks up
+	// (openSavedDraft).
+	findingDrafts map[api.DraftID]bool
 
 	// model caches what the backend returned; the widgets are built from it.
 	model mailModel
@@ -231,6 +236,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		savingAll:         make(map[api.MessageID]bool),
 		syncStates:        make(map[api.AccountID]api.SyncState),
 		actions:           make(map[string]*gio.SimpleAction),
+		findingDrafts:     make(map[api.DraftID]bool),
 		// Until the client reports a state, the first attempt is underway.
 		conn:       connView{State: client.Connecting},
 		statusRows: make(map[api.AccountID]*statusRow),
@@ -300,6 +306,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.registerActions()
 	// The main window lives as long as the application: no unbinding.
 	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions)
+	w.assistantPanel = newAssistantPanel(w, b)
 	// A Claude app may have been installed or registered meanwhile.
 	w.NotifyProperty("is-active", func() {
 		if w.IsActive() {
@@ -479,6 +486,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 // placeholder when row is nil (selection cleared). The list code calls it
 // directly when it changes the selection on the user's behalf.
 func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
+	if w.assistantPanel != nil {
+		w.assistantPanel.followSelection()
+	}
 	if row == nil {
 		w.messageStack.SetVisibleChildName(w.emptyPageName())
 		w.outboxBanner.SetRevealed(false)
@@ -564,6 +574,12 @@ func (w *Window) addAction(name string, enabled bool, fn func()) {
 	a.ConnectActivate(func(*glib.Variant) { fn() })
 	w.AddAction(a)
 	w.actions[name] = a
+}
+
+// CloseAssistant ends the assistant panel's Claude Code for good; main.go
+// calls it when the application shuts down.
+func (w *Window) CloseAssistant() {
+	w.assistantPanel.close()
 }
 
 // Toast shows a transient message over the message pane.

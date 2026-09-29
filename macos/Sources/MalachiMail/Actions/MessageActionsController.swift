@@ -294,7 +294,7 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         alert.alertStyle = .warning
         alert.messageText = L10n.T("Open This Link?")
         // TRANSLATORS: %s is the link's real destination.
-        alert.informativeText = L10n.T("This link leads to %s.", href) // macOS-only string
+        alert.informativeText = L10n.T("This link leads to %s.", href)
         let cancel = alert.addButton(withTitle: mn(L10n.T("_Cancel")))
         cancel.keyEquivalent = "\u{1b}"
         let open = alert.addButton(withTitle: mn(L10n.T("_Open Link")))

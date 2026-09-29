@@ -628,10 +628,13 @@ user typing a question in Claude, with the ids filled in.
 ### The panel in the app (experimental)
 
 The third target, *In App*, runs the conversation in a panel of the main
-window (macOS so far; the pure parts are `ui/internal/assistant`: the
+window (macOS and GTK; the pure parts are `ui/internal/assistant`: the
 command line, the system prompt, the stream-json events, the Markdown
-subset the panel renders). The app starts the user's own Claude Code CLI,
-one process per conversation, and talks to it over stdin and stdout:
+subset the panel renders; the GTK app's conversation, process and
+locator are `ui/internal/assistantpanel`, ported from the macOS client). The
+app starts the user's own Claude Code CLI, one process per conversation,
+in an empty private directory (`~/.cache/malachi/assistant` on Linux), and
+talks to it over stdin and stdout:
 
 ```
 claude -p --verbose --output-format stream-json --include-partial-messages

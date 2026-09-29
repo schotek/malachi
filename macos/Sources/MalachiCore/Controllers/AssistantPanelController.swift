@@ -5,8 +5,8 @@ import Foundation
 import os
 
 /// The assistant panel of the main window (ui/internal/assistant, the In
-/// App target; there is no Blueprint yet, the GTK widgets follow this
-/// port) without its views: the conversation with the user's own Claude
+/// App target; GTK ui/internal/assistantpanel `Controller`, a port of
+/// this) without its views: the conversation with the user's own Claude
 /// Code, restricted to the malachi-mcp tools, as a list of items the panel
 /// shows.
 ///

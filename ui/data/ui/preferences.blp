@@ -307,6 +307,23 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.ComboRow assistant_target {
         use-markup: false;
       }
+
+      // In App only: the claude the panel runs, and the model.
+      Adw.ActionRow assistant_claude_code {
+        use-markup: false;
+        subtitle-selectable: true;
+        visible: false;
+
+        [suffix]
+        Button assistant_claude_choose {
+          valign: center;
+        }
+      }
+
+      Adw.ComboRow assistant_model {
+        use-markup: false;
+        visible: false;
+      }
     }
   }
 }

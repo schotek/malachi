@@ -104,8 +104,8 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	ask := gio.NewSimpleAction("assistant", glib.NewVariantType("s"))
 	ask.SetEnabled(false)
 	ask.ConnectActivate(func(v *glib.Variant) {
-		if v != nil && !outbox {
-			w.handOff(&mw.Window.Window, assistant.Action(v.String()), s.AccountID, []string{string(id)}, mw.view.say)
+		if v != nil {
+			w.askAssistantAbout(&mw.Window.Window, assistant.Action(v.String()), s, mw.view.say)
 		}
 	})
 	g.AddAction(ask)

@@ -210,7 +210,7 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 	}
 	askAction := gio.NewSimpleAction("ask", nil)
 	askAction.ConnectActivate(func(*glib.Variant) { v.askAboutAttachment(acc, id, a, remote) })
-	v.bindAskItem(arrow, g, askAction)
+	v.bindAskItem(arrow, g, askAction, a.ContentType)
 	box.InsertActionGroup("att", g)
 
 	switch {

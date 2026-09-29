@@ -5,7 +5,7 @@ import AppKit
 import MalachiCore
 
 // The entries of the assistant panel's transcript (ui/internal/assistant,
-// the In App target; no Blueprint yet, the GTK widgets follow): the user's
+// the In App target; GTK window/assistant_panel.go `makeRow`): the user's
 // question, the answer, a tool at work, a draft card, an error and a note.
 // Everything shown here comes from the model or from mail it read, so it is
 // plain text in labels (`stringValue`) or attributed text built here from

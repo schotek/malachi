@@ -9,16 +9,19 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/background"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -77,6 +80,9 @@ type PreferencesDialog struct {
 	assistantGroup  *adw.PreferencesGroup
 	assistantMenu   *adw.SwitchRow
 	assistantTarget *adw.ComboRow
+	claudeCodeRow   *adw.ActionRow
+	claudeChoose    *gtk.Button
+	assistantModel  *adw.ComboRow
 
 	closed bool
 }
@@ -149,6 +155,9 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		assistantGroup:       b.GetObject("assistant_group").Cast().(*adw.PreferencesGroup),
 		assistantMenu:        b.GetObject("assistant_menu_switch").Cast().(*adw.SwitchRow),
 		assistantTarget:      b.GetObject("assistant_target").Cast().(*adw.ComboRow),
+		claudeCodeRow:        b.GetObject("assistant_claude_code").Cast().(*adw.ActionRow),
+		claudeChoose:         b.GetObject("assistant_claude_choose").Cast().(*gtk.Button),
+		assistantModel:       b.GetObject("assistant_model").Cast().(*adw.ComboRow),
 	}
 
 	// The dialog is rebuilt on every open while the store lives for the whole
@@ -713,7 +722,9 @@ func assistantGroupFor(menu, registered, known bool, problem string) assistantGr
 // application's Assistant state (assistantGroupFor). The switch is set by
 // hand, because what it shows depends on the bridge too; "Open In" is bound
 // to assistant-target and lists the targets this client does not support
-// insensitive (targetListFactory). Without a bridge (the Flatpak build) the
+// insensitive (targetListFactory). While In App is chosen two more rows
+// follow: "Claude Code", the executable the panel runs (bindClaudeCode),
+// and "Model" (assistant-model). Without a bridge (the Flatpak build) the
 // Assistant can never be shown, and the group is hidden.
 func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 	a := d.assist
@@ -728,12 +739,22 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 	}
 	d.assistantTarget.SetListFactory(&targetListFactory().ListItemFactory)
 	d.assistantTarget.SetModel(gtk.NewStringList(names))
+	panel := assistant.PanelTexts(tr)
+	d.claudeCodeRow.SetTitle(assistant.TargetName(tr, assistant.Code))
+	d.claudeChoose.SetLabel(panel.Choose)
+	d.assistantModel.SetTitle(panel.Model)
+	models := make([]string, len(assistant.Models))
+	for i, m := range assistant.Models {
+		models[i] = assistant.ModelName(tr, m)
+	}
+	d.assistantModel.SetModel(gtk.NewStringList(models))
 	if !a.hasBridge() {
 		d.assistantGroup.SetVisible(false)
 		return func() {}
 	}
 
 	var syncing bool
+	showClaudeCode, unbindClaude := d.bindClaudeCode(s)
 	update := func() {
 		if d.closed {
 			return
@@ -749,7 +770,20 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 			menuSubtitle = texts.RegisterFirst
 		}
 		d.assistantMenu.SetSubtitle(menuSubtitle)
-		d.assistantTarget.SetSubtitle(st.targetSubtitle)
+		// In App: the Claude Code row says what is wrong with it.
+		app := a.target() == assistant.App
+		if app {
+			d.assistantTarget.SetSubtitle("")
+		} else {
+			d.assistantTarget.SetSubtitle(st.targetSubtitle)
+		}
+		for _, row := range []gtk.Widgetter{d.claudeCodeRow, d.assistantModel} {
+			gtk.BaseWidget(row).SetVisible(app)
+			gtk.BaseWidget(row).SetSensitive(st.sensitive)
+		}
+		if app {
+			showClaudeCode()
+		}
 	}
 	handle := d.assistantMenu.NotifyProperty("active", func() {
 		if syncing {
@@ -763,16 +797,102 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 		s.SetAssistantMenu(d.assistantMenu.Active())
 	})
 	unbindTarget := bindChoice(s, settings.KeyAssistantTarget, d.assistantTarget, assistantTargets, a.target, s.SetAssistantTarget)
+	unbindModel := bindChoice(s, settings.KeyAssistantModel, d.assistantModel, assistant.Models, s.AssistantModel, s.SetAssistantModel)
 	// The assistant keys are among the changes it reports.
 	remove := a.OnChange(update)
+	// Another claude chosen: its row looks again.
+	removePath := s.OnChanged(settings.KeyAssistantClaudePath, update)
+	// A Claude app may have been installed, or Claude Code signed in,
+	// meanwhile.
+	a.locator.Refresh()
 	update()
-	// A Claude app may have been installed meanwhile.
 	a.refreshHandlers()
 	return func() {
 		remove()
+		removePath()
 		unbindTarget()
+		unbindModel()
+		unbindClaude()
 		d.assistantMenu.HandlerDisconnect(handle)
 	}
+}
+
+// bindClaudeCode drives the Claude Code row: show fills its subtitle with
+// the executable the panel runs, its version and whether it is signed in
+// (asked once, then kept by the locator until the dialog opens again or the
+// path changes), or that none was found; "Choose…" picks one of the user's
+// own (assistant-claude-path). The file found automatically stores
+// nothing, so choosing it goes back to looking in the usual places.
+func (d *PreferencesDialog) bindClaudeCode(s *settings.Store) (show func(), unbind func()) {
+	a := d.assist
+	gen := 0
+	show = func() {
+		gen++
+		my := gen
+		path := a.locator.Locate()
+		if path == "" {
+			d.claudeCodeRow.SetSubtitle(assistant.Problem(tr, assistant.App, assistant.Availability{}))
+			return
+		}
+		if !strings.HasPrefix(d.claudeCodeRow.Subtitle(), path) {
+			d.claudeCodeRow.SetSubtitle(path)
+		}
+		a.locator.Version(func(version string) {
+			a.locator.SignedIn(func(in assistantpanel.SignIn) {
+				if d.closed || my != gen {
+					return
+				}
+				d.claudeCodeRow.SetSubtitle(claudeCodeState(path, version, in))
+			})
+		})
+	}
+	handle := d.claudeChoose.ConnectClicked(func() {
+		dlg := gtk.NewFileDialog()
+		dlg.SetTitle(assistant.TargetName(tr, assistant.Code))
+		if current := a.locator.Locate(); current != "" {
+			dlg.SetInitialFolder(gio.NewFileForPath(filepath.Dir(current)))
+		}
+		// The preferences are a dialog, not a window: no parent.
+		dlg.Open(context.Background(), nil, func(r gio.AsyncResulter) {
+			f, err := dlg.OpenFinish(r)
+			if err != nil || d.closed {
+				return // dismissed
+			}
+			chosen := f.Path()
+			if chosen == "" || !assistantpanel.IsExecutableFile(chosen) {
+				return
+			}
+			value := chosen
+			if chosen == a.locator.AutomaticPath() {
+				value = ""
+			}
+			a.locator.Refresh()
+			if s.AssistantClaudePath() == value {
+				show()
+				return
+			}
+			// The change handlers look again.
+			s.SetAssistantClaudePath(value)
+		})
+	})
+	return show, func() { d.claudeChoose.HandlerDisconnect(handle) }
+}
+
+// claudeCodeState is the Claude Code row's subtitle: "path · version ·
+// Signed in"; what is not known is left out.
+func claudeCodeState(path, version string, in assistantpanel.SignIn) string {
+	t := assistant.PanelTexts(tr)
+	parts := []string{path}
+	if version != "" {
+		parts = append(parts, version)
+	}
+	switch {
+	case in.Known && in.SignedIn:
+		parts = append(parts, t.SignedIn)
+	case in.Known:
+		parts = append(parts, t.NotSignedInShort)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // targetListFactory renders the choices of "Open In" in its popup, in the

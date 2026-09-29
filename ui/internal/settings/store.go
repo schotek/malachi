@@ -76,10 +76,15 @@ const (
 
 // Keys of the Assistant menu (ui/internal/assistant): whether it is shown
 // (while the malachi-mcp bridge is registered, assistant.Shown) and where
-// it opens Claude. They must match the gschema.
+// it opens Claude; and of its panel (the In App target): the model, the
+// claude executable ("" looks in the usual places) and whether the user
+// allowed sending mail to Claude. They must match the gschema.
 const (
-	KeyAssistantMenu   = "assistant-menu"
-	KeyAssistantTarget = "assistant-target"
+	KeyAssistantMenu       = "assistant-menu"
+	KeyAssistantTarget     = "assistant-target"
+	KeyAssistantModel      = "assistant-model"
+	KeyAssistantClaudePath = "assistant-claude-path"
+	KeyAssistantConsent    = "assistant-consent"
 )
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
@@ -136,8 +141,11 @@ var defaults = map[string]any{
 	KeyWindowHeight:    760,
 	KeyWindowMaximized: false,
 
-	KeyAssistantMenu:   true,
-	KeyAssistantTarget: string(assistant.Desktop),
+	KeyAssistantMenu:       true,
+	KeyAssistantTarget:     string(assistant.Desktop),
+	KeyAssistantModel:      string(assistant.Sonnet),
+	KeyAssistantClaudePath: "",
+	KeyAssistantConsent:    false,
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -288,6 +296,28 @@ func (s *Store) SetAssistantTarget(v assistant.Target) {
 		}
 	}
 }
+
+// AssistantModel is the stored model as assistant.ParseModel reads it: an
+// unknown nick is Sonnet.
+func (s *Store) AssistantModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyAssistantModel))
+}
+
+// SetAssistantModel ignores values outside the enum.
+func (s *Store) SetAssistantModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyAssistantModel, string(v))
+			return
+		}
+	}
+}
+
+func (s *Store) AssistantClaudePath() string     { return s.str(KeyAssistantClaudePath) }
+func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath, v) }
+
+func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
+func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
 // folder sidebar, each entry one node. The window package owns the encoding

@@ -697,6 +697,23 @@ func TestConversationLabel(t *testing.T) {
 	}
 }
 
+// SubjectLine is the subject ConversationLabel shows, "" when nothing of
+// it is left.
+func TestSubjectLine(t *testing.T) {
+	for in, want := range map[string]string{
+		"Invoice 42":             "Invoice 42",
+		"  Line one\r\nline two": "Line one line two",
+		"":                       "",
+		" \t\n":                  "",
+		"\x00\x07":               "",
+		strings.Repeat("b", 201): strings.Repeat("b", 200),
+	} {
+		if got := SubjectLine(in); got != want {
+			t.Errorf("SubjectLine(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestStoppedText(t *testing.T) {
 	long := strings.Repeat("a", 199) + "č" // 201 bytes: the č does not fit
 	tests := []struct {

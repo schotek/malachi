@@ -131,6 +131,10 @@ func main() {
 		}
 	})
 	app.ConnectShutdown(func() {
+		// The assistant panel's Claude Code ends with the application.
+		if mainWin != nil {
+			mainWin.CloseAssistant()
+		}
 		window.SweepOpenedAttachments(log)
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in

@@ -5,8 +5,8 @@ import AppKit
 import MalachiCore
 
 /// The assistant panel of the main window put together
-/// (ui/internal/assistant, the In App target; the GTK widgets follow this
-/// port): the `AssistantPanelController`, its view, and what it needs from
+/// (ui/internal/assistant, the In App target; GTK window/assistant_panel.go
+/// follows this port): the `AssistantPanelController`, its view, and what it needs from
 /// the rest of the application.
 ///
 /// - The list's selection goes to the controller (`followSelection`,

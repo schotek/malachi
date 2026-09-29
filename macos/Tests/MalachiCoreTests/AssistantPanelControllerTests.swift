@@ -9,8 +9,8 @@ import Testing
 // ui/internal/assistant) against a stand-in `claude`: a script that
 // answers `--version` and `auth status --json`, records every start, its
 // arguments, environment and stdin, and prints a canned turn (stream-json
-// lines, or a shell snippet) per stdin line. No Go counterpart yet: the
-// GTK panel follows this port.
+// lines, or a shell snippet) per stdin line. The Go counterpart is
+// ui/internal/assistantpanel controller_test.go, the same fake.
 
 /// One turn of the fake: JSON lines, then an optional shell snippet (a
 /// `sleep` that keeps the turn open, an exit).

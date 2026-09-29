@@ -39,26 +39,73 @@ func statusWith(desktop, code bool) mcpsetup.Status {
 	}}
 }
 
-// GTK opens Claude Code only: whatever is stored reads as Claude Code,
-// and the menu and the settings list Claude Desktop without offering it.
+// GTK hands mail to Claude Code, in a terminal or in the panel: a stored
+// target it does not support (Claude Desktop, an unknown nick) reads as
+// Claude Code, and the menu and the settings list Claude Desktop without
+// offering it.
 func TestGtkTarget(t *testing.T) {
-	for _, in := range []assistant.Target{assistant.Desktop, assistant.Code, assistant.App, "elsewhere"} {
-		if got := gtkTarget(in); got != assistant.Code {
-			t.Errorf("gtkTarget(%q) = %q, want code", in, got)
+	for in, want := range map[assistant.Target]assistant.Target{
+		assistant.Desktop: assistant.Code,
+		assistant.Code:    assistant.Code,
+		assistant.App:     assistant.App,
+		"elsewhere":       assistant.Code,
+	} {
+		if got := gtkTarget(in); got != want {
+			t.Errorf("gtkTarget(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if slices.Contains(assistantTargets, assistant.App) {
-		t.Error("assistantTargets lists App, which GTK does not have")
+	if !slices.Equal(assistantTargets, []assistant.Target{assistant.Desktop, assistant.Code, assistant.App}) {
+		t.Errorf("assistantTargets %v", assistantTargets)
 	}
-	if supportedTarget(assistant.Desktop) || !supportedTarget(assistant.Code) {
-		t.Error("supportedTarget: want Claude Code only")
+	if supportedTarget(assistant.Desktop) || !supportedTarget(assistant.Code) || !supportedTarget(assistant.App) {
+		t.Error("supportedTarget: want Claude Code and the panel")
 	}
 	a := testAssistant()
-	for _, stored := range assistant.Targets {
+	for stored, want := range map[assistant.Target]assistant.Target{
+		assistant.Desktop: assistant.Code, assistant.Code: assistant.Code, assistant.App: assistant.App,
+	} {
 		a.settings.SetAssistantTarget(stored)
-		if got := a.target(); got != assistant.Code {
-			t.Errorf("target with %q stored = %q, want code", stored, got)
+		if got := a.target(); got != want {
+			t.Errorf("target with %q stored = %q, want %q", stored, got, want)
 		}
+	}
+}
+
+// The panel runs while Claude Code and the bridge were found (its
+// "handler") and the bridge is registered in any client; it exists while
+// the Assistant is shown and In App chosen. Its attachment item is there
+// for the types the bridge reads.
+func TestAssistantPanelTarget(t *testing.T) {
+	a := testAssistant()
+	a.settings.SetAssistantTarget(assistant.App)
+	a.status = ptr(statusWith(true, false)) // registered in Claude Desktop only
+	a.handlers = map[assistant.Target]bool{assistant.App: true}
+	if target, ok := a.pick(true); target != assistant.App || !ok {
+		t.Errorf("pick = (%q, %v), want the panel, usable", target, ok)
+	}
+	if !a.panelShown() || a.problem(assistant.App) != "" {
+		t.Errorf("panelShown %v, problem %q", a.panelShown(), a.problem(assistant.App))
+	}
+	if !a.canAskFile("text/plain; charset=utf-8") || a.canAskFile("application/pdf") {
+		t.Error("canAskFile: the panel asks about what the bridge reads only")
+	}
+	a.handlers = map[assistant.Target]bool{}
+	if _, ok := a.pick(true); ok || a.problem(assistant.App) != "Claude Code was not found on this computer" {
+		t.Errorf("without Claude Code: problem %q", a.problem(assistant.App))
+	}
+	a.handlers = map[assistant.Target]bool{assistant.App: true}
+	a.status = ptr(statusWith(false, false))
+	if _, ok := a.pick(true); ok || a.panelShown() {
+		t.Error("the panel without the bridge registered anywhere")
+	}
+	a.status = ptr(statusWith(false, true))
+	a.settings.SetAssistantTarget(assistant.Code)
+	if a.panelShown() {
+		t.Error("the panel with Claude Code chosen")
+	}
+	a.handlers = map[assistant.Target]bool{assistant.Code: true}
+	if !a.canAskFile("application/pdf") {
+		t.Error("canAskFile: Claude Code in a terminal takes any file")
 	}
 }
 
@@ -209,10 +256,10 @@ func TestAssistantMenuModel(t *testing.T) {
 		targets = append(targets, itemString(sections[1], i, "target"))
 		targetActions = append(targetActions, itemString(sections[1], i, "action"))
 	}
-	if want := []string{"desktop", "code"}; !slices.Equal(targets, want) {
+	if want := []string{"desktop", "code", "app"}; !slices.Equal(targets, want) {
 		t.Errorf("targets %v, want %v", targets, want)
 	}
-	if want := []string{"app.assistant-unsupported", "app.assistant-target"}; !slices.Equal(targetActions, want) {
+	if want := []string{"app.assistant-unsupported", "app.assistant-target", "app.assistant-target"}; !slices.Equal(targetActions, want) {
 		t.Errorf("target actions %v, want %v (Claude Desktop listed, not offered)", targetActions, want)
 	}
 	if got := sections[2].NItems(); got != 2 {

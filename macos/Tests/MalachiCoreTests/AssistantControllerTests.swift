@@ -8,7 +8,7 @@ import Testing
 // The application's cache of what the Assistant menu (ui/internal/assistant)
 // may use: the handlers from an injected lookup, the registration from a
 // stand-in malachi-mcp (the fake-bridge approach of MCPRegistrationTests).
-// No Go counterpart: GTK has no Assistant widgets yet.
+// The Go counterpart is ui/internal/window assistant_test.go.
 
 private struct Timeout: Error {}
 

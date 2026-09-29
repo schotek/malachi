@@ -17,6 +17,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/assistant"
+	"github.com/schotek/malachi/ui/internal/assistantpanel"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/mcpsetup"
 	"github.com/schotek/malachi/ui/internal/settings"
@@ -34,27 +35,26 @@ import (
 // Assistant group. The macOS client leads (MalachiCore
 // AssistantController, MalachiMail Assistant/); this is its port.
 //
-// This client opens Claude Code only, in the terminal its claude-cli://
-// handler picks ($TERMINAL, then x-terminal-emulator, then the common
-// emulators). Claude Desktop for Linux is a preview the project does not
-// support: the menu and the settings list it, insensitive. The third target
-// of the reference, In App (the panel that runs Claude Code itself), is not
-// in this client yet. Whatever is stored reads as Claude Code here
-// (gtkTarget); the gschema keeps the reference's default.
+// This client hands mail to Claude Code only: in the terminal its
+// claude-cli:// handler picks ($TERMINAL, then x-terminal-emulator, then
+// the common emulators), or in the assistant panel of the main window (In
+// App, assistant_panel.go), which runs Claude Code itself. Claude Desktop
+// for Linux is a preview the project does not support: the menu and the
+// settings list it, insensitive, and a stored "desktop" reads as Claude
+// Code here (gtkTarget); the gschema keeps the reference's default.
 
 // assistantIcon is the ✦ button's icon, shipped in ui/data/icons (the
 // hicolor theme when installed, MALACHI_ICON_DIR in a source tree).
 const assistantIcon = "malachi-assistant-symbolic"
 
 // assistantTargets are the targets the menu and the settings list, in
-// their order (assistant.Targets without App); only the supported ones can
-// be chosen.
-var assistantTargets = []assistant.Target{assistant.Desktop, assistant.Code}
+// their order (assistant.Targets); only the supported ones can be chosen.
+var assistantTargets = assistant.Targets
 
-// supportedTarget says whether this client opens target t: Claude Code
-// only.
+// supportedTarget says whether this client opens target t: Claude Code, in
+// a terminal or in the panel.
 func supportedTarget(t assistant.Target) bool {
-	return t == assistant.Code
+	return t == assistant.Code || t == assistant.App
 }
 
 // gtkTarget is the stored target as this client uses it: one it does not
@@ -94,6 +94,9 @@ type Assistant struct {
 	// build, where the Claude apps can neither see nor start it).
 	bridge string
 
+	// locator finds Claude Code for the panel (In App).
+	locator *assistantpanel.Locator
+
 	status   *mcpsetup.Status
 	handlers map[assistant.Target]bool
 	querying bool
@@ -118,9 +121,12 @@ func NewAssistant(s *settings.Store, log *slog.Logger) *Assistant {
 			a.log.Debug("no MCP bridge; the Assistant stays off", "err", err)
 		}
 	}
+	a.locator = assistantpanel.NewLocator(s, os.Environ(), glibLoop{}, assistantDirectory(), a.log)
 	for _, key := range []string{settings.KeyAssistantMenu, settings.KeyAssistantTarget} {
 		s.OnChanged(key, a.notify)
 	}
+	// Another claude chosen: whether the panel can run changes.
+	s.OnChanged(settings.KeyAssistantClaudePath, a.refreshHandlers)
 	return a
 }
 
@@ -165,11 +171,15 @@ func (a *Assistant) Refresh() {
 }
 
 // refreshHandlers looks up whether an app handles the links of each
-// supported target.
+// supported target, and whether the panel finds Claude Code and the
+// bridge.
 func (a *Assistant) refreshHandlers() {
 	found := make(map[assistant.Target]bool, len(assistantTargets))
 	for _, t := range assistantTargets {
-		if supportedTarget(t) {
+		switch {
+		case t == assistant.App:
+			found[t] = a.bridge != "" && a.locator.Locate() != ""
+		case supportedTarget(t):
 			found[t] = gio.AppInfoGetDefaultForURIScheme(t.Scheme()) != nil
 		}
 	}
@@ -242,10 +252,14 @@ func (a *Assistant) target() assistant.Target {
 }
 
 // availability is what is known about target t; a target this client
-// does not support has nothing.
+// does not support has nothing. For the panel: Claude Code and the bridge
+// were found, the bridge is registered in any client.
 func (a *Assistant) availability(t assistant.Target) assistant.Availability {
-	if !supportedTarget(t) {
+	switch {
+	case !supportedTarget(t):
 		return assistant.Availability{}
+	case t == assistant.App:
+		return assistant.Availability{Handler: a.handlers[t], Registered: a.registered()}
 	}
 	return targetAvailability(a.status, a.handlers, t)
 }
@@ -270,7 +284,27 @@ func targetAvailability(st *mcpsetup.Status, handlers map[assistant.Target]bool,
 // and Summarize Unread need the bridge, handing over a file does not.
 func (a *Assistant) pick(needsBridge bool) (assistant.Target, bool) {
 	return assistant.Pick(a.target(), a.availability(assistant.Desktop), a.availability(assistant.Code),
-		assistant.Availability{}, needsBridge)
+		a.availability(assistant.App), needsBridge)
+}
+
+// panelShown says whether the assistant panel exists: the Assistant is
+// shown and In App chosen. Whether it can run is pick's.
+func (a *Assistant) panelShown() bool {
+	return a.shown() && a.target() == assistant.App
+}
+
+// canAskFile says whether an attachment's "Ask the Assistant…" can run for
+// a part of contentType: the chosen Claude app is installed (the file goes
+// without the bridge); for In App, the panel can run (it reads the file
+// through the bridge's get_attachment) and the bridge returns this type's
+// content (assistant.AttachmentReadable).
+func (a *Assistant) canAskFile(contentType string) bool {
+	if a.target() == assistant.App {
+		_, ok := a.pick(true)
+		return ok && assistant.AttachmentReadable(contentType)
+	}
+	_, ok := a.pick(false)
+	return ok
 }
 
 // problem says why target t cannot run the message actions; "" when it
@@ -392,12 +426,34 @@ func newestFirst(ids []api.MessageID, thread bool) []string {
 // conversation row's folder members (fetched first when not known yet), or
 // the one message. Never an Outbox message: it is not on the server yet.
 func (w *Window) askAssistant(act assistant.Action) {
+	if target, ok := w.assist.pick(true); target == assistant.App {
+		if ok {
+			w.assistantPanel.run(act)
+		}
+		return
+	}
 	w.selectedIDs(func(row listRow, ids []api.MessageID) {
 		if w.model.inOutbox(row.Message) {
 			return
 		}
 		w.handOff(&w.ApplicationWindow.Window, act, row.Message.AccountID, newestFirst(ids, row.Thread), w.Toast)
 	})
+}
+
+// askAssistantAbout runs a message action on message s from a message
+// window: in the panel (the main window comes forward), or handed to
+// Claude Code with toast for what failed. Never an Outbox message.
+func (w *Window) askAssistantAbout(parent *gtk.Window, act assistant.Action, s api.MessageSummary, toast func(string)) {
+	if w.model.inOutbox(s) {
+		return
+	}
+	if target, ok := w.assist.pick(true); target == assistant.App {
+		if ok {
+			w.assistantPanel.runAbout(act, s)
+		}
+		return
+	}
+	w.handOff(parent, act, s.AccountID, []string{string(s.ID)}, toast)
 }
 
 // handOff opens the chosen Claude app with the prompt of a message action
@@ -437,6 +493,10 @@ func (w *Window) summarizeUnread() {
 		return
 	}
 	k := w.model.selected
+	if target == assistant.App {
+		w.assistantPanel.summarizeUnread(k)
+		return
+	}
 	prompt, err := assistant.UnreadPrompt(tr, string(k.Account), string(k.Folder))
 	if err != nil {
 		w.assistantFailed(err, w.Toast)
@@ -480,16 +540,24 @@ func (w *Window) assistantFailed(err error, toast func(string)) {
 	toast(widget.LaunchErrorText(err))
 }
 
-// askAboutAttachment is an attachment's "Ask the Assistant…": the part
-// fetched (the message downloaded first when remote) and written like
-// Open writes it, then handed to Claude Code, which needs its handler but
-// not the bridge (Claude reads the file, not the mail), with the file's
-// private directory as its working directory. Failures of the fetch and
-// the write have their toasts.
+// askAboutAttachment is an attachment's "Ask the Assistant…". In the panel
+// it waits for the user's question, and Claude Code reads the part through
+// the bridge. Otherwise the part is fetched (the message downloaded first
+// when remote) and written like Open writes it, then handed to Claude Code
+// in a terminal, which needs its handler but not the bridge (Claude reads
+// the file, not the mail), with the file's private directory as its
+// working directory. Failures of the fetch and the write have their
+// toasts.
 func (v *messageView) askAboutAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
 	w := v.win
 	w.assist.refreshHandlers()
-	if _, ok := w.assist.pick(false); !ok {
+	if !w.assist.canAskFile(a.ContentType) {
+		return
+	}
+	if w.assist.target() == assistant.App {
+		// Claude Code reads the part through the bridge: nothing is
+		// written or downloaded here.
+		w.assistantPanel.askAttachment(acc, id, a)
 		return
 	}
 	v.writeAttachment(acc, id, a, remote, func(path string, _ bool) {
@@ -509,9 +577,10 @@ func (v *messageView) askAboutAttachment(acc api.AccountID, id api.MessageID, a 
 
 // bindAskItem keeps a chip's "Ask the Assistant…" (att.ask in group g)
 // with the Assistant: the action exists while the Assistant is shown (the
-// item hides without it) and is enabled while the chosen Claude app is
-// installed. The arrow looks again as its menu opens.
-func (v *messageView) bindAskItem(arrow *gtk.MenuButton, g *gio.SimpleActionGroup, ask *gio.SimpleAction) {
+// item hides without it) and is enabled while the file can be asked about
+// (canAskFile, by the part's contentType). The arrow looks again as its
+// menu opens.
+func (v *messageView) bindAskItem(arrow *gtk.MenuButton, g *gio.SimpleActionGroup, ask *gio.SimpleAction, contentType string) {
 	a := v.win.assist
 	added := false
 	sync := func() {
@@ -522,8 +591,7 @@ func (v *messageView) bindAskItem(arrow *gtk.MenuButton, g *gio.SimpleActionGrou
 			g.RemoveAction("ask")
 		}
 		added = a.shown()
-		_, ok := a.pick(false)
-		ask.SetEnabled(ok)
+		ask.SetEnabled(a.canAskFile(contentType))
 	}
 	sync()
 	arrow.SetCreatePopupFunc(func(*gtk.MenuButton) {

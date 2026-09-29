@@ -229,4 +229,24 @@ func TestAssistantKeys(t *testing.T) {
 	if s.AssistantMenu() {
 		t.Error("SetAssistantMenu(false) did not stick")
 	}
+
+	if got := s.AssistantModel(); got != assistant.Sonnet {
+		t.Errorf("AssistantModel default = %q, want sonnet", got)
+	}
+	s.SetAssistantModel("gpt")
+	if got := s.AssistantModel(); got != assistant.Sonnet {
+		t.Errorf("invalid model accepted: %q", got)
+	}
+	s.SetAssistantModel(assistant.Opus)
+	if got := s.AssistantModel(); got != assistant.Opus {
+		t.Errorf("AssistantModel = %q, want opus", got)
+	}
+	if s.AssistantClaudePath() != "" || s.AssistantConsent() {
+		t.Error("claude path and consent must start empty and off")
+	}
+	s.SetAssistantClaudePath("/opt/claude")
+	s.SetAssistantConsent(true)
+	if s.AssistantClaudePath() != "/opt/claude" || !s.AssistantConsent() {
+		t.Error("claude path or consent did not stick")
+	}
 }

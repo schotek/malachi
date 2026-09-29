@@ -5,7 +5,7 @@ import AppKit
 import MalachiCore
 
 /// The question field of the assistant panel (ui/internal/assistant, the
-/// In App target; no Blueprint yet, the GTK widgets follow): plain text in
+/// In App target; GTK assistant_panel.blp `assistant_input`): plain text in
 /// a rounded box that grows from one line to five and scrolls beyond.
 /// Return sends (`onSubmit`), Shift-Return (and Option-Return) starts a new
 /// line, Escape drops a waiting message action (`onCancel`). The
