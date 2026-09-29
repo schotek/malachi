@@ -6,9 +6,11 @@
 // ClaudeCodeProcessTests.swift and AssistantRequestTests.swift); GTK:
 // ui/internal/assistantpanel harness_test.go. A stand-in claude in a
 // fresh directory: it answers --version and auth status --json as
-// scripted; any other command line starts a conversation, which records
-// the start, its arguments, environment and working directory, runs the
-// start's steps, then runs one turn per line of stdin (the turns counted
+// scripted, recording each call (the locator's stand-in of
+// ClaudeCodeProcessTests.swift, `echo "$*" >> calls`); any other command
+// line starts a conversation, which records the start, its arguments,
+// environment and working directory, runs the start's steps, then runs one
+// turn per line of stdin (the turns counted
 // over every start, the last repeating) and ends at the end of stdin.
 // Swift writes a #!/bin/sh script; on Windows the program is this
 // project's, copied into the directory as claude.exe (the apphost loads its
@@ -50,6 +52,9 @@ public sealed class FakeClaudeScript
 
     /// <summary>Every line read from stdin, over every conversation.</summary>
     public const string StdinFileName = "stdin";
+
+    /// <summary>The arguments of every --version and auth run, a line each.</summary>
+    public const string CallsFileName = "calls";
 
     /// <summary>The version line Swift's stand-in prints.</summary>
     public const string DefaultVersion = "2.1.178 (Claude Code)";
@@ -107,6 +112,10 @@ public sealed class FakeClaudeScript
             ? new Dictionary<string, string>()
             : JsonSerializer.Deserialize(text, FakeClaudeJson.Default.DictionaryStringString) ?? [];
     }
+
+    /// <summary>The arguments of every --version and auth run in <paramref name="directory"/> so far ("--version", "auth status --json").</summary>
+    public static IReadOnlyList<string> Calls(string directory) =>
+        ReadText(directory, CallsFileName).Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
     /// <summary>The working directory of the last conversation started in <paramref name="directory"/>.</summary>
     public static string Cwd(string directory) => ReadText(directory, CwdFileName).Trim();

@@ -3,8 +3,10 @@
 
 // Port of the #!/bin/sh stand-in claude of macos/Tests/MalachiCoreTests/
 // AssistantPanelControllerTests.swift (FakeClaude): --version and auth run
-// their steps; anything else is a conversation that records its start,
-// arguments, environment and working directory, runs the start's steps,
+// their steps, each recording its arguments as a line of "calls" (the
+// locator's stand-in of ClaudeCodeProcessTests.swift); anything else is a
+// conversation that records its start, arguments, environment and working
+// directory, runs the start's steps,
 // then a turn per stdin line (recorded; the turns counted over every start
 // of the directory, the last repeating) and exits 0 at the end of stdin.
 // Everything is read and written as UTF-8 bytes: the console's code page
@@ -33,10 +35,12 @@ internal static class Program
         var script = FakeClaudeScript.Load(Path.Combine(directory, FakeClaudeScript.ScriptFileName));
         if (args.Length > 0 && args[0] == "--version")
         {
+            RecordCall(directory, args);
             return Run(script.Version, 0) ?? 0;
         }
         if (args.Length > 0 && args[0] == "auth")
         {
+            RecordCall(directory, args);
             return Run(script.Auth, 0) ?? 0;
         }
 
@@ -75,6 +79,11 @@ internal static class Program
         }
         return 0;
     }
+
+    // Swift's `echo "$*" >> calls` of the locator's stand-in: the arguments
+    // of a --version or auth run, one line each.
+    private static void RecordCall(string directory, string[] args) =>
+        File.AppendAllText(Path.Combine(directory, FakeClaudeScript.CallsFileName), string.Join(' ', args) + "\n", new UTF8Encoding(false));
 
     // Runs the steps; the status of an exit step, or null to go on.
     private static int? Run(IReadOnlyList<FakeClaudeStep> steps, int start)
