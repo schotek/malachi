@@ -22,5 +22,7 @@ public sealed partial class Integration
         var hub = new ReaderHub(state, mainWindow, this);
         Reader = hub;
         tokens.Add(hub);
+        // The Assistant's menus and panel act on the list and the reader.
+        mainWindow.AttachAssistant(this, hub.Services);
     }
 }

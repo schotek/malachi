@@ -136,7 +136,16 @@ public sealed class PaneLayout
     /// has the sidebar's width; the narrow stack gives the list the whole
     /// window.
     /// </summary>
-    public static PaneWidths Widths(PaneMode mode, double window, int sidebar, int list)
+    public static PaneWidths Widths(PaneMode mode, double window, int sidebar, int list) =>
+        Widths(mode, window, sidebar, list, MessageMinimum);
+
+    /// <summary>
+    /// As <see cref="Widths(PaneMode, double, int, int)"/>, with the message
+    /// keeping <paramref name="messageMinimum"/> instead of
+    /// <see cref="MessageMinimum"/>: what the message pane's buttons need,
+    /// which GTK's panes get from their minimum widths.
+    /// </summary>
+    public static PaneWidths Widths(PaneMode mode, double window, int sidebar, int list, double messageMinimum)
     {
         var s = ClampSidebar(sidebar);
         switch (mode)
@@ -144,9 +153,9 @@ public sealed class PaneLayout
             case PaneMode.Narrow:
                 return new PaneWidths(s, Math.Max(window, 0));
             case PaneMode.Medium:
-                return new PaneWidths(s, Math.Max(Math.Min(ClampList(list), window - MessageMinimum), ListMinimum));
+                return new PaneWidths(s, Math.Max(Math.Min(ClampList(list), window - messageMinimum), ListMinimum));
             default:
-                return new PaneWidths(s, Math.Max(Math.Min(ClampList(list), window - MessageMinimum - s), ListMinimum));
+                return new PaneWidths(s, Math.Max(Math.Min(ClampList(list), window - messageMinimum - s), ListMinimum));
         }
     }
 

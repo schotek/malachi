@@ -19,14 +19,18 @@
 // of its attached messages, when the message leaves its folder.
 
 using System;
+using Malachi.App.Assistants;
+using Malachi.App.Preferences;
 using Malachi.App.Reader;
 using Malachi.App.Shell;
 using Malachi.Core;
 using Malachi.Core.Api;
+using Malachi.Core.Assistants;
 using Malachi.Core.I18n;
 using Malachi.Core.Model;
 using Malachi.Core.Presentation;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace Malachi.App.MessageWindows;
 
@@ -54,6 +58,7 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         View = new MessageView(ReaderMode.Window, services, Tracked.Commands) { HostWindow = this };
         ViewHost.Content = View;
         WireCommands();
+        WireAssistant();
         View.Reader.Rendered += (_, r) => Rendered(r);
         Activated += (_, e) =>
         {
@@ -108,6 +113,29 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         c.LoadImages.Handler = () => router.LoadImages(Id);
         c.TrustSender.Handler = () => router.TrustSender(Id);
         RefreshActions();
+    }
+
+    // assistant.go bindAssistantButton for a message window: the Assistant
+    // menu without Summarize Unread, on this window's message (never an
+    // Outbox message), shown while the Assistant is (MessageWindowController
+    // on macOS).
+    private void WireAssistant()
+    {
+        var state = services.State;
+        var button = View.Assistant;
+        var menu = new AssistantMenu(
+            state,
+            canAsk: () => state.Integration?.List.Mailbox.Model.InOutbox(View.Reader.Current ?? summary) == false,
+            ask: a => state.MainWindow?.AssistantActions?.AskAbout(a, View.Reader.Current ?? summary, this),
+            setUp: () => PreferencesWindow.Show(state)?.ShowAi());
+        button.Flyout = menu.Flyout;
+        button.Label = Assistant.Texts().Assistant;
+        ToolTipService.SetToolTip(button, Assistant.Texts().Assistant);
+        void Sync() => button.Visibility = state.Assistant.Shown ? Visibility.Visible : Visibility.Collapsed;
+        EventHandler changed = (_, _) => Sync();
+        state.Assistant.Changed += changed;
+        Closed += (_, _) => state.Assistant.Changed -= changed;
+        Sync();
     }
 
     // The title follows the full message's subject, the commands the flags

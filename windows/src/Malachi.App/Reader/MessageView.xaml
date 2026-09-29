@@ -228,6 +228,18 @@ gets the sanitiser's output only.
                         <FontIcon x:Name="StarGlyph" />
                     </AppBarToggleButton.Icon>
                 </AppBarToggleButton>
+                <!-- message_window.blp assistant_button: the Assistant menu of
+                     a message window, shown while the Assistant is (its
+                     flyout, label and visibility from MessageWindow). -->
+                <AppBarButton
+                    x:Name="AssistantButton"
+                    AutomationProperties.AutomationId="AssistantButton"
+                    Style="{StaticResource CommandRowButtonStyle}"
+                    Visibility="Collapsed">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('malachi-assistant')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
                 <AppBarButton
                     x:Name="MoreButton"
                     AutomationProperties.AutomationId="MessageMenuButton"

@@ -162,6 +162,34 @@ public sealed partial class ComposeWebView : HardenedWebView
         }
     }
 
+    /// <summary>
+    /// editor.RewriteTarget: notes the passage the assistant's rewrite works
+    /// on (the selection, or the user's own text above the line
+    /// <paramref name="attribution"/>) and calls <paramref name="done"/> with
+    /// it; the empty target when the bridge does not run or the evaluation
+    /// failed (a rewrite must never hang).
+    /// </summary>
+    public void RewriteTarget(string attribution, Action<RewriteTarget> done)
+    {
+        if (Channel.BeginRewriteTarget(attribution, done) is { } script)
+        {
+            _ = RewriteTargetAsync(script);
+        }
+    }
+
+    /// <summary>
+    /// editor.ApplyRewrite: puts <paramref name="text"/> in place of the
+    /// passage <see cref="RewriteTarget"/> noted, or below it, as plain text,
+    /// one step the page's undo takes back; ignored until the bridge runs.
+    /// </summary>
+    public void ApplyRewrite(string text, bool below)
+    {
+        if (Channel.ApplyRewriteScript(text, below) is { } script)
+        {
+            Run(script);
+        }
+    }
+
     /// <summary>editor.FocusStart: focuses the view and, once the bridge runs, puts the caret at the start.</summary>
     public void FocusStart()
     {
@@ -281,6 +309,16 @@ public sealed partial class ComposeWebView : HardenedWebView
     {
         var result = await EvaluateAsync(EditorBridge.FlushScript);
         Channel.Flushed(id, result);
+    }
+
+    // The passage comes as the page's "rewrite" message; a failed
+    // evaluation answers the waiting rewrites with the empty target.
+    private async Task RewriteTargetAsync(string script)
+    {
+        if (await EvaluateAsync(script) is null)
+        {
+            Channel.RewriteFailed();
+        }
     }
 
     // editor.onMessage: only from the document on display, only strings of

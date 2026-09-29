@@ -10,7 +10,8 @@ A compose window, top to bottom as compose.blp:
 
 - the header bar as the window's title bar (docs/windows-port.md §11.3): Attach
   at the start, the title (the subject, or "New Message", shortened as
-  Adw.WindowTitle shortens it), the Draft Menu (Save Draft, Attach Files…,
+  Adw.WindowTitle shortens it), the assistant's rewrite (✦, while it can
+  run; ComposeWindow.Rewrite.cs), the Draft Menu (Save Draft, Attach Files…,
   Insert Image…, Discard) and the accented Send at the end, on Mica; a narrow
   window shows Send without its label and no app icon
   (ComposeWindow.HeaderBar.cs);
@@ -27,6 +28,7 @@ A compose window, top to bottom as compose.blp:
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
     xmlns:local="using:Malachi.App.Compose"
+    xmlns:reader="using:Malachi.App.Reader"
     xmlns:res="using:Malachi.App.Resources">
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -96,6 +98,74 @@ A compose window, top to bottom as compose.blp:
                     Margin="0,0,4,0"
                     Orientation="Horizontal"
                     Spacing="6">
+                    <!-- [end] rewrite_button: the assistant's rewrite (ui/internal/assistant,
+                         the In App target), shown while the one-shot requests can run;
+                         its flyout is rewrite_popover (ComposeWindow.Rewrite.cs). -->
+                    <Button
+                        x:Name="RewriteButton"
+                        Width="40"
+                        Height="32"
+                        Padding="0"
+                        AutomationProperties.AutomationId="ComposeRewrite"
+                        Click="OnRewriteClick"
+                        Style="{StaticResource SubtleButtonStyle}"
+                        Visibility="Collapsed">
+                        <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('malachi-assistant')}" />
+                        <FlyoutBase.AttachedFlyout>
+                            <!-- rewrite_popover: the presets and the user's own instruction,
+                                 the answer as plain text while it arrives and when it is
+                                 there, and what to do with it. Every text is set in code;
+                                 the answer is TextBox.Text, never markup. -->
+                            <Flyout x:Name="RewriteFlyout" Placement="BottomEdgeAlignedRight">
+                                <StackPanel Width="380" Spacing="10">
+                                    <TextBlock x:Name="RewriteTitle" Style="{StaticResource HeadingLabelStyle}" />
+                                    <reader:WrapBox
+                                        x:Name="RewritePresets"
+                                        ChildSpacing="6"
+                                        LineSpacing="6" />
+                                    <TextBox x:Name="RewriteCustom" AutomationProperties.AutomationId="ComposeRewriteInstruction" />
+                                    <StackPanel
+                                        x:Name="RewriteStatus"
+                                        Orientation="Horizontal"
+                                        Spacing="6"
+                                        Visibility="Collapsed">
+                                        <ProgressRing
+                                            Width="16"
+                                            Height="16"
+                                            IsActive="True" />
+                                        <TextBlock x:Name="RewriteStatusLabel" Style="{StaticResource DimCaptionLabelStyle}" />
+                                    </StackPanel>
+                                    <TextBox
+                                        x:Name="RewriteResult"
+                                        Height="140"
+                                        AutomationProperties.AutomationId="ComposeRewriteResult"
+                                        IsReadOnly="True"
+                                        ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                        TextWrapping="Wrap"
+                                        Visibility="Collapsed" />
+                                    <TextBlock
+                                        x:Name="RewriteError"
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        TextWrapping="Wrap"
+                                        Visibility="Collapsed" />
+                                    <Grid ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Button x:Name="RewriteDiscard" />
+                                        <Button x:Name="RewriteInsert" Grid.Column="2" />
+                                        <Button
+                                            x:Name="RewriteReplace"
+                                            Grid.Column="3"
+                                            Style="{StaticResource AccentButtonStyle}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Flyout>
+                        </FlyoutBase.AttachedFlyout>
+                    </Button>
                     <!-- [end] the Draft Menu (compose_menu) -->
                     <Button
                         x:Name="DraftMenuButton"
