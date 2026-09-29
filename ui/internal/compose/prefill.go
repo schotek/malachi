@@ -84,6 +84,11 @@ type Params struct {
 	DraftID  api.DraftID
 	Version  int
 	Replaces api.MessageID
+	// Attribution is the line above the quoted original of a reply or a
+	// forward (the one handed to draft.create, Attribution), "" when not
+	// known (a new message, a draft opened from Drafts): the assistant's
+	// rewrite takes the user's own text as what the editor holds above it.
+	Attribution string
 }
 
 // FromDraft turns a draft.create or draft.open result into window

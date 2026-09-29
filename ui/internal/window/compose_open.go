@@ -58,9 +58,11 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 	if acc, ok := w.model.account(s.AccountID); ok {
 		self = selfAddress(acc)
 	}
+	attribution := compose.Attribution(kind, src)
 	fallback := func() {
 		p := compose.Prefill(kind, src, self)
 		p.AccountID = s.AccountID
+		p.Attribution = attribution
 		w.compose.Open(p)
 	}
 
@@ -68,7 +70,7 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 		AccountID:   s.AccountID,
 		Mode:        kind.Mode(),
 		MessageID:   id,
-		Attribution: compose.Attribution(kind, src),
+		Attribution: attribution,
 	}
 	// create runs draft.create and opens the window; w.composing[id] is set.
 	create := func() {
@@ -90,6 +92,7 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 				p := compose.FromDraft(kind, res.Draft, res.Blocked)
 				p.AccountID = s.AccountID
 				p.Skipped = len(res.Skipped)
+				p.Attribution = attribution
 				w.compose.Open(p)
 			})
 		}()

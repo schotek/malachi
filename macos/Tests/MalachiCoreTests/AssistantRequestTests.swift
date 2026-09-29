@@ -9,8 +9,8 @@ import Testing
 // rewrite.go and search.go): `AssistantRequest`, the compose window's
 // `ComposeRewriteController` and the search field's `SearchConversion`
 // against the stand-in `claude` of AssistantPanelControllerTests
-// (`FakeClaude`). No real Claude Code is ever run here. No Go counterpart:
-// the GTK widgets follow this port.
+// (`FakeClaude`). No real Claude Code is ever run here. The Go
+// counterpart is ui/internal/assistantpanel oneshot_test.go.
 
 /// A result line with a structured_output (raw JSON) and a text.
 private func structuredResult(_ structured: String, text: String = "") -> String {

@@ -199,6 +199,9 @@ type Window struct {
 	forwardButton  *gtk.Button
 	outboxBanner   *adw.Banner
 	draftBanner    *adw.Banner // a message of the Drafts folder (drafts.go)
+
+	// ownWords is the search in the user's own words (search_ownwords.go).
+	ownWords ownWords
 }
 
 // Starter brings the daemon up before the window dials its socket

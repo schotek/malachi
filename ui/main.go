@@ -81,6 +81,7 @@ func main() {
 		assist.AddActions(app, func() { openPreferences(app, prefs, rpc, assist, log, "ai") })
 		assist.Refresh()
 		mgr = compose.NewManager(app, rpc, log, prefs)
+		mgr.Assistant = assist
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
 				// A short confirmation: the outbox folder and the "sent"

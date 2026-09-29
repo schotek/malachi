@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-29 20:06+0200\n"
+"POT-Creation-Date: 2026-09-29 20:07+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -18,7 +18,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
 
-#: ui/main.go:196
+#: ui/main.go:197
 msgid "A native mail client for the GNOME desktop."
 msgstr ""
 
@@ -798,60 +798,60 @@ msgstr ""
 msgid "Check for new mail and show notifications in the background"
 msgstr ""
 
-#: ui/internal/compose/compose.go:146
+#: ui/internal/compose/compose.go:147
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/compose.go:253 ui/internal/compose/draft.go:150
+#: ui/internal/compose/compose.go:255 ui/internal/compose/draft.go:150
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/compose.go:328 ui/data/ui/compose.ui:10
+#: ui/internal/compose/compose.go:330 ui/data/ui/compose.ui:10
 #: ui/data/ui/compose.ui:49
 msgid "New Message"
 msgstr ""
 
-#: ui/internal/compose/compose.go:455 ui/data/ui/compose.ui:283
-#: ui/data/ui/compose.ui:476
+#: ui/internal/compose/compose.go:457 ui/data/ui/compose.ui:288
+#: ui/data/ui/compose.ui:481
 msgid "Paragraph"
 msgstr ""
 
-#: ui/internal/compose/compose.go:458
+#: ui/internal/compose/compose.go:460
 #, c-format
 msgid "Heading %s"
 msgstr ""
 
-#: ui/internal/compose/compose.go:487 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:489 ui/data/ui/compose.ui:55
 msgid "Attach Files"
 msgstr ""
 
-#: ui/internal/compose/compose.go:510
+#: ui/internal/compose/compose.go:512
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/compose.go:519 ui/data/ui/compose.ui:376
+#: ui/internal/compose/compose.go:521 ui/data/ui/compose.ui:381
 msgid "Insert Image"
 msgstr ""
 
-#: ui/internal/compose/compose.go:521
+#: ui/internal/compose/compose.go:523
 msgid "Images"
 msgstr ""
 
-#: ui/internal/compose/compose.go:535
+#: ui/internal/compose/compose.go:537
 msgid "Only local images can be inserted"
 msgstr ""
 
-#: ui/internal/compose/compose.go:549
+#: ui/internal/compose/compose.go:551
 #, c-format
 msgid "Attaching %s…"
 msgstr ""
 
-#: ui/internal/compose/compose.go:558
+#: ui/internal/compose/compose.go:560
 #, c-format
 msgid "Attaching %s"
 msgstr ""
 
-#: ui/internal/compose/compose.go:590 ui/internal/window/assistant_panel.go:174
+#: ui/internal/compose/compose.go:592 ui/internal/window/assistant_panel.go:174
 msgid "Remove"
 msgstr ""
 
@@ -907,7 +907,7 @@ msgid "Discard this message?"
 msgstr ""
 
 #: ui/internal/compose/draft.go:385 ui/internal/compose/draft.go:398
-#: ui/data/ui/compose.ui:469
+#: ui/internal/compose/rewrite.go:106 ui/data/ui/compose.ui:474
 msgid "_Discard"
 msgstr ""
 
@@ -915,18 +915,18 @@ msgstr ""
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/draft.go:397 ui/internal/widget/rpc.go:193
-#: ui/internal/window/assistant_panel.go:193
-#: ui/internal/window/assistant_panel.go:350 ui/internal/window/remote.go:262
-#: ui/internal/window/remote.go:288 ui/data/ui/account_wizard.ui:401
+#: ui/internal/compose/draft.go:397 ui/internal/widget/consent.go:23
+#: ui/internal/widget/rpc.go:193 ui/internal/window/assistant_panel.go:193
+#: ui/internal/window/remote.go:262 ui/internal/window/remote.go:288
+#: ui/data/ui/account_wizard.ui:401
 msgid "_Cancel"
 msgstr ""
 
-#: ui/internal/compose/draft.go:399 ui/data/ui/compose.ui:455
+#: ui/internal/compose/draft.go:399 ui/data/ui/compose.ui:460
 msgid "_Save Draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:452
+#: ui/internal/compose/draft.go:453
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -934,7 +934,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: %d is the number of files of the forwarded (or quoted) message that the new one lacks.
-#: ui/internal/compose/draft.go:463
+#: ui/internal/compose/draft.go:464
 #, c-format
 msgid "%d attachment of the original could not be attached"
 msgid_plural "%d attachments of the original could not be attached"
@@ -942,37 +942,37 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: quote header without a date; %s is the sender.
-#: ui/internal/compose/prefill.go:154
+#: ui/internal/compose/prefill.go:159
 #, c-format
 msgid "%s wrote:"
 msgstr ""
 
 #. TRANSLATORS: quote header; %s are the date and the sender.
-#: ui/internal/compose/prefill.go:157
+#: ui/internal/compose/prefill.go:162
 #, c-format
 msgid "On %s, %s wrote:"
 msgstr ""
 
-#: ui/internal/compose/prefill.go:161
+#: ui/internal/compose/prefill.go:166
 msgid "---------- Forwarded message ----------"
-msgstr ""
-
-#: ui/internal/compose/prefill.go:162
-#, c-format
-msgid "From: %s"
-msgstr ""
-
-#: ui/internal/compose/prefill.go:165
-#, c-format
-msgid "Date: %s"
 msgstr ""
 
 #: ui/internal/compose/prefill.go:167
 #, c-format
+msgid "From: %s"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:170
+#, c-format
+msgid "Date: %s"
+msgstr ""
+
+#: ui/internal/compose/prefill.go:172
+#, c-format
 msgid "Subject: %s"
 msgstr ""
 
-#: ui/internal/compose/prefill.go:169
+#: ui/internal/compose/prefill.go:174
 #, c-format
 msgid "To: %s"
 msgstr ""
@@ -1401,7 +1401,7 @@ msgid "Unstar"
 msgstr ""
 
 #: ui/internal/window/actions.go:63 ui/data/ui/message_window.ui:68
-#: ui/data/ui/window.ui:469
+#: ui/data/ui/window.ui:482
 msgid "Star"
 msgstr ""
 
@@ -1514,7 +1514,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:857
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:870
 msgid "_New Message"
 msgstr ""
 
@@ -1527,16 +1527,16 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:413 ui/data/ui/compose.ui:66
+#: ui/internal/window/assistant_panel.go:403 ui/data/ui/compose.ui:66
 msgid "_Send"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:653 ui/internal/window/status.go:321
-#: ui/data/ui/window.ui:398
+#: ui/internal/window/assistant_panel.go:643 ui/internal/window/status.go:321
+#: ui/data/ui/window.ui:411
 msgid "Try Again"
 msgstr ""
 
-#: ui/internal/window/assistant_panel.go:899 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:889 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr ""
 
@@ -1545,7 +1545,7 @@ msgid "Files inside an attached message cannot be opened or saved yet."
 msgstr ""
 
 #: ui/internal/window/attachments.go:185 ui/data/ui/message_window.ui:56
-#: ui/data/ui/window.ui:450
+#: ui/data/ui/window.ui:463
 msgid "More Actions"
 msgstr ""
 
@@ -1633,23 +1633,23 @@ msgstr ""
 msgid "Saving the attachments"
 msgstr ""
 
-#: ui/internal/window/compose_open.go:131
+#: ui/internal/window/compose_open.go:134
 msgid "Forward Without Attachments?"
 msgstr ""
 
-#: ui/internal/window/compose_open.go:132
+#: ui/internal/window/compose_open.go:135
 msgid "Downloading the attachments"
 msgstr ""
 
-#: ui/internal/window/compose_open.go:133
+#: ui/internal/window/compose_open.go:136
 msgid "_Forward Without Attachments"
 msgstr ""
 
-#: ui/internal/window/compose_open.go:219
+#: ui/internal/window/compose_open.go:222
 msgid "Preparing the forwarded message"
 msgstr ""
 
-#: ui/internal/window/compose_open.go:221
+#: ui/internal/window/compose_open.go:224
 msgid "Preparing the reply"
 msgstr ""
 
@@ -1752,7 +1752,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:599
+#: ui/internal/window/folders.go:388 ui/data/ui/window.ui:612
 msgid "No Accounts"
 msgstr ""
 
@@ -1870,7 +1870,7 @@ msgstr ""
 msgid "Sending the message"
 msgstr ""
 
-#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:279
+#: ui/internal/window/outbox.go:75 ui/data/ui/window.ui:292
 msgid "Retry"
 msgstr ""
 
@@ -1901,7 +1901,7 @@ msgid "Cancel Sending"
 msgstr ""
 
 #: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:86
-#: ui/data/ui/window.ui:490
+#: ui/data/ui/window.ui:503
 msgid "Move to Trash"
 msgstr ""
 
@@ -2035,47 +2035,48 @@ msgid_plural "%d pictures of this message are on the server only"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search.go:244
+#: ui/internal/window/search.go:246
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:296 ui/data/ui/window.ui:236
+#: ui/internal/window/search.go:298 ui/internal/window/search_ownwords.go:147
+#: ui/data/ui/window.ui:239
 msgid "Search Mail"
 msgstr ""
 
-#: ui/internal/window/search.go:300
+#: ui/internal/window/search.go:302
 msgid "Search Failed"
 msgstr ""
 
-#: ui/internal/window/search.go:301
+#: ui/internal/window/search.go:303
 msgid "Searching"
 msgstr ""
 
-#: ui/internal/window/search.go:303
+#: ui/internal/window/search.go:305
 msgid "Searching…"
 msgstr ""
 
-#: ui/internal/window/search.go:305
+#: ui/internal/window/search.go:307
 msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:328
+#: ui/internal/window/search.go:330
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:330
+#: ui/internal/window/search.go:332
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:334
+#: ui/internal/window/search.go:336
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:338
+#: ui/internal/window/search.go:340
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
@@ -2195,7 +2196,7 @@ msgstr ""
 
 #. TRANSLATORS: banner button
 #: ui/internal/window/status.go:325 ui/internal/window/sync.go:526
-#: ui/data/ui/window.ui:291
+#: ui/data/ui/window.ui:304
 msgid "_Edit Account…"
 msgstr ""
 
@@ -2275,7 +2276,7 @@ msgctxt "button"
 msgid "Sign In"
 msgstr ""
 
-#: ui/internal/window/sync.go:528 ui/data/ui/window.ui:285
+#: ui/internal/window/sync.go:528 ui/data/ui/window.ui:298
 msgid "Open Preferences"
 msgstr ""
 
@@ -2325,15 +2326,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:601
+#: ui/internal/window/window.go:604
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:667 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:670 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:673 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:676 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr ""
 
@@ -2508,114 +2509,114 @@ msgstr ""
 msgid "Draft Menu"
 msgstr ""
 
-#: ui/data/ui/compose.ui:105 ui/data/ui/embedded_window.ui:104
-#: ui/data/ui/message_window.ui:195 ui/data/ui/window.ui:650
+#: ui/data/ui/compose.ui:110 ui/data/ui/embedded_window.ui:104
+#: ui/data/ui/message_window.ui:195 ui/data/ui/window.ui:663
 msgid "From"
 msgstr ""
 
-#: ui/data/ui/compose.ui:133 ui/data/ui/embedded_window.ui:130
-#: ui/data/ui/message_window.ui:221 ui/data/ui/window.ui:676
+#: ui/data/ui/compose.ui:138 ui/data/ui/embedded_window.ui:130
+#: ui/data/ui/message_window.ui:221 ui/data/ui/window.ui:689
 msgid "To"
 msgstr ""
 
-#: ui/data/ui/compose.ui:151
+#: ui/data/ui/compose.ui:156
 msgid "Cc/Bcc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:171 ui/data/ui/embedded_window.ui:158
-#: ui/data/ui/message_window.ui:249 ui/data/ui/window.ui:704
+#: ui/data/ui/compose.ui:176 ui/data/ui/embedded_window.ui:158
+#: ui/data/ui/message_window.ui:249 ui/data/ui/window.ui:717
 msgid "Cc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:200
+#: ui/data/ui/compose.ui:205
 msgid "Bcc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:226
+#: ui/data/ui/compose.ui:231
 msgid "Subject"
 msgstr ""
 
-#: ui/data/ui/compose.ui:258
+#: ui/data/ui/compose.ui:263
 msgid "Bold (Ctrl+B)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:265
+#: ui/data/ui/compose.ui:270
 msgid "Italic (Ctrl+I)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:272
+#: ui/data/ui/compose.ui:277
 msgid "Underline (Ctrl+U)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:285
+#: ui/data/ui/compose.ui:290
 msgid "Paragraph Style"
 msgstr ""
 
-#: ui/data/ui/compose.ui:293
+#: ui/data/ui/compose.ui:298
 msgid "Alignment"
 msgstr ""
 
-#: ui/data/ui/compose.ui:305
+#: ui/data/ui/compose.ui:310
 msgid "Bulleted List"
 msgstr ""
 
-#: ui/data/ui/compose.ui:312
+#: ui/data/ui/compose.ui:317
 msgid "Numbered List"
 msgstr ""
 
-#: ui/data/ui/compose.ui:319
+#: ui/data/ui/compose.ui:324
 msgid "Quote"
 msgstr ""
 
-#: ui/data/ui/compose.ui:331
+#: ui/data/ui/compose.ui:336
 msgid "Insert Link"
 msgstr ""
 
-#: ui/data/ui/compose.ui:350
+#: ui/data/ui/compose.ui:355
 msgid "Insert"
 msgstr ""
 
-#: ui/data/ui/compose.ui:364
+#: ui/data/ui/compose.ui:369
 msgid "Text Colour"
 msgstr ""
 
-#: ui/data/ui/compose.ui:384
+#: ui/data/ui/compose.ui:389
 msgid "Clear Formatting"
 msgstr ""
 
-#: ui/data/ui/compose.ui:392
+#: ui/data/ui/compose.ui:397
 msgid "This message will be sent as plain text."
 msgstr ""
 
-#: ui/data/ui/compose.ui:459
+#: ui/data/ui/compose.ui:464
 msgid "Attach _Files…"
 msgstr ""
 
-#: ui/data/ui/compose.ui:463
+#: ui/data/ui/compose.ui:468
 msgid "Insert _Image…"
 msgstr ""
 
-#: ui/data/ui/compose.ui:481
+#: ui/data/ui/compose.ui:486
 msgid "Heading 1"
 msgstr ""
 
-#: ui/data/ui/compose.ui:486
+#: ui/data/ui/compose.ui:491
 msgid "Heading 2"
 msgstr ""
 
-#: ui/data/ui/compose.ui:491
+#: ui/data/ui/compose.ui:496
 msgid "Heading 3"
 msgstr ""
 
-#: ui/data/ui/compose.ui:498
+#: ui/data/ui/compose.ui:503
 msgid "Left"
 msgstr ""
 
-#: ui/data/ui/compose.ui:503
+#: ui/data/ui/compose.ui:508
 msgid "Center"
 msgstr ""
 
-#: ui/data/ui/compose.ui:508
+#: ui/data/ui/compose.ui:513
 msgid "Right"
 msgstr ""
 
@@ -2624,62 +2625,62 @@ msgid "Attached Message"
 msgstr ""
 
 #: ui/data/ui/embedded_window.ui:61 ui/data/ui/message_window.ui:120
-#: ui/data/ui/message_window.ui:396 ui/data/ui/window.ui:533
-#: ui/data/ui/window.ui:889
+#: ui/data/ui/message_window.ui:396 ui/data/ui/window.ui:546
+#: ui/data/ui/window.ui:902
 msgid "Load _Images"
 msgstr ""
 
 #: ui/data/ui/embedded_window.ui:267 ui/data/ui/message_window.ui:358
-#: ui/data/ui/window.ui:812
+#: ui/data/ui/window.ui:825
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:32 ui/data/ui/window.ui:420
+#: ui/data/ui/message_window.ui:32 ui/data/ui/window.ui:433
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:429
+#: ui/data/ui/message_window.ui:38 ui/data/ui/window.ui:442
 msgid "Reply"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:44 ui/data/ui/window.ui:436
+#: ui/data/ui/message_window.ui:44 ui/data/ui/window.ui:449
 msgid "Reply All"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:50 ui/data/ui/window.ui:443
+#: ui/data/ui/message_window.ui:50 ui/data/ui/window.ui:456
 msgid "Forward"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:476
+#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:489
 msgid "Archive"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:80 ui/data/ui/window.ui:483
+#: ui/data/ui/message_window.ui:80 ui/data/ui/window.ui:496
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:126 ui/data/ui/window.ui:539
+#: ui/data/ui/message_window.ui:126 ui/data/ui/window.ui:552
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:128 ui/data/ui/window.ui:541
+#: ui/data/ui/message_window.ui:128 ui/data/ui/window.ui:554
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:157 ui/data/ui/window.ui:570
+#: ui/data/ui/message_window.ui:157 ui/data/ui/window.ui:583
 msgid "_Download Pictures"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:386 ui/data/ui/window.ui:879
+#: ui/data/ui/message_window.ui:386 ui/data/ui/window.ui:892
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:390 ui/data/ui/window.ui:883
+#: ui/data/ui/message_window.ui:390 ui/data/ui/window.ui:896
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:400 ui/data/ui/window.ui:893
+#: ui/data/ui/message_window.ui:400 ui/data/ui/window.ui:906
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -2996,74 +2997,74 @@ msgstr ""
 msgid "Inbox"
 msgstr ""
 
-#: ui/data/ui/window.ui:248
+#: ui/data/ui/window.ui:261
 msgctxt "search scope"
 msgid "Folder"
 msgstr ""
 
-#: ui/data/ui/window.ui:254
+#: ui/data/ui/window.ui:267
 msgctxt "search scope"
 msgid "Account"
 msgstr ""
 
-#: ui/data/ui/window.ui:260
+#: ui/data/ui/window.ui:273
 msgctxt "search scope"
 msgid "All Accounts"
 msgstr ""
 
-#: ui/data/ui/window.ui:278
+#: ui/data/ui/window.ui:291
 msgid "The mail backend (malachid) is not running."
 msgstr ""
 
-#: ui/data/ui/window.ui:304
+#: ui/data/ui/window.ui:317
 msgid "All"
 msgstr ""
 
-#: ui/data/ui/window.ui:310
+#: ui/data/ui/window.ui:323
 msgid "Unread"
 msgstr ""
 
-#: ui/data/ui/window.ui:316
+#: ui/data/ui/window.ui:329
 msgid "Flagged"
 msgstr ""
 
-#: ui/data/ui/window.ui:359
+#: ui/data/ui/window.ui:372
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:503
+#: ui/data/ui/window.ui:516
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:504
+#: ui/data/ui/window.ui:517
 msgid "Edit"
 msgstr ""
 
-#: ui/data/ui/window.ui:587
+#: ui/data/ui/window.ui:600
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:588
+#: ui/data/ui/window.ui:601
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:600
+#: ui/data/ui/window.ui:613
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:603
+#: ui/data/ui/window.ui:616
 msgid "_Add Account…"
 msgstr ""
 
-#: ui/data/ui/window.ui:863
+#: ui/data/ui/window.ui:876
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:867
+#: ui/data/ui/window.ui:880
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:871
+#: ui/data/ui/window.ui:884
 msgid "_About Malachi Mail"
 msgstr ""
 

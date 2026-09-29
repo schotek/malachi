@@ -533,7 +533,8 @@ that comes back replaces the words and is searched as if typed and
 Return pressed, in the current scope (a list folded by a narrow window
 unfolds); a failure is the toast *The search could not be converted: …*
 and the words stay. Only the typed words go to Claude, no mail. The
-editor bridge carries two macOS additions for the rewrite
-(`rewriteTarget`, `rewriteApply`), and the compose window keeps the
-attribution line it asked `draft.create` for (`ComposeParams.attribution`);
-the GTK widgets follow this port.
+editor bridge carries two additions for the rewrite (`rewriteTarget`,
+`rewriteApply`), and the compose window keeps the attribution line it
+asked `draft.create` for (`ComposeParams.attribution`); GTK has the same
+(its search field has no magnifier menu: a button beside it, and
+Alt+Enter), so this is no deviation.

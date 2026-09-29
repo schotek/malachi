@@ -10,9 +10,10 @@ import Foundation
 /// keydown shortcut test accepts the Command key as well as Control;
 /// `window.malachi.exec(cmd, arg)` runs an editing command from Swift
 /// (WKWebView has no native editing-command API; GTK calls WebKit's); and
-/// the assistant's rewrite (ui/internal/assistant, the In App target; GTK
-/// follows): `window.malachi.rewriteTarget(attribution)` notes the passage
-/// to rewrite and returns it as JSON (`RewriteTarget`), the selection when
+/// the assistant's rewrite (ui/internal/assistant, the In App target; GTK's
+/// bridge has the same two, posting the passage as a "rewrite" message
+/// instead of returning it): `window.malachi.rewriteTarget(attribution)`
+/// notes the passage to rewrite and returns it as JSON (`RewriteTarget`), the selection when
 /// it holds more than white space, otherwise the user's own text, which is
 /// everything before the first `div` whose text is the attribution line
 /// the compose window put above the quoted original (white space compared
@@ -164,7 +165,7 @@ public struct EditorState: Sendable, Equatable, Codable {
 }
 
 /// What the compose window's rewrite works on, as the bridge's
-/// `rewriteTarget` reports it (a macOS addition): the selection
+/// `rewriteTarget` reports it (GTK editor.RewriteTarget): the selection
 /// (`selected`), or the user's own text above the quoted original, and its
 /// text as the page renders it (paragraphs and line breaks as newlines).
 /// Mail text: shown and sent only as plain text.

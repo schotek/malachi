@@ -66,14 +66,8 @@ func gtkTarget(t assistant.Target) assistant.Target {
 	return assistant.Code
 }
 
-// catalog is the assistant.Translator over the application's catalog.
-type catalog struct{}
-
-func (catalog) T(msgid string) string                   { return i18n.T(msgid) }
-func (catalog) N(singular, plural string, n int) string { return i18n.N(singular, plural, n) }
-
 // tr translates the texts of ui/internal/assistant.
-var tr assistant.Translator = catalog{}
+var tr assistant.Translator = i18n.Catalog{}
 
 // Assistant is what the Assistant menus know about the two Claude apps,
 // once for the whole application: whether an app handles each target's
@@ -99,7 +93,10 @@ type Assistant struct {
 
 	status   *mcpsetup.Status
 	handlers map[assistant.Target]bool
-	querying bool
+	// claudeFound: the locator found Claude Code when the handlers were
+	// last looked up (CanRunInApp).
+	claudeFound bool
+	querying    bool
 
 	observers map[int]func()
 	nextID    int
@@ -126,7 +123,7 @@ func NewAssistant(s *settings.Store, log *slog.Logger) *Assistant {
 		s.OnChanged(key, a.notify)
 	}
 	// Another claude chosen: whether the panel can run changes.
-	s.OnChanged(settings.KeyAssistantClaudePath, a.refreshHandlers)
+	s.OnChanged(settings.KeyAssistantClaudePath, a.RefreshHandlers)
 	return a
 }
 
@@ -166,27 +163,29 @@ func (a *Assistant) AddActions(app *adw.Application, setUp func()) {
 // Refresh looks the handlers up now and asks the bridge for its status in
 // the background.
 func (a *Assistant) Refresh() {
-	a.refreshHandlers()
+	a.RefreshHandlers()
 	a.query()
 }
 
-// refreshHandlers looks up whether an app handles the links of each
+// RefreshHandlers looks up whether an app handles the links of each
 // supported target, and whether the panel finds Claude Code and the
 // bridge.
-func (a *Assistant) refreshHandlers() {
+func (a *Assistant) RefreshHandlers() {
+	claude := a.locator.Locate() != ""
 	found := make(map[assistant.Target]bool, len(assistantTargets))
 	for _, t := range assistantTargets {
 		switch {
 		case t == assistant.App:
-			found[t] = a.bridge != "" && a.locator.Locate() != ""
+			found[t] = a.bridge != "" && claude
 		case supportedTarget(t):
 			found[t] = gio.AppInfoGetDefaultForURIScheme(t.Scheme()) != nil
 		}
 	}
-	if maps.Equal(found, a.handlers) {
+	if maps.Equal(found, a.handlers) && claude == a.claudeFound {
 		return
 	}
 	a.handlers = found
+	a.claudeFound = claude
 	a.notify()
 }
 
@@ -291,6 +290,26 @@ func (a *Assistant) pick(needsBridge bool) (assistant.Target, bool) {
 // shown and In App chosen. Whether it can run is pick's.
 func (a *Assistant) panelShown() bool {
 	return a.shown() && a.target() == assistant.App
+}
+
+// CanRunInApp says whether the In App target's one-shot requests exist:
+// the compose window's rewrite and the search in the user's own words,
+// which read no mail and need no bridge (assistantpanel.Request). The same
+// condition as the panel's (panelShown), and Claude Code found as last
+// looked up; whether it is signed in is asked when a request runs. Its
+// changes come through OnChange.
+func (a *Assistant) CanRunInApp() bool {
+	return a.panelShown() && a.claudeFound
+}
+
+// NewRequest is a one-shot request on the user's Claude Code, in the
+// panel's private directory; the caller sets its Consent (the question on
+// its own window).
+func (a *Assistant) NewRequest() *assistantpanel.Request {
+	return assistantpanel.NewRequest(assistantpanel.RequestConfig{
+		Settings: a.settings, Locator: a.locator, Loop: glibLoop{}, Log: a.log,
+		Directory: assistantDirectory(), Env: os.Environ(),
+	})
 }
 
 // canAskFile says whether an attachment's "Ask the Assistant…" can run for
@@ -550,7 +569,7 @@ func (w *Window) assistantFailed(err error, toast func(string)) {
 // toasts.
 func (v *messageView) askAboutAttachment(acc api.AccountID, id api.MessageID, a api.Attachment, remote bool) {
 	w := v.win
-	w.assist.refreshHandlers()
+	w.assist.RefreshHandlers()
 	if !w.assist.canAskFile(a.ContentType) {
 		return
 	}
@@ -595,7 +614,7 @@ func (v *messageView) bindAskItem(arrow *gtk.MenuButton, g *gio.SimpleActionGrou
 	}
 	sync()
 	arrow.SetCreatePopupFunc(func(*gtk.MenuButton) {
-		a.refreshHandlers()
+		a.RefreshHandlers()
 		sync()
 	})
 }

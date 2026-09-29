@@ -835,7 +835,7 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 	// meanwhile.
 	a.locator.Refresh()
 	update()
-	a.refreshHandlers()
+	a.RefreshHandlers()
 	return func() {
 		remove()
 		removePath()

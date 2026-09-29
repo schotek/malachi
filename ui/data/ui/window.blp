@@ -248,10 +248,25 @@ Adw.ApplicationWindow main_window {
                   orientation: vertical;
                   spacing: 6;
 
-                  SearchEntry search_entry {
-                    placeholder-text: _("Search Mail");
-                    search-delay: 300;
-                    hexpand: true;
+                  Box {
+                    spacing: 6;
+
+                    SearchEntry search_entry {
+                      placeholder-text: _("Search Mail");
+                      search-delay: 300;
+                      hexpand: true;
+                    }
+
+                    // Search in Your Own Words (ui/internal/assistant, the
+                    // In App target): icon, tooltip and visibility from Go
+                    // (window/search_ownwords.go).
+                    Button search_own_words {
+                      visible: false;
+
+                      styles [
+                        "flat",
+                      ]
+                    }
                   }
 
                   Adw.ToggleGroup search_scope {

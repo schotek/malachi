@@ -550,6 +550,15 @@ Unread in This Folder*, and an attachment's menu gets *Ask the Assistant…*.
   first question asks whether mail may be sent to Claude. *Preferences →
   AI* shows which `claude` it runs and chooses the model.
 
+With *In App* chosen, the same Claude Code also helps outside the panel,
+with no tool and no mail of its own: the ✦ button of the compose window
+rewrites the selection, or your own text above the quoted message (*More
+Polite*, *Shorter*, *Fix Mistakes*, *Translate to English* or your own
+instruction), and puts the answer in its place or below it only when you
+say so; the ✦ button beside the search field (or Alt+Enter in it) turns
+what you typed ("invoices from Jana in March") into a search. Only the
+passage or the typed words go to Claude.
+
 Claude Desktop for Linux is a preview the project does not support: it is
 listed, but cannot be chosen (the macOS app offers it). How it works and why
 it is safe: [docs/mcp.md](docs/mcp.md#hand-off-from-the-app-the-assistant-menu),

@@ -36,6 +36,8 @@ type Editor struct {
 	html    string // last body innerHTML seen (or loaded)
 	text    string // last body innerText seen
 	waiters []func()
+	// rewrites wait for the page's "rewrite" message (RewriteTarget).
+	rewrites []func(RewriteTarget)
 
 	// OnChanged fires after the page reported new content (debounced).
 	OnChanged func()
@@ -79,6 +81,7 @@ func New(log *slog.Logger) *Editor {
 	})
 	e.ConnectWebProcessTerminated(func(reason webkit.WebProcessTerminationReason) {
 		e.ready = false
+		e.answerRewrites(RewriteTarget{})
 		e.log.Warn("web process terminated", "reason", int(reason))
 		if e.OnCrashed != nil {
 			e.OnCrashed()
@@ -156,6 +159,43 @@ func (e *Editor) FocusStart() {
 	}
 }
 
+// RewriteTarget notes the passage the assistant's rewrite works on and
+// calls done (on the main loop) with it: the selection, or the user's own
+// text, everything above the line attribution (the whole body when ""
+// or not found; bridgeJS). done gets an empty target when the bridge is
+// not running.
+func (e *Editor) RewriteTarget(attribution string, done func(RewriteTarget)) {
+	if !e.ready {
+		done(RewriteTarget{})
+		return
+	}
+	e.rewrites = append(e.rewrites, done)
+	e.eval("window.malachi.rewriteTarget(" + jsString(attribution) + ")")
+}
+
+// ApplyRewrite puts text in place of the passage RewriteTarget noted, or
+// below it, as plain text (RewriteInsertion): one step the page's undo
+// takes back, reported as typing is. The editor should have the keyboard.
+func (e *Editor) ApplyRewrite(text string, below bool) {
+	if !e.ready {
+		return
+	}
+	command, argument := RewriteInsertion(text, below)
+	flag := "false"
+	if below {
+		flag = "true"
+	}
+	e.eval("window.malachi.rewriteApply(" + flag + ", " + jsString(command) + ", " + jsString(argument) + ")")
+}
+
+func (e *Editor) answerRewrites(t RewriteTarget) {
+	waiting := e.rewrites
+	e.rewrites = nil
+	for _, done := range waiting {
+		done(t)
+	}
+}
+
 // SetDebug forwards the page's console output to stderr.
 func (e *Editor) SetDebug(on bool) {
 	e.Settings().SetEnableWriteConsoleMessagesToStdout(on)
@@ -192,6 +232,8 @@ func (e *Editor) onMessage(v *javascriptcore.Value) {
 		if e.OnState != nil {
 			e.OnState(msg.State)
 		}
+	case "rewrite":
+		e.answerRewrites(RewriteTarget{Selected: msg.Selected, Text: msg.Text})
 	}
 }
 

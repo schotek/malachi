@@ -4,7 +4,7 @@
 import Foundation
 
 /// The compose window's rewrite (ui/internal/assistant rewrite.go, the In
-/// App target; the GTK widgets follow this port) without its popover: a
+/// App target; GTK assistantpanel.Rewriter is its port) without its popover: a
 /// passage of the message, the selection or the user's own text, goes to
 /// the user's Claude Code with a preset or the user's own instruction
 /// (`Assistant.rewriteMessage` under `Assistant.rewriteSystemPrompt`, one

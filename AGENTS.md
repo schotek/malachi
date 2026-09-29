@@ -370,9 +370,9 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK úroveň A
-   a B1 (jen Claude Code, v terminálu nebo v panelu), GTK B2 a Windows
-   doplňují (viz předávka níže)
+8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK hotovo
+   (A, B1 a B2; jen Claude Code, v terminálu nebo v aplikaci), Windows
+   doplňuje (viz předávka níže)
 
 Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
@@ -423,9 +423,16 @@ zašedlé (`supportedTarget`), uložené `desktop` se čte jako Claude Code,
 výchozí hodnota gschema zůstává referenční (`desktop`), proto žádná
 nabídka restartu Claude Desktop (který i na Linuxu za běhu přepisuje
 konfiguraci, „Config file written“ v `~/.config/Claude/logs/main.log`);
-stránka AI opakuje neúspěšný dotaz na stav po 1, 2 a 4 s. Zbývá B2
-(úprava textu v okně Nová zpráva, hledání vlastními slovy; reference
-`ui/internal/assistant` `rewrite.go` a `search.go`). Handler Claude Code
+stránka AI opakuje neúspěšný dotaz na stav po 1, 2 a 4 s. B2 je napsané:
+`assistantpanel` `Request` (jednorázový požadavek bez mostu), `Rewriter`
+a `Searcher` jako porty `AssistantRequest`, `ComposeRewriteController`
+a `SearchConversion` i s testy; okno Nová zpráva má tlačítko ✦
+`rewrite_button` s `rewrite_popover` (`compose/rewrite.go`, rozhraní
+`compose.Assistant` nad stavem `window.Assistant`, `CanRunInApp`), most
+editoru `rewriteTarget`/`rewriteApply` (pasáž posílá zprávou „rewrite“,
+`editor.RewriteTarget`, `ApplyRewrite`), `compose.Params.Attribution`;
+hledání má tlačítko ✦ `search_own_words` vedle pole a Alt+Enter
+(`window/search_ownwords.go`). Handler Claude Code
 z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do terminálu
 zkoušet s aplikací nainstalovanou na hostiteli. Windows:
 klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené

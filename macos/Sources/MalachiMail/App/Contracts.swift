@@ -196,7 +196,7 @@ protocol EditorView: AnyObject {
     func exec(_ command: String, _ argument: String?)
     /// editor.FocusStart: caret to the start of the body (replies).
     func focusStart()
-    /// The assistant's rewrite (a macOS addition to the bridge,
+    /// The assistant's rewrite (the bridge's rewriteTarget, as in GTK's,
     /// ui/internal/assistant): notes the passage to rewrite, the selection
     /// when it holds more than white space, otherwise the user's own text
     /// before the `div` holding `attribution` (the whole body when "" or

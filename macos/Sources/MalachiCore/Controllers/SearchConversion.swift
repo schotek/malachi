@@ -4,7 +4,7 @@
 import Foundation
 
 /// The search in the user's own words (ui/internal/assistant search.go,
-/// the In App target; the GTK widgets follow this port) without the search
+/// the In App target; GTK assistantpanel.Searcher is its port) without the search
 /// field: the typed words go to the user's Claude Code
 /// (`Assistant.searchMessage` under `Assistant.searchSystemPrompt`, the
 /// answer shaped by `Assistant.searchSchema`, one `AssistantRequest`), and

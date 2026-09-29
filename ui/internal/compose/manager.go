@@ -27,6 +27,9 @@ type Manager struct {
 	// OnSent is called with a short message when a window queued a message
 	// (e.g. to show a toast on the main window). May be nil.
 	OnSent func(text string)
+	// Assistant is the assistant's state for the windows' rewrite
+	// (rewrite.go); nil leaves it off.
+	Assistant Assistant
 
 	windows  []*Window
 	accounts []api.Account

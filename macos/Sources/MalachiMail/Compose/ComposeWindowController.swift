@@ -790,7 +790,8 @@ extension ComposeWindowController: NSToolbarItemValidation {
 /// The header bar of compose.blp as a unified toolbar: Attach, the draft
 /// menu and Send. Items act through the responder chain. With the
 /// assistant's In App target the Assistant button (ui/internal/assistant;
-/// no Blueprint yet) sits before the draft menu while `showsAssistant`.
+/// GTK compose.blp `rewrite_button`) sits before the draft menu while
+/// `showsAssistant`.
 @MainActor
 private final class ComposeToolbar: NSObject, NSToolbarDelegate {
     enum ID {

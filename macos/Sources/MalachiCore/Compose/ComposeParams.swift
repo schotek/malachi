@@ -93,9 +93,10 @@ public struct ComposeParams: Sendable, Equatable {
     public var skipped: Int
     /// The line above the quoted original of a reply or a forward (the
     /// `attribution` handed to draft.create, `attribution(kind:source:)`),
-    /// "" when not known (a new message, a draft opened from Drafts). A
-    /// macOS addition for the assistant's rewrite (ui/internal/assistant):
-    /// the user's own text is what the editor holds above it.
+    /// "" when not known (a new message, a draft opened from Drafts; GTK
+    /// compose.Params `Attribution`). For the assistant's rewrite
+    /// (ui/internal/assistant): the user's own text is what the editor
+    /// holds above it.
     public var attribution: String
 
     public init(

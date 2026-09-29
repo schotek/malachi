@@ -343,17 +343,7 @@ func (p *assistantPanel) askAttachment(acc api.AccountID, id api.MessageID, a ap
 
 // askConsent asks "Send Mail to Claude?" before the first question ever.
 func (p *assistantPanel) askConsent(done func(bool)) {
-	t := assistant.PanelTexts(tr)
-	d := adw.NewAlertDialog(t.ConsentHeading, t.ConsentBody)
-	d.SetHeadingUseMarkup(false)
-	d.SetBodyUseMarkup(false)
-	d.AddResponse("cancel", i18n.T("_Cancel"))
-	d.AddResponse("allow", t.Allow)
-	d.SetResponseAppearance("allow", adw.ResponseSuggested)
-	d.SetDefaultResponse("allow")
-	d.SetCloseResponse("cancel")
-	d.ConnectResponse(func(response string) { done(response == "allow") })
-	d.Present(p.w)
+	widget.AskAssistantConsent(p.w, done)
 }
 
 // State

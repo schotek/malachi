@@ -1228,6 +1228,14 @@ while the bridge is registered in a Claude client:
   mail may be sent to Claude (`assistant-consent`). The app never reads,
   stores or offers credentials: it asks `claude auth status --json` for
   `loggedIn` only.
+- **One-shot requests** (In App only: the compose window's rewrite, the
+  search in your own words): the same Claude Code without the bridge, so
+  the model has no tool at all; only the passage (the selection, or the
+  user's own text above the quoted original, never the original itself)
+  or the typed words go to Claude. The answer is plain text: the rewrite's
+  goes into the message escaped, and only when the user chooses Replace or
+  Insert Below; the search's is one line in the search syntax, cut to the
+  daemon's limit, which the app searches for as if typed.
 
 Not defended: the model following instructions in mail with the read and
 draft tools it has (reading other mail and putting it into an answer or a

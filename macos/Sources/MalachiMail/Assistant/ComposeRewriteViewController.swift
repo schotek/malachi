@@ -5,8 +5,8 @@ import AppKit
 import MalachiCore
 
 /// The compose window's rewrite (ui/internal/assistant rewrite.go, the In
-/// App target; there is no Blueprint yet, the GTK widgets follow this
-/// port): the popover of the toolbar's Assistant button. It renders a
+/// App target; GTK compose.blp `rewrite_popover` and compose/rewrite.go
+/// follow this port): the popover of the toolbar's Assistant button. It renders a
 /// `ComposeRewriteController` for one passage (`RewriteTarget`):
 ///
 /// - the title: "Rewrite Selection" or "Rewrite Your Text";

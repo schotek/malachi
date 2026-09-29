@@ -7,8 +7,8 @@ import os
 /// One question to the user's Claude Code that reads no mail: the one-shot
 /// requests of ui/internal/assistant's In App target, the compose window's
 /// rewrite (`ComposeRewriteController`) and the search in the user's own
-/// words (`SearchConversion`). There is no Blueprint yet; the GTK widgets
-/// follow this port.
+/// words (`SearchConversion`). GTK ui/internal/assistantpanel `Request`
+/// is its port.
 ///
 /// It runs the panel's protocol once (`ClaudeCodeProcess`): the command
 /// line of `Assistant.args` without the bridge (no MCP server, no tool),

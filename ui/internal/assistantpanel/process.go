@@ -63,7 +63,9 @@ var errStarted = errors.New("claude was started already")
 // every line parsed with assistant.ParseEvents off the main loop, and the
 // events are delivered on the main loop in the order of the lines
 // (OnEvents). A line that is not JSON is logged and skipped. Its stderr is
-// kept, at most stderrLimit bytes, for the reason of an early exit.
+// kept, at most stderrLimit bytes, for the reason of an early exit. A
+// one-shot request writes one turn and closes stdin (CloseInput); Claude
+// Code then ends after its answer.
 //
 // Terminate closes stdin and sends SIGTERM, and SIGKILL after the grace
 // when the process is still there. Its end is reported once, after every
@@ -88,9 +90,10 @@ type Process struct {
 	cmd   *exec.Cmd
 	stdin *stdinWriter
 	// running is set from the start until the end was reported;
-	// terminating once Terminate was called. Main loop only.
-	running, terminating bool
-	ended                *Exit
+	// terminating once Terminate was called; inputClosed once CloseInput
+	// was. Main loop only.
+	running, terminating, inputClosed bool
+	ended                             *Exit
 }
 
 // NewProcess prepares claude at executable with args, env and dir; Start
@@ -169,13 +172,24 @@ func (p *Process) Start() error {
 // Send writes one turn; false when the process is not running (or being
 // terminated). The write happens off the main loop, in order.
 func (p *Process) Send(line []byte) bool {
-	if !p.running || p.terminating || p.stdin == nil {
+	if !p.running || p.terminating || p.inputClosed || p.stdin == nil {
 		return false
 	}
 	data := make([]byte, 0, len(line)+1)
 	data = append(append(data, line...), '\n')
 	p.stdin.write(data)
 	return true
+}
+
+// CloseInput closes stdin once the turns written before are through: a
+// one-shot request's Claude Code ends after its answer. Nothing more is
+// sent.
+func (p *Process) CloseInput() {
+	if !p.running || p.inputClosed || p.stdin == nil {
+		return
+	}
+	p.inputClosed = true
+	p.stdin.close()
 }
 
 // Terminate ends the conversation now: stdin closed, SIGTERM, SIGKILL after
