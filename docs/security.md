@@ -1193,6 +1193,49 @@ recipient allow-list for
 `send_message` built on `contact.search` is the next step and is not
 implemented.
 
+### 10.1 The Assistant
+
+The desktop apps' Assistant ([mcp.md](mcp.md), *Hand-off from the app*
+and *The panel in the app*) puts the bridge to work in two ways, and only
+while the bridge is registered in a Claude client:
+
+- **Hand-off** (the ✦ menu, an attachment's *Ask the Assistant…*): the app
+  opens Claude Code (and on macOS Claude Desktop) through its link scheme
+  with a prefilled, unsent question. The question carries opaque ids and
+  an instruction only, never a subject, a sender, a folder or a file name:
+  those are written by the sender and would reach the model as the user's
+  own words. The user reads the question and sends it; everything above
+  applies to the Claude client as to any agent, its own tools and settings
+  included. An attachment goes as a file in a private directory of its
+  own, written where the app writes attachments for opening (§8); Claude
+  Code gets that directory as its working directory.
+- **The panel** (In App, experimental): the app runs the user's own Claude
+  Code, and closes the channels this section leaves open. It allows the
+  bridge's read and draft tools only (`--tools ""`, `--disallowedTools
+  LSP`, `--strict-mcp-config`, `--permission-mode dontAsk` with an
+  allow-list, and the bridge it starts has neither `--allow-modify` nor
+  `--allow-send`), loads nothing of the user's Claude Code setup
+  (`--setting-sources ""`: no settings, `CLAUDE.md`, plugins or hooks;
+  `--disable-slash-commands`), keeps no transcript (`--no-session-persistence`)
+  and runs it in an empty private directory (0700) with a minimal
+  environment (no `CLAUDE*`, `ANTHROPIC*` or `MALACHI_*` variable). What
+  remains is the answer text and a draft the user sends. The answer is
+  untrusted like mail, since it may quote a message: it is drawn from a
+  small Markdown subset with fonts only, never HTML or markup, links are
+  http and https only and each is opened after a question that names its
+  destination; a draft is offered from the bridge's own result line and
+  opened only after `draft.list` has it. The first question asks whether
+  mail may be sent to Claude (`assistant-consent`). The app never reads,
+  stores or offers credentials: it asks `claude auth status --json` for
+  `loggedIn` only.
+
+Not defended: the model following instructions in mail with the read and
+draft tools it has (reading other mail and putting it into an answer or a
+draft the user then sends); the `claude` executable itself, which is the
+user's program with the user's rights (the one on the usual paths, or the
+one chosen in the settings); and what Anthropic does with the content,
+which is sent under the user's Claude account and terms.
+
 ## 11. Reporting
 
 Security issues: open a private report on the GitHub repository (Security →

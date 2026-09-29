@@ -69,6 +69,12 @@ work reliably anymore, and on Linux that is worse than anywhere else.
 - **AI agents, on a leash.** An optional MCP bridge lets an agent read and
   draft mail through the daemon. Read-only unless you say otherwise;
   marking, moving, deleting and sending each need a separate flag.
+- **Assistant** (experimental). With the MCP bridge registered, the ✦ menu
+  hands the selected message, conversation or folder to Claude Code: with
+  a prepared question in a terminal, or in a panel of the main window that
+  runs your own Claude Code with only the bridge's read and draft tools.
+  Nothing is sent to Claude before you ask, and nothing is sent by mail
+  before you send the draft yourself.
 - **Czech translation**, and the machinery to add more.
 
 ## Goals
@@ -524,6 +530,30 @@ key, only after the daemon has proved that it holds the key; the protocol
 version is checked in the same handshake.
 
 Tools, arguments, limits and the threat model: [docs/mcp.md](docs/mcp.md).
+
+### The Assistant
+
+With the bridge registered (*Preferences → AI → Register with Claude*), the
+✦ button above a message opens the **Assistant** menu: *Summarize*, *Draft
+a Reply…*, *Tasks and Deadlines*, *Ask About This Message…* and *Summarize
+Unread in This Folder*, and an attachment's menu gets *Ask the Assistant…*.
+*Open In* chooses where Claude runs:
+
+- **Claude Code** opens in a terminal (the one its `claude-cli://` handler
+  picks: `$TERMINAL`, then `x-terminal-emulator`, then the common
+  emulators) with the question typed in and not sent. The question names
+  the mail by opaque ids only; Claude reads it through the bridge.
+- **In App (Experimental)** keeps the conversation in a panel on the right
+  of the main window. It runs your own `claude` (signed in as you, billed
+  as your Claude Code usage) with only the bridge's read and draft tools,
+  none of your Claude Code settings, and nothing written to disk; the
+  first question asks whether mail may be sent to Claude. *Preferences →
+  AI* shows which `claude` it runs and chooses the model.
+
+Claude Desktop for Linux is a preview the project does not support: it is
+listed, but cannot be chosen (the macOS app offers it). How it works and why
+it is safe: [docs/mcp.md](docs/mcp.md#hand-off-from-the-app-the-assistant-menu),
+[docs/security.md](docs/security.md#101-the-assistant).
 
 ## Supported providers
 

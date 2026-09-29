@@ -501,9 +501,9 @@ choosing the one found automatically goes back to looking), and *Model*
 (*Sonnet*, the default, *Haiku* or *Opus*: `assistant-model`, used from
 the next conversation). The conversation lives in memory only: *New
 Conversation*, *Stop* (the next question starts a new one) or quitting the
-app ends Claude Code. As with the menu, macOS is the first client to show
-the panel (the logic and the strings are `ui/internal/assistant`'s), not a
-deviation.
+app ends Claude Code. As with the menu, GTK has the same panel (its
+conversation `ui/internal/assistantpanel`, the strings
+`ui/internal/assistant`'s), so this is no deviation.
 
 Two more uses of the same Claude Code exist while the panel could run
 (the Assistant shown, In App chosen and `claude` found): one-shot requests

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
@@ -110,6 +111,11 @@ var (
 // storagePollSeconds is how often the Disk Space Used row asks again while
 // the dialog is open: the numbers move while stored mail is converted.
 const storagePollSeconds = 5
+
+// mcpStatusRetryDelays are the pauses before the repeats of a failed
+// malachi-mcp status on the AI page (macOS MCPRegistrationController
+// defaultStatusRetryDelays).
+var mcpStatusRetryDelays = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 
 // NewPreferences builds the dialog bound to s, for the Mail group and the
 // Accounts page to the daemon through c, and for the AI page to the
@@ -566,7 +572,8 @@ func (d *PreferencesDialog) bindLaunchAtLogin(s *settings.Store) (unbind func())
 // application's last status is shown at once, so the switch does not show
 // "off" only because the dialog has not asked yet, and so is every newer
 // one it learns while no call of the dialog runs; every status the dialog
-// gets goes to the application (Assistant.Apply), whose menus follow it.
+// gets goes to the application (Assistant.Apply), whose menus follow it. A
+// failed status check is asked again after 1, 2 and 4 s.
 func (d *PreferencesDialog) bindMCP() (unbind func()) {
 	row := d.mcpSwitch
 	var (
@@ -607,29 +614,50 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 	follow()
 	removeFollow := a.OnChange(follow)
 
-	op++
-	query := op
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
-		defer cancel()
-		st, err := mcpsetup.Query(ctx, bridge)
-		glib.IdleAdd(func() {
-			if d.closed || query != op {
-				return
-			}
-			if err != nil {
-				d.log.Warn("malachi-mcp status", "err", err)
-				if !a.known() {
-					// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-					d.mcpGroup.SetDescription(fmt.Sprintf(i18n.T("The MCP bridge did not answer: %s"), err))
+	// A failed status check is repeated after each of the pauses (a Claude
+	// app may be rewriting its file just then), unless a newer call came
+	// meanwhile; the last known state stays shown. Only when the repeats
+	// are used up and no state is known does the group say why.
+	retries := 0
+	var query func()
+	query = func() {
+		op++
+		my := op
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), mcpsetup.Timeout)
+			defer cancel()
+			st, err := mcpsetup.Query(ctx, bridge)
+			glib.IdleAdd(func() {
+				if d.closed || my != op {
+					return
 				}
-				return
-			}
-			a.Apply(st)
-			set(st.Registered())
-			row.SetSensitive(true)
-		})
-	}()
+				if err != nil {
+					d.log.Warn("malachi-mcp status", "err", err, "retry", retries < len(mcpStatusRetryDelays))
+					if retries < len(mcpStatusRetryDelays) {
+						delay := mcpStatusRetryDelays[retries]
+						retries++
+						glib.TimeoutAdd(uint(delay.Milliseconds()), func() bool {
+							if !d.closed && my == op {
+								query()
+							}
+							return false
+						})
+						return
+					}
+					if !a.known() {
+						// TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+						d.mcpGroup.SetDescription(fmt.Sprintf(i18n.T("The MCP bridge did not answer: %s"), err))
+					}
+					return
+				}
+				retries = 0
+				a.Apply(st)
+				set(st.Registered())
+				row.SetSensitive(true)
+			})
+		}()
+	}
+	query()
 
 	handle := row.NotifyProperty("active", func() {
 		if syncing {
@@ -675,6 +703,7 @@ func (d *PreferencesDialog) bindMCP() (unbind func()) {
 				}
 				// The bridge's report is authoritative; it may differ from
 				// what was asked for (e.g. one client left registered).
+				retries = 0
 				a.Apply(st)
 				set(st.Registered())
 			})

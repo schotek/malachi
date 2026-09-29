@@ -64,7 +64,7 @@ public struct MCPStatus: Codable, Equatable, Sendable {
 /// status check has no sentence of its own, as in GTK: it is logged, the
 /// last known state stays, and the check is repeated after
 /// `statusRetryDelays` (a Claude app may be rewriting its file just then;
-/// GTK asks again only when the page comes up, macOS leads here).
+/// GTK preferences.go `bindMCP` repeats it after the same pauses).
 /// Without a bridge beside the application (`Paths.mcpBridge`
 /// nil) the row stays insensitive and a toast says so, once. A status
 /// asked while a call runs is skipped (that call's answer is the newer

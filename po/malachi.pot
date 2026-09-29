@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-29 19:37+0200\n"
+"POT-Creation-Date: 2026-09-29 20:06+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1905,76 +1905,76 @@ msgstr ""
 msgid "Move to Trash"
 msgstr ""
 
-#: ui/internal/window/preferences.go:273
+#: ui/internal/window/preferences.go:279
 msgid "Saving mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:302
+#: ui/internal/window/preferences.go:308
 msgid "Loading mail settings"
 msgstr ""
 
-#: ui/internal/window/preferences.go:365
+#: ui/internal/window/preferences.go:371
 msgid "Measuring the disk space"
 msgstr ""
 
-#: ui/internal/window/preferences.go:401
+#: ui/internal/window/preferences.go:407
 msgid "Converting the stored mail in the background"
 msgstr ""
 
-#: ui/internal/window/preferences.go:403
+#: ui/internal/window/preferences.go:409
 msgid "Converting stopped: the disk is full"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:407
+#: ui/internal/window/preferences.go:413
 #, c-format
 msgid "Compression saves %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a size such as "1.2 GiB".
-#: ui/internal/window/preferences.go:411
+#: ui/internal/window/preferences.go:417
 #, c-format
 msgid "%s of attachments are on the server only"
 msgstr ""
 
-#: ui/internal/window/preferences.go:549
+#: ui/internal/window/preferences.go:555
 msgid "The desktop portal refused to change autostart"
 msgstr ""
 
-#: ui/internal/window/preferences.go:552
+#: ui/internal/window/preferences.go:558
 msgid "Autostart needs xdg-desktop-portal"
 msgstr ""
 
-#: ui/internal/window/preferences.go:555
+#: ui/internal/window/preferences.go:561
 msgid "Autostart was not granted"
 msgstr ""
 
-#: ui/internal/window/preferences.go:589
+#: ui/internal/window/preferences.go:596
 msgid "Not available in the Flatpak build"
 msgstr ""
 
-#: ui/internal/window/preferences.go:595
+#: ui/internal/window/preferences.go:602
 msgid "The MCP bridge (malachi-mcp) was not found"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:624
+#: ui/internal/window/preferences.go:649
 #, c-format
 msgid "The MCP bridge did not answer: %s"
 msgstr ""
 
-#: ui/internal/window/preferences.go:666
+#: ui/internal/window/preferences.go:694
 msgid "No Claude app was found on this computer"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:669
+#: ui/internal/window/preferences.go:697
 #, c-format
 msgid "The MCP bridge could not be registered: %s"
 msgstr ""
 
 #. TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-#: ui/internal/window/preferences.go:672
+#: ui/internal/window/preferences.go:700
 #, c-format
 msgid "The MCP bridge could not be unregistered: %s"
 msgstr ""
