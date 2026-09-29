@@ -50,14 +50,16 @@ public sealed class SettingsTests
         s.MarkReadDelay = 999;
         Assert.Equal(SettingsStore.MarkReadDelayMax, s.MarkReadDelay);
         Assert.Equal(SearchScope.Folder, s.SearchScope);
+        Assert.True(s.AssistantMenu);
+        Assert.Equal(AssistantTarget.Desktop, s.AssistantTarget);
         // The gschema's window geometry, which Windows uses (GTK does not).
         Assert.Equal(1200, s.WindowWidth);
         Assert.Equal(760, s.WindowHeight);
         Assert.False(s.WindowMaximized);
         Assert.Equal(240, s.FolderPaneWidth);
         Assert.Equal(380, s.MessageListWidth);
-        // The 23 gschema keys and ctrl-r.
-        Assert.Equal(24, SettingsStore.Schema.Count);
+        // The 25 gschema keys and ctrl-r.
+        Assert.Equal(26, SettingsStore.Schema.Count);
         Assert.Equal(Enum.GetValues<SettingsKey>().Length, SettingsStore.Schema.Count);
         Assert.Equal(
             SettingsStore.Schema.Select(k => k.Name).Order(StringComparer.Ordinal),
@@ -114,6 +116,10 @@ public sealed class SettingsTests
         Assert.Equal(SearchScope.Folder, s.SearchScope);
         s.SearchScope = SearchScope.All;
         Assert.Equal(SearchScope.All, s.SearchScope);
+        backend.SetString("assistant-target", "browser");
+        Assert.Equal(AssistantTarget.Desktop, s.AssistantTarget);
+        s.AssistantTarget = AssistantTarget.Code;
+        Assert.Equal(AssistantTarget.Code, s.AssistantTarget);
 
         backend.SetString("ctrl-r", "dance");
         Assert.Equal(CtrlR.Reply, s.CtrlR);
@@ -351,6 +357,7 @@ public sealed class SettingsTests
         Assert.Equal(["system", "light", "dark"], SettingsStore.Info(SettingsKey.ColorScheme).Choices);
         Assert.Equal(["comfortable", "compact"], SettingsStore.Info(SettingsKey.Density).Choices);
         Assert.Equal(["folder", "account", "all"], SettingsStore.Info(SettingsKey.SearchScope).Choices);
+        Assert.Equal(["desktop", "code"], SettingsStore.Info(SettingsKey.AssistantTarget).Choices);
         Assert.Equal(["reply", "refresh"], SettingsStore.Info(SettingsKey.CtrlR).Choices);
         Assert.Equal([SettingsKey.CtrlR], SettingsStore.Schema.Where(k => k.WindowsOnly).Select(k => k.Key));
         var backend = new InMemorySettingsBackend();
@@ -358,11 +365,15 @@ public sealed class SettingsTests
         s.ColorScheme = ColorScheme.Light;
         s.Density = Density.Compact;
         s.SearchScope = SearchScope.Account;
+        s.AssistantTarget = AssistantTarget.Code;
+        s.AssistantMenu = false;
         s.CtrlR = CtrlR.Refresh;
         s.WindowMaximized = true;
         Assert.True(backend.TryGetString("color-scheme", out var scheme) && scheme == "light");
         Assert.True(backend.TryGetString("message-list-density", out var density) && density == "compact");
         Assert.True(backend.TryGetString("search-scope", out var scope) && scope == "account");
+        Assert.True(backend.TryGetString("assistant-target", out var target) && target == "code");
+        Assert.True(backend.TryGetBoolean("assistant-menu", out var menu) && !menu);
         Assert.True(backend.TryGetString("ctrl-r", out var ctrlR) && ctrlR == "refresh");
         Assert.True(backend.TryGetBoolean("window-maximized", out var maximized) && maximized);
     }

@@ -23,3 +23,8 @@ struct PrefsConfirmation: Sendable {
 /// and answers whether the user confirmed and whether the extra check box
 /// ("Also delete drafts and downloaded data") was on.
 typealias PrefsConfirmRemoval = @MainActor (NSWindow?, PrefsConfirmation) async -> (confirmed: Bool, deleteLocalData: Bool)
+
+/// Asks "Restart Claude Desktop?" (`Assistant.restartTexts()`) as a sheet
+/// on `window` (nil: application-modal); true for Restart Claude Desktop,
+/// false for Later.
+typealias PrefsConfirmRestart = @MainActor (NSWindow?) async -> Bool

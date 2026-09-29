@@ -251,7 +251,15 @@ obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
 Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
 `ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows
 `McpRegistrationController`, který předá `--command` a u MSIX Claude Desktop
-`--claude-desktop-config`); viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
+`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (zatím
+jen macOS; čistá logika a texty v `ui/internal/assistant`, portovaná do
+`MalachiCore`, klíče gschema `assistant-menu` a `assistant-target`, GTK
+widgety a Windows UI následují) předá vybranou poštu do Claude Desktop
+nebo Claude Code odkazem `claude://` / `claude-cli://` s předvyplněným,
+neodeslaným dotazem, který nese jen ID; existuje jen se zapnutým
+přepínačem Registrovat v Claude (`assistant.Shown`); poštu Claude čte přes most,
+přílohu dostane jako soubor (Cowork, pracovní adresář Claude Code); démon
+ani most se kvůli tomu nemění (`docs/mcp.md`, Hand-off). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
 GPL-3.0-or-later): plné zrcadlo GTK UI — průvodce účtem, sidebar,
 seznam (plochý i vlákna), čtení s uzamčeným WKWebView (JS vypnutý,
 stejná CSP, scheme handler `malachi-cid:`, síť odříznutá proxy i content

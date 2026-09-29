@@ -740,6 +740,19 @@ final class MessageViewController: NSViewController {
             guard let self else { return }
             self.onOpenEmbedded?(s, a, remote, chip)
         }
+        // The Assistant (ui/internal/assistant): hidden while it is not
+        // shown (its menu off, or the bridge not registered), disabled while
+        // no app handles the chosen Claude app's links (the file itself goes
+        // without the bridge, and never to the other app).
+        chip.assistantItem = { [weak self] in
+            guard let self, self.state.assistant.shown else { return nil }
+            self.state.assistant.refreshHandlers()
+            return self.state.assistant.pick(needsBridge: false).ok
+        }
+        chip.onAskAssistant = { [weak self, weak chip] in
+            guard let self else { return }
+            self.delegate?.askAssistant(about: a, of: s, remote: remote, from: chip?.window ?? self.view.window)
+        }
         return chip
     }
 

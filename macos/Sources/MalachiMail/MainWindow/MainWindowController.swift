@@ -45,6 +45,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private let toolbarDelegate: MainToolbar
+    /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
+    /// Unread in This Folder.
+    private let assistantMenu: AssistantMenu
+    private var assistantToken: AssistantController.Token?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
 
     init(state: AppState) {
@@ -78,7 +82,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         w.contentViewController = content
         // The toolbar's tracking separators need the split view, so the
         // toolbar comes after the content (the plan's ordering).
-        toolbarDelegate = MainToolbar(splitView: split.splitView)
+        assistantMenu = AssistantMenu(state: state, includesUnread: true)
+        toolbarDelegate = MainToolbar(
+            splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown)
         super.init(window: w)
         w.delegate = self
         w.toolbar = toolbarDelegate.makeToolbar()
@@ -101,6 +107,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             self?.setListSeparator(visible: !collapsed)
         }
         setListSeparator(visible: !split.isListCollapsed)
+        // The Assistant button follows `AssistantController.shown`: the
+        // `assistant-menu` setting while the bridge is registered (the
+        // window lives as long as the application).
+        let assistant = state.assistant
+        assistantToken = assistant.onChange { [weak self] in
+            guard let self, let toolbar = self.window?.toolbar else { return }
+            self.toolbarDelegate.setAssistant(visible: assistant.shown, in: toolbar)
+        }
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
         split.listContainer.install(StatusPageViewController(
@@ -279,6 +293,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.trustSender()
     }
 
+    /// The Assistant menu's message actions (the item's tag) on the
+    /// selection.
+    @objc func askAssistant(_ sender: Any?) {
+        guard let a = AssistantMenu.action(tag: (sender as? NSMenuItem)?.tag) else { return }
+        messageActions?.askAssistant(a)
+    }
+
+    /// Summarize Unread in This Folder, the main window's only.
+    @objc func summarizeUnread(_ sender: Any?) {
+        messageActions?.summarizeUnread()
+    }
+
     // MARK: Validation
 
     /// Whether `action` is allowed for the selection (actions.go
@@ -300,6 +326,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.moveToTrash: return f.trash
         case Action.loadImages: return f.loadImages
         case Action.trustSender: return f.trustSender
+        // A message not in the Outbox, and the chosen Claude app can read
+        // the mail (ui/internal/assistant `Pick`, no fallback).
+        case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok
+        case Action.summarizeUnread:
+            return (messageActions?.canSummarizeUnread ?? false) && state.assistant.pick(needsBridge: true).ok
         default: return nil
         }
     }

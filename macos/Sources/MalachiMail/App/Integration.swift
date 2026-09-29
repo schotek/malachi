@@ -344,16 +344,12 @@ final class Integration {
         }
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
-            PreferencesWindowController.show(
-                client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
-                confirmRemoval: { window, c in
-                    let answer = await state.alerts.confirmDestructiveExtra(
-                        on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
-                        extraLabel: c.extraLabel, extraDefault: c.extraDefault)
-                    return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
-                },
-                confirmTrust: Integration.confirmTrust(state.alerts)
-            )
+            Integration.showPreferences(state)
+        }
+        // The Assistant menu's "Set Up the Assistant…".
+        state.hooks.openAISettings = { [weak state] in
+            guard let state else { return }
+            Integration.showPreferences(state).select(.ai)
         }
         state.hooks.addAccount = { [weak self] window in
             guard let self, let parent = window ?? self.mainWindow?.window else { return }
@@ -362,6 +358,28 @@ final class Integration {
                 from: parent, client: self.state.client, confirmTrust: Self.confirmTrust(self.state.alerts)
             ) { _, _ in }
         }
+    }
+
+    /// Opens the settings window (or brings it to the front) with what
+    /// its pages need from the application.
+    @discardableResult
+    private static func showPreferences(_ state: AppState) -> PreferencesWindowController {
+        PreferencesWindowController.show(
+            client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
+            assistant: state.assistant, claudeDesktop: state.claudeDesktop,
+            confirmRestart: { window in
+                let t = Assistant.restartTexts()
+                return await state.alerts.confirm(
+                    on: window, heading: t.heading, body: t.body, confirmLabel: t.restart, declineLabel: t.later)
+            },
+            confirmRemoval: { window, c in
+                let answer = await state.alerts.confirmDestructiveExtra(
+                    on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
+                    extraLabel: c.extraLabel, extraDefault: c.extraDefault)
+                return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
+            },
+            confirmTrust: Integration.confirmTrust(state.alerts)
+        )
     }
 
     // MARK: No Accounts page

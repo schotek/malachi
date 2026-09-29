@@ -48,7 +48,9 @@ private final class Scratch {
         s.markReadDelay = 999
         #expect(s.markReadDelay == Settings.markReadDelayMax)
         #expect(s.searchScope == .folder)
-        #expect(Settings.Key.allCases.count == 19)
+        #expect(s.assistantMenu)
+        #expect(s.assistantTarget == .desktop)
+        #expect(Settings.Key.allCases.count == 21)
         #expect(Set(Settings.registrationDefaults().keys) == Set(Settings.Key.allCases.map(\.rawValue)))
     }
 
@@ -96,6 +98,19 @@ private final class Scratch {
         #expect(s.searchScope == .folder)
         s.searchScope = .all
         #expect(s.searchScope == .all)
+
+        // The gschema's AssistantTarget nicks; anything else is Desktop.
+        scratch.defaults.set("code", forKey: "assistant-target")
+        #expect(s.assistantTarget == .code)
+        scratch.defaults.set("vim", forKey: "assistant-target")
+        #expect(s.assistantTarget == .desktop)
+        s.assistantTarget = .code
+        #expect(scratch.defaults.string(forKey: "assistant-target") == "code")
+        s.assistantTarget = Assistant.Target("other")
+        #expect(scratch.defaults.string(forKey: "assistant-target") == "desktop")
+        s.assistantMenu = false
+        #expect(!s.assistantMenu)
+        #expect(scratch.defaults.bool(forKey: "assistant-menu") == false)
 
         scratch.defaults.set("dance", forKey: "command-r")
         #expect(s.commandR == .reply)

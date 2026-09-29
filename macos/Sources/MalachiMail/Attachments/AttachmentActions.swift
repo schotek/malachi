@@ -95,6 +95,17 @@ final class AttachmentActions {
         }
     }
 
+    /// Writes the part to a private file for another application, as Open
+    /// does, without opening it: the Assistant's "Ask the Assistant…"
+    /// (`AssistantActions`) hands the path to Claude. The file carries the
+    /// quarantine attribute and goes with the directory for opening (after
+    /// `openMaxAge`, and at quit). Nil after a failure, which has had its
+    /// toast.
+    func writeForHandOff(_ a: Attachment, of s: MessageSummary, remote: Bool, from window: NSWindow?) async -> URL? {
+        guard let res = await fetchForViewing(a, of: s, remote: remote, from: window) else { return nil }
+        return await writeForViewing(name: fileName(res, a), data: res.data, from: window)
+    }
+
     /// The part through `MessageCache.partData` (attachments.go
     /// `partData`): the message downloaded first when the part is on the
     /// server (`remote`, the chip's `partState`).

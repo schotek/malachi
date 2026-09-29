@@ -43,6 +43,15 @@ import MalachiCore
     @objc optional func loadImages(_ sender: Any?)
     @objc optional func trustSender(_ sender: Any?)
 
+    // The Assistant menu (ui/internal/assistant). A message action's tag
+    // is its index in `Assistant.messageActions`; Summarize Unread is the
+    // main window's only; the target's tag is its index in
+    // `AssistantController.targets`. The last two are the application's.
+    @objc optional func askAssistant(_ sender: Any?)
+    @objc optional func summarizeUnread(_ sender: Any?)
+    @objc optional func setAssistantTarget(_ sender: Any?)
+    @objc optional func setUpAssistant(_ sender: Any?)
+
     // Compose window (compose.blp).
     @objc optional func sendMessage(_ sender: Any?)
     @objc optional func saveDraft(_ sender: Any?)
@@ -92,6 +101,11 @@ enum Action {
     static let moveToTrash = #selector(MalachiActions.moveToTrash(_:))
     static let loadImages = #selector(MalachiActions.loadImages(_:))
     static let trustSender = #selector(MalachiActions.trustSender(_:))
+
+    static let askAssistant = #selector(MalachiActions.askAssistant(_:))
+    static let summarizeUnread = #selector(MalachiActions.summarizeUnread(_:))
+    static let setAssistantTarget = #selector(MalachiActions.setAssistantTarget(_:))
+    static let setUpAssistant = #selector(MalachiActions.setUpAssistant(_:))
 
     static let sendMessage = #selector(MalachiActions.sendMessage(_:))
     static let saveDraft = #selector(MalachiActions.saveDraft(_:))

@@ -33,6 +33,10 @@ public final class Settings {
         case collapsedFolders = "collapsed-folders"
         case collapsedAccounts = "collapsed-accounts"
         case favouriteFolders = "favourite-folders"
+        /// The Assistant menu (ui/internal/assistant): shown at all, and
+        /// the Claude app it opens (Settings → AI → Assistant).
+        case assistantMenu = "assistant-menu"
+        case assistantTarget = "assistant-target"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
     }
@@ -84,6 +88,8 @@ public final class Settings {
             Key.collapsedFolders.rawValue: [String](),
             Key.collapsedAccounts.rawValue: [String](),
             Key.favouriteFolders.rawValue: [String](),
+            Key.assistantMenu.rawValue: true,
+            Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
             Key.commandR.rawValue: CommandR.reply.rawValue,
         ]
     }
@@ -238,6 +244,23 @@ public final class Settings {
     public var favouriteFolders: [String] {
         get { stringList(.favouriteFolders) }
         set { set(.favouriteFolders, newValue) }
+    }
+
+    // MARK: Assistant
+
+    /// Whether the Assistant menu is shown (the toolbar button, the Message
+    /// menu's submenu, the attachment menu's item).
+    public var assistantMenu: Bool {
+        get { bool(.assistantMenu) }
+        set { set(.assistantMenu, newValue) }
+    }
+
+    /// Where the Assistant menu opens Claude: the gschema enum
+    /// AssistantTarget's nicks, read with `Assistant.parseTarget` (an
+    /// unknown nick is Claude Desktop).
+    public var assistantTarget: Assistant.Target {
+        get { Assistant.parseTarget(string(.assistantTarget)) }
+        set { set(.assistantTarget, Assistant.parseTarget(newValue.rawValue).rawValue) }
     }
 
     // MARK: Change notification

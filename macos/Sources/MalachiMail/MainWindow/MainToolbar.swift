@@ -10,6 +10,9 @@ import MalachiCore
 /// act through the responder chain and are validated by whichever
 /// responder owns the action (the window controller). The search field
 /// reports to the window, which hands the text to the list.
+/// The Assistant button (ui/internal/assistant; no Blueprint yet) sits
+/// right before More Actions while the `assistant-menu` setting is on;
+/// its menu is the window's `AssistantMenu`.
 @MainActor
 final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     enum ID {
@@ -26,6 +29,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         static let junk = NSToolbarItem.Identifier("junk")
         static let archive = NSToolbarItem.Identifier("archive")
         static let star = NSToolbarItem.Identifier("star")
+        static let assistant = NSToolbarItem.Identifier("assistant")
         static let moreActions = NSToolbarItem.Identifier("moreActions")
     }
 
@@ -50,17 +54,21 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions, ID.search,
+        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions, ID.search,
     ]
 
     /// The items of the message section, for the message window's toolbar.
     static let messageSectionItems: [NSToolbarItem.Identifier] = [
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions,
+        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions,
     ]
 
     private weak var splitView: NSSplitView?
     private var items: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
+    /// The Assistant button's menu; nil for a toolbar without one.
+    private let assistantMenu: AssistantMenu?
+    /// Whether the Assistant button is in the toolbar (`assistant-menu`).
+    private var showsAssistant: Bool
 
     /// The search field's text once typing pauses, "" at once when it is
     /// cleared (search.go `onSearchChanged`); Return in the field
@@ -72,10 +80,15 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     /// `search-delay: 300`).
     static let searchDelay: TimeInterval = 0.3
 
-    /// - Parameter splitView: the split view whose dividers 0 and 1 the
-    ///   tracking separators follow; nil for a toolbar without sections.
-    init(splitView: NSSplitView?) {
+    /// - Parameters:
+    ///   - splitView: the split view whose dividers 0 and 1 the tracking
+    ///     separators follow; nil for a toolbar without sections.
+    ///   - assistantMenu: the Assistant button's menu, nil for none.
+    ///   - showsAssistant: whether the button starts in the toolbar.
+    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false) {
         self.splitView = splitView
+        self.assistantMenu = assistantMenu
+        self.showsAssistant = showsAssistant
     }
 
     /// A configured toolbar with this object as its delegate.
@@ -117,14 +130,36 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         }
     }
 
+    /// Puts the Assistant button into `toolbar` (right before More
+    /// Actions) or takes it out, as the `assistant-menu` setting changes.
+    func setAssistant(visible: Bool, in toolbar: NSToolbar) {
+        showsAssistant = visible
+        let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.assistant }
+        if visible {
+            guard current == nil, assistantMenu != nil else { return }
+            let at = toolbar.items.firstIndex { $0.itemIdentifier == ID.moreActions } ?? toolbar.items.count
+            toolbar.insertItem(withItemIdentifier: ID.assistant, at: at)
+        } else if let current {
+            toolbar.removeItem(at: current)
+        }
+    }
+
     // MARK: NSToolbarDelegate
 
-    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+    /// Every item this toolbar can hold, the Assistant button included.
+    private var allItems: [NSToolbarItem.Identifier] {
         splitView == nil ? Self.messageSectionItems : Self.defaultItems
     }
 
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        guard showsAssistant, assistantMenu != nil else {
+            return allItems.filter { $0 != ID.assistant }
+        }
+        return allItems
+    }
+
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
+        allItems
     }
 
     func toolbar(
@@ -196,6 +231,19 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
             return button(id, image: Icon.archive, label: L10n.T("Archive"), action: Action.archive)
         case ID.star:
             return StarToolbarItem(itemIdentifier: id)
+        case ID.assistant:
+            // The Assistant menu (ui/internal/assistant), filled on open.
+            guard let assistantMenu else { return nil }
+            let label = Assistant.texts().assistant
+            let it = NSMenuToolbarItem(itemIdentifier: id)
+            it.image = Icon.symbol("sparkles", size: .toolbar, description: label)
+            it.label = label
+            it.paletteLabel = label
+            it.toolTip = label
+            it.showsIndicator = false
+            it.isBordered = true
+            it.menu = assistantMenu.menu
+            return it
         case ID.moreActions:
             let it = NSMenuToolbarItem(itemIdentifier: id)
             it.image = Icon.moreActions

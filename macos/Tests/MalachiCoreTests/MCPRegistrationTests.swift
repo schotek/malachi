@@ -88,9 +88,13 @@ private final class Recorder {
     }
 }
 
+/// A controller over `bridge`; a failed status is not repeated unless the
+/// test asks for `statusRetryDelays`.
 @MainActor
-private func makeController(_ bridge: FakeBridge, timeout: Duration = .seconds(15)) -> (MCPRegistrationController, Recorder) {
-    let c = MCPRegistrationController(bridge: bridge.path, timeout: timeout)
+private func makeController(
+    _ bridge: FakeBridge, timeout: Duration = .seconds(15), statusRetryDelays: [Duration] = []
+) -> (MCPRegistrationController, Recorder) {
+    let c = MCPRegistrationController(bridge: bridge.path, timeout: timeout, statusRetryDelays: statusRetryDelays)
     let rec = Recorder()
     rec.attach(c)
     return (c, rec)
@@ -147,17 +151,19 @@ private func loadedController(_ bridge: FakeBridge, timeout: Duration = .seconds
         #expect(rec.toasts.isEmpty)
         #expect(bridge.calls == ["status --json"])
 
-        // Asked again (the page came up again): a fresh status.
+        // Asked again (the page came up again): a fresh status, and the
+        // row of a known state stays sensitive meanwhile.
         c.load()
-        #expect(!c.isEnabled)
-        try await waitUntil { c.isEnabled }
+        #expect(c.isEnabled)
+        try await waitUntil { rec.registered.count == 2 }
         #expect(bridge.calls == ["status --json", "status --json"])
-        #expect(rec.enabled == [true, false, true])
+        #expect(rec.enabled == [true])
         #expect(rec.registered == [true, true])
     }
 
     @Test func aFailedStatusIsOnlyLoggedAndTheRowStaysInsensitive() async throws {
-        // Fails the first time, answers the second (the page came up again).
+        // Fails the first time, answers the second (the page came up again;
+        // no automatic repeat here).
         let flag = FileManager.default.temporaryDirectory.appendingPathComponent("malachi-mcp-flag-\(UUID().uuidString.prefix(8))")
         let bridge = try FakeBridge(status: "[ -e '\(flag.path)' ] && \(prints(statusJSON(registered: true))) || { touch '\(flag.path)'; \(fails("read config: permission denied")); }")
         let (c, rec) = makeController(bridge)
@@ -177,6 +183,76 @@ private func loadedController(_ bridge: FakeBridge, timeout: Duration = .seconds
         #expect(rec.registered == [true])
         #expect(rec.enabled == [true])
         #expect(bridge.calls == ["status --json", "status --json"])
+    }
+
+    @Test func aFailedStatusIsRepeatedShortly() async throws {
+        // Fails the first time (a Claude app rewriting its file), answers
+        // the repeat.
+        let flag = FileManager.default.temporaryDirectory.appendingPathComponent("malachi-mcp-flag-\(UUID().uuidString.prefix(8))")
+        let bridge = try FakeBridge(status: "[ -e '\(flag.path)' ] && \(prints(statusJSON(registered: true))) || { touch '\(flag.path)'; \(fails("parse config: unexpected end of JSON input")); }")
+        let (c, rec) = makeController(bridge, statusRetryDelays: [.milliseconds(100)])
+        c.load()
+        try await waitUntil { c.isEnabled }
+        #expect(c.isRegistered)
+        #expect(bridge.calls == ["status --json", "status --json"])
+        #expect(rec.toasts.isEmpty)
+        #expect(rec.registered == [true])
+    }
+
+    @Test func aFailedStatusOfAKnownStateKeepsItAndGivesUpAfterTheRepeats() async throws {
+        // Answers the first time, fails from then on.
+        let flag = FileManager.default.temporaryDirectory.appendingPathComponent("malachi-mcp-flag-\(UUID().uuidString.prefix(8))")
+        let bridge = try FakeBridge(status: "[ -e '\(flag.path)' ] && { \(fails("parse config: unexpected end of JSON input")); } || { touch '\(flag.path)'; \(prints(statusJSON(registered: true))); }")
+        let (c, rec) = makeController(bridge, statusRetryDelays: [.milliseconds(50), .milliseconds(50)])
+        c.load()
+        try await waitUntil { c.isEnabled }
+        c.load()
+        // The check and its two repeats fail; the known state stays shown
+        // and the row sensitive throughout.
+        try await waitUntil { bridge.calls.count == 4 }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(bridge.calls.count == 4, "no repeat after the last delay")
+        #expect(c.isEnabled)
+        #expect(c.isRegistered)
+        #expect(c.status?.isRegistered == true)
+        #expect(rec.enabled == [true])
+        #expect(rec.registered == [true])
+        #expect(rec.toasts.isEmpty)
+    }
+
+    @Test func adoptShowsAStatusFromElsewhereAtOnce() async throws {
+        let bridge = try FakeBridge(status: prints(statusJSON(registered: false)), install: "sleep 0.3; \(prints(statusJSON(registered: true)))")
+        let (c, rec) = makeController(bridge)
+        let known = try JSONDecoder().decode(MCPStatus.self, from: Data(statusJSON(registered: true).utf8))
+        // Before the page asked: the application's last status is shown and
+        // the row is sensitive, without a call.
+        c.adopt(known)
+        #expect(c.isRegistered)
+        #expect(c.isEnabled)
+        #expect(rec.registered == [true])
+        #expect(rec.enabled == [true])
+        #expect(bridge.calls.isEmpty)
+        // The same status again changes nothing.
+        c.adopt(known)
+        #expect(rec.registered == [true])
+        // While a call runs its answer is newer: nothing taken.
+        c.set(registered: true)
+        let off = try JSONDecoder().decode(MCPStatus.self, from: Data(statusJSON(registered: false).utf8))
+        c.adopt(off)
+        #expect(c.isRegistered)
+        try await waitUntil { c.isEnabled }
+        // Afterwards a newer status from elsewhere is taken again.
+        c.adopt(off)
+        #expect(!c.isRegistered)
+        #expect(rec.registered.last == false)
+        // Without a bridge or once closed: nothing.
+        let missing = MCPRegistrationController(bridge: nil)
+        missing.adopt(known)
+        #expect(!missing.isRegistered)
+        #expect(!missing.isEnabled)
+        c.close()
+        c.adopt(known)
+        #expect(!c.isRegistered)
     }
 
     @Test func setRegistersThroughInstall() async throws {
@@ -345,6 +421,57 @@ private func loadedController(_ bridge: FakeBridge, timeout: Duration = .seconds
         c.set(registered: false)
         try await Task.sleep(for: .milliseconds(100))
         #expect(bridge.calls.count == 2)
+    }
+
+    @Test func changeReturnsTheStatusAfterTheCallbacks() async throws {
+        let bridge = try FakeBridge(status: prints(statusJSON(registered: false)), install: prints(statusJSON(registered: true)))
+        let (c, rec) = try await loadedController(bridge)
+        let s = await c.change(registered: true)
+        #expect(s?.isRegistered == true)
+        #expect(c.isRegistered)
+        #expect(c.isEnabled)
+        #expect(rec.registered == [false, true], "the switch followed before the caller went on")
+        #expect(bridge.calls == ["status --json", "install --json"])
+    }
+
+    @Test func changeReturnsNilWhenTheCallFails() async throws {
+        let bridge = try FakeBridge(status: prints(statusJSON(registered: true)), uninstall: fails("write: permission denied"))
+        let (c, rec) = try await loadedController(bridge)
+        #expect(await c.change(registered: false) == nil)
+        #expect(rec.toasts == ["The MCP bridge could not be unregistered: write: permission denied"])
+        #expect(c.isRegistered)
+        #expect(rec.registered == [true, true])
+    }
+
+    @Test func changeReturnsNilWithoutABridgeOvertakenOrClosed() async throws {
+        let missing = MCPRegistrationController(bridge: nil)
+        let rec = Recorder()
+        rec.attach(missing)
+        #expect(await missing.change(registered: true) == nil)
+        #expect(rec.toasts == ["The MCP bridge (malachi-mcp) was not found"])
+        #expect(rec.registered == [false])
+
+        let bridge = try FakeBridge(
+            status: prints(statusJSON(registered: false)),
+            install: "sleep 0.3; \(prints(statusJSON(registered: true)))",
+            uninstall: prints(statusJSON(registered: false))
+        )
+        let (c, _) = try await loadedController(bridge)
+        // Overtaken by a newer call: nil, and the newer one's answer counts.
+        let slow = Task { await c.change(registered: true) }
+        try await waitUntil { bridge.calls.count == 2 }
+        let fast = await c.change(registered: false)
+        #expect(fast?.isRegistered == false)
+        #expect(await slow.value == nil)
+        #expect(!c.isRegistered)
+
+        // Closed while the call runs: nil.
+        let pending = Task { await c.change(registered: true) }
+        try await waitUntil { bridge.calls.count == 4 }
+        c.close()
+        #expect(await pending.value == nil)
+        #expect(await c.change(registered: false) == nil)
+        #expect(bridge.calls.count == 4)
     }
 
     @Test func theReasonIsTheFirstLineOfStderrBounded() {

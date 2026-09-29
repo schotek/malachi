@@ -25,6 +25,10 @@
     <value nick="account" value="1"/>
     <value nick="all" value="2"/>
   </enum>
+  <enum id="io.github.schotek.Malachi.AssistantTarget">
+    <value nick="desktop" value="0"/>
+    <value nick="code" value="1"/>
+  </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
@@ -134,6 +138,18 @@
       <default>100</default>
       <range min="50" max="200"/>
       <summary>Message body text zoom in percent</summary>
+    </key>
+
+    <!-- Assistant menu: hand-off of the selected mail to Claude -->
+    <key name="assistant-menu" type="b">
+      <default>true</default>
+      <summary>Show the Assistant menu that hands mail to Claude</summary>
+      <description>The menu opens Claude Desktop or Claude Code on this computer with a prepared question about the selected mail.</description>
+    </key>
+    <key name="assistant-target" enum="io.github.schotek.Malachi.AssistantTarget">
+      <default>'desktop'</default>
+      <summary>Where the Assistant menu opens Claude</summary>
+      <description>Claude Desktop, or Claude Code in a terminal; the last choice made in the Assistant menu or in the settings.</description>
     </key>
   </schema>
 </schemalist>

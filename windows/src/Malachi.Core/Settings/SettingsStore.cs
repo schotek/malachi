@@ -72,6 +72,8 @@ public sealed class SettingsStore : IDisposable
         new(SettingsKey.MonochromeAvatars, "monochrome-avatars", "b", false),
         new(SettingsKey.MonospacePlainText, "monospace-plain-text", "b", false),
         new(SettingsKey.TextZoom, "text-zoom", "i", 100, minimum: TextZoomMin, maximum: TextZoomMax),
+        new(SettingsKey.AssistantMenu, "assistant-menu", "b", true),
+        new(SettingsKey.AssistantTarget, "assistant-target", "s", "desktop", choices: Nicks<AssistantTarget>.All),
         new(SettingsKey.CtrlR, "ctrl-r", "s", "reply", choices: Nicks<CtrlR>.All, windowsOnly: true),
     ];
 
@@ -270,6 +272,22 @@ public sealed class SettingsStore : IDisposable
     {
         get => GetInt32(SettingsKey.TextZoom);
         set => SetInt32(SettingsKey.TextZoom, value);
+    }
+
+    // Assistant
+
+    /// <summary>Whether the Assistant menu that hands mail to Claude is shown.</summary>
+    public bool AssistantMenu
+    {
+        get => GetBoolean(SettingsKey.AssistantMenu);
+        set => SetBoolean(SettingsKey.AssistantMenu, value);
+    }
+
+    /// <summary>Where the Assistant menu opens Claude, the last choice made in the menu or in the settings.</summary>
+    public AssistantTarget AssistantTarget
+    {
+        get => GetEnum<AssistantTarget>(SettingsKey.AssistantTarget);
+        set => SetEnum(SettingsKey.AssistantTarget, value);
     }
 
     // Sidebar state

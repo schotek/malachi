@@ -19,8 +19,9 @@ reader with a locked-down WebKit view, attachments, message actions,
 notifications with sound, compose with the rich-text editor, drafts
 (kept in the Drafts folder and opened from it for editing), reply and
 forward with the quoted original, `mailto:` links, the settings
-window, launch at login, running in the background, and the Czech
-translation generated from `po/` at build time. What is missing is listed
+window, launch at login, running in the background, the Assistant menu
+that hands mail to Claude Desktop or Claude Code ([AI agents](#ai-agents)),
+and the Czech translation generated from `po/` at build time. What is missing is listed
 under [Not on macOS, not yet](#not-on-macos-not-yet).
 
 Licence: GPL-3.0-or-later (everything outside `backend/`). Every source file
@@ -110,17 +111,19 @@ macos/
                                 notifications, the enums, the error codes, the
                                 handshake's types and proofs (Auth.swift)
     Model/, Compose/, Wizard/,  the pure logic of the GTK UI ported 1:1 (window model,
-    HTML/, Text/                threads, folding, favourites, search, address parsing, mailto:,
+    HTML/, Text/, Assistant/    threads, folding, favourites, search, address parsing, mailto:,
                                 quoting, wizard fields and results, the viewer and editor
-                                documents, formatting, error texts)
+                                documents, formatting, error texts, the Assistant's prompts
+                                and links from ui/internal/assistant)
     Controllers/                @MainActor view models over the RPC client, tested against
                                 an in-process fake daemon
     I18n/                       L10n (T/N/C), the catalogue loader, plural rules, strftime
     Settings/                   UserDefaults with the GSettings keys
     Platform/                   the open directory for attachments, RPC timeouts
-  Sources/MalachiMail/          AppKit: App/ (delegate, menu bar, alerts, login item),
-                                MainWindow/, Sidebar/, MessageList/, MessageView/, Windows/,
-                                Actions/, Attachments/, Compose/, WebViews/, Preferences/,
+  Sources/MalachiMail/          AppKit: App/ (delegate, menu bar, alerts, login item,
+                                quitting and starting Claude Desktop), MainWindow/, Sidebar/,
+                                MessageList/, MessageView/, Windows/, Actions/, Assistant/,
+                                Attachments/, Compose/, WebViews/, Preferences/,
                                 AccountWizard/ (the pages of the assistant; the browser
                                 sign-in is OAuthPageController), Notifications/,
                                 Appearance/, Shared/
@@ -222,8 +225,8 @@ next start after a crash.
 | Store lock | `~/Library/Application Support/Malachi Mail/store.db.daemon.lock`: held by the running daemon, released by the system with its process; a second daemon for the same store exits |
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
 | RPC key | beside the socket, its path plus `.key` (`~/.cache/malachi/run/rpc.sock.key`): a new key at every daemon start, mode 0600, removed when the daemon stops cleanly; the app reads it for every connection and keeps nothing ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
-| Attachments being opened or previewed | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
-| Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys plus `command-r` |
+| Attachments being opened or previewed, or handed to Claude | `~/Library/Caches/Malachi Mail/open/` (private, emptied at start and exit, entries older than an hour swept) |
+| Preferences | `defaults` domain `io.github.schotek.Malachi`, the GSettings keys (the Assistant's `assistant-menu` and `assistant-target` among them) plus `command-r` |
 | Passwords, sign-ins | login keychain, service `io.github.schotek.Malachi` (`password`, or `oauth2.refresh_token` for a browser sign-in) |
 | MCP bridge | `Contents/MacOS/malachi-mcp` in the bundle, `build/malachi-mcp` in a checkout |
 | Keyring helper | `Contents/MacOS/malachi-keychain` |
@@ -382,3 +385,57 @@ those files itself. The AI page exists in both UIs with the same strings,
 so it is not a deviation. Outside the bundle (`swift run`) there is no
 bridge beside the executable; the row is then insensitive and a toast
 says so.
+
+Claude Desktop reads its MCP servers only when it starts and, while it
+runs, rewrites its configuration file from memory, undoing an entry
+written or removed meanwhile ([docs/mcp.md](../docs/mcp.md)). Flipping
+*Register with Claude* while Claude Desktop runs (and the bridge reports
+it as installed) therefore asks *Restart Claude Desktop?* before anything
+is written. *Restart Claude Desktop* asks it to quit (the ordinary quit
+request, as from the Dock), waits until it has quit (at most 20 s), runs
+`install` or `uninstall` and starts it again in the background; when it
+did not quit in time a toast says so, and the change is written anyway
+and stays pending. *Later* writes the change at once and keeps it
+pending. While a change is pending, a *Claude Desktop* row under the
+switch says it picks up the change when it restarts and offers
+*Restart* (the same restart), and as soon as Claude Desktop quits by
+itself the app writes the change once more, which then sticks, and the
+row goes. Pending lasts for the app's run. Claude Code keeps the entry
+while it runs and is left alone. GTK has no equivalent yet: macOS leads
+here with the texts of `ui/internal/assistant` (`RestartTexts`), so it is
+not a deviation.
+
+The **Assistant** menu hands the selected mail to Claude on this Mac with
+a prepared question, prefilled and unsent: it opens Claude Desktop
+(`claude://`) or Claude Code in a terminal (`claude-cli://`), the user
+reads the question, completes it and sends it there, and Claude reads the
+mail itself through the registered bridge. The question carries only the
+opaque ids of the account and the messages (a folded conversation's
+members in the folder, newest first) or of the folder, never a subject, a
+name or a file name. It is the sparkles button before *More Actions* in
+the main window and in a message window, and *Message → Assistant* in the
+menu bar: *Summarize*, *Draft a Reply…*, *Tasks and Deadlines*, *Ask
+About This Message…*, *Summarize Unread in This Folder* (the main window
+only), then *Open In* with *Claude Desktop* and *Claude Code*. The
+Assistant exists only while *Register with Claude* is on: without the
+bridge in any Claude client the button, the submenu and the attachment
+item are gone, and the Assistant group of *Settings → AI* is insensitive
+with its switch off, saying why (its preference is kept for when the
+bridge is registered again). The menu always uses the app chosen under
+*Open In*, never the other one instead. An app whose links nothing
+handles cannot be chosen (Claude Code's handler exists once it has been
+used in a terminal); while the chosen app cannot read the mail (not
+installed, or the bridge not registered in it) the actions are disabled,
+a disabled line above *Set Up the Assistant…* says why, and *Set Up the
+Assistant…* opens *Settings → AI*. An attachment's menu has *Ask the
+Assistant…* after *Open*, disabled while the chosen app is not
+installed: the file is written as for *Open* (downloaded
+first when it is only on the server, with the quarantine attribute) and
+attached to a Cowork task in Claude Desktop, which asks you to confirm
+it, or becomes Claude Code's working directory. *Settings → AI →
+Assistant* has *Show the Assistant Menu* (`assistant-menu`) and *Open
+In* (`assistant-target`, which the menu's choice changes too), whose
+subtitle says why the chosen app cannot be used. The shared logic and every string are GTK's
+(`ui/internal/assistant`, `po/`); the GTK widgets follow later, so this is
+the first client to show them, not a deviation. The link formats and the
+limits are in [docs/mcp.md](../docs/mcp.md#hand-off-from-the-app-the-assistant-menu).

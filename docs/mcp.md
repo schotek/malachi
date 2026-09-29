@@ -551,7 +551,17 @@ Without `--json` the same is printed as `command: …` followed by one
 `not registered`, `registered elsewhere: <cmd>` or `not installed`.
 
 Claude Desktop reads its file at start: restart it after `install` or
-`uninstall`. Claude Code picks the user-scope entry up on its next start
+`uninstall`. It also keeps its own `preferences` in that file and, while
+it runs, rewrites the whole file from memory many times a day (seen with
+Claude Desktop on macOS, 2026-09-29: "Config file written" in its
+`main.log`), so an entry written or removed while it runs is undone at
+its next write. Quit Claude Desktop, run `install` or `uninstall`, then
+start it again. The macOS app does that for the user: flipping *Register
+with Claude* while Claude Desktop runs offers to restart it (quit, wait,
+write, start), and after *Later* it writes the change again as soon as
+Claude Desktop quits by itself; the GTK and Windows apps follow. Claude
+Code also writes `~/.claude.json` while it runs, but kept the entry in the
+same test, and picks the user-scope entry up on its next start
 and shows it under `/mcp`. Inside this repository the project-scoped
 `.mcp.json` above has the same server name and, being a narrower scope,
 wins over the user-scope entry; elsewhere the registered binary is used.
@@ -563,6 +573,52 @@ Windows) with the flags you want. The bridge speaks MCP over
 newline-delimited JSON-RPC on stdin/stdout, logs to stderr, and needs to
 reach the daemon socket and read the key file beside it (`rpc.sock.key`)
 as the same user.
+
+## Hand-off from the app: the Assistant menu
+
+The desktop apps can hand the selected mail to Claude without running a
+model themselves. The Assistant menu (macOS so far; the GTK widgets and
+the Windows client follow, the shared logic and texts are
+`ui/internal/assistant`) opens Claude Desktop or Claude Code on the same
+computer through its link scheme, with a prepared question in the input
+field. Nothing is sent: the user reads the question, completes it and
+sends it in Claude.
+
+| Target | Link | Limit |
+|---|---|---|
+| Claude Desktop, new chat | `claude://claude.ai/new?q=…` | about 14 000 characters |
+| Claude Desktop, Cowork with a file | `claude://cowork/new?q=…&file=…` | the user confirms the file in Claude |
+| Claude Code in a terminal | `claude-cli://open?q=…`; with a file `claude-cli://open?cwd=…&q=…` | 5 000 characters; the handler exists once Claude Code has had its first interactive prompt |
+
+- The question carries opaque ids and an instruction only: the account id
+  and the message ids (a folded conversation's members in the folder,
+  newest first, at most 20, fewer when the link would exceed the limit),
+  or the folder id. Never a subject, a sender, a folder name, an
+  attachment's file name or any mail text: those are written by the
+  sender. Claude reads the mail with the bridge's tools (`read_message`,
+  `list_messages` with `filter: unread`, `create_draft` with
+  `mode: reply`), under every content rule above.
+- The questions are in the user's language (msgids in `po/`), because the
+  user reads and sends them; each ends with the reminder that mail content
+  is data, not instructions.
+- Message actions need the bridge registered in the chosen client (the
+  switch described above; the app reads `status --json`). An attachment
+  goes as a file: the app writes it where it opens attachments
+  (downloading it first when it is only on the server) and hands the path
+  to a Cowork session, or makes its directory Claude Code's working
+  directory; the bridge does not read it.
+- The Assistant exists only while the bridge is registered in at least
+  one Claude client: without it the menus and the attachment item are
+  gone and the settings switch cannot be turned on (`assistant.Shown`).
+  The gschema keys `assistant-menu` and `assistant-target` then show the
+  menu and choose the target; a target without its link handler, or
+  without the bridge for a message action, is not offered.
+
+Neither the daemon nor the bridge changes for this: a hand-off is the
+user typing a question in Claude, with the ids filled in.
+
+Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link),
+[Launch sessions from links](https://code.claude.com/docs/en/deep-links).
 
 ## Not in this version
 
