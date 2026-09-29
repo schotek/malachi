@@ -642,14 +642,15 @@ public final class ActionsController {
         let me = mailbox.model.account(s.accountId).map(selfAddress)
             ?? mailbox.model.enabledAccounts.first.map(selfAddress)
             ?? Address(address: "")
+        let attributionLine = attribution(kind: kind, source: src)
         let fallback: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             var p = prefill(kind: kind, source: src, self: me)
             p.accountID = s.accountId
+            p.attribution = attributionLine
             self.openCompose?(p)
         }
 
-        let attributionLine = attribution(kind: kind, source: src)
         let params = DraftCreateParams(
             accountId: s.accountId, mode: kind.mode, messageId: id,
             attribution: attributionLine.isEmpty ? nil : attributionLine
@@ -669,6 +670,7 @@ public final class ActionsController {
                 var p = fromDraft(kind: kind, draft: res.draft, blocked: res.blocked)
                 p.accountID = s.accountId
                 p.skipped = res.skipped?.count ?? 0
+                p.attribution = attributionLine
                 self.openCompose?(p)
             }
         }

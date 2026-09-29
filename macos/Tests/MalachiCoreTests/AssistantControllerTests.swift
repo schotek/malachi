@@ -357,6 +357,56 @@ private final class Handlers {
         #expect(!bare.availability(.app).handler)
     }
 
+    /// The one-shot requests (the compose window's rewrite, the search in
+    /// the user's own words) exist while the panel does and Claude Code
+    /// was found; they need no bridge of their own, and a change of what
+    /// was found is reported.
+    @Test func canRunInAppNeedsThePanelAndClaudeCode() async throws {
+        let scratch = ScratchSettings()
+        let dir = try assistantScratchDir()
+        let claude = try writeScript(dir.appendingPathComponent("claude"), "exit 0")
+        let bridge = try StatusBridge(printing: statusJSON(desktop: true, code: false))
+        let prefix = dir.path + "/"
+        let locator = ClaudeCodeLocator(
+            settings: scratch.settings, environment: ["HOME": dir.path, "PATH": ""],
+            usable: { $0.hasPrefix(prefix) && ClaudeCodeLocator.isExecutableFile($0) })
+        let h = Handlers([])
+        let c = AssistantController(bridge: bridge.path, settings: scratch.settings, locator: locator) { h.lookup($0) }
+        var changes = 0
+        let token = c.onChange { changes += 1 }
+        defer { token.cancel() }
+        #expect(!c.claudeFound && !c.canRunInApp)
+        scratch.settings.assistantTarget = .app
+        c.refresh()
+        try await waitUntil { c.status != nil }
+        #expect(c.panelShown && !c.claudeFound && !c.canRunInApp, "Claude Code not found")
+
+        scratch.settings.assistantClaudePath = claude
+        let before = changes
+        c.refreshHandlers()
+        #expect(c.claudeFound && c.canRunInApp)
+        #expect(changes == before + 1)
+        c.refreshHandlers()
+        #expect(changes == before + 1, "nothing changed")
+
+        scratch.settings.assistantTarget = .desktop
+        #expect(!c.canRunInApp)
+        scratch.settings.assistantTarget = .app
+        scratch.settings.assistantMenu = false
+        #expect(!c.canRunInApp)
+        scratch.settings.assistantMenu = true
+        #expect(c.canRunInApp)
+        c.apply(try status(desktop: false, code: false))
+        #expect(!c.canRunInApp, "the Assistant is off while nothing is registered")
+
+        // Claude Code found without the bridge beside the application: the
+        // panel's target is not available, the one-shot requests would be,
+        // but the Assistant is not shown without a registration anyway.
+        let bare = AssistantController(bridge: nil, settings: scratch.settings, locator: locator) { h.lookup($0) }
+        bare.refreshHandlers()
+        #expect(bare.claudeFound && !bare.availability(.app).handler && !bare.canRunInApp)
+    }
+
     @Test func aCancelledObserverIsNotCalled() {
         let scratch = ScratchSettings()
         let (c, h) = make(bridge: nil, installed: [], scratch: scratch)

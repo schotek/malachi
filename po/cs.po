@@ -3207,6 +3207,71 @@ msgstr "Panel asistenta smí posílat poštu do Claude"
 msgid "Set when the user allowed it the first time."
 msgstr "Nastaví se, když to uživatel poprvé povolí."
 
+#. TRANSLATORS: A button of the assistant in the compose window: rewrites the text more politely.
+#: ui/internal/assistant/assistant.go
+msgid "More Polite"
+msgstr "Zdvořileji"
+
+#. TRANSLATORS: A button of the assistant in the compose window: rewrites the text shorter.
+#: ui/internal/assistant/assistant.go
+msgid "Shorter"
+msgstr "Stručněji"
+
+#. TRANSLATORS: A button of the assistant in the compose window: fixes spelling, grammar and punctuation.
+#: ui/internal/assistant/assistant.go
+msgid "Fix Mistakes"
+msgstr "Opravit chyby"
+
+#. TRANSLATORS: A button of the assistant in the compose window.
+#: ui/internal/assistant/assistant.go
+msgid "Translate to English"
+msgstr "Přeložit do angličtiny"
+
+#. TRANSLATORS: The title of the assistant's popover in the compose window when text is selected.
+#: ui/internal/assistant/assistant.go
+msgid "Rewrite Selection"
+msgstr "Upravit výběr"
+
+#. TRANSLATORS: The title of the assistant's popover in the compose window: the text the user wrote above the quoted message.
+#: ui/internal/assistant/assistant.go
+msgid "Rewrite Your Text"
+msgstr "Upravit váš text"
+
+#. TRANSLATORS: Placeholder of a field in the assistant's popover of the compose window: what to do with the text.
+#: ui/internal/assistant/assistant.go
+msgid "Your own instruction…"
+msgstr "Vlastní pokyn…"
+
+#: ui/internal/assistant/assistant.go
+msgid "Rewriting…"
+msgstr "Přepisuje se…"
+
+#. TRANSLATORS: A button: the rewritten text replaces the original.
+#: ui/internal/assistant/assistant.go
+msgid "Replace"
+msgstr "Nahradit"
+
+#. TRANSLATORS: A button: the rewritten text goes below the original, which stays.
+#: ui/internal/assistant/assistant.go
+msgid "Insert Below"
+msgstr "Vložit pod"
+
+#. TRANSLATORS: An item of the search field's menu: the assistant turns what was typed into a search.
+#: ui/internal/assistant/assistant.go
+msgid "Search in Your Own Words"
+msgstr "Hledat vlastními slovy"
+
+#. TRANSLATORS: The search field's placeholder while the assistant turns the typed words into a search.
+#: ui/internal/assistant/assistant.go
+msgid "Converting the search…"
+msgstr "Převádí se hledání…"
+
+#. TRANSLATORS: %s is a technical reason.
+#: ui/internal/assistant/assistant.go
+#, c-format
+msgid "The search could not be converted: %s"
+msgstr "Hledání se nepodařilo převést: %s"
+
 #~ msgid "This message has not been downloaded yet."
 #~ msgstr "Tato zpráva ještě nebyla stažena."
 

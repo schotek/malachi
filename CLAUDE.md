@@ -370,8 +370,8 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Asistent (Claude) — macOS hotovo (úroveň A a panel B1), GTK a Windows
-   doplňují, macOS rozpracovává B2 (viz předávka níže)
+8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK
+   a Windows doplňují (viz předávka níže)
 
 Asistent — předávka pro GTK a Windows (stav 2026-09-29, větev
 `feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
@@ -384,13 +384,22 @@ konfiguraci) a B1 (třetí cíl „V aplikaci (experimentální)“: panel vprav
 v hlavním okně nad `claude -p` se stream-json, souhlas při prvním dotazu,
 rychlé akce, odpověď jako podmnožina Markdownu bez HTML, karta
 „Otevřít koncept“, rozhovor drží kontext s lištou „Vybrali jste jinou
-zprávu“). Referencí pro port je čistý Go balíček `ui/internal/assistant`
+zprávu“) a B2 (jen s cílem „V aplikaci“: tlačítko ✦ v okně Nová zpráva
+upraví výběr, jinak vlastní text nad hlavičkou citace — Zdvořileji,
+Stručněji, Opravit chyby, Přeložit do angličtiny, vlastní pokyn; náhled
+a Nahradit / Vložit pod / Zahodit jedním krokem zpět; „Hledat vlastními
+slovy“ v nabídce lupy pole hledání a ⌥↩ převede napsaná slova na dotaz
+v syntaxi hledání přes `--json-schema`; obě žádosti jsou jednorázové
+a bez nástrojů). Referencí pro port je čistý Go balíček `ui/internal/assistant`
 (texty, dotazy, příkazová řádka, události, Markdown, pravidla dostupnosti;
 testovaný), chování UI popisuje `docs/mcp.md` (Hand-off, The panel in the
 app) a macOS: `MalachiCore/Assistant/`, `Controllers/AssistantController`,
 `ClaudeDesktopController`, `AssistantPanelController`,
-`Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `MalachiMail/Assistant/`,
-`Preferences/AIPaneViewController`. GTK: nejdřív v Toolbxu `make po`
+`Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `Controllers/AssistantRequest`,
+`ComposeRewriteController`, `SearchConversion`, `MalachiMail/Assistant/`,
+`Preferences/AIPaneViewController`; editor bridge má dva doplňky
+(`rewriteTarget`, `rewriteApply`) a okno Nová zpráva si pamatuje svou
+hlavičku citace (`ComposeParams.attribution`). GTK: nejdřív v Toolbxu `make po`
 (položky asistenta v `po/malachi.pot` a `cs.po` jsou dopsané ručně bez
 čísel řádků), `make lint`, `make test`; pak widgety — `MenuButton` ✦ jako
 `[end]` vedle `message_menu` v `window.blp` i `message_window.blp`,
@@ -400,9 +409,7 @@ Claude Desktop pro Linux přepisuje konfiguraci jako na macOS. Windows:
 klíče nastavení a `parity-exclusions.txt` jsou zapsané, ale neověřené
 (na Macu není dotnet) — nejdřív `build.ps1 test` a `lint`, pak porty do
 `Malachi.Core` (1:1 ze Swiftu) a UI; msgid asistenta z exclusions při
-použití odebírat. Rozpracováno na macOS (neportovat, texty a klíče se
-ještě mohou změnit): B2 — úprava vybraného či vlastního textu v okně Nová
-zpráva a hledání vlastními slovy v poli hledání. Cíl „V aplikaci“ zůstává
+použití odebírat. Cíl „V aplikaci“ zůstává
 experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
 Code z aplikace.
 

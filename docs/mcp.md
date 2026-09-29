@@ -676,6 +676,23 @@ question then names the added message to the model); an Assistant-menu
 action on another message adds it by itself, its question naming the
 ids anyway.
 
+Two one-shot requests use the same command line without the bridge (no
+`--mcp-config`, no `--allowedTools`: the model has no tool at all), one
+message on stdin and the `result` event as the answer, and exist under
+the same conditions as the panel:
+
+- **Rewriting in the compose window** sends only the passage: the
+  selection, or the user's own text above the attribution line of a reply
+  or forward (never the quoted original below it), with a fixed
+  instruction (more polite, shorter, fix mistakes, translate to English)
+  or the user's own. The answer is shown as plain text and goes into the
+  editor as escaped text only when the user chooses Replace or Insert
+  Below, as one undoable step.
+- **Searching in your own words** sends only the typed words;
+  `--json-schema` makes the answer a `query` in the search syntax of
+  `search.query`, which the app puts into the search field and runs as if
+  typed. No mail leaves the computer for it.
+
 The panel, like the hand-offs, exists only while *Register with Claude*
 is on, although it brings its own `--mcp-config`.
 

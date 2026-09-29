@@ -3124,3 +3124,68 @@ msgstr ""
 #: data/io.github.schotek.Malachi.gschema.xml:173
 msgid "Set when the user allowed it the first time."
 msgstr ""
+
+#. TRANSLATORS: A button of the assistant in the compose window: rewrites the text more politely.
+#: ui/internal/assistant/assistant.go
+msgid "More Polite"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant in the compose window: rewrites the text shorter.
+#: ui/internal/assistant/assistant.go
+msgid "Shorter"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant in the compose window: fixes spelling, grammar and punctuation.
+#: ui/internal/assistant/assistant.go
+msgid "Fix Mistakes"
+msgstr ""
+
+#. TRANSLATORS: A button of the assistant in the compose window.
+#: ui/internal/assistant/assistant.go
+msgid "Translate to English"
+msgstr ""
+
+#. TRANSLATORS: The title of the assistant's popover in the compose window when text is selected.
+#: ui/internal/assistant/assistant.go
+msgid "Rewrite Selection"
+msgstr ""
+
+#. TRANSLATORS: The title of the assistant's popover in the compose window: the text the user wrote above the quoted message.
+#: ui/internal/assistant/assistant.go
+msgid "Rewrite Your Text"
+msgstr ""
+
+#. TRANSLATORS: Placeholder of a field in the assistant's popover of the compose window: what to do with the text.
+#: ui/internal/assistant/assistant.go
+msgid "Your own instruction…"
+msgstr ""
+
+#: ui/internal/assistant/assistant.go
+msgid "Rewriting…"
+msgstr ""
+
+#. TRANSLATORS: A button: the rewritten text replaces the original.
+#: ui/internal/assistant/assistant.go
+msgid "Replace"
+msgstr ""
+
+#. TRANSLATORS: A button: the rewritten text goes below the original, which stays.
+#: ui/internal/assistant/assistant.go
+msgid "Insert Below"
+msgstr ""
+
+#. TRANSLATORS: An item of the search field's menu: the assistant turns what was typed into a search.
+#: ui/internal/assistant/assistant.go
+msgid "Search in Your Own Words"
+msgstr ""
+
+#. TRANSLATORS: The search field's placeholder while the assistant turns the typed words into a search.
+#: ui/internal/assistant/assistant.go
+msgid "Converting the search…"
+msgstr ""
+
+#. TRANSLATORS: %s is a technical reason.
+#: ui/internal/assistant/assistant.go
+#, c-format
+msgid "The search could not be converted: %s"
+msgstr ""

@@ -125,8 +125,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// takes one whose write was still in flight.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         purgeOpenDir()
-        // The assistant panel's Claude Code ends with the application.
+        // The assistant panel's Claude Code ends with the application, and
+        // so does a search in the user's own words under way.
         integration?.assistantPanel.close()
+        mainWindow?.cancelSearchInOwnWords()
         guard let state else {
             return .terminateNow
         }

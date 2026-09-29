@@ -91,12 +91,19 @@ public struct ComposeParams: Sendable, Equatable {
     /// a cap, unreadable, or kept on the mail server); the window says so
     /// once (compose.Params `Skipped`).
     public var skipped: Int
+    /// The line above the quoted original of a reply or a forward (the
+    /// `attribution` handed to draft.create, `attribution(kind:source:)`),
+    /// "" when not known (a new message, a draft opened from Drafts). A
+    /// macOS addition for the assistant's rewrite (ui/internal/assistant):
+    /// the user's own text is what the editor holds above it.
+    public var attribution: String
 
     public init(
         kind: ComposeKind = .new, accountID: AccountID? = nil, to: [Address] = [], cc: [Address] = [],
         bcc: [Address] = [], subject: String = "", bodyHTML: String = "", inReplyTo: MessageID? = nil,
         forwarding: MessageID? = nil, attachments: [DraftAttachment] = [], blocked: BlockedContent = BlockedContent(),
-        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil, skipped: Int = 0
+        draftID: DraftID? = nil, version: Int = 0, replaces: MessageID? = nil, skipped: Int = 0,
+        attribution: String = ""
     ) {
         self.kind = kind
         self.accountID = accountID
@@ -113,5 +120,6 @@ public struct ComposeParams: Sendable, Equatable {
         self.version = version
         self.replaces = replaces
         self.skipped = skipped
+        self.attribution = attribution
     }
 }

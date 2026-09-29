@@ -16,6 +16,9 @@ import os
 /// logged and skipped. Its stderr is kept, at most `stderrLimit` bytes,
 /// for the reason of an early exit (its first line, `reasonLimit` bytes).
 ///
+/// A one-shot request writes one turn and closes stdin (`closeInput`);
+/// Claude Code then ends after its answer.
+///
 /// `terminate()` closes stdin and sends SIGTERM, and SIGKILL after
 /// `killGrace` when the process is still there. Its end is reported once,
 /// after every event of its stdout (`onExit`), whether it exited by itself,
@@ -91,6 +94,8 @@ public final class ClaudeCodeProcess {
     private var state: ChildState?
     private var consumer: Task<Void, Never>?
     private var terminating = false
+    /// `closeInput` was called: nothing more is sent.
+    private var inputClosed = false
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "assistant")
 
     public init(
@@ -172,11 +177,20 @@ public final class ClaudeCodeProcess {
     /// terminated). The write happens off the main actor, in order.
     @discardableResult
     public func send(_ line: Data) -> Bool {
-        guard running, !terminating, let input else { return false }
+        guard running, !terminating, !inputClosed, let input else { return false }
         var data = line
         data.append(0x0A)
         input.write(data)
         return true
+    }
+
+    /// Closes stdin after the turns written so far: Claude Code answers
+    /// them and ends (a one-shot request, `AssistantRequest`). Nothing can
+    /// be sent afterwards; the end is reported through `onExit`.
+    public func closeInput() {
+        guard running, !inputClosed, let input else { return }
+        inputClosed = true
+        input.close()
     }
 
     /// Ends the conversation now: stdin closed, SIGTERM, SIGKILL after the

@@ -15,7 +15,10 @@
 // names (events.go), the Markdown subset the answers are shown in
 // (markdown.go), where claude may be and the child's environment
 // (claude.go). Running the process is the client's; authentication is
-// entirely Claude Code's, Malachi Mail never touches credentials.
+// entirely Claude Code's, Malachi Mail never touches credentials. With
+// App chosen, two one-shot requests run on the same Claude Code without
+// the bridge: the compose window's rewrite of a passage (rewrite.go) and
+// the search in the user's own words (search.go).
 //
 // A prompt carries only opaque ids from the daemon's API and an
 // instruction, never mail content: subjects, sender names, folder names
@@ -586,6 +589,93 @@ func PanelTexts(tr Translator) PanelStrings {
 		SignedIn:          tr.T("Signed in"),
 		NotSignedInShort:  tr.T("Not signed in: run claude in Terminal and sign in"),
 	}
+}
+
+// RewriteLabel is the button of a preset rewrite in the compose window's
+// popover; "" for Custom (its field has ComposeTexts().Custom) and an
+// unknown one.
+func RewriteLabel(tr Translator, r Rewrite) string {
+	switch r {
+	case Politer:
+		// TRANSLATORS: A button of the assistant in the compose window: rewrites the text more politely.
+		return tr.T("More Polite")
+	case Shorter:
+		// TRANSLATORS: A button of the assistant in the compose window: rewrites the text shorter.
+		return tr.T("Shorter")
+	case Fix:
+		// TRANSLATORS: A button of the assistant in the compose window: fixes spelling, grammar and punctuation.
+		return tr.T("Fix Mistakes")
+	case ToEnglish:
+		// TRANSLATORS: A button of the assistant in the compose window.
+		return tr.T("Translate to English")
+	}
+	return ""
+}
+
+// ComposeStrings are the fixed texts of the compose window's rewrite
+// (target App): a popover under the toolbar's Assistant button, with the
+// presets (RewriteLabel), a field for the user's own instruction, the
+// answer and what to do with it. Its button that closes it without a
+// change keeps the existing msgid of Discard ("_Discard"), and its errors
+// are the panel's (PanelTexts().NotFound, NotSignedIn, StoppedText).
+type ComposeStrings struct {
+	// RewriteSelection is the popover's title when the editor has a
+	// selection; RewriteText when it works on the user's own text above
+	// the quoted original.
+	RewriteSelection, RewriteText string
+	// Custom is the placeholder of the field for the user's own
+	// instruction; Rewriting the line while the answer arrives.
+	Custom, Rewriting string
+	// Replace puts the answer in place of the passage (the default
+	// button); InsertBelow puts it after the passage.
+	Replace, InsertBelow string
+}
+
+// ComposeTexts returns the fixed texts of the compose window's rewrite,
+// translated.
+func ComposeTexts(tr Translator) ComposeStrings {
+	return ComposeStrings{
+		// TRANSLATORS: The title of the assistant's popover in the compose window when text is selected.
+		RewriteSelection: tr.T("Rewrite Selection"),
+		// TRANSLATORS: The title of the assistant's popover in the compose window: the text the user wrote above the quoted message.
+		RewriteText: tr.T("Rewrite Your Text"),
+		// TRANSLATORS: Placeholder of a field in the assistant's popover of the compose window: what to do with the text.
+		Custom:    tr.T("Your own instruction…"),
+		Rewriting: tr.T("Rewriting…"),
+		// TRANSLATORS: A button: the rewritten text replaces the original.
+		Replace: tr.T("Replace"),
+		// TRANSLATORS: A button: the rewritten text goes below the original, which stays.
+		InsertBelow: tr.T("Insert Below"),
+	}
+}
+
+// SearchStrings are the fixed texts of the search in the user's own words
+// (target App): the item of the search field's menu (also ⌥↩ in the
+// field on the Mac) and the field's placeholder while the words are
+// converted. A failure is SearchFailedText.
+type SearchStrings struct {
+	OwnWords, Converting string
+}
+
+// SearchTexts returns the fixed texts of the search in the user's own
+// words, translated.
+func SearchTexts(tr Translator) SearchStrings {
+	return SearchStrings{
+		// TRANSLATORS: An item of the search field's menu: the assistant turns what was typed into a search.
+		OwnWords: tr.T("Search in Your Own Words"),
+		// TRANSLATORS: The search field's placeholder while the assistant turns the typed words into a search.
+		Converting: tr.T("Converting the search…"),
+	}
+}
+
+// SearchFailedText is the toast when the words could not be turned into a
+// search (the words stay in the field). reason is technical (Claude Code
+// not found or not signed in, the result's text, stderr, a timeout) and
+// shown as data, as StoppedText shows it: its first non-empty line without
+// control characters, at most 200 bytes; "unknown" when nothing is left.
+func SearchFailedText(tr Translator, reason string) string {
+	// TRANSLATORS: %s is a technical reason.
+	return fmt.Sprintf(tr.T("The search could not be converted: %s"), firstLine(reason, maxReason))
 }
 
 // Prompt builds the prompt of a message action (Summarize, DraftReply,

@@ -25,6 +25,15 @@ package assistant
 // is not written to disk. --system-prompt replaces Claude Code's coding
 // prompt. Verified with Claude Code 2.1.178.
 //
+// The compose window's rewrite and the search in the user's own words
+// (rewrite.go, search.go) are one-shot requests over the same protocol:
+// the same command line without the bridge (no --mcp-config, no
+// --allowedTools: Claude Code has no tool at all and reads no mail), with
+// --json-schema when the answer has a shape (the search), one UserMessage
+// on stdin, which is then closed, and the answer in the result event
+// (ResultText, or Structured for a --json-schema); the process ends after
+// it.
+//
 // This file holds no translatable text: the system prompt and the context
 // lines are for the model, in English, like the bridge's server
 // instructions.
@@ -63,18 +72,27 @@ var AllowedTools = []string{
 type Options struct {
 	// Bridge is the path of malachi-mcp, which Claude Code starts as its
 	// only MCP server; Socket the daemon's socket passed to it with
-	// --socket, "" for the bridge's default.
+	// --socket, "" for the bridge's default. Without a Bridge (a one-shot
+	// request that reads no mail: the compose window's rewrite, the search
+	// in the user's own words) Claude Code gets no MCP server and no tool:
+	// neither --mcp-config nor --allowedTools, and Socket is unused.
 	Bridge, Socket string
 	// Model is the --model alias, read as ParseModel reads it.
 	Model Model
-	// SystemPrompt is the whole system prompt (SystemPrompt).
+	// SystemPrompt is the whole system prompt (SystemPrompt,
+	// RewriteSystemPrompt, SearchSystemPrompt).
 	SystemPrompt string
+	// JSONSchema, when set, asks for an answer of that shape
+	// (--json-schema, after everything else): the result event's
+	// structured_output (Event.Structured), as for SearchSchema.
+	JSONSchema string
 }
 
 // Args are the arguments of claude (without the executable itself) for
-// one conversation of the panel; see the comment at the top of this file.
+// one conversation of the panel, or for a one-shot request without the
+// bridge; see the comment at the top of this file.
 func Args(o Options) []string {
-	return []string{
+	args := []string{
 		"-p", "--verbose",
 		"--output-format", "stream-json",
 		"--include-partial-messages",
@@ -84,13 +102,22 @@ func Args(o Options) []string {
 		"--disable-slash-commands",
 		"--setting-sources", "",
 		"--strict-mcp-config",
-		"--mcp-config", mcpConfig(o.Bridge, o.Socket),
-		"--allowedTools", strings.Join(AllowedTools, ","),
+	}
+	if o.Bridge != "" {
+		args = append(args,
+			"--mcp-config", mcpConfig(o.Bridge, o.Socket),
+			"--allowedTools", strings.Join(AllowedTools, ","))
+	}
+	args = append(args,
 		"--permission-mode", "dontAsk",
 		"--no-session-persistence",
 		"--model", string(ParseModel(string(o.Model))),
 		"--system-prompt", o.SystemPrompt,
+	)
+	if o.JSONSchema != "" {
+		args = append(args, "--json-schema", o.JSONSchema)
 	}
+	return args
 }
 
 // mcpConfig is the JSON of --mcp-config: the bridge as the stdio server

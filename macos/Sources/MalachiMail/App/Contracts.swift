@@ -196,6 +196,17 @@ protocol EditorView: AnyObject {
     func exec(_ command: String, _ argument: String?)
     /// editor.FocusStart: caret to the start of the body (replies).
     func focusStart()
+    /// The assistant's rewrite (a macOS addition to the bridge,
+    /// ui/internal/assistant): notes the passage to rewrite, the selection
+    /// when it holds more than white space, otherwise the user's own text
+    /// before the `div` holding `attribution` (the whole body when "" or
+    /// not found), and hands it over; nil when the page is not ready or
+    /// the script failed.
+    func rewriteTarget(attribution: String, _ done: @escaping @MainActor (RewriteTarget?) -> Void)
+    /// Puts `text` in place of the passage `rewriteTarget` noted, or below
+    /// it, as plain text (`rewriteInsertion`): one edit the page's undo
+    /// takes back, reported as a change like typing.
+    func applyRewrite(_ text: String, below: Bool)
 
     /// editor.RegisterCID / RegisterFetcher / UnregisterCID for the
     /// `cid:` scheme of this process (shared registry).

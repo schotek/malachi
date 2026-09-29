@@ -27,6 +27,13 @@
 // the bridge is the only MCP server, only `allowedTools` run and the
 // session is not written to disk (verified with Claude Code 2.1.178).
 //
+// The compose window's rewrite and the search in the user's own words
+// (AssistantRewrite.swift, AssistantSearch.swift) are one-shot requests
+// over the same protocol (`AssistantRequest`): the same command line
+// without the bridge (no --mcp-config, no --allowedTools: no tool at all),
+// with --json-schema when the answer has a shape, one `userMessage` on
+// stdin, which is then closed, and the answer in the result event.
+//
 // Authentication is entirely Claude Code's: the command line never carries
 // a key, the environment passes nothing of the kind, and whether Claude
 // Code is signed in is only asked (`claude auth status --json`). The system
@@ -110,29 +117,40 @@ extension Assistant {
     /// assistant.Options: what the command line is built from.
     public struct Options: Sendable, Equatable {
         /// The path of `malachi-mcp`, which Claude Code starts as its only
-        /// MCP server.
+        /// MCP server. "" for a one-shot request that reads no mail (the
+        /// compose window's rewrite, the search in the user's own words):
+        /// no MCP server and no tool, neither --mcp-config nor
+        /// --allowedTools, and `socket` unused.
         public var bridge: String
         /// The daemon's socket, passed to the bridge with --socket; "" for
         /// the bridge's default.
         public var socket: String
         /// The `--model` alias, read as `parseModel` reads it.
         public var model: Model
-        /// The whole system prompt (`systemPrompt`).
+        /// The whole system prompt (`systemPrompt`, `rewriteSystemPrompt`,
+        /// `searchSystemPrompt`).
         public var systemPrompt: String
+        /// When set, the answer's shape (--json-schema, after everything
+        /// else): the result event's structured_output, as for
+        /// `searchSchema`.
+        public var jsonSchema: String
 
-        public init(bridge: String, socket: String = "", model: Model = .sonnet, systemPrompt: String) {
+        public init(
+            bridge: String, socket: String = "", model: Model = .sonnet, systemPrompt: String, jsonSchema: String = ""
+        ) {
             self.bridge = bridge
             self.socket = socket
             self.model = model
             self.systemPrompt = systemPrompt
+            self.jsonSchema = jsonSchema
         }
     }
 
     /// assistant.Args: the arguments of `claude` (without the executable
-    /// itself) for one conversation of the panel; see the comment at the
-    /// top of this file.
+    /// itself) for one conversation of the panel, or for a one-shot request
+    /// without the bridge; see the comment at the top of this file.
     public static func args(_ o: Options) -> [String] {
-        [
+        var args = [
             "-p", "--verbose",
             "--output-format", "stream-json",
             "--include-partial-messages",
@@ -142,13 +160,23 @@ extension Assistant {
             "--disable-slash-commands",
             "--setting-sources", "",
             "--strict-mcp-config",
-            "--mcp-config", mcpConfig(bridge: o.bridge, socket: o.socket),
-            "--allowedTools", allowedTools.joined(separator: ","),
+        ]
+        if !o.bridge.isEmpty {
+            args += [
+                "--mcp-config", mcpConfig(bridge: o.bridge, socket: o.socket),
+                "--allowedTools", allowedTools.joined(separator: ","),
+            ]
+        }
+        args += [
             "--permission-mode", "dontAsk",
             "--no-session-persistence",
             "--model", parseModel(o.model.rawValue).rawValue,
             "--system-prompt", o.systemPrompt,
         ]
+        if !o.jsonSchema.isEmpty {
+            args += ["--json-schema", o.jsonSchema]
+        }
+        return args
     }
 
     /// mcpConfig: the JSON of --mcp-config, as encoding/json writes it: the

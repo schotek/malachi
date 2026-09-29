@@ -16,7 +16,11 @@ import Quartz
 /// panel (`install(assistant:)`), which exists while
 /// `AssistantController.panelShown` (the Assistant shown, In App chosen):
 /// the window follows that state with the split view's inspector and the
-/// toolbar's inspector section.
+/// toolbar's inspector section. While `AssistantController.canRunInApp`
+/// the search field also offers "Search in Your Own Words" (its
+/// magnifier's menu, ⌥↩): the typed words go to the user's Claude Code
+/// (`SearchConversion`), and the query it answers replaces them and is
+/// searched as if typed and Return pressed.
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
 @MainActor
@@ -54,6 +58,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private let assistantMenu: AssistantMenu
     private var assistantToken: AssistantController.Token?
     private var assistantTargetToken: Settings.ChangeToken?
+    /// The search in the user's own words, made on first use.
+    private var conversion: SearchConversion?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
 
     init(state: AppState) {
@@ -128,6 +134,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         assistantTargetToken = state.settings.onChange(.assistantTarget) { [weak self] in
             self?.updateAssistantPanel()
         }
+        toolbarDelegate.onSearchOwnWords = { [weak self] words in
+            self?.searchInOwnWords(words)
+        }
+        toolbarDelegate.setOwnWords(available: assistant.canRunInApp)
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
         split.listContainer.install(StatusPageViewController(
@@ -184,6 +194,68 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         if let toolbar = window?.toolbar {
             toolbarDelegate.setAssistantPanel(visible: allowed, in: toolbar)
         }
+        let ownWords = state.assistant.canRunInApp
+        toolbarDelegate.setOwnWords(available: ownWords)
+        if !ownWords, toolbarDelegate.converting {
+            conversion?.cancel()
+            toolbarDelegate.endConverting(text: nil)
+        }
+    }
+
+    // MARK: Search in your own words
+
+    /// "Search in Your Own Words" with the field's `words`: the field shows
+    /// that it converts, then the query replaces the words and is searched
+    /// for (the list unfolds when a narrow window folded it, as the status
+    /// bar's Outbox does); a failure is a toast and the words stay. The
+    /// first request ever asks for consent on this window.
+    private func searchInOwnWords(_ words: String) {
+        guard state.assistant.canRunInApp, !toolbarDelegate.converting else { return }
+        let conversion = searchConversion()
+        toolbarDelegate.beginConverting()
+        let started = conversion.convert(words) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .query(let query):
+                self.toolbarDelegate.endConverting(text: query)
+                if self.split.isListCollapsed {
+                    self.split.toggleMessageList(nil)
+                }
+                self.onSearchReturn?(query)
+            case .failed(let text):
+                self.toolbarDelegate.endConverting(text: nil)
+                self.toasts.show(text)
+            case .declined:
+                self.toolbarDelegate.endConverting(text: nil)
+            }
+        }
+        if !started {
+            toolbarDelegate.endConverting(text: nil)
+        }
+    }
+
+    /// Ends a search in the user's own words under way (the application
+    /// quits); the typed words go back into the field.
+    func cancelSearchInOwnWords() {
+        conversion?.cancel()
+        toolbarDelegate.endConverting(text: nil)
+    }
+
+    private func searchConversion() -> SearchConversion {
+        if let conversion {
+            return conversion
+        }
+        let request = AssistantRequest(settings: state.settings, locator: state.claudeCode)
+        let alerts = state.alerts
+        request.consent = { [weak self] in
+            let t = Assistant.panelTexts()
+            return await alerts.confirm(
+                on: self?.window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow,
+                declineLabel: t.cancel)
+        }
+        let c = SearchConversion(request: request)
+        conversion = c
+        return c
     }
 
     private func setListSeparator(visible: Bool) {
