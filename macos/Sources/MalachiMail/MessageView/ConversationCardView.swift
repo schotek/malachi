@@ -9,15 +9,25 @@ import MalachiCore
 protocol ConversationCardHost: AnyObject {
     var delegate: (any MessageActionDelegate)? { get }
     var cache: MessageCache { get }
+    /// The Assistant, for "Ask the Assistant…" on the attachment chips.
+    var assistant: AssistantController { get }
     /// The text-zoom setting, for a web view made now.
     var textZoom: Int { get }
     /// The plain-text body's font (text zoom, monospace).
     var bodyFont: NSFont { get }
     /// The buttons the card of `s` offers (`Conversation.cardActions`).
     func actions(for s: MessageSummary) -> Capabilities.Actions
+    /// The entry the conversation holds for the card of member `id`
+    /// (`ConversationController.loaded`), nil when none was asked for or
+    /// it was let go.
+    func held(_ id: MessageID) -> LoadedMessage?
     /// The recipients' disclosure opened: the full message (Cc) is asked
     /// for.
     func cardNeedsDetails(_ card: ConversationCardView)
+    /// The user folds or opens the card that opened the conversation (its
+    /// arrow, a click on its preview): the choice holds while the
+    /// conversation is shown.
+    func cardSetFolded(_ card: ConversationCardView, _ folded: Bool)
     /// Runs `change`, which alters the card's height, keeping what the user
     /// reads in place.
     func cardHeightChanging(_ change: () -> Void)
@@ -55,6 +65,12 @@ protocol ConversationCardHost: AnyObject {
 /// keeps the card live (`setLive`, near the viewport); otherwise the body
 /// keeps the height it last had. The card is an accessibility group named
 /// by its sender and date.
+///
+/// The card that opened the conversation folds (conversation_card.go
+/// `setFold`, `setFolded`): an arrow at the start of its header, and while
+/// folded only the header and a preview of its text (the summary's
+/// snippet, two lines at most) show. A folded card holds no web view and
+/// asks for no body; the arrow, or a click on the preview, opens it.
 @MainActor
 final class ConversationCardView: NSView {
     let id: MessageID
@@ -69,6 +85,13 @@ final class ConversationCardView: NSView {
     private(set) var live = false
     /// The recipients' disclosure is open.
     private(set) var detailsOpen = false
+    /// The card opened the conversation (`ConversationLayout.Display.root`):
+    /// its header has the fold arrow.
+    private(set) var foldable = false
+    /// Folded to its header and the preview: no body, no web view
+    /// (`setFolded`). Only ever set on the card that opened the
+    /// conversation.
+    private(set) var folded = false
 
     /// The short date of the list instead of the full date and time (a
     /// narrow pane, `ConversationLayout.compactDates`).
@@ -85,6 +108,15 @@ final class ConversationCardView: NSView {
     private let top = FillStackView()
     private let root = FillStackView()
     private var hovering = false
+
+    // The fold: the preview under the header while folded, what holds the
+    // banner, the bars and the body (hidden as a whole while folded), and
+    // the parts of the header stack the fold hid, shown again when it
+    // opens.
+    private let preview = NSTextField(wrappingLabelWithString: "")
+    private let previewBox = NSView()
+    private let content = FillStackView()
+    private var foldHidden: [NSView] = []
 
     // Made when first needed, in the order of `TopSlot` and `Slot`.
     private var details: AddressHeaderView?
@@ -116,8 +148,9 @@ final class ConversationCardView: NSView {
         case header, details, chips, hint
     }
 
+    /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case top, banner, remote, pictures, text, body
+        case banner, remote, pictures, text, body
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -163,6 +196,8 @@ final class ConversationCardView: NSView {
         clipsToBounds = true
         layer?.masksToBounds = true
 
+        header.foldButton.target = self
+        header.foldButton.action = #selector(foldClicked(_:))
         header.disclosure.target = self
         header.disclosure.action = #selector(toggleDetails(_:))
         for (b, image, action) in [
@@ -204,11 +239,36 @@ final class ConversationCardView: NSView {
             loadingLabel.leadingAnchor.constraint(equalTo: bodyHost.leadingAnchor, constant: Self.paddingH),
         ])
 
+        // The folded card's preview: plain dim text at the card's padding,
+        // two lines at most with an ellipsis; a click opens the card.
+        preview.font = Typo.body
+        preview.textColor = Tint.secondary
+        preview.isSelectable = false
+        preview.maximumNumberOfLines = 2
+        preview.cell?.truncatesLastVisibleLine = true
+        preview.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        preview.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        previewBox.translatesAutoresizingMaskIntoConstraints = false
+        previewBox.addSubview(preview)
+        NSLayoutConstraint.activate([
+            preview.topAnchor.constraint(equalTo: previewBox.topAnchor),
+            preview.bottomAnchor.constraint(equalTo: previewBox.bottomAnchor, constant: -Self.paddingV),
+            preview.leadingAnchor.constraint(equalTo: previewBox.leadingAnchor, constant: Self.paddingH),
+            preview.trailingAnchor.constraint(equalTo: previewBox.trailingAnchor, constant: -Self.paddingH),
+        ])
+        previewBox.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(previewClicked(_:))))
+        previewBox.isHidden = true
+
+        content.spacing = 0
+        install(bodyHost, .body)
+
         root.spacing = 0
         root.edgeInsets = NSEdgeInsets(top: Self.border, left: Self.border, bottom: Self.border, right: Self.border)
         root.translatesAutoresizingMaskIntoConstraints = false
-        install(top, .top)
-        install(bodyHost, .body)
+        for v in [top, previewBox, content] {
+            root.addArrangedSubview(v)
+        }
         addSubview(root)
         NSLayoutConstraint.activate([
             root.topAnchor.constraint(equalTo: topAnchor),
@@ -235,23 +295,23 @@ final class ConversationCardView: NSView {
         topSlots[slot] = v
     }
 
-    /// Puts `v` into the card's stack at its place.
+    /// Puts `v` under the header at its place.
     private func install(_ v: NSView, _ slot: Slot) {
         let at = slots.keys.filter { $0.rawValue < slot.rawValue }.count
-        root.insertArrangedSubview(v, at: at)
+        content.insertArrangedSubview(v, at: at)
         slots[slot] = v
     }
 
     private func uninstall(_ slot: Slot) {
         guard let v = slots.removeValue(forKey: slot) else { return }
-        root.removeArrangedSubview(v)
+        content.removeArrangedSubview(v)
         v.removeFromSuperview()
     }
 
     // MARK: Header
 
     /// Shows `item` (the same member, as the model has it now: flags, the
-    /// delivery state, the issue's badges).
+    /// delivery state, the issue's badges, the snippet of the preview).
     func update(_ item: Conversation.Item) {
         self.item = item
         if let s = item.message {
@@ -270,6 +330,9 @@ final class ConversationCardView: NSView {
         header.editedLabel.isHidden = item.edited.isEmpty
         renderDate()
         updateButtons()
+        if foldable {
+            showFoldState() // the snippet may have changed
+        }
     }
 
     /// The date at the header's end: in full, or the list's short form in
@@ -307,6 +370,84 @@ final class ConversationCardView: NSView {
     func refreshActions() {
         updateButtons()
     }
+
+    // MARK: Fold
+
+    /// Makes the card the one that opened the conversation (`on`), which
+    /// folds to its header and a preview of its text
+    /// (`ConversationLayout.displayOrder`), and folds or opens it; off: an
+    /// ordinary card, open (conversation_card.go `setFold`).
+    func setFold(_ on: Bool, folded: Bool) {
+        foldable = on
+        header.foldButton.isHidden = !on
+        setFolded(on && folded)
+    }
+
+    /// Folds the card to its header and the preview, or opens it: the
+    /// chips, the hint, the banner, the bars and the body come back as
+    /// they were (the recipients stay closed), and what arrived meanwhile
+    /// is shown (conversation_card.go `setFolded`). A folded card holds no
+    /// web view and is asked for no body (the pane's `updateLive`).
+    func setFolded(_ on: Bool) {
+        guard on != folded else {
+            showFoldState()
+            return
+        }
+        changingHeight {
+            folded = on
+            if on {
+                if detailsOpen {
+                    // The recipients close with it.
+                    header.disclosure.state = .off
+                    detailsOpen = false
+                    details?.isHidden = true
+                }
+                for case let v? in [chips, hintLabel] as [NSView?] where !v.isHidden {
+                    v.isHidden = true
+                    foldHidden.append(v)
+                }
+                setLive(false)
+            } else {
+                for v in foldHidden {
+                    v.isHidden = false
+                }
+                foldHidden = []
+            }
+            showFoldState()
+            if !on {
+                render(host?.held(id))
+            }
+        }
+    }
+
+    /// The fold's arrow, the preview and what is under them, as the card
+    /// is folded or not (conversation_card.go `showFoldState`). The preview
+    /// is the summary's snippet: text from the message, plain.
+    private func showFoldState() {
+        let tip = folded ? L10n.T("Expand") : L10n.T("Collapse")
+        header.foldButton.image = Icon.image(folded ? "pan-end" : "pan-down", size: .small)
+        header.foldButton.toolTip = tip
+        header.foldButton.setAccessibilityLabel(tip)
+        let snippet = summary.snippet.trimmingCharacters(in: .whitespacesAndNewlines)
+        preview.stringValue = snippet
+        previewBox.isHidden = !folded || snippet.isEmpty
+        header.disclosure.isHidden = folded
+        content.isHidden = folded
+        header.contentChanged()
+    }
+
+    @objc private func foldClicked(_ sender: Any?) {
+        host?.cardSetFolded(self, !folded)
+    }
+
+    /// A click on the preview only opens the card.
+    @objc private func previewClicked(_ sender: Any?) {
+        if folded {
+            host?.cardSetFolded(self, false)
+        }
+    }
+
+    // MARK: Recipients
 
     @objc private func toggleDetails(_ sender: Any?) {
         detailsOpen = header.disclosure.state == .on
@@ -401,8 +542,10 @@ final class ConversationCardView: NSView {
 
     /// Shows whatever `lm` holds (nil: nothing asked for yet, or let go by
     /// the pane): the body, the bars, the chips, the recipients and the
-    /// delivery state. A body already shown stays when `lm` has none.
+    /// delivery state. A body already shown stays when `lm` has none. A
+    /// folded card shows none of it (`setFolded` renders once it opens).
     func render(_ lm: LoadedMessage?) {
+        guard !folded else { return }
         renderDetails(lm?.msg)
         renderOutbox(lm?.msg)
         renderBody(lm)
@@ -410,8 +553,11 @@ final class ConversationCardView: NSView {
         renderChips(lm)
     }
 
-    /// Redraws the bars and leaves the body alone.
+    /// Redraws the bars and leaves the body alone. Their buttons never
+    /// hold the keyboard focus in this client (`RemoteBarView`), so hiding
+    /// one moves none.
     func renderBars(_ lm: LoadedMessage?) {
+        guard !folded else { return }
         guard isHTML, let lm else {
             remoteBar?.isHidden = true
             picturesBar?.isHidden = true
@@ -460,8 +606,15 @@ final class ConversationCardView: NSView {
     }
 
     /// The chips for what `lm` holds (`ChipPlan`); nothing until
-    /// message.get answered.
+    /// message.get answered. The chip that holds the keyboard focus (one
+    /// used a moment ago, whose download starts or ends now) goes with the
+    /// rest; the focus goes to the chip in its place, or to the body when
+    /// there is none (attachments.go `renderAttachments`). A folded card's
+    /// chips are drawn once it opens.
     func renderChips(_ lm: LoadedMessage?) {
+        guard !folded else { return }
+        let focus = ChipFocus(chipViews, in: window)
+        defer { focus.restore(to: chipViews, else: bodyView) }
         let plan = ChipPlan(lm?.msg, lm?.body)
         if plan.isEmpty {
             chips?.removeAllViews()
@@ -473,7 +626,7 @@ final class ConversationCardView: NSView {
         let flow = chips ?? makeChips()
         flow.removeAllViews()
         let factory = AttachmentChipFactory(
-            delegate: host.delegate, cache: host.cache,
+            delegate: host.delegate, cache: host.cache, assistant: host.assistant,
             openEmbedded: { [weak self] s, a, remote, chip in self?.host?.openEmbedded(s, a, remote, chip) },
             window: { [weak self] in self?.window },
             chipForPart: { [weak self] part in
@@ -484,6 +637,15 @@ final class ConversationCardView: NSView {
             flow.addView(v)
         }
         flow.isHidden = false
+    }
+
+    /// What shows the body now, for the keyboard focus a chip gives up:
+    /// the text view, or the web view while the card is live.
+    private var bodyView: NSView? {
+        if let textView {
+            return textView
+        }
+        return webView
     }
 
     private func makeChips() -> FlowView {
@@ -497,6 +659,7 @@ final class ConversationCardView: NSView {
     /// `renderOutboxBanner`): the full message's once known, else the
     /// summary's.
     func renderOutbox(_ m: Message?) {
+        guard !folded else { return }
         let text = outboxBannerText(m?.summary.outbox ?? summary.outbox)
         guard text.shown || banner != nil else { return }
         let b = banner ?? makeBanner()
@@ -652,7 +815,7 @@ final class ConversationCardView: NSView {
 
     /// Whether the card holds a web view (`ConversationLayout.live`): made
     /// and loaded when it becomes live, let go when it does not stay; the
-    /// body keeps its last height meanwhile.
+    /// body keeps its last height meanwhile. A folded card is never live.
     func setLive(_ on: Bool) {
         guard on != live else { return }
         live = on

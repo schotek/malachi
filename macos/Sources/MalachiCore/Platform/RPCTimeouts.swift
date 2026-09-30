@@ -41,8 +41,9 @@ public enum RPCTimeouts {
     /// download goes on when the caller gives up (docs/api.md: wait at
     /// least 5 minutes).
     public static let download: Duration = .seconds(300)
-    /// `issue.transitions`: one request to the Jira site.
-    public static let transitions: Duration = .seconds(20)
+    /// `issue.transitions`: one request to the Jira site, which may be
+    /// slow (issue_actions.go `issueTimeout`, one value for both calls).
+    public static let transitions: Duration = .seconds(45)
     /// `issue.transition`: the request, then the daemon refreshes the
     /// issue from the site for up to 30 s.
     public static let transition: Duration = .seconds(45)

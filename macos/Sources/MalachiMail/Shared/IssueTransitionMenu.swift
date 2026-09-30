@@ -37,7 +37,9 @@ func issueSubject(of s: MessageSummary?) -> IssueActionsController.Subject? {
 /// `subject` names the message when the menu opens: the card's own, or
 /// the key window's (`keyWindowSubject`). The controller comes from
 /// `AppState.Hooks.issueActions`; without it, or without the capability,
-/// the menu item validates disabled and the pill is a plain label.
+/// the menu item validates disabled (the menu bar's, as its other items
+/// do) or is hidden with its separator (More Actions: window.blp
+/// `hidden-when: "action-disabled"`), and the pill is a plain label.
 @MainActor
 final class IssueTransitionMenu: NSObject, NSMenuDelegate, NSMenuItemValidation {
     let menu = NSMenu()
@@ -75,6 +77,11 @@ final class IssueTransitionMenu: NSObject, NSMenuDelegate, NSMenuItemValidation 
         return c.canTransition(s.accountId)
     }
 
+    /// The separator in front of the item in a menu that hides both while
+    /// there is nothing to offer (`menuItem(hiddenWith:)`).
+    private weak var separator: NSMenuItem?
+    private var hidesWhenUnavailable = false
+
     /// The "Change Status" item with this menu as its submenu, validated by
     /// `isOffered`. The item keeps this object alive (its `representedObject`;
     /// a menu's delegate and an item's target are weak).
@@ -86,13 +93,30 @@ final class IssueTransitionMenu: NSObject, NSMenuDelegate, NSMenuItemValidation 
         return item
     }
 
+    /// The item for a menu that shows it only where it can act (More
+    /// Actions): it and `separator`, the one in front of it, are hidden
+    /// while there is nothing to offer, and start out hidden.
+    func menuItem(hiddenWith separator: NSMenuItem) -> NSMenuItem {
+        let item = menuItem()
+        hidesWhenUnavailable = true
+        self.separator = separator
+        item.isHidden = true
+        separator.isHidden = true
+        return item
+    }
+
     /// The submenu's parent item never fires (the submenu opens instead);
     /// the selector exists for the validation.
     @objc private func changeStatus(_ sender: Any?) {}
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(changeStatus(_:)) {
-            return isOffered
+            let offered = isOffered
+            if hidesWhenUnavailable {
+                item.isHidden = !offered
+                separator?.isHidden = !offered
+            }
+            return offered
         }
         return item.isEnabled
     }

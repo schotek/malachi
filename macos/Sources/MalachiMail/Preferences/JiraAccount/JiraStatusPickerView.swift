@@ -130,7 +130,11 @@ final class JiraStatusPickerView: NSView, PrefsGroupMember {
                 check.tag = choices.count
                 check.isEnabled = on
                 check.lineBreakMode = .byTruncatingTail
+                // A status name comes from the site: a long one is cut and
+                // the tooltip has it whole (statuses.go: 32 characters).
+                check.toolTip = choice.name
                 check.frame.size = check.fittingSize
+                check.frame.size.width = min(check.frame.width, Self.maxCheckWidth(check.font))
                 choices.append(choice)
                 checks.append(check)
                 flow.addView(check)
@@ -150,6 +154,13 @@ final class JiraStatusPickerView: NSView, PrefsGroupMember {
         for check in checks {
             check.isEnabled = on
         }
+    }
+
+    /// The widest a check box gets: the box and 32 characters of its font.
+    private static func maxCheckWidth(_ font: NSFont?) -> CGFloat {
+        let font = font ?? .systemFont(ofSize: NSFont.systemFontSize)
+        let text = String(repeating: "0", count: 32) as NSString
+        return ceil(text.size(withAttributes: [.font: font]).width) + 22
     }
 
     @objc private func toggled(_ sender: NSButton) {

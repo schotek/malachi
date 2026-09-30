@@ -5,12 +5,15 @@ import Foundation
 
 // The arithmetic of the conversation view that does not need AppKit: which
 // cards are near enough to the viewport to hold a body and a web view, how
-// a card's web view follows the height of the document it shows, the
-// timeline in the gutter beside the cards (which item gets an avatar and
-// which a dot, where the line runs) and where the parts of a card's header
-// go at the width it has. The pane (ConversationViewController,
-// ConversationRow, ConversationCardView, the sized mode of MessageWebView)
-// applies it. Swift-first, like the view.
+// a card's web view follows the height of the document it shows, the order
+// the pane shows the model's items in (what opened the conversation first,
+// then the rest newest first), the timeline in the gutter beside the cards
+// (which item gets an avatar and which a dot, where the line runs) and
+// where the parts of a card's header go at the width it has. The pane
+// (ConversationViewController, ConversationRow, ConversationCardView, the
+// sized mode of MessageWebView) applies it. Swift-first, like the view; the
+// GTK pane ported it (ui/internal/window/conversation_layout.go), and the
+// order shown is a port of what it added there (`convDisplayOrder`).
 
 /// The conversation view's rules for keeping cards cheap: every card is a
 /// native view, but a body is fetched only for the cards within
@@ -105,6 +108,74 @@ public enum ConversationLayout {
     }
 }
 
+// MARK: The order shown
+
+extension ConversationLayout {
+    /// conversation_layout.go `convDisplay`: the stack as the pane shows it
+    /// (`displayOrder`): the items in order, which of them opened the
+    /// conversation (`root`, an index into `items`; -1 when it is not
+    /// shown), and whether that card starts folded to its header.
+    public struct Display: Sendable, Equatable {
+        public var items: [Conversation.Item]
+        public var root: Int
+        public var rootFolded: Bool
+
+        public init(items: [Conversation.Item] = [], root: Int = -1, rootFolded: Bool = false) {
+            self.items = items
+            self.root = root
+            self.rootFolded = rootFolded
+        }
+    }
+
+    /// conversation_layout.go `convDisplayOrder`: the order the pane shows
+    /// the model's items in, as Jira shows an issue: what opened the
+    /// conversation first (`root`: the issue's description, or the oldest
+    /// message of a mail conversation that thread.get did not cut), then
+    /// the rest newest first, so that the newest is what the pane opens on
+    /// right under it, and the row of older members left out last. The
+    /// opening card starts folded while another message card follows it (a
+    /// conversation of one message and its status changes shows that
+    /// message whole). The model (`Conversation.Model`) keeps the items
+    /// oldest first; `items` is not changed.
+    public static func displayOrder(_ items: [Conversation.Item]) -> Display {
+        var d = Display()
+        d.items.reserveCapacity(items.count)
+        let opening = root(items)
+        if opening >= 0 {
+            d.items.append(items[opening])
+            d.root = 0
+        }
+        var truncated: [Conversation.Item] = []
+        for i in items.indices.reversed() where i != opening {
+            if items[i].kind == .truncated {
+                truncated.append(items[i])
+                continue
+            }
+            d.items.append(items[i])
+            if items[i].kind == .message {
+                d.rootFolded = opening >= 0
+            }
+        }
+        d.items.append(contentsOf: truncated)
+        return d
+    }
+
+    /// conversation_layout.go `convRoot`: the index in `items` (the
+    /// model's, oldest first) of the item that opened the conversation: the
+    /// description of a Jira issue wherever it is, else the oldest member
+    /// when it is a message card and no older member is left out (no
+    /// truncated row before it); -1 for none.
+    public static func root(_ items: [Conversation.Item]) -> Int {
+        if let i = items.firstIndex(where: { $0.kind == .message && $0.message?.issue?.item == .description }) {
+            return i
+        }
+        if let first = items.first, first.kind == .message {
+            return 0
+        }
+        return -1
+    }
+}
+
 // MARK: The timeline
 
 extension ConversationLayout {
@@ -164,11 +235,11 @@ extension ConversationLayout {
         }
     }
 
-    /// The timeline of `items`, one piece each: a message has its sender's
-    /// avatar (accent-tinted when it is the user's own), an event and the
-    /// row of older messages a dot. The line runs between the markers: from
-    /// the first item's to the last item's, so a conversation of one item
-    /// has none.
+    /// The timeline of `items` (in the order shown, `displayOrder`), one
+    /// piece each: a message has its sender's avatar (accent-tinted when it
+    /// is the user's own), an event and the row of older messages a dot.
+    /// The line runs between the markers: from the first item's to the last
+    /// item's, so a conversation of one item has none.
     public static func rails(_ items: [Conversation.Item]) -> [Rail] {
         items.enumerated().map { i, item in
             let message = item.kind == .message
@@ -194,9 +265,10 @@ extension ConversationLayout {
 // MARK: A card's header
 
 /// Where the parts of a card's header go at the width the card has: the
-/// unread dot, the sender and the recipients' disclosure, then the badges
-/// (who relayed the comment, Internal, Edited), and at the trailing edge
-/// the date, with the hover buttons before it.
+/// fold arrow of the card that opened the conversation, the unread dot, the
+/// sender and the recipients' disclosure, then the badges (who relayed the
+/// comment, Internal, Edited), and at the trailing edge the date, with the
+/// hover buttons before it.
 ///
 /// The date keeps its place and its width. The sender gives way first (its
 /// name is truncated), down to `minSender`. The badges follow the sender on
@@ -221,6 +293,8 @@ public struct ConversationHeaderLayout: Sendable, Equatable {
 
     /// The natural widths of the parts; 0 for a part that is not shown.
     public struct Parts: Sendable, Equatable {
+        /// The fold arrow, before everything else.
+        public var fold: Double
         public var dot: Double
         public var sender: Double
         public var disclosure: Double
@@ -230,9 +304,10 @@ public struct ConversationHeaderLayout: Sendable, Equatable {
         public var buttons: Double
 
         public init(
-            dot: Double = 0, sender: Double = 0, disclosure: Double = 0, badges: [Double] = [], date: Double = 0,
-            buttons: Double = 0
+            fold: Double = 0, dot: Double = 0, sender: Double = 0, disclosure: Double = 0, badges: [Double] = [],
+            date: Double = 0, buttons: Double = 0
         ) {
+            self.fold = fold
             self.dot = dot
             self.sender = sender
             self.disclosure = disclosure
@@ -258,6 +333,7 @@ public struct ConversationHeaderLayout: Sendable, Equatable {
     }
 
     /// nil: the part is not shown.
+    public var fold: Slot?
     public var dot: Slot?
     public var sender: Slot?
     public var disclosure: Slot?
@@ -283,9 +359,13 @@ public struct ConversationHeaderLayout: Sendable, Equatable {
         let room = dateWidth > 0 ? max(width - dateWidth - Self.dateSpacing, 0) : width
 
         var x = 0.0
+        if shown(parts.fold) > 0 {
+            fold = Slot(0, min(shown(parts.fold), room))
+            x = shown(parts.fold) + Self.spacing
+        }
         if shown(parts.dot) > 0 {
-            dot = Slot(0, min(shown(parts.dot), room))
-            x = shown(parts.dot) + Self.spacing
+            dot = Slot(x, min(shown(parts.dot), max(room - x, 0)))
+            x += shown(parts.dot) + Self.spacing
         }
         let disclosureWidth = shown(parts.disclosure)
         let after = disclosureWidth > 0 ? Self.spacing + disclosureWidth : 0

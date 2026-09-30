@@ -79,7 +79,6 @@ final class CommentHeaderView: NSBox {
         visibilityControl.controlSize = .regular
         visibilityControl.target = self
         visibilityControl.action = #selector(visibilityChosen(_:))
-        visibilityControl.refusesFirstResponder = true
         visibilityControl.isHidden = options.isEmpty
         visibilityControl.setContentHuggingPriority(.required, for: .horizontal)
         visibilityControl.setContentCompressionResistancePriority(.required, for: .horizontal)

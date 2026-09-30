@@ -166,10 +166,11 @@ final class ConversationEventRow: NSView {
     }
 }
 
-/// The row on top of a conversation whose older members are left out
+/// The row at the bottom of a conversation (after its oldest member shown,
+/// `ConversationLayout.displayOrder`) whose older members are left out
 /// (`Conversation.ItemKind.truncated`): its sentence in small secondary
 /// text, in the column of the cards' texts. It sits on the timeline like
-/// an event: its mark is a dot (`ConversationRow`), where the line starts.
+/// an event: its mark is a dot (`ConversationRow`), where the line ends.
 @MainActor
 final class ConversationTruncatedRow: NSView {
     private let label = NSTextField(wrappingLabelWithString: "")

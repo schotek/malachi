@@ -579,10 +579,16 @@ public final class ActionsController {
     /// A reply or reply to all of a message whose pictures are kept on the
     /// mail server only downloads it first as well (`replyNeedsDownload`),
     /// so the quote has them; a failure is only logged and the reply goes
-    /// on (the compose window says what draft.create left out).
+    /// on (the compose window says what draft.create left out). A comment
+    /// (a reply on an account that comments) quotes nothing and downloads
+    /// nothing.
     public func openCompose(_ kind: ComposeKind, _ id: MessageID, from parent: AnyObject? = nil) {
         guard let s = summary(id), !composing.contains(id) else { return }
         composing.insert(id)
+        if kind == .reply, mailbox.model.account(s.accountId)?.can(.comment) == true {
+            createDraft(kind, s)
+            return
+        }
         if kind == .reply || kind == .replyAll, replyNeedsDownload(cache.loaded(id)) {
             let cache = cache
             Task { @MainActor [weak self] in

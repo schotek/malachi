@@ -227,6 +227,29 @@ private final class Harness {
         #expect(await h.fixture.callCount(API.MessageDownload.name) == 0, "nothing is quoted, nothing downloaded")
     }
 
+    /// compose_open.go `openComposeFrom`: the comment goes before the
+    /// download a reply makes for pictures kept on the server.
+    @Test func aCommentDownloadsNoPictures() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        try await h.showIssue()
+        var shown = MessageBodyResult(
+            messageId: "w1c", bodyState: .fetched, hasHtml: true, html: "<p><img src=\"malachi-cid:j/w1c/2\"></p>",
+            text: "", blocked: BlockedContent(remoteImages: 0), remoteContent: .block, sanitizerVersion: "1")
+        shown.remotePictures = 1
+        await h.fixture.setBody(shown)
+        let s = try #require(h.mailbox.model.message("w1c")?.summary)
+        h.cache.fetchBody(s) { _ in }
+        try await waitUntil { replyNeedsDownload(h.cache.loaded("w1c")) }
+
+        try await h.onDraftCreate(DraftCreateResult(
+            draft: Draft(accountId: jira, inReplyTo: "w1c", comment: DraftComment(issue: webIssue)), quoted: .none))
+        h.actions.openCompose(.reply, "w1c")
+        try await waitUntil { h.composed.count == 1 }
+        #expect(await h.fixture.callCount(API.MessageDownload.name) == 0)
+        #expect(await h.recorder.downloads.isEmpty)
+    }
+
     @Test func aFailedCommentOnlyToasts() async throws {
         let h = try await Harness()
         defer { Task { await h.stop() } }

@@ -172,9 +172,9 @@ final class FolderCellView: NSTableCellView {
 
 /// A heading row (folders.go `newHeaderRow`): the Favourites section or an
 /// account. The outline's source-list style draws it as a group row; the
-/// text is plain. An issue-tracker account's heading carries its kind in a
-/// small capsule after the name ("JIRA", `accountHeaderBadge`; Swift-first:
-/// mirror in folders.go when GTK gets Jira accounts).
+/// text is plain. An account's heading carries its kind in a small capsule
+/// after the name ("JIRA", "GOOGLE", "M365", "IMAP"; `accountHeaderBadge`);
+/// the Favourites heading has none.
 @MainActor
 final class SidebarHeaderCellView: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("SidebarHeaderCell")

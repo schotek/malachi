@@ -20,8 +20,11 @@ final class JiraAccountWindowController: NSWindowController {
     private var onDone: (@MainActor (AccountID, AccountConfig) -> Void)?
 
     /// Opens the settings of `account` as a sheet on `parent`. `onDone`
-    /// runs after account.update succeeded, before the sheet closes; a
-    /// page that had nothing to save closes without it.
+    /// runs after account.update succeeded, before the sheet closes (a
+    /// page that had nothing to save closes without it), and after the
+    /// assistant stored a new token, over the sheet that stays: the
+    /// caller's list shows the account as it is now (jira_editors.go
+    /// `editJiraAccount` of the preferences).
     static func present(
         from parent: NSWindow, client: RPCClient, account: Account,
         onDone: @escaping @MainActor (AccountID, AccountConfig) -> Void
@@ -80,8 +83,9 @@ final class JiraAccountWindowController: NSWindowController {
     /// page has edited stays in the page.
     private func replaceToken(_ account: Account) {
         guard let window else { return }
-        JiraWizardWindowController.present(from: window, client: controller.client, editing: account) { [weak self] _, _ in
+        JiraWizardWindowController.present(from: window, client: controller.client, editing: account) { [weak self] id, cfg in
             self?.controller.tokenReplaced()
+            self?.onDone?(id, cfg)
         }
     }
 

@@ -4,12 +4,13 @@
 import AppKit
 import MalachiCore
 
-/// The header of a card of the conversation view: an unread dot, the
-/// sender, the disclosure of the recipients, who relayed the comment
-/// ("via …"), the Internal and Edited badges of an issue's comment, and at
-/// the trailing edge the date, with Reply (Comment on an issue), Reply All
-/// and Forward before it while the pointer is over the card or one of them
-/// has the focus.
+/// The header of a card of the conversation view: the fold arrow of the
+/// card that opened the conversation (conversation_card.go `setFold`;
+/// hidden on the others), an unread dot, the sender, the disclosure of the
+/// recipients, who relayed the comment ("via …"), the Internal and Edited
+/// badges of an issue's comment, and at the trailing edge the date, with
+/// Reply (Comment on an issue), Reply All and Forward before it while the
+/// pointer is over the card or one of them has the focus.
 ///
 /// The parts are placed by `ConversationHeaderLayout` for the width the
 /// card has (the sender is truncated, the badges go to a second line, the
@@ -20,6 +21,7 @@ import MalachiCore
 /// (`stringValue`); the names come from the message.
 @MainActor
 final class ConversationCardHeader: NSView {
+    let foldButton = CardFoldButton()
     let unread = UnreadDot()
     let senderLabel = NSTextField(labelWithString: "")
     let disclosure = NSButton()
@@ -79,6 +81,8 @@ final class ConversationCardHeader: NSView {
         internalPill.font = Typo.caption
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: false)
 
+        foldButton.isHidden = true
+
         disclosure.bezelStyle = .disclosure
         disclosure.setButtonType(.pushOnPushOff)
         disclosure.title = ""
@@ -98,7 +102,7 @@ final class ConversationCardHeader: NSView {
         buttonsBox.alphaValue = 0
 
         // The buttons last: they lie over what they cover.
-        for v in [unread, senderLabel, disclosure, viaLabel, internalPill, editedLabel, dateLabel, buttonsBox] as [NSView] {
+        for v in [foldButton, unread, senderLabel, disclosure, viaLabel, internalPill, editedLabel, dateLabel, buttonsBox] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = true
             addSubview(v)
         }
@@ -157,7 +161,8 @@ final class ConversationCardHeader: NSView {
     private func arrange(width: CGFloat, place: Bool) -> CGFloat {
         let buttonsSize = anyButton ? buttons.fittingSize : .zero
         let parts = ConversationHeaderLayout.Parts(
-            dot: naturalWidth(unread), sender: senderLabel.stringValue.isEmpty ? 0 : naturalWidth(senderLabel),
+            fold: naturalWidth(foldButton), dot: naturalWidth(unread),
+            sender: senderLabel.stringValue.isEmpty ? 0 : naturalWidth(senderLabel),
             disclosure: naturalWidth(disclosure), badges: badgeViews.map(naturalWidth), date: naturalWidth(dateLabel),
             buttons: Double(ceil(buttonsSize.width)))
         let plan = ConversationHeaderLayout(parts, width: Double(width), buttonsShown: buttonsShown)
@@ -181,6 +186,7 @@ final class ConversationCardHeader: NSView {
             }
             v.frame = v.frame(forAlignmentRect: backingAlignedRect(r, options: .alignAllEdgesNearest))
         }
+        put(foldButton, plan.fold)
         put(unread, plan.dot)
         put(senderLabel, plan.sender)
         put(disclosure, plan.disclosure)
@@ -219,6 +225,32 @@ final class UnreadDot: NSView {
     override func updateLayer() {
         layer?.backgroundColor = NSColor.controlAccentColor.cgColor
     }
+}
+
+/// The fold arrow of the card that opened the conversation: borderless, a
+/// chevron that points to the side while the card is folded and down while
+/// it is open, as the arrow of a conversation row in the list.
+@MainActor
+final class CardFoldButton: NSButton {
+    private static let size = NSSize(width: 16, height: 20)
+
+    init() {
+        super.init(frame: NSRect(origin: .zero, size: Self.size))
+        isBordered = false
+        bezelStyle = .inline
+        imagePosition = .imageOnly
+        imageScaling = .scaleNone
+        title = ""
+        setButtonType(.momentaryChange)
+        contentTintColor = Tint.secondary
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("not used")
+    }
+
+    override var intrinsicContentSize: NSSize { Self.size }
 }
 
 /// What the hover buttons of a card lie on: the card's own background, so

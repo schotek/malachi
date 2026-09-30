@@ -9,9 +9,11 @@ import Testing
 // cards are near the viewport and which of them get a web view, where the
 // viewport goes to keep an item in place and for a page of Space, and how a
 // card's web view follows its document's height (WebHeightGovernor); and
-// the attachment chips' plan (ChipPlan.swift); the timeline beside the
-// cards (which item has an avatar and which a dot, where the line runs) and
-// where the parts of a card's header go (ConversationHeaderLayout).
+// the attachment chips' plan (ChipPlan.swift); the order the pane shows the
+// items in (`displayOrder`, ported with conversation_layout_test.go
+// `TestConvDisplayOrder`); the timeline beside the cards (which item has an
+// avatar and which a dot, where the line runs) and where the parts of a
+// card's header go (ConversationHeaderLayout).
 
 private typealias Span = ConversationLayout.Span
 
@@ -186,6 +188,95 @@ struct ConversationTimelineTests {
     }
 }
 
+// MARK: The order shown
+
+struct ConversationDisplayOrderTests {
+    private func ids(_ items: [Conversation.Item]) -> [String] {
+        items.map { $0.kind == .truncated ? "…" : ($0.message?.id.rawValue ?? "") }
+    }
+
+    private func msg(_ id: String) -> Conversation.Item {
+        Conversation.Item(kind: .message, message: railMember(id, 0))
+    }
+
+    private func event(_ id: String) -> Conversation.Item {
+        Conversation.Item(kind: .event, message: railMember(id, 0))
+    }
+
+    private func issue(_ id: String, _ kind: IssueItemKind) -> Conversation.Item {
+        Conversation.Item(kind: .message, message: railMember(id, 0, issue: MessageIssue(info: railIssue, item: kind)))
+    }
+
+    private var truncated: Conversation.Item {
+        var it = Conversation.Item(kind: .truncated)
+        it.text = "2 earlier messages are not shown"
+        return it
+    }
+
+    /// The pane shows what opened the conversation first, then the rest
+    /// newest first and the row of older members last; the model keeps its
+    /// own order, and the timeline follows the order shown.
+    @Test func displayOrder() {
+        struct Case {
+            var name: String
+            var items: [Conversation.Item]
+            var want: [String]
+            var root: Int
+            var folded: Bool
+        }
+        let cases = [
+            Case(
+                name: "mail: the first message on top, folded", items: [msg("a"), msg("b"), msg("c")],
+                want: ["a", "c", "b"], root: 0, folded: true),
+            Case(
+                name: "issue: the description on top",
+                items: [issue("desc", .description), event("e1"), issue("c1", .comment), event("e2")],
+                want: ["desc", "e2", "c1", "e1"], root: 0, folded: true),
+            Case(
+                name: "issue with only status changes: the description stays open",
+                items: [issue("desc", .description), event("e1"), event("e2")],
+                want: ["desc", "e2", "e1"], root: 0, folded: false),
+            Case(
+                name: "cut mail: no first message, older ones last", items: [truncated, msg("x"), msg("y")],
+                want: ["y", "x", "…"], root: -1, folded: false),
+            Case(
+                name: "cut issue: the description when it is there",
+                items: [truncated, issue("desc", .description), issue("c1", .comment)],
+                want: ["desc", "c1", "…"], root: 0, folded: true),
+            Case(name: "an event first is no opening", items: [event("e"), msg("m")], want: ["m", "e"], root: -1, folded: false),
+            Case(name: "nothing", items: [], want: [], root: -1, folded: false),
+        ]
+        for c in cases {
+            let before = c.items
+            let d = ConversationLayout.displayOrder(c.items)
+            #expect(ids(d.items) == c.want, "\(c.name)")
+            #expect(d.root == c.root && d.rootFolded == c.folded, "\(c.name)")
+            #expect(c.items == before, "\(c.name): the model's items were changed")
+        }
+
+        // The timeline runs from the opening card down to the row of older
+        // members.
+        let shown = ConversationLayout.displayOrder([truncated, msg("x"), msg("y")]).items
+        let rails = ConversationLayout.rails(shown)
+        #expect(rails.first == Rail(marker: .avatar, below: true), "top")
+        #expect(rails.last == Rail(marker: .dot, above: true), "the older row at the bottom")
+    }
+
+    /// What opened the conversation (conversation_layout.go `convRoot`).
+    @Test func root() {
+        #expect(ConversationLayout.root([msg("a"), msg("b")]) == 0)
+        #expect(ConversationLayout.root([issue("c1", .comment), event("e"), issue("desc", .description)]) == 2)
+        #expect(ConversationLayout.root([truncated, msg("a")]) == -1, "thread.get cut the conversation")
+        #expect(ConversationLayout.root([truncated, issue("c1", .comment), issue("desc", .description)]) == 2)
+        #expect(ConversationLayout.root([event("e"), msg("a")]) == -1)
+        #expect(ConversationLayout.root([]) == -1)
+        // An event is never the opening, whatever its issue says.
+        var odd = event("e")
+        odd.message?.issue = MessageIssue(info: railIssue, item: .description)
+        #expect(ConversationLayout.root([odd]) == -1)
+    }
+}
+
 // MARK: A card's header
 
 private typealias Header = ConversationHeaderLayout
@@ -215,6 +306,25 @@ struct ConversationHeaderLayoutTests {
         let unread = Header(headerParts(dot: 8), width: 600, buttonsShown: false)
         #expect(unread.dot == Slot(0, 8) && unread.sender == Slot(14, 120) && unread.disclosure == Slot(140, 13))
         #expect(unread.badges.first == Slot(161, 80))
+        #expect(unread.fold == nil)
+    }
+
+    /// The card that opened the conversation: its fold arrow starts the
+    /// line, and the rest moves.
+    @Test func theFoldArrowComesFirst() {
+        var parts = headerParts()
+        parts.fold = 16
+        let h = Header(parts, width: 600, buttonsShown: false)
+        #expect(h.fold == Slot(0, 16))
+        #expect(h.dot == nil && h.sender == Slot(22, 120) && h.disclosure == Slot(148, 13))
+        #expect(h.badges.first == Slot(169, 80))
+        #expect(h.date == Slot(470, 130), "the date keeps its place")
+        // With the unread dot after it; folded, the disclosure is not shown.
+        parts.dot = 8
+        parts.disclosure = 0
+        let folded = Header(parts, width: 600, buttonsShown: false)
+        #expect(folded.fold == Slot(0, 16) && folded.dot == Slot(22, 8) && folded.sender == Slot(36, 120))
+        #expect(folded.disclosure == nil && folded.badges.first == Slot(164, 80))
     }
 
     @Test func partsNotShownHaveNoPlace() {

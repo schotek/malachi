@@ -188,6 +188,8 @@ final class JiraListEditorView: NSView, PrefsGroupMember, NSTextFieldDelegate {
             button.controlSize = .small
             button.tag = i
             button.lineBreakMode = .byTruncatingMiddle
+            // What the button adds, when the label is a shorter name for it.
+            button.toolTip = s.value
             button.isEnabled = rowEnabled && groupEnabled
             button.frame.size = button.fittingSize
             suggestionsFlow.addView(button)

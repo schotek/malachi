@@ -1799,9 +1799,9 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   the comment mode in `ui/internal/compose`. Open: the Windows port.
 - Conversation view: **decided** (2026-09-29) — selecting a folded
   conversation row (two or more members in the folder; a Jira folder is
-  always grouped) shows every member stacked in the reading pane,
-  oldest first and scrolled to the newest, as native cards on a
-  timeline: each HTML body in a locked web view of its own, sized to
+  always grouped) shows every member stacked in the reading pane as
+  native cards on a timeline (at first oldest first and scrolled to the
+  newest; the order of today is below): each HTML body in a locked web view of its own, sized to
   its document by a script of the app in the view's own world
   (`macos-port.md` §5), never one composed document. The sanitiser
   keeps classes, ids and `<style>` selectors, so in one document a
@@ -1822,7 +1822,8 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   (the description, or the first message) folded to its header while
   more follows, then the rest newest first (the user's decision,
   2026-09-30: oldest first scrolled to the newest left the newest cut
-  off while the cards above it grew); the model and the macOS client
-  keep the oldest first. Open: the Windows port, and a
+  off while the cards above it grew); the macOS client shows the same
+  order since that day (`ConversationLayout.displayOrder`), and the
+  model keeps the oldest first in both. Open: the Windows port, and a
   card's page under a dark appearance (the document keeps its light
   background).

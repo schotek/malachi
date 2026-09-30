@@ -397,8 +397,11 @@ final class MessageCellView: NSTableCellView {
         }
         issueKey.stringValue = issue.key
         issueKey.isHidden = issue.key.isEmpty
-        subject.stringValue = issue.summary
-        statusPill.stringValue = issue.status
+        // An issue without a summary keeps the message's subject.
+        if !issue.summary.isEmpty {
+            subject.stringValue = issue.summary
+        }
+        statusPill.setText(issue.status, maxCharacters: PillLabel.statusCharacters)
         statusPill.toolTip = issue.status
         statusPill.isHidden = issue.status.isEmpty
         statusStyle = issue.statusStyle
@@ -413,6 +416,7 @@ final class MessageCellView: NSTableCellView {
             subjectLine.isHidden = false
         } else if event {
             eventLabel.stringValue = Self.eventArrow + issue.eventText
+            eventLabel.toolTip = issue.eventText
             eventLabel.isHidden = false
             subjectLine.isHidden = member
             preview.isHidden = true
@@ -554,6 +558,21 @@ final class PillLabel: NSTextField {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
+    }
+
+    /// The most characters of a status a pill shows (widget/pill.go
+    /// `NewPill`: ellipsised at 24); the tooltip has the whole of it.
+    static let statusCharacters = 24
+
+    /// Shows `text`, cut to `maxCharacters` with an ellipsis: a status
+    /// name comes from the site and may be of any length, and a pill does
+    /// not shrink.
+    func setText(_ text: String, maxCharacters: Int) {
+        if text.count > maxCharacters, maxCharacters > 1 {
+            stringValue = text.prefix(maxCharacters - 1) + "…"
+        } else {
+            stringValue = text
+        }
     }
 
     override var intrinsicContentSize: NSSize {

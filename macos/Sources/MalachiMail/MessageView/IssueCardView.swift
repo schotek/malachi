@@ -12,7 +12,8 @@ import MalachiCore
 /// Everything but the labels comes from the Jira site and is shown as plain
 /// text (`stringValue`, or a title built from it with a font and a colour
 /// only); the key opens its URL only when `Jira.isIssueURL` accepts it for
-/// the account's site (`openable`), otherwise it is plain text. On an
+/// the account's site (`openable`), otherwise it is plain text that can be
+/// selected and copied (issue_card.go: the button or the label). On an
 /// account that changes statuses (`Capability.transition`) the status pill
 /// is a menu button (`IssueStatusPill`) that pops the Change Status menu
 /// up (`statusMenu`, set by the host); while a transition runs the pill
@@ -32,6 +33,8 @@ final class IssueCardView: NSView {
     private(set) var issueKey = ""
 
     private let keyButton = NSButton()
+    /// The key of an issue whose URL is not opened: text to select.
+    private let keyLabel = NSTextField(labelWithString: "")
     private let statusPill = IssueStatusPill()
     private let internalPill = PillLabel()
     private let viaLabel = NSTextField(labelWithString: "")
@@ -41,6 +44,10 @@ final class IssueCardView: NSView {
     private var fieldLabels: [NSTextField] = []
     private var fieldValues: [NSTextField] = []
     private var url = ""
+
+    /// The key's font: the size of a message's subject (Typo.title2Bold),
+    /// which the card stands in for.
+    private static let keyFont = NSFont.monospacedDigitSystemFont(ofSize: Typo.title2Bold.pointSize, weight: .bold)
 
     /// The widest a field's value gets before it is truncated: a name from
     /// the site can be long, and the flow never truncates by itself.
@@ -61,11 +68,18 @@ final class IssueCardView: NSView {
     private func build() {
         keyButton.isBordered = false
         keyButton.setButtonType(.momentaryChange)
-        keyButton.refusesFirstResponder = true
         keyButton.target = self
         keyButton.action = #selector(keyClicked)
         keyButton.setContentHuggingPriority(.required, for: .horizontal)
         keyButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        keyButton.isHidden = true
+        keyLabel.font = Self.keyFont
+        keyLabel.isSelectable = true
+        keyLabel.lineBreakMode = .byClipping
+        keyLabel.maximumNumberOfLines = 1
+        keyLabel.setContentHuggingPriority(.required, for: .horizontal)
+        keyLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        keyLabel.isHidden = true
 
         statusPill.isHidden = true
         statusPill.onClick = { [weak self] in self?.statusClicked() }
@@ -88,7 +102,7 @@ final class IssueCardView: NSView {
         rest.translatesAutoresizingMaskIntoConstraints = false
         rest.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
         rest.setContentCompressionResistancePriority(NSLayoutConstraint.Priority(1), for: .horizontal)
-        let top = NSStackView(views: [keyButton, statusPill, internalPill, viaLabel, editedLabel, rest])
+        let top = NSStackView(views: [keyButton, keyLabel, statusPill, internalPill, viaLabel, editedLabel, rest])
         top.orientation = .horizontal
         top.alignment = .centerY
         top.distribution = .fill
@@ -140,20 +154,21 @@ final class IssueCardView: NSView {
             statusPill.busy = false
         }
         issueKey = card.key
-        // The key is the card's title: the size of a message's subject
-        // (Typo.title2Bold), which the card stands in for.
-        let font = NSFont.monospacedDigitSystemFont(ofSize: Typo.title2Bold.pointSize, weight: .bold)
-        let colour: NSColor = openable ? .linkColor : .labelColor
-        keyButton.attributedTitle = NSAttributedString(string: card.key, attributes: [.font: font, .foregroundColor: colour])
-        keyButton.isEnabled = openable
-        keyButton.toolTip = openable ? card.openTooltip : nil
-        keyButton.setAccessibilityLabel(openable ? card.openTooltip : card.key)
-        keyButton.isHidden = card.key.isEmpty
+        // The key is the card's title: a link when it may be opened, text
+        // to select otherwise.
+        keyButton.attributedTitle = NSAttributedString(
+            string: card.key, attributes: [.font: Self.keyFont, .foregroundColor: NSColor.linkColor])
+        keyButton.toolTip = card.openTooltip
+        keyButton.setAccessibilityLabel(card.openTooltip)
+        keyButton.isHidden = card.key.isEmpty || !openable
+        keyLabel.stringValue = card.key
+        keyLabel.isHidden = card.key.isEmpty || openable
 
         statusPill.text = card.status
         statusPill.setLabel(card.statusLabel)
         statusPill.isHidden = card.status.isEmpty
         statusPill.menuIndicator = transitions && statusMenu != nil
+        statusPill.menuToolTip = Jira.changeStatusLabel()
         statusPill.paint(IssuePill.colours(card.statusStyle))
         internalPill.stringValue = card.internalLabel
         internalPill.isHidden = !card.internal

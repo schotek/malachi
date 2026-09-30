@@ -8,7 +8,8 @@ import MalachiCore
 /// besides the issue card's pill: the Message menu of the menu bar, acting
 /// on the key window's message (`IssueTransitionHost`), and the More
 /// Actions menu of the main window and of every message window, acting on
-/// that window's. The menus are built elsewhere (MainMenu, MainToolbar);
+/// that window's and hidden there while it has nothing to act on. The
+/// menus are built elsewhere (MainMenu, MainToolbar);
 /// the items are added to them once they exist, so those builders stay as
 /// they are.
 @MainActor
@@ -27,8 +28,11 @@ enum ChangeStatusMenus {
         guard let item = toolbar?.items.first(where: { $0.itemIdentifier == MainToolbar.ID.moreActions }) as? NSMenuToolbarItem
         else { return }
         let menu = IssueTransitionMenu(state: state, subject: subject)
-        item.menu.addItem(.separator())
-        item.menu.addItem(menu.menuItem())
+        // Only for a message of an issue on an account that changes
+        // statuses; for mail the menu ends as it did.
+        let separator = NSMenuItem.separator()
+        item.menu.addItem(separator)
+        item.menu.addItem(menu.menuItem(hiddenWith: separator))
     }
 }
 
