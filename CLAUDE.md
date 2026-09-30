@@ -358,7 +358,8 @@ Pořadí prací:
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
 8. Účty Jira (`kind: jira`) — backend a macOS hotovo (čtení, komentáře,
-   notifikační maily, zobrazení konverzace); GTK a Windows zbývají
+   změna stavu, notifikační maily, zobrazení konverzace); GTK a Windows
+   zbývají
    (reference `ui/internal/jira`, `ui/internal/capabilities`,
    `ui/internal/conversation`)
 
@@ -482,7 +483,7 @@ jira:<issueId>`, `remote_id` `i:`/`c:`/`h:`; tabulky `issues`,
 (`Folder.virtual`, kopie řádků se stejným `remote_id` a Message-ID,
 `folders.go`; `open` podle `closedStatuses`, jinak kategorie done);
 příznaky jen lokální a na všechny kopie (`ops.go`); move/delete účet nemá
-(`Account.capabilities`: jira `["comment","forward"]`, mail
+(`Account.capabilities`: jira `["comment","forward","transition"]`, mail
 `api.MailCapabilities`, nil od staršího démona = mail; `message.move`/
 `delete` bez capability = `invalidArgument`). Bot cleaner
 `internal/jira/botclean`: komentáře, které přeposílá integrace jako „Issue
@@ -533,8 +534,17 @@ poštu), `ignore`; každá změna skrytí = `notify.messagesChanged` (koalescenc
 250 ms). MCP most: `list_accounts` vrací `capabilities`, `list_messages`/
 `search_messages`/`read_message` `issue` (key, status, item), `create_draft`
 `mode: reply` na jira účtu = koncept komentáře (`visibility`), ostatní
-režimy odmítá, přeposlání z mail účtu přes `messageAccountId`
-(`docs/mcp.md`). UI: macOS první (`macos/`): průvodce jako sheet
+režimy odmítá, přeposlání z mail účtu přes `messageAccountId`,
+`list_transitions` a za `--allow-modify` `transition_issue`
+(`docs/mcp.md`). Změna stavu (`docs/api.md` §4.12, `core/issue_transitions.go`,
+`jira/transitions.go`): `issue.transitions` vypíše přechody, které site
+uživateli na issue dovolí (`GET …/transitions?expand=transitions.fields`,
+nejvýš 100), `issue.transition` jeden provede a issue hned obnoví (čeká
+≤ 30 s), takže řádek události a nový stav dorazí obvyklou cestou; přechod
+s obrazovkou nebo povinným polem je `needsInput` a démon ho odmítne ještě
+před POSTem (`invalidArgument`), 401 = `authFailed`, 404 = `messageGone`,
+odmítnutí site = `serverError` s její vyčištěnou zprávou; řešitel se
+nemění. UI: macOS první (`macos/`): průvodce jako sheet
 (`AccountWizard/Jira`, `JiraWizardController`), sidebar s kapslí JIRA
 a pohledy nad spaces (`FolderTree.swift`), seznam jira složky vždy
 seskupený (`MailModel+Jira.swift`) s pilulkou stavu a řádky událostí,
@@ -542,7 +552,12 @@ karta issue nad hlavičkou (`IssueCardView`, `IssueReading.swift`; událost
 bez těla), akce podle capabilities (`Model/Capabilities.swift`,
 `ActionRules.swift`, `MainWindow/ActionPresentation.swift`: Reply →
 Comment, Forward přes mail účet), okno komentáře (`Compose/CommentHeaderView`,
-`ComposeWindowController+Comment`), nastavení účtu jako sheet
+`ComposeWindowController+Comment`), pilulka stavu v kartě issue jako
+nabídka přechodů a „Změnit stav“ v menu Zpráva a Další akce
+(`Shared/IssueStatusPill`, `IssueTransitionMenu`, `App/ChangeStatusMenus`,
+`IssueActionsController`; přechody `needsInput` neaktivní s vysvětlením,
+přechod do stavu, který issue už má, se nenabízí —
+`ui/internal/jira/transitions.go`), nastavení účtu jako sheet
 (`Preferences/JiraAccount`, `JiraAccountController`: spaces, okno, pohledy
 a uzavřené stavy, notifikační maily, boti s nabídkou „Issue Sync“;
 `JiraPattern.swift` kontroluje RE2 podle `regexp/syntax`),

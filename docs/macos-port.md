@@ -148,7 +148,11 @@ the spaces, the offline window and *Only Issues Involving Me* →
 `JiraAccountController` (the settings sheet of a Jira account:
 `account.listSpaces` with the stored token for the spaces and statuses,
 the form of `ui/internal/jira/settings.go`, `account.update` with empty
-credentials, which keeps the token) and `ConversationController` (the
+credentials, which keeps the token), `IssueActionsController` (the
+status menu of an issue: `issue.transitions` when the menu opens,
+`issue.transition` for the chosen item, stale replies dropped, one
+transition per issue at a time, the returned issue applied to the card
+at once) and `ConversationController` (the
 conversation shown for a folded conversation row: the members from the
 list controller's folder-scoped `thread.get`, the bodies through
 `MessageCache` near the viewport only, the one member marked read, the
@@ -469,7 +473,9 @@ format in one place for both clients.
   `JiraAccountsTests`, `ConversationLayoutTests` with the height
   governor), the controllers (`JiraWizardControllerTests`,
   `JiraAccountControllerTests`, `JiraComposeControllerTests`,
-  `JiraActionsTests`, `ConversationControllerTests`,
+  `JiraActionsTests`, `IssueActionsControllerTests`
+  (`JiraTransitionsTests` for `ui/internal/jira/transitions.go`),
+  `ConversationControllerTests`,
   `MessagesChangedTests`) and the Czech cases (`JiraTranslationTests`,
   `JiraSettingsTranslationTests`).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process

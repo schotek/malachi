@@ -1707,8 +1707,14 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   issue with the mail that discusses it (`References` never merge into a
   `jira:` thread; a notification mail is linked to its issue instead).
   Not included: Jira Service Management queues (a folder is a whole
-  space), transitions and assigning (the site is written to by a comment
-  only), saved JQL as folders, attachments in outgoing comments.
+  space), assigning, saved JQL as folders, attachments in outgoing
+  comments. *Amended 2026-09-30:* a status transition is written too
+  (`issue.transitions` / `issue.transition`, capability `transition`):
+  only one the site lists for the user and only when it needs no screen
+  or required field (those are listed as `needsInput` and refused before
+  anything is posted); the issue is refreshed afterwards, so the change
+  shows as its event row. Asking for a transition's fields in the client
+  is not included.
 - Jira sign-in: **decided** (2026-09-29) — an API token on Cloud (HTTP
   Basic with the Atlassian account's e-mail; a scoped token through the
   API gateway `api.atlassian.com/ex/jira/<cloudId>`) and a personal
