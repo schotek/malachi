@@ -54,6 +54,10 @@ public sealed partial class Integration : IDisposable
         Cache = new MessageCache(state.Client, mainToast, logs.CreateLogger<MessageCache>());
         Actions = new ActionsController(Mailbox, List, Cache, state.Settings, mainToast, logs.CreateLogger<ActionsController>());
         Compose = new ComposeController(state.Client, state.Settings, logger: logs.CreateLogger<ComposeController>());
+        // The Change Status menus of every view (window.go w.issues): their
+        // toasts over the main window.
+        Issues = new IssueActionsController(state.Client, id => Mailbox.Model.Account(id), logs.CreateLogger<IssueActionsController>());
+        Issues.ToastRequested += (_, text) => mainToast(text);
 
         WireConnection();
         WireNotifications();
@@ -96,6 +100,9 @@ public sealed partial class Integration : IDisposable
         state.Hooks.ComposeNew = () => Compose.Open(new ComposeParams { Kind = ComposeKind.New });
     }
 
+    /// <summary>The Change Status menus of Jira issues, shared by every view of the window.</summary>
+    public IssueActionsController Issues { get; }
+
     /// <summary>Stops the controllers' work; the daemon has been stopped by then.</summary>
     public void Dispose()
     {
@@ -104,6 +111,7 @@ public sealed partial class Integration : IDisposable
             t.Dispose();
         }
         tokens.Clear();
+        Issues.Dispose();
         Compose.Dispose();
         Cache.Dispose();
         List.Dispose();
@@ -138,6 +146,7 @@ public sealed partial class Integration : IDisposable
         tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
         tokens.Add(hub.AddSyncState(Mailbox.HandleSyncState));
         tokens.Add(hub.AddAuthRequired(Mailbox.HandleAuthRequired));
+        tokens.Add(hub.AddMessagesChanged(Mailbox.HandleMessagesChanged));
         tokens.Add(hub.AddAccountsChanged(() =>
         {
             Mailbox.HandleAccountsChanged();
@@ -151,6 +160,10 @@ public sealed partial class Integration : IDisposable
     private void WireMailbox()
     {
         Mailbox.ListTitleChanged += (_, heading) => mainWindow.ShowListHeading(heading);
+        // notify.go handleMessagesChanged: the cache lets go of the account's
+        // messages (the daemon rebuilt them in place) before anything shows
+        // them again.
+        Mailbox.MessagesChanged += (_, n) => Cache.Evict(n.AccountId);
     }
 
     // window.go 337-360 and 411-433: the main window's commands act on the

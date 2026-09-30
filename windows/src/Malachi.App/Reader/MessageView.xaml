@@ -158,7 +158,8 @@ gets the sanitiser's output only.
                     Style="{StaticResource CommandRowButtonStyle}"
                     ToolTipService.ToolTip="{l:T Msgid='Reply'}">
                     <AppBarButton.Icon>
-                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('mail-reply-sender')}" />
+                        <!-- Reply, or Comment on an issue (ShowFlags). -->
+                        <FontIcon x:Name="ReplyGlyph" />
                     </AppBarButton.Icon>
                 </AppBarButton>
                 <AppBarButton
@@ -259,6 +260,9 @@ gets the sanitiser's output only.
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem x:Name="LoadImagesItem" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
                             <MenuFlyoutItem x:Name="TrustSenderItem" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                            <!-- The status of a Jira issue (hidden-when: action-disabled). -->
+                            <MenuFlyoutSeparator x:Name="ChangeStatusSeparator" Visibility="Collapsed" />
+                            <MenuFlyoutItem x:Name="ChangeStatusItem" Text="{l:T Msgid='Change Status'}" Visibility="Collapsed" />
                         </MenuFlyout>
                     </FlyoutBase.AttachedFlyout>
                 </AppBarButton>
@@ -504,6 +508,9 @@ gets the sanitiser's output only.
                             Padding="24,12,24,12"
                             HorizontalAlignment="Stretch"
                             Spacing="12">
+                            <!-- issue_card_slot: the issue card of a Jira message
+                                 (window/issue_card.go); hidden for mail. -->
+                            <local:IssueCardView x:Name="IssueCard" State="{x:Bind Reader.IssueCard, Mode=OneWay}" />
                             <TextBlock
                                 x:Name="SubjectLabel"
                                 AutomationProperties.AutomationId="MessageSubject"

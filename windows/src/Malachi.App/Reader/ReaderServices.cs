@@ -47,6 +47,15 @@ public sealed class ReaderServices
     /// <summary>The icons of the attachment chips.</summary>
     public required ChipIcons Icons { get; init; }
 
+    /// <summary>The Change Status menus of Jira issues (window.go <c>w.issues</c>).</summary>
+    public required IssueActionsController Issues { get; init; }
+
+    /// <summary>
+    /// The site of a Jira account (model.go <c>issueSite</c>): the only site
+    /// an issue card's key may open; "" when unknown or not Jira.
+    /// </summary>
+    public required Func<Malachi.Core.Api.AccountId, string> IssueSite { get; init; }
+
     /// <summary>
     /// Shows <paramref name="text"/> in the toast overlay of
     /// <paramref name="window"/> when it has one, otherwise wherever the

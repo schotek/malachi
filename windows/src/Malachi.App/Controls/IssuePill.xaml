@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/internal/widget/pill.go (NewPill, SetStatusPill,
+SetInternalPill); macOS: Shared/PillLabel and IssuePill.swift. A pill of an
+issue: its status in the colour of its category, or the Internal badge of
+a service-desk comment; hidden while its text is empty. The fill is a
+visual state's ThemeResource (Resources/Pills.xaml), so it follows the
+theme. The status is its own tooltip, since a long one is cut; the text is
+the site's, shown as plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Controls.IssuePill"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="False"
+    VerticalAlignment="Center">
+    <Border x:Name="Fill" Style="{StaticResource IssuePillBorderStyle}">
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="Kinds">
+                <VisualState x:Name="Plain" />
+                <VisualState x:Name="InProgress">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource IssuePillInProgressBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Done">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource IssuePillDoneBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Internal">
+                    <VisualState.Setters>
+                        <Setter Target="Fill.Background" Value="{ThemeResource IssuePillInternalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+        <TextBlock x:Name="Label" Style="{StaticResource IssuePillTextStyle}" />
+    </Border>
+</UserControl>

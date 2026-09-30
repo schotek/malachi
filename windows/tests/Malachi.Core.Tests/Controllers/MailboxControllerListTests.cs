@@ -565,11 +565,14 @@ public sealed class MailboxControllerListTests
         var log = new ListLog();
         await using var h = await StartAsync(log, messages: new() { [Inbox] = ThreadedMessages() }, grouped: true);
         await h.IdleAsync();
-        await h.On(() => h.List.Select(new ListKey("t1")));
-        Assert.True(h.List.ActionFlags.On && h.List.ActionFlags.MarkRead && h.List.ActionFlags.MarkUnread);
 
+        // Asked in the turn of the selection, as the Swift test does: the
+        // selection's own thread.get (MarkConversationRead) is still out, and
+        // the action waits for the same answer.
         var asked = await h.On(() =>
         {
+            h.List.Select(new ListKey("t1"));
+            Assert.True(h.List.ActionFlags.On && h.List.ActionFlags.MarkRead && h.List.ActionFlags.MarkUnread);
             h.List.SelectedIds((row, ids) =>
             {
                 log.Ids.Add(ids);
@@ -907,6 +910,9 @@ public sealed class MailboxControllerListTests
             await h.IdleAsync();
             var (view, actions) = await ViewOfAsync(h);
             await h.On(() => h.List.Select(new ListKey("t3")));
+            // The selection asks for the members (MarkConversationRead); an
+            // answer after the flag change would bring the fixture's flags back.
+            await h.IdleAsync();
             var selected = view.Single(v => v.Key == h.List.SelectedKey);
             Assert.Equal(1, selected.Row.Summary?.UnreadCount);
 

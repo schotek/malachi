@@ -56,6 +56,18 @@ public sealed partial class MessageRowView : UserControl
     /// <summary>The hairline under every row but the last.</summary>
     public static Visibility NotLast(bool last) => last ? Visibility.Collapsed : Visibility.Visible;
 
+    /// <summary>The sender's column: the rest of the line, but on an event row its actor's size.</summary>
+    public static GridLength FromColumn(bool eventRow) => eventRow ? GridLength.Auto : new GridLength(1, GridUnitType.Star);
+
+    /// <summary>The change's column: the rest of an event row, nothing otherwise.</summary>
+    public static GridLength EventColumn(bool eventRow) => eventRow ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+
+    /// <summary>The actor of an event gives way to the change: at most 160 px of it.</summary>
+    public static double FromMaxWidth(bool eventRow) => eventRow ? 160 : double.PositiveInfinity;
+
+    /// <summary>The actor of an event is set like the change (the caption class).</summary>
+    public static double FromSize(bool eventRow) => eventRow ? 12 : 14;
+
     private static void OnRowChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var view = (MessageRowView)d;

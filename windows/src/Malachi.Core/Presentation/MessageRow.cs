@@ -3,7 +3,7 @@
 
 // Port of ui/internal/widget/message_row.go (MessageRow: SetMessage,
 // SetThread, SetReserveExpander, fill, SetExpanded, SetMember, applyLead,
-// SetCompact, SetShowPreview, SetShowAvatar; the margins and sizes of
+// applyIssue, SetCompact, SetShowPreview, SetShowAvatar; the margins and sizes of
 // message_row.blp), threads.go (the row a listRow becomes: newMessageRow,
 // syncRows) and widget/highlight.go (the matched words in bold); macOS:
 // MessageList/MessageCellView.swift, which keeps this in AppKit and Windows
@@ -23,6 +23,7 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Model;
 using Malachi.Core.Text;
 
@@ -76,6 +77,12 @@ public sealed partial class MessageRow : ObservableObject
         CountTooltip = "";
         ExpanderIcon = "pan-end-symbolic";
         ExpanderTooltip = "";
+        IssueKey = "";
+        StatusText = "";
+        InternalText = "";
+        EventText = "";
+        EventTooltip = "";
+        SubjectLineShown = true;
         AvatarSize = AvatarComfortable;
         MarginStart = MarginStartPlain;
         MarginTop = MarginComfortable;
@@ -217,6 +224,43 @@ public sealed partial class MessageRow : ObservableObject
     [ObservableProperty]
     public partial bool IsLast { get; set; }
 
+    /// <summary>A row of a Jira account: the issue's key before the subject; "" for mail.</summary>
+    [ObservableProperty]
+    public partial string IssueKey { get; private set; }
+
+    /// <summary>The issue's status, its pill after the subject; "" hides it.</summary>
+    [ObservableProperty]
+    public partial string StatusText { get; private set; }
+
+    /// <summary>The colour of the status pill.</summary>
+    [ObservableProperty]
+    public partial JiraStatusStyle StatusStyle { get; private set; }
+
+    /// <summary>The Internal badge of a service-desk comment; "" hides it.</summary>
+    [ObservableProperty]
+    public partial string InternalText { get; private set; }
+
+    /// <summary>
+    /// An event message of an issue (a status or assignee change), not a
+    /// conversation: its actor where the sender goes, set small, and the
+    /// change after it (<see cref="EventText"/>), no preview and no unread
+    /// dot.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsEventRow { get; private set; }
+
+    /// <summary>The change of an event row after its actor ("→ Status: A → B"); "" otherwise.</summary>
+    [ObservableProperty]
+    public partial string EventText { get; private set; }
+
+    /// <summary>The change of an event row without its arrow, the label's tooltip.</summary>
+    [ObservableProperty]
+    public partial string EventTooltip { get; private set; }
+
+    /// <summary>The subject line is shown: always but on an event row under its conversation (one line).</summary>
+    [ObservableProperty]
+    public partial bool SubjectLineShown { get; private set; }
+
     /// <summary>
     /// Shows <paramref name="row"/>: a conversation row from its aggregates,
     /// a message row from <paramref name="message"/> (what the list's
@@ -230,6 +274,7 @@ public sealed partial class MessageRow : ObservableObject
         ArgumentNullException.ThrowIfNull(message);
         bool thread;
         bool loading;
+        JiraIssueRow? issue;
         if (row.Thread && row.Summary is { } summary)
         {
             // SetThread: the participants where the sender goes, the member
@@ -249,6 +294,7 @@ public sealed partial class MessageRow : ObservableObject
             thread = true;
             loading = t.Loading;
             Expanded = t.Expanded;
+            issue = t.Issue;
         }
         else
         {
@@ -268,12 +314,13 @@ public sealed partial class MessageRow : ObservableObject
             thread = false;
             loading = false;
             Expanded = false;
+            issue = message.Issue;
         }
         IsThread = thread;
         Loading = thread && loading;
         IsMember = row.Member;
         Monochrome = look.Monochrome;
-        ShowPreview = look.ShowPreview;
+        ApplyIssue(issue, thread, look.ShowPreview);
         // SetCompact.
         MarginTop = look.Compact ? MarginCompact : MarginComfortable;
         MarginBottom = MarginTop;
@@ -289,12 +336,18 @@ public sealed partial class MessageRow : ObservableObject
     /// </summary>
     public override string ToString()
     {
-        var parts = new List<string> { Sender };
+        var parts = new List<string> { Sender, EventTooltip };
         if (CountText.Length > 0)
         {
             parts.Add(CountTooltip);
         }
-        parts.Add(Subject);
+        if (SubjectLineShown)
+        {
+            parts.Add(IssueKey);
+            parts.Add(Subject);
+            parts.Add(StatusText);
+            parts.Add(InternalText);
+        }
         if (Unread)
         {
             parts.Add(L10n.T("Unread"));
@@ -317,6 +370,65 @@ public sealed partial class MessageRow : ObservableObject
             parts.Add(Preview);
         }
         return string.Join(", ", parts.Where(p => p.Length > 0));
+    }
+
+    // message_row.go applyIssue: the issue of a row of a Jira account over
+    // what SetMessage or SetThread laid out: the key, the issue's summary for
+    // the subject ("KEY: Summary" without the key), the status pill and the
+    // Internal badge. A conversation whose latest member is an event shows
+    // the change as its preview; an event message row is the actor and the
+    // change on its first line, without a preview or an unread dot, and under
+    // its conversation without the subject line either (one line). A mail
+    // row hides all of it. Every text is the site's, plain.
+    private void ApplyIssue(JiraIssueRow? issue, bool thread, bool showPreview)
+    {
+        IsEventRow = issue is { Event: true } && !thread;
+        if (issue is null)
+        {
+            IssueKey = "";
+            StatusText = "";
+            StatusStyle = JiraStatusStyle.Plain;
+            InternalText = "";
+            EventText = "";
+            EventTooltip = "";
+            SubjectLineShown = true;
+            ShowPreview = showPreview;
+            return;
+        }
+        IssueKey = issue.Key;
+        if (issue.Summary.Length > 0)
+        {
+            Subject = issue.Summary;
+        }
+        StatusText = issue.Status;
+        StatusStyle = issue.StatusStyle;
+        InternalText = issue.Internal ? issue.InternalLabel : "";
+        if (thread)
+        {
+            if (issue.Event && issue.EventText.Length > 0)
+            {
+                Preview = issue.EventText;
+                Highlights = [];
+            }
+            EventText = "";
+            EventTooltip = "";
+            SubjectLineShown = true;
+        }
+        else if (IsEventRow)
+        {
+            // A symbol, not a word, leads the change after its actor.
+            EventText = "→ " + issue.EventText;
+            EventTooltip = issue.EventText;
+            SubjectLineShown = !IsMember;
+            Unread = false;
+        }
+        else
+        {
+            EventText = "";
+            EventTooltip = "";
+            SubjectLineShown = true;
+        }
+        ShowPreview = showPreview && !IsEventRow;
     }
 
     // message_row.go fill: the parts a message and a conversation row share.

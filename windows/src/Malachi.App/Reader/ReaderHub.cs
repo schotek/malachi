@@ -88,6 +88,24 @@ public sealed class ReaderHub : IDisposable
             Windows = registry,
             FileTypes = policy,
             Icons = new ChipIcons(new ShellFileTypes()),
+            Issues = integration.Issues,
+            IssueSite = id => integration.Mailbox.Model.Account(id)?.Config.Jira?.SiteUrl ?? "",
+        };
+        // issueActions onBusy and onIssue: every card showing the issue
+        // follows (window.go setIssueBusy, applyIssue).
+        integration.Issues.BusyChanged += (_, e) =>
+        {
+            foreach (var reader in registry.Readers)
+            {
+                reader.IssueBusyChanged(e.Account, e.Key);
+            }
+        };
+        integration.Issues.IssueChanged += (_, e) =>
+        {
+            foreach (var reader in registry.Readers)
+            {
+                reader.ApplyIssue(e.Account, e.Issue);
+            }
         };
         registry.MakeMessageWindow = s => new MessageWindow(Services, s);
         registry.MakeEmbeddedWindow = (containing, attachment, result) => new EmbeddedMessageWindow(Services, containing, attachment, result);
@@ -97,6 +115,9 @@ public sealed class ReaderHub : IDisposable
         mainWindow.Reader = Pane;
 
         WireMainCommands(mainWindow.Commands, router);
+        // win.change-status pops up the Change Status menu of the issue card
+        // on display (window.go).
+        mainWindow.Commands.ChangeStatus.Handler = () => Pane.OpenStatusMenu();
         WireReading();
         WireActions();
     }

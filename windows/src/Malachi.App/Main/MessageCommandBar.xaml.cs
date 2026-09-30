@@ -7,7 +7,9 @@
 // MainWindow/MainToolbar.swift and MainWindowController's validation
 // (starTitle, trashTitle). See MessageCommandBar.xaml. The buttons run the
 // main window's commands, which are enabled from the selection's
-// ActionFlags; the star and the trash follow the flags too.
+// ActionFlags; the star and the trash follow the flags too, and so do the
+// actions an account does not offer (hidden) and Reply's label
+// (ActionPresentation).
 
 using System;
 using Malachi.App.Commands;
@@ -32,6 +34,7 @@ public sealed partial class MessageCommandBar : UserControl
         InitializeComponent();
         StarButton.IsEnabled = false;
         StarGlyph.Glyph = Icons.Glyph("non-starred-symbolic");
+        ReplyGlyph.Glyph = Icons.Glyph("mail-reply-sender-symbolic");
         StarButton.Click += OnStarClick;
     }
 
@@ -50,6 +53,8 @@ public sealed partial class MessageCommandBar : UserControl
         CommandBinding.Bind(MenuMarkRead, windowCommands.MarkRead);
         CommandBinding.Bind(MenuLoadImages, windowCommands.LoadImages);
         CommandBinding.Bind(MenuTrustSender, windowCommands.TrustSender);
+        CommandBinding.Bind(MenuChangeStatus, windowCommands.ChangeStatus);
+        windowCommands.ChangeStatus.Command.CanExecuteChanged += (_, _) => ShowFlags();
         windowCommands.ToggleFlag.Command.CanExecuteChanged += (_, _) => ShowFlags();
         windowCommands.Trash.Command.CanExecuteChanged += (_, _) => ShowFlags();
         ShowFlags();
@@ -76,6 +81,20 @@ public sealed partial class MessageCommandBar : UserControl
         var trash = Outbox.TrashTooltip(flags.Outbox);
         ToolTipService.SetToolTip(TrashButton, trash);
         AutomationProperties.SetName(TrashButton, trash);
+        // actions.go presentReply and the capabilities' visibility.
+        var reply = ActionPresentation.ReplyLabel(flags);
+        ReplyGlyph.Glyph = ActionPresentation.ReplyGlyph(flags);
+        ToolTipService.SetToolTip(ReplyButton, reply);
+        AutomationProperties.SetName(ReplyButton, reply);
+        ReplyButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Reply);
+        ReplyAllButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.ReplyAll);
+        ForwardButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Forward);
+        TrashButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Trash);
+        ArchiveButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Archive);
+        JunkButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Junk);
+        var status = c.ChangeStatus.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
+        MenuChangeStatus.Visibility = status;
+        MenuChangeStatusSeparator.Visibility = status;
     }
 
     /// <summary>The Assistant's ✦ button (window.blp assistant_button); the main window gives it its menu.</summary>

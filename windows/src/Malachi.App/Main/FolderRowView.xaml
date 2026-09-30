@@ -10,10 +10,12 @@ rules of ui/internal/style (rows of 24 px plus 1 above and below, icons of
 waiting for the pointer or the keyboard); macOS:
 Sidebar/FolderCellView.swift and SidebarHeaderCellView. A heading is the
 fold arrow (inert and invisible on Favourites) and a dim caption heading,
-3 px lower than a row; a folder is indented 12 per level: its arrow (in
-a nested account), role icon, name (and whose it is, for a pinned folder
-with several accounts), unread badge and pin star. What the row shows is
-Core's SidebarRow; every text is plain.
+3 px lower than a row, with the kind capsule of an account's heading
+(JIRA, GOOGLE, M365, IMAP; widget.NewKindBadge) right after its name; a
+folder is indented 12 per level: its arrow (in a nested account), icon (a
+Jira view's saved search, else its role's), name (and whose it is, for a
+pinned folder with several accounts), unread badge and pin star. What the
+row shows is Core's SidebarRow; every text is plain.
 -->
 <UserControl
     x:Class="Malachi.App.Main.FolderRowView"
@@ -78,14 +80,24 @@ Core's SidebarRow; every text is plain.
             Visibility="{x:Bind res:Bind.VisibleIfText(Row.Icon), Mode=OneWay}" />
 
         <StackPanel Grid.Column="2" VerticalAlignment="Center">
-            <TextBlock
-                x:Name="TitleLabel"
-                MaxLines="1"
-                Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
-                Style="{x:Bind TitleStyle(Row.IsHeading), Mode=OneWay}"
-                Text="{x:Bind Row.Title, Mode=OneWay}"
-                TextTrimming="CharacterEllipsis"
-                TextWrapping="NoWrap" />
+            <main:CapsulePanel>
+                <TextBlock
+                    x:Name="TitleLabel"
+                    MaxLines="1"
+                    Opacity="{x:Bind main:FolderRowView.DimOpacity(Row.Dimmed), Mode=OneWay}"
+                    Style="{x:Bind TitleStyle(Row.IsHeading), Mode=OneWay}"
+                    Text="{x:Bind Row.Title, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis"
+                    TextWrapping="NoWrap" />
+                <!-- The row's text names it for a screen reader (SidebarRow.ToString). -->
+                <Border
+                    x:Name="Capsule"
+                    AutomationProperties.AccessibilityView="Raw"
+                    Style="{StaticResource KindBadgeBorderStyle}"
+                    Visibility="{x:Bind res:Bind.VisibleIfText(Row.Capsule), Mode=OneWay}">
+                    <TextBlock Style="{StaticResource KindBadgeTextStyle}" Text="{x:Bind Row.Capsule, Mode=OneWay}" />
+                </Border>
+            </main:CapsulePanel>
             <TextBlock
                 x:Name="SubtitleLabel"
                 MaxLines="1"

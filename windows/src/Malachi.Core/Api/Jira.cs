@@ -321,6 +321,14 @@ public sealed record MessageIssue
     };
 
     /// <summary>
+    /// This item of the issue as <paramref name="info"/> says it is now (Go's
+    /// <c>item.IssueInfo = info</c>, Swift's <c>issue.info = info</c>): the
+    /// issue's members replaced, the item's own kept.
+    /// </summary>
+    public MessageIssue WithInfo(IssueInfo info) =>
+        Of(info, Item) with { Visibility = Visibility, Changes = Changes, Via = Via, Edited = Edited, Mine = Mine };
+
+    /// <summary>
     /// The projection of <paramref name="info"/> as the item
     /// <paramref name="item"/> (Swift <c>MessageIssue(info:item:)</c>); the
     /// item's own members are set with <c>with</c>.

@@ -108,6 +108,9 @@ public sealed partial class MessageView : UserControl
             mode, services.Cache, services.FileTypes, logger: services.State.Logs.CreateLogger<ReaderController>())
         {
             IsDraft = mode == ReaderMode.Pane ? services.Router.IsDraft : null,
+            IssueSite = services.IssueSite,
+            CanTransition = services.Issues.CanTransition,
+            IssueBusy = services.Issues.IsBusy,
         };
         Reader.Toast = text => services.ToastIn(HostWindow, text);
         Reader.PropertyChanged += OnReaderChanged;
@@ -117,6 +120,11 @@ public sealed partial class MessageView : UserControl
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
 
+        // The issue card of a Jira message (issue_card.go): its menu acts on
+        // the message on display, its key opens the issue in the browser.
+        IssueCard.Issues = services.Issues;
+        IssueCard.Subject = () => Reader.Current is { } shown ? Malachi.Core.Controllers.IssueActionsController.SubjectOf(shown) : null;
+        IssueCard.OpenIssue = OpenIssue;
         WireCommands();
         // GTK SetFocusOnClick(false): a click leaves the focus where it was,
         // since the bar goes away the moment the images are in; the keyboard
@@ -148,6 +156,28 @@ public sealed partial class MessageView : UserControl
 
     /// <summary>The window the view is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow { get; set; }
+
+    /// <summary>win.change-status / msg.change-status: pops up the Change Status menu of the card on display.</summary>
+    public bool OpenStatusMenu() => IssueCard.OpenStatusMenu();
+
+    // issue_card.go openKey: the issue in the browser (a URL of the
+    // account's own site, the card checked it); a failure is a toast.
+    private void OpenIssue(string url) => _ = OpenIssueAsync(url);
+
+    private async System.Threading.Tasks.Task OpenIssueAsync(string url)
+    {
+        var window = HostWindow;
+        try
+        {
+            await services.State.Launcher.OpenLinkAsync(url, ReaderServices.Owner(window));
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            LogOpenIssueFailed(logger, e.GetType().Name);
+            // TRANSLATORS: %s is a technical error message.
+            services.ToastIn(window, L10n.T("The link could not be opened: %s", e.Message));
+        }
+    }
 
     /// <summary>
     /// Puts the keyboard in the body (message_window.blp focus-widget:
@@ -224,6 +254,8 @@ public sealed partial class MessageView : UserControl
         MarkReadItem.Command = commands.MarkRead.Command;
         LoadImagesItem.Command = commands.LoadImages.Command;
         TrustSenderItem.Command = commands.TrustSender.Command;
+        ChangeStatusItem.Command = commands.ChangeStatus.Command;
+        commands.ChangeStatus.Command.CanExecuteChanged += (_, _) => ShowFlags();
         // The star shows the flagged state and the trash button says what it
         // does (actions.go setStar, outbox.go trashTooltip): both follow the
         // flags, whose change re-validates these commands.
@@ -248,6 +280,20 @@ public sealed partial class MessageView : UserControl
         var trash = Outbox.TrashTooltip(f.Outbox);
         TrashButton.Label = trash;
         ToolTipService.SetToolTip(TrashButton, trash);
+        // message_window.go: the capabilities' visibility and presentReply.
+        var reply = Main.ActionPresentation.ReplyLabel(f);
+        ReplyButton.Label = reply;
+        ReplyGlyph.Glyph = Main.ActionPresentation.ReplyGlyph(f);
+        ToolTipService.SetToolTip(ReplyButton, reply);
+        ReplyButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Reply);
+        ReplyAllButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.ReplyAll);
+        ForwardButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Forward);
+        TrashButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Trash);
+        ArchiveButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Archive);
+        JunkButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Junk);
+        var status = commands.ChangeStatus.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
+        ChangeStatusItem.Visibility = status;
+        ChangeStatusSeparator.Visibility = status;
     }
 
     private void OnReaderChanged(object? sender, PropertyChangedEventArgs e)
@@ -817,6 +863,9 @@ public sealed partial class MessageView : UserControl
             button.IsEnabled = !services.Attachments.IsSavingAll(id);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "opening an issue failed: {Kind}")]
+    private static partial void LogOpenIssueFailed(ILogger logger, string kind);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "copying an address failed: {Kind} 0x{HResult:X8}")]
     private static partial void LogCopyFailed(ILogger logger, string kind, int hResult);
