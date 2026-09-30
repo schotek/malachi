@@ -554,6 +554,20 @@ Windows: macOS `waitsWhereNothingShowsTheWork`,
 pod přepisem (macOS řádek v `FillStackView`, Windows `ProgressRing` pod
 `Transcript`) a řádek chyby s oběma tlačítky.
 
+Tabulky v odpovědích (2026-09-30, všechny tři klienty): model je posílá
+i přes zákaz v systémovém promptu (Úkoly a termíny: „co, kdo a do kdy“),
+proto je parser Markdownu (`assistant.Markdown`, Swift
+`Assistant.markdown`, C# `Assistant.Markdown`) čte jako GitHub tabulku
+(řádek buněk v odstavci, řádek oddělovačů se stejným počtem buněk, pak
+řádky) a z každého řádku udělá odrážku: první buňka tučně, další neprázdné
+buňky na vlastních řádcích jako „záhlaví: buňka“. Pohledy se nemění; jen
+GTK spojuje řádky jednoho bloku mimo kód znakem U+2028 jako macOS
+(`lineSeparator`), aby pokračovací řádek odrážky začínal pod textem.
+Popisky záhlaví smějí stát nejvýš tolik bajtů jako řádky samotné (jinak
+by obří záhlaví opakované u každého řádku znásobilo výstup). Swift a C#
+napsané bez překladu: testy `blocks` a `isLinear` (macOS) a `BlockCases`
+a `LinearInputs` (Windows).
+
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
 `OAuth2Config{source: goa}` / `GraphConfig{source: goa}`). Jinak vlastní

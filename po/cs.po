@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-30 13:39+0200\n"
+"POT-Creation-Date: 2026-09-30 13:57+0200\n"
 "PO-Revision-Date: 2026-09-04 12:10+0200\n"
 "Last-Translator: Vladislav Janeček\n"
 "Language-Team: Czech\n"
@@ -1635,7 +1635,7 @@ msgstr "_Odeslat"
 msgid "Try Again"
 msgstr "Zkusit znovu"
 
-#: ui/internal/window/assistant_panel.go:928 ui/internal/window/drafts.go:77
+#: ui/internal/window/assistant_panel.go:939 ui/internal/window/drafts.go:77
 msgid "Opening the draft"
 msgstr "Otevření konceptu"
 

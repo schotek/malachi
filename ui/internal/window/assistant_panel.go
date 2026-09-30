@@ -765,6 +765,13 @@ type answerView struct {
 // listIndent is the indentation of one list level, in pixels.
 const listIndent = 14
 
+// lineSeparator joins the lines of one block without starting a new
+// paragraph (macOS AssistantMarkdownRenderer.lineSeparator): a list
+// item's next line, a table row's "header: cell" among them, starts under
+// its text, not under its marker, and the block's spacing comes once, after
+// it. A code block keeps "\n", so that copied code has plain newlines.
+const lineSeparator = "\u2028"
+
 func newAnswerView(tv *gtk.TextView) *answerView {
 	a := &answerView{tv: tv, buf: tv.Buffer(), tags: map[string]*gtk.TextTag{}, links: map[string]string{}}
 	table := a.buf.TagTable()
@@ -865,7 +872,11 @@ func (a *answerView) render(markdown string) {
 				a.links[name] = s.Link
 				tags = append(tags, t)
 			}
-			a.insert(s.Text, tags...)
+			text := s.Text
+			if b.Kind != assistant.BlockCode {
+				text = strings.ReplaceAll(text, "\n", lineSeparator)
+			}
+			a.insert(text, tags...)
 		}
 	}
 }

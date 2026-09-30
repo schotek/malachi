@@ -77,6 +77,17 @@ const maxListLevel = 3
 // `code`, [text](http(s)://…) and bare http(s):// URLs at a word's start.
 // A marker without its closing half, and a link to anything but http or
 // https, stays literal text.
+//
+// A table (a paragraph's line of cells between "|", a delimiter row of as
+// many ---, :---, ---: or :---: cells, then rows) is read as one bullet
+// per row, for the narrow panel: its first cell in bold, then every other
+// cell that is not empty on a line of its own as "header: cell". The
+// pipes at a row's edges are optional, "\|" is a pipe inside a cell, cells
+// beyond the header's are dropped and missing ones are empty; a blank
+// line, a line without a pipe, a heading or a fence ends the table, and a
+// table without rows shows nothing. The header labels cost at most what
+// the rows themselves do: once they would outweigh the rows so far, the
+// cells go without them.
 func Markdown(text string) []Block {
 	var p mdParser
 	for _, line := range strings.Split(cleanText(text), "\n") {
@@ -123,6 +134,11 @@ type mdParser struct {
 	// indents are the indentations of the open list's levels, outermost
 	// first.
 	indents []int
+	// header is the open table's header cells, nil when no table is
+	// open; budget what the rows so far leave for the header labels, in
+	// bytes.
+	header []string
+	budget int
 }
 
 func (p *mdParser) line(l string) {
@@ -134,6 +150,18 @@ func (p *mdParser) line(l string) {
 		}
 		p.code = append(p.code, l)
 		return
+	}
+	if p.header != nil {
+		fenceOrHeading := false
+		if indent <= 3 {
+			_, _, isHeading := heading(rest)
+			fenceOrHeading = isHeading || strings.HasPrefix(rest, "```")
+		}
+		if !fenceOrHeading && hasPipe(rest) {
+			p.tableRow(rest)
+			return
+		}
+		p.header = nil
 	}
 	if strings.Trim(rest, " \t") == "" {
 		p.flush()
@@ -153,6 +181,9 @@ func (p *mdParser) line(l string) {
 			return
 		}
 	}
+	if indent <= 3 && p.open != nil && p.open.Kind == BlockParagraph && p.startTable(rest) {
+		return
+	}
 	if kind, number, text, ok := listItem(rest); ok {
 		p.flush()
 		p.open = &Block{Kind: kind, Level: p.listLevel(indent), Number: number}
@@ -167,6 +198,118 @@ func (p *mdParser) line(l string) {
 	p.indents = nil
 	p.open = &Block{Kind: BlockParagraph}
 	p.lines = []string{text}
+}
+
+// startTable reads rest as a delimiter row under the open paragraph's
+// last line: when that line is a header of as many cells, the line leaves
+// the paragraph (the rest of it is flushed) and a table opens.
+func (p *mdParser) startTable(rest string) bool {
+	last := p.lines[len(p.lines)-1]
+	if !hasPipe(rest) || !hasPipe(last) {
+		return false
+	}
+	delimiter := tableCells(rest)
+	for _, c := range delimiter {
+		if !delimiterCell(c) {
+			return false
+		}
+	}
+	header := tableCells(last)
+	if len(header) != len(delimiter) {
+		return false
+	}
+	p.lines = p.lines[:len(p.lines)-1]
+	if len(p.lines) > 0 {
+		p.flush()
+	}
+	p.open, p.lines, p.indents = nil, nil, nil
+	p.header, p.budget = header, 0
+	return true
+}
+
+// tableRow adds a row of the open table as a bullet: the first cell in
+// bold, then "header: cell" for every other cell that is not empty, each
+// on its own line. A row with no text adds nothing.
+func (p *mdParser) tableRow(rest string) {
+	p.budget += len(rest)
+	cells := tableCells(rest)
+	var title []Span
+	var fields []string
+	for i := 0; i < len(cells) && i < len(p.header); i++ {
+		c := cells[i]
+		switch {
+		case c == "":
+		case i == 0:
+			title = inlineSpans(c)
+			for k := range title {
+				title[k].Bold = true
+			}
+		case p.header[i] != "" && len(p.header[i])+2 <= p.budget:
+			p.budget -= len(p.header[i]) + 2
+			fields = append(fields, p.header[i]+": "+c)
+		default:
+			fields = append(fields, c)
+		}
+	}
+	spans := title
+	if len(fields) > 0 {
+		text := strings.Join(fields, "\n")
+		if len(title) > 0 {
+			text = "\n" + text
+		}
+		spans = append(spans, inlineSpans(text)...)
+	}
+	if len(spans) > 0 {
+		p.blocks = append(p.blocks, Block{Kind: BlockBullet, Spans: spans})
+	}
+}
+
+// hasPipe says whether l has a "|" that is not escaped, as tableCells
+// reads it.
+func hasPipe(l string) bool {
+	for i := 0; i < len(l); i++ {
+		switch {
+		case l[i] == '\\' && i+1 < len(l) && l[i+1] == '|':
+			i++
+		case l[i] == '|':
+			return true
+		}
+	}
+	return false
+}
+
+// tableCells are the cells of a table row: the text between its unescaped
+// pipes, one pipe at each edge dropped, "\|" read as "|", every cell
+// trimmed of spaces and tabs.
+func tableCells(l string) []string {
+	l = strings.Trim(l, " \t")
+	l = strings.TrimPrefix(l, "|")
+	if strings.HasSuffix(l, "|") && !strings.HasSuffix(l, "\\|") {
+		l = l[:len(l)-1]
+	}
+	var cells []string
+	var cell strings.Builder
+	for i := 0; i < len(l); i++ {
+		switch {
+		case l[i] == '\\' && i+1 < len(l) && l[i+1] == '|':
+			cell.WriteByte('|')
+			i++
+		case l[i] == '|':
+			cells = append(cells, strings.Trim(cell.String(), " \t"))
+			cell.Reset()
+		default:
+			cell.WriteByte(l[i])
+		}
+	}
+	return append(cells, strings.Trim(cell.String(), " \t"))
+}
+
+// delimiterCell says whether c is a delimiter row's cell: dashes, with a
+// colon at either end or both.
+func delimiterCell(c string) bool {
+	c = strings.TrimPrefix(c, ":")
+	c = strings.TrimSuffix(c, ":")
+	return c != "" && strings.Trim(c, "-") == ""
 }
 
 // flush ends the open paragraph or list item.

@@ -96,6 +96,29 @@ func TestMarkdownBlocks(t *testing.T) {
 		}},
 		{"an empty code block", "```\n```", []Block{{Kind: BlockCode}}},
 		{"a fence indented four spaces is text", "    ```\n    x", []Block{para("```\nx")}},
+		{"a table: a bullet per row", "| Co | Kdo | Do kdy |\n|---|---|---|\n| Odpovědět Radkovi | Vladislav (vy) | neuvedeno |\n| Rozhodnout o **Pro** | Radek | – |", []Block{
+			{Kind: BlockBullet, Spans: []Span{{Text: "Odpovědět Radkovi", Bold: true}, {Text: "\nKdo: Vladislav (vy)\nDo kdy: neuvedeno"}}},
+			{Kind: BlockBullet, Spans: []Span{{Text: "Rozhodnout o ", Bold: true}, {Text: "Pro", Bold: true}, {Text: "\nKdo: Radek\nDo kdy: –"}}},
+		}},
+		{"a table among text", "Úkoly:\nCo | Kdo\n:--- | ---:\n`a\\|b` | **Radek**\n|  | jen kdo |\n| x |\n| y | z | extra |\nkonec", []Block{
+			para("Úkoly:"),
+			{Kind: BlockBullet, Spans: []Span{{Text: "a|b", Bold: true, Code: true}, {Text: "\nKdo: "}, {Text: "Radek", Bold: true}}},
+			{Kind: BlockBullet, Spans: plain("Kdo: jen kdo")},
+			{Kind: BlockBullet, Spans: []Span{{Text: "x", Bold: true}}},
+			{Kind: BlockBullet, Spans: []Span{{Text: "y", Bold: true}, {Text: "\nKdo: z"}}},
+			para("konec"),
+		}},
+		{"a delimiter of another count is text", "| a | b |\n|---|\n| c | d |", []Block{para("| a | b |\n|---|\n| c | d |")}},
+		{"a header without a pipe is text", "Title\n---|---", []Block{para("Title\n---|---")}},
+		{"rows without a delimiter are text", "| a | b |\n| x | y |", []Block{para("| a | b |\n| x | y |")}},
+		{"a table without rows; one ended by a heading", "| a | b |\n|-|-|\n\n| c | d |\n|:-:|-|\n| e | f |\n# Head | x", []Block{
+			{Kind: BlockBullet, Spans: []Span{{Text: "e", Bold: true}, {Text: "\nd: f"}}},
+			{Kind: BlockHeading, Level: 1, Spans: plain("Head | x")},
+		}},
+		{"labels no longer than the rows", "| t | " + strings.Repeat("h", 20) + " |\n|-|-|\n| a | b |\n| c | d |", []Block{
+			{Kind: BlockBullet, Spans: []Span{{Text: "a", Bold: true}, {Text: "\nb"}}},
+			{Kind: BlockBullet, Spans: []Span{{Text: "c", Bold: true}, {Text: "\nd"}}},
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -254,6 +277,11 @@ func TestMarkdownIsLinear(t *testing.T) {
 		"openers, one paren2": strings.Repeat("[a](https://x.org/", mb/18) + ")",
 		"openers, text paren": strings.Repeat("[a](http://x.org/b ", mb/19) + ")",
 		"openers, no scheme":  strings.Repeat("[a](x", mb/5) + ")",
+		// Tables: rows, a header label repeated for every row, one very
+		// wide table.
+		"table rows":    "a|b\n-|-\n" + strings.Repeat("x|y\n", mb/4),
+		"a long header": "a|" + strings.Repeat("h", mb/2) + "\n-|-\n" + strings.Repeat("x|y\n", mb/8),
+		"a wide table":  strings.Repeat("|", mb/4) + "\n|" + strings.Repeat("-|", mb/4-1) + "\n" + strings.Repeat("|a|b|\n", mb/12),
 	}
 	for name, in := range inputs {
 		start := time.Now()

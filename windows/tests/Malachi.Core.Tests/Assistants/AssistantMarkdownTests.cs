@@ -109,6 +109,39 @@ public sealed class AssistantMarkdownTests
         },
         { "an empty code block", "```\n```", [B(Code, [])] },
         { "a fence indented four spaces is text", "    ```\n    x", [Para("```\nx")] },
+        {
+            "a table: a bullet per row",
+            "| Co | Kdo | Do kdy |\n|---|---|---|\n| Odpovědět Radkovi | Vladislav (vy) | neuvedeno |\n| Rozhodnout o **Pro** | Radek | – |",
+            [
+                B(Bullet, [S("Odpovědět Radkovi", bold: true), S("\nKdo: Vladislav (vy)\nDo kdy: neuvedeno")]),
+                B(Bullet, [S("Rozhodnout o ", bold: true), S("Pro", bold: true), S("\nKdo: Radek\nDo kdy: –")]),
+            ]
+        },
+        {
+            "a table among text",
+            "Úkoly:\nCo | Kdo\n:--- | ---:\n`a\\|b` | **Radek**\n|  | jen kdo |\n| x |\n| y | z | extra |\nkonec",
+            [
+                Para("Úkoly:"),
+                B(Bullet, [S("a|b", bold: true, code: true), S("\nKdo: "), S("Radek", bold: true)]),
+                B(Bullet, Plain("Kdo: jen kdo")),
+                B(Bullet, [S("x", bold: true)]),
+                B(Bullet, [S("y", bold: true), S("\nKdo: z")]),
+                Para("konec"),
+            ]
+        },
+        { "a delimiter of another count is text", "| a | b |\n|---|\n| c | d |", [Para("| a | b |\n|---|\n| c | d |")] },
+        { "a header without a pipe is text", "Title\n---|---", [Para("Title\n---|---")] },
+        { "rows without a delimiter are text", "| a | b |\n| x | y |", [Para("| a | b |\n| x | y |")] },
+        {
+            "a table without rows; one ended by a heading",
+            "| a | b |\n|-|-|\n\n| c | d |\n|:-:|-|\n| e | f |\n# Head | x",
+            [B(Bullet, [S("e", bold: true), S("\nd: f")]), B(Heading, Plain("Head | x"), level: 1)]
+        },
+        {
+            "labels no longer than the rows",
+            "| t | " + new string('h', 20) + " |\n|-|-|\n| a | b |\n| c | d |",
+            [B(Bullet, [S("a", bold: true), S("\nb")]), B(Bullet, [S("c", bold: true), S("\nd")])]
+        },
     };
 
     public static TheoryData<string, string, MarkdownSpan[]> InlineCases => new()
@@ -266,6 +299,11 @@ public sealed class AssistantMarkdownTests
         ["openers, one paren2"] = () => Repeat("[a](https://x.org/", Mb / 18) + ")",
         ["openers, text paren"] = () => Repeat("[a](http://x.org/b ", Mb / 19) + ")",
         ["openers, no scheme"] = () => Repeat("[a](x", Mb / 5) + ")",
+        // Tables: rows, a header label repeated for every row, one very wide
+        // table.
+        ["table rows"] = () => "a|b\n-|-\n" + Repeat("x|y\n", Mb / 4),
+        ["a long header"] = () => "a|" + Repeat("h", Mb / 2) + "\n-|-\n" + Repeat("x|y\n", Mb / 8),
+        ["a wide table"] = () => Repeat("|", Mb / 4) + "\n|" + Repeat("-|", (Mb / 4) - 1) + "\n" + Repeat("|a|b|\n", Mb / 12),
     };
 
     public static TheoryData<string> LinearNames => [.. LinearInputs.Keys];

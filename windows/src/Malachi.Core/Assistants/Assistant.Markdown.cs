@@ -73,6 +73,18 @@ public static partial class Assistant
     /// [text](http(s)://…) and bare http(s):// URLs at a word's start. A
     /// marker without its closing half, and a link to anything but http or
     /// https, stays literal text.
+    /// <para>
+    /// A table (a paragraph's line of cells between "|", a delimiter row of
+    /// as many ---, :---, ---: or :---: cells, then rows) is read as one
+    /// bullet per row, for the narrow panel: its first cell in bold, then
+    /// every other cell that is not empty on a line of its own as "header:
+    /// cell". The pipes at a row's edges are optional, "\|" is a pipe inside
+    /// a cell, cells beyond the header's are dropped and missing ones are
+    /// empty; a blank line, a line without a pipe, a heading or a fence ends
+    /// the table, and a table without rows shows nothing. The header labels
+    /// cost at most what the rows themselves do: once they would outweigh the
+    /// rows so far, the cells go without them.
+    /// </para>
     /// </summary>
     public static IReadOnlyList<MarkdownBlock> Markdown(string text)
     {
@@ -215,6 +227,11 @@ public static partial class Assistant
         private bool inCode;
         private MarkdownBlock? open;
 
+        // The open table's header cells, null when no table is open; budget
+        // what the rows so far leave for the header labels, in bytes.
+        private List<byte[]>? header;
+        private int budget;
+
         public List<MarkdownBlock> Blocks { get; } = [];
 
         public void Line(int lo, int hi)
@@ -249,6 +266,16 @@ public static partial class Assistant
                 code.Add((lo, hi));
                 return;
             }
+            if (header is not null)
+            {
+                var fenceOrHeading = indent <= 3 && (IsFence(r, hi) || Heading(r, hi, out _, out _));
+                if (!fenceOrHeading && HasPipe(r, hi))
+                {
+                    TableRow(r, hi);
+                    return;
+                }
+                header = null;
+            }
             if (r == hi) // nothing but spaces and tabs
             {
                 Flush();
@@ -266,6 +293,10 @@ public static partial class Assistant
                 Flush();
                 indents.Clear();
                 Blocks.Add(new MarkdownBlock { Kind = MarkdownBlockKind.Heading, Level = level, Spans = InlineSpans(s[title.Lo..title.Hi]) });
+                return;
+            }
+            if (indent <= 3 && open is { Kind: MarkdownBlockKind.Paragraph } && StartTable(r, hi))
+            {
                 return;
             }
             if (ListItem(r, hi, out var kind, out var number, out var item))
@@ -293,6 +324,198 @@ public static partial class Assistant
                 CloseCode();
             }
             Flush();
+        }
+
+        // startTable: reads s[r..hi) as a delimiter row under the open
+        // paragraph's last line; when that line is a header of as many cells,
+        // it leaves the paragraph (the rest of it is flushed) and a table
+        // opens.
+        private bool StartTable(int r, int hi)
+        {
+            if (lines.Count == 0)
+            {
+                return false;
+            }
+            var last = lines[^1];
+            if (!HasPipe(r, hi) || !HasPipe(last.Lo, last.Hi))
+            {
+                return false;
+            }
+            var delimiter = TableCells(r, hi);
+            if (!delimiter.TrueForAll(IsDelimiterCell))
+            {
+                return false;
+            }
+            var cells = TableCells(last.Lo, last.Hi);
+            if (cells.Count != delimiter.Count)
+            {
+                return false;
+            }
+            lines.RemoveAt(lines.Count - 1);
+            if (lines.Count > 0)
+            {
+                Flush();
+            }
+            open = null;
+            lines.Clear();
+            indents.Clear();
+            header = cells;
+            budget = 0;
+            return true;
+        }
+
+        // tableRow: a row of the open table as a bullet: the first cell in
+        // bold, then "header: cell" for every other cell that is not empty,
+        // each on its own line. A row with no text adds nothing.
+        private void TableRow(int r, int hi)
+        {
+            if (header is null)
+            {
+                return;
+            }
+            budget += hi - r;
+            var cells = TableCells(r, hi);
+            var spans = new List<MarkdownSpan>();
+            var fields = new List<byte[]>();
+            for (var i = 0; i < cells.Count && i < header.Count; i++)
+            {
+                var c = cells[i];
+                if (c.Length == 0)
+                {
+                    continue;
+                }
+                if (i == 0)
+                {
+                    foreach (var span in InlineSpans(c))
+                    {
+                        spans.Add(span with { Bold = true });
+                    }
+                }
+                else if (header[i].Length > 0 && header[i].Length + 2 <= budget)
+                {
+                    budget -= header[i].Length + 2;
+                    fields.Add([.. header[i], 0x3A, 0x20, .. c]);
+                }
+                else
+                {
+                    fields.Add(c);
+                }
+            }
+            if (fields.Count > 0)
+            {
+                var text = new List<byte>();
+                if (spans.Count > 0)
+                {
+                    text.Add(0x0A);
+                }
+                for (var k = 0; k < fields.Count; k++)
+                {
+                    if (k > 0)
+                    {
+                        text.Add(0x0A);
+                    }
+                    text.AddRange(fields[k]);
+                }
+                spans.AddRange(InlineSpans([.. text]));
+            }
+            if (spans.Count > 0)
+            {
+                Blocks.Add(new MarkdownBlock { Kind = MarkdownBlockKind.Bullet, Spans = spans });
+            }
+        }
+
+        // hasPipe: whether s[lo..hi) has a "|" that is not escaped, as
+        // TableCells reads it.
+        private bool HasPipe(int lo, int hi)
+        {
+            var i = lo;
+            while (i < hi)
+            {
+                if (s[i] == 0x5C && i + 1 < hi && s[i + 1] == 0x7C)
+                {
+                    i += 2;
+                    continue;
+                }
+                if (s[i] == 0x7C)
+                {
+                    return true;
+                }
+                i++;
+            }
+            return false;
+        }
+
+        // tableCells: the cells of a table row, the text between its
+        // unescaped pipes, one pipe at each edge dropped, "\|" read as "|",
+        // every cell trimmed of spaces and tabs.
+        private List<byte[]> TableCells(int lo, int hi)
+        {
+            (lo, hi) = TrimST(lo, hi);
+            if (lo < hi && s[lo] == 0x7C)
+            {
+                lo++;
+            }
+            if (hi > lo && s[hi - 1] == 0x7C && !(hi - lo >= 2 && s[hi - 2] == 0x5C))
+            {
+                hi--;
+            }
+            var cells = new List<byte[]>();
+            var cell = new List<byte>();
+            var i = lo;
+            while (i < hi)
+            {
+                if (s[i] == 0x5C && i + 1 < hi && s[i + 1] == 0x7C)
+                {
+                    cell.Add(0x7C);
+                    i += 2;
+                    continue;
+                }
+                if (s[i] == 0x7C)
+                {
+                    cells.Add(TrimCell(cell));
+                    cell.Clear();
+                }
+                else
+                {
+                    cell.Add(s[i]);
+                }
+                i++;
+            }
+            cells.Add(TrimCell(cell));
+            return cells;
+        }
+
+        // strings.Trim(cell, " \t").
+        private static byte[] TrimCell(List<byte> b)
+        {
+            var lo = 0;
+            var hi = b.Count;
+            while (lo < hi && (b[lo] == 0x20 || b[lo] == 0x09))
+            {
+                lo++;
+            }
+            while (hi > lo && (b[hi - 1] == 0x20 || b[hi - 1] == 0x09))
+            {
+                hi--;
+            }
+            return b.GetRange(lo, hi - lo).ToArray();
+        }
+
+        // delimiterCell: whether c is a delimiter row's cell: dashes, with a
+        // colon at either end or both.
+        private static bool IsDelimiterCell(byte[] c)
+        {
+            var lo = 0;
+            var hi = c.Length;
+            if (lo < hi && c[lo] == 0x3A)
+            {
+                lo++;
+            }
+            if (hi > lo && c[hi - 1] == 0x3A)
+            {
+                hi--;
+            }
+            return lo < hi && Array.TrueForAll(c[lo..hi], b => b == 0x2D);
         }
 
         // Ends the open paragraph or list item.

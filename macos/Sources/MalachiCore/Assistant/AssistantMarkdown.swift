@@ -89,6 +89,17 @@ extension Assistant {
     /// [text](http(s)://…) and bare http(s):// URLs at a word's start. A
     /// marker without its closing half, and a link to anything but http or
     /// https, stays literal text.
+    ///
+    /// A table (a paragraph's line of cells between "|", a delimiter row of
+    /// as many ---, :---, ---: or :---: cells, then rows) is read as one
+    /// bullet per row, for the narrow panel: its first cell in bold, then
+    /// every other cell that is not empty on a line of its own as "header:
+    /// cell". The pipes at a row's edges are optional, "\|" is a pipe
+    /// inside a cell, cells beyond the header's are dropped and missing ones
+    /// are empty; a blank line, a line without a pipe, a heading or a fence
+    /// ends the table, and a table without rows shows nothing. The header
+    /// labels cost at most what the rows themselves do: once they would
+    /// outweigh the rows so far, the cells go without them.
     public static func markdown(_ text: String) -> [Block] {
         let s = cleanMarkdownText(text)
         return s.withUnsafeBufferPointer { p in
@@ -207,6 +218,10 @@ private struct MarkdownParser {
     var lines: [Range<Int>] = []
     /// The indentations of the open list's levels, outermost first.
     var indents: [Int] = []
+    /// The open table's header cells, nil when no table is open; budget
+    /// what the rows so far leave for the header labels, in bytes.
+    var header: [[UInt8]]?
+    var budget = 0
 
     init(s: UnsafeBufferPointer<UInt8>) {
         self.s = s
@@ -236,6 +251,14 @@ private struct MarkdownParser {
             code.append(lo..<hi)
             return
         }
+        if header != nil {
+            let fenceOrHeading = indent <= 3 && (isFence(r, hi) || heading(r, hi) != nil)
+            if !fenceOrHeading, hasPipe(r, hi) {
+                tableRow(r, hi)
+                return
+            }
+            header = nil
+        }
         if r == hi { // nothing but spaces and tabs
             flush()
             return
@@ -253,6 +276,9 @@ private struct MarkdownParser {
                 kind: .heading, level: level, spans: Assistant.inlineSpans(UnsafeBufferPointer(rebasing: s[text]))))
             return
         }
+        if indent <= 3, open?.kind == .paragraph, startTable(r, hi) {
+            return
+        }
         if let (kind, number, text) = listItem(r, hi) {
             flush()
             open = Assistant.Block(kind: kind, level: listLevel(indent), number: number, spans: [])
@@ -267,6 +293,154 @@ private struct MarkdownParser {
         indents = []
         open = Assistant.Block(kind: .paragraph, spans: [])
         lines = [text]
+    }
+
+    /// startTable: reads s[r..<hi] as a delimiter row under the open
+    /// paragraph's last line; when that line is a header of as many cells,
+    /// it leaves the paragraph (the rest of it is flushed) and a table
+    /// opens.
+    mutating func startTable(_ r: Int, _ hi: Int) -> Bool {
+        guard let last = lines.last, hasPipe(r, hi), hasPipe(last.lowerBound, last.upperBound) else { return false }
+        let delimiter = tableCells(r, hi)
+        guard delimiter.allSatisfy(Self.isDelimiterCell) else { return false }
+        let cells = tableCells(last.lowerBound, last.upperBound)
+        guard cells.count == delimiter.count else { return false }
+        lines.removeLast()
+        if !lines.isEmpty {
+            flush()
+        }
+        open = nil
+        lines = []
+        indents = []
+        header = cells
+        budget = 0
+        return true
+    }
+
+    /// tableRow: a row of the open table as a bullet: the first cell in
+    /// bold, then "header: cell" for every other cell that is not empty,
+    /// each on its own line. A row with no text adds nothing.
+    mutating func tableRow(_ r: Int, _ hi: Int) {
+        guard let header else { return }
+        budget += hi - r
+        let cells = tableCells(r, hi)
+        var title: [Assistant.Span] = []
+        var fields: [[UInt8]] = []
+        var i = 0
+        while i < cells.count, i < header.count {
+            let c = cells[i]
+            if c.isEmpty {
+                // An empty cell says nothing.
+            } else if i == 0 {
+                title = Self.spans(c)
+                for k in title.indices {
+                    title[k].bold = true
+                }
+            } else if !header[i].isEmpty, header[i].count + 2 <= budget {
+                budget -= header[i].count + 2
+                fields.append(header[i] + Array(": ".utf8) + c)
+            } else {
+                fields.append(c)
+            }
+            i += 1
+        }
+        var spans = title
+        if !fields.isEmpty {
+            var text: [UInt8] = title.isEmpty ? [] : [0x0A]
+            for (k, f) in fields.enumerated() {
+                if k > 0 {
+                    text.append(0x0A)
+                }
+                text.append(contentsOf: f)
+            }
+            spans += Self.spans(text)
+        }
+        if !spans.isEmpty {
+            blocks.append(Assistant.Block(kind: .bullet, spans: spans))
+        }
+    }
+
+    /// hasPipe: whether s[lo..<hi] has a "|" that is not escaped, as
+    /// `tableCells` reads it.
+    func hasPipe(_ lo: Int, _ hi: Int) -> Bool {
+        var i = lo
+        while i < hi {
+            if s[i] == 0x5C, i + 1 < hi, s[i + 1] == 0x7C {
+                i += 2
+                continue
+            }
+            if s[i] == 0x7C {
+                return true
+            }
+            i += 1
+        }
+        return false
+    }
+
+    /// tableCells: the cells of a table row, the text between its unescaped
+    /// pipes, one pipe at each edge dropped, "\|" read as "|", every cell
+    /// trimmed of spaces and tabs.
+    func tableCells(_ lo: Int, _ hi: Int) -> [[UInt8]] {
+        let t = trimST(lo, hi)
+        var lo = t.lowerBound
+        var hi = t.upperBound
+        if lo < hi, s[lo] == 0x7C {
+            lo += 1
+        }
+        if hi > lo, s[hi - 1] == 0x7C, !(hi - lo >= 2 && s[hi - 2] == 0x5C) {
+            hi -= 1
+        }
+        var cells: [[UInt8]] = []
+        var cell: [UInt8] = []
+        var i = lo
+        while i < hi {
+            if s[i] == 0x5C, i + 1 < hi, s[i + 1] == 0x7C {
+                cell.append(0x7C)
+                i += 2
+                continue
+            }
+            if s[i] == 0x7C {
+                cells.append(Self.trimCell(cell))
+                cell = []
+            } else {
+                cell.append(s[i])
+            }
+            i += 1
+        }
+        cells.append(Self.trimCell(cell))
+        return cells
+    }
+
+    /// strings.Trim(cell, " \t").
+    static func trimCell(_ b: [UInt8]) -> [UInt8] {
+        var lo = 0
+        var hi = b.count
+        while lo < hi, b[lo] == 0x20 || b[lo] == 0x09 {
+            lo += 1
+        }
+        while hi > lo, b[hi - 1] == 0x20 || b[hi - 1] == 0x09 {
+            hi -= 1
+        }
+        return Array(b[lo..<hi])
+    }
+
+    /// delimiterCell: whether c is a delimiter row's cell: dashes, with a
+    /// colon at either end or both.
+    static func isDelimiterCell(_ c: [UInt8]) -> Bool {
+        var lo = 0
+        var hi = c.count
+        if lo < hi, c[lo] == 0x3A {
+            lo += 1
+        }
+        if hi > lo, c[hi - 1] == 0x3A {
+            hi -= 1
+        }
+        return lo < hi && c[lo..<hi].allSatisfy { $0 == 0x2D }
+    }
+
+    /// The spans of a cell's or a row's text.
+    static func spans(_ b: [UInt8]) -> [Assistant.Span] {
+        b.withUnsafeBufferPointer { Assistant.inlineSpans($0) }
     }
 
     /// Ends the open paragraph or list item.

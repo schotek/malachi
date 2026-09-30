@@ -97,6 +97,31 @@ private func para(_ s: String) -> B { B(kind: .paragraph, spans: plain(s)) }
             ]),
             ("an empty code block", "```\n```", [B(kind: .code, spans: [])]),
             ("a fence indented four spaces is text", "    ```\n    x", [para("```\nx")]),
+            ("a table: a bullet per row",
+             "| Co | Kdo | Do kdy |\n|---|---|---|\n| Odpovědět Radkovi | Vladislav (vy) | neuvedeno |\n| Rozhodnout o **Pro** | Radek | – |", [
+                B(kind: .bullet, spans: [S(text: "Odpovědět Radkovi", bold: true), S(text: "\nKdo: Vladislav (vy)\nDo kdy: neuvedeno")]),
+                B(kind: .bullet, spans: [S(text: "Rozhodnout o ", bold: true), S(text: "Pro", bold: true), S(text: "\nKdo: Radek\nDo kdy: –")]),
+            ]),
+            ("a table among text",
+             "Úkoly:\nCo | Kdo\n:--- | ---:\n`a\\|b` | **Radek**\n|  | jen kdo |\n| x |\n| y | z | extra |\nkonec", [
+                para("Úkoly:"),
+                B(kind: .bullet, spans: [S(text: "a|b", bold: true, code: true), S(text: "\nKdo: "), S(text: "Radek", bold: true)]),
+                B(kind: .bullet, spans: plain("Kdo: jen kdo")),
+                B(kind: .bullet, spans: [S(text: "x", bold: true)]),
+                B(kind: .bullet, spans: [S(text: "y", bold: true), S(text: "\nKdo: z")]),
+                para("konec"),
+            ]),
+            ("a delimiter of another count is text", "| a | b |\n|---|\n| c | d |", [para("| a | b |\n|---|\n| c | d |")]),
+            ("a header without a pipe is text", "Title\n---|---", [para("Title\n---|---")]),
+            ("rows without a delimiter are text", "| a | b |\n| x | y |", [para("| a | b |\n| x | y |")]),
+            ("a table without rows; one ended by a heading", "| a | b |\n|-|-|\n\n| c | d |\n|:-:|-|\n| e | f |\n# Head | x", [
+                B(kind: .bullet, spans: [S(text: "e", bold: true), S(text: "\nd: f")]),
+                B(kind: .heading, level: 1, spans: plain("Head | x")),
+            ]),
+            ("labels no longer than the rows", "| t | " + String(repeating: "h", count: 20) + " |\n|-|-|\n| a | b |\n| c | d |", [
+                B(kind: .bullet, spans: [S(text: "a", bold: true), S(text: "\nb")]),
+                B(kind: .bullet, spans: [S(text: "c", bold: true), S(text: "\nd")]),
+            ]),
         ]
         for (name, input, want) in cases {
             #expect(Assistant.markdown(input) == want, "\(name)")
@@ -253,6 +278,13 @@ private func para(_ s: String) -> B { B(kind: .paragraph, spans: plain(s)) }
             ("control bytes", String(repeating: "\u{0}\r", count: mb / 2)),
             ("replacement characters", String(repeating: "\u{FFFD}", count: mb / 3)),
             ("bold over a block", "**" + String(repeating: "a *b* _c_ `d` ", count: mb / 14) + "**"),
+            // Tables: rows, a header label repeated for every row, one very
+            // wide table.
+            ("table rows", "a|b\n-|-\n" + String(repeating: "x|y\n", count: mb / 4)),
+            ("a long header", "a|" + String(repeating: "h", count: mb / 2) + "\n-|-\n" + String(repeating: "x|y\n", count: mb / 8)),
+            ("a wide table",
+             String(repeating: "|", count: mb / 4) + "\n|" + String(repeating: "-|", count: mb / 4 - 1) + "\n"
+                + String(repeating: "|a|b|\n", count: mb / 12)),
         ]
         // Swift only: link targets that share one closing parenthesis. The
         // Go scanner reads each of them to the end again (quadratic: 360 KB
