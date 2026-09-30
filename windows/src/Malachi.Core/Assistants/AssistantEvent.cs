@@ -67,6 +67,20 @@ public sealed record AssistantEvent
     /// <summary>Result: <c>structured_output</c> as the raw JSON of the line; null when absent or null.</summary>
     public byte[]? Structured { get; init; }
 
+    /// <summary>
+    /// Failure: what Claude Code calls the failure, its message's
+    /// <c>error</c> ("authentication_failed", "rate_limit", …).
+    /// </summary>
+    public string Failure { get; init; } = "";
+
+    /// <summary>
+    /// Event.NotSignedIn: whether the event is the failure of a turn for
+    /// want of a sign-in the API accepts: Claude Code is signed out, or its
+    /// sign-in has expired or was revoked (<c>claude auth status</c> may
+    /// still say loggedIn then).
+    /// </summary>
+    public bool NotSignedIn => Kind == AssistantEventKind.Failure && Failure == Assistant.AuthenticationFailed;
+
     /// <inheritdoc/>
     public bool Equals(AssistantEvent? other) =>
         other is not null
@@ -83,7 +97,8 @@ public sealed record AssistantEvent
         && CostUsd.Equals(other.CostUsd)
         && (Structured is null
             ? other.Structured is null
-            : other.Structured is not null && Structured.AsSpan().SequenceEqual(other.Structured));
+            : other.Structured is not null && Structured.AsSpan().SequenceEqual(other.Structured))
+        && string.Equals(Failure, other.Failure, StringComparison.Ordinal);
 
     /// <inheritdoc/>
     public override int GetHashCode()
@@ -111,6 +126,7 @@ public sealed record AssistantEvent
         {
             hash.AddBytes(Structured);
         }
+        hash.Add(Failure, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }

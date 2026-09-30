@@ -176,3 +176,130 @@ esac`)
 		t.Errorf("version %q, sign-in %+v; want neither known", *v, *s)
 	}
 }
+
+// signInClaude is a claude whose auth login runs login.sh in dir and whose
+// auth status says what the file logged-in holds.
+func signInClaude(t *testing.T, dir string) string {
+	t.Helper()
+	return writeScript(t, filepath.Join(dir, "claude"), fmt.Sprintf(`D='%s'
+case "$1 $2" in
+"auth login") echo "$*" >> "$D/calls"; pwd -P > "$D/cwd"; . "$D/login.sh"; exit 0;;
+"auth status") printf '{"loggedIn": %%s}\n' "$(cat "$D/logged-in")"; exit 0;;
+esac
+exit 2`, dir))
+}
+
+// Claude Code's own sign-in: claude auth login in the private directory,
+// its end reported once, and the kept sign-in state asked afresh after it.
+func TestLocatorSignIn(t *testing.T) {
+	dir := scratch(t)
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("logged-in", "false")
+	write("login.sh", `echo 'Opening browser to sign in…'
+echo 'If the browser did not open, visit: https://claude.example/authorize?state=secret'
+printf true > "$D/logged-in"`)
+	exe := signInClaude(t, dir)
+	loop := newTestLoop()
+	l := testLocator(dir, &memSettings{claudePath: exe}, []string{"HOME=" + dir, "PATH="}, loop)
+	changes := 0
+	remove := l.OnSignInChange(func() { changes++ })
+	signedIn := func() SignIn {
+		var s *SignIn
+		l.SignedIn(func(x SignIn) { s = &x })
+		loop.runUntil(t, func() bool { return s != nil })
+		return *s
+	}
+	if s := signedIn(); s != (SignIn{Known: true}) {
+		t.Fatalf("sign-in %+v before, want signed out", s)
+	}
+	var results []SignInResult
+	record := func(r SignInResult) { results = append(results, r) }
+	l.SignIn(record)
+	if !l.SigningIn() || changes != 1 {
+		t.Errorf("signing in %v, %d changes after SignIn", l.SigningIn(), changes)
+	}
+	loop.runUntil(t, func() bool { return len(results) == 1 })
+	if results[0] != (SignInResult{Outcome: SignInDone}) || l.SigningIn() || changes != 2 {
+		t.Errorf("result %+v, signing in %v, %d changes", results[0], l.SigningIn(), changes)
+	}
+	// No Refresh by the caller: the answer kept from before is gone.
+	if s := signedIn(); s != (SignIn{Known: true, SignedIn: true}) {
+		t.Errorf("sign-in %+v after, want signed in", s)
+	}
+	if got := strings.TrimSpace(readFile(t, filepath.Join(dir, "calls"))); got != "auth login" {
+		t.Errorf("calls %q", got)
+	}
+	if got := strings.TrimSpace(readFile(t, filepath.Join(dir, "cwd"))); got != dir {
+		t.Errorf("cwd %q, want the private directory %q", got, dir)
+	}
+
+	// A bad end: stderr's first line, else the status.
+	write("login.sh", `echo 'Login failed: no' >&2; exit 3`)
+	l.SignIn(record)
+	loop.runUntil(t, func() bool { return len(results) == 2 })
+	if results[1] != (SignInResult{Outcome: SignInFailed, Reason: "Login failed: no"}) {
+		t.Errorf("result %+v", results[1])
+	}
+	write("login.sh", `exit 4`)
+	l.SignIn(record)
+	loop.runUntil(t, func() bool { return len(results) == 3 })
+	if results[2] != (SignInResult{Outcome: SignInFailed, Reason: "claude exited with status 4"}) {
+		t.Errorf("result %+v", results[2])
+	}
+
+	// Cancelled; then one that another takes the place of.
+	write("login.sh", `exec sleep 30`)
+	cancel := l.SignIn(record)
+	loop.settle(t, 100*time.Millisecond)
+	cancel()
+	cancel()
+	loop.runUntil(t, func() bool { return len(results) == 4 })
+	if results[3].Outcome != SignInCancelled || l.SigningIn() {
+		t.Errorf("result %+v, signing in %v", results[3], l.SigningIn())
+	}
+	stale := l.SignIn(record)
+	loop.settle(t, 100*time.Millisecond)
+	write("login.sh", `exit 0`)
+	l.SignIn(record)
+	loop.runUntil(t, func() bool { return len(results) == 6 })
+	if results[4].Outcome != SignInCancelled || results[5].Outcome != SignInDone {
+		t.Errorf("results %+v", results[4:])
+	}
+	// The cancel of a sign-in that is over ends no other.
+	write("login.sh", `exec sleep 30`)
+	l.SignIn(record)
+	stale()
+	if !l.SigningIn() {
+		t.Error("a stale cancel ended the sign-in under way")
+	}
+	// Out of time.
+	l.signInTimeout = 200 * time.Millisecond
+	l.SignIn(record)
+	loop.runUntil(t, func() bool { return len(results) == 8 })
+	if results[6].Outcome != SignInCancelled || results[7].Outcome != SignInTimedOut {
+		t.Errorf("results %+v", results[6:])
+	}
+	remove()
+	before := changes
+	l.SignIn(record)
+	l.CancelSignIn()
+	loop.runUntil(t, func() bool { return len(results) == 9 })
+	if changes != before {
+		t.Errorf("a removed watcher was called")
+	}
+
+	// No Claude Code at all.
+	if err := os.Remove(exe); err != nil {
+		t.Fatal(err)
+	}
+	l.SignIn(record)
+	loop.runUntil(t, func() bool { return len(results) == 10 })
+	if results[9].Outcome != SignInNotFound || l.SigningIn() {
+		t.Errorf("result %+v", results[9])
+	}
+}

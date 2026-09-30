@@ -458,6 +458,47 @@ v něm běží) a živé odpovědi skutečného Claude Code (přihlášení
 experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
 Code z aplikace.
 
+Přihlášení Claude Code z aplikace (2026-09-30, ve všech třech klientech;
+běžný uživatel nic nespouští v terminálu). Claude Code má vlastní
+přihlášení, oddělené od Claude Desktop (`~/.claude/.credentials.json`, na
+macOS Keychain); aplikace přihlašovací údaje dál nikdy nevidí. Když
+`claude auth status` řekne nepřihlášeno, řádek panelu „Claude Code není
+přihlášený“ a řádek Claude Code v Předvolbách → AI nabídnou *Přihlásit
+se…*: locator spustí vlastní `claude auth login` Claude Code
+(`assistant.SignInArgs`, `SignInEnv` = `ChildEnv` + proměnné desktopové
+session pro otevření prohlížeče na Linuxu; na Windows jen
+`ChildEnvironment`), čeká nejdéle 10 minut na konec procesu (stav 0 =
+přihlášeno; jeho výstup se neukazuje ani neloguje), jedno přihlášení pro
+celou aplikaci (nové nahradí běžící, to skončí jako zrušené), panel ho
+ukazuje jako řádek aktivity „Čeká se na přihlášení v prohlížeči…“, Stop ho
+ukončí a po úspěchu se sama znovu pošle poslední otázka. Zprávu, kterou
+Claude Code napíše sám, když API tah odmítne (`assistant` s polem
+`error`, událost `EventFailure`), panel neukazuje jako odpověď (výsledek
+ji opakuje); `authentication_failed` (vypršelý či odvolaný token, ať
+`auth status` tvrdí cokoli) skončí stejným řádkem s *Přihlásit se…* a
+ukončí proces. Bez Claude Code nabízí panel i Předvolby *Získat Claude
+Code…* (`assistant.InstallURL`, stránka Anthropic v prohlížeči; aplikace
+nic nestahuje ani nespouští). Přepis v okně Nová zpráva a hledání
+vlastními slovy tlačítko nemají a odkazují na Předvolby → AI
+(`SignInTexts().Hint`). Referencí je Go: `ui/internal/assistant`
+(`SignInTexts`, `SignInFailedText`, `events.go`) a
+`ui/internal/assistantpanel` (`Locator.SignIn`, `Controller.SignIn`,
+`Offer`), testy proti falešnému `claude` (na Windows se pouští
+křížově přeložené ve WSL). Stav: Windows hotový a ověřený testy i
+průchodem UI proti falešnému `claude.exe`; okno GTK
+(`window/assistant_panel.go`, `preferences.go`) a macOS klient jsou
+napsané na Windows bez překladu, takže je čeká sestavení a test
+v Toolbxu a na Macu; `po/malachi.pot` a `po/cs.po` jsou upravené ručně
+(xgettext na Windows není), `make po` v Toolbxu je srovná. Skutečné
+přihlášení (souhlas v prohlížeči) ověřuje vlastník. Na Macu zkontrolovat
+hlavně: `Content.error(_, retry:, offer: = .none)` (výchozí hodnota
+asociované hodnoty a `.none` u `Offer`), `ClaudeCodeLocator.startSignIn`
+(`SignInRun`, `Task.detached` a `AsyncStream` pod Swift 6,
+`nonisolated static runSignIn` s typy vnořenými v `@MainActor` třídě),
+řádek chyby s tlačítky ve `FlowView` (mezera u poznámek a chyb bez
+tlačítek) a testy závislé na čase (`signInStoppedAndReplaced`,
+`ClaudeCodeLocatorTests.signIn`).
+
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
 `OAuth2Config{source: goa}` / `GraphConfig{source: goa}`). Jinak vlastní

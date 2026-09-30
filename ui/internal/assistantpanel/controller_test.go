@@ -342,7 +342,8 @@ func TestPartialContextIsResolved(t *testing.T) {
 	}
 }
 
-// No Claude Code: an error with Try Again, nothing started.
+// No Claude Code: an error with Get Claude Code… and Try Again, nothing
+// started.
 func TestClaudeNotFound(t *testing.T) {
 	fake := newFakeClaude(t, "true", "", answerTurn("ok"))
 	h := newHarness(t, fake, true, testBridge)
@@ -354,37 +355,173 @@ func TestClaudeNotFound(t *testing.T) {
 	}
 	h.turn()
 	contentsEqual(t, "transcript", h.contents(), []Content{
-		user("", "Hello"), failure("Claude Code was not found on this computer", true),
+		user("", "Hello"), offered("Claude Code was not found on this computer", true, OfferInstall),
 	})
 }
 
-// Signed out: an error, and Try Again after signing in works.
-func TestNotSignedIn(t *testing.T) {
+const (
+	signedOut = "Claude Code is not signed in"
+	waiting   = "Waiting for the sign-in in your browser…"
+)
+
+// Signed out: an error with Sign In…, which runs Claude Code's sign-in and
+// then sends the same question, without a second bubble.
+func TestNotSignedInSignsIn(t *testing.T) {
 	fake := newFakeClaude(t, "false", "", answerTurn("Hi there"))
 	h := newHarness(t, fake, true, testBridge)
 	if !h.panel.Submit("Hello") {
 		t.Fatal("question refused")
 	}
 	h.turn()
-	signedOut := "Claude Code is not signed in. Run claude in Terminal and sign in."
-	contentsEqual(t, "transcript", h.contents(), []Content{user("", "Hello"), failure(signedOut, true)})
+	contentsEqual(t, "transcript", h.contents(), []Content{user("", "Hello"), offered(signedOut, false, OfferSignIn)})
+	if fake.starts() != 0 || fake.logins() != 0 {
+		t.Errorf("%d starts, %d sign-ins", fake.starts(), fake.logins())
+	}
+	// Try Again is not what the line offers.
+	h.panel.Retry(h.panel.Items()[1].ID)
+	if h.panel.Phase() != PhaseIdle {
+		t.Fatal("Try Again ran on a line that offers Sign In…")
+	}
+	fake.login(signsIn)
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.turn()
+	contentsEqual(t, "after Sign In…", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, true), answer("Hi there", false),
+	})
+	if fake.logins() != 1 || fake.starts() != 1 || !slices.Equal(fake.prompts(), []string{"Hello"}) {
+		t.Errorf("%d sign-ins, %d starts, prompts %q", fake.logins(), fake.starts(), fake.prompts())
+	}
+	// The sign-in opens the browser: it has the desktop session, and still
+	// nothing of a surrounding Claude or of Malachi Mail.
+	env := fake.read("login-env")
+	if !strings.Contains(env, "DISPLAY=:7\n") || strings.Contains(env, "ANTHROPIC") || strings.Contains(env, "MALACHI") {
+		t.Errorf("sign-in environment:\n%s", env)
+	}
+	// A button used up does nothing more.
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	if h.panel.Phase() != PhaseIdle || fake.logins() != 1 {
+		t.Errorf("a second Sign In… on the same line ran")
+	}
+}
+
+// A sign-in that ends badly: its reason, and Sign In… again.
+func TestSignInFails(t *testing.T) {
+	fake := newFakeClaude(t, "false", "", answerTurn("Hi there"))
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.Submit("Hello")
+	h.turn()
+	fake.login(`echo 'Login failed: the browser said no' >&2
+echo 'more' >&2
+exit 1`)
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.turn()
+	contentsEqual(t, "transcript", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, true),
+		offered("The sign-in failed: Login failed: the browser said no", false, OfferSignIn),
+	})
 	if fake.starts() != 0 {
 		t.Errorf("%d starts", fake.starts())
 	}
-	// Signed in meanwhile: Try Again sends the same question, without a
-	// second bubble.
-	script := strings.Replace(readFile(t, fake.path), `{"loggedIn": false}`, `{"loggedIn": true}`, 1)
-	if err := os.WriteFile(fake.path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	h.panel.Retry(h.panel.Items()[1].ID)
+	// Once more, and it works.
+	fake.login(signsIn)
+	h.panel.SignIn(h.panel.Items()[3].ID)
 	h.turn()
-	contentsEqual(t, "after Try Again", h.contents(), []Content{
-		user("", "Hello"), failure(signedOut, false), answer("Hi there", false),
-	})
-	if !slices.Equal(fake.prompts(), []string{"Hello"}) {
-		t.Errorf("prompts %q", fake.prompts())
+	if h.last() != answer("Hi there", false) || fake.logins() != 2 {
+		t.Errorf("last %+v, %d sign-ins", h.last(), fake.logins())
 	}
+}
+
+// The browser brings no answer in time: the sign-in is ended.
+func TestSignInTimesOut(t *testing.T) {
+	fake := newFakeClaude(t, "false", "", answerTurn("Hi there"))
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.locator.signInTimeout = 300 * time.Millisecond
+	h.panel.Submit("Hello")
+	h.turn()
+	fake.login("exec sleep 30")
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.turn()
+	if h.last() != offered("The sign-in took too long; try again", false, OfferSignIn) || h.panel.locator.SigningIn() {
+		t.Errorf("last %+v, signing in %v", h.last(), h.panel.locator.SigningIn())
+	}
+}
+
+// Stop ends a sign-in like any turn; one the settings start takes its
+// place.
+func TestSignInStoppedAndReplaced(t *testing.T) {
+	fake := newFakeClaude(t, "false", "", answerTurn("Hi there"))
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.Submit("Hello")
+	h.turn()
+	fake.login("exec sleep 30")
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.loop.runUntil(t, func() bool { return h.panel.locator.SigningIn() })
+	contentsEqual(t, "signing in", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, false),
+	})
+	h.panel.Stop()
+	h.loop.settle(t, 100*time.Millisecond)
+	contentsEqual(t, "stopped", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, true), note("The conversation was stopped"),
+	})
+	if h.panel.locator.SigningIn() || h.panel.Phase() != PhaseIdle {
+		t.Errorf("signing in %v, phase %v after Stop", h.panel.locator.SigningIn(), h.panel.Phase())
+	}
+
+	// The same question again: signed out, Sign In…, and the settings'
+	// sign-in takes over while the browser is open.
+	h.panel.NewConversation()
+	h.panel.Submit("Hello")
+	h.turn()
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.loop.runUntil(t, func() bool { return h.panel.locator.SigningIn() })
+	var settings []SignInResult
+	fake.login(signsIn)
+	h.panel.locator.SignIn(func(r SignInResult) { settings = append(settings, r) })
+	h.turn()
+	h.loop.runUntil(t, func() bool { return len(settings) == 1 })
+	contentsEqual(t, "taken over", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, true), offered(signedOut, false, OfferSignIn),
+	})
+	if settings[0].Outcome != SignInDone {
+		t.Errorf("the settings' sign-in: %+v", settings[0])
+	}
+}
+
+// The API refuses the sign-in although auth status says loggedIn (expired,
+// revoked): Claude Code's own message is no answer, the line offers Sign
+// In…, and the question goes to a new process after it.
+func TestRefusedSignInOffersSignIn(t *testing.T) {
+	refused := "Failed to authenticate. API Error: 401"
+	fake := newFakeClaude(t, "true", "",
+		fakeTurn{lines: []string{fakeInit, fakeFailure("authentication_failed", refused), fakeResult(refused, false)}},
+		answerTurn("Hi there"))
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.Submit("Hello")
+	h.turn()
+	contentsEqual(t, "transcript", h.contents(), []Content{user("", "Hello"), offered(signedOut, false, OfferSignIn)})
+	fake.login(signsIn)
+	h.panel.SignIn(h.panel.Items()[1].ID)
+	h.turn()
+	contentsEqual(t, "after Sign In…", h.contents(), []Content{
+		user("", "Hello"), failure(signedOut, false), activity(waiting, true), answer("Hi there", false),
+	})
+	if fake.logins() != 1 || fake.starts() != 2 || !slices.Equal(fake.prompts(), []string{"Hello", "Hello"}) {
+		t.Errorf("%d sign-ins, %d starts, prompts %q", fake.logins(), fake.starts(), fake.prompts())
+	}
+}
+
+// Another refusal of the API is said once, by the result.
+func TestRefusedTurnIsSaidOnce(t *testing.T) {
+	limit := "API Error: Rate limit reached"
+	fake := newFakeClaude(t, "true", "",
+		fakeTurn{lines: []string{fakeInit, fakeFailure("rate_limit", limit), fakeResult(limit, false)}})
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.Submit("Hello")
+	h.turn()
+	contentsEqual(t, "transcript", h.contents(), []Content{
+		user("", "Hello"), failure("The assistant stopped: "+limit, true),
+	})
 }
 
 // No bridge beside the application: the tools are missing.

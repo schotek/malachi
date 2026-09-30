@@ -48,6 +48,14 @@ internal static class CannedStreamJson
         "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"" + id
         + "\",\"is_error\":" + (error ? "true" : "false") + ",\"content\":[{\"type\":\"text\",\"text\":\"" + text + "\"}]}]}}";
 
+    /// <summary>
+    /// The message Claude Code writes itself when the API refused the turn;
+    /// the result repeats its text (fakeFailure).
+    /// </summary>
+    public static string Failure(string failure, string text) =>
+        "{\"type\":\"assistant\",\"message\":{\"model\":\"<synthetic>\",\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"" + text
+        + "\"}]},\"error\":\"" + failure + "\"}";
+
     /// <summary>The result of a turn (fakeResult).</summary>
     public static string Result(string text = "done", bool success = true) =>
         "{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":" + (success ? "false" : "true") + ",\"result\":\"" + text

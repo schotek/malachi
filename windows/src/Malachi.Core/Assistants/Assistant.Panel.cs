@@ -640,7 +640,7 @@ public static partial class Assistant
         AllMail = L10n.T("All mail"),
         DraftReady = L10n.T("A draft is ready"),
         OpenDraft = L10n.T("Open Draft"),
-        NotSignedIn = L10n.T("Claude Code is not signed in. Run claude in Terminal and sign in."),
+        NotSignedIn = L10n.T("Claude Code is not signed in"),
         ToolsMissing = L10n.T("The Malachi Mail tools are not available to the assistant"),
         Stopped = L10n.T("The conversation was stopped"),
         TryAgain = L10n.T("Try Again"),
@@ -655,7 +655,7 @@ public static partial class Assistant
         Model = L10n.T("Model"),
         Choose = L10n.T("Choose…"),
         SignedIn = L10n.T("Signed in"),
-        NotSignedInShort = L10n.T("Not signed in: run claude in Terminal and sign in"),
+        NotSignedInShort = L10n.T("Not signed in"),
         NotFound = L10n.T("Claude Code was not found on this computer"),
         // TRANSLATORS: A bar in the assistant panel: the conversation is about other mail than the message selected in the list.
         AnotherSelected = L10n.T("Another message is selected"),

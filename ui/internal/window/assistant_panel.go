@@ -553,7 +553,7 @@ func (p *assistantPanel) makeRow(it assistantpanel.Item) *transcriptRow {
 	case assistantpanel.ContentDraft:
 		r = draftRow(func() { p.ctl.OpenDraftItem(id) })
 	default: // ContentError, ContentNote
-		r = lineRow(func() { p.ctl.Retry(id) })
+		r = lineRow(func() { p.ctl.Retry(id) }, func(o assistantpanel.Offer) { p.offered(id, o) })
 	}
 	r.kind = it.Content.Kind
 	r.update(it.Content)
@@ -631,8 +631,9 @@ func draftRow(open func()) *transcriptRow {
 }
 
 // lineRow is an error (with Try Again when the question can be sent once
-// more) or a note.
-func lineRow(retry func()) *transcriptRow {
+// more, and the button of what it offers: Sign In… or Get Claude Code…) or
+// a note.
+func lineRow(retry func(), offer func(assistantpanel.Offer)) *transcriptRow {
 	box := gtk.NewBox(gtk.OrientationHorizontal, 6)
 	icon := gtk.NewImageFromIconName("dialog-warning-symbolic")
 	icon.SetVAlign(gtk.AlignStart)
@@ -642,10 +643,17 @@ func lineRow(retry func()) *transcriptRow {
 	label := plainLabel()
 	button := gtk.NewButtonWithLabel(i18n.T("Try Again"))
 	button.AddCSSClass("chip-action")
-	button.SetHAlign(gtk.AlignStart)
 	button.ConnectClicked(retry)
+	offered := assistantpanel.OfferNone
+	other := gtk.NewButtonWithLabel("")
+	other.AddCSSClass("chip-action")
+	other.ConnectClicked(func() { offer(offered) })
+	buttons := gtk.NewBox(gtk.OrientationHorizontal, 6)
+	buttons.SetHAlign(gtk.AlignStart)
+	buttons.Append(other)
+	buttons.Append(button)
 	column.Append(label)
-	column.Append(button)
+	column.Append(buttons)
 	box.Append(icon)
 	box.Append(column)
 	return &transcriptRow{root: box, update: func(c assistantpanel.Content) {
@@ -654,14 +662,42 @@ func lineRow(retry func()) *transcriptRow {
 			label.RemoveCSSClass("dim-label")
 			label.AddCSSClass("error")
 			icon.SetVisible(true)
+			offered = c.Offer
+			other.SetLabel(offerLabel(c.Offer))
+			other.SetVisible(c.Offer != assistantpanel.OfferNone)
 			button.SetVisible(c.Retry)
+			buttons.SetVisible(c.Retry || c.Offer != assistantpanel.OfferNone)
 			return
 		}
 		label.RemoveCSSClass("error")
 		label.AddCSSClass("dim-label")
 		icon.SetVisible(false)
-		button.SetVisible(false)
+		buttons.SetVisible(false)
 	}}
+}
+
+// offerLabel is the button of what an error line offers.
+func offerLabel(o assistantpanel.Offer) string {
+	t := assistant.SignInTexts(tr)
+	switch o {
+	case assistantpanel.OfferSignIn:
+		return t.SignIn
+	case assistantpanel.OfferInstall:
+		return t.GetClaudeCode
+	}
+	return ""
+}
+
+// offered is the other button of an error line: Sign In… runs Claude
+// Code's own sign-in and sends the question again (the controller's),
+// Get Claude Code… opens Anthropic's page with the installers.
+func (p *assistantPanel) offered(id int, o assistantpanel.Offer) {
+	switch o {
+	case assistantpanel.OfferSignIn:
+		p.ctl.SignIn(id)
+	case assistantpanel.OfferInstall:
+		p.w.launchURI(&p.w.ApplicationWindow.Window, assistant.InstallURL)
+	}
 }
 
 // answerRow is an answer: a read-only text view that draws its Markdown

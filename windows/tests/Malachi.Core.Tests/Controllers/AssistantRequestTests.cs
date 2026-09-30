@@ -198,12 +198,39 @@ public sealed class AssistantRequestTests
         await signedOut.StartAsync("S", "m");
         await signedOut.WhenAsync(() => signedOut.Outcomes.Count > 0, "the outcome");
         Assert.Equal([new Outcome.Failed(new AssistantRequest.Failure.NotSignedIn())], signedOut.Outcomes);
-        Assert.Equal("Claude Code is not signed in. Run claude in Terminal and sign in.", new AssistantRequest.Failure.NotSignedIn().Text);
-        Assert.Equal("Not signed in: run claude in Terminal and sign in", new AssistantRequest.Failure.NotSignedIn().Reason);
+        Assert.Equal("Claude Code is not signed in. Sign in under AI in the preferences.", new AssistantRequest.Failure.NotSignedIn().Text);
+        Assert.Equal("Claude Code is not signed in. Sign in under AI in the preferences.", new AssistantRequest.Failure.NotSignedIn().Reason);
         Assert.Equal("The assistant stopped: x", new AssistantRequest.Failure.Stopped("x").Text);
         Assert.Equal("x", new AssistantRequest.Failure.Stopped("x").Reason);
         Assert.Equal("Claude Code was not found on this computer", new AssistantRequest.Failure.NotFound().Reason);
         Assert.Equal(0, FakeClaudeScript.Starts(signedOut.Dir.Path));
+    }
+
+    /// <summary>
+    /// oneshot_test.go TestRequestRefusedSignIn: the API refuses the sign-in
+    /// although auth status says loggedIn, and the request ends as not signed
+    /// in; Claude Code's own message is no answer. Another refusal is the
+    /// result's.
+    /// </summary>
+    [Fact]
+    public async Task RefusedSignIn()
+    {
+        RequireWindows();
+        const string refused = "Failed to authenticate. API Error: 401";
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init, CannedStreamJson.Failure("authentication_failed", refused), CannedStreamJson.Result(refused, success: false))));
+        await h.StartAsync("S", "m");
+        await h.WhenAsync(() => h.Outcomes.Count > 0, "the outcome");
+        Assert.Equal([new Outcome.Failed(new AssistantRequest.Failure.NotSignedIn())], h.Outcomes);
+        Assert.Empty(h.Texts);
+
+        const string limit = "API Error: Rate limit reached";
+        await using var other = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init, CannedStreamJson.Failure("rate_limit", limit), CannedStreamJson.Result(limit, success: false))));
+        await other.StartAsync("S", "m");
+        await other.WhenAsync(() => other.Outcomes.Count > 0, "the outcome");
+        Assert.Equal([Stopped(limit)], other.Outcomes);
+        Assert.Empty(other.Texts);
     }
 
     /// <summary>A result that is not a success, and an exit before the result.</summary>
@@ -501,7 +528,8 @@ public sealed class AssistantRequestTests
         }
         await signedOut.Ui.RunAsync(() => other.Convert("faktury", RecordOther));
         await signedOut.WhenAsync(() => got.Count == 3, "the third failure");
-        Assert.Equal(new SearchOutcome.Failed("The search could not be converted: Not signed in: run claude in Terminal and sign in"), got[2]);
+        Assert.Equal(
+            new SearchOutcome.Failed("The search could not be converted: Claude Code is not signed in. Sign in under AI in the preferences."), got[2]);
     }
 
     [Fact]

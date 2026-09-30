@@ -51,8 +51,11 @@ public sealed class AssistantPanelControllerTests
     private const string TestBridge = @"C:\Program Files\Malachi Mail\malachi-mcp.exe";
     private const string TestSocket = @"C:\Users\test\.cache\malachi\run\rpc.sock";
 
-    // What the stand-in's auth status prints (NotSignedIn).
+    // What the stand-in's auth status prints (the sign-in tests).
     private const string AuthFile = "auth-status";
+
+    private const string SignedOut = "Claude Code is not signed in";
+    private const string Waiting = "Waiting for the sign-in in your browser…";
 
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(300);
 
@@ -395,7 +398,7 @@ public sealed class AssistantPanelControllerTests
         Assert.Equal(Prompt(AssistantAction.Summarize, conv.Selection), h.LastPrompt);
     }
 
-    /// <summary>No Claude Code: an error with Try Again, nothing started.</summary>
+    /// <summary>No Claude Code: an error with Get Claude Code… and Try Again, nothing started.</summary>
     [Fact]
     public async Task ClaudeNotFound()
     {
@@ -405,37 +408,222 @@ public sealed class AssistantPanelControllerTests
         Assert.True(await h.On(() => h.Panel.Submit("Hello")));
         await h.TurnAsync();
         Assert.Equal(
-            [new UserContent("", "Hello"), new ErrorContent("Claude Code was not found on this computer", true)],
+            [new UserContent("", "Hello"), new ErrorContent("Claude Code was not found on this computer", true, ErrorOffer.Install)],
             await h.ContentsAsync());
         Assert.Equal(0, h.Starts);
     }
 
-    /// <summary>Signed out: an error, and Try Again after signing in works.</summary>
+    // A stand-in that is signed out until a sign-in writes the file its auth
+    // status prints (Go's signsIn).
+    private static Func<string, FakeClaudeScript> SignedOutClaude(params IReadOnlyList<FakeClaudeStep>[] turns) => dir =>
+    {
+        var status = Path.Combine(dir, AuthFile);
+        File.WriteAllText(status, "{\"loggedIn\": false}\n");
+        return new FakeClaudeScript(turns, auth: [FakeClaudeStep.PrintFile(status)]);
+    };
+
+    // The stand-in's auth login signs in from now on.
+    private static void SignsIn(Harness h) => FakeClaudeScript.SetLogin(
+        h.Dir.Path, FakeClaudeStep.WriteFile(Path.Combine(h.Dir.Path, AuthFile), "{\"loggedIn\": true}\n"));
+
+    /// <summary>
+    /// controller_test.go TestNotSignedInSignsIn. Signed out: an error with
+    /// Sign In…, which runs Claude Code's sign-in and then sends the same
+    /// question, without a second bubble.
+    /// </summary>
     [Fact]
-    public async Task NotSignedIn()
+    public async Task NotSignedInSignsIn()
     {
         RequireWindows();
-        await using var h = await Harness.CreateAsync(dir =>
-        {
-            var status = Path.Combine(dir, AuthFile);
-            File.WriteAllText(status, "{\"loggedIn\": false}\n");
-            return new FakeClaudeScript([CannedStreamJson.AnswerTurn("Hi there")], auth: [FakeClaudeStep.PrintFile(status)]);
-        });
+        await using var h = await Harness.CreateAsync(SignedOutClaude(CannedStreamJson.AnswerTurn("Hi there")));
         Assert.True(await h.On(() => h.Panel.Submit("Hello")));
         await h.TurnAsync();
-        const string signedOut = "Claude Code is not signed in. Run claude in Terminal and sign in.";
-        Assert.Equal([new UserContent("", "Hello"), new ErrorContent(signedOut, true)], await h.ContentsAsync());
+        Assert.Equal([new UserContent("", "Hello"), new ErrorContent(SignedOut, false, ErrorOffer.SignIn)], await h.ContentsAsync());
         Assert.Equal(0, h.Starts);
+        Assert.Equal(0, h.Logins);
 
-        // Signed in meanwhile (the stand-in now says so): Try Again sends the
-        // same question, without a second bubble.
-        File.WriteAllText(Path.Combine(h.Dir.Path, AuthFile), "{\"loggedIn\": true}\n");
-        await h.On(() => h.Panel.Retry(h.Panel.Items[1].Id));
+        // Try Again is not what the line offers.
+        await h.On(() =>
+        {
+            h.Panel.Retry(h.Panel.Items[1].Id);
+            Assert.Equal(Phase.Idle, h.Panel.CurrentPhase);
+        });
+        SignsIn(h);
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
         await h.TurnAsync();
         Assert.Equal(
-            [new UserContent("", "Hello"), new ErrorContent(signedOut, false), new AnswerContent("Hi there", false)],
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(SignedOut, false),
+                new ActivityContent(Waiting, true),
+                new AnswerContent("Hi there", false),
+            ],
             await h.ContentsAsync());
+        Assert.Equal(1, h.Logins);
+        Assert.Equal(1, h.Starts);
         Assert.Equal(["Hello"], h.Prompts);
+        // The sign-in ran in the private directory with the child's
+        // environment: nothing of a surrounding Claude or of Malachi Mail.
+        var env = FakeClaudeScript.LoginEnv(h.Dir.Path);
+        Assert.Equal(h.Dir.Path, Variable(env, "USERPROFILE"));
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("ANTHROPIC", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(env.Keys, k => k.StartsWith("MALACHI", StringComparison.OrdinalIgnoreCase));
+        // A button used up does nothing more.
+        await h.On(() =>
+        {
+            h.Panel.SignIn(h.Panel.Items[1].Id);
+            Assert.Equal(Phase.Idle, h.Panel.CurrentPhase);
+        });
+        Assert.Equal(1, h.Logins);
+    }
+
+    /// <summary>controller_test.go TestSignInFails. A sign-in that ends badly: its reason, and Sign In… again.</summary>
+    [Fact]
+    public async Task SignInFails()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(SignedOutClaude(CannedStreamJson.AnswerTurn("Hi there")));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        FakeClaudeScript.SetLogin(
+            h.Dir.Path, FakeClaudeStep.Stderr("Login failed: the browser said no\nmore\n"), FakeClaudeStep.Exit(1));
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
+        await h.TurnAsync();
+        Assert.Equal(
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(SignedOut, false),
+                new ActivityContent(Waiting, true),
+                new ErrorContent("The sign-in failed: Login failed: the browser said no", false, ErrorOffer.SignIn),
+            ],
+            await h.ContentsAsync());
+        Assert.Equal(0, h.Starts);
+
+        // Once more, and it works.
+        SignsIn(h);
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[3].Id));
+        await h.TurnAsync();
+        Assert.Equal(new AnswerContent("Hi there", false), await h.LastAsync());
+        Assert.Equal(2, h.Logins);
+    }
+
+    /// <summary>controller_test.go TestSignInTimesOut. The browser brings no answer in time: the sign-in is ended.</summary>
+    [Fact]
+    public async Task SignInTimesOut()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(
+            SignedOutClaude(CannedStreamJson.AnswerTurn("Hi there")), signInTimeout: TimeSpan.FromMilliseconds(500));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        FakeClaudeScript.SetLogin(h.Dir.Path, FakeClaudeStep.Hang());
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
+        await h.TurnAsync();
+        Assert.Equal(new ErrorContent("The sign-in took too long; try again", false, ErrorOffer.SignIn), await h.LastAsync());
+        Assert.False(await h.On(() => h.Locator.SigningIn));
+    }
+
+    /// <summary>
+    /// controller_test.go TestSignInStoppedAndReplaced. Stop ends a sign-in
+    /// like any turn; one the settings start takes its place.
+    /// </summary>
+    [Fact]
+    public async Task SignInStoppedAndReplaced()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(SignedOutClaude(CannedStreamJson.AnswerTurn("Hi there")));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        FakeClaudeScript.SetLogin(h.Dir.Path, FakeClaudeStep.Hang());
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
+        await h.WhenAsync(() => h.Locator.SigningIn, "the sign-in");
+        Assert.Equal(
+            [new UserContent("", "Hello"), new ErrorContent(SignedOut, false), new ActivityContent(Waiting, false)],
+            await h.ContentsAsync());
+        await h.On(() =>
+        {
+            h.Panel.Stop();
+            Assert.False(h.Locator.SigningIn);
+            Assert.Equal(Phase.Idle, h.Panel.CurrentPhase);
+        });
+        await h.IdleAsync();
+        Assert.Equal(
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(SignedOut, false),
+                new ActivityContent(Waiting, true),
+                new NoteContent("The conversation was stopped"),
+            ],
+            await h.ContentsAsync());
+
+        // The same question again: signed out, Sign In…, and the settings'
+        // sign-in takes over while the browser is open.
+        await h.On(h.Panel.NewConversation);
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
+        await h.WhenAsync(() => h.Locator.SigningIn, "the sign-in");
+        SignsIn(h);
+        var settings = await h.On(() => h.Locator.SignInAsync());
+        await h.TurnAsync();
+        Assert.Equal(new ClaudeCodeSignIn.Done(), await settings);
+        Assert.Equal(
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(SignedOut, false),
+                new ActivityContent(Waiting, true),
+                new ErrorContent(SignedOut, false, ErrorOffer.SignIn),
+            ],
+            await h.ContentsAsync());
+    }
+
+    /// <summary>
+    /// controller_test.go TestRefusedSignInOffersSignIn. The API refuses the
+    /// sign-in although auth status says loggedIn (expired, revoked): Claude
+    /// Code's own message is no answer, the line offers Sign In…, and the
+    /// question goes to a new process after it.
+    /// </summary>
+    [Fact]
+    public async Task RefusedSignInOffersSignIn()
+    {
+        RequireWindows();
+        const string refused = "Failed to authenticate. API Error: 401";
+        await using var h = await Harness.CreateAsync(Fake(
+            CannedStreamJson.Turn(
+                CannedStreamJson.Init, CannedStreamJson.Failure("authentication_failed", refused), CannedStreamJson.Result(refused, success: false)),
+            CannedStreamJson.AnswerTurn("Hi there")));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        Assert.Equal([new UserContent("", "Hello"), new ErrorContent(SignedOut, false, ErrorOffer.SignIn)], await h.ContentsAsync());
+        Assert.Null(await h.On(() => h.Panel.Process));
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[1].Id));
+        await h.TurnAsync();
+        Assert.Equal(
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(SignedOut, false),
+                new ActivityContent(Waiting, true),
+                new AnswerContent("Hi there", false),
+            ],
+            await h.ContentsAsync());
+        Assert.Equal(1, h.Logins);
+        Assert.Equal(2, h.Starts);
+        Assert.Equal(["Hello", "Hello"], h.Prompts);
+    }
+
+    /// <summary>controller_test.go TestRefusedTurnIsSaidOnce. Another refusal of the API is said once, by the result.</summary>
+    [Fact]
+    public async Task RefusedTurnIsSaidOnce()
+    {
+        RequireWindows();
+        const string limit = "API Error: Rate limit reached";
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init, CannedStreamJson.Failure("rate_limit", limit), CannedStreamJson.Result(limit, success: false))));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        Assert.Equal(
+            [new UserContent("", "Hello"), new ErrorContent("The assistant stopped: " + limit, true)],
+            await h.ContentsAsync());
     }
 
     /// <summary>No bridge beside the application: the tools are missing.</summary>
@@ -1084,6 +1272,12 @@ public sealed class AssistantPanelControllerTests
 
         public AssistantPanelController Panel { get; private set; } = null!;
 
+        /// <summary>The panel's locator, the application's (the settings sign in through it too).</summary>
+        public ClaudeCodeLocator Locator { get; private set; } = null!;
+
+        /// <summary>The sign-ins the stand-in ran.</summary>
+        public int Logins => FakeClaudeScript.Logins(Dir.Path);
+
         public int ConsentAsked { get; private set; }
 
         public bool ConsentAnswer { get; set; } = true;
@@ -1109,7 +1303,8 @@ public sealed class AssistantPanelControllerTests
             CreateAsync(_ => script, consent, bridge);
 
         /// <summary>A harness whose stand-in <paramref name="script"/> makes, given the directory.</summary>
-        public static async Task<Harness> CreateAsync(Func<string, FakeClaudeScript> script, bool consent = true, string? bridge = TestBridge)
+        public static async Task<Harness> CreateAsync(
+            Func<string, FakeClaudeScript> script, bool consent = true, string? bridge = TestBridge, TimeSpan? signInTimeout = null)
         {
             var h = new Harness(script);
             h.Panel = await h.Ui.RunAsync(() =>
@@ -1119,9 +1314,12 @@ public sealed class AssistantPanelControllerTests
                 var prefix = h.Dir.Path + @"\";
                 var locator = new ClaudeCodeLocator(
                     h.Settings,
-                    CannedStreamJson.Environment(("USERPROFILE", h.Dir.Path)),
+                    CannedStreamJson.Environment(("USERPROFILE", h.Dir.Path), ("ANTHROPIC_API_KEY", "sk-never"), ("MALACHI_SOCKET", TestSocket)),
                     timeout: TimeSpan.FromSeconds(60),
-                    usable: p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && ClaudeCodeLocator.IsExecutableFile(p));
+                    usable: p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && ClaudeCodeLocator.IsExecutableFile(p),
+                    signInTimeout: signInTimeout ?? TimeSpan.FromSeconds(60));
+                locator.SigningInChanged += (_, _) => h.Changed();
+                h.Locator = locator;
                 var panel = new AssistantPanelController(
                     h.Settings,
                     locator,

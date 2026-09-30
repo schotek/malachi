@@ -48,7 +48,8 @@ public sealed class ClaudeCodeLocatorTests
     // Only paths inside dir count; a run may take long on a busy machine
     // (a .NET stand-in starting), which no test times.
     private static ClaudeCodeLocator Locator(
-        string dir, SettingsStore settings, IReadOnlyDictionary<string, string>? env = null, IPrivateDirectoryFactory? directories = null, string? work = null)
+        string dir, SettingsStore settings, IReadOnlyDictionary<string, string>? env = null, IPrivateDirectoryFactory? directories = null, string? work = null,
+        TimeSpan? signInTimeout = null)
     {
         var prefix = dir + @"\";
         return new ClaudeCodeLocator(
@@ -57,7 +58,8 @@ public sealed class ClaudeCodeLocatorTests
             timeout: TimeSpan.FromSeconds(60),
             directory: work ?? dir,
             directories: directories,
-            usable: p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && ClaudeCodeLocator.IsExecutableFile(p));
+            usable: p => p.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && ClaudeCodeLocator.IsExecutableFile(p),
+            signInTimeout: signInTimeout ?? TimeSpan.FromSeconds(60));
     }
 
     private static string Touch(string path)
@@ -182,6 +184,82 @@ public sealed class ClaudeCodeLocatorTests
             [],
             auth: [FakeClaudeStep.Stdout("{\"loggedIn\": false}\n"), FakeClaudeStep.Exit(1)]).CreateIn(outDir);
         Assert.False(await l.SignedInAsync());
+    }
+
+    /// <summary>
+    /// locator_test.go TestLocatorSignIn. Claude Code's own sign-in: claude
+    /// auth login in the private directory, its end reported once, and the
+    /// kept sign-in state asked afresh after it.
+    /// </summary>
+    [Fact]
+    public async Task SignIn()
+    {
+        RequireWindows();
+        using var dir = new TemporaryDirectory();
+        var state = Path.Combine(dir.Path, "logged-in");
+        File.WriteAllText(state, "{\"loggedIn\": false}\n");
+        var settings = Settings();
+        settings.AssistantClaudePath = new FakeClaudeScript([], auth: [FakeClaudeStep.PrintFile(state)]).CreateIn(dir.Path);
+        var work = Path.Combine(dir.Path, "work");
+        var l = Locator(dir.Path, settings, work: work);
+        var changes = 0;
+        void Count(object? sender, EventArgs e) => changes++;
+        l.SigningInChanged += Count;
+        Assert.False(await l.SignedInAsync());
+
+        FakeClaudeScript.SetLogin(
+            dir.Path,
+            FakeClaudeStep.Stdout("Opening browser to sign in…\nIf the browser didn't open, visit: https://claude.example/authorize?state=secret\n"),
+            FakeClaudeStep.WriteFile(state, "{\"loggedIn\": true}\n"));
+        var run = l.SignInAsync();
+        Assert.True(l.SigningIn);
+        Assert.Equal(1, changes);
+        Assert.Equal(new ClaudeCodeSignIn.Done(), await run);
+        Assert.False(l.SigningIn);
+        Assert.Equal(2, changes);
+        // No Refresh by the caller: the answer kept from before is gone.
+        Assert.True(await l.SignedInAsync());
+        Assert.Equal(1, FakeClaudeScript.Logins(dir.Path));
+        Assert.Equal(work, FakeClaudeScript.LoginCwd(dir.Path));
+
+        // A bad end: stderr's first line, else the status.
+        FakeClaudeScript.SetLogin(dir.Path, FakeClaudeStep.Stderr("Login failed: no\nmore\n"), FakeClaudeStep.Exit(3));
+        Assert.Equal(new ClaudeCodeSignIn.Failed("Login failed: no"), await l.SignInAsync());
+        FakeClaudeScript.SetLogin(dir.Path, FakeClaudeStep.Exit(4));
+        Assert.Equal(new ClaudeCodeSignIn.Failed("claude exited with status 4"), await l.SignInAsync());
+
+        // Cancelled; then one that another takes the place of.
+        FakeClaudeScript.SetLogin(dir.Path, FakeClaudeStep.Hang());
+        run = l.SignInAsync();
+        l.CancelSignIn(run);
+        l.CancelSignIn(run);
+        Assert.False(l.SigningIn);
+        Assert.Equal(new ClaudeCodeSignIn.Cancelled(), await run);
+        var stale = l.SignInAsync();
+        FakeClaudeScript.SetLogin(dir.Path);
+        var next = l.SignInAsync();
+        Assert.Equal(new ClaudeCodeSignIn.Cancelled(), await stale);
+        Assert.Equal(new ClaudeCodeSignIn.Done(), await next);
+        // The cancel of a sign-in that is over ends no other.
+        FakeClaudeScript.SetLogin(dir.Path, FakeClaudeStep.Hang());
+        run = l.SignInAsync();
+        l.CancelSignIn(stale);
+        Assert.True(l.SigningIn);
+        l.CancelSignIn();
+        Assert.Equal(new ClaudeCodeSignIn.Cancelled(), await run);
+
+        // Out of time.
+        var brief = Locator(dir.Path, settings, work: work, signInTimeout: TimeSpan.FromMilliseconds(500));
+        Assert.Equal(new ClaudeCodeSignIn.TimedOut(), await brief.SignInAsync());
+        Assert.False(brief.SigningIn);
+
+        // A removed handler hears nothing more; no Claude Code at all.
+        l.SigningInChanged -= Count;
+        var before = changes;
+        File.Delete(settings.AssistantClaudePath);
+        Assert.Equal(new ClaudeCodeSignIn.NotFound(), await l.SignInAsync());
+        Assert.False(l.SigningIn);
+        Assert.Equal(before, changes);
     }
 
     /// <summary>locator_test.go TestLocatorFailedRunsAreUnknown: auth status that prints no JSON, or no boolean, is not known.</summary>

@@ -207,7 +207,7 @@ func TestRequestNotFoundAndNotSignedIn(t *testing.T) {
 		text, reason string
 	}{
 		{Failure{Kind: FailureNotFound}, "Claude Code was not found on this computer", "Claude Code was not found on this computer"},
-		{Failure{Kind: FailureNotSignedIn}, "Claude Code is not signed in. Run claude in Terminal and sign in.", "Not signed in: run claude in Terminal and sign in"},
+		{Failure{Kind: FailureNotSignedIn}, "Claude Code is not signed in. Sign in under AI in the preferences.", "Claude Code is not signed in. Sign in under AI in the preferences."},
 		{Failure{Kind: FailureStopped, Reason: "x"}, "The assistant stopped: x", "x"},
 	} {
 		if c.f.Text(tr) != c.text || c.f.ReasonText(tr) != c.reason {
@@ -443,8 +443,35 @@ func TestSearchRefusesAndFails(t *testing.T) {
 	other := NewSearcher(tr, signedOut.request)
 	other.Convert("faktury", record)
 	signedOut.loop.runUntil(t, func() bool { return len(got) == 3 })
-	if got[2].Text != "The search could not be converted: Not signed in: run claude in Terminal and sign in" {
+	if got[2].Text != "The search could not be converted: Claude Code is not signed in. Sign in under AI in the preferences." {
 		t.Errorf("outcome %+v", got[2])
+	}
+}
+
+// The API refuses the sign-in although auth status says loggedIn: the
+// request ends as not signed in, Claude Code's own message is no answer.
+func TestRequestRefusedSignIn(t *testing.T) {
+	refused := "Failed to authenticate. API Error: 401"
+	fake := newFakeClaude(t, "true", "", fakeTurn{
+		lines: []string{fakeInit, fakeFailure("authentication_failed", refused), fakeResult(refused, false)},
+	})
+	h := newRequestHarness(t, fake, true, true)
+	var outcomes []Outcome
+	var texts []string
+	h.request.Start("S", "m", "", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
+	h.loop.runUntil(t, func() bool { return len(outcomes) > 0 })
+	if !sameOutcome(outcomes[0], failed(FailureNotSignedIn, "")) || len(texts) != 0 {
+		t.Errorf("outcome %+v, streamed %q", outcomes[0], texts)
+	}
+	// Another refusal is the result's.
+	limit := "API Error: Rate limit reached"
+	other := newRequestHarness(t, newFakeClaude(t, "true", "", fakeTurn{
+		lines: []string{fakeInit, fakeFailure("rate_limit", limit), fakeResult(limit, false)},
+	}), true, true)
+	other.request.Start("S", "m", "", func(s string) { texts = append(texts, s) }, func(o Outcome) { outcomes = append(outcomes, o) })
+	other.loop.runUntil(t, func() bool { return len(outcomes) == 2 })
+	if !sameOutcome(outcomes[1], failed(FailureStopped, limit)) || len(texts) != 0 {
+		t.Errorf("outcome %+v, streamed %q", outcomes[1], texts)
 	}
 }
 

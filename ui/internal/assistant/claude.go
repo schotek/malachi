@@ -388,10 +388,40 @@ const systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
 // no CLAUDE* or ANTHROPIC* variable of a surrounding session, no
 // MALACHI_* (the socket goes on the command line).
 func ChildEnv(parent []string, claudePath string) []string {
+	return childEnv(parent, claudePath, nil)
+}
+
+// SignInArgs are the arguments of Claude Code's own sign-in: claude auth
+// login opens the browser at claude.ai, waits for its answer on a local
+// port and stores the sign-in itself; the application only waits for it to
+// end (status 0: signed in). It waits with its stdin closed too. What it
+// prints is never logged or shown: the address to open by hand names the
+// sign-in's session. Measured with Claude Code 2.1.285.
+var SignInArgs = []string{"auth", "login"}
+
+// signInEnvKeys are the variables the sign-in keeps beyond childEnvKeys:
+// what opening the browser takes on a Linux desktop (xdg-open and the
+// portal), and the user's own BROWSER, which Claude Code runs instead.
+var signInEnvKeys = map[string]bool{
+	"DISPLAY": true, "WAYLAND_DISPLAY": true, "XAUTHORITY": true,
+	"XDG_RUNTIME_DIR": true, "XDG_CURRENT_DESKTOP": true, "XDG_SESSION_TYPE": true,
+	"XDG_DATA_DIRS": true, "DBUS_SESSION_BUS_ADDRESS": true, "BROWSER": true,
+}
+
+// SignInEnv is the environment of claude auth login: ChildEnv and the
+// variables of signInEnvKeys from parent when set there. Claude Code opens
+// the browser itself, so it needs the desktop session; still no CLAUDE*,
+// ANTHROPIC* or MALACHI_* variable.
+func SignInEnv(parent []string, claudePath string) []string {
+	return childEnv(parent, claudePath, signInEnvKeys)
+}
+
+// childEnv is ChildEnv with the variables of more kept as well.
+func childEnv(parent []string, claudePath string, more map[string]bool) []string {
 	kept := map[string]string{}
 	for _, kv := range parent {
 		k, v, ok := strings.Cut(kv, "=")
-		if ok && childEnvKeys[k] {
+		if ok && (childEnvKeys[k] || more[k]) {
 			kept[k] = v
 		}
 	}

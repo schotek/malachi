@@ -7,7 +7,9 @@
 // ui/internal/assistantpanel harness_test.go. A stand-in claude in a
 // fresh directory: it answers --version and auth status --json as
 // scripted, recording each call (the locator's stand-in of
-// ClaudeCodeProcessTests.swift, `echo "$*" >> calls`); any other command
+// ClaudeCodeProcessTests.swift, `echo "$*" >> calls`); auth login runs
+// the steps a test wrote with SetLogin (Go's login.sh), recording its
+// environment and working directory; any other command
 // line starts a conversation, which records the start, its arguments,
 // environment and working directory, runs the start's steps, then runs one
 // turn per line of stdin (the turns counted
@@ -55,6 +57,15 @@ public sealed class FakeClaudeScript
 
     /// <summary>The arguments of every --version and auth run, a line each.</summary>
     public const string CallsFileName = "calls";
+
+    /// <summary>What <c>auth login</c> does: steps, a JSON array; without the file it ends with status 0.</summary>
+    public const string LoginFileName = "login.json";
+
+    /// <summary>The environment of the last <c>auth login</c>, a JSON object.</summary>
+    public const string LoginEnvFileName = "login-env.json";
+
+    /// <summary>The working directory of the last <c>auth login</c>.</summary>
+    public const string LoginCwdFileName = "login-cwd";
 
     /// <summary>The version line Swift's stand-in prints.</summary>
     public const string DefaultVersion = "2.1.178 (Claude Code)";
@@ -116,6 +127,43 @@ public sealed class FakeClaudeScript
     /// <summary>The arguments of every --version and auth run in <paramref name="directory"/> so far ("--version", "auth status --json").</summary>
     public static IReadOnlyList<string> Calls(string directory) =>
         ReadText(directory, CallsFileName).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>The sign-ins (<c>auth login</c>) run in <paramref name="directory"/> so far.</summary>
+    public static int Logins(string directory) => Calls(directory).Count(c => c == "auth login");
+
+    /// <summary>What the stand-in's <c>auth login</c> in <paramref name="directory"/> does from now on (Go's login.sh).</summary>
+    public static void SetLogin(string directory, params FakeClaudeStep[] steps)
+    {
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
+        {
+            FakeClaudeStep.WriteSteps(writer, steps);
+        }
+        File.WriteAllBytes(Path.Combine(directory, LoginFileName), buffer.ToArray());
+    }
+
+    /// <summary>The environment of the last sign-in run in <paramref name="directory"/>.</summary>
+    public static IReadOnlyDictionary<string, string> LoginEnv(string directory)
+    {
+        var text = ReadText(directory, LoginEnvFileName);
+        return text.Length == 0
+            ? new Dictionary<string, string>()
+            : JsonSerializer.Deserialize(text, FakeClaudeJson.Default.DictionaryStringString) ?? [];
+    }
+
+    /// <summary>The working directory of the last sign-in run in <paramref name="directory"/>.</summary>
+    public static string LoginCwd(string directory) => ReadText(directory, LoginCwdFileName).Trim();
+
+    internal static IReadOnlyList<FakeClaudeStep> LoadLogin(string directory)
+    {
+        var path = Path.Combine(directory, LoginFileName);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+        using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+        return FakeClaudeStep.ReadSteps(document.RootElement);
+    }
 
     /// <summary>The working directory of the last conversation started in <paramref name="directory"/>.</summary>
     public static string Cwd(string directory) => ReadText(directory, CwdFileName).Trim();

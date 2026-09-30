@@ -33,6 +33,9 @@ const (
 	lineStructured = `{"type":"result","subtype":"success","is_error":false,"result":"","total_cost_usd":0.5,"permission_denials":[],"structured_output":{"summary":"x", "items":[1,2]}}`
 	lineMaxTurns   = `{"type":"result","subtype":"error_max_turns","is_error":true,"duration_ms":90000,"num_turns":30,"session_id":"5f1c2d3e","total_cost_usd":0.2,"usage":{},"permission_denials":[{"tool_name":"mcp__malachi__send_message","tool_use_id":"toolu_09","tool_input":{"draftId":"d1"}},{"tool_name":"Bash","tool_use_id":"toolu_10","tool_input":{"command":"rm -rf ~"}}]}`
 	lineAPIError   = `{"type":"result","subtype":"success","is_error":true,"result":"Invalid API key · Please run /login","total_cost_usd":0,"permission_denials":[]}`
+	// Claude Code 2.1.285, signed out; 2.1.72 says the same of a sign-in
+	// the API no longer accepts ("Failed to authenticate. API Error: 401 …").
+	lineAuthFailed = `{"type":"assistant","message":{"diagnostics":null,"id":"acbc4b28","container":null,"model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"Not logged in · Please run /login"}],"context_management":null},"parent_tool_use_id":null,"session_id":"ecadd567","uuid":"5096d9af","error":"authentication_failed"}`
 )
 
 func TestParseEvents(t *testing.T) {
@@ -67,6 +70,13 @@ func TestParseEvents(t *testing.T) {
 			{Kind: EventText, Text: "And search."},
 			{Kind: EventToolUse, Tool: "WebFetch", ToolUseID: "toolu_02"},
 		}},
+		{"assistant, the API refused the sign-in", lineAuthFailed, []Event{{Kind: EventFailure, Failure: "authentication_failed"}}},
+		{"assistant, another refusal", `{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error: Rate limit reached"}]},"error":"rate_limit"}`,
+			[]Event{{Kind: EventFailure, Failure: "rate_limit"}}},
+		{"assistant, an error of another type", `{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]},"error":{"code":1}}`,
+			[]Event{{Kind: EventText, Text: "x"}}},
+		{"assistant, an empty error", `{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]},"error":""}`,
+			[]Event{{Kind: EventText, Text: "x"}}},
 		{"assistant, only thinking", lineThinking, nil},
 		{"assistant, string content", `{"type":"assistant","message":{"content":"plain"}}`, nil},
 		{"assistant, no message", `{"type":"assistant"}`, nil},

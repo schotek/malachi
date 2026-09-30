@@ -801,7 +801,7 @@ public sealed class AssistantPanelLogicTests
         Assert.Equal("Another message is selected", t.AnotherSelected);
         Assert.Equal("Add to Conversation", t.AddToConversation);
         Assert.Equal("Claude Code was not found on this computer", t.NotFound);
-        Assert.Equal("Claude Code is not signed in. Run claude in Terminal and sign in.", t.NotSignedIn);
+        Assert.Equal("Claude Code is not signed in", t.NotSignedIn);
         Assert.Equal("The Malachi Mail tools are not available to the assistant", t.ToolsMissing);
         Assert.Equal("The conversation was stopped", t.Stopped);
         Assert.Equal("Mail you ask about is sent to Claude under your account", t.Footer);
@@ -815,7 +815,7 @@ public sealed class AssistantPanelLogicTests
         Assert.Equal("Model", t.Model);
         Assert.Equal("Choose…", t.Choose);
         Assert.Equal("Signed in", t.SignedIn);
-        Assert.Equal("Not signed in: run claude in Terminal and sign in", t.NotSignedInShort);
+        Assert.Equal("Not signed in", t.NotSignedInShort);
         // The same msgid as Problem's for a claude that was not found.
         Assert.Equal(t.NotFound, Assistant.Problem(AssistantTarget.App, default));
         // Swift: the shared buttons and the chip's texts it carries.
@@ -824,6 +824,34 @@ public sealed class AssistantPanelLogicTests
         Assert.Equal("Try Again", t.TryAgain);
         Assert.Equal(Assistant.ContextLabel(1), t.SelectedMessage);
         Assert.Equal(Assistant.ContextLabel(0), t.AllMail);
+    }
+
+    /// <summary>assistant_test.go TestSignInTexts.</summary>
+    [Fact]
+    public void SignInTexts()
+    {
+        var t = Assistant.SignInTexts();
+        Assert.Equal("Sign In…", t.SignIn);
+        Assert.Equal("Waiting for the sign-in in your browser…", t.Waiting);
+        Assert.Equal("The sign-in took too long; try again", t.TimedOut);
+        Assert.Equal("Claude Code is not signed in. Sign in under AI in the preferences.", t.Hint);
+        Assert.Equal("Get Claude Code…", t.GetClaudeCode);
+        // The hint starts with the panel's line.
+        Assert.StartsWith(Assistant.PanelTexts().NotSignedIn + ". ", t.Hint, StringComparison.Ordinal);
+        Assert.Equal("https://code.claude.com/docs/en/setup", Assistant.InstallUrl);
+        Assert.Equal(["auth", "login"], Assistant.SignInArguments);
+    }
+
+    /// <summary>assistant_test.go TestSignInFailedText.</summary>
+    [Theory]
+    [InlineData("claude exited with status 1", "The sign-in failed: claude exited with status 1")]
+    [InlineData("Login failed\nat line 2\n", "The sign-in failed: Login failed")]
+    [InlineData("", "The sign-in failed: unknown")]
+    public void SignInFailedText(string reason, string want)
+    {
+        Assert.Equal(want, Assistant.SignInFailedText(reason));
+        Assert.Equal("The sign-in failed: " + new string('b', 200), Assistant.SignInFailedText(new string('b', 300)));
+        Assert.Equal("The sign-in failed: bad[31m red", Assistant.SignInFailedText("bad" + S(0x1B) + "[31m red" + S(7)));
     }
 
     [Fact]

@@ -4,7 +4,10 @@
 // Port of the #!/bin/sh stand-in claude of macos/Tests/MalachiCoreTests/
 // AssistantPanelControllerTests.swift (FakeClaude): --version and auth run
 // their steps, each recording its arguments as a line of "calls" (the
-// locator's stand-in of ClaudeCodeProcessTests.swift); anything else is a
+// locator's stand-in of ClaudeCodeProcessTests.swift); auth login, Claude
+// Code's own sign-in, records its environment and working directory and
+// runs the steps of login.json when there is one (the test's, changed
+// between sign-ins), else it ends with status 0; anything else is a
 // conversation that records its start, arguments, environment and working
 // directory, runs the start's steps,
 // then a turn per stdin line (recorded; the turns counted over every start
@@ -41,6 +44,14 @@ internal static class Program
         if (args.Length > 0 && args[0] == "auth")
         {
             RecordCall(directory, args);
+            if (args.Length > 1 && args[1] == "login")
+            {
+                File.WriteAllText(
+                    Path.Combine(directory, FakeClaudeScript.LoginEnvFileName),
+                    JsonSerializer.Serialize(CurrentEnvironment(), FakeClaudeJson.Default.DictionaryStringString));
+                File.WriteAllText(Path.Combine(directory, FakeClaudeScript.LoginCwdFileName), Environment.CurrentDirectory);
+                return Run(FakeClaudeScript.LoadLogin(directory), 0) ?? 0;
+            }
             return Run(script.Auth, 0) ?? 0;
         }
 
@@ -49,14 +60,9 @@ internal static class Program
         File.WriteAllText(
             Path.Combine(directory, FakeClaudeScript.ArgsFileName),
             JsonSerializer.Serialize(args, FakeClaudeJson.Default.StringArray));
-        var env = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (DictionaryEntry e in Environment.GetEnvironmentVariables())
-        {
-            env[(string)e.Key] = (string?)e.Value ?? "";
-        }
         File.WriteAllText(
             Path.Combine(directory, FakeClaudeScript.EnvFileName),
-            JsonSerializer.Serialize(env, FakeClaudeJson.Default.DictionaryStringString));
+            JsonSerializer.Serialize(CurrentEnvironment(), FakeClaudeJson.Default.DictionaryStringString));
         File.WriteAllText(Path.Combine(directory, FakeClaudeScript.CwdFileName), Environment.CurrentDirectory);
 
         if (Run(script.OnStart, start) is { } early)
@@ -78,6 +84,16 @@ internal static class Program
             }
         }
         return 0;
+    }
+
+    private static Dictionary<string, string> CurrentEnvironment()
+    {
+        var env = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (DictionaryEntry e in Environment.GetEnvironmentVariables())
+        {
+            env[(string)e.Key] = (string?)e.Value ?? "";
+        }
+        return env;
     }
 
     // Swift's `echo "$*" >> calls` of the locator's stand-in: the arguments
@@ -111,6 +127,9 @@ internal static class Program
                     break;
                 case "printFile":
                     Write(StandardOutput, File.ReadAllText(step.Text, Encoding.UTF8));
+                    break;
+                case "writeFile":
+                    File.WriteAllText(step.Text, step.Value, new UTF8Encoding(false));
                     break;
                 case "hang":
                     while (true)

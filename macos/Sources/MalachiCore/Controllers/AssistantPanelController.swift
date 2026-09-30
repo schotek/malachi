@@ -27,11 +27,12 @@ import os
 /// 4. Without a running process: Claude Code is located (none: "Claude
 ///    Code was not found on this computer"), the bridge must be there
 ///    (none: the tools are not available), and Claude Code must not say it
-///    is signed out (`ClaudeCodeLocator.signedIn`, asked afresh: "Claude
-///    Code is not signed in…"; not known counts as signed in, and the
-///    process then says what is wrong). Then the process starts
-///    (`Assistant.args`, `Assistant.childEnv`, the private directory) and
-///    is kept for the follow-up questions of the conversation.
+///    is signed out (`ClaudeCodeLocator.signedIn`, asked afresh; not known
+///    counts as signed in, and the process then says what is wrong):
+///    "Claude Code is not signed in" with Sign In…, see below. Then the
+///    process starts (`Assistant.args`, `Assistant.childEnv`, the private
+///    directory) and is kept for the follow-up questions of the
+///    conversation.
 /// 5. `running`: the turn is written to stdin. Its `system/init` must
 ///    report the bridge connected, or the conversation ends with "The
 ///    Malachi Mail tools are not available to the assistant". Text deltas
@@ -41,7 +42,24 @@ import os
 ///    adds a draft card, whose Open Draft the application checks with
 ///    draft.list (`openDraft`). The result ends the turn (`idle`); one that
 ///    is not a success adds "The assistant stopped: …". The process ending
-///    during a turn does the same with its stderr's first line.
+///    during a turn does the same with its stderr's first line. A message
+///    Claude Code wrote itself because the API refused the turn
+///    (`Assistant.Event.Kind.failure`) is no answer: the result repeats it.
+///    When the API refused the sign-in (expired or revoked, whatever
+///    `claude auth status` says), the turn ends with "Claude Code is not
+///    signed in" and Sign In…, and the process ends, for a new sign-in
+///    takes a new one.
+///
+/// Sign In… (`signIn(_:)`) sends the same question once more, with Claude
+/// Code's own sign-in in front of step 4's start: the line "Waiting for the
+/// sign-in in your browser…" is an activity while `claude auth login` runs
+/// (`ClaudeCodeLocator.startSignIn`: the browser opens, the application
+/// sees no credential), then the process starts and the question is asked.
+/// A sign-in that fails, takes too long or is taken over by the settings'
+/// ends the turn with its reason and Sign In… again; `stop()` ends it like
+/// any turn. "Claude Code was not found on this computer" offers Get Claude
+/// Code… (`Offer.install`), which the view opens in the browser, beside Try
+/// Again.
 ///
 /// `stop()` ends the process and the turn with the note "The conversation
 /// was stopped"; the next question starts a new process (a new
@@ -98,10 +116,24 @@ public final class AssistantPanelController {
         case activity(label: String, done: Bool)
         /// A draft the bridge saved, with Open Draft.
         case draft(Assistant.DraftRef)
-        /// What went wrong; `retry` offers Try Again.
-        case error(String, retry: Bool)
+        /// What went wrong; `retry` offers Try Again, `offer` one more
+        /// button.
+        case error(String, retry: Bool, offer: Offer = .none)
         /// A remark of the panel's own ("The conversation was stopped").
         case note(String)
+    }
+
+    /// The button of an error item beyond Try Again.
+    public enum Offer: Sendable, Equatable {
+        /// OfferNone: no other button.
+        case none
+        /// OfferSignIn: "Sign In…" beside "Claude Code is not signed in"
+        /// (`signIn(_:)`).
+        case signIn
+        /// OfferInstall: "Get Claude Code…" beside "Claude Code was not
+        /// found on this computer"; the view opens `Assistant.installURL`
+        /// in the browser.
+        case install
     }
 
     /// What changed in `items`, for the view.
@@ -204,6 +236,8 @@ public final class AssistantPanelController {
         var inEffect: Context?
         /// What a message action or an attachment's question is about.
         var target: Target?
+        /// Sign In… sent it: Claude Code signs in before it starts.
+        var signIn = false
     }
 
     /// How long the members of a folded conversation are waited for.
@@ -283,6 +317,12 @@ public final class AssistantPanelController {
     /// The question of the turn under way (or the last that failed), for
     /// Try Again.
     private var lastRequest: Request?
+    /// The API refused the sign-in in the turn under way.
+    private var authFailed = false
+    /// The sign-in's activity line, and the sign-in the question under way
+    /// started.
+    private var signingIn: Int?
+    private var signInRun: ClaudeCodeLocator.SignInRun?
     private var settingsToken: Settings.ChangeToken?
     /// The next `Pinned.key`.
     private var nextKey = 0
@@ -321,6 +361,7 @@ public final class AssistantPanelController {
         guard !closed else { return }
         closed = true
         gen += 1
+        endSignIn()
         process?.terminate()
         process = nil
         settingsToken?.cancel()
@@ -605,9 +646,21 @@ public final class AssistantPanelController {
     public func retry(_ itemID: Int) {
         guard !closed, phase == .idle, let req = lastRequest,
               let idx = items.firstIndex(where: { $0.id == itemID }),
-              case .error(let text, true) = items[idx].content else { return }
-        items[idx].content = .error(text, retry: false)
+              case .error(let text, true, let offer) = items[idx].content else { return }
+        items[idx].content = .error(text, retry: false, offer: offer)
         onChange?(.updated(idx))
+        start(req, echo: false)
+    }
+
+    /// Sign In… on an error item: Claude Code's own sign-in in the browser,
+    /// then the same question once more.
+    public func signIn(_ itemID: Int) {
+        guard !closed, phase == .idle, var req = lastRequest,
+              let idx = items.firstIndex(where: { $0.id == itemID }),
+              case .error(let text, let retry, .signIn) = items[idx].content else { return }
+        items[idx].content = .error(text, retry: retry, offer: .none)
+        onChange?(.updated(idx))
+        req.signIn = true
         start(req, echo: false)
     }
 
@@ -623,6 +676,7 @@ public final class AssistantPanelController {
     public func stop() {
         guard phase != .idle else { return }
         gen += 1
+        endSignIn()
         endProcess()
         closeTurn()
         phase = .idle
@@ -635,9 +689,11 @@ public final class AssistantPanelController {
     /// was about; the chip follows the selection again.
     public func newConversation() {
         gen += 1
+        endSignIn()
         endProcess()
         items = []
         streaming = nil
+        signingIn = nil
         activities = [:]
         toolNames = [:]
         pending = nil
@@ -694,7 +750,10 @@ public final class AssistantPanelController {
         if case .context(let c)? = req.target {
             req.target = .pinned(pinnedKey(of: c) ?? add(c))
         }
-        lastRequest = req
+        // Try Again sends the question, not the sign-in.
+        var last = req
+        last.signIn = false
+        lastRequest = last
         clearRetries()
         if echo {
             append(.user(label: req.label, text: req.text))
@@ -727,19 +786,23 @@ public final class AssistantPanelController {
         if process?.running != true {
             process = nil
             guard let path = locator.locate() else {
-                fail(Assistant.panelTexts().notFound, retry: true)
+                fail(Assistant.panelTexts().notFound, retry: true, offer: .install)
                 return
             }
             guard let bridge else {
                 fail(Assistant.panelTexts().toolsMissing, retry: false)
                 return
             }
-            locator.refresh()
-            let signedIn = await locator.signedIn()
-            guard my == gen else { return }
-            if signedIn == false {
-                fail(Assistant.panelTexts().notSignedIn, retry: true)
-                return
+            if req.signIn {
+                guard await signInFirst(my) else { return }
+            } else {
+                locator.refresh()
+                let signedIn = await locator.signedIn()
+                guard my == gen else { return }
+                if signedIn == false {
+                    fail(Assistant.panelTexts().notSignedIn, retry: false, offer: .signIn)
+                    return
+                }
             }
             do {
                 process = try launch(path, bridge)
@@ -757,8 +820,54 @@ public final class AssistantPanelController {
         for i in pinned.indices where told.contains(pinned[i].key) {
             pinned[i].announced = true
         }
+        authFailed = false
         phase = .running
         onState?()
+    }
+
+    /// Runs Claude Code's sign-in, shown as an activity line; true once it
+    /// is signed in. Anything else ends the turn with the reason and Sign
+    /// In… again (false, as when the question was overtaken meanwhile).
+    private func signInFirst(_ my: Int) async -> Bool {
+        let texts = Assistant.signInTexts()
+        signingIn = append(.activity(label: texts.waiting, done: false))
+        let run = locator.startSignIn()
+        signInRun = run
+        let result = await run.result
+        guard my == gen else { return false }
+        signInRun = nil
+        closeSignIn()
+        switch result {
+        case .done:
+            return true
+        case .failed(let reason):
+            fail(Assistant.signInFailedText(reason), retry: false, offer: .signIn)
+        case .timedOut:
+            fail(texts.timedOut, retry: false, offer: .signIn)
+        case .notFound:
+            fail(Assistant.panelTexts().notFound, retry: true, offer: .install)
+        case .cancelled: // the settings' sign-in took its place
+            fail(Assistant.panelTexts().notSignedIn, retry: false, offer: .signIn)
+        }
+        return false
+    }
+
+    /// Ends the sign-in the question under way started; its end is not
+    /// reported.
+    private func endSignIn() {
+        guard let run = signInRun else { return }
+        signInRun = nil
+        locator.cancelSignIn(run)
+    }
+
+    /// The sign-in's activity line is over.
+    private func closeSignIn() {
+        guard let idx = signingIn else { return }
+        signingIn = nil
+        if items.indices.contains(idx), case .activity(let label, false) = items[idx].content {
+            items[idx].content = .activity(label: label, done: true)
+            onChange?(.updated(idx))
+        }
     }
 
     /// The prompt of a question and the keys of the pinned contexts it
@@ -939,12 +1048,24 @@ public final class AssistantPanelController {
                 }
                 closeTurn()
                 phase = .idle
-                if !e.success {
-                    append(.error(Assistant.stoppedText(e.resultText), retry: true))
-                } else {
+                if e.success {
                     lastRequest = nil
+                } else if authFailed {
+                    // A new sign-in takes a new Claude Code.
+                    endProcess()
+                    append(.error(Assistant.panelTexts().notSignedIn, retry: false, offer: .signIn))
+                } else {
+                    append(.error(Assistant.stoppedText(e.resultText), retry: true))
                 }
+                authFailed = false
                 onState?()
+            case .failure:
+                // Claude Code's own words for a turn the API refused: the
+                // result repeats them.
+                log.info("assistant: the API refused the turn: \(e.failure, privacy: .public)")
+                if e.notSignedIn {
+                    authFailed = true
+                }
             case .other:
                 continue
             }
@@ -964,19 +1085,19 @@ public final class AssistantPanelController {
         onState?()
     }
 
-    /// Ends the turn with an error line.
-    private func fail(_ text: String, retry: Bool) {
+    /// Ends the turn with an error line and its buttons.
+    private func fail(_ text: String, retry: Bool, offer: Offer = .none) {
         closeTurn()
         phase = .idle
-        append(.error(text, retry: retry))
+        append(.error(text, retry: retry, offer: offer))
         onState?()
     }
 
-    /// Try Again belongs to the last question only.
+    /// Try Again and the offers belong to the last question only.
     private func clearRetries() {
         for (idx, item) in items.enumerated() {
-            if case .error(let text, true) = item.content {
-                items[idx].content = .error(text, retry: false)
+            if case .error(let text, let retry, let offer) = item.content, retry || offer != .none {
+                items[idx].content = .error(text, retry: false, offer: .none)
                 onChange?(.updated(idx))
             }
         }
@@ -992,6 +1113,7 @@ public final class AssistantPanelController {
     /// Nothing streams any more and every activity is over.
     private func closeTurn() {
         closeStreaming()
+        closeSignIn()
         for idx in activities.values.sorted() {
             if case .activity(let label, false) = items[idx].content {
                 items[idx].content = .activity(label: label, done: true)

@@ -11,8 +11,9 @@ insensitive while its state is not known and while a change runs; under
 it, while a change waits for Claude Desktop to restart, the row Claude
 Desktop with Restart (macOS; GTK has no Claude Desktop). The group
 Assistant (assistant_group): Show the Assistant Menu, Open In, and while In
-App is chosen Claude Code (the claude.exe the panel runs, Choose…) and
-Model. Its texts come from ui/internal/assistant, set in code
+App is chosen Claude Code (the claude.exe the panel runs, Choose…, and in
+front of it the button of what the row offers: Sign In… or Get Claude
+Code…) and Model. Its texts come from ui/internal/assistant, set in code
 (AiPage.xaml.cs).
 -->
 <UserControl
@@ -89,7 +90,14 @@ Model. Its texts come from ui/internal/assistant, set in code
                                 IsTextSelectionEnabled="True"
                                 TextWrapping="Wrap" />
                         </tk:SettingsCard.Description>
-                        <Button x:Name="ClaudeChooseButton" AutomationProperties.AutomationId="ClaudeCodeChoose" Click="OnChooseClaudeClick" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="ClaudeOfferButton"
+                                AutomationProperties.AutomationId="ClaudeCodeOffer"
+                                Click="OnClaudeOfferClick"
+                                Visibility="Collapsed" />
+                            <Button x:Name="ClaudeChooseButton" AutomationProperties.AutomationId="ClaudeCodeChoose" Click="OnChooseClaudeClick" />
+                        </StackPanel>
                     </tk:SettingsCard>
                     <tk:SettingsCard x:Name="AssistantModelRow" Visibility="Collapsed">
                         <ComboBox

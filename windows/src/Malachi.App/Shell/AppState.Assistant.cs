@@ -124,9 +124,11 @@ public sealed partial class AppState
     }
 
     // Quit: nothing more is asked or written; a running Claude Code ends with
-    // the panel's controller.
+    // the panel's controller, and its sign-in, which nobody waits for any
+    // more, here.
     private void CloseAssistant()
     {
+        ClaudeCode?.CancelSignIn();
         claudeDesktopWatch?.Cancel();
         claudeDesktopWatch = null;
         ClaudeDesktop?.Close();

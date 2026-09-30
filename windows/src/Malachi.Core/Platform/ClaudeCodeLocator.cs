@@ -3,9 +3,10 @@
 
 // Port of macos/Sources/MalachiCore/Platform/ClaudeCodeLocator.swift
 // (ClaudeCodeLocator: candidates, locate, isExecutableFile, refresh,
-// version, signedIn, run, ensureDirectory); GTK:
-// ui/internal/assistantpanel/locator.go (Locator, Candidates, Locate,
-// AutomaticPath, IsExecutableFile, Refresh, Version, SignedIn, run).
+// version, signedIn, signIn, cancelSignIn, signingIn, run,
+// ensureDirectory); GTK: ui/internal/assistantpanel/locator.go (Locator,
+// Candidates, Locate, AutomaticPath, IsExecutableFile, Refresh, Version,
+// SignedIn, SignIn, CancelSignIn, SigningIn, OnSignInChange, run).
 //
 // Windows differences (decided with the owner):
 // - Only claude.exe runs (Assistant.CandidatePaths, IsExecutableFile):
@@ -32,12 +33,21 @@
 //   Task.detached); only the kind of its failure is logged, and never
 //   anything claude printed: the output of auth status holds the account's
 //   e-mail address.
+// - The sign-in (SignInAsync) is a run of the same runner with the sign-in's
+//   timeout and a cancellation of its own: out of time or cancelled, the
+//   process is killed with every process it started, at once (there is no
+//   SIGTERM to send first). Its environment is ChildEnvironment (Windows
+//   has no SignInEnv, Assistant.SignIn.cs). GTK's watchers are the event
+//   SigningInChanged; its callback and cancel function are the task and
+//   CancelSignIn. The task continues on the caller's (UI) thread, where the
+//   locator's state lives.
 
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Assistants;
 using Malachi.Core.Controllers;
@@ -50,10 +60,11 @@ namespace Malachi.Core.Platform;
 
 /// <summary>
 /// Finds the user's Claude Code for the assistant panel (the In App target)
-/// and asks it two things: its version and whether it is signed in. Malachi
-/// Mail never signs in, never reads a credential and never shows the
-/// account: <c>claude auth status --json</c> is read for its
-/// <c>loggedIn</c> only.
+/// and asks it two things: its version and whether it is signed in;
+/// <see cref="SignInAsync"/> runs Claude Code's own sign-in. Malachi Mail
+/// never reads a credential and never shows the account: <c>claude auth
+/// status --json</c> is read for its <c>loggedIn</c> only, and <c>claude
+/// auth login</c> does the signing in.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -77,6 +88,9 @@ public sealed partial class ClaudeCodeLocator
     /// <summary>How long one run of <c>claude --version</c> or <c>claude auth status</c> may take.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long the browser is waited for in a sign-in.</summary>
+    public static readonly TimeSpan DefaultSignInTimeout = TimeSpan.FromMinutes(10);
+
     /// <summary>The most of the version line that is kept, in bytes.</summary>
     public const int VersionLimit = 100;
 
@@ -86,6 +100,7 @@ public sealed partial class ClaudeCodeLocator
     private readonly IReadOnlyDictionary<string, string> environment;
     private readonly BridgeRunner runner;
     private readonly TimeSpan timeout;
+    private readonly TimeSpan signInTimeout;
     private readonly string? directory;
     private readonly IPrivateDirectoryFactory? directories;
     private readonly Func<string, bool> usable;
@@ -93,6 +108,10 @@ public sealed partial class ClaudeCodeLocator
 
     private Dictionary<string, Task<string?>> versions = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Task<bool?>> signIns = new(StringComparer.OrdinalIgnoreCase);
+
+    // The sign-in under way: what ends it, and its task.
+    private CancellationTokenSource? signIn;
+    private Task<ClaudeCodeSignIn>? signInTask;
 
     /// <summary>A locator that reads the setting from <paramref name="settings"/>.</summary>
     /// <param name="settings">Where <c>assistant-claude-path</c> is read.</param>
@@ -111,6 +130,7 @@ public sealed partial class ClaudeCodeLocator
     /// <param name="directories">Makes <paramref name="directory"/> private; Directory.CreateDirectory when null.</param>
     /// <param name="usable">Whether a candidate is the one (<see cref="IsExecutableFile"/>; the tests keep it to their own directory).</param>
     /// <param name="logger">Receives the kind of a failed run, never its output.</param>
+    /// <param name="signInTimeout">How long a sign-in waits for the browser (<see cref="DefaultSignInTimeout"/>).</param>
     public ClaudeCodeLocator(
         SettingsStore settings,
         IReadOnlyDictionary<string, string>? environment = null,
@@ -119,21 +139,29 @@ public sealed partial class ClaudeCodeLocator
         string? directory = null,
         IPrivateDirectoryFactory? directories = null,
         Func<string, bool>? usable = null,
-        ILogger<ClaudeCodeLocator>? logger = null)
+        ILogger<ClaudeCodeLocator>? logger = null,
+        TimeSpan? signInTimeout = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         Settings = settings;
         this.environment = environment ?? ProcessEnvironment.Copy(ProcessEnvironment.Current());
         this.runner = runner ?? new BridgeRunner();
         this.timeout = timeout ?? DefaultTimeout;
+        this.signInTimeout = signInTimeout ?? DefaultSignInTimeout;
         this.directory = directory;
         this.directories = directories;
         this.usable = usable ?? IsExecutableFile;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
     }
 
+    /// <summary>A sign-in started or ended (<see cref="SigningIn"/>); raised on the thread of <see cref="SignInAsync"/>'s caller.</summary>
+    public event EventHandler? SigningInChanged;
+
     /// <summary>Where <c>assistant-claude-path</c> is read.</summary>
     public SettingsStore Settings { get; }
+
+    /// <summary>Whether a sign-in is under way.</summary>
+    public bool SigningIn => signIn is not null;
 
     /// <summary>
     /// Whether <paramref name="path"/> is a claude that Windows runs: an
@@ -244,6 +272,135 @@ public sealed partial class ClaudeCodeLocator
         var task = Run(path, AuthArguments, static (stdout, _) => LoggedIn(stdout));
         signIns[path] = task;
         return task;
+    }
+
+    /// <summary>
+    /// Runs Claude Code's own sign-in for the located executable (<c>claude
+    /// auth login</c>, <see cref="Assistant.SignInArguments"/>, with
+    /// <see cref="Assistant.ChildEnvironment"/> in the panel's private
+    /// directory).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Claude Code opens the browser, the user signs in to Claude there, and
+    /// Claude Code stores the sign-in itself. Malachi Mail only waits for the
+    /// process to end: it sees no credential, and what the process prints is
+    /// neither shown nor logged (the address it names belongs to the
+    /// sign-in; only stderr's first line is the reason of a failure). The
+    /// answers kept for <see cref="SignedInAsync"/> are forgotten when it
+    /// ends, so the next question asks afresh.
+    /// </para>
+    /// <para>
+    /// One sign-in at a time, for the panel and the settings alike: a new one
+    /// takes the place of the one under way, which ends as
+    /// <see cref="ClaudeCodeSignIn.Cancelled"/>, as does one that
+    /// <see cref="CancelSignIn()"/> ends. Call it on the UI thread; it
+    /// continues there.
+    /// </para>
+    /// </remarks>
+    public Task<ClaudeCodeSignIn> SignInAsync()
+    {
+        CancelSignIn();
+        if (Locate() is not { } path)
+        {
+            return Task.FromResult<ClaudeCodeSignIn>(new ClaudeCodeSignIn.NotFound());
+        }
+        var mine = new CancellationTokenSource();
+        signIn = mine;
+        var task = RunSignInAsync(path, mine);
+        if (signIn == mine)
+        {
+            signInTask = task;
+            SigningInChanged?.Invoke(this, EventArgs.Empty);
+        }
+        return task;
+    }
+
+    // The sign-in's run: claude auth login off the UI thread, its end back
+    // on it.
+    private async Task<ClaudeCodeSignIn> RunSignInAsync(string path, CancellationTokenSource mine)
+    {
+        using var disposal = mine;
+        var env = Assistant.ChildEnvironment(environment, path);
+        var token = mine.Token;
+        ClaudeCodeSignIn result;
+        try
+        {
+            var output = await Task.Run(async () =>
+            {
+                var dir = EnsureDirectory() ? directory : null;
+                return await runner.RunAsync(path, Assistant.SignInArguments, signInTimeout, env, dir, token).ConfigureAwait(false);
+            });
+            result = output.Status == 0
+                ? new ClaudeCodeSignIn.Done()
+                : new ClaudeCodeSignIn.Failed(
+                    new ClaudeCodeExit(output.Status, McpRegistrationController.FirstLine(output.Stderr.Span, ClaudeCodeProcess.ReasonLimit)).Description);
+        }
+        catch (OperationCanceledException)
+        {
+            result = new ClaudeCodeSignIn.Cancelled();
+        }
+        catch (BridgeRunnerException e) when (e.Failure == BridgeRunnerFailure.Timeout)
+        {
+            result = new ClaudeCodeSignIn.TimedOut();
+        }
+        catch (BridgeRunnerException e)
+        {
+            // The system's reason, without the runner's own name for what it ran.
+            result = new ClaudeCodeSignIn.Failed("claude could not be started: " + (e.InnerException?.Message ?? e.Message));
+        }
+        if (result is not ClaudeCodeSignIn.Done)
+        {
+            // The outcome alone: stderr may name the account.
+            LogSignIn(logger, result.GetType().Name);
+        }
+        if (signIn != mine)
+        {
+            // Cancelled, or another sign-in took its place: reported then.
+            return new ClaudeCodeSignIn.Cancelled();
+        }
+        signIn = null;
+        signInTask = null;
+        Refresh();
+        SigningInChanged?.Invoke(this, EventArgs.Empty);
+        return result;
+    }
+
+    /// <summary>
+    /// Ends the sign-in <paramref name="run"/> (a task of
+    /// <see cref="SignInAsync"/>) when it is the one under way; a sign-in
+    /// that is over, or that another took the place of, ends no other.
+    /// </summary>
+    public void CancelSignIn(Task<ClaudeCodeSignIn> run)
+    {
+        if (ReferenceEquals(signInTask, run))
+        {
+            CancelSignIn();
+        }
+    }
+
+    /// <summary>
+    /// Ends the sign-in under way, which is reported as
+    /// <see cref="ClaudeCodeSignIn.Cancelled"/>; nothing without one.
+    /// </summary>
+    public void CancelSignIn()
+    {
+        if (signIn is not { } run)
+        {
+            return;
+        }
+        signIn = null;
+        signInTask = null;
+        try
+        {
+            run.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It ended in this very moment.
+        }
+        Refresh();
+        SigningInChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // The usual places, in order.
@@ -358,6 +515,9 @@ public sealed partial class ClaudeCodeLocator
             return false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "claude auth login: {Outcome}")]
+    private static partial void LogSignIn(ILogger logger, string outcome);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "claude {Argument} failed: {Failure}")]
     private static partial void LogRunFailed(ILogger logger, string argument, BridgeRunnerFailure failure);

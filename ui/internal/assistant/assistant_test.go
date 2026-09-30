@@ -752,7 +752,7 @@ func TestPanelTexts(t *testing.T) {
 		AnotherSelected:   "Another message is selected",
 		AddToConversation: "Add to Conversation",
 		NotFound:          "Claude Code was not found on this computer",
-		NotSignedIn:       "Claude Code is not signed in. Run claude in Terminal and sign in.",
+		NotSignedIn:       "Claude Code is not signed in",
 		ToolsMissing:      "The Malachi Mail tools are not available to the assistant",
 		Stopped:           "The conversation was stopped",
 		Footer:            "Mail you ask about is sent to Claude under your account",
@@ -764,7 +764,7 @@ func TestPanelTexts(t *testing.T) {
 		Model:             "Model",
 		Choose:            "Choose…",
 		SignedIn:          "Signed in",
-		NotSignedInShort:  "Not signed in: run claude in Terminal and sign in",
+		NotSignedInShort:  "Not signed in",
 	}
 	if got := PanelTexts(identity{}); got != want {
 		t.Errorf("PanelTexts =\n%+v\nwant\n%+v", got, want)
@@ -776,6 +776,51 @@ func TestPanelTexts(t *testing.T) {
 	// The same msgid as Problem's for a claude that was not found.
 	if got := Problem(identity{}, App, Availability{}); got != want.NotFound {
 		t.Errorf("Problem(App, missing) = %q, want PanelTexts().NotFound", got)
+	}
+}
+
+func TestSignInTexts(t *testing.T) {
+	want := SignInStrings{
+		SignIn:        "Sign In…",
+		Waiting:       "Waiting for the sign-in in your browser…",
+		TimedOut:      "The sign-in took too long; try again",
+		Hint:          "Claude Code is not signed in. Sign in under AI in the preferences.",
+		GetClaudeCode: "Get Claude Code…",
+	}
+	if got := SignInTexts(identity{}); got != want {
+		t.Errorf("SignInTexts =\n%+v\nwant\n%+v", got, want)
+	}
+	cs := catalog{"Sign In…": "Přihlásit se…", "Get Claude Code…": "Získat Claude Code…"}
+	if got := SignInTexts(cs); got.SignIn != "Přihlásit se…" || got.GetClaudeCode != "Získat Claude Code…" {
+		t.Errorf("SignInTexts(cs) = %+v", got)
+	}
+	// The hint starts with the panel's line.
+	if !strings.HasPrefix(want.Hint, PanelTexts(identity{}).NotSignedIn+". ") {
+		t.Errorf("Hint %q does not start with NotSignedIn", want.Hint)
+	}
+	if InstallURL != "https://code.claude.com/docs/en/setup" {
+		t.Errorf("InstallURL = %q", InstallURL)
+	}
+}
+
+func TestSignInFailedText(t *testing.T) {
+	tests := []struct {
+		name, reason, want string
+	}{
+		{"plain", "claude exited with status 1", "The sign-in failed: claude exited with status 1"},
+		{"first line", "Login failed\nat line 2\n", "The sign-in failed: Login failed"},
+		{"control characters", "bad\x1b[31m red\x07", "The sign-in failed: bad[31m red"},
+		{"cut", strings.Repeat("b", 300), "The sign-in failed: " + strings.Repeat("b", 200)},
+		{"empty", "", "The sign-in failed: unknown"},
+	}
+	for _, tt := range tests {
+		if got := SignInFailedText(identity{}, tt.reason); got != tt.want {
+			t.Errorf("%s: SignInFailedText = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+	cs := catalog{"The sign-in failed: %s": "Přihlášení selhalo: %s"}
+	if got := SignInFailedText(cs, "x"); got != "Přihlášení selhalo: x" {
+		t.Errorf("SignInFailedText(cs) = %q", got)
 	}
 }
 

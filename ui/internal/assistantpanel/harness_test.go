@@ -159,6 +159,12 @@ func fakeToolResult(id, text string, isError bool) string {
 	return fmt.Sprintf(`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","is_error":%t,"content":[{"type":"text","text":"%s"}]}]}}`, id, isError, text)
 }
 
+// fakeFailure is the message Claude Code writes itself when the API refused
+// the turn; the result repeats its text.
+func fakeFailure(failure, text string) string {
+	return `{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"` + text + `"}]},"error":"` + failure + `"}`
+}
+
 func fakeResult(text string, success bool) string {
 	return fmt.Sprintf(`{"type":"result","subtype":"success","is_error":%t,"result":"%s","total_cost_usd":0.01}`, !success, text)
 }
@@ -185,10 +191,12 @@ type fakeClaude struct {
 }
 
 // newFakeClaude writes the fake: loggedIn is what auth status --json says
-// ("true", "false"), onStart shell run at every start of a conversation
-// with $n the start's number, turns the turns in order, counted over every
-// start (the second question of a new process is turn 2); the last
-// repeats.
+// ("true", "false") until a sign-in leaves the file signed-in, onStart shell
+// run at every start of a conversation with $n the start's number, turns
+// the turns in order, counted over every start (the second question of a
+// new process is turn 2); the last repeats. auth login is counted in
+// logins, records its environment in login-env and runs login.sh when
+// there is one (signsIn, or the test's own), else it ends with status 0.
 func newFakeClaude(t *testing.T, loggedIn, onStart string, turns ...fakeTurn) *fakeClaude {
 	t.Helper()
 	dir := scratch(t)
@@ -201,7 +209,15 @@ func newFakeClaude(t *testing.T, loggedIn, onStart string, turns ...fakeTurn) *f
 	path := writeScript(t, filepath.Join(dir, "claude"), fmt.Sprintf(`D='%s'
 case "$1" in
 --version) echo '2.1.178 (Claude Code)'; exit 0;;
-auth) echo '{"loggedIn": %s}'; exit 0;;
+auth)
+  if [ "$2" = login ]; then
+    echo login >> "$D/logins"
+    env > "$D/login-env"
+    if [ -f "$D/login.sh" ]; then . "$D/login.sh"; fi
+    exit 0
+  fi
+  if [ -f "$D/signed-in" ]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": %s}'; fi
+  exit 0;;
 esac
 echo start >> "$D/starts"
 n=$(wc -l < "$D/starts" | tr -d ' ')
@@ -221,6 +237,19 @@ done`, dir, loggedIn, onStart, len(turns)))
 }
 
 func (f *fakeClaude) read(name string) string { return readFile(f.t, filepath.Join(f.dir, name)) }
+
+// login is what auth login does, as shell ($D is the fake's directory).
+func (f *fakeClaude) login(shell string) {
+	f.t.Helper()
+	if err := os.WriteFile(filepath.Join(f.dir, "login.sh"), []byte(shell+"\n"), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// signsIn is a sign-in that works: auth status says loggedIn from then on.
+const signsIn = `: > "$D/signed-in"`
+
+func (f *fakeClaude) logins() int { return strings.Count(f.read("logins"), "\n") }
 
 func (f *fakeClaude) starts() int { return strings.Count(f.read("starts"), "\n") }
 
@@ -287,7 +316,7 @@ func newHarness(t *testing.T, fake *fakeClaude, consent bool, bridge string) *ha
 	loop := newTestLoop()
 	s := &memSettings{consent: consent, claudePath: fake.path}
 	work := filepath.Join(fake.dir, "work")
-	loc := NewLocator(s, []string{"HOME=" + fake.dir}, loop, "", discardLog())
+	loc := NewLocator(s, []string{"HOME=" + fake.dir, "DISPLAY=:7", "ANTHROPIC_API_KEY=sk-never", "MALACHI_SOCKET=/tmp/s.sock"}, loop, "", discardLog())
 	loc.timeout = 5 * time.Second
 	prefix := fake.dir + "/"
 	loc.usable = func(p string) bool { return strings.HasPrefix(p, prefix) && IsExecutableFile(p) }
@@ -346,6 +375,9 @@ func activity(label string, done bool) Content {
 }
 func failure(text string, retry bool) Content {
 	return Content{Kind: ContentError, Text: text, Retry: retry}
+}
+func offered(text string, retry bool, offer Offer) Content {
+	return Content{Kind: ContentError, Text: text, Retry: retry, Offer: offer}
 }
 func note(text string) Content { return Content{Kind: ContentNote, Text: text} }
 

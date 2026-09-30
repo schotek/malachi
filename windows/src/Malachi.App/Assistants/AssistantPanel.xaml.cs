@@ -9,8 +9,9 @@
 // AssistantPanelController and sends the clicks back; the host (the main
 // window) gives the controller its hooks (consent, the context's members,
 // Open Draft) and this panel the way a link of an answer is opened (after
-// "Open This Link?"). Everything the model or mail wrote is TextBlock.Text
-// or a Run set from code (AnswerRenderer), never markup.
+// "Open This Link?") and the way a page of the application's own is (Get
+// Claude Code…). Everything the model or mail wrote is TextBlock.Text or a
+// Run set from code (AnswerRenderer), never markup.
 //
 // Windows differences: Return sends and Shift+Return starts a new line in a
 // TextBox that accepts returns (GTK's text view the same); the user's
@@ -46,6 +47,7 @@ public sealed partial class AssistantPanel : UserControl
     private readonly List<Row> rows = [];
     private AssistantPanelController? controller;
     private Action<string>? openLink;
+    private Action<string>? openPage;
 
     // The transcript was at its end and stays there as items arrive; a user
     // who scrolled up to read is left where they are.
@@ -89,14 +91,18 @@ public sealed partial class AssistantPanel : UserControl
 
     /// <summary>
     /// Renders <paramref name="panelController"/>; a link of an answer goes to
-    /// <paramref name="linkOpener"/> (which asks before it opens anything).
+    /// <paramref name="linkOpener"/> (which asks before it opens anything), a
+    /// page the application itself names (Get Claude Code…) to
+    /// <paramref name="pageOpener"/>.
     /// </summary>
-    public void Attach(AssistantPanelController panelController, Action<string> linkOpener)
+    public void Attach(AssistantPanelController panelController, Action<string> linkOpener, Action<string> pageOpener)
     {
         ArgumentNullException.ThrowIfNull(panelController);
         ArgumentNullException.ThrowIfNull(linkOpener);
+        ArgumentNullException.ThrowIfNull(pageOpener);
         controller = panelController;
         openLink = linkOpener;
+        openPage = pageOpener;
         panelController.Changed += (_, change) => ApplyChange(change);
         panelController.StateChanged += (_, _) => UpdateState();
         panelController.FocusInputRequested += (_, _) =>
@@ -344,11 +350,37 @@ public sealed partial class AssistantPanel : UserControl
             AnswerContent => new AnswerRow(href => openLink?.Invoke(href)),
             ActivityContent => new ActivityRow(),
             DraftContent => new DraftRow(() => controller?.OpenDraftItem(id)),
-            _ => new LineRow(() => controller?.Retry(id)),
+            _ => new LineRow(() => controller?.Retry(id), offer => Offered(id, offer)),
         };
         row.Kind = item.Content.GetType();
         row.Update(item.Content);
         return row;
+    }
+
+    /// <summary>The button of what an error line, or the settings' Claude Code row, offers; "" for nothing.</summary>
+    internal static string OfferLabel(ErrorOffer offer) => offer switch
+    {
+        ErrorOffer.SignIn => Assistant.SignInTexts().SignIn,
+        ErrorOffer.Install => Assistant.SignInTexts().GetClaudeCode,
+        _ => "",
+    };
+
+    // The other button of an error line: Sign In… runs Claude Code's own
+    // sign-in and sends the question again (the controller's), Get Claude
+    // Code… opens Anthropic's page with the installers.
+    private void Offered(int id, ErrorOffer offer)
+    {
+        switch (offer)
+        {
+            case ErrorOffer.SignIn:
+                controller?.SignIn(id);
+                break;
+            case ErrorOffer.Install:
+                openPage?.Invoke(Assistant.InstallUrl);
+                break;
+            default:
+                break;
+        }
     }
 
     // A plain-text label for model or mail text: never markup.
@@ -499,24 +531,30 @@ public sealed partial class AssistantPanel : UserControl
         }
     }
 
-    // An error (with Try Again when the question can be sent once more) or
-    // a note.
+    // An error (with Try Again when the question can be sent once more, and
+    // the button of what it offers: Sign In… or Get Claude Code…) or a note.
     private sealed class LineRow : Row
     {
         private readonly Grid grid = new() { ColumnSpacing = 6 };
         private readonly FontIcon icon = new() { Glyph = Icons.Glyph("dialog-warning-symbolic"), FontSize = 14, VerticalAlignment = VerticalAlignment.Top };
         private readonly TextBlock label = PlainLabel("BodyLabelStyle");
-        private readonly Button button = new() { Content = L10n.T("Try Again"), HorizontalAlignment = HorizontalAlignment.Left };
+        private readonly Button button = new() { Content = L10n.T("Try Again") };
+        private readonly Button other = new();
+        private readonly StackPanel buttons = new() { Orientation = Orientation.Horizontal, Spacing = 6, HorizontalAlignment = HorizontalAlignment.Left };
+        private ErrorOffer offered;
 
-        public LineRow(Action retry)
+        public LineRow(Action retry, Action<ErrorOffer> offer)
         {
             icon.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
             button.Click += (_, _) => retry();
+            other.Click += (_, _) => offer(offered);
+            buttons.Children.Add(other);
+            buttons.Children.Add(button);
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             var column = new StackPanel { Spacing = 4 };
             column.Children.Add(label);
-            column.Children.Add(button);
+            column.Children.Add(buttons);
             Grid.SetColumn(column, 1);
             grid.Children.Add(icon);
             grid.Children.Add(column);
@@ -532,13 +570,17 @@ public sealed partial class AssistantPanel : UserControl
                     label.Text = e.Text;
                     label.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
                     icon.Visibility = Visibility.Visible;
+                    offered = e.Offer;
+                    other.Content = OfferLabel(e.Offer);
+                    other.Visibility = e.Offer == ErrorOffer.None ? Visibility.Collapsed : Visibility.Visible;
                     button.Visibility = e.Retry ? Visibility.Visible : Visibility.Collapsed;
+                    buttons.Visibility = e.Retry || e.Offer != ErrorOffer.None ? Visibility.Visible : Visibility.Collapsed;
                     break;
                 case NoteContent n:
                     label.Text = n.Text;
                     label.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
                     icon.Visibility = Visibility.Collapsed;
-                    button.Visibility = Visibility.Collapsed;
+                    buttons.Visibility = Visibility.Collapsed;
                     break;
             }
         }

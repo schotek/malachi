@@ -24,7 +24,8 @@ import os
 /// 2. Claude Code is located (none: `.notFound`) and must not say it is
 ///    signed out (`ClaudeCodeLocator.signedIn`, asked afresh:
 ///    `.notSignedIn`; not known counts as signed in, and the process then
-///    says what is wrong).
+///    says what is wrong: a turn the API refused for its sign-in,
+///    `Assistant.Event.Kind.failure`, is `.notSignedIn` too).
 /// 3. The process starts; text deltas stream to `onText` (a whole text
 ///    block replaces the deltas before it), the result ends it: a success
 ///    is `.answered` with the result's text and structured_output, anything
@@ -42,18 +43,20 @@ public final class AssistantRequest {
     public enum Failure: Error, Sendable, Equatable {
         /// Claude Code was not found on this computer.
         case notFound
-        /// Claude Code says it is not signed in.
+        /// Claude Code says it is not signed in, or the API refused its
+        /// sign-in.
         case notSignedIn
         /// It ended badly; the reason is technical (the result's text or
         /// subtype, stderr's first line, the timeout, a launch failure).
         case stopped(String)
 
         /// The line where the panel's errors are shown (the compose
-        /// window's popover): the panel's texts.
+        /// window's popover): the panel's texts, and for a missing sign-in
+        /// where to sign in (a request has no Sign In… of its own).
         public var text: String {
             switch self {
             case .notFound: return Assistant.panelTexts().notFound
-            case .notSignedIn: return Assistant.panelTexts().notSignedIn
+            case .notSignedIn: return Assistant.signInTexts().hint
             case .stopped(let reason): return Assistant.stoppedText(reason)
             }
         }
@@ -63,7 +66,7 @@ public final class AssistantRequest {
         public var reason: String {
             switch self {
             case .notFound: return Assistant.panelTexts().notFound
-            case .notSignedIn: return Assistant.panelTexts().notSignedInShort
+            case .notSignedIn: return Assistant.signInTexts().hint
             case .stopped(let reason): return reason
             }
         }
@@ -246,6 +249,13 @@ public final class AssistantRequest {
                     self.blocks += e.text
                     self.streamed = ""
                     onText?(self.blocks)
+                case .failure:
+                    // Claude Code's own words for a turn the API refused,
+                    // which the result repeats; a refused sign-in ends it.
+                    if e.notSignedIn {
+                        self.finish(my, .failed(.notSignedIn), completion)
+                        return
+                    }
                 case .result:
                     self.log.info("assistant request: success \(e.success, privacy: .public), cost \(e.costUSD, privacy: .public) USD")
                     let text = e.resultText.isEmpty ? self.blocks + self.streamed : e.resultText

@@ -7,9 +7,10 @@ import Testing
 
 // The assistant panel's state machine (the In App target of
 // ui/internal/assistant) against a stand-in `claude`: a script that
-// answers `--version` and `auth status --json`, records every start, its
-// arguments, environment and stdin, and prints a canned turn (stream-json
-// lines, or a shell snippet) per stdin line. The Go counterpart is
+// answers `--version` and `auth status --json`, runs a scripted `auth
+// login`, records every start, its arguments, environment and stdin, and
+// prints a canned turn (stream-json lines, or a shell snippet) per stdin
+// line. The Go counterpart is
 // ui/internal/assistantpanel controller_test.go, the same fake.
 
 /// One turn of the fake: JSON lines, then an optional shell snippet (a
@@ -24,8 +25,13 @@ struct FakeClaude {
     let dir: URL
     let path: String
 
+    /// `auth login` is counted in `logins`, records its environment in
+    /// `loginEnv` and runs `login.sh` when there is one (`login(_:)`:
+    /// `signsIn`, or the test's own), else it ends with status 0.
+    ///
     /// - Parameters:
-    ///   - loggedIn: what `auth status --json` says ("true", "false").
+    ///   - loggedIn: what `auth status --json` says ("true", "false")
+    ///     until a sign-in leaves the file `signed-in`.
     ///   - onStart: shell run at every start of a conversation, with `$n`
     ///     the start's number (to fail the first, say).
     ///   - turns: the turns in order, counted over every start (the
@@ -41,7 +47,15 @@ struct FakeClaude {
             D='\(d)'
             case "$1" in
             --version) echo '2.1.178 (Claude Code)'; exit 0;;
-            auth) echo '{"loggedIn": \(loggedIn)}'; exit 0;;
+            auth)
+              if [ "$2" = login ]; then
+                echo login >> "$D/logins"
+                env > "$D/login-env"
+                if [ -f "$D/login.sh" ]; then . "$D/login.sh"; fi
+                exit 0
+              fi
+              if [ -f "$D/signed-in" ]; then echo '{"loggedIn": true}'; else echo '{"loggedIn": \(loggedIn)}'; fi
+              exit 0;;
             esac
             echo start >> "$D/starts"
             n=$(wc -l < "$D/starts" | tr -d ' ')
@@ -64,6 +78,14 @@ struct FakeClaude {
         (try? String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8)) ?? ""
     }
 
+    /// What `auth login` does, as shell (`$D` is the fake's directory).
+    func login(_ shell: String) throws {
+        try Data((shell + "\n").utf8).write(to: dir.appendingPathComponent("login.sh"))
+    }
+
+    var logins: Int { read("logins").split(separator: "\n").count }
+    /// The environment of the last `auth login`.
+    var loginEnv: String { read("login-env") }
     var starts: Int { read("starts").split(separator: "\n").count }
     var args: [String] { read("args").split(separator: "\n", omittingEmptySubsequences: false).dropLast().map(String.init) }
     var env: String { read("env") }
@@ -95,6 +117,11 @@ func fakeToolUse(_ id: String, _ tool: String) -> String {
 func fakeToolResult(_ id: String, _ text: String, error: Bool = false) -> String {
     #"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"\#(id)","is_error":\#(error),"content":[{"type":"text","text":"\#(text)"}]}]}}"#
 }
+/// The message Claude Code writes itself when the API refused the turn; the
+/// result repeats its text.
+func fakeFailure(_ failure: String, _ text: String) -> String {
+    #"{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"\#(text)"}]},"error":"\#(failure)"}"#
+}
 func fakeResult(_ text: String = "done", success: Bool = true) -> String {
     #"{"type":"result","subtype":"success","is_error":\#(!success),"result":"\#(text)","total_cost_usd":0.01}"#
 }
@@ -107,7 +134,14 @@ func answerTurn(_ text: String) -> FakeTurn {
     ])
 }
 
+/// A sign-in that works: `auth status` says loggedIn from then on.
+let signsIn = #": > "$D/signed-in""#
+
 private typealias C = AssistantPanelController.Content
+
+/// The panel's lines of Claude Code's sign-in.
+private let signedOut = "Claude Code is not signed in"
+private let waiting = "Waiting for the sign-in in your browser…"
 
 @MainActor
 private final class PanelHarness {
@@ -129,7 +163,11 @@ private final class PanelHarness {
         work = fake.dir.appendingPathComponent("work", isDirectory: true)
         let prefix = fake.dir.path + "/"
         let locator = ClaudeCodeLocator(
-            settings: scratch.settings, environment: ["HOME": fake.dir.path], timeout: .seconds(5),
+            settings: scratch.settings,
+            environment: [
+                "HOME": fake.dir.path, "DISPLAY": ":7", "ANTHROPIC_API_KEY": "sk-never", "MALACHI_SOCKET": "/tmp/s.sock",
+            ],
+            timeout: .seconds(5),
             usable: { $0.hasPrefix(prefix) && ClaudeCodeLocator.isExecutableFile($0) })
         panel = AssistantPanelController(
             settings: scratch.settings, locator: locator, bridge: bridge, socket: "/tmp/malachi-test.sock", directory: work,
@@ -416,7 +454,8 @@ private func folded(
         #expect(fake.prompts.last == (try Assistant.prompt(.app, .summarize, conv.selection)))
     }
 
-    /// No Claude Code: an error with Try Again, nothing started.
+    /// No Claude Code: an error with Get Claude Code… and Try Again,
+    /// nothing started.
     @Test func claudeNotFound() async throws {
         let fake = try FakeClaude(turns: [answerTurn("ok")])
         let h = try PanelHarness(fake: fake)
@@ -426,36 +465,175 @@ private func folded(
         try await h.turn()
         #expect(h.contents == [
             .user(label: "", text: "Hello"),
-            .error("Claude Code was not found on this computer", retry: true),
+            .error("Claude Code was not found on this computer", retry: true, offer: .install),
         ])
     }
 
-    /// Signed out: an error, and Try Again after signing in works.
-    @Test func notSignedIn() async throws {
+    /// Signed out: an error with Sign In…, which runs Claude Code's sign-in
+    /// and then sends the same question, without a second bubble.
+    @Test func notSignedInSignsIn() async throws {
         let fake = try FakeClaude(loggedIn: "false", turns: [answerTurn("Hi there")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        #expect(h.contents == [.user(label: "", text: "Hello"), .error(signedOut, retry: false, offer: .signIn)])
+        #expect(fake.starts == 0 && fake.logins == 0)
+        // Try Again is not what the line offers.
+        h.panel.retry(h.panel.items[1].id)
+        #expect(h.panel.phase == .idle, "Try Again ran on a line that offers Sign In…")
+        try fake.login(signsIn)
+        h.panel.signIn(h.panel.items[1].id)
+        try await h.turn()
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: true),
+            .assistant(text: "Hi there", streaming: false),
+        ])
+        #expect(fake.logins == 1 && fake.starts == 1)
+        #expect(fake.prompts == ["Hello"])
+        // The sign-in opens the browser: it has the desktop session, and
+        // still nothing of a surrounding Claude or of Malachi Mail.
+        let env = fake.loginEnv
+        #expect(env.contains("DISPLAY=:7\n"))
+        #expect(!env.contains("ANTHROPIC") && !env.contains("MALACHI"), "sign-in environment:\n\(env)")
+        // A button used up does nothing more.
+        h.panel.signIn(h.panel.items[1].id)
+        #expect(h.panel.phase == .idle && fake.logins == 1, "a second Sign In… on the same line ran")
+    }
+
+    /// A sign-in that ends badly: its reason, and Sign In… again.
+    @Test func signInFails() async throws {
+        let fake = try FakeClaude(loggedIn: "false", turns: [answerTurn("Hi there")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        try fake.login("""
+            echo 'Login failed: the browser said no' >&2
+            echo 'more' >&2
+            exit 1
+            """)
+        h.panel.signIn(h.panel.items[1].id)
+        try await h.turn()
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: true),
+            .error("The sign-in failed: Login failed: the browser said no", retry: false, offer: .signIn),
+        ])
+        #expect(fake.starts == 0)
+        // Once more, and it works.
+        try fake.login(signsIn)
+        h.panel.signIn(h.panel.items[3].id)
+        try await h.turn()
+        #expect(h.contents.last == .assistant(text: "Hi there", streaming: false))
+        #expect(fake.logins == 2)
+    }
+
+    /// The browser brings no answer in time: the sign-in is ended.
+    @Test func signInTimesOut() async throws {
+        let fake = try FakeClaude(loggedIn: "false", turns: [answerTurn("Hi there")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        h.panel.locator.signInTimeout = .milliseconds(300)
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        try fake.login("exec sleep 30")
+        h.panel.signIn(h.panel.items[1].id)
+        try await h.turn()
+        #expect(h.contents.last == .error("The sign-in took too long; try again", retry: false, offer: .signIn))
+        #expect(!h.panel.locator.signingIn)
+    }
+
+    /// Stop ends a sign-in like any turn; one the settings start takes its
+    /// place.
+    @Test func signInStoppedAndReplaced() async throws {
+        let fake = try FakeClaude(loggedIn: "false", turns: [answerTurn("Hi there")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        try fake.login("exec sleep 30")
+        h.panel.signIn(h.panel.items[1].id)
+        try await waitFor { h.panel.locator.signingIn }
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: false),
+        ])
+        h.panel.stop()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: true),
+            .note("The conversation was stopped"),
+        ])
+        #expect(!h.panel.locator.signingIn && h.panel.phase == .idle)
+
+        // The same question again: signed out, Sign In…, and the settings'
+        // sign-in takes over while the browser is open.
+        h.panel.newConversation()
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        h.panel.signIn(h.panel.items[1].id)
+        try await waitFor { h.panel.locator.signingIn }
+        try fake.login(signsIn)
+        let settings = h.panel.locator.startSignIn()
+        try await h.turn()
+        #expect(await settings.result == .done)
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: true),
+            .error(signedOut, retry: false, offer: .signIn),
+        ])
+    }
+
+    /// The API refuses the sign-in although auth status says loggedIn
+    /// (expired, revoked): Claude Code's own message is no answer, the line
+    /// offers Sign In…, and the question goes to a new process after it.
+    @Test func refusedSignInOffersSignIn() async throws {
+        let refused = "Failed to authenticate. API Error: 401"
+        let fake = try FakeClaude(turns: [
+            FakeTurn(lines: [fakeInit, fakeFailure("authentication_failed", refused), fakeResult(refused, success: false)]),
+            answerTurn("Hi there"),
+        ])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        #expect(h.contents == [.user(label: "", text: "Hello"), .error(signedOut, retry: false, offer: .signIn)])
+        #expect(h.panel.process == nil)
+        try fake.login(signsIn)
+        h.panel.signIn(h.panel.items[1].id)
+        try await h.turn()
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(signedOut, retry: false),
+            .activity(label: waiting, done: true),
+            .assistant(text: "Hi there", streaming: false),
+        ])
+        #expect(fake.logins == 1 && fake.starts == 2)
+        #expect(fake.prompts == ["Hello", "Hello"])
+    }
+
+    /// Another refusal of the API is said once, by the result.
+    @Test func refusedTurnIsSaidOnce() async throws {
+        let limit = "API Error: Rate limit reached"
+        let fake = try FakeClaude(turns: [
+            FakeTurn(lines: [fakeInit, fakeFailure("rate_limit", limit), fakeResult(limit, success: false)]),
+        ])
         let h = try PanelHarness(fake: fake)
         defer { h.stop() }
         #expect(h.panel.submit("Hello"))
         try await h.turn()
         #expect(h.contents == [
             .user(label: "", text: "Hello"),
-            .error("Claude Code is not signed in. Run claude in Terminal and sign in.", retry: true),
+            .error("The assistant stopped: " + limit, retry: true),
         ])
-        #expect(fake.starts == 0)
-
-        // Signed in meanwhile (the fake now says so): Try Again sends the
-        // same question, without a second bubble.
-        let script = try String(contentsOfFile: fake.path, encoding: .utf8).replacingOccurrences(
-            of: #"{"loggedIn": false}"#, with: #"{"loggedIn": true}"#)
-        try Data(script.utf8).write(to: URL(fileURLWithPath: fake.path))
-        h.panel.retry(h.panel.items[1].id)
-        try await h.turn()
-        #expect(h.contents == [
-            .user(label: "", text: "Hello"),
-            .error("Claude Code is not signed in. Run claude in Terminal and sign in.", retry: false),
-            .assistant(text: "Hi there", streaming: false),
-        ])
-        #expect(fake.prompts == ["Hello"])
     }
 
     /// No bridge beside the application: the tools are missing.

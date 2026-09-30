@@ -23,12 +23,13 @@ public sealed partial class AssistantRequest
 
         /// <summary>
         /// The line where the panel's errors are shown (the compose window's
-        /// popover): the panel's texts.
+        /// popover): the panel's texts, and for a missing sign-in where to
+        /// sign in (a request has no Sign In… of its own).
         /// </summary>
         public string Text => this switch
         {
             NotFound => Assistant.PanelTexts().NotFound,
-            NotSignedIn => Assistant.PanelTexts().NotSignedIn,
+            NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => Assistant.StoppedText(s.Detail),
             _ => Assistant.StoppedText(""),
         };
@@ -37,7 +38,7 @@ public sealed partial class AssistantRequest
         public string Reason => this switch
         {
             NotFound => Assistant.PanelTexts().NotFound,
-            NotSignedIn => Assistant.PanelTexts().NotSignedInShort,
+            NotSignedIn => Assistant.SignInTexts().Hint,
             Stopped s => s.Detail,
             _ => "",
         };
@@ -45,7 +46,7 @@ public sealed partial class AssistantRequest
         /// <summary>Claude Code was not found on this computer.</summary>
         public sealed record NotFound : Failure;
 
-        /// <summary>Claude Code says it is not signed in.</summary>
+        /// <summary>Claude Code says it is not signed in, or the API refused its sign-in.</summary>
         public sealed record NotSignedIn : Failure;
 
         /// <summary>

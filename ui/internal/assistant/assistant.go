@@ -549,7 +549,7 @@ type PanelStrings struct {
 	// one is NewConversation).
 	AnotherSelected, AddToConversation string
 	// The error and note lines of the transcript: Claude Code not found,
-	// not signed in, the bridge's tools missing, and the note after Stop.
+	// not signed in (SignInTexts), the bridge's tools missing, the note after Stop.
 	NotFound, NotSignedIn, ToolsMissing, Stopped string
 	// Footer is the line under the question field.
 	Footer string
@@ -582,7 +582,7 @@ func PanelTexts(tr Translator) PanelStrings {
 		// TRANSLATORS: A button of the bar "Another message is selected": the assistant may talk about that message too.
 		AddToConversation: tr.T("Add to Conversation"),
 		NotFound:          tr.T("Claude Code was not found on this computer"),
-		NotSignedIn:       tr.T("Claude Code is not signed in. Run claude in Terminal and sign in."),
+		NotSignedIn:       tr.T("Claude Code is not signed in"),
 		ToolsMissing:      tr.T("The Malachi Mail tools are not available to the assistant"),
 		Stopped:           tr.T("The conversation was stopped"),
 		Footer:            tr.T("Mail you ask about is sent to Claude under your account"),
@@ -594,7 +594,7 @@ func PanelTexts(tr Translator) PanelStrings {
 		Model:             tr.T("Model"),
 		Choose:            tr.T("Choose…"),
 		SignedIn:          tr.T("Signed in"),
-		NotSignedInShort:  tr.T("Not signed in: run claude in Terminal and sign in"),
+		NotSignedInShort:  tr.T("Not signed in"),
 	}
 }
 
@@ -897,3 +897,48 @@ func unreserved(c byte) bool {
 	}
 	return strings.IndexByte("-_.!~*'()", c) >= 0
 }
+
+// SignInStrings are the fixed texts of Claude Code's sign-in from the
+// application (target App): the application runs Claude Code's own claude
+// auth login, which opens the browser, and waits for it. It never sees a
+// credential.
+type SignInStrings struct {
+	// SignIn is the button beside the panel's "Claude Code is not signed
+	// in" and on the settings' Claude Code row; Waiting what both show
+	// while the browser is open (the panel as an activity line).
+	SignIn, Waiting string
+	// TimedOut is the error line when the browser brought no answer in
+	// time. Hint is the line of a request that has no button of its own
+	// (the compose window's rewrite, the search in the user's own words).
+	TimedOut, Hint string
+	// GetClaudeCode is the button beside "Claude Code was not found on
+	// this computer": it opens InstallURL in the browser.
+	GetClaudeCode string
+}
+
+// SignInTexts returns the fixed texts of Claude Code's sign-in, translated.
+func SignInTexts(tr Translator) SignInStrings {
+	return SignInStrings{
+		SignIn:   tr.T("Sign In…"),
+		Waiting:  tr.T("Waiting for the sign-in in your browser…"),
+		TimedOut: tr.T("The sign-in took too long; try again"),
+		// TRANSLATORS: AI is the page of the preferences with the Claude Code row.
+		Hint: tr.T("Claude Code is not signed in. Sign in under AI in the preferences."),
+		// TRANSLATORS: A button that opens the web page with Claude Code's installers.
+		GetClaudeCode: tr.T("Get Claude Code…"),
+	}
+}
+
+// SignInFailedText is the error line when Claude Code's sign-in ended
+// badly. reason is technical (its stderr, or its exit status) and shown as
+// data, as StoppedText shows it: its first non-empty line without control
+// characters, at most 200 bytes; "unknown" when nothing is left.
+func SignInFailedText(tr Translator, reason string) string {
+	// TRANSLATORS: %s is a technical reason.
+	return fmt.Sprintf(tr.T("The sign-in failed: %s"), firstLine(reason, maxReason))
+}
+
+// InstallURL is where "Get Claude Code…" leads: Anthropic's page with the
+// installers for every system. The application downloads and runs nothing
+// itself.
+const InstallURL = "https://code.claude.com/docs/en/setup"

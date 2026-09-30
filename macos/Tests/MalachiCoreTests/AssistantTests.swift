@@ -481,5 +481,15 @@ struct AssistantTranslationTests {
             #expect(cs.translate(msgid) == want, "\(msgid)")
         }
         #expect(cs.translate("The search could not be converted: %s", ["x"]) == "Hledání se nepodařilo převést: x")
+        // Claude Code's sign-in from the application.
+        let signIn = [
+            ("Sign In…", "Přihlásit se…"), ("Get Claude Code…", "Získat Claude Code…"),
+            ("Claude Code is not signed in", "Claude Code není přihlášený"), ("Not signed in", "Nepřihlášeno"),
+            ("Waiting for the sign-in in your browser…", "Čeká se na přihlášení v prohlížeči…"),
+        ]
+        for (msgid, want) in signIn {
+            #expect(cs.translate(msgid) == want, "\(msgid)")
+        }
+        #expect(cs.translate("The sign-in failed: %s", ["x"]) == "Přihlášení selhalo: x")
     }
 }

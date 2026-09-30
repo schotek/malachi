@@ -35,8 +35,9 @@
 // stdin, which is then closed, and the answer in the result event.
 //
 // Authentication is entirely Claude Code's: the command line never carries
-// a key, the environment passes nothing of the kind, and whether Claude
-// Code is signed in is only asked (`claude auth status --json`). The system
+// a key, the environment passes nothing of the kind, whether Claude Code is
+// signed in is only asked (`claude auth status --json`), and signing in is
+// Claude Code's own `claude auth login` (AssistantSignIn.swift). The system
 // prompt and the context line are for the model, in English, like the
 // bridge's server instructions; the texts at the end go through L10n.
 
@@ -465,12 +466,38 @@ extension Assistant {
     /// variable of a surrounding session, no MALACHI_* (the socket goes on
     /// the command line).
     public static func childEnv(_ parent: [String], claudePath: String) -> [String] {
+        childEnv(parent, claudePath: claudePath, more: [])
+    }
+
+    /// signInEnvKeys: the variables the sign-in keeps beyond
+    /// `childEnvKeys`: what opening the browser takes on a Linux desktop
+    /// (xdg-open and the portal), and the user's own BROWSER, which Claude
+    /// Code runs instead. macOS needs none of them to open the browser; the
+    /// list is the Go package's, so both clients keep the same variables.
+    static let signInEnvKeys: Set<[UInt8]> = Set(
+        [
+            "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE",
+            "XDG_DATA_DIRS", "DBUS_SESSION_BUS_ADDRESS", "BROWSER",
+        ].map { Array($0.utf8) })
+
+    /// assistant.SignInEnv: the environment of `claude auth login`
+    /// (`signInArgs`): `childEnv` and the variables of `signInEnvKeys` from
+    /// `parent` when set there. Claude Code opens the browser itself, so it
+    /// needs the desktop session; still no CLAUDE*, ANTHROPIC* or MALACHI_*
+    /// variable.
+    public static func signInEnv(_ parent: [String], claudePath: String) -> [String] {
+        childEnv(parent, claudePath: claudePath, more: signInEnvKeys)
+    }
+
+    /// childEnv: `childEnv(_:claudePath:)` with the variables of `more`
+    /// kept as well.
+    static func childEnv(_ parent: [String], claudePath: String, more: Set<[UInt8]>) -> [String] {
         var kept: [[UInt8]: String] = [:]
         for entry in parent {
             let b = Array(entry.utf8)
             guard let eq = b.firstIndex(of: UInt8(ascii: "=")) else { continue }
             let key = Array(b[..<eq])
-            if childEnvKeys.contains(key) {
+            if childEnvKeys.contains(key) || more.contains(key) {
                 kept[key] = String(decoding: b[(eq + 1)...], as: UTF8.self)
             }
         }
@@ -488,7 +515,16 @@ extension Assistant {
 
     /// `childEnv` as a dictionary, for `Foundation.Process`.
     public static func childEnvironment(_ parent: [String: String], claudePath: String) -> [String: String] {
-        let entries = childEnv(parent.map { $0.key + "=" + $0.value }, claudePath: claudePath)
+        environment(childEnv(parent.map { $0.key + "=" + $0.value }, claudePath: claudePath))
+    }
+
+    /// `signInEnv` as a dictionary, for `Foundation.Process`.
+    public static func signInEnvironment(_ parent: [String: String], claudePath: String) -> [String: String] {
+        environment(signInEnv(parent.map { $0.key + "=" + $0.value }, claudePath: claudePath))
+    }
+
+    /// "KEY=value" entries as a dictionary.
+    private static func environment(_ entries: [String]) -> [String: String] {
         var out: [String: String] = [:]
         for e in entries {
             let b = Array(e.utf8)
@@ -538,8 +574,8 @@ extension Assistant {
         public var anotherSelected: String
         public var addToConversation: String
         /// The error and note lines of the transcript: Claude Code not
-        /// found (`notFound`), not signed in, the bridge's tools missing,
-        /// and the note after Stop.
+        /// found (`notFound`), not signed in (`signInTexts`), the bridge's
+        /// tools missing, and the note after Stop.
         public var notSignedIn: String
         public var toolsMissing: String
         public var stopped: String
@@ -624,7 +660,7 @@ extension Assistant {
             allMail: L10n.T("All mail"),
             draftReady: L10n.T("A draft is ready"),
             openDraft: L10n.T("Open Draft"),
-            notSignedIn: L10n.T("Claude Code is not signed in. Run claude in Terminal and sign in."),
+            notSignedIn: L10n.T("Claude Code is not signed in"),
             toolsMissing: L10n.T("The Malachi Mail tools are not available to the assistant"),
             stopped: L10n.T("The conversation was stopped"),
             tryAgain: L10n.T("Try Again"),
@@ -639,7 +675,7 @@ extension Assistant {
             model: L10n.T("Model"),
             choose: L10n.T("Choose…"),
             signedIn: L10n.T("Signed in"),
-            notSignedInShort: L10n.T("Not signed in: run claude in Terminal and sign in"),
+            notSignedInShort: L10n.T("Not signed in"),
             notFound: L10n.T("Claude Code was not found on this computer"),
             // TRANSLATORS: A bar in the assistant panel: the conversation is about other mail than the message selected in the list.
             anotherSelected: L10n.T("Another message is selected"),

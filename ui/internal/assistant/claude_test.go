@@ -447,3 +447,54 @@ func TestChildEnv(t *testing.T) {
 		}
 	}
 }
+
+// The sign-in opens the browser: ChildEnv and the desktop session, nothing
+// else.
+func TestSignInEnv(t *testing.T) {
+	parent := []string{
+		"HOME=/home/u",
+		"PATH=/usr/bin:/bin:/usr/local/bin",
+		"LANG=cs_CZ.UTF-8",
+		"DISPLAY=:0",
+		"WAYLAND_DISPLAY=wayland-0",
+		"XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",
+		"XDG_RUNTIME_DIR=/run/user/1000",
+		"XDG_CURRENT_DESKTOP=GNOME",
+		"XDG_SESSION_TYPE=wayland",
+		"XDG_DATA_DIRS=/usr/local/share:/usr/share",
+		"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+		"BROWSER=firefox",
+		"XDG_CONFIG_HOME=/home/u/.config",
+		"CLAUDECODE=1",
+		"CLAUDE_CODE_OAUTH_TOKEN=secret",
+		"ANTHROPIC_API_KEY=sk-ant-secret",
+		"MALACHI_SOCKET=/tmp/s.sock",
+		"LD_PRELOAD=/tmp/evil.so",
+	}
+	got := SignInEnv(parent, "/home/u/.local/bin/claude")
+	want := []string{
+		"BROWSER=firefox",
+		"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+		"DISPLAY=:0",
+		"HOME=/home/u",
+		"LANG=cs_CZ.UTF-8",
+		"PATH=/home/u/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		"WAYLAND_DISPLAY=wayland-0",
+		"XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",
+		"XDG_CURRENT_DESKTOP=GNOME",
+		"XDG_DATA_DIRS=/usr/local/share:/usr/share",
+		"XDG_RUNTIME_DIR=/run/user/1000",
+		"XDG_SESSION_TYPE=wayland",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("SignInEnv =\n%q\nwant\n%q", got, want)
+	}
+	// Without a session it is ChildEnv.
+	bare := []string{"HOME=/Users/u", "USER=u"}
+	if got, want := SignInEnv(bare, "/opt/homebrew/bin/claude"), ChildEnv(bare, "/opt/homebrew/bin/claude"); !slices.Equal(got, want) {
+		t.Errorf("SignInEnv = %q, want ChildEnv's %q", got, want)
+	}
+	if !slices.Equal(SignInArgs, []string{"auth", "login"}) {
+		t.Errorf("SignInArgs = %q", SignInArgs)
+	}
+}

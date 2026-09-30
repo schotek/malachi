@@ -50,5 +50,6 @@ public sealed partial class AssistantPanelController
     /// when this question is its first.
     /// </param>
     /// <param name="Target">What a message action or an attachment's question is about.</param>
-    private sealed record Request(RequestKind Kind, string Label, string Text, Context? InEffect, Target? Target);
+    /// <param name="SignIn">Sign In… sent it: Claude Code signs in before it starts.</param>
+    private sealed record Request(RequestKind Kind, string Label, string Text, Context? InEffect, Target? Target, bool SignIn = false);
 }

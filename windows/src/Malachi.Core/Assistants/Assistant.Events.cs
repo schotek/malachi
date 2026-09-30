@@ -17,10 +17,13 @@
 // rate_limit_event, stream_event (event content_block_delta with delta
 // text_delta {text}; thinking_delta and signature_delta ignored),
 // assistant (message.content: thinking, text {text}, tool_use {id, name,
-// input}), user (message.content: tool_result {tool_use_id, is_error,
-// content: a string or [{type: text, text}]}) and result (subtype success
-// or error_*, is_error, result, structured_output, permission_denials
-// [{tool_name}], total_cost_usd, usage).
+// input}; error when Claude Code wrote the message itself because the API
+// refused the turn: authentication_failed, billing_error, rate_limit,
+// invalid_request, server_error, unknown), user (message.content:
+// tool_result {tool_use_id, is_error, content: a string or [{type: text,
+// text}]}) and result (subtype success or error_*, is_error, result,
+// structured_output, permission_denials [{tool_name}], total_cost_usd,
+// usage).
 //
 // The JSON is read the way Go's encoding/json reads it into
 // map[string]json.RawMessage (GoJson), not with System.Text.Json. Go's
@@ -39,6 +42,8 @@ public static partial class Assistant
     /// event per text or tool_use block of an <c>assistant</c> message and
     /// per tool_result block of a <c>user</c> message, in order (thinking and
     /// other blocks yield nothing, so such a message may yield none), one
+    /// <see cref="AssistantEventKind.Failure"/> alone for an <c>assistant</c>
+    /// message with an error, one
     /// <see cref="AssistantEventKind.SystemInit"/> for system/init, one
     /// <see cref="AssistantEventKind.TextDelta"/> for a text delta, one
     /// <see cref="AssistantEventKind.Result"/> for a result, and one
@@ -112,8 +117,19 @@ public static partial class Assistant
         return new AssistantEvent(AssistantEventKind.SystemInit) { BridgeConnected = connected, Tools = [.. tools] };
     }
 
+    /// <summary>
+    /// The <see cref="AssistantEvent.Failure"/> of a turn the API refused
+    /// because Claude Code is not signed in, or its sign-in is no longer
+    /// accepted (Go's authenticationFailed).
+    /// </summary>
+    internal const string AuthenticationFailed = "authentication_failed";
+
     private static List<AssistantEvent> ParseAssistant(GoJson.Object o)
     {
+        if (o.Str("error") is { Length: > 0 } failure)
+        {
+            return [new AssistantEvent(AssistantEventKind.Failure) { Failure = failure }];
+        }
         var output = new List<AssistantEvent>();
         foreach (var raw in o.Obj("message")?.Array("content") ?? [])
         {

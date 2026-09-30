@@ -193,8 +193,8 @@ private final class Outcomes {
         signedOut.request.start(systemPrompt: "S", message: "m", completion: { got.outcomes.append($0) })
         try await waitFor { got.outcomes.count == 2 }
         #expect(got.outcomes[1] == .failed(.notSignedIn))
-        #expect(AssistantRequest.Failure.notSignedIn.text == "Claude Code is not signed in. Run claude in Terminal and sign in.")
-        #expect(AssistantRequest.Failure.notSignedIn.reason == "Not signed in: run claude in Terminal and sign in")
+        #expect(AssistantRequest.Failure.notSignedIn.text == "Claude Code is not signed in. Sign in under AI in the preferences.")
+        #expect(AssistantRequest.Failure.notSignedIn.reason == "Claude Code is not signed in. Sign in under AI in the preferences.")
         #expect(AssistantRequest.Failure.stopped("x").text == "The assistant stopped: x")
         #expect(AssistantRequest.Failure.stopped("x").reason == "x")
         #expect(signedOut.fake.starts == 0)
@@ -214,6 +214,33 @@ private final class Outcomes {
         h.request.start(systemPrompt: "S", message: "m", completion: { got.outcomes.append($0) })
         try await waitFor { got.outcomes.count == 2 }
         #expect(got.outcomes[1] == .failed(.stopped("Error: boom")))
+    }
+
+    /// The API refuses the sign-in although auth status says loggedIn: the
+    /// request ends as not signed in, Claude Code's own message is no
+    /// answer.
+    @Test func refusedSignIn() async throws {
+        let refused = "Failed to authenticate. API Error: 401"
+        let fake = try FakeClaude(turns: [
+            FakeTurn(lines: [fakeInit, fakeFailure("authentication_failed", refused), fakeResult(refused, success: false)]),
+        ])
+        let h = try RequestHarness(fake: fake)
+        defer { h.stop() }
+        let got = Outcomes()
+        h.request.start(systemPrompt: "S", message: "m", onText: { got.texts.append($0) }, completion: { got.outcomes.append($0) })
+        try await waitFor { !got.outcomes.isEmpty }
+        #expect(got.outcomes == [.failed(.notSignedIn)])
+        #expect(got.texts.isEmpty)
+        // Another refusal is the result's.
+        let limit = "API Error: Rate limit reached"
+        let other = try RequestHarness(fake: try FakeClaude(turns: [
+            FakeTurn(lines: [fakeInit, fakeFailure("rate_limit", limit), fakeResult(limit, success: false)]),
+        ]))
+        defer { other.stop() }
+        other.request.start(systemPrompt: "S", message: "m", onText: { got.texts.append($0) }, completion: { got.outcomes.append($0) })
+        try await waitFor { got.outcomes.count == 2 }
+        #expect(got.outcomes[1] == .failed(.stopped(limit)))
+        #expect(got.texts.isEmpty)
     }
 
     /// No answer in time: the process is ended and the request fails.
@@ -389,7 +416,7 @@ private final class Outcomes {
         let other = SearchConversion(request: signedOut.request)
         other.convert("faktury") { got.value.append($0) }
         try await waitFor { got.value.count == 3 }
-        #expect(got.value[2] == .failed("The search could not be converted: Not signed in: run claude in Terminal and sign in"))
+        #expect(got.value[2] == .failed("The search could not be converted: Claude Code is not signed in. Sign in under AI in the preferences."))
     }
 
     @Test func searchOutcomes() {

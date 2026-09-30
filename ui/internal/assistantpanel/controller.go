@@ -38,11 +38,26 @@ const (
 	ContentActivity
 	// ContentDraft is a draft the bridge saved, with Open Draft.
 	ContentDraft
-	// ContentError is what went wrong; Retry offers Try Again.
+	// ContentError is what went wrong; Retry offers Try Again, Offer one
+	// more button.
 	ContentError
 	// ContentNote is a remark of the panel's own ("The conversation was
 	// stopped").
 	ContentNote
+)
+
+// Offer is the button of an error item beyond Try Again.
+type Offer int
+
+// The offers.
+const (
+	OfferNone Offer = iota
+	// OfferSignIn: "Sign In…" beside "Claude Code is not signed in"
+	// (Controller.SignIn).
+	OfferSignIn
+	// OfferInstall: "Get Claude Code…" beside "Claude Code was not found on
+	// this computer"; the view opens assistant.InstallURL in the browser.
+	OfferInstall
 )
 
 // Content is what one item of the transcript shows; only the fields of its
@@ -56,6 +71,8 @@ type Content struct {
 	Text                   string
 	Streaming, Done, Retry bool
 	Draft                  assistant.DraftRef
+	// Offer is the error's other button.
+	Offer Offer
 }
 
 // Item is one entry of the transcript; ID stays with it.
@@ -208,6 +225,8 @@ type request struct {
 	// target is what a message action or an attachment's question is
 	// about.
 	target *target
+	// signIn: Sign In… sent it; Claude Code signs in before it starts.
+	signIn bool
 }
 
 // DefaultResolveTimeout is how long the members of a folded conversation
@@ -235,9 +254,10 @@ var errNoMessages = errors.New("assistant: no message ids")
 //     was not found on this computer"), the bridge must be there (none: the
 //     tools are not available), and Claude Code must not say it is signed
 //     out (Locator.SignedIn, asked afresh; not known counts as signed in,
-//     and the process then says what is wrong). Then the process starts
-//     (assistant.Args, assistant.ChildEnv, the private directory) and is
-//     kept for the follow-up questions of the conversation.
+//     and the process then says what is wrong): "Claude Code is not signed
+//     in" with Sign In…, see below. Then the process starts (assistant.Args,
+//     assistant.ChildEnv, the private directory) and is kept for the
+//     follow-up questions of the conversation.
 //  5. Running: the turn is written to stdin. Its system/init must report
 //     the bridge connected, or the conversation ends with "The Malachi Mail
 //     tools are not available to the assistant". Text deltas stream into
@@ -247,7 +267,22 @@ var errNoMessages = errors.New("assistant: no message ids")
 //     whose Open Draft the application checks with draft.list (OpenDraft).
 //     The result ends the turn (idle); one that is not a success adds "The
 //     assistant stopped: …". The process ending during a turn does the same
-//     with its stderr's first line.
+//     with its stderr's first line. A message Claude Code wrote itself
+//     because the API refused the turn (assistant.EventFailure) is no
+//     answer: the result repeats it. When the API refused the sign-in
+//     (expired or revoked, whatever claude auth status says), the turn ends
+//     with "Claude Code is not signed in" and Sign In…, and the process
+//     ends, for a new sign-in takes a new one.
+//
+// Sign In… (SignIn) sends the same question once more, with Claude Code's
+// own sign-in in front of step 4's start: the line "Waiting for the sign-in
+// in your browser…" is an activity while claude auth login runs
+// (Locator.SignIn: the browser opens, the application sees no credential),
+// then the process starts and the question is asked. A sign-in that fails,
+// takes too long or is taken over by the settings' ends the turn with its
+// reason and Sign In… again; Stop ends it like any turn. "Claude Code was
+// not found on this computer" offers Get Claude Code… (OfferInstall), which
+// the view opens in the browser, beside Try Again.
 //
 // Stop ends the process and the turn with the note "The conversation was
 // stopped"; the next question starts a new process (a new conversation
@@ -344,7 +379,13 @@ type Controller struct {
 	// lastRequest is the question of the turn under way (or the last that
 	// failed), for Try Again.
 	lastRequest *request
-	nextKey     int
+	// authFailed: the API refused the sign-in in the turn under way.
+	authFailed bool
+	// signingIn is the index of the sign-in's activity line, -1 none;
+	// cancelSignIn ends the sign-in this question started.
+	signingIn    int
+	cancelSignIn func()
+	nextKey      int
 	// resolving are the pinned folded conversations whose members are
 	// being asked for, and who waits for them.
 	resolving map[int]*future[struct{}]
@@ -391,6 +432,7 @@ func New(cfg Config) *Controller {
 		env:            cfg.Env,
 		killGrace:      grace,
 		streaming:      -1,
+		signingIn:      -1,
 		activities:     make(map[string]int),
 		toolNames:      make(map[string]string),
 		resolving:      make(map[int]*future[struct{}]),
@@ -404,6 +446,7 @@ func (c *Controller) Close() {
 	}
 	c.closed = true
 	c.gen++
+	c.endSignIn()
 	if c.process != nil {
 		c.process.Terminate()
 	}
@@ -829,6 +872,23 @@ func (c *Controller) Retry(itemID int) {
 	c.start(*c.lastRequest, false)
 }
 
+// SignIn is Sign In… on an error item: Claude Code's own sign-in in the
+// browser, then the same question once more.
+func (c *Controller) SignIn(itemID int) {
+	if c.closed || c.phase != PhaseIdle || c.lastRequest == nil {
+		return
+	}
+	idx := c.indexOf(itemID)
+	if idx < 0 || c.items[idx].Content.Kind != ContentError || c.items[idx].Content.Offer != OfferSignIn {
+		return
+	}
+	c.items[idx].Content.Offer = OfferNone
+	c.changed(ChangeUpdated, idx)
+	req := *c.lastRequest
+	req.signIn = true
+	c.start(req, false)
+}
+
 // OpenDraftItem is a draft card's Open Draft.
 func (c *Controller) OpenDraftItem(itemID int) {
 	idx := c.indexOf(itemID)
@@ -855,6 +915,7 @@ func (c *Controller) Stop() {
 		return
 	}
 	c.gen++
+	c.endSignIn()
 	c.endProcess()
 	c.closeTurn()
 	c.phase = PhaseIdle
@@ -867,9 +928,11 @@ func (c *Controller) Stop() {
 // chip follows the selection again.
 func (c *Controller) NewConversation() {
 	c.gen++
+	c.endSignIn()
 	c.endProcess()
 	c.items = nil
 	c.streaming = -1
+	c.signingIn = -1
 	c.activities = make(map[string]int)
 	c.toolNames = make(map[string]string)
 	c.pending, c.pendingTarget = Pending{}, nil
@@ -947,6 +1010,7 @@ func (c *Controller) pin(req request, my int, echo bool) {
 		req.target = &target{pinned: true, key: c.pinOrAdd(req.target.ctx)}
 	}
 	last := req
+	last.signIn = false
 	c.lastRequest = &last
 	c.clearRetries()
 	if echo {
@@ -992,22 +1056,14 @@ func (c *Controller) promptReady(req request, my int) {
 	c.process = nil
 	p := c.locator.Locate()
 	if p == "" {
-		c.fail(assistant.PanelTexts(c.tr).NotFound, true)
+		c.offer(assistant.PanelTexts(c.tr).NotFound, true, OfferInstall)
 		return
 	}
 	if c.bridge == "" {
 		c.fail(assistant.PanelTexts(c.tr).ToolsMissing, false)
 		return
 	}
-	c.locator.Refresh()
-	c.locator.SignedIn(func(s SignIn) {
-		if my != c.gen {
-			return
-		}
-		if s.Known && !s.SignedIn {
-			c.fail(assistant.PanelTexts(c.tr).NotSignedIn, true)
-			return
-		}
+	launch := func() {
 		proc, err := c.launch(p)
 		if err != nil {
 			c.log.Warn("assistant", "err", err)
@@ -1016,7 +1072,72 @@ func (c *Controller) promptReady(req request, my int) {
 		}
 		c.process = proc
 		c.send(prompt, told)
+	}
+	if req.signIn {
+		c.signInFirst(my, launch)
+		return
+	}
+	c.locator.Refresh()
+	c.locator.SignedIn(func(s SignIn) {
+		if my != c.gen {
+			return
+		}
+		if s.Known && !s.SignedIn {
+			c.offer(assistant.PanelTexts(c.tr).NotSignedIn, false, OfferSignIn)
+			return
+		}
+		launch()
 	})
+}
+
+// signInFirst runs Claude Code's sign-in, shown as an activity line, and
+// goes on with then once it is signed in; anything else ends the turn with
+// the reason and Sign In… again.
+func (c *Controller) signInFirst(my int, then func()) {
+	texts := assistant.SignInTexts(c.tr)
+	c.signingIn = c.append(Content{Kind: ContentActivity, Label: texts.Waiting})
+	c.cancelSignIn = c.locator.SignIn(func(r SignInResult) {
+		if my != c.gen {
+			return
+		}
+		c.cancelSignIn = nil
+		c.closeSignIn()
+		switch r.Outcome {
+		case SignInDone:
+			then()
+		case SignInFailed:
+			c.offer(assistant.SignInFailedText(c.tr, r.Reason), false, OfferSignIn)
+		case SignInTimedOut:
+			c.offer(texts.TimedOut, false, OfferSignIn)
+		case SignInNotFound:
+			c.offer(assistant.PanelTexts(c.tr).NotFound, true, OfferInstall)
+		default: // SignInCancelled: the settings' sign-in took its place
+			c.offer(assistant.PanelTexts(c.tr).NotSignedIn, false, OfferSignIn)
+		}
+	})
+}
+
+// endSignIn ends the sign-in the question under way started; its end is
+// not reported.
+func (c *Controller) endSignIn() {
+	cancel := c.cancelSignIn
+	c.cancelSignIn = nil
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// closeSignIn: the sign-in's activity line is over.
+func (c *Controller) closeSignIn() {
+	idx := c.signingIn
+	c.signingIn = -1
+	if idx < 0 || idx >= len(c.items) {
+		return
+	}
+	if it := &c.items[idx].Content; it.Kind == ContentActivity && !it.Done {
+		it.Done = true
+		c.changed(ChangeUpdated, idx)
+	}
 }
 
 // send is step 5: the turn.
@@ -1030,6 +1151,7 @@ func (c *Controller) send(prompt string, told []int) {
 			c.pinned[i].Announced = true
 		}
 	}
+	c.authFailed = false
 	c.phase = PhaseRunning
 	c.state()
 }
@@ -1275,6 +1397,13 @@ func (c *Controller) handle(events []assistant.Event) {
 					c.append(Content{Kind: ContentDraft, Draft: ref})
 				}
 			}
+		case assistant.EventFailure:
+			// Claude Code's own words for a turn the API refused: the
+			// result repeats them.
+			c.log.Info("assistant: the API refused the turn", "failure", e.Failure)
+			if e.NotSignedIn() {
+				c.authFailed = true
+			}
 		case assistant.EventResult:
 			c.log.Info("assistant turn", "success", e.Success, "costUSD", e.CostUSD, "denied", len(e.Denied))
 			for _, tool := range e.Denied {
@@ -1282,11 +1411,17 @@ func (c *Controller) handle(events []assistant.Event) {
 			}
 			c.closeTurn()
 			c.phase = PhaseIdle
-			if !e.Success {
-				c.append(Content{Kind: ContentError, Text: assistant.StoppedText(c.tr, e.ResultText), Retry: true})
-			} else {
+			switch {
+			case e.Success:
 				c.lastRequest = nil
+			case c.authFailed:
+				// A new sign-in takes a new Claude Code.
+				c.endProcess()
+				c.append(Content{Kind: ContentError, Text: assistant.PanelTexts(c.tr).NotSignedIn, Offer: OfferSignIn})
+			default:
+				c.append(Content{Kind: ContentError, Text: assistant.StoppedText(c.tr, e.ResultText), Retry: true})
 			}
+			c.authFailed = false
 			c.state()
 		}
 	}
@@ -1309,17 +1444,22 @@ func (c *Controller) exited(e Exit) {
 
 // fail ends the turn with an error line.
 func (c *Controller) fail(text string, retry bool) {
+	c.offer(text, retry, OfferNone)
+}
+
+// offer ends the turn with an error line and its buttons.
+func (c *Controller) offer(text string, retry bool, offer Offer) {
 	c.closeTurn()
 	c.phase = PhaseIdle
-	c.append(Content{Kind: ContentError, Text: text, Retry: retry})
+	c.append(Content{Kind: ContentError, Text: text, Retry: retry, Offer: offer})
 	c.state()
 }
 
-// clearRetries: Try Again belongs to the last question only.
+// clearRetries: Try Again and the offers belong to the last question only.
 func (c *Controller) clearRetries() {
 	for i := range c.items {
-		if it := &c.items[i].Content; it.Kind == ContentError && it.Retry {
-			it.Retry = false
+		if it := &c.items[i].Content; it.Kind == ContentError && (it.Retry || it.Offer != OfferNone) {
+			it.Retry, it.Offer = false, OfferNone
 			c.changed(ChangeUpdated, i)
 		}
 	}
@@ -1338,6 +1478,7 @@ func (c *Controller) endProcess() {
 // closeTurn: nothing streams any more and every activity is over.
 func (c *Controller) closeTurn() {
 	c.closeStreaming()
+	c.closeSignIn()
 	idxs := make([]int, 0, len(c.activities))
 	for _, idx := range c.activities {
 		idxs = append(idxs, idx)

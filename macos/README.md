@@ -456,8 +456,10 @@ its only MCP server and only the bridge's read and draft tools allowed;
 the command line and why it is safe are in
 [docs/mcp.md](../docs/mcp.md#the-panel-in-the-app-experimental)). Signing
 in is Claude Code's alone: the app never sees a credential, it only asks
-`claude auth status` whether Claude Code is signed in, and otherwise says
-to run `claude` in Terminal and sign in. The choice is disabled while no
+`claude auth status` whether Claude Code is signed in, and otherwise
+offers *Sign In…*, which runs Claude Code's own `claude auth login` (the
+browser opens; the app waits for it and then asks the question again).
+The choice is disabled while no
 `claude` is found. The panel exists only while the Assistant does and In
 App is chosen; then the toolbar ends with the inspector button after the
 search field and *View → Show Assistant* / *Hide Assistant* toggles it.
@@ -478,7 +480,8 @@ added message to the model); the transcript (the questions, the
 answers as plain text with a small Markdown subset drawn as fonts, never
 HTML, a line with a spinner while a tool reads mail, *A draft is ready*
 with *Open Draft*, which opens the draft only after `draft.list` has it,
-errors with *Try Again*); the question field (Return sends, Shift-Return
+errors with *Try Again*, *Sign In…* when Claude Code is not signed in or
+*Get Claude Code…* when there is none); the question field (Return sends, Shift-Return
 starts a new line; one to five lines) with *Send*, or *Stop* while an
 answer comes; and the line *Mail you ask about is sent to Claude under
 your account*. The first question ever asks *Send Mail to Claude?* as a
@@ -497,7 +500,8 @@ type (plain text, CSV, Markdown, calendar, JSON, PNG, JPEG, GIF, WebP).
 *Settings → AI → Assistant* shows two more rows while In App is chosen:
 *Claude Code* (its path, version and whether it is signed in, or that it
 was not found) with *Choose…* for another `claude` (`assistant-claude-path`;
-choosing the one found automatically goes back to looking), and *Model*
+choosing the one found automatically goes back to looking) and with what
+the row offers, *Sign In…* or *Get Claude Code…*, and *Model*
 (*Sonnet*, the default, *Haiku* or *Opus*: `assistant-model`, used from
 the next conversation). The conversation lives in memory only: *New
 Conversation*, *Stop* (the next question starts a new one) or quitting the

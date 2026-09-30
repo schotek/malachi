@@ -554,7 +554,11 @@ Unread in This Folder*, and an attachment's menu gets *Ask the Assistant…*.
   with only the bridge's read and draft tools,
   none of your Claude Code settings, and nothing written to disk; the
   first question asks whether mail may be sent to Claude. *Preferences →
-  AI* shows which `claude` it runs and chooses the model.
+  AI* shows which `claude` it runs and chooses the model. Claude Code has
+  a sign-in of its own, apart from Claude Desktop's: while it is signed
+  out the panel and that page offer *Sign In…*, which opens Claude's
+  sign-in in your browser (and *Get Claude Code…* while it is not
+  installed).
 
 With *In App* chosen, the same Claude Code also helps outside the panel,
 with no tool and no mail of its own: the ✦ button of the compose window

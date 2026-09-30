@@ -29,4 +29,11 @@ public enum AssistantEventKind
 
     /// <summary>EventResult: the turn is over.</summary>
     Result,
+
+    /// <summary>
+    /// EventFailure: an <c>assistant</c> message Claude Code wrote itself,
+    /// because the API refused the turn. Its text is no answer; the result
+    /// that follows repeats it.
+    /// </summary>
+    Failure,
 }

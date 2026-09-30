@@ -7,10 +7,10 @@
 // subjectLabel, messageCount, placeholder, pendingLabel, subtitle,
 // setContext, removeContext, addSelection, add, pinnedKey, pinnedContext,
 // newKey, run, run(_:on:), perform, summarizeUnread, askAttachment,
-// cancelPending, submit, retry, openDraft, stop, newConversation, close,
-// start, prepare, prompt, unresolved, resolvePinned, settle, resolve,
-// launch, handle, exited, fail, clearRetries, endProcess, closeTurn,
-// closeStreaming, append, localDate, Once); GTK:
+// cancelPending, submit, retry, signIn, openDraft, stop, newConversation,
+// close, start, prepare, prompt, unresolved, resolvePinned, settle, resolve,
+// launch, handle, exited, fail, clearRetries, endProcess, endSignIn,
+// closeSignIn, closeTurn, closeStreaming, append, localDate, Once); GTK:
 // ui/internal/assistantpanel/controller.go (Controller, its port).
 //
 // Windows differences:
@@ -97,8 +97,9 @@ namespace Malachi.Core.Controllers;
 /// Code was not found on this computer"), the bridge must be there (none:
 /// the tools are not available), and Claude Code must not say it is signed
 /// out (<see cref="ClaudeCodeLocator.SignedInAsync"/>, asked afresh: "Claude
-/// Code is not signed in…"; not known counts as signed in, and the process
-/// then says what is wrong). Then the process starts
+/// Code is not signed in" with Sign In…, see below; not known counts as
+/// signed in, and the process then says what is wrong). Then the process
+/// starts
 /// (<see cref="Assistant.Args"/>, <see cref="Assistant.ChildEnvironment"/>,
 /// the private directory) and is kept for the follow-up questions of the
 /// conversation.</item>
@@ -112,8 +113,25 @@ namespace Malachi.Core.Controllers;
 /// Draft the application checks (<see cref="OpenDraft"/>). The result ends
 /// the turn (<see cref="Phase.Idle"/>); one that is not a success adds "The
 /// assistant stopped: …". The process ending during a turn does the same
-/// with its stderr's first line.</item>
+/// with its stderr's first line. A message Claude Code wrote itself because
+/// the API refused the turn (<see cref="AssistantEventKind.Failure"/>) is no
+/// answer: the result repeats it. When the API refused the sign-in (expired
+/// or revoked, whatever <c>claude auth status</c> says), the turn ends with
+/// "Claude Code is not signed in" and Sign In…, and the process ends, for a
+/// new sign-in takes a new one.</item>
 /// </list>
+/// <para>
+/// Sign In… (<see cref="SignIn"/>) sends the same question once more, with
+/// Claude Code's own sign-in in front of step 4's start: the line "Waiting
+/// for the sign-in in your browser…" is an activity while <c>claude auth
+/// login</c> runs (<see cref="ClaudeCodeLocator.SignInAsync"/>: the browser
+/// opens, the application sees no credential), then the process starts and
+/// the question is asked. A sign-in that fails, takes too long or is taken
+/// over by the settings' ends the turn with its reason and Sign In… again;
+/// <see cref="Stop"/> ends it like any turn. "Claude Code was not found on
+/// this computer" offers Get Claude Code… (<see cref="ErrorOffer.Install"/>),
+/// which the view opens in the browser, beside Try Again.
+/// </para>
 /// <para>
 /// <see cref="Stop"/> ends the process and the turn with the note "The
 /// conversation was stopped"; the next question starts a new process (a new
@@ -202,6 +220,13 @@ public sealed partial class AssistantPanelController : IDisposable
     // The question of the turn under way (or the last that failed), for Try
     // Again.
     private Request? lastRequest;
+
+    // The API refused the sign-in in the turn under way.
+    private bool authFailed;
+
+    // The sign-in's activity line, and the sign-in this question started.
+    private int? signingIn;
+    private Task<ClaudeCodeSignIn>? signInRun;
 
     // The next Pinned.Key.
     private int nextKey;
@@ -752,6 +777,26 @@ public sealed partial class AssistantPanelController : IDisposable
         Start(request, echo: false);
     }
 
+    /// <summary>
+    /// Sign In… on an error item: Claude Code's own sign-in in the browser,
+    /// then the same question once more.
+    /// </summary>
+    public void SignIn(int itemId)
+    {
+        scope.VerifyAccess();
+        if (IsClosed || CurrentPhase != Phase.Idle || lastRequest is not { } request)
+        {
+            return;
+        }
+        var idx = items.FindIndex(i => i.Id == itemId);
+        if (idx < 0 || items[idx].Content is not ErrorContent { Offer: ErrorOffer.SignIn } error)
+        {
+            return;
+        }
+        SetContent(idx, error with { Offer = ErrorOffer.None });
+        Start(request with { SignIn = true }, echo: false);
+    }
+
     /// <summary>A draft card's Open Draft.</summary>
     public void OpenDraftItem(int itemId)
     {
@@ -776,6 +821,7 @@ public sealed partial class AssistantPanelController : IDisposable
             return;
         }
         gen++;
+        EndSignIn();
         EndProcess();
         CloseTurn();
         CurrentPhase = Phase.Idle;
@@ -792,9 +838,11 @@ public sealed partial class AssistantPanelController : IDisposable
     {
         scope.VerifyAccess();
         gen++;
+        EndSignIn();
         EndProcess();
         items.Clear();
         streaming = null;
+        signingIn = null;
         activities.Clear();
         toolNames.Clear();
         Pending = null;
@@ -821,6 +869,7 @@ public sealed partial class AssistantPanelController : IDisposable
             return;
         }
         gen++;
+        EndSignIn();
         EndProcess();
         settingsToken?.Cancel();
         settingsToken = null;
@@ -888,7 +937,7 @@ public sealed partial class AssistantPanelController : IDisposable
         {
             request = request with { Target = new PinnedTarget(PinnedKey(about) ?? Add(about)) };
         }
-        lastRequest = request;
+        lastRequest = request with { SignIn = false };
         ClearRetries();
         if (echo)
         {
@@ -933,7 +982,7 @@ public sealed partial class AssistantPanelController : IDisposable
             Process = null;
             if (Locator.Locate() is not { } path)
             {
-                Fail(Assistant.PanelTexts().NotFound, retry: true);
+                Fail(Assistant.PanelTexts().NotFound, retry: true, ErrorOffer.Install);
                 return;
             }
             if (bridge is not { Length: > 0 } bridgePath)
@@ -941,16 +990,52 @@ public sealed partial class AssistantPanelController : IDisposable
                 Fail(Assistant.PanelTexts().ToolsMissing, retry: false);
                 return;
             }
-            Locator.Refresh();
-            var signedIn = await Locator.SignedInAsync();
-            if (my != gen)
+            if (request.SignIn)
             {
-                return;
+                // Sign In…: Claude Code's own sign-in, shown as an activity
+                // line; anything but signed in ends the turn with the reason
+                // and Sign In… again.
+                signingIn = Append(new ActivityContent(Assistant.SignInTexts().Waiting, false));
+                var run = Locator.SignInAsync();
+                signInRun = run;
+                var outcome = await run;
+                if (my != gen)
+                {
+                    return;
+                }
+                signInRun = null;
+                CloseSignIn();
+                switch (outcome)
+                {
+                    case ClaudeCodeSignIn.Done:
+                        break;
+                    case ClaudeCodeSignIn.Failed failed:
+                        Fail(Assistant.SignInFailedText(failed.Reason), retry: false, ErrorOffer.SignIn);
+                        return;
+                    case ClaudeCodeSignIn.TimedOut:
+                        Fail(Assistant.SignInTexts().TimedOut, retry: false, ErrorOffer.SignIn);
+                        return;
+                    case ClaudeCodeSignIn.NotFound:
+                        Fail(Assistant.PanelTexts().NotFound, retry: true, ErrorOffer.Install);
+                        return;
+                    default: // Cancelled: the settings' sign-in took its place
+                        Fail(Assistant.PanelTexts().NotSignedIn, retry: false, ErrorOffer.SignIn);
+                        return;
+                }
             }
-            if (signedIn == false)
+            else
             {
-                Fail(Assistant.PanelTexts().NotSignedIn, retry: true);
-                return;
+                Locator.Refresh();
+                var signedIn = await Locator.SignedInAsync();
+                if (my != gen)
+                {
+                    return;
+                }
+                if (signedIn == false)
+                {
+                    Fail(Assistant.PanelTexts().NotSignedIn, retry: false, ErrorOffer.SignIn);
+                    return;
+                }
             }
             try
             {
@@ -982,6 +1067,7 @@ public sealed partial class AssistantPanelController : IDisposable
                 pinned[i] = pinned[i] with { Announced = true };
             }
         }
+        authFailed = false;
         CurrentPhase = Phase.Running;
         RaiseState();
     }
@@ -1292,6 +1378,15 @@ public sealed partial class AssistantPanelController : IDisposable
                         Append(new DraftContent(draft));
                     }
                     break;
+                case AssistantEventKind.Failure:
+                    // Claude Code's own words for a turn the API refused: the
+                    // result repeats them.
+                    LogRefused(logger, e.NotSignedIn);
+                    if (e.NotSignedIn)
+                    {
+                        authFailed = true;
+                    }
+                    break;
                 case AssistantEventKind.Result:
                     LogTurn(logger, e.Success, e.CostUsd, e.Denied.Count);
                     foreach (var denied in e.Denied)
@@ -1300,14 +1395,21 @@ public sealed partial class AssistantPanelController : IDisposable
                     }
                     CloseTurn();
                     CurrentPhase = Phase.Idle;
-                    if (!e.Success)
-                    {
-                        Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true));
-                    }
-                    else
+                    if (e.Success)
                     {
                         lastRequest = null;
                     }
+                    else if (authFailed)
+                    {
+                        // A new sign-in takes a new Claude Code.
+                        EndProcess();
+                        Append(new ErrorContent(Assistant.PanelTexts().NotSignedIn, false, ErrorOffer.SignIn));
+                    }
+                    else
+                    {
+                        Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true));
+                    }
+                    authFailed = false;
                     RaiseState();
                     break;
                 default:
@@ -1333,24 +1435,49 @@ public sealed partial class AssistantPanelController : IDisposable
         RaiseState();
     }
 
-    // Ends the turn with an error line.
-    private void Fail(string text, bool retry)
+    // Ends the turn with an error line and its buttons.
+    private void Fail(string text, bool retry, ErrorOffer offer = ErrorOffer.None)
     {
         CloseTurn();
         CurrentPhase = Phase.Idle;
-        Append(new ErrorContent(text, retry));
+        Append(new ErrorContent(text, retry, offer));
         RaiseState();
     }
 
-    // Try Again belongs to the last question only.
+    // Try Again and the offers belong to the last question only.
     private void ClearRetries()
     {
         for (var idx = 0; idx < items.Count; idx++)
         {
-            if (items[idx].Content is ErrorContent { Retry: true } error)
+            if (items[idx].Content is ErrorContent error && (error.Retry || error.Offer != ErrorOffer.None))
             {
-                SetContent(idx, error with { Retry = false });
+                SetContent(idx, error with { Retry = false, Offer = ErrorOffer.None });
             }
+        }
+    }
+
+    // Ends the sign-in the question under way started; its end is not
+    // reported.
+    private void EndSignIn()
+    {
+        if (signInRun is { } run)
+        {
+            signInRun = null;
+            Locator.CancelSignIn(run);
+        }
+    }
+
+    // The sign-in's activity line is over.
+    private void CloseSignIn()
+    {
+        if (signingIn is not { } idx)
+        {
+            return;
+        }
+        signingIn = null;
+        if (idx < items.Count && items[idx].Content is ActivityContent { Done: false } activity)
+        {
+            SetContent(idx, activity with { Done = true });
         }
     }
 
@@ -1366,6 +1493,7 @@ public sealed partial class AssistantPanelController : IDisposable
     private void CloseTurn()
     {
         CloseStreaming();
+        CloseSignIn();
         foreach (var idx in activities.Values.Order())
         {
             if (items[idx].Content is ActivityContent { Done: false } activity)
@@ -1455,6 +1583,9 @@ public sealed partial class AssistantPanelController : IDisposable
 
     [LoggerMessage(Level = LogLevel.Information, Message = "assistant turn: success {Success}, cost {CostUsd} USD, {Denied} denied")]
     private static partial void LogTurn(ILogger logger, bool success, double costUsd, int denied);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "assistant: the API refused the turn (sign-in: {SignIn})")]
+    private static partial void LogRefused(ILogger logger, bool signIn);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "assistant: denied {Tool}")]
     private static partial void LogDenied(ILogger logger, string tool);

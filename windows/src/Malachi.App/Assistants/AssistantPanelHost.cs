@@ -14,7 +14,8 @@
 // the main window comes forward), the first question asks for consent on
 // the main window, and Open Draft opens a draft only after draft.list has
 // it. A link of an answer is opened only after "Open This Link?" named its
-// destination, as a link the daemon did not list.
+// destination, as a link the daemon did not list; Get Claude Code…, a page
+// the application itself names, opens as the sign-in pages do.
 
 using System;
 using System.Linq;
@@ -62,7 +63,10 @@ internal sealed class AssistantPanelHost : IDisposable
         Controller.Consent = () => state.Alerts.ConfirmAsync(window, texts.ConsentHeading, texts.ConsentBody, texts.Allow, L10n.T("_Cancel"));
         Controller.ResolveContext = Resolve;
         Controller.OpenDraft = r => integration.Actions.OpenSavedDraft(new AccountId(r.AccountId), new DraftId(r.DraftId));
-        view.Attach(Controller, href => _ = reader.Links.OpenAsync(new ActivatedLink(href, href), [], window));
+        view.Attach(
+            Controller,
+            href => _ = reader.Links.OpenAsync(new ActivatedLink(href, href), [], window),
+            url => _ = state.OpenUrlAsync(url));
     }
 
     /// <summary>The conversation.</summary>

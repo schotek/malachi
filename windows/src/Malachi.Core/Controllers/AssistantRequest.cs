@@ -63,7 +63,9 @@ namespace Malachi.Core.Controllers;
 /// <item>Claude Code is located (none: <see cref="Failure.NotFound"/>) and
 /// must not say it is signed out (<see cref="ClaudeCodeLocator.SignedInAsync"/>,
 /// asked afresh: <see cref="Failure.NotSignedIn"/>; not known counts as
-/// signed in, and the process then says what is wrong).</item>
+/// signed in, and the process then says what is wrong: a turn the API
+/// refused for its sign-in, <see cref="AssistantEventKind.Failure"/>, is
+/// <see cref="Failure.NotSignedIn"/> too).</item>
 /// <item>The process starts; text deltas stream to <c>onText</c> (a whole
 /// text block replaces the deltas before it), the result ends it: a
 /// success is <see cref="Outcome.Answered"/> with the result's text and
@@ -377,6 +379,15 @@ public sealed partial class AssistantRequest : IDisposable
                     blocks += e.Text;
                     streamed = "";
                     Text(onText, blocks);
+                    break;
+                case AssistantEventKind.Failure:
+                    // Claude Code's own words for a turn the API refused,
+                    // which the result repeats; a refused sign-in ends it.
+                    if (e.NotSignedIn)
+                    {
+                        Finish(my, new Outcome.Failed(new Failure.NotSignedIn()), completion);
+                        return;
+                    }
                     break;
                 case AssistantEventKind.Result:
                     LogResult(logger, e.Success, e.CostUsd);

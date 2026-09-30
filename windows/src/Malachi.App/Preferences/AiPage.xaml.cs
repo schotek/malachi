@@ -5,7 +5,8 @@
 // (bindIfReady, setSwitch, registerChanged, the status on every
 // appearance, bindClaudeDesktop, restartClaudeDesktop, bindAssistant,
 // followApplication, updateAssistantGroup, showClaudeCode,
-// claudeCodeState, claudePathChanged, chooseClaudeCode); GTK:
+// claudeCodeState, claudePathChanged, chooseClaudeCode, claudeCodeOffer);
+// GTK:
 // ui/internal/window/preferences.go (bindMCP, assistantGroupFor,
 // bindAssistant, bindClaudeCode, claudeCodeState). The switch shows what
 // the bundled malachi-mcp.exe last confirmed, through McpRegistrationController
@@ -28,7 +29,13 @@
 // Claude Code (the claude.exe the panel runs, Choose…) and Model
 // (assistant-model). Without the bridge registered in any Claude client
 // both first rows are insensitive and the switch says why; while nothing is
-// known they are insensitive and show the setting.
+// known they are insensitive and show the setting. The Claude Code row has
+// a second button for what it offers: "Sign In…" while Claude Code says it
+// is signed out, which runs Claude Code's own sign-in in the browser (the
+// application's locator, shared with the panel: the row says "Waiting for
+// the sign-in in your browser…" whoever started it, and a second click
+// starts it afresh), and "Get Claude Code…" while there is none, which
+// opens Anthropic's page with the installers.
 //
 // Windows differences: Choose… offers .exe files only (the panel runs only
 // a claude.exe, windows/README.md); Open In lists all three targets (GTK
@@ -69,6 +76,9 @@ public sealed partial class AiPage : UserControl
 
     // Bumped by every look at Claude Code: a late answer is dropped.
     private int claudeCodeGen;
+
+    // What the Claude Code row's second button does.
+    private ErrorOffer claudeOffer;
     private bool closed;
 
     /// <summary>The page of a preferences window over <paramref name="state"/>.</summary>
@@ -133,6 +143,7 @@ public sealed partial class AiPage : UserControl
         bindings.Choice(AssistantTargetBox, SettingsKey.AssistantTarget, Assistant.Targets, () => state.Settings.AssistantTarget, v => state.Settings.AssistantTarget = v);
         bindings.Choice(AssistantModelBox, SettingsKey.AssistantModel, Assistant.Models, () => state.Settings.AssistantModel, v => state.Settings.AssistantModel = v);
         state.Assistant.Changed += OnAssistantChanged;
+        state.ClaudeCode.SigningInChanged += OnSigningInChanged;
         UpdateRegisterRow();
         UpdateAssistantGroup();
     }
@@ -159,6 +170,8 @@ public sealed partial class AiPage : UserControl
         state.ClaudeDesktop.Changed -= OnClaudeDesktopChanged;
         state.ClaudeDesktop.ToastRequested -= OnClaudeDesktopToast;
         state.Assistant.Changed -= OnAssistantChanged;
+        // A sign-in under way goes on: the user is in the browser.
+        state.ClaudeCode.SigningInChanged -= OnSigningInChanged;
     }
 
     // The MCP switch
@@ -302,7 +315,8 @@ public sealed partial class AiPage : UserControl
 
     // The row's text: the claude.exe the panel runs, its version and whether
     // it is signed in (asked once, then kept by the locator until the page
-    // comes up again or the path changes), or that none was found.
+    // comes up again, the path changes or a sign-in starts or ends), or that
+    // none was found; and what its second button offers.
     private async void ShowClaudeCode()
     {
         var my = ++claudeCodeGen;
@@ -310,11 +324,13 @@ public sealed partial class AiPage : UserControl
         if (locator.Locate() is not { } path)
         {
             ClaudeCodeState.Text = Assistant.Problem(AssistantTarget.App, new AssistantAvailability());
+            SetClaudeOffer(ErrorOffer.Install);
             return;
         }
         if (!ClaudeCodeState.Text.StartsWith(path, StringComparison.Ordinal))
         {
             ClaudeCodeState.Text = path;
+            SetClaudeOffer(ErrorOffer.None);
         }
         var version = await locator.VersionAsync();
         var signedIn = await locator.SignedInAsync();
@@ -322,11 +338,16 @@ public sealed partial class AiPage : UserControl
         {
             return;
         }
-        ClaudeCodeState.Text = ClaudeCodeStateText(path, version, signedIn);
+        ClaudeCodeState.Text = ClaudeCodeStateText(path, version, signedIn, locator.SigningIn);
+        SetClaudeOffer(signedIn == false ? ErrorOffer.SignIn : ErrorOffer.None);
     }
 
-    /// <summary>"path · version · Signed in"; what is not known is left out (preferences.go claudeCodeState).</summary>
-    internal static string ClaudeCodeStateText(string path, string? version, bool? signedIn)
+    /// <summary>
+    /// "path · version · Signed in"; what is not known is left out, and
+    /// while a sign-in is under way the row says that it waits for the
+    /// browser instead of "Not signed in" (preferences.go claudeCodeState).
+    /// </summary>
+    internal static string ClaudeCodeStateText(string path, string? version, bool? signedIn, bool signingIn)
     {
         var t = Assistant.PanelTexts();
         var parts = new System.Collections.Generic.List<string> { path };
@@ -334,11 +355,67 @@ public sealed partial class AiPage : UserControl
         {
             parts.Add(version);
         }
-        if (signedIn is { } s)
+        if (signedIn == true)
         {
-            parts.Add(s ? t.SignedIn : t.NotSignedInShort);
+            parts.Add(t.SignedIn);
+        }
+        else if (signingIn)
+        {
+            parts.Add(Assistant.SignInTexts().Waiting);
+        }
+        else if (signedIn == false)
+        {
+            parts.Add(t.NotSignedInShort);
         }
         return string.Join(" · ", parts);
+    }
+
+    private void SetClaudeOffer(ErrorOffer offer)
+    {
+        claudeOffer = offer;
+        ClaudeOfferButton.Content = Assistants.AssistantPanel.OfferLabel(offer);
+        ClaudeOfferButton.Visibility = offer == ErrorOffer.None ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    // A sign-in started or ended, here or in the panel: the row looks again.
+    private void OnSigningInChanged(object? sender, EventArgs e)
+    {
+        if (!closed && state.Settings.AssistantTarget == AssistantTarget.App)
+        {
+            ShowClaudeCode();
+        }
+    }
+
+    // The row's second button: Sign In… runs Claude Code's own sign-in in
+    // the browser, Get Claude Code… opens the page with its installers.
+    private async void OnClaudeOfferClick(object sender, RoutedEventArgs e)
+    {
+        switch (claudeOffer)
+        {
+            case ErrorOffer.Install:
+                await state.OpenUrlAsync(Assistant.InstallUrl);
+                break;
+            case ErrorOffer.SignIn:
+                var result = await state.ClaudeCode.SignInAsync();
+                if (closed)
+                {
+                    return;
+                }
+                switch (result)
+                {
+                    case ClaudeCodeSignIn.Failed failed:
+                        toasts.Show(Assistant.SignInFailedText(failed.Reason));
+                        break;
+                    case ClaudeCodeSignIn.TimedOut:
+                        toasts.Show(Assistant.SignInTexts().TimedOut);
+                        break;
+                    default:
+                        break;
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     // Choose…: the claude.exe the panel should run. The one found

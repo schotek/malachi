@@ -22,7 +22,9 @@ import MalachiCore
 ///   main window (the controller keeps the answer in `assistant-consent`).
 /// - A draft card's Open Draft is `ActionsController.openSavedDraft`, a
 ///   link in an answer the actions' `openLink` with no listed links, so
-///   its destination is always confirmed.
+///   its destination is always confirmed. Get Claude Code…, a page the
+///   application itself names, opens in the browser as the sign-in pages
+///   do (`openInBrowser`), without a question.
 /// - The Assistant menu, the Message menu and an attachment's menu run
 ///   their actions here while In App is the target (`AssistantActions`):
 ///   the panel unfolds and runs the action on the selection (a
@@ -74,6 +76,12 @@ final class AssistantPanelHost {
         }
         viewController.onLink = { [weak messageActions] href, window in
             messageActions?.openLink(href, links: [], from: window)
+        }
+        let toasts = state.toasts
+        viewController.onOpenPage = { url in
+            openInBrowser(url) { text in
+                toasts.show(text)
+            }
         }
     }
 

@@ -848,12 +848,30 @@ func (d *PreferencesDialog) bindAssistant(s *settings.Store) (unbind func()) {
 
 // bindClaudeCode drives the Claude Code row: show fills its subtitle with
 // the executable the panel runs, its version and whether it is signed in
-// (asked once, then kept by the locator until the dialog opens again or the
-// path changes), or that none was found; "Choose…" picks one of the user's
-// own (assistant-claude-path). The file found automatically stores
-// nothing, so choosing it goes back to looking in the usual places.
+// (asked once, then kept by the locator until the dialog opens again, the
+// path changes or a sign-in starts or ends), or that none was found;
+// "Choose…" picks one of the user's own (assistant-claude-path). The file
+// found automatically stores nothing, so choosing it goes back to looking
+// in the usual places.
+//
+// A second button, made here, is what the row offers: "Sign In…" while
+// Claude Code says it is signed out, which runs Claude Code's own sign-in
+// in the browser (the locator's, shared with the panel: the row says
+// "Waiting for the sign-in in your browser…" whoever started it, and a
+// second click starts it afresh), and "Get Claude Code…" while there is
+// none, which opens Anthropic's page with the installers.
 func (d *PreferencesDialog) bindClaudeCode(s *settings.Store) (show func(), unbind func()) {
 	a := d.assist
+	offer := assistantpanel.OfferNone
+	button := gtk.NewButtonWithLabel("")
+	button.SetVAlign(gtk.AlignCenter)
+	button.SetVisible(false)
+	d.claudeCodeRow.AddSuffix(button)
+	setOffer := func(o assistantpanel.Offer) {
+		offer = o
+		button.SetLabel(offerLabel(o))
+		button.SetVisible(o != assistantpanel.OfferNone)
+	}
 	gen := 0
 	show = func() {
 		gen++
@@ -861,20 +879,56 @@ func (d *PreferencesDialog) bindClaudeCode(s *settings.Store) (show func(), unbi
 		path := a.locator.Locate()
 		if path == "" {
 			d.claudeCodeRow.SetSubtitle(assistant.Problem(tr, assistant.App, assistant.Availability{}))
+			setOffer(assistantpanel.OfferInstall)
 			return
 		}
 		if !strings.HasPrefix(d.claudeCodeRow.Subtitle(), path) {
 			d.claudeCodeRow.SetSubtitle(path)
+			setOffer(assistantpanel.OfferNone)
 		}
 		a.locator.Version(func(version string) {
 			a.locator.SignedIn(func(in assistantpanel.SignIn) {
 				if d.closed || my != gen {
 					return
 				}
-				d.claudeCodeRow.SetSubtitle(claudeCodeState(path, version, in))
+				d.claudeCodeRow.SetSubtitle(claudeCodeState(path, version, in, a.locator.SigningIn()))
+				if in.Known && !in.SignedIn {
+					setOffer(assistantpanel.OfferSignIn)
+				} else {
+					setOffer(assistantpanel.OfferNone)
+				}
 			})
 		})
 	}
+	offered := button.ConnectClicked(func() {
+		switch offer {
+		case assistantpanel.OfferInstall:
+			// The preferences are a dialog, not a window: no parent.
+			widget.LaunchURI(nil, assistant.InstallURL, func(err error) {
+				if err != nil && !d.closed {
+					d.AddToast(widget.PlainToast(widget.LaunchErrorText(err)))
+				}
+			})
+		case assistantpanel.OfferSignIn:
+			a.locator.SignIn(func(r assistantpanel.SignInResult) {
+				if d.closed {
+					return
+				}
+				switch r.Outcome {
+				case assistantpanel.SignInFailed:
+					d.AddToast(widget.PlainToast(assistant.SignInFailedText(tr, r.Reason)))
+				case assistantpanel.SignInTimedOut:
+					d.AddToast(widget.PlainToast(assistant.SignInTexts(tr).TimedOut))
+				}
+			})
+		}
+	})
+	// A sign-in started or ended, here or in the panel: the row looks again.
+	unwatch := a.locator.OnSignInChange(func() {
+		if !d.closed {
+			show()
+		}
+	})
 	handle := d.claudeChoose.ConnectClicked(func() {
 		dlg := gtk.NewFileDialog()
 		dlg.SetTitle(assistant.TargetName(tr, assistant.Code))
@@ -904,12 +958,17 @@ func (d *PreferencesDialog) bindClaudeCode(s *settings.Store) (show func(), unbi
 			s.SetAssistantClaudePath(value)
 		})
 	})
-	return show, func() { d.claudeChoose.HandlerDisconnect(handle) }
+	return show, func() {
+		d.claudeChoose.HandlerDisconnect(handle)
+		button.HandlerDisconnect(offered)
+		unwatch()
+	}
 }
 
 // claudeCodeState is the Claude Code row's subtitle: "path · version ·
-// Signed in"; what is not known is left out.
-func claudeCodeState(path, version string, in assistantpanel.SignIn) string {
+// Signed in"; what is not known is left out, and while a sign-in is under
+// way (signingIn) the row says that it waits for the browser instead.
+func claudeCodeState(path, version string, in assistantpanel.SignIn, signingIn bool) string {
 	t := assistant.PanelTexts(tr)
 	parts := []string{path}
 	if version != "" {
@@ -918,6 +977,8 @@ func claudeCodeState(path, version string, in assistantpanel.SignIn) string {
 	switch {
 	case in.Known && in.SignedIn:
 		parts = append(parts, t.SignedIn)
+	case signingIn:
+		parts = append(parts, assistant.SignInTexts(tr).Waiting)
 	case in.Known:
 		parts = append(parts, t.NotSignedInShort)
 	}

@@ -6,7 +6,8 @@ import MalachiCore
 
 // The entries of the assistant panel's transcript (ui/internal/assistant,
 // the In App target; GTK window/assistant_panel.go `makeRow`): the user's
-// question, the answer, a tool at work, a draft card, an error and a note.
+// question, the answer, a tool at work, a draft card, an error (with Try
+// Again and the button of what it offers) and a note.
 // Everything shown here comes from the model or from mail it read, so it is
 // plain text in labels (`stringValue`) or attributed text built here from
 // `Assistant.markdown` with fonts and colours only: never HTML, never RTF,
@@ -430,27 +431,63 @@ final class AssistantDraftView: NSView, AssistantItemView {
 }
 
 /// An error line (red, with Try Again when the question can be sent once
-/// more) or a note (secondary).
+/// more, and the button of what it offers: Sign In… or Get Claude Code…)
+/// or a note (secondary). The buttons sit side by side under the text and
+/// wrap when the panel is narrow.
 @MainActor
 final class AssistantMessageLineView: NSView, AssistantItemView {
+    /// The gap between the text and the buttons under it.
+    private static let buttonGap: CGFloat = 4
+
     private let symbol = CalloutCard.symbolView()
     private let label = assistantLabel(size: 12)
     private let retryButton = NSButton(title: Assistant.panelTexts().tryAgain, target: nil, action: nil)
+    private let offerButton = NSButton(title: "", target: nil, action: nil)
+    private let buttons = FlowView(spacing: 6, lineSpacing: 4)
+    /// The text over the buttons.
+    private var column: NSStackView?
     private let retry: () -> Void
+    private let offer: (AssistantPanelController.Offer) -> Void
+    /// What the other button offers, as last shown.
+    private var offered: AssistantPanelController.Offer = .none
 
-    init(_ content: AssistantPanelController.Content, retry: @escaping () -> Void) {
+    /// The button of what an error line, or the settings' Claude Code row,
+    /// offers; "" for nothing (GTK `offerLabel`).
+    static func offerLabel(_ offer: AssistantPanelController.Offer) -> String {
+        let t = Assistant.signInTexts()
+        switch offer {
+        case .signIn: return t.signIn
+        case .install: return t.getClaudeCode
+        case .none: return ""
+        }
+    }
+
+    init(
+        _ content: AssistantPanelController.Content, retry: @escaping () -> Void,
+        offer: @escaping (AssistantPanelController.Offer) -> Void
+    ) {
         self.retry = retry
+        self.offer = offer
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         retryButton.bezelStyle = .push
         retryButton.controlSize = .small
         retryButton.target = self
         retryButton.action = #selector(retryClicked(_:))
-        let text = NSStackView(views: [label, retryButton])
+        offerButton.bezelStyle = .push
+        offerButton.controlSize = .small
+        offerButton.target = self
+        offerButton.action = #selector(offerClicked(_:))
+        // What the line offers first, then Try Again; a hidden button
+        // leaves the row, and without any the row has no height.
+        buttons.addView(offerButton)
+        buttons.addView(retryButton)
+        let text = NSStackView(views: [label, buttons])
         text.orientation = .vertical
         text.alignment = .leading
-        text.spacing = 4
+        text.spacing = Self.buttonGap
         text.setHuggingPriority(.defaultLow, for: .horizontal)
+        column = text
         // The text column takes the row's width beside the symbol.
         let row = NSStackView(views: [symbol, text])
         row.orientation = .horizontal
@@ -465,6 +502,7 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
             row.leadingAnchor.constraint(equalTo: leadingAnchor),
             row.trailingAnchor.constraint(equalTo: trailingAnchor),
             label.widthAnchor.constraint(equalTo: text.widthAnchor),
+            buttons.widthAnchor.constraint(equalTo: text.widthAnchor),
         ])
         update(content)
     }
@@ -478,6 +516,10 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
         retry()
     }
 
+    @objc private func offerClicked(_ sender: Any?) {
+        offer(offered)
+    }
+
     func accepts(_ content: AssistantPanelController.Content) -> Bool {
         switch content {
         case .error, .note: return true
@@ -487,22 +529,37 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
 
     func update(_ content: AssistantPanelController.Content) {
         switch content {
-        case .error(let text, let canRetry):
+        case .error(let text, let canRetry, let other):
             label.stringValue = text
             label.textColor = .systemRed
             symbol.image = NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
                 .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
             symbol.contentTintColor = .systemRed
             symbol.isHidden = false
-            retryButton.isHidden = !canRetry
+            showButtons(retry: canRetry, offer: other)
         case .note(let text):
             label.stringValue = text
             label.textColor = .secondaryLabelColor
             symbol.isHidden = true
-            retryButton.isHidden = true
+            showButtons(retry: false, offer: .none)
         default:
             break
         }
+    }
+
+    /// Shows the buttons the line has. The row of buttons stays in the
+    /// column (its width is tied to the column's): without a button it has
+    /// no height, and then no gap above it either.
+    private func showButtons(retry: Bool, offer: AssistantPanelController.Offer) {
+        offered = offer
+        if offer != .none {
+            offerButton.title = Self.offerLabel(offer)
+        }
+        offerButton.isHidden = offer == .none
+        retryButton.isHidden = !retry
+        buttons.needsLayout = true
+        buttons.invalidateIntrinsicContentSize()
+        column?.setCustomSpacing(retry || offer != .none ? Self.buttonGap : 0, after: label)
     }
 }
 

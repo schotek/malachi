@@ -29,7 +29,8 @@ import MalachiCore
 /// (`stringValue`, `NSTextView.string`) or as the attributed text the
 /// transcript builds from `Assistant.markdown` with fonts only (CLAUDE.md
 /// rule 3). A link in an answer goes to `onLink`, which the application
-/// routes through the actions' confirmation.
+/// routes through the actions' confirmation; a page the application itself
+/// names (Get Claude Code… on an error line) goes to `onOpenPage`.
 @MainActor
 final class AssistantPanelViewController: NSViewController {
     static let inset: CGFloat = 12
@@ -37,6 +38,10 @@ final class AssistantPanelViewController: NSViewController {
     let controller: AssistantPanelController
     /// A link in an answer was clicked; `window` is the panel's.
     var onLink: (@MainActor (_ href: String, _ window: NSWindow?) -> Void)?
+    /// A page of the application's own is to be opened in the browser (Get
+    /// Claude Code…: `Assistant.installURL`); no confirmation, it is no
+    /// link of an answer.
+    var onOpenPage: (@MainActor (_ url: String) -> Void)?
 
     private let titleLabel = PrefsWrappingLabel("", size: 13, weight: .semibold)
     private let subtitleLabel = PrefsWrappingLabel("", size: 11, color: .secondaryLabelColor)
@@ -146,7 +151,7 @@ final class AssistantPanelViewController: NSViewController {
 
         // The transcript.
         transcript.makeView = { [weak self] item in
-            self?.makeItemView(item) ?? AssistantMessageLineView(item.content, retry: {})
+            self?.makeItemView(item) ?? AssistantMessageLineView(item.content, retry: {}, offer: { _ in })
         }
         transcript.setContentHuggingPriority(.defaultLow, for: .vertical)
         transcript.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -276,9 +281,29 @@ final class AssistantPanelViewController: NSViewController {
                 self?.controller.openDraft(id)
             }
         case .error, .note:
-            return AssistantMessageLineView(item.content) { [weak self] in
-                self?.controller.retry(id)
-            }
+            return AssistantMessageLineView(
+                item.content,
+                retry: { [weak self] in
+                    self?.controller.retry(id)
+                },
+                offer: { [weak self] offer in
+                    self?.offered(id, offer)
+                })
+        }
+    }
+
+    /// The other button of an error line (GTK `offered`): Sign In… runs
+    /// Claude Code's own sign-in and sends the question again (the
+    /// controller's), Get Claude Code… opens Anthropic's page with the
+    /// installers.
+    private func offered(_ id: Int, _ offer: AssistantPanelController.Offer) {
+        switch offer {
+        case .signIn:
+            controller.signIn(id)
+        case .install:
+            onOpenPage?(Assistant.installURL)
+        case .none:
+            break
         }
     }
 

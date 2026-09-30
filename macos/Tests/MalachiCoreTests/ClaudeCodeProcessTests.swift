@@ -352,4 +352,94 @@ private let initLine = #"{"type":"system","subtype":"init","mcp_servers":[{"name
         scratch.settings.assistantClaudePath = out
         #expect(await l.signedIn() == false)
     }
+
+    /// A claude whose `auth login` runs login.sh in `dir` and whose `auth
+    /// status` says what the file logged-in holds.
+    private func signInClaude(_ dir: URL) throws -> String {
+        try writeScript(dir.appendingPathComponent("claude"), """
+            D='\(dir.path)'
+            case "$1 $2" in
+            "auth login") echo "$*" >> "$D/calls"; pwd -P > "$D/cwd"; . "$D/login.sh"; exit 0;;
+            "auth status") printf '{"loggedIn": %s}\\n' "$(cat "$D/logged-in")"; exit 0;;
+            esac
+            exit 2
+            """)
+    }
+
+    /// Claude Code's own sign-in: `claude auth login` in the private
+    /// directory, its end reported once, and the kept sign-in state asked
+    /// afresh after it.
+    @Test func signIn() async throws {
+        let scratch = ScratchSettings()
+        let dir = try assistantScratchDir()
+        func write(_ name: String, _ body: String) throws {
+            try Data(body.utf8).write(to: dir.appendingPathComponent(name))
+        }
+        func read(_ name: String) throws -> String {
+            try String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        try write("logged-in", "false")
+        try write("login.sh", """
+            echo 'Opening browser to sign in…'
+            echo 'If the browser did not open, visit: https://claude.example/authorize?state=secret'
+            printf true > "$D/logged-in"
+            """)
+        let exe = try signInClaude(dir)
+        scratch.settings.assistantClaudePath = exe
+        let l = locator(dir, scratch.settings)
+        var changes = 0
+        let token = l.onSignInChange { changes += 1 }
+        #expect(await l.signedIn() == false, "signed out before")
+        let first = l.startSignIn()
+        #expect(l.signingIn && changes == 1)
+        #expect(await first.result == .done)
+        #expect(!l.signingIn && changes == 2)
+        // No refresh by the caller: the answer kept from before is gone.
+        #expect(await l.signedIn() == true)
+        #expect(try read("calls") == "auth login")
+        #expect(try read("cwd") == dir.path, "the private directory")
+
+        // A bad end: stderr's first line, else the status.
+        try write("login.sh", "echo 'Login failed: no' >&2; exit 3")
+        #expect(await l.signIn() == .failed(reason: "Login failed: no"))
+        try write("login.sh", "exit 4")
+        #expect(await l.signIn() == .failed(reason: "claude exited with status 4"))
+
+        // Cancelled; then one that another takes the place of.
+        try write("login.sh", "exec sleep 30")
+        let cancelled = l.startSignIn()
+        try await Task.sleep(for: .milliseconds(100))
+        l.cancelSignIn(cancelled)
+        l.cancelSignIn(cancelled)
+        #expect(await cancelled.result == .cancelled)
+        #expect(!l.signingIn)
+        let stale = l.startSignIn()
+        try await Task.sleep(for: .milliseconds(100))
+        try write("login.sh", "exit 0")
+        let next = l.startSignIn()
+        #expect(await stale.result == .cancelled)
+        #expect(await next.result == .done)
+        // The cancel of a sign-in that is over ends no other.
+        try write("login.sh", "exec sleep 30")
+        let held = l.startSignIn()
+        l.cancelSignIn(stale)
+        #expect(l.signingIn, "a stale cancel ended the sign-in under way")
+        // Out of time.
+        l.signInTimeout = .milliseconds(200)
+        let late = l.startSignIn()
+        #expect(await held.result == .cancelled)
+        #expect(await late.result == .timedOut)
+        #expect(!l.signingIn)
+        token.cancel()
+        let before = changes
+        let last = l.startSignIn()
+        l.cancelSignIn()
+        #expect(await last.result == .cancelled)
+        #expect(changes == before, "a removed watcher was called")
+
+        // No Claude Code at all.
+        try FileManager.default.removeItem(atPath: exe)
+        #expect(await l.signIn() == .notFound)
+        #expect(!l.signingIn)
+    }
 }

@@ -672,9 +672,25 @@ claude -p --verbose --output-format stream-json --include-partial-messages
 - **Nothing stored.** `--no-session-persistence` keeps the transcript,
   tool results included, out of `~/.claude/projects/`; the conversation
   lives in the process and ends with it.
-- **Sign-in is Claude Code's.** The app never reads, stores or offers
-  credentials; it asks `claude auth status --json` only for `loggedIn`
-  and otherwise tells the user to sign in in a terminal. Whatever Claude
+- **Sign-in is Claude Code's.** Claude Code has a sign-in of its own,
+  apart from Claude Desktop's, and the app never reads, stores or asks
+  for a credential. It asks `claude auth status --json` only for
+  `loggedIn`; while that says signed out, the panel's line *Claude Code is
+  not signed in* and the *Claude Code* row of *Preferences → AI* offer
+  *Sign In…*, which runs Claude Code's own `claude auth login`: Claude
+  Code opens the browser at claude.ai and stores the sign-in itself, and
+  the app only waits for that process to end (up to ten minutes; *Stop*
+  ends it; what it prints, the address of the sign-in's session included,
+  is neither shown nor logged). The panel then asks the question again.
+  A sign-in the API no longer accepts, whatever `auth status` says, shows
+  the same line: Claude Code reports such a turn as
+  `authentication_failed`, and its own message for a turn the API refused
+  is not shown as an answer (the result repeats it). Without Claude Code
+  the panel and the row offer *Get Claude Code…*, which opens Anthropic's
+  page with the installers in the browser; the app downloads and runs
+  nothing itself. The compose window's rewrite and the search in the
+  user's own words have no button of their own and say where to sign in.
+  Whatever Claude
   Code uses (a Claude plan or an API key) is billed as Claude Code usage
   to the user. Anthropic's terms for running Claude Code from another
   product ([Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance))

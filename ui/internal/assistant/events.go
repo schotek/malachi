@@ -15,10 +15,13 @@ package assistant
 // rate_limit_event, stream_event (event content_block_delta with delta
 // text_delta {text}; thinking_delta and signature_delta ignored),
 // assistant (message.content: thinking, text {text}, tool_use {id, name,
-// input}), user (message.content: tool_result {tool_use_id, is_error,
-// content: a string or [{type: text, text}]}) and result (subtype success
-// or error_*, is_error, result, structured_output, permission_denials
-// [{tool_name}], total_cost_usd, usage).
+// input}; error when Claude Code wrote the message itself because the API
+// refused the turn: authentication_failed, billing_error, rate_limit,
+// invalid_request, server_error, unknown), user (message.content:
+// tool_result {tool_use_id, is_error, content: a string or [{type: text,
+// text}]}) and result (subtype success or error_*, is_error, result,
+// structured_output, permission_denials [{tool_name}], total_cost_usd,
+// usage).
 //
 // This file holds no translatable text.
 
@@ -51,7 +54,15 @@ const (
 	EventToolResult
 	// EventResult ends the turn.
 	EventResult
+	// EventFailure is an assistant message Claude Code wrote itself: the
+	// API refused the turn. Its text is no answer; the result that follows
+	// repeats it.
+	EventFailure
 )
+
+// authenticationFailed is the Failure of a turn the API refused because
+// Claude Code is not signed in, or its sign-in is no longer accepted.
+const authenticationFailed = "authentication_failed"
 
 // Event is one thing the panel reacts to; only the fields of its Kind are
 // set.
@@ -81,12 +92,23 @@ type Event struct {
 	Denied     []string
 	CostUSD    float64
 	Structured json.RawMessage
+	// EventFailure: what Claude Code calls the failure, its message's
+	// error ("authentication_failed", "rate_limit", …).
+	Failure string
+}
+
+// NotSignedIn says whether the event is the failure of a turn for want of
+// a sign-in the API accepts: Claude Code is signed out, or its sign-in has
+// expired or was revoked (claude auth status may still say loggedIn then).
+func (e Event) NotSignedIn() bool {
+	return e.Kind == EventFailure && e.Failure == authenticationFailed
 }
 
 // ParseEvents reads one stdout line (without its newline): one event per
 // text or tool_use block of an assistant message and per tool_result
 // block of a user message, in order (thinking and other blocks yield
-// nothing, so such a message may yield none), one EventInit for
+// nothing, so such a message may yield none), one EventFailure alone for
+// an assistant message with an error, one EventInit for
 // system/init, one EventTextDelta for a text delta, one EventResult for a
 // result, and one EventOther for any other line. It is an error when the
 // line is not JSON or not a JSON object.
@@ -140,6 +162,9 @@ func parseInit(o object) Event {
 }
 
 func parseAssistant(o object) []Event {
+	if failure := o.str("error"); failure != "" {
+		return []Event{{Kind: EventFailure, Failure: failure}}
+	}
 	var out []Event
 	for _, raw := range o.obj("message").array("content") {
 		b := objectOf(raw)

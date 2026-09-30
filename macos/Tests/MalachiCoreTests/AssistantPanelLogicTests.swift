@@ -8,7 +8,8 @@ import Testing
 // The In App target of ui/internal/assistant (the assistant panel): the
 // counterpart of claude_test.go and of the panel's half of
 // assistant_test.go (models, activity lines, the context chip, the
-// stopped line, the panel's texts, the attachment prompt). The events are
+// stopped line, the panel's texts, Claude Code's sign-in, the attachment
+// prompt). The events are
 // in AssistantEventsTests, the Markdown in AssistantMarkdownTests. The
 // catalogue is English here (AssistantTests), so every msgid is its own
 // translation, as Go's `identity` translator makes it; the Czech catalogue
@@ -319,6 +320,54 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
         #expect(dict == ["HOME": "/h", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
     }
 
+    /// The sign-in opens the browser: ChildEnv and the desktop session,
+    /// nothing else.
+    @Test func signInEnv() {
+        let parent = [
+            "HOME=/home/u",
+            "PATH=/usr/bin:/bin:/usr/local/bin",
+            "LANG=cs_CZ.UTF-8",
+            "DISPLAY=:0",
+            "WAYLAND_DISPLAY=wayland-0",
+            "XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",
+            "XDG_RUNTIME_DIR=/run/user/1000",
+            "XDG_CURRENT_DESKTOP=GNOME",
+            "XDG_SESSION_TYPE=wayland",
+            "XDG_DATA_DIRS=/usr/local/share:/usr/share",
+            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+            "BROWSER=firefox",
+            "XDG_CONFIG_HOME=/home/u/.config",
+            "CLAUDECODE=1",
+            "CLAUDE_CODE_OAUTH_TOKEN=secret",
+            "ANTHROPIC_API_KEY=sk-ant-secret",
+            "MALACHI_SOCKET=/tmp/s.sock",
+            "LD_PRELOAD=/tmp/evil.so",
+        ]
+        #expect(Assistant.signInEnv(parent, claudePath: "/home/u/.local/bin/claude") == [
+            "BROWSER=firefox",
+            "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus",
+            "DISPLAY=:0",
+            "HOME=/home/u",
+            "LANG=cs_CZ.UTF-8",
+            "PATH=/home/u/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+            "WAYLAND_DISPLAY=wayland-0",
+            "XAUTHORITY=/run/user/1000/.mutter-Xwaylandauth.X",
+            "XDG_CURRENT_DESKTOP=GNOME",
+            "XDG_DATA_DIRS=/usr/local/share:/usr/share",
+            "XDG_RUNTIME_DIR=/run/user/1000",
+            "XDG_SESSION_TYPE=wayland",
+        ])
+        // Without a session it is ChildEnv.
+        let bare = ["HOME=/Users/u", "USER=u"]
+        #expect(Assistant.signInEnv(bare, claudePath: "/opt/homebrew/bin/claude")
+            == Assistant.childEnv(bare, claudePath: "/opt/homebrew/bin/claude"))
+        #expect(Assistant.signInArgs == ["auth", "login"])
+        // Swift only: the dictionary form for Foundation.Process.
+        let dict = Assistant.signInEnvironment(
+            ["HOME": "/h", "BROWSER": "firefox", "ANTHROPIC_API_KEY": "x"], claudePath: "/opt/homebrew/bin/claude")
+        #expect(dict == ["HOME": "/h", "BROWSER": "firefox", "PATH": "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"])
+    }
+
     // MARK: assistant_test.go, the panel's half
 
     @Test func models() {
@@ -445,7 +494,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
         #expect(t.anotherSelected == "Another message is selected")
         #expect(t.addToConversation == "Add to Conversation")
         #expect(t.notFound == "Claude Code was not found on this computer")
-        #expect(t.notSignedIn == "Claude Code is not signed in. Run claude in Terminal and sign in.")
+        #expect(t.notSignedIn == "Claude Code is not signed in")
         #expect(t.toolsMissing == "The Malachi Mail tools are not available to the assistant")
         #expect(t.stopped == "The conversation was stopped")
         #expect(t.footer == "Mail you ask about is sent to Claude under your account")
@@ -457,7 +506,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
         #expect(t.model == "Model")
         #expect(t.choose == "Choose…")
         #expect(t.signedIn == "Signed in")
-        #expect(t.notSignedInShort == "Not signed in: run claude in Terminal and sign in")
+        #expect(t.notSignedInShort == "Not signed in")
         // The same msgid as Problem's for a claude that was not found.
         #expect(Assistant.problem(.app, Assistant.Availability()) == t.notFound)
         // Swift only: the shared buttons and the chip's texts it carries.
@@ -466,6 +515,34 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
         #expect(t.tryAgain == "Try Again")
         #expect(t.selectedMessage == Assistant.contextLabel(1))
         #expect(t.allMail == Assistant.contextLabel(0))
+    }
+
+    @Test func signInTexts() {
+        let t = Assistant.signInTexts()
+        #expect(t == Assistant.SignInStrings(
+            signIn: "Sign In…",
+            waiting: "Waiting for the sign-in in your browser…",
+            timedOut: "The sign-in took too long; try again",
+            hint: "Claude Code is not signed in. Sign in under AI in the preferences.",
+            getClaudeCode: "Get Claude Code…"))
+        // The hint starts with the panel's line.
+        #expect(t.hint.hasPrefix(Assistant.panelTexts().notSignedIn + ". "))
+        #expect(Assistant.installURL == "https://code.claude.com/docs/en/setup")
+    }
+
+    @Test func signInFailedText() {
+        let cases: [(String, String, String)] = [
+            ("plain", "claude exited with status 1", "The sign-in failed: claude exited with status 1"),
+            ("first line", "Login failed\nat line 2\n", "The sign-in failed: Login failed"),
+            ("control characters", "bad\u{1B}[31m red\u{7}", "The sign-in failed: bad[31m red"),
+            ("cut", String(repeating: "b", count: 300), "The sign-in failed: " + String(repeating: "b", count: 200)),
+            ("empty", "", "The sign-in failed: unknown"),
+            // Swift only: a reason is data, never a format.
+            ("percent signs", "%@ %s %d", "The sign-in failed: %@ %s %d"),
+        ]
+        for (name, reason, want) in cases {
+            #expect(Assistant.signInFailedText(reason) == want, "\(name)")
+        }
     }
 
     @Test func attachmentPrompt() throws {

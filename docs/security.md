@@ -1226,8 +1226,13 @@ while the bridge is registered in a Claude client:
   destination; a draft is offered from the bridge's own result line and
   opened only after `draft.list` has it. The first question asks whether
   mail may be sent to Claude (`assistant-consent`). The app never reads,
-  stores or offers credentials: it asks `claude auth status --json` for
-  `loggedIn` only. On Windows the panel runs only a `claude.exe` (npm's
+  stores or asks for a credential: it asks `claude auth status --json` for
+  `loggedIn` only, and *Sign In…* runs Claude Code's own `claude auth
+  login`, which opens the browser and stores the sign-in itself; the app
+  waits for the process to end and neither shows nor logs what it prints
+  (the address it names belongs to the sign-in's session). *Get Claude
+  Code…* opens Anthropic's page in the browser; the app downloads and
+  runs nothing. On Windows the panel runs only a `claude.exe` (npm's
   `claude.cmd` would pass the command line through `cmd.exe`, whose
   parsing cannot carry its JSON arguments safely), keeps of the
   environment only what a Windows program needs to start (matched without

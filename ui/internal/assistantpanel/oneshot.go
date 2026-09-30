@@ -29,7 +29,8 @@ const (
 	FailureStopped FailureKind = iota
 	// FailureNotFound: Claude Code was not found on this computer.
 	FailureNotFound
-	// FailureNotSignedIn: Claude Code says it is not signed in.
+	// FailureNotSignedIn: Claude Code says it is not signed in, or the API
+	// refused its sign-in.
 	FailureNotSignedIn
 )
 
@@ -40,13 +41,14 @@ type Failure struct {
 }
 
 // Text is the line where the panel's errors are shown (the compose
-// window's popover): the panel's texts.
+// window's popover): the panel's texts, and for a missing sign-in where to
+// sign in (a request has no Sign In… of its own).
 func (f Failure) Text(tr assistant.Translator) string {
 	switch f.Kind {
 	case FailureNotFound:
 		return assistant.PanelTexts(tr).NotFound
 	case FailureNotSignedIn:
-		return assistant.PanelTexts(tr).NotSignedIn
+		return assistant.SignInTexts(tr).Hint
 	}
 	return assistant.StoppedText(tr, f.Reason)
 }
@@ -58,7 +60,7 @@ func (f Failure) ReasonText(tr assistant.Translator) string {
 	case FailureNotFound:
 		return assistant.PanelTexts(tr).NotFound
 	case FailureNotSignedIn:
-		return assistant.PanelTexts(tr).NotSignedInShort
+		return assistant.SignInTexts(tr).Hint
 	}
 	return f.Reason
 }
@@ -122,7 +124,9 @@ type RequestConfig struct {
 //     meanwhile). Declined: OutcomeDeclined, nothing is sent.
 //  2. Claude Code is located (none: FailureNotFound) and must not say it is
 //     signed out (Locator.SignedIn, asked afresh: FailureNotSignedIn; not
-//     known counts as signed in, and the process then says what is wrong).
+//     known counts as signed in, and the process then says what is wrong:
+//     a turn the API refused for its sign-in, assistant.EventFailure, is
+//     FailureNotSignedIn too).
 //  3. The process starts; text deltas stream to onText (a whole text block
 //     replaces the deltas before it), the result ends it: a success is
 //     OutcomeAnswered with the result's text and structured_output,
@@ -300,6 +304,13 @@ func (r *Request) launch(my int, path, systemPrompt, jsonSchema string, onText f
 				r.streamed = ""
 				if onText != nil {
 					onText(r.blocks)
+				}
+			case assistant.EventFailure:
+				// Claude Code's own words for a turn the API refused,
+				// which the result repeats; a refused sign-in ends it.
+				if e.NotSignedIn() {
+					r.finish(my, failed(FailureNotSignedIn, ""), completion)
+					return
 				}
 			case assistant.EventResult:
 				r.log.Info("assistant request", "success", e.Success, "costUSD", e.CostUSD)

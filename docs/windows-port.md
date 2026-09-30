@@ -1718,7 +1718,21 @@ stderr, exits, a process that never ends). What is Windows' own:
   this machine: the command line's flags exist and `system/init` comes in
   that environment (the machine's own login had expired, so no answer came:
   `claude auth status` still said `loggedIn: true`, and Claude Code retried
-  the API eleven times).
+  the API eleven times before it said "Failed to authenticate. API Error:
+  401"; 2.1.285 asks for a new token first, clears the dead one and says
+  "Not logged in" at once).
+- **The sign-in** (`ClaudeCodeLocator.SignInAsync`): Claude Code's sign-in
+  is its own, apart from Claude Desktop's (`%USERPROFILE%\.claude\.credentials.json`),
+  so a user of Claude Desktop alone has none. *Sign In…* runs `claude.exe
+  auth login` through the locator's runner with `Assistant.ChildEnvironment`
+  in the private directory and waits up to ten minutes: Claude Code opens
+  the browser through the shell and stores the sign-in itself (measured
+  with 2.1.285: it waits with its stdin closed, prints the address to open
+  by hand, which is neither shown nor logged, and honours `BROWSER`, which
+  the child's environment does not carry). Out of time, cancelled (*Stop*,
+  a second sign-in, Quit) it is killed with its process tree. One sign-in
+  at a time for the panel and *Preferences → AI*, which both follow
+  `SigningInChanged`.
 - **Claude Desktop** is the MSIX package `Claude_pzs8sxrjxfjjc`
   (`Malachi.Platform.Windows.Claude.ClaudeDesktopApp`): it runs while a
   `claude.exe` of that package family runs (`GetPackageFamilyName`; the
@@ -2338,8 +2352,10 @@ the words are converted the box is disabled and says so. *Preferences →
 AI* (`AiPage`) has GTK's rows: *Register with Claude* (with Claude
 Desktop's restart question), *Assistant Menu*, *Open In*, and for In App
 *Claude Code* (the path found or chosen, its version and whether it is
-signed in, and *Choose…*, whose file dialog takes a `claude.exe`) and
-*Model*.
+signed in, *Choose…*, whose file dialog takes a `claude.exe`, and in front
+of it what the row offers: *Sign In…* while Claude Code says it is signed
+out, *Get Claude Code…* while there is none) and *Model*. The panel's
+error line has the same two buttons beside *Try Again*.
 
 An open inline panel takes its width from the three panes, which are laid
 out for what it leaves (Core's `PaneLayout.Resize` gets the window's width
@@ -2371,6 +2387,19 @@ Not walked: the hand-off links (they would open the Claude apps of the
 machine the session ran in), Claude Desktop's restart (the same reason),
 and a real Claude Code, whose login on the development machine had
 expired.
+
+The sign-in was walked through the same way on 2026-09-30, with a stand-in
+whose `auth status` says signed out until its `auth login` has run for
+four seconds: the *Claude Code* row (*Not signed in*, *Sign In…*, then
+*Waiting for the sign-in in your browser…*, then *Signed in* and no
+button), the panel (*Claude Code is not signed in* with *Sign In…*, the
+waiting line with *Stop*, then the answer to the question asked before),
+and without any Claude Code both the row and the panel's line with *Get
+Claude Code…* (beside *Try Again* in the panel). The sign-in's working
+directory and environment were read back from the stand-in's records. Not
+walked: *Get Claude Code…* itself (it would open the browser of the
+machine the session ran in) and the sign-in of a real Claude Code, which
+takes the owner's answer in the browser.
 
 ## 12. Tests
 

@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -47,9 +49,10 @@ const DefaultLocatorTimeout = 10 * time.Second
 const versionLimit = 100
 
 // Locator finds the user's Claude Code for the panel and asks it two
-// things: its version and whether it is signed in. Malachi Mail never
-// signs in, never reads a credential and never shows the account: claude
-// auth status --json is read for its loggedIn only. (macOS:
+// things: its version and whether it is signed in; SignIn runs Claude
+// Code's own sign-in. Malachi Mail never reads a credential and never
+// shows the account: claude auth status --json is read for its loggedIn
+// only, and claude auth login does the signing in. (macOS:
 // ClaudeCodeLocator.)
 //
 // Locate looks every time (a few stats): the path of assistant-claude-path
@@ -79,6 +82,13 @@ type Locator struct {
 
 	versions map[string]*future[string]
 	signIns  map[string]*future[SignIn]
+
+	// signIn is the sign-in under way (SignIn), nil without one; watchers
+	// hear when one starts or ends.
+	signIn        *signInRun
+	signInTimeout time.Duration
+	watchers      map[int]func()
+	nextWatcher   int
 }
 
 // SignIn is what claude auth status said: whether it answered, and whether
@@ -101,6 +111,9 @@ func NewLocator(s Settings, env []string, loop Loop, dir string, log *slog.Logge
 		usable:   IsExecutableFile,
 		versions: make(map[string]*future[string]),
 		signIns:  make(map[string]*future[SignIn]),
+
+		signInTimeout: DefaultSignInTimeout,
+		watchers:      make(map[int]func()),
 	}
 }
 
@@ -236,6 +249,163 @@ func (l *Locator) SignedIn(done func(SignIn)) {
 		})
 	}
 	f.then(done)
+}
+
+// DefaultSignInTimeout is how long the browser is waited for.
+const DefaultSignInTimeout = 10 * time.Minute
+
+// signInGrace is the time from SIGTERM to SIGKILL for a sign-in that is
+// cancelled or out of time.
+const signInGrace = 2 * time.Second
+
+// SignInOutcome is how Claude Code's sign-in ended.
+type SignInOutcome int
+
+// The outcomes of a sign-in.
+const (
+	// SignInDone: claude auth login ended with status 0.
+	SignInDone SignInOutcome = iota
+	// SignInFailed: it ended badly, or could not run; Reason says how.
+	SignInFailed
+	// SignInTimedOut: the browser brought no answer within the timeout.
+	SignInTimedOut
+	// SignInCancelled: it was cancelled, or another sign-in took its place.
+	SignInCancelled
+	// SignInNotFound: there is no Claude Code to sign in.
+	SignInNotFound
+)
+
+// SignInResult is how a sign-in ended; Reason is technical (stderr's first
+// line, else the exit status in words) and set for SignInFailed only.
+type SignInResult struct {
+	Outcome SignInOutcome
+	Reason  string
+}
+
+// signInRun is the sign-in under way.
+type signInRun struct {
+	cancel context.CancelFunc
+	done   func(SignInResult)
+}
+
+// SigningIn says whether a sign-in is under way.
+func (l *Locator) SigningIn() bool { return l.signIn != nil }
+
+// SignIn runs Claude Code's own sign-in for the located executable (claude
+// auth login: assistant.SignInArgs with assistant.SignInEnv, in the panel's
+// private directory). Claude Code opens the browser, the user signs in to
+// Claude there, and Claude Code stores the sign-in itself. Malachi Mail
+// only waits for the process to end: it sees no credential, and what the
+// process prints is neither shown nor logged (the address it names belongs
+// to the sign-in; only stderr's first line is the reason of a failure).
+// done is called once, on the main loop; the answers kept for SignedIn are
+// forgotten first, so the next question asks afresh.
+//
+// One sign-in at a time, for the panel and the settings alike: a new one
+// takes the place of the one under way, which ends as SignInCancelled.
+// cancel ends this sign-in the same way and does nothing once it is over.
+func (l *Locator) SignIn(done func(SignInResult)) (cancel func()) {
+	l.CancelSignIn()
+	p := l.Locate()
+	if p == "" {
+		l.loop.Post(func() { done(SignInResult{Outcome: SignInNotFound}) })
+		return func() {}
+	}
+	env := assistant.SignInEnv(l.env, p)
+	dir := ""
+	if l.dir != "" && ensureDirectory(l.dir) == nil {
+		dir = l.dir
+	}
+	ctx, stop := context.WithCancel(context.Background())
+	run := &signInRun{cancel: stop, done: done}
+	l.signIn = run
+	l.signInChanged()
+	timeout := l.signInTimeout
+	go func() {
+		limit, release := context.WithTimeout(ctx, timeout)
+		defer release()
+		cmd := exec.CommandContext(limit, p, assistant.SignInArgs...)
+		cmd.Env = env
+		cmd.Dir = dir
+		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		cmd.WaitDelay = signInGrace
+		var stderr limitedBuffer
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+			// The browser it started still holds its stderr.
+			err = nil
+		}
+		result := SignInResult{Outcome: SignInDone}
+		var exit *exec.ExitError
+		switch {
+		case ctx.Err() != nil:
+			result.Outcome = SignInCancelled
+		case limit.Err() != nil:
+			result.Outcome = SignInTimedOut
+		case errors.As(err, &exit):
+			reason := Exit{Status: exit.ExitCode(), Reason: firstLine(stderr.Bytes(), reasonLimit)}.Description()
+			result = SignInResult{Outcome: SignInFailed, Reason: reason}
+		case err != nil:
+			result = SignInResult{Outcome: SignInFailed, Reason: "claude could not be started: " + err.Error()}
+		}
+		if result.Outcome != SignInDone {
+			// The outcome alone: stderr may name the account.
+			l.log.Warn("claude auth login", "outcome", int(result.Outcome))
+		}
+		l.loop.Post(func() {
+			stop()
+			if l.signIn != run {
+				return // cancelled, and reported then
+			}
+			l.signIn = nil
+			l.Refresh()
+			l.signInChanged()
+			done(result)
+		})
+	}()
+	return func() {
+		if l.signIn == run {
+			l.CancelSignIn()
+		}
+	}
+}
+
+// CancelSignIn ends the sign-in under way, which is reported as
+// SignInCancelled; nothing without one.
+func (l *Locator) CancelSignIn() {
+	run := l.signIn
+	if run == nil {
+		return
+	}
+	l.signIn = nil
+	run.cancel()
+	l.Refresh()
+	l.signInChanged()
+	done := run.done
+	l.loop.Post(func() { done(SignInResult{Outcome: SignInCancelled}) })
+}
+
+// OnSignInChange calls f whenever a sign-in starts or ends (SigningIn),
+// until the returned function is called.
+func (l *Locator) OnSignInChange(f func()) (remove func()) {
+	id := l.nextWatcher
+	l.nextWatcher++
+	l.watchers[id] = f
+	return func() { delete(l.watchers, id) }
+}
+
+func (l *Locator) signInChanged() {
+	ids := make([]int, 0, len(l.watchers))
+	for id := range l.watchers {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	for _, id := range ids {
+		if f, ok := l.watchers[id]; ok {
+			f()
+		}
+	}
 }
 
 // run runs claude with args off the main loop and hands its stdout, its

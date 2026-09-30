@@ -14,10 +14,13 @@
 // rate_limit_event, stream_event (event content_block_delta with delta
 // text_delta {text}; thinking_delta and signature_delta ignored),
 // assistant (message.content: thinking, text {text}, tool_use {id, name,
-// input}), user (message.content: tool_result {tool_use_id, is_error,
-// content: a string or [{type: text, text}]}) and result (subtype success
-// or error_*, is_error, result, structured_output, permission_denials
-// [{tool_name}], total_cost_usd, usage).
+// input}; error when Claude Code wrote the message itself because the API
+// refused the turn: authentication_failed, billing_error, rate_limit,
+// invalid_request, server_error, unknown), user (message.content:
+// tool_result {tool_use_id, is_error, content: a string or [{type: text,
+// text}]}) and result (subtype success or error_*, is_error, result,
+// structured_output, permission_denials [{tool_name}], total_cost_usd,
+// usage).
 //
 // The JSON is read the way Go's encoding/json reads it into
 // `map[string]json.RawMessage` (`GoJSON` below), not with
@@ -37,6 +40,11 @@ extension Assistant {
     /// bridgeServer: the name of the bridge's MCP server in --mcp-config
     /// and in the init event's mcp_servers.
     static let bridgeServer = "malachi"
+
+    /// authenticationFailed: the `failure` of a turn the API refused
+    /// because Claude Code is not signed in, or its sign-in is no longer
+    /// accepted.
+    static let authenticationFailed = "authentication_failed"
 
     /// assistant.Event: one thing the panel reacts to; only the fields of
     /// its kind are set.
@@ -59,6 +67,10 @@ extension Assistant {
             case toolResult
             /// EventResult: the turn is over.
             case result
+            /// EventFailure: an `assistant` message Claude Code wrote
+            /// itself: the API refused the turn. Its text is no answer; the
+            /// result that follows repeats it.
+            case failure
         }
 
         public var kind: Kind
@@ -88,9 +100,21 @@ extension Assistant {
         public var denied: [String] = []
         public var costUSD: Double = 0
         public var structured: Data?
+        /// failure: what Claude Code calls the failure, its message's
+        /// `error` ("authentication_failed", "rate_limit", …).
+        public var failure = ""
 
         public init(kind: Kind) {
             self.kind = kind
+        }
+
+        /// Event.NotSignedIn: whether the event is the failure of a turn
+        /// for want of a sign-in the API accepts: Claude Code is signed
+        /// out, or its sign-in has expired or was revoked (`claude auth
+        /// status` may still say loggedIn then). The name is compared byte
+        /// for byte.
+        public var notSignedIn: Bool {
+            kind == .failure && failure.utf8.elementsEqual(Assistant.authenticationFailed.utf8)
         }
     }
 
@@ -110,7 +134,8 @@ extension Assistant {
     /// assistant.ParseEvents: one stdout line (without its newline): one
     /// event per text or tool_use block of an `assistant` message and per
     /// tool_result block of a `user` message, in order (thinking and other
-    /// blocks yield nothing, so such a message may yield none), one
+    /// blocks yield nothing, so such a message may yield none), one `failure`
+    /// alone for an `assistant` message with an error, one
     /// `systemInit` for system/init, one `textDelta` for a text delta, one
     /// `result` for a result, and one `other` for any other line. Throws
     /// when the line (without surrounding white space) is not JSON or not
@@ -166,6 +191,12 @@ extension Assistant {
     }
 
     private static func parseAssistant(_ o: GoJSON.Object) -> [Event] {
+        let failure = o.str("error")
+        if !failure.isEmpty {
+            var e = Event(kind: .failure)
+            e.failure = failure
+            return [e]
+        }
         var out: [Event] = []
         for raw in o.obj("message")?.array("content") ?? [] {
             let block = GoJSON.Object(o.b, raw)

@@ -32,7 +32,14 @@ import MalachiCore
 /// whether it is signed in, from the application's `ClaudeCodeLocator`,
 /// or that it was not found), with "Choose…" for one of the user's own
 /// (`assistant-claude-path`; choosing the one found automatically goes
-/// back to looking), and "Model" (`assistant-model`). The
+/// back to looking), and "Model" (`assistant-model`). In front of
+/// "Choose…" the Claude Code row has the button of what it offers (GTK
+/// preferences.go `bindClaudeCode`): "Sign In…" while Claude Code says it
+/// is signed out, which runs Claude Code's own sign-in in the browser (the
+/// application's locator, shared with the panel: the row says "Waiting for
+/// the sign-in in your browser…" whoever started it, and a second click
+/// starts it afresh), and "Get Claude Code…" while there is none, which
+/// opens Anthropic's page with the installers. The
 /// group depends on "Register with Claude" (`Assistant.shown`): while the
 /// bridge is registered in no client both rows are insensitive, the switch
 /// shows off whatever the preference holds and says why, so the Assistant
@@ -61,6 +68,8 @@ final class AIPaneViewController: PreferencesPaneViewController {
     let assistantTarget = NSPopUpButton(frame: .zero, pullsDown: false)
     let assistantModel = NSPopUpButton(frame: .zero, pullsDown: false)
     let claudeCodeChoose = NSButton(title: Assistant.panelTexts().choose, target: nil, action: nil)
+    /// What the Claude Code row offers: Sign In… or Get Claude Code….
+    let claudeCodeOfferButton = NSButton(title: "", target: nil, action: nil)
     let assistantGroup = PreferencesGroupView(
         title: Assistant.texts().assistant,
         description: Assistant.texts().description
@@ -89,8 +98,12 @@ final class AIPaneViewController: PreferencesPaneViewController {
     private var claudeCodeRow: PreferenceRowView?
     private var modelRow: PreferenceRowView?
     private var claudePathToken: Settings.ChangeToken?
+    /// A sign-in started or ended, here or in the panel.
+    private var signInToken: ClaudeCodeLocator.SignInToken?
     /// Bumped by every look at Claude Code: a late answer is dropped.
     private var claudeCodeGen = 0
+    /// What the Claude Code row's second button does.
+    private var claudeCodeOffer: AssistantPanelController.Offer = .none
     /// The open panel's filter while "Choose…" is up.
     private var chooseFilter: ExecutableFilter?
     /// The application's Claude Desktop controller and its question; nil
@@ -171,7 +184,16 @@ final class AIPaneViewController: PreferencesPaneViewController {
         let panelTexts = Assistant.panelTexts()
         claudeCodeChoose.target = self
         claudeCodeChoose.action = #selector(chooseClaudeCode(_:))
-        let claudeCode = PreferenceRowView(title: Assistant.targetName(.code), trailing: claudeCodeChoose)
+        claudeCodeOfferButton.target = self
+        claudeCodeOfferButton.action = #selector(claudeCodeOfferClicked(_:))
+        claudeCodeOfferButton.isHidden = true
+        // What the row offers, then Choose…; the hidden button leaves the
+        // row.
+        let claudeCodeButtons = NSStackView(views: [claudeCodeOfferButton, claudeCodeChoose])
+        claudeCodeButtons.orientation = .horizontal
+        claudeCodeButtons.alignment = .centerY
+        claudeCodeButtons.spacing = 6
+        let claudeCode = PreferenceRowView(title: Assistant.targetName(.code), trailing: claudeCodeButtons)
         claudeCode.setSubtitleSelectable()
         claudeCodeRow = claudeCode
         assistantModel.addItems(withTitles: Assistant.models.map(Assistant.modelName))
@@ -249,6 +271,9 @@ final class AIPaneViewController: PreferencesPaneViewController {
             self.targetToken = nil
             self.claudePathToken?.cancel()
             self.claudePathToken = nil
+            // A sign-in under way goes on: the user is in the browser.
+            self.signInToken?.cancel()
+            self.signInToken = nil
         }
     }
 
@@ -265,6 +290,12 @@ final class AIPaneViewController: PreferencesPaneViewController {
         bindings.add(.bind(assistantTarget, to: settings, .assistantTarget, choices: AssistantController.targets, \.assistantTarget))
         bindings.add(.bind(assistantModel, to: settings, .assistantModel, choices: Assistant.models, \.assistantModel))
         claudePathToken = settings.onChange(.assistantClaudePath) { [weak self] in self?.claudePathChanged() }
+        // A sign-in started or ended, here or in the panel: the row looks
+        // again.
+        signInToken = assistant?.locator?.onSignInChange { [weak self] in
+            guard let self, !self.closed, let settings = self.settings, settings.assistantTarget == .app else { return }
+            self.showClaudeCode()
+        }
         assistantToken = assistant?.onChange { [weak self] in
             self?.followApplication()
             self?.updateAssistantGroup()
@@ -326,40 +357,95 @@ final class AIPaneViewController: PreferencesPaneViewController {
 
     /// The Claude Code row's subtitle: the executable the panel runs, its
     /// version and whether it is signed in (asked once, then kept by the
-    /// locator until the page comes up again or the path changes), or
-    /// that none was found.
+    /// locator until the page comes up again, the path changes or a
+    /// sign-in starts or ends), or that none was found; and what its second
+    /// button offers.
     private func showClaudeCode() {
         guard let row = claudeCodeRow, !closed else { return }
         claudeCodeGen += 1
         let gen = claudeCodeGen
         guard let locator = assistant?.locator, let path = locator.locate() else {
             row.subtitle = Assistant.problem(.app, Assistant.Availability())
+            setClaudeCodeOffer(.install)
             return
         }
         if !row.subtitle.hasPrefix(path) {
             row.subtitle = path
+            setClaudeCodeOffer(.none)
         }
         Task { @MainActor [weak self] in
             let version = await locator.version()
             let signedIn = await locator.signedIn()
             guard let self, !self.closed, gen == self.claudeCodeGen else { return }
-            self.claudeCodeRow?.subtitle = Self.claudeCodeState(path: path, version: version, signedIn: signedIn)
+            self.claudeCodeRow?.subtitle = Self.claudeCodeState(
+                path: path, version: version, signedIn: signedIn, signingIn: locator.signingIn)
+            self.setClaudeCodeOffer(signedIn == false ? .signIn : .none)
         }
     }
 
-    /// "path · version · Signed in"; what is not known is left out.
-    static func claudeCodeState(path: String, version: String?, signedIn: Bool?) -> String {
+    /// "path · version · Signed in"; what is not known is left out, and
+    /// while a sign-in is under way (`signingIn`) the row says that it
+    /// waits for the browser instead of "Not signed in".
+    static func claudeCodeState(path: String, version: String?, signedIn: Bool?, signingIn: Bool = false) -> String {
         let texts = Assistant.panelTexts()
         var parts = [path]
         if let version {
             parts.append(version)
         }
-        switch signedIn {
-        case true?: parts.append(texts.signedIn)
-        case false?: parts.append(texts.notSignedInShort)
-        case nil: break
+        if signedIn == true {
+            parts.append(texts.signedIn)
+        } else if signingIn {
+            parts.append(Assistant.signInTexts().waiting)
+        } else if signedIn == false {
+            parts.append(texts.notSignedInShort)
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// The row's second button: its title, and hidden while the row offers
+    /// nothing.
+    private func setClaudeCodeOffer(_ offer: AssistantPanelController.Offer) {
+        claudeCodeOffer = offer
+        if offer != .none {
+            claudeCodeOfferButton.title = AssistantMessageLineView.offerLabel(offer)
+        }
+        claudeCodeOfferButton.isHidden = offer == .none
+        // A hidden button is out of the row (the stack detaches it) and
+        // misses the row's sensitivity meanwhile.
+        claudeCodeOfferButton.isEnabled = (claudeCodeRow?.isEnabled ?? true) && assistantGroup.isEnabled
+    }
+
+    /// The row's second button: Sign In… runs Claude Code's own sign-in in
+    /// the browser (the locator's, which the row follows through
+    /// `onSignInChange`; a failure or a timeout is said as the page says
+    /// its other errors), Get Claude Code… opens the page with its
+    /// installers.
+    @objc private func claudeCodeOfferClicked(_ sender: Any?) {
+        guard !closed else { return }
+        switch claudeCodeOffer {
+        case .install:
+            openInBrowser(Assistant.installURL) { [weak self] text in
+                guard let self, !self.closed else { return }
+                self.toast?(text)
+            }
+        case .signIn:
+            guard let locator = assistant?.locator else { return }
+            let run = locator.startSignIn()
+            Task { @MainActor [weak self] in
+                let result = await run.result
+                guard let self, !self.closed else { return }
+                switch result {
+                case .failed(let reason):
+                    self.toast?(Assistant.signInFailedText(reason))
+                case .timedOut:
+                    self.toast?(Assistant.signInTexts().timedOut)
+                case .done, .cancelled, .notFound:
+                    break
+                }
+            }
+        case .none:
+            break
+        }
     }
 
     /// `assistant-claude-path` changed: Claude Code is looked for again,

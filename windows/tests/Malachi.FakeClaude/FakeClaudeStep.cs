@@ -27,8 +27,11 @@ public sealed class FakeClaudeStep
     /// <summary>What the step is.</summary>
     public string Kind { get; }
 
-    /// <summary>The text of stdout, stderr and printFile.</summary>
+    /// <summary>The text of stdout and stderr, the path of printFile and writeFile.</summary>
     public string Text { get; private init; } = "";
+
+    /// <summary>What writeFile writes.</summary>
+    public string Value { get; private init; } = "";
 
     /// <summary>The number of exit, sleep, fill and ifStart.</summary>
     public long Number { get; private init; }
@@ -66,6 +69,9 @@ public sealed class FakeClaudeStep
     /// <summary>Writes the content of the file <paramref name="path"/> to stdout (a state the test changes).</summary>
     public static FakeClaudeStep PrintFile(string path) => new("printFile") { Text = path };
 
+    /// <summary>Writes <paramref name="text"/> to the file <paramref name="path"/> (a sign-in that changes what auth status prints).</summary>
+    public static FakeClaudeStep WriteFile(string path, string text) => new("writeFile") { Text = path, Value = text };
+
     /// <summary>Runs <paramref name="then"/> at the conversation start number <paramref name="start"/> only (Swift's <c>$n</c>).</summary>
     public static FakeClaudeStep IfStart(int start, params FakeClaudeStep[] then) => new("ifStart") { Number = start, Then = then };
 
@@ -80,6 +86,7 @@ public sealed class FakeClaudeStep
             writer.WriteStartObject();
             writer.WriteString("kind", step.Kind);
             writer.WriteString("text", step.Text);
+            writer.WriteString("value", step.Value);
             writer.WriteNumber("number", step.Number);
             writer.WritePropertyName("then");
             WriteSteps(writer, step.Then);
@@ -91,6 +98,7 @@ public sealed class FakeClaudeStep
     private static FakeClaudeStep Read(JsonElement e) => new(e.GetProperty("kind").GetString() ?? "")
     {
         Text = e.GetProperty("text").GetString() ?? "",
+        Value = e.TryGetProperty("value", out var value) ? value.GetString() ?? "" : "",
         Number = e.GetProperty("number").GetInt64(),
         Then = ReadSteps(e.GetProperty("then")),
     };
