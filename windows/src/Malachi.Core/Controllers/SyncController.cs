@@ -570,7 +570,7 @@ public sealed partial class SyncController : ObservableObject, IDisposable, IMai
         var kind = AuthBannerKind(n, account);
         // The banner's button shows no mnemonic.
         var button = WizardController.WithoutMnemonic(SyncStatusTexts.AuthBannerButton(kind, n.Reason));
-        return (SyncStatusTexts.AuthBannerTitle(kind, n.Reason, name), button);
+        return (SyncStatusTexts.AccountAuthBannerTitle(account, kind, n.Reason, name), button);
     }
 
     /// <summary>

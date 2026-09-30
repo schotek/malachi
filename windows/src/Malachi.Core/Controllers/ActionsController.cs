@@ -183,7 +183,7 @@ public sealed partial class ActionsController
     /// <c>setMessageActionsSensitive</c>).
     /// </summary>
     public ActionFlags ActionFlagsFor(ListRow? row) =>
-        ActionRules.MessageActionState(row, Mailbox.Model.InOutbox, Mailbox.Model.CanMoveToRole);
+        ActionRules.MessageActionState(row, Mailbox.Model);
 
     /// <summary>Swift <c>flags(for:)</c>: <see cref="ActionFlagsFor"/> for a single message (a message window's commands).</summary>
     public ActionFlags FlagsFor(MessageSummary s)

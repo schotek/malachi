@@ -643,7 +643,7 @@ public sealed class MailboxControllerListTests
             h.List.Select(new ListKey(Message: "m4"));
         });
         Assert.Empty(log.Marks);
-        Assert.Equal(ActionRules.MessageActionState(h.List.Rows[0], h.Mailbox.Model.InOutbox, h.Mailbox.Model.CanMoveToRole), h.List.ActionFlags);
+        Assert.Equal(ActionRules.MessageActionState(h.List.Rows[0], h.Mailbox.Model), h.List.ActionFlags);
         Assert.True(h.List.ActionFlags.MarkUnread && !h.List.ActionFlags.MarkRead);
         await h.On(() => h.List.Select(new ListKey(Message: "m3")));
         Assert.Equal(["m3"], Ids(log.Marks));

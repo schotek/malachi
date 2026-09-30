@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/AccountsPage.swift
-// (accountRowTitle, accountStatusText, accountRowOffersSignIn, insertIndex,
-// moveAccount); GTK: ui/internal/window/accounts_page.go (accountRowTitle,
-// accountStatusText, accountRow) and accounts_reorder.go (insertIndex,
-// moveAccount).
+// (accountRowTitle, accountRowSubtitle, accountEditor, jiraEditor,
+// accountStatusText, accountRowOffersSignIn, insertIndex, moveAccount); GTK:
+// ui/internal/window/accounts_page.go (accountRowTitle, accountRowSubtitle,
+// accountEditor, jiraEditor, accountIcon, accountStatusText, accountRow)
+// and accounts_reorder.go (insertIndex, moveAccount).
 
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Text;
 using Malachi.Core.Wizard;
 
@@ -21,15 +23,74 @@ public static class AccountsPage
 {
     /// <summary>
     /// The account name, or the address when unnamed (accounts_page.go
-    /// <c>accountRowTitle</c>). Unlike the sidebar's account label
-    /// (<c>accountLabel</c>) nothing is trimmed: this is the name as the user
-    /// typed it.
+    /// <c>accountRowTitle</c>); an unnamed Jira account shows its site's host
+    /// before the address (<see cref="Jira.SiteHost"/>). Unlike the sidebar's
+    /// account label (<c>accountLabel</c>) nothing is trimmed: this is the
+    /// name as the user typed it.
     /// </summary>
     public static string AccountRowTitle(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
-        return a.Config.Name.Length > 0 ? a.Config.Name : a.Config.Email;
+        if (a.Config.Name.Length > 0)
+        {
+            return a.Config.Name;
+        }
+        var host = Jira.SiteHost(a.Config);
+        return host.Length > 0 ? host : a.Config.Email;
     }
+
+    /// <summary>
+    /// The line under an account's name in Preferences → Accounts
+    /// (accounts_page.go <c>accountRowSubtitle</c>): the address of a mail
+    /// account, the site's host of a Jira account (its address when the title
+    /// shows the host already).
+    /// </summary>
+    public static string AccountRowSubtitle(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        var host = Jira.SiteHost(a.Config);
+        return host.Length == 0 || host == AccountRowTitle(a) ? a.Config.Email : host;
+    }
+
+    /// <summary>
+    /// accounts_page.go <c>jiraAccountIcon</c>: the icon of a Jira account's
+    /// row (Adwaita has no ticket; a GTK name, which IconGlyphs maps).
+    /// </summary>
+    public const string JiraAccountIcon = "checkbox-checked-symbolic";
+
+    /// <summary>
+    /// The row icon by account kind (accounts_page.go <c>accountIcon</c>): a
+    /// task list for a Jira account, the provider's icon otherwise
+    /// (<see cref="Provider.ProviderIcon"/>, the generic mail icon on
+    /// Windows, U6).
+    /// </summary>
+    public static string AccountIcon(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        return Jira.IsJira(a.Config) ? JiraAccountIcon : Provider.ProviderIcon(Provider.AccountProvider(a.Config));
+    }
+
+    /// <summary>
+    /// What edits account <paramref name="a"/>, by its kind (accounts_page.go
+    /// <c>accountEditor</c>). Every "edit account" route asks this first,
+    /// since the mail wizard builds its pages from <c>imap</c> and
+    /// <c>smtp</c>, which a Jira account has not.
+    /// </summary>
+    public static AccountEditor EditorOf(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        return Jira.IsJira(a.Config) ? AccountEditor.Jira : AccountEditor.MailWizard;
+    }
+
+    /// <summary>
+    /// What edits a Jira account on an "edit account" route
+    /// (accounts_page.go <c>jiraEditor</c>): the settings, unless the route
+    /// asks for the token (<paramref name="requestToken"/>: the reason of the
+    /// sign-in banner or of an account's Sign In in the status flyout, null
+    /// when it is not known), which the assistant asks for and says why.
+    /// </summary>
+    public static JiraEditor JiraEditorFor(ErrorCode? requestToken) =>
+        requestToken is null ? JiraEditor.Settings : JiraEditor.Token;
 
     /// <summary>
     /// The short status shown next to the switch; empty for the

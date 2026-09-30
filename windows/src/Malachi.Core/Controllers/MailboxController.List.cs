@@ -982,7 +982,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     public void RefreshActionFlags()
     {
         Scope.VerifyAccess();
-        var f = ActionRules.MessageActionState(SelectedRow, Model.InOutbox, Model.CanMoveToRole);
+        var f = ActionRules.MessageActionState(SelectedRow, Model);
         if (f == ActionFlags)
         {
             return;

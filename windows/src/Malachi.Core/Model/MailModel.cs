@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
 
@@ -149,20 +150,24 @@ public sealed partial class MailModel
 
     /// <summary>
     /// Projects a list summary onto what a row displays (model.go
-    /// <c>summaryMessage</c>).
+    /// <c>summaryMessage</c>). A message of a Jira account adds its issue
+    /// (<see cref="Jira.RowIssue"/>), and an event of an issue is never
+    /// unread, whatever its flags.
     /// </summary>
     public static RowMessage SummaryMessage(MessageSummary s)
     {
         ArgumentNullException.ThrowIfNull(s);
+        var issue = Jira.RowIssue(s);
         return new RowMessage
         {
             From = s.From,
             Subject = s.Subject,
             Snippet = s.Snippet,
             Date = s.Date,
-            Unread = !FolderTree.HasFlag(s.Flags, Flag.Seen),
+            Unread = issue?.Unread ?? !FolderTree.HasFlag(s.Flags, Flag.Seen),
             Flagged = FolderTree.HasFlag(s.Flags, Flag.Flagged),
             HasAttachments = s.HasAttachments,
+            Issue = issue,
         };
     }
 

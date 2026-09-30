@@ -7,7 +7,7 @@
 // authBannerText, editsPassword, goaAuthBannerText, oauthAuthBannerText,
 // certStatusText, certProblemAccount, certBannerText); GTK:
 // ui/internal/window/sync.go (syncStatusText, sendingText, notSentText,
-// certStatusText, certProblemAccount, certBannerText, authBannerTitle,
+// certStatusText, certProblemAccount, certBannerText, accountAuthBannerTitle, authBannerTitle,
 // authBannerButton, editsPassword, authBannerText, goaAuthBannerText,
 // oauthAuthBannerText) and status.go (accountStatuses, accountDetail,
 // statusButtonLabel, statusButtonMnemonic, sameAccounts). authBannerTitle,
@@ -19,6 +19,7 @@ using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Text;
 using Malachi.Core.Wizard;
 
@@ -373,6 +374,18 @@ public static class SyncStatusTexts
         return true;
     }
 
+    /// <summary>
+    /// <see cref="AuthBannerTitle"/> for account <paramref name="a"/> (null
+    /// while it is not listed yet), which signs in the way
+    /// <paramref name="kind"/> says (sync.go <c>accountAuthBannerTitle</c>):
+    /// a Jira account names its token (<see cref="Jira.AuthBannerText"/>), a
+    /// keyring failure reads as for mail.
+    /// </summary>
+    public static string AccountAuthBannerTitle(Account? a, SignInKind kind, ErrorCode reason, string account)
+    {
+        var text = Jira.AuthBannerText(a?.Config.ProtocolKind ?? AccountKind.Imap, reason, account);
+        return text.Length > 0 ? text : AuthBannerTitle(kind, reason, account);
+    }
     /// <summary>
     /// The sign-in banner's sentence for an account that signs in the way
     /// <paramref name="kind"/> says, after a <c>notify.authRequired</c> with

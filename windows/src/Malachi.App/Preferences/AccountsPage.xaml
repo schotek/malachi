@@ -123,7 +123,7 @@ status and the controls go to a second line (AccountRowPanel).
                                         VerticalAlignment="Center"
                                         FontSize="16"
                                         Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
-                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Email, Mode=OneWay}">
+                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Subtitle, Mode=OneWay}">
                                         <TextBlock
                                             MaxLines="1"
                                             Style="{StaticResource BodyLabelStyle}"
@@ -132,7 +132,7 @@ status and the controls go to a second line (AccountRowPanel).
                                         <TextBlock
                                             MaxLines="1"
                                             Style="{StaticResource DimCaptionLabelStyle}"
-                                            Text="{x:Bind Email, Mode=OneWay}"
+                                            Text="{x:Bind Subtitle, Mode=OneWay}"
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                     <TextBlock

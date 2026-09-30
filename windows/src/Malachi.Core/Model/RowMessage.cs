@@ -9,6 +9,7 @@
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
+using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
 
@@ -17,8 +18,9 @@ namespace Malachi.Core.Model;
 /// result adds where it lies (<see cref="Origin"/>, with the full path and
 /// account as <see cref="OriginTooltip"/>) and the matched words of
 /// <see cref="Snippet"/> (<see cref="Highlights"/>, UTF-8 byte ranges into
-/// it, as the daemon sent them). Every text is hostile input, shown as
-/// plain text.
+/// it, as the daemon sent them). A message of a Jira account adds its issue
+/// (<see cref="Issue"/>, <see cref="Jira.RowIssue"/>). Every text is hostile
+/// input, shown as plain text.
 /// </summary>
 public sealed record RowMessage
 {
@@ -51,4 +53,10 @@ public sealed record RowMessage
 
     /// <summary>The matched words of a search result's excerpt, byte ranges into <see cref="Snippet"/>.</summary>
     public IReadOnlyList<MatchRange> Highlights { get; init; } = [];
+
+    /// <summary>
+    /// The issue's key, summary and status, and whether the row is an event
+    /// (a status or assignee change); null for a mail message.
+    /// </summary>
+    public JiraIssueRow? Issue { get; init; }
 }

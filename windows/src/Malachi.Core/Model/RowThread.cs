@@ -7,13 +7,15 @@
 using System;
 using System.Collections.Generic;
 using Malachi.Core.Api;
+using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
 
 /// <summary>
 /// What a conversation row displays, a projection of a thread summary over
-/// the members of the listed folder. Every text is hostile input, shown as
-/// plain text.
+/// the members of the listed folder. A conversation of a Jira account is one
+/// issue (<see cref="Issue"/>, <see cref="Jira.ThreadRowIssue"/>). Every
+/// text is hostile input, shown as plain text.
 /// </summary>
 public sealed record RowThread
 {
@@ -46,4 +48,10 @@ public sealed record RowThread
 
     /// <summary>Unfolded, members not answered yet.</summary>
     public required bool Loading { get; init; }
+
+    /// <summary>
+    /// The issue's key, summary and status, and the change its latest member
+    /// made (an event's text); null for a conversation of a mail account.
+    /// </summary>
+    public JiraIssueRow? Issue { get; init; }
 }
