@@ -1792,7 +1792,11 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   `make po` renumbers them), the Windows ones listed in
   `windows/parity-exclusions.txt`, and the Swift functions without a Go
   mirror are marked "Swift-first" for the port. The user's Jira lives on
-  the Mac. Open: the GTK and Windows ports.
+  the Mac. The GTK UI followed (2026-09-30): the Go reference used as it
+  is through `i18n.Tr`, the Swift-first functions mirrored in
+  `ui/internal/window`, the assistant in `ui/internal/accountwizard`
+  (`jira.go`, `jira_flow.go`), the settings in `ui/internal/jiraaccount`,
+  the comment mode in `ui/internal/compose`. Open: the Windows port.
 - Conversation view: **decided** (2026-09-29) — selecting a folded
   conversation row (two or more members in the folder; a Jira folder is
   always grouped) shows every member stacked in the reading pane,
@@ -1808,7 +1812,17 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   cheap (a body is fetched near the viewport, at most eight web views
   live). Rejected: one document with the cards' headers in it; the
   members expanded in the list instead (the GTK model, kept for member
-  rows). Open: the GTK port (a height measurement needs a script in an
-  isolated world with JavaScript on for that world alone, or a
-  snapshot), the Windows port, and a card's page under a dark
-  appearance (the document keeps its light background).
+  rows). The GTK port (2026-09-30) measures with a script in an isolated
+  world: WebKitGTK cannot switch content script off alone, so a card's
+  view has the JavaScript engine on with script markup off, which the CSP
+  and the sanitiser back ([security.md §3.2](security.md#32-defences));
+  a snapshot of the document was rejected, since a long newsletter would
+  take hundreds of megabytes to measure. The GTK pane orders the
+  conversation as Jira shows an issue, opened at its top: what opened it
+  (the description, or the first message) folded to its header while
+  more follows, then the rest newest first (the user's decision,
+  2026-09-30: oldest first scrolled to the newest left the newest cut
+  off while the cards above it grew); the model and the macOS client
+  keep the oldest first. Open: the Windows port, and a
+  card's page under a dark appearance (the document keeps its light
+  background).

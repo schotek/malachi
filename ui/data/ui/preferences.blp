@@ -30,10 +30,13 @@ Adw.PreferencesDialog preferences_dialog {
     Adw.PreferencesGroup accounts_group {
       title: _("Mail Accounts");
 
-      header-suffix: Button add_account_button {
+      // A menu of the two assistants: a mail account or a Jira account
+      // (window/accounts_page.go, the "prefs" action group).
+      header-suffix: MenuButton add_account_button {
         icon-name: "list-add-symbolic";
         tooltip-text: _("Add Account");
         valign: center;
+        menu-model: add_account_menu;
 
         styles [
           "flat",
@@ -295,6 +298,20 @@ Adw.PreferencesDialog preferences_dialog {
         title: _("Register with Claude");
         subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
       }
+    }
+  }
+}
+
+menu add_account_menu {
+  section {
+    item {
+      label: _("_Add Account…");
+      action: "prefs.add-account";
+    }
+
+    item {
+      label: _("Add _Jira Account…");
+      action: "prefs.add-jira-account";
     }
   }
 }

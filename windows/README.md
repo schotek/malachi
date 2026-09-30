@@ -458,7 +458,7 @@ features, not deviations.
 - **Jira accounts and the conversation view** are not ported yet. The
   daemon has them (`kind: jira`, [docs/api.md §4.1](../docs/api.md#41-account),
   [docs/architecture.md §3.6](../docs/architecture.md#36-issue-tracker-accounts-kind-jira)),
-  and the macOS client came first ([macos/README.md](../macos/README.md#swift-first-what-the-gtk-ui-still-has-to-mirror)):
+  and the macOS client came first, the GTK UI followed ([macos/README.md](../macos/README.md#swift-first-where-the-gtk-ui-mirrors-it)):
   the port takes the Go reference of the pure logic (`ui/internal/jira`,
   `ui/internal/capabilities`, `ui/internal/conversation`) and the Swift
   (`MalachiCore/Jira`, `Model/Capabilities.swift`,

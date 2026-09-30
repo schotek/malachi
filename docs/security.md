@@ -152,6 +152,50 @@ Layer 2 — **the UI webview** (WebKitGTK 6.0):
   ephemeral data manager per message;
 - tested with the corpus in `backend/testdata/mime`.
 
+In the conversation view of the GTK UI (a folded conversation row
+selected: every member of the folder stacked as native cards,
+`ui/internal/window/conversation_view.go`) layer 2 is one locked view
+**per HTML card** (`ui/internal/htmlview/card.go`,
+`ui/data/ui/html_card.blp`), at most eight alive at a time (the nearest
+to the viewport; the others keep their last height without a view), each
+with the viewer's configuration above but for one thing: the JavaScript
+engine is on (`enable-javascript`), because WebKitGTK has no switch for
+content script alone, and it runs one script of the application's own.
+That script (`htmlview/size.go`) is added from Go to the view's own
+`WebKitUserContentManager` in an isolated script world (`malachi-size`,
+top frame, at document end), and its only message handler (`size`) is
+registered in that world alone, so nothing in the document's world could
+reach its globals or post to the handler. The document itself cannot run
+script: `enable-javascript-markup` stays off, so WebKit's parser drops
+every `<script>` element, event-handler attribute and `javascript:` URL
+before anything runs; the Content-Security-Policy (`default-src 'none'`,
+no `script-src`) refuses inline and external script besides; and the
+sanitiser has removed all of it first. Windows cannot be opened and the
+clipboard cannot be reached from script
+(`javascript-can-open-windows-automatically`,
+`javascript-can-access-clipboard` off). The script only reads the layout
+(a `ResizeObserver` on the document element and on `#malachi-column`,
+and every picture that finishes loading) and posts where the column ends
+in CSS pixels, with a flag of its own making when the report followed a
+change of the view's height alone; Go takes the number only as a finite
+value that is not negative, capped (`readSize`), and nothing else of the
+document reaches it. The window's governor (`webHeightGovernor`) turns
+it into the view's height at the text zoom, capped at 4000 px (beyond it
+the card scrolls inside), and freezes it after three growths in a row
+that the view's own growth caused (`100vh`, `height: 100%`) until the
+document, the width or the zoom changes, so a message cannot grow the
+pane without end. Everything else is the viewer's: an ephemeral network
+session behind a proxy nothing answers on, the default policy and the
+same one as a `<meta>` in a document that is `CompactDocument` of one
+sanitiser output (the column's padding cut to the card's), `malachi-cid:`
+pictures through `message.part` only, `decide-policy` refusing every
+navigation but the initial load (a user's link goes through the viewer's
+masked-link check), and the reduced context menu. The single-message
+view keeps JavaScript off entirely. A composed document of the whole
+conversation was rejected for the reason given for macOS below: in a
+card the headers, badges and event rows are native widgets with plain
+text, and the body is one message's output.
+
 Layer 2 exists so a sanitiser bug is not automatically a compromise; it is
 not a reason to relax layer 1.
 

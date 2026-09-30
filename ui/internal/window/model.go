@@ -8,6 +8,9 @@ import (
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
+	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -125,8 +128,12 @@ func (m *mailModel) bumpAll() {
 
 // accountLabel is the sidebar header text for an account: its configured
 // name, falling back to the address. Both are user-entered, shown as plain
-// text.
+// text. A Jira account without a name falls back to its site's host first
+// (jira.AccountLabel).
 func accountLabel(a api.Account) string {
+	if jira.IsJira(a.Config) {
+		return jira.AccountLabel(a.Config)
+	}
 	if name := strings.TrimSpace(a.Config.Name); name != "" {
 		return name
 	}
@@ -506,9 +513,11 @@ func hasFlag(flags []api.Flag, f api.Flag) bool {
 	return false
 }
 
-// summaryMessage projects a list summary onto what a row displays.
+// summaryMessage projects a list summary onto what a row displays. A
+// message of a Jira account adds its issue (jira.RowIssue), and an event
+// of an issue is never unread, whatever its flags.
 func summaryMessage(s api.MessageSummary) widget.Message {
-	return widget.Message{
+	m := widget.Message{
 		From:           s.From,
 		Subject:        s.Subject,
 		Snippet:        s.Snippet,
@@ -516,7 +525,30 @@ func summaryMessage(s api.MessageSummary) widget.Message {
 		Unread:         !hasFlag(s.Flags, api.FlagSeen),
 		Flagged:        hasFlag(s.Flags, api.FlagFlagged),
 		HasAttachments: s.HasAttachments,
+		Issue:          jira.RowIssue(s, i18n.Tr),
 	}
+	if m.Issue != nil {
+		m.Unread = m.Issue.Unread
+	}
+	return m
+}
+
+// alwaysGrouped reports whether folder k is listed as conversations
+// whatever the "group by conversation" setting: a folder of a Jira
+// account, whose issues are one thread each (jira.AlwaysThreaded). False
+// for no folder or an unknown account. The outbox stays flat all the same
+// (the caller's rule, as for mail).
+func (m *mailModel) alwaysGrouped(k folderKey) bool {
+	a, ok := m.account(k.Account)
+	return ok && jira.AlwaysThreaded(a.Config)
+}
+
+// countsUnread reports whether a notified message raises its
+// conversation's unread count: an unseen message that is not an event of
+// an issue (the daemon stores events seen; this holds even when one
+// arrives unseen).
+func countsUnread(s api.MessageSummary) bool {
+	return !hasFlag(s.Flags, api.FlagSeen) && !jira.IsEvent(s.Issue)
 }
 
 // matchesFilter reports whether s belongs in a list shown under f. It
@@ -731,12 +763,18 @@ func badgeFor(list []api.Folder, f api.Folder, collapsed bool) int {
 }
 
 // sortSiblings orders folders at one tree level: special-use roles first
-// (Inbox, Drafts, Sent, …), then alphabetically by path.
+// (Inbox, Drafts, Sent, …), then the fixed views of a Jira account
+// (Assigned to Me, Watching, Open; jira.VirtualRank), then alphabetically
+// by path.
 func sortSiblings(list []api.Folder) {
 	sort.SliceStable(list, func(i, j int) bool {
 		ri, rj := roleRank(list[i].Role), roleRank(list[j].Role)
 		if ri != rj {
 			return ri < rj
+		}
+		vi, vj := jira.VirtualRank(list[i].Virtual), jira.VirtualRank(list[j].Virtual)
+		if vi != vj {
+			return vi < vj
 		}
 		return strings.ToLower(list[i].Path) < strings.ToLower(list[j].Path)
 	})
@@ -765,6 +803,41 @@ func roleRank(r api.FolderRole) int {
 	}
 	return 100
 }
+
+// folderIcon is the icon of a folder's row: the fixed view's
+// (jira.VirtualIcon) for a virtual folder of a Jira account, the role's
+// (roleIcon) otherwise.
+func folderIcon(f api.Folder) string {
+	if v := jira.VirtualIcon(f.Virtual); v != "" {
+		return v
+	}
+	return roleIcon(f.Role)
+}
+
+// accountHeaderBadge is the capsule after an account's heading in the
+// sidebar, which says what kind of account it is: "JIRA" for an
+// issue-tracker account (jira.KindBadge), the provider a mail account signs
+// in with ("GOOGLE", "M365"; signin.Provider), "IMAP" for a mail account
+// with a password. Brand and protocol names, never translated.
+func accountHeaderBadge(a api.Account) string {
+	if jira.IsJira(a.Config) {
+		return jira.KindBadge
+	}
+	switch signin.Provider(a.Config) {
+	case signin.ProviderGoogle:
+		return googleBadge
+	case signin.ProviderMicrosoft365:
+		return microsoftBadge
+	}
+	return imapBadge
+}
+
+// The capsules of mail accounts (accountHeaderBadge).
+const (
+	googleBadge    = "GOOGLE"
+	microsoftBadge = "M365"
+	imapBadge      = "IMAP"
+)
 
 // roleIcon is the symbolic icon for a folder role. Adwaita ships no
 // mail-inbox-symbolic or mail-archive-symbolic, hence mail-unread and

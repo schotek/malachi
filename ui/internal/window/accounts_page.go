@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/diamondburned/gotk4-adwaita/pkg/adw"
+	"github.com/diamondburned/gotk4/pkg/gio/v2"
 	"github.com/diamondburned/gotk4/pkg/glib/v2"
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 	"github.com/diamondburned/gotk4/pkg/pango"
@@ -17,6 +18,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -68,16 +70,18 @@ func (r *accountRow) setDropHint(h dropHint) {
 }
 
 // bindAccounts fills the Accounts page from account.list and wires the add
-// button. The page reloads after its own actions; the group stays
-// insensitive until the first load succeeds.
+// menu (a mail account or a Jira account). The page reloads after its own
+// actions; the group stays insensitive until the first load succeeds.
 func (d *PreferencesDialog) bindAccounts(c *client.Client) (unbind func()) {
 	d.accountsGroup.SetSensitive(false)
 	d.loadAccounts(c)
 
-	// The wizard is built here rather than through app.add-account so the
-	// page can reload itself: the preferences dialog does not receive
+	// The wizards are built here rather than through app.add-account so
+	// the page can reload itself: the preferences dialog does not receive
 	// notify.accountsChanged.
-	handle := d.addAccount.ConnectClicked(func() {
+	group := gio.NewSimpleActionGroup()
+	mail := gio.NewSimpleAction("add-account", nil)
+	mail.ConnectActivate(func(*glib.Variant) {
 		wz := accountwizard.New(c, d.log)
 		wz.OnDone = func(_ api.AccountID, cfg api.AccountConfig) {
 			d.loadAccounts(c)
@@ -86,7 +90,12 @@ func (d *PreferencesDialog) bindAccounts(c *client.Client) (unbind func()) {
 		}
 		wz.Present(d)
 	})
-	return func() { d.addAccount.HandlerDisconnect(handle) }
+	group.AddAction(mail)
+	jiraAdd := gio.NewSimpleAction("add-jira-account", nil)
+	jiraAdd.ConnectActivate(func(*glib.Variant) { d.addJiraAccount(c) })
+	group.AddAction(jiraAdd)
+	d.InsertActionGroup("prefs", group)
+	return func() { d.InsertActionGroup("prefs", nil) }
 }
 
 // loadAccounts runs account.list and rebuilds the rows.
@@ -131,7 +140,7 @@ func (d *PreferencesDialog) newAccountRow(c *client.Client, a api.Account) *acco
 	row.SetUseMarkup(false)
 	row.AddCSSClass("account-row")
 	row.SetTitle(accountRowTitle(a))
-	row.SetSubtitle(a.Config.Email)
+	row.SetSubtitle(accountRowSubtitle(a))
 
 	row.handle = gtk.NewImageFromIconName("list-drag-handle-symbolic")
 	row.handle.AddCSSClass("drag-handle")
@@ -235,8 +244,14 @@ func (d *PreferencesDialog) setAccountEnabled(c *client.Client, row *accountRow,
 	}()
 }
 
-// editAccount opens the wizard prefilled with the row's account.
+// editAccount opens the wizard prefilled with the row's account; a Jira
+// account opens its settings (accountEditor), where its token is replaced
+// too.
 func (d *PreferencesDialog) editAccount(c *client.Client, row *accountRow) {
+	if accountEditor(row.account) == editorJira {
+		d.editJiraAccount(c, row.account)
+		return
+	}
 	d.presentEdit(c, accountwizard.NewEdit(c, d.log, row.account))
 }
 
@@ -288,12 +303,69 @@ func (d *PreferencesDialog) removeAccount(c *client.Client, row *accountRow) {
 	})
 }
 
-// accountRowTitle is the account name, or the address when unnamed.
+// accountRowTitle is the account name, or the address when unnamed; an
+// unnamed Jira account shows its site's host before the address
+// (jira.SiteHost). Unlike accountLabel nothing is trimmed: this is the
+// name as the user typed it.
 func accountRowTitle(a api.Account) string {
 	if a.Config.Name != "" {
 		return a.Config.Name
 	}
+	if host := jira.SiteHost(a.Config); host != "" {
+		return host
+	}
 	return a.Config.Email
+}
+
+// accountRowSubtitle is the line under an account's name in Settings →
+// Accounts: the address of a mail account, the site's host of a Jira
+// account (its address when the title shows the host already).
+func accountRowSubtitle(a api.Account) string {
+	host := jira.SiteHost(a.Config)
+	if host == "" || host == accountRowTitle(a) {
+		return a.Config.Email
+	}
+	return host
+}
+
+// editorKind is what edits an account: the mail account assistant, or
+// what a Jira account has for it (jiraEditor). Every "edit account" route
+// asks accountEditor first, since the mail assistant builds its pages from
+// imap and smtp, which a Jira account has not.
+type editorKind int
+
+const (
+	editorMailWizard editorKind = iota
+	editorJira
+)
+
+// accountEditor is the editorKind of account a, by its kind.
+func accountEditor(a api.Account) editorKind {
+	if jira.IsJira(a.Config) {
+		return editorJira
+	}
+	return editorMailWizard
+}
+
+// jiraEditorKind is what edits a Jira account: its settings
+// (jiraaccount), or the Jira assistant in its edit mode, which asks for a
+// new token and says why.
+type jiraEditorKind int
+
+const (
+	jiraEditSettings jiraEditorKind = iota
+	jiraEditToken
+)
+
+// jiraEditor is the jiraEditorKind of an "edit account" route: the
+// settings, unless the route asks for the token (reason is the reason of
+// the sign-in banner or of an account's Sign In in the status popover; 0
+// when it is not known).
+func jiraEditor(reason api.ErrorCode) jiraEditorKind {
+	if reason == 0 {
+		return jiraEditSettings
+	}
+	return jiraEditToken
 }
 
 // accountStatusText is the short status shown next to the switch; empty
@@ -329,7 +401,15 @@ func accountStatusText(s api.SyncState) string {
 
 // accountIcon is the row icon by account kind: the provider's icon of
 // GNOME Online Accounts when the account signs in with a provider and the
-// theme has it, the generic mail icon otherwise.
+// theme has it, a task list for a Jira account, the generic mail icon
+// otherwise.
 func accountIcon(a api.Account) string {
+	if jira.IsJira(a.Config) {
+		return jiraAccountIcon
+	}
 	return widget.ProviderIcon(signin.Provider(a.Config))
 }
+
+// jiraAccountIcon is the icon of a Jira account's row (Adwaita has no
+// ticket).
+const jiraAccountIcon = "checkbox-checked-symbolic"

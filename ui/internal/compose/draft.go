@@ -15,6 +15,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/editor"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -34,7 +35,10 @@ const (
 	saveAutosave
 )
 
-// draftState is the lifecycle of the draft behind a window.
+// draftState is the lifecycle of the draft behind a window. A comment
+// (comment.go) goes through it too, with the differences of the comment*
+// and closesUnasked, deletesOnClose functions: no Save Draft, a silent
+// autosave, and a copy that goes with the window unless it was sent.
 type draftState struct {
 	draftID api.DraftID
 	version int
@@ -61,8 +65,10 @@ type draftState struct {
 	lastError string // last autosave error shown as a toast
 	flushed   flushEcho
 
-	closed  bool // window is gone; drop late callbacks
-	discard bool // close without asking
+	closed bool // window is gone; drop late callbacks
+	// discard closes without asking; for a comment it also says that its
+	// copy is settled (sent, or deleted already).
+	discard bool
 }
 
 // flushEcho remembers the content a save's flush reported: the editor's
@@ -99,10 +105,19 @@ func (w *Window) ctx() context.Context {
 
 // rpc runs call off the main loop and then on it, unless the window closed.
 func (w *Window) rpc(call func() (any, error), then func(v any, err error)) {
+	w.rpcOr(call, then, nil)
+}
+
+// rpcOr is rpc with gone (optional) run on the main loop in place of then
+// when the window closed meanwhile.
+func (w *Window) rpcOr(call func() (any, error), then, gone func(v any, err error)) {
 	go func() {
 		v, err := call()
 		glib.IdleAdd(func() {
 			if w.draft.closed {
+				if gone != nil {
+					gone(v, err)
+				}
 				return
 			}
 			then(v, err)
@@ -136,20 +151,28 @@ func (w *Window) markDirty() {
 }
 
 func (w *Window) refreshStatus() {
-	d := &w.draft
+	w.setStatus(draftStatus(&w.draft, w.isComment(), w.m.Placeholder()))
+}
+
+// draftStatus is the status line under the window. A comment is saved
+// only against a crash, not as a draft the user keeps: nothing to say
+// about it but that it is being sent.
+func draftStatus(d *draftState, comment, placeholder bool) string {
 	switch {
 	case d.sending:
-		w.setStatus(i18n.T("Sending…"))
+		return i18n.T("Sending…")
+	case comment:
+		return ""
 	case d.saving:
-		w.setStatus(i18n.T("Saving draft…"))
+		return i18n.T("Saving draft…")
 	case d.dirty:
-		w.setStatus(i18n.T("Unsaved changes"))
+		return i18n.T("Unsaved changes")
 	case !d.lastSaved.IsZero():
-		w.setStatus(fmt.Sprintf(i18n.T("Draft saved %s"), widget.FormatTime(d.lastSaved)))
-	case w.m.Placeholder():
-		w.setStatus(i18n.T("Using placeholder account"))
+		return fmt.Sprintf(i18n.T("Draft saved %s"), widget.FormatTime(d.lastSaved))
+	case placeholder:
+		return i18n.T("Using placeholder account")
 	default:
-		w.setStatus("")
+		return ""
 	}
 }
 
@@ -173,6 +196,9 @@ func (w *Window) build() api.Draft {
 	if richText {
 		d.HTMLBody = w.editor.HTML()
 	}
+	// A comment has no recipients; of it draft.save reads only the
+	// visibility, and the issue goes back as it came.
+	d.Comment = wireComment(w.params.Comment, w.visibility())
 	if to == nil {
 		d.To = []api.Address{}
 	}
@@ -207,7 +233,7 @@ func (w *Window) save(reason saveReason, done func(err error)) {
 			return
 		}
 		draft := w.build()
-		w.rpc(func() (any, error) {
+		w.rpcOr(func() (any, error) {
 			var res api.DraftSaveResult
 			err := w.m.client.Call(w.ctx(), api.MethodDraftSave, api.DraftSaveParams{Draft: draft}, &res)
 			return res, err
@@ -239,6 +265,12 @@ func (w *Window) save(reason saveReason, done func(err error)) {
 			for _, f := range pending {
 				f(err)
 			}
+		}, func(v any, err error) {
+			// The window went while a comment was being saved: no Drafts
+			// folder keeps it, so the copy goes too.
+			if res, ok := v.(api.DraftSaveResult); ok && err == nil && draft.Comment != nil {
+				w.forget(draft.AccountID, res.DraftID)
+			}
 		})
 	})
 }
@@ -269,6 +301,19 @@ func (w *Window) saveFailed(reason saveReason, err error) {
 			}
 		}
 	}
+	if w.isComment() {
+		// A comment is saved to be sent (send), and otherwise only
+		// against a crash: a failed autosave says nothing and tries again.
+		if text := commentSaveFailure(reason, err); text != "" {
+			w.toast(text)
+			return
+		}
+		w.log.Debug("comment autosave failed", "err", err)
+		if d.autosave == 0 {
+			w.markDirty()
+		}
+		return
+	}
 	text := widget.RPCErrorText(i18n.T("Saving the draft"), err)
 	if reason == saveAutosave {
 		// Do not nag every 30 s with the same failure (e.g. no backend).
@@ -285,20 +330,25 @@ func (w *Window) saveFailed(reason saveReason, err error) {
 	}
 }
 
-// send validates, saves if needed and queues the message.
+// send validates, saves if needed and queues the message. A comment has
+// no recipients; it needs text (jira.SendProblem, checked on the editor's
+// current content).
 func (w *Window) send() {
 	d := &w.draft
 	if d.sending {
 		return
 	}
-	to, cc, bcc, ok := w.recipients()
-	if !ok {
-		w.toast(i18n.T("Fix the highlighted recipients"))
-		return
-	}
-	if len(to)+len(cc)+len(bcc) == 0 {
-		w.toast(i18n.T("Add at least one recipient"))
-		return
+	comment := w.isComment()
+	if !comment {
+		to, cc, bcc, ok := w.recipients()
+		if !ok {
+			w.toast(i18n.T("Fix the highlighted recipients"))
+			return
+		}
+		if len(to)+len(cc)+len(bcc) == 0 {
+			w.toast(i18n.T("Add at least one recipient"))
+			return
+		}
 	}
 	d.sending = true
 	w.actions["send"].SetEnabled(false)
@@ -308,6 +358,30 @@ func (w *Window) send() {
 		w.actions["send"].SetEnabled(true)
 		w.refreshStatus()
 	}
+	if !comment {
+		w.queue(fail)
+		return
+	}
+	w.editor.Flush(func() {
+		// Runs before OnChanged of the same message: what it reports is
+		// the content being sent, not an edit (flushEcho).
+		d.flushed.record(w.editor.HTML())
+		if d.closed {
+			return
+		}
+		if problem := jira.SendProblem(w.editor.Text(), i18n.Tr); problem != "" {
+			w.toast(problem)
+			fail()
+			return
+		}
+		w.queue(fail)
+	})
+}
+
+// queue is send's second half: the explicit save, then message.send; fail
+// gives Send back.
+func (w *Window) queue(fail func()) {
+	d := &w.draft
 	w.save(saveExplicit, func(err error) {
 		if err != nil {
 			fail()
@@ -332,25 +406,39 @@ func (w *Window) send() {
 			}
 			d.discard = true
 			if w.m.OnSent != nil {
-				w.m.OnSent(i18n.T("Message queued for sending"))
+				w.m.OnSent(queuedText(w.isComment()))
 			}
 			w.Close()
 		})
 	})
 }
 
+// queuedText is the toast after Send went through: a comment's
+// (jira.CommentQueued) or a message's.
+func queuedText(comment bool) string {
+	if comment {
+		return jira.CommentQueued(i18n.Tr)
+	}
+	return i18n.T("Message queued for sending")
+}
+
 // deleteDraft deletes the stored draft (and with it its copy in the
 // Drafts folder); the window is closing, so a failure is only logged.
 func (w *Window) deleteDraft() {
-	accountID, id := w.account().ID, w.draft.draftID
-	w.rpc(func() (any, error) {
-		return nil, w.m.client.Call(w.ctx(), api.MethodDraftDelete,
+	w.forget(w.account().ID, w.draft.draftID)
+}
+
+// forget is draft.delete of draft id in the background, also once the
+// window is gone; a failure is only logged.
+func (w *Window) forget(accountID api.AccountID, id api.DraftID) {
+	c, log, ctx := w.m.client, w.log, w.ctx()
+	go func() {
+		err := c.Call(ctx, api.MethodDraftDelete,
 			api.DraftDeleteParams{AccountID: accountID, DraftID: id}, &api.DraftDeleteResult{})
-	}, func(_ any, err error) {
 		if err != nil {
-			w.log.Debug("draft.delete", "err", err)
+			log.Debug("draft.delete", "err", err)
 		}
-	})
+	}()
 }
 
 // discard drops the draft (after confirmation when the setting is on). A
@@ -386,12 +474,26 @@ func (w *Window) discard() {
 }
 
 // closeRequest keeps the window open while there are unsaved edits and
-// asks what to do with them.
+// asks what to do with them. A comment has no Save Draft: the question is
+// whether to discard it, and its saved copy goes too.
 func (w *Window) closeRequest() bool {
 	d := &w.draft
-	if d.discard || (!d.dirty && !d.saving) {
+	if closesUnasked(d, w.isComment(), w.editor.Text()) {
 		w.cleanup()
 		return false
+	}
+	if w.isComment() {
+		widget.ConfirmDestructive(w, i18n.T("Discard this message?"), "", i18n.T("_Discard"), func() {
+			if d.closed {
+				return
+			}
+			if d.draftID != "" {
+				w.deleteDraft()
+			}
+			d.discard = true
+			w.Close()
+		})
+		return true
 	}
 	dlg := adw.NewAlertDialog(i18n.T("Save changes to this draft?"), "")
 	dlg.AddResponse("cancel", i18n.T("_Cancel"))
@@ -423,9 +525,13 @@ func (w *Window) closeRequest() bool {
 	return true
 }
 
-// cleanup runs when the window really closes.
+// cleanup runs when the window really closes. A comment's saved copy goes
+// with the window unless it was sent (deletesOnClose).
 func (w *Window) cleanup() {
 	d := &w.draft
+	if deletesOnClose(d, w.isComment()) {
+		w.deleteDraft()
+	}
 	d.closed = true
 	if d.autosave != 0 {
 		glib.SourceRemove(d.autosave)
@@ -439,7 +545,44 @@ func (w *Window) cleanup() {
 			editor.UnregisterCID(a.ContentID)
 		}
 	}
+	// The editor's web process goes with the window, not when the view is
+	// collected some time later.
+	w.editor.Close()
 	w.m.remove(w)
+}
+
+// closesUnasked is closeRequest's first branch: the window may go without
+// a question, having no edits to lose. A comment, which no Drafts folder
+// keeps, goes unasked only while there is nothing in it (jira.SendProblem
+// on text, the editor's last reported text), a save under way or not (its
+// copy goes too, deletesOnClose).
+func closesUnasked(d *draftState, comment bool, text string) bool {
+	if d.discard {
+		return true
+	}
+	if comment {
+		return jira.SendProblem(text, i18n.Tr) != ""
+	}
+	return !d.dirty && !d.saving
+}
+
+// deletesOnClose reports whether cleanup deletes the saved draft: a
+// comment's copy goes with the window unless it was sent or deleted
+// already (draftState.discard); its autosave is only against a crash. An
+// e-mail's draft stays.
+func deletesOnClose(d *draftState, comment bool) bool {
+	return comment && !d.discard && d.draftID != ""
+}
+
+// commentSaveFailure is the toast after a failed save of a comment that
+// was no conflict (saveFailed): a comment is saved on its way out, so the
+// explicit save says Sending; its autosave, only against a crash, says
+// nothing ("").
+func commentSaveFailure(reason saveReason, err error) string {
+	if reason == saveAutosave {
+		return ""
+	}
+	return widget.RPCErrorText(i18n.T("Sending"), err)
 }
 
 // blockedSummary describes what the backend's sanitiser removed.

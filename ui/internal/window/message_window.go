@@ -81,6 +81,9 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	// button cancels the send.
 	outbox := w.model.inOutbox(s)
 	mw.outbox = outbox
+	// What the message's account offers (action_rules.go): a Jira account
+	// comments instead of replying and has no Trash, Archive or Junk.
+	st := w.model.messageActionState(listRow{Key: listKey{Message: id}, Message: s}, true)
 	g := gio.NewSimpleActionGroup()
 	add := func(name string, enabled bool, fn func()) *gio.SimpleAction {
 		a := gio.NewSimpleAction(name, nil)
@@ -93,15 +96,29 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.markUnread = add("mark-unread", false, func() { w.markUnread(id) })
 	mw.setSeen(hasFlag(s.Flags, api.FlagSeen))
 	add("toggle-flag", !outbox, func() { w.toggleFlagged(id) })
-	add("trash", true, func() { w.trashFrom(mw, id) })
-	add("archive", !outbox && w.canMoveToRole(s, api.RoleArchive), func() { w.archive(id) })
-	add("junk", !outbox && w.canMoveToRole(s, api.RoleJunk), func() { w.junkFrom(mw, id) })
+	add("trash", st.trash, func() { w.trashFrom(mw, id) })
+	add("archive", st.archive, func() { w.archive(id) })
+	add("junk", st.junk, func() { w.junkFrom(mw, id) })
 	add("load-images", true, func() { w.loadRemoteImages(id) })
 	add("trust-sender", !outbox, func() { w.trustSender(id) })
+	add("change-status", s.Issue != nil && w.issues.canTransition(s.AccountID), func() {
+		if mw.view.card != nil {
+			mw.view.card.popupStatus()
+		}
+	})
 	mw.InsertActionGroup("msg", g)
 	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button", "junk": "junk_button"} {
 		b.GetObject(obj).Cast().(*gtk.Button).SetActionName("msg." + name)
 	}
+	for obj, supported := range map[string]bool{
+		"trash_button": st.supported.Trash, "archive_button": st.supported.Archive, "junk_button": st.supported.Junk,
+		"reply_all_button": st.supported.ReplyAll, "forward_button": st.supported.Forward,
+		"reply_button": st.supported.Reply,
+	} {
+		b.GetObject(obj).Cast().(*gtk.Button).SetVisible(supported)
+	}
+	w.presentReply(b.GetObject("reply_button").Cast().(*gtk.Button), st.comment)
+	b.GetObject("forward_button").Cast().(*gtk.Button).SetSensitive(st.forward)
 	b.GetObject("trash_button").Cast().(*gtk.Button).SetTooltipText(trashTooltip(outbox))
 	mw.star.SetSensitive(!outbox)
 	// "clicked" fires for user clicks only, not for SetActive from Go.

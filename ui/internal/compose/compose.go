@@ -21,6 +21,7 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/editor"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -44,6 +45,18 @@ type Window struct {
 	ccBcc         *gtk.Button
 	ccBox, bccBox *gtk.Box
 	ccSep, bccSep *gtk.Separator
+
+	// The comment mode (comment.go) shows commentHeader in place of
+	// headerRows: the issue's key and summary and, on a service-desk
+	// request, the choice of who reads the comment (visibilityGroup, one
+	// toggle per commentOptions).
+	headerRows      *gtk.Box
+	commentHeader   *gtk.Box
+	commentTitle    *gtk.Label
+	commentSummary  *gtk.Label
+	visibilityGroup *adw.ToggleGroup
+	commentOptions  []jira.VisibilityOption
+	attachButton    *gtk.Button
 
 	toasts     *adw.ToastOverlay
 	editorSlot *gtk.Box
@@ -103,6 +116,7 @@ func newWindow(m *Manager, p Params) *Window {
 		bccBox:      b.GetObject("bcc_box").Cast().(*gtk.Box),
 		ccSep:       b.GetObject("cc_separator").Cast().(*gtk.Separator),
 		bccSep:      b.GetObject("bcc_separator").Cast().(*gtk.Separator),
+		headerRows:  b.GetObject("header_rows").Cast().(*gtk.Box),
 		toasts:      b.GetObject("toast_overlay").Cast().(*adw.ToastOverlay),
 		editorSlot:  b.GetObject("editor_slot").Cast().(*gtk.Box),
 		attBox:      b.GetObject("attachments_box").Cast().(*gtk.FlowBox),
@@ -126,6 +140,11 @@ func newWindow(m *Manager, p Params) *Window {
 		actions:     make(map[string]*gio.SimpleAction),
 		chips:       make(map[string]gtk.Widgetter),
 	}
+	w.commentHeader = b.GetObject("comment_header").Cast().(*gtk.Box)
+	w.commentTitle = b.GetObject("comment_title").Cast().(*gtk.Label)
+	w.commentSummary = b.GetObject("comment_summary").Cast().(*gtk.Label)
+	w.visibilityGroup = b.GetObject("comment_visibility").Cast().(*adw.ToggleGroup)
+	w.attachButton = b.GetObject("attach_button").Cast().(*gtk.Button)
 
 	// Editor.
 	w.editor = editor.New(m.log)
@@ -177,6 +196,7 @@ func newWindow(m *Manager, p Params) *Window {
 		w.actions["insert-image"].SetEnabled(false)
 		w.plainHint.SetVisible(true)
 	}
+	w.applyCommentMode()
 	w.ConnectCloseRequest(w.closeRequest)
 	return w
 }
@@ -249,7 +269,7 @@ func (w *Window) setAccounts(accounts []api.Account, placeholder bool) {
 	// its quoted pictures and forwarded files were copied into that
 	// account, and the reply belongs to that mailbox's conversation.
 	w.from.SetSensitive(len(accounts) > 1 && !(w.fromLocked() && found))
-	if placeholder {
+	if placeholder && !w.isComment() {
 		w.setStatus(i18n.T("Using placeholder account"))
 	}
 }
@@ -260,8 +280,12 @@ func (w *Window) fromLocked() bool {
 	return w.params.InReplyTo != "" || w.params.Forwarding != ""
 }
 
-// account is the selected identity.
+// account is the selected identity; a comment's is the issue's account
+// (Manager.commentAccount), which writes no mail and is not in From.
 func (w *Window) account() api.Account {
+	if w.isComment() {
+		return w.m.commentAccount(w.params.AccountID)
+	}
 	if i := w.from.Selected(); i < uint(len(w.accounts)) {
 		return w.accounts[i]
 	}
@@ -321,7 +345,13 @@ func (w *Window) setCcBccVisible(cc, bcc bool) {
 // showCcBcc is the Cc/Bcc button: both lines at once.
 func (w *Window) showCcBcc() { w.setCcBccVisible(true, true) }
 
+// updateTitle shows the subject, or "New Message"; a comment names its
+// issue (jira.CommentTitle).
 func (w *Window) updateTitle() {
+	if c := w.params.Comment; c != nil {
+		w.title.SetTitle(jira.CommentTitle(c.Issue.Key, i18n.Tr))
+		return
+	}
 	if s := strings.TrimSpace(w.subject.Text()); s != "" {
 		w.title.SetTitle(s)
 	} else {

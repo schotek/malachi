@@ -113,7 +113,7 @@ func (v *messageView) openEmbeddedWindow(acc api.AccountID, id api.MessageID, a 
 			w.openEmbedded[key] = ew
 			ew.ConnectCloseRequest(func() bool {
 				ew.closed = true
-				ew.view.cancelSpinner()
+				ew.view.close()
 				delete(w.openEmbedded, key)
 				return false
 			})

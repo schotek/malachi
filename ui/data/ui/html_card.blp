@@ -1,0 +1,62 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using WebKit 6.0;
+// The body of one card of the conversation view (ui/internal/htmlview
+// Card): the backend-sanitised HTML of one message, in a view as tall as
+// its document. A copy of html_view.blp that differs in one thing only.
+//
+// The JavaScript engine is on, for one script of the application's own:
+// htmlview adds it from Go to html_card_ucm in an isolated world
+// ("malachi-size") with the only message handler ("size") registered in
+// that world, and it only reads the layout (the document's height). The
+// document can bring no script of its own: enable-javascript-markup off
+// makes the parser drop every script element, event-handler attribute and
+// javascript: URL; the CSP (default-src 'none') refuses inline and
+// external script besides; and the sanitiser has removed all of it before
+// (docs/security.md §3.2, layer 2). No window opening, no clipboard.
+//
+// Everything else is html_view.blp's: the construct-only properties
+// (network session, user content manager, settings, default CSP) set here,
+// the CSP allowing images from the application's own malachi-cid: scheme
+// and data: URIs and inline styles only, and the Go side pointing the
+// network session at an unreachable proxy and refusing every navigation but
+// the initial load.
+WebKit.WebView html_card {
+  hexpand: true;
+
+  network-session: WebKit.NetworkSession {
+    is-ephemeral: true;
+  };
+
+  user-content-manager: WebKit.UserContentManager html_card_ucm {};
+
+  default-content-security-policy: "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'";
+
+  settings: WebKit.Settings {
+    // The application's isolated-world script only; see above.
+    enable-javascript: true;
+    enable-javascript-markup: false;
+    javascript-can-open-windows-automatically: false;
+    javascript-can-access-clipboard: false;
+    enable-developer-extras: false;
+    enable-html5-local-storage: false;
+    enable-html5-database: false;
+    enable-offline-web-application-cache: false;
+    enable-media: false;
+    enable-mediasource: false;
+    enable-webgl: false;
+    enable-webaudio: false;
+    enable-page-cache: false;
+    enable-smooth-scrolling: false;
+    enable-dns-prefetching: false;
+    enable-hyperlink-auditing: false;
+    enable-site-specific-quirks: false;
+    allow-file-access-from-file-urls: false;
+    allow-universal-access-from-file-urls: false;
+    allow-top-navigation-to-data-urls: false;
+    allow-modal-dialogs: false;
+    auto-load-images: true;
+    enable-write-console-messages-to-stdout: false;
+  };
+}

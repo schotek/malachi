@@ -66,6 +66,10 @@ func main() {
 		// autostart entry): there is no window yet, so hold the application
 		// until the first activation shows one.
 		serviceHold bool
+		// newMessage is app.compose, set by addActions before the
+		// application runs: off while only accounts that write no mail
+		// (issue trackers) are known.
+		newMessage *gio.SimpleAction
 	)
 	app.ConnectStartup(func() {
 		// Attachments a previous run wrote for opening (docs/security.md §8).
@@ -74,6 +78,9 @@ func main() {
 		prefs = settings.Open(log)
 		style.Apply(prefs)
 		mgr = compose.NewManager(app, rpc, log, prefs)
+		// New Message needs an account that writes mail
+		// (capabilities.CanComposeNew): a Jira account only comments.
+		mgr.OnAccountsChanged = func() { newMessage.SetEnabled(mgr.CanComposeNew()) }
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
 				// A short confirmation: the outbox folder and the "sent"
@@ -133,7 +140,7 @@ func main() {
 		sup.Stop()
 	})
 
-	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
+	newMessage = addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))
 }
 
@@ -159,7 +166,8 @@ func addUninstalledIconPath() {
 
 // addActions registers application actions. store yields the settings store,
 // which exists only after startup has run; show presents the main window.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, show func(), composer func() *compose.Manager) {
+// It returns app.compose, which follows the accounts that write mail.
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, show func(), composer func() *compose.Manager) *gio.SimpleAction {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -202,6 +210,14 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	})
 	app.AddAction(addAccount)
 
+	// app.add-jira-account opens the Jira assistant from the main window's
+	// empty state, like app.add-account.
+	addJira := gio.NewSimpleAction("add-jira-account", nil)
+	addJira.ConnectActivate(func(*glib.Variant) {
+		accountwizard.NewJira(rpc, log).Present(app.ActiveWindow())
+	})
+	app.AddAction(addJira)
+
 	quit := gio.NewSimpleAction("quit", nil)
 	quit.ConnectActivate(func(*glib.Variant) { app.Quit() })
 	app.AddAction(quit)
@@ -214,6 +230,7 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	for action, accel := range window.MessageAccels {
 		app.SetAccelsForAction(action, []string{accel})
 	}
+	return newMessage
 }
 
 func newLogger() *slog.Logger {

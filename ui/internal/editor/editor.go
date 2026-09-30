@@ -79,6 +79,9 @@ func New(log *slog.Logger) *Editor {
 	})
 	e.ConnectWebProcessTerminated(func(reason webkit.WebProcessTerminationReason) {
 		e.ready = false
+		if reason == webkit.WebProcessTerminatedByApi {
+			return // Close ended it
+		}
 		e.log.Warn("web process terminated", "reason", int(reason))
 		if e.OnCrashed != nil {
 			e.OnCrashed()
@@ -104,6 +107,19 @@ func New(log *slog.Logger) *Editor {
 	})
 	e.AddController(drop)
 	return e
+}
+
+// Close ends the editor's web process at once, for an editor whose window
+// closes: without it the process lives on until the Go wrapper of the view
+// is collected, and compose windows opened and closed one after another
+// pile processes up until the sandbox cannot start another one. The
+// editor is dead afterwards.
+func (e *Editor) Close() {
+	e.OnCrashed, e.OnChanged, e.OnState, e.OnReady, e.OnDropFiles = nil, nil, nil, nil, nil
+	e.ready = false
+	e.waiters = nil
+	e.StopLoading()
+	e.TerminateWebProcess()
 }
 
 // Load replaces the document with bodyHTML (already safe for the page).

@@ -143,6 +143,10 @@ type Window struct {
 	// actions are the win.* actions by name (without the prefix).
 	actions map[string]*gio.SimpleAction
 
+	// issues is the controller of the Change Status menus of Jira issues
+	// (issue_actions.go), shared by the pane and the message windows.
+	issues *issueActions
+
 	outerSplit *adw.NavigationSplitView
 	innerSplit *adw.NavigationSplitView
 	listPage   *adw.NavigationPage
@@ -190,6 +194,10 @@ type Window struct {
 	forwardButton  *gtk.Button
 	outboxBanner   *adw.Banner
 	draftBanner    *adw.Banner // a message of the Drafts folder (drafts.go)
+
+	// conv is the pane's conversation view, made the first time a
+	// conversation is shown (conversation_view.go).
+	conv *conversationView
 }
 
 // Starter brings the daemon up before the window dials its socket
@@ -274,6 +282,15 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		draftBanner:    b.GetObject("draft_banner").Cast().(*adw.Banner),
 	}
 	w.SetApplication(&app.Application)
+	w.issues = &issueActions{
+		client:  c,
+		log:     w.log.With("component", "issues"),
+		post:    func(fn func()) { glib.IdleAdd(fn) },
+		account: w.model.account,
+		toast:   w.Toast,
+		onBusy:  w.setIssueBusy,
+		onIssue: w.applyIssue,
+	}
 	w.pane = newMessageView(w, &w.ApplicationWindow.Window, b)
 	w.pane.load = func() {
 		if s, ok := w.selectedMessage(); ok {
@@ -313,8 +330,9 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		s.OnChanged(key, w.applyListAppearance)
 	}
 	// Grouping is a different listing (thread.list): loadMessages notices
-	// the mode change and starts the folder over.
-	s.OnChanged(settings.KeyGroupByConversation, w.loadMessages)
+	// the mode change and starts the folder over, unless the folder keeps
+	// its mode (a Jira account's is always grouped).
+	s.OnChanged(settings.KeyGroupByConversation, w.groupingChanged)
 
 	// "Run in Background": closing hides the window instead of destroying
 	// it. A hidden window still keeps the GtkApplication alive, so no
@@ -466,6 +484,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 // directly when it changes the selection on the user's behalf.
 func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 	if row == nil {
+		w.hideConversation()
 		w.messageStack.SetVisibleChildName(w.emptyPageName())
 		w.outboxBanner.SetRevealed(false)
 		w.draftBanner.SetRevealed(false)
@@ -477,7 +496,13 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 	if !ok {
 		return
 	}
-	// A conversation row shows (and marks read) its newest folder member.
+	// A folded conversation row shows the whole conversation, marking its
+	// newest message read (conversation_view.go); any other row its message.
+	if w.showConversation(r) {
+		w.setMessageActionsSensitive(true)
+		w.innerSplit.SetShowContent(true)
+		return
+	}
 	s := r.Message
 	w.showMessage(s.ID)
 	w.setMessageActionsSensitive(true)
@@ -529,6 +554,49 @@ func (w *Window) registerActions() {
 	w.addAction("toggle-flag", false, forRows(func(row listRow, ids []api.MessageID) { w.setFlaggedIDs(ids, w.model.flagTarget(row)) }))
 	w.addAction("load-images", false, forSelected(w.loadRemoteImages))
 	w.addAction("trust-sender", false, forSelected(w.trustSender))
+	// Change Status pops up the menu of the issue card on display: the
+	// conversation's, or the single message's.
+	w.addAction("change-status", false, func() {
+		switch {
+		case w.conversationShown():
+			if w.conv.issueCard != nil {
+				w.conv.issueCard.popupStatus()
+			}
+		case w.pane.card != nil:
+			w.pane.card.popupStatus()
+		}
+	})
+}
+
+// setIssueBusy shows the spinner of a running transition on the issue
+// cards showing the issue key of acc (issueActions onBusy).
+func (w *Window) setIssueBusy(acc api.AccountID, key string, busy bool) {
+	for _, v := range w.messageViews() {
+		if v.card != nil && v.shown.AccountID == acc {
+			v.card.setBusy(busy, key)
+		}
+	}
+	w.conversationSetIssueBusy(acc, key, busy)
+}
+
+// applyIssue shows the refreshed issue of a transition on every card
+// showing it (issueActions onIssue); the list and the messages follow with
+// the daemon's notifications.
+func (w *Window) applyIssue(acc api.AccountID, info api.IssueInfo) {
+	for _, v := range w.messageViews() {
+		v.applyIssue(acc, info)
+	}
+	w.conversationApplyIssue(acc, info)
+}
+
+// messageViews are the displays of one message: the pane's and every
+// message window's.
+func (w *Window) messageViews() []*messageView {
+	out := []*messageView{w.pane}
+	for _, mw := range w.openMessages {
+		out = append(out, mw.view)
+	}
+	return out
 }
 
 // addAction registers one stateless win.<name> action.
@@ -597,6 +665,10 @@ func (w *Window) showConnectionState(s client.State, err error) {
 		go w.fetchSystemInfo()
 		w.loadAccounts()
 		w.loadSyncStatus()
+		// The compose windows' accounts, and whether New Message is on
+		// (an issue tracker alone writes no mail), may have changed with
+		// the daemon.
+		w.compose.Invalidate()
 	default:
 		// A daemon of another protocol version does run (the status line
 		// names it): the banner saying that none does would be wrong.

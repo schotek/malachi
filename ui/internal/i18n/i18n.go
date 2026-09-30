@@ -67,3 +67,21 @@ func N(singular, plural string, n int) string {
 func C(context, msgid string) string {
 	return glib.Dpgettext2(Domain, context, msgid)
 }
+
+// Translator is T, N and C as a value, for the pure packages that take
+// their texts through one (jira.Translator, conversation.Translator): they
+// hold no gettext of their own, so that their tests run without it and
+// the other clients port them one to one.
+type Translator struct{}
+
+// Tr is the Translator of the malachi domain.
+var Tr Translator
+
+// T is T.
+func (Translator) T(msgid string) string { return T(msgid) }
+
+// N is N.
+func (Translator) N(singular, plural string, n int) string { return N(singular, plural, n) }
+
+// C is C.
+func (Translator) C(context, msgid string) string { return C(context, msgid) }

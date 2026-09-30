@@ -162,7 +162,8 @@ func (w *Window) imagesDone(id api.MessageID, lm *loadedMessage) {
 // refreshRemoteBar redraws the bar of message id wherever it is on display
 // and leaves the body alone (showLoaded would reload the web view).
 func (w *Window) refreshRemoteBar(id api.MessageID, lm *loadedMessage) {
-	if s, ok := w.selectedMessage(); ok && s.ID == id {
+	w.conversationRefreshBars(id, lm)
+	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {
 		renderRemoteBar(w.pane, lm)
 	}
 	if mw, ok := w.openMessages[id]; ok {
@@ -173,7 +174,8 @@ func (w *Window) refreshRemoteBar(id api.MessageID, lm *loadedMessage) {
 // showLoaded re-renders message id wherever it is on display: the pane
 // when it is the selected message, and its own window when one is open.
 func (w *Window) showLoaded(id api.MessageID, lm *loadedMessage) {
-	if s, ok := w.selectedMessage(); ok && s.ID == id {
+	w.conversationShowLoaded(id, lm)
+	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {
 		w.paneLabels().render(s, lm)
 	}
 	if mw, ok := w.openMessages[id]; ok {
@@ -356,7 +358,8 @@ func renderPicturesBar(v *messageView, lm *loadedMessage) {
 // refreshPicturesBar redraws the pictures bar of message id wherever it is
 // on display and leaves the body alone.
 func (w *Window) refreshPicturesBar(id api.MessageID, lm *loadedMessage) {
-	if s, ok := w.selectedMessage(); ok && s.ID == id {
+	w.conversationRefreshBars(id, lm)
+	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {
 		renderPicturesBar(w.pane, lm)
 	}
 	if mw, ok := w.openMessages[id]; ok {

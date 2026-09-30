@@ -357,9 +357,9 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Účty Jira (`kind: jira`) — backend a macOS hotovo (čtení, komentáře,
-   změna stavu, notifikační maily, zobrazení konverzace); GTK a Windows
-   zbývají
+8. Účty Jira (`kind: jira`) — backend, macOS a GTK hotovo (čtení,
+   komentáře, změna stavu, notifikační maily, zobrazení konverzace);
+   Windows zbývá
    (reference `ui/internal/jira`, `ui/internal/capabilities`,
    `ui/internal/conversation`)
 
@@ -564,13 +564,43 @@ a uzavřené stavy, notifikační maily, boti s nabídkou „Issue Sync“;
 `notify.messagesChanged` → `MailboxController.handleMessagesChanged`.
 Čistá logika nejdřív jako reference v Go (`ui/internal/jira` — texty,
 karta, události, průvodce, compose, nastavení; `ui/internal/capabilities`;
-testované na Macu), portovaná 1:1 do `MalachiCore/Jira`; msgidy ručně
-připsané do `po/malachi.pot` a `po/cs.po`; GTK widgety a Windows UI
-zbývají (`windows/parity-exclusions.txt` „Jira account: macOS first“;
-funkce označené „Swift-first“ v `FolderTree`, `AccountsPage`,
-`ActionRules`, `MailModel+Jira`, `NotificationText`, `SyncStatus`,
-`MailboxController.handleMessagesChanged`). Zobrazení konverzace (zatím
-jen macOS, reference `ui/internal/conversation`, „Conversation view: macOS
+testované na Macu), portovaná 1:1 do `MalachiCore/Jira`; Windows UI
+zbývá (`windows/parity-exclusions.txt` „Jira account: macOS first“;
+funkce označené „Swift-first“ a kde je GTK zrcadlí: tabulka
+v `macos/README.md`). GTK (2026-09-30) používá referenční balíčky tak,
+jak jsou, přes `i18n.Tr` (adaptér `jira.Translator` nad `i18n.T/N/C`)
+a nepřidalo žádný msgid: sidebar (`model.go` `accountLabel`,
+`sortSiblings` s `VirtualRank`, `folderIcon`, `accountHeaderBadge`;
+`folders.go` kapsle druhu za jménem každého účtu — JIRA, u pošty
+poskytovatel `GOOGLE`/`M365` podle `signin.Provider`, jinak `IMAP`; GTK
+první, macOS a Windows ukazují zatím jen JIRA —, názvy pohledů), seznam
+(`groupedListing` = nastavení nebo `alwaysGrouped`, `groupingChanged`
+nechá jira složku být, `countsUnread`, `widget/message_row.go` klíč,
+pilulky `widget/pill.go` a řádky událostí; CSS pilulek v
+`internal/style`), karta issue nad hlavičkou v panelu i okně zprávy
+(`issue_reading.go`, `issue_card.go`: klíč otevře jen URL vlastního
+site, pilulka stavu je `MenuButton` s popoverem přechodů načteným při
+otevření; `issue_actions.go` = port `IssueActionsController` s testy;
+„Změnit stav“ v menu Další akce `win.change-status` / `msg.change-status`,
+skryté, když účet stavy nemění), akce podle capabilities
+(`action_rules.go` + `actions.go`: nepodporované akce zmizí z lišty,
+Odpovědět → Komentovat s ikonou `chat-message-new-symbolic`; `compose_open.go`
+`openComment` bez náhradního předvyplnění, přeposlání přes
+`capabilities.ForwardFrom` s `messageAccountId`), režim komentáře okna
+Nová zpráva (`compose/comment.go`, větve v `draft.go`, `Manager.Accounts`
+= `ComposeAccounts`, `CanComposeNew` řídí `app.compose` v `main.go`),
+průvodce (`accountwizard/jira_flow.go` čistý tok s testy proti falešnému
+démonovi, `jira.go` + `jira_wizard.blp`; *Přidat Jira účet…* v nabídce
+„+“ Předvoleb → Účty a na prázdném okně `app.add-jira-account`),
+nastavení účtu (`ui/internal/jiraaccount`: `Controller` s testy,
+`Dialog` + `jira_account.blp`, `TokenReplaced` po novém tokenu), cesty
+„Upravit účet“ (`accounts_page.go` `accountEditor`/`jiraEditor`,
+`jira_editors.go`: banner přihlášení s důvodem → průvodce na tokenu,
+jinak nastavení; nikdy poštovní průvodce), `notify.messagesChanged`
+(`notify.go` `handleMessagesChanged`, `evictAccount`, `refreshShown`,
+`forgetMembers`), texty notifikací (`issueNotificationLine`) a banneru
+(`accountAuthBannerTitle`). Zobrazení konverzace (macOS a GTK, reference
+`ui/internal/conversation`, pro Windows „Conversation view: macOS
 first“): výběr sbaleného řádku vlákna (≥ 2 členů ve složce; jira složky
 vždy) ukáže v panelu čtení celé vlákno jako nativní karty od nejstarší
 s časovou osou v levém okraji, u jira kartou issue nahoře a událostmi jako
@@ -579,7 +609,22 @@ událost; každá HTML karta má vlastní uzamčený WKWebView v režimu `sized`
 (výšku hlásí skript aplikace ve vlastním světě, JS obsahu vypnutý, strop
 4000 pt, nejvýš 8 živých pohledů; `ConversationLayout.swift`,
 `ConversationViewController.swift`), nikdy jeden složený dokument — CSS
-jedné zprávy by přepsalo hlavičky ostatních. `MALACHI_DATA_DIR` přebíjí
+jedné zprávy by přepsalo hlavičky ostatních. GTK: `window/conversation_*.go`
+(jako issue v Jiře: nahoře karta issue, pod ní úvodní zpráva — popis
+issue, u pošty nejstarší neořezaná zpráva — sbalená na hlavičku
+a náhled, dokud následuje jiná zpráva, pak ostatní od nejnovější,
+`convDisplayOrder`, otevřené nahoře — rozhodnutí uživatele 2026-09-30,
+model i macOS zůstávají od nejstarší; řádek starších zpráv dole; controller
+a layout čisté a testované, stránka `conversation_view.blp`
+přidaná do `message_stack` při prvním použití, karty znovu používají
+čipy, adresy a lišty panelu přes vlastní `messageView`, mezerník
+a Shift+mezerník v seznamu listují), karta `htmlview/card.go`
++ `html_card.blp`: WebKitGTK neumí vypnout jen JS obsahu, proto
+`enable-javascript` zapnutý se `enable-javascript-markup` vypnutým,
+jediný skript aplikace ve světě `malachi-size` s handlerem `size`
+registrovaným jen tam (`size.go`, Go bere jen ověřené číslo), strop
+4000 px a zmrazení výšky (`webHeightGovernor`); samostatný pohled zprávy
+má JS dál vypnutý úplně (`docs/security.md` §3.2). `MALACHI_DATA_DIR` přebíjí
 datový adresář i na macOS (`Daemon/Paths.swift`, jako na Windows).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
@@ -630,20 +675,24 @@ komprese a příloh na vyžádání, Microsoft účty).
   `windows/src` musí v šabloně být (s kontextem i plurálem).
 - Msgidy Jira účtů a zobrazení konverzace (`ui/internal/jira/*.go`,
   `ui/internal/conversation/conversation.go`, v `po/POTFILES` za
-  `ui/internal/compose/suggest.go`) byly do `po/malachi.pot` a `po/cs.po`
-  připsány ručně s odkazy `#: soubor` bez čísel řádků, protože macOS
-  klient vznikl dřív než GTK widgety: `make lint` je hlásí jako
-  zastaralou šablonu, dokud v Toolbxu neproběhne `make po`, které je
-  přečísluje a seřadí (překlady v `cs.po` zůstanou). Windows je má
-  v `windows/parity-exclusions.txt` („Jira account: macOS first“,
-  „Conversation view: macOS first“); s portem se odtud mažou.
+  `ui/internal/compose/suggest.go`) vznikly s macOS klientem před GTK
+  widgety; od GTK portu je `make po` přečísloval a GTK je používá přes
+  `i18n.Tr`. Windows je má v `windows/parity-exclusions.txt` („Jira
+  account: macOS first“, „Conversation view: macOS first“); s portem se
+  odtud mažou.
 - Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
   tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
   store změnila dřív, než je větev v `main`. Na macOS
   `MALACHI_DATA_DIR=<kopie adresáře Application Support> MALACHI_SOCKET=<vlastní
   rpc.sock>` pro app i démona (`Daemon/Paths.swift`, stejně jako Windows
   agent v `%TEMP%`), `malachi-mcp` čte totéž `MALACHI_SOCKET`; vlastní
-  socket je nutný, jinak app převezme démona nad ostrým storem. Komentáře
+  socket je nutný, jinak app převezme démona nad ostrým storem. Na
+  Linuxu kopie `~/.local/share/malachi` (store i `messages/`, démon
+  zastavený) a `config.toml`, démon ručně `./build/malachid --config
+  <kopie>/config.toml --store <kopie>/store.db --socket
+  $XDG_RUNTIME_DIR/malachi-test.sock` a UI s `MALACHI_SOCKET` na týž
+  socket a `MALACHI_DAEMON=none` (`make run-frontend`); XDG proměnné
+  UI neměň, přesměrovaly by i dconf s předvolbami. Komentáře
   na produkční Jiře jen do issue, které uživatel sám určí; Data Center
   není k dispozici a ověřuje se jen fakem `internal/jira/jiratest`.
 - Windows: XAML kompilátor je nástroj .NET Frameworku bez podpory dlouhých

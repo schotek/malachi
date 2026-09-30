@@ -626,13 +626,18 @@ reverse: the msgids are in `po/` already (appended by hand, `make po`
 renumbers them) and on the Windows side in `parity-exclusions.txt`;
 every Swift function without a Go counterpart is marked `Swift-first`
 with the Go file it belongs in, and
-[macos/README.md](../macos/README.md#swift-first-what-the-gtk-ui-still-has-to-mirror)
+[macos/README.md](../macos/README.md#swift-first-where-the-gtk-ui-mirrors-it)
 lists them for the port; the deviations (the assistant and the settings
 as sheets, the JIRA capsule, the conversation view with its per-card web
 views, `MALACHI_DATA_DIR`) are in its table. The daemon needed nothing
 platform-specific: `MALACHI_DATA_DIR` is the app's reading of its own
 paths, and the test copies the feature was verified on ran beside the
-everyday store with their own socket.
+everyday store with their own socket. The GTK UI followed on
+2026-09-30: it uses the Go reference as it is and mirrors the
+Swift-first functions where
+[macos/README.md](../macos/README.md#swift-first-where-the-gtk-ui-mirrors-it)
+said, so the two clients are at parity again and the order of §10
+holds for what comes next.
 
 **Distribution is still ahead.** The bundle is ad-hoc signed for the
 machine it was built on. Not done: Apple Developer Program membership,

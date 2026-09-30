@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -50,6 +51,12 @@ type loadedMessage struct {
 	err  error // message.body failure
 
 	seq uint64 // insertion order in Window.loaded
+
+	// account is the account of the message, from the fetch that made the
+	// entry: evictAccount finds the entries of an account whose messages
+	// the daemon rebuilt (notify.messagesChanged). "" for an entry made
+	// without one.
+	account api.AccountID
 
 	// In-flight halves and who wants to hear about them; a second
 	// fetchMessage for the same id while one runs joins instead of asking
@@ -101,6 +108,11 @@ type messageView struct {
 	stack               *gtk.Stack // "text" | "loading" | "html"
 	slot                *gtk.Box   // hosts html
 	html                *htmlview.View
+
+	// card is the issue card over the headers of a Jira message
+	// (issue_card.go); nil on the view of an attached message, whose
+	// builder has no slot for it.
+	card *issueCard
 
 	// The From, To and Cc chips (addresses.go).
 	addresses *addressHeader
@@ -170,6 +182,10 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		trustButton: b.GetObject("remote_trust").Cast().(*gtk.Button),
 	}
 	v.addresses = newAddressHeader(v, b)
+	if slot := b.GetObject("issue_card_slot"); slot != nil {
+		v.card = newIssueCard(w, parent, func() (issueSubject, bool) { return subjectOf(v.shown) })
+		slot.Cast().(*gtk.Box).Append(v.card)
+	}
 	v.plain()
 	v.hint.SetLabel(i18n.T("The formatted version of this message could not be shown safely; this is its plain text."))
 	load, trust := v.loadButton, v.trustButton
@@ -256,6 +272,15 @@ func (v *messageView) htmlView() *htmlview.View {
 	return v.html
 }
 
+// close ends the HTML view's web process, if there is one: the view's
+// window closes.
+func (v *messageView) close() {
+	v.cancelSpinner()
+	if v.html != nil {
+		v.html.Close()
+	}
+}
+
 // setZoom pushes the text-zoom setting to the HTML view, if there is one.
 func (v *messageView) setZoom(percent int) {
 	if v.html != nil {
@@ -274,21 +299,66 @@ func (v *messageView) showText(text string) {
 
 // renderHeaders shows the headers: from the summary alone, or from the full
 // message when m is not nil (recipients with Cc). The attachment chips are
-// renderAttachments' business: they depend on the body too.
-func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) {
+// renderAttachments' business: they depend on the body too. A message of a
+// Jira account gets the issue card, and the issue's summary is its subject
+// (the card has the key); what it shows of the issue is returned (nil for
+// mail).
+func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) *issueReading {
 	from, to, date := s.From, s.To, s.Date
 	var cc []api.Address
+	summary := s
 	if m != nil {
 		from, to, cc, date = m.From, m.To, m.CC, m.Date
 		s.Subject = m.Subject
 	}
-	v.subject.SetLabel(subjectText(s.Subject))
+	var issue *issueReading
+	if r, ok := readIssue(summary, m, v.win.model.issueSite(s.AccountID)); ok {
+		issue = &r
+		v.subject.SetLabel(r.subject)
+	} else {
+		v.subject.SetLabel(subjectText(s.Subject))
+	}
+	if v.card != nil {
+		v.card.show(issue, s.AccountID, v.win.issues.canTransition(s.AccountID))
+	}
 	v.addresses.show(s.ID, s.AccountID, from, to, cc)
 	if date.IsZero() {
 		v.date.SetLabel("")
 	} else {
 		v.date.SetLabel(widget.FormatDateTime(date))
 	}
+	return issue
+}
+
+// renderEvent shows an event of an issue (a status or assignee change) in
+// place of a body: its changes as sentences (issueReading.eventBody), no
+// bars.
+func (v *messageView) renderEvent(text string) {
+	v.cancelSpinner()
+	v.links = nil
+	v.hint.SetVisible(false)
+	v.setBarVisible(false)
+	v.showPicturesBar(picturesBarState{})
+	v.showText(text)
+}
+
+// applyIssue shows the refreshed issue of a transition (issueActions
+// onIssue) on the card at once when it is the issue on display; the
+// message's own summary follows with the daemon's notifications.
+func (v *messageView) applyIssue(acc api.AccountID, info api.IssueInfo) {
+	s := v.shown
+	if v.card == nil || s.AccountID != acc || s.Issue == nil || jira.Clean(s.Issue.Key) != jira.Clean(info.Key) {
+		return
+	}
+	item := *s.Issue
+	item.IssueInfo = info
+	s.Issue = &item
+	r, ok := readIssue(s, nil, v.win.model.issueSite(acc))
+	if !ok {
+		return
+	}
+	v.card.show(&r, acc, v.win.issues.canTransition(acc))
+	v.subject.SetLabel(r.subject)
 }
 
 // renderBody shows the body, its state, or the error that prevented it:
@@ -328,13 +398,18 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	v.shown, v.shownLoaded = s, lm
 	if lm == nil {
-		v.renderHeaders(s, nil)
-		v.loading()
+		if issue := v.renderHeaders(s, nil); issue != nil && issue.event {
+			v.renderEvent(issue.eventBody)
+		} else {
+			v.loading()
+		}
 		v.renderAttachments(s, nil)
 		return
 	}
-	v.renderHeaders(s, lm.msg)
-	if lm.bodySettled() {
+	issue := v.renderHeaders(s, lm.msg)
+	if issue != nil && issue.event {
+		v.renderEvent(issue.eventBody)
+	} else if lm.bodySettled() {
 		v.renderBody(lm)
 	} else {
 		v.loading()
@@ -410,6 +485,11 @@ func (w *Window) showMessage(id api.MessageID) {
 	w.outboxBanner.SetRevealed(false)
 	w.draftBanner.SetRevealed(w.model.inDrafts(s))
 	w.messageStack.SetVisibleChildName("message")
+	if readsWithoutBody(s) {
+		// A status or assignee change: its changes are the whole message,
+		// there is no body to fetch.
+		return
+	}
 	w.fetchMessage(s.AccountID, id, func(lm *loadedMessage) {
 		if gen != w.model.bodyGen {
 			return // the pane moved on
@@ -427,6 +507,9 @@ func (w *Window) showMessage(id api.MessageID) {
 // and stays valid whatever the pane shows now.
 func (w *Window) fetchMessage(acc api.AccountID, id api.MessageID, done func(*loadedMessage)) {
 	lm := w.loadedFor(id)
+	if lm.account == "" {
+		lm.account = acc
+	}
 	if lm.complete() {
 		done(lm)
 		return
@@ -556,12 +639,16 @@ func (w *Window) openMessageWindow(id api.MessageID) {
 	w.openMessages[id] = mw
 	mw.ConnectCloseRequest(func() bool {
 		mw.closed = true
-		// The only timer that would outlive the window.
-		mw.view.cancelSpinner()
+		// The only timer that would outlive the window, and the web
+		// process, which would live until the view is collected.
+		mw.view.close()
 		delete(w.openMessages, id)
 		return false
 	})
 	mw.Present()
+	if readsWithoutBody(s) {
+		return // an event of an issue: nothing to fetch
+	}
 	w.fetchMessage(s.AccountID, id, func(lm *loadedMessage) {
 		if mw.closed {
 			return

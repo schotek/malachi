@@ -68,6 +68,20 @@ ListBoxRow message_row {
           hexpand: true;
         }
 
+        // The change of an event row of a Jira account (a status or
+        // assignee change) after its actor; hidden otherwise.
+        Label event_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+          visible: false;
+
+          styles [
+            "caption",
+            "dim-label",
+          ]
+        }
+
         // Member count of a conversation row; hidden below two.
         Label count_badge {
           visible: false;
@@ -132,9 +146,50 @@ ListBoxRow message_row {
         }
       }
 
-      Label subject_label {
-        xalign: 0;
-        ellipsize: end;
+      // The subject; on a row of a Jira account the issue's key before the
+      // summary and its status (and the Internal badge of an internal
+      // comment) after it, as pills styled by the application CSS
+      // (widget/pill.go).
+      Box subject_line {
+        orientation: horizontal;
+        spacing: 6;
+
+        Label issue_key {
+          visible: false;
+
+          styles [
+            "caption",
+            "numeric",
+            "dim-label",
+          ]
+        }
+
+        Label subject_label {
+          xalign: 0;
+          ellipsize: end;
+          hexpand: true;
+        }
+
+        Label status_pill {
+          visible: false;
+          valign: center;
+          ellipsize: end;
+          max-width-chars: 24;
+
+          styles [
+            "issue-pill",
+          ]
+        }
+
+        Label internal_pill {
+          visible: false;
+          valign: center;
+
+          styles [
+            "issue-pill",
+            "internal-pill",
+          ]
+        }
       }
 
       Label preview_label {
