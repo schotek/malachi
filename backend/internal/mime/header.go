@@ -202,12 +202,12 @@ func (p *parser) date(raw string) time.Time {
 	return time.Time{}
 }
 
-// msgIDs parses a message identifier list, falling back to whitespace
-// splitting when the strict parser rejects the field, and returns at most
-// max distinct cleaned identifiers without angle brackets: the first max,
-// or with tail the last max (References lists ancestors oldest first, and
-// the nearest ones are what threading links on). A repeated identifier
-// counts once, so repetition cannot fill the cap.
+// msgIDs parses a message identifier list, falling back to msgIDFields
+// when the strict parser rejects the field, and returns at most max
+// distinct cleaned identifiers without angle brackets: the first max, or
+// with tail the last max (References lists ancestors oldest first, and the
+// nearest ones are what threading links on). A repeated identifier counts
+// once, so repetition cannot fill the cap.
 func (p *parser) msgIDs(mh *msgmail.Header, key string, max int, tail bool) []string {
 	raw := mh.Get(key)
 	if strings.TrimSpace(raw) == "" {
@@ -218,9 +218,7 @@ func (p *parser) msgIDs(mh *msgmail.Header, key string, max int, tail bool) []st
 		p.problem(strings.ToLower(key) + ": " + err.Error())
 	}
 	if len(list) == 0 {
-		for _, f := range strings.Fields(cleanField(raw, 0)) {
-			list = append(list, strings.Trim(f, "<>"))
-		}
+		list = msgIDFields(raw)
 	}
 	out := make([]string, 0, min(len(list), max))
 	seen := make(map[string]bool, min(len(list), max))
@@ -264,9 +262,20 @@ func ParseReferences(r io.Reader, limits Limits) []string {
 // firstMsgID extracts the first identifier from a raw Message-ID value
 // that the strict parser rejected.
 func firstMsgID(raw string) string {
-	f := strings.Fields(cleanField(raw, 0))
+	f := msgIDFields(raw)
 	if len(f) == 0 {
 		return ""
 	}
-	return strings.Trim(f[0], "<>")
+	return f[0]
+}
+
+// msgIDFields splits an identifier field the strict parser rejected into
+// candidate identifiers. Whitespace and angle brackets both separate them:
+// a bracket is never part of an identifier, so a stray one ("0>0") ends
+// the identifier instead of surviving inside it, and identifiers written
+// without a space between them ("<a@x><b@x>") stay apart.
+func msgIDFields(raw string) []string {
+	return strings.FieldsFunc(cleanField(raw, 0), func(r rune) bool {
+		return r == ' ' || r == '<' || r == '>'
+	})
 }

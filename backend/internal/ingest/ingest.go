@@ -329,8 +329,13 @@ func verify(stored *store.Message, p *mime.Parsed, parts bool) error {
 
 // messageIDKey compares Message-IDs the way two parsers agree on them: the
 // envelope's (IMAP ENVELOPE, Graph's internetMessageId) and the parser's
-// differ at most in brackets, folding and case.
+// differ at most in brackets, folding and case. A row stored before the
+// parser split identifiers at a stray bracket may hold one inside ("0>0");
+// what precedes it is what the parser reads now.
 func messageIDKey(s string) string {
 	s = strings.Trim(strings.TrimSpace(s), "<>")
+	if i := strings.IndexAny(s, "<>"); i >= 0 {
+		s = s[:i]
+	}
 	return strings.ToLower(strings.Join(strings.Fields(s), ""))
 }

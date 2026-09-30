@@ -9,7 +9,6 @@ import (
 	"io"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/emersion/go-imap/v2"
@@ -488,11 +487,12 @@ func addresses(in []imap.Address) []api.Address {
 	return out
 }
 
-// cleanID normalises a Message-ID style identifier: no brackets, no
-// whitespace or control characters, capped.
+// cleanID normalises a Message-ID style identifier the way the parser does
+// (mime.TrimMessageID): no brackets, no whitespace or control characters,
+// capped. The envelope's value is what the store keeps, so it must obey
+// the same rules as the one parsed from the body later.
 func cleanID(s string) string {
-	s = cleanField(strings.Trim(strings.TrimSpace(s), "<>"), maxFieldBytes)
-	return strings.Join(strings.Fields(s), "")
+	return mime.TrimMessageID(s)
 }
 
 // syncFlags re-reads the flags of messages both sides know.

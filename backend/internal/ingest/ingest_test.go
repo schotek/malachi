@@ -576,6 +576,37 @@ func TestStoreRefusesMismatch(t *testing.T) {
 	f.stagingEmpty(t)
 }
 
+// The stored Message-ID and the parser's name the same message despite
+// brackets, folding and case, and despite a stray bracket that an older
+// parser left in the stored one.
+func TestMessageIDKey(t *testing.T) {
+	cases := []struct {
+		stored, parsed string
+		same           bool
+	}{
+		{"a@x", "A@X", true},
+		{"<a@x>", "a@x", true},
+		{"0>0", "0", true},
+		{"x>y@example.org", "x", true},
+		{"0>0", "1", false},
+		{"a@x", "b@x", false},
+	}
+	for _, c := range cases {
+		if same := messageIDKey(c.stored) == messageIDKey(c.parsed); same != c.same {
+			t.Errorf("%q vs %q: same = %v", c.stored, c.parsed, same)
+		}
+	}
+	// Downloaded again, the message whose stored id an older parser took
+	// as "0>0" is still the stored one.
+	p, err := mime.Parse(strings.NewReader("Message-ID: <0>0>\r\n\r\nbody\r\n"), mime.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := verify(&store.Message{RFCMessageID: "0>0"}, p, false); err != nil {
+		t.Errorf("legacy id: %v", err)
+	}
+}
+
 // Strip settles what it cannot or need not reduce, so the background pass
 // does not come back to it.
 func TestStripSettles(t *testing.T) {

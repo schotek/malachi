@@ -1,0 +1,11 @@
+From: Eve <eve@example.org>
+To: bob@example.net
+Subject: Re: stray brackets
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+MessAge-ID:0>0
+In-Reply-To: <parent>@example.org>
+References: junk <root@example.org><mid@example.org> x>y@example.org
+ <<parent@example.org>> <tail@example.org
+Content-Type: text/plain; charset=utf-8
+
+Angle brackets where no identifier has them.

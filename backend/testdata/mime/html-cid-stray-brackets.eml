@@ -1,0 +1,26 @@
+From: Eve <eve@example.org>
+To: bob@example.net
+Subject: Pictures
+Date: Tue, 2 Sep 2026 10:15:00 +0200
+Message-ID: <cid-brackets@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<p>Two pictures:</p><img src="cid:pic>1@example.org"><img src="cid:pic2@example.org">
+--rel
+Content-Type: image/png
+Content-ID: <pic>1@example.org>
+Content-Disposition: inline
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--rel
+Content-Type: image/png
+Content-ID: <pic2@example.org>
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgo=
+--rel--

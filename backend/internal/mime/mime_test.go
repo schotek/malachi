@@ -694,6 +694,72 @@ func TestThreadingHeaders(t *testing.T) {
 	if p.MessageID != "" || len(p.References) != 2 {
 		t.Errorf("no message-id: id %q refs %v", p.MessageID, p.References)
 	}
+
+	// The fallback splits at stray brackets as at whitespace.
+	p = parseFile(t, "thread-stray-brackets.eml")
+	refs := []string{"junk", "root@example.org", "mid@example.org", "x", "y@example.org", "parent@example.org", "tail@example.org"}
+	if p.MessageID != "0" || p.InReplyTo != "parent" || !reflect.DeepEqual(p.References, refs) {
+		t.Errorf("stray brackets: id %q in-reply-to %q refs %q", p.MessageID, p.InReplyTo, p.References)
+	}
+
+	// The strict parser accepts a bracket inside a domain literal; such an
+	// identifier is dropped, the valid ones around it stay.
+	p = parseFile(t, "thread-bracket-literal.eml")
+	refs = []string{"root@example.org", "parent@example.org"}
+	if p.MessageID != "" || p.InReplyTo != "second@example.org" || !reflect.DeepEqual(p.References, refs) {
+		t.Errorf("bracket literal: id %q in-reply-to %q refs %q", p.MessageID, p.InReplyTo, p.References)
+	}
+}
+
+// FuzzParse found "MessAge-ID:0>0" keeping its '>': the fallback trimmed
+// brackets only at the ends of a whitespace-separated field. No bracket may
+// survive in any of the three identifier fields, on either parser path.
+func TestStrayAngleBrackets(t *testing.T) {
+	p := parseString(t, "MessAge-ID:0>0", DefaultLimits())
+	if p.MessageID != "0" {
+		t.Errorf("crasher: message-id %q", p.MessageID)
+	}
+	cases := []struct {
+		header, id, inReplyTo string
+		refs                  []string
+	}{
+		{"Message-ID: <0>0>", "0", "", nil},
+		{"Message-ID: a<b@x", "a", "", nil},
+		{"Message-ID: <a@[b>c]>", "", "", nil},
+		{"Message-ID: <a@[<]>", "", "", nil},
+		{"In-Reply-To: 0>0", "", "0", nil},
+		{"In-Reply-To: <a@[b>c]> <b@x>", "", "b@x", nil},
+		{"References: 0>0 1<1", "", "", []string{"0", "1"}},
+		{"References: junk <a@x><b@x>", "", "", []string{"junk", "a@x", "b@x"}},
+		{"References: <a@x> <m@[<>]> <b@x>", "", "", []string{"a@x", "b@x"}},
+	}
+	for _, c := range cases {
+		q := parseString(t, c.header+"\r\n\r\n", DefaultLimits())
+		if q.MessageID != c.id || q.InReplyTo != c.inReplyTo || !reflect.DeepEqual(q.References, c.refs) {
+			t.Errorf("%q: id %q, in-reply-to %q, references %q", c.header, q.MessageID, q.InReplyTo, q.References)
+		}
+	}
+	// A client replying to the broken message writes its id between
+	// brackets; the reply must still name the identifier the parent got.
+	reply := parseString(t, "In-Reply-To: <0>0>\r\n\r\n", DefaultLimits())
+	if reply.InReplyTo != p.MessageID {
+		t.Errorf("reply names %q, parent is %q", reply.InReplyTo, p.MessageID)
+	}
+}
+
+// A Content-ID with a bracket inside names no identifier: the part is an
+// ordinary attachment, not a picture the HTML shows, and ExtractPart agrees.
+func TestContentIDStrayBracket(t *testing.T) {
+	p := parseFile(t, "html-cid-stray-brackets.eml")
+	stray, ok1 := attachmentByPart(p, "2")
+	clean, ok2 := attachmentByPart(p, "3")
+	if !ok1 || !ok2 || stray.ContentID != "" || stray.Inline || clean.ContentID != "pic2@example.org" || !clean.Inline || !p.HasAttachments {
+		t.Errorf("attachments = %+v", p.Attachments)
+	}
+	part, err := ExtractPart(bytes.NewReader(readFile(t, "html-cid-stray-brackets.eml")), "2", DefaultLimits(), 0)
+	if err != nil || part.ContentID != "" || part.Inline {
+		t.Errorf("part 2 = %+v, %v", part, err)
+	}
 }
 
 func TestParseReferences(t *testing.T) {
@@ -709,6 +775,8 @@ func TestParseReferences(t *testing.T) {
 		{"empty", "", nil},
 		{"garbage", "References: <a@x b@x> junk\r\n\r\n", []string{"a@x", "b@x", "junk"}},
 		{"duplicates", "References: <a@x> <b@x> <a@x>\r\n\r\n", []string{"a@x", "b@x"}},
+		{"stray brackets", "References: 0>0 <a@x><b@x> c@x>\r\n\r\n", []string{"0", "a@x", "b@x", "c@x"}},
+		{"bracket in literal", "References: <a@x> <b@[<]> <c@x>\r\n\r\n", []string{"a@x", "c@x"}},
 	}
 	for _, c := range cases {
 		if got := ParseReferences(strings.NewReader(c.in), limits); !reflect.DeepEqual(got, c.want) {
@@ -995,6 +1063,26 @@ func TestCleanField(t *testing.T) {
 	}
 	if got := cleanField("no cap "+strings.Repeat("x", 5000), 0); len(got) != 5007 {
 		t.Errorf("uncapped length = %d", len(got))
+	}
+}
+
+func TestTrimMessageID(t *testing.T) {
+	cases := map[string]string{
+		"<a@x>":     "a@x",
+		" <a\t@x> ": "a@x",
+		"a@x":       "a@x",
+		"<a\r\n@x>": "a@x",
+		"<<a@x>>":   "a@x",
+		"<a@x>>":    "a@x",
+		"<a@[b>c]>": "",
+		"<0>0>":     "",
+		"":          "",
+		"<>":        "",
+	}
+	for in, want := range cases {
+		if got := TrimMessageID(in); got != want {
+			t.Errorf("TrimMessageID(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

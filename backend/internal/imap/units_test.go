@@ -163,6 +163,10 @@ func TestCleanField(t *testing.T) {
 	if cleanID(" <abc\t@x.y> ") != "abc@x.y" {
 		t.Fatalf("cleanID = %q", cleanID(" <abc\t@x.y> "))
 	}
+	// go-imap's strict parser accepts a bracket inside a domain literal.
+	if cleanID("abc@[x>y]") != "" {
+		t.Fatalf("cleanID kept a bracket: %q", cleanID("abc@[x>y]"))
+	}
 }
 
 func TestDiffUIDs(t *testing.T) {

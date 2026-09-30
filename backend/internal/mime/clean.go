@@ -40,9 +40,17 @@ func cleanField(s string, max int) string {
 }
 
 // cleanID is cleanField for message and content identifiers, which never
-// legitimately contain whitespace.
+// legitimately contain whitespace or angle brackets. Whitespace (a long
+// identifier folded in two) is removed. A bracket still inside once the
+// surrounding pair is gone leaves no identifier at all: brackets delimit
+// identifiers, so gluing the pieces together would invent one. The strict
+// parser lets one through in a no-fold-literal ("<a@[b>c]>"), and a
+// Content-ID is only trimmed at its ends.
 func cleanID(s string, max int) string {
 	s = cleanField(s, 0)
+	if strings.ContainsAny(s, "<>") {
+		return ""
+	}
 	if strings.IndexByte(s, ' ') >= 0 {
 		s = strings.ReplaceAll(s, " ", "")
 	}
@@ -125,11 +133,10 @@ func CleanHeaderText(s string) string {
 	return cleanField(s, DefaultLimits().MaxFieldBytes)
 }
 
-// TrimMessageID normalises a Message-ID from an API: angle brackets and
-// whitespace removed, control characters dropped, capped like a parsed id.
+// TrimMessageID normalises a Message-ID from an API: surrounding angle
+// brackets and whitespace removed, control characters dropped, capped like
+// a parsed id. A bracket left inside makes it empty, as cleanID does for a
+// parsed one.
 func TrimMessageID(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "<")
-	s = strings.TrimSuffix(s, ">")
-	return cleanID(s, DefaultLimits().MaxFieldBytes)
+	return cleanID(strings.Trim(strings.TrimSpace(s), "<>"), DefaultLimits().MaxFieldBytes)
 }
