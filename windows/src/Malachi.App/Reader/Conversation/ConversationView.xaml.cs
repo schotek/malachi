@@ -638,10 +638,14 @@ internal sealed partial class ConversationView : UserControl
         Busy = card.Key.Length > 0 && Services.Issues.IsBusy(account, card.Key),
     };
 
-    // The same card, by value (a record compares its lists by reference).
+    // The same card, by value (a record compares its lists by reference, and
+    // JiraCard is no API type the JSON context could encode).
     private static bool SameCard(IssueCardState a, IssueCardState b) =>
         a.Account == b.Account && a.Openable == b.Openable && a.Menu == b.Menu && a.Busy == b.Busy
-        && JsonCoding.EncodeToString(a.Card) == JsonCoding.EncodeToString(b.Card);
+        && a.Card with { Rows = NoRows } == b.Card with { Rows = NoRows }
+        && a.Card.Rows.SequenceEqual(b.Card.Rows);
+
+    private static readonly JiraCardRow[] NoRows = [];
 
     // convFirstMember: the first member of m, which names the conversation's
     // account (and its issue).
