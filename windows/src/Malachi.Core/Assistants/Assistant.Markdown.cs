@@ -40,9 +40,12 @@
 // lines joined). IsWebUrl(string) is public for the tests (Swift's is
 // internal); the other helpers Swift keeps internal are private, as nothing
 // else uses them and the tests see no internals, and Swift's inline(_:),
-// which no test calls, is not ported. A C# string holds no invalid UTF-8 for
-// Go's U+FFFD to replace; a lone surrogate is U+FFFD once encoded (Utf8).
-// This file holds no translatable text.
+// which no test calls, is not ported. Two savings of allocations Go and
+// Swift do without (a table makes an inliner or two for every row): text
+// with no byte the inliner acts on is one plain span without an inliner, and
+// the inliner makes its URL cursors when it first needs them. A C# string
+// holds no invalid UTF-8 for Go's U+FFFD to replace; a lone surrogate is
+// U+FFFD once encoded (Utf8). This file holds no translatable text.
 
 using System;
 using System.Buffers;
@@ -150,12 +153,21 @@ public static partial class Assistant
 
     // Inline
 
+    // The bytes Inliner.Run acts on: `, *, _, [ and the h or H a bare URL
+    // starts with.
+    private static readonly SearchValues<byte> InlineMarkers = SearchValues.Create("`*_[hH"u8);
+
     /// <summary>inlineSpans: the spans of a block's text.</summary>
     private static List<MarkdownSpan> InlineSpans(byte[] s)
     {
         if (s.Length == 0)
         {
             return [];
+        }
+        if (s.AsSpan().IndexOfAny(InlineMarkers) < 0)
+        {
+            // What Run makes of text without any of them: one plain span.
+            return [new MarkdownSpan { Text = FromUtf8(s) }];
         }
         var inl = new Inliner(s);
         inl.Run(0, s.Length, false, false);
@@ -231,6 +243,12 @@ public static partial class Assistant
         // what the rows so far leave for the header labels, in bytes.
         private List<byte[]>? header;
         private int budget;
+
+        // Scratch the table rows reuse: the bytes of a cell being read, a
+        // row's cells and the text of its fields.
+        private readonly List<byte> cellBytes = [];
+        private readonly List<byte[]> rowCells = [];
+        private readonly ArrayBufferWriter<byte> rowText = new();
 
         public List<MarkdownBlock> Blocks { get; } = [];
 
@@ -341,12 +359,12 @@ public static partial class Assistant
             {
                 return false;
             }
-            var delimiter = TableCells(r, hi);
+            var delimiter = TableCells(r, hi, rowCells);
             if (!delimiter.TrueForAll(IsDelimiterCell))
             {
                 return false;
             }
-            var cells = TableCells(last.Lo, last.Hi);
+            var cells = TableCells(last.Lo, last.Hi, []);
             if (cells.Count != delimiter.Count)
             {
                 return false;
@@ -374,9 +392,13 @@ public static partial class Assistant
                 return;
             }
             budget += hi - r;
-            var cells = TableCells(r, hi);
+            var cells = TableCells(r, hi, rowCells);
             var spans = new List<MarkdownSpan>();
-            var fields = new List<byte[]>();
+            // The fields are written as they come, each on its own line (a
+            // newline after the first cell's spans, as the first cell comes
+            // first).
+            rowText.ResetWrittenCount();
+            var fields = 0;
             for (var i = 0; i < cells.Count && i < header.Count; i++)
             {
                 var c = cells[i];
@@ -386,37 +408,25 @@ public static partial class Assistant
                 }
                 if (i == 0)
                 {
-                    foreach (var span in InlineSpans(c))
-                    {
-                        spans.Add(span with { Bold = true });
-                    }
+                    AddInlineSpans(spans, c, bold: true);
+                    continue;
                 }
-                else if (header[i].Length > 0 && header[i].Length + 2 <= budget)
+                if (fields > 0 || spans.Count > 0)
+                {
+                    rowText.Write("\n"u8);
+                }
+                fields++;
+                if (header[i].Length > 0 && header[i].Length + 2 <= budget)
                 {
                     budget -= header[i].Length + 2;
-                    fields.Add([.. header[i], 0x3A, 0x20, .. c]);
+                    rowText.Write(header[i]);
+                    rowText.Write(": "u8);
                 }
-                else
-                {
-                    fields.Add(c);
-                }
+                rowText.Write(c);
             }
-            if (fields.Count > 0)
+            if (fields > 0)
             {
-                var text = new List<byte>();
-                if (spans.Count > 0)
-                {
-                    text.Add(0x0A);
-                }
-                for (var k = 0; k < fields.Count; k++)
-                {
-                    if (k > 0)
-                    {
-                        text.Add(0x0A);
-                    }
-                    text.AddRange(fields[k]);
-                }
-                spans.AddRange(InlineSpans([.. text]));
+                AddInlineSpans(spans, rowText.WrittenSpan, bold: false);
             }
             if (spans.Count > 0)
             {
@@ -447,9 +457,11 @@ public static partial class Assistant
 
         // tableCells: the cells of a table row, the text between its
         // unescaped pipes, one pipe at each edge dropped, "\|" read as "|",
-        // every cell trimmed of spaces and tabs.
-        private List<byte[]> TableCells(int lo, int hi)
+        // every cell trimmed of spaces and tabs; written into cells, which
+        // is returned.
+        private List<byte[]> TableCells(int lo, int hi, List<byte[]> cells)
         {
+            cells.Clear();
             (lo, hi) = TrimST(lo, hi);
             if (lo < hi && s[lo] == 0x7C)
             {
@@ -459,8 +471,8 @@ public static partial class Assistant
             {
                 hi--;
             }
-            var cells = new List<byte[]>();
-            var cell = new List<byte>();
+            var cell = cellBytes;
+            cell.Clear();
             var i = lo;
             while (i < hi)
             {
@@ -485,6 +497,25 @@ public static partial class Assistant
             return cells;
         }
 
+        // The spans of text (inlineSpans) added to spans, each made bold
+        // when bold is.
+        private static void AddInlineSpans(List<MarkdownSpan> spans, ReadOnlySpan<byte> text, bool bold)
+        {
+            if (text.IsEmpty)
+            {
+                return;
+            }
+            if (text.IndexOfAny(InlineMarkers) < 0)
+            {
+                spans.Add(new MarkdownSpan { Text = FromUtf8(text), Bold = bold });
+                return;
+            }
+            foreach (var span in InlineSpans(text.ToArray()))
+            {
+                spans.Add(bold ? span with { Bold = true } : span);
+            }
+        }
+
         // strings.Trim(cell, " \t").
         private static byte[] TrimCell(List<byte> b)
         {
@@ -498,7 +529,7 @@ public static partial class Assistant
             {
                 hi--;
             }
-            return b.GetRange(lo, hi - lo).ToArray();
+            return CollectionsMarshal.AsSpan(b)[lo..hi].ToArray();
         }
 
         // delimiterCell: whether c is a delimiter row's cell: dashes, with a
@@ -689,9 +720,10 @@ public static partial class Assistant
         private readonly Closers parens = new();
         private readonly Closers opens = new();
 
-        // The cursors of the link targets and of the bare URLs.
-        private readonly UrlScan linkScan = new();
-        private readonly UrlScan bareScan = new();
+        // The cursors of the link targets and of the bare URLs, made when
+        // the first of their kind is read.
+        private UrlScan? linkScan;
+        private UrlScan? bareScan;
 
         // The open span's text.
         private readonly ArrayBufferWriter<byte> buf = new();
@@ -887,7 +919,7 @@ public static partial class Assistant
                 linkAt = j;
                 linkEnd = parens.Next(j + 2);
                 var open = opens.Next(j + 2);
-                linkOK = linkEnd >= 0 && (open < 0 || open > linkEnd) && IsWebUrl(s, j + 2, linkEnd, linkScan);
+                linkOK = linkEnd >= 0 && (open < 0 || open > linkEnd) && IsWebUrl(s, j + 2, linkEnd, linkScan ??= new());
             }
             if (!(linkOK && linkEnd < hi && NewlineBefore(j) <= i))
             {
@@ -963,7 +995,7 @@ public static partial class Assistant
                 }
                 break;
             }
-            return (end, IsWebUrl(s, i, j, bareScan) ? j : -1);
+            return (end, IsWebUrl(s, i, j, bareScan ??= new()) ? j : -1);
         }
 
         private string StringOf(int lo, int hi) => FromUtf8(s.AsSpan(lo, hi - lo));
