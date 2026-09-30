@@ -46,6 +46,34 @@ internal static class CodePoints
     }
 
     /// <summary>
+    /// Go's <c>strings.EqualFold</c>: as many runes on both sides, each pair
+    /// equal, or equal once both are lowered or both upper-cased (invariant).
+    /// Go folds by the simple-fold orbits, which lowering and upper-casing
+    /// join the same way for the letters mail and Jira names use (the Kelvin
+    /// sign and k, the long s and s, the Greek thetas included).
+    /// </summary>
+    public static bool EqualFold(string a, string b)
+    {
+        var ea = a.EnumerateRunes();
+        var eb = b.EnumerateRunes();
+        while (true)
+        {
+            var hasA = ea.MoveNext();
+            var hasB = eb.MoveNext();
+            if (!hasA || !hasB)
+            {
+                return hasA == hasB;
+            }
+            var x = ea.Current;
+            var y = eb.Current;
+            if (x != y && Rune.ToLowerInvariant(x) != Rune.ToLowerInvariant(y) && Rune.ToUpperInvariant(x) != Rune.ToUpperInvariant(y))
+            {
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
     /// <paramref name="s"/> with every rune lowered on its own, as Go's
     /// <c>strings.ToLower</c> does (no culture, no special casing).
     /// </summary>
