@@ -938,6 +938,41 @@ import Testing
         #expect(try encodeObject(AccountTestResult(imap: EndpointTestResult(ok: true, latencyMs: 1)))["jira"] == nil)
     }
 
+    /// issue.transitions and issue.transition (docs/api.md §4.12): the
+    /// params encode with the JSON names of pkg/api, the
+    /// results decode, `needsInput` and `toCategory` are optional on the
+    /// wire, and the transition capability is one more `Capability`.
+    @Test func issueTransitionMethods() throws {
+        let list = try encodeObject(IssueTransitionsParams(accountId: "acc_j", messageId: "m_j1"))
+        #expect(list as NSDictionary == ["accountId": "acc_j", "messageId": "m_j1"])
+        let perform = try encodeObject(IssueTransitionParams(accountId: "acc_j", messageId: "m_j1", transitionId: "31"))
+        #expect(perform as NSDictionary == ["accountId": "acc_j", "messageId": "m_j1", "transitionId": "31"])
+
+        let r = try decode(IssueTransitionsResult.self, #"""
+        {"issue":{\#(Self.issueJSON)},
+         "transitions":[{"id":"11","name":"Start Progress","to":"In Progress","toCategory":"inProgress"},
+                        {"id":"21","name":"Done","to":"Done","toCategory":"done","needsInput":true},
+                        {"id":"41","name":"Escalate","to":"Escalated","toCategory":"blocked"}]}
+        """#)
+        #expect(r.issue.key == "ITSD-42" && r.issue.status == "In Progress" && r.issue.commentVisibilities == [.public, .internal])
+        #expect(r.transitions == [
+            IssueTransition(id: "11", name: "Start Progress", to: "In Progress", toCategory: .inProgress),
+            IssueTransition(id: "21", name: "Done", to: "Done", toCategory: .done, needsInput: true),
+            IssueTransition(id: "41", name: "Escalate", to: "Escalated", toCategory: "blocked"),
+        ])
+        #expect(r.transitions[0].needsInput == nil && r.transitions[2].toCategory == "blocked", "an unknown category decodes as itself")
+        let none = try decode(IssueTransitionsResult.self, #"{"issue":{\#(Self.issueJSON)},"transitions":null}"#)
+        #expect(none.transitions.isEmpty, "never null on the wire, but an old fixture may say so")
+        let done = try decode(IssueTransitionResult.self, #"{"issue":{"key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer","status":"Done","statusCategory":"done"}}"#)
+        #expect(done.issue.status == "Done" && done.issue.statusCategory == .done && done.issue.assignee == nil)
+
+        let state = #"{"accountId":"j","status":"idle","progress":-1,"pendingOutbox":0}"#
+        let acc = try decode(Account.self, #"{"id":"j","config":{"name":"n","email":"e@x","kind":"jira"},"enabled":true,"state":\#(state),"capabilities":["comment","forward","transition"]}"#)
+        #expect(acc.can(.transition) && Capability.transition == "transition")
+        #expect(!API.mailCapabilities.contains(.transition), "mail accounts never change statuses")
+        #expect(API.Limits.maxIssueTransitions == 100)
+    }
+
     /// notify.messagesChanged (docs/api.md §5): the payload decodes, also
     /// as a notification.
     @Test func messagesChangedNotification() throws {
@@ -1202,11 +1237,12 @@ import Testing
         "config.get", "config.set",
         "sender.list", "sender.add", "sender.remove",
         "contact.search",
+        "issue.transitions", "issue.transition",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 50)
-        #expect(Set(API.allMethods).count == 50, "no duplicates")
+        #expect(API.allMethods.count == 52)
+        #expect(Set(API.allMethods).count == 52, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
@@ -1214,6 +1250,7 @@ import Testing
             "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
         ])
         #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
+        #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
     }
 
     @Test func timeoutsFollowThePlan() {
@@ -1237,11 +1274,14 @@ import Testing
         // Like account.discover and account.test: a site lookup, a sign-in with listing.
         #expect(API.AccountDetectSite.timeout == .seconds(15) && RPCTimeouts.detectSite == .seconds(15))
         #expect(API.AccountListSpaces.timeout == .seconds(45) && RPCTimeouts.listSpaces == .seconds(45))
+        // One request to the site; the request and the daemon's refresh (up to 30 s).
+        #expect(API.IssueTransitions.timeout == .seconds(20) && RPCTimeouts.transitions == .seconds(20))
+        #expect(API.IssueTransition.timeout == .seconds(45) && RPCTimeouts.transition == .seconds(45))
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
                                     "account.oauthStart", "account.oauthWait", "message.download",
-                                    "account.detectSite", "account.listSpaces"]
+                                    "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

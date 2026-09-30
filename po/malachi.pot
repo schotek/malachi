@@ -971,6 +971,43 @@ msgstr[1] ""
 msgid "Add %s"
 msgstr ""
 
+#. TRANSLATORS: menu of the status changes a Jira issue allows.
+#: ui/internal/jira/transitions.go
+msgid "Change Status"
+msgstr ""
+
+#. TRANSLATORS: a status change of a Jira issue asks for more on the site and cannot be made here.
+#: ui/internal/jira/transitions.go
+msgid "Needs fields in Jira"
+msgstr ""
+
+#. TRANSLATORS: the only item of the Change Status menu of a Jira issue whose status cannot be changed.
+#: ui/internal/jira/transitions.go
+msgid "No status change is available"
+msgstr ""
+
+#. TRANSLATORS: progressive; %s of "%s failed: …" when the status changes of a Jira issue could not be listed.
+#: ui/internal/jira/transitions.go
+msgid "Loading the status changes"
+msgstr ""
+
+#. TRANSLATORS: progressive; %s of "%s failed: …" when the status of a Jira issue could not be changed.
+#: ui/internal/jira/transitions.go
+msgid "Changing the status"
+msgstr ""
+
+#. TRANSLATORS: toast; %s is the new status of a Jira issue, such as "In Progress".
+#: ui/internal/jira/transitions.go
+#, c-format
+msgid "Status changed to %s"
+msgstr ""
+
+#. TRANSLATORS: toast; %s is the reason the Jira site gave, in its own words.
+#: ui/internal/jira/transitions.go
+#, c-format
+msgid "The status could not be changed: %s"
+msgstr ""
+
 #. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
 #: ui/internal/conversation/conversation.go
 #, c-format
@@ -1668,6 +1705,7 @@ msgid "Remove from Favourites"
 msgstr ""
 
 #: ui/internal/window/folders.go:88 ui/internal/window/messages.go:242
+#: ui/internal/jira/transitions.go
 msgid "Loading…"
 msgstr ""
 

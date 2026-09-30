@@ -120,6 +120,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         ])
         issueBox.isHidden = true
         issueCard.onOpen = { [weak self] url in self?.openIssueLink(url) }
+        issueCard.statusMenu = IssueTransitionMenu(state: state) { [weak self] in self?.transitionSubject }
         stack.addArrangedSubview(issueBox)
         clamp.setChild(stack)
 
@@ -388,20 +389,55 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     }
 
     /// The issue card of a Jira conversation, once on top; its key opens
-    /// the issue only on the account's own site.
+    /// the issue only on the account's own site, its status pill is the
+    /// Change Status menu on an account that changes statuses.
     private func showIssue(_ model: Conversation.Model) {
         guard let card = model.issue, let account = firstMember(model)?.accountId else {
             issueCard.show(nil, openable: false)
             issueBox.isHidden = true
             return
         }
-        let site = controller.issueSite(account)
-        issueCard.show(card, openable: !card.url.isEmpty && Jira.isIssueURL(card.url, siteURL: site))
+        showIssueCard(card, account: account)
         issueBox.isHidden = false
+    }
+
+    private func showIssueCard(_ card: Jira.Card, account: AccountID) {
+        let site = controller.issueSite(account)
+        let actions = state.hooks.issueActions?()
+        issueCard.show(
+            card, openable: !card.url.isEmpty && Jira.isIssueURL(card.url, siteURL: site),
+            transitions: actions?.canTransition(account) ?? false)
+        if let actions {
+            issueCard.setBusy(actions.isBusy(account: account, key: card.key), key: card.key)
+        }
     }
 
     private func firstMember(_ model: Conversation.Model) -> MessageSummary? {
         model.items.first { $0.kind != .truncated }?.message
+    }
+
+    /// The issue of the conversation on show, for the Change Status menu:
+    /// any member names it (the first one here); nil for a mail
+    /// conversation or none.
+    var transitionSubject: IssueActionsController.Subject? {
+        guard let model = controller.model, model.issue != nil else { return nil }
+        return issueSubject(of: firstMember(model))
+    }
+
+    /// The refreshed issue of a transition (`IssueActionsController.
+    /// onIssueChanged`): the card shows it at once when it is the issue
+    /// on show; the members follow with the daemon's notifications.
+    func applyIssue(_ info: IssueInfo, account: AccountID) {
+        guard let model = controller.model, let card = model.issue, let member = firstMember(model),
+              member.accountId == account, Jira.clean(info.key) == card.key else { return }
+        showIssueCard(Jira.issueCard(info), account: account)
+    }
+
+    /// A transition started or ended on the issue `key` of `account`
+    /// (`IssueActionsController.onBusy`): the pill's spinner.
+    func setIssueBusy(_ busy: Bool, account: AccountID, key: String) {
+        guard let model = controller.model, let member = firstMember(model), member.accountId == account else { return }
+        issueCard.setBusy(busy, key: key)
     }
 
     private func openIssueLink(_ url: String) {

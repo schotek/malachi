@@ -512,8 +512,8 @@ the agent's tool list at all:
 
 | Tier | How to grant | Tools |
 |---|---|---|
-| Read and draft | always on | `list_accounts`, `list_folders`, `list_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
-| Modify | `-allow-modify`, or `MALACHI_MCP_ALLOW_MODIFY=true` for `.mcp.json` | `mark_messages`, `move_messages`, `delete_messages` |
+| Read and draft | always on | `list_accounts`, `list_folders`, `list_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft`, `search_messages`, `list_transitions` |
+| Modify | `-allow-modify`, or `MALACHI_MCP_ALLOW_MODIFY=true` for `.mcp.json` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
 | Send | `-allow-send`, or `MALACHI_MCP_ALLOW_SEND=true` | `send_message` |
 
 Drafting needs no flag because a draft is inert: it stays in the local store,

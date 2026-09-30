@@ -37,7 +37,7 @@ func testJiraComments(t *testing.T, mode jiratest.Mode) {
 	ctx, b, f, id := e.ctx, e.b, e.f, e.id
 
 	list, err := b.Accounts().List(ctx, api.AccountListParams{})
-	if err != nil || fmt.Sprint(list.Accounts[0].Capabilities) != "[comment forward]" {
+	if err != nil || fmt.Sprint(list.Accounts[0].Capabilities) != "[comment forward transition]" {
 		t.Fatalf("capabilities: %+v %v", list, err)
 	}
 	_, byName := e.folders()

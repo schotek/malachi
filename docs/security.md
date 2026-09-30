@@ -1314,8 +1314,10 @@ Defences:
   original message (`draft.create`), and a forward attaches the original's
   parts, all gated by the human who sends;
   `delete_messages` only moves to Trash and refuses messages already in
-  Trash or in the Outbox; `send_message` accepts only drafts created by
-  the same process, at the recorded version;
+  Trash or in the Outbox; `transition_issue` performs only a status
+  transition the site lists for the user and never one that needs input;
+  `send_message` accepts only drafts created by the same process, at the
+  recorded version;
 - no account management, no configuration, no credentials or server
   settings in any output; the bridge makes no call before the daemon has
   proved the per-run key (§8), on every platform alike, so a process

@@ -183,16 +183,16 @@ func apiError(err error) error {
 
 // capabilitiesFor is Account.Capabilities of an account: every mail
 // capability for a mailbox (imap, graph); for an issue tracker a comment
-// (reply writes one) and the forward of its messages by e-mail from a
-// mail account; nothing for a kind this daemon does not know. Never nil,
-// so the list is always sent (nil would mean "a daemon without
-// capabilities" to a client).
+// (reply writes one), the forward of its messages by e-mail from a mail
+// account and the status transitions of its issues; nothing for a kind
+// this daemon does not know. Never nil, so the list is always sent (nil
+// would mean "a daemon without capabilities" to a client).
 func capabilitiesFor(c api.AccountConfig) []api.AccountCapability {
 	switch c.Protocol() {
 	case api.AccountIMAP, api.AccountGraph:
 		return append([]api.AccountCapability{}, api.MailCapabilities...)
 	case api.AccountJira:
-		return []api.AccountCapability{api.CapabilityComment, api.CapabilityForward}
+		return []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition}
 	default:
 		return []api.AccountCapability{}
 	}

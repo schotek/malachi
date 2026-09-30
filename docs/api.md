@@ -660,9 +660,11 @@ derives it from `kind`:
 | `forward` | its messages can be forwarded; a `jira` account's from a mail account (`draft.create` `messageAccountId`, §4.5) |
 | `comment` | reply writes a comment to the issue (`draft.create` `reply` returns a comment draft); a client names the action Comment |
 | `move`, `delete` | `message.move`, `message.delete` |
+| `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
 
 `imap` and `graph` accounts have `["compose", "reply", "replyAll",
-"forward", "move", "delete"]`; a `jira` account `["comment", "forward"]`.
+"forward", "move", "delete"]`; a `jira` account `["comment", "forward",
+"transition"]`.
 Flags (`message.flag`) are always allowed, and so is `message.delete` of
 an account's outbox messages (cancelling a queued send or comment). Archiving and
 marking as junk still depend on folders with those roles, which a `jira`
@@ -2336,6 +2338,61 @@ Server, and an address book that fails or times out all leave the
 address-book part simply empty, never an error. A query is at least one
 character; clients wait for two before asking.
 
+### 4.12 issue
+
+The issues of an issue-tracker account (`kind: jira`, §4.1), named by any
+message of the issue: the message's thread is the issue. Both methods need
+the account's `transition` capability (§4.1); on any other account they
+answer `invalidArgument`. They go to the site at once (the daemon's own
+client of the account, so the same token and route as the sync), unlike
+the local-first message operations.
+
+```jsonc
+IssueTransition { "id": "31", "name": "Start Progress", "to": "In Progress",
+                  "toCategory": "todo" | "inProgress" | "done" (opt),
+                  "needsInput": true (opt) }
+```
+
+`name` and `to` are untrusted display text from the site: the
+transition's name as the site's own status menu shows it, and the name of
+the status it leads to. `needsInput` says the transition opens a screen on
+the site or has fields that must be filled in (Jira's `hasScreen`, or a
+field with `required`): the daemon cannot perform it, and a client lists
+it disabled with a hint that it needs fields on the site.
+
+#### `issue.transitions`
+- params: `{ "accountId", "messageId" }`
+- result: `{ "issue": IssueInfo, "transitions": [IssueTransition] }` —
+  `issue` as the daemon last synchronised it (§3); `transitions` never
+  null, in the site's order, at most `api.MaxIssueTransitions` (100),
+  those the site marks unavailable to the user left out
+- errors: invalidArgument (an account without the capability, a message
+  of no issue, an empty id), accountNotFound, messageNotFound (the
+  message), messageGone (the site no longer shows the issue, or hides it
+  from the user), authFailed (the site refused the token), serverError
+  (the site's answer, its message in `error.message`), serverTimeout,
+  networkError, tlsError, keyringError, storageError
+
+#### `issue.transition`
+- params: `{ "accountId", "messageId", "transitionId" }` — the id of a
+  transition from `issue.transitions` without `needsInput`
+- result: `{ "issue": IssueInfo }` — the issue after the daemon refreshed
+  it from the site, so its `status` is the new one and the event row of
+  the change (§3, `issue.item: "event"`, the user's own: read, never
+  announced) is stored; when the refresh did not finish within 30 s, the
+  issue as last synchronised (the transition was performed all the same
+  and the next pass brings the change)
+- errors: those of `issue.transitions`, and invalidArgument for a
+  transition the issue does not offer or one with `needsInput` (checked
+  against the site's current list before anything is changed); a
+  transition the site refuses after all (a 400, such as a validator of
+  the workflow) is serverError with the site's cleaned message
+
+The daemon lists the transitions again before performing one, so a
+transition that stopped being offered since the client listed them is
+refused rather than sent. Clients allow 20 s for `issue.transitions` and
+45 s for `issue.transition`.
+
 ## 5. Notifications
 
 | Method | params |
@@ -2656,3 +2713,11 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   search; new `notify.messagesChanged`, also sent by a `jira` account whose
   stored messages a pass rebuilt in place. `thread.get` without `folderId`
   and account-wide `search.query` leave out the views' copies.
+- **2** (2026-09-30, compatible addition: issue status transitions): new
+  capability `transition` (a `jira` account now has `["comment",
+  "forward", "transition"]`) and new `issue.transitions` /
+  `issue.transition` (§4.12): the transitions the site offers on the issue
+  of a message, those needing input on the site marked, and one performed
+  by its id followed by a refresh of the issue; new limit
+  `api.MaxIssueTransitions`; no new error codes (a transition the site
+  refuses is serverError, an issue it no longer shows messageGone).

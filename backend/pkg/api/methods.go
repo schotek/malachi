@@ -82,6 +82,10 @@ const (
 
 	// Contacts (recipient completion).
 	MethodContactSearch = "contact.search"
+
+	// Issues (the issues of an issue-tracker account).
+	MethodIssueTransitions = "issue.transitions"
+	MethodIssueTransition  = "issue.transition"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -114,6 +118,7 @@ var AllMethods = []string{
 	MethodConfigGet, MethodConfigSet,
 	MethodSenderList, MethodSenderAdd, MethodSenderRemove,
 	MethodContactSearch,
+	MethodIssueTransitions, MethodIssueTransition,
 }
 
 // AllNotifications lists every server-initiated notification.

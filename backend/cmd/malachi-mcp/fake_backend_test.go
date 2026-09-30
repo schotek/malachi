@@ -74,6 +74,12 @@ type fakeBackend struct {
 	triggers          []api.SyncTriggerParams
 	nextDraft         int
 
+	// transitions is what issue.transitions answers for a message, and
+	// transitionCalls what issue.transition was asked (each moves the
+	// message's issue to the transition's target).
+	transitions     map[api.MessageID][]api.IssueTransition
+	transitionCalls []api.IssueTransitionParams
+
 	searchResults []api.SearchResult // what every search.query answers
 	searchCalls   []api.SearchQueryParams
 }
@@ -117,6 +123,73 @@ func (f *fakeBackend) Attachments() api.AttachmentService {
 }
 func (f *fakeBackend) Sync() api.SyncService     { return fakeSync{f.StubBackend.Sync(), f} }
 func (f *fakeBackend) Search() api.SearchService { return fakeSearch{f.StubBackend.Search(), f} }
+func (f *fakeBackend) Issues() api.IssueService  { return fakeIssues{f.StubBackend.Issues(), f} }
+
+type fakeIssues struct {
+	api.IssueService
+	f *fakeBackend
+}
+
+// issueOf is the issue of a message of the jira fixture; a mail account or
+// a message without an issue is invalidArgument, as the daemon answers.
+func (s fakeIssues) issueOf(accountID api.AccountID, messageID api.MessageID) (api.IssueInfo, error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	m, ok := s.f.messages[messageID]
+	if !ok || m.AccountID != accountID {
+		return api.IssueInfo{}, api.NewError(api.CodeMessageNotFound, "message %s not found", messageID)
+	}
+	if m.Issue == nil {
+		return api.IssueInfo{}, api.NewError(api.CodeInvalidArgument, "account %s lacks the capability \"transition\"", accountID)
+	}
+	return m.Issue.IssueInfo, nil
+}
+
+func (s fakeIssues) Transitions(_ context.Context, p api.IssueTransitionsParams) (*api.IssueTransitionsResult, error) {
+	if err := s.f.gate(api.MethodIssueTransitions); err != nil {
+		return nil, err
+	}
+	is, err := s.issueOf(p.AccountID, p.MessageID)
+	if err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	ts := slices.Clone(s.f.transitions[p.MessageID])
+	s.f.mu.Unlock()
+	if ts == nil {
+		ts = []api.IssueTransition{}
+	}
+	return &api.IssueTransitionsResult{Issue: is, Transitions: ts}, nil
+}
+
+func (s fakeIssues) Transition(_ context.Context, p api.IssueTransitionParams) (*api.IssueTransitionResult, error) {
+	s.f.record(func() { s.f.transitionCalls = append(s.f.transitionCalls, p) })
+	if err := s.f.gate(api.MethodIssueTransition); err != nil {
+		return nil, err
+	}
+	is, err := s.issueOf(p.AccountID, p.MessageID)
+	if err != nil {
+		return nil, err
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	for _, t := range s.f.transitions[p.MessageID] {
+		if t.ID != p.TransitionID {
+			continue
+		}
+		if t.NeedsInput {
+			return nil, api.NewError(api.CodeInvalidArgument, "jira: transition %q needs fields filled in on the site", t.ID)
+		}
+		is.Status, is.StatusCategory = t.To, t.ToCategory
+		m := s.f.messages[p.MessageID]
+		issue := *m.Issue
+		issue.IssueInfo = is
+		m.Issue = &issue
+		s.f.messages[p.MessageID] = m
+		return &api.IssueTransitionResult{Issue: is}, nil
+	}
+	return nil, api.NewError(api.CodeInvalidArgument, "jira: the issue offers no transition %q", p.TransitionID)
+}
 
 type fakeSearch struct {
 	api.SearchService

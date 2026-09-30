@@ -12,14 +12,27 @@ import MalachiCore
 /// Everything but the labels comes from the Jira site and is shown as plain
 /// text (`stringValue`, or a title built from it with a font and a colour
 /// only); the key opens its URL only when `Jira.isIssueURL` accepts it for
-/// the account's site (`openable`), otherwise it is plain text.
+/// the account's site (`openable`), otherwise it is plain text. On an
+/// account that changes statuses (`Capability.transition`) the status pill
+/// is a menu button (`IssueStatusPill`) that pops the Change Status menu
+/// up (`statusMenu`, set by the host); while a transition runs the pill
+/// shows a spinner (`setBusy`), and the result's issue is applied through
+/// `show` again.
 @MainActor
 final class IssueCardView: NSView {
     /// The key was clicked: open `url` (`openIssue`, which checks it again).
     var onOpen: (@MainActor (_ url: String) -> Void)?
 
+    /// The Change Status menu of the card's issue (the host sets it once;
+    /// its subject is the host's message). nil: the pill is a label.
+    var statusMenu: IssueTransitionMenu?
+
+    /// The key of the issue on show (cleaned, as the card has it); "" for
+    /// none.
+    private(set) var issueKey = ""
+
     private let keyButton = NSButton()
-    private let statusPill = PillLabel()
+    private let statusPill = IssueStatusPill()
     private let internalPill = PillLabel()
     private let viaLabel = NSTextField(labelWithString: "")
     private let editedLabel = NSTextField(labelWithString: "")
@@ -54,10 +67,10 @@ final class IssueCardView: NSView {
         keyButton.setContentHuggingPriority(.required, for: .horizontal)
         keyButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        for pill in [statusPill, internalPill] {
-            pill.font = Typo.caption
-            pill.isHidden = true
-        }
+        statusPill.isHidden = true
+        statusPill.onClick = { [weak self] in self?.statusClicked() }
+        internalPill.font = Typo.caption
+        internalPill.isHidden = true
         for label in [viaLabel, editedLabel] {
             label.font = Typo.caption
             label.textColor = Tint.secondary
@@ -109,14 +122,24 @@ final class IssueCardView: NSView {
 
     /// Shows `card`, or hides the view for none (a mail message).
     /// `openable`: the card's URL leads to an issue of the account's site.
-    func show(_ card: Jira.Card?, openable: Bool) {
+    /// `transitions`: the account changes statuses, so the pill is a menu
+    /// button (with `statusMenu` set).
+    func show(_ card: Jira.Card?, openable: Bool, transitions: Bool = false) {
         guard let card else {
             isHidden = true
             url = ""
+            issueKey = ""
+            statusPill.busy = false
             return
         }
         isHidden = false
         url = openable ? card.url : ""
+        if issueKey != card.key {
+            // Another issue: its own transition, if any, is reported by
+            // the host (`setBusy`) once the card is on.
+            statusPill.busy = false
+        }
+        issueKey = card.key
         // The key is the card's title: the size of a message's subject
         // (Typo.title2Bold), which the card stands in for.
         let font = NSFont.monospacedDigitSystemFont(ofSize: Typo.title2Bold.pointSize, weight: .bold)
@@ -127,10 +150,11 @@ final class IssueCardView: NSView {
         keyButton.setAccessibilityLabel(openable ? card.openTooltip : card.key)
         keyButton.isHidden = card.key.isEmpty
 
-        statusPill.stringValue = card.status
-        statusPill.setAccessibilityLabel(card.statusLabel)
+        statusPill.text = card.status
+        statusPill.setLabel(card.statusLabel)
         statusPill.isHidden = card.status.isEmpty
-        IssuePill.paint(statusPill, IssuePill.colours(card.statusStyle), emphasized: false)
+        statusPill.menuIndicator = transitions && statusMenu != nil
+        statusPill.paint(IssuePill.colours(card.statusStyle))
         internalPill.stringValue = card.internalLabel
         internalPill.isHidden = !card.internal
         IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: false)
@@ -153,8 +177,19 @@ final class IssueCardView: NSView {
         fields.invalidateIntrinsicContentSize()
     }
 
+    /// The spinner in the pill while a transition runs on the issue `key`
+    /// (as the daemon names it) of `account`; another issue's is ignored.
+    func setBusy(_ busy: Bool, key: String) {
+        guard !issueKey.isEmpty, Jira.clean(key) == issueKey else { return }
+        statusPill.busy = busy
+    }
+
     @objc private func keyClicked() {
         guard !url.isEmpty else { return }
         onOpen?(url)
+    }
+
+    private func statusClicked() {
+        statusMenu?.popUp(under: statusPill)
     }
 }

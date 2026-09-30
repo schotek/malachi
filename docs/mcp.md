@@ -37,7 +37,7 @@ Flags and environment of the server:
 |---|---|
 | `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` (`~/.cache/malachi/run/rpc.sock` without it) |
 | `-socket` on Windows | the same rules; Windows sets neither XDG variable, so the default is `%USERPROFILE%\.cache\malachi\run\rpc.sock`, as for the daemon and the Windows app. It is outside `AppData` on purpose: a bridge started by the MSIX Claude Desktop sees a redirected `AppData` (see [below](#claude-desktop-and-claude-code-status-install-uninstall)) but the same socket |
-| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages` |
+| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
 | `MALACHI_LOG_LEVEL`, `MALACHI_LOG_FORMAT` | as for the daemon; logs go to stderr, stdout carries only MCP frames |
@@ -73,7 +73,9 @@ registered at all, so it never appears in the client's tool list.
 - **Timeouts.** 2 s to connect, 5 s for the handshake
   (`api.HandshakeTimeout`), 30 s per daemon call (`malachid did not answer
   within 30s`), except `message.download`, which may take 2 minutes (see
-  [Attachments on the mail server](#attachments-on-the-mail-server)).
+  [Attachments on the mail server](#attachments-on-the-mail-server)), and
+  `issue.transition`, which may take 45 s (the daemon waits for the
+  issue's refresh).
 - **Errors from the daemon** reach the model as tool errors (never
   protocol errors, so the model can react): `<codeName> (<code>): <message>`
   with the message control-stripped and capped at 200 bytes, plus a hint for
@@ -84,8 +86,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages` |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `create_draft` |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
 | send | `-allow-send` | `send_message` |
 
 A draft is inert: it lives in the daemon's store and, once it has rested
@@ -212,6 +214,19 @@ destructive, only `send_message` open-world.
   deletes them.
 - `trigger_sync`: optional `accountId`, `folderId`, `full`; returns at once.
 
+### list_transitions
+
+- input: `accountId` (an issue-tracker account, kind `jira`, capability
+  `transition`), `messageId` (any message of the issue)
+- output: a trusted count line, then a fence with the issue's key,
+  summary and current status and one line per transition the site
+  offers: `id`, `name`, `to` (the status it leads to), `category` when
+  the site says, and `needsInput` for a transition with a screen or
+  required fields on the site, which `transition_issue` cannot perform
+  ([api.md §4.12](api.md#412-issue), `issue.transitions`).
+- A mail account, or a message of no issue, is the daemon's
+  `invalidArgument`; an issue the site no longer shows is `messageGone`.
+
 ### create_draft
 
 - input: `accountId`; optional `mode` (`reply` | `replyAll` | `forward`;
@@ -290,6 +305,19 @@ destructive, only `send_message` open-world.
 - `delete_messages`: always "move to Trash". A message already in Trash
   (the daemon would expunge it) or in the Outbox (the daemon would cancel
   its delivery) makes the whole call fail; there is no `permanent` option.
+
+### transition_issue (`-allow-modify`)
+
+- input: `accountId`, `messageId`, `transitionId` (from `list_transitions`,
+  one without `needsInput`)
+- The daemon lists the transitions again, refuses one the issue does not
+  offer or one that needs input (`invalidArgument`), performs the
+  transition on the site (`issue.transition`) and waits up to 30 s for
+  the issue's refresh; the output is a trusted line and a fence with the
+  issue's key, summary and new status. A transition the site refuses
+  after all is its `serverError` with the site's message. Nothing else
+  of an issue can be changed here: no assignee, no fields, no comment
+  (that is `create_draft`).
 
 ### send_message (`-allow-send`)
 

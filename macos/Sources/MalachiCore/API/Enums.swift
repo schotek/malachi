@@ -285,6 +285,9 @@ public struct Capability: WireEnum {
     public static let comment: Capability = "comment"
     public static let move: Capability = "move"
     public static let delete: Capability = "delete"
+    /// The status of an issue can be changed (issue.transitions,
+    /// issue.transition): the Change Status menu.
+    public static let transition: Capability = "transition"
 }
 
 /// api.JiraDeployment: where a Jira site runs.

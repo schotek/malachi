@@ -44,6 +44,10 @@ final class AppState {
         /// Whether New Message is offered (`Capabilities.canComposeNew`: not
         /// with issue-tracker accounts alone); nil counts as yes.
         var canComposeNew: (@MainActor () -> Bool)?
+        /// The Change Status menu's controller (`IssueActionsController`,
+        /// Integration+Jira): the menus and the issue cards' pills ask it
+        /// when they open; nil offers no status changes.
+        var issueActions: (@MainActor () -> IssueActionsController?)?
     }
 
     let client: RPCClient

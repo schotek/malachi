@@ -16,6 +16,7 @@ ui/internal/jira/compose.go
 ui/internal/jira/jira.go
 ui/internal/jira/wizard.go
 ui/internal/jira/settings.go
+ui/internal/jira/transitions.go
 ui/internal/conversation/conversation.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/format.go

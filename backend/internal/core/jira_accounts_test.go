@@ -346,7 +346,7 @@ func TestJiraAccountRoutingAndCapabilities(t *testing.T) {
 		t.Fatalf("list: %+v %v", list, err)
 	}
 	acc := list.Accounts[0]
-	if fmt.Sprint(acc.Capabilities) != "[comment forward]" || acc.Can(api.CapabilityMove) || acc.Can(api.CapabilityCompose) || acc.Can(api.CapabilityReply) {
+	if fmt.Sprint(acc.Capabilities) != "[comment forward transition]" || acc.Can(api.CapabilityMove) || acc.Can(api.CapabilityCompose) || acc.Can(api.CapabilityReply) {
 		t.Fatalf("capabilities = %v", acc.Capabilities)
 	}
 

@@ -4,7 +4,9 @@
 // Issue-tracker (Jira) accounts: the `jira` block of an account
 // (docs/api.md §3, §4.1 account.detectSite and account.listSpaces), the
 // issue projection of a message and a thread (§3, §4.3, §4.4), comment
-// drafts (§4.5) and notify.messagesChanged (§5); types.go, the Jira types.
+// drafts (§4.5), issue status transitions (§4.12 issue.transitions and
+// issue.transition) and notify.messagesChanged (§5); types.go, the Jira
+// types.
 // Everything that came from the site (summaries, names, statuses, titles)
 // is hostile input like mail: display it as plain text.
 
@@ -394,6 +396,81 @@ public struct DraftComment: Codable, Sendable, Equatable {
     public init(issue: IssueInfo, visibility: CommentVisibility = "") {
         self.issue = issue
         self.visibility = visibility
+    }
+}
+
+/// api.IssueTransitionsParams (`issue.transitions`, docs/api.md §4.12):
+/// the issue is named by any message of it (the message's thread is the
+/// issue).
+public struct IssueTransitionsParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var messageId: MessageID
+
+    public init(accountId: AccountID, messageId: MessageID) {
+        self.accountId = accountId
+        self.messageId = messageId
+    }
+}
+
+/// api.IssueTransition: one status change the site offers the user on the
+/// issue. `name` and `to` are untrusted display text from the site.
+public struct IssueTransition: Codable, Sendable, Equatable {
+    public var id: String
+    /// The transition's name, as the site's own status menu shows it.
+    public var name: String
+    /// The name of the status it leads to.
+    public var to: String
+    /// The category of that status; nil when the site does not say.
+    public var toCategory: IssueStatusCategory?
+    /// The transition opens a screen on the site or has fields that must
+    /// be filled: it cannot be performed here (issue.transition refuses it
+    /// with invalidArgument); a client lists it disabled.
+    public var needsInput: Bool?
+
+    public init(id: String, name: String, to: String, toCategory: IssueStatusCategory? = nil, needsInput: Bool? = nil) {
+        self.id = id
+        self.name = name
+        self.to = to
+        self.toCategory = toCategory
+        self.needsInput = needsInput
+    }
+}
+
+/// api.IssueTransitionsResult: `issue` as the daemon last synchronised it,
+/// `transitions` in the site's order, at most
+/// `API.Limits.maxIssueTransitions`.
+public struct IssueTransitionsResult: Codable, Sendable, Equatable {
+    public var issue: IssueInfo
+    @NullAsEmpty public var transitions: [IssueTransition]
+
+    public init(issue: IssueInfo, transitions: [IssueTransition] = []) {
+        self.issue = issue
+        self.transitions = transitions
+    }
+}
+
+/// api.IssueTransitionParams (`issue.transition`): `transitionId` is the
+/// `id` of a transition without `needsInput`.
+public struct IssueTransitionParams: Codable, Sendable, Equatable {
+    public var accountId: AccountID
+    public var messageId: MessageID
+    public var transitionId: String
+
+    public init(accountId: AccountID, messageId: MessageID, transitionId: String) {
+        self.accountId = accountId
+        self.messageId = messageId
+        self.transitionId = transitionId
+    }
+}
+
+/// api.IssueTransitionResult: the issue after the daemon refreshed it from
+/// the site, or as last synchronised when the refresh did not finish in
+/// time (the transition was performed all the same).
+public struct IssueTransitionResult: Codable, Sendable, Equatable {
+    public var issue: IssueInfo
+
+    public init(issue: IssueInfo) {
+        self.issue = issue
     }
 }
 

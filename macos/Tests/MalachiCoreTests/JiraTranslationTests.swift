@@ -153,6 +153,9 @@ struct JiraTranslationTests {
         #expect(cs.context("jira", "Internal") == "Interní")
         #expect(cs.translate("Add _Jira Account…") == "Přidat účet _Jira…")
         #expect(cs.context("change list separator", "; ") == "; ")
+        #expect(cs.translate("Change Status") == "Změnit stav")
+        #expect(cs.translate("Needs fields in Jira") == "Vyžaduje pole v Jiře")
+        #expect(cs.translate("No status change is available") == "Žádná změna stavu není k dispozici")
     }
 
     @Test(.enabled(if: jiraLocaleDir != nil, jiraLocaleHint))
@@ -166,6 +169,13 @@ struct JiraTranslationTests {
         #expect(cs.translate("Comment on %s", ["ITSD-42"]) == "Komentář k ITSD-42")
         #expect(cs.translate("The Jira site rejected the token of %s", ["Acme"]) == "Web Jira odmítl token účtu Acme")
         #expect(cs.translate("via %s", ["Issue Sync"]) == "přes Issue Sync")
+        #expect(cs.translate("Status changed to %s", ["Probíhá"]) == "Stav změněn na Probíhá")
+        #expect(cs.translate("The status could not be changed: %s", ["Přechod není povolen"]) == "Stav se nepodařilo změnit: Přechod není povolen")
+        // The progressive forms fit the generic sentences (a neuter noun, as "Uložení konceptu").
+        #expect(cs.translate("%s failed: the server could not be reached", [cs.translate("Changing the status")])
+                    == "Nastavení stavu selhalo: server je nedostupný")
+        #expect(cs.translate("%s failed: the server returned an error", [cs.translate("Loading the status changes")])
+                    == "Načtení změn stavu selhalo: server vrátil chybu")
     }
 
     @Test(.enabled(if: jiraLocaleDir != nil, jiraLocaleHint))

@@ -399,6 +399,9 @@ const (
 	CapabilityComment  AccountCapability = "comment"  // reply creates a comment draft (Draft.Comment); a client labels Reply "Comment"
 	CapabilityMove     AccountCapability = "move"     // message.move
 	CapabilityDelete   AccountCapability = "delete"   // message.delete
+	// CapabilityTransition: the status of an issue can be changed through
+	// issue.transitions and issue.transition.
+	CapabilityTransition AccountCapability = "transition"
 )
 
 // MailCapabilities is what a mail account (imap, graph) can do, and what a
@@ -1286,6 +1289,51 @@ type MessageIssue struct {
 	// Mine: the account's own user wrote the item on the site (never set
 	// with Via: a relayed comment is someone else's).
 	Mine bool `json:"mine,omitempty"`
+}
+
+// Issue status transitions (issue.transitions, issue.transition; an
+// account with CapabilityTransition). Both name the issue by any message
+// of it: the message's thread is the issue.
+
+type IssueTransitionsParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"` // any message of the issue
+}
+
+// IssueTransition is one status change the site offers the user on the
+// issue. Name and To are untrusted display text from the site.
+type IssueTransition struct {
+	ID   string `json:"id"`
+	Name string `json:"name"` // the transition's name, as the site's own status menu shows it
+	To   string `json:"to"`   // the name of the status it leads to
+	// ToCategory is the category of that status ("" when the site does
+	// not say).
+	ToCategory IssueStatusCategory `json:"toCategory,omitempty"`
+	// NeedsInput: the transition opens a screen on the site or has fields
+	// that must be filled; it cannot be performed here (issue.transition
+	// refuses it with invalidArgument). A client lists it disabled.
+	NeedsInput bool `json:"needsInput,omitempty"`
+}
+
+type IssueTransitionsResult struct {
+	Issue       IssueInfo         `json:"issue"`       // the issue as the daemon last synchronised it
+	Transitions []IssueTransition `json:"transitions"` // never null; in the site's order, at most MaxIssueTransitions
+}
+
+// MaxIssueTransitions bounds the transitions issue.transitions returns.
+const MaxIssueTransitions = 100
+
+type IssueTransitionParams struct {
+	AccountID    AccountID `json:"accountId"`
+	MessageID    MessageID `json:"messageId"`    // any message of the issue
+	TransitionID string    `json:"transitionId"` // IssueTransition.ID of a transition without NeedsInput
+}
+
+type IssueTransitionResult struct {
+	// Issue is the issue after the daemon refreshed it from the site (or
+	// as last synchronised when the refresh did not finish in time: the
+	// transition was performed all the same).
+	Issue IssueInfo `json:"issue"`
 }
 
 // ---------------------------------------------------------------------------

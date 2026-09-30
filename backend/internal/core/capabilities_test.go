@@ -47,7 +47,7 @@ func TestAccountListCapabilities(t *testing.T) {
 	if api.MailCapabilities[0] != api.CapabilityCompose {
 		t.Fatal("a listed account shares MailCapabilities")
 	}
-	if caps := res.Accounts[2].Capabilities; !slices.Equal(caps, []api.AccountCapability{api.CapabilityComment, api.CapabilityForward}) {
+	if caps := res.Accounts[2].Capabilities; !slices.Equal(caps, []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition}) {
 		t.Errorf("jira: capabilities %v", caps)
 	}
 }

@@ -193,6 +193,7 @@ final class MessageViewController: NSViewController {
         picturesBar.onLoad = { [weak self] in self?.downloadPictures() }
         header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
         header.issueCard.onOpen = { [weak self] url in self?.openIssueLink(url) }
+        header.issueCard.statusMenu = IssueTransitionMenu(state: state) { [weak self] in self?.transitionSubject }
         header.addresses.onWrite = { [weak self] address, account in
             self?.delegate?.newMessage(to: address, account: account)
         }
@@ -387,7 +388,8 @@ final class MessageViewController: NSViewController {
         }
         let issue = issueReading(s, m, site: issueSite(s))
         header.subject = issue?.subject ?? subjectText(subject)
-        header.issueCard.show(issue?.card, openable: issue?.openable ?? false)
+        header.issueCard.show(issue?.card, openable: issue?.openable ?? false, transitions: canTransition(s))
+        refreshIssueBusy()
         header.addresses.show(s.id, account: s.accountId, from: from, to: to, cc: cc)
         header.date = date.isGoZero ? "" : formatDateTime(date)
         return issue

@@ -1,0 +1,254 @@
+{
+  "expand": "transitions",
+  "transitions": [
+    {
+      "id": "11",
+      "name": "Start Progress",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/3",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "In Progress",
+        "id": "3",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "indeterminate"
+        }
+      },
+      "hasScreen": false,
+      "isGlobal": false,
+      "isInitial": false,
+      "isAvailable": true,
+      "isConditional": false,
+      "fields": {}
+    },
+    {
+      "id": 21,
+      "name": "Resolve",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/10001",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Done",
+        "id": "10001",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "done",
+          "colorName": "yellow",
+          "name": "done"
+        }
+      },
+      "hasScreen": "true",
+      "fields": {
+        "resolution": {
+          "required": "true",
+          "schema": {
+            "type": "resolution",
+            "system": "resolution"
+          },
+          "name": "Resolution",
+          "key": "resolution",
+          "operations": [
+            "set"
+          ],
+          "allowedValues": [
+            {
+              "id": "10000",
+              "name": "Done"
+            }
+          ]
+        },
+        "comment": {
+          "required": false
+        }
+      }
+    },
+    {
+      "id": "31",
+      "name": "Odd fields",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/10002",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Waiting",
+        "id": "10002",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "indeterminate"
+        }
+      },
+      "hasScreen": false,
+      "fields": [
+        "not",
+        "an",
+        "object"
+      ]
+    },
+    {
+      "id": "32",
+      "name": "Field of the wrong type",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/10002",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Waiting",
+        "id": "10002"
+      },
+      "fields": {
+        "summary": 5,
+        "resolution": {
+          "required": true
+        }
+      }
+    },
+    {
+      "id": "11",
+      "name": "Duplicate id",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/77",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Elsewhere",
+        "id": "77"
+      }
+    },
+    {
+      "name": "No id",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/77",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Elsewhere",
+        "id": "77"
+      }
+    },
+    {
+      "id": "../../etc",
+      "name": "Bad id",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/77",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Elsewhere",
+        "id": "77"
+      }
+    },
+    {
+      "id": "41",
+      "name": "Reopen\u202e\u0000 zp\u011bt",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/1",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "To Do",
+        "id": "1",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "new",
+          "colorName": "yellow",
+          "name": "new"
+        }
+      }
+    },
+    {
+      "id": "51",
+      "name": null,
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/9",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "Only a target",
+        "id": "9",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "weird",
+          "colorName": "yellow",
+          "name": "weird"
+        }
+      }
+    },
+    {
+      "id": "52",
+      "name": "Nowhere",
+      "to": null
+    },
+    {
+      "id": "53",
+      "to": {
+        "name": "",
+        "id": "9"
+      }
+    },
+    {
+      "id": "54",
+      "name": "Unavailable",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/1",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "To Do",
+        "id": "1",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "new",
+          "colorName": "yellow",
+          "name": "new"
+        }
+      },
+      "isAvailable": false
+    },
+    "not an object",
+    42,
+    null,
+    {
+      "id": "55",
+      "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/3",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "In Progress",
+        "id": "3",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "indeterminate"
+        }
+      },
+      "hasScreen": false
+    },
+    {
+      "id": "56",
+      "name": "Available as a string",
+      "to": {
+        "self": "https://acme.atlassian.net/rest/api/3/status/3",
+        "description": "",
+        "iconUrl": "https://acme.atlassian.net/images/icons/statuses/generic.png",
+        "name": "In Progress",
+        "id": "3",
+        "statusCategory": {
+          "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+          "id": 4,
+          "key": "indeterminate",
+          "colorName": "yellow",
+          "name": "indeterminate"
+        }
+      },
+      "isAvailable": "true",
+      "hasScreen": null,
+      "fields": null
+    }
+  ]
+}

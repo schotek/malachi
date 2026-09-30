@@ -28,9 +28,10 @@ import (
 // seen it. Errors are *StatusError (IsNotFound, IsForbidden,
 // IsUnauthorized, RetryAfter) or *api.Error; ToAPIError maps both.
 //
-// The one write is AddComment (ADF on cloud, wiki markup on datacenter,
-// BuildComment); finding a comment again by the property it was posted
-// with needs nothing more: Comments returns the properties.
+// The writes are AddComment (ADF on cloud, wiki markup on datacenter,
+// BuildComment; finding a comment again by the property it was posted
+// with needs nothing more: Comments returns the properties) and
+// Transition (a status change the site offers, Transitions).
 type Remote interface {
 	// Deployment is the flavour behind the interface.
 	Deployment() api.JiraDeployment
@@ -74,6 +75,16 @@ type Remote interface {
 	// describes it; a 2xx whose body tells too little is still success (the
 	// comment exists), with only IssueID set.
 	AddComment(ctx context.Context, issueID string, body CommentBody, props map[string]json.RawMessage) (Comment, error)
+	// Transitions lists the status changes the site offers the user on the
+	// issue, in the site's order, at most maxTransitions; those the site
+	// marks unavailable are left out. A 404 means the issue is gone or
+	// hidden (IsNotFound).
+	Transitions(ctx context.Context, issueID string) ([]Transition, error)
+	// Transition performs the transition on the issue without any field
+	// of its screen. The site refuses one it does not offer, or one whose
+	// screen has required fields, with a 400 (a *StatusError carrying its
+	// message); a 404 means the issue is gone or hidden.
+	Transition(ctx context.Context, issueID, transitionID string) error
 }
 
 // NewRemote returns the Remote for the client's deployment. The client
@@ -100,6 +111,7 @@ const (
 	maxHistories      = 1000 // per issue, the newest kept
 	maxReconcile      = 50   // cloud reconcileIssues
 	maxPages          = 1000 // any paged loop of one call
+	maxTransitions    = api.MaxIssueTransitions
 )
 
 // User is a user of the site as one answer names it.
@@ -230,6 +242,17 @@ type History struct {
 	Author  User
 	Created time.Time
 	Changes []Change
+}
+
+// Transition is a status change the site offers on an issue (a workflow
+// transition out of its current status).
+type Transition struct {
+	ID   string
+	Name string // the transition's name; "" when the site named none
+	To   Status // the status it leads to (Name "" when the site named none)
+	// NeedsInput: the transition has a screen on the site, or fields that
+	// must be filled; performing it without them is not possible here.
+	NeedsInput bool
 }
 
 // Cursor is an opaque position in a paged search: cloud's nextPageToken
@@ -449,6 +472,92 @@ func (b *base) AddComment(ctx context.Context, issueID string, body CommentBody,
 		}
 	}
 	return Comment{IssueID: issueID}, nil
+}
+
+// Transitions lists the transitions of an issue. Both flavours share the
+// endpoint and its shape; expand=transitions.fields brings the fields of
+// each transition's screen, whose required flags decide NeedsInput.
+func (b *base) Transitions(ctx context.Context, issueID string) ([]Transition, error) {
+	if !validID(issueID) {
+		return nil, api.NewError(api.CodeInvalidArgument, "jira: bad issue id")
+	}
+	q := url.Values{}
+	q.Set("expand", "transitions.fields")
+	data, err := b.c.getJSON(ctx, b.api+"/issue/"+url.PathEscape(issueID)+"/transitions", q)
+	if err != nil {
+		return nil, err
+	}
+	var env struct {
+		Transitions *[]json.RawMessage `json:"transitions"`
+	}
+	if err := decodeStrict(data, &env); err != nil {
+		return nil, err
+	}
+	if env.Transitions == nil {
+		return nil, api.NewError(api.CodeServerError, "jira: transitions answer without transitions")
+	}
+	out := make([]Transition, 0, min(len(*env.Transitions), maxTransitions))
+	seen := map[string]bool{}
+	for _, raw := range *env.Transitions {
+		if len(out) == maxTransitions {
+			break
+		}
+		var w wireTransition
+		if !decodeLenient(raw, &w) {
+			continue
+		}
+		tr, ok := transitionOf(&w)
+		if !ok || seen[tr.ID] {
+			continue
+		}
+		seen[tr.ID] = true
+		out = append(out, tr)
+	}
+	return out, nil
+}
+
+// transitionOf converts one transition; false without a usable id, without
+// anything to show (neither a name nor a target status), or when the site
+// says the user cannot perform it.
+func transitionOf(w *wireTransition) (Transition, bool) {
+	tr := Transition{ID: cleanID(w.ID), Name: cleanText(string(w.Name), maxNameBytes), NeedsInput: bool(w.HasScreen)}
+	if w.To != nil {
+		tr.To = statusFrom(w.To)
+	}
+	if tr.ID == "" || (tr.Name == "" && tr.To.Name == "") || (w.Available != nil && !bool(*w.Available)) {
+		return Transition{}, false
+	}
+	for _, f := range w.Fields {
+		if f != nil && bool(f.Required) {
+			tr.NeedsInput = true
+			break
+		}
+	}
+	return tr, true
+}
+
+// Transition performs a transition: POST /issue/{id}/transitions with the
+// transition's id and nothing else. The site answers 204.
+func (b *base) Transition(ctx context.Context, issueID, transitionID string) error {
+	if !validID(issueID) {
+		return api.NewError(api.CodeInvalidArgument, "jira: bad issue id")
+	}
+	if !validID(transitionID) {
+		return api.NewError(api.CodeInvalidArgument, "jira: bad transition id")
+	}
+	var payload struct {
+		Transition struct {
+			ID string `json:"id"`
+		} `json:"transition"`
+	}
+	payload.Transition.ID = transitionID
+	_, err := b.c.postJSON(ctx, b.api+"/issue/"+url.PathEscape(issueID)+"/transitions", payload)
+	return err
+}
+
+// validID reports whether id is a non-empty entity id as cleanID keeps it.
+func validID(id string) bool {
+	return id != "" && cleanID(flexString(id)) == id
 }
 
 // idLess orders numeric ids numerically, others as strings.

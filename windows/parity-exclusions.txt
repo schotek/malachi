@@ -144,3 +144,10 @@ Enter an address, or a domain such as @example.org	Jira account: macOS first
 This entry is already in the list	Jira account: macOS first
 The list holds at most %d entry	Jira account: macOS first
 Add %s	Jira account: macOS first
+Change Status	Jira account: macOS first
+Needs fields in Jira	Jira account: macOS first
+No status change is available	Jira account: macOS first
+Loading the status changes	Jira account: macOS first
+Changing the status	Jira account: macOS first
+Status changed to %s	Jira account: macOS first
+The status could not be changed: %s	Jira account: macOS first

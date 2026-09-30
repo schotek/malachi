@@ -67,6 +67,19 @@ func exercise(tr Translator) {
 	ReplyLabel(true, tr)
 	ReplyLabel(false, tr)
 	exerciseSettings(tr)
+	exerciseTransitions(tr)
+}
+
+// exerciseTransitions is exercise for transitions.go.
+func exerciseTransitions(tr Translator) {
+	Transitions(api.IssueTransitionsResult{Transitions: []api.IssueTransition{{ID: "1", Name: "a", NeedsInput: true}}}, tr)
+	ChangeStatusLabel(tr)
+	TransitionsLoading(tr)
+	NoTransitions(tr)
+	LoadTransitionsAction(tr)
+	TransitionAction(tr)
+	StatusChanged(TransitionItem{Target: "a"}, api.IssueInfo{}, tr)
+	TransitionFailed(api.CodeServerError, "a", "", tr)
 }
 
 // exerciseSettings is exercise for settings.go.

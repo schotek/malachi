@@ -37,10 +37,21 @@ func (b *StubBackend) Sync() api.SyncService              { return stubSync{} }
 func (b *StubBackend) Config() api.ConfigService          { return stubConfig{} }
 func (b *StubBackend) Senders() api.SenderService         { return stubSenders{} }
 func (b *StubBackend) Contacts() api.ContactService       { return stubContacts{} }
+func (b *StubBackend) Issues() api.IssueService           { return stubIssues{} }
 
 type stubContacts struct{}
 
 func (stubContacts) Search(context.Context, api.ContactSearchParams) (*api.ContactSearchResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+type stubIssues struct{}
+
+func (stubIssues) Transitions(context.Context, api.IssueTransitionsParams) (*api.IssueTransitionsResult, error) {
+	return nil, api.ErrNotImplemented
+}
+
+func (stubIssues) Transition(context.Context, api.IssueTransitionParams) (*api.IssueTransitionResult, error) {
 	return nil, api.ErrNotImplemented
 }
 

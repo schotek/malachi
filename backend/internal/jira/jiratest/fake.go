@@ -39,7 +39,8 @@ import (
 // network.
 //
 // Build state with the builder methods (AddIssue, AddComment, SetStatus,
-// Assign, AddAttachment, EditComment, SetWatching, AddSiteFile, ...);
+// Assign, AddAttachment, EditComment, SetWatching, SetTransitions,
+// AddSiteFile, ...);
 // change it later only through them or Update, which hold the lock and
 // bump the issue's updated time. Knobs, set through Set: GatewayOnly (a
 // scoped token the site refuses), AnonymousBlocked (a DC site without
@@ -157,6 +158,11 @@ type Issue struct {
 	// Extra replaces entries of the issue's "fields" object as sent
 	// (pathological values: wrong types, huge strings...).
 	Extra map[string]any
+	// Transitions is the issue's workflow (nil = DefaultTransitions);
+	// performed records the transitions clients performed
+	// (TransitionsPerformed).
+	Transitions []*Transition
+	performed   []string
 }
 
 // Comment is a comment of an issue; HTML is its rendered body.
@@ -757,6 +763,10 @@ func (f *Server) route(w http.ResponseWriter, r *http.Request, path string, gate
 		f.comments(w, strings.TrimSuffix(strings.TrimPrefix(rest, "/issue/"), "/comment"), q)
 	case post && strings.HasPrefix(rest, "/issue/") && strings.HasSuffix(rest, "/comment"):
 		f.postComment(w, strings.TrimSuffix(strings.TrimPrefix(rest, "/issue/"), "/comment"), body, q)
+	case get && strings.HasPrefix(rest, "/issue/") && strings.HasSuffix(rest, "/transitions"):
+		f.transitions(w, strings.TrimSuffix(strings.TrimPrefix(rest, "/issue/"), "/transitions"), q)
+	case post && strings.HasPrefix(rest, "/issue/") && strings.HasSuffix(rest, "/transitions"):
+		f.postTransition(w, strings.TrimSuffix(strings.TrimPrefix(rest, "/issue/"), "/transitions"), body)
 	case get && strings.HasPrefix(rest, "/issue/") && !strings.Contains(strings.TrimPrefix(rest, "/issue/"), "/"):
 		f.issue(w, strings.TrimPrefix(rest, "/issue/"), q, gateway)
 	default:

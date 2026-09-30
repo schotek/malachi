@@ -237,6 +237,22 @@ type wireChangelog struct {
 	Histories  []json.RawMessage `json:"histories"`
 }
 
+// wireTransition is one entry of GET /issue/{id}/transitions. Fields is
+// present with expand=transitions.fields: the fields of the transition's
+// screen, keyed by field id; only "required" is read of each.
+type wireTransition struct {
+	ID        flexString                      `json:"id"`
+	Name      flexString                      `json:"name"`
+	To        *wireStatus                     `json:"to"`
+	HasScreen flexBool                        `json:"hasScreen"`
+	Available *flexBool                       `json:"isAvailable"`
+	Fields    map[string]*wireTransitionField `json:"fields"`
+}
+
+type wireTransitionField struct {
+	Required flexBool `json:"required"`
+}
+
 type wireServerInfo struct {
 	BaseURL        *flexString `json:"baseUrl"`
 	Version        *flexString `json:"version"`

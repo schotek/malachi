@@ -44,6 +44,11 @@ final class MessageWindows {
         }
     }
 
+    /// Called with every message window once it is on screen (the hub
+    /// adds the Change Status submenu to its More Actions menu;
+    /// Integration+Jira).
+    var onMessageWindowOpened: (@MainActor (MessageWindowController) -> Void)?
+
     private var tracked: [WeakView] = []
     /// The views of several messages (`MessageDisplay`), held weakly.
     private var trackedDisplays: [WeakDisplay] = []
@@ -115,6 +120,7 @@ final class MessageWindows {
         place(wc)
         wc.showWindow(nil)
         wc.show(s)
+        onMessageWindowOpened?(wc)
     }
 
     /// Every open message window.

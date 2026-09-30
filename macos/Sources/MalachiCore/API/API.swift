@@ -398,6 +398,26 @@ public enum API {
         public static let name = "contact.search"
     }
 
+    // MARK: Issues
+
+    /// The status changes the site allows on the issue of a message
+    /// (an account with `Capability.transition`).
+    public enum IssueTransitions: RPCMethod {
+        public typealias Params = IssueTransitionsParams
+        public typealias Result = IssueTransitionsResult
+        public static let name = "issue.transitions"
+        public static let timeout = RPCTimeouts.transitions
+    }
+
+    /// Performs one of them; the daemon refreshes the issue before it
+    /// answers.
+    public enum IssueTransition: RPCMethod {
+        public typealias Params = IssueTransitionParams
+        public typealias Result = IssueTransitionResult
+        public static let name = "issue.transition"
+        public static let timeout = RPCTimeouts.transition
+    }
+
     // MARK: Tables
 
     /// Every method type, in the order of methods.go.
@@ -420,6 +440,7 @@ public enum API {
         ConfigGet.self, ConfigSet.self,
         SenderList.self, SenderAdd.self, SenderRemove.self,
         ContactSearch.self,
+        IssueTransitions.self, IssueTransition.self,
     ]
 
     /// api.AllMethods: every callable method name.
@@ -493,6 +514,8 @@ public enum API {
         /// `JiraConfig.offlineDays`: the largest value, and what 0 means.
         public static let maxJiraOfflineDays = 365
         public static let defaultJiraOfflineDays = 30
+        /// `issue.transitions`: at most this many transitions.
+        public static let maxIssueTransitions = 100
     }
 }
 

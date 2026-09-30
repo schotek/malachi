@@ -27,7 +27,7 @@ func withJiraAccount(f *fakeBackend) *fakeBackend {
 			Jira: &api.JiraConfig{SiteURL: "https://acme.atlassian.net", Deployment: api.JiraCloud, Login: "jana@acme.test"}},
 		Enabled:      true,
 		State:        api.SyncState{AccountID: fxJira, Status: api.SyncIdle, Progress: -1},
-		Capabilities: []api.AccountCapability{api.CapabilityComment, api.CapabilityForward},
+		Capabilities: []api.AccountCapability{api.CapabilityComment, api.CapabilityForward, api.CapabilityTransition},
 	})
 	f.folders[fxJira] = []api.Folder{{ID: fxJiraSpace, AccountID: fxJira, Name: "IT Service Desk", Path: "IT Service Desk",
 		Role: api.RoleNone, Subscribed: true, Selectable: true, Synced: true, Total: 1}}
@@ -44,6 +44,10 @@ func withJiraAccount(f *fakeBackend) *fakeBackend {
 	}}
 	f.lists[fxJiraSpace] = []api.MessageSummary{c.MessageSummary}
 	f.messages["jc1"] = c
+	f.transitions = map[api.MessageID][]api.IssueTransition{"jc1": {
+		{ID: "21", Name: "Resolve", To: "Done", ToCategory: api.StatusCategoryDone, NeedsInput: true},
+		{ID: "41", Name: "Reopen" + rtlOverride, To: "To " + rtlOverride + "Do", ToCategory: api.StatusCategoryTodo},
+	}}
 	f.bodies["jc1"] = api.MessageBodyResult{MessageID: "jc1", BodyState: api.BodyFetched, Text: "It works again.\n",
 		RemoteContent: api.RemoteBlock, SanitizerVersion: "1"}
 	f.searchResults = append(f.searchResults, api.SearchResult{Message: c.MessageSummary, Snippet: "It works again."})
@@ -174,4 +178,61 @@ func TestJiraForwardByMail(t *testing.T) {
 	}
 	// The default attribution names the original from its own account.
 	mustContain(t, save.HTMLBody, "Forwarded message", "Subject: ITSD-7: Printer")
+}
+
+// list_transitions fences the site's names, marks what needs input, and
+// transition_issue (behind --allow-modify) performs one by id and reports
+// the issue's new status; what the daemon refuses comes back as its error.
+func TestJiraTransitionsTools(t *testing.T) {
+	h := newHarness(t, withJiraAccount(newFixture()), true, false)
+	out := h.ok(t, "list_transitions", map[string]any{"accountId": "j1", "messageId": "jc1"})
+	mustContain(t, out, "2 transitions offered on the issue of message jc1 in account j1")
+	body := fencedBody(t, out)
+	mustContain(t, body, "issue: ITSD-7\n", "summary: Printer\n", "status: In Progress\n",
+		`- id=21 name="Resolve" to="Done" category=done needsInput`, `- id=41 name="Reopen" to="To Do" category=todo`)
+	mustNotContain(t, out, rtlOverride, "id=41 name=\"Reopen\" to=\"To Do\" category=todo needsInput")
+
+	h.fail(t, "list_transitions", map[string]any{"accountId": "j1", "messageId": ""}, "accountId and messageId are required")
+	h.fail(t, "list_transitions", map[string]any{"accountId": "a1", "messageId": "m1"}, "invalidArgument")
+	h.fail(t, "list_transitions", map[string]any{"accountId": "j1", "messageId": "m_nobody"}, "messageNotFound")
+
+	h.fail(t, "transition_issue", map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": ""}, "transitionId are required")
+	h.fail(t, "transition_issue", map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": "21"}, "needs fields filled in on the site")
+	h.fail(t, "transition_issue", map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": "99"}, "offers no transition")
+	out = h.ok(t, "transition_issue", map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": "41"})
+	mustContain(t, out, "transition 41 performed on the issue of message jc1 in account j1")
+	mustContain(t, fencedBody(t, out), "issue: ITSD-7\n", "summary: Printer\n", "status: To Do")
+	mustNotContain(t, out, rtlOverride)
+	h.fb.mu.Lock()
+	calls := h.fb.transitionCalls
+	h.fb.mu.Unlock()
+	if len(calls) != 3 || calls[2] != (api.IssueTransitionParams{AccountID: fxJira, MessageID: "jc1", TransitionID: "41"}) {
+		t.Fatalf("issue.transition calls = %+v", calls)
+	}
+	// The issue's status changed for every later reading.
+	out = h.ok(t, "read_message", map[string]any{"accountId": "j1", "messageId": "jc1"})
+	mustContain(t, fencedBody(t, out), "issue-status: To Do\n")
+
+	// An issue the site no longer shows, a token the site refuses.
+	h.fb.setFail(api.MethodIssueTransitions, api.NewError(api.CodeMessageGone, "jira: HTTP 404: Issue does not exist"))
+	h.fail(t, "list_transitions", map[string]any{"accountId": "j1", "messageId": "jc1"}, "messageGone")
+	h.fb.setFail(api.MethodIssueTransition, api.NewError(api.CodeAuthFailed, "jira: HTTP 401: Unauthorized"))
+	h.fail(t, "transition_issue", map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": "41"}, "authFailed")
+}
+
+// Without --allow-modify the status of an issue cannot be changed, only
+// listed.
+func TestJiraTransitionGated(t *testing.T) {
+	h := newHarness(t, withJiraAccount(newFixture()), false, false)
+	h.ok(t, "list_transitions", map[string]any{"accountId": "j1", "messageId": "jc1"})
+	params := mcpCallParams("transition_issue")
+	params.Arguments = map[string]any{"accountId": "j1", "messageId": "jc1", "transitionId": "41"}
+	if _, err := h.cs.CallTool(t.Context(), &params); err == nil {
+		t.Fatal("transition_issue must be unknown without --allow-modify")
+	}
+	h.fb.mu.Lock()
+	defer h.fb.mu.Unlock()
+	if len(h.fb.transitionCalls) != 0 {
+		t.Fatalf("issue.transition was called: %+v", h.fb.transitionCalls)
+	}
 }

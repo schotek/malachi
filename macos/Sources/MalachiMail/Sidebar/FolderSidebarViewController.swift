@@ -254,7 +254,9 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
             let cell = outline.makeView(withIdentifier: FolderCellView.reuseIdentifier, owner: nil) as? FolderCellView
                 ?? FolderCellView()
             cell.configure(entry: node.entry, subtitle: node.subtitle)
-            cell.toolTip = node.entry.folder?.path
+            // A view of an issue account has the daemon's English name as
+            // its path: the tooltip is the title the row shows.
+            cell.toolTip = node.entry.folder.map { $0.virtual == nil ? $0.path : folderTitle($0) }
             let key = node.key
             cell.onToggleFavourite = { [weak self] in self?.mailbox.toggleFavourite(key) }
             return cell
