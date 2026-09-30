@@ -620,6 +620,74 @@ private func folded(
         #expect(fake.prompts == ["Hello", "Hello"])
     }
 
+    /// TestWaiting: the panel waits where nothing in the transcript shows
+    /// the work: from the question until a tool is at work, from its result
+    /// until the answer streams, and after a text block until the result;
+    /// never while idle. (Not named `waiting`, which would hide the sign-in
+    /// line's text in the other tests.)
+    @Test func waitsWhereNothingShowsTheWork() async throws {
+        let fake = try FakeClaude(turns: [
+            FakeTurn(lines: [
+                fakeInit, fakeToolUse("t1", "read_message"), fakeToolResult("t1", "From: someone"),
+                fakeDelta("Hi"), fakeText("Hi"), fakeResult(),
+            ]),
+        ])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        var seen = [h.panel.waiting]
+        let record = {
+            let w = h.panel.waiting
+            if seen.last != w {
+                seen.append(w)
+            }
+        }
+        h.panel.onChange = { _ in record() }
+        h.panel.onState = { record() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        #expect(seen == [false, true, false, true, false, true, false])
+    }
+
+    /// TestRefreshFailedOffersRetryAndSignIn: Claude Code could not refresh
+    /// its sign-in (another Claude Code held the refresh lock): its words
+    /// are said whole once, the line offers Try Again and Sign In…, and
+    /// either goes to a new process and takes both buttons.
+    @Test func refreshFailedOffersRetryAndSignIn() async throws {
+        // Claude Code 2.1.284, 215 bytes.
+        let words = "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close other Claude Code processes or sign in again."
+        let stopped = "The assistant stopped: " + words
+        let refresh = FakeTurn(lines: [fakeInit, fakeFailure("server_error", words), fakeResult(words, success: false)])
+        let fake = try FakeClaude(turns: [refresh, answerTurn("Hi there"), refresh, answerTurn("Signed in")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.submit("Hello"))
+        try await h.turn()
+        #expect(h.contents == [.user(label: "", text: "Hello"), .error(stopped, retry: true, offer: .signIn)])
+        #expect(h.panel.process == nil)
+        h.panel.retry(h.panel.items[1].id)
+        try await h.turn()
+        #expect(h.contents == [
+            .user(label: "", text: "Hello"),
+            .error(stopped, retry: false),
+            .assistant(text: "Hi there", streaming: false),
+        ])
+        #expect(fake.starts == 2)
+
+        #expect(h.panel.submit("Again"))
+        try await h.turn()
+        try fake.login(signsIn)
+        h.panel.signIn(h.panel.items[4].id)
+        try await h.turn()
+        #expect(Array(h.contents[3...]) == [
+            .user(label: "", text: "Again"),
+            .error(stopped, retry: false),
+            .activity(label: waiting, done: true),
+            .assistant(text: "Signed in", streaming: false),
+        ])
+        #expect(fake.logins == 1 && fake.starts == 3)
+        #expect(fake.prompts == ["Hello", "Hello", "Again", "Again"])
+    }
+
     /// Another refusal of the API is said once, by the result.
     @Test func refusedTurnIsSaidOnce() async throws {
         let limit = "API Error: Rate limit reached"

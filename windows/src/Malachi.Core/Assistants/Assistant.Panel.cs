@@ -94,8 +94,13 @@ public static partial class Assistant
     /// <summary>The most of a subject <see cref="ConversationLabel"/> shows, in bytes.</summary>
     internal const int MaxSubject = 200;
 
-    /// <summary>The most of a reason <see cref="StoppedText"/> (and the search's failure text) shows, in bytes.</summary>
-    internal const int MaxReason = 200;
+    /// <summary>
+    /// The most of a reason <see cref="StoppedText"/> (and the search's failure
+    /// text) shows, in bytes: room for Claude Code's longer words, whose end
+    /// says what helps (its message when it could not refresh its sign-in is
+    /// 215 bytes).
+    /// </summary>
+    internal const int MaxReason = 400;
 
     /// <summary>The length of a drive root, <c>X:\</c>.</summary>
     internal const int WindowsRootLength = 3;
@@ -721,7 +726,7 @@ public static partial class Assistant
     /// The transcript's error line when a turn ended badly
     /// (assistant.StoppedText). <paramref name="reason"/> is technical (the
     /// result's text or subtype, or Claude Code's stderr) and shown as data:
-    /// its first non-empty line without control characters, at most 200
+    /// its first non-empty line without control characters, at most 400
     /// bytes (cut at a character boundary); "unknown" when nothing is left.
     /// </summary>
     public static string StoppedText(string reason)

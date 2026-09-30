@@ -134,7 +134,7 @@ public sealed class ClaudeCodeProcessTests
         });
     }
 
-    /// <summary>stderr is kept bounded, the reason is its first line cut at 200 bytes.</summary>
+    /// <summary>stderr is kept bounded, the reason is its first line cut at 400 bytes.</summary>
     [Fact]
     public async Task StderrIsBounded()
     {

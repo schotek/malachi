@@ -9,8 +9,8 @@ using Adw 1;
 // wrote is plain text (labels without markup, the answers a text buffer
 // with tags). From the top: the header with New Conversation, the context
 // chip, the quick actions, the bar "Another message is selected", the
-// transcript, the waiting action, the question field with Send or Stop and
-// the line that says where the mail goes.
+// transcript with its spinner, the waiting action, the question field with
+// Send or Stop and the line that says where the mail goes.
 Adw.ToolbarView assistant_panel {
   [top]
   Adw.HeaderBar {
@@ -106,13 +106,26 @@ Adw.ToolbarView assistant_panel {
       vexpand: true;
       hscrollbar-policy: never;
 
-      child: Box assistant_transcript {
+      child: Box {
         orientation: vertical;
         spacing: 10;
         margin-top: 12;
         margin-bottom: 12;
         margin-start: 12;
         margin-end: 12;
+
+        Box assistant_transcript {
+          orientation: vertical;
+          spacing: 10;
+        }
+
+        // While a question is under way and nothing above shows it
+        // (assistantpanel.Controller.Waiting): until Claude Code answers,
+        // between a tool and more text.
+        Adw.Spinner assistant_waiting {
+          halign: start;
+          visible: false;
+        }
       };
     }
 

@@ -131,7 +131,12 @@ reaches the screen as TextBlock.Text or Runs set from code, never markup.
             VerticalAlignment="Bottom"
             Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
 
-        <!-- The transcript: one row per item of the controller. -->
+        <!--
+            The transcript: one row per item of the controller, and below
+            them the spinner while a question is under way and nothing above
+            shows it (AssistantPanelController.IsWaiting; GTK
+            assistant_waiting).
+        -->
         <ScrollViewer
             x:Name="Scroller"
             Grid.Row="3"
@@ -139,11 +144,19 @@ reaches the screen as TextBlock.Text or Runs set from code, never markup.
             HorizontalScrollMode="Disabled"
             IsTabStop="False"
             VerticalScrollBarVisibility="Auto">
-            <StackPanel
-                x:Name="Transcript"
-                Margin="12"
-                AutomationProperties.AutomationId="AssistantTranscript"
-                Spacing="10" />
+            <StackPanel Margin="12" Spacing="10">
+                <StackPanel
+                    x:Name="Transcript"
+                    AutomationProperties.AutomationId="AssistantTranscript"
+                    Spacing="10" />
+                <ProgressRing
+                    x:Name="WaitingRing"
+                    Width="14"
+                    Height="14"
+                    HorizontalAlignment="Left"
+                    IsActive="False"
+                    Visibility="Collapsed" />
+            </StackPanel>
         </ScrollViewer>
 
         <Rectangle

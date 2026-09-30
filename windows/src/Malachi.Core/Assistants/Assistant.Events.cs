@@ -124,11 +124,32 @@ public static partial class Assistant
     /// </summary>
     internal const string AuthenticationFailed = "authentication_failed";
 
+    /// <summary>
+    /// How Claude Code's own words begin when it could not refresh its
+    /// sign-in for the turn, a <see cref="AssistantEvent.Failure"/> that is
+    /// not <see cref="AuthenticationFailed"/> ("server_error"; Go's
+    /// refreshFailed). Measured with Claude Code 2.1.284: "Failed to refresh
+    /// OAuth token: another Claude Code process is refreshing it or exited
+    /// mid-refresh. …" while another Claude Code holds its refresh lock, or
+    /// one ended holding it; Claude Code takes such a lock over after about a
+    /// minute.
+    /// </summary>
+    internal const string RefreshFailedPrefix = "Failed to refresh OAuth token";
+
     private static List<AssistantEvent> ParseAssistant(GoJson.Object o)
     {
         if (o.Str("error") is { Length: > 0 } failure)
         {
-            return [new AssistantEvent(AssistantEventKind.Failure) { Failure = failure }];
+            var texts = new List<string>();
+            foreach (var raw in o.Obj("message")?.Array("content") ?? [])
+            {
+                var block = GoJson.Object.Of(o.B, raw);
+                if (block?.Str("type") == "text")
+                {
+                    texts.Add(block.Str("text"));
+                }
+            }
+            return [new AssistantEvent(AssistantEventKind.Failure) { Failure = failure, Text = string.Join('\n', texts) }];
         }
         var output = new List<AssistantEvent>();
         foreach (var raw in o.Obj("message")?.Array("content") ?? [])

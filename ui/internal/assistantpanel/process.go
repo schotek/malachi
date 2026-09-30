@@ -22,8 +22,9 @@ import (
 const (
 	// stderrLimit is the most of stderr that is kept.
 	stderrLimit = 64 << 10
-	// reasonLimit cuts the reason of an early exit, stderr's first line.
-	reasonLimit = 200
+	// reasonLimit cuts the reason of an early exit, stderr's first line
+	// (assistant.StoppedText shows as much).
+	reasonLimit = 400
 	// DefaultKillGrace is the time from SIGTERM to SIGKILL.
 	DefaultKillGrace = 2 * time.Second
 	// eofGrace is how long stdout and stderr are read after the exit (a

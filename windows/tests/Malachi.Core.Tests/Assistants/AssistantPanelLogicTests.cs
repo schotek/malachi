@@ -761,15 +761,18 @@ public sealed class AssistantPanelLogicTests
 
     public static TheoryData<string, string, string> StoppedTextCases()
     {
-        var longReason = new string('a', 199) + "č"; // 201 bytes: the č does not fit
+        var longReason = new string('a', 399) + "č"; // 401 bytes: the č does not fit
+        // Claude Code 2.1.284, 215 bytes, whose end says what helps.
+        const string refresh = "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close other Claude Code processes or sign in again.";
         return new()
         {
             { "plain", "error_max_turns", "The assistant stopped: error_max_turns" },
             { "first line", "API Error: 401\nat line 2\n", "The assistant stopped: API Error: 401" },
             { "first non-empty line", "\n  \n\tspawn failed \nmore", "The assistant stopped: spawn failed" },
             { "control characters", "bad" + S(0x1B) + "[31m red" + S(7), "The assistant stopped: bad[31m red" },
-            { "cut at a character", longReason, "The assistant stopped: " + new string('a', 199) },
-            { "exactly the cap", new string('b', 200), "The assistant stopped: " + new string('b', 200) },
+            { "cut at a character", longReason, "The assistant stopped: " + new string('a', 399) },
+            { "exactly the cap", new string('b', 400), "The assistant stopped: " + new string('b', 400) },
+            { "Claude Code's words whole", refresh, "The assistant stopped: " + refresh },
             { "empty", "", "The assistant stopped: unknown" },
             { "only spaces", " \n\t\n", "The assistant stopped: unknown" },
             // Swift: lines end at "\n" alone, a "\r" is dropped, and a reason
@@ -850,7 +853,7 @@ public sealed class AssistantPanelLogicTests
     public void SignInFailedText(string reason, string want)
     {
         Assert.Equal(want, Assistant.SignInFailedText(reason));
-        Assert.Equal("The sign-in failed: " + new string('b', 200), Assistant.SignInFailedText(new string('b', 300)));
+        Assert.Equal("The sign-in failed: " + new string('b', 400), Assistant.SignInFailedText(new string('b', 500)));
         Assert.Equal("The sign-in failed: bad[31m red", Assistant.SignInFailedText("bad" + S(0x1B) + "[31m red" + S(7)));
     }
 

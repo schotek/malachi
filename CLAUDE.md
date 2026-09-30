@@ -63,6 +63,22 @@ notifikace je v dokumentu zmíněna a každý chybový kód má řádek v tabulc
 (`| kód | jméno |`). Chybové kódy se nikdy nepřečíslovávají, jen přidávají.
 Nekompatibilní změna = bump `ProtocolVersion`.
 
+### 6. Změna UI jde do všech tří klientů současně
+Každá změna nebo oprava v UI (nová funkce, oprava chování, úprava vzhledu)
+se dělá v jedné práci v GTK, macOS i Windows klientovi, ne jen v jednom
+z nich s tím, že porty přijdou „někdy“. Pořadí zůstává: nejdřív čistá
+logika v Go (`ui/internal/…`) a GTK jako reference, hned potom port do
+`MalachiCore`/`MalachiMail` a `Malachi.Core`/`Malachi.App` i s testy.
+Klient, který na tomto stroji nejde sestavit (Swift a C# na Linuxu,
+GTK na Windows), se napíše podle okolního kódu a v předávce se uvede, co
+zbývá sestavit a ověřit. Když zadání neříká, kterých klientů se změna
+týká, zeptej se uživatele (v Claude Code přes `AskUserQuestion`), jestli
+ji dělat jen v jednom, nebo ve všech třech. Výjimky jsou jen odchylky
+z tabulek v `macos/README.md` a `windows/README.md` a věci, které na
+platformě nedávají smysl (třeba Claude Desktop na Linuxu). Příklad:
+kolečko čekání v panelu asistenta (2026-09-30) přišlo do všech tří
+klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
+
 ## Konvence
 
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
@@ -498,6 +514,45 @@ asociované hodnoty a `.none` u `Offer`), `ClaudeCodeLocator.startSignIn`
 řádek chyby s tlačítky ve `FlowView` (mezera u poznámek a chyb bez
 tlačítek) a testy závislé na čase (`signInStoppedAndReplaced`,
 `ClaudeCodeLocatorTests.signIn`).
+
+Doplněk k přihlášení (2026-09-30, všechny tři klienty). Když Claude
+Code nemůže obnovit token, protože zámek obnovy
+`~/.claude/.oauth_refresh.lock` drží jiný Claude Code (nebo ho po sobě
+nechal proces ukončený uprostřed obnovy), odmítne tah s `error:
+server_error`, ne `authentication_failed`, a slovy „Failed to refresh
+OAuth token: …“ (změřeno s 2.1.284 v dočasném `HOME`: zámek starší než
+asi minutu si Claude Code převezme sám, `auth status` token neobnovuje).
+`EventFailure` teď nese text zprávy (`Event.Text`), `Event.RefreshFailed()`
+ho pozná podle začátku a panel pak ukončí proces a řádek „Asistent
+skončil: …“ nabídne *Zkusit znovu* i *Přihlásit se…*. `maxReason`
+(`StoppedText`, `SearchFailedText`, `SignInFailedText`) a `reasonLimit`
+procesu mají 400 bajtů místo 200 (ta věta Claude Code má 215 a rada je na
+jejím konci). `Locator.run` (`--version`, `auth status`) po vypršení
+limitu posílá SIGTERM a SIGKILL až po `DefaultKillGrace`, stejně jako
+`Process` a přihlášení; macOS to tak dělal už dřív (`BridgeRunner`),
+Windows dál ukončuje strom procesů. Porty: Swift `Assistant.refreshFailed`
+a `Event.refreshFailed`, C# `Assistant.RefreshFailedPrefix` a
+`AssistantEvent.RefreshFailed`, v obou controllerech `refreshFailed`,
+`maxReason`/`MaxReason` a `reasonLimit`/`ReasonLimit` 400.
+
+Kolečko čekání v panelu (2026-09-30, všechny tři klienty): dokud běží
+dotaz a nic v přepisu neukazuje práci (nestreamuje odpověď, nepracuje
+nástroj ani přihlášení), je pod přepisem otáčející se kolečko; stav počítá
+controller z položek (Go `Controller.Waiting`, Swift `waiting`, C#
+`IsWaiting`), pohledy jen přepínají (GTK `assistant_waiting` v
+`assistant_panel.blp`, macOS `AssistantTranscriptView.setWaiting`, Windows
+`WaitingRing` v `AssistantPanel.xaml`).
+
+Obojí je v Go a GTK sestavené a otestované; Swift a C# jsou napsané na
+Linuxu bez překladu, takže je čeká sestavení a testy na Macu a na
+Windows: macOS `waitsWhereNothingShowsTheWork`,
+`refreshFailedOffersRetryAndSignIn`, `signInFailures`, `stoppedText`,
+`signInFailedText`, `searchFailedText`, `stderrIsBounded` a kontrola
+řádků proti `events_test.go`; Windows `WaitsWhereNothingShowsTheWork`,
+`RefreshFailedOffersRetryAndSignIn`, `SignInFailures`, `StoppedTextCases`,
+`SignInFailedText`, `StderrIsBounded` a `LinesAreGos`. Na pohled: kolečko
+pod přepisem (macOS řádek v `FillStackView`, Windows `ProgressRing` pod
+`Transcript`) a řádek chyby s oběma tlačítky.
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;

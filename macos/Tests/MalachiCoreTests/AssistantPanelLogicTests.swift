@@ -461,14 +461,17 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
     }
 
     @Test func stoppedText() {
-        let long = String(repeating: "a", count: 199) + "č" // 201 bytes: the č does not fit
+        let long = String(repeating: "a", count: 399) + "č" // 401 bytes: the č does not fit
+        // Claude Code 2.1.284, 215 bytes, whose end says what helps.
+        let refresh = "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close other Claude Code processes or sign in again."
         let cases: [(String, String, String)] = [
             ("plain", "error_max_turns", "The assistant stopped: error_max_turns"),
             ("first line", "API Error: 401\nat line 2\n", "The assistant stopped: API Error: 401"),
             ("first non-empty line", "\n  \n\tspawn failed \nmore", "The assistant stopped: spawn failed"),
             ("control characters", "bad\u{1B}[31m red\u{7}", "The assistant stopped: bad[31m red"),
-            ("cut at a character", long, "The assistant stopped: " + String(repeating: "a", count: 199)),
-            ("exactly the cap", String(repeating: "b", count: 200), "The assistant stopped: " + String(repeating: "b", count: 200)),
+            ("cut at a character", long, "The assistant stopped: " + String(repeating: "a", count: 399)),
+            ("exactly the cap", String(repeating: "b", count: 400), "The assistant stopped: " + String(repeating: "b", count: 400)),
+            ("Claude Code's words whole", refresh, "The assistant stopped: " + refresh),
             ("empty", "", "The assistant stopped: unknown"),
             ("only spaces", " \n\t\n", "The assistant stopped: unknown"),
             // Swift only: lines end at "\n" alone, a "\r" is dropped, and a
@@ -535,7 +538,7 @@ private let attachmentAsk = "Using the Malachi Mail tools, read attachment %@ of
             ("plain", "claude exited with status 1", "The sign-in failed: claude exited with status 1"),
             ("first line", "Login failed\nat line 2\n", "The sign-in failed: Login failed"),
             ("control characters", "bad\u{1B}[31m red\u{7}", "The sign-in failed: bad[31m red"),
-            ("cut", String(repeating: "b", count: 300), "The sign-in failed: " + String(repeating: "b", count: 200)),
+            ("cut", String(repeating: "b", count: 500), "The sign-in failed: " + String(repeating: "b", count: 400)),
             ("empty", "", "The sign-in failed: unknown"),
             // Swift only: a reason is data, never a format.
             ("percent signs", "%@ %s %d", "The sign-in failed: %@ %s %d"),

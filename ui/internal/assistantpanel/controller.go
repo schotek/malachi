@@ -272,7 +272,12 @@ var errNoMessages = errors.New("assistant: no message ids")
 //     answer: the result repeats it. When the API refused the sign-in
 //     (expired or revoked, whatever claude auth status says), the turn ends
 //     with "Claude Code is not signed in" and Sign In…, and the process
-//     ends, for a new sign-in takes a new one.
+//     ends, for a new sign-in takes a new one. When Claude Code could not
+//     refresh its sign-in (assistant.Event.RefreshFailed: another Claude
+//     Code was refreshing it, or ended in the middle of that), the turn
+//     ends with the result's "The assistant stopped: …" and both Try Again
+//     (Claude Code takes the refresh over after about a minute) and Sign
+//     In…, and the process ends the same way.
 //
 // Sign In… (SignIn) sends the same question once more, with Claude Code's
 // own sign-in in front of step 4's start: the line "Waiting for the sign-in
@@ -379,8 +384,9 @@ type Controller struct {
 	// lastRequest is the question of the turn under way (or the last that
 	// failed), for Try Again.
 	lastRequest *request
-	// authFailed: the API refused the sign-in in the turn under way.
-	authFailed bool
+	// authFailed: the API refused the sign-in in the turn under way;
+	// refreshFailed: Claude Code could not refresh it.
+	authFailed, refreshFailed bool
 	// signingIn is the index of the sign-in's activity line, -1 none;
 	// cancelSignIn ends the sign-in this question started.
 	signingIn    int
@@ -463,6 +469,24 @@ func (c *Controller) Phase() Phase { return c.phase }
 
 // Running says whether a question is under way.
 func (c *Controller) Running() bool { return c.phase != PhaseIdle }
+
+// Waiting says whether a question is under way and nothing in the
+// transcript shows it: no answer streams, no tool and no sign-in is at
+// work. The view shows that it waits (a spinner at the end of the
+// transcript): from the question until Claude Code started and answers,
+// and between a tool's result and what comes next. It is read from the
+// items, so it holds at every Change and OnState.
+func (c *Controller) Waiting() bool {
+	if c.phase == PhaseIdle {
+		return false
+	}
+	for _, it := range c.items {
+		if it.Content.Streaming || it.Content.Kind == ContentActivity && !it.Content.Done {
+			return false
+		}
+	}
+	return true
+}
 
 // Closed says whether nothing runs any more.
 func (c *Controller) Closed() bool { return c.closed }
@@ -1151,7 +1175,7 @@ func (c *Controller) send(prompt string, told []int) {
 			c.pinned[i].Announced = true
 		}
 	}
-	c.authFailed = false
+	c.authFailed, c.refreshFailed = false, false
 	c.phase = PhaseRunning
 	c.state()
 }
@@ -1401,8 +1425,11 @@ func (c *Controller) handle(events []assistant.Event) {
 			// Claude Code's own words for a turn the API refused: the
 			// result repeats them.
 			c.log.Info("assistant: the API refused the turn", "failure", e.Failure)
-			if e.NotSignedIn() {
+			switch {
+			case e.NotSignedIn():
 				c.authFailed = true
+			case e.RefreshFailed():
+				c.refreshFailed = true
 			}
 		case assistant.EventResult:
 			c.log.Info("assistant turn", "success", e.Success, "costUSD", e.CostUSD, "denied", len(e.Denied))
@@ -1418,10 +1445,16 @@ func (c *Controller) handle(events []assistant.Event) {
 				// A new sign-in takes a new Claude Code.
 				c.endProcess()
 				c.append(Content{Kind: ContentError, Text: assistant.PanelTexts(c.tr).NotSignedIn, Offer: OfferSignIn})
+			case c.refreshFailed:
+				// Its words say what happened and what helps: Try Again
+				// in a minute, or a new sign-in now; either way a new
+				// Claude Code.
+				c.endProcess()
+				c.append(Content{Kind: ContentError, Text: assistant.StoppedText(c.tr, e.ResultText), Retry: true, Offer: OfferSignIn})
 			default:
 				c.append(Content{Kind: ContentError, Text: assistant.StoppedText(c.tr, e.ResultText), Retry: true})
 			}
-			c.authFailed = false
+			c.authFailed, c.refreshFailed = false, false
 			c.state()
 		}
 	}

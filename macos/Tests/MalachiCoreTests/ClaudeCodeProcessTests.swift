@@ -153,7 +153,7 @@ private let initLine = #"{"type":"system","subtype":"init","mcp_servers":[{"name
         #expect(r.exits[0].description == "claude exited with status 0")
     }
 
-    /// stderr is kept bounded, the reason is its first line cut at 200
+    /// stderr is kept bounded, the reason is its first line cut at 400
     /// bytes.
     @Test func stderrIsBounded() async throws {
         let (p, _, r) = try make("""

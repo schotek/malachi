@@ -34,6 +34,9 @@ private let lineAPIError = #"{"type":"result","subtype":"success","is_error":tru
 // Claude Code 2.1.285, signed out; 2.1.72 says the same of a sign-in the
 // API no longer accepts ("Failed to authenticate. API Error: 401 …").
 private let lineAuthFailed = #"{"type":"assistant","message":{"diagnostics":null,"id":"acbc4b28","container":null,"model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"Not logged in · Please run /login"}],"context_management":null},"parent_tool_use_id":null,"session_id":"ecadd567","uuid":"5096d9af","error":"authentication_failed"}"#
+// Claude Code 2.1.284 while another Claude Code held its refresh lock (the
+// text cut short here).
+private let lineRefreshFailed = #"{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh."}]},"session_id":"ecadd567","error":"server_error"}"#
 
 /// Every line above, for the check against the Go file.
 let assistantEventLines: [String: String] = [
@@ -43,7 +46,7 @@ let assistantEventLines: [String: String] = [
     "lineAssistant": lineAssistant, "lineThinking": lineThinking, "lineResultStr": lineResultStr,
     "lineResultArr": lineResultArr, "lineUserText": lineUserText, "lineSuccess": lineSuccess,
     "lineStructured": lineStructured, "lineMaxTurns": lineMaxTurns, "lineAPIError": lineAPIError,
-    "lineAuthFailed": lineAuthFailed,
+    "lineAuthFailed": lineAuthFailed, "lineRefreshFailed": lineRefreshFailed,
 ]
 
 /// An expected event: only the fields of its kind set, as Go's literals.
@@ -106,10 +109,18 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
                 E(.text, text: "And search."),
                 E(.toolUse, tool: "WebFetch", toolUseID: "toolu_02"),
             ]),
-            ("assistant, the API refused the sign-in", lineAuthFailed, [E(.failure, failure: "authentication_failed")]),
+            ("assistant, the API refused the sign-in", lineAuthFailed,
+             [E(.failure, text: "Not logged in · Please run /login", failure: "authentication_failed")]),
             ("assistant, another refusal",
              #"{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error: Rate limit reached"}]},"error":"rate_limit"}"#,
-             [E(.failure, failure: "rate_limit")]),
+             [E(.failure, text: "API Error: Rate limit reached", failure: "rate_limit")]),
+            ("assistant, the sign-in not refreshed", lineRefreshFailed,
+             [E(.failure, text: "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh.",
+                failure: "server_error")]),
+            ("assistant, a refusal of odd blocks",
+             #"{"type":"assistant","message":{"content":[{"type":"text","text":"a"},{"type":"thinking","thinking":"t"},7,{"type":"text","text":"b"}]},"error":"unknown"}"#,
+             [E(.failure, text: "a\nb", failure: "unknown")]),
+            ("assistant, a refusal without a message", #"{"type":"assistant","error":"unknown"}"#, [E(.failure, failure: "unknown")]),
             ("assistant, an error of another type",
              #"{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]},"error":{"code":1}}"#,
              [E(.text, text: "x")]),
@@ -179,6 +190,29 @@ private func parse(_ line: String) throws -> [Assistant.Event] {
         #expect(!E(.result, isError: true, resultText: "authentication_failed").notSignedIn)
         #expect(!E(.text, failure: "authentication_failed").notSignedIn)
         #expect(E(.failure, failure: "rate_limit") != E(.failure, failure: "server_error"))
+    }
+
+    /// TestSignInFailures: a sign-in the API refused, and one Claude Code
+    /// could not refresh, are told apart by the failure and Claude Code's
+    /// words.
+    @Test func signInFailures() throws {
+        let refresh = "Failed to refresh OAuth token: another Claude Code process is refreshing it"
+        let cases: [(String, Assistant.Event, Bool, Bool)] = [
+            ("refused", E(.failure, text: "Not logged in · Please run /login", failure: "authentication_failed"), true, false),
+            ("refused, words of a refresh", E(.failure, text: refresh, failure: "authentication_failed"), true, false),
+            ("not refreshed", E(.failure, text: refresh, failure: "server_error"), false, true),
+            ("not refreshed, another failure", E(.failure, text: refresh, failure: "unknown"), false, true),
+            ("another server error", E(.failure, text: "API Error: 529 Overloaded", failure: "server_error"), false, false),
+            ("words not at the start", E(.failure, text: "Note: " + refresh, failure: "server_error"), false, false),
+            ("a result with the words", E(.result, isError: true, resultText: refresh), false, false),
+            ("an answer with the words", E(.text, text: refresh), false, false),
+        ]
+        for (name, event, notSignedIn, notRefreshed) in cases {
+            #expect(event.notSignedIn == notSignedIn, "\(name): notSignedIn")
+            #expect(event.refreshFailed == notRefreshed, "\(name): refreshFailed")
+        }
+        let events = try parse(lineRefreshFailed)
+        #expect(events.count == 1 && events[0].refreshFailed)
     }
 
     /// Bad UTF-8 inside a string is U+FFFD, as Go reads it; outside one the

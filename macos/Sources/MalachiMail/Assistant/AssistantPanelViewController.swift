@@ -309,7 +309,8 @@ final class AssistantPanelViewController: NSViewController {
 
     // MARK: State
 
-    /// Everything but the transcript follows the controller's state.
+    /// Everything but the transcript's items follows the controller's
+    /// state, its spinner among it.
     private func updateState() {
         let c = controller
         subtitleLabel.stringValue = c.subtitle
@@ -332,6 +333,7 @@ final class AssistantPanelViewController: NSViewController {
         input.placeholderText = c.placeholder
         input.textView.setAccessibilityLabel(c.placeholder)
         newButton.isEnabled = !c.closed && (!c.items.isEmpty || c.running || c.pending != nil || c.isPinned)
+        transcript.setWaiting(c.waiting)
         updateSendButton()
     }
 

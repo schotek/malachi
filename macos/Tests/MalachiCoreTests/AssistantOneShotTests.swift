@@ -224,14 +224,14 @@ private let searchPromptFor20260929 = "You turn what the user wants to find in t
     }
 
     @Test func searchFailedText() {
-        let long = String(repeating: "a", count: 199) + "č"
+        let long = String(repeating: "a", count: 399) + "č"
         let cases: [(String, String, String)] = [
             ("plain", "Claude Code was not found on this computer", "The search could not be converted: Claude Code was not found on this computer"),
             ("first line", "API Error: 401\nat line 2\n", "The search could not be converted: API Error: 401"),
             ("first non-empty line", "\n  \n\ttimed out \nmore", "The search could not be converted: timed out"),
             ("control characters", "bad" + scalar(0x1B) + "[31m red" + scalar(7), "The search could not be converted: bad[31m red"),
             ("percent signs are data", "100% %s", "The search could not be converted: 100% %s"),
-            ("cut at a character", long, "The search could not be converted: " + String(repeating: "a", count: 199)),
+            ("cut at a character", long, "The search could not be converted: " + String(repeating: "a", count: 399)),
             ("empty", "", "The search could not be converted: unknown"),
         ]
         for (name, reason, want) in cases {

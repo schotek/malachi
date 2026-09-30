@@ -46,6 +46,15 @@ extension Assistant {
     /// accepted.
     static let authenticationFailed = "authentication_failed"
 
+    /// refreshFailed: how Claude Code's own words begin when it could not
+    /// refresh its sign-in for the turn, a `failure` that is not
+    /// `authenticationFailed` ("server_error"). Measured with Claude Code
+    /// 2.1.284: "Failed to refresh OAuth token: another Claude Code process
+    /// is refreshing it or exited mid-refresh. …" while another Claude Code
+    /// holds its refresh lock, or one ended holding it; Claude Code takes
+    /// such a lock over after about a minute.
+    static let refreshFailed = "Failed to refresh OAuth token"
+
     /// assistant.Event: one thing the panel reacts to; only the fields of
     /// its kind are set.
     public struct Event: Sendable, Equatable {
@@ -79,7 +88,8 @@ extension Assistant {
         /// reported.
         public var bridgeConnected = false
         public var tools: [String] = []
-        /// textDelta and text: the text.
+        /// textDelta and text: the text; failure: Claude Code's own words,
+        /// its message's text blocks joined with "\n".
         public var text = ""
         /// toolUse: the tool without the `mcp__malachi__` prefix (another
         /// tool keeps its name) and the call's id; toolResult: the id of
@@ -115,6 +125,16 @@ extension Assistant {
         /// for byte.
         public var notSignedIn: Bool {
             kind == .failure && failure.utf8.elementsEqual(Assistant.authenticationFailed.utf8)
+        }
+
+        /// Event.RefreshFailed: whether the event is the failure of a turn
+        /// whose sign-in Claude Code could not refresh just then (another
+        /// Claude Code was refreshing it, or ended in the middle of that):
+        /// trying again in a minute may work, signing in again works now.
+        /// `notSignedIn` takes precedence; the words are compared byte for
+        /// byte.
+        public var refreshFailed: Bool {
+            kind == .failure && !notSignedIn && text.utf8.starts(with: Assistant.refreshFailed.utf8)
         }
     }
 
@@ -195,6 +215,14 @@ extension Assistant {
         if !failure.isEmpty {
             var e = Event(kind: .failure)
             e.failure = failure
+            var texts: [String] = []
+            for raw in o.obj("message")?.array("content") ?? [] {
+                let block = GoJSON.Object(o.b, raw)
+                if block?.str("type") == "text" {
+                    texts.append(block?.str("text") ?? "")
+                }
+            }
+            e.text = texts.joined(separator: "\n")
             return [e]
         }
         var out: [Event] = []

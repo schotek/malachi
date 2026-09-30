@@ -177,6 +177,27 @@ esac`)
 	}
 }
 
+// A run out of time gets SIGTERM, so that Claude Code can let go of what it
+// holds, and is not known.
+func TestLocatorRunOutOfTimeIsTerminated(t *testing.T) {
+	dir := scratch(t)
+	exe := writeScript(t, filepath.Join(dir, "claude"), fmt.Sprintf(`trap 'echo TERM > "%s/signal"; kill $! 2>/dev/null; exit 0' TERM
+sleep 30 >/dev/null 2>&1 &
+wait`, dir))
+	loop := newTestLoop()
+	l := testLocator(dir, &memSettings{claudePath: exe}, []string{"HOME=" + dir, "PATH=/usr/bin:/bin"}, loop)
+	l.timeout = 300 * time.Millisecond
+	var v *string
+	l.Version(func(x string) { v = &x })
+	loop.runUntil(t, func() bool { return v != nil })
+	if *v != "" {
+		t.Errorf("version %q, want not known", *v)
+	}
+	if got := strings.TrimSpace(readFile(t, filepath.Join(dir, "signal"))); got != "TERM" {
+		t.Errorf("signal %q, want TERM", got)
+	}
+}
+
 // signInClaude is a claude whose auth login runs login.sh in dir and whose
 // auth status says what the file logged-in holds.
 func signInClaude(t *testing.T, dir string) string {

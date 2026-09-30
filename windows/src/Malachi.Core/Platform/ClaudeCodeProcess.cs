@@ -90,8 +90,8 @@ public sealed partial class ClaudeCodeProcess
     /// <summary>The most of stderr that is kept.</summary>
     public const int StderrLimit = 64 << 10;
 
-    /// <summary>The reason of an early exit: stderr's first line, cut at this many bytes.</summary>
-    public const int ReasonLimit = 200;
+    /// <summary>The reason of an early exit: stderr's first line, cut at this many bytes (<see cref="Assistant.StoppedText"/> shows as much).</summary>
+    public const int ReasonLimit = 400;
 
     /// <summary>
     /// The longest stdout line; a longer one is dropped (a tool result is

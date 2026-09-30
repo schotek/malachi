@@ -110,6 +110,7 @@ type assistantPanel struct {
 	scroller     *gtk.ScrolledWindow
 	transcript   *gtk.Box
 	rows         []*transcriptRow
+	waiting      *adw.Spinner
 	pending      *gtk.Box
 	pendingLabel *gtk.Label
 	input        *gtk.TextView
@@ -137,6 +138,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 		bar:          pb.GetObject("assistant_bar").Cast().(*gtk.Box),
 		scroller:     pb.GetObject("assistant_scroller").Cast().(*gtk.ScrolledWindow),
 		transcript:   pb.GetObject("assistant_transcript").Cast().(*gtk.Box),
+		waiting:      pb.GetObject("assistant_waiting").Cast().(*adw.Spinner),
 		pending:      pb.GetObject("assistant_pending").Cast().(*gtk.Box),
 		pendingLabel: pb.GetObject("assistant_pending_label").Cast().(*gtk.Label),
 		input:        pb.GetObject("assistant_input").Cast().(*gtk.TextView),
@@ -348,8 +350,8 @@ func (p *assistantPanel) askConsent(done func(bool)) {
 
 // State
 
-// updateState brings everything but the transcript in line with the
-// controller.
+// updateState brings everything but the transcript's rows in line with the
+// controller, the spinner below them among it.
 func (p *assistantPanel) updateState() {
 	c := p.ctl
 	p.title.SetSubtitle(c.Subtitle())
@@ -375,6 +377,7 @@ func (p *assistantPanel) updateState() {
 	p.pending.SetVisible(label != "")
 	p.placeholder.SetText(c.Placeholder())
 	p.newButton.SetSensitive(!c.Closed() && (len(c.Items()) > 0 || c.Running() || c.Pending().Kind != assistantpanel.PendingNone || c.IsPinned()))
+	p.waiting.SetVisible(c.Waiting())
 	p.updateSend()
 }
 

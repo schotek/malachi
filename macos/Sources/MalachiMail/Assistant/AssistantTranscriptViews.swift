@@ -567,7 +567,8 @@ final class AssistantMessageLineView: NSView, AssistantItemView {
 /// bottom in a scroll view. While the view is scrolled to the end it stays
 /// there as items arrive and an answer streams in; a user who scrolled up
 /// to read is left where they are until they scroll back down (or the
-/// conversation starts over).
+/// conversation starts over). Below the items a spinner says that the
+/// assistant is at work while nothing above shows it (`setWaiting`).
 @MainActor
 final class AssistantTranscriptView: NSView {
     /// How near the end still counts as at the end.
@@ -580,6 +581,10 @@ final class AssistantTranscriptView: NSView {
     private let stack = FillStackView()
     /// The item views, in the order of the controller's items.
     private var views: [any AssistantItemView] = []
+    /// The spinner's row: in the stack, after the items, only while the
+    /// controller waits (GTK `assistant_waiting`).
+    private let waitingRow = NSView()
+    private let waitingSpinner = Spinner(size: 16)
     /// Whether the view follows the end.
     private var followsEnd = true
     /// The view scrolls itself: its own bounds change says nothing about
@@ -604,8 +609,13 @@ final class AssistantTranscriptView: NSView {
         scrollView.borderType = .noBorder
         scrollView.documentView = document
         addSubview(scrollView)
+        waitingRow.translatesAutoresizingMaskIntoConstraints = false
+        waitingRow.addSubview(waitingSpinner)
         let clip = scrollView.contentView
         NSLayoutConstraint.activate([
+            waitingSpinner.leadingAnchor.constraint(equalTo: waitingRow.leadingAnchor),
+            waitingSpinner.topAnchor.constraint(equalTo: waitingRow.topAnchor),
+            waitingSpinner.bottomAnchor.constraint(equalTo: waitingRow.bottomAnchor),
             scrollView.topAnchor.constraint(equalTo: topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: bottomAnchor),
             scrollView.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -657,6 +667,21 @@ final class AssistantTranscriptView: NSView {
         stickToEnd()
     }
 
+    /// Shows the spinner below the items while the controller waits
+    /// (`AssistantPanelController.waiting`), and takes it away after.
+    func setWaiting(_ waiting: Bool) {
+        guard waiting != (waitingRow.superview != nil) else { return }
+        if waiting {
+            stack.addArrangedSubview(waitingRow)
+            waitingSpinner.start()
+        } else {
+            waitingSpinner.stop()
+            stack.removeArrangedSubview(waitingRow)
+            waitingRow.removeFromSuperview()
+        }
+        stickToEnd()
+    }
+
     private func rebuild(_ items: [AssistantPanelController.Item]) {
         for v in views {
             stack.removeArrangedSubview(v)
@@ -670,8 +695,9 @@ final class AssistantTranscriptView: NSView {
 
     private func append(_ item: AssistantPanelController.Item) {
         guard let v = makeView?(item) else { return }
+        // After the other items, before the spinner's row.
+        stack.insertArrangedSubview(v, at: views.count)
         views.append(v)
-        stack.addArrangedSubview(v)
     }
 
     private func replace(at i: Int, with item: AssistantPanelController.Item) {

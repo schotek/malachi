@@ -165,7 +165,7 @@ extension Assistant {
     /// technical (Claude Code not found or not signed in, the result's
     /// text, stderr, a timeout) and shown as data, as `stoppedText` shows
     /// it: its first non-empty line without control characters, at most
-    /// 200 bytes; "unknown" when nothing is left.
+    /// 400 bytes; "unknown" when nothing is left.
     public static func searchFailedText(_ reason: String) -> String {
         // TRANSLATORS: %s is a technical reason.
         L10n.T("The search could not be converted: %s", firstLine(reason, limit: maxReason))

@@ -64,6 +64,15 @@ const (
 // Claude Code is not signed in, or its sign-in is no longer accepted.
 const authenticationFailed = "authentication_failed"
 
+// refreshFailed is how Claude Code's own words begin when it could not
+// refresh its sign-in for the turn, a Failure that is not
+// authenticationFailed ("server_error"). Measured with Claude Code
+// 2.1.284: "Failed to refresh OAuth token: another Claude Code process is
+// refreshing it or exited mid-refresh. …" while another Claude Code holds
+// its refresh lock, or one ended holding it; Claude Code takes such a
+// lock over after about a minute.
+const refreshFailed = "Failed to refresh OAuth token"
+
 // Event is one thing the panel reacts to; only the fields of its Kind are
 // set.
 type Event struct {
@@ -72,7 +81,8 @@ type Event struct {
 	// and the names of the tools Claude Code offers, as reported.
 	BridgeConnected bool
 	Tools           []string
-	// EventTextDelta and EventText: the text.
+	// EventTextDelta and EventText: the text; EventFailure: Claude Code's
+	// own words, its message's text blocks joined with "\n".
 	Text string
 	// EventToolUse: the tool without the "mcp__malachi__" prefix (another
 	// tool keeps its name) and the call's id; EventToolResult: the id of
@@ -102,6 +112,14 @@ type Event struct {
 // expired or was revoked (claude auth status may still say loggedIn then).
 func (e Event) NotSignedIn() bool {
 	return e.Kind == EventFailure && e.Failure == authenticationFailed
+}
+
+// RefreshFailed says whether the event is the failure of a turn whose
+// sign-in Claude Code could not refresh just then (another Claude Code was
+// refreshing it, or ended in the middle of that): trying again in a minute
+// may work, signing in again works now. NotSignedIn takes precedence.
+func (e Event) RefreshFailed() bool {
+	return e.Kind == EventFailure && !e.NotSignedIn() && strings.HasPrefix(e.Text, refreshFailed)
 }
 
 // ParseEvents reads one stdout line (without its newline): one event per
@@ -163,7 +181,13 @@ func parseInit(o object) Event {
 
 func parseAssistant(o object) []Event {
 	if failure := o.str("error"); failure != "" {
-		return []Event{{Kind: EventFailure, Failure: failure}}
+		var texts []string
+		for _, raw := range o.obj("message").array("content") {
+			if b := objectOf(raw); b.str("type") == "text" {
+				texts = append(texts, b.str("text"))
+			}
+		}
+		return []Event{{Kind: EventFailure, Failure: failure, Text: strings.Join(texts, "\n")}}
 	}
 	var out []Event
 	for _, raw := range o.obj("message").array("content") {

@@ -176,7 +176,7 @@ public static partial class Assistant
     /// <paramref name="reason"/> is technical (Claude Code not found or not
     /// signed in, the result's text, stderr, a timeout) and shown as data, as
     /// StoppedText shows it: its first non-empty line without control
-    /// characters, at most 200 bytes; "unknown" when nothing is left.
+    /// characters, at most 400 bytes; "unknown" when nothing is left.
     /// </summary>
     public static string SearchFailedText(string reason)
     {

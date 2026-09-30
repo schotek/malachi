@@ -611,6 +611,91 @@ public sealed class AssistantPanelControllerTests
         Assert.Equal(["Hello", "Hello"], h.Prompts);
     }
 
+    /// <summary>
+    /// controller_test.go TestWaiting. The panel waits where nothing in the
+    /// transcript shows the work: from the question until a tool is at work,
+    /// from its result until the answer streams, and after a text block until
+    /// the result; never while idle.
+    /// </summary>
+    [Fact]
+    public async Task WaitsWhereNothingShowsTheWork()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.Turn(
+            CannedStreamJson.Init,
+            CannedStreamJson.ToolUse("t1", "read_message"),
+            CannedStreamJson.ToolResult("t1", "From: someone"),
+            CannedStreamJson.Delta("Hi"),
+            CannedStreamJson.Text("Hi"),
+            CannedStreamJson.Result())));
+        var seen = new List<bool>();
+        await h.On(() =>
+        {
+            seen.Add(h.Panel.IsWaiting);
+            void Record()
+            {
+                if (seen[^1] != h.Panel.IsWaiting)
+                {
+                    seen.Add(h.Panel.IsWaiting);
+                }
+            }
+            h.Panel.Changed += (_, _) => Record();
+            h.Panel.StateChanged += (_, _) => Record();
+        });
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        Assert.Equal([false, true, false, true, false, true, false], await h.On(() => seen.ToList()));
+    }
+
+    /// <summary>
+    /// controller_test.go TestRefreshFailedOffersRetryAndSignIn. Claude Code
+    /// could not refresh its sign-in (another Claude Code held the refresh
+    /// lock): its words are said whole once, the line offers Try Again and
+    /// Sign In…, and either goes to a new process and takes both buttons.
+    /// </summary>
+    [Fact]
+    public async Task RefreshFailedOffersRetryAndSignIn()
+    {
+        RequireWindows();
+        // Claude Code 2.1.284, 215 bytes.
+        const string words = "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close other Claude Code processes or sign in again.";
+        const string stopped = "The assistant stopped: " + words;
+        var refresh = CannedStreamJson.Turn(
+            CannedStreamJson.Init, CannedStreamJson.Failure("server_error", words), CannedStreamJson.Result(words, success: false));
+        await using var h = await Harness.CreateAsync(Fake(
+            refresh, CannedStreamJson.AnswerTurn("Hi there"), refresh, CannedStreamJson.AnswerTurn("Signed in")));
+        Assert.True(await h.On(() => h.Panel.Submit("Hello")));
+        await h.TurnAsync();
+        Assert.Equal([new UserContent("", "Hello"), new ErrorContent(stopped, true, ErrorOffer.SignIn)], await h.ContentsAsync());
+        Assert.Null(await h.On(() => h.Panel.Process));
+        await h.On(() => h.Panel.Retry(h.Panel.Items[1].Id));
+        await h.TurnAsync();
+        Assert.Equal(
+            [
+                new UserContent("", "Hello"),
+                new ErrorContent(stopped, false),
+                new AnswerContent("Hi there", false),
+            ],
+            await h.ContentsAsync());
+        Assert.Equal(2, h.Starts);
+
+        Assert.True(await h.On(() => h.Panel.Submit("Again")));
+        await h.TurnAsync();
+        await h.On(() => h.Panel.SignIn(h.Panel.Items[4].Id));
+        await h.TurnAsync();
+        Assert.Equal(
+            [
+                new UserContent("", "Again"),
+                new ErrorContent(stopped, false),
+                new ActivityContent(Waiting, true),
+                new AnswerContent("Signed in", false),
+            ],
+            (await h.ContentsAsync()).GetRange(3, 4));
+        Assert.Equal(1, h.Logins);
+        Assert.Equal(3, h.Starts);
+        Assert.Equal(["Hello", "Hello", "Again", "Again"], h.Prompts);
+    }
+
     /// <summary>controller_test.go TestRefusedTurnIsSaidOnce. Another refusal of the API is said once, by the result.</summary>
     [Fact]
     public async Task RefusedTurnIsSaidOnce()

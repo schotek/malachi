@@ -71,7 +71,7 @@ extension Assistant {
     /// assistant.SignInFailedText: the error line when Claude Code's
     /// sign-in ended badly. `reason` is technical (its stderr, or its exit
     /// status) and shown as data, as `stoppedText` shows it: its first
-    /// non-empty line without control characters, at most 200 bytes;
+    /// non-empty line without control characters, at most 400 bytes;
     /// "unknown" when nothing is left.
     public static func signInFailedText(_ reason: String) -> String {
         // TRANSLATORS: %s is a technical reason.

@@ -48,7 +48,12 @@ import os
 ///    When the API refused the sign-in (expired or revoked, whatever
 ///    `claude auth status` says), the turn ends with "Claude Code is not
 ///    signed in" and Sign In…, and the process ends, for a new sign-in
-///    takes a new one.
+///    takes a new one. When Claude Code could not refresh its sign-in
+///    (`Assistant.Event.refreshFailed`: another Claude Code was refreshing
+///    it, or ended in the middle of that), the turn ends with the result's
+///    "The assistant stopped: …" and both Try Again (Claude Code takes the
+///    refresh over after about a minute) and Sign In…, and the process ends
+///    the same way.
 ///
 /// Sign In… (`signIn(_:)`) sends the same question once more, with Claude
 /// Code's own sign-in in front of step 4's start: the line "Waiting for the
@@ -317,8 +322,10 @@ public final class AssistantPanelController {
     /// The question of the turn under way (or the last that failed), for
     /// Try Again.
     private var lastRequest: Request?
-    /// The API refused the sign-in in the turn under way.
+    /// The API refused the sign-in in the turn under way; refreshFailed:
+    /// Claude Code could not refresh it.
     private var authFailed = false
+    private var refreshFailed = false
     /// The sign-in's activity line, and the sign-in the question under way
     /// started.
     private var signingIn: Int?
@@ -371,6 +378,24 @@ public final class AssistantPanelController {
     // MARK: Reading
 
     public var running: Bool { phase != .idle }
+
+    /// A question is under way and nothing in the transcript shows it: no
+    /// answer streams, no tool and no sign-in is at work. The view shows
+    /// that it waits (a spinner below the transcript): from the question
+    /// until Claude Code answers, and between a tool's result and what comes
+    /// next. It is read from the items, so it holds at every change and
+    /// `onState`. (GTK: `Controller.Waiting`.)
+    public var waiting: Bool {
+        guard phase != .idle else { return false }
+        return !items.contains { item in
+            switch item.content {
+            case .assistant(text: _, streaming: true), .activity(label: _, done: false):
+                return true
+            default:
+                return false
+            }
+        }
+    }
 
     /// The conversation keeps its context: its first question was asked.
     public var isPinned: Bool { !pinned.isEmpty }
@@ -821,6 +846,7 @@ public final class AssistantPanelController {
             pinned[i].announced = true
         }
         authFailed = false
+        refreshFailed = false
         phase = .running
         onState?()
     }
@@ -1054,10 +1080,17 @@ public final class AssistantPanelController {
                     // A new sign-in takes a new Claude Code.
                     endProcess()
                     append(.error(Assistant.panelTexts().notSignedIn, retry: false, offer: .signIn))
+                } else if refreshFailed {
+                    // Its words say what happened and what helps: Try Again
+                    // in a minute, or a new sign-in now; either way a new
+                    // Claude Code.
+                    endProcess()
+                    append(.error(Assistant.stoppedText(e.resultText), retry: true, offer: .signIn))
                 } else {
                     append(.error(Assistant.stoppedText(e.resultText), retry: true))
                 }
                 authFailed = false
+                refreshFailed = false
                 onState?()
             case .failure:
                 // Claude Code's own words for a turn the API refused: the
@@ -1065,6 +1098,8 @@ public final class AssistantPanelController {
                 log.info("assistant: the API refused the turn: \(e.failure, privacy: .public)")
                 if e.notSignedIn {
                     authFailed = true
+                } else if e.refreshFailed {
+                    refreshFailed = true
                 }
             case .other:
                 continue

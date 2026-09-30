@@ -511,6 +511,65 @@ func TestRefusedSignInOffersSignIn(t *testing.T) {
 	}
 }
 
+// Claude Code could not refresh its sign-in (another Claude Code held the
+// refresh lock): its words are said whole once, the line offers Try Again
+// and Sign In…, and either goes to a new process and takes both buttons.
+func TestRefreshFailedOffersRetryAndSignIn(t *testing.T) {
+	// Claude Code 2.1.284, 215 bytes.
+	words := "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh. This is usually transient; retry in a minute, and if it persists close other Claude Code processes or sign in again."
+	stopped := "The assistant stopped: " + words
+	refresh := fakeTurn{lines: []string{fakeInit, fakeFailure("server_error", words), fakeResult(words, false)}}
+	fake := newFakeClaude(t, "true", "", refresh, answerTurn("Hi there"), refresh, answerTurn("Signed in"))
+	h := newHarness(t, fake, true, testBridge)
+	h.panel.Submit("Hello")
+	h.turn()
+	contentsEqual(t, "transcript", h.contents(), []Content{user("", "Hello"), offered(stopped, true, OfferSignIn)})
+	h.panel.Retry(h.panel.Items()[1].ID)
+	h.turn()
+	contentsEqual(t, "after Try Again", h.contents(), []Content{
+		user("", "Hello"), failure(stopped, false), answer("Hi there", false),
+	})
+	if fake.starts() != 2 {
+		t.Errorf("%d starts after Try Again, want a new process", fake.starts())
+	}
+
+	h.panel.Submit("Again")
+	h.turn()
+	fake.login(signsIn)
+	h.panel.SignIn(h.panel.Items()[4].ID)
+	h.turn()
+	contentsEqual(t, "after Sign In…", h.contents()[3:], []Content{
+		user("", "Again"), failure(stopped, false), activity(waiting, true), answer("Signed in", false),
+	})
+	if fake.logins() != 1 || fake.starts() != 3 || !slices.Equal(fake.prompts(), []string{"Hello", "Hello", "Again", "Again"}) {
+		t.Errorf("%d sign-ins, %d starts, prompts %q", fake.logins(), fake.starts(), fake.prompts())
+	}
+}
+
+// The panel waits where nothing in the transcript shows the work: from the
+// question until a tool is at work, from its result until the answer
+// streams, and after a text block until the result; never while idle.
+func TestWaiting(t *testing.T) {
+	fake := newFakeClaude(t, "true", "", fakeTurn{lines: []string{
+		fakeInit, fakeToolUse("t1", "read_message"), fakeToolResult("t1", "From: someone", false),
+		fakeDelta("Hi"), fakeText("Hi"), fakeResult("done", true),
+	}})
+	h := newHarness(t, fake, true, testBridge)
+	seen := []bool{h.panel.Waiting()}
+	record := func() {
+		if w := h.panel.Waiting(); seen[len(seen)-1] != w {
+			seen = append(seen, w)
+		}
+	}
+	h.panel.OnChange = func(Change) { record() }
+	h.panel.OnState = record
+	h.panel.Submit("Hello")
+	h.turn()
+	if want := []bool{false, true, false, true, false, true, false}; !slices.Equal(seen, want) {
+		t.Errorf("waiting %v, want %v", seen, want)
+	}
+}
+
 // Another refusal of the API is said once, by the result.
 func TestRefusedTurnIsSaidOnce(t *testing.T) {
 	limit := "API Error: Rate limit reached"

@@ -732,13 +732,15 @@ extension Assistant {
         return contextLabel(1)
     }
 
-    /// maxReason: the most of a reason `stoppedText` shows, in bytes.
-    static let maxReason = 200
+    /// maxReason: the most of a reason `stoppedText` shows, in bytes: room
+    /// for Claude Code's longer words, whose end says what helps (its
+    /// message when it could not refresh its sign-in is 215 bytes).
+    static let maxReason = 400
 
     /// assistant.StoppedText: the transcript's error line when a turn ended
     /// badly. `reason` is technical (the result's text or subtype, or
     /// Claude Code's stderr) and shown as data: its first non-empty line
-    /// without control characters, at most 200 bytes (cut at a character
+    /// without control characters, at most 400 bytes (cut at a character
     /// boundary); "unknown" when nothing is left.
     public static func stoppedText(_ reason: String) -> String {
         // TRANSLATORS: %s is a technical reason.

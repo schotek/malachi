@@ -118,7 +118,12 @@ namespace Malachi.Core.Controllers;
 /// answer: the result repeats it. When the API refused the sign-in (expired
 /// or revoked, whatever <c>claude auth status</c> says), the turn ends with
 /// "Claude Code is not signed in" and Sign In…, and the process ends, for a
-/// new sign-in takes a new one.</item>
+/// new sign-in takes a new one. When Claude Code could not refresh its
+/// sign-in (<see cref="AssistantEvent.RefreshFailed"/>: another Claude Code
+/// was refreshing it, or ended in the middle of that), the turn ends with the
+/// result's "The assistant stopped: …" and both Try Again (Claude Code takes
+/// the refresh over after about a minute) and Sign In…, and the process ends
+/// the same way.</item>
 /// </list>
 /// <para>
 /// Sign In… (<see cref="SignIn"/>) sends the same question once more, with
@@ -221,8 +226,10 @@ public sealed partial class AssistantPanelController : IDisposable
     // Again.
     private Request? lastRequest;
 
-    // The API refused the sign-in in the turn under way.
+    // The API refused the sign-in in the turn under way; refreshFailed:
+    // Claude Code could not refresh it.
     private bool authFailed;
+    private bool refreshFailed;
 
     // The sign-in's activity line, and the sign-in this question started.
     private int? signingIn;
@@ -378,6 +385,19 @@ public sealed partial class AssistantPanelController : IDisposable
 
     /// <summary>A question is under way.</summary>
     public bool IsRunning => CurrentPhase != Phase.Idle;
+
+    /// <summary>
+    /// A question is under way and nothing in the transcript shows it: no
+    /// answer streams, no tool and no sign-in is at work. The view shows that
+    /// it waits (a spinner below the transcript): from the question until
+    /// Claude Code answers, and between a tool's result and what comes next.
+    /// It is read from the items, so it holds at every <see cref="Changed"/>
+    /// and <see cref="StateChanged"/>. (Swift: <c>waiting</c>; GTK:
+    /// <c>Controller.Waiting</c>.)
+    /// </summary>
+    public bool IsWaiting =>
+        CurrentPhase != Phase.Idle
+        && !items.Any(it => it.Content is AnswerContent { Streaming: true } or ActivityContent { Done: false });
 
     /// <summary>The conversation keeps its context: its first question was asked.</summary>
     public bool IsPinned => pinned.Count > 0;
@@ -1068,6 +1088,7 @@ public sealed partial class AssistantPanelController : IDisposable
             }
         }
         authFailed = false;
+        refreshFailed = false;
         CurrentPhase = Phase.Running;
         RaiseState();
     }
@@ -1386,6 +1407,10 @@ public sealed partial class AssistantPanelController : IDisposable
                     {
                         authFailed = true;
                     }
+                    else if (e.RefreshFailed)
+                    {
+                        refreshFailed = true;
+                    }
                     break;
                 case AssistantEventKind.Result:
                     LogTurn(logger, e.Success, e.CostUsd, e.Denied.Count);
@@ -1405,11 +1430,20 @@ public sealed partial class AssistantPanelController : IDisposable
                         EndProcess();
                         Append(new ErrorContent(Assistant.PanelTexts().NotSignedIn, false, ErrorOffer.SignIn));
                     }
+                    else if (refreshFailed)
+                    {
+                        // Its words say what happened and what helps: Try
+                        // Again in a minute, or a new sign-in now; either way
+                        // a new Claude Code.
+                        EndProcess();
+                        Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true, ErrorOffer.SignIn));
+                    }
                     else
                     {
                         Append(new ErrorContent(Assistant.StoppedText(e.ResultText), true));
                     }
                     authFailed = false;
+                    refreshFailed = false;
                     RaiseState();
                     break;
                 default:

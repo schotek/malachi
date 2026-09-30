@@ -404,13 +404,15 @@ func bidiControl(r rune) bool {
 	return false
 }
 
-// maxReason caps the reason StoppedText shows, in bytes.
-const maxReason = 200
+// maxReason caps the reason StoppedText shows, in bytes: room for Claude
+// Code's longer words, whose end says what helps (its message when it
+// could not refresh its sign-in is 215 bytes).
+const maxReason = 400
 
 // StoppedText is the transcript's error line when a turn ended badly.
 // reason is technical (the result's text or subtype, or Claude Code's
 // stderr) and shown as data: its first non-empty line without control
-// characters, at most 200 bytes (cut at a character boundary); "unknown"
+// characters, at most 400 bytes (cut at a character boundary); "unknown"
 // when nothing is left.
 func StoppedText(tr Translator, reason string) string {
 	// TRANSLATORS: %s is a technical reason.
@@ -679,7 +681,7 @@ func SearchTexts(tr Translator) SearchStrings {
 // search (the words stay in the field). reason is technical (Claude Code
 // not found or not signed in, the result's text, stderr, a timeout) and
 // shown as data, as StoppedText shows it: its first non-empty line without
-// control characters, at most 200 bytes; "unknown" when nothing is left.
+// control characters, at most 400 bytes; "unknown" when nothing is left.
 func SearchFailedText(tr Translator, reason string) string {
 	// TRANSLATORS: %s is a technical reason.
 	return fmt.Sprintf(tr.T("The search could not be converted: %s"), firstLine(reason, maxReason))
@@ -932,7 +934,7 @@ func SignInTexts(tr Translator) SignInStrings {
 // SignInFailedText is the error line when Claude Code's sign-in ended
 // badly. reason is technical (its stderr, or its exit status) and shown as
 // data, as StoppedText shows it: its first non-empty line without control
-// characters, at most 200 bytes; "unknown" when nothing is left.
+// characters, at most 400 bytes; "unknown" when nothing is left.
 func SignInFailedText(tr Translator, reason string) string {
 	// TRANSLATORS: %s is a technical reason.
 	return fmt.Sprintf(tr.T("The sign-in failed: %s"), firstLine(reason, maxReason))

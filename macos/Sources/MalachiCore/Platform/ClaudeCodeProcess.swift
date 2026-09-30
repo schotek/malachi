@@ -63,8 +63,9 @@ public final class ClaudeCodeProcess {
 
     /// The most of stderr that is kept.
     public nonisolated static let stderrLimit = 64 << 10
-    /// The reason of an early exit: stderr's first line, cut here.
-    public nonisolated static let reasonLimit = 200
+    /// The reason of an early exit: stderr's first line, cut here
+    /// (`Assistant.stoppedText` shows as much).
+    public nonisolated static let reasonLimit = 400
     /// SIGTERM to SIGKILL.
     public nonisolated static let defaultKillGrace: Duration = .seconds(2)
     /// How long stdout and stderr are read after the exit (a child of

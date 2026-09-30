@@ -410,7 +410,10 @@ func (l *Locator) signInChanged() {
 
 // run runs claude with args off the main loop and hands its stdout, its
 // exit status and an error that kept it from running (a timeout among
-// them) to read on the main loop.
+// them) to read on the main loop. A run out of time is ended as a
+// conversation is (Process.Terminate) and the sign-in: SIGTERM, so that
+// Claude Code can let go of what it holds, and SIGKILL after
+// DefaultKillGrace.
 func (l *Locator) run(p string, args []string, read func(out []byte, status int, err error)) {
 	env := assistant.ChildEnv(l.env, p)
 	dir := ""
@@ -424,7 +427,8 @@ func (l *Locator) run(p string, args []string, read func(out []byte, status int,
 		cmd := exec.CommandContext(ctx, p, args...)
 		cmd.Env = env
 		cmd.Dir = dir
-		cmd.WaitDelay = time.Second
+		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		cmd.WaitDelay = DefaultKillGrace
 		out, err := cmd.Output()
 		status := 0
 		var exit *exec.ExitError

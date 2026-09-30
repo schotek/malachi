@@ -16,7 +16,7 @@
 // Windows differences: Return sends and Shift+Return starts a new line in a
 // TextBox that accepts returns (GTK's text view the same); the user's
 // question is a tinted card like GTK's .assistant-user bubble; the activity
-// line's spinner is a ProgressRing.
+// line's spinner and the one below the transcript are ProgressRings.
 
 using System;
 using System.Collections.Generic;
@@ -160,7 +160,21 @@ public sealed partial class AssistantPanel : UserControl
         PendingRow.Visibility = label.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         Input.PlaceholderText = c.Placeholder;
         NewButton.IsEnabled = !c.IsClosed && (c.Items.Count > 0 || c.IsRunning || c.Pending is not null || c.IsPinned);
+        UpdateWaiting(c.IsWaiting);
         UpdateSend();
+    }
+
+    // The spinner below the transcript while the controller waits; it sits
+    // outside Transcript, whose size alone keeps the end in sight.
+    private void UpdateWaiting(bool waiting)
+    {
+        if (WaitingRing.IsActive == waiting)
+        {
+            return;
+        }
+        WaitingRing.IsActive = waiting;
+        WaitingRing.Visibility = waiting ? Visibility.Visible : Visibility.Collapsed;
+        StickToEnd();
     }
 
     // The chip's icon of one context: all mail, a conversation, a message.

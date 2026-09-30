@@ -55,7 +55,7 @@ public static partial class Assistant
     /// assistant.SignInFailedText: the error line when Claude Code's sign-in
     /// ended badly. <paramref name="reason"/> is technical (its stderr, or
     /// its exit status) and shown as data, as <see cref="StoppedText"/> shows
-    /// it: its first non-empty line without control characters, at most 200
+    /// it: its first non-empty line without control characters, at most 400
     /// bytes; "unknown" when nothing is left.
     /// </summary>
     public static string SignInFailedText(string reason)

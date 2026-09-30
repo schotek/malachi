@@ -143,8 +143,8 @@ public sealed class AssistantOneShotTests
         ["first non-empty line"] = ("\n  \n\ttimed out \nmore", "The search could not be converted: timed out"),
         ["control characters"] = ("bad" + Scalar(0x1B) + "[31m red" + Scalar(7), "The search could not be converted: bad[31m red"),
         ["percent signs are data"] = ("100% %s", "The search could not be converted: 100% %s"),
-        // 201 bytes: the č does not fit.
-        ["cut at a character"] = (Repeat("a", 199) + "č", "The search could not be converted: " + Repeat("a", 199)),
+        // 401 bytes: the č does not fit.
+        ["cut at a character"] = (Repeat("a", 399) + "č", "The search could not be converted: " + Repeat("a", 399)),
         ["empty"] = ("", "The search could not be converted: unknown"),
     };
 

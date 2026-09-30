@@ -171,7 +171,7 @@ done`
 	}
 }
 
-// stderr is kept bounded, the reason is its first line cut at 200 bytes.
+// stderr is kept bounded, the reason is its first line cut at 400 bytes.
 func TestProcessStderrIsBounded(t *testing.T) {
 	p, _, r, loop := makeProcess(t, func(string) string {
 		return `i=0

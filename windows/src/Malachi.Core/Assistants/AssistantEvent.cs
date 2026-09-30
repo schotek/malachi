@@ -36,7 +36,7 @@ public sealed record AssistantEvent
     /// <summary>SystemInit: the names of the tools Claude Code offers, as reported.</summary>
     public IReadOnlyList<string> Tools { get; init; } = [];
 
-    /// <summary>TextDelta and Text: the text.</summary>
+    /// <summary>TextDelta and Text: the text; Failure: Claude Code's own words, its message's text blocks joined with "\n".</summary>
     public string Text { get; init; } = "";
 
     /// <summary>ToolUse: the tool without the <c>mcp__malachi__</c> prefix (another tool keeps its name).</summary>
@@ -80,6 +80,19 @@ public sealed record AssistantEvent
     /// still say loggedIn then).
     /// </summary>
     public bool NotSignedIn => Kind == AssistantEventKind.Failure && Failure == Assistant.AuthenticationFailed;
+
+    /// <summary>
+    /// Event.RefreshFailed: whether the event is the failure of a turn whose
+    /// sign-in Claude Code could not refresh just then (another Claude Code
+    /// was refreshing it, or ended in the middle of that): trying again in a
+    /// minute may work, signing in again works now.
+    /// <see cref="NotSignedIn"/> takes precedence; the words are compared
+    /// ordinally.
+    /// </summary>
+    public bool RefreshFailed =>
+        Kind == AssistantEventKind.Failure
+        && !NotSignedIn
+        && Text.StartsWith(Assistant.RefreshFailedPrefix, StringComparison.Ordinal);
 
     /// <inheritdoc/>
     public bool Equals(AssistantEvent? other) =>

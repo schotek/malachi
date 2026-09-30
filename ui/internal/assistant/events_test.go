@@ -36,6 +36,9 @@ const (
 	// Claude Code 2.1.285, signed out; 2.1.72 says the same of a sign-in
 	// the API no longer accepts ("Failed to authenticate. API Error: 401 …").
 	lineAuthFailed = `{"type":"assistant","message":{"diagnostics":null,"id":"acbc4b28","container":null,"model":"<synthetic>","role":"assistant","stop_reason":"stop_sequence","stop_sequence":"","type":"message","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"text","text":"Not logged in · Please run /login"}],"context_management":null},"parent_tool_use_id":null,"session_id":"ecadd567","uuid":"5096d9af","error":"authentication_failed"}`
+	// Claude Code 2.1.284 while another Claude Code held its refresh lock
+	// (the text cut short here).
+	lineRefreshFailed = `{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh."}]},"session_id":"ecadd567","error":"server_error"}`
 )
 
 func TestParseEvents(t *testing.T) {
@@ -70,9 +73,14 @@ func TestParseEvents(t *testing.T) {
 			{Kind: EventText, Text: "And search."},
 			{Kind: EventToolUse, Tool: "WebFetch", ToolUseID: "toolu_02"},
 		}},
-		{"assistant, the API refused the sign-in", lineAuthFailed, []Event{{Kind: EventFailure, Failure: "authentication_failed"}}},
+		{"assistant, the API refused the sign-in", lineAuthFailed, []Event{{Kind: EventFailure, Failure: "authentication_failed", Text: "Not logged in · Please run /login"}}},
 		{"assistant, another refusal", `{"type":"assistant","message":{"model":"<synthetic>","content":[{"type":"text","text":"API Error: Rate limit reached"}]},"error":"rate_limit"}`,
-			[]Event{{Kind: EventFailure, Failure: "rate_limit"}}},
+			[]Event{{Kind: EventFailure, Failure: "rate_limit", Text: "API Error: Rate limit reached"}}},
+		{"assistant, the sign-in not refreshed", lineRefreshFailed, []Event{{Kind: EventFailure, Failure: "server_error",
+			Text: "Failed to refresh OAuth token: another Claude Code process is refreshing it or exited mid-refresh."}}},
+		{"assistant, a refusal of odd blocks", `{"type":"assistant","message":{"content":[{"type":"text","text":"a"},{"type":"thinking","thinking":"t"},7,{"type":"text","text":"b"}]},"error":"unknown"}`,
+			[]Event{{Kind: EventFailure, Failure: "unknown", Text: "a\nb"}}},
+		{"assistant, a refusal without a message", `{"type":"assistant","error":"unknown"}`, []Event{{Kind: EventFailure, Failure: "unknown"}}},
 		{"assistant, an error of another type", `{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]},"error":{"code":1}}`,
 			[]Event{{Kind: EventText, Text: "x"}}},
 		{"assistant, an empty error", `{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]},"error":""}`,
@@ -122,6 +130,38 @@ func TestParseEvents(t *testing.T) {
 				t.Errorf("ParseEvents =\n%+v\nwant\n%+v", got, tt.want)
 			}
 		})
+	}
+}
+
+// A sign-in the API refused, and one Claude Code could not refresh, are
+// told apart by the failure and Claude Code's words.
+func TestSignInFailures(t *testing.T) {
+	refresh := "Failed to refresh OAuth token: another Claude Code process is refreshing it"
+	tests := []struct {
+		name                      string
+		event                     Event
+		notSignedIn, notRefreshed bool
+	}{
+		{"refused", Event{Kind: EventFailure, Failure: "authentication_failed", Text: "Not logged in · Please run /login"}, true, false},
+		{"refused, words of a refresh", Event{Kind: EventFailure, Failure: "authentication_failed", Text: refresh}, true, false},
+		{"not refreshed", Event{Kind: EventFailure, Failure: "server_error", Text: refresh}, false, true},
+		{"not refreshed, another failure", Event{Kind: EventFailure, Failure: "unknown", Text: refresh}, false, true},
+		{"another server error", Event{Kind: EventFailure, Failure: "server_error", Text: "API Error: 529 Overloaded"}, false, false},
+		{"words not at the start", Event{Kind: EventFailure, Failure: "server_error", Text: "Note: " + refresh}, false, false},
+		{"a result with the words", Event{Kind: EventResult, IsError: true, ResultText: refresh}, false, false},
+		{"an answer with the words", Event{Kind: EventText, Text: refresh}, false, false},
+	}
+	for _, tt := range tests {
+		if got := tt.event.NotSignedIn(); got != tt.notSignedIn {
+			t.Errorf("%s: NotSignedIn = %v", tt.name, got)
+		}
+		if got := tt.event.RefreshFailed(); got != tt.notRefreshed {
+			t.Errorf("%s: RefreshFailed = %v", tt.name, got)
+		}
+	}
+	events, err := ParseEvents([]byte(lineRefreshFailed))
+	if err != nil || len(events) != 1 || !events[0].RefreshFailed() {
+		t.Errorf("ParseEvents(lineRefreshFailed) = %+v, %v", events, err)
 	}
 }
 
