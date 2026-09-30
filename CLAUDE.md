@@ -887,11 +887,12 @@ komprese a příloh na vyžádání, Microsoft účty).
   widgety; od GTK portu je `make po` přečísloval a GTK je používá přes
   `i18n.Tr`. Windows je má v `windows/parity-exclusions.txt` („Jira
   account: macOS first“, „Conversation view: macOS first“); s portem se
-  odtud mažou. Při sloučení `main` (Asistent, 2026-09-30) na Macu jsou
-  `po/malachi.pot` a `po/cs.po` sjednocené přes `msgcat` (žádný msgid
-  nechybí, čeština je úplná), ale odkazy `#: soubor:řádek` neodpovídají:
-  `make po` v Toolbxu je srovná, do té doby `make lint` hlásí zastaralou
-  šablonu. Sloučené GTK soubory prošly jen `gopls check`, ne překladem.
+  odtud mažou. Po sloučení `main` (Asistent, 2026-09-30) na Macu je
+  `make po` srovnal v kontejneru Fedora 42 (Blueprint 0.16, gettext 0.23.1
+  jako v Toolbxu; stačí `blueprint-compiler`, `gtk4`, `libadwaita`,
+  `webkitgtk6.0`, `appstream`, `gettext` a `make`, žádné Go ani překlad
+  gotk4), takže všechny `.blp` prošly Blueprintem. Sloučené Go soubory GTK
+  prošly jen `gopls check`, ne překladem: sestavení a testy čekají na Toolbx.
 - Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
   tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
   store změnila dřív, než je větev v `main`. Na macOS
