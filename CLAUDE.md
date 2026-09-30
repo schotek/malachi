@@ -386,12 +386,12 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Asistent (Claude) — macOS hotovo (úroveň A, panel B1 a B2), GTK hotovo
-   (A, B1 a B2; jen Claude Code, v terminálu nebo v aplikaci), Windows
-   hotovo (A, B1 a B2; viz předávka níže)
+8. ~~Asistent (Claude)~~ hotovo v macOS, GTK (jen Claude Code, v terminálu
+   nebo v aplikaci) i Windows: úroveň A, panel B1 a B2 (viz níže); cíl
+   „V aplikaci“ experimentální do potvrzení podmínek Anthropicu
 
-Asistent — předávka (stav 2026-09-29, větev
-`feat/assistant-menu`). Na macOS je hotové a uživatelem otestované:
+Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
+funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
 úroveň A (menu ✦ Asistent v toolbaru a menu Zpráva, položka „Zeptat se
 asistenta…“ na čipu přílohy, předání do Claude Desktop `claude://` a
 Claude Code `claude-cli://`, skupina Asistent v Předvolbách → AI,
@@ -467,10 +467,8 @@ pracovní adresář `%LOCALAPPDATA%\Malachi Mail\assistant`; Claude Desktop je
 MSIX `Claude_pzs8sxrjxfjjc`, restart ho požádá o ukončení Restart
 Managerem jako při odhlášení (zavření okna ho jen schová do oznamovací
 oblasti), čeká 45 s a spustí ho podle AUMID (`ClaudeDesktopApp`). Ověřeno
-automaticky a v UI proti falešnému `claude.exe` a devmailu; neověřené
-zůstává: skutečné ukončení a restart Claude Desktop (session agenta
-v něm běží) a živé odpovědi skutečného Claude Code (přihlášení
-`claude.exe` na vývojovém stroji vypršelo). Cíl „V aplikaci“ zůstává
+automaticky a v UI proti falešnému `claude.exe` a devmailu a uživatelem se
+skutečným Claude Desktop a Claude Code (2026-09-30). Cíl „V aplikaci“ zůstává
 experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
 Code z aplikace.
 
