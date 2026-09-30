@@ -67,6 +67,13 @@ public sealed record ThreadSummary
     [JsonPropertyName("folderIds")]
     [JsonConverter(typeof(NullAsEmptyListConverter<FolderId>))]
     public IReadOnlyList<FolderId> FolderIds { get; init => field = value ?? []; } = [];
+
+    /// <summary>
+    /// Present only for a thread of a jira account, which is one issue;
+    /// <see cref="Latest"/> may then be an event row.
+    /// </summary>
+    [JsonPropertyName("issue")]
+    public IssueInfo? Issue { get; init; }
 }
 
 /// <summary>

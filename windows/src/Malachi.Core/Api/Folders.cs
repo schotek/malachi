@@ -61,6 +61,14 @@ public sealed record Folder
     /// <summary>Messages in the local store.</summary>
     [JsonPropertyName("total")]
     public required int Total { get; init; }
+
+    /// <summary>
+    /// Set on a virtual folder of a jira account (role <c>none</c>;
+    /// <see cref="Name"/> is an English fallback, the UI titles it by this
+    /// code).
+    /// </summary>
+    [JsonPropertyName("virtual")]
+    public VirtualFolder? Virtual { get; init; }
 }
 
 /// <summary>api.FolderListParams.</summary>

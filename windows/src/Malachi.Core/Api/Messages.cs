@@ -116,6 +116,13 @@ public sealed record MessageSummary
     /// <summary>Present only for a message in the account's outbox folder.</summary>
     [JsonPropertyName("outbox")]
     public OutboxInfo? Outbox { get; init; }
+
+    /// <summary>
+    /// Present only for a message of a jira account: the issue and what the
+    /// message is of it.
+    /// </summary>
+    [JsonPropertyName("issue")]
+    public MessageIssue? Issue { get; init; }
 }
 
 /// <summary>

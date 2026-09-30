@@ -179,6 +179,14 @@ public static class API
     public static readonly RpcMethod<AccountOAuthCancelParams, EmptyResult> AccountOAuthCancel =
         new("account.oauthCancel", RpcTimeouts.Default, Wire.AccountOAuthCancelParams, Wire.EmptyResult);
 
+    /// <summary><c>account.detectSite</c>: what kind of Jira site an address names, anonymously.</summary>
+    public static readonly RpcMethod<AccountDetectSiteParams, AccountDetectSiteResult> AccountDetectSite =
+        new("account.detectSite", RpcTimeouts.DetectSite, Wire.AccountDetectSiteParams, Wire.AccountDetectSiteResult);
+
+    /// <summary><c>account.listSpaces</c>: signs in to a Jira site and lists its spaces and statuses.</summary>
+    public static readonly RpcMethod<AccountListSpacesParams, AccountListSpacesResult> AccountListSpaces =
+        new("account.listSpaces", RpcTimeouts.ListSpaces, Wire.AccountListSpacesParams, Wire.AccountListSpacesResult);
+
     // Folders
 
     /// <summary><c>folder.list</c>.</summary>
@@ -337,6 +345,16 @@ public static class API
     public static readonly RpcMethod<ContactSearchParams, ContactSearchResult> ContactSearch =
         new("contact.search", RpcTimeouts.Default, Wire.ContactSearchParams, Wire.ContactSearchResult);
 
+    // Issues
+
+    /// <summary><c>issue.transitions</c>: the status changes the site offers the user on an issue.</summary>
+    public static readonly RpcMethod<IssueTransitionsParams, IssueTransitionsResult> IssueTransitions =
+        new("issue.transitions", RpcTimeouts.Transitions, Wire.IssueTransitionsParams, Wire.IssueTransitionsResult);
+
+    /// <summary><c>issue.transition</c>: performs one; the issue is refreshed before the answer.</summary>
+    public static readonly RpcMethod<IssueTransitionParams, IssueTransitionResult> IssueTransition =
+        new("issue.transition", RpcTimeouts.Transition, Wire.IssueTransitionParams, Wire.IssueTransitionResult);
+
     // Tables
 
     /// <summary>Every method, in the order of methods.go.</summary>
@@ -346,6 +364,7 @@ public static class API
         AccountList, AccountAdd, AccountRemove, AccountSetEnabled,
         AccountUpdate, AccountDiscover, AccountTest, AccountLinked,
         AccountReorder, AccountOAuthStart, AccountOAuthWait, AccountOAuthCancel,
+        AccountDetectSite, AccountListSpaces,
         FolderList, FolderSubscribe,
         MessageList, MessageGet, MessageBody, MessagePart,
         MessageEmbedded, MessageDownload, MessageFlag, MessageMove, MessageDelete,
@@ -359,6 +378,7 @@ public static class API
         ConfigGet, ConfigSet,
         SenderList, SenderAdd, SenderRemove,
         ContactSearch,
+        IssueTransitions, IssueTransition,
     ];
 
     /// <summary>api.AllMethods: every callable method name.</summary>
@@ -378,13 +398,23 @@ public static class API
 
         /// <summary>api.NotifyAccountsChanged.</summary>
         public const string AccountsChanged = "notify.accountsChanged";
+
+        /// <summary>api.NotifyMessagesChanged.</summary>
+        public const string MessagesChanged = "notify.messagesChanged";
     }
 
     /// <summary>api.AllNotifications: every server-initiated notification name.</summary>
     public static IReadOnlyList<string> AllNotifications { get; } =
     [
-        Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged,
+        Notify.NewMessage, Notify.SyncState, Notify.AuthRequired, Notify.AccountsChanged, Notify.MessagesChanged,
     ];
+
+    /// <summary>
+    /// api.MailCapabilities: what an IMAP or Graph account can do, and every
+    /// account of a daemon that sends no <c>capabilities</c>.
+    /// </summary>
+    public static IReadOnlyList<Capability> MailCapabilities { get; } =
+        [Capability.Compose, Capability.Reply, Capability.ReplyAll, Capability.Forward, Capability.Move, Capability.Delete];
 
     /// <summary>The limits the daemon enforces (types.go constants), for pre-checks.</summary>
     public static class Limits
@@ -469,5 +499,26 @@ public static class API
 
         /// <summary>api.MaxSearchTotal.</summary>
         public const int MaxSearchTotal = 1000;
+
+        /// <summary>JiraConfig.Spaces.</summary>
+        public const int MaxJiraSpaces = 200;
+
+        /// <summary>JiraConfig.ClosedStatuses.</summary>
+        public const int MaxJiraStatuses = 64;
+
+        /// <summary>NotificationSenders, BotNames, MetadataFilters, AuthorPrefixes, each.</summary>
+        public const int MaxJiraListEntries = 32;
+
+        /// <summary>One entry of those lists, in bytes.</summary>
+        public const int MaxJiraPatternBytes = 512;
+
+        /// <summary>JiraConfig.OfflineDays.</summary>
+        public const int MaxJiraOfflineDays = 365;
+
+        /// <summary>What JiraConfig.OfflineDays 0 means.</summary>
+        public const int DefaultJiraOfflineDays = 30;
+
+        /// <summary>The transitions <c>issue.transitions</c> returns at most.</summary>
+        public const int MaxIssueTransitions = 100;
     }
 }

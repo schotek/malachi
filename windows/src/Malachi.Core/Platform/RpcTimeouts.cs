@@ -7,7 +7,9 @@
 // (composeTimeout), download.go (downloadTimeout),
 // ui/internal/accountwizard/wizard.go (discoverTimeout,
 // testTimeout, addTimeout, oauthStartTimeout, oauthWaitCallTimeout),
-// backend/pkg/api/auth.go (HandshakeTimeout).
+// accountwizard/jira_flow.go (detectSiteTimeout, listSpacesTimeout),
+// window/issue_actions.go (issueTimeout), backend/pkg/api/auth.go
+// (HandshakeTimeout).
 
 using System;
 
@@ -70,4 +72,22 @@ public static class RpcTimeouts
     /// 5 minutes; download.go <c>downloadTimeout</c>).
     /// </summary>
     public static readonly TimeSpan Download = TimeSpan.FromMinutes(5);
+
+    /// <summary><c>account.detectSite</c>: two anonymous requests to the site, 15 s inside.</summary>
+    public static readonly TimeSpan DetectSite = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// <c>account.listSpaces</c>: signs in, lists spaces and statuses and may
+    /// count every space's issues.
+    /// </summary>
+    public static readonly TimeSpan ListSpaces = TimeSpan.FromSeconds(45);
+
+    /// <summary>
+    /// <c>issue.transitions</c>: one request to the site (docs/api.md §4.12,
+    /// as macOS; the GTK UI allows it the 45 s of a transition).
+    /// </summary>
+    public static readonly TimeSpan Transitions = TimeSpan.FromSeconds(20);
+
+    /// <summary><c>issue.transition</c>: the transition, then the issue's refresh (up to 30 s).</summary>
+    public static readonly TimeSpan Transition = TimeSpan.FromSeconds(45);
 }

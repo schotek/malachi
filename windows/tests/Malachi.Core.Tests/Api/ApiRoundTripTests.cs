@@ -34,7 +34,7 @@ public sealed class ApiRoundTripTests
         """{"source":"daemon","goaAccountId":"account_1","provider":"office365","clientId":"c","tenantId":"common","authUrl":"https://a","tokenUrl":"https://t","scopes":["s1","s2"]}""";
 
     private const string Config =
-        """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"syncIntervalSeconds":300}""";
+        """{"name":"Work","email":"me@example.org","displayName":"Me","kind":"imap","imap":@server@,"smtp":@server@,"oauth2":@oauth2@,"graph":{"source":"goa","goaAccountId":"account_1"},"jira":@jira@,"syncIntervalSeconds":300}""";
 
     private const string Error = """{"code":1302,"message":"550 no","data":{"limit":1,"size":2}}""";
 
@@ -46,13 +46,13 @@ public sealed class ApiRoundTripTests
     private const string Outbox = """{"state":"failed","attempts":3,"nextAttemptAt":"2026-09-02T12:00:00.5Z","error":@error@}""";
 
     private const string Summary =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_outbox","threadId":"t_9","from":[@address@],"to":[{"address":"me@example.org"}],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen","pinned"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@}""";
 
     private const string Attachment =
         """{"partId":"2.1","filename":"image001.png","contentType":"image/png","size":100,"inline":true,"contentId":"image001@example.org","remote":true}""";
 
     private const string Message =
-        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"}}""";
+        """{"id":"m_1","accountId":"acc_1","folderId":"f_inbox","threadId":"t_9","from":[@address@],"to":[@address@],"subject":"Lunch","date":"2026-09-02T10:00:00Z","snippet":"plain","flags":["seen"],"hasAttachments":true,"size":4321,"outbox":@outbox@,"issue":@itemissue@,"cc":[@address@],"bcc":[@address@],"replyTo":[@address@],"rfcMessageId":"<x@example.org>","inReplyTo":"<w@example.org>","references":["<v@example.org>","<w@example.org>"],"attachments":[@attachment@],"headers":{"Auto-Submitted":"no"}}""";
 
     private const string Blocked =
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
@@ -64,13 +64,23 @@ public sealed class ApiRoundTripTests
         """{"id":"att_1","filename":"a.png","contentType":"image/png","size":100,"inline":true,"contentId":"abc@malachi.local"}""";
 
     private const string Draft =
-        """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
+        """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","comment":{"issue":@issue@,"visibility":"internal"},"updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
 
     private const string Thread =
-        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"]}""";
+        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@}""";
 
     private const string Certificate =
         """{"sha256":"@pin@","subject":"127.0.0.1","issuer":"CA","dnsNames":["mail.example.org"],"ipAddresses":["127.0.0.1"],"notBefore":"2024-01-02T03:04:05Z","notAfter":"2044-01-02T03:04:05Z","selfSigned":true}""";
+
+    private const string Jira =
+        """{"siteUrl":"https://acme.atlassian.net","deployment":"cloud","cloudId":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0","login":"jana@acme.example","spaces":[{"id":"10001","key":"ITSD","name":"IT Service Desk"},{"id":"10002","key":"WEB"}],"offlineDays":90,"onlyMine":true,"hideEvents":false,"disabledFolders":["watching"],"closedStatuses":[{"id":"6","name":"Closed"},{"id":"10005"}],"notificationMail":"hide","notificationSenders":["@acme.example"],"botNames":["Relay Bot"],"metadataFilters":["^Sent from .*$"],"authorPrefixes":["[EXT]"]}""";
+
+    private const string Issue =
+        """{"key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer jams","status":"In Progress","statusCategory":"inProgress","type":"Service Request","priority":"High","assignee":"Jana","reporter":"Petr","assignedToMe":true,"watching":false,"commentVisibilities":["public","internal"]}""";
+
+    // MessageIssue: the issue's members and the item's, in one object (Go embeds IssueInfo).
+    private const string ItemIssue =
+        """{"key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer jams","status":"In Progress","statusCategory":"inProgress","type":"Service Request","priority":"High","assignee":"Jana","reporter":"Petr","assignedToMe":true,"watching":false,"commentVisibilities":["public","internal"],"item":"event","visibility":"internal","changes":[{"field":"status","from":"To Do","to":"In Progress"},{"field":"assignee","to":"Jana"}],"via":"Relay Bot","edited":true,"mine":false}""";
 
     private const string Page = """{"cursor":"opaque","limit":50}""";
 
@@ -94,7 +104,7 @@ public sealed class ApiRoundTripTests
         [nameof(GraphConfig)] = Case<GraphConfig>("""{"source":"goa","goaAccountId":"account_1788512854_0"}"""),
         [nameof(AccountConfig)] = Case<AccountConfig>(Config),
         [nameof(Credentials)] = Case<Credentials>("""{"password":"secret","oauthSession":"s_1"}"""),
-        [nameof(Account)] = Case<Account>("""{"id":"acc_1","config":@config@,"enabled":true,"state":@state@}"""),
+        [nameof(Account)] = Case<Account>("""{"id":"acc_1","config":@config@,"enabled":true,"state":@state@,"capabilities":["comment","forward","teleport"]}"""),
         [nameof(AccountListResult)] = Case<AccountListResult>("""{"accounts":[{"id":"acc_1","config":@config@,"enabled":false,"state":@state@}]}"""),
         [nameof(AccountAddParams)] = Case<AccountAddParams>("""{"config":@config@,"credentials":{}}"""),
         [nameof(AccountAddResult)] = Case<AccountAddResult>("""{"accountId":"acc_2"}"""),
@@ -120,7 +130,7 @@ public sealed class ApiRoundTripTests
         [nameof(AccountTestParams)] = Case<AccountTestParams>("""{"accountId":"acc_1","config":@config@,"credentials":{"oauthSession":"s_1"}}"""),
         [nameof(EndpointTestResult)] = Case<EndpointTestResult>("""{"ok":false,"error":@error@,"capabilities":["IDLE","CONDSTORE"],"latencyMs":120}"""),
         [nameof(AccountTestResult)] = Case<AccountTestResult>(
-            """{"imap":{"ok":true,"latencyMs":1},"smtp":{"ok":false,"error":{"code":1201,"message":"535"},"latencyMs":2},"graph":{"ok":true,"capabilities":["graph"],"latencyMs":3}}"""),
+            """{"imap":{"ok":true,"latencyMs":1},"smtp":{"ok":false,"error":{"code":1201,"message":"535"},"latencyMs":2},"graph":{"ok":true,"capabilities":["graph"],"latencyMs":3},"jira":{"ok":true,"capabilities":["cloud","gateway"],"latencyMs":4}}"""),
         // Attachments.cs
         [nameof(AttachmentImportParams)] = Case<AttachmentImportParams>("""{"accountId":"acc_1","path":"C:\\Users\\u\\a.pdf","data":"AQID","filename":"a.bin","inline":true}"""),
         [nameof(AttachmentImportResult)] = Case<AttachmentImportResult>("""{"attachment":@draftattachment@}"""),
@@ -146,7 +156,7 @@ public sealed class ApiRoundTripTests
         [nameof(DraftListResult)] = Case<DraftListResult>("""{"drafts":[@draft@],"page":@pageinfo@}"""),
         [nameof(DraftDeleteParams)] = Case<DraftDeleteParams>("""{"accountId":"acc_1","draftId":"d_1"}"""),
         [nameof(DraftCreateParams)] = Case<DraftCreateParams>(
-            """{"accountId":"acc_1","mode":"replyAll","messageId":"m_1","mailto":"mailto:a@example.org","attribution":"On Tue, Alice wrote:"}"""),
+            """{"accountId":"acc_1","mode":"replyAll","messageId":"m_1","mailto":"mailto:a@example.org","attribution":"On Tue, Alice wrote:","messageAccountId":"acc_j"}"""),
         [nameof(DraftCreateResult)] = Case<DraftCreateResult>("""{"draft":@draft@,"quoted":"html","blocked":@blocked@,"skipped":[@attachment@]}"""),
         [nameof(DraftOpenParams)] = Case<DraftOpenParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(DraftOpenResult)] = Case<DraftOpenResult>("""{"draft":@draft@,"blocked":@blocked@,"skipped":[@attachment@]}"""),
@@ -155,11 +165,34 @@ public sealed class ApiRoundTripTests
         [nameof(OutboxRetryParams)] = Case<OutboxRetryParams>("""{"accountId":"acc_1","messageId":"m_7"}"""),
         // Folders.cs
         [nameof(Folder)] = Case<Folder>(
-            """{"id":"f_2","accountId":"acc_1","parentId":"f_1","name":"Sub","path":"Inbox/Sub","role":"none","subscribed":false,"selectable":true,"synced":true,"unread":0,"total":1}"""),
+            """{"id":"f_2","accountId":"acc_1","parentId":"f_1","name":"Sub","path":"Inbox/Sub","role":"none","subscribed":false,"selectable":true,"synced":true,"unread":0,"total":1,"virtual":"assignedToMe"}"""),
         [nameof(FolderListParams)] = Case<FolderListParams>("""{"accountId":"acc_1","includeUnsubscribed":true}"""),
         [nameof(FolderListResult)] = Case<FolderListResult>(
             """{"folders":[{"id":"f_1","accountId":"acc_1","name":"Inbox","path":"Inbox","role":"inbox","subscribed":true,"selectable":true,"synced":true,"unread":3,"total":120}]}"""),
         [nameof(FolderSubscribeParams)] = Case<FolderSubscribeParams>("""{"accountId":"acc_1","folderId":"f_1","subscribed":false}"""),
+        // Jira.cs
+        [nameof(SpaceRef)] = Case<SpaceRef>("""{"id":"10001","key":"ITSD","name":"IT Service Desk"}"""),
+        [nameof(StatusRef)] = Case<StatusRef>("""{"id":"6","name":"Closed"}"""),
+        [nameof(JiraConfig)] = Case<JiraConfig>(Jira),
+        [nameof(IssueInfo)] = Case<IssueInfo>(Issue),
+        [nameof(IssueChange)] = Case<IssueChange>("""{"field":"assignee","from":"Petr","to":"Jana"}"""),
+        [nameof(MessageIssue)] = Case<MessageIssue>(ItemIssue),
+        [nameof(AccountDetectSiteParams)] = Case<AccountDetectSiteParams>("""{"url":"acme.atlassian.net"}"""),
+        [nameof(AccountDetectSiteResult)] = Case<AccountDetectSiteResult>(
+            """{"kind":"jira","siteUrl":"https://acme.atlassian.net","deployment":"cloud","cloudId":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0","title":"Acme","version":"1001.0.0-SNAPSHOT"}"""),
+        [nameof(AccountListSpacesParams)] = Case<AccountListSpacesParams>("""{"accountId":"acc_j","config":@config@,"credentials":{"password":"token"},"counts":true}"""),
+        [nameof(Space)] = Case<Space>("""{"id":"10001","key":"ITSD","name":"IT Service Desk","serviceDesk":true,"issues":120}"""),
+        [nameof(IssueStatus)] = Case<IssueStatus>("""{"id":"6","name":"Closed","category":"done"}"""),
+        [nameof(SiteUser)] = Case<SiteUser>("""{"name":"Jana Dvořáková","email":"jana@acme.example"}"""),
+        [nameof(AccountListSpacesResult)] = Case<AccountListSpacesResult>(
+            """{"user":{"name":"Jana"},"spaces":[{"id":"10002","key":"WEB","name":"Website","issues":-1}],"statuses":[{"id":"1","name":"To Do","category":"todo"}]}"""),
+        [nameof(DraftComment)] = Case<DraftComment>("""{"issue":@issue@,"visibility":""}"""),
+        [nameof(IssueTransitionsParams)] = Case<IssueTransitionsParams>("""{"accountId":"acc_j","messageId":"m_j1"}"""),
+        [nameof(IssueTransition)] = Case<IssueTransition>("""{"id":"21","name":"Done","to":"Done","toCategory":"done","needsInput":true}"""),
+        [nameof(IssueTransitionsResult)] = Case<IssueTransitionsResult>("""{"issue":@issue@,"transitions":[{"id":"11","name":"Start Progress","to":"In Progress"}]}"""),
+        [nameof(IssueTransitionParams)] = Case<IssueTransitionParams>("""{"accountId":"acc_j","messageId":"m_j1","transitionId":"11"}"""),
+        [nameof(IssueTransitionResult)] = Case<IssueTransitionResult>("""{"issue":@issue@}"""),
+        [nameof(MessagesChangedNotification)] = Case<MessagesChangedNotification>("""{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
         // Messages.cs
         [nameof(Malachi.Core.Api.Address)] = Case<Address>(Address),
         [nameof(OutboxInfo)] = Case<OutboxInfo>(Outbox),
@@ -483,6 +516,7 @@ public sealed class ApiRoundTripTests
             ("@draft@", Draft), ("@body@", Body), ("@blocked@", Blocked), ("@config@", Config), ("@server@", Server),
             ("@oauth2@", OAuth2), ("@state@", State), ("@error@", Error), ("@address@", Address),
             ("@pageinfo@", PageInfo), ("@page@", Page), ("@pin@", Pin),
+            ("@jira@", Jira), ("@itemissue@", ItemIssue), ("@issue@", Issue),
         };
         string previous;
         do

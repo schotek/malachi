@@ -86,6 +86,24 @@ public sealed class NotificationDecodeTests
     }
 
     [Fact]
+    public void MessagesChanged()
+    {
+        var n = Raw("notify.messagesChanged", """{"accountId":"acc_1","folderIds":["f_inbox","f_work"]}""");
+        var p = Assert.IsType<DaemonNotification.MessagesChanged>(n).Payload;
+        Assert.Equal("acc_1", p.AccountId);
+        Assert.Equal<FolderId>(["f_inbox", "f_work"], p.FolderIds);
+        // No folder named, or the list left out or null: any folder of the account.
+        foreach (var parameters in new[] { """{"accountId":"acc_1"}""", """{"accountId":"acc_1","folderIds":[]}""", """{"accountId":"acc_1","folderIds":null}""" })
+        {
+            var any = Assert.IsType<DaemonNotification.MessagesChanged>(Raw("notify.messagesChanged", parameters)).Payload;
+            Assert.Equal("acc_1", any.AccountId);
+            Assert.Empty(any.FolderIds);
+        }
+        Assert.Throws<JsonException>(() => Raw("notify.messagesChanged", """{"folderIds":["f_inbox"]}"""));
+        Assert.Throws<JsonException>(() => Raw("notify.messagesChanged", """{"accountId":"acc_1","folderIds":"f_inbox"}"""));
+    }
+
+    [Fact]
     public void UnknownMethodIsKeptByName()
     {
         var n = Raw("notify.somethingNewer", """{"x":1}""");
@@ -108,6 +126,7 @@ public sealed class NotificationDecodeTests
             (API.Notify.SyncState, """{"state":{"accountId":"acc_1","status":"idle","progress":-1,"pendingOutbox":0}}"""),
             (API.Notify.AuthRequired, """{"accountId":"acc_1","reason":1200,"message":"m"}"""),
             (API.Notify.AccountsChanged, "{}"),
+            (API.Notify.MessagesChanged, """{"accountId":"acc_1","folderIds":["f_inbox"]}"""),
         ];
         Assert.Equal(API.AllNotifications, samples.Select(s => s.Method));
         foreach (var (method, parameters) in samples)

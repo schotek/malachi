@@ -25,7 +25,7 @@ public sealed class GoContractTests
         var source = GoContract.ApiSource("methods.go");
         var constants = GoContract.StringConstants(source);
         var goMethods = GoContract.SliceIdentifiers(source, "AllMethods").Select(name => constants[name]).ToArray();
-        Assert.Equal(48, goMethods.Length);
+        Assert.Equal(52, goMethods.Length);
         Assert.Equal(goMethods, API.AllMethods);
         Assert.Equal(goMethods, API.Methods.Select(m => m.Name));
         Assert.Equal(ApiCodingTests.GoMethods, goMethods); // the Swift test's copy is current
@@ -42,6 +42,7 @@ public sealed class GoContractTests
         Assert.Equal(API.Notify.SyncState, constants["NotifySyncState"]);
         Assert.Equal(API.Notify.AuthRequired, constants["NotifyAuthRequired"]);
         Assert.Equal(API.Notify.AccountsChanged, constants["NotifyAccountsChanged"]);
+        Assert.Equal(API.Notify.MessagesChanged, constants["NotifyMessagesChanged"]);
     }
 
     [Fact]
@@ -94,6 +95,14 @@ public sealed class GoContractTests
         { nameof(KnownSenderSource), "types.go", "KnownSenderSource*" },
         { nameof(ContactSource), "types.go", "ContactSource" },
         { nameof(StorageConversion), "types.go", "StorageConversion" },
+        { nameof(Capability), "types.go", "AccountCapability" },
+        { nameof(JiraDeployment), "types.go", "JiraDeployment" },
+        { nameof(VirtualFolder), "types.go", "VirtualFolder" },
+        { nameof(NotificationMailMode), "types.go", "NotificationMailMode" },
+        { nameof(IssueStatusCategory), "types.go", "IssueStatusCategory" },
+        { nameof(IssueItemKind), "types.go", "IssueItemKind" },
+        { nameof(CommentVisibility), "types.go", "CommentVisibility" },
+        { nameof(IssueField), "types.go", "IssueField" },
         { nameof(TlsErrorReason), "tls.go", "TLSErrorReason" },
     };
 
@@ -136,7 +145,7 @@ public sealed class GoContractTests
     {
         var go = GoContract.IntConstants(GoContract.ApiSource("types.go"));
         var limits = typeof(API.Limits).GetFields(BindingFlags.Public | BindingFlags.Static).Where(f => f.IsLiteral).ToArray();
-        Assert.Equal(25, limits.Length);
+        Assert.Equal(32, limits.Length);
         foreach (var limit in limits)
         {
             // Go spells the identifier "IDs"; C# "Ids".
@@ -185,6 +194,15 @@ public sealed class GoContractTests
         // download.go counts in minutes, which GoContract.Seconds does not read.
         Assert.Contains("const downloadTimeout = 5 * time.Minute", GoContract.Source("ui", "internal", "window", "download.go"), StringComparison.Ordinal);
         Assert.Equal(TimeSpan.FromMinutes(5), RpcTimeouts.Download);
+        var jiraWizard = GoContract.Source("ui", "internal", "accountwizard", "jira_flow.go");
+        Assert.Equal(GoContract.Seconds(jiraWizard, "detectSiteTimeout"), RpcTimeouts.DetectSite);
+        Assert.Equal(GoContract.Seconds(jiraWizard, "listSpacesTimeout"), RpcTimeouts.ListSpaces);
+        Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "jiraaccount", "controller.go"), "listSpacesTimeout"), RpcTimeouts.ListSpaces);
+        Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "window", "issue_actions.go"), "issueTimeout"), RpcTimeouts.Transition);
+        // issue.transitions: docs/api.md's 20 s, as macOS; the GTK UI allows
+        // it the 45 s of issue.transition (issueTimeout).
+        Assert.Contains("Clients allow 20 s for `issue.transitions` and\n45 s for `issue.transition`.", GoContract.Source("docs", "api.md"), StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromSeconds(20), RpcTimeouts.Transitions);
     }
 
     /// <summary>
