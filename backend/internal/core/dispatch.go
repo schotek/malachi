@@ -14,7 +14,10 @@ import (
 // kindSupervisor routes every SyncSupervisor call to the supervisor of the
 // account's kind (imap or graph). It remembers the kind of each started
 // account, because Stop, Trigger and State only carry the id; an id it has
-// not seen is a no-op, as the interface promises.
+// not seen is a no-op, as the interface promises. A kind this daemon does
+// not know (an account a newer version added to the store) goes to a no-op
+// supervisor: the account is left alone, never handed to the IMAP syncer,
+// whose server settings it does not have.
 type kindSupervisor struct {
 	IMAP  SyncSupervisor
 	Graph SyncSupervisor
@@ -30,10 +33,13 @@ func newKindSupervisor(imap, graph SyncSupervisor) *kindSupervisor {
 }
 
 func (k *kindSupervisor) for_(kind api.AccountKind) SyncSupervisor {
-	if kind == api.AccountGraph {
+	switch kind {
+	case api.AccountIMAP:
+		return k.IMAP
+	case api.AccountGraph:
 		return k.Graph
 	}
-	return k.IMAP
+	return noopSupervisor{}
 }
 
 func (k *kindSupervisor) remember(a store.Account) SyncSupervisor {
@@ -130,10 +136,13 @@ func newKindOutbox(imap, graph OutboxSupervisor) *kindOutbox {
 }
 
 func (k *kindOutbox) for_(kind api.AccountKind) OutboxSupervisor {
-	if kind == api.AccountGraph {
+	switch kind {
+	case api.AccountIMAP:
+		return k.IMAP
+	case api.AccountGraph:
 		return k.Graph
 	}
-	return k.IMAP
+	return noopOutbox{}
 }
 
 func (k *kindOutbox) Run(ctx context.Context) {
