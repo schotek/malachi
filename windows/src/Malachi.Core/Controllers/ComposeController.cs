@@ -26,6 +26,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Malachi.Core.Api;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers.Infrastructure;
+using Malachi.Core.Model;
 using Malachi.Core.Settings;
 using Malachi.Core.Transport;
 using Microsoft.Extensions.Logging;
@@ -93,11 +94,23 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
     /// </summary>
     public Func<ComposeParams, IComposeWindowHandle>? MakeWindow { get; set; }
 
-    /// <summary>Manager.Accounts: the known accounts, or the placeholder while the backend cannot list any.</summary>
-    public IReadOnlyList<Account> Accounts => known.Count == 0 ? PlaceholderAccounts : known;
+    /// <summary>
+    /// Manager.Accounts: the known accounts that write mail (the From list,
+    /// <see cref="Capabilities.ComposeAccounts"/>: not an issue tracker's),
+    /// or the placeholder while the backend lists none.
+    /// </summary>
+    public IReadOnlyList<Account> Accounts => Capabilities.ComposeAccounts(known) is { Count: > 0 } list ? list : PlaceholderAccounts;
 
     /// <summary>Manager.Placeholder: whether <see cref="Accounts"/> is the placeholder identity.</summary>
-    public bool Placeholder => known.Count == 0;
+    public bool Placeholder => Capabilities.ComposeAccounts(known).Count == 0;
+
+    /// <summary>
+    /// Every account the backend listed, those that do not write mail
+    /// included: a comment window's issue-tracker account is found here (it
+    /// is pinned to it; From lists <see cref="Accounts"/>). Empty until the
+    /// list arrived.
+    /// </summary>
+    public IReadOnlyList<Account> KnownAccounts => known;
 
     /// <summary>Manager.SelfAddress: the first account's address, for Reply All exclusion.</summary>
     public Address SelfAddress

@@ -51,6 +51,14 @@ public sealed record ComposeParams
     public MessageId? Forwarding { get; init; }
 
     /// <summary>
+    /// The issue a comment draft goes to and its visibility, as
+    /// <c>draft.create</c> returned them (<see cref="Draft.Comment"/>): the
+    /// window writes a comment then (<see cref="IssueTrackers.Jira.CommentCompose"/>),
+    /// pinned to <see cref="AccountId"/>. Null for an e-mail.
+    /// </summary>
+    public DraftComment? Comment { get; init; }
+
+    /// <summary>
     /// What the daemon imported for the draft (the quoted original's
     /// pictures, a forwarded message's files): not yet bound, the first
     /// <c>draft.save</c> binds them.

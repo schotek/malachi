@@ -566,7 +566,7 @@ internal sealed class MailFixture : IAsyncDisposable
     /// <summary>The conversation key of a message: its thread id, or its own id for one an older daemon never linked.</summary>
     private static ThreadId ThreadKey(MessageSummary s) => s.ThreadId ?? new ThreadId("unlinked:" + s.Id.Value);
 
-    /// <summary>Aggregates a conversation over its members (oldest first), as docs/api.md §4.4 describes thread.list's summary.</summary>
+    /// <summary>Aggregates a conversation over its members (oldest first), as docs/api.md §4.4 describes thread.list's summary; a jira thread's issue is the latest member's.</summary>
     private ThreadSummary Aggregate(ThreadId tid, List<MessageSummary> members, AccountId account)
     {
         var latest = members[^1];
@@ -603,6 +603,7 @@ internal sealed class MailFixture : IAsyncDisposable
             Flags = flags,
             HasAttachments = attachments,
             FolderIds = folderIds,
+            Issue = latest.Issue?.Info,
         };
     }
 

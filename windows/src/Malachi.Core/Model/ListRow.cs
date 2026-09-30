@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of macos/Sources/MalachiCore/Model/MailModel+Threads.swift (ListRow);
-// GTK: ui/internal/window/thread_model.go (listRow). Immutable. Its equality
+// Port of macos/Sources/MalachiCore/Model/MailModel+Threads.swift (ListRow)
+// and ConversationController.swift (ListRow.showsConversation); GTK:
+// ui/internal/window/thread_model.go (listRow) and
+// conversation_controller.go (rowShowsConversation). Immutable. Its equality
 // compares the summaries' lists by reference, as every record's does; a
 // view diffs rows by Key.
 
@@ -36,4 +38,13 @@ public sealed record ListRow
 
     /// <summary>Conversation-row state: unfolded while thread.get has not answered yet.</summary>
     public bool Loading { get; init; }
+
+    /// <summary>
+    /// A folded conversation row of the grouped list whose selection shows
+    /// the whole conversation in the reading pane: a conversation row (not a
+    /// member row, not a single-message row) with two or more members in the
+    /// folder (<see cref="Conversation.IsConversationRow"/>). Every other row
+    /// shows its message alone.
+    /// </summary>
+    public bool ShowsConversation => Thread && !Member && Key.Thread is not null && Summary is { } s && Conversation.IsConversationRow(s);
 }

@@ -68,4 +68,19 @@ public interface IComposeForm
 
     /// <summary>Closes the window without asking (the controller decided).</summary>
     void CloseWindow();
+
+    /// <summary>
+    /// The window writes a comment on an issue (<see cref="Compose.ComposeParams.Comment"/>,
+    /// <see cref="IssueTrackers.Jira.CommentCompose"/>): no recipients,
+    /// subject or attachments, and no Save Draft, since no Drafts folder
+    /// keeps a comment. False for an e-mail window.
+    /// </summary>
+    bool IsComment => false;
+
+    /// <summary>
+    /// The comment's visibility as chosen in the window
+    /// (<see cref="IssueTrackers.Jira.SelectedVisibility"/> at first); public
+    /// for an e-mail.
+    /// </summary>
+    CommentVisibility CommentVisibility => CommentVisibility.Public;
 }

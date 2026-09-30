@@ -90,6 +90,23 @@ public sealed class LoadedCache
     public void RemoveAll() => entries.Clear();
 
     /// <summary>
+    /// Forgets the entries of the account's messages (notify.messagesChanged:
+    /// the daemon rebuilt them in place, docs/api.md §5; notify.go
+    /// <c>evictAccount</c>), and those whose account is not known, which may
+    /// be its. Returns the ids let go, in order.
+    /// </summary>
+    public IReadOnlyList<MessageId> RemoveAll(AccountId account)
+    {
+        var gone = entries.Where(e => e.Value.AccountId is not { } a || a == account).Select(e => e.Key)
+            .OrderBy(id => id.Value, StringComparer.Ordinal).ToList();
+        foreach (var id in gone)
+        {
+            entries.Remove(id);
+        }
+        return gone;
+    }
+
+    /// <summary>
     /// Evicts the entries with the lowest <see cref="LoadedMessage.Seq"/>
     /// until at most <paramref name="limit"/> remain and their bodies fit in
     /// <paramref name="maxBytes"/>; the newest entry always stays

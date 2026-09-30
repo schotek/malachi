@@ -83,6 +83,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     // Closures to run once a conversation's members are known (the waiters
     // of thread_model.go threadMembers).
     private readonly Dictionary<ThreadId, List<Action>> waiters = [];
+
+    // What runs instead when that thread.get fails.
+    private readonly Dictionary<ThreadId, List<Action>> failureWaiters = [];
     private CancellationTokenSource? markReadTimer;
     private MessageId? markReadId;
     private SettingsChangeToken? settingsToken;
@@ -115,9 +118,11 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         mailbox.OnNewMessageForList = ApplyNewMessage;
         mailbox.RefreshOutboxViews = RefreshOutboxViews;
         mailbox.CollapseLoading = CollapseLoadingRows;
+        mailbox.RefreshShown = RefreshShown;
         // Grouping is a different listing (thread.list): LoadMessages
-        // notices the mode change and starts the folder over (window.go).
-        settingsToken = settings.OnChange(SettingsKey.GroupByConversation, LoadMessages);
+        // notices the mode change and starts the folder over (window.go),
+        // unless the folder's mode stays (GroupingChanged).
+        settingsToken = settings.OnChange(SettingsKey.GroupByConversation, GroupingChanged);
         if (Model.Selected is not null)
         {
             LoadMessages();
@@ -188,6 +193,34 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// <c>onMessageRowSelected</c>; Swift <c>onSelectedMessageChanged</c>).
     /// </summary>
     public event EventHandler<MessageSummary?>? SelectedMessageChanged;
+
+    /// <summary>
+    /// The selected row itself, announced just before
+    /// <see cref="SelectedMessageChanged"/>, null when nothing is selected: a
+    /// conversation row (<see cref="ListRow.ShowsConversation"/>) puts the
+    /// whole conversation in the pane (<see cref="ConversationController"/>),
+    /// any other row its message (Swift <c>onSelectedRowChanged</c>).
+    /// </summary>
+    public event EventHandler<ListRow?>? SelectedRowChanged;
+
+    /// <summary>
+    /// The folder members the model holds of a conversation changed while
+    /// its row may have kept its key (an arrival, a flag change, a removal
+    /// and its undo, thread.get answering, a reload): what the conversation
+    /// view shows follows (<see cref="ConversationController"/>; Swift
+    /// <c>onThreadMembersChanged</c>). Grouped mode only.
+    /// </summary>
+    public event EventHandler<ThreadId>? ThreadMembersChanged;
+
+    /// <summary>
+    /// The messages of the shown conversation were rebuilt in place by the
+    /// daemon (notify.messagesChanged, <see cref="RefreshShown"/>): the
+    /// conversation view lets go of the bodies it holds and asks for them
+    /// again; its folder members were forgotten here and come back through
+    /// <see cref="ThreadMembersChanged"/> once the reload asked thread.get
+    /// for them (Swift <c>onConversationChanged</c>). Grouped mode only.
+    /// </summary>
+    public event EventHandler<ThreadId>? ConversationChanged;
 
     /// <summary>
     /// A message row was activated (double-click, Enter): open it in a
@@ -283,6 +316,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         settingsToken?.Cancel();
         settingsToken = null;
         waiters.Clear();
+        failureWaiters.Clear();
     }
 
     /// <summary>Closes the list (<see cref="Close"/>).</summary>
@@ -313,7 +347,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         var k = Model.Selected;
         var gen = Model.BumpList();
         Model.LoadingMore = false;
-        var grouped = Settings.GroupByConversation && FolderRoleOf(k) != Api.FolderRole.Outbox;
+        var grouped = GroupedListing(k);
         if (k != Model.ListFolder || grouped != Model.Grouped)
         {
             Model.ListFolder = k;
@@ -322,6 +356,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             Reconcile(SelectionHint.Clear);
             OnPropertyChanged(nameof(FolderRole));
             OnPropertyChanged(nameof(InOutbox));
+            // With nothing selected the actions follow the listed folder's
+            // account (a Jira folder has no Reply).
+            RefreshActionFlags();
         }
         if (k is not { } key)
         {
@@ -378,6 +415,27 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     }
 
     /// <summary>
+    /// Whether folder <paramref name="k"/> is listed as conversations
+    /// (thread.list; messages.go <c>groupedListing</c>): with the "group by
+    /// conversation" setting, and always for a folder of a Jira account
+    /// (<see cref="MailModel.AlwaysGrouped"/>); never the outbox.
+    /// </summary>
+    public bool GroupedListing(FolderKey? k) =>
+        (Settings.GroupByConversation || Model.AlwaysGrouped(k)) && FolderRoleOf(k) != Api.FolderRole.Outbox;
+
+    // The "group by conversation" setting changed: the folder is listed
+    // again in the other mode. A folder whose mode stays (a Jira account's,
+    // the outbox) keeps its rows and is not asked again.
+    private void GroupingChanged()
+    {
+        if (!Model.Search.Active && Model.ListFolder == Model.Selected && GroupedListing(Model.Selected) == Model.Grouped)
+        {
+            return;
+        }
+        LoadMessages();
+    }
+
+    /// <summary>
     /// Runs thread.list for folder <paramref name="k"/>, first page
     /// (threads.go <c>loadThreadPage</c>); <paramref name="gen"/> is the list
     /// generation the reply belongs to.
@@ -414,6 +472,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             Model.SetThreads(res.Threads, res.Page);
             SyncRows();
             FetchExpandedMembers();
+            AnnounceSelectedMembers();
         });
     }
 
@@ -825,9 +884,11 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// Makes the folder members of a conversation known, through thread.get
     /// when needed, and runs <paramref name="then"/> afterwards (at once when
     /// they are). A failed fetch folds the row back and says why (threads.go
-    /// <c>ensureMembers</c>).
+    /// <c>ensureMembers</c>), and runs <paramref name="failed"/> instead of
+    /// <paramref name="then"/>. Neither runs when the list moved on meanwhile
+    /// (another folder, a reload, the connection lost).
     /// </summary>
-    public void EnsureMembers(ThreadId tid, Action? then)
+    public void EnsureMembers(ThreadId tid, Action? then, Action? failed = null)
     {
         Scope.VerifyAccess();
         if (!Model.Members.TryGetValue(tid, out var mem))
@@ -846,6 +907,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 waiters[tid] = list = [];
             }
             list.Add(then);
+        }
+        if (failed is not null)
+        {
+            if (!failureWaiters.TryGetValue(tid, out var list))
+            {
+                failureWaiters[tid] = list = [];
+            }
+            list.Add(failed);
         }
         if (mem.Fetching)
         {
@@ -866,12 +935,17 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             }
             Model.Members[tid] = now with { Fetching = false };
             var waiting = waiters.Remove(tid, out var w) ? w : [];
+            var failing = failureWaiters.Remove(tid, out var f) ? f : [];
             if (!outcome.TryGetValue(out var res, out var err))
             {
                 LogThreadGetFailed(logger, err!.Message);
                 Mailbox.Toast(RpcErrorText.Text(L10n.T("Loading the conversation"), err));
                 Model.SetExpanded(tid, false);
                 SyncRows();
+                foreach (var fn in failing)
+                {
+                    fn();
+                }
                 return;
             }
             Model.SetMembers(tid, res.Thread, res.Messages);
@@ -880,11 +954,30 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             {
                 RefreshActionFlags();
             }
+            ThreadMembersChanged?.Invoke(this, tid);
             foreach (var fn in waiting)
             {
                 fn();
             }
         });
+    }
+
+    /// <summary>
+    /// Forgets that the folder members of conversation <paramref name="tid"/>
+    /// are known, so the next <see cref="EnsureMembers"/> asks thread.get
+    /// again (the conversation view lost every member it showed while older
+    /// ones are left out, or the daemon rebuilt the messages).
+    /// </summary>
+    public void RefreshMembers(ThreadId tid)
+    {
+        Scope.VerifyAccess();
+        if (!Model.Members.TryGetValue(tid, out var mem) || !mem.Complete)
+        {
+            return;
+        }
+        Model.Members[tid] = mem with { Complete = false };
+        Model.RebuildRows();
+        SyncRows();
     }
 
     /// <summary>
@@ -912,6 +1005,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         Scope.VerifyAccess();
         Model.CollapseLoading();
         waiters.Clear();
+        failureWaiters.Clear();
         SyncRows();
         ShowLoadMore();
     }
@@ -957,7 +1051,12 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         AnnounceSelection();
     }
 
-    /// <summary>window.go <c>onMessageRowSelected</c> for the current <see cref="SelectedKey"/>.</summary>
+    /// <summary>
+    /// window.go <c>onMessageRowSelected</c> for the current
+    /// <see cref="SelectedKey"/>. A conversation row shows the whole
+    /// conversation and marks only the member <c>Conversation.Build</c> picks
+    /// (<see cref="MarkConversationRead"/>).
+    /// </summary>
     private void AnnounceSelection()
     {
         var row = SelectedRow;
@@ -966,9 +1065,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             SelectedKey = null;
             SelectionCleared?.Invoke(this, EventArgs.Empty);
         }
+        SelectedRowChanged?.Invoke(this, row);
         SelectedMessageChanged?.Invoke(this, row?.Message);
         RefreshActionFlags();
-        if (row is not null && !Model.InOutbox(row.Message))
+        if (row is { ShowsConversation: true, Key.Thread: { } tid })
+        {
+            MarkConversationRead(tid);
+        }
+        else if (row is not null && !Model.InOutbox(row.Message))
         {
             ScheduleMarkRead(row.Message.Id);
         }
@@ -976,6 +1080,73 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         {
             ScheduleMarkRead(null); // the daemon refuses flags on outbox messages
         }
+    }
+
+    /// <summary>
+    /// Arms the mark-as-read timer for the member opening conversation
+    /// <paramref name="tid"/> marks read (<see cref="ConversationModel.MarkRead"/>:
+    /// the newest message that is not an event, when it is unread; older
+    /// unread members stay unread), once the folder members are known;
+    /// nothing when the selection has moved on by then, or when thread.get
+    /// fails. The conversation view's controller calls it again when the
+    /// members arrive after such a failure
+    /// (<see cref="ConversationController.MembersChanged"/>).
+    /// </summary>
+    public void MarkConversationRead(ThreadId tid)
+    {
+        Scope.VerifyAccess();
+        // The previous selection's timer goes now, whatever the wait.
+        ScheduleMarkRead(null);
+        EnsureMembers(tid, () =>
+        {
+            if (SelectedRow is not { ShowsConversation: true, Summary: { } thread } row || row.Key != new ListKey(Thread: tid)
+                || !Model.Members.TryGetValue(tid, out var mem) || !mem.Complete)
+            {
+                return;
+            }
+            ScheduleMarkRead(Conversation.Build(thread, mem.List).MarkRead);
+        });
+    }
+
+    // Tells the conversation view that the members of the selected
+    // conversation may have changed (a reload kept its key): it merges them,
+    // or asks for them again when the reload dropped them.
+    private void AnnounceSelectedMembers()
+    {
+        if (SelectedRow is { ShowsConversation: true, Key.Thread: { } tid })
+        {
+            ThreadMembersChanged?.Invoke(this, tid);
+        }
+    }
+
+    /// <summary>
+    /// notify.messagesChanged for the account of the selected row, just
+    /// before the folder is listed again (notify.go <c>refreshShown</c>;
+    /// <see cref="MailboxController.RefreshShown"/>): the cache let go of the
+    /// account's messages, so what the pane shows is fetched again. A message
+    /// row is announced again, which shows its message afresh (and re-arms
+    /// the mark-as-read timer, a no-op for a read message); a conversation
+    /// row's folder members are forgotten, so the reload's answer asks
+    /// thread.get for them again (their senders and dates may have changed),
+    /// and the conversation view drops the bodies it holds
+    /// (<see cref="ConversationChanged"/>). Not the whole selection
+    /// announcement for a conversation: that would ask thread.get a second
+    /// time (<see cref="MarkConversationRead"/>).
+    /// </summary>
+    public void RefreshShown(AccountId acc)
+    {
+        Scope.VerifyAccess();
+        if (SelectedRow is not { } row || row.Message.AccountId != acc)
+        {
+            return;
+        }
+        if (row is { ShowsConversation: true, Key.Thread: { } tid })
+        {
+            RefreshMembers(tid);
+            ConversationChanged?.Invoke(this, tid);
+            return;
+        }
+        AnnounceSelection();
     }
 
     /// <summary>Re-evaluates the per-message actions for the selected row (actions.go <c>refreshMessageActions</c>).</summary>
@@ -1129,6 +1300,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             if (Model.ApplyNewMessage(s, Model.ListFilter, SelectedKey ?? new ListKey()))
             {
                 SyncRows();
+                if (s.ThreadId is { } tid)
+                {
+                    ThreadMembersChanged?.Invoke(this, tid);
+                }
             }
             else
             {
@@ -1155,7 +1330,30 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         var changed = Model.ApplyFlags(ids, setFlags ?? [], clearFlags ?? []);
         RefreshRows(changed);
         RefreshActionFlags();
+        if (Model.Grouped)
+        {
+            foreach (var tid in ThreadsOf(changed))
+            {
+                ThreadMembersChanged?.Invoke(this, tid);
+            }
+        }
         return changed;
+    }
+
+    // The conversations the given messages are members of in the grouped
+    // list, each once, in the order they first appear.
+    private List<ThreadId> ThreadsOf(IReadOnlyList<MessageId> ids)
+    {
+        var seen = new HashSet<ThreadId>();
+        var output = new List<ThreadId>();
+        foreach (var id in ids)
+        {
+            if (Model.MemberOf.TryGetValue(id, out var tid) && seen.Add(tid))
+            {
+                output.Add(tid);
+            }
+        }
+        return output;
     }
 
     /// <summary>
@@ -1181,6 +1379,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 }
             };
         }
+        // The conversations the messages belong to, while the model still
+        // knows it.
+        var tids = ThreadsOf(ids);
         if (Model.RemoveMessages(ids) is not { } removal)
         {
             LoadMessages();
@@ -1188,6 +1389,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         }
         var gen = Model.ListGen;
         SyncRowsAfterRemoval();
+        foreach (var tid in tids)
+        {
+            ThreadMembersChanged?.Invoke(this, tid);
+        }
         return () =>
         {
             if (Model.ListGen != gen)
@@ -1196,6 +1401,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             }
             Model.RestoreRemoval(removal);
             SyncRows();
+            foreach (var tid in tids)
+            {
+                ThreadMembersChanged?.Invoke(this, tid);
+            }
         };
     }
 

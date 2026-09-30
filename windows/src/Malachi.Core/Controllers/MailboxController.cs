@@ -204,6 +204,25 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// </summary>
     public Action? CollapseLoading { get; set; }
 
+    /// <summary>
+    /// The list's <c>refreshShown</c>, installed by the list half (Swift
+    /// <c>refreshShown</c>): the views showing messages of the account fetch
+    /// them again, as the cache let them go (<see cref="MessagesChanged"/>
+    /// ran just before). Called together with <see cref="ReloadMessages"/>,
+    /// before it.
+    /// </summary>
+    public Action<AccountId>? RefreshShown { get; set; }
+
+    /// <summary>
+    /// notify.messagesChanged for an account the window shows, before
+    /// anything is listed or fetched again: whatever is cached of the
+    /// account's messages may be stale (the daemon rebuilt them in place,
+    /// keeping their ids; docs/api.md §5). The app lets the message cache go
+    /// of them (<see cref="MessageCache.Evict(AccountId)"/>; Swift
+    /// <c>onMessagesChanged</c>).
+    /// </summary>
+    public event EventHandler<MessagesChangedNotification>? MessagesChanged;
+
     /// <summary>The transport.</summary>
     public RpcClient Client { get; }
 
@@ -904,6 +923,9 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             case DaemonNotification.AccountsChanged:
                 HandleAccountsChanged();
                 break;
+            case DaemonNotification.MessagesChanged c:
+                HandleMessagesChanged(c.Payload);
+                break;
             case DaemonNotification.Unknown u:
                 LogUnknownNotification(logger, u.Method);
                 break;
@@ -922,6 +944,43 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         LoadAccounts();
     }
 
+    /// <summary>
+    /// notify.messagesChanged (notify.go <c>handleMessagesChanged</c>):
+    /// messages of the account's folders changed without arriving or leaving
+    /// (docs/api.md §5). Either they were hidden or shown again (a Jira
+    /// account hides the notification mails of its issues in a mail account,
+    /// and shows them again when that is switched off), or a Jira account's
+    /// own messages were rebuilt in place, keeping their ids (other rendering
+    /// settings, a comment edited or re-attributed, an issue renamed). The
+    /// account's folders are read again for their counts; the message cache
+    /// lets go of the account's entries (<see cref="MessagesChanged"/>); and
+    /// when the selected folder is one of those named — or any folder of the
+    /// account when none is named, or a virtual folder of the account, which
+    /// shows copies of every space's issues — what the pane shows of it is
+    /// fetched again (<see cref="RefreshShown"/>) and it is listed again.
+    /// </summary>
+    public void HandleMessagesChanged(MessagesChangedNotification n)
+    {
+        ArgumentNullException.ThrowIfNull(n);
+        Scope.VerifyAccess();
+        if (Model.Account(n.AccountId) is not { Enabled: true })
+        {
+            return;
+        }
+        LoadFolders(n.AccountId, Model.FoldersGen);
+        Scope.Raise(MessagesChanged, this, n);
+        if (Model.Selected is not { } sel || sel.Account != n.AccountId
+            || !(n.FolderIds.Count == 0 || System.Linq.Enumerable.Contains(n.FolderIds, sel.Folder) || IsVirtual(sel)))
+        {
+            return;
+        }
+        RefreshShown?.Invoke(n.AccountId);
+        ReloadMessages?.Invoke();
+    }
+
+    // A fixed view of a Jira account (Assigned to Me, Watching, Open): it
+    // shows copies of every space's issues.
+    private bool IsVirtual(FolderKey k) => Model.Folder(k)?.Virtual is { Value.Length: > 0 };
     /// <summary>notify.authRequired: reveals the sign-in banner for the account.</summary>
     public void HandleAuthRequired(AuthRequiredNotification n)
     {
@@ -989,7 +1048,8 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// Runs when an account leaves the syncing state (folders.go
     /// <c>onSyncFinished</c>): folders are reloaded and, when the synced
     /// folder is the selected one (or the whole account was synced), the
-    /// list.
+    /// list. A virtual folder of a Jira account shows issues of every space,
+    /// so any pass of its account reloads it.
     /// </summary>
     internal void OnSyncFinished(SyncState? prev, SyncState cur)
     {
@@ -998,7 +1058,8 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             return;
         }
         LoadFolders(cur.AccountId, Model.FoldersGen);
-        if (Model.Selected is { } sel && sel.Account == cur.AccountId && (cur.FolderId is null || cur.FolderId == sel.Folder))
+        if (Model.Selected is { } sel && sel.Account == cur.AccountId
+            && (cur.FolderId is null || cur.FolderId == sel.Folder || IsVirtual(sel)))
         {
             ReloadMessages?.Invoke();
         }

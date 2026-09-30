@@ -59,6 +59,9 @@ public static partial class Prefill
             DraftId = draft.Id,
             Version = draft.Version,
             Replaces = draft.Replaces,
+            // A comment draft (draft.create reply on an account that
+            // comments) opens the window's comment mode.
+            Comment = draft.Comment,
         };
     }
 

@@ -161,6 +161,28 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         Cache.Remove(id);
     }
 
+    /// <summary>
+    /// Forgets every entry of the account's messages (notify.messagesChanged:
+    /// the daemon rebuilt them in place, keeping their ids — a Jira pass with
+    /// other rendering settings, an edited or re-attributed comment, a
+    /// renamed issue; docs/api.md §5; notify.go <c>evictAccount</c>): the
+    /// next fetch asks the daemon again, so the views showing one are told to
+    /// show it again after this (<see cref="ListController.RefreshShown"/>).
+    /// An entry with a half in flight is let go as well: its answer is put
+    /// back only when nothing has asked for the message since (Settle). The
+    /// daemon emits the notification after the rebuild, so an answer that
+    /// arrives later carries the rebuilt message.
+    /// </summary>
+    public void Evict(AccountId account)
+    {
+        scope.VerifyAccess();
+        var gone = Cache.RemoveAll(account);
+        if (gone.Count > 0)
+        {
+            LogEvicted(logger, gone.Count, account.Value);
+        }
+    }
+
     /// <summary>Ends the cache's background work; outcomes after it are dropped.</summary>
     public void Dispose() => scope.Dispose();
 
@@ -181,54 +203,102 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
-        var id = s.Id;
-        var lm = Cache.LoadedFor(id);
+        var lm = Cache.LoadedFor(s.Id);
+        lm.AccountId = s.AccountId;
         if (lm.Complete)
         {
             done(lm);
             return;
         }
+        Wait(lm, done);
+        if (lm.Msg is null && !lm.Getting)
+        {
+            StartGet(s, lm);
+        }
+        if (lm.Body is null && !lm.Fetching)
+        {
+            StartBody(s, lm);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Fetch"/> for the body half alone: <c>message.body</c> when
+    /// the cache lacks the body and no request is in flight, never
+    /// <c>message.get</c>; <paramref name="done"/> runs as
+    /// <see cref="Fetch"/>'s does, at once when the body (or its error, which
+    /// is retried the same way) is there already and nothing is in flight. A
+    /// card of the conversation view whose message has no attachments needs
+    /// nothing <c>message.get</c> adds to its summary.
+    /// </summary>
+    public void FetchBody(MessageSummary s, Action<LoadedMessage> done)
+    {
+        ArgumentNullException.ThrowIfNull(s);
+        ArgumentNullException.ThrowIfNull(done);
+        scope.VerifyAccess();
+        var lm = Cache.LoadedFor(s.Id);
+        lm.AccountId = s.AccountId;
+        if (lm.Body is not null && !lm.Getting && !lm.Fetching)
+        {
+            done(lm);
+            return;
+        }
+        Wait(lm, done);
+        if (lm.Body is null && !lm.Fetching)
+        {
+            StartBody(s, lm);
+        }
+    }
+
+    // Queues done for the next settle of lm.
+    private void Wait(LoadedMessage lm, Action<LoadedMessage> done)
+    {
         if (!waiters.TryGetValue(lm, out var list))
         {
             waiters[lm] = list = [];
         }
         list.Add(done);
-        if (lm.Msg is null && !lm.Getting)
+    }
+
+    // message.get for s into lm (the first half of Fetch).
+    private void StartGet(MessageSummary s, LoadedMessage lm)
+    {
+        var id = s.Id;
+        lm.Getting = true;
+        scope.Perform(Client, API.MessageGet, new MessageGetParams { AccountId = s.AccountId, MessageId = id }, outcome =>
         {
-            lm.Getting = true;
-            scope.Perform(Client, API.MessageGet, new MessageGetParams { AccountId = s.AccountId, MessageId = id }, outcome =>
+            lm.Getting = false;
+            if (outcome.TryGetValue(out var res, out var err))
             {
-                lm.Getting = false;
-                if (outcome.TryGetValue(out var res, out var err))
-                {
-                    lm.Msg = res.Message;
-                }
-                else
-                {
-                    LogGetFailed(logger, err!);
-                }
-                Settle(id, lm);
-            }, RpcTimeouts.Default);
-        }
-        if (lm.Body is null && !lm.Fetching)
+                lm.Msg = res.Message;
+            }
+            else
+            {
+                LogGetFailed(logger, err!);
+            }
+            Settle(id, lm);
+        }, RpcTimeouts.Default);
+    }
+
+    // message.body for s into lm (the second half of Fetch).
+    private void StartBody(MessageSummary s, LoadedMessage lm)
+    {
+        var id = s.Id;
+        lm.Fetching = true;
+        lm.Err = null; // a retry after a failure
+        scope.Perform(Client, API.MessageBody, new MessageBodyParams { AccountId = s.AccountId, MessageId = id }, outcome =>
         {
-            lm.Fetching = true;
-            lm.Err = null; // a retry after a failure
-            scope.Perform(Client, API.MessageBody, new MessageBodyParams { AccountId = s.AccountId, MessageId = id }, outcome =>
+            lm.Fetching = false;
+            if (outcome.TryGetValue(out var res, out var err))
             {
-                lm.Fetching = false;
-                if (outcome.TryGetValue(out var res, out var err))
-                {
-                    lm.Body = res;
-                }
-                else
-                {
-                    LogBodyFailed(logger, err!);
-                    lm.Err = err;
-                }
-                Settle(id, lm);
-            });
-        }
+                lm.Body = res;
+            }
+            else
+            {
+                LogBodyFailed(logger, err!);
+                lm.Err = err;
+            }
+            Settle(id, lm);
+        });
     }
 
     /// <summary>
@@ -755,6 +825,9 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         }
         scope.Raise(MessageLoaded, this, new MessageCacheEntry(id, lm));
     }
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "cache: dropped {Count} messages of {Account}")]
+    private static partial void LogEvicted(ILogger logger, int count, string? account);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "message.get failed")]
     private static partial void LogGetFailed(ILogger logger, Exception error);

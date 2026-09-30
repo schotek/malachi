@@ -219,22 +219,28 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
     /// <summary>
     /// A fixture with the account "a" and <paramref name="folders"/>, the
     /// given messages per folder, a connected client and the controllers,
-    /// with the inbox listed.
+    /// with the inbox listed. <paramref name="accounts"/> replace the account
+    /// "a" (the first account's inbox is listed; its folders are still
+    /// <paramref name="folders"/>), and <paramref name="script"/> scripts the
+    /// fixture further (the other accounts' folders, handlers).
     /// </summary>
     public static async Task<ActionsControllerHarness> StartAsync(
         IReadOnlyList<Folder>? folders = null,
         IReadOnlyDictionary<FolderKey, MessageSummary[]>? messages = null,
         bool grouped = false,
-        bool confirmDelete = true)
+        bool confirmDelete = true,
+        IReadOnlyList<Account>? accounts = null,
+        Action<MailFixture>? script = null)
     {
         var time = new FakeTimeProvider(Base);
         var fixture = new MailFixture(time);
-        fixture.SetAccounts([MailModelTests.TestAccount("a", email: "me@example.invalid", displayName: "Me")]);
-        fixture.SetFolders(folders ?? TestFolders(), Acc);
+        fixture.SetAccounts(accounts ?? [MailModelTests.TestAccount("a", email: "me@example.invalid", displayName: "Me")]);
+        fixture.SetFolders(folders ?? TestFolders(), accounts is { Count: > 0 } ? accounts[0].Id : Acc);
         foreach (var (k, list) in messages ?? new Dictionary<FolderKey, MessageSummary[]>())
         {
             fixture.SetMessages(list, k.Account, k.Folder);
         }
+        script?.Invoke(fixture);
         await fixture.StartAsync();
         var client = new RpcClient(fixture.Path, PortableKeyFilePolicy.Instance);
         await client.ConnectAsync(TestContext.Current.CancellationToken);
@@ -277,7 +283,7 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             h.Mailbox.LoadAccounts();
         });
         await h.IdleAsync();
-        Assert.Equal(Inbox, h.Mailbox.Model.ListFolder);
+        Assert.Equal(accounts is { Count: > 0 } ? h.Mailbox.Model.InitialFolder() : Inbox, h.Mailbox.Model.ListFolder);
         return h;
     }
 
@@ -435,7 +441,8 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
         {
             var k = Model.Selected;
             var gen = Model.BumpList();
-            var grouped = mailbox.Settings.GroupByConversation && (k is not { } sel || Model.FolderRole(sel) != FolderRole.Outbox);
+            // ListController.GroupedListing: a Jira account's folders are always grouped.
+            var grouped = (mailbox.Settings.GroupByConversation || Model.AlwaysGrouped(k)) && (k is not { } sel || Model.FolderRole(sel) != FolderRole.Outbox);
             if (k != Model.ListFolder || grouped != Model.Grouped)
             {
                 Model.ListFolder = k;
@@ -567,8 +574,8 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             };
         }
 
-        // threads.go ensureMembers.
-        private void EnsureMembers(ThreadId tid, Action then)
+        /// <summary>threads.go ensureMembers.</summary>
+        public void EnsureMembers(ThreadId tid, Action then)
         {
             if (!Model.Members.TryGetValue(tid, out var mem))
             {
