@@ -109,6 +109,7 @@ func (w *Window) loadAccounts() {
 			w.model.folders = make(map[api.AccountID][]api.Folder, len(res.Accounts))
 			w.model.folderErr = make(map[api.AccountID]error)
 			w.hasAccounts = len(res.Accounts) > 0
+			w.withdrawAccountNotifications()
 			// sync.status may have answered before the accounts were known,
 			// and the status line and its popover follow the account set
 			// (added, removed, paused, renamed).
@@ -459,6 +460,7 @@ func (w *Window) selectFolder(k folderKey) {
 	w.refreshListTitle()
 	w.highlightFolderRow(k)
 	w.loadMessages()
+	w.withdrawViewedNotifications()
 }
 
 // highlightFolderRow selects k's sidebar row without re-entering the
@@ -501,14 +503,16 @@ func (w *Window) updateFolderRow(k folderKey) {
 }
 
 // onSyncFinished runs when an account leaves the syncing state: folders
-// are reloaded and, when the synced folder is the selected one (or the
-// whole account was synced, or the selected folder is a view of a Jira
+// are reloaded, the account's notifications are checked (notify.go
+// verifyNotifications) and, when the synced folder is the selected one (or
+// the whole account was synced, or the selected folder is a view of a Jira
 // account), the list. Called by applySyncState (sync.go).
 func (w *Window) onSyncFinished(prev, cur api.SyncState) {
 	if prev.Status != api.SyncSyncing || cur.Status == api.SyncSyncing {
 		return
 	}
 	w.loadFolders(cur.AccountID, w.model.foldersGen)
+	w.verifyNotifications(cur.AccountID)
 	sel := w.model.selected
 	if sel.Account != cur.AccountID {
 		return

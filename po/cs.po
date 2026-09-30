@@ -1709,7 +1709,7 @@ msgstr "%d B"
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/widget/message_row.go:210 ui/internal/window/folders.go:339
+#: ui/internal/widget/message_row.go:210 ui/internal/window/folders.go:340
 #, c-format
 msgid "%d message"
 msgid_plural "%d messages"
@@ -1718,7 +1718,7 @@ msgstr[1] "%d zprávy"
 msgstr[2] "%d zpráv"
 
 #: ui/internal/widget/message_row.go:294 ui/internal/window/message_view.go:451
-#: ui/internal/window/notify.go:106
+#: ui/internal/window/notify.go:111
 msgid "(No subject)"
 msgstr "(Bez předmětu)"
 
@@ -2071,11 +2071,11 @@ msgstr "Odebrat hvězdičku"
 msgid "Star"
 msgstr "Přidat hvězdičku"
 
-#: ui/internal/window/actions.go:191
+#: ui/internal/window/actions.go:192
 msgid "Marking the message as read"
 msgstr "Označení zprávy jako přečtené"
 
-#: ui/internal/window/actions.go:193
+#: ui/internal/window/actions.go:194
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
@@ -2083,11 +2083,11 @@ msgstr[0] "Označení %d zprávy jako přečtené"
 msgstr[1] "Označení %d zpráv jako přečtených"
 msgstr[2] "Označení %d zpráv jako přečtených"
 
-#: ui/internal/window/actions.go:195
+#: ui/internal/window/actions.go:196
 msgid "Marking the message as unread"
 msgstr "Označení zprávy jako nepřečtené"
 
-#: ui/internal/window/actions.go:197
+#: ui/internal/window/actions.go:198
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
@@ -2095,11 +2095,11 @@ msgstr[0] "Označení %d zprávy jako nepřečtené"
 msgstr[1] "Označení %d zpráv jako nepřečtených"
 msgstr[2] "Označení %d zpráv jako nepřečtených"
 
-#: ui/internal/window/actions.go:245
+#: ui/internal/window/actions.go:250
 msgid "Starring the message"
 msgstr "Označení zprávy hvězdičkou"
 
-#: ui/internal/window/actions.go:247
+#: ui/internal/window/actions.go:252
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
@@ -2107,11 +2107,11 @@ msgstr[0] "Označení %d zprávy hvězdičkou"
 msgstr[1] "Označení %d zpráv hvězdičkou"
 msgstr[2] "Označení %d zpráv hvězdičkou"
 
-#: ui/internal/window/actions.go:249
+#: ui/internal/window/actions.go:254
 msgid "Removing the star"
 msgstr "Odebrání hvězdičky"
 
-#: ui/internal/window/actions.go:251
+#: ui/internal/window/actions.go:256
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
@@ -2119,11 +2119,11 @@ msgstr[0] "Odebrání hvězdičky %d zprávě"
 msgstr[1] "Odebrání hvězdičky %d zprávám"
 msgstr[2] "Odebrání hvězdičky %d zprávám"
 
-#: ui/internal/window/actions.go:301
+#: ui/internal/window/actions.go:307
 msgid "Moving the message to Trash"
 msgstr "Přesunutí zprávy do koše"
 
-#: ui/internal/window/actions.go:303
+#: ui/internal/window/actions.go:309
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
@@ -2131,11 +2131,11 @@ msgstr[0] "Přesunutí %d zprávy do koše"
 msgstr[1] "Přesunutí %d zpráv do koše"
 msgstr[2] "Přesunutí %d zpráv do koše"
 
-#: ui/internal/window/actions.go:350
+#: ui/internal/window/actions.go:356
 msgid "Archiving the message"
 msgstr "Archivace zprávy"
 
-#: ui/internal/window/actions.go:352
+#: ui/internal/window/actions.go:358
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
@@ -2143,20 +2143,20 @@ msgstr[0] "Archivace %d zprávy"
 msgstr[1] "Archivace %d zpráv"
 msgstr[2] "Archivace %d zpráv"
 
-#: ui/internal/window/actions.go:353
+#: ui/internal/window/actions.go:359
 msgid "This account has no archive folder"
 msgstr "Tento účet nemá složku Archiv"
 
-#: ui/internal/window/actions.go:379 ui/internal/window/actions.go:393
+#: ui/internal/window/actions.go:385 ui/internal/window/actions.go:399
 msgid "This account has no junk folder"
 msgstr "Tento účet nemá složku pro nevyžádanou poštu"
 
-#: ui/internal/window/actions.go:382
+#: ui/internal/window/actions.go:388
 msgid "Mark as junk?"
 msgstr "Označit jako nevyžádanou poštu?"
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:385
+#: ui/internal/window/actions.go:391
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
@@ -2164,15 +2164,15 @@ msgstr[0] "Označit %d zprávu jako nevyžádanou?"
 msgstr[1] "Označit %d zprávy jako nevyžádané?"
 msgstr[2] "Označit %d zpráv jako nevyžádané?"
 
-#: ui/internal/window/actions.go:387
+#: ui/internal/window/actions.go:393
 msgid "Mark as _Junk"
 msgstr "Označit jako _nevyžádanou"
 
-#: ui/internal/window/actions.go:390
+#: ui/internal/window/actions.go:396
 msgid "Marking the message as junk"
 msgstr "Označení zprávy jako nevyžádané"
 
-#: ui/internal/window/actions.go:392
+#: ui/internal/window/actions.go:398
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -2427,54 +2427,54 @@ msgstr "Přidat do oblíbených"
 msgid "Remove from Favourites"
 msgstr "Odebrat z oblíbených"
 
-#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:421
+#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:422
 msgid "Folders Unavailable"
 msgstr "Složky nejsou dostupné"
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:422
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:423
 msgid "Loading folders"
 msgstr "Načtení složek"
 
-#: ui/internal/window/folders.go:202
+#: ui/internal/window/folders.go:203
 msgid "Favourites"
 msgstr "Oblíbené"
 
-#: ui/internal/window/folders.go:306
+#: ui/internal/window/folders.go:307
 msgctxt "folder"
 msgid "Inbox"
 msgstr "Doručená pošta"
 
-#: ui/internal/window/folders.go:308
+#: ui/internal/window/folders.go:309
 msgctxt "folder"
 msgid "Drafts"
 msgstr "Koncepty"
 
-#: ui/internal/window/folders.go:310
+#: ui/internal/window/folders.go:311
 msgctxt "folder"
 msgid "Sent"
 msgstr "Odeslaná pošta"
 
-#: ui/internal/window/folders.go:312
+#: ui/internal/window/folders.go:313
 msgctxt "folder"
 msgid "Trash"
 msgstr "Koš"
 
-#: ui/internal/window/folders.go:314
+#: ui/internal/window/folders.go:315
 msgctxt "folder"
 msgid "Junk"
 msgstr "Nevyžádaná pošta"
 
-#: ui/internal/window/folders.go:316
+#: ui/internal/window/folders.go:317
 msgctxt "folder"
 msgid "Archive"
 msgstr "Archiv"
 
-#: ui/internal/window/folders.go:318
+#: ui/internal/window/folders.go:319
 msgctxt "folder"
 msgid "All Mail"
 msgstr "Všechna pošta"
 
-#: ui/internal/window/folders.go:320
+#: ui/internal/window/folders.go:321
 msgctxt "folder"
 msgid "Outbox"
 msgstr "Pošta k odeslání"
@@ -2482,7 +2482,7 @@ msgstr "Pošta k odeslání"
 #. TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
 #. the first %d is the number of unread messages (the plural follows
 #. it), the second the number of all messages in the folder.
-#: ui/internal/window/folders.go:344
+#: ui/internal/window/folders.go:345
 #, c-format
 msgid "%d unread of %d"
 msgid_plural "%d unread of %d"
@@ -2490,27 +2490,27 @@ msgstr[0] "%d nepřečtená z %d"
 msgstr[1] "%d nepřečtené z %d"
 msgstr[2] "%d nepřečtených z %d"
 
-#: ui/internal/window/folders.go:413 ui/data/ui/window.ui:612
+#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:612
 msgid "No Accounts"
 msgstr "Žádné účty"
 
-#: ui/internal/window/folders.go:414
+#: ui/internal/window/folders.go:415
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr "Přidejte poštovní účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:416
+#: ui/internal/window/folders.go:417
 msgid "No Enabled Accounts"
 msgstr "Žádné povolené účty"
 
-#: ui/internal/window/folders.go:417
+#: ui/internal/window/folders.go:418
 msgid "Enable an account in Preferences to see its folders here."
 msgstr "Povolte účet v Předvolbách a jeho složky se zobrazí zde."
 
-#: ui/internal/window/folders.go:426
+#: ui/internal/window/folders.go:427
 msgid "No Folders Yet"
 msgstr "Zatím žádné složky"
 
-#: ui/internal/window/folders.go:427
+#: ui/internal/window/folders.go:428
 msgid "Folders appear after the first synchronisation."
 msgstr "Složky se objeví po první synchronizaci."
 
@@ -2579,7 +2579,7 @@ msgstr "Žádné zprávy"
 msgid "This folder is empty."
 msgstr "Tato složka je prázdná."
 
-#: ui/internal/window/notify.go:93
+#: ui/internal/window/notify.go:98
 msgid "New message"
 msgstr "Nová zpráva"
 
@@ -3067,15 +3067,15 @@ msgstr "Účet %s vyžaduje pozornost"
 msgid "Loading the conversation"
 msgstr "Načtení konverzace"
 
-#: ui/internal/window/window.go:671
+#: ui/internal/window/window.go:681
 msgid "New mail"
 msgstr "Nová pošta"
 
-#: ui/internal/window/window.go:741 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:751 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr "Hledat"
 
-#: ui/internal/window/window.go:747 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:757 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr "Zprávy"
 

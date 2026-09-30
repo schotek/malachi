@@ -148,8 +148,9 @@ func (w *Window) markUnread(id api.MessageID) { w.setSeenIDs([]api.MessageID{id}
 
 // setSeenIDs changes the seen flag of the messages that do not have it so
 // yet, optimistically (rows, unread badge of the folder, menu actions),
-// and sends one message.flag; a failure puts everything back. The
-// messages are of one folder (a conversation row's members are).
+// and sends one message.flag; a failure puts everything back, success in
+// marking read withdraws their desktop notifications. The messages are of
+// one folder (a conversation row's members are).
 func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 	var todo []api.MessageID
 	var k folderKey
@@ -197,9 +198,13 @@ func (w *Window) setSeenIDs(ids []api.MessageID, seen bool) {
 		what = fmt.Sprintf(i18n.N("Marking %d message as unread", "Marking %d messages as unread", n), n)
 	}
 	set, clear := flagChange(api.FlagSeen, seen)
-	w.call(what, api.MethodMessageFlag, api.MessageFlagParams{
+	w.callThen(what, api.MethodMessageFlag, api.MessageFlagParams{
 		AccountID: k.Account, MessageIDs: todo, Set: set, Clear: clear,
-	}, func() { apply(!seen) })
+	}, func() { apply(!seen) }, func() {
+		if seen {
+			w.withdrawNotifications(todo)
+		}
+	})
 }
 
 // toggleFlagged stars or unstars message id.
@@ -271,8 +276,9 @@ func (w *Window) trashFrom(parent gtk.Widgetter, id api.MessageID) {
 }
 
 // trashIDs moves messages to Trash (message.delete) after the optional
-// confirmation shown over parent, with subject as its body. For a single
-// outbox message it cancels the send instead (outbox.go).
+// confirmation shown over parent, with subject as its body, and withdraws
+// their desktop notifications once it succeeded. For a single outbox
+// message it cancels the send instead (outbox.go).
 func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject string) {
 	if len(ids) == 1 {
 		if s, ok := w.summary(ids[0]); ok && w.model.inOutbox(s) {
@@ -302,12 +308,12 @@ func (w *Window) trashIDs(parent gtk.Widgetter, ids []api.MessageID, subject str
 		if n > 1 {
 			what = fmt.Sprintf(i18n.N("Moving %d message to Trash", "Moving %d messages to Trash", n), n)
 		}
-		w.call(what, api.MethodMessageDelete, api.MessageDeleteParams{
+		w.callThen(what, api.MethodMessageDelete, api.MessageDeleteParams{
 			AccountID: acc, MessageIDs: idsOf(list),
 		}, func() {
 			restore()
 			undo()
-		})
+		}, func() { w.withdrawNotifications(idsOf(list)) })
 	})
 }
 
@@ -398,7 +404,8 @@ func (w *Window) junkIDs(parent gtk.Widgetter, ids []api.MessageID, subject stri
 // role (message.move). what gives the progressive action for the error
 // toast for the number moved, missing is the toast when the account has
 // no such folder. The rows go at once and come back on failure; the
-// folder counts follow the messages to the target (trackMoves).
+// folder counts follow the messages to the target (trackMoves). Success
+// withdraws their desktop notifications.
 func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what func(n int) string, missing string) {
 	var list []api.MessageSummary
 	for _, s := range w.summaries(ids) {
@@ -423,12 +430,12 @@ func (w *Window) moveIDsToRole(ids []api.MessageID, role api.FolderRole, what fu
 		w.closeMessageWindow(s.ID)
 	}
 	undo := w.trackMoves(list, folderKey{Account: acc, Folder: target.ID})
-	w.call(what(len(list)), api.MethodMessageMove, api.MessageMoveParams{
+	w.callThen(what(len(list)), api.MethodMessageMove, api.MessageMoveParams{
 		AccountID: acc, MessageIDs: idsOf(list), TargetFolderID: target.ID,
 	}, func() {
 		restore()
 		undo()
-	})
+	}, func() { w.withdrawNotifications(idsOf(list)) })
 }
 
 // scheduleMarkRead arms the mark-as-read timer for the newly selected

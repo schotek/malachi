@@ -136,7 +136,8 @@ public final class ActionsController {
 
     /// Changes the seen flag of the messages that do not have it so yet,
     /// optimistically (rows, unread badge of the folder, menu actions), and
-    /// sends one message.flag; a failure puts everything back (actions.go
+    /// sends one message.flag; a failure puts everything back, success in
+    /// marking read withdraws their desktop notifications (actions.go
     /// `setSeenIDs`). The messages are of one folder (a conversation row's
     /// members are).
     public func setSeen(_ ids: [MessageID], _ seen: Bool) {
@@ -179,7 +180,11 @@ public final class ActionsController {
         call(
             API.MessageFlag.self,
             MessageFlagParams(accountId: k.account, messageIds: changing, set: change.set, clear: change.clear),
-            what: what, onError: { _ in apply(!seen) }
+            what: what, onError: { _ in apply(!seen) }, onOK: { [weak self] _ in
+                if seen {
+                    self?.mailbox.withdrawNotifications(changing)
+                }
+            }
         )
     }
 
@@ -278,8 +283,8 @@ public final class ActionsController {
     }
 
     /// The confirmed half of `trash`: the rows go at once, the windows
-    /// close, the folder counts follow, message.delete runs and a failure
-    /// puts everything back.
+    /// close, the folder counts follow, message.delete runs, a failure puts
+    /// everything back and success withdraws the desktop notifications.
     private func moveToTrash(_ msgs: [MessageSummary]) {
         let ids = msgs.map(\.id)
         let restore = list.removeRows(ids)
@@ -301,6 +306,8 @@ public final class ActionsController {
         call(API.MessageDelete.self, MessageDeleteParams(accountId: acc, messageIds: ids), what: what, onError: { _ in
             restore()
             undo()
+        }, onOK: { [weak self] _ in
+            self?.mailbox.withdrawNotifications(ids)
         })
     }
 
@@ -374,9 +381,10 @@ public final class ActionsController {
     /// in progressive form for the error toast, for the number moved;
     /// `missing` is the toast when the account has no such folder. The rows
     /// go at once and come back on failure; the folder counts follow the
-    /// messages to the target (`trackMoves`). Outbox messages are left
-    /// out (the daemon refuses moves on them), and a message already in the
-    /// target folder is a no-op.
+    /// messages to the target (`trackMoves`), and success withdraws their
+    /// desktop notifications. Outbox messages are left out (the daemon
+    /// refuses moves on them), and a message already in the target folder
+    /// is a no-op.
     func moveToRole(_ ids: [MessageID], _ role: FolderRole, missing: String, what: (Int) -> String) {
         let msgs = summaries(ids).filter { !mailbox.model.inOutbox($0) } // accelerators bypass the disabled actions
         guard let first = msgs.first else { return }
@@ -399,6 +407,8 @@ public final class ActionsController {
             what: what(msgs.count), onError: { _ in
                 restore()
                 undo()
+            }, onOK: { [weak self] _ in
+                self?.mailbox.withdrawNotifications(moving)
             }
         )
     }

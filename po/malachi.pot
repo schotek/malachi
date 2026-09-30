@@ -1637,7 +1637,7 @@ msgstr ""
 #. TRANSLATORS: tooltip of the member count of a conversation row.
 #. TRANSLATORS: subtitle of the message list; %d is the number of
 #. messages in the folder.
-#: ui/internal/widget/message_row.go:210 ui/internal/window/folders.go:339
+#: ui/internal/widget/message_row.go:210 ui/internal/window/folders.go:340
 #, c-format
 msgid "%d message"
 msgid_plural "%d messages"
@@ -1645,7 +1645,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: ui/internal/widget/message_row.go:294 ui/internal/window/message_view.go:451
-#: ui/internal/window/notify.go:106
+#: ui/internal/window/notify.go:111
 msgid "(No subject)"
 msgstr ""
 
@@ -1992,101 +1992,101 @@ msgstr ""
 msgid "Star"
 msgstr ""
 
-#: ui/internal/window/actions.go:191
+#: ui/internal/window/actions.go:192
 msgid "Marking the message as read"
 msgstr ""
 
-#: ui/internal/window/actions.go:193
+#: ui/internal/window/actions.go:194
 #, c-format
 msgid "Marking %d message as read"
 msgid_plural "Marking %d messages as read"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:195
+#: ui/internal/window/actions.go:196
 msgid "Marking the message as unread"
 msgstr ""
 
-#: ui/internal/window/actions.go:197
+#: ui/internal/window/actions.go:198
 #, c-format
 msgid "Marking %d message as unread"
 msgid_plural "Marking %d messages as unread"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:245
+#: ui/internal/window/actions.go:250
 msgid "Starring the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:247
+#: ui/internal/window/actions.go:252
 #, c-format
 msgid "Starring %d message"
 msgid_plural "Starring %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:249
+#: ui/internal/window/actions.go:254
 msgid "Removing the star"
 msgstr ""
 
-#: ui/internal/window/actions.go:251
+#: ui/internal/window/actions.go:256
 #, c-format
 msgid "Removing the star from %d message"
 msgid_plural "Removing the star from %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:301
+#: ui/internal/window/actions.go:307
 msgid "Moving the message to Trash"
 msgstr ""
 
-#: ui/internal/window/actions.go:303
+#: ui/internal/window/actions.go:309
 #, c-format
 msgid "Moving %d message to Trash"
 msgid_plural "Moving %d messages to Trash"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:350
+#: ui/internal/window/actions.go:356
 msgid "Archiving the message"
 msgstr ""
 
-#: ui/internal/window/actions.go:352
+#: ui/internal/window/actions.go:358
 #, c-format
 msgid "Archiving %d message"
 msgid_plural "Archiving %d messages"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:353
+#: ui/internal/window/actions.go:359
 msgid "This account has no archive folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:379 ui/internal/window/actions.go:393
+#: ui/internal/window/actions.go:385 ui/internal/window/actions.go:399
 msgid "This account has no junk folder"
 msgstr ""
 
-#: ui/internal/window/actions.go:382
+#: ui/internal/window/actions.go:388
 msgid "Mark as junk?"
 msgstr ""
 
 #. TRANSLATORS: %d is the number of messages of a conversation.
-#: ui/internal/window/actions.go:385
+#: ui/internal/window/actions.go:391
 #, c-format
 msgid "Mark %d message as junk?"
 msgid_plural "Mark %d messages as junk?"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/actions.go:387
+#: ui/internal/window/actions.go:393
 msgid "Mark as _Junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:390
+#: ui/internal/window/actions.go:396
 msgid "Marking the message as junk"
 msgstr ""
 
-#: ui/internal/window/actions.go:392
+#: ui/internal/window/actions.go:398
 #, c-format
 msgid "Marking %d message as junk"
 msgid_plural "Marking %d messages as junk"
@@ -2334,54 +2334,54 @@ msgstr ""
 msgid "Remove from Favourites"
 msgstr ""
 
-#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:421
+#: ui/internal/window/folders.go:103 ui/internal/window/folders.go:422
 msgid "Folders Unavailable"
 msgstr ""
 
-#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:422
+#: ui/internal/window/folders.go:104 ui/internal/window/folders.go:423
 msgid "Loading folders"
 msgstr ""
 
-#: ui/internal/window/folders.go:202
+#: ui/internal/window/folders.go:203
 msgid "Favourites"
 msgstr ""
 
-#: ui/internal/window/folders.go:306
+#: ui/internal/window/folders.go:307
 msgctxt "folder"
 msgid "Inbox"
 msgstr ""
 
-#: ui/internal/window/folders.go:308
+#: ui/internal/window/folders.go:309
 msgctxt "folder"
 msgid "Drafts"
 msgstr ""
 
-#: ui/internal/window/folders.go:310
+#: ui/internal/window/folders.go:311
 msgctxt "folder"
 msgid "Sent"
 msgstr ""
 
-#: ui/internal/window/folders.go:312
+#: ui/internal/window/folders.go:313
 msgctxt "folder"
 msgid "Trash"
 msgstr ""
 
-#: ui/internal/window/folders.go:314
+#: ui/internal/window/folders.go:315
 msgctxt "folder"
 msgid "Junk"
 msgstr ""
 
-#: ui/internal/window/folders.go:316
+#: ui/internal/window/folders.go:317
 msgctxt "folder"
 msgid "Archive"
 msgstr ""
 
-#: ui/internal/window/folders.go:318
+#: ui/internal/window/folders.go:319
 msgctxt "folder"
 msgid "All Mail"
 msgstr ""
 
-#: ui/internal/window/folders.go:320
+#: ui/internal/window/folders.go:321
 msgctxt "folder"
 msgid "Outbox"
 msgstr ""
@@ -2389,34 +2389,34 @@ msgstr ""
 #. TRANSLATORS: subtitle of the message list, e.g. "12 unread of 1234";
 #. the first %d is the number of unread messages (the plural follows
 #. it), the second the number of all messages in the folder.
-#: ui/internal/window/folders.go:344
+#: ui/internal/window/folders.go:345
 #, c-format
 msgid "%d unread of %d"
 msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:413 ui/data/ui/window.ui:612
+#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:612
 msgid "No Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:414
+#: ui/internal/window/folders.go:415
 msgid "Add a mail account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:416
+#: ui/internal/window/folders.go:417
 msgid "No Enabled Accounts"
 msgstr ""
 
-#: ui/internal/window/folders.go:417
+#: ui/internal/window/folders.go:418
 msgid "Enable an account in Preferences to see its folders here."
 msgstr ""
 
-#: ui/internal/window/folders.go:426
+#: ui/internal/window/folders.go:427
 msgid "No Folders Yet"
 msgstr ""
 
-#: ui/internal/window/folders.go:427
+#: ui/internal/window/folders.go:428
 msgid "Folders appear after the first synchronisation."
 msgstr ""
 
@@ -2484,7 +2484,7 @@ msgstr ""
 msgid "This folder is empty."
 msgstr ""
 
-#: ui/internal/window/notify.go:93
+#: ui/internal/window/notify.go:98
 msgid "New message"
 msgstr ""
 
@@ -2960,15 +2960,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:671
+#: ui/internal/window/window.go:681
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:741 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:751 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:747 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:757 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr ""
 
