@@ -375,8 +375,22 @@ fetch a page, both unseen by the filter:
   runtime's viewer inside a page of the app's own; text, HTML, SVG, XML
   and messages as escaped source; nothing written to disk, no link
   followed;
+- in the conversation view, one view per HTML card as on macOS
+  (`WebViews/CardWebView.cs`, at most eight alive, the nearest to the
+  viewport, handed on from a pool with the old document dropped first),
+  each a viewer with everything above and a document of one sanitiser
+  output (`ViewerDocument.CompactDocument`), never one document of the
+  conversation. Page script stays off: the card's height is read from
+  outside by a host script (`CardSize`, through the prototypes' own
+  accessors, changing nothing) when the document loaded, a picture
+  arrived or the view's width, height or zoom changed, since no listener
+  an injected script set up would ever run; the height is capped
+  (4000 px, beyond it the card scrolls inside) and frozen for a document
+  that grows with the view, so a message cannot grow the pane without
+  end ([windows-port.md §6.7](windows-port.md#67-conversation-card-cardwebview));
 - the **network canary** (`Malachi.App.Canary`, part of `make
-  test-windows`) runs the real viewer, editor and previewer against a
+  test-windows`) runs the real viewer, a conversation card's view, the
+  editor and the previewer against a
   hostile document, its active twin (hover, clicks, forms, a refresh) and
   every HTML part of `backend/testdata/mime` raw, without the sanitiser,
   with a loopback listener per vector and Chromium's NetLog: no listener

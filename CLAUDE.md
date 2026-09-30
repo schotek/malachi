@@ -324,7 +324,8 @@ WebView2, programy nikdy), Mark of the Web na přílohách, akce
 s kontextovými menu, compose s contenteditable editorem a bridge skriptem,
 koncepty, `draft.create`, `mailto:` a registrace pro Výchozí aplikace,
 Předvolby, notifikace se systémovým zvukem pošty, ikona v oznamovací
-oblasti při běhu na pozadí, spuštění po přihlášení (klíč Run), čeština.
+oblasti při běhu na pozadí, spuštění po přihlášení (klíč Run), účty Jira
+a zobrazení konverzace (od 2026-09-30, viz odstavec o Jira níže), čeština.
 Tři projekty a helper: `Malachi.Core` (net10.0 bez WinUI a P/Invoke,
 testovatelný na jakémkoli OS: API typy přepsané z `docs/api.md`, transport
 s handshakem, supervisor démona, 1:1 porty čisté logiky Go UI a Swiftu
@@ -337,7 +338,7 @@ launcher, Run, `mailto:`, tray), `Malachi.App` (WinUI 3, `MalachiMail.exe`,
 tenké: okna, XAML, vrstva WebView2) a `Malachi.Credentials`
 (`malachi-credentials.exe`, NativeAOT helper keyringu démona nad Credential
 Managerem, hodnota nad 2560 B po kusech ověřených SHA-256). Testy: xUnit v3
-na Microsoft.Testing.Platform, ~5 000 (Core s FakeDaemon a MailFixture,
+na Microsoft.Testing.Platform, ~6 000 (Core s FakeDaemon a MailFixture,
 služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
 hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
 pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
@@ -389,11 +390,10 @@ Pořadí prací:
 8. ~~Asistent (Claude)~~ hotovo v macOS, GTK (jen Claude Code, v terminálu
    nebo v aplikaci) i Windows: úroveň A, panel B1 a B2 (viz níže); cíl
    „V aplikaci“ experimentální do potvrzení podmínek Anthropicu
-9. Účty Jira (`kind: jira`) — backend, macOS a GTK hotovo (čtení,
-   komentáře, změna stavu, notifikační maily, zobrazení konverzace);
-   Windows zbývá
-   (reference `ui/internal/jira`, `ui/internal/capabilities`,
-   `ui/internal/conversation`)
+9. Účty Jira (`kind: jira`) — backend, macOS, GTK i Windows hotovo
+   (čtení, komentáře, změna stavu, notifikační maily, zobrazení
+   konverzace; Windows na `feat/jira-windows`, zbývá průchod vlastníka
+   proti skutečnému Jira Cloud)
 
 Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
 funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
@@ -772,9 +772,8 @@ a uzavřené stavy, notifikační maily, boti s nabídkou „Issue Sync“;
 `notify.messagesChanged` → `MailboxController.handleMessagesChanged`.
 Čistá logika nejdřív jako reference v Go (`ui/internal/jira` — texty,
 karta, události, průvodce, compose, nastavení; `ui/internal/capabilities`;
-testované na Macu), portovaná 1:1 do `MalachiCore/Jira`; Windows UI
-zbývá (`windows/parity-exclusions.txt` „Jira account: macOS first“;
-funkce označené „Swift-first“ a kde je GTK zrcadlí: tabulka
+testované na Macu), portovaná 1:1 do `MalachiCore/Jira`; Windows viz
+níže (funkce označené „Swift-first“ a kde je GTK zrcadlí: tabulka
 v `macos/README.md`). GTK (2026-09-30) používá referenční balíčky tak,
 jak jsou, přes `i18n.Tr` (adaptér `jira.Translator` nad `i18n.T/N/C`)
 a nepřidalo žádný msgid: sidebar (`model.go` `accountLabel`,
@@ -782,7 +781,7 @@ a nepřidalo žádný msgid: sidebar (`model.go` `accountLabel`,
 `folders.go` kapsle druhu za jménem každého účtu — JIRA, u pošty
 poskytovatel `GOOGLE`/`M365` podle `signin.Provider`, jinak `IMAP`; GTK
 první, macOS od 2026-09-30 (`FolderTree.swift` `accountHeaderBadge`),
-Windows s portem —, názvy pohledů), seznam
+Windows od téhož dne —, názvy pohledů), seznam
 (`groupedListing` = nastavení nebo `alwaysGrouped`, `groupingChanged`
 nechá jira složku být, `countsUnread`, `widget/message_row.go` klíč,
 pilulky `widget/pill.go` a řádky událostí; CSS pilulek v
@@ -808,9 +807,8 @@ nastavení účtu (`ui/internal/jiraaccount`: `Controller` s testy,
 jinak nastavení; nikdy poštovní průvodce), `notify.messagesChanged`
 (`notify.go` `handleMessagesChanged`, `evictAccount`, `refreshShown`,
 `forgetMembers`), texty notifikací (`issueNotificationLine`) a banneru
-(`accountAuthBannerTitle`). Zobrazení konverzace (macOS a GTK, reference
-`ui/internal/conversation`, pro Windows „Conversation view: macOS
-first“): výběr sbaleného řádku vlákna (≥ 2 členů ve složce; jira složky
+(`accountAuthBannerTitle`). Zobrazení konverzace (všechny tři klienty,
+reference `ui/internal/conversation`): výběr sbaleného řádku vlákna (≥ 2 členů ve složce; jira složky
 vždy) ukáže v panelu čtení celé vlákno jako nativní karty s časovou osou
 v levém okraji, řazené jako issue v Jiře (viz GTK níže; macOS stejně od
 2026-09-30, `ConversationLayout.displayOrder`), u jira kartou issue nahoře
@@ -851,6 +849,41 @@ a model postavený po selhaném `thread.get` ze seznamu se po příchodu členů
 postaví znovu (`listing`), čipy příloh v kartách mají „Zeptat se
 asistenta…“. Ikony poskytovatelů v Předvolbách → Účty macOS nemá (SF
 Symbols je neobsahuje, řádek pošty má obálku; tabulka v `macos/README.md`).
+
+Windows (2026-09-30, větev `feat/jira-windows`, `docs/windows-port.md`
+§11.7 a §6.7): port Swiftu, chování podle GTK. Core: `IssueTrackers/`
+(= `ui/internal/jira` a `ui/internal/capabilities`), `Model/Conversation*`,
+`ConversationLayout*` a `WebHeightGovernor`, controllery
+`JiraWizardController`, `JiraAccountController`, `IssueActionsController`,
+`ConversationController`, režim komentáře `ComposeController`
+(`CommentAccount`), vše s porty testů Go a Swiftu. App: průvodce
+`Wizard/JiraWizardWindow` (stránky site, přihlášení, spaces; vlastní modální
+okno přes `ModalDialog` jako poštovní průvodce), nastavení
+`Preferences/JiraAccountWindow` (+ `JiraListEditor`, `JiraStatusPicker`;
+Uložit a Zrušit dole), *Přidat účet Jira…* v nabídce `…`, v „+“ Předvoleb
+→ Účty a na prázdném okně, karta issue `Reader/IssueCardView` (pilulka
+jako `DropDownButton` s přechody), okno komentáře
+`Compose/ComposeWindow.Comment.cs` (viditelnost jako `SelectorBar`),
+zobrazení konverzace `Reader/Conversation/` (`ConversationView`,
+`ConversationCard`, řádky časové osy a událostí; čipy sdílené s panelem
+přes `MessageChips`; místo čtení drží kotvení `ScrollViewer`; mezerník
+a Shift+mezerník v seznamu). HTML karta je `WebViews/CardWebView`: skript
+stránky vypnutý jako v prohlížeči zprávy, výšku měří hostitel skriptem
+`CardSize` přes `ExecuteScriptAsync` po načtení, obrázku a změně šířky,
+výšky či zvětšení (WebView2 nemá izolovaný svět a bez skriptu stránky
+žádný posluchač nepoběží), strop a zmrazení jako GTK; kolečko nad kartou,
+jejíž dokument se vejde, posouvá sloupec; kanárek pouští i kartu.
+Odchylky v tabulce `windows/README.md`. Prošlé ručně proti falešnému
+Jira DC (kopie `jiratest` na 127.0.0.1 ve výzkumné složce agenta, token
+fixtury) a devmailu; průchod našel dvě chyby, obě opravené: porovnání
+karty issue přes JSON kontext API (`JiraCard` v něm není, konverzace
+přestala sledovat členy) a `sameShape`, který při novém načtení nechal
+členy vlákna, jehož issue změnilo jen stav či řešitele (s vypnutými
+událostmi) — oprava ve všech třech klientech, Go a Swift napsané na
+Windows bez překladu: `go test ./internal/window` v Toolbxu a
+`swift test` na Macu (`setThreadsIssueMoved`) čekají. Zbývá průchod
+vlastníka proti skutečnému Jira Cloud (token zadá sám, komentář jen do
+issue, které určí).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
@@ -902,9 +935,8 @@ komprese a příloh na vyžádání, Microsoft účty).
   `ui/internal/conversation/conversation.go`, v `po/POTFILES` za
   `ui/internal/compose/suggest.go`) vznikly s macOS klientem před GTK
   widgety; od GTK portu je `make po` přečísloval a GTK je používá přes
-  `i18n.Tr`. Windows je má v `windows/parity-exclusions.txt` („Jira
-  account: macOS first“, „Conversation view: macOS first“); s portem se
-  odtud mažou. Po sloučení `main` (Asistent, 2026-09-30) na Macu je
+  `i18n.Tr`. Windows port je používá všechny (z
+  `windows/parity-exclusions.txt` zmizely). Po sloučení `main` (Asistent, 2026-09-30) na Macu je
   `make po` srovnal v kontejneru Fedora 42 (Blueprint 0.16, gettext 0.23.1
   jako v Toolbxu; stačí `blueprint-compiler`, `gtk4`, `libadwaita`,
   `webkitgtk6.0`, `appstream`, `gettext` a `make`, žádné Go ani překlad

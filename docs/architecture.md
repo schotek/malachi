@@ -1796,7 +1796,9 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   is through `i18n.Tr`, the Swift-first functions mirrored in
   `ui/internal/window`, the assistant in `ui/internal/accountwizard`
   (`jira.go`, `jira_flow.go`), the settings in `ui/internal/jiraaccount`,
-  the comment mode in `ui/internal/compose`. Open: the Windows port.
+  the comment mode in `ui/internal/compose`. The Windows client followed
+  the same day ([windows-port.md §11.7](windows-port.md#117-jira-accounts-and-the-conversation-view)),
+  a port of the Swift checked against the GTK behaviour.
 - Conversation view: **decided** (2026-09-29) — selecting a folded
   conversation row (two or more members in the folder; a Jira folder is
   always grouped) shows every member stacked in the reading pane as

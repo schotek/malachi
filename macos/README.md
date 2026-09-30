@@ -368,7 +368,7 @@ deviations.
 For the Jira accounts and the conversation view the order of
 [docs/macos-port.md §10](../docs/macos-port.md#10-adding-a-feature-keeping-the-parity)
 was reversed: the backend and this client came first, the GTK widgets
-followed on 2026-09-30, and the Windows client is still to come. So that
+followed on 2026-09-30, and the Windows client the same day. So that
 the port had something to diff against, the pure logic exists as Go
 packages the GTK UI uses as they are (with `i18n.Tr`, the adapter over
 `ui/internal/i18n`, as the `Translator`), and their tests are the
@@ -386,13 +386,12 @@ reference the Swift tests port:
   `MalachiCore/Model/Conversation.swift`.
 
 The msgids of those packages are in `po/POTFILES`, `po/malachi.pot` and
-`po/cs.po` (the GTK UI added none of its own), and in
-`windows/parity-exclusions.txt` under "Jira account: macOS first" and
-"Conversation view: macOS first" until the Windows client uses them.
+`po/cs.po` (the GTK UI added none of its own); the Windows client uses
+them all.
 
 What had no Go counterpart is marked `Swift-first` in its comment, with
 the Go file it belongs in; the GTK port mirrors it there (the Windows port
-takes the same map):
+took the same map):
 
 | Swift | Mirrored in |
 |---|---|

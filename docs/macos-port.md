@@ -666,7 +666,8 @@ everyday store with their own socket. The GTK UI followed on
 Swift-first functions where
 [macos/README.md](../macos/README.md#swift-first-where-the-gtk-ui-mirrors-it)
 said, so the two clients are at parity again and the order of §10
-holds for what comes next.
+holds for what comes next. The Windows client followed the same day
+([windows-port.md §11.7](windows-port.md#117-jira-accounts-and-the-conversation-view)).
 
 **Distribution is still ahead.** The bundle is ad-hoc signed for the
 machine it was built on. Not done: Apple Developer Program membership,

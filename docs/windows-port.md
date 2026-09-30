@@ -14,7 +14,9 @@ same model: a client of the daemon's API, a mirror of the GTK UI, no mail
 logic of its own.
 
 **Status: the full mail UI of the GTK application, built on
-`feat/windows` (2026-09-27 and 28).** §0 records the decisions, each with
+`feat/windows` (2026-09-27 and 28), with the Assistant (§11.6) and the
+Jira accounts and conversation view (§11.7, `feat/jira-windows`,
+2026-09-30) since.** §0 records the decisions, each with
 where it is built; §15 the phases the port was built in and their gates;
 §16 the research and the measurements it started from; §17 what is still
 open before a public release. Where a section says *measured* or
@@ -522,11 +524,12 @@ summarised in §16. What it established:
   page's world.
 
 The code is `Malachi.App/WebViews` (`WebViewEnvironment`, `HardenedWebView`
-and the three views over it) and its pure rules in `Malachi.Core.Presentation`
+and the four views over it: the viewer, a conversation card's, the editor
+and the previewer) and its pure rules in `Malachi.Core.Presentation`
 (`RequestGate`, `ResponseHeaders`, `NavigationPolicy`, `LinkProbe`,
 `ContextMenuPolicy`, `RendererRecovery`, `HoverLabel`, `ViewerZoom`,
-`PreviewContent`, `PreviewDocument`, `PreviewPanel`, `EditorKeys`), which
-have their tests. The views are built in code, not XAML, and use nothing
+`CardSize`, `PreviewContent`, `PreviewDocument`, `PreviewPanel`,
+`EditorKeys`), which have their tests. The views are built in code, not XAML, and use nothing
 else of the app, so the network canary (§12) compiles the same files into
 its host. A view initialises when it is first loaded into a window and is
 closed with `Close()` when its window goes; `CoreWebViewInitialized` says
@@ -1043,6 +1046,56 @@ shows what the chip lists. The title bar carries the attachment's name and
 menu does on the part the daemon served (a download on Microsoft 365 may
 renumber it); Escape and Ctrl+W close it (`WindowKind.Other`), as Escape
 closes Sushi and Quick Look.
+
+### 6.7 Conversation card (`CardWebView`)
+
+The port of GTK's `htmlview.Card` (`card.go`, `size.go`) and the card half
+of macOS's `MessageWebView`: the HTML body of one card of the conversation
+view (§11.7), in a view as tall as its document, stacked with the other
+cards in one scrolling column. It is a viewer (`WebViewKind.Viewer`: the
+`viewer` profile, the gate, `malachi-cid:` through `PartFetcher`, links
+through `LinkProbe` and `LinkDecision`, the reduced context menu, the hover
+text for the pane's one label, the text zoom as CSS), and everything of
+§6.3 holds, page script off included. Its document is
+`ViewerDocument.CompactDocument`, GTK's `CompactDocument` (the column's
+padding cut to the card's; drift-tested against `htmlview`); never one
+document of the whole conversation, where one message's CSS could reach
+the headers of another ([security.md §3.2](security.md#32-defences)).
+
+The one difference from GTK's card is how the height is known. GTK's card
+runs a measuring script of the application in an isolated world of the
+page, with a `ResizeObserver` and every picture's load reporting the
+height. WebView2 has no isolated world, and with page script off no
+listener of an injected script fires (measured, §6 above), so the host
+measures instead: `CardSize.Script`, run with `ExecuteScriptAsync` (host
+scripts run with page script off) 40 ms after the last of the causes that
+may change the height: the document's load (its `NavigationCompleted`,
+when the pictures it asked for were answered), a picture served after it,
+a change of the view's width or of the text zoom, and a change of its
+height alone (a report within 100 ms of that says so, as `sizeScript`'s
+viewport flag). The script reads where the column ends, overflow included,
+only through the prototypes' own accessors, so a named element of the
+message cannot stand in for `getElementById` or a size, and changes
+nothing; its height is in CSS pixels of the viewport, the zoom included,
+capped at `CardSize.MaxReported`. A report for a document the view no
+longer shows (a view handed from one card to another, a newer document) is
+dropped. The card's `WebHeightGovernor` (GTK's `webHeightGovernor`) sizes
+the view to it up to 4000 px, beyond which the card scrolls inside, and
+freezes a document that grows with every step the view grows (three
+reports in a row caused by the view's own growth) until its document,
+width or zoom changes.
+
+Views are pooled by the pane (`ConversationLayout.LiveCards`: the cards
+within two screens of the viewport, at most eight web views, two kept idle;
+`Reset` drops the callbacks and the document of a view handed on, so a
+report of the old document never reaches the next card, and `Release`
+closes it). The wheel over a card whose document fits goes on to the
+column (GTK's `forwardScroll`; the XAML sees the wheel over a WebView2,
+visual hosting, and the card forwards it with `handledEventsToo`). A
+failed renderer shows the body again once (§6.1); a card whose view gives
+up shows the plain text. The canary runs a card view as well: the hostile
+document, its links and hover, a document of known height measured at two
+zooms, and the recovery of its renderer (§12).
 
 ## 7. Concurrency
 
@@ -2401,13 +2454,120 @@ walked: *Get Claude Code…* itself (it would open the browser of the
 machine the session ran in) and the sign-in of a real Claude Code, which
 takes the owner's answer in the browser.
 
+### 11.7 Jira accounts and the conversation view
+
+Ported on `feat/jira-windows` (2026-09-30) after the macOS client (which
+had them first) and the GTK UI (which mirrors it, and is the reference for
+the behaviour). The pure logic is Core's, each file a port of its Go
+reference and of the Swift with the tests of both: `IssueTrackers/`
+(`ui/internal/jira` and `ui/internal/capabilities`: the texts and view
+models of the assistant, the sidebar, the list rows, the issue card and
+its transitions, the event lines, the comment window and the account
+settings with its checks), `Model/Conversation*` and
+`Model/ConversationLayout*` (`ui/internal/conversation` and GTK's
+`conversation_layout.go`: the items, the order, the member marked read,
+the live cards, the rails, the height governor), and the controllers
+`JiraWizardController`, `JiraAccountController`, `IssueActionsController`
+(the transitions menu and the busy state of an issue, one for the app),
+`ConversationController` and the comment mode of `ComposeController`,
+tested against the fake daemon. The app is thin over them:
+
+- **Adding and editing.** *Add Jira Account…* is in the primary menu `…`,
+  in the *+* menu of *Preferences → Accounts* and on the empty window
+  (`AddJiraAccountButton`); it opens `Wizard/JiraWizardWindow`, an owned
+  modal window like the account wizard (`ModalDialog`, shared by both)
+  with the pages site, credentials and spaces. Every route that edits an
+  account asks `AccountsPage.EditorOf` first (GTK's `accountEditor`): a
+  Jira account opens `Preferences/JiraAccountWindow`, one scrolling page
+  over `JiraAccountController` whose closed statuses and lists are
+  `JiraStatusPicker` and `JiraListEditor` (theme brushes from XAML, so a
+  window's own theme reaches them); *Replace Token…* opens the assistant
+  in its edit mode over it.
+- **Sidebar and list.** The account's heading carries the JIRA capsule,
+  the views (Assigned to Me, Watching, Open) sit above the spaces, a Jira
+  folder is always grouped, rows show the issue key and the status pill,
+  event rows are never unread; the compose button is off while no account
+  writes mail (`Integration.CanComposeNew`), the tray's New Message too.
+- **Reading.** `Reader/IssueCardView` over the headers of a Jira message
+  (its key a link only to the account's own site, the pill a
+  `DropDownButton` with *Change Status* while the account transitions and
+  the spinner while one runs; `IssueActionsController` fans the result out
+  to every card that shows the issue). *Change Status* is in the command
+  bar's and the list's menus and acts on the card of the pane, of a
+  message window, or of the conversation shown. Reply is *Comment* on an
+  account that comments (`ActionRules`), and the compose window opened for
+  it is in its comment mode (`Compose/ComposeWindow.Comment.cs`): the
+  issue's key and summary instead of the header fields, *Reply to
+  Customer* / *Internal Note* on a service-desk request, the restricted
+  formatting bar, nothing attached, no Save Draft, pinned to the issue's
+  account (`ComposeController.CommentAccount`).
+- **The conversation view** (`Reader/Conversation/`). Selecting a folded
+  conversation row of the grouped list (`ListRow.ShowsConversation`; not
+  while a search shows its flat results) shows the whole conversation in
+  the reading pane (`ReaderHub`: `ReaderController.LeaveForConversation`
+  lets go of the single message, `ConversationController.Show` of the
+  row); any other row clears it. `ConversationView` lays out Core's
+  `ConversationModel`: the issue card once on top, then
+  `ConversationLayout.DisplayOrder` (what opened the conversation, folded
+  to its header and a preview while more follows, then the rest newest
+  first, the row of older members left out at the bottom), each member a
+  `ConversationCard` on the timeline of `ConversationRow` (the sender's
+  avatar, the user's own in the accent colour; the dots of the issue's
+  status and assignee changes, `ConversationEventRow`). A card has the
+  fold arrow, the unread dot, the sender, the recipients' disclosure, the
+  Jira badges and the hover buttons (Reply or Comment, Reply All,
+  Forward; also shown while one has the keyboard focus), and below the
+  single-message pane's own recipients, chips (`MessageChips`, shared with
+  `MessageView` and its `ChipStyles.xaml`), hint and bars. Bodies are
+  fetched only for the cards near the viewport (`NeedsBody`); an HTML body
+  is a `CardWebView` (§6.7) from the pane's pool, a plain one a
+  `TextBlock`. Where heights settle (bodies arriving, views measuring),
+  the item being read stays in place through the `ScrollViewer`'s own
+  anchoring (every row an anchor candidate, the anchor at the viewport's
+  top) where GTK moves the adjustment back itself; at the top the view
+  stays at the top. The conversation follows the list: members that
+  arrive, change or go are merged (`ListController.ThreadMembersChanged`,
+  `ConversationChanged` after `notify.messagesChanged`). Only the newest
+  member that is not an event is marked read. The list keeps the
+  keyboard: Space and Shift+Space page through the conversation
+  (`MessageListPane.PageConversation`).
+
+Walked through on 2026-09-30 with the published app on the walk's own
+data, socket, preferences key and fake keyring, against a fake Jira Data
+Center site on 127.0.0.1 (a copy of `backend/internal/jira/jiratest`
+listening on a real port, seeded with a service desk and two ordinary
+spaces, with a control endpoint that makes another user comment, write an
+internal note, change a status or assign) and devmail: the assistant
+(detection, the personal access token, a wrong token's refusal, the
+spaces with their counts), the sidebar and the views, the list with its
+pills, the issue card and *Change Status* from the pane, from a message
+window and from a conversation (the transitions that need fields in Jira
+disabled with the reason, the event row and the toast after), comments
+from the command bar and from a card's hover button (an internal note and
+a reply to the customer, posted with their visibility), a comment, a
+status change and an assignment made on the site arriving in the shown
+conversation or taking the issue out of *Assigned to Me*, the settings
+window (the events switched off and the conversation rebuilt without
+them, *Replace Token…*), the conversation view of mail threads (plain and
+HTML cards, folding, recipients, the wheel over both kinds of card) and
+Space paging. Two faults found there are fixed: the conversation stopped
+following its members because the issue cards were compared through the
+API's JSON context, which does not know them, and a reload kept a
+conversation's members when only its issue had moved (a status change
+with the events off), in all three clients (`sameShape`). Not walked: a
+real Jira Cloud site (the owner's, with a token they enter).
+
 ## 12. Tests
 
-`make test-windows` (`build.ps1 test`) runs six test projects, 5,064
-tests in about two minutes on the development machine (2026-09-29): 4,189
-in `Malachi.Core.Tests`, 651 in `Malachi.Platform.Windows.Tests`, 159 in
-`Malachi.Credentials.Tests`, 27 in `Malachi.Conventions.Tests`, 26 in
-the canary and 12 UI tests (4 of them opt-in). The tests that need a
+`make test-windows` (`build.ps1 test`) runs six test projects, 5,944
+tests in about a minute and a half on the development machine
+(2026-09-30): 5,067 in `Malachi.Core.Tests`, 651 in
+`Malachi.Platform.Windows.Tests`, 159 in `Malachi.Credentials.Tests`, 27
+in `Malachi.Conventions.Tests`, 28 in the canary and 12 UI tests (4 of
+them opt-in). The canary and the UI tests share the desktop when they run
+side by side: once in a while a UI test's primary menu closes before its
+item is found (seen once on 2026-09-30, `AboutShowsTheVersion`), and a
+second run passes. The tests that need a
 built `malachid.exe` skip without one
 (`make windows` or `build.ps1 go` builds it, `MALACHI_TEST_MALACHID`
 names another), and the Credential Manager round trips run only on
@@ -2461,7 +2621,8 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   `.config` and `.resw` should they appear).
 - The **network canary** (`Malachi.App.Canary`, with its WinUI host
   `Malachi.App.Canary.Host`, which compiles `src/Malachi.App/WebViews`
-  itself): the host holds the real viewer, editor and previewer in the
+  itself): the host holds the real viewer, a conversation card's view,
+  the editor and the previewer in the
   app's environment, in a window beyond the edge of the screen that never
   takes the focus, and plays the spike's hostile document (every vector
   with its own loopback listener in the test process, DNS-only host names,
@@ -2491,7 +2652,7 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   design, is a cancelled navigation's speculative preconnect, which starts
   no URL request); nothing navigated but the views' own documents; a click
   is user-initiated and a meta refresh not (what `NavigationPolicy` relies
-  on); no window opened (the three windows WebView2 draws the views in
+  on); no window opened (the four windows WebView2 draws the views in
   aside, titled *Malachi Mail* throughout, also while the previewer shows a
   PDF whose metadata has a title of its own); nothing downloaded; the gate
   answered 403 to everything not the view's own; and that clicks reached
@@ -2500,7 +2661,9 @@ request. The `.trx` reports land in `build\windows\TestResults\`.
   for the backslash, which ends Chromium's authority first; §6.4); and,
   as checks of the
   views themselves, that the editor's bridge types, formats and flushes
-  under its CSP, a dropped file arrives as a path, and the viewer zooms.
+  under its CSP, a dropped file arrives as a path, the viewer zooms, and
+  the card view measures a document of a known height at two zooms
+  (§6.7).
   A control run of the same document in a WebView2 without protection
   (its reach beyond the machine cut off) must reach the canaries (the
   preconnect and the prerender among them) and show connections, URL
@@ -3028,29 +3191,8 @@ Later tracks: MSIX (virtualisation disabled, an execution alias for
 `malachi-mcp`), Windows Web Account Manager as a daemon extension point, a
 taskbar unread badge, and the separate proposals at the end of §14.
 
-Not ported yet, and the one place where the client trails the daemon's
-API (protocol 2, [api.md §7](api.md#7-changelog), 2026-09-29): the Jira
-accounts (`kind: jira`, [architecture.md §3.6](architecture.md#36-issue-tracker-accounts-kind-jira))
-and the conversation view of the reading pane, both built macOS-first
-([architecture.md §7](architecture.md#7-open-decisions)). The port follows
-§3 with the macOS client as its source, as before: the Go reference of
-the pure logic is `ui/internal/jira` (the assistant, the sidebar and list
-projections, the issue card, the comment window, the account settings
-with its RE2 check), `ui/internal/capabilities` (which actions an account
-offers, from `Account.capabilities`) and `ui/internal/conversation` (the
-stacked conversation, the member marked read); their Swift ports are
-`MalachiCore/Jira`, `Model/Capabilities.swift` and
-`Model/Conversation.swift`, the controllers `JiraWizardController`,
-`JiraAccountController` and `ConversationController`, and the views the
-Jira assistant and settings sheets, `IssueCardView`, the comment mode of
-the compose window, `ActionPresentation` and the conversation view with
-the sized mode of `MessageWebView` (a second script of the app's own
-that measures the document; on WebView2 that is a host script run with
-page script off, as the link reader of §6.4 is, and the measurement
-must cope with content sized by the viewport as the Swift height
-governor does). Until then the client ignores
-`capabilities`, `issue`, `virtual`, `comment` and `notify.messagesChanged`
-(unknown fields, so nothing fails to decode), and every msgid of the
-feature is in `parity-exclusions.txt` under "Jira account: macOS first"
-and "Conversation view: macOS first", to be removed as the port uses them
-(§9).
+The Jira accounts and the conversation view of the reading pane, where
+the client trailed the daemon's API until 2026-09-30, are ported (§11.7,
+the card's view §6.7); of them only a walk against a real Jira Cloud site
+is open, which takes the owner's own token and an issue they name for the
+comments.
