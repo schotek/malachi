@@ -107,7 +107,7 @@ resources) has three targets and their tests:
 
 | Target | May import | Holds |
 |---|---|---|
-| `MalachiCore` | Foundation, Network, CryptoKit (the handshake's HMAC-SHA256), Darwin (the socket probe, the key file, the supervisor's signals), UniformTypeIdentifiers, os | The typed API, the transport with its handshake, the daemon supervisor, the pure logic ported from the Go UI (models, threads, folding, favourites, address parsing, quoting, wizard fields, HTML documents, formatting, error texts), the `@MainActor` controllers, settings, i18n, the open directory. **No AppKit, no WebKit.** Everything here is covered by `swift test`. |
+| `MalachiCore` | Foundation, Network, CryptoKit (the handshake's HMAC-SHA256), Darwin (the socket probe, the key file, the supervisor's signals), UniformTypeIdentifiers, os | The typed API, the transport with its handshake, the daemon supervisor, the pure logic ported from the Go UI (models, threads, folding, favourites, address parsing, quoting, wizard fields, HTML documents, formatting, error texts, the Assistant's prompts and links in `Assistant/`, the port of `ui/internal/assistant`), the `@MainActor` controllers, settings, i18n, the open directory. **No AppKit, no WebKit.** Everything here is covered by `swift test`. |
 | `MalachiMail` | AppKit, WebKit, UserNotifications, ServiceManagement, `MalachiCore` | Windows, views, the menu bar, the toolbar, the WebKit wrappers, the platform services. Thin: it renders what a controller holds and sends clicks back. |
 | `MalachiKeychain` | Foundation, Security | `malachi-keychain`, the keyring helper. Independent of the other two. |
 
@@ -140,7 +140,28 @@ in the endpoint fields until the host or port changes),
 `StorageUsageController` (`system.storage` every 5 s while Settings is
 open),
 `MCPRegistrationController` (runs the bundled `malachi-mcp status` /
-`install` / `uninstall --json` through `BridgeRunner` for Settings → AI),
+`install` / `uninstall --json` through `BridgeRunner` for Settings → AI;
+the page shows the application's last status at once and follows every
+newer one, so neither switch shows "off" only because a check has not
+answered, and a failed check is repeated after 1, 2 and 4 s, where GTK
+waits for the page to come up again),
+`AssistantController` (what the Assistant menu may use: the Claude apps'
+link handlers through an injected LaunchServices lookup and the bridge's
+registration from `malachi-mcp status --json`, run by an
+`MCPRegistrationController` of its own without toasts; held by
+`AppState`, refreshed at launch and whenever an Assistant menu opens,
+and updated by the AI page's switch),
+`ClaudeDesktopController` (Claude Desktop rewrites its configuration
+from memory while it runs, so a registration written then is lost: the
+AI page offers to restart it, quit through the injected platform, write,
+start again, and a change left for *Later* is written again when Claude
+Desktop quits by itself; the AppKit side is `ClaudeDesktopService`),
+`AssistantPanelController` (the in-app panel of phase B: consent, the
+signed-in check, one `ClaudeCodeProcess` per conversation fed by stdin
+and read as stream-json through `LineFramer`, the transcript items,
+pending actions, drafts offered after `openSavedDraft` finds them;
+`ClaudeCodeLocator` finds `claude` where a Finder-launched app's `PATH`
+does not reach),
 `JiraWizardController` (the Jira assistant: `account.detectSite` →
 the token → `account.listSpaces`, which doubles as the sign-in test →
 the spaces, the offline window and *Only Issues Involving Me* →
@@ -393,7 +414,9 @@ are those of `data/io.github.schotek.Malachi.gschema.xml`
 `color-scheme`, `message-list-density`, `show-preview-line`,
 `group-by-conversation`, `show-avatars`, `monochrome-avatars`,
 `monospace-plain-text`, `text-zoom`, `collapsed-folders`,
-`collapsed-accounts`, `favourite-folders`) plus one macOS-only key,
+`collapsed-accounts`, `favourite-folders`, `assistant-menu`,
+`assistant-target`, the latter read through `Assistant.parseTarget`, so an
+unknown nick is Claude Desktop) plus one macOS-only key,
 `command-r` (`reply`, the default, or `refresh`; §3). Numeric keys are
 clamped to the schema's ranges, bad enum strings fall back to the default,
 and a change fires its handlers through KVO on `UserDefaults`, so a
@@ -403,9 +426,10 @@ GTK window sharing the profile would. `launch-at-login` only mirrors
 options live here; anything that affects mail handling (check interval,
 remote content, retention) is the daemon's, through `config.get`/`config.set`.
 
-The window frames (`Main`, `Settings`) and the two pane widths
-(`main-sidebar-width`, `main-list-width`) are AppKit state in the same
-domain, not settings.
+The window frames (`Main`, `Settings`) and the pane widths
+(`main-sidebar-width`, `main-list-width`, and the assistant panel's
+`main-assistant-width`) are AppKit state in the same domain, not
+settings.
 
 ## 8. Localisation
 
@@ -449,7 +473,10 @@ format in one place for both clients.
   `AddressListTests`, `PrefillTests`, `MailtoTests`, `SuggestTests`,
   `BlockedSummaryTests`, `HTMLLinksTests`, `CIDRegistryTests`,
   `EditorBridgeTests`, `WizardFieldsTests`, `WizardResultsTests`,
-  `SignInTests`, `FormatTests`, `RPCErrorTextTests`, `ProviderTests`), the
+  `SignInTests`, `FormatTests`, `RPCErrorTextTests`, `ProviderTests`,
+  `AssistantTests` from `ui/internal/assistant/assistant_test.go`, whose
+  translator case is `AssistantTranslationTests` against the generated
+  Czech catalogue), the
   transport
   (`FramingTests`, `JSONRPCTests`, `RPCClientTests`, `SupervisorTests`,
   `AuthTests` with the test vectors of api.md §1.4 and `DaemonKeyTests`,
@@ -463,19 +490,21 @@ format in one place for both clients.
   `MailboxControllerListTests`, `MessageCacheTests`, `SyncControllerTests`,
   `ActionsControllerTests`, `ComposeControllerTests`, `DraftStateTests`,
   `WizardControllerTests`, `MailPreferencesTests`, `StorageUsageTests`,
-  `MCPRegistrationTests` with a `#!/bin/sh` fake bridge). The Jira
-  accounts and the conversation view add the ports of the Go reference
-  tests (`JiraTests`, `JiraWizardTests`, `JiraComposeTests`,
+  `MCPRegistrationTests` with a `#!/bin/sh` fake bridge,
+  `AssistantControllerTests` with the same kind of bridge and a scripted
+  link-handler lookup, `ClaudeDesktopControllerTests` with a fake
+  platform and bridge).
+  The Jira accounts and the conversation view add the ports of the Go
+  reference tests (`JiraTests`, `JiraWizardTests`, `JiraComposeTests`,
   `JiraSettingsTests`, `JiraPatternTests` for `ui/internal/jira`;
-  `CapabilitiesTests` for `ui/internal/capabilities`;
-  `ConversationTests` for `ui/internal/conversation`), the Swift-first
-  logic (`JiraListTests`, `JiraReaderTests`, `JiraActionRulesTests`,
-  `JiraAccountsTests`, `ConversationLayoutTests` with the height
-  governor), the controllers (`JiraWizardControllerTests`,
-  `JiraAccountControllerTests`, `JiraComposeControllerTests`,
-  `JiraActionsTests`, `IssueActionsControllerTests`
-  (`JiraTransitionsTests` for `ui/internal/jira/transitions.go`),
-  `ConversationControllerTests`,
+  `CapabilitiesTests` for `ui/internal/capabilities`; `ConversationTests`
+  for `ui/internal/conversation`), the Swift-first logic (`JiraListTests`,
+  `JiraReaderTests`, `JiraActionRulesTests`, `JiraAccountsTests`,
+  `ConversationLayoutTests` with the height governor), the controllers
+  (`JiraWizardControllerTests`, `JiraAccountControllerTests`,
+  `JiraComposeControllerTests`, `JiraActionsTests`,
+  `IssueActionsControllerTests` (`JiraTransitionsTests` for
+  `ui/internal/jira/transitions.go`), `ConversationControllerTests`,
   `MessagesChangedTests`) and the Czech cases (`JiraTranslationTests`,
   `JiraSettingsTranslationTests`).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
@@ -656,3 +685,12 @@ of the GTK code. The client is GPL-3.0-or-later like everything outside
 `backend/`; `backend/` stays AGPL-3.0-only, the boundary case
 [LICENSING.md](../LICENSING.md) anticipates with the commercial core
 licence. App Store distribution, if it ever matters, reopens this.
+
+**The Assistant menu came to macOS first (2026-09-29).** It hands the
+selected mail to Claude Desktop or Claude Code through their `claude:` and
+`claude-cli:` links ([mcp.md](mcp.md#hand-off-from-the-app-the-assistant-menu)).
+GTK has its logic and msgids (`ui/internal/assistant`) but not the
+widgets yet, Windows only the settings keys; once GTK has a Blueprint for
+it, that becomes the reference as everywhere else. The hand-off itself
+depends on the Claude apps' link handlers, which only a manual test with
+Claude Desktop and Claude Code installed covers.

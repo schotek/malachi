@@ -17,6 +17,7 @@ using Malachi.Core.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Malachi.App.Main;
 
@@ -75,6 +76,29 @@ public sealed partial class MessageCommandBar : UserControl
         var trash = Outbox.TrashTooltip(flags.Outbox);
         ToolTipService.SetToolTip(TrashButton, trash);
         AutomationProperties.SetName(TrashButton, trash);
+    }
+
+    /// <summary>The Assistant's ✦ button (window.blp assistant_button); the main window gives it its menu.</summary>
+    public Button Assistant => AssistantButton;
+
+    /// <summary>The assistant panel's toggle (window.blp assistant_panel_button).</summary>
+    public ToggleButton AssistantPanel => AssistantPanelToggle;
+
+    /// <summary>
+    /// The width the bar needs to show every visible button: the two groups,
+    /// the padding and the spacing between them (the minimum width GTK's
+    /// header bar would ask its pane for).
+    /// </summary>
+    public double MinimumWidth
+    {
+        get
+        {
+            var infinite = new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity);
+            StartGroup.Measure(infinite);
+            EndGroup.Measure(infinite);
+            var bar = (Grid)Content;
+            return bar.Padding.Left + bar.Padding.Right + StartGroup.DesiredSize.Width + (2 * bar.ColumnSpacing) + EndGroup.DesiredSize.Width;
+        }
     }
 
     // window.go: the star acts on the selection (every member of a

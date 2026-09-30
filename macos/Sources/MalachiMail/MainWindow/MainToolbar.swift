@@ -10,8 +10,20 @@ import MalachiCore
 /// act through the responder chain and are validated by whichever
 /// responder owns the action (the window controller). The search field
 /// reports to the window, which hands the text to the list.
+/// The Assistant button (ui/internal/assistant; GTK `assistant_button`) sits
+/// right before More Actions while the `assistant-menu` setting is on;
+/// its menu is the window's `AssistantMenu`. While the assistant panel
+/// exists (In App chosen), the main window's toolbar ends with AppKit's
+/// inspector section after the search field: the tracking separator on
+/// the panel's divider and the inspector toggle.
+/// While the assistant's one-shot requests can run
+/// (`AssistantController.canRunInApp`), the search field's magnifier has a
+/// menu with "Search in Your Own Words", which ⌥↩ in the field does too
+/// (`onSearchOwnWords`); while the words are converted the field shows
+/// "Converting the search…" and takes no typing (`beginConverting`,
+/// `endConverting`).
 @MainActor
-final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
+final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSMenuItemValidation {
     enum ID {
         static let toolbar = NSToolbar.Identifier("main")
         static let newMessage = NSToolbarItem.Identifier("newMessage")
@@ -26,6 +38,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         static let junk = NSToolbarItem.Identifier("junk")
         static let archive = NSToolbarItem.Identifier("archive")
         static let star = NSToolbarItem.Identifier("star")
+        static let assistant = NSToolbarItem.Identifier("assistant")
         static let moreActions = NSToolbarItem.Identifier("moreActions")
     }
 
@@ -50,17 +63,31 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions, ID.search,
+        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions, ID.search,
+    ]
+
+    /// The inspector section after the search field while the assistant
+    /// panel exists: AppKit's own items, which follow the split view
+    /// controller's inspector and send `toggleInspector:`.
+    static let panelItems: [NSToolbarItem.Identifier] = [
+        .inspectorTrackingSeparator, .flexibleSpace, .toggleInspector,
     ]
 
     /// The items of the message section, for the message window's toolbar.
     static let messageSectionItems: [NSToolbarItem.Identifier] = [
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.moreActions,
+        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions,
     ]
 
     private weak var splitView: NSSplitView?
     private var items: [NSToolbarItem.Identifier: NSToolbarItem] = [:]
+    /// The Assistant button's menu; nil for a toolbar without one.
+    private let assistantMenu: AssistantMenu?
+    /// Whether the Assistant button is in the toolbar (`assistant-menu`).
+    private var showsAssistant: Bool
+    /// Whether the inspector section is in the toolbar (the assistant
+    /// panel exists); only a toolbar with sections has one.
+    private var showsPanel: Bool
 
     /// The search field's text once typing pauses, "" at once when it is
     /// cleared (search.go `onSearchChanged`); Return in the field
@@ -72,10 +99,39 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     /// `search-delay: 300`).
     static let searchDelay: TimeInterval = 0.3
 
-    /// - Parameter splitView: the split view whose dividers 0 and 1 the
-    ///   tracking separators follow; nil for a toolbar without sections.
-    init(splitView: NSSplitView?) {
+    /// "Search in Your Own Words" (the magnifier's menu, ⌥↩ in the field)
+    /// with the field's text; the window installs it.
+    var onSearchOwnWords: (@MainActor (String) -> Void)?
+    /// The magnifier's menu, built once and set as the field's template
+    /// only while the one-shot requests can run (`setOwnWords`).
+    private let ownWordsMenu = NSMenu()
+    /// Whether "Search in Your Own Words" is offered.
+    private var ownWords = false
+    /// The words are being converted: the field takes no typing, and what
+    /// was typed is kept for when the conversion fails.
+    private(set) var converting = false
+    private var typedWords = ""
+
+    /// - Parameters:
+    ///   - splitView: the split view whose dividers 0 and 1 the tracking
+    ///     separators follow; nil for a toolbar without sections.
+    ///   - assistantMenu: the Assistant button's menu, nil for none.
+    ///   - showsAssistant: whether the button starts in the toolbar.
+    ///   - showsPanel: whether the inspector section (the assistant
+    ///     panel's toggle) starts in the toolbar.
+    init(splitView: NSSplitView?, assistantMenu: AssistantMenu? = nil, showsAssistant: Bool = false, showsPanel: Bool = false) {
         self.splitView = splitView
+        self.assistantMenu = assistantMenu
+        self.showsAssistant = showsAssistant
+        self.showsPanel = showsPanel && splitView != nil
+        super.init()
+        let item = NSMenuItem(
+            title: Assistant.searchTexts().ownWords, action: #selector(searchInOwnWords(_:)), keyEquivalent: "")
+        item.target = self
+        // ⌥↩ in the field (the field's own key, shown for discovery).
+        item.keyEquivalent = "\r"
+        item.keyEquivalentModifierMask = .option
+        ownWordsMenu.addItem(item)
     }
 
     /// A configured toolbar with this object as its delegate.
@@ -117,14 +173,64 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
         }
     }
 
+    /// Puts the Assistant button into `toolbar` (right before More
+    /// Actions) or takes it out, as the `assistant-menu` setting changes.
+    func setAssistant(visible: Bool, in toolbar: NSToolbar) {
+        showsAssistant = visible
+        let current = toolbar.items.firstIndex { $0.itemIdentifier == ID.assistant }
+        if visible {
+            guard current == nil, assistantMenu != nil else { return }
+            let at = toolbar.items.firstIndex { $0.itemIdentifier == ID.moreActions } ?? toolbar.items.count
+            toolbar.insertItem(withItemIdentifier: ID.assistant, at: at)
+        } else if let current {
+            toolbar.removeItem(at: current)
+        }
+    }
+
+    /// Puts the inspector section (the tracking separator, a flexible
+    /// space and the inspector toggle) after the search field, or takes it
+    /// out, as the assistant panel comes and goes. Only the main window's
+    /// toolbar has one.
+    func setAssistantPanel(visible: Bool, in toolbar: NSToolbar) {
+        guard splitView != nil else { return }
+        showsPanel = visible
+        let current = toolbar.items.firstIndex { $0.itemIdentifier == .inspectorTrackingSeparator }
+        if visible {
+            guard current == nil else { return }
+            var at = toolbar.items.firstIndex { $0.itemIdentifier == ID.search }.map { $0 + 1 } ?? toolbar.items.count
+            for id in Self.panelItems {
+                toolbar.insertItem(withItemIdentifier: id, at: at)
+                at += 1
+            }
+        } else if let current {
+            // The section is the toolbar's end: the separator and what follows.
+            for _ in current..<min(current + Self.panelItems.count, toolbar.items.count) {
+                toolbar.removeItem(at: current)
+            }
+        }
+    }
+
     // MARK: NSToolbarDelegate
 
+    /// Every item this toolbar can hold, the Assistant button and the
+    /// inspector section included.
+    private var allItems: [NSToolbarItem.Identifier] {
+        splitView == nil ? Self.messageSectionItems : Self.defaultItems + Self.panelItems
+    }
+
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        splitView == nil ? Self.messageSectionItems : Self.defaultItems
+        var ids = splitView == nil ? Self.messageSectionItems : Self.defaultItems
+        if !showsAssistant || assistantMenu == nil {
+            ids.removeAll { $0 == ID.assistant }
+        }
+        if showsPanel {
+            ids += Self.panelItems
+        }
+        return ids
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
+        allItems
     }
 
     func toolbar(
@@ -181,6 +287,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
             it.searchField.delegate = self
             it.searchField.target = self
             it.searchField.action = #selector(searchFieldChanged(_:))
+            it.searchField.searchMenuTemplate = ownWords ? ownWordsMenu : nil
             return it
         case ID.reply:
             return button(id, image: Icon.reply, label: L10n.T("Reply"), action: Action.reply)
@@ -196,6 +303,19 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
             return button(id, image: Icon.archive, label: L10n.T("Archive"), action: Action.archive)
         case ID.star:
             return StarToolbarItem(itemIdentifier: id)
+        case ID.assistant:
+            // The Assistant menu (ui/internal/assistant), filled on open.
+            guard let assistantMenu else { return nil }
+            let label = Assistant.texts().assistant
+            let it = NSMenuToolbarItem(itemIdentifier: id)
+            it.image = Icon.symbol("sparkles", size: .toolbar, description: label)
+            it.label = label
+            it.paletteLabel = label
+            it.toolTip = label
+            it.showsIndicator = false
+            it.isBordered = true
+            it.menu = assistantMenu.menu
+            return it
         case ID.moreActions:
             let it = NSMenuToolbarItem(itemIdentifier: id)
             it.image = Icon.moreActions
@@ -212,14 +332,73 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
 
     // MARK: Search field
 
+    private var searchField: NSSearchField? {
+        (items[ID.search] as? NSSearchToolbarItem)?.searchField
+    }
+
     /// ⌘F (Edit → Find…): the search field takes the keyboard.
     func focusSearch() {
         (items[ID.search] as? NSSearchToolbarItem)?.beginSearchInteraction()
     }
 
+    /// Puts `text` into the search field without its typing pause; the
+    /// caller searches for it (as Return would).
+    func setSearchText(_ text: String) {
+        searchWork?.cancel()
+        searchWork = nil
+        searchField?.stringValue = text
+    }
+
+    /// Offers "Search in Your Own Words" (the magnifier's menu and ⌥↩) or
+    /// takes it away; a conversion under way is the window's to end.
+    func setOwnWords(available: Bool) {
+        ownWords = available
+        searchField?.searchMenuTemplate = available ? ownWordsMenu : nil
+    }
+
+    /// The words are being converted: the field shows "Converting the
+    /// search…" and takes no typing; what was typed is kept.
+    func beginConverting() {
+        guard let field = searchField, !converting else { return }
+        converting = true
+        searchWork?.cancel()
+        searchWork = nil
+        typedWords = field.stringValue
+        if field.currentEditor() != nil {
+            field.window?.makeFirstResponder(nil)
+        }
+        field.isEditable = false
+        field.placeholderString = Assistant.searchTexts().converting
+        field.stringValue = ""
+    }
+
+    /// The conversion is over: the field takes typing again and shows
+    /// `text`, or the words typed before it (a failure).
+    func endConverting(text: String?) {
+        guard let field = searchField, converting else { return }
+        converting = false
+        field.isEditable = true
+        field.placeholderString = L10n.T("Search Mail")
+        field.stringValue = text ?? typedWords
+        typedWords = ""
+    }
+
+    /// The magnifier's "Search in Your Own Words".
+    @objc private func searchInOwnWords(_ sender: Any?) {
+        guard ownWords, !converting, let field = searchField else { return }
+        onSearchOwnWords?(field.stringValue)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(searchInOwnWords(_:)) else { return true }
+        let words = searchField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return ownWords && !converting && !words.isEmpty
+    }
+
     /// Every change of the field's text: an emptied field ends the search
     /// at once, anything else waits for typing to pause.
     @objc private func searchFieldChanged(_ sender: NSSearchField) {
+        guard !converting else { return }
         let text = sender.stringValue
         searchWork?.cancel()
         searchWork = nil
@@ -237,11 +416,20 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
     }
 
     /// Return in the field selects the first result, without waiting for
-    /// the pause.
+    /// the pause; ⌥↩ searches in the user's own words while that is
+    /// offered.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
-        guard let field = control as? NSSearchField, commandSelector == #selector(NSResponder.insertNewline(_:)) else {
+        guard let field = control as? NSSearchField else { return false }
+        if commandSelector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)), ownWords {
+            if !converting {
+                onSearchOwnWords?(field.stringValue)
+            }
+            return true
+        }
+        guard commandSelector == #selector(NSResponder.insertNewline(_:)) else {
             return false
         }
+        guard !converting else { return true }
         searchWork?.cancel()
         searchWork = nil
         onSearchReturn?(field.stringValue)
@@ -250,6 +438,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate {
 
     /// The field was cleared (its ✕, or Escape).
     func searchFieldDidEndSearching(_ sender: NSSearchField) {
+        guard !converting else { return }
         searchWork?.cancel()
         searchWork = nil
         onSearchText?("")

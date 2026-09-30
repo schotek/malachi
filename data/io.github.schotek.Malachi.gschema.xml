@@ -25,6 +25,16 @@
     <value nick="account" value="1"/>
     <value nick="all" value="2"/>
   </enum>
+  <enum id="io.github.schotek.Malachi.AssistantTarget">
+    <value nick="desktop" value="0"/>
+    <value nick="code" value="1"/>
+    <value nick="app" value="2"/>
+  </enum>
+  <enum id="io.github.schotek.Malachi.AssistantModel">
+    <value nick="sonnet" value="0"/>
+    <value nick="haiku" value="1"/>
+    <value nick="opus" value="2"/>
+  </enum>
 
   <schema id="io.github.schotek.Malachi" path="/io/github/schotek/Malachi/">
     <!-- Window geometry -->
@@ -134,6 +144,33 @@
       <default>100</default>
       <range min="50" max="200"/>
       <summary>Message body text zoom in percent</summary>
+    </key>
+
+    <!-- Assistant menu: hand-off of the selected mail to Claude -->
+    <key name="assistant-menu" type="b">
+      <default>true</default>
+      <summary>Show the Assistant menu that hands mail to Claude</summary>
+      <description>The menu opens Claude Desktop or Claude Code on this computer with a prepared question about the selected mail.</description>
+    </key>
+    <key name="assistant-target" enum="io.github.schotek.Malachi.AssistantTarget">
+      <default>'desktop'</default>
+      <summary>Where the Assistant menu opens Claude</summary>
+      <description>Claude Desktop, Claude Code in a terminal, or the panel in the app; the last choice made in the Assistant menu or in the settings.</description>
+    </key>
+    <key name="assistant-model" enum="io.github.schotek.Malachi.AssistantModel">
+      <default>'sonnet'</default>
+      <summary>The model the assistant panel uses</summary>
+      <description>Sonnet, Haiku or Opus, passed to Claude Code.</description>
+    </key>
+    <key name="assistant-claude-path" type="s">
+      <default>''</default>
+      <summary>Where Claude Code is</summary>
+      <description>The claude executable the assistant panel runs; empty looks in the usual places.</description>
+    </key>
+    <key name="assistant-consent" type="b">
+      <default>false</default>
+      <summary>The assistant panel may send mail to Claude</summary>
+      <description>Set when the user allowed it the first time.</description>
     </key>
   </schema>
 </schemalist>

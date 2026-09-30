@@ -38,6 +38,9 @@ final class Integration {
     /// Compose: windows, drafts, the recipient completion
     /// (compose/manager.go), with the WebKit editor behind `EditorView`.
     let compose: ComposeManager
+    /// The assistant panel of the main window (ui/internal/assistant, the
+    /// In App target): its controller, its view and its wiring.
+    let assistantPanel: AssistantPanelHost
 
     private(set) weak var mainWindow: MainWindowController?
     /// Toasts over the main window's message pane (window.go `Toast`).
@@ -86,17 +89,21 @@ final class Integration {
             state: state, actions: actions, list: list, cache: cache, windows: windows
         ) { [weak mainWindow] in mainWindow?.window }
         compose = ComposeManager(state: state) { ComposeEditorView() }
+        assistantPanel = AssistantPanelHost(
+            state: state, list: list, actions: actions, messageActions: messageActions, mainWindow: mainWindow)
 
         mainWindow.install(sidebar: sidebar)
         mainWindow.install(list: listView)
         mainWindow.install(message: reader)
         mainWindow.install(statusBar: statusBar)
+        mainWindow.install(assistant: assistantPanel.viewController)
         wireConnection()
         wireNotifications()
         wireMailbox()
         wireStatusBar()
         wireReading()
         wireActions()
+        wireAssistantPanel()
         wireHooks()
         compose.install(into: state)
         wireJira()
@@ -114,6 +121,18 @@ final class Integration {
         }
         list.onActionFlagsChanged = { [weak self] _ in
             self?.mainWindow?.window?.toolbar?.validateVisibleItems()
+        }
+    }
+
+    /// The assistant panel follows the list's selection, after the reader
+    /// (the handler `wireReading` installed keeps running first); the
+    /// Assistant menus run in the panel while In App is the target.
+    private func wireAssistantPanel() {
+        messageActions.assistant.panel = assistantPanel
+        let reading = listView.onSelectedMessageChanged
+        listView.onSelectedMessageChanged = { [weak self] summary in
+            reading?(summary)
+            self?.assistantPanel.followSelection()
         }
     }
 
@@ -356,16 +375,12 @@ final class Integration {
         }
         state.hooks.openPreferences = { [weak state] in
             guard let state else { return }
-            PreferencesWindowController.show(
-                client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
-                confirmRemoval: { window, c in
-                    let answer = await state.alerts.confirmDestructiveExtra(
-                        on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
-                        extraLabel: c.extraLabel, extraDefault: c.extraDefault)
-                    return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
-                },
-                confirmTrust: Integration.confirmTrust(state.alerts)
-            )
+            Integration.showPreferences(state)
+        }
+        // The Assistant menu's "Set Up the Assistant…".
+        state.hooks.openAISettings = { [weak state] in
+            guard let state else { return }
+            Integration.showPreferences(state).select(.ai)
         }
         state.hooks.addAccount = { [weak self] window in
             guard let self, let parent = window ?? self.mainWindow?.window else { return }
@@ -374,6 +389,28 @@ final class Integration {
                 from: parent, client: self.state.client, confirmTrust: Self.confirmTrust(self.state.alerts)
             ) { _, _ in }
         }
+    }
+
+    /// Opens the settings window (or brings it to the front) with what
+    /// its pages need from the application.
+    @discardableResult
+    private static func showPreferences(_ state: AppState) -> PreferencesWindowController {
+        PreferencesWindowController.show(
+            client: state.client, settings: state.settings, bridge: state.paths.mcpBridge?.path,
+            assistant: state.assistant, claudeDesktop: state.claudeDesktop,
+            confirmRestart: { window in
+                let t = Assistant.restartTexts()
+                return await state.alerts.confirm(
+                    on: window, heading: t.heading, body: t.body, confirmLabel: t.restart, declineLabel: t.later)
+            },
+            confirmRemoval: { window, c in
+                let answer = await state.alerts.confirmDestructiveExtra(
+                    on: window, heading: c.heading, body: c.body, confirmLabel: c.confirmLabel,
+                    extraLabel: c.extraLabel, extraDefault: c.extraDefault)
+                return (confirmed: answer.confirmed, deleteLocalData: answer.extra)
+            },
+            confirmTrust: Integration.confirmTrust(state.alerts)
+        )
     }
 
     // MARK: No Accounts page

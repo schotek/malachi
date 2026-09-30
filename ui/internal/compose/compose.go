@@ -77,6 +77,7 @@ type Window struct {
 	clearButton             *gtk.Button
 
 	editor      *editor.Editor
+	rewrite     *rewriteUI // the assistant's rewrite (rewrite.go)
 	actions     map[string]*gio.SimpleAction
 	blockAction *gio.SimpleAction
 	alignAction *gio.SimpleAction
@@ -189,6 +190,7 @@ func newWindow(m *Manager, p Params) *Window {
 	w.wireActions()
 	w.wireToolbar()
 	w.wireRows()
+	w.wireRewrite(b)
 	if !richText {
 		// Text-only phase (see richText): no formatting to offer, no
 		// inline images, and the user is told what will go out.

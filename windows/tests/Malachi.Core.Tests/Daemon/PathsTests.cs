@@ -6,8 +6,8 @@
 // os.UserHomeDir reads it, api.SocketBase's Flatpak directory, empty
 // variables, the data directory and MALACHI_DATA_DIR, the preferences' key
 // and the names MALACHI_SETTINGS_KEY may give it (every other value falls
-// back to the app's key), the key and log files, the directories made
-// before the daemon starts; and the MCP
+// back to the app's key), the key and log files, the assistant's working
+// directory, the directories made before the daemon starts; and the MCP
 // bridge beside the app, the cases of ui/internal/mcpsetup/mcpsetup_test.go
 // (TestLocate) that apply: the Windows app, as the macOS one, looks for the
 // bridge beside itself only, never on PATH.
@@ -90,6 +90,22 @@ public sealed class PathsTests
         var q = Paths.Resolve(Env(("LOCALAPPDATA", local), ("MALACHI_DATA_DIR", elsewhere)), null);
         Assert.Equal(elsewhere, q.DataDir);
         Assert.Equal(Path.Combine(elsewhere, "store.db"), q.Store);
+    }
+
+    /// <summary>
+    /// Claude Code's working directory for the assistant (Swift's
+    /// ClaudeCodeLocator.defaultDirectory, in the Caches directory there) is
+    /// in the data directory, and moves with MALACHI_DATA_DIR.
+    /// </summary>
+    [Fact]
+    public void TheAssistantsDirectoryIsInTheDataDirectory()
+    {
+        var local = Path.Combine(Home, "AppData", "Local");
+        Assert.Equal(Path.Combine(local, "Malachi Mail", "assistant"), Paths.Resolve(Env(("LOCALAPPDATA", local)), null).AssistantDir);
+        var elsewhere = Path.Combine(Home, "agent-data");
+        Assert.Equal(
+            Path.Combine(elsewhere, "assistant"),
+            Paths.Resolve(Env(("LOCALAPPDATA", local), ("MALACHI_DATA_DIR", elsewhere)), null).AssistantDir);
     }
 
     [Fact]

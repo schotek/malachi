@@ -498,6 +498,66 @@ public sealed class LauncherTests
         Assert.Empty(shell.Launches);
     }
 
+    // The Assistant's links (ui/internal/assistant Link and FileLink): the
+    // three forms, made of what encodeURIComponent keeps, nothing else.
+    [Theory]
+    [InlineData("claude://claude.ai/new?q=Summarize%20message%20m1", true)]
+    [InlineData("claude://cowork/new?q=Read%20the%20file&file=C%3A%5CUsers%5Cu%5Cx.pdf", true)]
+    [InlineData("claude-cli://open?q=Hi", true)]
+    [InlineData("claude-cli://open?cwd=C%3A%5Cx&q=Hi%20(there)%20*'~!", true)]
+    [InlineData("claude://claude.ai/new?q=a b", false)]
+    [InlineData("claude://claude.ai/new?q=a\"--x", false)]
+    [InlineData(@"claude://claude.ai/new?q=a\b", false)]
+    [InlineData("claude://claude.ai/new?q=č", false)]
+    [InlineData("claude://claude.ai/chat/1234", false)]
+    [InlineData("claude://code/new?q=x&folder=C%3A%5C", false)]
+    [InlineData("claude-cli://open", false)]
+    [InlineData("CLAUDE://claude.ai/new?q=x", false)]
+    [InlineData("https://claude.ai/new?q=x", false)]
+    [InlineData("file:///C:/Windows/System32/calc.exe", false)]
+    [InlineData("claude-cli://open?q=x\nnext", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void AssistantLinkTest(string? link, bool want)
+    {
+        Assert.Equal(want, Launcher.IsAssistantLink(link));
+    }
+
+    [Fact]
+    public void AnAssistantLinkIsAtMostTheLimit()
+    {
+        const string Prefix = "claude://claude.ai/new?q=";
+        Assert.True(Launcher.IsAssistantLink(Prefix + new string('x', Malachi.Core.Platform.ILauncher.MaxAssistantLink - Prefix.Length)));
+        Assert.False(Launcher.IsAssistantLink(Prefix + new string('x', Malachi.Core.Platform.ILauncher.MaxAssistantLink - Prefix.Length + 1)));
+    }
+
+    [Fact]
+    public async Task OpenAssistantLinkHandsTheLinkAsItIs()
+    {
+        var shell = new StandInShell();
+        const string Link = "claude-cli://open?cwd=C%3A%5Cx&q=Hi";
+
+        Assert.True(await shell.Launcher.OpenAssistantLinkAsync(Link, 7, TestContext.Current.CancellationToken));
+
+        var launch = Assert.Single(shell.Launches);
+        Assert.Equal(Link, launch.Target);
+        Assert.Equal(7, launch.Owner);
+        Assert.False(launch.Dialogs);
+    }
+
+    [Theory]
+    [InlineData("https://claude.ai/new?q=x")]
+    [InlineData("claude://claude.ai/new?q=a b")]
+    [InlineData(@"C:\Windows\System32\calc.exe")]
+    public async Task OpenAssistantLinkRefusesEverythingElse(string link)
+    {
+        var shell = new StandInShell();
+
+        await Assert.ThrowsAsync<ArgumentException>(() => shell.Launcher.OpenAssistantLinkAsync(link, 0, TestContext.Current.CancellationToken));
+
+        Assert.Empty(shell.Launches);
+    }
+
     // The shell played: records what it was handed and answers as told.
     private sealed class StandInShell
     {

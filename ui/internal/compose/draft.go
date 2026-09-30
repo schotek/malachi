@@ -545,6 +545,7 @@ func (w *Window) cleanup() {
 			editor.UnregisterCID(a.ContentID)
 		}
 	}
+	w.rewrite.close()
 	// The editor's web process goes with the window, not when the view is
 	// collected some time later.
 	w.editor.Close()

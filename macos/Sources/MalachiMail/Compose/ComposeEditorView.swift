@@ -172,6 +172,25 @@ final class ComposeEditorView: NSView, EditorView {
         }
     }
 
+    /// The assistant's rewrite: the bridge's `rewriteTarget`, answered with
+    /// what it returned (nil until the page is ready, or when it failed).
+    func rewriteTarget(attribution: String, _ done: @escaping @MainActor (RewriteTarget?) -> Void) {
+        guard isReady else {
+            done(nil)
+            return
+        }
+        web.run(RewriteTarget.script(attribution: attribution)) { result, error in
+            done(error == nil ? RewriteTarget.decode(result) : nil)
+        }
+    }
+
+    /// The assistant's rewrite: the answer into the page as plain text
+    /// (`rewriteApplyScript`). Ignored until the document is ready.
+    func applyRewrite(_ text: String, below: Bool) {
+        guard isReady else { return }
+        web.run(rewriteApplyScript(text, below: below))
+    }
+
     func registerCID(_ id: String, path: String, contentType: String) {
         registry.register(id, path: path, contentType: contentType)
     }

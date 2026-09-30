@@ -13,7 +13,8 @@ import os
 /// that touches the model or the daemon is the `ActionsController`'s; this
 /// only resolves the selection, the window a sheet goes on, and the links
 /// and attachments that need the desktop (remote.go `openLink`,
-/// attachments.go).
+/// attachments.go), and the Assistant's hand-off to Claude
+/// (`AssistantActions`, ui/internal/assistant).
 ///
 /// It installs itself as the controller's hooks; the application installs
 /// it as `MessageWindows.delegate`, `MainWindowController.messageActions`
@@ -26,6 +27,8 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     let cache: MessageCache
     let windows: MessageWindows
     let attachments: AttachmentActions
+    /// The Assistant menu and the chips' "Ask the Assistant…".
+    let assistant: AssistantActions
 
     private let mainWindow: @MainActor () -> NSWindow?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "actions")
@@ -44,6 +47,7 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         self.windows = windows
         self.mainWindow = mainWindow
         attachments = AttachmentActions(state: state, cache: cache)
+        assistant = AssistantActions(state: state, list: list, attachments: attachments)
         installHooks()
     }
 
@@ -159,6 +163,19 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func trustSender() {
         forSelected { actions.trustSender($0) }
+    }
+
+    /// Toasts go over the main window's message pane.
+    func askAssistant(_ action: Assistant.Action) {
+        assistant.ask(action, from: mainWindow())
+    }
+
+    func summarizeUnread() {
+        assistant.summarizeUnread(from: mainWindow())
+    }
+
+    var canSummarizeUnread: Bool {
+        assistant.canSummarizeUnread
     }
 
     // MARK: MessageActionDelegate (one message; message_window.go `msg.*`)
@@ -277,7 +294,7 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
         alert.alertStyle = .warning
         alert.messageText = L10n.T("Open This Link?")
         // TRANSLATORS: %s is the link's real destination.
-        alert.informativeText = L10n.T("This link leads to %s.", href) // macOS-only string
+        alert.informativeText = L10n.T("This link leads to %s.", href)
         let cancel = alert.addButton(withTitle: mn(L10n.T("_Cancel")))
         cancel.keyEquivalent = "\u{1b}"
         let open = alert.addButton(withTitle: mn(L10n.T("_Open Link")))
@@ -360,6 +377,16 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
 
     func saveAllAttachments(_ attachments: [Attachment], of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
         self.attachments.saveAll(attachments, of: summary, remote: remote, from: window)
+    }
+
+    // MARK: Assistant (ui/internal/assistant)
+
+    func askAssistant(_ action: Assistant.Action, about summary: MessageSummary, from window: NSWindow?) {
+        assistant.ask(action, about: summary, from: window)
+    }
+
+    func askAssistant(about attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?) {
+        assistant.ask(about: attachment, of: summary, remote: remote, from: window)
     }
 
     // MARK: Helpers

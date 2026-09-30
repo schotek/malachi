@@ -177,6 +177,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             WireToolbar();
             WireRows();
             WireHeaderBar();
+            WireRewrite();
             // Text-only phase (draft.go richText): no formatting to offer, no
             // inline images, and the user is told what will go out.
             FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
@@ -233,7 +234,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     // not the window (macOS EscapeCloser.shouldClose).
     private bool PopupOpen =>
         suggestions.Any(s => s.IsVisible) || FormatBar.IsPopupOpen || Header.IsFromOpen
-        || DraftMenuButton.Flyout?.IsOpen == true;
+        || DraftMenuButton.Flyout?.IsOpen == true || RewriteFlyout.IsOpen;
 
     private nint Handle => WindowPresenter.Handle(this);
 
@@ -593,6 +594,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             s.Dispose();
         }
         FormatBar.HidePopups();
+        CloseRewrite();
         draft.Cleanup();
         attachments.Dispose();
         editor.Close();

@@ -82,7 +82,7 @@ public sealed partial class PreferencesWindow : Window
         accounts = new AccountsPage(state, this, ToastsHost);
         general = new GeneralPage(state, bindings, ToastsHost);
         appearance = new AppearancePage(state, bindings);
-        ai = new AiPage(state, ToastsHost);
+        ai = new AiPage(state, bindings, ToastsHost, () => this);
 
         var commands = Tracked.Commands;
         commands.MoveUp.Handler = () => accounts.MoveSelected(-1);
@@ -116,6 +116,9 @@ public sealed partial class PreferencesWindow : Window
 
     /// <summary>The Accounts page.</summary>
     public AccountsPage Accounts => accounts;
+
+    /// <summary>Shows the AI page (the Assistant menu's "Set Up the Assistant…", app.assistant-setup).</summary>
+    public void ShowAi() => Navigation.SelectedItem = AiItem;
 
     /// <summary>
     /// Opens the Preferences, or brings the open window to the front

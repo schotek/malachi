@@ -89,6 +89,20 @@ internal sealed partial class AlertService : IAlerts
     }
 
     /// <inheritdoc/>
+    public async Task<bool> ConfirmAsync(Window? window, string heading, string body, string confirmLabel, string declineLabel)
+    {
+        var result = await ShowAsync(window, () => new ContentDialog
+        {
+            Title = Heading(heading),
+            Content = body.Length == 0 ? null : Body(body),
+            PrimaryButtonText = Mnemonic.Strip(confirmLabel),
+            CloseButtonText = Mnemonic.Strip(declineLabel),
+            DefaultButton = ContentDialogButton.Primary,
+        });
+        return result == ContentDialogResult.Primary;
+    }
+
+    /// <inheritdoc/>
     public async Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window)
     {
         var result = await ShowAsync(window, () => new ContentDialog

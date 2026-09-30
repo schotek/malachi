@@ -49,6 +49,10 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
     private(set) var closed = false
 
     private let toolbarDelegate: MainToolbar
+    /// The toolbar's Assistant menu (ui/internal/assistant), without
+    /// Summarize Unread in This Folder: a message window has no folder.
+    private let assistantMenu: AssistantMenu
+    private var assistantToken: AssistantController.Token?
     private var escape: EscapeCloser?
 
     init(state: AppState, cache: MessageCache, summary: MessageSummary) {
@@ -57,7 +61,8 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         messageView = MessageViewController(state: state, cache: cache, mode: .window)
         // A window mode view always has one.
         toasts = messageView.toasts ?? ToastPresenter()
-        toolbarDelegate = MainToolbar(splitView: nil)
+        assistantMenu = AssistantMenu(state: state, includesUnread: false)
+        toolbarDelegate = MainToolbar(splitView: nil, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown)
 
         let w = NSWindow(
             contentRect: NSRect(origin: .zero, size: Self.defaultSize),
@@ -78,6 +83,11 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         w.center()
         w.initialFirstResponder = messageView.bodyTextView
         escape = EscapeCloser.install(on: w)
+        let assistant = state.assistant
+        assistantToken = assistant.onChange { [weak self] in
+            guard let self, let toolbar = self.window?.toolbar else { return }
+            self.toolbarDelegate.setAssistant(visible: assistant.shown, in: toolbar)
+        }
 
         messageView.onRender = { [weak self] s, lm in
             self?.rendered(s, lm)
@@ -118,6 +128,8 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         closed = true
         escape?.uninstall()
         escape = nil
+        assistantToken?.cancel()
+        assistantToken = nil
         // The only timer that would outlive the window.
         messageView.close()
     }
@@ -184,6 +196,13 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         delegate?.trustSender(id)
     }
 
+    /// The Assistant menu's message actions (the item's tag) on this
+    /// window's message.
+    @objc func askAssistant(_ sender: Any?) {
+        guard let a = AssistantMenu.action(tag: (sender as? NSMenuItem)?.tag) else { return }
+        delegate?.askAssistant(a, about: messageView.current ?? summary, from: window)
+    }
+
     // MARK: Validation
 
     private func allows(_ action: Selector, _ f: ActionFlags) -> Bool? {
@@ -199,6 +218,11 @@ final class MessageWindowController: NSWindowController, NSWindowDelegate, Toast
         case Action.moveToTrash: return f.trash
         case Action.loadImages: return f.loadImages
         case Action.trustSender: return f.trustSender
+        // A message not in the Outbox, and the chosen Claude app can read
+        // the mail (ui/internal/assistant `Pick`, no fallback).
+        case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok
+        // Summarize Unread in This Folder is the main window's; this
+        // controller does not answer it (the menu bar's item stays off).
         default: return nil
         }
     }

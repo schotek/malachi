@@ -5,8 +5,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Port of the message page's header bar of ui/data/ui/window.blp: Reply,
 Reply All and Forward at the start; at the end, packed right to left, More
-Actions (message_menu_model), the Star toggle, Archive, Mark as Junk and
-Move to Trash, so that they read Trash, Junk, Archive, Star, More; and of
+Actions (message_menu_model), the Assistant's ✦ button and its panel's
+toggle (window.blp assistant_button, assistant_panel_button, shown only
+while the Assistant is), the Star toggle, Archive, Mark as Junk and Move to
+Trash, so that they read Trash, Junk, Archive, Star, panel, ✦, More; and of
 ui/internal/window/actions.go (setMessageActionsSensitive, setStar: the
 star's icon and tooltip, the trash's tooltip for an outbox message);
 macOS: MainWindow/MainToolbar.swift (the message section). Every button
@@ -90,6 +92,7 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
         <StackPanel
+            x:Name="StartGroup"
             VerticalAlignment="Center"
             Orientation="Horizontal"
             Spacing="2">
@@ -119,6 +122,7 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
             </Button>
         </StackPanel>
         <StackPanel
+            x:Name="EndGroup"
             Grid.Column="2"
             VerticalAlignment="Center"
             Orientation="Horizontal"
@@ -160,6 +164,27 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 ToolTipService.ToolTip="{l:T Msgid='Star'}">
                 <FontIcon x:Name="StarGlyph" FontSize="16" />
             </ToggleButton>
+            <!-- assistant_panel_button: opens and folds the assistant panel,
+                 shown while the Assistant is on and In App chosen (tooltip
+                 and visibility from MainWindow.Assistant.cs). -->
+            <ToggleButton
+                x:Name="AssistantPanelToggle"
+                Width="36"
+                Height="32"
+                Padding="0"
+                AutomationProperties.AutomationId="AssistantPanelToggle"
+                Visibility="Collapsed">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('sidebar-show-right-symbolic')}" />
+            </ToggleButton>
+            <!-- assistant_button: the Assistant menu, shown while the
+                 Assistant is (its flyout, tooltip and visibility from code). -->
+            <Button
+                x:Name="AssistantButton"
+                AutomationProperties.AutomationId="AssistantButton"
+                Style="{StaticResource HeaderButtonStyle}"
+                Visibility="Collapsed">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('malachi-assistant-symbolic')}" />
+            </Button>
             <Button
                 x:Name="MoreButton"
                 AutomationProperties.AutomationId="MoreButton"

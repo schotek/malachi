@@ -163,6 +163,9 @@
       "malachi.fakebridge": {
         "type": "Project"
       },
+      "malachi.fakeclaude": {
+        "type": "Project"
+      },
       "CommunityToolkit.Mvvm": {
         "type": "CentralTransitive",
         "requested": "[8.4.2, )",

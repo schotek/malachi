@@ -75,6 +75,14 @@ Adw.Window compose_window {
         menu-model: compose_menu;
         tooltip-text: _("Draft Menu");
       }
+
+      // The assistant's rewrite (ui/internal/assistant, the In App
+      // target): icon, tooltip, visibility and rewrite_popover come from
+      // Go (compose/rewrite.go).
+      [end]
+      Button rewrite_button {
+        visible: false;
+      }
     }
 
     content: Adw.ToastOverlay toast_overlay {
@@ -569,4 +577,104 @@ SizeGroup header_labels {
     bcc_label,
     subject_label,
   ]
+}
+
+// The rewrite's popover, parented to rewrite_button from Go: the presets
+// and the user's own instruction, the answer as plain text (never markup)
+// while it arrives and when it is there, and what to do with it. Every
+// text comes from ui/internal/assistant, set in Go.
+Popover rewrite_popover {
+  child: Box {
+    orientation: vertical;
+    spacing: 10;
+    width-request: 380;
+    margin-top: 8;
+    margin-bottom: 8;
+    margin-start: 8;
+    margin-end: 8;
+
+    Label rewrite_title {
+      use-markup: false;
+      xalign: 0;
+
+      styles [
+        "heading",
+      ]
+    }
+
+    Adw.WrapBox rewrite_presets {
+      child-spacing: 6;
+      line-spacing: 6;
+    }
+
+    Entry rewrite_custom {}
+
+    Box rewrite_status {
+      spacing: 6;
+      visible: false;
+
+      Adw.Spinner {}
+
+      Label rewrite_status_label {
+        use-markup: false;
+        xalign: 0;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    }
+
+    ScrolledWindow rewrite_result_scroll {
+      height-request: 140;
+      hscrollbar-policy: never;
+      visible: false;
+
+      styles [
+        "card",
+      ]
+
+      child: TextView rewrite_result {
+        editable: false;
+        cursor-visible: false;
+        wrap-mode: word_char;
+        top-margin: 6;
+        bottom-margin: 6;
+        left-margin: 8;
+        right-margin: 8;
+      };
+    }
+
+    Label rewrite_error {
+      use-markup: false;
+      wrap: true;
+      xalign: 0;
+      visible: false;
+
+      styles [
+        "error",
+      ]
+    }
+
+    Box {
+      spacing: 8;
+
+      Button rewrite_discard {
+        use-underline: true;
+      }
+
+      Box {
+        hexpand: true;
+      }
+
+      Button rewrite_insert {}
+
+      Button rewrite_replace {
+        styles [
+          "suggested-action",
+        ]
+      }
+    }
+  };
 }

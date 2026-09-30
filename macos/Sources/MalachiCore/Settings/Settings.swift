@@ -33,6 +33,16 @@ public final class Settings {
         case collapsedFolders = "collapsed-folders"
         case collapsedAccounts = "collapsed-accounts"
         case favouriteFolders = "favourite-folders"
+        /// The Assistant menu (ui/internal/assistant): shown at all, and
+        /// the Claude app it opens (Settings → AI → Assistant).
+        case assistantMenu = "assistant-menu"
+        case assistantTarget = "assistant-target"
+        /// The assistant panel (the In App target): the model, where
+        /// Claude Code is (empty: the usual places), and whether the user
+        /// allowed mail to go to Claude.
+        case assistantModel = "assistant-model"
+        case assistantClaudePath = "assistant-claude-path"
+        case assistantConsent = "assistant-consent"
         /// macOS only: what ⌘R does (Settings → General → Keyboard).
         case commandR = "command-r"
     }
@@ -84,6 +94,11 @@ public final class Settings {
             Key.collapsedFolders.rawValue: [String](),
             Key.collapsedAccounts.rawValue: [String](),
             Key.favouriteFolders.rawValue: [String](),
+            Key.assistantMenu.rawValue: true,
+            Key.assistantTarget.rawValue: Assistant.Target.desktop.rawValue,
+            Key.assistantModel.rawValue: Assistant.Model.sonnet.rawValue,
+            Key.assistantClaudePath.rawValue: "",
+            Key.assistantConsent.rawValue: false,
             Key.commandR.rawValue: CommandR.reply.rawValue,
         ]
     }
@@ -238,6 +253,44 @@ public final class Settings {
     public var favouriteFolders: [String] {
         get { stringList(.favouriteFolders) }
         set { set(.favouriteFolders, newValue) }
+    }
+
+    // MARK: Assistant
+
+    /// Whether the Assistant menu is shown (the toolbar button, the Message
+    /// menu's submenu, the attachment menu's item).
+    public var assistantMenu: Bool {
+        get { bool(.assistantMenu) }
+        set { set(.assistantMenu, newValue) }
+    }
+
+    /// Where the Assistant menu opens Claude: the gschema enum
+    /// AssistantTarget's nicks, read with `Assistant.parseTarget` (an
+    /// unknown nick is Claude Desktop).
+    public var assistantTarget: Assistant.Target {
+        get { Assistant.parseTarget(string(.assistantTarget)) }
+        set { set(.assistantTarget, Assistant.parseTarget(newValue.rawValue).rawValue) }
+    }
+
+    /// The model of the assistant panel: the gschema enum AssistantModel's
+    /// nicks, read with `Assistant.parseModel` (an unknown nick is Sonnet).
+    public var assistantModel: Assistant.Model {
+        get { Assistant.parseModel(string(.assistantModel)) }
+        set { set(.assistantModel, Assistant.parseModel(newValue.rawValue).rawValue) }
+    }
+
+    /// The claude executable the panel runs; "" looks in the usual places
+    /// (`ClaudeCodeLocator`).
+    public var assistantClaudePath: String {
+        get { string(.assistantClaudePath) }
+        set { set(.assistantClaudePath, newValue) }
+    }
+
+    /// Whether the user allowed the panel to send mail to Claude (asked
+    /// before the first question).
+    public var assistantConsent: Bool {
+        get { bool(.assistantConsent) }
+        set { set(.assistantConsent, newValue) }
     }
 
     // MARK: Change notification

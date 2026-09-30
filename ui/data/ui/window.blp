@@ -11,10 +11,22 @@ Adw.ApplicationWindow main_window {
   width-request: 360;
   height-request: 294;
 
+  // The assistant panel folds first: below the sidebar's breakpoint plus
+  // its width it only overlays the panes. Only the last matching
+  // breakpoint applies, so the narrower ones repeat it.
+  Adw.Breakpoint {
+    condition ("max-width: 1180sp")
+
+    setters {
+      assistant_split.collapsed: true;
+    }
+  }
+
   Adw.Breakpoint {
     condition ("max-width: 900sp")
 
     setters {
+      assistant_split.collapsed: true;
       outer_split.collapsed: true;
     }
   }
@@ -23,230 +35,321 @@ Adw.ApplicationWindow main_window {
     condition ("max-width: 600sp")
 
     setters {
+      assistant_split.collapsed: true;
       outer_split.collapsed: true;
       inner_split.collapsed: true;
     }
   }
 
-  content: Adw.NavigationSplitView outer_split {
-    min-sidebar-width: 200;
-    max-sidebar-width: 320;
-    sidebar-width-fraction: 0.2;
+  // The assistant panel (ui/internal/assistant, the In App target) on the
+  // right: window/assistant_panel.go puts assistant_panel.blp into
+  // assistant_panel_bin and shows it while the Assistant is on and In
+  // App chosen; the message pane's toggle opens and folds it.
+  content: Adw.OverlaySplitView assistant_split {
+    sidebar-position: end;
+    show-sidebar: false;
+    min-sidebar-width: 280;
+    max-sidebar-width: 480;
+    sidebar-width-fraction: 0.28;
 
-    sidebar: Adw.NavigationPage {
-      title: _("Folders");
-      tag: "folders";
+    content: Adw.NavigationSplitView outer_split {
+      min-sidebar-width: 200;
+      max-sidebar-width: 320;
+      sidebar-width-fraction: 0.2;
 
-      child: Adw.ToolbarView {
-        [top]
-        Adw.HeaderBar {
-          [start]
-          Button {
-            icon-name: "mail-message-new-symbolic";
-            tooltip-text: _("New Message (Ctrl+N)");
-            action-name: "app.compose";
+      sidebar: Adw.NavigationPage {
+        title: _("Folders");
+        tag: "folders";
+
+        child: Adw.ToolbarView {
+          [top]
+          Adw.HeaderBar {
+            [start]
+            Button {
+              icon-name: "mail-message-new-symbolic";
+              tooltip-text: _("New Message (Ctrl+N)");
+              action-name: "app.compose";
+            }
+
+            [end]
+            MenuButton {
+              icon-name: "open-menu-symbolic";
+              tooltip-text: _("Main Menu");
+              menu-model: primary_menu;
+              primary: true;
+            }
           }
 
-          [end]
-          MenuButton {
-            icon-name: "open-menu-symbolic";
-            tooltip-text: _("Main Menu");
-            menu-model: primary_menu;
-            primary: true;
-          }
-        }
+          // "folders" is the list; "status" replaces it while there is
+          // nothing to list (no account, loading, error).
+          content: Stack folder_stack {
+            StackPage {
+              name: "folders";
 
-        // "folders" is the list; "status" replaces it while there is
-        // nothing to list (no account, loading, error).
-        content: Stack folder_stack {
-          StackPage {
-            name: "folders";
+              child: ScrolledWindow {
+                hscrollbar-policy: never;
 
-            child: ScrolledWindow {
-              hscrollbar-policy: never;
+                // folder-list carries the sidebar's density (ui/internal/style);
+                // the message list below shares navigation-sidebar and must not
+                // be caught by those rules.
+                child: ListBox folder_list {
+                  styles [
+                    "navigation-sidebar",
+                    "folder-list",
+                  ]
+                };
+              };
+            }
 
-              // folder-list carries the sidebar's density (ui/internal/style);
-              // the message list below shares navigation-sidebar and must not
-              // be caught by those rules.
-              child: ListBox folder_list {
+            StackPage {
+              name: "status";
+
+              child: Adw.StatusPage folder_status_page {};
+            }
+          };
+
+          // One line for the state of every account (window/sync.go), or of
+          // the connection to the daemon while there is none; the icon shows
+          // only then. The line opens a popover with each account's state and
+          // action, and the daemon at the bottom (window/status.go). A screen
+          // reader reads the line itself, not the tooltip.
+          [bottom]
+          MenuButton status_button {
+            // TRANSLATORS: tooltip of the status line at the bottom of the
+            // folder list, which opens the state of every account.
+            tooltip-text: _("Sync Status");
+            direction: up;
+            margin-start: 6;
+            margin-end: 6;
+            margin-top: 6;
+            margin-bottom: 6;
+
+            accessibility {
+              labelled-by: sync_label;
+            }
+
+            styles [
+              "flat",
+              "status-line",
+            ]
+
+            child: Box {
+              spacing: 8;
+
+              Adw.Spinner sync_spinner {
+                visible: false;
+                valign: center;
+              }
+
+              Image connection_icon {
+                visible: false;
+              }
+
+              Label sync_label {
+                ellipsize: end;
+                xalign: 0;
+                hexpand: true;
+
                 styles [
-                  "navigation-sidebar",
-                  "folder-list",
+                  "caption",
+                  "dim-label",
                 ]
+              }
+            };
+
+            // Rows are built from Go, one per account (plus one for its
+            // unsent messages); status_daemon names the connected daemon.
+            // The clamp holds the width: a wrapping label asks for the width
+            // of its whole text, and the reasons in the rows are sentences.
+            popover: Popover status_popover {
+              child: Adw.Clamp {
+                maximum-size: 320;
+                tightening-threshold: 320;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 12;
+                  width-request: 320;
+                  margin-start: 6;
+                  margin-end: 6;
+                  margin-top: 6;
+                  margin-bottom: 6;
+
+                  ListBox status_accounts {
+                    selection-mode: none;
+
+                    styles [
+                      "boxed-list",
+                    ]
+                  }
+
+                  Label status_daemon {
+                    xalign: 0;
+                    wrap: true;
+
+                    styles [
+                      "caption",
+                      "dim-label",
+                    ]
+                  }
+                };
               };
             };
-          }
-
-          StackPage {
-            name: "status";
-
-            child: Adw.StatusPage folder_status_page {};
           }
         };
-
-        // One line for the state of every account (window/sync.go), or of
-        // the connection to the daemon while there is none; the icon shows
-        // only then. The line opens a popover with each account's state and
-        // action, and the daemon at the bottom (window/status.go). A screen
-        // reader reads the line itself, not the tooltip.
-        [bottom]
-        MenuButton status_button {
-          // TRANSLATORS: tooltip of the status line at the bottom of the
-          // folder list, which opens the state of every account.
-          tooltip-text: _("Sync Status");
-          direction: up;
-          margin-start: 6;
-          margin-end: 6;
-          margin-top: 6;
-          margin-bottom: 6;
-
-          accessibility {
-            labelled-by: sync_label;
-          }
-
-          styles [
-            "flat",
-            "status-line",
-          ]
-
-          child: Box {
-            spacing: 8;
-
-            Adw.Spinner sync_spinner {
-              visible: false;
-              valign: center;
-            }
-
-            Image connection_icon {
-              visible: false;
-            }
-
-            Label sync_label {
-              ellipsize: end;
-              xalign: 0;
-              hexpand: true;
-
-              styles [
-                "caption",
-                "dim-label",
-              ]
-            }
-          };
-
-          // Rows are built from Go, one per account (plus one for its
-          // unsent messages); status_daemon names the connected daemon.
-          // The clamp holds the width: a wrapping label asks for the width
-          // of its whole text, and the reasons in the rows are sentences.
-          popover: Popover status_popover {
-            child: Adw.Clamp {
-              maximum-size: 320;
-              tightening-threshold: 320;
-
-              child: Box {
-                orientation: vertical;
-                spacing: 12;
-                width-request: 320;
-                margin-start: 6;
-                margin-end: 6;
-                margin-top: 6;
-                margin-bottom: 6;
-
-                ListBox status_accounts {
-                  selection-mode: none;
-
-                  styles [
-                    "boxed-list",
-                  ]
-                }
-
-                Label status_daemon {
-                  xalign: 0;
-                  wrap: true;
-
-                  styles [
-                    "caption",
-                    "dim-label",
-                  ]
-                }
-              };
-            };
-          };
-        }
       };
-    };
 
-    content: Adw.NavigationPage {
-      title: _("Messages");
-      tag: "messages";
+      content: Adw.NavigationPage {
+        title: _("Messages");
+        tag: "messages";
 
-      child: Adw.NavigationSplitView inner_split {
-        min-sidebar-width: 280;
-        max-sidebar-width: 460;
-        sidebar-width-fraction: 0.38;
+        child: Adw.NavigationSplitView inner_split {
+          min-sidebar-width: 280;
+          max-sidebar-width: 460;
+          sidebar-width-fraction: 0.38;
 
-        sidebar: Adw.NavigationPage list_page {
-          title: _("Inbox");
-          tag: "list";
+          sidebar: Adw.NavigationPage list_page {
+            title: _("Inbox");
+            tag: "list";
 
-          child: Adw.ToolbarView {
-            [top]
-            Adw.HeaderBar {
-              // The selected folder, and under it its unread and total
-              // counts (window/folders.go refreshListTitle); the page's
-              // own title follows for the back button of a collapsed view.
-              title-widget: Adw.WindowTitle list_title {
-                title: _("Inbox");
-              };
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar {
+                // The selected folder, and under it its unread and total
+                // counts (window/folders.go refreshListTitle); the page's
+                // own title follows for the back button of a collapsed view.
+                title-widget: Adw.WindowTitle list_title {
+                  title: _("Inbox");
+                };
 
-              [start]
-              Button refresh_button {
-                icon-name: "view-refresh-symbolic";
-                tooltip-text: _("Check for New Mail");
-                action-name: "win.refresh";
-              }
-
-              [end]
-              ToggleButton search_button {
-                icon-name: "edit-find-symbolic";
-                tooltip-text: _("Search");
-              }
-            }
-
-            // Search over the local store (window/search.go): the entry
-            // and where it looks. The list below shows the results while
-            // the bar is open. No key-capture-widget: typing into the list
-            // must keep reaching the single-key shortcuts.
-            [top]
-            SearchBar search_bar {
-              search-mode-enabled: bind search_button.active bidirectional;
-
-              child: Box {
-                orientation: vertical;
-                spacing: 6;
-
-                SearchEntry search_entry {
-                  placeholder-text: _("Search Mail");
-                  search-delay: 300;
-                  hexpand: true;
+                [start]
+                Button refresh_button {
+                  icon-name: "view-refresh-symbolic";
+                  tooltip-text: _("Check for New Mail");
+                  action-name: "win.refresh";
                 }
 
-                Adw.ToggleGroup search_scope {
+                [end]
+                ToggleButton search_button {
+                  icon-name: "edit-find-symbolic";
+                  tooltip-text: _("Search");
+                }
+              }
+
+              // Search over the local store (window/search.go): the entry
+              // and where it looks. The list below shows the results while
+              // the bar is open. No key-capture-widget: typing into the list
+              // must keep reaching the single-key shortcuts.
+              [top]
+              SearchBar search_bar {
+                search-mode-enabled: bind search_button.active bidirectional;
+
+                child: Box {
+                  orientation: vertical;
+                  spacing: 6;
+
+                  Box {
+                    spacing: 6;
+
+                    SearchEntry search_entry {
+                      placeholder-text: _("Search Mail");
+                      search-delay: 300;
+                      hexpand: true;
+                    }
+
+                    // Search in Your Own Words (ui/internal/assistant, the
+                    // In App target): icon, tooltip and visibility from Go
+                    // (window/search_ownwords.go).
+                    Button search_own_words {
+                      visible: false;
+
+                      styles [
+                        "flat",
+                      ]
+                    }
+                  }
+
+                  Adw.ToggleGroup search_scope {
+                    halign: center;
+                    homogeneous: true;
+
+                    Adw.Toggle {
+                      name: "folder";
+                      label: C_("search scope", "Folder");
+                    }
+
+                    Adw.Toggle {
+                      name: "account";
+                      label: C_("search scope", "Account");
+                    }
+
+                    Adw.Toggle {
+                      name: "all";
+                      label: C_("search scope", "All Accounts");
+                    }
+
+                    styles [
+                      "flat",
+                      "message-filter",
+                    ]
+                  }
+                };
+              }
+
+              content: Box {
+                orientation: vertical;
+
+                Adw.Banner backend_banner {
+                  title: _("The mail backend (malachid) is not running.");
+                  button-label: _("Retry");
+                  revealed: false;
+                }
+
+                // Title is set from Go (account and reason) on
+                // notify.authRequired; the button opens the preferences.
+                Adw.Banner auth_banner {
+                  button-label: _("Open Preferences");
+                  revealed: false;
+                }
+
+                // Title is set from Go (sync.go) for the first account whose
+                // server certificate is refused or has changed
+                // (certtrust.FromSyncState); the button opens the account's
+                // settings, where the certificate can be trusted.
+                Adw.Banner cert_banner {
+                  // TRANSLATORS: banner button
+                  button-label: _("_Edit Account…");
+                  revealed: false;
+                }
+
+                // Narrows the list to unread or flagged messages. The filter
+                // is applied by the backend (message.list "filter") so the
+                // paging cursor and page.total stay consistent; it is global
+                // for the session and resets to All on restart.
+                Adw.ToggleGroup message_filter {
                   halign: center;
+                  margin-top: 4;
+                  margin-bottom: 4;
                   homogeneous: true;
 
                   Adw.Toggle {
-                    name: "folder";
-                    label: C_("search scope", "Folder");
-                  }
-
-                  Adw.Toggle {
-                    name: "account";
-                    label: C_("search scope", "Account");
-                  }
-
-                  Adw.Toggle {
                     name: "all";
-                    label: C_("search scope", "All Accounts");
+                    label: _("All");
+                  }
+
+                  Adw.Toggle {
+                    name: "unread";
+                    // TRANSLATORS: a filter over the message list, not an
+                    // action: show only the messages that are unread.
+                    label: _("Unread");
+                  }
+
+                  Adw.Toggle {
+                    name: "flagged";
+                    // TRANSLATORS: a filter over the message list, not an
+                    // action: show only the messages carrying the flagged
+                    // (starred, follow-up) mark.
+                    label: _("Flagged");
                   }
 
                   styles [
@@ -254,609 +357,564 @@ Adw.ApplicationWindow main_window {
                     "message-filter",
                   ]
                 }
-              };
-            }
 
-            content: Box {
-              orientation: vertical;
+                // "messages" is the list with its Load More footer; "status"
+                // replaces it for empty / loading / error states.
+                Stack list_stack {
+                  vexpand: true;
 
-              Adw.Banner backend_banner {
-                title: _("The mail backend (malachid) is not running.");
-                button-label: _("Retry");
-                revealed: false;
-              }
-
-              // Title is set from Go (account and reason) on
-              // notify.authRequired; the button opens the preferences.
-              Adw.Banner auth_banner {
-                button-label: _("Open Preferences");
-                revealed: false;
-              }
-
-              // Title is set from Go (sync.go) for the first account whose
-              // server certificate is refused or has changed
-              // (certtrust.FromSyncState); the button opens the account's
-              // settings, where the certificate can be trusted.
-              Adw.Banner cert_banner {
-                // TRANSLATORS: banner button
-                button-label: _("_Edit Account…");
-                revealed: false;
-              }
-
-              // Narrows the list to unread or flagged messages. The filter
-              // is applied by the backend (message.list "filter") so the
-              // paging cursor and page.total stay consistent; it is global
-              // for the session and resets to All on restart.
-              Adw.ToggleGroup message_filter {
-                halign: center;
-                margin-top: 4;
-                margin-bottom: 4;
-                homogeneous: true;
-
-                Adw.Toggle {
-                  name: "all";
-                  label: _("All");
-                }
-
-                Adw.Toggle {
-                  name: "unread";
-                  // TRANSLATORS: a filter over the message list, not an
-                  // action: show only the messages that are unread.
-                  label: _("Unread");
-                }
-
-                Adw.Toggle {
-                  name: "flagged";
-                  // TRANSLATORS: a filter over the message list, not an
-                  // action: show only the messages carrying the flagged
-                  // (starred, follow-up) mark.
-                  label: _("Flagged");
-                }
-
-                styles [
-                  "flat",
-                  "message-filter",
-                ]
-              }
-
-              // "messages" is the list with its Load More footer; "status"
-              // replaces it for empty / loading / error states.
-              Stack list_stack {
-                vexpand: true;
-
-                StackPage {
-                  name: "messages";
-
-                  child: Box {
-                    orientation: vertical;
-
-                    ScrolledWindow list_scroller {
-                      hscrollbar-policy: never;
-                      vexpand: true;
-
-                      child: ListBox message_list {
-                        // Single click selects (preview in the right pane);
-                        // double-click or Enter activates (opens a window).
-                        activate-on-single-click: false;
-
-                        // A hairline between messages, in the theme's border
-                        // colour. The rows are squared off in the application
-                        // CSS (see ui/internal/style) so the line runs
-                        // straight across instead of following the rounded
-                        // corners the sidebar style gives them.
-                        show-separators: true;
-
-                        styles [
-                          "navigation-sidebar",
-                          "message-list",
-                        ]
-                      };
-                    }
-
-                    Box {
-                      orientation: horizontal;
-                      halign: center;
-                      spacing: 6;
-                      margin-top: 6;
-                      margin-bottom: 6;
-
-                      Button load_more_button {
-                        label: _("Load More");
-                        visible: false;
-
-                        styles [
-                          "flat",
-                        ]
-                      }
-
-                      Adw.Spinner load_more_spinner {
-                        visible: false;
-                      }
-                    }
-
-                    // Under the last page of search results: how far back
-                    // the local store reaches (window/search.go).
-                    Label search_note {
-                      visible: false;
-                      wrap: true;
-                      justify: center;
-                      margin-start: 12;
-                      margin-end: 12;
-                      margin-bottom: 6;
-
-                      styles [
-                        "caption",
-                        "dim-label",
-                      ]
-                    }
-                  };
-                }
-
-                StackPage {
-                  name: "status";
-
-                  child: Adw.StatusPage list_status_page {
-                    child: Button list_retry_button {
-                      label: _("Try Again");
-                      visible: false;
-                      halign: center;
-
-                      styles [
-                        "pill",
-                      ]
-                    };
-                  };
-                }
-              }
-            };
-          };
-        };
-
-        content: Adw.NavigationPage message_page {
-          title: _("Message");
-          tag: "message";
-
-          child: Adw.ToolbarView {
-            [top]
-            Adw.HeaderBar {
-              // Enabled from Go while a message is selected; the buttons
-              // with an action-name follow the win.* action's enabled state.
-
-              [start]
-              Button reply_button {
-                icon-name: "mail-reply-sender-symbolic";
-                tooltip-text: _("Reply");
-                sensitive: false;
-              }
-
-              [start]
-              Button reply_all_button {
-                icon-name: "mail-reply-all-symbolic";
-                tooltip-text: _("Reply All");
-                sensitive: false;
-              }
-
-              [start]
-              Button forward_button {
-                icon-name: "mail-forward-symbolic";
-                tooltip-text: _("Forward");
-                sensitive: false;
-              }
-
-              // [end] packs right to left: the first child is rightmost.
-
-              [end]
-              MenuButton message_menu {
-                icon-name: "view-more-symbolic";
-                tooltip-text: _("More Actions");
-                menu-model: message_menu_model;
-              }
-
-              [end]
-              ToggleButton star_button {
-                icon-name: "non-starred-symbolic";
-                tooltip-text: _("Star");
-                sensitive: false;
-              }
-
-              [end]
-              Button archive_button {
-                icon-name: "folder-download-symbolic";
-                tooltip-text: _("Archive");
-                action-name: "win.archive";
-              }
-
-              [end]
-              Button junk_button {
-                icon-name: "mail-mark-junk-symbolic";
-                tooltip-text: _("Mark as Junk");
-                action-name: "win.junk";
-              }
-
-              [end]
-              Button trash_button {
-                icon-name: "user-trash-symbolic";
-                tooltip-text: _("Move to Trash");
-                action-name: "win.trash";
-              }
-            }
-
-            // Delivery state of a message in the outbox (title and button
-            // set from Go, see window/outbox.go); hidden otherwise.
-            [top]
-            Adw.Banner outbox_banner {
-              revealed: false;
-            }
-
-            // A message of the Drafts folder: the button opens it in the
-            // compose window (window/drafts.go); double-click does too.
-            [top]
-            Adw.Banner draft_banner {
-              title: _("This message is a draft");
-              button-label: _("Edit");
-              use-markup: false;
-              revealed: false;
-            }
-
-            // Remote images the sanitiser removed from an HTML message
-            // (window/remote.go): the count, a button that loads them
-            // through the daemon for this message, and one that trusts the
-            // sender. Adw.Banner has room for one button, hence a bar of
-            // our own. While the daemon fetches, the spinner replaces the
-            // buttons.
-            [top]
-            Box remote_bar {
-              orientation: horizontal;
-              spacing: 12;
-              visible: false;
-
-              styles [
-                "toolbar",
-                "remote-bar",
-              ]
-
-              Adw.Spinner remote_spinner {
-                visible: false;
-                valign: center;
-              }
-
-              Label remote_label {
-                xalign: 0;
-                wrap: true;
-                hexpand: true;
-              }
-
-              Button remote_load {
-                label: _("Load _Images");
-                use-underline: true;
-              }
-
-              Button remote_trust {
-                label: _("Always From This _Sender");
-                use-underline: true;
-                tooltip-text: _("Load remote images now and whenever this sender writes");
-              }
-            }
-
-            // Pictures the HTML shows that are kept on the mail server only
-            // (neverStoreAttachments; window/remote.go): the count and a
-            // button that has the daemon download the message, after which
-            // the body is asked for again. The spinner replaces the button
-            // meanwhile. Shown under remote_bar when both apply.
-            [top]
-            Box pictures_bar {
-              orientation: horizontal;
-              spacing: 12;
-              visible: false;
-
-              styles [
-                "toolbar",
-                "remote-bar",
-              ]
-
-              Adw.Spinner pictures_spinner {
-                visible: false;
-                valign: center;
-              }
-
-              Label pictures_label {
-                xalign: 0;
-                wrap: true;
-                hexpand: true;
-              }
-
-              Button pictures_download {
-                label: _("_Download Pictures");
-                use-underline: true;
-              }
-            }
-
-            content: Adw.ToastOverlay toast_overlay {
-              child: Stack message_stack {
-                transition-type: crossfade;
-
-                StackPage {
-                  name: "empty";
-
-                  child: Adw.StatusPage {
-                    icon-name: "mail-unread-symbolic";
-                    title: _("No Message Selected");
-                    description: _("Select a message to read it here.");
-                  };
-                }
-
-                // Shown instead of "empty" while account.list is empty.
-                StackPage {
-                  name: "no-accounts";
-
-                  child: Adw.StatusPage no_accounts_page {
-                    icon-name: "system-users-symbolic";
-                    title: _("No Accounts");
-                    description: _("Add a mail account to start reading and sending mail.");
+                  StackPage {
+                    name: "messages";
 
                     child: Box {
                       orientation: vertical;
-                      spacing: 12;
-                      halign: center;
 
-                      Button {
-                        label: _("_Add Account…");
-                        use-underline: true;
-                        halign: center;
-                        action-name: "app.add-account";
+                      ScrolledWindow list_scroller {
+                        hscrollbar-policy: never;
+                        vexpand: true;
 
-                        styles [
-                          "suggested-action",
-                          "pill",
-                        ]
+                        child: ListBox message_list {
+                          // Single click selects (preview in the right pane);
+                          // double-click or Enter activates (opens a window).
+                          activate-on-single-click: false;
+
+                          // A hairline between messages, in the theme's border
+                          // colour. The rows are squared off in the application
+                          // CSS (see ui/internal/style) so the line runs
+                          // straight across instead of following the rounded
+                          // corners the sidebar style gives them.
+                          show-separators: true;
+
+                          styles [
+                            "navigation-sidebar",
+                            "message-list",
+                          ]
+                        };
                       }
 
-                      // An issue tracker instead (the Jira assistant).
-                      Button {
-                        label: _("Add _Jira Account…");
-                        use-underline: true;
+                      Box {
+                        orientation: horizontal;
                         halign: center;
-                        action-name: "app.add-jira-account";
+                        spacing: 6;
+                        margin-top: 6;
+                        margin-bottom: 6;
+
+                        Button load_more_button {
+                          label: _("Load More");
+                          visible: false;
+
+                          styles [
+                            "flat",
+                          ]
+                        }
+
+                        Adw.Spinner load_more_spinner {
+                          visible: false;
+                        }
+                      }
+
+                      // Under the last page of search results: how far back
+                      // the local store reaches (window/search.go).
+                      Label search_note {
+                        visible: false;
+                        wrap: true;
+                        justify: center;
+                        margin-start: 12;
+                        margin-end: 12;
+                        margin-bottom: 6;
 
                         styles [
-                          "flat",
-                          "pill",
+                          "caption",
+                          "dim-label",
                         ]
                       }
                     };
-                  };
+                  }
+
+                  StackPage {
+                    name: "status";
+
+                    child: Adw.StatusPage list_status_page {
+                      child: Button list_retry_button {
+                        label: _("Try Again");
+                        visible: false;
+                        halign: center;
+
+                        styles [
+                          "pill",
+                        ]
+                      };
+                    };
+                  }
+                }
+              };
+            };
+          };
+
+          content: Adw.NavigationPage message_page {
+            title: _("Message");
+            tag: "message";
+
+            child: Adw.ToolbarView {
+              [top]
+              Adw.HeaderBar {
+                // Enabled from Go while a message is selected; the buttons
+                // with an action-name follow the win.* action's enabled state.
+
+                [start]
+                Button reply_button {
+                  icon-name: "mail-reply-sender-symbolic";
+                  tooltip-text: _("Reply");
+                  sensitive: false;
                 }
 
-                // The headers stay put at the top; the body below scrolls
-                // on its own, because a WebKit view scrolls itself and
-                // would have no height inside a scrolled window.
-                StackPage {
-                  name: "message";
+                [start]
+                Button reply_all_button {
+                  icon-name: "mail-reply-all-symbolic";
+                  tooltip-text: _("Reply All");
+                  sensitive: false;
+                }
 
-                  child: Box {
-                    orientation: vertical;
+                [start]
+                Button forward_button {
+                  icon-name: "mail-forward-symbolic";
+                  tooltip-text: _("Forward");
+                  sensitive: false;
+                }
 
-                    Adw.Clamp {
-                      maximum-size: 900;
-                      // Equal to the maximum: min(width, 900), the width htmlview's
-                      // baseCSS gives an HTML body, so its text lines up with these.
-                      tightening-threshold: 900;
+                // [end] packs right to left: the first child is rightmost.
+
+                [end]
+                MenuButton message_menu {
+                  icon-name: "view-more-symbolic";
+                  tooltip-text: _("More Actions");
+                  menu-model: message_menu_model;
+                }
+
+                // The Assistant (ui/internal/assistant): icon, tooltip, menu
+                // and visibility come from Go (window/assistant.go).
+                [end]
+                MenuButton assistant_button {
+                  visible: false;
+                }
+
+                // Opens and folds the assistant panel; tooltip and visibility
+                // from Go (window/assistant_panel.go).
+                [end]
+                ToggleButton assistant_panel_button {
+                  icon-name: "sidebar-show-right-symbolic";
+                  visible: false;
+                  active: bind assistant_split.show-sidebar bidirectional;
+                }
+
+                [end]
+                ToggleButton star_button {
+                  icon-name: "non-starred-symbolic";
+                  tooltip-text: _("Star");
+                  sensitive: false;
+                }
+
+                [end]
+                Button archive_button {
+                  icon-name: "folder-download-symbolic";
+                  tooltip-text: _("Archive");
+                  action-name: "win.archive";
+                }
+
+                [end]
+                Button junk_button {
+                  icon-name: "mail-mark-junk-symbolic";
+                  tooltip-text: _("Mark as Junk");
+                  action-name: "win.junk";
+                }
+
+                [end]
+                Button trash_button {
+                  icon-name: "user-trash-symbolic";
+                  tooltip-text: _("Move to Trash");
+                  action-name: "win.trash";
+                }
+              }
+
+              // Delivery state of a message in the outbox (title and button
+              // set from Go, see window/outbox.go); hidden otherwise.
+              [top]
+              Adw.Banner outbox_banner {
+                revealed: false;
+              }
+
+              // A message of the Drafts folder: the button opens it in the
+              // compose window (window/drafts.go); double-click does too.
+              [top]
+              Adw.Banner draft_banner {
+                title: _("This message is a draft");
+                button-label: _("Edit");
+                use-markup: false;
+                revealed: false;
+              }
+
+              // Remote images the sanitiser removed from an HTML message
+              // (window/remote.go): the count, a button that loads them
+              // through the daemon for this message, and one that trusts the
+              // sender. Adw.Banner has room for one button, hence a bar of
+              // our own. While the daemon fetches, the spinner replaces the
+              // buttons.
+              [top]
+              Box remote_bar {
+                orientation: horizontal;
+                spacing: 12;
+                visible: false;
+
+                styles [
+                  "toolbar",
+                  "remote-bar",
+                ]
+
+                Adw.Spinner remote_spinner {
+                  visible: false;
+                  valign: center;
+                }
+
+                Label remote_label {
+                  xalign: 0;
+                  wrap: true;
+                  hexpand: true;
+                }
+
+                Button remote_load {
+                  label: _("Load _Images");
+                  use-underline: true;
+                }
+
+                Button remote_trust {
+                  label: _("Always From This _Sender");
+                  use-underline: true;
+                  tooltip-text: _("Load remote images now and whenever this sender writes");
+                }
+              }
+
+              // Pictures the HTML shows that are kept on the mail server only
+              // (neverStoreAttachments; window/remote.go): the count and a
+              // button that has the daemon download the message, after which
+              // the body is asked for again. The spinner replaces the button
+              // meanwhile. Shown under remote_bar when both apply.
+              [top]
+              Box pictures_bar {
+                orientation: horizontal;
+                spacing: 12;
+                visible: false;
+
+                styles [
+                  "toolbar",
+                  "remote-bar",
+                ]
+
+                Adw.Spinner pictures_spinner {
+                  visible: false;
+                  valign: center;
+                }
+
+                Label pictures_label {
+                  xalign: 0;
+                  wrap: true;
+                  hexpand: true;
+                }
+
+                Button pictures_download {
+                  label: _("_Download Pictures");
+                  use-underline: true;
+                }
+              }
+
+              content: Adw.ToastOverlay toast_overlay {
+                child: Stack message_stack {
+                  transition-type: crossfade;
+
+                  StackPage {
+                    name: "empty";
+
+                    child: Adw.StatusPage {
+                      icon-name: "mail-unread-symbolic";
+                      title: _("No Message Selected");
+                      description: _("Select a message to read it here.");
+                    };
+                  }
+
+                  // Shown instead of "empty" while account.list is empty.
+                  StackPage {
+                    name: "no-accounts";
+
+                    child: Adw.StatusPage no_accounts_page {
+                      icon-name: "system-users-symbolic";
+                      title: _("No Accounts");
+                      description: _("Add a mail account to start reading and sending mail.");
 
                       child: Box {
                         orientation: vertical;
                         spacing: 12;
-                        margin-start: 24;
-                        margin-end: 24;
-                        margin-top: 24;
+                        halign: center;
 
-                        // The issue card of a Jira message (window/issue_card.go), built
-                        // from Go; hidden for mail.
-                        Box issue_card_slot {
-                          orientation: vertical;
-                        }
-
-                        Label message_subject {
-                          xalign: 0;
-                          wrap: true;
-                          selectable: true;
+                        Button {
+                          label: _("_Add Account…");
+                          use-underline: true;
+                          halign: center;
+                          action-name: "app.add-account";
 
                           styles [
-                            "title-2",
+                            "suggested-action",
+                            "pill",
                           ]
                         }
 
-                        // Sender and recipients as chips, built from Go
-                        // (window/addresses.go); a row without addresses is hidden.
-                        Grid message_addresses {
-                          column-spacing: 12;
-                          row-spacing: 6;
-
-                          Label message_from_label {
-                            label: _("From");
-                            xalign: 0;
-                            valign: start;
-
-                            layout {
-                              column: 0;
-                              row: 0;
-                            }
-
-                            styles [
-                              "dim-label",
-                              "address-label",
-                            ]
-                          }
-
-                          Adw.WrapBox message_from {
-                            child-spacing: 4;
-                            line-spacing: 4;
-                            hexpand: true;
-
-                            layout {
-                              column: 1;
-                              row: 0;
-                            }
-                          }
-
-                          Label message_to_label {
-                            label: _("To");
-                            xalign: 0;
-                            valign: start;
-                            visible: false;
-
-                            layout {
-                              column: 0;
-                              row: 1;
-                            }
-
-                            styles [
-                              "dim-label",
-                              "address-label",
-                            ]
-                          }
-
-                          Adw.WrapBox message_to {
-                            child-spacing: 4;
-                            line-spacing: 4;
-                            hexpand: true;
-                            visible: false;
-
-                            layout {
-                              column: 1;
-                              row: 1;
-                            }
-                          }
-
-                          Label message_cc_label {
-                            label: _("Cc");
-                            xalign: 0;
-                            valign: start;
-                            visible: false;
-
-                            layout {
-                              column: 0;
-                              row: 2;
-                            }
-
-                            styles [
-                              "dim-label",
-                              "address-label",
-                            ]
-                          }
-
-                          Adw.WrapBox message_cc {
-                            child-spacing: 4;
-                            line-spacing: 4;
-                            hexpand: true;
-                            visible: false;
-
-                            layout {
-                              column: 1;
-                              row: 2;
-                            }
-                          }
-                        }
-
-                        Label message_date {
-                          xalign: 0;
+                        // An issue tracker instead (the Jira assistant).
+                        Button {
+                          label: _("Add _Jira Account…");
+                          use-underline: true;
+                          halign: center;
+                          action-name: "app.add-jira-account";
 
                           styles [
-                            "caption",
-                            "dim-label",
+                            "flat",
+                            "pill",
                           ]
                         }
-
-                        // Attachment chips, built from Go
-                        // (window/attachments.go); hidden without any.
-                        Adw.WrapBox message_attachments {
-                          child-spacing: 6;
-                          line-spacing: 6;
-                          visible: false;
-                        }
-
-                        // Why only the plain text is shown; hidden otherwise.
-                        Label body_hint {
-                          xalign: 0;
-                          wrap: true;
-                          visible: false;
-
-                          styles [
-                            "caption",
-                            "dim-label",
-                          ]
-                        }
-
-                        Separator {}
                       };
-                    }
+                    };
+                  }
 
-                    // "text": the plain-text body; "html": the sanitised
-                    // HTML in a WebKit view appended from Go when the
-                    // first HTML message is shown (window/message_view.go).
-                    Stack body_stack {
-                      vexpand: true;
+                  // The headers stay put at the top; the body below scrolls
+                  // on its own, because a WebKit view scrolls itself and
+                  // would have no height inside a scrolled window.
+                  StackPage {
+                    name: "message";
 
-                      StackPage {
-                        name: "text";
+                    child: Box {
+                      orientation: vertical;
 
-                        child: ScrolledWindow {
-                          hscrollbar-policy: never;
+                      Adw.Clamp {
+                        maximum-size: 900;
+                        // Equal to the maximum: min(width, 900), the width htmlview's
+                        // baseCSS gives an HTML body, so its text lines up with these.
+                        tightening-threshold: 900;
 
-                          child: Adw.Clamp {
-                            maximum-size: 900;
-                            tightening-threshold: 900;
+                        child: Box {
+                          orientation: vertical;
+                          spacing: 12;
+                          margin-start: 24;
+                          margin-end: 24;
+                          margin-top: 24;
 
-                            child: Label message_body {
+                          // The issue card of a Jira message (window/issue_card.go), built
+                          // from Go; hidden for mail.
+                          Box issue_card_slot {
+                            orientation: vertical;
+                          }
+
+                          Label message_subject {
+                            xalign: 0;
+                            wrap: true;
+                            selectable: true;
+
+                            styles [
+                              "title-2",
+                            ]
+                          }
+
+                          // Sender and recipients as chips, built from Go
+                          // (window/addresses.go); a row without addresses is hidden.
+                          Grid message_addresses {
+                            column-spacing: 12;
+                            row-spacing: 6;
+
+                            Label message_from_label {
+                              label: _("From");
                               xalign: 0;
-                              yalign: 0;
-                              wrap: true;
-                              wrap-mode: word_char;
-                              selectable: true;
-                              vexpand: true;
-                              margin-start: 24;
-                              margin-end: 24;
-                              margin-top: 12;
-                              margin-bottom: 24;
-                              // Zoom and font come from ui/internal/style.
+                              valign: start;
+
+                              layout {
+                                column: 0;
+                                row: 0;
+                              }
+
                               styles [
-                                "message-body",
+                                "dim-label",
+                                "address-label",
                               ]
+                            }
+
+                            Adw.WrapBox message_from {
+                              child-spacing: 4;
+                              line-spacing: 4;
+                              hexpand: true;
+
+                              layout {
+                                column: 1;
+                                row: 0;
+                              }
+                            }
+
+                            Label message_to_label {
+                              label: _("To");
+                              xalign: 0;
+                              valign: start;
+                              visible: false;
+
+                              layout {
+                                column: 0;
+                                row: 1;
+                              }
+
+                              styles [
+                                "dim-label",
+                                "address-label",
+                              ]
+                            }
+
+                            Adw.WrapBox message_to {
+                              child-spacing: 4;
+                              line-spacing: 4;
+                              hexpand: true;
+                              visible: false;
+
+                              layout {
+                                column: 1;
+                                row: 1;
+                              }
+                            }
+
+                            Label message_cc_label {
+                              label: _("Cc");
+                              xalign: 0;
+                              valign: start;
+                              visible: false;
+
+                              layout {
+                                column: 0;
+                                row: 2;
+                              }
+
+                              styles [
+                                "dim-label",
+                                "address-label",
+                              ]
+                            }
+
+                            Adw.WrapBox message_cc {
+                              child-spacing: 4;
+                              line-spacing: 4;
+                              hexpand: true;
+                              visible: false;
+
+                              layout {
+                                column: 1;
+                                row: 2;
+                              }
+                            }
+                          }
+
+                          Label message_date {
+                            xalign: 0;
+
+                            styles [
+                              "caption",
+                              "dim-label",
+                            ]
+                          }
+
+                          // Attachment chips, built from Go
+                          // (window/attachments.go); hidden without any.
+                          Adw.WrapBox message_attachments {
+                            child-spacing: 6;
+                            line-spacing: 6;
+                            visible: false;
+                          }
+
+                          // Why only the plain text is shown; hidden otherwise.
+                          Label body_hint {
+                            xalign: 0;
+                            wrap: true;
+                            visible: false;
+
+                            styles [
+                              "caption",
+                              "dim-label",
+                            ]
+                          }
+
+                          Separator {}
+                        };
+                      }
+
+                      // "text": the plain-text body; "html": the sanitised
+                      // HTML in a WebKit view appended from Go when the
+                      // first HTML message is shown (window/message_view.go).
+                      Stack body_stack {
+                        vexpand: true;
+
+                        StackPage {
+                          name: "text";
+
+                          child: ScrolledWindow {
+                            hscrollbar-policy: never;
+
+                            child: Adw.Clamp {
+                              maximum-size: 900;
+                              tightening-threshold: 900;
+
+                              child: Label message_body {
+                                xalign: 0;
+                                yalign: 0;
+                                wrap: true;
+                                wrap-mode: word_char;
+                                selectable: true;
+                                vexpand: true;
+                                margin-start: 24;
+                                margin-end: 24;
+                                margin-top: 12;
+                                margin-bottom: 24;
+                                // Zoom and font come from ui/internal/style.
+                                styles [
+                                  "message-body",
+                                ]
+                              };
                             };
                           };
-                        };
+                        }
+
+                        StackPage {
+                          name: "loading";
+
+                          child: Adw.Spinner body_spinner {
+                            halign: center;
+                            valign: center;
+                            width-request: 32;
+                            height-request: 32;
+
+                            accessibility {
+                              label: C_("accessibility", "Loading the message");
+                            }
+                          };
+                        }
+
+                        StackPage {
+                          name: "html";
+
+                          child: Box html_slot {
+                            orientation: vertical;
+                          };
+                        }
                       }
-
-                      StackPage {
-                        name: "loading";
-
-                        child: Adw.Spinner body_spinner {
-                          halign: center;
-                          valign: center;
-                          width-request: 32;
-                          height-request: 32;
-
-                          accessibility {
-                            label: C_("accessibility", "Loading the message");
-                          }
-                        };
-                      }
-
-                      StackPage {
-                        name: "html";
-
-                        child: Box html_slot {
-                          orientation: vertical;
-                        };
-                      }
-                    }
-                  };
-                }
+                    };
+                  }
+                };
               };
             };
           };
         };
       };
     };
+
+    sidebar: Adw.Bin assistant_panel_bin {};
   };
 }
 

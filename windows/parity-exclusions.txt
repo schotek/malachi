@@ -48,6 +48,16 @@ Show sender avatars in the message list	gschema: a key's summary or description,
 Draw avatars in neutral grey instead of per-sender colours	gschema: a key's summary or description, for dconf editors, not the UI
 Use a monospace font for plain-text message bodies	gschema: a key's summary or description, for dconf editors, not the UI
 Message body text zoom in percent	gschema: a key's summary or description, for dconf editors, not the UI
+Show the Assistant menu that hands mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
+The menu opens Claude Desktop or Claude Code on this computer with a prepared question about the selected mail.	gschema: a key's summary or description, for dconf editors, not the UI
+Where the Assistant menu opens Claude	gschema: a key's summary or description, for dconf editors, not the UI
+Claude Desktop, Claude Code in a terminal, or the panel in the app; the last choice made in the Assistant menu or in the settings.	gschema: a key's summary or description, for dconf editors, not the UI
+The model the assistant panel uses	gschema: a key's summary or description, for dconf editors, not the UI
+Sonnet, Haiku or Opus, passed to Claude Code.	gschema: a key's summary or description, for dconf editors, not the UI
+Where Claude Code is	gschema: a key's summary or description, for dconf editors, not the UI
+The claude executable the assistant panel runs; empty looks in the usual places.	gschema: a key's summary or description, for dconf editors, not the UI
+The assistant panel may send mail to Claude	gschema: a key's summary or description, for dconf editors, not the UI
+Set when the user allowed it the first time.	gschema: a key's summary or description, for dconf editors, not the UI
 Email Client	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the installer's metadata comes before a release (docs/windows-port.md §17)
 Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
@@ -65,6 +75,7 @@ folder\004Open	Jira account: macOS first
 Open %s in the Browser	Jira account: macOS first
 Status	Jira account: macOS first
 Unassigned	Jira account: macOS first
+jira value\004None	Jira account: macOS first
 Assignee	Jira account: macOS first
 Priority	Jira account: macOS first
 Type	Jira account: macOS first

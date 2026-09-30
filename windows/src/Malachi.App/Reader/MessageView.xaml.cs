@@ -143,6 +143,9 @@ public sealed partial class MessageView : UserControl
     /// <summary>What the view shows.</summary>
     public ReaderController Reader { get; }
 
+    /// <summary>The Assistant's ✦ button of a message window's command row (message_window.blp assistant_button).</summary>
+    public AppBarButton Assistant => AssistantButton;
+
     /// <summary>The window the view is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow { get; set; }
 
@@ -702,6 +705,26 @@ public sealed partial class MessageView : UserControl
         MnemonicLabel.Apply(save, L10n.T("Save _As…"));
         save.Click += (_, _) => _ = services.Attachments.SaveAsAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
         menu.Items.Add(open);
+        // assistant.go bindAskItem: "Ask the Assistant…" while the Assistant
+        // is shown, enabled while the chosen target can take the file (for
+        // In App, a type the bridge reads); looked at again as the menu opens.
+        var ask = new MenuFlyoutItem { Text = Core.Assistants.Assistant.Texts().AskFile };
+        ask.Click += (_, _) => services.State.MainWindow?.AssistantActions?.AskAboutAttachment(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
+        menu.Opening += (_, _) =>
+        {
+            var assistant = services.State.Assistant;
+            assistant.RefreshHandlers();
+            var shown = assistant.Shown;
+            if (shown && !menu.Items.Contains(ask))
+            {
+                menu.Items.Insert(menu.Items.IndexOf(open) + 1, ask);
+            }
+            else if (!shown)
+            {
+                menu.Items.Remove(ask);
+            }
+            ask.IsEnabled = assistant.CanAskFile(chip.Attachment.ContentType);
+        };
         menu.Items.Add(save);
         button.Flyout = menu;
         button.Click += (_, _) =>

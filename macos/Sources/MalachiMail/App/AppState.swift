@@ -17,6 +17,9 @@ final class AppState {
     struct Hooks {
         /// Opens the Settings window (`app.preferences`).
         var openPreferences: (@MainActor () -> Void)?
+        /// Opens the Settings window on the AI page: the Assistant menu's
+        /// "Set Up the Assistant…".
+        var openAISettings: (@MainActor () -> Void)?
         /// Opens the account wizard as a sheet on `window` (`app.add-account`).
         var addAccount: (@MainActor (NSWindow?) -> Void)?
         /// Opens an empty compose window (`app.compose`).
@@ -60,6 +63,21 @@ final class AppState {
     let alerts: any Alerts
     let windows: WindowRegistry
     let notifications: NotificationHub
+    /// What the Assistant menu may use (ui/internal/assistant): the Claude
+    /// apps' link handlers, the user's Claude Code for the panel and the
+    /// bridge's registration in them.
+    let assistant: AssistantController
+    /// Finds the user's Claude Code and asks its version and sign-in, for
+    /// the assistant panel, its availability and Settings → AI (one
+    /// instance, so their answers are shared).
+    let claudeCode: ClaudeCodeLocator
+    /// Claude Desktop around a change of "Register with Claude": the offer
+    /// to restart it and the change it still has to pick up, for the
+    /// application's run (docs/mcp.md; macOS leads, GTK follows).
+    let claudeDesktop: ClaudeDesktopController
+    /// Whether Claude Desktop runs, quitting and starting it, and its
+    /// termination, for `claudeDesktop`.
+    private let claudeDesktopService: ClaudeDesktopService
 
     var hooks = Hooks()
 
@@ -76,6 +94,27 @@ final class AppState {
         windows = WindowRegistry()
         notifications = NotificationHub()
         notifications.attach(to: connection)
+        let claudeCode = ClaudeCodeLocator(settings: settings, directory: ClaudeCodeLocator.defaultDirectory)
+        self.claudeCode = claudeCode
+        let assistant = AssistantController(
+            bridge: paths.mcpBridge?.path, settings: settings, locator: claudeCode, handler: Self.handlesScheme)
+        self.assistant = assistant
+        let service = ClaudeDesktopService()
+        claudeDesktopService = service
+        let desktop = ClaudeDesktopController(bridge: paths.mcpBridge?.path, platform: service.platform)
+        claudeDesktop = desktop
+        // Every status a write of it reports reaches the Assistant menus;
+        // Claude Desktop quitting by itself writes what it still has to get.
+        desktop.onStatus = { [weak assistant] s in assistant?.apply(s) }
+        service.onTerminate = { [weak desktop] in desktop?.terminated() }
+    }
+
+    /// Whether an application handles links of `scheme` (LaunchServices),
+    /// for `AssistantController`: Claude Desktop registers `claude:`,
+    /// Claude Code `claude-cli:` once it was used in a terminal.
+    private static func handlesScheme(_ scheme: String) -> Bool {
+        guard let url = URL(string: scheme + "://") else { return false }
+        return NSWorkspace.shared.urlForApplication(toOpen: url) != nil
     }
 
     /// Presents the main window (a hidden one comes back: "Run in

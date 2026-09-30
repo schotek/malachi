@@ -130,6 +130,21 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("box.attachment-chip label.chip-name, button.chip-action label { font-size: 90%; }\n")
 	b.WriteString("box.attachment-chip label.chip-size { font-size: 80%; }\n")
 	b.WriteString("box.attachment-chip menubutton.chip-arrow > button { min-width: 16px; padding-left: 2px; padding-right: 2px; }\n")
+	// The assistant panel (window/assistant_panel.go): the context chip is a
+	// pill with its remove button inside it; the user's questions a tinted
+	// bubble, the cards (the draft, the bar "Another message is selected")
+	// a faint one; the answers are text views on the panel's own
+	// background; the question field is a rounded box that grows to five
+	// lines.
+	b.WriteString("box.assistant-chip { background-color: alpha(@window_fg_color, 0.07); border-radius: 99px; padding: 2px 3px 2px 10px; }\n")
+	b.WriteString("box.assistant-chip label { font-size: 90%; }\n")
+	b.WriteString("box.assistant-chip image { -gtk-icon-size: 14px; }\n")
+	b.WriteString("box.assistant-chip button { min-width: 20px; min-height: 20px; padding: 0; }\n")
+	b.WriteString("box.assistant-user { background-color: alpha(@accent_bg_color, 0.14); border-radius: 12px; padding: 6px 10px; }\n")
+	b.WriteString("box.assistant-card { background-color: alpha(@window_fg_color, 0.05); border-radius: 12px; padding: 8px 10px; }\n")
+	b.WriteString("textview.assistant-answer, textview.assistant-answer > text { background: none; }\n")
+	b.WriteString("scrolledwindow.assistant-input { border-radius: 8px; box-shadow: inset 0 0 0 1px alpha(@window_fg_color, 0.15); }\n")
+	b.WriteString("scrolledwindow.assistant-input textview, scrolledwindow.assistant-input textview > text { background: none; }\n")
 	// Sender and recipients above a message (window/addresses.go): pills on
 	// a faint tint, a size down and without the bold weight Adwaita gives
 	// buttons, since a row of bold names reads as shouting. "+N more" is a

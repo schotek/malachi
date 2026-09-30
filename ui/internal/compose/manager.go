@@ -36,6 +36,9 @@ type Manager struct {
 	// again (New Message). May be nil; while set, Invalidate fetches the
 	// list at once even without an open window.
 	OnAccountsChanged func()
+	// Assistant is the assistant's state for the windows' rewrite
+	// (rewrite.go); nil leaves it off.
+	Assistant Assistant
 
 	windows  []*Window
 	accounts []api.Account

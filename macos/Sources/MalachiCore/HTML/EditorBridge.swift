@@ -6,16 +6,27 @@
 
 import Foundation
 
-/// editor.bridgeJS, byte for byte, with two additions for WKWebView: the
-/// keydown shortcut test accepts the Command key as well as Control, and
+/// editor.bridgeJS, byte for byte, with three additions for WKWebView: the
+/// keydown shortcut test accepts the Command key as well as Control;
 /// `window.malachi.exec(cmd, arg)` runs an editing command from Swift
-/// (WKWebView has no native editing-command API; GTK calls WebKit's). It
-/// runs in a content world of its own (`WKContentWorld.defaultClient`,
-/// sharing the DOM) after the document is parsed, only
-/// observes (content changes, selection formatting) and handles the
-/// Ctrl/Cmd+B/I/U keys; every other formatting command comes from Swift.
-/// Messages to Swift are JSON strings posted to the "malachi" script
-/// message handler.
+/// (WKWebView has no native editing-command API; GTK calls WebKit's); and
+/// the assistant's rewrite (ui/internal/assistant, the In App target; GTK's
+/// bridge has the same two, posting the passage as a "rewrite" message
+/// instead of returning it): `window.malachi.rewriteTarget(attribution)`
+/// notes the passage to rewrite and returns it as JSON (`RewriteTarget`), the selection when
+/// it holds more than white space, otherwise the user's own text, which is
+/// everything before the first `div` whose text is the attribution line
+/// the compose window put above the quoted original (white space compared
+/// collapsed), or the whole body when there is none;
+/// `window.malachi.rewriteApply(below, cmd, arg)` selects that passage
+/// again (its end when `below`) and runs one editing command there
+/// (`rewriteInsertion`), which the page's undo takes back as one step, and
+/// reports the change as typing does. It runs in a content world of its
+/// own (`WKContentWorld.defaultClient`, sharing the DOM) after the
+/// document is parsed, only observes (content changes, selection
+/// formatting) and handles the Ctrl/Cmd+B/I/U keys; every other formatting
+/// command comes from Swift. Messages to Swift are JSON strings posted to
+/// the "malachi" script message handler.
 public let bridgeJS = #"""
 (() => {
   const post = m => window.webkit.messageHandlers.malachi.postMessage(JSON.stringify(m));
@@ -57,6 +68,50 @@ public let bridgeJS = #"""
     }
   };
   window.malachi.exec = (c, a) => { document.execCommand(c, false, a == null ? null : a); state(); };
+  let passage = null;
+  const collapsed = s => String(s || '').replace(/\s+/g, ' ').trim();
+  window.malachi.rewriteTarget = attribution => {
+    const sel = document.getSelection();
+    passage = null;
+    if (sel.rangeCount && !sel.isCollapsed && document.body.contains(sel.getRangeAt(0).commonAncestorContainer) &&
+        sel.toString().trim()) {
+      passage = sel.getRangeAt(0).cloneRange();
+      return JSON.stringify({selected: true, text: sel.toString()});
+    }
+    const r = document.createRange();
+    r.selectNodeContents(document.body);
+    const want = collapsed(attribution);
+    const mark = want && Array.from(document.body.querySelectorAll('div')).find(d => collapsed(d.innerText) === want);
+    if (mark) {
+      let prev = mark;
+      while (prev !== document.body && !prev.previousSibling) prev = prev.parentNode;
+      prev = prev === document.body ? null : prev.previousSibling;
+      if (prev) r.setEnd(prev, prev.nodeType === Node.TEXT_NODE ? prev.length : prev.childNodes.length);
+      else r.collapse(true);
+    }
+    const saved = sel.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    sel.removeAllRanges();
+    sel.addRange(r);
+    const text = sel.toString();
+    sel.removeAllRanges();
+    if (saved) sel.addRange(saved);
+    passage = r;
+    return JSON.stringify({selected: false, text});
+  };
+  window.malachi.rewriteApply = (below, c, a) => {
+    if (!passage) return false;
+    const r = passage.cloneRange();
+    passage = null;
+    if (below) r.collapse(false);
+    document.body.focus();
+    const sel = document.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand(c, false, a);
+    schedule();
+    state();
+    return true;
+  };
   post({type: 'ready'});
 })();
 """#
@@ -107,6 +162,70 @@ public struct EditorState: Sendable, Equatable, Codable {
         block = try c.decodeIfPresent(String.self, forKey: .block) ?? ""
         align = try c.decodeIfPresent(String.self, forKey: .align) ?? ""
     }
+}
+
+/// What the compose window's rewrite works on, as the bridge's
+/// `rewriteTarget` reports it (GTK editor.RewriteTarget): the selection
+/// (`selected`), or the user's own text above the quoted original, and its
+/// text as the page renders it (paragraphs and line breaks as newlines).
+/// Mail text: shown and sent only as plain text.
+public struct RewriteTarget: Sendable, Equatable, Codable {
+    public var selected: Bool
+    public var text: String
+
+    public init(selected: Bool, text: String) {
+        self.selected = selected
+        self.text = text
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case selected, text
+    }
+
+    /// A missing field is its zero value.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        selected = try c.decodeIfPresent(Bool.self, forKey: .selected) ?? false
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+    }
+
+    /// What `rewriteTarget` returned (a JSON string); nil for anything
+    /// else.
+    public static func decode(_ result: Any?) -> RewriteTarget? {
+        guard let raw = result as? String else { return nil }
+        return try? JSONDecoder().decode(RewriteTarget.self, from: Data(raw.utf8))
+    }
+
+    /// The script that notes the passage and returns it: the selection, or
+    /// the text before the div of `attribution` (the whole body when "").
+    public static func script(attribution: String) -> String {
+        "window.malachi.rewriteTarget(" + jsString(attribution) + ")"
+    }
+}
+
+/// The editing command that puts the rewrite's answer into the message as
+/// plain text: in place of the passage one line with `insertText`, several
+/// lines as `escapeText` HTML (each line break a `<br>`) with
+/// `insertHTML`; below the passage (`below`) always the latter, on a line
+/// of its own (a `<br>` before it, and one after it that the page shows
+/// only when the passage's line goes on). Nothing of `text` is ever markup.
+public func rewriteInsertion(_ text: String, below: Bool) -> (command: String, argument: String) {
+    let text = text.replacingOccurrences(of: "\r\n", with: "\n")
+    if below {
+        return ("insertHTML", "<br>" + escapeText(text) + "<br>")
+    }
+    if !text.unicodeScalars.contains("\n") {
+        return ("insertText", text)
+    }
+    return ("insertHTML", escapeText(text))
+}
+
+/// The script that puts the rewrite's answer in place of the passage
+/// `rewriteTarget` noted, or below it (`rewriteInsertion`).
+public func rewriteApplyScript(_ text: String, below: Bool) -> String {
+    let (command, argument) = rewriteInsertion(text, below: below)
+    return "window.malachi.rewriteApply(" + (below ? "true" : "false") + ", " + jsString(command) + ", "
+        + jsString(argument) + ")"
 }
 
 /// editor.bridgeMessage: what the page posts: `ready`, `changed` (with

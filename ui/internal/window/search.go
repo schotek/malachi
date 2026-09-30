@@ -50,6 +50,7 @@ func (w *Window) setupSearch(b *gtk.Builder) {
 	focus.ConnectEnter(func() { w.setTypingAccels(false) })
 	focus.ConnectLeave(func() { w.setTypingAccels(true) })
 	w.searchEntry.AddController(focus)
+	w.setupOwnWords(b)
 }
 
 // setTypingAccels installs (on) or lifts the shortcuts without a modifier.
@@ -106,6 +107,7 @@ func (w *Window) onSearchModeChanged() {
 		st.text = strings.TrimSpace(w.searchEntry.Text())
 		w.runSearch(false)
 	} else {
+		w.cancelOwnWords()
 		st.text = ""
 		st.hits = nil
 		w.searchEntry.SetText("") // its search-changed finds search inactive
@@ -123,7 +125,7 @@ func (w *Window) onSearchModeChanged() {
 // onSearchChanged runs once typing pauses.
 func (w *Window) onSearchChanged() {
 	st := &w.model.search
-	if !st.active {
+	if !st.active || w.ownWords.converting {
 		return
 	}
 	st.text = strings.TrimSpace(w.searchEntry.Text())
@@ -135,7 +137,7 @@ func (w *Window) onSearchChanged() {
 // they arrive.
 func (w *Window) onSearchActivate() {
 	st := &w.model.search
-	if !st.active {
+	if !st.active || w.ownWords.converting {
 		return
 	}
 	st.text = strings.TrimSpace(w.searchEntry.Text())

@@ -46,6 +46,7 @@ test.
     <Project Path="tests/Malachi.Core.Tests/Malachi.Core.Tests.csproj" />
     <Project Path="tests/Malachi.Credentials.Tests/Malachi.Credentials.Tests.csproj" />
     <Project Path="tests/Malachi.FakeBridge/Malachi.FakeBridge.csproj" />
+    <Project Path="tests/Malachi.FakeClaude/Malachi.FakeClaude.csproj" />
     <Project Path="tests/Malachi.FakeKeyring/Malachi.FakeKeyring.csproj" />
     <Project Path="tests/Malachi.Platform.Windows.Tests/Malachi.Platform.Windows.Tests.csproj" />
   </Folder>

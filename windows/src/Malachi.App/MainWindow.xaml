@@ -22,6 +22,7 @@ PaneLayout). The pane widths are dragged with the toolkit's sizers
     x:Class="Malachi.App.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:assistants="using:Malachi.App.Assistants"
     xmlns:controls="using:Malachi.App.Controls"
     xmlns:l="using:Malachi.App.Localization"
     xmlns:main="using:Malachi.App.Main"
@@ -60,106 +61,157 @@ PaneLayout). The pane widths are dragged with the toolkit's sizers
             <TitleBar.IconSource>
                 <ImageIconSource ImageSource="ms-appx:///Assets/Malachi.ico" />
             </TitleBar.IconSource>
-            <AutoSuggestBox
-                x:Name="SearchBox"
-                MinWidth="240"
-                MaxWidth="480"
+            <!-- The box, and beside it window.blp's search_own_words: the
+                 assistant turns the typed words into a search (In App only;
+                 MainWindow.OwnWords.cs). -->
+            <Grid
+                MaxWidth="520"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Center"
-                AutomationProperties.AutomationId="SearchBox"
-                AutomationProperties.Name="{l:T Msgid='Search'}"
-                PlaceholderText="{l:T Msgid='Search Mail'}">
-                <AutoSuggestBox.QueryIcon>
-                    <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph('edit-find')}" />
-                </AutoSuggestBox.QueryIcon>
-            </AutoSuggestBox>
+                ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <AutoSuggestBox
+                    x:Name="SearchBox"
+                    MinWidth="240"
+                    MaxWidth="480"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="SearchBox"
+                    AutomationProperties.Name="{l:T Msgid='Search'}"
+                    PlaceholderText="{l:T Msgid='Search Mail'}">
+                    <AutoSuggestBox.QueryIcon>
+                        <FontIcon FontSize="12" Glyph="{x:Bind res:Icons.Glyph('edit-find')}" />
+                    </AutoSuggestBox.QueryIcon>
+                </AutoSuggestBox>
+                <Button
+                    x:Name="OwnWordsButton"
+                    Grid.Column="1"
+                    Width="32"
+                    Height="32"
+                    Padding="0"
+                    VerticalAlignment="Center"
+                    AutomationProperties.AutomationId="SearchOwnWords"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    Visibility="Collapsed">
+                    <FontIcon FontSize="14" Glyph="{x:Bind res:Icons.Glyph('malachi-assistant')}" />
+                </Button>
+            </Grid>
         </TitleBar>
 
-        <!-- outer_split: the sidebar beside the list and message. -->
+        <!-- assistant_split: the assistant panel on the right of the panes
+             (window.blp; ui/internal/assistant, the In App target), a pane of
+             its own wider than 1180 and an overlay otherwise (Core's
+             PaneLayout.AssistantInline), 0.28 of the width within 280 to 480;
+             the message pane's toggle opens and folds it. -->
         <SplitView
-            x:Name="PaneSplit"
+            x:Name="AssistantSplit"
             Grid.Row="1"
             DisplayMode="Inline"
-            IsPaneOpen="True"
+            IsPaneOpen="False"
             IsTabStop="False"
-            OpenPaneLength="240"
+            OpenPaneLength="320"
             PaneBackground="Transparent"
-            PaneClosed="OnPaneClosed">
+            PaneClosed="OnAssistantPaneClosed"
+            PanePlacement="Right">
             <SplitView.Pane>
                 <Grid>
-                    <!-- The overlay of a folded sidebar is opaque. -->
                     <Border
-                        x:Name="OverlayBackground"
+                        x:Name="AssistantBackground"
                         Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
                         BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
-                        BorderThickness="0,1,1,0"
-                        Visibility="Collapsed" />
-                    <main:SidebarPane x:Name="SidebarPane" AutomationProperties.AutomationId="Sidebar" />
+                        BorderThickness="1,1,0,0" />
+                    <assistants:AssistantPanel x:Name="AssistantPanelView" AutomationProperties.AutomationId="AssistantPanel" />
                 </Grid>
             </SplitView.Pane>
 
-            <!-- inner_split: the list beside the message page. -->
-            <Grid x:Name="ContentPanes">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition
-                        x:Name="ListColumn"
-                        Width="380"
-                        MinWidth="280"
-                        MaxWidth="460" />
-                    <ColumnDefinition x:Name="MessageColumn" Width="*" MinWidth="300" />
-                </Grid.ColumnDefinitions>
-                <!-- The content layer the list and the message sit on. -->
-                <Border
-                    x:Name="ContentLayer"
-                    Grid.ColumnSpan="2"
-                    Background="{ThemeResource LayerFillColorDefaultBrush}"
-                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                    BorderThickness="1,1,0,0"
-                    CornerRadius="8,0,0,0" />
-                <main:MessageListPane x:Name="ListPane" AutomationProperties.AutomationId="MessageListPane" />
-                <Rectangle
-                    x:Name="ListDivider"
-                    Width="1"
-                    HorizontalAlignment="Right"
-                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                <Grid x:Name="MessagePane" Grid.Column="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="*" />
-                    </Grid.RowDefinitions>
-                    <main:MessageCommandBar x:Name="MessageCommands" AutomationProperties.AutomationId="MessageCommands" />
-                    <ContentControl
-                        x:Name="ReaderRegion"
-                        Grid.Row="1"
-                        HorizontalContentAlignment="Stretch"
-                        VerticalContentAlignment="Stretch"
-                        IsTabStop="False" />
-                    <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+            <!-- outer_split: the sidebar beside the list and message. -->
+            <SplitView
+                x:Name="PaneSplit"
+                DisplayMode="Inline"
+                IsPaneOpen="True"
+                IsTabStop="False"
+                OpenPaneLength="240"
+                PaneBackground="Transparent"
+                PaneClosed="OnPaneClosed">
+                <SplitView.Pane>
+                    <Grid>
+                        <!-- The overlay of a folded sidebar is opaque. -->
+                        <Border
+                            x:Name="OverlayBackground"
+                            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource SurfaceStrokeColorDefaultBrush}"
+                            BorderThickness="0,1,1,0"
+                            Visibility="Collapsed" />
+                        <main:SidebarPane x:Name="SidebarPane" AutomationProperties.AutomationId="Sidebar" />
+                    </Grid>
+                </SplitView.Pane>
+
+                <!-- inner_split: the list beside the message page. -->
+                <Grid x:Name="ContentPanes">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition
+                            x:Name="ListColumn"
+                            Width="380"
+                            MinWidth="280"
+                            MaxWidth="460" />
+                        <ColumnDefinition x:Name="MessageColumn" Width="*" MinWidth="300" />
+                    </Grid.ColumnDefinitions>
+                    <!-- The content layer the list and the message sit on. -->
+                    <Border
+                        x:Name="ContentLayer"
+                        Grid.ColumnSpan="2"
+                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1,1,0,0"
+                        CornerRadius="8,0,0,0" />
+                    <main:MessageListPane x:Name="ListPane" AutomationProperties.AutomationId="MessageListPane" />
+                    <Rectangle
+                        x:Name="ListDivider"
+                        Width="1"
+                        HorizontalAlignment="Right"
+                        Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <Grid x:Name="MessagePane" Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <main:MessageCommandBar x:Name="MessageCommands" AutomationProperties.AutomationId="MessageCommands" />
+                        <ContentControl
+                            x:Name="ReaderRegion"
+                            Grid.Row="1"
+                            HorizontalContentAlignment="Stretch"
+                            VerticalContentAlignment="Stretch"
+                            IsTabStop="False" />
+                        <controls:ToastHost x:Name="ToastsHost" Grid.Row="1" />
+                    </Grid>
+                    <!-- The list's width (inner_split, 280 to 460). -->
+                    <tk:GridSplitter
+                        x:Name="ListSplitter"
+                        Width="8"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Margin="0,0,-4,0"
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        IsThumbVisible="False"
+                        ResizeBehavior="CurrentAndNext"
+                        ResizeDirection="Columns" />
+                    <!-- The sidebar's width (outer_split, 200 to 320). -->
+                    <tk:PropertySizer
+                        x:Name="SidebarSizer"
+                        Width="8"
+                        AutomationProperties.AccessibilityView="Raw"
+                        Margin="-4,0,0,0"
+                        HorizontalAlignment="Left"
+                        Background="Transparent"
+                        Binding="{x:Bind PaneSplit.OpenPaneLength, Mode=TwoWay}"
+                        IsThumbVisible="False"
+                        Maximum="320"
+                        Minimum="200" />
                 </Grid>
-                <!-- The list's width (inner_split, 280 to 460). -->
-                <tk:GridSplitter
-                    x:Name="ListSplitter"
-                    Width="8"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Margin="0,0,-4,0"
-                    HorizontalAlignment="Right"
-                    Background="Transparent"
-                    IsThumbVisible="False"
-                    ResizeBehavior="CurrentAndNext"
-                    ResizeDirection="Columns" />
-                <!-- The sidebar's width (outer_split, 200 to 320). -->
-                <tk:PropertySizer
-                    x:Name="SidebarSizer"
-                    Width="8"
-                    AutomationProperties.AccessibilityView="Raw"
-                    Margin="-4,0,0,0"
-                    HorizontalAlignment="Left"
-                    Background="Transparent"
-                    Binding="{x:Bind PaneSplit.OpenPaneLength, Mode=TwoWay}"
-                    IsThumbVisible="False"
-                    Maximum="320"
-                    Minimum="200" />
-            </Grid>
+            </SplitView>
         </SplitView>
 
         <!-- The status line across the bottom edge (window.blp status_button,

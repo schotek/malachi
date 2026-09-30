@@ -274,10 +274,11 @@ public sealed class PrefillTests
             Attachments = [new DraftAttachment { Id = "att1", Filename = "secret.pdf", ContentType = "application/pdf", Size = 1, Inline = false }],
             DraftId = new DraftId("d1"),
             Version = 3,
+            Attribution = "Secret Name wrote:",
         };
         Assert.Equal(
             "ComposeParams(kind: Reply, accountId: acc1, to: 1, cc: 2, bcc: 0, subject: 14 chars, bodyHtml: 13 chars, "
-            + "inReplyTo: m1, forwarding: null, attachments: 1, draftId: d1, version: 3, replaces: null, skipped: 0)",
+            + "inReplyTo: m1, forwarding: null, attachments: 1, draftId: d1, version: 3, replaces: null, skipped: 0, attribution: 18 chars)",
             p.ToString());
         var src = new ComposeSource
         {

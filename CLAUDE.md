@@ -63,6 +63,22 @@ notifikace je v dokumentu zmíněna a každý chybový kód má řádek v tabulc
 (`| kód | jméno |`). Chybové kódy se nikdy nepřečíslovávají, jen přidávají.
 Nekompatibilní změna = bump `ProtocolVersion`.
 
+### 6. Změna UI jde do všech tří klientů současně
+Každá změna nebo oprava v UI (nová funkce, oprava chování, úprava vzhledu)
+se dělá v jedné práci v GTK, macOS i Windows klientovi, ne jen v jednom
+z nich s tím, že porty přijdou „někdy“. Pořadí zůstává: nejdřív čistá
+logika v Go (`ui/internal/…`) a GTK jako reference, hned potom port do
+`MalachiCore`/`MalachiMail` a `Malachi.Core`/`Malachi.App` i s testy.
+Klient, který na tomto stroji nejde sestavit (Swift a C# na Linuxu,
+GTK na Windows), se napíše podle okolního kódu a v předávce se uvede, co
+zbývá sestavit a ověřit. Když zadání neříká, kterých klientů se změna
+týká, zeptej se uživatele (v Claude Code přes `AskUserQuestion`), jestli
+ji dělat jen v jednom, nebo ve všech třech. Výjimky jsou jen odchylky
+z tabulek v `macos/README.md` a `windows/README.md` a věci, které na
+platformě nedávají smysl (třeba Claude Desktop na Linuxu). Příklad:
+kolečko čekání v panelu asistenta (2026-09-30) přišlo do všech tří
+klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
+
 ## Konvence
 
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
@@ -251,7 +267,20 @@ obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
 Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
 `ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows
 `McpRegistrationController`, který předá `--command` a u MSIX Claude Desktop
-`--claude-desktop-config`); viz `docs/mcp.md`). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
+`--claude-desktop-config`); viz `docs/mcp.md`). Menu Asistent (macOS,
+GTK `ui/internal/window/assistant.go` a Windows; čistá logika a texty
+v `ui/internal/assistant`, portovaná do `MalachiCore` a `Malachi.Core`,
+klíče gschema `assistant-menu` a `assistant-target`) předá vybranou poštu do Claude Desktop
+nebo Claude Code odkazem `claude://` / `claude-cli://` s předvyplněným,
+neodeslaným dotazem, který nese jen ID; existuje jen se zapnutým
+přepínačem Registrovat v Claude (`assistant.Shown`); poštu Claude čte přes most,
+přílohu dostane jako soubor (Cowork, pracovní adresář Claude Code); třetí
+cíl „V aplikaci (experimentální)“ spouští v panelu hlavního okna uživatelův
+`claude -p` (stream-json, proces na rozhovor) jen s nástroji mostu pro
+čtení a koncepty, bez jeho nastavení, pluginů a ukládání relací, se
+souhlasem při prvním použití (klíče `assistant-model`,
+`assistant-claude-path`, `assistant-consent`); démon
+ani most se kvůli tomu nemění (`docs/mcp.md`, Hand-off). macOS klient (`macos/`, Swift/AppKit, SwiftPM tools 6.0, macOS 14+,
 GPL-3.0-or-later): plné zrcadlo GTK UI — průvodce účtem, sidebar,
 seznam (plochý i vlákna), čtení s uzamčeným WKWebView (JS vypnutý,
 stejná CSP, scheme handler `malachi-cid:`, síť odříznutá proxy i content
@@ -308,7 +337,7 @@ launcher, Run, `mailto:`, tray), `Malachi.App` (WinUI 3, `MalachiMail.exe`,
 tenké: okna, XAML, vrstva WebView2) a `Malachi.Credentials`
 (`malachi-credentials.exe`, NativeAOT helper keyringu démona nad Credential
 Managerem, hodnota nad 2560 B po kusech ověřených SHA-256). Testy: xUnit v3
-na Microsoft.Testing.Platform, ~4 000 (Core s FakeDaemon a MailFixture,
+na Microsoft.Testing.Platform, ~5 000 (Core s FakeDaemon a MailFixture,
 služby Windows včetně skutečného `malachid.exe`, helper, konvence: SPDX
 hlavičky, gschema, kontrola řetězců a pokrytí msgid) a síťový kanárek, který
 pouští skutečné pohledy WebView2 proti nepřátelským dokumentům a surovému
@@ -357,11 +386,190 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
-8. Účty Jira (`kind: jira`) — backend, macOS a GTK hotovo (čtení,
+8. ~~Asistent (Claude)~~ hotovo v macOS, GTK (jen Claude Code, v terminálu
+   nebo v aplikaci) i Windows: úroveň A, panel B1 a B2 (viz níže); cíl
+   „V aplikaci“ experimentální do potvrzení podmínek Anthropicu
+9. Účty Jira (`kind: jira`) — backend, macOS a GTK hotovo (čtení,
    komentáře, změna stavu, notifikační maily, zobrazení konverzace);
    Windows zbývá
    (reference `ui/internal/jira`, `ui/internal/capabilities`,
    `ui/internal/conversation`)
+
+Asistent (stav 2026-09-30, sloučeno do `main`; uživatel potvrdil, že
+funguje ve všech třech klientech). Na macOS je hotové a uživatelem otestované:
+úroveň A (menu ✦ Asistent v toolbaru a menu Zpráva, položka „Zeptat se
+asistenta…“ na čipu přílohy, předání do Claude Desktop `claude://` a
+Claude Code `claude-cli://`, skupina Asistent v Předvolbách → AI,
+existuje jen se zapnutým „Registrovat v Claude“, bez náhradního cíle,
+nabídka restartu Claude Desktop, který za běhu přepisuje svou
+konfiguraci) a B1 (třetí cíl „V aplikaci (experimentální)“: panel vpravo
+v hlavním okně nad `claude -p` se stream-json, souhlas při prvním dotazu,
+rychlé akce, odpověď jako podmnožina Markdownu bez HTML, karta
+„Otevřít koncept“, rozhovor drží kontext s lištou „Vybrali jste jinou
+zprávu“) a B2 (jen s cílem „V aplikaci“: tlačítko ✦ v okně Nová zpráva
+upraví výběr, jinak vlastní text nad hlavičkou citace — Zdvořileji,
+Stručněji, Opravit chyby, Přeložit do angličtiny, vlastní pokyn; náhled
+a Nahradit / Vložit pod / Zahodit jedním krokem zpět; „Hledat vlastními
+slovy“ v nabídce lupy pole hledání a ⌥↩ převede napsaná slova na dotaz
+v syntaxi hledání přes `--json-schema`; obě žádosti jsou jednorázové
+a bez nástrojů). Referencí pro port je čistý Go balíček `ui/internal/assistant`
+(texty, dotazy, příkazová řádka, události, Markdown, pravidla dostupnosti;
+testovaný), chování UI popisuje `docs/mcp.md` (Hand-off, The panel in the
+app) a macOS: `MalachiCore/Assistant/`, `Controllers/AssistantController`,
+`ClaudeDesktopController`, `AssistantPanelController`,
+`Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, `Controllers/AssistantRequest`,
+`ComposeRewriteController`, `SearchConversion`, `MalachiMail/Assistant/`,
+`Preferences/AIPaneViewController`; editor bridge má dva doplňky
+(`rewriteTarget`, `rewriteApply`) a okno Nová zpráva si pamatuje svou
+hlavičku citace (`ComposeParams.attribution`). GTK: úroveň A a panel B1
+jsou hotové a uživatelem otestované (`ui/internal/window/assistant.go`: stav `Assistant` pro celou aplikaci
+nad `mcpsetup` a výchozím handlerem schématu z GIO, `MenuButton`
+`assistant_button` vedle `message_menu` v `window.blp` i
+`message_window.blp` s akcemi `win.assistant`/`msg.assistant`,
+`win.assistant-unread`, `app.assistant-target`/`-setup`/`-problem`,
+položka `att.ask` v menu čipu přílohy, skupina Asistent na `ai_page`,
+ikona `malachi-assistant-symbolic` v `ui/data/icons`) i panel B1
+(`ui/internal/assistantpanel`: `Controller` jako port
+`AssistantPanelController`, `Process`, `Locator`, testy proti falešnému
+`claude` portované ze Swiftu; `window/assistant_panel.go` +
+`assistant_panel.blp` v `Adw.OverlaySplitView` `assistant_split` na
+konci hlavního okna s přepínačem `assistant_panel_button`, odpovědi jako
+`GtkTextView` se značkami z `assistant.Markdown`, odkazy vždy přes
+„Otevřít tento odkaz?“; Předvolby → AI řádky Claude Code a Model; pracovní
+adresář `~/.cache/malachi/assistant`). Na Linuxu jen Claude Code:
+v terminálu, který vybere jeho handler `claude-cli://` (`$TERMINAL`,
+`x-terminal-emulator`, běžné emulátory), nebo v panelu; Claude Desktop pro
+Linux je preview, které nepodporujeme: menu i Předvolby ho ukazují
+zašedlé (`supportedTarget`), uložené `desktop` se čte jako Claude Code,
+výchozí hodnota gschema zůstává referenční (`desktop`), proto žádná
+nabídka restartu Claude Desktop (který i na Linuxu za běhu přepisuje
+konfiguraci, „Config file written“ v `~/.config/Claude/logs/main.log`);
+stránka AI opakuje neúspěšný dotaz na stav po 1, 2 a 4 s. B2 je napsané:
+`assistantpanel` `Request` (jednorázový požadavek bez mostu), `Rewriter`
+a `Searcher` jako porty `AssistantRequest`, `ComposeRewriteController`
+a `SearchConversion` i s testy; okno Nová zpráva má tlačítko ✦
+`rewrite_button` s `rewrite_popover` (`compose/rewrite.go`, rozhraní
+`compose.Assistant` nad stavem `window.Assistant`, `CanRunInApp`), most
+editoru `rewriteTarget`/`rewriteApply` (pasáž posílá zprávou „rewrite“,
+`editor.RewriteTarget`, `ApplyRewrite`), `compose.Params.Attribution`;
+hledání má tlačítko ✦ `search_own_words` vedle pole a Alt+Enter
+(`window/search_ownwords.go`). Handler Claude Code
+z vývojového běhu v Toolbxu běží uvnitř kontejneru; předání do terminálu
+zkoušet s aplikací nainstalovanou na hostiteli. Windows: A, B1 i B2 jsou
+napsané jako port macOS (`Malachi.Core/Assistants/` = čistý balíček
+`ui/internal/assistant` včetně sémantiky bajtů UTF-8 a čtení JSON jako Go;
+kontrolery `AssistantController`, `ClaudeDesktopController`,
+`AssistantPanelController`, `AssistantRequest`, `ComposeRewriteController`,
+`SearchConversion`, `Platform/ClaudeCodeLocator`, `ClaudeCodeProcess`, testy
+proti falešnému `claude.exe` z `tests/Malachi.FakeClaude`; UI
+`Malachi.App/Assistants/`, `MainWindow.Assistant.cs`, `MainWindow.OwnWords.cs`,
+`Compose/ComposeWindow.Rewrite.cs`, `Preferences/AiPage`), msgid asistenta
+jsou z exclusions pryč. Odlišnosti: Claude Code jen jako `claude.exe`
+(nativní instalátor `%USERPROFILE%\.local\bin`, pak `PATH`; npm
+`claude.cmd` ne, `cmd.exe` by JSON argumenty nepřenesl bezpečně), konec
+procesu zavřením stdin a zabitím stromu procesů po 2 s (žádný SIGTERM),
+pracovní adresář `%LOCALAPPDATA%\Malachi Mail\assistant`; Claude Desktop je
+MSIX `Claude_pzs8sxrjxfjjc`, restart ho požádá o ukončení Restart
+Managerem jako při odhlášení (zavření okna ho jen schová do oznamovací
+oblasti), čeká 45 s a spustí ho podle AUMID (`ClaudeDesktopApp`). Ověřeno
+automaticky a v UI proti falešnému `claude.exe` a devmailu a uživatelem se
+skutečným Claude Desktop a Claude Code (2026-09-30). Cíl „V aplikaci“ zůstává
+experimentální, dokud Anthropic nepotvrdí podmínky pro spouštění Claude
+Code z aplikace.
+
+Přihlášení Claude Code z aplikace (2026-09-30, ve všech třech klientech;
+běžný uživatel nic nespouští v terminálu). Claude Code má vlastní
+přihlášení, oddělené od Claude Desktop (`~/.claude/.credentials.json`, na
+macOS Keychain); aplikace přihlašovací údaje dál nikdy nevidí. Když
+`claude auth status` řekne nepřihlášeno, řádek panelu „Claude Code není
+přihlášený“ a řádek Claude Code v Předvolbách → AI nabídnou *Přihlásit
+se…*: locator spustí vlastní `claude auth login` Claude Code
+(`assistant.SignInArgs`, `SignInEnv` = `ChildEnv` + proměnné desktopové
+session pro otevření prohlížeče na Linuxu; na Windows jen
+`ChildEnvironment`), čeká nejdéle 10 minut na konec procesu (stav 0 =
+přihlášeno; jeho výstup se neukazuje ani neloguje), jedno přihlášení pro
+celou aplikaci (nové nahradí běžící, to skončí jako zrušené), panel ho
+ukazuje jako řádek aktivity „Čeká se na přihlášení v prohlížeči…“, Stop ho
+ukončí a po úspěchu se sama znovu pošle poslední otázka. Zprávu, kterou
+Claude Code napíše sám, když API tah odmítne (`assistant` s polem
+`error`, událost `EventFailure`), panel neukazuje jako odpověď (výsledek
+ji opakuje); `authentication_failed` (vypršelý či odvolaný token, ať
+`auth status` tvrdí cokoli) skončí stejným řádkem s *Přihlásit se…* a
+ukončí proces. Bez Claude Code nabízí panel i Předvolby *Získat Claude
+Code…* (`assistant.InstallURL`, stránka Anthropic v prohlížeči; aplikace
+nic nestahuje ani nespouští). Přepis v okně Nová zpráva a hledání
+vlastními slovy tlačítko nemají a odkazují na Předvolby → AI
+(`SignInTexts().Hint`). Referencí je Go: `ui/internal/assistant`
+(`SignInTexts`, `SignInFailedText`, `events.go`) a
+`ui/internal/assistantpanel` (`Locator.SignIn`, `Controller.SignIn`,
+`Offer`), testy proti falešnému `claude` (na Windows se pouští
+křížově přeložené ve WSL). Stav: Windows hotový a ověřený testy i
+průchodem UI proti falešnému `claude.exe`; okno GTK
+(`window/assistant_panel.go`, `preferences.go`) a macOS klient jsou
+napsané na Windows bez překladu, takže je čeká sestavení a test
+v Toolbxu a na Macu; `po/malachi.pot` a `po/cs.po` jsou upravené ručně
+(xgettext na Windows není), `make po` v Toolbxu je srovná. Skutečné
+přihlášení (souhlas v prohlížeči) ověřuje vlastník. Na Macu zkontrolovat
+hlavně: `Content.error(_, retry:, offer: = .none)` (výchozí hodnota
+asociované hodnoty a `.none` u `Offer`), `ClaudeCodeLocator.startSignIn`
+(`SignInRun`, `Task.detached` a `AsyncStream` pod Swift 6,
+`nonisolated static runSignIn` s typy vnořenými v `@MainActor` třídě),
+řádek chyby s tlačítky ve `FlowView` (mezera u poznámek a chyb bez
+tlačítek) a testy závislé na čase (`signInStoppedAndReplaced`,
+`ClaudeCodeLocatorTests.signIn`).
+
+Doplněk k přihlášení (2026-09-30, všechny tři klienty). Když Claude
+Code nemůže obnovit token, protože zámek obnovy
+`~/.claude/.oauth_refresh.lock` drží jiný Claude Code (nebo ho po sobě
+nechal proces ukončený uprostřed obnovy), odmítne tah s `error:
+server_error`, ne `authentication_failed`, a slovy „Failed to refresh
+OAuth token: …“ (změřeno s 2.1.284 v dočasném `HOME`: zámek starší než
+asi minutu si Claude Code převezme sám, `auth status` token neobnovuje).
+`EventFailure` teď nese text zprávy (`Event.Text`), `Event.RefreshFailed()`
+ho pozná podle začátku a panel pak ukončí proces a řádek „Asistent
+skončil: …“ nabídne *Zkusit znovu* i *Přihlásit se…*. `maxReason`
+(`StoppedText`, `SearchFailedText`, `SignInFailedText`) a `reasonLimit`
+procesu mají 400 bajtů místo 200 (ta věta Claude Code má 215 a rada je na
+jejím konci). `Locator.run` (`--version`, `auth status`) po vypršení
+limitu posílá SIGTERM a SIGKILL až po `DefaultKillGrace`, stejně jako
+`Process` a přihlášení; macOS to tak dělal už dřív (`BridgeRunner`),
+Windows dál ukončuje strom procesů. Porty: Swift `Assistant.refreshFailed`
+a `Event.refreshFailed`, C# `Assistant.RefreshFailedPrefix` a
+`AssistantEvent.RefreshFailed`, v obou controllerech `refreshFailed`,
+`maxReason`/`MaxReason` a `reasonLimit`/`ReasonLimit` 400.
+
+Kolečko čekání v panelu (2026-09-30, všechny tři klienty): dokud běží
+dotaz a nic v přepisu neukazuje práci (nestreamuje odpověď, nepracuje
+nástroj ani přihlášení), je pod přepisem otáčející se kolečko; stav počítá
+controller z položek (Go `Controller.Waiting`, Swift `waiting`, C#
+`IsWaiting`), pohledy jen přepínají (GTK `assistant_waiting` v
+`assistant_panel.blp`, macOS `AssistantTranscriptView.setWaiting`, Windows
+`WaitingRing` v `AssistantPanel.xaml`).
+
+Obojí je v Go a GTK sestavené a otestované; Swift a C# jsou napsané na
+Linuxu bez překladu, takže je čeká sestavení a testy na Macu a na
+Windows: macOS `waitsWhereNothingShowsTheWork`,
+`refreshFailedOffersRetryAndSignIn`, `signInFailures`, `stoppedText`,
+`signInFailedText`, `searchFailedText`, `stderrIsBounded` a kontrola
+řádků proti `events_test.go`; Windows `WaitsWhereNothingShowsTheWork`,
+`RefreshFailedOffersRetryAndSignIn`, `SignInFailures`, `StoppedTextCases`,
+`SignInFailedText`, `StderrIsBounded` a `LinesAreGos`. Na pohled: kolečko
+pod přepisem (macOS řádek v `FillStackView`, Windows `ProgressRing` pod
+`Transcript`) a řádek chyby s oběma tlačítky.
+
+Tabulky v odpovědích (2026-09-30, všechny tři klienty): model je posílá
+i přes zákaz v systémovém promptu (Úkoly a termíny: „co, kdo a do kdy“),
+proto je parser Markdownu (`assistant.Markdown`, Swift
+`Assistant.markdown`, C# `Assistant.Markdown`) čte jako GitHub tabulku
+(řádek buněk v odstavci, řádek oddělovačů se stejným počtem buněk, pak
+řádky) a z každého řádku udělá odrážku: první buňka tučně, další neprázdné
+buňky na vlastních řádcích jako „záhlaví: buňka“. Pohledy se nemění; jen
+GTK spojuje řádky jednoho bloku mimo kód znakem U+2028 jako macOS
+(`lineSeparator`), aby pokračovací řádek odrážky začínal pod textem.
+Popisky záhlaví smějí stát nejvýš tolik bajtů jako řádky samotné (jinak
+by obří záhlaví opakované u každého řádku znásobilo výstup). Swift a C#
+napsané bez překladu: testy `blocks` a `isLinear` (macOS) a `BlockCases`
+a `LinearInputs` (Windows).
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
@@ -679,7 +887,11 @@ komprese a příloh na vyžádání, Microsoft účty).
   widgety; od GTK portu je `make po` přečísloval a GTK je používá přes
   `i18n.Tr`. Windows je má v `windows/parity-exclusions.txt` („Jira
   account: macOS first“, „Conversation view: macOS first“); s portem se
-  odtud mažou.
+  odtud mažou. Při sloučení `main` (Asistent, 2026-09-30) na Macu jsou
+  `po/malachi.pot` a `po/cs.po` sjednocené přes `msgcat` (žádný msgid
+  nechybí, čeština je úplná), ale odkazy `#: soubor:řádek` neodpovídají:
+  `make po` v Toolbxu je srovná, do té doby `make lint` hlásí zastaralou
+  šablonu. Sloučené GTK soubory prošly jen `gopls check`, ne překladem.
 - Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
   tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
   store změnila dřív, než je větev v `main`. Na macOS

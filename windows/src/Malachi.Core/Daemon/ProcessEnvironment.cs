@@ -15,7 +15,7 @@ using System.Collections.Generic;
 namespace Malachi.Core.Daemon;
 
 /// <summary>Environment dictionaries with the system's comparison of names.</summary>
-internal static class ProcessEnvironment
+public static class ProcessEnvironment
 {
     /// <summary>How the system compares variable names.</summary>
     public static StringComparer NameComparer { get; } =

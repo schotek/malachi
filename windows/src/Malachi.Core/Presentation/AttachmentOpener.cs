@@ -144,48 +144,8 @@ public sealed partial class AttachmentOpener
     /// </summary>
     public async Task OpenAsync(Attachment a, MessageSummary s, bool remote, object? window)
     {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(s);
-        if (!CanOpen(a))
+        if (await WriteForViewingAsync(a, s, remote, window) is not { } path)
         {
-            RefuseProgram(window);
-            return;
-        }
-        if (await FetchForViewingAsync(a, s, remote, window) is not { } res)
-        {
-            return;
-        }
-        var name = AttachmentChips.FileName(res, a, lookAlikes);
-        if (policy.IsDangerous(name, res.ContentType))
-        {
-            LogServedAsProgram(logger, a.PartId);
-            RefuseProgram(window);
-            return;
-        }
-        string path;
-        try
-        {
-            path = await Task.Run(() => openDir.Write(name, res.Data));
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            LogWriteFailed(logger, a.PartId, e.GetType().Name, e.HResult);
-            Say(window, L10n.T("The attachment could not be opened"));
-            return;
-        }
-        // The file's own name from here on: the open directory may have
-        // shortened the one it was given.
-        if (policy.IsDangerous(Path.GetFileName(path), res.ContentType))
-        {
-            LogServedAsProgram(logger, a.PartId);
-            RefuseProgram(window);
-            return;
-        }
-        var zone = await MarkAsync(path, AttachmentUse.Open, a.PartId);
-        if (zone is not { MayOpen: true })
-        {
-            LogNotMarked(logger, a.PartId, zone?.Outcome.ToString() ?? "error", zone?.SaveResult ?? 0);
-            Say(window, L10n.T("The attachment could not be opened"));
             return;
         }
         try
@@ -197,6 +157,69 @@ public sealed partial class AttachmentOpener
             LogLaunchFailed(logger, a.PartId, e.GetType().Name, e.HResult);
             Say(window, L10n.T("The attachment could not be opened"));
         }
+    }
+
+    /// <summary>
+    /// Writes the part to a private file for another application, as Open
+    /// does, without opening it (macOS AttachmentActions.writeForHandOff):
+    /// the Assistant's "Ask the Assistant…" hands the path to Claude. The file
+    /// is marked as Open's is, goes with the directory for opening, and is
+    /// never a program or script. Null after a failure, which had its toast.
+    /// </summary>
+    public Task<string?> WriteForHandOffAsync(Attachment a, MessageSummary s, bool remote, object? window) =>
+        WriteForViewingAsync(a, s, remote, window);
+
+    // Open's half before the launch: the part fetched (the message
+    // downloaded first when remote), written to a private file, judged on
+    // its name and type before and after, and marked; its path, or null
+    // after a failure, which had its toast.
+    private async Task<string?> WriteForViewingAsync(Attachment a, MessageSummary s, bool remote, object? window)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(s);
+        if (!CanOpen(a))
+        {
+            RefuseProgram(window);
+            return null;
+        }
+        if (await FetchForViewingAsync(a, s, remote, window) is not { } res)
+        {
+            return null;
+        }
+        var name = AttachmentChips.FileName(res, a, lookAlikes);
+        if (policy.IsDangerous(name, res.ContentType))
+        {
+            LogServedAsProgram(logger, a.PartId);
+            RefuseProgram(window);
+            return null;
+        }
+        string path;
+        try
+        {
+            path = await Task.Run(() => openDir.Write(name, res.Data));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            LogWriteFailed(logger, a.PartId, e.GetType().Name, e.HResult);
+            Say(window, L10n.T("The attachment could not be opened"));
+            return null;
+        }
+        // The file's own name from here on: the open directory may have
+        // shortened the one it was given.
+        if (policy.IsDangerous(Path.GetFileName(path), res.ContentType))
+        {
+            LogServedAsProgram(logger, a.PartId);
+            RefuseProgram(window);
+            return null;
+        }
+        var zone = await MarkAsync(path, AttachmentUse.Open, a.PartId);
+        if (zone is not { MayOpen: true })
+        {
+            LogNotMarked(logger, a.PartId, zone?.Outcome.ToString() ?? "error", zone?.SaveResult ?? 0);
+            Say(window, L10n.T("The attachment could not be opened"));
+            return null;
+        }
+        return path;
     }
 
     /// <summary>

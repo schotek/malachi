@@ -1,0 +1,16 @@
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+A scripted claude.exe (its version, its sign-in state and canned
+stream-json turns) for the tests of the assistant panel, its process, its
+locator and the one-shot requests (docs/windows-port.md §12): no real
+Claude Code is ever run by the tests.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Malachi.FakeClaude</RootNamespace>
+  </PropertyGroup>
+</Project>

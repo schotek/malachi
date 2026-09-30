@@ -123,3 +123,23 @@ CreateDIBSection
 SelectObject
 DeleteObject
 DeleteDC
+// Claude Desktop around a change of the MCP registration (Claude/): its
+// processes by the MSIX package family and their parents, its quit through
+// the Restart Manager (the session end an Electron app answers; WM_CLOSE
+// only hides it to the tray), its start by the application user model id.
+OpenProcess
+GetPackageFamilyName
+GetProcessTimes
+CreateToolhelp32Snapshot
+Process32FirstW
+Process32NextW
+PROCESSENTRY32W
+RmStartSession
+RmRegisterResources
+RmShutdown
+RmEndSession
+RM_UNIQUE_PROCESS
+CCH_RM_SESSION_KEY
+IApplicationActivationManager
+ApplicationActivationManager
+ACTIVATEOPTIONS

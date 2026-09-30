@@ -17,7 +17,9 @@ import UniformTypeIdentifiers
 /// disabled with the reason as its tooltip; a part on the server stays
 /// enabled, and its actions download the message first; an attached message
 /// is viewed in its own window on click; an executable is previewed like
-/// any file but keeps Open disabled (docs/security.md §4). Names and types
+/// any file but keeps Open disabled (docs/security.md §4). After Open the
+/// Assistant's "Ask the Assistant…" (ui/internal/assistant), while the
+/// `assistant-menu` setting is on, hands the file to Claude. Names and types
 /// are server data and are shown as plain text; the name's middle is elided
 /// so the extension stays visible, the whole name is the tooltip.
 @MainActor
@@ -41,6 +43,11 @@ final class AttachmentChipView: NSView {
     var onOpen: (@MainActor () -> Void)?
     var onSave: (@MainActor () -> Void)?
     var onView: (@MainActor () -> Void)?
+    /// "Ask the Assistant…": asked when the menu opens; nil hides the item
+    /// (the Assistant menu is off), false disables it (the chosen Claude
+    /// app is missing).
+    var assistantItem: (@MainActor () -> Bool?)?
+    var onAskAssistant: (@MainActor () -> Void)?
 
     /// Whether the chip's actions can run: the part is stored, or on the
     /// server and downloaded on the way.
@@ -199,6 +206,12 @@ final class AttachmentChipView: NSView {
         open.target = self
         open.isEnabled = !executable
         menu.addItem(open)
+        if let enabled = assistantItem?() {
+            let ask = NSMenuItem(title: Assistant.texts().askFile, action: #selector(askItem(_:)), keyEquivalent: "")
+            ask.target = self
+            ask.isEnabled = enabled
+            menu.addItem(ask)
+        }
         let save = NSMenuItem(title: mn(L10n.T("Save _As…")), action: #selector(saveItem(_:)), keyEquivalent: "")
         save.target = self
         menu.addItem(save)
@@ -215,6 +228,10 @@ final class AttachmentChipView: NSView {
 
     @objc private func saveItem(_ sender: Any?) {
         onSave?()
+    }
+
+    @objc private func askItem(_ sender: Any?) {
+        onAskAssistant?()
     }
 }
 

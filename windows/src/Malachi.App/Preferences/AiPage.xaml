@@ -6,9 +6,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Port of macos/Sources/MalachiMail/Preferences/AIPaneViewController.swift;
 GTK: preferences.blp ai_page. The group MCP (mcp_group) with its
 description, which a missing bridge or a status the bridge did not give
-replaces (GTK, U2 and U3), and its one row, Register with Claude
-(mcp_switch), insensitive until the bridge answered and while a call
-runs.
+replaces (GTK, U2 and U3), and its row Register with Claude (mcp_switch),
+insensitive while its state is not known and while a change runs; under
+it, while a change waits for Claude Desktop to restart, the row Claude
+Desktop with Restart (macOS; GTK has no Claude Desktop). The group
+Assistant (assistant_group): Show the Assistant Menu, Open In, and while In
+App is chosen Claude Code (the claude.exe the panel runs, Choose…, and in
+front of it the button of what the row offers: Sign In… or Get Claude
+Code…) and Model. Its texts come from ui/internal/assistant, set in code
+(AiPage.xaml.cs).
 -->
 <UserControl
     x:Class="Malachi.App.Preferences.AiPage"
@@ -55,6 +61,49 @@ runs.
                             AutomationProperties.AutomationId="RegisterWithClaude"
                             AutomationProperties.Name="{l:T Msgid='Register with Claude'}"
                             Toggled="OnRegisterToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="PendingRow" Visibility="Collapsed">
+                        <Button x:Name="RestartButton" AutomationProperties.AutomationId="RestartClaudeDesktop" Click="OnRestartClick" />
+                    </tk:SettingsCard>
+                </StackPanel>
+
+                <StackPanel x:Name="AssistantGroup" Spacing="{StaticResource SettingsCardSpacing}">
+                    <TextBlock
+                        x:Name="AssistantHeading"
+                        AutomationProperties.HeadingLevel="Level2"
+                        Style="{StaticResource SettingsGroupHeaderStyle}" />
+                    <TextBlock x:Name="AssistantDescription" Style="{StaticResource SettingsGroupDescriptionStyle}" />
+                    <tk:SettingsCard x:Name="AssistantMenuRow">
+                        <ToggleSwitch x:Name="AssistantMenuSwitch" AutomationProperties.AutomationId="AssistantMenu" Toggled="OnAssistantMenuToggled" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="AssistantTargetRow">
+                        <ComboBox
+                            x:Name="AssistantTargetBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AssistantTarget" />
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="ClaudeCodeRow" Visibility="Collapsed">
+                        <tk:SettingsCard.Description>
+                            <TextBlock
+                                x:Name="ClaudeCodeState"
+                                AutomationProperties.AutomationId="ClaudeCodeState"
+                                IsTextSelectionEnabled="True"
+                                TextWrapping="Wrap" />
+                        </tk:SettingsCard.Description>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button
+                                x:Name="ClaudeOfferButton"
+                                AutomationProperties.AutomationId="ClaudeCodeOffer"
+                                Click="OnClaudeOfferClick"
+                                Visibility="Collapsed" />
+                            <Button x:Name="ClaudeChooseButton" AutomationProperties.AutomationId="ClaudeCodeChoose" Click="OnChooseClaudeClick" />
+                        </StackPanel>
+                    </tk:SettingsCard>
+                    <tk:SettingsCard x:Name="AssistantModelRow" Visibility="Collapsed">
+                        <ComboBox
+                            x:Name="AssistantModelBox"
+                            MinWidth="200"
+                            AutomationProperties.AutomationId="AssistantModel" />
                     </tk:SettingsCard>
                 </StackPanel>
             </StackPanel>

@@ -4,9 +4,13 @@
 // Port of macos/Tests/MalachiCoreTests/EditorBridgeTests.swift, the
 // counterpart of ui/internal/editor/editor_test.go. The bridge script's own
 // test checks the Windows deltas; EditorBridgeDriftTests compares the whole
-// script with bridge.go.
+// script with bridge.go, which is what Swift's
+// bridgeScriptIsGTKsPlusTheAdditions checks of its own copy. Swift's
+// rewriteTargetDecode reads what its bridge returns; here the passage is
+// GTK's "rewrite" message, so its cases go through the channel.
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using Malachi.Core.Html;
 using Xunit;
@@ -17,6 +21,7 @@ public sealed class EditorBridgeTests
 {
     private const string LineSeparator = "\x2028";
     private const string ParagraphSeparator = "\x2029";
+    private const string Backslash = @"\";
 
     [Fact]
     public void Document()
@@ -214,15 +219,127 @@ public sealed class EditorBridgeTests
         Assert.Contains("if (window !== window.top || !String(window.location.href).startsWith('" + EditorBridge.DocumentUrlPrefix + "')) return;", js, StringComparison.Ordinal);
         Assert.Equal("malachi-doc://editor/", EditorBridge.DocumentUrlPrefix);
         // No document property is read through the document once content
-        // exists: every access goes through the captured prototypes.
-        foreach (var clobberable in new[] { "document.body", "document.getSelection", "document.queryCommand", "document.execCommand", "document.createRange", "document.addEventListener", ".parentElement", ".closest(" })
+        // exists, nor a property of a node the bridge walks through the node:
+        // every access goes through the captured prototypes.
+        foreach (var clobberable in new[]
         {
-            Assert.False(js.Contains(clobberable, StringComparison.Ordinal), $"{clobberable} read through the document");
+            "document.body", "document.getSelection", "document.queryCommand", "document.execCommand", "document.createRange", "document.addEventListener",
+            ".parentElement", ".closest(", ".parentNode", ".previousSibling", ".nodeType", ".childNodes",
+        })
+        {
+            Assert.False(js.Contains(clobberable, StringComparison.Ordinal), $"{clobberable} read through the document or the node");
         }
+        // The rewrite (GTK's, posted as a message): the selection when it
+        // holds more than white space, the text before the attribution's div,
+        // or the whole body; its text read through the selection (line breaks
+        // as the page renders them), which is put back; the answer by one
+        // editing command, reported like typing.
+        Assert.Contains("sel.toString().trim()", js, StringComparison.Ordinal);
+        Assert.Contains("body().querySelectorAll('div')).find(d => collapsed(d.innerText) === want)", js, StringComparison.Ordinal);
+        Assert.Contains("r.selectNodeContents(body());", js, StringComparison.Ordinal);
+        Assert.Contains("if (saved) sel.addRange(saved);", js, StringComparison.Ordinal);
+        Assert.Contains("post({type: 'rewrite', selected: false, text});", js, StringComparison.Ordinal);
+        Assert.Contains("post({type: 'rewrite', selected: true, text: sel.toString()});", js, StringComparison.Ordinal);
+        Assert.Contains("if (below) r.collapse(false);", js, StringComparison.Ordinal);
+        Assert.Contains("execCommand.call(document, c, false, a);\n        schedule();\n        state();", js, StringComparison.Ordinal);
+        Assert.False(js.Contains("innerHTML =", StringComparison.Ordinal), "the page's HTML is never written by the bridge");
         // Escape and Ctrl+K go to the window; files dropped go with the
         // message.
         Assert.Contains("post({type: 'key', key: 'escape'})", js, StringComparison.Ordinal);
         Assert.Contains("post({type: 'key', key: 'link'})", js, StringComparison.Ordinal);
         Assert.Contains("postWith.call(webview, JSON.stringify({type: 'drop'}), e.dataTransfer.files);", js, StringComparison.Ordinal);
     }
+
+    // Swift rewriteInsertion and editor_test.go TestRewriteInsertion (the
+    // same cases): the answer goes in as plain text, one line with
+    // insertText, several as escaped HTML with line breaks, below the
+    // passage on a line of its own; never markup of its own. Windows adds
+    // html.EscapeString's apostrophe, a lone CR (kept, as Go keeps it) and
+    // the empty answer, each as Go's RewriteInsertion returns them.
+    [Theory]
+    [InlineData("Dobrý den.", false, "insertText", "Dobrý den.")]
+    [InlineData("<b>x</b> & 'y'", false, "insertText", "<b>x</b> & 'y'")]
+    [InlineData("a\n\nb <i>", false, "insertHTML", "a<br><br>b &lt;i&gt;")]
+    [InlineData("a\r\nb", false, "insertHTML", "a<br>b")]
+    [InlineData("x & y", true, "insertHTML", "<br>x &amp; y<br>")]
+    [InlineData("a\nb", true, "insertHTML", "<br>a<br>b<br>")]
+    [InlineData("</script>\"", true, "insertHTML", "<br>&lt;/script&gt;&#34;<br>")]
+    [InlineData("it's\n\"so\"", false, "insertHTML", "it&#39;s<br>&#34;so&#34;")]
+    [InlineData("a\rb", false, "insertText", "a\rb")]
+    [InlineData("a\rb\n", false, "insertHTML", "a\rb<br>")]
+    [InlineData("", false, "insertText", "")]
+    [InlineData("", true, "insertHTML", "<br><br>")]
+    public void RewriteInsertion(string text, bool below, string command, string argument)
+    {
+        Assert.Equal((command, argument), EditorBridge.RewriteInsertion(text, below));
+    }
+
+    // Swift rewriteScripts: the attribution and the answer go in as string
+    // literals (the attribution is mail data, a sender's name).
+    [Fact]
+    public void RewriteScripts()
+    {
+        Assert.Equal("""window.malachi.rewriteTarget("On 1 May, Jana wrote:")""", EditorBridge.RewriteTargetScript("On 1 May, Jana wrote:"));
+        Assert.Equal("""window.malachi.rewriteTarget("")""", EditorBridge.RewriteTargetScript(""));
+        Assert.Equal(
+            "window.malachi.rewriteTarget(\"a" + Backslash + "\")" + Escape("003c") + "/script" + Escape("003e") + Backslash + "n\")",
+            EditorBridge.RewriteTargetScript("a\")</script>\n"));
+        Assert.Equal("""window.malachi.rewriteApply(false, "insertText", "Hi")""", EditorBridge.RewriteApplyScript("Hi", below: false));
+        var br = Escape("003c") + "br" + Escape("003e");
+        Assert.Equal(
+            "window.malachi.rewriteApply(true, \"insertHTML\", \"" + br + "a" + br + "b" + br + "\")",
+            EditorBridge.RewriteApplyScript("a\nb", below: true));
+    }
+
+    // Swift rewriteTargetDecode, through the channel: the passage is the
+    // page's "rewrite" message (GTK's shape; macOS decodes what its bridge
+    // returns). A missing field is its zero value; anything that is not a
+    // message of that shape answers nobody.
+    [Theory]
+    [InlineData("""{"type":"rewrite","selected":true,"text":"a\nb"}""", true, true, "a\nb")]
+    [InlineData("""{"type":"rewrite","selected":false,"text":""}""", true, false, "")]
+    [InlineData("""{"type":"rewrite","text":"x"}""", true, false, "x")]
+    [InlineData("""{"type":"rewrite"}""", true, false, "")]
+    [InlineData("not json", false, false, "")]
+    [InlineData("""{"type":"rewrite","selected":"yes"}""", false, false, "")]
+    [InlineData("""{"type":"rewrite","text":42}""", false, false, "")]
+    [InlineData("42", false, false, "")]
+    [InlineData(null, false, false, "")]
+    public void RewriteTargetDecode(string? raw, bool answered, bool selected, string text)
+    {
+        var channel = new EditorChannel();
+        channel.Receive("""{"type":"ready"}""");
+        var got = new List<RewriteTarget>();
+        Assert.NotNull(channel.BeginRewriteTarget("", got.Add));
+        Assert.Equal(answered, channel.Receive(raw) is not null);
+        if (answered)
+        {
+            Assert.Equal([new RewriteTarget { Selected = selected, Text = text }], got);
+        }
+        else
+        {
+            Assert.Empty(got);
+        }
+    }
+
+    // editor_test.go TestRewriteMessage: the page posts the passage of a
+    // rewrite; the bridge has both functions.
+    [Fact]
+    public void RewriteMessage()
+    {
+        var m = BridgeMessage.Decode("""{"type":"rewrite","selected":true,"text":"a\nb"}""");
+        Assert.Equal((BridgeMessage.Kinds.Rewrite, true, "a\nb"), (m.Type, m.Selected, m.Text));
+        foreach (var fn in new[] { "rewriteTarget(attribution)", "rewriteApply(below, c, a)", "post({type: 'rewrite'" })
+        {
+            Assert.True(EditorBridge.Script.Contains(fn, StringComparison.Ordinal), $"the bridge lacks {fn}");
+        }
+        // Windows: the passage is mail text, never printed.
+        Assert.Equal("RewriteTarget(selected: true, text: 6 chars)", new RewriteTarget { Selected = true, Text = "secret" }.ToString());
+        Assert.Equal(
+            "BridgeMessage(type: rewrite, seq: 0, html: 0 chars, text: 3 chars, key: 0 chars)",
+            m.ToString());
+    }
+
+    // A JSON escape of the code point hex as the script holds it.
+    private static string Escape(string hex) => Backslash + "u" + hex;
 }

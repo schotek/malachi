@@ -63,6 +63,13 @@ func N(singular, plural string, n int) string {
 	return glib.Dngettext(Domain, singular, plural, uint32(n))
 }
 
+// Catalog translates through T and N: the translator the pure packages
+// take (ui/internal/assistant's Translator).
+type Catalog struct{}
+
+func (Catalog) T(msgid string) string                   { return T(msgid) }
+func (Catalog) N(singular, plural string, n int) string { return N(singular, plural, n) }
+
 // C translates msgid disambiguated by context.
 func C(context, msgid string) string {
 	return glib.Dpgettext2(Domain, context, msgid)
