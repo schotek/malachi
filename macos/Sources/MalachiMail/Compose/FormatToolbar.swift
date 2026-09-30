@@ -257,6 +257,39 @@ final class FormatToolbar: NSStackView {
     /// Whether the link popover is up (Escape closes it first).
     var isLinkPopoverShown: Bool { linkPopover.isShown }
 
+    /// Keeps only the controls of `formats` (a comment's,
+    /// `Jira.commentFormats`); the others leave the bar, and so does a
+    /// separator left with nothing to separate. Formats without a control
+    /// here (code) change nothing.
+    func restrict(to formats: [Jira.Format]) {
+        let allowed = Set(formats)
+        let controls: [(NSView, Jira.Format)] = [
+            (boldButton, .bold), (italicButton, .italic), (underlineButton, .underline),
+            (blockButton, .heading), (alignButton, .alignment),
+            (ulButton, .bulletList), (olButton, .numberedList), (quoteButton, .quote),
+            (linkButton, .link), (colorWell, .colour), (imageButton, .image), (clearButton, .clear),
+        ]
+        for (v, f) in controls {
+            v.isHidden = !allowed.contains(f)
+        }
+        // A separator shows only between two groups that kept a control.
+        var previous: NSView?
+        for v in arrangedSubviews {
+            if (v as? NSBox)?.boxType == .separator {
+                let after = previous.map { ($0 as? NSBox)?.boxType != .separator } ?? false
+                v.isHidden = !after
+                if after {
+                    previous = v
+                }
+            } else if !v.isHidden {
+                previous = v
+            }
+        }
+        if let last = previous, (last as? NSBox)?.boxType == .separator {
+            last.isHidden = true
+        }
+    }
+
     // MARK: Actions
 
     @objc private func toggled(_ sender: NSButton) {

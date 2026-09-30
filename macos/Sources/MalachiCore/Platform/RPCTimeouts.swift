@@ -26,6 +26,10 @@ public enum RPCTimeouts {
     public static let discover: Duration = .seconds(15)
     /// `account.test`: 10 s to connect and 20 s per endpoint inside.
     public static let test: Duration = .seconds(45)
+    /// `account.detectSite`: a few requests to the address the user typed.
+    public static let detectSite: Duration = .seconds(15)
+    /// `account.listSpaces`: signs in and lists (and may count) the spaces.
+    public static let listSpaces: Duration = .seconds(45)
     /// `account.add`, `account.update`: the keyring may prompt.
     public static let save: Duration = .seconds(30)
     /// `account.oauthStart`: the daemon opens a listener and builds the URL.

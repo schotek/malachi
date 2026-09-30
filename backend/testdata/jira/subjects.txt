@@ -1,0 +1,153 @@
+# Subjects of mail messages for internal/jira's notification matcher
+# (TestMatchNotificationSubjects). One case a line: "<want> | <subject>",
+# want being the issue key the matcher finds or "-" for none. The sender
+# matches in every case; the account's selected spaces are ITSD, WEB and
+# MOB2 (OPS, HR and ABC exist on the site and are not selected).
+#
+# In a subject, <repeat:N:text> stands for text N times, <U+XXXX> for that
+# code point and <empty> for nothing, so that this file holds no long
+# lines, no invisible characters, no letters that only look like others
+# and no space at the end of a line. Everything is fictional.
+
+# The site's own notifications, and an automation rule's.
+ITSD-42 | [JIRA] (ITSD-42) Printer on the 2nd floor
+ITSD-42 | [JIRA] (ITSD-42) Tiskárna ve 2. patře netiskne
+WEB-7 | [JIRA] Petr Svoboda commented on (WEB-7) Landing page typo
+MOB2-1 | [JIRA] (MOB2-1) Crash on start
+ITSD-20 | IT Service Desk: Printer jams (ITSD-20)
+ITSD-20 | IT Service Desk: Printer jams (ITSD-20)<U+0020>
+WEB-123456789 | Web: nine digits (WEB-123456789)
+ITSD-42 | [ITSD-42] Printer on the 2nd floor
+ITSD-42 | Re: [JIRA] (ITSD-42) Printer on the 2nd floor
+ITSD-42 | Fwd: FW: [JIRA] (ITSD-42) Printer on the 2nd floor
+ITSD-42 | (ITSD-42)
+ITSD-1 | [JIRA] (ITSD-1) (WEB-2) two keys, the first wins
+WEB-2 | [JIRA] [WEB-2] (ITSD-1) two keys, the first wins
+
+# Keys of spaces that are not selected are passed over.
+- | [JIRA] (OPS-7) Backup failed
+- | Human Resources: Onboarding (HR-3)
+ITSD-42 | [JIRA] (OPS-7) relates to (ITSD-42)
+- | [JIRA] (ITSDX-42) a longer space key
+- | [JIRA] (ITS-42) a shorter space key
+- | [JIRA] (XITSD-42) a prefix
+- | [JIRA] (MOB-1) the space is MOB2
+- | [JIRA] (MOB22-1) the space is MOB2
+
+# No brackets, or not around the key alone.
+- | [JIRA] ITSD-42 Printer on the 2nd floor
+- | ITSD-42
+- | [JIRA] ( ITSD-42 ) spaces inside
+- | [JIRA] (ITSD-42 ) a space inside
+- | [JIRA] (ITSD-42, WEB-7) a list
+- | [JIRA] (ITSD-42] mixed brackets
+- | [JIRA] [ITSD-42) mixed brackets
+- | [JIRA] {ITSD-42} braces
+- | [JIRA] <ITSD-42> angle brackets
+- | [JIRA] (ITSD-42
+- | [JIRA] ITSD-42)
+- | (ITSD-
+- | (ITSD
+- | (
+- | [
+- | <empty>
+- | <U+0020>
+- | [JIRA] (see ITSD-42) words before the key
+- | [JIRA] (ITSD-42: Printer) words after the key
+- | https://acme.atlassian.net/browse/ITSD-42
+- | [JIRA] (https://acme.atlassian.net/browse/ITSD-42)
+
+# Numbers.
+- | [JIRA] (ITSD-0) zero
+- | (ABC-0)
+- | (ABC-01)
+- | (ABC-1) a space that is not selected
+- | [JIRA] (ITSD-01) a leading zero
+- | [JIRA] (ITSD-042) a leading zero
+- | [JIRA] (ITSD-) no number
+- | [JIRA] (ITSD--42) two hyphens
+- | [JIRA] (ITSD-4 2) a space in the number
+- | [JIRA] (ITSD-42a) a letter after the number
+- | [JIRA] (ITSD-4.2) a dot
+- | [JIRA] (ITSD-1234567890) ten digits
+- | [JIRA] (ITSD-99999999999999999999999999999999999999) a long number
+- | [JIRA] (ITSD-+42) a sign
+- | [JIRA] (ITSD-<U+0664><U+0662>) Arabic-Indic digits
+- | [JIRA] (ITSD-<U+FF14><U+FF12>) full-width digits
+
+# Case: a key is capitals, to the letter.
+- | [JIRA] (itsd-42) lower case
+- | [JIRA] (Itsd-42) mixed case
+- | [JIRA] (ITSd-42) mixed case
+- | [jira] (web-7) lower case
+
+# Letters of other scripts that look like the key's.
+- | [JIRA] (<U+0406><U+0422><U+0405>D-42) Cyrillic I, T and S
+- | [JIRA] (IT<U+0405>D-42) one Cyrillic letter
+- | [JIRA] (<U+0399><U+03A4>SD-42) Greek iota and tau
+- | [JIRA] (<U+FF29><U+FF34><U+FF33><U+FF24>-42) full-width letters
+- | [JIRA] (W<U+0415>B-7) Cyrillic E
+- | [JIRA] (ITSD<U+2010>42) a Unicode hyphen
+- | [JIRA] (ITSD<U+2013>42) an en dash
+- | [JIRA] (ITSD<U+2212>42) a minus sign
+- | [JIRA] <U+FF08>ITSD-42<U+FF09> full-width parentheses
+- | [JIRA] <U+FF3B>ITSD-42<U+FF3D> full-width brackets
+- | [JIRA] (IT<U+200B>SD-42) a zero-width space in the key
+- | [JIRA] (<U+200B>ITSD-42) a zero-width space before the key
+- | [JIRA] (ITSD-42<U+200B>) a zero-width space after the key
+- | [JIRA] (ITSD<U+00AD>-42) a soft hyphen
+- | [JIRA] (<U+202E>24-DSTI) right-to-left override
+- | [JIRA] (<U+FEFF>ITSD-42) a byte order mark
+ITSD-42 | <U+202E>[JIRA] (ITSD-42) an override around a real key<U+202C>
+ITSD-42 | [JIRA]<U+00A0>(ITSD-42)<U+00A0>no-break spaces around the brackets
+
+# Control characters and header tricks that reached the subject.
+- | [JIRA] (ITSD<U+0000>-42) NUL
+- | [JIRA] (ITSD<U+000A>-42) a line feed in the key
+- | [JIRA] (ITSD-<U+000D><U+000A> 42) a folded key
+ITSD-42 | [JIRA]<U+000D><U+000A>From: jira@acme.atlassian.net<U+000D><U+000A>Subject: (ITSD-42)
+ITSD-42 | [JIRA]<U+0009>(ITSD-42)<U+0009>tabs
+
+# RFC 2047 encoded words: decoded by the parser before the matcher reads
+# the subject; one that stayed encoded is read as it stands.
+ITSD-42 | [JIRA] (ITSD-42) Tiskárna – žluťoučký kůň
+ITSD-42 | =?UTF-8?Q?[JIRA]_(ITSD-42)_Tisk=C3=A1rna?=
+- | =?UTF-8?Q?[JIRA]_=28ITSD-42=29_Tisk=C3=A1rna?=
+- | =?UTF-8?B?W0pJUkFdIChJVFNELTQyKSBUaXNrw6FybmE=?=
+- | =?UTF-8?Q?[JIRA]_(ITSD=2D42)?=
+- | =?ISO-8859-2?Q?(ITSD-?= =?ISO-8859-2?Q?42)?=
+
+# Nesting and many brackets.
+ITSD-42 | [(ITSD-42)]
+ITSD-42 | ([ITSD-42])
+ITSD-42 | [[ITSD-42]]
+ITSD-42 | ((ITSD-42))
+ITSD-42 | [JIRA] ((((((((ITSD-42))))))))
+ITSD-42 | [JIRA] (([ITSD-42) (ITSD-42)
+WEB-7 | (ITSD-(WEB-7)42)
+- | (ITSD-(WEB-)7)42)
+ITSD-42 | <repeat:300:(>ITSD-42)
+ITSD-42 | <repeat:300:[(>ITSD-42)
+- | <repeat:1000:(>
+- | <repeat:1000:[>
+- | <repeat:500:()>
+- | <repeat:250:(A-1)>
+- | <repeat:100:(ITSD-0)>
+- | <repeat:90:(OPS-12345)>
+ITSD-5 | <repeat:90:(OPS-12345)>(ITSD-5)
+- | <repeat:1000:(ITSD->
+- | <repeat:1000:(ITSD>
+- | <repeat:4000:A>
+
+# Length: a header line holds 998 bytes; the matcher reads 1024 of the
+# subject and no further.
+ITSD-42 | <repeat:989:x>(ITSD-42)
+ITSD-42 | (ITSD-42)<repeat:989:x>
+ITSD-42 | <repeat:1015:x>(ITSD-42)
+- | <repeat:1016:x>(ITSD-42)
+- | <repeat:1020:x>(ITSD-42)
+- | <repeat:1024:x>(ITSD-42)
+- | <repeat:100000:x>(ITSD-42)
+ITSD-42 | <repeat:507:é>(ITSD-42)
+- | <repeat:508:é>(ITSD-42)
+- | <repeat:1019:x>(ITSD-42345)

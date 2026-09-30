@@ -516,6 +516,469 @@ msgstr ""
 msgid "Recently used"
 msgstr ""
 
+#. TRANSLATORS: a comment on a service-desk request that the customer reads too.
+#: ui/internal/jira/compose.go
+msgid "Reply to Customer"
+msgstr ""
+
+#. TRANSLATORS: a comment on a service-desk request that only the team reads.
+#: ui/internal/jira/compose.go
+msgid "Internal Note"
+msgstr ""
+
+#. TRANSLATORS: title of the window that writes a comment; %s is an issue key such as "ITSD-42".
+#: ui/internal/jira/compose.go
+#, c-format
+msgid "Comment on %s"
+msgstr ""
+
+#: ui/internal/jira/compose.go
+msgid "Write a comment first"
+msgstr ""
+
+#: ui/internal/jira/compose.go
+msgid "Comment queued"
+msgstr ""
+
+#. TRANSLATORS: the Reply action of an issue: writes a comment.
+#: ui/internal/jira/compose.go
+msgid "Comment"
+msgstr ""
+
+#. TRANSLATORS: a folder of a Jira account: the issues assigned to the user.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Assigned to Me"
+msgstr ""
+
+#. TRANSLATORS: a folder of a Jira account: the issues the user watches.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Watching"
+msgstr ""
+
+#. TRANSLATORS: a folder of a Jira account: the issues that are not closed yet.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Open"
+msgstr ""
+
+#. TRANSLATORS: tooltip of an issue key such as "ITSD-42".
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Open %s in the Browser"
+msgstr ""
+
+#. TRANSLATORS: a field of a Jira issue.
+#: ui/internal/jira/jira.go
+msgid "Status"
+msgstr ""
+
+#. TRANSLATORS: the value of an empty field of a Jira issue (priority, type, reporter).
+#: ui/internal/jira/jira.go
+msgctxt "jira value"
+msgid "None"
+msgstr ""
+
+#: ui/internal/jira/jira.go
+msgid "Unassigned"
+msgstr ""
+
+#. TRANSLATORS: a field of a Jira issue: the person who works on it.
+#: ui/internal/jira/jira.go
+msgid "Assignee"
+msgstr ""
+
+#. TRANSLATORS: a field of a Jira issue.
+#: ui/internal/jira/jira.go
+msgid "Priority"
+msgstr ""
+
+#. TRANSLATORS: a field of a Jira issue: its type, such as Bug or Task.
+#: ui/internal/jira/jira.go
+msgid "Type"
+msgstr ""
+
+#. TRANSLATORS: a field of a Jira issue: the person who created it.
+#: ui/internal/jira/jira.go
+msgid "Reporter"
+msgstr ""
+
+#. TRANSLATORS: %s is an integration (a bot) that posted a comment on its author's behalf.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "via %s"
+msgstr ""
+
+#. TRANSLATORS: a comment of a Jira issue was changed after it was posted.
+#: ui/internal/jira/jira.go
+msgid "Edited"
+msgstr ""
+
+#. TRANSLATORS: badge of a comment only the service-desk team can read.
+#: ui/internal/jira/jira.go
+msgctxt "jira"
+msgid "Internal"
+msgstr ""
+
+#. TRANSLATORS: an issue's status changed; the first %s is the old status, the second the new one.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Status: %s → %s"
+msgstr ""
+
+#. TRANSLATORS: an issue was assigned to someone else; the first %s is the old assignee, the second the new one.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Assignee: %s → %s"
+msgstr ""
+
+#. TRANSLATORS: put between two changes of an issue on one line ("Status: A → B; Assignee: C → D").
+#: ui/internal/jira/jira.go
+msgctxt "change list separator"
+msgid "; "
+msgstr ""
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "No API token is stored for %s"
+msgstr ""
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "The Jira site rejected the token of %s"
+msgstr ""
+
+#. TRANSLATORS: menu item; "Jira" is a product name.
+#: ui/internal/jira/wizard.go
+msgid "Add _Jira Account…"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Add Jira Account"
+msgstr ""
+
+#. TRANSLATORS: title of the page that asks for the address of a Jira installation.
+#: ui/internal/jira/wizard.go
+msgid "Jira Site"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Enter the address of your Jira site. Malachi Mail finds out whether it runs "
+"in the cloud or in your company's data center."
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Site Address"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Looking up the Jira site"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Loading the spaces"
+msgstr ""
+
+#. TRANSLATORS: Jira projects, which Jira calls spaces.
+#: ui/internal/jira/wizard.go
+msgctxt "jira"
+msgid "Spaces"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Choose the spaces whose issues appear as folders."
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "No spaces are visible to this account"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Only Issues Involving Me"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Assigned to you, reported by you or watched by you"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Keep Issues Offline For"
+msgstr ""
+
+#. TRANSLATORS: subtitle of "Keep Issues Offline For".
+#: ui/internal/jira/wizard.go
+msgid "Older issues stay on the site and are not shown"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "The Jira site rejected the token"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "API Token"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Create an API token for Malachi Mail in your Atlassian account, then paste "
+"it here."
+msgstr ""
+
+#. TRANSLATORS: button that opens id.atlassian.com in the browser.
+#: ui/internal/jira/wizard.go
+msgid "Create API Token…"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Enter the API token for this account"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Personal Access Token"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Create a personal access token in your Jira profile, then paste it here."
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "Enter the personal access token for this account"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "This is not a web address"
+msgstr ""
+
+#. TRANSLATORS: the first %s is the name of a Jira site, the second its version ("9.12.4").
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Found %s, version %s"
+msgstr ""
+
+#. TRANSLATORS: %s is the name of a Jira site.
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Found %s"
+msgstr ""
+
+#. TRANSLATORS: an estimate of the issues of a Jira space.
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "about %d issue"
+msgid_plural "about %d issues"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/jira/wizard.go
+msgid "Select at least one space"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Select at most %d space"
+msgid_plural "Select at most %d spaces"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/jira/wizard.go
+msgid "This address is not a Jira site"
+msgstr ""
+
+#: ui/internal/jira/wizard.go
+msgid "An account for this Jira site already exists"
+msgstr ""
+
+#. TRANSLATORS: title of the window with the settings of a Jira account; "Jira" is a product name.
+#: ui/internal/jira/settings.go
+msgid "Jira Account"
+msgstr ""
+
+#. TRANSLATORS: label of the user a Jira account signs in as.
+#: ui/internal/jira/settings.go
+msgid "Signed In As"
+msgstr ""
+
+#. TRANSLATORS: button that asks for a new API token of a Jira account.
+#: ui/internal/jira/settings.go
+msgid "Replace Token…"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Synchronisation"
+msgstr ""
+
+#. TRANSLATORS: switch; the changes are listed among the comments of an issue.
+#: ui/internal/jira/settings.go
+msgid "Show Status and Assignee Changes"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Closed Statuses"
+msgstr ""
+
+#. TRANSLATORS: "Open" is the folder of a Jira account with the issues that are not closed yet.
+#: ui/internal/jira/settings.go
+msgid "Issues in these statuses are left out of Open"
+msgstr ""
+
+#. TRANSLATORS: the e-mails Jira sends about changes of issues.
+#: ui/internal/jira/settings.go
+msgid "Notification E-mails"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "When a Jira Notification Arrives"
+msgstr ""
+
+#. TRANSLATORS: the addresses notification e-mails of Jira come from.
+#: ui/internal/jira/settings.go
+msgid "Senders"
+msgstr ""
+
+#. TRANSLATORS: "@example.org" is an example, keep it as it is.
+#: ui/internal/jira/settings.go
+msgid "An address, or a domain such as @example.org"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Comments Posted by Bots"
+msgstr ""
+
+#. TRANSLATORS: the Jira accounts of integrations that post comments for other people.
+#: ui/internal/jira/settings.go
+msgid "Bot Accounts"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Their comments are shown under the person they name"
+msgstr ""
+
+#. TRANSLATORS: lines of a comment that are not shown.
+#: ui/internal/jira/settings.go
+msgid "Hidden Lines"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Lines matching these patterns are removed from comments"
+msgstr ""
+
+#. TRANSLATORS: words a bot puts in front of a person's name, such as a company name.
+#: ui/internal/jira/settings.go
+msgid "Name Prefixes"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Removed from the start of authors' names"
+msgstr ""
+
+#. TRANSLATORS: button that adds what was typed to a list.
+#: ui/internal/jira/settings.go
+msgid "Add"
+msgstr ""
+
+#. TRANSLATORS: what a notification e-mail of Jira does: the issue it names is synchronised.
+#: ui/internal/jira/settings.go
+msgid "Check the Issue at Once"
+msgstr ""
+
+#. TRANSLATORS: what a notification e-mail of Jira does: the issue is synchronised and the e-mail is not listed.
+#: ui/internal/jira/settings.go
+msgid "Check the Issue and Hide the E-mail"
+msgstr ""
+
+#. TRANSLATORS: what a notification e-mail of Jira does: nothing, it is an e-mail like any other.
+#: ui/internal/jira/settings.go
+msgid "Do Nothing"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid ""
+"Hidden e-mails stay in your mailbox and come back when you turn this off"
+msgstr ""
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "To Do"
+msgstr ""
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "In Progress"
+msgstr ""
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "Done"
+msgstr ""
+
+#. TRANSLATORS: the issue statuses that belong to no category.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "Other"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "Select at most %d status"
+msgid_plural "Select at most %d statuses"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/internal/jira/settings.go
+msgid "This entry is too long"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "This entry contains control characters"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "A bot name needs at least 3 characters"
+msgstr ""
+
+#. TRANSLATORS: %s says what is wrong with a regular expression, in English ("missing closing )").
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "This pattern is not valid: %s"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "Enter an address, or a domain such as @example.org"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+msgid "This entry is already in the list"
+msgstr ""
+
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "The list holds at most %d entry"
+msgid_plural "The list holds at most %d entries"
+msgstr[0] ""
+msgstr[1] ""
+
+#. TRANSLATORS: button that adds a suggested entry to a list; %s is the entry, such as the name of a bot.
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "Add %s"
+msgstr ""
+
+#. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
+#: ui/internal/conversation/conversation.go
+#, c-format
+msgid "%d earlier message is not shown"
+msgid_plural "%d earlier messages are not shown"
+msgstr[0] ""
+msgstr[1] ""
+
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
 #: ui/internal/widget/format.go:62
 msgctxt "participant list separator"

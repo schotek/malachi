@@ -61,10 +61,12 @@ func (s *threadService) List(ctx context.Context, p api.ThreadListParams) (*api.
 	}
 	out := make([]api.ThreadSummary, 0, len(items))
 	latest := make([]api.MessageSummary, 0, len(items))
+	rows := make([]store.Message, 0, len(items))
 	for _, r := range items {
 		t := toAPIThread(r)
 		out = append(out, t)
 		latest = append(latest, t.Latest)
+		rows = append(rows, r.Latest)
 	}
 	// The outbox decoration writes into the slice it is given.
 	if err := s.b.attachOutboxInfo(ctx, a.ID, string(p.FolderID), latest); err != nil {
@@ -72,6 +74,9 @@ func (s *threadService) List(ctx context.Context, p api.ThreadListParams) (*api.
 	}
 	for i := range out {
 		out[i].Latest = latest[i]
+	}
+	if err := s.b.decorateThreads(ctx, a, rows, out); err != nil {
+		return nil, err
 	}
 	return &api.ThreadListResult{Threads: out, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
 }
@@ -126,7 +131,15 @@ func (s *threadService) Get(ctx context.Context, p api.ThreadGetParams) (*api.Th
 		return nil, err
 	}
 	summary.Latest = all[len(all)-1]
-	return &api.ThreadGetResult{Thread: summary, Messages: all[:len(all)-1]}, nil
+	all = all[:len(all)-1]
+	if err := s.b.decorateRows(ctx, a, members, all); err != nil {
+		return nil, err
+	}
+	threads := []api.ThreadSummary{summary}
+	if err := s.b.decorateThreads(ctx, a, []store.Message{row.Latest}, threads); err != nil {
+		return nil, err
+	}
+	return &api.ThreadGetResult{Thread: threads[0], Messages: all}, nil
 }
 
 // toAPIThread maps a store row; the subject loses its reply markers and

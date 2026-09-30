@@ -356,8 +356,14 @@ public func authBannerButton(_ kind: SignInKind, _ reason: ErrorCode) -> String 
 /// reason (sync.go `authBannerText`): a missing password and a refused one
 /// are named, since the password is what the user enters again (the
 /// button edits the account, `editsPassword`); `account` is the account's
-/// display name.
-public func authBannerText(_ reason: ErrorCode, _ account: String) -> String {
+/// display name. A Jira account (`kind`) names its token instead
+/// (`Jira.authBannerText`); a keyring failure reads as for mail.
+/// Swift-first: mirror in sync.go when GTK gets Jira accounts.
+public func authBannerText(_ reason: ErrorCode, _ account: String, kind: AccountKind? = nil) -> String {
+    let jira = Jira.authBannerText(kind: kind ?? .imap, reason: reason, account: account)
+    if !jira.isEmpty {
+        return jira
+    }
     switch reason {
     case .authRequired:
         // TRANSLATORS: banner; %s is an account name

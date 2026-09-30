@@ -51,6 +51,10 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 	if d.Version != p.Version {
 		return nil, api.NewError(api.CodeConflict, "draft %s was modified; reload it", p.DraftID)
 	}
+	if isIssueAccount(a) {
+		// An issue tracker sends no e-mail: its drafts are comments.
+		return s.sendComment(ctx, a, p, d)
+	}
 
 	var recipients []string
 	for _, list := range [][]api.Address{d.To, d.CC, d.BCC} {
@@ -127,20 +131,8 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 		Build:        func(w io.Writer) error { return smtp.BuildMessage(w, in) },
 		Limit:        limit,
 	})
-	var apiErr *api.Error
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return nil, api.NewError(api.CodeDraftNotFound, "draft %s not found", p.DraftID)
-	case errors.Is(err, store.ErrVersionConflict):
-		return nil, api.NewError(api.CodeConflict, "draft %s was modified; reload it", p.DraftID)
-	case errors.Is(err, store.ErrTooBig):
-		// The store stops at the first byte over the cap, so the exact size
-		// is unknown; report the estimate when it explains the excess.
-		return nil, tooBig(limit, max(estimateOutgoingSize(d), limit+1))
-	case errors.As(err, &apiErr):
-		return nil, apiErr
-	case err != nil:
-		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	if err != nil {
+		return nil, enqueueError(err, p.DraftID, d)
 	}
 	s.b.log.Info("message queued", "account", a.ID, "message", m.ID, "recipients", len(recipients), "size", m.Size)
 	s.b.Delivery.Wake(a.ID)
@@ -150,6 +142,24 @@ func (s *messageService) Send(ctx context.Context, p api.MessageSendParams) (*ap
 		s.b.triggerDrafts(a.ID)
 	}
 	return &api.MessageSendResult{OutboxID: api.MessageID(m.ID)}, nil
+}
+
+// enqueueError maps a failed EnqueueOutbox of draft d.
+func enqueueError(err error, id api.DraftID, d store.Draft) error {
+	var apiErr *api.Error
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return api.NewError(api.CodeDraftNotFound, "draft %s not found", id)
+	case errors.Is(err, store.ErrVersionConflict):
+		return api.NewError(api.CodeConflict, "draft %s was modified; reload it", id)
+	case errors.Is(err, store.ErrTooBig):
+		// The store stops at the first byte over the cap, so the exact size
+		// is unknown; report the estimate when it explains the excess.
+		return tooBig(outgoingLimit, max(estimateOutgoingSize(d), outgoingLimit+1))
+	case errors.As(err, &apiErr):
+		return apiErr
+	}
+	return api.NewError(api.CodeStorageError, "%v", err)
 }
 
 // threadingHeaders derives In-Reply-To and References for a reply: the

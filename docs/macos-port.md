@@ -43,7 +43,10 @@ started when the application quits. The daemon gets macOS paths for the
 configuration and the store (`~/Library/Application Support/Malachi
 Mail/`) as flags and keeps its own default socket path, so `malachi-mcp`
 and `.mcp.json` work unchanged (`MalachiCore/Daemon/Paths.swift`,
-`DaemonSupervisor.swift`).
+`DaemonSupervisor.swift`). `MALACHI_DATA_DIR` replaces that directory
+(the Windows client's override, [windows-port.md §1](windows-port.md#1-process-model)),
+so a test build with its own `MALACHI_SOCKET` runs beside the everyday
+one on a copy of the store.
 
 Like the GTK UI (`SweepOpenedAttachments`), the app removes the directory
 it writes attachments to for opening and previewing
@@ -137,7 +140,23 @@ in the endpoint fields until the host or port changes),
 `StorageUsageController` (`system.storage` every 5 s while Settings is
 open),
 `MCPRegistrationController` (runs the bundled `malachi-mcp status` /
-`install` / `uninstall --json` through `BridgeRunner` for Settings → AI).
+`install` / `uninstall --json` through `BridgeRunner` for Settings → AI),
+`JiraWizardController` (the Jira assistant: `account.detectSite` →
+the token → `account.listSpaces`, which doubles as the sign-in test →
+the spaces, the offline window and *Only Issues Involving Me* →
+`account.add`; in its edit mode `account.update` with a new token),
+`JiraAccountController` (the settings sheet of a Jira account:
+`account.listSpaces` with the stored token for the spaces and statuses,
+the form of `ui/internal/jira/settings.go`, `account.update` with empty
+credentials, which keeps the token) and `ConversationController` (the
+conversation shown for a folded conversation row: the members from the
+list controller's folder-scoped `thread.get`, the bodies through
+`MessageCache` near the viewport only, the one member marked read, the
+cards kept in step as members arrive or go; the port of
+`ui/internal/conversation`). `MailboxController.handleMessagesChanged`
+takes `notify.messagesChanged`: the account's folders read again, the
+cache's entries of the account dropped, the shown folder re-fetched and
+listed again.
 Each is a `@MainActor` class over an injected `RPCClient` (or a process
 runner) and a `toast` sink, tested against a scripted daemon or a fake
 bridge script (§9), with no view in sight.
@@ -220,9 +239,21 @@ Rules that keep it honest against a daemon it did not ship with:
   level once per distinct reason until the next connection. No new
   strings: both are the GTK msgids;
 - `system.hello` and `system.authenticate` are in the method table like
-  every method (48, in the order of `api.AllMethods`), but only
+  every method (50, in the order of `api.AllMethods`; `account.detectSite`
+  and `account.listSpaces` came with the Jira accounts), but only
   `RPCClient.connect()` sends them; `ErrorCode.unauthenticated` (1005) is
   what the daemon answers anything else before the handshake;
+  `API.allNotifications` is `api.AllNotifications` in its order
+  (`newMessage`, `syncState`, `authRequired`, `accountsChanged`,
+  `messagesChanged`), and `APICodingTests.methodTableMatchesGo` holds
+  both lists against the Go ones;
+- the Jira types (`API/Jira.swift`: `JiraConfig` with every Go field,
+  since `Codable` drops unknown keys and an `account.update` from the
+  settings would otherwise erase them; `IssueInfo`, `MessageIssue` with
+  the flattened `IssueInfo`, `Space`, `IssueStatus`, `DraftComment`,
+  `MessagesChangedNotification`) follow the rules above:
+  `Account.capabilities` is `[Capability]?`, not `@NullAsEmpty`, because
+  a missing list means the mail default while an empty one means none;
 - timeouts are the GTK UI's (`Platform/RPCTimeouts.swift`): 5 s by
   default, 5 s for the whole handshake (`handshake`, api.HandshakeTimeout),
   3 s for `system.info`, 60 s for `message.part` and
@@ -232,7 +263,10 @@ Rules that keep it honest against a daemon it did not ship with:
   `account.oauthStart` and 75 s for each `account.oauthWait` (the daemon
   answers `pending` after a minute and the wizard asks again), 300 s for
   `message.download` (`download`: the daemon's budget is 4 minutes, and
-  it finishes a download its caller gave up on).
+  it finishes a download its caller gave up on), 15 s for
+  `account.detectSite` and 45 s for `account.listSpaces` (the daemon
+  signs in, lists and counts within 40 s), the values api.md names for
+  the clients.
 
 `docs/api.md` and `backend/pkg/api` are not changed from here. A feature
 that needs a new method is added to the daemon and the document first
@@ -272,6 +306,33 @@ The two schemes are different on purpose: a displayed message can never
 address compose attachments, and a composed draft cannot name a received
 message's parts. One view per pane is reused between messages (without
 network nothing persists, and the document is replaced whole).
+
+The conversation view (`MessageView/ConversationViewController.swift`,
+a folded conversation row selected) stacks the members of a conversation
+as native cards and gives every HTML card a `MessageWebView` of its own
+in its **sized mode** (`init(cache:zoom:sized: true)`): the same
+configuration, the same content rule list, content JavaScript off, and
+the document still `viewerDocument(body:compact:)` around one sanitiser
+output, the column's padding cut to the card's. What the mode adds is a
+second user script of the app's own (`sizeScript`), in the same
+`.defaultClient` world as the viewer script, that only reads the layout:
+a `ResizeObserver` on the document and on the column reports the
+document's height in CSS pixels through a third message handler (`size`)
+whenever it changes and when a picture finishes loading, and
+`WebHeightGovernor` (`MalachiCore/Model/ConversationLayout.swift`, pure
+and tested) turns it into the view's height at the page zoom: capped at
+4000 pt (beyond it the card scrolls inside), and frozen after three
+growths in a row that the view's own growth caused (`100vh`,
+`height: 100%`: the script marks a report that followed a change of the
+view's height alone), until the document, the width or the zoom
+changes. The scroll wheel goes on to the conversation's scroll view while
+the document fits, the link under the pointer to the pane's one status
+label (`onHover`), and the card re-measures on zoom. Cards are cheap:
+`ConversationLayout.live` fetches a body only within two screens of the
+viewport and keeps at most eight web views alive, the nearest first; the
+others keep the height they last had without a view. Why not one composed
+document of the whole conversation, and what a card may and may not do,
+is in [security.md §3.2](security.md#32-defences) (layer 2 on macOS).
 
 The [security review checklist](security.md#12-review-checklist-for-prs-touching-content-handling)
 applies to changes in `WebViews/`, `MessageView/`, `Compose/`,
@@ -398,7 +459,19 @@ format in one place for both clients.
   `MailboxControllerListTests`, `MessageCacheTests`, `SyncControllerTests`,
   `ActionsControllerTests`, `ComposeControllerTests`, `DraftStateTests`,
   `WizardControllerTests`, `MailPreferencesTests`, `StorageUsageTests`,
-  `MCPRegistrationTests` with a `#!/bin/sh` fake bridge).
+  `MCPRegistrationTests` with a `#!/bin/sh` fake bridge). The Jira
+  accounts and the conversation view add the ports of the Go reference
+  tests (`JiraTests`, `JiraWizardTests`, `JiraComposeTests`,
+  `JiraSettingsTests`, `JiraPatternTests` for `ui/internal/jira`;
+  `CapabilitiesTests` for `ui/internal/capabilities`;
+  `ConversationTests` for `ui/internal/conversation`), the Swift-first
+  logic (`JiraListTests`, `JiraReaderTests`, `JiraActionRulesTests`,
+  `JiraAccountsTests`, `ConversationLayoutTests` with the height
+  governor), the controllers (`JiraWizardControllerTests`,
+  `JiraAccountControllerTests`, `JiraComposeControllerTests`,
+  `JiraActionsTests`, `ConversationControllerTests`,
+  `MessagesChangedTests`) and the Czech cases (`JiraTranslationTests`,
+  `JiraSettingsTranslationTests`).
 - `Tests/MalachiCoreTests/Fixtures/`: `FakeDaemon` is an in-process
   `malachid` on a real unix socket speaking the same newline-delimited
   JSON-RPC, with per-method handlers. It plays the daemon's side of the
@@ -532,6 +605,28 @@ client of the user's own in
 [README](../README.md#oauth-clients-for-gmail-and-microsoft-365)). Who would own that is the open question
 of the original exploration, and it is the same on a Linux desktop
 without GNOME Online Accounts.
+
+**Jira accounts came to macOS first (2026-09-29).** For the
+issue-tracker accounts ([api.md §4.1](api.md#41-account),
+[architecture.md §3.6](architecture.md#36-issue-tracker-accounts-kind-jira))
+and the conversation view the order of §10 was reversed, since the user's
+Jira lives on the Mac: the daemon first as always, then a Go reference of
+the pure UI logic (`ui/internal/jira`, `ui/internal/capabilities`,
+`ui/internal/conversation`, tested on the Mac without GTK), ported 1:1
+into `MalachiCore` (`Jira/`, `Model/Capabilities.swift`,
+`Model/Conversation.swift`) with the AppKit views on top, and the GTK
+widgets and the Windows client later. The parity rules of §3 hold in
+reverse: the msgids are in `po/` already (appended by hand, `make po`
+renumbers them) and on the Windows side in `parity-exclusions.txt`;
+every Swift function without a Go counterpart is marked `Swift-first`
+with the Go file it belongs in, and
+[macos/README.md](../macos/README.md#swift-first-what-the-gtk-ui-still-has-to-mirror)
+lists them for the port; the deviations (the assistant and the settings
+as sheets, the JIRA capsule, the conversation view with its per-card web
+views, `MALACHI_DATA_DIR`) are in its table. The daemon needed nothing
+platform-specific: `MALACHI_DATA_DIR` is the app's reading of its own
+paths, and the test copies the feature was verified on ran beside the
+everyday store with their own socket.
 
 **Distribution is still ahead.** The bundle is ad-hoc signed for the
 machine it was built on. Not done: Apple Developer Program membership,

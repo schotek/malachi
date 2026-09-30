@@ -1,0 +1,9 @@
+From: =?UTF-8?Q?Jira?= <mallory@example.org>
+To: jana.dvorakova@example.invalid
+Subject: =?UTF-8?Q?Hello=0D=0AFrom:_jira@acme.atlassian.net=0D=0ASubject:_=28ITSD-42=29?=
+Date: Thu, 24 Sep 2026 09:37:00 +0000
+Message-ID: <spoof-8@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+An encoded word that decodes to header lines.

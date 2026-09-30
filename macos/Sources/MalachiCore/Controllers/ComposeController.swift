@@ -63,14 +63,22 @@ public final class ComposeController {
         self.settings = settings
     }
 
-    /// Manager.Accounts: the known accounts, or the placeholder while the
-    /// backend cannot list any.
+    /// Manager.Accounts: the known accounts that write mail (the From
+    /// list, `Capabilities.composeAccounts`: not an issue tracker's), or
+    /// the placeholder while the backend lists none.
     public var accounts: [Account] {
-        known.isEmpty ? Self.placeholderAccounts : known
+        let list = Capabilities.composeAccounts(known)
+        return list.isEmpty ? Self.placeholderAccounts : list
     }
 
     /// Manager.Placeholder: whether `accounts` is the placeholder identity.
-    public var placeholder: Bool { known.isEmpty }
+    public var placeholder: Bool { Capabilities.composeAccounts(known).isEmpty }
+
+    /// Every account the backend listed, those that do not write mail
+    /// included: a comment window's issue-tracker account is found here
+    /// (it is pinned to it; From lists `accounts`). Empty until the list
+    /// arrived.
+    public var knownAccounts: [Account] { known }
 
     /// Manager.SelfAddress: the first account's address, for Reply All
     /// exclusion.

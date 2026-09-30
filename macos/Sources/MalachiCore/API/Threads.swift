@@ -27,11 +27,14 @@ public struct ThreadSummary: Codable, Sendable, Equatable {
     public var hasAttachments: Bool
     /// Every folder of the account with at least one member, whatever the scope.
     @NullAsEmpty public var folderIds: [FolderID]
+    /// Present only for a thread of a jira account, which is one issue;
+    /// `latest` may then be an event row.
+    public var issue: IssueInfo?
 
     public init(
         id: ThreadID, accountId: AccountID, subject: String, participants: [Address], messageCount: Int,
         unreadCount: Int, latestDate: Date, latest: MessageSummary, snippet: String, flags: [Flag],
-        hasAttachments: Bool, folderIds: [FolderID]
+        hasAttachments: Bool, folderIds: [FolderID], issue: IssueInfo? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -45,6 +48,7 @@ public struct ThreadSummary: Codable, Sendable, Equatable {
         self.flags = flags
         self.hasAttachments = hasAttachments
         self.folderIds = folderIds
+        self.issue = issue
     }
 }
 

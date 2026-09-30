@@ -38,6 +38,12 @@ final class AppState {
         /// the front; false when none edits it (compose/manager.go
         /// `FindDraft`).
         var raiseDraft: (@MainActor (Draft) -> Bool)?
+        /// Opens the Jira account assistant as a sheet on `window` (File ▸
+        /// Add Jira Account…, `JiraWizardWindowController`).
+        var addJiraAccount: (@MainActor (NSWindow?) -> Void)?
+        /// Whether New Message is offered (`Capabilities.canComposeNew`: not
+        /// with issue-tracker accounts alone); nil counts as yes.
+        var canComposeNew: (@MainActor () -> Bool)?
     }
 
     let client: RPCClient
@@ -137,6 +143,7 @@ final class NotificationHub {
     private var syncState = HandlerList<SyncState>()
     private var authRequired = HandlerList<AuthRequiredNotification>()
     private var accountsChanged = HandlerList<Void>()
+    private var messagesChanged = HandlerList<MessagesChangedNotification>()
     private var connection = HandlerList<ConnectionController.ConnectionState>()
 
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "notify")
@@ -170,6 +177,10 @@ final class NotificationHub {
         accountsChanged.add { _ in f() }
     }
 
+    func addMessagesChanged(_ f: @escaping @MainActor (MessagesChangedNotification) -> Void) -> Token {
+        messagesChanged.add(f)
+    }
+
     /// Fires on every connection state change, after `connectionState`
     /// was updated. A handler added later does not get the current state;
     /// read `connectionState` for that.
@@ -196,6 +207,8 @@ final class NotificationHub {
             authRequired.fire(a)
         case .accountsChanged:
             accountsChanged.fire(())
+        case .messagesChanged(let m):
+            messagesChanged.fire(m)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }

@@ -321,7 +321,7 @@ public final class SyncController {
         case .oauth:
             return (oauthAuthBannerText(n.reason, name), button)
         case .password:
-            return (authBannerText(n.reason, name), button)
+            return (authBannerText(n.reason, name, kind: account?.config.protocolKind), button)
         }
     }
 

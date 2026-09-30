@@ -55,11 +55,14 @@ public struct MessageSummary: Codable, Sendable, Equatable {
     public var size: Int
     /// Present only for a message in the account's outbox folder.
     public var outbox: OutboxInfo?
+    /// Present only for a message of a jira account: the issue and which
+    /// part of it the message is (the subject is "KEY: Summary").
+    public var issue: MessageIssue?
 
     public init(
         id: MessageID, accountId: AccountID, folderId: FolderID, threadId: ThreadID? = nil,
         from: [Address], to: [Address]? = nil, subject: String, date: Date, snippet: String,
-        flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil
+        flags: [Flag], hasAttachments: Bool, size: Int, outbox: OutboxInfo? = nil, issue: MessageIssue? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -74,6 +77,7 @@ public struct MessageSummary: Codable, Sendable, Equatable {
         self.hasAttachments = hasAttachments
         self.size = size
         self.outbox = outbox
+        self.issue = issue
     }
 }
 

@@ -105,6 +105,8 @@ public struct Removal: Sendable, Equatable {
 
 /// What a conversation row displays (widget/message_row.go `Thread`), a
 /// projection of a thread summary over the members of the listed folder.
+/// A conversation of a Jira account is one issue (`issue`,
+/// `Jira.threadRowIssue`).
 public struct RowThread: Sendable, Equatable {
     /// Newest first, as the daemon sent them.
     public var participants: [Address]
@@ -119,10 +121,13 @@ public struct RowThread: Sendable, Equatable {
     public var expanded: Bool
     /// Unfolded, members not answered yet.
     public var loading: Bool
+    /// The issue's key, summary and status, and the change its latest
+    /// member stands for when that is an event; nil for mail.
+    public var issue: Jira.IssueRow?
 
     public init(
         participants: [Address], subject: String, snippet: String, date: Date, count: Int, unread: Int,
-        flagged: Bool, hasAttachments: Bool, expanded: Bool, loading: Bool
+        flagged: Bool, hasAttachments: Bool, expanded: Bool, loading: Bool, issue: Jira.IssueRow? = nil
     ) {
         self.participants = participants
         self.subject = subject
@@ -134,6 +139,7 @@ public struct RowThread: Sendable, Equatable {
         self.hasAttachments = hasAttachments
         self.expanded = expanded
         self.loading = loading
+        self.issue = issue
     }
 }
 
@@ -143,7 +149,7 @@ public func summaryThread(_ t: ThreadSummary, expanded: Bool, loading: Bool) -> 
     RowThread(
         participants: t.participants, subject: t.subject, snippet: t.snippet, date: t.latestDate,
         count: t.messageCount, unread: t.unreadCount, flagged: hasFlag(t.flags, .flagged),
-        hasAttachments: t.hasAttachments, expanded: expanded, loading: loading
+        hasAttachments: t.hasAttachments, expanded: expanded, loading: loading, issue: Jira.threadRowIssue(t)
     )
 }
 
@@ -375,7 +381,9 @@ extension MailModel {
     /// a row); an unlisted one is added at the top when the filter would
     /// list it. The filter is not applied to a listed conversation, the same
     /// policy as `matchesFilter`. False means the message carries no thread
-    /// id and the list has to be loaded again.
+    /// id and the list has to be loaded again. A message of an issue brings
+    /// the issue as it is now (its status may have moved), and an event of
+    /// it never counts as unread.
     @discardableResult
     public mutating func applyNewMessage(_ s: MessageSummary, filter f: MessageFilter, selected: ListKey) -> Bool {
         guard let threadID = s.threadId else {
@@ -390,8 +398,9 @@ extension MailModel {
             }
             let t = ThreadSummary(
                 id: threadID, accountId: s.accountId, subject: s.subject, participants: s.from,
-                messageCount: 1, unreadCount: hasFlag(s.flags, .seen) ? 0 : 1, latestDate: s.date, latest: s,
-                snippet: s.snippet, flags: s.flags, hasAttachments: s.hasAttachments, folderIds: [s.folderId]
+                messageCount: 1, unreadCount: countsUnread(s) ? 1 : 0, latestDate: s.date, latest: s,
+                snippet: s.snippet, flags: s.flags, hasAttachments: s.hasAttachments, folderIds: [s.folderId],
+                issue: s.issue?.info
             )
             threads.insert(t, at: 0)
             members[t.id] = ThreadMembers(list: [s], complete: true)
@@ -419,8 +428,11 @@ extension MailModel {
         }
         memberOf[s.id] = t.id
         t.messageCount += 1
-        if !hasFlag(s.flags, .seen) {
+        if countsUnread(s) {
             t.unreadCount += 1
+        }
+        if let info = s.issue?.info {
+            t.issue = info
         }
         if s.date >= t.latestDate {
             t.latestDate = s.date

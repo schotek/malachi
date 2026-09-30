@@ -42,12 +42,14 @@ const (
 	evAuthRequired
 	evAccountsChanged
 	evSyncState
+	evMessagesChanged
 )
 
 type event struct {
 	kind       eventKind
 	newMessage api.NewMessageNotification
 	auth       api.AuthRequiredNotification
+	messages   api.MessagesChangedNotification
 	accountID  api.AccountID // evSyncState: the value is read from accountState.next
 }
 
@@ -68,7 +70,8 @@ type accountState struct {
 // goroutine, because rpc.Server's broadcast writes synchronously to each
 // client and a stalled client would otherwise stall a syncer.
 //
-// NewMessage, AuthRequired and AccountsChanged pass through in order.
+// NewMessage, AuthRequired, AccountsChanged and MessagesChanged pass
+// through in order.
 // SyncState is delivered at once when status, folderId, error code (or a
 // tlsError's reason and certificate), lastSync, pendingOutbox or
 // failedOutbox differ from the last delivered state of that account; a
@@ -127,6 +130,10 @@ func (c *coalescingNotifier) AuthRequired(n api.AuthRequiredNotification) {
 
 func (c *coalescingNotifier) AccountsChanged(api.AccountsChangedNotification) {
 	c.enqueue(event{kind: evAccountsChanged})
+}
+
+func (c *coalescingNotifier) MessagesChanged(n api.MessagesChangedNotification) {
+	c.enqueue(event{kind: evMessagesChanged, messages: n})
 }
 
 func (c *coalescingNotifier) SyncState(n api.SyncStateNotification) {
@@ -230,6 +237,8 @@ func (c *coalescingNotifier) deliver(ev event) {
 		c.inner.AuthRequired(ev.auth)
 	case evAccountsChanged:
 		c.inner.AccountsChanged(api.AccountsChangedNotification{})
+	case evMessagesChanged:
+		c.inner.MessagesChanged(ev.messages)
 	case evSyncState:
 		c.mu.Lock()
 		a := c.accounts[ev.accountID]
@@ -278,8 +287,14 @@ func errorCode(e *api.Error) api.ErrorCode {
 // worker report one consistent state. It also completes
 // notify.authRequired of an account with the backend's own sign-in with
 // the authUrl of the session waiting for it (opening one if needed): the
-// engines know nothing about sign-in sessions either. Other events pass
-// through.
+// engines know nothing about sign-in sessions either. A notify.newMessage
+// of an issue-tracker account gets its message's issue
+// (MessageSummary.issue), which the syncer does not know how to project;
+// one of a mail message that is hidden (a notification mail of an
+// issue-tracker site, issue_mail.go) is dropped. notify.messagesChanged is
+// gathered per account (messagesChanged), and the first finished pass of
+// an issue-tracker account judges its notification mail (issuePassed).
+// notify.accountsChanged passes through.
 type outboxAwareNotifier struct {
 	b     *Backend
 	inner api.Notifier
@@ -287,7 +302,13 @@ type outboxAwareNotifier struct {
 
 var _ api.Notifier = outboxAwareNotifier{}
 
-func (n outboxAwareNotifier) NewMessage(ev api.NewMessageNotification) { n.inner.NewMessage(ev) }
+func (n outboxAwareNotifier) NewMessage(ev api.NewMessageNotification) {
+	if n.b.hiddenMail(ev) {
+		return
+	}
+	n.b.decorateNewMessage(&ev)
+	n.inner.NewMessage(ev)
+}
 func (n outboxAwareNotifier) AuthRequired(ev api.AuthRequiredNotification) {
 	if ev.AuthURL == "" {
 		ev.AuthURL = n.b.reauthURL(ev)
@@ -297,9 +318,17 @@ func (n outboxAwareNotifier) AuthRequired(ev api.AuthRequiredNotification) {
 func (n outboxAwareNotifier) AccountsChanged(ev api.AccountsChangedNotification) {
 	n.inner.AccountsChanged(ev)
 }
+func (n outboxAwareNotifier) MessagesChanged(ev api.MessagesChangedNotification) {
+	folders := make([]string, len(ev.FolderIDs))
+	for i, f := range ev.FolderIDs {
+		folders[i] = string(f)
+	}
+	n.b.messagesChanged(map[string][]string{string(ev.AccountID): folders})
+}
 func (n outboxAwareNotifier) SyncState(ev api.SyncStateNotification) {
 	ev.State.PendingOutbox, ev.State.FailedOutbox = n.b.outboxCounts(string(ev.State.AccountID))
 	n.inner.SyncState(ev)
+	n.b.issuePassed(ev.State)
 }
 
 // forwardingNotifier hands events to whatever notifier the backend has at
@@ -330,5 +359,11 @@ func (f forwardingNotifier) AuthRequired(n api.AuthRequiredNotification) {
 func (f forwardingNotifier) AccountsChanged(n api.AccountsChangedNotification) {
 	if nn := f.b.getNotifier(); nn != nil {
 		nn.AccountsChanged(n)
+	}
+}
+
+func (f forwardingNotifier) MessagesChanged(n api.MessagesChangedNotification) {
+	if nn := f.b.getNotifier(); nn != nil {
+		nn.MessagesChanged(n)
 	}
 }

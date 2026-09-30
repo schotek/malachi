@@ -42,6 +42,54 @@ import Testing
         #expect(notificationText(n).title.count == 200, "a title at the cap is not cut")
     }
 
+    /// A message of an issue: the author, and the issue's key and summary
+    /// from `issue`, whatever the subject says.
+    @Test func issueNotificationText() {
+        func issue(_ key: String, _ summary: String, item: IssueItemKind = .comment) -> MessageIssue {
+            MessageIssue(info: IssueInfo(key: key, url: "https://acme.atlassian.net/browse/" + key, summary: summary, status: "Open"),
+                         item: item)
+        }
+        var s = summary("m")
+        s.from = [Address(name: "Jana Dvořáková", address: "jana@acme.example")]
+        s.subject = "ITSD-42: The printer is on fire"
+        s.issue = issue("ITSD-42", "The printer is on fire")
+        var n = NewMessageNotification(accountId: "j", folderId: "f", message: s)
+        var got = notificationText(n)
+        #expect(got.title == "Jana Dvořáková")
+        #expect(got.body == "ITSD-42: The printer is on fire")
+
+        // The issue, not the subject; a description like a comment.
+        n.message.subject = "Re: something else"
+        n.message.issue = issue("WEB-7", "  Broken\n link ", item: .description)
+        #expect(notificationText(n).body == "WEB-7: Broken link")
+
+        // Whichever of the two the issue has; the subject when it has
+        // neither.
+        n.message.issue = issue("WEB-7", "")
+        #expect(notificationText(n).body == "WEB-7")
+        n.message.issue = issue("", "Broken link")
+        #expect(notificationText(n).body == "Broken link")
+        n.message.issue = issue(" ", "\t")
+        #expect(notificationText(n).body == "Re: something else")
+        n.message.subject = " "
+        #expect(notificationText(n).body == "(No subject)")
+
+        // Hostile text: one line, nothing invisible, capped like a subject.
+        let override = String(Unicode.Scalar(0x202E)!)
+        let zeroWidth = String(Unicode.Scalar(0x200B)!)
+        n.message.issue = issue("MOB-1" + zeroWidth, "Pay" + override + "\r\nnow\u{0}" + String(repeating: "ž", count: 500))
+        got = notificationText(n)
+        #expect(got.body.hasPrefix("MOB-1: Pay now"))
+        #expect(!got.body.unicodeScalars.contains { $0.properties.generalCategory == .format || $0.properties.generalCategory == .control })
+        #expect(got.body.utf8.count <= notificationBodyMax + 3 && got.body.hasSuffix("…"))
+        #expect(!got.body.contains("\u{FFFD}"), "cap left an invalid UTF-8 sequence")
+
+        // A mail message is as before.
+        n.message.issue = nil
+        n.message.subject = "  Lunch?  "
+        #expect(notificationText(n).body == "Lunch?")
+    }
+
     @Test func nearestIntervalTest() {
         let cases = [0: 0, -5: 0, 60: 1, 300: 1, 500: 1, 700: 2, 900: 2, 1300: 2, 1400: 3, 1800: 3, 99999: 3]
         for (input, want) in cases {

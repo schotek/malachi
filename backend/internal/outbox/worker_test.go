@@ -86,6 +86,7 @@ type recorder struct {
 func (r *recorder) NewMessage(api.NewMessageNotification)           {}
 func (r *recorder) SyncState(api.SyncStateNotification)             {}
 func (r *recorder) AccountsChanged(api.AccountsChangedNotification) {}
+func (r *recorder) MessagesChanged(api.MessagesChangedNotification) {}
 func (r *recorder) AuthRequired(n api.AuthRequiredNotification) {
 	r.mu.Lock()
 	r.auth = append(r.auth, n)

@@ -24,6 +24,12 @@ public final class LoadedMessage {
     /// Insertion order in `LoadedCache`.
     public var seq: UInt64
 
+    /// The account the message belongs to, from the summary it was fetched
+    /// for: `LoadedCache.removeAll(of:)` finds the entries of an account
+    /// whose messages the daemon rebuilt (notify.messagesChanged). nil for
+    /// an entry made without a summary.
+    public var accountId: AccountID?
+
     /// In-flight halves; a second fetch for the same id while one runs
     /// joins instead of asking the daemon twice.
     public var getting: Bool
@@ -48,12 +54,13 @@ public final class LoadedMessage {
     public init(
         msg: Message? = nil, body: MessageBodyResult? = nil, err: (any Error)? = nil, seq: UInt64 = 0,
         getting: Bool = false, fetching: Bool = false, loadingImages: Bool = false, loadingPictures: Bool = false,
-        picturesRechecked: Bool = false
+        picturesRechecked: Bool = false, accountId: AccountID? = nil
     ) {
         self.msg = msg
         self.body = body
         self.err = err
         self.seq = seq
+        self.accountId = accountId ?? msg?.summary.accountId
         self.getting = getting
         self.fetching = fetching
         self.loadingImages = loadingImages
@@ -127,6 +134,18 @@ public struct LoadedCache {
     /// Forgets everything.
     public mutating func removeAll() {
         entries = [:]
+    }
+
+    /// Forgets the entries of the account's messages (notify.messagesChanged:
+    /// the daemon rebuilt them in place, docs/api.md §5), and those whose
+    /// account is not known, which may be its. Returns the ids let go.
+    @discardableResult
+    public mutating func removeAll(of account: AccountID) -> [MessageID] {
+        let gone = entries.filter { $0.value.accountId == nil || $0.value.accountId == account }.map(\.key)
+        for id in gone {
+            entries[id] = nil
+        }
+        return gone.sorted { $0.rawValue < $1.rawValue }
     }
 
     /// Evicts the entries with the lowest `seq` until at most `limit` remain

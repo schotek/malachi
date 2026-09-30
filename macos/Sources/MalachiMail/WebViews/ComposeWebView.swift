@@ -66,7 +66,8 @@ final class ComposeWebView: WKWebView {
     /// The body of a message the bridge posted to the `malachi` handler
     /// (a JSON string; the editor decodes it).
     var onBridgeMessage: (@MainActor (Any) -> Void)?
-    /// Files dropped onto the view, taken away from WebKit.
+    /// Files dropped onto the view, taken away from WebKit. Without a
+    /// handler (a comment takes no attachments) a file drag is refused.
     var onDropFiles: (@MainActor ([URL]) -> Void)?
     /// The web content process died; the page is gone until the next load.
     var onCrashed: (@MainActor () -> Void)?
@@ -243,11 +244,16 @@ final class ComposeWebView: WKWebView {
     private static let fileURLReading: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        isFileDrag(sender) ? .copy : super.draggingEntered(sender)
+        isFileDrag(sender) ? fileDragOperation : super.draggingEntered(sender)
     }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        isFileDrag(sender) ? .copy : super.draggingUpdated(sender)
+        isFileDrag(sender) ? fileDragOperation : super.draggingUpdated(sender)
+    }
+
+    /// Copy while someone takes the files, nothing otherwise.
+    private var fileDragOperation: NSDragOperation {
+        onDropFiles == nil ? [] : .copy
     }
 
     override func draggingExited(_ sender: (any NSDraggingInfo)?) {
@@ -258,7 +264,7 @@ final class ComposeWebView: WKWebView {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        isFileDrag(sender) ? true : super.prepareForDragOperation(sender)
+        isFileDrag(sender) ? onDropFiles != nil : super.prepareForDragOperation(sender)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {

@@ -406,6 +406,9 @@ func (s *Server) AuthRequired(n api.AuthRequiredNotification) {
 func (s *Server) AccountsChanged(n api.AccountsChangedNotification) {
 	s.broadcast(api.NotifyAccountsChanged, n)
 }
+func (s *Server) MessagesChanged(n api.MessagesChangedNotification) {
+	s.broadcast(api.NotifyMessagesChanged, n)
+}
 
 // --- connection ----------------------------------------------------------
 

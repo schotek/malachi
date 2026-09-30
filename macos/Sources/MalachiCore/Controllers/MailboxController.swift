@@ -83,6 +83,17 @@ public final class MailboxController {
     /// reloaded: refresh the views showing the outbox (outbox.go
     /// `refreshOutboxViews`).
     public var refreshOutboxViews: (@MainActor (AccountID) -> Void)?
+    /// notify.messagesChanged for an account the window shows, before
+    /// anything is listed or fetched again: whatever is cached of the
+    /// account's messages may be stale (the daemon rebuilt them in place,
+    /// keeping their ids; docs/api.md §5). The app lets the message cache
+    /// go of them (`MessageCache.evict(account:)`).
+    public var onMessagesChanged: (@MainActor (MessagesChangedNotification) -> Void)?
+    /// The list's `refreshShown`, installed by the list extension: the
+    /// views showing messages of the account fetch them again, as the
+    /// cache let them go (`onMessagesChanged` ran just before). Called
+    /// together with `reloadMessages`, before it.
+    public var refreshShown: (@MainActor (AccountID) -> Void)?
     /// The backend went away: fold a conversation waiting for its members
     /// back (window.go `showConnectionState`, `collapseLoading` + `syncRows`).
     public var collapseLoading: (@MainActor () -> Void)?
@@ -563,6 +574,8 @@ public final class MailboxController {
             handleAuthRequired(a)
         case .accountsChanged:
             handleAccountsChanged()
+        case .messagesChanged(let m):
+            handleMessagesChanged(m)
         case .unknown(let method):
             log.info("notification \(method, privacy: .public)")
         }
@@ -574,6 +587,31 @@ public final class MailboxController {
     public func handleAccountsChanged() {
         sync.hideAuthBanner()
         loadAccounts()
+    }
+
+    /// notify.messagesChanged: messages of the account's folders changed
+    /// without arriving or leaving (docs/api.md §5). Either they were
+    /// hidden or shown again (a Jira account hides the notification mails
+    /// of its issues in a mail account, and shows them again when that is
+    /// switched off), or a Jira account's own messages were rebuilt in
+    /// place, keeping their ids (other rendering settings, a comment edited
+    /// or re-attributed, an issue renamed). The account's folders are read
+    /// again for their counts; the message cache lets go of the account's
+    /// entries (`onMessagesChanged`); and when the selected folder is one
+    /// of those named — or any folder of the account when none is named,
+    /// or a virtual folder of the account, which shows copies of every
+    /// space's issues — what the pane shows of it is fetched again
+    /// (`refreshShown`) and it is listed again. Swift-first: mirror in
+    /// notify.go when GTK gets Jira accounts.
+    public func handleMessagesChanged(_ n: MessagesChangedNotification) {
+        guard let account = model.account(n.accountId), account.enabled else { return }
+        loadFolders(n.accountId, model.foldersGen)
+        onMessagesChanged?(n)
+        guard let sel = model.selected, sel.account == n.accountId,
+              n.folderIds.isEmpty || n.folderIds.contains(sel.folder) || model.folder(sel)?.virtual != nil
+        else { return }
+        refreshShown?(n.accountId)
+        reloadMessages?()
     }
 
     /// notify.authRequired: reveals the sign-in banner for the account.
@@ -621,11 +659,14 @@ public final class MailboxController {
 
     /// Runs when an account leaves the syncing state (folders.go
     /// `onSyncFinished`): folders are reloaded and, when the synced folder is
-    /// the selected one (or the whole account was synced), the list.
+    /// the selected one (or the whole account was synced), the list. A
+    /// virtual folder of a Jira account shows issues of every space, so any
+    /// pass of its account reloads it.
     func onSyncFinished(_ prev: SyncState?, _ cur: SyncState) {
         guard let prev, prev.status == .syncing, cur.status != .syncing else { return }
         loadFolders(cur.accountId, model.foldersGen)
-        if let sel = model.selected, sel.account == cur.accountId, cur.folderId == nil || cur.folderId == sel.folder {
+        if let sel = model.selected, sel.account == cur.accountId,
+           cur.folderId == nil || cur.folderId == sel.folder || model.folder(sel)?.virtual != nil {
             reloadMessages?()
         }
     }

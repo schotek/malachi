@@ -328,6 +328,7 @@ extension MainWindowController: NSUserInterfaceValidations {
                 menuItem.state = FilterMenu.tag(current) == menuItem.tag ? .on : .off
             default: break
             }
+            ActionPresentation.present(menuItem, action, f)
             if Action.bareKeyActions.contains(action), isTyping {
                 return false
             }
@@ -349,6 +350,7 @@ extension MainWindowController: NSToolbarItemValidation {
         default:
             break
         }
+        ActionPresentation.present(item, f)
         return allows(action, f) ?? true
     }
 }

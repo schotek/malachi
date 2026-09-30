@@ -32,7 +32,9 @@ type SearchFilter struct {
 	Match string
 	// AccountID "" means every enabled account.
 	AccountID string
-	// FolderIDs, when set, are the only folders searched.
+	// FolderIDs, when set, are the only folders searched. Without them
+	// the virtual folders (Folder.Virtual) are left out, whose rows are
+	// copies of rows found in the space folders.
 	FolderIDs []string
 	// ExcludeRoles are folder roles left out (Trash and Junk outside an
 	// explicit folder).
@@ -57,7 +59,8 @@ type SearchRow struct {
 var ErrSearchRejected = errors.New("full-text query rejected")
 
 // SearchMessages returns one page of the messages that match f, newest
-// first (date, then id, descending), and how many match: the exact number
+// first (date, then id, descending), and how many match (hidden rows,
+// Message.Hidden, never do): the exact number
 // up to api.MaxSearchTotal, -1 beyond it (counting every match of a
 // two-letter prefix in a large store costs as much as the search). The
 // cursor is opaque and belongs to search: a message.list cursor (or a
@@ -142,11 +145,14 @@ func searchScope(f SearchFilter) (from, where string, args []any) {
 	} else {
 		conds = append(conds, `m.account_id IN (SELECT id FROM accounts WHERE enabled = 1)`)
 	}
+	conds = append(conds, `m.hidden = 0`)
 	if len(f.FolderIDs) > 0 {
 		conds = append(conds, `m.folder_id IN (`+placeholders(len(f.FolderIDs))+`)`)
 		for _, id := range f.FolderIDs {
 			args = append(args, id)
 		}
+	} else {
+		conds = append(conds, `f.virtual = ''`)
 	}
 	if len(f.ExcludeRoles) > 0 {
 		conds = append(conds, `f.role NOT IN (`+placeholders(len(f.ExcludeRoles))+`)`)

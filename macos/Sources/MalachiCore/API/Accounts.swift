@@ -122,7 +122,8 @@ public struct GraphConfig: Codable, Sendable, Equatable {
 /// api.AccountConfig: the non-secret part of an account. Secrets travel only
 /// in `Credentials` at add/test time and are never returned by any method.
 /// `imap` and `smtp` are set for an IMAP account and absent for Graph; `graph`
-/// the other way round.
+/// the other way round; a Jira account has only `jira`, its `email` is the
+/// user's address (the cloud login) and its token is `Credentials.password`.
 public struct AccountConfig: Codable, Sendable, Equatable {
     /// Display name of the account.
     public var name: String
@@ -135,13 +136,15 @@ public struct AccountConfig: Codable, Sendable, Equatable {
     public var smtp: ServerConfig?
     public var oauth2: OAuth2Config?
     public var graph: GraphConfig?
+    /// Kind `jira` only.
+    public var jira: JiraConfig?
     /// nil = the daemon's default.
     public var syncIntervalSeconds: Int?
 
     public init(
         name: String, email: String, displayName: String? = nil, kind: AccountKind? = nil,
         imap: ServerConfig? = nil, smtp: ServerConfig? = nil, oauth2: OAuth2Config? = nil,
-        graph: GraphConfig? = nil, syncIntervalSeconds: Int? = nil
+        graph: GraphConfig? = nil, jira: JiraConfig? = nil, syncIntervalSeconds: Int? = nil
     ) {
         self.name = name
         self.email = email
@@ -151,6 +154,7 @@ public struct AccountConfig: Codable, Sendable, Equatable {
         self.smtp = smtp
         self.oauth2 = oauth2
         self.graph = graph
+        self.jira = jira
         self.syncIntervalSeconds = syncIntervalSeconds
     }
 
@@ -188,12 +192,31 @@ public struct Account: Codable, Sendable, Equatable {
     public var config: AccountConfig
     public var enabled: Bool
     public var state: SyncState
+    /// What the account can do. nil (a daemon that predates it) is
+    /// `API.mailCapabilities`, which is why it is not `@NullAsEmpty`: an
+    /// empty list (a Jira account) can do none of them. Ask `can(_:)`.
+    public var capabilities: [Capability]?
 
-    public init(id: AccountID, config: AccountConfig, enabled: Bool, state: SyncState) {
+    public init(id: AccountID, config: AccountConfig, enabled: Bool, state: SyncState, capabilities: [Capability]? = nil) {
         self.id = id
         self.config = config
         self.enabled = enabled
         self.state = state
+        self.capabilities = capabilities
+    }
+}
+
+extension API {
+    /// api.MailCapabilities: what an IMAP or Graph account can do, and
+    /// every account of a daemon that sends no `capabilities`.
+    public static let mailCapabilities: [Capability] = [.compose, .reply, .replyAll, .forward, .move, .delete]
+}
+
+extension Account {
+    /// api.Account.Can: whether the account has the capability, nil
+    /// `capabilities` read as `API.mailCapabilities`.
+    public func can(_ c: Capability) -> Bool {
+        (capabilities ?? API.mailCapabilities).contains(c)
     }
 }
 
@@ -456,15 +479,22 @@ public struct EndpointTestResult: Codable, Sendable, Equatable {
 }
 
 /// api.AccountTestResult: `imap` and `smtp` for an IMAP account, `graph`
-/// for a Graph account.
+/// for a Graph account, `jira` for a Jira account (its `capabilities`
+/// carry `cloud` or `datacenter`, and `gateway` when the gateway route was
+/// used).
 public struct AccountTestResult: Codable, Sendable, Equatable {
     public var imap: EndpointTestResult?
     public var smtp: EndpointTestResult?
     public var graph: EndpointTestResult?
+    public var jira: EndpointTestResult?
 
-    public init(imap: EndpointTestResult? = nil, smtp: EndpointTestResult? = nil, graph: EndpointTestResult? = nil) {
+    public init(
+        imap: EndpointTestResult? = nil, smtp: EndpointTestResult? = nil, graph: EndpointTestResult? = nil,
+        jira: EndpointTestResult? = nil
+    ) {
         self.imap = imap
         self.smtp = smtp
         self.graph = graph
+        self.jira = jira
     }
 }

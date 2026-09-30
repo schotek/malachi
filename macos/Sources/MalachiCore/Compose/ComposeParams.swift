@@ -74,6 +74,12 @@ public struct ComposeParams: Sendable, Equatable {
     public var bodyHTML: String
     public var inReplyTo: MessageID?
     public var forwarding: MessageID?
+    /// The issue a comment draft goes to and its visibility, as
+    /// draft.create returned them (`Draft.comment`): the window writes a
+    /// comment then (`Jira.commentCompose`), pinned to `accountID`. nil for
+    /// an e-mail. Set after `init` (`fromDraft`); macOS first, the GTK
+    /// compose.Params follows with its comment mode.
+    public var comment: DraftComment?
     /// What the backend imported for the draft (the quoted original's
     /// pictures, a forwarded message's files): not yet bound, the first
     /// draft.save binds them.

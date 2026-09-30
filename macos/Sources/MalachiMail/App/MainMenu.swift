@@ -113,6 +113,9 @@ enum MainMenu {
         let m = NSMenu()
         m.addItem(item(mn(L10n.T("_New Message")), Action.newMessage, key: "n"))
         m.addItem(item(mn(L10n.T("_Add Account…")), Action.addAccount))
+        let jira = item(mn(Jira.wizardTexts().addMenu), Action.addAccount)
+        jira.tag = AddAccountTag.jira
+        m.addItem(jira)
         m.addItem(.separator())
         m.addItem(item("Close", #selector(NSWindow.performClose(_:)), key: "w")) // macOS-only string
         m.addItem(item(mn(L10n.T("_Save Draft")), Action.saveDraft, key: "s"))

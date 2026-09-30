@@ -28,6 +28,9 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
     let toasts = ToastPresenter()
 
     let header = ComposeHeaderView()
+    /// The issue and its visibility in place of `header` in comment mode
+    /// (ComposeWindowController+Comment.swift); nil for an e-mail.
+    private(set) lazy var commentHeader: CommentHeaderView? = params.comment.map { CommentHeaderView(comment: $0) }
     let formatToolbar = FormatToolbar()
     let chips = AttachmentChipsView()
     let statusLabel = NSTextField(labelWithString: "")
@@ -97,7 +100,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         w.toolbar = toolbarDelegate.makeToolbar()
         w.contentView = buildContent()
         w.setFrame(NSRect(origin: .zero, size: Self.defaultSize), display: false)
-        w.initialFirstResponder = header.toField
+        w.initialFirstResponder = isComment ? editor.view : header.toField
         w.autorecalculatesKeyViewLoop = true
         chips.onRemove = { [weak self] id in
             self?.removeAttachment(id)
@@ -105,6 +108,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         // The editor's callbacks first, as in compose.go: `ready` and
         // `state` may follow the load at any time.
         wireEditor()
+        applyCommentMode()
 
         // Prefill before connecting change handlers so it does not count
         // as an edit.
@@ -114,7 +118,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         header.subjectField.stringValue = params.subject
         header.setCcBccVisible(cc: !params.cc.isEmpty, bcc: !params.bcc.isEmpty)
         updateTitle()
-        draft.setOriginal(inReplyTo: params.inReplyTo, forwarding: params.forwarding)
+        draft.setOriginal(inReplyTo: params.inReplyTo, forwarding: params.forwarding, comment: params.comment)
         // A draft opened from the Drafts folder is the user's already: its
         // id and version make the saves updates, and closing never deletes it.
         draft.setOpened(draftID: params.draftID, version: params.version, replaces: params.replaces,
@@ -179,7 +183,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         let root = FillStackView()
         root.spacing = 0
         for v in [
-            Self.inset(header, top: 12, left: 12, bottom: 6, right: 12),
+            Self.inset(commentHeader.map { $0 as NSView } ?? header, top: 12, left: 12, bottom: 6, right: 12),
             formatToolbar, plainHintRow, editorBox, chips, statusRow,
         ] {
             root.addArrangedSubview(v)
@@ -322,8 +326,13 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         return invalid.isEmpty
     }
 
-    /// compose.go `updateTitle`: the subject, or "New Message".
+    /// compose.go `updateTitle`: the subject, or "New Message"; a comment
+    /// names its issue (`Jira.commentTitle`).
     func updateTitle() {
+        if let c = params.comment {
+            window?.title = Jira.commentTitle(c.issue.key)
+            return
+        }
         let s = header.subjectField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         window?.title = s.isEmpty ? L10n.T("New Message") : s
     }
@@ -406,8 +415,12 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
 // MARK: - ComposeForm
 
 extension ComposeWindowController: ComposeForm {
-    /// compose.go `account`: the selected identity.
+    /// compose.go `account`: the selected identity; a comment's is the
+    /// issue's account (`commentAccount`).
     var account: Account {
+        if let a = commentAccount {
+            return a
+        }
         let i = header.selectedAccountIndex
         if i >= 0, i < accounts.count {
             return accounts[i]
@@ -516,7 +529,7 @@ extension ComposeWindowController: ComposeWindowHandle {
         // in (compose.go `fromLocked`): its quoted pictures and forwarded
         // files were copied into that account.
         header.setAccounts(labels: labels, selected: found ?? 0, enabled: list.count > 1 && !(fromLocked && found != nil))
-        if placeholder {
+        if placeholder, !isComment {
             setStatus(L10n.T("Using placeholder account"))
         }
     }
@@ -529,7 +542,9 @@ extension ComposeWindowController: MalachiActions {
         draft.send()
     }
 
+    /// Not in comment mode: no Drafts folder keeps a comment.
     @objc func saveDraft(_ sender: Any?) {
+        guard !isComment else { return }
         draft.save(reason: .explicit)
     }
 
@@ -603,6 +618,9 @@ extension ComposeWindowController: NSUserInterfaceValidations {
     /// the formatting at the caret.
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         guard let action = item.action else { return false }
+        if isComment, !Self.commentAllows(action) {
+            return false
+        }
         let st = editorState
         let block: String
         switch st.block {

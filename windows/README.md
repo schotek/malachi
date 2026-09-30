@@ -455,6 +455,24 @@ features, not deviations.
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon
   degrades silently.
+- **Jira accounts and the conversation view** are not ported yet. The
+  daemon has them (`kind: jira`, [docs/api.md §4.1](../docs/api.md#41-account),
+  [docs/architecture.md §3.6](../docs/architecture.md#36-issue-tracker-accounts-kind-jira)),
+  and the macOS client came first ([macos/README.md](../macos/README.md#swift-first-what-the-gtk-ui-still-has-to-mirror)):
+  the port takes the Go reference of the pure logic (`ui/internal/jira`,
+  `ui/internal/capabilities`, `ui/internal/conversation`) and the Swift
+  (`MalachiCore/Jira`, `Model/Capabilities.swift`,
+  `Model/Conversation.swift`, `JiraWizardController`,
+  `JiraAccountController`, `ConversationController`, the sized mode of
+  `MessageWebView`) into `Malachi.Core` and `Malachi.App`. Until then the
+  client knows nothing of such an account: what the daemon lists of it
+  reads as mail (the subject of every message is `KEY: Summary`), the
+  actions it offers on it the daemon refuses (`invalidArgument`, an
+  account without the capability), and it is not the place to add or
+  edit one. A folded conversation row shows its newest member, as in
+  GTK. The msgids are listed in `parity-exclusions.txt`
+  under "Jira account: macOS first" and "Conversation view: macOS first";
+  the port removes them from there as it uses them.
 - **Distribution**: the app folder is unsigned and has no installer or
   updater; ARM64 has not run on real hardware; the Microsoft components'
   licence permission is the owner's decision; CI builds the zips for both

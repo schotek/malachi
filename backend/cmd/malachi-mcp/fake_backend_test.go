@@ -341,6 +341,22 @@ func (s fakeDrafts) Create(_ context.Context, p api.DraftCreateParams) (*api.Dra
 	if !ok {
 		return nil, api.NewError(api.CodeMessageNotFound, "message %s not found", p.MessageID)
 	}
+	src := p.AccountID
+	if p.MessageAccountID != "" {
+		src = p.MessageAccountID
+	}
+	if m.AccountID != "" && m.AccountID != src {
+		return nil, api.NewError(api.CodeMessageNotFound, "message %s is not in account %s", p.MessageID, src)
+	}
+	if m.Issue != nil && p.AccountID == m.AccountID {
+		// A message of an issue tracker: a reply is a comment draft.
+		if p.Mode != api.ComposeReply {
+			return nil, api.NewError(api.CodeInvalidArgument, "account %s writes comments only", p.AccountID)
+		}
+		info := m.Issue.IssueInfo
+		return &api.DraftCreateResult{Quoted: api.QuoteNone, Draft: api.Draft{AccountID: p.AccountID, Subject: m.Subject,
+			InReplyTo: m.ID, Comment: &api.DraftComment{Issue: info}}}, nil
+	}
 	if form == "" {
 		form = api.QuoteHTML
 		if body.BodyState != api.BodyFetched {

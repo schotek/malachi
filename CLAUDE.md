@@ -357,6 +357,10 @@ Pořadí prací:
 6. ~~Vyhledávání~~ hotovo (backend, GTK, MCP, macOS, Windows)
 7. ~~Klient pro Windows~~ hotovo (WinUI 3, `windows/`; zbývá distribuce,
    `docs/windows-port.md` §17)
+8. Účty Jira (`kind: jira`) — backend a macOS hotovo (čtení, komentáře,
+   notifikační maily, zobrazení konverzace); GTK a Windows zbývají
+   (reference `ui/internal/jira`, `ui/internal/capabilities`,
+   `ui/internal/conversation`)
 
 Gmail a Microsoft 365 mají dvě cesty. Na GNOME přednostně GNOME Online
 Accounts (token i registrované klient ID drží GOA, proto žádný CASA audit;
@@ -454,6 +458,115 @@ zavřít před náhradou či smazáním, `fsretry` pod zámkem jmen zprávy
 a soubor držený čtenářem déle je `store.ErrBusy` (převod a ořez se k němu
 vrátí), žádný platformní kód (`docs/windows-port.md` §14).
 
+Účty Jira (`kind: jira`, migrace 0015, `docs/architecture.md` §3.6 a §7,
+`docs/api.md` §4.1): issue tracker čtený jako pošta — Jira Cloud (REST v3,
+ADF) i Data Center (REST v2, wiki markup), `internal/jira` vedle
+`internal/imap` a `internal/graph`, v `core/dispatch.go` tabulka
+supervisorů podle `kind`. Vzdálená vrstva (`client.go`, `remote.go`,
+`cloud.go`, `datacenter.go`, `types.go`: rozhraní `Remote`, nejvýš 4
+souběžné požadavky na účet, Retry-After, redirecty jen na https a nikdy
+s tokenem na jiný host, JSON do 32 MiB, každý řetězec ze site vyčištěný
+a oříznutý); syncer (`supervisor.go`, `sync.go`: jeden syncer na účet,
+průchod každou minutu, inkrementální JQL `updated >= "-Nm"` s rezervou
+5 min, hodinová rekonciliace id ve scope pro smazané, přesunuté a
+sledované issues, `reconcile.go`, retence podle okna účtu). Každá položka
+issue — popis, komentář, změna stavu či řešitele (`events.go`) — je jedna
+syntetizovaná zpráva RFC 5322 (`synth.go`: deterministicky, při každém
+sestavení tytéž bajty; adresy `<id>@users.jira.invalid`, Message-ID
+`issue.<id>@<host>.malachi.invalid`, předmět `KEY: Summary` na každém
+řádku; obrázky ze site jako `cid:` části, relativní odkazy absolutní,
+`images.go`) uložená přes `internal/ingest` jako pošta; `thread_id =
+jira:<issueId>`, `remote_id` `i:`/`c:`/`h:`; tabulky `issues`,
+`issue_items`, `issue_spaces` (`store/issues.go`). Složky = vybrané spaces
+(`space:<id>`) a pevné pohledy `assignedToMe`/`watching`/`open`
+(`Folder.virtual`, kopie řádků se stejným `remote_id` a Message-ID,
+`folders.go`; `open` podle `closedStatuses`, jinak kategorie done);
+příznaky jen lokální a na všechny kopie (`ops.go`); move/delete účet nemá
+(`Account.capabilities`: jira `["comment","forward"]`, mail
+`api.MailCapabilities`, nil od staršího démona = mail; `message.move`/
+`delete` bez capability = `invalidArgument`). Bot cleaner
+`internal/jira/botclean`: komentáře, které přeposílá integrace jako „Issue
+Sync – Synchronization for Jira“, dostanou autora a čas z hlavičky `KEY
+Autor added comment - datum` (`via`), řádky podle `metadataFilters` (RE2)
+se odstraní; je to čistič, ne bezpečnostní hranice — sanitizér běží při
+zobrazení. `render_key` (pravidla botů + `hideEvents` + `synthVersion`)
+přestaví uložené řádky na místě pod týmiž id a průchod pak pošle
+`notify.messagesChanged`. `message.download` zprávu sestaví ze site znovu
+(`fetch.go`, `ErrGone` → `messageGone`). Fake site pro testy
+`internal/jira/jiratest` (Cloud i DC, žádná síť), patologická data
+`backend/testdata/jira`. Přihlášení: Cloud e-mail + API token (Basic; při
+401 a známém `cloudId` přes bránu `api.atlassian.com/ex/jira/<cloudId>`,
+kterou vyžadují scoped tokeny), DC personal access token (Bearer); token
+je `credentials.password` v keyringu (`auth.KeyPassword`) a jde jen na
+site, pro který byl uložen; žádné OAuth (Atlassian nedovoluje client
+secret v open source, PKCE nepodporuje a všichni uživatelé jedné aplikace
+sdílejí její limit; §7). Průvodce: `account.detectSite` (anonymně
+serverInfo + tenant_info, klient 15 s) a `account.listSpaces` (přihlášení,
+spaces, statusy, uživatel, odhad počtu issues, 45 s; s `accountId` uložený
+token). Per-účet `JiraConfig.offlineDays` (0 = 30, max 365; preference
+`offlineDays` neplatí), otevřené issues přiřazené mně bez ohledu na stáří
+(do 500), `onlyMine`, `hideEvents`, `disabledFolders`; první backfill:
+položky mladší 3 dnů nepřečtené, starší přečtené; události vždy přečtené
+a nikdy nenotifikované. Unikátnost účtu je (email, realm): mail účty realm
+"", jira normalizovaný host[:port]+path site (`store.RealmOf`), takže jira
+účet smí mít adresu schránky. Komentáře (`core/comments.go`):
+`draft.create reply` na jira účtu = koncept komentáře (`Draft.comment`,
+`visibility` `public`/`internal`, interní jen u service-desk issue),
+lokální (žádná složka Koncepty, `draft_sync` se neozbrojí); `message.send`
+ho zařadí do outboxu jako MIME a `jira.Supervisor.Deliver` pošle v ADF
+(Cloud, `adf.go`) nebo wiki (DC, `wiki.go`) ze sanitizovaného HTML
+(`comment.go`, limit 32 767 znaků) s entity property
+`io.github.schotek.malachi.outbox` = id outbox zprávy (idempotence po
+ztracené odpovědi) a `sd.public.comment` u interních, pak refresh issue
+(čeká ≤ 30 s). Přeposlání jira zprávy = obyčejný e-mail z mail účtu
+(`DraftCreateParams.messageAccountId`, kopie částí do úložiště příloh mail
+účtu). Notifikační maily site v mail účtech (`core/issue_mail.go`,
+`jira/notification.go`, `docs/security.md` §4.1): `JiraConfig.notificationMail`
+`sync` (výchozí: hook `Stored` po uložení těla → `MatchNotification` podle
+From (`notificationSenders`, výchozí `@<host site>` na Cloudu, na DC nic) a
+klíče v předmětu → link v `issue_mail_links` + refresh issue, u čerstvé
+zprávy počká ≤ 5 s před `notify.newMessage`), `hide` (navíc
+`messages.hidden`, jen když issue je v účtu uložené; display filtr, na
+serveru nic; zpět při změně nastavení, pozastavení, odebrání; hodinové
+přehodnocení v `core.Maintain`, po `account.update` prohlédne i starší
+poštu), `ignore`; každá změna skrytí = `notify.messagesChanged` (koalescence
+250 ms). MCP most: `list_accounts` vrací `capabilities`, `list_messages`/
+`search_messages`/`read_message` `issue` (key, status, item), `create_draft`
+`mode: reply` na jira účtu = koncept komentáře (`visibility`), ostatní
+režimy odmítá, přeposlání z mail účtu přes `messageAccountId`
+(`docs/mcp.md`). UI: macOS první (`macos/`): průvodce jako sheet
+(`AccountWizard/Jira`, `JiraWizardController`), sidebar s kapslí JIRA
+a pohledy nad spaces (`FolderTree.swift`), seznam jira složky vždy
+seskupený (`MailModel+Jira.swift`) s pilulkou stavu a řádky událostí,
+karta issue nad hlavičkou (`IssueCardView`, `IssueReading.swift`; událost
+bez těla), akce podle capabilities (`Model/Capabilities.swift`,
+`ActionRules.swift`, `MainWindow/ActionPresentation.swift`: Reply →
+Comment, Forward přes mail účet), okno komentáře (`Compose/CommentHeaderView`,
+`ComposeWindowController+Comment`), nastavení účtu jako sheet
+(`Preferences/JiraAccount`, `JiraAccountController`: spaces, okno, pohledy
+a uzavřené stavy, notifikační maily, boti s nabídkou „Issue Sync“;
+`JiraPattern.swift` kontroluje RE2 podle `regexp/syntax`),
+`notify.messagesChanged` → `MailboxController.handleMessagesChanged`.
+Čistá logika nejdřív jako reference v Go (`ui/internal/jira` — texty,
+karta, události, průvodce, compose, nastavení; `ui/internal/capabilities`;
+testované na Macu), portovaná 1:1 do `MalachiCore/Jira`; msgidy ručně
+připsané do `po/malachi.pot` a `po/cs.po`; GTK widgety a Windows UI
+zbývají (`windows/parity-exclusions.txt` „Jira account: macOS first“;
+funkce označené „Swift-first“ v `FolderTree`, `AccountsPage`,
+`ActionRules`, `MailModel+Jira`, `NotificationText`, `SyncStatus`,
+`MailboxController.handleMessagesChanged`). Zobrazení konverzace (zatím
+jen macOS, reference `ui/internal/conversation`, „Conversation view: macOS
+first“): výběr sbaleného řádku vlákna (≥ 2 členů ve složce; jira složky
+vždy) ukáže v panelu čtení celé vlákno jako nativní karty od nejstarší
+s časovou osou v levém okraji, u jira kartou issue nahoře a událostmi jako
+kompaktní řádky, přečtený se označí jen nejnovější člen, který není
+událost; každá HTML karta má vlastní uzamčený WKWebView v režimu `sized`
+(výšku hlásí skript aplikace ve vlastním světě, JS obsahu vypnutý, strop
+4000 pt, nejvýš 8 živých pohledů; `ConversationLayout.swift`,
+`ConversationViewController.swift`), nikdy jeden složený dokument — CSS
+jedné zprávy by přepsalo hlavičky ostatních. `MALACHI_DATA_DIR` přebíjí
+datový adresář i na macOS (`Daemon/Paths.swift`, jako na Windows).
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).
@@ -500,6 +613,24 @@ komprese a příloh na vyžádání, Microsoft účty).
   hlásí jako chybu (`CoverageEnforced` je zapnuté). Zrušený msgid, který v exclusions zůstal, a msgid z exclusions, který
   klient začal používat, shodí `build.ps1 lint` vždy. msgid použitý ve
   `windows/src` musí v šabloně být (s kontextem i plurálem).
+- Msgidy Jira účtů a zobrazení konverzace (`ui/internal/jira/*.go`,
+  `ui/internal/conversation/conversation.go`, v `po/POTFILES` za
+  `ui/internal/compose/suggest.go`) byly do `po/malachi.pot` a `po/cs.po`
+  připsány ručně s odkazy `#: soubor` bez čísel řádků, protože macOS
+  klient vznikl dřív než GTK widgety: `make lint` je hlásí jako
+  zastaralou šablonu, dokud v Toolbxu neproběhne `make po`, které je
+  přečísluje a seřadí (překlady v `cs.po` zůstanou). Windows je má
+  v `windows/parity-exclusions.txt` („Jira account: macOS first“,
+  „Conversation view: macOS first“); s portem se odtud mažou.
+- Jira testuj proti kopii, ne nad ostrým storem: migrace 0015 přestaví
+  tabulku `accounts` a je jako každá migrace nevratná, takže by ostrý
+  store změnila dřív, než je větev v `main`. Na macOS
+  `MALACHI_DATA_DIR=<kopie adresáře Application Support> MALACHI_SOCKET=<vlastní
+  rpc.sock>` pro app i démona (`Daemon/Paths.swift`, stejně jako Windows
+  agent v `%TEMP%`), `malachi-mcp` čte totéž `MALACHI_SOCKET`; vlastní
+  socket je nutný, jinak app převezme démona nad ostrým storem. Komentáře
+  na produkční Jiře jen do issue, které uživatel sám určí; Data Center
+  není k dispozici a ověřuje se jen fakem `internal/jira/jiratest`.
 - Windows: XAML kompilátor je nástroj .NET Frameworku bez podpory dlouhých
   cest a na cestě přes 260 znaků padá (`MSB3073`, `XamlCompiler.exe`,
   `MSB3106`), i se zapnutými dlouhými cestami ve Windows. Klon drž na krátké

@@ -52,6 +52,8 @@ enum Icon {
         "mail-read": "envelope.open",
         "system-users": "person.2",
         "folder": "folder",
+        // A fixed view of a Jira account (`Jira.virtualIcon`).
+        "folder-saved-search": "folder.badge.gearshape",
         "document-edit": "doc",
         "mail-send": "paperplane",
         "mail-attachment": "paperclip",

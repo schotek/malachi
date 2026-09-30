@@ -62,6 +62,9 @@ public enum DaemonNotification: Sendable, Equatable {
     case syncState(SyncState)
     case authRequired(AuthRequiredNotification)
     case accountsChanged
+    /// Messages of an account were hidden or shown again without arriving
+    /// or leaving (`MessagesChangedNotification`, API/Jira.swift).
+    case messagesChanged(MessagesChangedNotification)
     case unknown(method: String)
 
     /// Decodes the params of a raw notification by its method. Throws when
@@ -76,6 +79,8 @@ public enum DaemonNotification: Sendable, Equatable {
             self = .authRequired(try raw.params(AuthRequiredNotification.self))
         case API.Notify.accountsChanged:
             self = .accountsChanged
+        case API.Notify.messagesChanged:
+            self = .messagesChanged(try raw.params(MessagesChangedNotification.self))
         default:
             self = .unknown(method: raw.method)
         }

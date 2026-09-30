@@ -591,7 +591,7 @@ func TestListThreadsUsesIndexes(t *testing.T) {
 	s := openTestStore(t)
 	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
 	linked(t, s, inbox, 1, "a", "")
-	rows, err := s.DB().Query(`EXPLAIN QUERY PLAN `+threadGroupQuery(""), inbox.ID)
+	rows, err := s.DB().Query(`EXPLAIN QUERY PLAN `+threadGroupQuery(""), inbox.ID, inbox.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,7 +606,10 @@ func TestListThreadsUsesIndexes(t *testing.T) {
 		plan = append(plan, detail)
 	}
 	joined := strings.Join(plan, "\n")
-	if !strings.Contains(joined, "messages_folder_thread") || strings.Contains(joined, "TEMP B-TREE") {
+	// The grouping reads the covering index only; the hidden rows it
+	// leaves out come from their partial index.
+	if !strings.Contains(joined, "COVERING INDEX messages_folder_thread") || !strings.Contains(joined, "messages_hidden") ||
+		strings.Contains(joined, "TEMP B-TREE") {
 		t.Errorf("plan:\n%s", joined)
 	}
 }

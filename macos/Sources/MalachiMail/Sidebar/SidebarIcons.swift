@@ -18,6 +18,8 @@ enum SidebarIcons {
         case "mail-mark-junk-symbolic": return "xmark.bin"
         case "folder-download-symbolic": return "archivebox"
         case "folder-symbolic": return "folder"
+        // A fixed view of a Jira account (`Jira.virtualIcon`).
+        case "folder-saved-search-symbolic": return "folder.badge.gearshape"
         case "system-users-symbolic": return "person.2"
         case "dialog-warning-symbolic": return "exclamationmark.triangle"
         case "non-starred-symbolic": return "star"

@@ -17,7 +17,10 @@ public struct Paths: Sendable {
     /// appended (`RPCAuth.keyPath`, docs/api.md §1.4), and is read by
     /// `RPCClient` on every connection.
     public let socket: String
-    /// `~/Library/Application Support/Malachi Mail`
+    /// `MALACHI_DATA_DIR`, else `~/Library/Application Support/Malachi Mail`
+    /// (the override is the Windows client's: a separate store and config
+    /// for a test run next to the everyday one; pair it with its own
+    /// `MALACHI_SOCKET`).
     public let dataDir: URL
     /// `Contents/MacOS/malachi-mcp` when bundled, nil otherwise.
     public let mcpBridge: URL?
@@ -52,9 +55,14 @@ public struct Paths: Sendable {
             let cache = env["XDG_CACHE_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? home + "/.cache"
             socket = cache + "/malachi/run/rpc.sock"
         }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
-        let dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
+        let dataDir: URL
+        if let d = env["MALACHI_DATA_DIR"], !d.isEmpty {
+            dataDir = URL(fileURLWithPath: d, isDirectory: true)
+        } else {
+            let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: home).appendingPathComponent("Library/Application Support", isDirectory: true)
+            dataDir = support.appendingPathComponent("Malachi Mail", isDirectory: true)
+        }
         let mcp = executable?.deletingLastPathComponent().appendingPathComponent("malachi-mcp")
         let bridge = mcp.flatMap { FileManager.default.isExecutableFile(atPath: $0.path) ? $0 : nil }
         let helper = executable?.deletingLastPathComponent().appendingPathComponent("malachi-keychain")

@@ -31,6 +31,8 @@ type AccountService interface {
 	OAuthStart(ctx context.Context, p AccountOAuthStartParams) (*AccountOAuthStartResult, error)
 	OAuthWait(ctx context.Context, p AccountOAuthWaitParams) (*AccountOAuthWaitResult, error)
 	OAuthCancel(ctx context.Context, p AccountOAuthCancelParams) (*AccountOAuthCancelResult, error)
+	DetectSite(ctx context.Context, p AccountDetectSiteParams) (*AccountDetectSiteResult, error)
+	ListSpaces(ctx context.Context, p AccountListSpacesParams) (*AccountListSpacesResult, error)
 }
 
 type FolderService interface {
@@ -126,4 +128,5 @@ type Notifier interface {
 	SyncState(n SyncStateNotification)
 	AuthRequired(n AuthRequiredNotification)
 	AccountsChanged(n AccountsChangedNotification)
+	MessagesChanged(n MessagesChangedNotification)
 }

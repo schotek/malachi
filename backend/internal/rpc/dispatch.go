@@ -68,6 +68,8 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodAccountOAuthStart] = wrap(acc.OAuthStart)
 	s.handlers[api.MethodAccountOAuthWait] = wrap(acc.OAuthWait)
 	s.handlers[api.MethodAccountOAuthCancel] = wrap(acc.OAuthCancel)
+	s.handlers[api.MethodAccountDetectSite] = wrap(acc.DetectSite)
+	s.handlers[api.MethodAccountListSpaces] = wrap(acc.ListSpaces)
 
 	s.handlers[api.MethodFolderList] = wrap(fol.List)
 	s.handlers[api.MethodFolderSubscribe] = wrap(fol.Subscribe)

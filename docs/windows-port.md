@@ -2804,3 +2804,30 @@ needs them:
 Later tracks: MSIX (virtualisation disabled, an execution alias for
 `malachi-mcp`), Windows Web Account Manager as a daemon extension point, a
 taskbar unread badge, and the separate proposals at the end of §14.
+
+Not ported yet, and the one place where the client trails the daemon's
+API (protocol 2, [api.md §7](api.md#7-changelog), 2026-09-29): the Jira
+accounts (`kind: jira`, [architecture.md §3.6](architecture.md#36-issue-tracker-accounts-kind-jira))
+and the conversation view of the reading pane, both built macOS-first
+([architecture.md §7](architecture.md#7-open-decisions)). The port follows
+§3 with the macOS client as its source, as before: the Go reference of
+the pure logic is `ui/internal/jira` (the assistant, the sidebar and list
+projections, the issue card, the comment window, the account settings
+with its RE2 check), `ui/internal/capabilities` (which actions an account
+offers, from `Account.capabilities`) and `ui/internal/conversation` (the
+stacked conversation, the member marked read); their Swift ports are
+`MalachiCore/Jira`, `Model/Capabilities.swift` and
+`Model/Conversation.swift`, the controllers `JiraWizardController`,
+`JiraAccountController` and `ConversationController`, and the views the
+Jira assistant and settings sheets, `IssueCardView`, the comment mode of
+the compose window, `ActionPresentation` and the conversation view with
+the sized mode of `MessageWebView` (a second script of the app's own
+that measures the document; on WebView2 that is a host script run with
+page script off, as the link reader of §6.4 is, and the measurement
+must cope with content sized by the viewport as the Swift height
+governor does). Until then the client ignores
+`capabilities`, `issue`, `virtual`, `comment` and `notify.messagesChanged`
+(unknown fields, so nothing fails to decode), and every msgid of the
+feature is in `parity-exclusions.txt` under "Jira account: macOS first"
+and "Conversation view: macOS first", to be removed as the port uses them
+(§9).

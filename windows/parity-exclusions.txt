@@ -53,3 +53,94 @@ mail;email;imap;	desktop file: the launcher's metadata of Linux desktops; the in
 Native email client for the GNOME desktop	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 Malachi Mail is a desktop email client for Linux, built with GTK 4 and libadwaita. It keeps mail available offline, renders HTML messages only after sanitising them, and separates the user interface from the mail engine so that the engine can be reused.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
 This is an early version. Mail can be read, written, sent and searched, but keep a second mail program for anything that matters.	AppStream metainfo: the Linux software centres' description; the installer's comes before a release
+Reply to Customer	Jira account: macOS first
+Internal Note	Jira account: macOS first
+Comment on %s	Jira account: macOS first
+Write a comment first	Jira account: macOS first
+Comment queued	Jira account: macOS first
+Comment	Jira account: macOS first
+folder\004Assigned to Me	Jira account: macOS first
+folder\004Watching	Jira account: macOS first
+folder\004Open	Jira account: macOS first
+Open %s in the Browser	Jira account: macOS first
+Status	Jira account: macOS first
+Unassigned	Jira account: macOS first
+Assignee	Jira account: macOS first
+Priority	Jira account: macOS first
+Type	Jira account: macOS first
+Reporter	Jira account: macOS first
+via %s	Jira account: macOS first
+Edited	Jira account: macOS first
+jira\004Internal	Jira account: macOS first
+Status: %s → %s	Jira account: macOS first
+Assignee: %s → %s	Jira account: macOS first
+change list separator\004; 	Jira account: macOS first
+No API token is stored for %s	Jira account: macOS first
+The Jira site rejected the token of %s	Jira account: macOS first
+Add _Jira Account…	Jira account: macOS first
+Add Jira Account	Jira account: macOS first
+Jira Site	Jira account: macOS first
+Enter the address of your Jira site. Malachi Mail finds out whether it runs in the cloud or in your company's data center.	Jira account: macOS first
+Site Address	Jira account: macOS first
+Looking up the Jira site	Jira account: macOS first
+Loading the spaces	Jira account: macOS first
+jira\004Spaces	Jira account: macOS first
+Choose the spaces whose issues appear as folders.	Jira account: macOS first
+No spaces are visible to this account	Jira account: macOS first
+Only Issues Involving Me	Jira account: macOS first
+Assigned to you, reported by you or watched by you	Jira account: macOS first
+Keep Issues Offline For	Jira account: macOS first
+Older issues stay on the site and are not shown	Jira account: macOS first
+The Jira site rejected the token	Jira account: macOS first
+API Token	Jira account: macOS first
+Create an API token for Malachi Mail in your Atlassian account, then paste it here.	Jira account: macOS first
+Create API Token…	Jira account: macOS first
+Enter the API token for this account	Jira account: macOS first
+Personal Access Token	Jira account: macOS first
+Create a personal access token in your Jira profile, then paste it here.	Jira account: macOS first
+Enter the personal access token for this account	Jira account: macOS first
+This is not a web address	Jira account: macOS first
+Found %s, version %s	Jira account: macOS first
+Found %s	Jira account: macOS first
+about %d issue	Jira account: macOS first
+Select at least one space	Jira account: macOS first
+Select at most %d space	Jira account: macOS first
+This address is not a Jira site	Jira account: macOS first
+An account for this Jira site already exists	Jira account: macOS first
+%d earlier message is not shown	Conversation view: macOS first
+Jira Account	Jira account: macOS first
+Signed In As	Jira account: macOS first
+Replace Token…	Jira account: macOS first
+Synchronisation	Jira account: macOS first
+Show Status and Assignee Changes	Jira account: macOS first
+Closed Statuses	Jira account: macOS first
+Issues in these statuses are left out of Open	Jira account: macOS first
+Notification E-mails	Jira account: macOS first
+When a Jira Notification Arrives	Jira account: macOS first
+Senders	Jira account: macOS first
+An address, or a domain such as @example.org	Jira account: macOS first
+Comments Posted by Bots	Jira account: macOS first
+Bot Accounts	Jira account: macOS first
+Their comments are shown under the person they name	Jira account: macOS first
+Hidden Lines	Jira account: macOS first
+Lines matching these patterns are removed from comments	Jira account: macOS first
+Name Prefixes	Jira account: macOS first
+Removed from the start of authors' names	Jira account: macOS first
+Add	Jira account: macOS first
+Check the Issue at Once	Jira account: macOS first
+Check the Issue and Hide the E-mail	Jira account: macOS first
+Do Nothing	Jira account: macOS first
+Hidden e-mails stay in your mailbox and come back when you turn this off	Jira account: macOS first
+status category\004To Do	Jira account: macOS first
+status category\004In Progress	Jira account: macOS first
+status category\004Done	Jira account: macOS first
+status category\004Other	Jira account: macOS first
+Select at most %d status	Jira account: macOS first
+This entry is too long	Jira account: macOS first
+This entry contains control characters	Jira account: macOS first
+A bot name needs at least 3 characters	Jira account: macOS first
+This pattern is not valid: %s	Jira account: macOS first
+Enter an address, or a domain such as @example.org	Jira account: macOS first
+This entry is already in the list	Jira account: macOS first
+The list holds at most %d entry	Jira account: macOS first
+Add %s	Jira account: macOS first

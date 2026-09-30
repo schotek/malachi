@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/ingest"
+	"github.com/schotek/malachi/backend/internal/jira"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -44,9 +45,9 @@ const (
 	downloadStopWait = 10 * time.Second
 )
 
-// rawFetcher downloads a stored message from its server into fn, with the
-// size the server announced (-1 when it announces none).
-type rawFetcher func(ctx context.Context, a store.Account, loc store.ServerLocation, fn func(r io.Reader, size int64) error) error
+// rawFetcher downloads a stored message m from its server (at loc) into
+// fn, with the size the server announced (-1 when it announces none).
+type rawFetcher func(ctx context.Context, a store.Account, m store.Message, loc store.ServerLocation, fn func(r io.Reader, size int64) error) error
 
 // errNoServerCopy: the store knows no place on the server to fetch the
 // message from (a local move not pushed yet, without a snapshot).
@@ -335,13 +336,13 @@ func (b *Backend) fetchInto(ctx context.Context, a store.Account, m store.Messag
 		OnDemand: true,
 		Expect:   store.RawExpect{BodyState: m.BodyState, RawState: m.RawState, HydratedAt: &hydrated},
 		Verify:   &m,
-		Strict:   a.Config.Protocol() != api.AccountGraph,
+		Strict:   !rebuildsMIME(a.Config.Protocol()),
 	}
 	fetch := b.dl.fetchRaw
 	if fetch == nil {
 		fetch = b.fetchRaw
 	}
-	return fetch(ctx, a, loc, func(r io.Reader, size int64) error {
+	return fetch(ctx, a, m, loc, func(r io.Reader, size int64) error {
 		if size > req.Limit {
 			return ingest.ErrTooBig
 		}
@@ -389,11 +390,31 @@ func (b *Backend) hold(ctx context.Context, gen uint64, m store.Message, req ing
 	return nil
 }
 
+// rebuildsMIME says whether the server of an account kind builds a
+// message anew for every download (Graph's $value, a Jira item synthesised
+// again), so that a download is checked by its Message-ID only, not byte
+// for byte against the stored parts (ingest.Request.Strict).
+func rebuildsMIME(kind api.AccountKind) bool {
+	return kind == api.AccountGraph || kind == api.AccountJira
+}
+
 // fetchRaw downloads a stored message from its account's server: IMAP on
 // a connection of its own (imap.FetchMessage) with the account's
 // credential, asked for again once after the server refused an OAuth2
-// token; Graph through the message's $value with the account's token.
-func (b *Backend) fetchRaw(ctx context.Context, a store.Account, loc store.ServerLocation, fn func(io.Reader, int64) error) error {
+// token; Graph through the message's $value with the account's token; a
+// Jira item built again from the site (jira.Supervisor.FetchMessage).
+func (b *Backend) fetchRaw(ctx context.Context, a store.Account, m store.Message, loc store.ServerLocation, fn func(io.Reader, int64) error) error {
+	if a.Config.Protocol() == api.AccountJira {
+		if b.jiraSync == nil {
+			return api.NewError(api.CodeUnavailable, "issue-tracker accounts are not available")
+		}
+		r, size, err := b.jiraSync.FetchMessage(ctx, a, m)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		return fn(r, size)
+	}
 	if a.Config.Protocol() == api.AccountGraph {
 		id := a.ID
 		client := graph.NewClient(graph.Options{
@@ -436,12 +457,14 @@ func (b *Backend) downloadError(ctx context.Context, a store.Account, m store.Me
 	case errors.Is(err, errNoServerCopy):
 		b.Supervisor.Trigger(a.ID, "", false)
 		return api.NewError(api.CodeUnavailable, "message %s has no place on the server yet; retry after the next sync", m.ID)
-	case errors.Is(err, imap.ErrGone), errors.Is(err, graph.ErrGone):
+	case errors.Is(err, imap.ErrGone), errors.Is(err, graph.ErrGone), errors.Is(err, jira.ErrGone):
 		folder := loc.Folder.ID
 		if folder == "" {
 			folder = m.FolderID
 		}
-		b.Supervisor.Trigger(a.ID, api.FolderID(folder), false)
+		// A Jira item gone with its issue shows in a full pass only (an
+		// issue deleted on the site does not change its updated time).
+		b.Supervisor.Trigger(a.ID, api.FolderID(folder), a.Config.Protocol() == api.AccountJira)
 		return api.NewError(api.CodeMessageGone, "the server no longer has message %s", m.ID)
 	case errors.Is(err, ingest.ErrTooBig):
 		if m.BodyState == store.BodyNone {

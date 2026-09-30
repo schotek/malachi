@@ -145,8 +145,11 @@ final class AccountRowCell: NSTableCellView, PrefsGroupMember {
 
     /// Shows the account's current state (accounts_page.go `accountRow.apply`).
     func apply(_ a: Account) {
+        // A Jira account: a ticket, and its site under the name (Swift-first:
+        // mirror in accounts_page.go when GTK gets Jira accounts).
+        icon.image = wizardSymbol(accountEditor(a) == .jira ? "ticket" : "envelope", pointSize: 15)
         titleLabel.stringValue = accountRowTitle(a)
-        subtitleLabel.stringValue = a.config.email
+        subtitleLabel.stringValue = accountRowSubtitle(a)
         reverting = true
         toggle.state = a.enabled ? .on : .off
         reverting = false

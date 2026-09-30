@@ -126,8 +126,12 @@ func (b *Backend) draftThreading(ctx context.Context, d store.Draft) (string, []
 // scheduleDraftSync arms a wake-up of the account's syncer for when its
 // next draft upload falls due (store.NextDraftUpload), replacing the one
 // armed before: a syncer idling on IDLE, or with polling off, would
-// otherwise only upload with the next unrelated pass.
+// otherwise only upload with the next unrelated pass. An issue-tracker
+// account has no Drafts folder on its server: nothing is armed.
 func (b *Backend) scheduleDraftSync(accountID string) {
+	if b.localDraftsOnly(accountID) {
+		return
+	}
 	due, err := b.store.NextDraftUpload(context.Background(), accountID, draftSyncQuiet)
 	if err != nil {
 		b.log.Warn("schedule draft upload", "account", accountID, "err", err)
@@ -151,13 +155,24 @@ func (b *Backend) scheduleDraftSync(accountID string) {
 }
 
 // triggerDrafts wakes the account's syncer for its Drafts folder: a pass
-// always pushes the queued operations and due drafts first.
+// always pushes the queued operations and due drafts first. Not for an
+// issue-tracker account, whose drafts stay local.
 func (b *Backend) triggerDrafts(accountID string) {
+	if b.localDraftsOnly(accountID) {
+		return
+	}
 	folder := api.FolderID("")
 	if f, err := b.store.FolderByRole(context.Background(), accountID, api.RoleDrafts); err == nil {
 		folder = api.FolderID(f.ID)
 	}
 	b.Supervisor.Trigger(accountID, folder, false)
+}
+
+// localDraftsOnly says whether the account keeps its drafts on this
+// device only (an issue tracker); an account that cannot be read does not.
+func (b *Backend) localDraftsOnly(accountID string) bool {
+	a, err := b.store.GetAccount(context.Background(), accountID)
+	return err == nil && isIssueAccount(a)
 }
 
 // stopDraftTimers cancels every armed wake-up (shutdown).

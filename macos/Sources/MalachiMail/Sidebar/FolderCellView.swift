@@ -107,7 +107,7 @@ final class FolderCellView: NSTableCellView {
     /// account of a pinned folder when there are several).
     func configure(entry: FolderEntry, subtitle text: String) {
         guard let folder = entry.folder else { return }
-        icon.image = SidebarIcons.image(roleIcon(folder.role), pointSize: SidebarMetrics.iconPointSize)
+        icon.image = SidebarIcons.image(folderIcon(folder), pointSize: SidebarMetrics.iconPointSize)
         title.stringValue = folderTitle(folder)
         subtitle.stringValue = text
         subtitle.isHidden = text.isEmpty
@@ -172,12 +172,15 @@ final class FolderCellView: NSTableCellView {
 
 /// A heading row (folders.go `newHeaderRow`): the Favourites section or an
 /// account. The outline's source-list style draws it as a group row; the
-/// text is plain.
+/// text is plain. An issue-tracker account's heading carries its kind in a
+/// small capsule after the name ("JIRA", `accountHeaderBadge`; Swift-first:
+/// mirror in folders.go when GTK gets Jira accounts).
 @MainActor
 final class SidebarHeaderCellView: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("SidebarHeaderCell")
 
     private let label = NSTextField(labelWithString: "")
+    private let kindBadge = PillLabel()
 
     init() {
         super.init(frame: .zero)
@@ -186,13 +189,22 @@ final class SidebarHeaderCellView: NSTableCellView {
         label.textColor = .secondaryLabelColor
         label.lineBreakMode = .byTruncatingTail
         label.maximumNumberOfLines = 1
-        label.translatesAutoresizingMaskIntoConstraints = false
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textField = label
-        addSubview(label)
+        kindBadge.font = .systemFont(ofSize: 9, weight: .semibold)
+        kindBadge.textColor = .secondaryLabelColor
+        kindBadge.isHidden = true
+        let row = NSStackView(views: [label, kindBadge])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 6
+        row.detachesHiddenViews = true
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -201,8 +213,11 @@ final class SidebarHeaderCellView: NSTableCellView {
         fatalError("not used")
     }
 
-    func configure(text: String) {
+    /// The heading's text and, when not empty, the capsule after it.
+    func configure(text: String, tag badge: String = "") {
         label.stringValue = text
+        kindBadge.stringValue = badge
+        kindBadge.isHidden = badge.isEmpty
     }
 }
 

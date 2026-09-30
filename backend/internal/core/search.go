@@ -131,7 +131,9 @@ func (s *searchService) Query(ctx context.Context, p api.SearchQueryParams) (*ap
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
 	results := make([]api.SearchResult, 0, len(rows))
+	remoteIDs := make([]string, 0, len(rows))
 	for _, r := range rows {
+		remoteIDs = append(remoteIDs, r.RemoteID)
 		sum := toAPISummary(r.Message)
 		res := api.SearchResult{Message: sum, Snippet: sum.Snippet}
 		if excerpt, ranges, ok := search.Excerpt(r.Text, q, searchExcerptRunes); ok {
@@ -140,6 +142,9 @@ func (s *searchService) Query(ctx context.Context, p api.SearchQueryParams) (*ap
 		results = append(results, res)
 	}
 	if err := s.b.attachResultOutbox(ctx, results); err != nil {
+		return nil, err
+	}
+	if err := s.b.attachResultIssues(ctx, accounts, remoteIDs, results); err != nil {
 		return nil, err
 	}
 	return &api.SearchQueryResult{Results: results, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
@@ -168,6 +173,41 @@ func (s *searchService) resolveIn(ctx context.Context, accounts []store.Account,
 		}
 	}
 	return ids, nil
+}
+
+// attachResultIssues fills the issue of the results of issue-tracker
+// accounts, one query per such account; remoteIDs[i] is the remote id of
+// results[i]. accounts are those in scope.
+func (b *Backend) attachResultIssues(ctx context.Context, accounts []store.Account, remoteIDs []string, results []api.SearchResult) error {
+	byID := make(map[api.AccountID]store.Account, len(accounts))
+	for _, a := range accounts {
+		if isIssueAccount(a) {
+			byID[api.AccountID(a.ID)] = a
+		}
+	}
+	if len(byID) == 0 {
+		return nil
+	}
+	byAccount := map[api.AccountID][]int{}
+	for i, r := range results {
+		if _, ok := byID[r.Message.AccountID]; ok {
+			byAccount[r.Message.AccountID] = append(byAccount[r.Message.AccountID], i)
+		}
+	}
+	for acc, idx := range byAccount {
+		list := make([]api.MessageSummary, len(idx))
+		ids := make([]string, len(idx))
+		for k, i := range idx {
+			list[k], ids[k] = results[i].Message, remoteIDs[i]
+		}
+		if err := b.decorateIssues(ctx, byID[acc], ids, list); err != nil {
+			return err
+		}
+		for k, i := range idx {
+			results[i].Message.Issue = list[k].Issue
+		}
+	}
+	return nil
 }
 
 // attachResultOutbox fills the outbox state of the results that are

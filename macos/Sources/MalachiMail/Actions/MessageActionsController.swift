@@ -306,10 +306,17 @@ final class MessageActionsController: MessageActions, MessageActionDelegate {
     }
 
     /// An address chip's New Message (addresses.go `chip`): a new message
-    /// to that address, from the account of the message it sits on.
+    /// to that address, from the account of the message it sits on, or
+    /// from the first mail account when that one cannot write (a Jira
+    /// account; `Capabilities.forwardFrom`).
     func newMessage(to address: Address, account: AccountID) {
         guard let open = state.hooks.openCompose else { return }
-        open(ComposeParams(kind: .new, accountID: account, to: [address]))
+        let from = Capabilities.forwardFrom(actions.mailbox.model.accounts, from: account)?.id ?? account
+        open(ComposeParams(kind: .new, accountID: from, to: [address]))
+    }
+
+    func account(_ id: AccountID) -> Account? {
+        actions.mailbox.model.account(id)
     }
 
     /// Opens `href` with the desktop's handler (remote.go `launchURI`).

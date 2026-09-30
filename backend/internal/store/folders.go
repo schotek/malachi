@@ -34,6 +34,9 @@ type Folder struct {
 	// Unsynced marks a folder that is listed and may take moves but whose
 	// contents are never downloaded (Gmail's All Mail, migration 0010).
 	Unsynced bool
+	// Virtual marks a fixed view of an issue-tracker account (migration
+	// 0015): its rows are copies of rows of the account's space folders.
+	Virtual api.VirtualFolder
 
 	// Sync engine state; untouched by UpsertFolders for existing rows.
 	UIDValidity    uint32
@@ -225,16 +228,16 @@ func (s *Store) UpsertFolders(ctx context.Context, accountID string, folders []F
 		}
 		row := tx.QueryRowContext(ctx, `
 			INSERT INTO folders (id, account_id, mailbox, delimiter, parent_id, name, path, role,
-			                     subscribed, selectable, unsynced, position, created_at, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			                     subscribed, selectable, unsynced, virtual, position, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (account_id, mailbox) DO UPDATE SET
 				delimiter = excluded.delimiter, parent_id = excluded.parent_id, name = excluded.name,
 				path = excluded.path, role = excluded.role, subscribed = excluded.subscribed,
-				selectable = excluded.selectable, unsynced = excluded.unsynced, position = excluded.position,
-				updated_at = excluded.updated_at
+				selectable = excluded.selectable, unsynced = excluded.unsynced, virtual = excluded.virtual,
+				position = excluded.position, updated_at = excluded.updated_at
 			RETURNING `+folderColumns,
 			ids[f.Mailbox], accountID, f.Mailbox, f.Delimiter, parentID, f.Name, f.Path, string(role),
-			boolInt(f.Subscribed), boolInt(f.Selectable), boolInt(f.Unsynced), i, now, now)
+			boolInt(f.Subscribed), boolInt(f.Selectable), boolInt(f.Unsynced), string(f.Virtual), i, now, now)
 		got, err := scanFolder(row)
 		if err != nil {
 			return nil, nil, fmt.Errorf("upsert folder %q: %w", f.Mailbox, err)
@@ -428,7 +431,8 @@ func (s *Store) ResetFolder(ctx context.Context, id string, uidValidity uint32) 
 }
 
 // RecountFolder recomputes the local unread/total counts of a folder from
-// its messages and returns them. ErrNotFound for an unknown id.
+// its messages and returns them; hidden rows (Message.Hidden) do not
+// count. ErrNotFound for an unknown id.
 func (s *Store) RecountFolder(ctx context.Context, id string) (unread, total int, err error) {
 	unread, total, err = recountFolderTx(ctx, s.db, id)
 	if err != nil {
@@ -444,11 +448,15 @@ type execQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+// recountFolderTx counts every row and subtracts the hidden ones, which the
+// partial index messages_hidden finds without a scan (there are few).
 func recountFolderTx(ctx context.Context, q execQuerier, id string) (unread, total int, err error) {
 	err = q.QueryRowContext(ctx, `
 		UPDATE folders SET
-			unread = (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id AND unread = 1),
+			unread = (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id AND unread = 1)
+			       - (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id AND hidden = 1 AND unread = 1),
 			total  = (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id)
+			       - (SELECT COUNT(*) FROM messages WHERE folder_id = folders.id AND hidden = 1)
 		WHERE id = ?
 		RETURNING unread, total`, id).Scan(&unread, &total)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -463,19 +471,19 @@ func recountFolderTx(ctx context.Context, q execQuerier, id string) (unread, tot
 const folderColumns = `id, account_id, mailbox, delimiter, parent_id,
 	COALESCE((SELECT p.mailbox FROM folders p WHERE p.id = folders.parent_id), ''),
 	name, path, role, subscribed, selectable, unsynced, uidvalidity, uidnext, highestmodseq, delta_link,
-	server_messages, server_unseen, unread, total, last_sync_at, position, created_at, updated_at`
+	server_messages, server_unseen, unread, total, last_sync_at, position, created_at, updated_at, virtual`
 
 func scanFolder(row scanner) (Folder, error) {
 	var f Folder
-	var role, lastSync, created, updated string
+	var role, lastSync, created, updated, virtual string
 	var subscribed, selectable, unsynced int
 	var uidvalidity, uidnext, modseq int64
 	if err := row.Scan(&f.ID, &f.AccountID, &f.Mailbox, &f.Delimiter, &f.ParentID, &f.ParentMailbox,
 		&f.Name, &f.Path, &role, &subscribed, &selectable, &unsynced, &uidvalidity, &uidnext, &modseq, &f.DeltaLink,
-		&f.ServerMessages, &f.ServerUnseen, &f.Unread, &f.Total, &lastSync, &f.Position, &created, &updated); err != nil {
+		&f.ServerMessages, &f.ServerUnseen, &f.Unread, &f.Total, &lastSync, &f.Position, &created, &updated, &virtual); err != nil {
 		return Folder{}, err
 	}
-	f.Role = api.FolderRole(role)
+	f.Role, f.Virtual = api.FolderRole(role), api.VirtualFolder(virtual)
 	f.Subscribed, f.Selectable, f.Unsynced = subscribed != 0, selectable != 0, unsynced != 0
 	f.UIDValidity, f.UIDNext, f.HighestModSeq = uint32(uidvalidity), uint32(uidnext), uint64(modseq)
 	f.LastSyncAt = parseStamp(lastSync)

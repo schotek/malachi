@@ -248,7 +248,7 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
             return cell
         case let node as AccountNode:
             let cell = headerCell()
-            cell.configure(text: node.entry.account.map(accountLabel) ?? "")
+            cell.configure(text: node.entry.account.map(accountLabel) ?? "", tag: node.entry.account.map(accountHeaderBadge) ?? "")
             return cell
         case let node as FolderNode:
             let cell = outline.makeView(withIdentifier: FolderCellView.reuseIdentifier, owner: nil) as? FolderCellView

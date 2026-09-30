@@ -1,0 +1,11 @@
+From: Mallory <mallory@example.org>
+From: Jira <jira@acme.atlassian.net>
+To: jana.dvorakova@example.invalid
+Subject: Quarterly report
+Subject: [JIRA] (ITSD-42) Printer on the 2nd floor
+Date: Thu, 24 Sep 2026 09:32:00 +0000
+Message-ID: <spoof-3@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Two From headers and two subjects.

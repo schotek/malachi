@@ -21,6 +21,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/fsretry"
 	"github.com/schotek/malachi/backend/internal/imap"
 	"github.com/schotek/malachi/backend/internal/ingest"
+	"github.com/schotek/malachi/backend/internal/jira/jiratest"
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
@@ -167,7 +168,7 @@ func (s *fakeServer) put(mailbox string, uid uint32, raw []byte) {
 	s.mu.Unlock()
 }
 
-func (s *fakeServer) fetch(ctx context.Context, _ store.Account, loc store.ServerLocation, fn func(io.Reader, int64) error) error {
+func (s *fakeServer) fetch(ctx context.Context, _ store.Account, _ store.Message, loc store.ServerLocation, fn func(io.Reader, int64) error) error {
 	s.mu.Lock()
 	s.asked = append(s.asked, loc)
 	gate, err, announce, wrap := s.gate, s.err, s.announce, s.wrap
@@ -657,5 +658,69 @@ func TestMessageDownloadShutdown(t *testing.T) {
 	}
 	if _, err := m.download(context.Background(), msg.ID); errCode(t, err) != api.CodeCancelled {
 		t.Fatalf("download after shutdown: %v", err)
+	}
+}
+
+// message.download on a jira account builds the item again from the site
+// (docs/api.md §4.3): a description whose large file stayed on the site
+// comes back whole with the stored Message-ID; an item the site no longer
+// has is messageGone, and the pass that call asks for removes it.
+func TestDownloadJiraRebuild(t *testing.T) {
+	for _, mode := range []jiratest.Mode{jiratest.Cloud, jiratest.DC} {
+		t.Run(string(mode), func(t *testing.T) {
+			var typo *jiratest.Issue
+			prefs := &api.Preferences{RemoteContent: api.RemoteBlock, AttachmentOfflineDays: api.Ptr(api.AttachmentOfflineNone)}
+			e := startJiraE2E(t, mode, prefs, func(f *jiratest.Server) {
+				typo = f.AddIssue("WEB", "Landing page typo", func(is *jiratest.Issue) { is.Description = "<p>See the report.</p>" })
+				f.AddAttachment(typo.ID, "report.pdf", "application/pdf", bigPDF)
+			})
+			ctx, b, id := e.ctx, e.b, e.id
+			_, byName := e.folders()
+			desc := item(t, e.list(byName["Web"].ID), typo.Key, api.IssueItemDescription)
+			got, err := b.Messages().Get(ctx, api.MessageGetParams{AccountID: id, MessageID: desc.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var pdf api.Attachment
+			for _, a := range got.Message.Attachments {
+				if a.Filename == "report.pdf" {
+					pdf = a
+				}
+			}
+			if !pdf.Remote {
+				t.Fatalf("the file is not left on the site: %+v", got.Message.Attachments)
+			}
+			if _, err := b.Messages().Part(ctx, api.MessagePartParams{AccountID: id, MessageID: desc.ID, PartID: pdf.PartID}); errCode(t, err) != api.CodePartNotDownloaded {
+				t.Fatalf("part before the download: %v", err)
+			}
+			res, err := b.Messages().Download(ctx, api.MessageDownloadParams{AccountID: id, MessageID: desc.ID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if res.Message.Issue == nil || res.Message.Issue.Key != typo.Key || res.Message.RFCMessageID != got.Message.RFCMessageID {
+				t.Fatalf("downloaded = %+v", res.Message)
+			}
+			for _, a := range res.Message.Attachments {
+				if a.Remote {
+					t.Fatalf("still remote after the download: %+v", a)
+				}
+			}
+			part, err := b.Messages().Part(ctx, api.MessagePartParams{AccountID: id, MessageID: desc.ID, PartID: pdf.PartID})
+			if err != nil || !bytes.Equal(part.Data, bigPDF) {
+				t.Fatalf("part after the download: %d bytes, %v", len(part.Data), err)
+			}
+
+			// The site deletes the issue: the copy in the Open view, still
+			// partial, is gone on download, then from the store.
+			open := item(t, e.list(byName["Open"].ID), typo.Key, api.IssueItemDescription)
+			e.f.DeleteIssue(typo.ID)
+			if _, err := b.Messages().Download(ctx, api.MessageDownloadParams{AccountID: id, MessageID: open.ID}); errCode(t, err) != api.CodeMessageGone {
+				t.Fatalf("download of a deleted issue: %v", err)
+			}
+			waitUntil(t, ctx, "the deleted issue's messages removed", func() bool {
+				_, err := b.Messages().Get(ctx, api.MessageGetParams{AccountID: id, MessageID: desc.ID})
+				return err != nil && errCode(t, err) == api.CodeMessageNotFound
+			})
+		})
 	}
 }

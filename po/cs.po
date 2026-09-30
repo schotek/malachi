@@ -536,6 +536,480 @@ msgstr "Adresář"
 msgid "Recently used"
 msgstr "Nedávno použité"
 
+#. TRANSLATORS: a comment on a service-desk request that the customer reads too.
+#: ui/internal/jira/compose.go
+msgid "Reply to Customer"
+msgstr "Veřejná odpověď"
+
+#. TRANSLATORS: a comment on a service-desk request that only the team reads.
+#: ui/internal/jira/compose.go
+msgid "Internal Note"
+msgstr "Interní poznámka"
+
+#. TRANSLATORS: title of the window that writes a comment; %s is an issue key such as "ITSD-42".
+#: ui/internal/jira/compose.go
+#, c-format
+msgid "Comment on %s"
+msgstr "Komentář k %s"
+
+#: ui/internal/jira/compose.go
+msgid "Write a comment first"
+msgstr "Nejdřív napište komentář"
+
+#: ui/internal/jira/compose.go
+msgid "Comment queued"
+msgstr "Komentář byl zařazen k odeslání"
+
+#. TRANSLATORS: the Reply action of an issue: writes a comment.
+#: ui/internal/jira/compose.go
+msgid "Comment"
+msgstr "Komentovat"
+
+#. TRANSLATORS: a folder of a Jira account: the issues assigned to the user.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Assigned to Me"
+msgstr "Přiřazené mně"
+
+#. TRANSLATORS: a folder of a Jira account: the issues the user watches.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Watching"
+msgstr "Sledované"
+
+#. TRANSLATORS: a folder of a Jira account: the issues that are not closed yet.
+#: ui/internal/jira/jira.go
+msgctxt "folder"
+msgid "Open"
+msgstr "Neuzavřené"
+
+#. TRANSLATORS: tooltip of an issue key such as "ITSD-42".
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Open %s in the Browser"
+msgstr "Otevřít %s v prohlížeči"
+
+#. TRANSLATORS: a field of a Jira issue.
+#: ui/internal/jira/jira.go
+msgid "Status"
+msgstr "Stav"
+
+#. TRANSLATORS: the value of an empty field of a Jira issue (priority, type, reporter).
+#: ui/internal/jira/jira.go
+msgctxt "jira value"
+msgid "None"
+msgstr "Nezadáno"
+
+#: ui/internal/jira/jira.go
+msgid "Unassigned"
+msgstr "Nepřiřazeno"
+
+#. TRANSLATORS: a field of a Jira issue: the person who works on it.
+#: ui/internal/jira/jira.go
+msgid "Assignee"
+msgstr "Řešitel"
+
+#. TRANSLATORS: a field of a Jira issue.
+#: ui/internal/jira/jira.go
+msgid "Priority"
+msgstr "Priorita"
+
+#. TRANSLATORS: a field of a Jira issue: its type, such as Bug or Task.
+#: ui/internal/jira/jira.go
+msgid "Type"
+msgstr "Typ"
+
+#. TRANSLATORS: a field of a Jira issue: the person who created it.
+#: ui/internal/jira/jira.go
+msgid "Reporter"
+msgstr "Zadavatel"
+
+#. TRANSLATORS: %s is an integration (a bot) that posted a comment on its author's behalf.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "via %s"
+msgstr "přes %s"
+
+#. TRANSLATORS: a comment of a Jira issue was changed after it was posted.
+#: ui/internal/jira/jira.go
+msgid "Edited"
+msgstr "Upraveno"
+
+#. TRANSLATORS: badge of a comment only the service-desk team can read.
+#: ui/internal/jira/jira.go
+msgctxt "jira"
+msgid "Internal"
+msgstr "Interní"
+
+#. TRANSLATORS: an issue's status changed; the first %s is the old status, the second the new one.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Status: %s → %s"
+msgstr "Stav: %s → %s"
+
+#. TRANSLATORS: an issue was assigned to someone else; the first %s is the old assignee, the second the new one.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "Assignee: %s → %s"
+msgstr "Řešitel: %s → %s"
+
+#. TRANSLATORS: put between two changes of an issue on one line ("Status: A → B; Assignee: C → D").
+#: ui/internal/jira/jira.go
+msgctxt "change list separator"
+msgid "; "
+msgstr "; "
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "No API token is stored for %s"
+msgstr "Pro účet %s není uložený API token"
+
+#. TRANSLATORS: banner; %s is an account name.
+#: ui/internal/jira/jira.go
+#, c-format
+msgid "The Jira site rejected the token of %s"
+msgstr "Web Jira odmítl token účtu %s"
+
+#. TRANSLATORS: menu item; "Jira" is a product name.
+#: ui/internal/jira/wizard.go
+msgid "Add _Jira Account…"
+msgstr "Přidat účet _Jira…"
+
+#: ui/internal/jira/wizard.go
+msgid "Add Jira Account"
+msgstr "Přidat účet Jira"
+
+#. TRANSLATORS: title of the page that asks for the address of a Jira installation.
+#: ui/internal/jira/wizard.go
+msgid "Jira Site"
+msgstr "Web Jira"
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Enter the address of your Jira site. Malachi Mail finds out whether it runs "
+"in the cloud or in your company's data center."
+msgstr ""
+"Zadejte adresu webu Jira. Malachi Mail zjistí, zda běží v cloudu, nebo v "
+"datovém centru vaší firmy."
+
+#: ui/internal/jira/wizard.go
+msgid "Site Address"
+msgstr "Adresa webu"
+
+#: ui/internal/jira/wizard.go
+msgid "Looking up the Jira site"
+msgstr "Vyhledání webu Jira"
+
+#: ui/internal/jira/wizard.go
+msgid "Loading the spaces"
+msgstr "Načtení prostorů"
+
+#. TRANSLATORS: Jira projects, which Jira calls spaces.
+#: ui/internal/jira/wizard.go
+msgctxt "jira"
+msgid "Spaces"
+msgstr "Prostory"
+
+#: ui/internal/jira/wizard.go
+msgid "Choose the spaces whose issues appear as folders."
+msgstr "Vyberte prostory, jejichž úkoly se zobrazí jako složky."
+
+#: ui/internal/jira/wizard.go
+msgid "No spaces are visible to this account"
+msgstr "Tento účet nevidí žádné prostory"
+
+#: ui/internal/jira/wizard.go
+msgid "Only Issues Involving Me"
+msgstr "Jen úkoly, které se mě týkají"
+
+#: ui/internal/jira/wizard.go
+msgid "Assigned to you, reported by you or watched by you"
+msgstr "Přiřazené vám, zadané vámi nebo sledované vámi"
+
+#: ui/internal/jira/wizard.go
+msgid "Keep Issues Offline For"
+msgstr "Uchovávat úkoly offline po dobu"
+
+#. TRANSLATORS: subtitle of "Keep Issues Offline For".
+#: ui/internal/jira/wizard.go
+msgid "Older issues stay on the site and are not shown"
+msgstr "Starší úkoly zůstanou na webu a nezobrazí se"
+
+#: ui/internal/jira/wizard.go
+msgid "The Jira site rejected the token"
+msgstr "Web Jira token odmítl"
+
+#: ui/internal/jira/wizard.go
+msgid "API Token"
+msgstr "API token"
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Create an API token for Malachi Mail in your Atlassian account, then paste "
+"it here."
+msgstr ""
+"Ve svém účtu Atlassian vytvořte API token pro Malachi Mail a vložte ho sem."
+
+#. TRANSLATORS: button that opens id.atlassian.com in the browser.
+#: ui/internal/jira/wizard.go
+msgid "Create API Token…"
+msgstr "Vytvořit API token…"
+
+#: ui/internal/jira/wizard.go
+msgid "Enter the API token for this account"
+msgstr "Zadejte API token k tomuto účtu"
+
+#: ui/internal/jira/wizard.go
+msgid "Personal Access Token"
+msgstr "Osobní přístupový token"
+
+#: ui/internal/jira/wizard.go
+msgid ""
+"Create a personal access token in your Jira profile, then paste it here."
+msgstr ""
+"Ve svém profilu v Jiře vytvořte osobní přístupový token a vložte ho sem."
+
+#: ui/internal/jira/wizard.go
+msgid "Enter the personal access token for this account"
+msgstr "Zadejte osobní přístupový token k tomuto účtu"
+
+#: ui/internal/jira/wizard.go
+msgid "This is not a web address"
+msgstr "Toto není webová adresa"
+
+#. TRANSLATORS: the first %s is the name of a Jira site, the second its version ("9.12.4").
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Found %s, version %s"
+msgstr "Nalezeno: %s, verze %s"
+
+#. TRANSLATORS: %s is the name of a Jira site.
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Found %s"
+msgstr "Nalezeno: %s"
+
+#. TRANSLATORS: an estimate of the issues of a Jira space.
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "about %d issue"
+msgid_plural "about %d issues"
+msgstr[0] "přibližně %d úkol"
+msgstr[1] "přibližně %d úkoly"
+msgstr[2] "přibližně %d úkolů"
+
+#: ui/internal/jira/wizard.go
+msgid "Select at least one space"
+msgstr "Vyberte alespoň jeden prostor"
+
+#: ui/internal/jira/wizard.go
+#, c-format
+msgid "Select at most %d space"
+msgid_plural "Select at most %d spaces"
+msgstr[0] "Vyberte nejvýš %d prostor"
+msgstr[1] "Vyberte nejvýš %d prostory"
+msgstr[2] "Vyberte nejvýš %d prostorů"
+
+#: ui/internal/jira/wizard.go
+msgid "This address is not a Jira site"
+msgstr "Tato adresa není web Jira"
+
+#: ui/internal/jira/wizard.go
+msgid "An account for this Jira site already exists"
+msgstr "Účet pro tento web Jira už existuje"
+
+#. TRANSLATORS: title of the window with the settings of a Jira account; "Jira" is a product name.
+#: ui/internal/jira/settings.go
+msgid "Jira Account"
+msgstr "Účet Jira"
+
+#. TRANSLATORS: label of the user a Jira account signs in as.
+#: ui/internal/jira/settings.go
+msgid "Signed In As"
+msgstr "Přihlášený uživatel"
+
+#. TRANSLATORS: button that asks for a new API token of a Jira account.
+#: ui/internal/jira/settings.go
+msgid "Replace Token…"
+msgstr "Nahradit token…"
+
+#: ui/internal/jira/settings.go
+msgid "Synchronisation"
+msgstr "Synchronizace"
+
+#. TRANSLATORS: switch; the changes are listed among the comments of an issue.
+#: ui/internal/jira/settings.go
+msgid "Show Status and Assignee Changes"
+msgstr "Zobrazovat změny stavu a řešitele"
+
+#: ui/internal/jira/settings.go
+msgid "Closed Statuses"
+msgstr "Uzavřené stavy"
+
+#. TRANSLATORS: "Open" is the folder of a Jira account with the issues that are not closed yet.
+#: ui/internal/jira/settings.go
+msgid "Issues in these statuses are left out of Open"
+msgstr "Úkoly v těchto stavech se ve složce Neuzavřené nezobrazují"
+
+#. TRANSLATORS: the e-mails Jira sends about changes of issues.
+#: ui/internal/jira/settings.go
+msgid "Notification E-mails"
+msgstr "Notifikační e-maily"
+
+#: ui/internal/jira/settings.go
+msgid "When a Jira Notification Arrives"
+msgstr "Když přijde notifikace z Jiry"
+
+#. TRANSLATORS: the addresses notification e-mails of Jira come from.
+#: ui/internal/jira/settings.go
+msgid "Senders"
+msgstr "Odesílatelé"
+
+#. TRANSLATORS: "@example.org" is an example, keep it as it is.
+#: ui/internal/jira/settings.go
+msgid "An address, or a domain such as @example.org"
+msgstr "Adresa, nebo doména, například @example.org"
+
+#: ui/internal/jira/settings.go
+msgid "Comments Posted by Bots"
+msgstr "Komentáře od botů"
+
+#. TRANSLATORS: the Jira accounts of integrations that post comments for other people.
+#: ui/internal/jira/settings.go
+msgid "Bot Accounts"
+msgstr "Účty botů"
+
+#: ui/internal/jira/settings.go
+msgid "Their comments are shown under the person they name"
+msgstr "Jejich komentáře se zobrazují pod jménem osoby, kterou uvádějí"
+
+#. TRANSLATORS: lines of a comment that are not shown.
+#: ui/internal/jira/settings.go
+msgid "Hidden Lines"
+msgstr "Skryté řádky"
+
+#: ui/internal/jira/settings.go
+msgid "Lines matching these patterns are removed from comments"
+msgstr "Řádky odpovídající těmto vzorům se z komentářů odstraňují"
+
+#. TRANSLATORS: words a bot puts in front of a person's name, such as a company name.
+#: ui/internal/jira/settings.go
+msgid "Name Prefixes"
+msgstr "Předpony jmen"
+
+#: ui/internal/jira/settings.go
+msgid "Removed from the start of authors' names"
+msgstr "Odstraňují se ze začátku jmen autorů"
+
+#. TRANSLATORS: button that adds what was typed to a list.
+#: ui/internal/jira/settings.go
+msgid "Add"
+msgstr "Přidat"
+
+#. TRANSLATORS: what a notification e-mail of Jira does: the issue it names is synchronised.
+#: ui/internal/jira/settings.go
+msgid "Check the Issue at Once"
+msgstr "Ihned zkontrolovat úkol"
+
+#. TRANSLATORS: what a notification e-mail of Jira does: the issue is synchronised and the e-mail is not listed.
+#: ui/internal/jira/settings.go
+msgid "Check the Issue and Hide the E-mail"
+msgstr "Zkontrolovat úkol a skrýt e-mail"
+
+#. TRANSLATORS: what a notification e-mail of Jira does: nothing, it is an e-mail like any other.
+#: ui/internal/jira/settings.go
+msgid "Do Nothing"
+msgstr "Nedělat nic"
+
+#: ui/internal/jira/settings.go
+msgid ""
+"Hidden e-mails stay in your mailbox and come back when you turn this off"
+msgstr ""
+"Skryté e-maily zůstávají ve vaší schránce a po vypnutí této volby se znovu "
+"zobrazí"
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "To Do"
+msgstr "K řešení"
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "In Progress"
+msgstr "Probíhá"
+
+#. TRANSLATORS: a category of issue statuses, as Jira calls it.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "Done"
+msgstr "Hotovo"
+
+#. TRANSLATORS: the issue statuses that belong to no category.
+#: ui/internal/jira/settings.go
+msgctxt "status category"
+msgid "Other"
+msgstr "Ostatní"
+
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "Select at most %d status"
+msgid_plural "Select at most %d statuses"
+msgstr[0] "Vyberte nejvýš %d stav"
+msgstr[1] "Vyberte nejvýš %d stavy"
+msgstr[2] "Vyberte nejvýš %d stavů"
+
+#: ui/internal/jira/settings.go
+msgid "This entry is too long"
+msgstr "Tato položka je příliš dlouhá"
+
+#: ui/internal/jira/settings.go
+msgid "This entry contains control characters"
+msgstr "Tato položka obsahuje řídicí znaky"
+
+#: ui/internal/jira/settings.go
+msgid "A bot name needs at least 3 characters"
+msgstr "Jméno bota musí mít alespoň 3 znaky"
+
+#. TRANSLATORS: %s says what is wrong with a regular expression, in English ("missing closing )").
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "This pattern is not valid: %s"
+msgstr "Tento vzor není platný: %s"
+
+#: ui/internal/jira/settings.go
+msgid "Enter an address, or a domain such as @example.org"
+msgstr "Zadejte adresu, nebo doménu, například @example.org"
+
+#: ui/internal/jira/settings.go
+msgid "This entry is already in the list"
+msgstr "Tato položka už v seznamu je"
+
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "The list holds at most %d entry"
+msgid_plural "The list holds at most %d entries"
+msgstr[0] "Seznam pojme nejvýš %d položku"
+msgstr[1] "Seznam pojme nejvýš %d položky"
+msgstr[2] "Seznam pojme nejvýš %d položek"
+
+#. TRANSLATORS: button that adds a suggested entry to a list; %s is the entry, such as the name of a bot.
+#: ui/internal/jira/settings.go
+#, c-format
+msgid "Add %s"
+msgstr "Přidat %s"
+
+#. TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
+#: ui/internal/conversation/conversation.go
+#, c-format
+msgid "%d earlier message is not shown"
+msgid_plural "%d earlier messages are not shown"
+msgstr[0] "%d starší zpráva není zobrazena"
+msgstr[1] "%d starší zprávy nejsou zobrazeny"
+msgstr[2] "%d starších zpráv není zobrazeno"
+
 #. TRANSLATORS: put between the names of a conversation's participants ("Alice, Bob").
 #: ui/internal/widget/format.go:62
 msgctxt "participant list separator"

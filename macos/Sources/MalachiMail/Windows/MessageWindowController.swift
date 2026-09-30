@@ -239,6 +239,7 @@ extension MessageWindowController: NSUserInterfaceValidations {
             case Action.moveToTrash: menuItem.title = trashTitle(f)
             default: break
             }
+            ActionPresentation.present(menuItem, action, f)
             if Action.bareKeyActions.contains(action), isTyping {
                 return false
             }
@@ -260,6 +261,7 @@ extension MessageWindowController: NSToolbarItemValidation {
         default:
             break
         }
+        ActionPresentation.present(item, f)
         return allows(action, f) ?? true
     }
 }

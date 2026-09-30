@@ -24,10 +24,14 @@ public struct Folder: Codable, Sendable, Equatable {
     public var synced: Bool
     public var unread: Int
     public var total: Int
+    /// Set on a virtual folder of a jira account (role `none`; `name` is
+    /// an English fallback, the UI titles it by this code).
+    public var virtual: VirtualFolder?
 
     public init(
         id: FolderID, accountId: AccountID, parentId: FolderID? = nil, name: String, path: String,
-        role: FolderRole, subscribed: Bool, selectable: Bool, synced: Bool, unread: Int, total: Int
+        role: FolderRole, subscribed: Bool, selectable: Bool, synced: Bool, unread: Int, total: Int,
+        virtual: VirtualFolder? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -40,6 +44,7 @@ public struct Folder: Codable, Sendable, Equatable {
         self.synced = synced
         self.unread = unread
         self.total = total
+        self.virtual = virtual
     }
 }
 

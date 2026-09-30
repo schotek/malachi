@@ -105,6 +105,23 @@ public final class MessageCache {
         cache.remove(id)
     }
 
+    /// Forgets every entry of the account's messages (notify.messagesChanged:
+    /// the daemon rebuilt them in place, keeping their ids — a Jira pass
+    /// with other rendering settings, an edited or re-attributed comment, a
+    /// renamed issue; docs/api.md §5): the next fetch asks the daemon
+    /// again, so the views showing one are told to show it again after
+    /// this (`MailboxController.refreshShown`). An entry with a half in
+    /// flight is let go as well: its answer is put back only when nothing
+    /// has asked for the message since (`settle`). The daemon emits the
+    /// notification after the rebuild, so an answer that arrives later
+    /// carries the rebuilt message.
+    public func evict(account: AccountID) {
+        let gone = cache.removeAll(of: account)
+        if !gone.isEmpty {
+            log.debug("cache: dropped \(gone.count) messages of \(account.rawValue, privacy: .public)")
+        }
+    }
+
     // MARK: Fetching
 
     /// Runs message.get and message.body for `s` (each only when the cache
@@ -116,55 +133,88 @@ public final class MessageCache {
     public func fetch(_ s: MessageSummary, _ then: @escaping Waiter) {
         let id = s.id
         let lm = cache.loadedFor(id)
+        lm.accountId = s.accountId
         if lm.complete {
             then(lm)
             return
         }
         waiters[ObjectIdentifier(lm), default: []].append(then)
-        let client = client
         if lm.msg == nil, !lm.getting {
-            lm.getting = true
-            Task { [weak self] in
-                let outcome: Result<MessageGetResult, any Error>
-                do {
-                    outcome = .success(try await client.call(
-                        API.MessageGet.self, MessageGetParams(accountId: s.accountId, messageId: id), timeout: RPCTimeouts.default))
-                } catch {
-                    outcome = .failure(error)
-                }
-                guard let self else { return }
-                lm.getting = false
-                switch outcome {
-                case .failure(let err):
-                    self.log.warning("message.get: \(String(describing: err), privacy: .public)")
-                case .success(let res):
-                    lm.msg = res.message
-                }
-                self.settle(id, lm)
-            }
+            startGet(s, lm)
         }
         if lm.body == nil, !lm.fetching {
-            lm.fetching = true
-            lm.err = nil // a retry after a failure
-            Task { [weak self] in
-                let outcome: Result<MessageBodyResult, any Error>
-                do {
-                    outcome = .success(try await client.call(
-                        API.MessageBody.self, MessageBodyParams(accountId: s.accountId, messageId: id)))
-                } catch {
-                    outcome = .failure(error)
-                }
-                guard let self else { return }
-                lm.fetching = false
-                switch outcome {
-                case .failure(let err):
-                    self.log.warning("message.body: \(String(describing: err), privacy: .public)")
-                    lm.err = err
-                case .success(let res):
-                    lm.body = res
-                }
-                self.settle(id, lm)
+            startBody(s, lm)
+        }
+    }
+
+    /// `fetch` for the body half alone: message.body when the cache lacks
+    /// the body and no request is in flight, never message.get; `then` runs
+    /// as `fetch`'s does, at once when the body (or its error, which is
+    /// retried the same way) is there already and nothing is in flight. A
+    /// card of the conversation view whose message has no attachments needs
+    /// nothing message.get adds to its summary.
+    public func fetchBody(_ s: MessageSummary, _ then: @escaping Waiter) {
+        let lm = cache.loadedFor(s.id)
+        lm.accountId = s.accountId
+        if lm.body != nil, !lm.getting, !lm.fetching {
+            then(lm)
+            return
+        }
+        waiters[ObjectIdentifier(lm), default: []].append(then)
+        if lm.body == nil, !lm.fetching {
+            startBody(s, lm)
+        }
+    }
+
+    /// message.get for `s` into `lm` (the first half of `fetch`).
+    private func startGet(_ s: MessageSummary, _ lm: LoadedMessage) {
+        let id = s.id
+        let client = client
+        lm.getting = true
+        Task { [weak self] in
+            let outcome: Result<MessageGetResult, any Error>
+            do {
+                outcome = .success(try await client.call(
+                    API.MessageGet.self, MessageGetParams(accountId: s.accountId, messageId: id), timeout: RPCTimeouts.default))
+            } catch {
+                outcome = .failure(error)
             }
+            guard let self else { return }
+            lm.getting = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("message.get: \(String(describing: err), privacy: .public)")
+            case .success(let res):
+                lm.msg = res.message
+            }
+            self.settle(id, lm)
+        }
+    }
+
+    /// message.body for `s` into `lm` (the second half of `fetch`).
+    private func startBody(_ s: MessageSummary, _ lm: LoadedMessage) {
+        let id = s.id
+        let client = client
+        lm.fetching = true
+        lm.err = nil // a retry after a failure
+        Task { [weak self] in
+            let outcome: Result<MessageBodyResult, any Error>
+            do {
+                outcome = .success(try await client.call(
+                    API.MessageBody.self, MessageBodyParams(accountId: s.accountId, messageId: id)))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            lm.fetching = false
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("message.body: \(String(describing: err), privacy: .public)")
+                lm.err = err
+            case .success(let res):
+                lm.body = res
+            }
+            self.settle(id, lm)
         }
     }
 

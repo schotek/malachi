@@ -29,6 +29,10 @@ defend against. Code that touches mail content must be reviewed against it.
   headers, MIME structure, bodies, attachment names.
 - **Mail server / network**: a compromised or hostile IMAP/SMTP server, or an
   on-path attacker if TLS is misconfigured. Controls every protocol byte.
+- **Issue-tracker site**: a Jira site the user connected (`kind: jira`),
+  and everyone who writes to it — reporters, commenters, integrations.
+  Controls every string of an issue, its rendered HTML and pictures, its
+  changelog, and the notification mail the site sends (§4.1, §4.2).
 - **Local unprivileged process** (limited scope): another app in the same
   user session. Flatpak reduces, but does not remove, this.
 - **Peer on the RPC socket**: a process that can connect to the daemon's
@@ -196,7 +200,27 @@ for WKWebView, since nothing of the WebKitGTK configuration carries over:
   Services requestor, no Look Up preview), so a selection of mail text is
   never handed to another program by a path around the link handling;
 - WebKit's separate content process; one view per pane, reused between
-  messages with the document replaced whole.
+  messages with the document replaced whole — and, in the conversation
+  view of the reading pane (a folded conversation row selected: every
+  member of the folder stacked as cards,
+  `MessageView/ConversationViewController.swift`), one locked view **per
+  HTML card**, at most eight alive at a time (the nearest to the
+  viewport, `ConversationLayout.maxLiveWebViews`; the others keep their
+  last height without a view), each with the configuration above and a
+  document that is `viewerDocument(body:)` of one sanitiser output.
+  The card takes the document's height from a second script of the
+  app's own, in the same private world as the link script, that only
+  reads the layout (a `ResizeObserver`) and reports it through its own
+  message handler; content JavaScript stays off, the height is capped
+  (4000 pt, beyond it the card scrolls inside) and frozen for a
+  document that grows with the view (`100vh`), so a message cannot grow
+  the pane without end. A composed document of the whole conversation
+  was rejected: the sanitiser keeps classes, ids and `<style>`
+  selectors (§3.2, layer 1), so in one document a message's CSS could
+  hide, restyle or forge the headers and the borders of the others, and
+  without JavaScript there is no isolation to stop it; in a card the
+  headers, the badges and the event rows are native text and the body is
+  one message's output.
 
 Layer 2 on Windows (`windows/src/Malachi.App/WebViews`, the rules in
 `Malachi.Core.Presentation`; [windows-port.md §6](windows-port.md#6-the-webview2-security-layer))
@@ -521,6 +545,112 @@ into it as well.
   proposed for them, and that cleaning for `draft.create`
   ([windows-port.md §14](windows-port.md#14-backend-and-repository-changes)).
 
+### 4.1 Notification mail of an issue tracker
+
+A `jira` account may act on the notification e-mails its site sends to
+the user's mailboxes (`notificationMail`, `docs/api.md` §4.1): fetch the
+issue a message names, and, if the user asked for it, hide the message in
+its mail account. The sender and the subject it goes by are written by
+whoever sent the message, and nothing in this client authenticates them
+(no DKIM or DMARC verdict is read), so the feature is built on what a
+forged message can make of it:
+
+- **What is read.** Only the `From` addresses and the subject, as the
+  parser or the server's envelope gave them, never the body or another
+  header (`Sender`, `Reply-To`, `Return-Path` and the site's own
+  `X-JIRA-FingerPrint` prove nothing). Every `From` address must be one
+  of the account's senders; a display name never counts, a host matches
+  itself only, the comparison lowers ASCII letters and nothing else, so
+  a letter of another script that looks like one, or one that Unicode
+  folds to one, is another letter. The subject's first 1024 bytes are
+  scanned once for an issue key in brackets, capitals and digits to the
+  letter; the scanner has no regular expression and no backtracking
+  (`internal/jira/notification.go`, tests over
+  `backend/testdata/jira/subjects.txt` and the
+  `jira-notification-*.eml` samples).
+- **The refresh is harmless.** A match makes the daemon ask the site for
+  one issue, by a key of the form above, within the spaces the account
+  has selected, with the account's own token, at the site of the
+  account: of the request the message chooses that key and nothing
+  else. The site
+  answers with what the user may read anyway; an issue out of scope is
+  not stored. A flood of forged notifications costs at most the syncer's
+  budget of such passes (30 a minute); an issue the site does not give
+  is asked for once in 10 minutes, however many messages name it; and a
+  mail syncer waits for an issue at most 5 seconds, for at most 6 issues
+  a minute.
+- **Hiding is opt-in and needs the issue.** Nothing is hidden unless the
+  user set the account to `hide`, and then only a message whose sender
+  matches, whose subject names an issue of a selected space, and whose
+  issue **is stored in the account**, where the user reads what the
+  message would have told them. A forged notification can therefore hide
+  at most itself, and only by naming an issue the user has; it cannot
+  hide another message, since each message is judged by its own sender
+  and subject. A Data Center account has no default sender and matches
+  nothing until the user names one.
+- **Hidden is not gone.** Hiding is a display filter in the local store:
+  the message stays on the mail server as it arrived, no flag is set, no
+  operation is queued for the server, and `message.get` still returns it
+  by id. It is shown again when the account stops hiding, is paused or
+  removed, when its space is deselected or its issue leaves the account;
+  the daemon judges every link again hourly. What the filter costs is
+  attention: a phishing message that imitates a notification of an issue
+  the user has, from the site's own address (which the user's mail
+  provider should have refused), is not shown in the mailbox, which is
+  the better place for it.
+- **A message about a message.** The issue a notification named is kept
+  under `onlyMine`; that is all a message can make the account store,
+  and the account's window removes it again.
+
+### 4.2 Content of an issue tracker
+
+What a `jira` account reads is written by everyone who can write to the
+site (§2), and it is handled as mail is:
+
+- **The site's HTML is hostile input** until the sanitiser has seen it.
+  The syncer keeps the site's rendered HTML (`renderedBody`) as it came,
+  inside the synthesised message, and only makes its relative links
+  absolute and embeds the site's own pictures as `cid:` parts
+  (`internal/jira/images.go`: streamed through the tokenizer, never
+  parsed into a tree); `message.body` sanitises it at display like any
+  HTML mail (§3.2, layer 1), and the locked views render the result
+  (layer 2). Every other string of an issue (summary, names, statuses,
+  key, space names, the site's title) is cleaned and capped before it is
+  stored and shown as plain text only; ids are checked for shape; a REST
+  page whose structure is wrong is an error, not an empty page
+  (`internal/jira/types.go`, tests over `backend/testdata/jira`).
+- **The bot cleaner is a cleaner, not a boundary**
+  (`internal/jira/botclean`): it re-attributes and trims comments a
+  synchronisation bot relayed, on the rendered HTML, with bounded input,
+  lines and depth and a recovered panic, and what it returns goes
+  through the sanitiser at display like the rest. A name or a header
+  line an attacker writes can at most make a comment look relayed by a
+  person of that name (`via` then names the bot); it cannot make the
+  cleaner emit markup of its own.
+- **Pictures come from the site alone.** A synthesised message embeds
+  only pictures the site itself serves (its origin and attachment
+  paths, or the account's API gateway route), downloaded with the
+  account's token, sniffed, never SVG, within the message's budget; a
+  picture elsewhere stays the link it is, under the remote-content
+  policy of §3.2 like a picture in mail. The daemon never fetches a URL
+  outside the site on the site's behalf.
+- **Synthetic addresses are never mailboxes.** Every sender of a
+  synthesised message is under the reserved `.invalid` domain
+  (`<id>@users.jira.invalid`, RFC 2606) and every Message-ID under
+  `<site host>.malachi.invalid`: nothing can reply to, forward to or
+  send mail to a person of the site, and a `jira` account has no `reply`,
+  `replyAll` or `compose` capability. A comment is the one thing the
+  account writes, and it goes to the issue the draft was made for.
+- **The token's audience is the site.** An API token or personal access
+  token is sent to the site's origin and, for a scoped Cloud token, to
+  the Atlassian API gateway for that cloud id, and nowhere else: the
+  client follows redirects itself, never onto another host with the
+  credentials and never from https to http (a Cloud attachment's 303 to
+  the media host goes without them); `account.test` and
+  `account.listSpaces` use a stored token only for the site (the realm)
+  it was stored for; the token is never logged and is redacted from the
+  site's error texts (§6).
+
 ## 5. Signatures and encryption (EFAIL and friends)
 
 Not implemented in phase 1. When PGP/S/MIME arrives:
@@ -672,6 +802,21 @@ Not implemented in phase 1. When PGP/S/MIME arrives:
   `config.toml`, and the daemon warns at start when that file is
   readable by group or others. Microsoft's registration is a public
   client without a secret.
+- A `jira` account (§4.2) has no OAuth sign-in: its API token (Cloud,
+  sent as HTTP Basic with the `login` address) or personal access token
+  (Data Center, a Bearer token) is `credentials.password`, stored in the
+  keyring under the same key as a mail password and never elsewhere.
+  Its audience is the site the account names, plus the Atlassian API
+  gateway for that cloud id: `account.update` of a `jira` account whose
+  site changes, and of an account that changes kind, needs a new
+  `credentials.password` rather than carrying the stored one over, and
+  `account.test` / `account.listSpaces` with `accountId` use the stored
+  token only for an account of the same site. The syncer caches it in
+  memory until the site refuses it or the account restarts; a refused
+  token puts the account in `authRequired` and the user replaces it in
+  the account's settings (the token is not refreshable). Atlassian's
+  developer terms leave no room for an OAuth client of the project's
+  own ([architecture.md §7](architecture.md#7-open-decisions)).
 - Log lines are scrubbed: authentication commands are logged as
   `AUTHENTICATE <redacted>`.
 - `account.list` never returns secrets; `Credentials` is write-only.
@@ -1213,6 +1358,13 @@ Advisories) rather than a public issue. No bug bounty.
       path of its own, and never judge the codec by the content?
 - [ ] New MIME-derived field: text-only, capped, never the raw header
       block?
+- [ ] Change to what `internal/jira` reads of a site or builds of it
+      (`types.go`, `synth.go`, `images.go`, `botclean`, `comment.go`,
+      `notification.go`): is every string cleaned and capped, is the
+      site's HTML still handed to the sanitiser unchanged in meaning,
+      does a picture still come from the site alone, and are there
+      hostile samples in `testdata/jira` (or `testdata/mime` for a
+      notification mail)?
 - [ ] New URL handling: is the scheme allow-listed, is the real target
       shown?
 - [ ] New network request: is it triggered by user action, not by content?

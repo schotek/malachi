@@ -21,7 +21,7 @@ import (
 func (b *bridge) registerReadTools(srv *mcp.Server) {
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_accounts",
-		Description: "List the configured mail accounts: id, name, address, kind and sync status. Call this first; every other tool needs an accountId.",
+		Description: "List the configured mail accounts: id, name, address, kind, sync status and capabilities (what create_draft can do with the account: compose, reply, replyAll, forward; comment for an issue tracker, whose reply is a comment on the issue). Call this first; every other tool needs an accountId.",
 		Annotations: annRead(),
 	}, b.listAccounts)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -31,7 +31,7 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 	}, b.listFolders)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "list_messages",
-		Description: "List messages in a folder, newest first by default: one page of summaries (id, date, from, to, subject, snippet, flags) and a cursor for the next page. Use read_message for a body." + untrustedNote,
+		Description: "List messages in a folder, newest first by default: one page of summaries (id, date, from, to, subject, snippet, flags; for an issue-tracker account (kind jira) also issue: key, status, and item: description, comment or event) and a cursor for the next page. Use read_message for a body." + untrustedNote,
 		Annotations: annRead(),
 	}, b.listMessages)
 	mcp.AddTool(srv, &mcp.Tool{
@@ -46,7 +46,7 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 	}, b.searchMessages)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "read_message",
-		Description: "Read one message: headers, attachment list and the plain-text body (never HTML). Long bodies are paged with offset and maxChars. Reading never marks the message as seen. " +
+		Description: "Read one message: headers, attachment list and the plain-text body (never HTML); for an issue-tracker account (kind jira) also the issue's key and status and what part of the issue the message is. Long bodies are paged with offset and maxChars. Reading never marks the message as seen. " +
 			"An attachment marked remote is kept on the mail server only; get_attachment downloads it." + untrustedNote,
 		Annotations: annRead(),
 	}, b.readMessage)
@@ -73,13 +73,14 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 type noArgs struct{}
 
 type accountOut struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Email       string `json:"email"`
-	DisplayName string `json:"displayName,omitempty"`
-	Kind        string `json:"kind"`
-	Enabled     bool   `json:"enabled"`
-	Status      string `json:"status"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Email        string   `json:"email"`
+	DisplayName  string   `json:"displayName,omitempty"`
+	Kind         string   `json:"kind"`
+	Enabled      bool     `json:"enabled"`
+	Status       string   `json:"status"`
+	Capabilities []string `json:"capabilities"`
 }
 
 func (b *bridge) listAccounts(ctx context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
@@ -96,16 +97,31 @@ func (b *bridge) listAccounts(ctx context.Context, _ *mcp.CallToolRequest, _ noA
 	}{Accounts: make([]accountOut, 0, len(res.Accounts))}
 	for _, a := range res.Accounts {
 		out.Accounts = append(out.Accounts, accountOut{
-			ID:          string(a.ID),
-			Name:        oneLine(a.Config.Name),
-			Email:       oneLine(a.Config.Email),
-			DisplayName: oneLine(a.Config.DisplayName),
-			Kind:        string(a.Config.Protocol()),
-			Enabled:     a.Enabled,
-			Status:      string(a.State.Status),
+			ID:           string(a.ID),
+			Name:         oneLine(a.Config.Name),
+			Email:        oneLine(a.Config.Email),
+			DisplayName:  oneLine(a.Config.DisplayName),
+			Kind:         string(a.Config.Protocol()),
+			Enabled:      a.Enabled,
+			Status:       string(a.State.Status),
+			Capabilities: capabilitiesOf(a),
 		})
 	}
 	return jsonResult(out), nil, nil
+}
+
+// capabilitiesOf lists the account's capabilities (a daemon that sends
+// none means the mail set).
+func capabilitiesOf(a api.Account) []string {
+	caps := a.Capabilities
+	if caps == nil {
+		caps = api.MailCapabilities
+	}
+	out := make([]string, 0, len(caps))
+	for _, c := range caps {
+		out = append(out, oneLine(string(c)))
+	}
+	return out
 }
 
 // --- list_folders ----------------------------------------------------------
@@ -171,6 +187,15 @@ type outboxOut struct {
 	Error    string `json:"error,omitempty"`
 }
 
+// issueOut is the issue of a message of an issue-tracker account: its key
+// and status (display text of the site, cleaned like all mail data) and
+// what part of the issue the message is.
+type issueOut struct {
+	Key    string `json:"key"`
+	Status string `json:"status,omitempty"`
+	Item   string `json:"item,omitempty"`
+}
+
 type messageOut struct {
 	ID             string     `json:"id"`
 	Date           string     `json:"date"`
@@ -182,6 +207,7 @@ type messageOut struct {
 	HasAttachments bool       `json:"hasAttachments"`
 	Size           int64      `json:"size"`
 	Outbox         *outboxOut `json:"outbox,omitempty"`
+	Issue          *issueOut  `json:"issue,omitempty"`
 }
 
 func (b *bridge) listMessages(ctx context.Context, _ *mcp.CallToolRequest, in listMessagesIn) (*mcp.CallToolResult, any, error) {
@@ -321,7 +347,16 @@ func summaryOut(m api.MessageSummary) messageOut {
 			out.Outbox.Error = m.Outbox.Error.Code.String()
 		}
 	}
+	out.Issue = issueOf(m.Issue)
 	return out
+}
+
+// issueOf projects MessageSummary.issue; nil for mail.
+func issueOf(is *api.MessageIssue) *issueOut {
+	if is == nil {
+		return nil
+	}
+	return &issueOut{Key: oneLine(is.Key), Status: oneLine(is.Status), Item: oneLine(string(is.Item))}
 }
 
 // --- read_message ----------------------------------------------------------
@@ -410,6 +445,9 @@ func (b *bridge) readMessage(ctx context.Context, _ *mcp.CallToolRequest, in rea
 		fmt.Fprintf(&u, "reply-to: %s\n", joinAddresses(m.ReplyTo))
 	}
 	fmt.Fprintf(&u, "subject: %s\n", oneLine(m.Subject))
+	if is := issueOf(m.Issue); is != nil {
+		fmt.Fprintf(&u, "issue: %s\nissue-status: %s\nissue-item: %s\n", is.Key, is.Status, is.Item)
+	}
 	if len(m.Attachments) == 0 {
 		u.WriteString("attachments: none\n")
 	} else {

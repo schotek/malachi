@@ -1,0 +1,192 @@
+{
+ "issues": [
+  {
+   "id": "10100",
+   "key": "ITSD-1",
+   "fields": {
+    "summary": "Tiskárna ve 2. patře nefunguje",
+    "status": {
+     "id": "3",
+     "name": "In Progress",
+     "statusCategory": {
+      "id": 4,
+      "key": "indeterminate"
+     }
+    },
+    "issuetype": {
+     "id": "10004",
+     "name": "Incident"
+    },
+    "priority": {
+     "id": "2",
+     "name": "High"
+    },
+    "assignee": {
+     "accountId": "712020:0c9f3c3e-7a9c-4b6e-9d55-3b1f0e8a2c41",
+     "displayName": "Petr Svoboda"
+    },
+    "reporter": {
+     "accountId": "5b10ac8d82e05b22cc7d4ef5",
+     "displayName": "Jana Dvořáková",
+     "emailAddress": "jana.dvorakova@acme.test"
+    },
+    "created": "2026-09-01T08:15:30.000+0200",
+    "updated": "2026-09-02T10:30:00.000+02:00",
+    "project": {
+     "id": "10000",
+     "key": "ITSD",
+     "name": "IT Service Desk",
+     "projectTypeKey": "service_desk"
+    },
+    "watches": {
+     "watchCount": 2,
+     "isWatching": "true"
+    },
+    "description": {
+     "type": "doc",
+     "version": 1,
+     "content": [
+      {
+       "type": "paragraph",
+       "content": [
+        {
+         "type": "text",
+         "text": "ADF is never read"
+        }
+       ]
+      }
+     ]
+    },
+    "attachment": [
+     {
+      "id": "20001",
+      "filename": "../../etc/passwd",
+      "size": 1234,
+      "mimeType": "text/plain; charset=UTF-8",
+      "content": "https://acme.atlassian.net/rest/api/3/attachment/content/20001",
+      "created": "2026-09-01T08:16:00.000+0200"
+     },
+     {
+      "id": "20001",
+      "filename": "duplicate.txt",
+      "size": 1,
+      "mimeType": "text/plain",
+      "content": "https://acme.atlassian.net/rest/api/3/attachment/content/20001"
+     },
+     {
+      "id": "20002",
+      "filename": "screen\u202egnp.exe",
+      "size": -5,
+      "mimeType": "not a type",
+      "content": "javascript:alert(1)",
+      "created": "garbage"
+     },
+     {
+      "id": "20003",
+      "filename": "relative.png",
+      "size": "77",
+      "mimeType": "IMAGE/PNG",
+      "content": "/rest/api/3/attachment/content/20003"
+     },
+     {
+      "filename": "no-id.txt"
+     },
+     "not an object"
+    ]
+   },
+   "renderedFields": {
+    "description": "<p>Dobrý den,</p><script>alert(1)</script>\u0000<img src=\"/rest/api/3/attachment/content/20003\">"
+   }
+  },
+  {
+   "key": "ITSD-2",
+   "fields": {
+    "summary": "no id"
+   }
+  },
+  {
+   "id": "10102",
+   "fields": {
+    "summary": "no key"
+   }
+  },
+  {
+   "id": "10100",
+   "key": "ITSD-99",
+   "fields": {
+    "summary": "duplicate id"
+   }
+  },
+  {
+   "id": 10104,
+   "key": "WEB-4",
+   "fields": {
+    "summary": {
+     "type": "doc"
+    },
+    "status": "Open",
+    "issuetype": [
+     "Bug"
+    ],
+    "priority": null,
+    "assignee": "Petr",
+    "created": "yesterday",
+    "updated": "2024-13-45T25:61:00.000+0100",
+    "project": {
+     "id": 10001,
+     "key": "WEB"
+    },
+    "watches": {
+     "isWatching": 1
+    },
+    "attachment": {
+     "id": "1"
+    }
+   }
+  },
+  {
+   "id": "10105",
+   "key": "../../ITSD-5",
+   "fields": {
+    "summary": "bad key"
+   }
+  },
+  {
+   "id": "10106",
+   "key": "MOB-6",
+   "fields": {
+    "summary": "Zpráva\u0007\u001b[31m s \u202eřízením\u200b\u2028nový řádek xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "assignee": {
+     "accountId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "displayName": "Petr\u0000 Svoboda\u202e"
+    },
+    "reporter": {
+     "key": "JIRAUSER10100",
+     "name": "jana.dvorakova",
+     "displayName": "Jana Dvořáková"
+    },
+    "created": "2026-09-03T12:00:00Z",
+    "updated": "2026-09-03T12:00:00.123456+0000",
+    "status": {
+     "id": "999",
+     "name": "Custom",
+     "statusCategory": {
+      "key": "mystery"
+     }
+    },
+    "project": {
+     "id": "10002",
+     "key": "MOB"
+    }
+   }
+  },
+  42,
+  {
+   "id": "10108 OR 1=1",
+   "key": "MOB-8",
+   "fields": {}
+  }
+ ],
+ "nextPageToken": "tok:9",
+ "isLast": false
+}

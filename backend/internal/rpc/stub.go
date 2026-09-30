@@ -97,6 +97,12 @@ func (stubAccounts) OAuthWait(context.Context, api.AccountOAuthWaitParams) (*api
 func (stubAccounts) OAuthCancel(context.Context, api.AccountOAuthCancelParams) (*api.AccountOAuthCancelResult, error) {
 	return nil, api.ErrNotImplemented
 }
+func (stubAccounts) DetectSite(context.Context, api.AccountDetectSiteParams) (*api.AccountDetectSiteResult, error) {
+	return nil, api.ErrNotImplemented
+}
+func (stubAccounts) ListSpaces(context.Context, api.AccountListSpacesParams) (*api.AccountListSpacesResult, error) {
+	return nil, api.ErrNotImplemented
+}
 
 type stubFolders struct{}
 

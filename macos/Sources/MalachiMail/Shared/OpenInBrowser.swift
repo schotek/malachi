@@ -30,3 +30,30 @@ func openInBrowser(_ href: String, onError: @escaping @MainActor (String) -> Voi
         }
     }
 }
+
+/// Opens an issue of a Jira account in the user's browser (the issue
+/// card's key): only a URL that `Jira.isIssueURL` accepts for the account's
+/// site `site` (`JiraConfig.siteUrl`), since the URL comes from the site
+/// and is hostile input like mail. A refusal or a failure is reported
+/// through `onError` with the GTK sentence.
+@MainActor
+func openIssue(_ href: String, site: String, onError: @escaping @MainActor (String) -> Void) {
+    let log = Logger(subsystem: "io.github.schotek.Malachi", category: "message")
+    guard Jira.isIssueURL(href, siteURL: site), let url = URL(string: href) else {
+        log.warning("issue link refused: not an address of the account's site")
+        // TRANSLATORS: %s is a technical error message.
+        onError(L10n.T("The link could not be opened: %s", "not an address of this Jira site")) // macOS-only string (the technical detail)
+        return
+    }
+    Task { @MainActor in
+        do {
+            _ = try await NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration())
+        } catch {
+            // The URL names the issue: private.
+            let ns = error as NSError
+            log.warning("open issue: \(ns.domain, privacy: .public) \(ns.code, privacy: .public)")
+            // TRANSLATORS: %s is a technical error message.
+            onError(L10n.T("The link could not be opened: %s", error.localizedDescription))
+        }
+    }
+}
