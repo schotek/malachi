@@ -100,6 +100,7 @@ $BuildDir = [System.IO.Path]::GetFullPath($ExecutionContext.SessionState.Path.Ge
 $WinBuild = Join-Path $BuildDir 'windows'
 $Artifacts = Join-Path $WinBuild 'artifacts'
 $AppDir = Join-Path $WinBuild "$Arch\Malachi Mail"
+$Replaced = Join-Path $WinBuild 'replaced'
 $IconFile = Join-Path $Artifacts 'obj\Malachi.App\Malachi.ico'
 
 # Runs a native command from $WorkingDirectory and fails on a non-zero exit
@@ -232,9 +233,46 @@ function Get-Dotnet {
     return Get-Tool 'dotnet' 'DOTNET' (Join-Path $env:ProgramFiles 'dotnet\dotnet.exe') 'install the .NET SDK 10.0.4xx (windows\global.json)'
 }
 
+# A program that still runs keeps its file: Windows neither deletes nor
+# overwrites it, but it renames it. The bridge is the usual one: Claude
+# Desktop and Claude Code start the registered malachi-mcp.exe (the app
+# folder's, and build\'s through .mcp.json) and keep it until they quit;
+# a daemon of make run-backend is another. Such a file is moved out of the
+# way into build\windows\replaced\, on the same volume as a rename needs,
+# and its program gets the new one at its next start; a later build
+# removes what has become free there.
+function Move-Aside {
+    param([string] $Path)
+    [System.IO.Directory]::CreateDirectory($Replaced) | Out-Null
+    $aside = Join-Path $Replaced ('{0}-{1}' -f [Guid]::NewGuid().ToString('N'), [System.IO.Path]::GetFileName($Path))
+    try {
+        [System.IO.File]::Move($Path, $aside)
+    } catch {
+        $cause = $_.Exception
+        if ($cause.InnerException) {
+            $cause = $cause.InnerException
+        }
+        throw "$Path is in use and could not be moved out of the way: $($cause.Message)"
+    }
+    Write-Warning "$Path is in use, moved to $aside; the program that runs it gets the new one at its next start"
+}
+
+function Remove-Replaced {
+    if (-not (Test-Path -LiteralPath $Replaced)) {
+        return
+    }
+    foreach ($old in [System.IO.Directory]::GetFiles($Replaced)) {
+        try {
+            [System.IO.File]::Delete($old)
+        } catch {
+            # Still running.
+            continue
+        }
+    }
+}
+
 # Copies a host-architecture binary into build\, where .mcp.json, make
-# run-backend and F5 (Directory.Build.targets) expect it. A daemon started
-# from there keeps its file locked; that copy is then left as it was.
+# run-backend and F5 (Directory.Build.targets) expect it.
 function Copy-DevBinary {
     param([string] $Path)
     [System.IO.Directory]::CreateDirectory($BuildDir) | Out-Null
@@ -246,11 +284,11 @@ function Copy-DevBinary {
         if ($cause.InnerException) {
             $cause = $cause.InnerException
         }
-        if ($cause -is [System.IO.IOException] -or $cause -is [System.UnauthorizedAccessException]) {
-            Write-Warning "$destination is in use (a daemon started from it?), left as it was: $($cause.Message)"
-        } else {
+        if (-not ($cause -is [System.IO.IOException] -or $cause -is [System.UnauthorizedAccessException])) {
             throw
         }
+        Move-Aside $destination
+        [System.IO.File]::Copy($Path, $destination, $true)
     }
 }
 
@@ -264,6 +302,7 @@ function Invoke-GoBuild {
     }
     $out = Join-Path $WinBuild "go\$Arch"
     [System.IO.Directory]::CreateDirectory($out) | Out-Null
+    Remove-Replaced
     $saved = @{}
     foreach ($name in 'GOOS', 'GOARCH', 'CGO_ENABLED', 'GOWORK') {
         $saved[$name] = [Environment]::GetEnvironmentVariable($name)
@@ -323,15 +362,52 @@ function Test-AppFolder {
     }
 }
 
+# Empties the app folder for a new build. Emptied rather than removed: a
+# process whose working directory it is (a program an older build started,
+# a terminal) keeps the folder itself, not what is in it. A file in use,
+# the bridge Claude Desktop runs from here, is moved aside (Move-Aside).
+# The app, its daemon or the helper running from the folder are an error
+# instead, before anything is removed: they would go on with their files
+# gone, and the single instance would answer for the new build.
+function Clear-AppFolder {
+    if (-not (Test-Path -LiteralPath $AppDir)) {
+        return
+    }
+    $inside = $AppDir + '\'
+    $running = @()
+    foreach ($process in Get-Process) {
+        $path = $null
+        try {
+            $path = $process.Path
+        } catch {
+            # Another user's process.
+            continue
+        }
+        if ($path -and $path.StartsWith($inside, [System.StringComparison]::OrdinalIgnoreCase) -and
+            [System.IO.Path]::GetFileName($path) -ne 'malachi-mcp.exe') {
+            $running += "$([System.IO.Path]::GetFileName($path)) (pid $($process.Id))"
+        }
+    }
+    if ($running.Count -gt 0) {
+        throw ("$($running -join ', ') still runs from $AppDir; quit Malachi Mail first " +
+            "(Quit in its menu or on its notification-area icon) and build again")
+    }
+    foreach ($item in Get-ChildItem -LiteralPath $AppDir -Force) {
+        try {
+            Remove-Item -LiteralPath $item.FullName -Recurse -Force
+        } catch {
+            if ($item.PSIsContainer) {
+                throw
+            }
+            Move-Aside $item.FullName
+        }
+    }
+}
+
 function Invoke-AppBuild {
     Invoke-GoBuild
     $dotnet = Get-Dotnet
-    if (Test-Path -LiteralPath $AppDir) {
-        # Emptied rather than removed: a process whose working directory it
-        # is (a program an older build started, a terminal) keeps the folder
-        # itself, not what is in it.
-        Get-ChildItem -LiteralPath $AppDir -Force | Remove-Item -Recurse -Force
-    }
+    Clear-AppFolder
     # The platform picks the app's RuntimeIdentifier and self-contained
     # comes from Malachi.App.csproj: a -r here would restore the referenced
     # projects for that runtime as well and rewrite their lock files.

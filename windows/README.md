@@ -561,9 +561,16 @@ features, not deviations.
   date and failed with CS8012. Should it come back (a build given an
   `ArtifactsPivots` of its own), `build.ps1 clean` clears the stale
   libraries.
-- **`build\malachid.exe is in use`.** A daemon started from `build\` is
-  running (`make run-backend`); that copy is left as it is, and the app
-  folder gets its own.
+- **`… is in use, moved to build\windows\replaced\…`.** A program still
+  runs that file: Claude Desktop or Claude Code the registered
+  `malachi-mcp.exe` (the app folder's, or `build\`'s through `.mcp.json`),
+  or `make run-backend` the daemon in `build\`. The build moves it out of
+  the way and puts the new one in its place; the program goes on with the
+  old one and gets the new one at its next start, and a later build removes
+  the moved file once it is free.
+- **`MalachiMail.exe (pid …) still runs from …`.** The app is running,
+  perhaps in the background with its icon in the notification area; quit
+  it (Ctrl+Q, or Quit on the icon) and build again. Nothing was removed.
 - **The network canary is skipped or fails.** `Malachi.App.Canary` starts
   its WinUI host beyond the edge of the screen, so it needs an interactive
   desktop session and the WebView2 runtime; without either, and on a CI

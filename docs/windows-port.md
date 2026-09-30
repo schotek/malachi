@@ -104,6 +104,20 @@ until its own exit, and `build.ps1 app` could not replace it. The
 absolute against the launch folder first. `build.ps1` empties the app
 folder rather than removing it, for what an older build started.
 
+One file of the folder is run by other programs for as long as they
+like: Claude Desktop and Claude Code start the registered
+`malachi-mcp.exe` and keep it until they quit (measured: two bridge
+processes of a Claude Desktop the app had restarted, and `build.ps1 app`
+failed with "access to the path … malachi-mcp.exe is denied" with half
+the folder removed). Windows neither deletes nor overwrites the file of a
+running program, but it renames it, so `build.ps1` moves a file in use
+into `build\windows\replaced\` (the same volume, as a rename needs), says
+so, and removes it in a later build once it is free; the program that
+runs it gets the new bridge at its next start. The same holds for
+`build\malachi-mcp.exe`, which `.mcp.json` names, and for a daemon of
+`make run-backend`. The app, its daemon or the helper still running from
+the app folder stop the build before anything is removed.
+
 | What | Where |
 |---|---|
 | App folder (dev) | `build\windows\<arch>\Malachi Mail\` with `MalachiMail.exe`, `malachid.exe`, `malachi-mcp.exe`, `malachi-credentials.exe`, `locale\<lang>.po`, licences |
@@ -2961,7 +2975,9 @@ needs them:
   open to individuals in the EU). Until then SmartScreen warns about the
   unsigned executables.
 - **Installer.** Velopack (per user, updates from GitHub Releases) and a
-  winget manifest; an update stops the daemon gracefully first, and an
+  winget manifest; an update stops the daemon gracefully first and must
+  cope with a `malachi-mcp.exe` that Claude Desktop or Claude Code still
+  runs (§1: it can be renamed, not replaced), and an
   uninstall removes what the app registered in HKCU (the `mailto:`
   registration, for which `MailtoRegistration.Unregister` exists, the Run
   value and the notification registration).
