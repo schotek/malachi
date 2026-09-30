@@ -327,7 +327,10 @@ function Invoke-AppBuild {
     Invoke-GoBuild
     $dotnet = Get-Dotnet
     if (Test-Path -LiteralPath $AppDir) {
-        Remove-Item -LiteralPath $AppDir -Recurse -Force
+        # Emptied rather than removed: a process whose working directory it
+        # is (a program an older build started, a terminal) keeps the folder
+        # itself, not what is in it.
+        Get-ChildItem -LiteralPath $AppDir -Force | Remove-Item -Recurse -Force
     }
     # The platform picks the app's RuntimeIdentifier and self-contained
     # comes from Malachi.App.csproj: a -r here would restore the referenced

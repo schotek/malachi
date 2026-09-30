@@ -90,6 +90,20 @@ stopped. `DBUS_SESSION_BUS_ADDRESS=disabled:` keeps the Secret Service,
 GOA and EDS paths from searching `PATH` for `dbus-launch` on every call
 (~10 ms per `contact.search` keystroke, measured).
 
+The app starts in its own folder (Explorer, a shortcut and `make
+run-windows` all make it the working directory) and leaves it for the
+user's profile before anything else (`Program.LeaveLaunchDirectory`):
+every process the app starts inherits its working directory, and one that
+outlives it (Claude Desktop, started by its restart around *Register with
+Claude* or by a hand-off, a browser opened for a link, a viewer opened
+for an attachment)
+would keep the folder from being removed or updated as long as it runs.
+Measured: a Claude Desktop the app had started kept `build\windows\x64\Malachi Mail`
+until its own exit, and `build.ps1 app` could not replace it. The
+`MALACHI_*` variables that name a path and were given relative are made
+absolute against the launch folder first. `build.ps1` empties the app
+folder rather than removing it, for what an older build started.
+
 | What | Where |
 |---|---|
 | App folder (dev) | `build\windows\<arch>\Malachi Mail\` with `MalachiMail.exe`, `malachid.exe`, `malachi-mcp.exe`, `malachi-credentials.exe`, `locale\<lang>.po`, licences |
