@@ -1221,7 +1221,8 @@ public sealed partial class ApiCodingTests
         Assert.Equal(RpcTimeouts.Download, API.MessageDownload.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(15), API.AccountDetectSite.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.AccountListSpaces.Timeout);
-        Assert.Equal(TimeSpan.FromSeconds(20), API.IssueTransitions.Timeout);
+        // One value for both, as in the GTK UI (issue_actions.go issueTimeout).
+        Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransitions.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransition.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {

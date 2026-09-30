@@ -83,10 +83,11 @@ public static class RpcTimeouts
     public static readonly TimeSpan ListSpaces = TimeSpan.FromSeconds(45);
 
     /// <summary>
-    /// <c>issue.transitions</c>: one request to the site (docs/api.md §4.12,
-    /// as macOS; the GTK UI allows it the 45 s of a transition).
+    /// <c>issue.transitions</c>: one request to the site, which may be slow;
+    /// one value for both calls, as the GTK UI (issue_actions.go
+    /// <c>issueTimeout</c>) and macOS have it (docs/api.md §4.12 says 20 s).
     /// </summary>
-    public static readonly TimeSpan Transitions = TimeSpan.FromSeconds(20);
+    public static readonly TimeSpan Transitions = TimeSpan.FromSeconds(45);
 
     /// <summary><c>issue.transition</c>: the transition, then the issue's refresh (up to 30 s).</summary>
     public static readonly TimeSpan Transition = TimeSpan.FromSeconds(45);

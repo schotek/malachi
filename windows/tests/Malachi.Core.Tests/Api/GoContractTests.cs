@@ -198,11 +198,10 @@ public sealed class GoContractTests
         Assert.Equal(GoContract.Seconds(jiraWizard, "detectSiteTimeout"), RpcTimeouts.DetectSite);
         Assert.Equal(GoContract.Seconds(jiraWizard, "listSpacesTimeout"), RpcTimeouts.ListSpaces);
         Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "jiraaccount", "controller.go"), "listSpacesTimeout"), RpcTimeouts.ListSpaces);
-        Assert.Equal(GoContract.Seconds(GoContract.Source("ui", "internal", "window", "issue_actions.go"), "issueTimeout"), RpcTimeouts.Transition);
-        // issue.transitions: docs/api.md's 20 s, as macOS; the GTK UI allows
-        // it the 45 s of issue.transition (issueTimeout).
-        Assert.Contains("Clients allow 20 s for `issue.transitions` and\n45 s for `issue.transition`.", GoContract.Source("docs", "api.md"), StringComparison.Ordinal);
-        Assert.Equal(TimeSpan.FromSeconds(20), RpcTimeouts.Transitions);
+        // One value for both issue calls (issue_actions.go issueTimeout).
+        var issue = GoContract.Source("ui", "internal", "window", "issue_actions.go");
+        Assert.Equal(GoContract.Seconds(issue, "issueTimeout"), RpcTimeouts.Transition);
+        Assert.Equal(GoContract.Seconds(issue, "issueTimeout"), RpcTimeouts.Transitions);
     }
 
     /// <summary>
