@@ -253,10 +253,13 @@ public sealed class ClaudeCodeLocatorTests
         Assert.Equal(new ClaudeCodeSignIn.TimedOut(), await brief.SignInAsync());
         Assert.False(brief.SigningIn);
 
-        // A removed handler hears nothing more; no Claude Code at all.
+        // A removed handler hears nothing more; no Claude Code at all. Go
+        // removes the program, but Windows may refuse to delete one whose
+        // process was ended a moment ago (the CI runner always did), so the
+        // setting names a program that is not there.
         l.SigningInChanged -= Count;
         var before = changes;
-        File.Delete(settings.AssistantClaudePath);
+        settings.AssistantClaudePath = Path.Combine(dir.Path, "gone", FakeClaudeScript.FileName);
         Assert.Equal(new ClaudeCodeSignIn.NotFound(), await l.SignInAsync());
         Assert.False(l.SigningIn);
         Assert.Equal(before, changes);
