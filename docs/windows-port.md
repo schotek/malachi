@@ -1922,7 +1922,10 @@ In the code (`Malachi.App/Main`, the view models in
 `Malachi.Core/Presentation` with their tests): the sidebar's rows are
 `SidebarRow`s (the rows of folders.go: headings 3 px lower with the fold
 arrow, which the Favourites heading keeps as an invisible place; folders
-indented 12 per level, the arrow's column only in a nested account, the
+12 in from their heading, which GTK's rows get from `Adw.ActionRow`'s
+start padding (`SidebarRow.FolderInset`; the first port left it out and
+drew an account's folders flush with its name), and 12 more per level,
+the arrow's column only in a nested account, the
 role glyph, the name and, for a pinned folder with two or more accounts,
 whose it is, the badge, the star), shown by `FolderRowView` and applied by
 key; the selection is the mailbox's `SelectedEntryKey`, a heading or a

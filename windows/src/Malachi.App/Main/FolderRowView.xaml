@@ -12,7 +12,9 @@ Sidebar/FolderCellView.swift and SidebarHeaderCellView. A heading is the
 fold arrow (inert and invisible on Favourites) and a dim caption heading,
 3 px lower than a row, with the kind capsule of an account's heading
 (JIRA, GOOGLE, M365, IMAP; widget.NewKindBadge) right after its name; a
-folder is indented 12 per level: its arrow (in a nested account), icon (a
+folder sits 12 in from its heading (the start padding of GTK's
+Adw.ActionRow, SidebarRow.FolderInset) and 12 more per level: its arrow
+(in a nested account), icon (a
 Jira view's saved search, else its role's), name (and whose it is, for a
 pinned folder with several accounts), unread badge and pin star. What the
 row shows is Core's SidebarRow; every text is plain.

@@ -36,6 +36,15 @@ public sealed partial class SidebarRow : ObservableObject
     /// <summary>folders.go <c>folderIndent</c>: the indent per tree level, in pixels.</summary>
     public const int IndentPerLevel = 12;
 
+    /// <summary>
+    /// How far every folder row sits in from its heading, in pixels: GTK's
+    /// folder rows are <c>Adw.ActionRow</c>s, whose header box has a start
+    /// padding of 12 that the headings (plain rows) lack, so an account's
+    /// folders stand one step in from its name (measured on GTK's sidebar;
+    /// macOS's outline puts them a level in, 12 as well).
+    /// </summary>
+    public const int FolderInset = 12;
+
     /// <summary>folders.go <c>folderHeadingGap</c>: the space above a heading, in pixels.</summary>
     public const int HeadingGap = 3;
 
@@ -83,7 +92,7 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial string Tooltip { get; private set; }
 
-    /// <summary>The indent of the tree level, in pixels.</summary>
+    /// <summary>The row's indent in pixels: 0 on a heading, <see cref="FolderInset"/> and the tree level's on a folder.</summary>
     [ObservableProperty]
     public partial double Indent { get; private set; }
 
@@ -199,7 +208,7 @@ public sealed partial class SidebarRow : ObservableObject
         Capsule = "";
         Subtitle = e.Favourite && several && e.Account is { } account ? FolderTree.AccountLabel(account) : "";
         Tooltip = DisplayText.Clean(f.Path);
-        Indent = IndentPerLevel * e.Depth;
+        Indent = FolderInset + (IndentPerLevel * e.Depth);
         Icon = FolderTree.FolderIcon(f);
         // Accounts without any nesting get no arrow column at all.
         SetTwisty(shown: e.Nested, active: e.Nested && e.HasChildren, collapsed: e.Collapsed);

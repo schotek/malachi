@@ -50,6 +50,7 @@ public sealed class SidebarRowTests
         Assert.False(row.HasStar);
         Assert.Equal(new AccountId("acc1"), row.Account);
         Assert.Null(row.Folder);
+        Assert.Equal(0, row.Indent);
 
         var collapsed = new CollapseState();
         collapsed.ToggleAccount("acc1");
@@ -85,14 +86,15 @@ public sealed class SidebarRowTests
         Assert.Equal("INBOX", inbox.Tooltip);
         Assert.Equal("mail-unread-symbolic", inbox.Icon);
         Assert.Equal("2", inbox.Badge);
-        Assert.Equal(0, inbox.Indent);
+        // A step in from the account's heading, as GTK's action rows are.
+        Assert.Equal(SidebarRow.FolderInset, inbox.Indent);
         Assert.True(inbox.Selectable);
         Assert.False(inbox.Dimmed);
         Assert.Equal(new FolderKey("acc1", "inbox"), inbox.Folder);
         Assert.Equal("Inbox, 2", inbox.ToString());
 
         var deep = Row(entries.First(e => e.Folder?.Id.Value == "deep"));
-        Assert.Equal(2 * SidebarRow.IndentPerLevel, deep.Indent);
+        Assert.Equal(SidebarRow.FolderInset + (2 * SidebarRow.IndentPerLevel), deep.Indent);
         Assert.Equal("", deep.Badge);
         Assert.Equal("folder-symbolic", deep.Icon);
     }
