@@ -4,6 +4,7 @@
 package window
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -107,10 +108,13 @@ func membersFromListing(t api.ThreadSummary) *threadMembers {
 }
 
 // sameShape reports whether a conversation's listing has not changed in
-// what would invalidate its fetched members.
+// what would invalidate its fetched members. That includes the issue of a
+// Jira conversation: its status, assignee or priority can move without a
+// new member (the account shows no events), and every member carries it.
 func sameShape(a, b api.ThreadSummary) bool {
 	return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount &&
-		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID
+		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID &&
+		reflect.DeepEqual(a.Issue, b.Issue)
 }
 
 // forgetMembers forgets the fetched folder members of conversation tid:

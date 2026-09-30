@@ -112,14 +112,26 @@ public sealed partial class MailModel
     /// <summary>
     /// Whether a conversation's listing has not changed in what would
     /// invalidate its fetched members (thread_model.go <c>sameShape</c>).
+    /// That includes the issue of a Jira conversation: its status, assignee
+    /// or priority can move without a new member (the account shows no
+    /// events), and every member carries it.
     /// </summary>
     public static bool SameShape(ThreadSummary a, ThreadSummary b)
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
         return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount
-            && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id;
+            && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id
+            && SameIssue(a.Issue, b.Issue);
     }
+
+    // The issue by value, as Go's reflect.DeepEqual compares it (a record
+    // compares its list by reference); a missing list is an empty one.
+    private static bool SameIssue(IssueInfo? a, IssueInfo? b) =>
+        ReferenceEquals(a, b)
+        || (a is not null && b is not null
+            && a with { CommentVisibilities = null } == b with { CommentVisibilities = null }
+            && (a.CommentVisibilities ?? []).SequenceEqual(b.CommentVisibilities ?? []));
 
     /// <summary>
     /// A new list with <paramref name="s"/> placed among

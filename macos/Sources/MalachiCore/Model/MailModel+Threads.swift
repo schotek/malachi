@@ -161,10 +161,14 @@ public func membersFromListing(_ t: ThreadSummary) -> ThreadMembers {
 }
 
 /// Whether a conversation's listing has not changed in what would
-/// invalidate its fetched members (thread_model.go `sameShape`).
+/// invalidate its fetched members (thread_model.go `sameShape`). That
+/// includes the issue of a Jira conversation: its status, assignee or
+/// priority can move without a new member (the account shows no events),
+/// and every member carries it.
 public func sameShape(_ a: ThreadSummary, _ b: ThreadSummary) -> Bool {
     a.messageCount == b.messageCount && a.unreadCount == b.unreadCount
         && a.latestDate == b.latestDate && a.latest.id == b.latest.id
+        && a.issue == b.issue
 }
 
 /// Places `s` among `list` (oldest first) by date (thread_model.go
