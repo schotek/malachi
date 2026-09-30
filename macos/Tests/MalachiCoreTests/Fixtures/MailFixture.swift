@@ -200,6 +200,9 @@ actor MailFixture {
         case .accountsChanged:
             method = API.Notify.accountsChanged
             params = Data("{}".utf8)
+        case .messagesChanged(let m):
+            method = API.Notify.messagesChanged
+            params = try encode(m)
         case .unknown(let m):
             method = m
             params = Data("{}".utf8)
@@ -483,7 +486,8 @@ actor MailFixture {
     }
 
     /// Aggregates a conversation over `members` (oldest first), as
-    /// docs/api.md §4.4 describes thread.list's summary.
+    /// docs/api.md §4.4 describes thread.list's summary; a jira thread's
+    /// `issue` is the latest member's.
     private func aggregate(_ tid: ThreadID, _ members: [MessageSummary], account acc: AccountID) -> ThreadSummary {
         let latest = members[members.count - 1]
         var flags: [Flag] = []
@@ -505,7 +509,8 @@ actor MailFixture {
         return ThreadSummary(
             id: tid, accountId: acc, subject: stripMarkers(latest.subject), participants: frontParticipants([], senders),
             messageCount: members.count, unreadCount: unread, latestDate: latest.date, latest: latest,
-            snippet: latest.snippet, flags: flags, hasAttachments: attachments, folderIds: folderIds
+            snippet: latest.snippet, flags: flags, hasAttachments: attachments, folderIds: folderIds,
+            issue: latest.issue?.info
         )
     }
 

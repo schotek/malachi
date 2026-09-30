@@ -11,7 +11,8 @@ import os
 /// `openEmbeddedWindow`/`closeEmbeddedWindows`, remote.go `showLoaded`/
 /// `refreshRemoteBar`, outbox.go `showOutboxState`): one window per
 /// message, one per attached message, and the fan-out of what the cache
-/// learns to every view showing the message. The hub installs itself as
+/// learns to every view showing the message, the conversation view's cards
+/// included (`MessageDisplay`). The hub installs itself as
 /// the cache's `onLoaded`, `onRemoteBar` and `onChips` (download.go
 /// `refreshChips`).
 ///
@@ -37,10 +38,20 @@ final class MessageWindows {
             for wc in messageWindows {
                 wc.delegate = delegate
             }
+            for d in displays {
+                d.delegate = delegate
+            }
         }
     }
 
+    /// Called with every message window once it is on screen (the hub
+    /// adds the Change Status submenu to its More Actions menu;
+    /// Integration+Jira).
+    var onMessageWindowOpened: (@MainActor (MessageWindowController) -> Void)?
+
     private var tracked: [WeakView] = []
+    /// The views of several messages (`MessageDisplay`), held weakly.
+    private var trackedDisplays: [WeakDisplay] = []
     private var cascadePoint = NSPoint.zero
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "windows")
 
@@ -77,6 +88,22 @@ final class MessageWindows {
         return tracked.compactMap(\.view)
     }
 
+    /// Registers a display of several messages (the conversation view) for
+    /// the fan-out and gives it the delegate and the embedded-window opener.
+    func track(display d: any MessageDisplay) {
+        d.delegate = delegate
+        d.onOpenEmbedded = { [weak self] containing, attachment, remote, chip in
+            self?.openEmbedded(containing: containing, attachment: attachment, remote: remote, chipView: chip)
+        }
+        trackedDisplays.append(WeakDisplay(d))
+    }
+
+    /// The live tracked displays.
+    var displays: [any MessageDisplay] {
+        trackedDisplays.removeAll { $0.display == nil }
+        return trackedDisplays.compactMap(\.display)
+    }
+
     // MARK: Message windows
 
     /// Opens message `s` in its own window, or raises the window that
@@ -93,6 +120,7 @@ final class MessageWindows {
         place(wc)
         wc.showWindow(nil)
         wc.show(s)
+        onMessageWindowOpened?(wc)
     }
 
     /// Every open message window.
@@ -176,6 +204,9 @@ final class MessageWindows {
                 v.render(s, lm)
             }
         }
+        for d in displays where d.displays(id) {
+            d.showLoaded(id, lm)
+        }
     }
 
     /// Redraws the bar of message `id` wherever it is on display and
@@ -185,6 +216,9 @@ final class MessageWindows {
             if let s = v.current, s.id == id {
                 v.refreshRemoteBar(lm)
             }
+        }
+        for d in displays where d.displays(id) {
+            d.refreshRemoteBar(id, lm)
         }
     }
 
@@ -198,6 +232,9 @@ final class MessageWindows {
                 v.refreshChips(lm)
             }
         }
+        for d in displays where d.displays(id) {
+            d.refreshChips(id, lm)
+        }
     }
 
     /// Pushes the cached delivery state of `id` to the banners showing it
@@ -208,6 +245,9 @@ final class MessageWindows {
             if let s = v.current, s.id == id {
                 v.renderOutboxBanner(m)
             }
+        }
+        for d in displays where d.displays(id) {
+            d.showOutboxState(id, m)
         }
     }
 
@@ -250,5 +290,15 @@ private struct WeakView {
 
     init(_ view: MessageViewController) {
         self.view = view
+    }
+}
+
+/// A weak reference to a tracked display.
+@MainActor
+private struct WeakDisplay {
+    weak var display: (any MessageDisplay)?
+
+    init(_ display: any MessageDisplay) {
+        self.display = display
     }
 }

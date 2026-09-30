@@ -27,6 +27,22 @@ own words ([AI agents](#ai-agents)), and the Czech translation generated
 from `po/` at build time. What is missing is listed
 under [Not on macOS, not yet](#not-on-macos-not-yet).
 
+Two things came here before the GTK UI, on purpose
+([docs/architecture.md §7](../docs/architecture.md#7-open-decisions),
+"macOS first for Jira"): **Jira accounts** (`kind: jira`, [docs/api.md
+§4.1](../docs/api.md#41-account): the assistant, the JIRA heading in the
+sidebar with the Assigned to Me / Watching / Open views above the spaces,
+the always-grouped list with status pills and event rows, the issue card
+over a message, Comment in place of Reply with the comment window,
+forwarding an issue's message from a mail account, the account's settings
+sheet with the spaces, the views, the notification mail and the bot
+comments) and the **conversation view** (a folded conversation row shows
+the whole conversation stacked in the reading pane, for mail and Jira
+alike). Their pure logic is a Go reference the GTK UI uses as it is
+(`ui/internal/jira`, `ui/internal/capabilities`,
+`ui/internal/conversation`); the GTK UI mirrors both since 2026-09-30,
+see [Swift-first](#swift-first-where-the-gtk-ui-mirrors-it).
+
 Licence: GPL-3.0-or-later (everything outside `backend/`). Every source file
 starts with the SPDX header; in `Package.swift` it sits on lines 2–3 because
 line 1 must be the `swift-tools-version` comment.
@@ -114,26 +130,52 @@ macos/
                                 notifications, the enums, the error codes, the
                                 handshake's types and proofs (Auth.swift)
     Model/, Compose/, Wizard/,  the pure logic of the GTK UI ported 1:1 (window model,
-    HTML/, Text/, Assistant/    threads, folding, favourites, search, address parsing, mailto:,
-                                quoting, wizard fields and results, the viewer and editor
-                                documents, formatting, error texts, the Assistant's prompts
-                                and links, the panel's command line, stream events and
-                                Markdown subset, the rewrite's and the search's prompts
-                                and answers from ui/internal/assistant)
+    HTML/, Text/, Assistant/    threads, folding, favourites, search, address parsing,
+                                mailto:, quoting, wizard fields and results, the viewer
+                                and editor documents, formatting, error texts, the
+                                Assistant's prompts and links, the panel's command line,
+                                stream events and Markdown subset, the rewrite's and the
+                                search's prompts and answers from ui/internal/assistant);
+                                Model/ also holds the conversation view's model and layout
+                                (Conversation.swift, ConversationLayout.swift, the port of
+                                ui/internal/conversation), the capabilities rules
+                                (Capabilities.swift, of ui/internal/capabilities) and the
+                                Jira parts of the reading pane, the list and the accounts
+                                page (IssueReading, ChipPlan, MailModel+Jira)
+    Jira/                       the port of ui/internal/jira: the texts and view models of
+                                the assistant, the sidebar, the list, the issue card, the
+                                comment window and the account settings (JiraWizard,
+                                JiraView, JiraCompose, JiraSettings, JiraURL, JiraPattern:
+                                the RE2 check of a filter, after Go's regexp/syntax)
     Controllers/                @MainActor view models over the RPC client, tested against
-                                an in-process fake daemon
+                                an in-process fake daemon (JiraWizardController,
+                                JiraAccountController and ConversationController among them)
     I18n/                       L10n (T/N/C), the catalogue loader, plural rules, strftime
     Settings/                   UserDefaults with the GSettings keys
     Platform/                   the open directory for attachments, RPC timeouts, the
                                 bridge runner, Claude Code's locator and its process for
                                 the assistant panel
   Sources/MalachiMail/          AppKit: App/ (delegate, menu bar, alerts, login item,
-                                quitting and starting Claude Desktop), MainWindow/, Sidebar/,
-                                MessageList/, MessageView/, Windows/, Actions/, Assistant/,
-                                Attachments/, Compose/, WebViews/, Preferences/,
-                                AccountWizard/ (the pages of the assistant; the browser
-                                sign-in is OAuthPageController), Notifications/,
-                                Appearance/, Shared/
+                                quitting and starting Claude Desktop; Integration+Jira and
+                                Integration+Conversation wire the two features),
+                                MainWindow/ (ActionPresentation: what the capabilities
+                                make of the toolbar and the menus), Sidebar/,
+                                MessageList/, MessageView/ (the single-message pane,
+                                IssueCardView, and the conversation view:
+                                ReadingPaneViewController swaps between them,
+                                ConversationViewController, ConversationCardView,
+                                ConversationCardHeader, ConversationEventRow,
+                                ConversationRow, MessageParts shared with the pane),
+                                Windows/ (MessageDisplay: the fan-out to a view showing
+                                several messages), Actions/, Assistant/, Attachments/,
+                                Compose/ (CommentHeaderView and
+                                ComposeWindowController+Comment: the comment mode),
+                                WebViews/ (MessageWebView has the sized mode of a
+                                conversation card), Preferences/ (JiraAccount/: the
+                                settings sheet of a Jira account), AccountWizard/ (the
+                                pages of the assistant; the browser sign-in is
+                                OAuthPageController; Jira/: the Jira assistant's sheet and
+                                pages), Notifications/, Appearance/, Shared/ (IssuePill)
   Sources/MalachiKeychain/      malachi-keychain, the daemon's keyring helper
   Tests/MalachiCoreTests/       the Go UI tests ported 1:1 plus the transport, controller
                                 and localisation tests; Fixtures/ holds FakeDaemon and
@@ -229,6 +271,7 @@ next start after a crash.
 |---|---|
 | Configuration | `~/Library/Application Support/Malachi Mail/config.toml` |
 | Mail store | `~/Library/Application Support/Malachi Mail/store.db` |
+| A test copy | `MALACHI_DATA_DIR=<dir>` puts the configuration, the store and the messages there instead, for the app and the daemon it starts; with its own `MALACHI_SOCKET` a test build runs beside the everyday one on a copy of the store (a migration is forward-only, so a branch is tried on a copy first) |
 | Store lock | `~/Library/Application Support/Malachi Mail/store.db.daemon.lock`: held by the running daemon, released by the system with its process; a second daemon for the same store exits |
 | RPC socket | `~/.cache/malachi/run/rpc.sock` (`MALACHI_SOCKET` overrides; `XDG_RUNTIME_DIR` / `XDG_CACHE_HOME` honoured) |
 | RPC key | beside the socket, its path plus `.key` (`~/.cache/malachi/run/rpc.sock.key`): a new key at every daemon start, mode 0600, removed when the daemon stops cleanly; the app reads it for every connection and keeps nothing ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
@@ -309,11 +352,60 @@ the strings and the confirmation dialogs.
 | The account wizard's sheet has a Cancel button at the bottom left of every page (Escape) and no close control in its header; while the browser sign-in waits, the page's own *Cancel* stands alone (Escape still closes the sheet and cancels the sign-in) | Close button in the header bar | macOS sheets carry no window controls; Cancel is the convention, and two Cancel buttons on one page would be ambiguous |
 | The daemon's key file (`rpc.sock.key`) is used only when it belongs to the user and grants nothing to group or others, besides being a regular file, not a link, of 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log) | The Go clients (the GTK UI, `malachi-mcp`, `api.ReadKeyFile`) check the file's type, size and format, not its owner and mode | Defence in depth: the daemon writes the file 0600 in its private directory, so a key another user owns or could read was not written by it or has been exposed. The Go clients cannot check owner and mode the same way on every platform they build for (CLAUDE.md rule 4); on macOS it costs nothing |
 | New and existing stores are compressed, and the large attachments of messages older than 30 days stay on the mail server until opened (*Settings* shows *Compress Stored Mail* on and *Keep Attachments Offline For* at *1 month*; the supervisor's `MALACHI_DEFAULT_*`, see [Disk space](#disk-space)) | Stored uncompressed, every attachment kept (the daemon's built-in defaults; *Everything*, compression off) | Many Macs have 256 GB disks; on Linux a file system such as btrfs compresses by itself. The same daemon, chosen at run time, no platform code |
+| The Jira assistant (*File → Add Jira Account…*, or the *+* pull-down in *Settings → Accounts*) is a sheet of the mail assistant's size with the pages site → credentials → spaces, Back and the page title in a 44 pt header, Cancel at the bottom left (`AccountWizard/Jira/`, `JiraWizardController`); editing an account opens it on the credentials page to replace the token | A dialog with the same pages (*Preferences → Accounts*, the *+* menu; *Add Jira Account…* on the empty window), the header's back button and the dialog's close button instead of Cancel (`ui/internal/accountwizard/jira.go`, `jira_flow.go`); the texts and rules are the Go reference `ui/internal/jira/wizard.go` | The same sheet as the mail assistant's; GTK dialogs close from their header |
+| The settings of a Jira account are a sheet (*Settings → Accounts*, the edit button on its row; *Edit Account…* from a banner): one scrolling page with the site (read only, *Replace Token…*), the spaces, the synchronisation, the views with the closed statuses, the notification e-mails and the bot comments, Cancel and Save below (`Preferences/JiraAccount/`, `JiraAccountController`) | A dialog with Cancel and Save in its header over one preferences page, the progress as the header's subtitle and a banner for a failed call (`ui/internal/jiraaccount`); the form, its checks and its texts are `ui/internal/jira/settings.go` | A mail account is edited in the assistant, which builds its pages from `imap` and `smtp`; a Jira account has neither, so every "edit account" route asks `accountEditor` first |
+| The heading of every account in the sidebar carries a small capsule after its name that says what kind of account it is: "JIRA", and for a mail account the provider it signs in with, "GOOGLE" or "M365", else "IMAP" (`accountHeaderBadge`, `SidebarHeaderCellView`; a full capsule in the sidebar's own look); a Jira account's row in *Settings → Accounts* has a ticket symbol and the site's host under the name, a mail account's an envelope whatever its provider; the views (Assigned to Me, Watching, Open) sit above the spaces with `folder.badge.gearshape` | The same capsules (`folders.go`, `model.go` `accountHeaderBadge`; GTK had the mail ones first, this client since 2026-09-30), with 4 px corners; the row in *Preferences → Accounts* a check-box symbol for Jira (Adwaita has no ticket) and the host, for mail the provider's icon of GNOME Online Accounts when the theme has it; the views with `folder-saved-search-symbolic` (`ui/internal/jira` `KindBadge`, `VirtualRank`, `VirtualFolderTitle`, `VirtualIcon`) | Decided; brand and protocol names, never translated. SF Symbols has no provider marks, and the capsule names the provider |
+| A folded conversation row (two or more members in the folder; a Jira folder is always grouped) shows the whole conversation in the reading pane: native cards on a timeline, ordered as Jira shows an issue (the issue card, then what opened the conversation — the issue's description, or the oldest message of mail not cut by `thread.get` — folded to its header and a preview while more follows, then the rest newest first, the row of older members at the bottom, the pane opened at its top; `ConversationLayout.displayOrder`, the user's choice, 2026-09-30, here since the same day), each HTML body in a locked web view of its own sized to its document (at most eight alive), a Jira conversation's status and assignee changes as compact rows; only the newest member that is not an event is marked read; Space and ⇧Space in the list page through it (`MessageView/Conversation*`, `ConversationController`) | The same order (`ui/internal/window/conversation_*.go`, `convDisplayOrder`, where it came first); a card's HTML view has the JavaScript engine on for the application's isolated-world script, with script markup off (`ui/internal/htmlview/card.go`, `size.go`) | Decided ([docs/architecture.md §7](../docs/architecture.md#7-open-decisions), "Conversation view"); the pure model is the Go reference `ui/internal/conversation`, the security of the per-card views in [docs/security.md §3.2](../docs/security.md#32-defences) |
+| `MALACHI_DATA_DIR` names the data directory (`config.toml`, `store.db`, the messages) instead of `~/Library/Application Support/Malachi Mail`, for the app and the daemon it starts (`Daemon/Paths.swift`) | `--config` / `--store` flags of the daemon, XDG directories | The Windows client's override, taken over so that a test build runs beside the everyday one on a copy of the store (pair it with its own `MALACHI_SOCKET`) |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK (a user script that runs with content JavaScript off), and a masked
 link is confirmed before it opens; those are security features, not
 deviations.
+
+## Swift-first: where the GTK UI mirrors it
+
+For the Jira accounts and the conversation view the order of
+[docs/macos-port.md §10](../docs/macos-port.md#10-adding-a-feature-keeping-the-parity)
+was reversed: the backend and this client came first, the GTK widgets
+followed on 2026-09-30, and the Windows client the same day. So that
+the port had something to diff against, the pure logic exists as Go
+packages the GTK UI uses as they are (with `i18n.Tr`, the adapter over
+`ui/internal/i18n`, as the `Translator`), and their tests are the
+reference the Swift tests port:
+
+- `ui/internal/jira` — the texts and view models of the assistant
+  (`wizard.go`), the sidebar, the list rows, the issue card and the event
+  lines (`jira.go`), the comment window (`compose.go`) and the account
+  settings with its checks (`settings.go`); the port is
+  `MalachiCore/Jira/`;
+- `ui/internal/capabilities` — which message actions an account offers
+  (`Account.capabilities`); the port is `MalachiCore/Model/Capabilities.swift`;
+- `ui/internal/conversation` — the items of a stacked conversation, the
+  member marked read, the scroll target, the truncated row; the port is
+  `MalachiCore/Model/Conversation.swift`.
+
+The msgids of those packages are in `po/POTFILES`, `po/malachi.pot` and
+`po/cs.po` (the GTK UI added none of its own); the Windows client uses
+them all.
+
+What had no Go counterpart is marked `Swift-first` in its comment, with
+the Go file it belongs in; the GTK port mirrors it there (the Windows port
+took the same map):
+
+| Swift | Mirrored in |
+|---|---|
+| `Model/FolderTree.swift`: `sortSiblings` (the views' rank after the roles), `folderIcon`, `accountHeaderBadge`, `folderTitle` (the views' names), `accountLabel` (the site's host for an unnamed Jira account) | `ui/internal/window/model.go`, `folders.go` |
+| `Model/AccountsPage.swift`: `accountRowTitle`, `accountRowSubtitle`, `accountEditor` (which editor a kind opens) | `ui/internal/window/accounts_page.go` |
+| `Model/ActionRules.swift`: `ActionFlags.comment` and `.unsupported` from the capabilities; `MainWindow/ActionPresentation.swift` (Reply relabelled Comment with `text.bubble`, unsupported items disabled in the menus and hidden or disabled in the toolbar) | `ui/internal/window/action_rules.go`, `actions.go` `setMessageActionsSensitive` (Reply relabelled Comment with `chat-message-new-symbolic`; unsupported actions hidden from the header bar, disabled in the menus) |
+| `Model/MailModel+Jira.swift`: `alwaysGrouped` (a Jira folder lists threads whatever the setting), events never unread; `RowMessage.issue` / `RowThread.issue` (`Jira.rowIssue`) | `ui/internal/window/thread_model.go`, `window.go` |
+| `Model/IssueReading.swift`, `MessageView/IssueCardView.swift`: the issue card over the headers, the summary as the subject, an event shown from `changes` without a body | `ui/internal/window/issue_reading.go`, `issue_card.go`, `message_view.go` |
+| `Model/NotificationText.swift`, `Model/SyncStatus.swift`: the Jira cases of the notification text and the status line | `ui/internal/window/notify.go`, `sync.go` |
+| `Controllers/MailboxController.swift` `handleMessagesChanged` (`notify.messagesChanged`: the folders read again, the message cache emptied for the account, the shown folder re-fetched and listed again) | `ui/internal/window/notify.go` |
+| `Controllers/JiraWizardController.swift`, `Controllers/JiraAccountController.swift`: the flows over `account.detectSite`, `account.listSpaces`, `account.add` / `update` | `ui/internal/accountwizard/jira_flow.go` (the flow, tested against a fake daemon) and `jira.go`; `ui/internal/jiraaccount` (`controller.go`, `dialog.go`); `ui/internal/window/jira_editors.go` routes to them |
+| `Controllers/ConversationController.swift`, `Model/ConversationLayout.swift`, `MessageView/Conversation*.swift`, the sized mode of `WebViews/MessageWebView.swift` | `ui/internal/window/conversation_controller.go`, `conversation_layout.go`, `conversation_view.go`, `conversation_card.go`, `conversation_rows.go` (from `onMessageRowSelected`); `ui/internal/htmlview/card.go` and `size.go` (the height measured by an isolated-world script, [docs/security.md §3.2](../docs/security.md#32-defences)) |
+| `Controllers/IssueActionsController.swift`, `Shared/IssueStatusPill.swift`, `Shared/IssueTransitionMenu.swift`, `App/ChangeStatusMenus.swift`: the status pill of the issue card as the menu of the transitions the site allows (`issue.transitions` / `issue.transition`), the same list under *Change Status* in the Message menu and More Actions; the items and texts are `ui/internal/jira/transitions.go` | `ui/internal/window/issue_actions.go`, `issue_card.go` (the pill as a menu button with a popover), *Change Status* in the More Actions menu of the main window and of a message window (`win.change-status`, `msg.change-status`) |
+| `Compose/CommentHeaderView.swift`, `Compose/ComposeWindowController+Comment.swift`: the comment mode of the compose window (no recipients, subject, attachments or Save Draft; the visibility choice on a service-desk request) | `ui/internal/compose/comment.go`, `draft.go`, `manager.go` |
 
 ## Not on macOS, not yet
 

@@ -7,13 +7,63 @@ import Foundation
 // (ui/internal/window/accounts_page.go, accounts_reorder.go).
 
 /// The account name, or the address when unnamed (accounts_page.go
-/// `accountRowTitle`). Unlike `accountLabel` nothing is trimmed: this is
-/// the name as the user typed it.
+/// `accountRowTitle`); an unnamed Jira account shows its site's host
+/// before the address (`Jira.siteHost`). Unlike `accountLabel` nothing is
+/// trimmed: this is the name as the user typed it. Swift-first: mirror in
+/// accounts_page.go when GTK gets Jira accounts.
 public func accountRowTitle(_ a: Account) -> String {
     if !a.config.name.isEmpty {
         return a.config.name
     }
+    let host = Jira.siteHost(a.config)
+    if !host.isEmpty {
+        return host
+    }
     return a.config.email
+}
+
+/// The line under an account's name in Settings → Accounts: the address
+/// of a mail account, the site's host of a Jira account (its address when
+/// the title shows the host already). Swift-first: mirror in
+/// accounts_page.go when GTK gets Jira accounts.
+public func accountRowSubtitle(_ a: Account) -> String {
+    let host = Jira.siteHost(a.config)
+    if host.isEmpty || host == accountRowTitle(a) {
+        return a.config.email
+    }
+    return host
+}
+
+/// What edits an account: the mail account wizard, or what a Jira
+/// account has for it (`jiraEditor`). Every "edit account" route asks
+/// this first, since the mail wizard builds its fields from `imap` and
+/// `smtp`, which a Jira account has not.
+public enum AccountEditor: Sendable, Equatable {
+    case mailWizard
+    case jira
+}
+
+/// What edits a Jira account: its settings (`JiraAccountController`), or
+/// the account assistant in its edit mode, which asks for a new token
+/// (`JiraWizardController`).
+public enum JiraEditor: Sendable, Equatable {
+    case settings
+    case token
+}
+
+/// `JiraEditor` of an "edit account" route: the settings, unless the
+/// route asks for the token (`requestToken`: the reason of the sign-in
+/// banner or of an account's Sign In in the status popover, 0 when it is
+/// not known), which the assistant asks for and says why. Swift-first:
+/// mirror in accounts_page.go when GTK gets Jira accounts.
+public func jiraEditor(requestToken: ErrorCode?) -> JiraEditor {
+    requestToken == nil ? .settings : .token
+}
+
+/// `AccountEditor` of an account, by its kind. Swift-first: mirror in
+/// accounts_page.go when GTK gets Jira accounts.
+public func accountEditor(_ a: Account) -> AccountEditor {
+    Jira.isJira(a.config) ? .jira : .mailWizard
 }
 
 /// The short status shown next to the switch; empty for the unremarkable

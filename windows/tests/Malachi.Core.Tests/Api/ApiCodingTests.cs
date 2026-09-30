@@ -22,7 +22,7 @@ using static Malachi.Core.Tests.Api.ApiJson;
 
 namespace Malachi.Core.Tests.Api;
 
-public sealed class ApiCodingTests
+public sealed partial class ApiCodingTests
 {
     // MARK: docs/api.md examples
 
@@ -1146,6 +1146,10 @@ public sealed class ApiCodingTests
         Assert.Equal("replyAll", create.GetProperty("mode").GetString());
         Assert.Null(Member(create, "mailto"));
         Assert.Equal("On x, y wrote:", create.GetProperty("attribution").GetString());
+        Assert.Null(Member(create, "messageAccountId"));
+        var forward = EncodeObject(new DraftCreateParams { AccountId = "acc_mail", Mode = ComposeMode.Forward, MessageId = "m", MessageAccountId = "acc_jira" });
+        Assert.Equal("acc_jira", forward.GetProperty("messageAccountId").GetString());
+        Assert.Equal("acc_mail", forward.GetProperty("accountId").GetString());
     }
 
     // MARK: Method table
@@ -1157,6 +1161,7 @@ public sealed class ApiCodingTests
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
+        "account.detectSite", "account.listSpaces",
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
@@ -1170,17 +1175,18 @@ public sealed class ApiCodingTests
         "config.get", "config.set",
         "sender.list", "sender.add", "sender.remove",
         "contact.search",
+        "issue.transitions", "issue.transition",
     ];
 
     [Fact]
     public void MethodTableMatchesGo()
     {
-        Assert.Equal(48, API.AllMethods.Count);
-        Assert.Equal(48, API.AllMethods.Distinct().Count()); // no duplicates
+        Assert.Equal(52, API.AllMethods.Count);
+        Assert.Equal(52, API.AllMethods.Distinct().Count()); // no duplicates
         Assert.Equal(GoMethods, API.AllMethods);
         Assert.Equal(API.AllMethods.Count, API.Methods.Count);
         Assert.Equal(API.SystemInfoName, API.SystemInfo.Name);
-        Assert.Equal(["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged"], API.AllNotifications);
+        Assert.Equal(["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged"], API.AllNotifications);
     }
 
     [Fact]
@@ -1213,12 +1219,18 @@ public sealed class ApiCodingTests
         // The daemon's download budget is 4 minutes; the client waits 5.
         Assert.Equal(TimeSpan.FromSeconds(300), RpcTimeouts.Download);
         Assert.Equal(RpcTimeouts.Download, API.MessageDownload.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(15), API.AccountDetectSite.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.AccountListSpaces.Timeout);
+        // One value for both, as in the GTK UI (issue_actions.go issueTimeout).
+        Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransitions.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(45), API.IssueTransition.Timeout);
         var special = new HashSet<string>(StringComparer.Ordinal)
         {
             "system.info", "system.hello", "system.authenticate", "message.body",
             "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
             "account.add", "account.update", "account.discover", "account.test",
             "account.oauthStart", "account.oauthWait", "message.download",
+            "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition",
         };
         foreach (var m in API.Methods.Where(m => !special.Contains(m.Name)))
         {

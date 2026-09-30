@@ -19,7 +19,10 @@ import (
 // empty since migration 0011); a message is linked into its conversation
 // inside the transaction that writes it (UpsertMessages, SetMessageBody,
 // EnqueueOutbox), by the union rule internal/thread describes. Listing
-// groups a folder's rows by thread id at query time.
+// groups a folder's rows by thread id at query time. Hidden rows
+// (Message.Hidden) are no member of any listing, and an account-wide
+// scope leaves out the copies in virtual folders (Folder.Virtual), which
+// would count an issue's messages once per view.
 
 // linkPolicy caps the linking work; tests lower it.
 var linkPolicy = thread.DefaultPolicy
@@ -357,12 +360,12 @@ func (s *Store) ListThreads(ctx context.Context, accountID, folderID, cursor str
 		return nil, "", 0, fmt.Errorf("list threads: unsupported filter %q", listFilter)
 	}
 	grouped := threadGroupQuery(having)
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, folderID).Scan(&total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM (`+grouped+`)`, folderID, folderID).Scan(&total); err != nil {
 		return nil, "", 0, fmt.Errorf("count threads: %w", err)
 	}
 
 	query := `WITH t AS (` + grouped + `) SELECT thread_id, n, unread, flagged, att, latest FROM t`
-	args := []any{folderID}
+	args := []any{folderID, folderID}
 	if cursor != "" {
 		query += ` WHERE (latest ` + cmp + ` ? OR (latest = ? AND thread_id ` + cmp + ` ?))`
 		args = append(args, cursorStamp, cursorStamp, cursorID)
@@ -397,18 +400,26 @@ func (s *Store) ListThreads(ctx context.Context, accountID, folderID, cursor str
 	return items, next, total, nil
 }
 
-// threadGroupQuery aggregates one folder's messages (the parameter) by
-// thread: the folder/thread index serves the grouping in thread order and
-// the page then sorts one row per thread. having narrows the threads.
+// threadGroupQuery aggregates one folder's messages (the parameter, given
+// twice) by thread: the folder/thread index serves the grouping in thread
+// order and the page then sorts one row per thread. having narrows the
+// threads. Hidden rows are left out by id, from the partial index of the
+// hidden ones, so that the grouping still reads the covering index only.
 func threadGroupQuery(having string) string {
 	return `SELECT thread_id, COUNT(*) AS n, SUM(unread) AS unread, MAX(flagged) AS flagged,
 			MAX(has_attachments) AS att, MAX(date) AS latest
-		FROM messages WHERE folder_id = ? AND thread_id != '' GROUP BY thread_id` + having
+		FROM messages WHERE folder_id = ? AND thread_id != ''
+			AND id NOT IN (SELECT id FROM messages WHERE folder_id = ? AND hidden = 1)
+		GROUP BY thread_id` + having
 }
 
+// notVirtual leaves out the rows in the account's virtual folders; its
+// parameter is the account id.
+const notVirtual = `folder_id NOT IN (SELECT id FROM folders WHERE account_id = ? AND virtual != '')`
+
 // GetThread aggregates one conversation over its members in folderID, or
-// over every member of the account when folderID is "". ErrNotFound when
-// nothing is in scope.
+// over every member of the account outside virtual folders when folderID
+// is "". ErrNotFound when nothing is in scope.
 func (s *Store) GetThread(ctx context.Context, accountID, threadID, folderID string) (ThreadRow, error) {
 	if threadID == "" {
 		return ThreadRow{}, ErrNotFound
@@ -437,8 +448,8 @@ func (s *Store) GetThread(ctx context.Context, accountID, threadID, folderID str
 
 // ThreadMessages lists the members in scope oldest first; when more than
 // limit exist the newest limit are returned, still oldest first. limit <= 0
-// means api.MaxThreadMessages. folderID "" means every folder. ErrNotFound
-// when nothing is in scope.
+// means api.MaxThreadMessages. folderID "" means every folder but the
+// virtual ones. ErrNotFound when nothing is in scope.
 func (s *Store) ThreadMessages(ctx context.Context, accountID, threadID, folderID string, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = api.MaxThreadMessages
@@ -471,21 +482,55 @@ func (s *Store) ThreadMessages(ctx context.Context, accountID, threadID, folderI
 	return out, nil
 }
 
-// threadScope is the WHERE clause of one thread's members, in a folder or
-// account-wide.
+// RetitleThread gives every row of the account's thread the subject (an
+// issue renamed or moved to another key: its rows all carry "KEY:
+// Summary"); the full-text index follows. ErrNotFound when the thread has
+// no row.
+func (s *Store) RetitleThread(ctx context.Context, accountID, threadID, subject string) error {
+	if threadID == "" {
+		return ErrNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("retitle thread: %w", err)
+	}
+	defer tx.Rollback()
+	var n int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM messages WHERE account_id = ? AND thread_id = ?`, accountID, threadID).Scan(&n); err != nil {
+		return fmt.Errorf("retitle thread: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE messages SET subject = ?, updated_at = ? WHERE account_id = ? AND thread_id = ? AND subject != ?`,
+		subject, nowStamp(), accountID, threadID, subject); err != nil {
+		return fmt.Errorf("retitle thread: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("retitle thread: %w", err)
+	}
+	return nil
+}
+
+// threadScope is the WHERE clause of one thread's visible members, in a
+// folder or account-wide (without the virtual folders' copies).
 func threadScope(accountID, threadID, folderID string) (string, []any) {
-	where := ` WHERE account_id = ? AND thread_id = ?`
+	where := ` WHERE account_id = ? AND thread_id = ? AND hidden = 0`
 	args := []any{accountID, threadID}
 	if folderID != "" {
 		where += ` AND folder_id = ?`
 		args = append(args, folderID)
+	} else {
+		where += ` AND ` + notVirtual
+		args = append(args, accountID)
 	}
 	return where, args
 }
 
 // threadRows completes the grouped rows with the newest member, the
 // participants, the flag union and the folders, in the order given.
-// folderID "" scopes the details to the whole account.
+// folderID "" scopes the details to the whole account but its virtual
+// folders; the folders are every one with a visible member.
 func (s *Store) threadRows(ctx context.Context, accountID, folderID string, groups []threadGroup) ([]ThreadRow, error) {
 	out := make([]ThreadRow, 0, len(groups))
 	if len(groups) == 0 {
@@ -510,14 +555,18 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 		}
 		return d
 	}
-	scope := ` WHERE account_id = ?`
+	scope := ` WHERE account_id = ? AND hidden = 0`
 	if folderID != "" {
 		scope += ` AND folder_id = ?`
+	} else {
+		scope += ` AND ` + notVirtual
 	}
 	scopeArgs := func(chunk []string) []any {
 		args := []any{accountID}
 		if folderID != "" {
 			args = append(args, folderID)
+		} else {
+			args = append(args, accountID)
 		}
 		for _, id := range chunk {
 			args = append(args, id)
@@ -584,7 +633,7 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 			return nil, fmt.Errorf("thread flags: %w", err)
 		}
 
-		rows, err = s.db.QueryContext(ctx, `SELECT thread_id, folder_id FROM messages WHERE account_id = ?`+in+
+		rows, err = s.db.QueryContext(ctx, `SELECT thread_id, folder_id FROM messages WHERE account_id = ? AND hidden = 0`+in+
 			` GROUP BY thread_id, folder_id ORDER BY thread_id, folder_id`, append([]any{accountID}, toAny(chunk)...)...)
 		if err != nil {
 			return nil, fmt.Errorf("thread folders: %w", err)

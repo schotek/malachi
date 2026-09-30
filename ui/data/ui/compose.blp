@@ -4,7 +4,9 @@ using Gtk 4.0;
 using Adw 1;
 // Compose window. Object IDs are looked up from ui/internal/compose;
 // keep them in sync. The rich-text editor (ui/internal/editor) is appended
-// to editor_slot from Go.
+// to editor_slot from Go. In comment mode (compose/comment.go)
+// comment_header replaces header_rows, and the toolbar keeps the controls
+// of a comment's formats (their ids are compose/comment.go toolbarFormats).
 Adw.Window compose_window {
   title: _("New Message");
   default-width: 760;
@@ -240,6 +242,66 @@ Adw.Window compose_window {
           }
         }
 
+        // Comment mode only: the issue a comment goes to (title and
+        // summary are set from Go, plain text from the site) and, on a
+        // service-desk request, who reads it (toggles added from Go).
+        Box comment_header {
+          visible: false;
+          margin-start: 12;
+          margin-end: 12;
+          margin-top: 12;
+          margin-bottom: 6;
+
+          styles [
+            "card",
+          ]
+
+          Box {
+            orientation: vertical;
+            hexpand: true;
+            spacing: 4;
+            margin-start: 12;
+            margin-end: 12;
+            margin-top: 10;
+            margin-bottom: 10;
+
+            Box {
+              spacing: 12;
+
+              Label comment_title {
+                xalign: 0;
+                hexpand: true;
+                ellipsize: end;
+                use-markup: false;
+
+                styles [
+                  "heading",
+                ]
+              }
+
+              Adw.ToggleGroup comment_visibility {
+                visible: false;
+                valign: center;
+                homogeneous: true;
+              }
+            }
+
+            Label comment_summary {
+              visible: false;
+              xalign: 0;
+              wrap: true;
+              wrap-mode: word_char;
+              lines: 2;
+              ellipsize: end;
+              use-markup: false;
+
+              styles [
+                "dim-label",
+              ]
+            }
+          }
+        }
+
         // Every control keeps focus in the editor so commands act on the
         // page selection.
         Box format_toolbar {
@@ -430,19 +492,23 @@ Adw.Window compose_window {
 
 menu compose_menu {
   section {
+    // Disabled in comment mode, and then hidden.
     item {
       label: _("_Save Draft");
       action: "compose.save";
+      hidden-when: "action-disabled";
     }
 
     item {
       label: _("Attach _Files…");
       action: "compose.attach";
+      hidden-when: "action-disabled";
     }
 
     item {
       label: _("Insert _Image…");
       action: "compose.insert-image";
+      hidden-when: "action-disabled";
     }
   }
 

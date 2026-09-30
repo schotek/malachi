@@ -105,6 +105,14 @@ public static class IconGlyphs
         ["mail-inbox"] = G(0xE81E),
         ["object-select"] = G(0xE73E),
         ["view-list"] = G(0xEA37),
+        // Jira accounts: Reply as Comment (macOS text.bubble), the account's
+        // row (GTK's stand-in for a ticket, as Adwaita has none), the views
+        // Assigned to Me, Watching and Open as saved queries (Filter), and
+        // the remove button of the settings' list editors.
+        ["chat-message-new"] = G(0xE90A),
+        ["checkbox-checked"] = G(0xE73A),
+        ["folder-saved-search"] = G(0xE71C),
+        ["list-remove"] = G(0xE738),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

@@ -84,6 +84,11 @@ type Params struct {
 	DraftID  api.DraftID
 	Version  int
 	Replaces api.MessageID
+	// Comment is the issue a comment draft goes to and its visibility, as
+	// draft.create returned them (Draft.Comment): the window opens in its
+	// comment mode (comment.go, jira.CommentCompose), pinned to AccountID.
+	// nil for an e-mail.
+	Comment *api.DraftComment
 	// Attribution is the line above the quoted original of a reply or a
 	// forward (the one handed to draft.create, Attribution), "" when not
 	// known (a new message, a draft opened from Drafts): the assistant's
@@ -114,6 +119,9 @@ func FromDraft(kind Kind, d api.Draft, blocked api.BlockedContent) Params {
 	if p.BodyHTML == "" {
 		p.BodyHTML = escapeText(d.TextBody)
 	}
+	// A comment draft (draft.create reply on an account that comments)
+	// opens the window's comment mode.
+	p.Comment = d.Comment
 	return p
 }
 

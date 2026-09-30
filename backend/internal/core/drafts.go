@@ -23,6 +23,14 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 	if err := validateDraft(&d); err != nil {
 		return nil, err
 	}
+	// The drafts of an issue tracker are comments: their own rules, then
+	// the same sanitising and storing as mail.
+	var visibility api.CommentVisibility
+	if a, err := s.b.store.GetAccount(ctx, string(d.AccountID)); err == nil && isIssueAccount(a) {
+		if visibility, err = s.b.checkCommentDraft(ctx, a, &d); err != nil {
+			return nil, err
+		}
+	}
 
 	ids := dedupe(attachmentIDs(d.Attachments))
 	atts, err := s.b.store.GetAttachments(ctx, string(d.AccountID), ids)
@@ -81,6 +89,8 @@ func (s *draftService) Save(ctx context.Context, p api.DraftSaveParams) (*api.Dr
 		HTMLBody:   html,
 		InReplyTo:  string(d.InReplyTo),
 		Forwarding: string(d.Forwarding),
+
+		CommentVisibility: visibility,
 	}
 	// The threading headers are kept with the draft, for a parent that
 	// leaves the local store before the draft is sent.
@@ -141,6 +151,7 @@ func (s *draftService) List(ctx context.Context, p api.DraftListParams) (*api.Dr
 	for _, it := range items {
 		out = append(out, toAPIDraft(it))
 	}
+	s.b.decorateCommentDrafts(ctx, string(p.AccountID), items, out)
 	return &api.DraftListResult{Drafts: out, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
 }
 
@@ -170,6 +181,10 @@ func (s *draftService) Delete(ctx context.Context, p api.DraftDeleteParams) (*ap
 // HTML with its pictures copied into the attachment store, or a parsed
 // mailto: URI. Nothing is stored but the copied parts; the quote degrades
 // (HTML → text → plain) rather than failing. The helpers are in quote.go.
+// A reply on an account that comments (an issue tracker) is a comment
+// draft of the message's issue instead (comments.go); a forward may take
+// its original from another account (messageAccountId), whose parts it
+// copies into the draft's account.
 func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*api.DraftCreateResult, error) {
 	bad := func(format string, args ...any) error {
 		return api.NewError(api.CodeInvalidArgument, format, args...)
@@ -182,6 +197,34 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 	a, err := s.b.requireAccount(ctx, string(p.AccountID))
 	if err != nil {
 		return nil, err
+	}
+	// src is the account of the original: another of the user's accounts
+	// only for a forward (a jira message forwarded from a mail account).
+	src := a
+	if p.MessageAccountID != "" && p.MessageAccountID != p.AccountID {
+		if p.Mode != api.ComposeForward {
+			return nil, bad("messageAccountId is for mode forward")
+		}
+		if src, err = s.b.requireAccount(ctx, string(p.MessageAccountID)); err != nil {
+			return nil, err
+		}
+	}
+	comment := p.Mode == api.ComposeReply && can(a.Config, api.CapabilityComment)
+	switch {
+	case comment:
+	case p.Mode == api.ComposeForward:
+		// The original's account must let its messages go, the draft's
+		// must be able to write mail.
+		if err := requireCapability(src, api.CapabilityForward); err != nil {
+			return nil, err
+		}
+		if err := requireCapability(a, api.CapabilityCompose); err != nil {
+			return nil, err
+		}
+	default:
+		if err := requireCapability(a, modeCapability(p.Mode)); err != nil {
+			return nil, err
+		}
 	}
 	if p.Mode == api.ComposeNew {
 		if p.MessageID != "" {
@@ -203,7 +246,10 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 	if err != nil {
 		return nil, err
 	}
-	m, err := s.b.getMessage(ctx, a.ID, string(p.MessageID))
+	if comment {
+		return s.b.createCommentDraft(ctx, a, string(p.MessageID))
+	}
+	m, err := s.b.getMessage(ctx, src.ID, string(p.MessageID))
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +264,7 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 		d.Subject = replySubject(m.Subject)
 		d.InReplyTo = api.MessageID(m.ID)
 	}
-	q := &quoter{b: s.b, account: a.ID, forward: forward, attribution: attribution}
+	q := &quoter{b: s.b, account: a.ID, source: src.ID, forward: forward, attribution: attribution}
 	res, err := q.quote(ctx, m)
 	if err != nil {
 		return nil, err
@@ -226,6 +272,21 @@ func (s *draftService) Create(ctx context.Context, p api.DraftCreateParams) (*ap
 	d.HTMLBody, d.TextBody = res.html, res.text
 	d.Attachments = toAPIAttachments(res.atts)
 	return &api.DraftCreateResult{Draft: d, Quoted: res.form, Blocked: res.blocked, Skipped: res.skipped}, nil
+}
+
+// modeCapability is the capability a draft.create mode needs of the
+// account (Account.Capabilities).
+func modeCapability(m api.ComposeMode) api.AccountCapability {
+	switch m {
+	case api.ComposeReply:
+		return api.CapabilityReply
+	case api.ComposeReplyAll:
+		return api.CapabilityReplyAll
+	case api.ComposeForward:
+		return api.CapabilityForward
+	default:
+		return api.CapabilityCompose
+	}
 }
 
 func attachmentIDs(atts []api.DraftAttachment) []string {

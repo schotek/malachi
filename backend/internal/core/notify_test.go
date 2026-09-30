@@ -98,6 +98,11 @@ func (r *recorder) AccountsChanged(api.AccountsChangedNotification) {
 	r.events = append(r.events, "accountsChanged")
 	r.mu.Unlock()
 }
+func (r *recorder) MessagesChanged(n api.MessagesChangedNotification) {
+	r.mu.Lock()
+	r.events = append(r.events, "messagesChanged:"+string(n.AccountID))
+	r.mu.Unlock()
+}
 
 func (r *recorder) snapshot() ([]api.SyncState, []string) {
 	r.mu.Lock()
@@ -295,10 +300,11 @@ func TestCoalescerPassesOtherEventsInOrder(t *testing.T) {
 	c.NewMessage(api.NewMessageNotification{AccountID: "a", Message: api.MessageSummary{ID: "m_1"}})
 	c.AuthRequired(api.AuthRequiredNotification{AccountID: "a", Reason: api.CodeAuthFailed})
 	c.AccountsChanged(api.AccountsChangedNotification{})
+	c.MessagesChanged(api.MessagesChangedNotification{AccountID: "b", FolderIDs: []api.FolderID{"f_1"}})
 	c.NewMessage(api.NewMessageNotification{AccountID: "a", Message: api.MessageSummary{ID: "m_2"}})
-	waitFor(t, "4 events", func() bool { _, e := r.snapshot(); return len(e) >= 4 })
+	waitFor(t, "5 events", func() bool { _, e := r.snapshot(); return len(e) >= 5 })
 	_, events := r.snapshot()
-	want := []string{"newMessage:m_1", "authRequired:a", "accountsChanged", "newMessage:m_2"}
+	want := []string{"newMessage:m_1", "authRequired:a", "accountsChanged", "messagesChanged:b", "newMessage:m_2"}
 	for i, w := range want {
 		if events[i] != w {
 			t.Fatalf("events = %v, want %v", events, want)
@@ -314,15 +320,17 @@ func TestSyncNotifierIsNilSafeAndForwards(t *testing.T) {
 	n.SyncState(api.SyncStateNotification{State: api.SyncState{AccountID: "a", Status: api.SyncSyncing}})
 	n.AuthRequired(api.AuthRequiredNotification{AccountID: "a"})
 	n.AccountsChanged(api.AccountsChangedNotification{})
+	n.MessagesChanged(api.MessagesChangedNotification{AccountID: "a"})
 	settle()
 
 	r := &recorder{}
 	b.SetNotifier(r)
 	n.NewMessage(api.NewMessageNotification{AccountID: "a", Message: api.MessageSummary{ID: "m_1"}})
 	n.SyncState(api.SyncStateNotification{State: api.SyncState{AccountID: "a", Status: api.SyncIdle}})
-	waitFor(t, "forwarded events", func() bool { _, e := r.snapshot(); return len(e) >= 2 })
+	n.MessagesChanged(api.MessagesChangedNotification{AccountID: "a"})
+	waitFor(t, "forwarded events", func() bool { _, e := r.snapshot(); return len(e) >= 3 })
 	_, events := r.snapshot()
-	if events[0] != "newMessage:m_1" || events[1] != "syncState:a" {
+	if events[0] != "newMessage:m_1" || events[1] != "syncState:a" || events[2] != "messagesChanged:a" {
 		t.Fatalf("events = %v", events)
 	}
 }

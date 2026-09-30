@@ -4,9 +4,12 @@
 package window
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -105,10 +108,27 @@ func membersFromListing(t api.ThreadSummary) *threadMembers {
 }
 
 // sameShape reports whether a conversation's listing has not changed in
-// what would invalidate its fetched members.
+// what would invalidate its fetched members. That includes the issue of a
+// Jira conversation: its status, assignee or priority can move without a
+// new member (the account shows no events), and every member carries it.
 func sameShape(a, b api.ThreadSummary) bool {
 	return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount &&
-		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID
+		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID &&
+		reflect.DeepEqual(a.Issue, b.Issue)
+}
+
+// forgetMembers forgets the fetched folder members of conversation tid:
+// what the listing tells of them takes their place, a new record that the
+// next ensureMembers asks thread.get for (the daemon rebuilt the
+// conversation's messages, notify.messagesChanged).
+func (m *mailModel) forgetMembers(tid api.ThreadID) {
+	i, ok := m.tindex[tid]
+	if !ok {
+		return
+	}
+	m.members[tid] = membersFromListing(m.threads[i])
+	m.reindexMembers()
+	m.rebuildRows()
 }
 
 // appendThreads adds a further page and returns how many rows it added.
@@ -230,7 +250,9 @@ func (m *mailModel) collapseLoading() {
 // reading stays a row); an unlisted one is added at the top when the
 // filter would list it. The filter is not applied to a listed
 // conversation, the same policy as matchesFilter. false means the message
-// carries no thread id and the list has to be loaded again.
+// carries no thread id and the list has to be loaded again. A message of
+// an issue brings the issue as it is now, and an event of it never counts
+// as unread (countsUnread).
 func (m *mailModel) applyNewMessage(s api.MessageSummary, f api.MessageFilter, selected listKey) bool {
 	if s.ThreadID == "" {
 		return false
@@ -250,8 +272,12 @@ func (m *mailModel) applyNewMessage(s api.MessageSummary, f api.MessageFilter, s
 			Flags: append([]api.Flag(nil), s.Flags...), HasAttachments: s.HasAttachments,
 			FolderIDs: []api.FolderID{s.FolderID},
 		}
-		if !hasFlag(s.Flags, api.FlagSeen) {
+		if countsUnread(s) {
 			t.UnreadCount = 1
+		}
+		if s.Issue != nil {
+			info := s.Issue.IssueInfo
+			t.Issue = &info
 		}
 		m.threads = append([]api.ThreadSummary{t}, m.threads...)
 		if m.members == nil {
@@ -280,8 +306,14 @@ func (m *mailModel) applyNewMessage(s api.MessageSummary, f api.MessageFilter, s
 	}
 	m.memberOf[s.ID] = t.ID
 	t.MessageCount++
-	if !hasFlag(s.Flags, api.FlagSeen) {
+	if countsUnread(s) {
 		t.UnreadCount++
+	}
+	// A message of an issue brings the issue as it is now: its status may
+	// have moved.
+	if s.Issue != nil {
+		info := s.Issue.IssueInfo
+		t.Issue = &info
 	}
 	if !s.Date.Before(t.LatestDate) {
 		t.LatestDate = s.Date
@@ -686,9 +718,11 @@ func (m *mailModel) setOutbox(id api.MessageID, o *api.OutboxInfo) {
 	}
 }
 
-// summaryThread projects a conversation onto what its row displays.
+// summaryThread projects a conversation onto what its row displays; a
+// conversation of a Jira account is one issue (jira.ThreadRowIssue).
 func summaryThread(t api.ThreadSummary, expanded, loading bool) widget.Thread {
 	return widget.Thread{
+		Issue:          jira.ThreadRowIssue(t, i18n.Tr),
 		Participants:   t.Participants,
 		Subject:        t.Subject,
 		Snippet:        t.Snippet,

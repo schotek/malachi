@@ -1,0 +1,110 @@
+{
+ "id": "10100",
+ "key": "ITSD-1",
+ "fields": {
+  "status": {
+   "id": "3",
+   "name": "In Progress"
+  }
+ },
+ "changelog": {
+  "startAt": 0,
+  "maxResults": 7,
+  "total": 7,
+  "histories": [
+   {
+    "id": "40001",
+    "author": {
+     "key": "JIRAUSER10100",
+     "displayName": "Jana Dvořáková"
+    },
+    "created": "2026-09-01T09:00:00.000+0200",
+    "items": [
+     {
+      "field": "status",
+      "fieldtype": "jira",
+      "from": "1",
+      "fromString": "To Do",
+      "to": "3",
+      "toString": "In Progress"
+     },
+     {
+      "field": "summary",
+      "fieldtype": "jira",
+      "fromString": "old",
+      "toString": "new"
+     },
+     {
+      "field": "Status",
+      "fieldtype": "custom",
+      "fromString": "A",
+      "toString": "B"
+     }
+    ]
+   },
+   {
+    "id": "40002",
+    "author": {
+     "key": "JIRAUSER10101",
+     "displayName": "Petr Svoboda"
+    },
+    "created": "2026-09-01T08:00:00.000+0200",
+    "items": [
+     {
+      "field": "assignee",
+      "fieldtype": "jira",
+      "from": null,
+      "fromString": null,
+      "to": "JIRAUSER10101",
+      "toString": "Petr Svoboda"
+     }
+    ]
+   },
+   {
+    "id": "40003",
+    "created": "2026-09-01T10:00:00.000+0200",
+    "items": [
+     {
+      "field": "labels",
+      "fieldtype": "jira",
+      "toString": "x"
+     }
+    ]
+   },
+   {
+    "id": "40002",
+    "created": "2026-09-02T10:00:00.000+0200",
+    "items": [
+     {
+      "field": "status",
+      "toString": "duplicate id"
+     }
+    ]
+   },
+   {
+    "created": "2026-09-02T10:00:00.000+0200",
+    "items": [
+     {
+      "field": "status",
+      "toString": "no id"
+     }
+    ]
+   },
+   {
+    "id": "40006",
+    "created": "2026-09-02T11:00:00.000+0200",
+    "items": "broken"
+   },
+   {
+    "id": "40007",
+    "created": "2026-09-02T12:00:00.000+0200",
+    "items": [
+     {
+      "field": "Assignee",
+      "toString": "Jana\u202e Dvořáková"
+     }
+    ]
+   }
+  ]
+ }
+}

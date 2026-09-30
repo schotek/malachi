@@ -172,6 +172,13 @@ backend/
                       accounts, sendMail delivery (probe.go: mailbox test)
   internal/imap       IMAP client + sync supervisor, one syncer per enabled
                       account (probe.go: connection test)
+  internal/jira       Jira client (Cloud REST v3, Data Center REST v2) + sync
+                      supervisor for issue-tracker accounts: issues read as
+                      threads of synthesised RFC 5322 messages, comments
+                      posted from the outbox, notification mail matched
+                      (§3.6; probe.go: site detection, sign-in test, the
+                      space list); jira/botclean cleans comments a bot
+                      relayed, jira/jiratest is the fake site of the tests
   internal/ingest     what of a downloaded message is stored: the attachment
                       policy, the skeleton and its check, the commit; used by
                       both syncers and message.download (§3.2)
@@ -187,8 +194,11 @@ backend/
   internal/sanitize   HTML sanitisation (security-critical)
   cmd/malachi-mcp     MCP (stdio) bridge for AI agents: a JSON-RPC client of
                       the socket with a flag-gated tool catalogue (docs/mcp.md)
-  testdata/mime       MIME samples, including malformed ones
+  testdata/mime       MIME samples, including malformed ones (also the
+                      jira-notification-*.eml samples of §3.6)
   testdata/autoconfig Thunderbird autoconfig samples, including hostile ones
+  testdata/jira       rendered Jira HTML, bot comments and REST pages,
+                      including hostile and malformed ones
 ```
 
 Dependency direction: `cmd` → `rpc` → (`api` + service implementations);
@@ -235,7 +245,15 @@ finds them (§3.4). `messages_fts` (0013) is the full-text index behind
 search, with `search_docs` mapping its rowids to message ids (§3.5).
 `message_files` (0014) accounts for the raw files, and the same migration
 gives `messages` the columns of a message stored without its large
-attachments (below).
+attachments (below). Migration 0015 is the issue-tracker accounts (§3.6):
+`accounts` rebuilt with a `realm` column, so that an address is unique
+per realm (`""` for mailboxes, the site for a `jira` account, which may
+therefore carry the address of the user's mailbox), `folders.virtual`
+(the fixed views), `messages.hidden` (the display filter of a
+notification mail), the `issues`, `issue_items` and `issue_spaces` tables
+the synthesised rows are built from, `issue_mail_links` (a notification
+mail to its issue), and the columns `drafts` and `outbox` need for a
+comment (`comment_visibility`, `issue_id`).
 
 A raw message is `<account>/<id>`, the bytes as received, or
 `<account>/<id>.zst`, the same bytes as one zstd frame
@@ -767,6 +785,249 @@ or counting every match of a two-letter prefix, made a search of a large
 store several times slower. Folder and account are joined at query time,
 so a move needs no reindexing; Trash and Junk are left out unless a folder
 is named. The query is never logged.
+
+### 3.6 Issue-tracker accounts (`kind: jira`)
+
+A Jira site is read by `internal/jira` as a third kind of account beside
+IMAP and Graph (`api.md` §4.1; decided 2026-09-29, §7): the selected
+spaces (projects) and three fixed views are its folders, every issue is a
+thread, and the description, each comment and each change of the status
+or the assignee is a message of it. Nothing of the sync engine, the
+store, threading, search, the reading pane or the MCP bridge knows the
+site: the syncer turns what the site says into RFC 5322 messages and
+stores them through `internal/ingest` like mail, and the issue tables of
+migration 0015 (§3.1) only decorate them (`MessageSummary.issue`,
+`ThreadSummary.issue`, `Folder.virtual`). `internal/core` routes the
+lifecycle by kind through the same table as Graph (`kindSupervisor` in
+`core/dispatch.go`, one entry per kind; the outbox likewise), so
+`sync.status`, the notifications and the account hooks of §3.2 are the
+same. What differs:
+
+- **Token.** Jira Cloud takes the Atlassian account's e-mail (`login`)
+  and an API token as HTTP Basic authentication, Data Center a personal
+  access token as a Bearer token; both are the account's
+  `credentials.password` in the keyring (`auth.KeyPassword`), asked for
+  once per syncer and dropped when the site refuses it. A scoped Cloud
+  token works only through the Atlassian API gateway
+  (`https://api.atlassian.com/ex/jira/<cloudId>`): a request the site
+  answers with 401 is tried there once, and the route that worked is
+  kept for the process. The token goes to the site's origin and to that
+  gateway only: redirects are followed by the client itself, never to
+  another host with the credentials and never from https to http
+  (`client.go`); `account.test` and `account.listSpaces` use a stored
+  token only for the site it was stored for (`accounts_jira.go`). No
+  OAuth (§7). A refused token is `authRequired` with `notify.authRequired`
+  once, retried after 30 minutes unless the account is updated.
+- **Identity.** An issue's rows share `thread_id = "jira:" + issue id`
+  (`store.IssueThreadID`, outside the linker's `t_` ids, so
+  `References` never merge two issues) and its space's folder
+  (`folders.mailbox = "space:" + id`); an item's copies share
+  `messages.remote_id` (`i:<issue>`, `c:<comment>`, `h:<history>`) and
+  the Message-ID. `issues` holds the issue as last seen (key, summary,
+  status, assignee, reporter, watching, `updated` from the site and
+  `synced_updated` for what the rows reflect, the `render_key` they were
+  built with, the views they are in), `issue_items` the items, and the
+  syncer never re-upserts a known row (`UpsertMessages` would reset the
+  flags, which are the only local state). The user's own site identity
+  (`/myself`) is `meta` `issues.me.<account>`.
+- **Synthesis** (`synth.go`, `images.go`, `events.go`). A message is a
+  function of what the site says and of the account's rendering settings
+  alone: no clock, no random boundary, so a rebuild is byte for byte the
+  stored message while the site says the same, and `message.download`
+  (`fetch.go`, `rebuildsMIME` in `core/download.go`, `Strict` off as for
+  Graph) can rebuild it from the site; a `X-Malachi-Revision` header
+  hashes what it was built from, with `synthVersion` (2). Senders are
+  `<user id>@users.jira.invalid` (a hash of the id when it is no plain
+  local part, of the name for a comment a bot relayed), Message-IDs
+  `issue.<id>@<site host>.malachi.invalid`, `comment.<cid>.issue.<id>@…`
+  and `history.<hid>.issue.<id>@…`, comments and events in reply to the
+  description, the subject `KEY: Summary` on every row (retitled on a
+  rename). The site's rendered HTML stays hostile input for the
+  sanitiser at display; synthesis only makes relative links absolute and
+  embeds the pictures the site itself serves as `cid:` parts (downloaded
+  with the account's credentials, sniffed, never SVG, at most 32 of at
+  most 16 MiB each within one 16 MiB message budget; over that a picture
+  stays a link); the issue's files are attachment parts of the item
+  whose HTML names them, else of the description. Events are
+  `text/plain`, one language-neutral line per change (`To Do → In
+  Progress`, `—` for an empty side); clients build the sentence from
+  `changes`. Every message goes through `internal/ingest` (§3.2) under
+  the attachment policy like mail.
+- **Cycle** (`sync.go`, `issues.go`; one goroutine per account). The
+  queued flag operations first (`ops.go`: a flag set on one copy of an
+  item is given to every copy, then dropped; moves and deletions the
+  account cannot ask for); then the user (daily) and the site's spaces
+  (every 6 h, `issue_spaces`) and the folders from the configuration
+  (`folders.go`: the views minus `disabledFolders`, then the spaces);
+  then the changed issues: a space folder never enumerated for the
+  account's window (a new account or space, a window that grew, a
+  `full` trigger) gets its window enumerated (`updated >= "-<days>d"`,
+  100 a page) plus the open issues assigned to the user whatever their
+  age (at most 500); the others are searched for what changed since the
+  last pass started, 5 minutes earlier (`updated >= "-<minutes>m"`:
+  relative JQL, so the profile's time zone never matters), plus what the
+  store owes a refresh (an interrupted pass, other rendering settings,
+  the queued keys of triggers and deliveries) fetched by id (Cloud
+  `bulkfetch` and `reconcileIssues` against the search index's lag, DC
+  `id in (…)`). Each changed issue is materialised, four at a time:
+  comments (`renderedBody`, the newest 500) and, unless `hideEvents`, the
+  changelog (status and assignee only); items that vanished and copies
+  in folders the issue left deleted; a new row only where none is, with
+  the flags of an existing copy, else read when the item is the user's
+  own or an event, or created more than three days before the first
+  enumeration of its space, or before the last pass; bodies built and
+  stored for new rows and changed items (an edited comment keeps its
+  flags, `edited` set); envelopes follow renames and re-attributions;
+  the item rows, then last the issue row with `synced_updated`, so an
+  interrupted materialisation is completed by the next pass. A new item
+  of someone else is announced once (`notify.newMessage` on the space
+  folder's row), never on a first enumeration and never for an event.
+  Then the reconciliation (below), the retention, the folder counts,
+  the space folders' cursors (`last_sync_at` = the pass's start,
+  `delta_link` = `window:<days>`), an account-level `notify.syncState`
+  and, when rows changed in place, one `notify.messagesChanged`.
+- **Polling and timings.** Jira has no push a desktop can use, so a pass
+  runs every 60 s while the sync interval is not 0 (manual: on a trigger
+  only), and an issue trigger (`TriggerIssue`, from a notification mail
+  or a delivered comment) brings one forward, debounced 2 s and at most
+  30 early passes a minute. Throttling (429/503 with `Retry-After` or
+  `X-RateLimit-Reset`) is honoured per request up to a minute, then by
+  the syncer as a whole up to 15 minutes; failures back off from 5 s to
+  5 minutes (±20 %); at most 4 requests of an account are in flight (the
+  Cloud limiter counts per user), 60 s per request and 5 minutes per
+  picture, JSON answers capped at 32 MiB.
+- **Reconciliation and retention** (`reconcile.go`). The incremental
+  search sees what changed, not what went — a deleted issue, one moved
+  out of the selected spaces or (with `onlyMine`) no longer the user's,
+  and watching an issue changes nothing of its `updated`. Hourly, and on
+  a `full` pass, the syncer enumerates the ids in scope (the window, the
+  open issues assigned to the user, the watched ones; ids only, 1000 a
+  page) and compares: an id the store lacks, or whose watching differs,
+  is refreshed; a stored issue the enumeration should have named and
+  did not is fetched directly and deleted when gone, out of the
+  selected spaces or no longer the user's (unless a notification mail
+  named it), else refreshed. An enumeration that stopped at its cap
+  proves nothing. Retention, on every pass: an issue last updated before
+  the account's own window (`JiraConfig.offlineDays`, 0 = 30, at most
+  365; the `offlineDays` preference does not apply) plus a day's grace
+  is deleted with every row and file, unless it is open and assigned to
+  the user (at most 500 of those, the most recently updated).
+  `DeleteIssues` also shows the notification mail it hid again.
+- **Views** (`assignedToMe`, `watching`, `open`; `Folder.virtual`, role
+  `none`). Copies of the space folders' rows for the issues in view, with
+  ids of their own, the same `remote_id`, Message-ID and `thread_id`;
+  `open` is the statuses not in `closedStatuses`, else not of the
+  category done. They cover the selected spaces only. `thread.get`
+  without `folderId` and an account-wide `search.query` leave the
+  copies out, so a message is found once; a flag on any copy reaches
+  all. The storage they multiply is accepted (§7).
+- **Bot comments** (`jira/botclean`). An integration that mirrors
+  comments between two sites ("Issue Sync – Synchronization for Jira")
+  posts every remote comment under its own account with a header line
+  `KEY-1 Jana Dvořáková added comment - 10/06/26 14:39 GMT+2`. For a
+  comment whose author is one of `botNames` (compared after
+  normalisation, as whole words), the cleaner takes the author and the
+  time from that header, strips `authorPrefixes` from the name, removes
+  the header, and re-attributes the message (`from` the person, `via`
+  the bot); from every comment it removes the lines matching one of
+  `metadataFilters` (RE2, whole trimmed lines), never emptying a
+  comment. It works on the tree of the rendered HTML (`x/net/html`, at
+  most 1 MiB, bounded lines and depth; preformatted, table, list and
+  quoted blocks left whole; a panic returns the input) and is a cleaner,
+  not a boundary: its output goes through `internal/sanitize` at display
+  like any HTML. Time zones are a fixed table (CET, CEST, GMT±N,
+  numeric offsets; "CET" between the last Sundays of March and October
+  is read as +2, as the prototype's Europe/Prague did), no tz database.
+  The rules, `hideEvents` and `synthVersion` make the account's
+  `render_key`; a change rebuilds every stored item in place under its
+  ids on the next pass, which ends with `notify.messagesChanged`.
+- **Comments** (`core/comments.go`, `jira/deliver.go`, `comment.go`,
+  `adf.go`, `wiki.go`). The account's capabilities are `["comment",
+  "forward"]`: `draft.create` `reply` makes a comment draft of the
+  message's issue (`Draft.comment`: the issue, `visibility` `public` or,
+  on a service-desk issue, `internal`), local only (no Drafts folder on
+  the site, `draft_sync` is not armed), with no recipients, attachments
+  or quote; the other modes are `invalidArgument`. `message.send` queues
+  it into the account's outbox as a MIME message like mail (`From` the
+  user as the site names them, the issue's subject, `In-Reply-To` the
+  message, so the queued row sits in the issue's thread) with the issue
+  and the visibility in the `outbox` row, and the outbox worker hands
+  it to `Supervisor.Deliver`: the sanitised HTML (or the plain text) is
+  read into a small document model and written as the Atlassian
+  Document Format on Cloud or wiki markup on Data Center (paragraphs,
+  marks, links to http(s) and mailto only, lists, quotes, code, rules,
+  headings; pictures dropped, the user's text never read as markup; at
+  most 32 767 characters, on Cloud of the ADF's JSON) and posted with
+  two entity properties: `io.github.schotek.malachi.outbox` = `{"id":
+  <outbox message id>}`, by which a retry after an answer that never
+  came finds the comment the site took among its newest 50 instead of
+  posting it twice, and `sd.public.comment` for an internal comment.
+  After the post the issue is refreshed and waited for (30 s at most),
+  so the comment is normally in the thread, read and unannounced, when
+  the outbox row goes; no Sent copy, and known senders and collected
+  addresses learn nothing. Permanent failures (`smtp.SendError`
+  `Permanent`) are the site's 400, 403, 404, 413 and other 4xx and a body
+  that converts to nothing; a refused token defers the account's queue
+  with `notify.authRequired`. A message of the account is forwarded by
+  e-mail from a mail account: `draft.create` `forward` with
+  `messageAccountId` naming the account the message is in reads the
+  original and its remote parts there and copies the parts into the mail
+  account's attachment store (`core/drafts.go`).
+- **Notification mail** (`core/issue_mail.go`, `jira/notification.go`;
+  the threat model in [security.md §4.1](security.md#41-notification-mail-of-an-issue-tracker)).
+  The site tells its users of every change by e-mail, which arrives in
+  their mail accounts. When a mail syncer stores such a message (the
+  `Stored` hook every syncer calls with the message id and the
+  attachment policy, before the message is announced), core asks every
+  enabled `jira` account whose `notificationMail` is not `ignore`, in the
+  accounts' order, whether the message is the site's (every `From`
+  address matches `notificationSenders`: `addr@host` or `@host`, ASCII
+  case only, no display name; empty means `@<site host>` on Cloud and
+  nobody on Data Center) about an issue of a selected space (the first
+  key in brackets or parentheses within the subject's first 1024 bytes,
+  a scanner without regular expressions). The first that agrees links
+  the message to the issue (`issue_mail_links`, which also keeps the
+  issue under `onlyMine`, `issues.via_mail`) and refreshes it: a message
+  that arrived within 15 minutes whose issue is not stored is waited for
+  (5 s at most, 6 such waits a minute), so that a hidden message
+  produces no `notify.newMessage`; otherwise the refresh is triggered,
+  unless the message is older than the account's window or than what
+  is stored of the issue, or the issue was asked for within 10 minutes
+  and the site did not give it. With `hide`, and only once the issue is
+  stored in the account, the message is hidden: `messages.hidden`, a
+  display filter — left out of every listing, count, thread and search,
+  `message.get` still answers, nothing changes on the mail server and
+  no flag is set. The links are judged again (`settleIssueMail`) when
+  the account's configuration changes, it is enabled or paused, its
+  first pass with a configuration ends, and hourly in `core.Maintain`;
+  after a change the account's mail from its senders within its window
+  is scanned for notifications stored before (200 messages a step,
+  50 000 at most). A paused or removed account shows its mail again.
+  Every hide or show is `notify.messagesChanged` on the mail account,
+  gathered for 250 ms; `outboxAwareNotifier` drops `notify.newMessage`
+  of a hidden message.
+- **Local only.** Flags (the site has no read state), the copies in the
+  views, the hidden marks, comment drafts, and everything the account
+  stores: the site is written to by a posted comment alone. There are
+  no server drafts, no move, delete, archive or junk, no `message.send`
+  of mail, and `account.linked` never lists the account.
+- **Setup and the fake site.** `account.detectSite` asks the address
+  anonymously what it is (`/rest/api/2/serverInfo`, on Cloud also
+  `/_edge/tenant_info` for the cloud id; a Data Center site that refuses
+  anonymous requests is recognised by Jira's headers), normalising the
+  URL (`NormaliseSiteURL`: https unless typed http for Data Center, no
+  user info, a context path kept, a pasted page link cut before
+  `browse`/`secure`/`rest`); `account.listSpaces` signs in and lists the
+  user, the spaces (at most 1000, with an estimate of the issues in the
+  window when asked) and the statuses; `account.test` probes the sign-in.
+  Tests never reach the network: `jira/jiratest` is an in-memory site
+  behind `httptest` in either flavour (page tokens and `startAt`, the
+  gateway route, a media host that must not see the token, index lag,
+  Retry-After, revoked tokens), driven by the package's tests and core's
+  end-to-end ones (the MCP bridge's tests script their fake daemon
+  instead); `backend/testdata/jira` holds hostile rendered HTML, bot
+  comments and malformed REST pages, `testdata/mime` the
+  `jira-notification-*.eml` samples.
 
 ## 4. Security boundary: HTML
 
@@ -1430,3 +1691,141 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   (Windows code in `backend/`, rule 4); a stop file (polling); a kill
   alone (no clean shutdown, and a message killed between SMTP `DATA` and
   its bookkeeping may be sent twice at the next start).
+- Jira as an account kind: **decided** (2026-09-29) — a Jira site is a
+  third kind of account (`jira`, §3.6) whose syncer synthesises RFC 5322
+  messages from the issues (the description, each comment, each status
+  or assignee change) and stores them through `internal/ingest` like
+  mail, `thread_id = jira:<issue id>`; the issue tables of migration
+  0015 only decorate them (`MessageSummary.issue`, `ThreadSummary.issue`,
+  `Folder.virtual`). So the store, threading, search, the outbox, the
+  reading pane's locked views, notifications and the MCP bridge work on
+  issues without knowing the site, and a client adds a projection, not
+  a second kind of list. Rejected: a composed view over a store of the
+  site's own objects (a second implementation of every listing, count,
+  thread, search, notification and MCP tool, and a second renderer for
+  the site's HTML beside the sanitiser and the locked views); joining an
+  issue with the mail that discusses it (`References` never merge into a
+  `jira:` thread; a notification mail is linked to its issue instead).
+  Not included: Jira Service Management queues (a folder is a whole
+  space), assigning, saved JQL as folders, attachments in outgoing
+  comments. *Amended 2026-09-30:* a status transition is written too
+  (`issue.transitions` / `issue.transition`, capability `transition`):
+  only one the site lists for the user and only when it needs no screen
+  or required field (those are listed as `needsInput` and refused before
+  anything is posted); the issue is refreshed afterwards, so the change
+  shows as its event row. Asking for a transition's fields in the client
+  is not included.
+- Jira sign-in: **decided** (2026-09-29) — an API token on Cloud (HTTP
+  Basic with the Atlassian account's e-mail; a scoped token through the
+  API gateway `api.atlassian.com/ex/jira/<cloudId>`) and a personal
+  access token on Data Center, never OAuth 2.0 (3LO). Atlassian's
+  developer terms forbid a client secret in a public source tree, the
+  flow has no PKCE (ECO-283), and every user of one registered app
+  shares its rate-limit budget, so a built-in client of the Microsoft
+  kind cannot exist, and an API token is not subject to that shared
+  budget. The token is the account's password in the keyring and goes
+  to its site and that gateway only ([security.md §6](security.md#6-credentials)).
+  Deferred: OAuth with an organisation's own registration through
+  `oauth2flow` (a fixed redirect port, since Atlassian takes the
+  callback URL literally, and a client secret for a new provider).
+  Known cost: an organisation may disable API tokens or shorten their
+  life (a year at most since December 2024); the account then fails
+  with `authRequired` and the token is replaced in the account's
+  settings.
+- Jira polling and reconciliation: **decided** (2026-09-29) — a pass a
+  minute with a relative incremental JQL (`updated >= "-Nm"`), and an
+  hourly enumeration of the ids in scope (§3.6). Jira offers no push a
+  desktop can receive (webhooks need a public endpoint) and no deletion
+  feed: the incremental search cannot see a deleted issue, one moved out
+  of scope, or a change of watching, so the enumeration is the only way
+  to find them, and it is bounded (ids only, 1000 a page, nothing
+  concluded from one that stopped at its cap). Rejected: `updated` in
+  absolute time (the profile's time zone shifts it); a full enumeration
+  every pass (the rate limit); Retry-After ignored beyond a request (the
+  syncer backs off as a whole).
+- The views as copies: **decided** (2026-09-29) — the fixed views
+  (assigned to me, watching, open) are folders of copied `messages` rows
+  that share `remote_id`, Message-ID and `thread_id` with the space
+  folder's, not a query at listing time. The store has no cross-folder
+  identity (the reason Gmail's Important and Starred are not listed
+  either), and a copy keeps every listing, count, flag, thread and
+  notification path as it is; the multiplied storage is accepted, the
+  copies are left out of account-wide `thread.get` and `search.query`,
+  and a flag on one copy reaches all. Rejected: a saved search per view
+  (a second listing path in every client); labels (the store's model).
+- Notification mail of the site: **decided** (2026-09-29, the user's
+  decision; the study advised a later phase) — a notification e-mail of
+  the site in a mail account refreshes its issue at once (`sync`, the
+  default) and may be hidden (`hide`, opt-in), only when its sender is
+  the site's, its subject names an issue of a selected space and the
+  issue is stored in the account ([security.md §4.1](security.md#41-notification-mail-of-an-issue-tracker)).
+  Hiding is a display filter in the local store, never a move, a
+  deletion or a flag on the mail server: the message stays where the
+  user's other clients see it and is shown again when the account no
+  longer covers it. Rejected: hiding by default; hiding on the sender
+  alone (a forged message could hide mail, and the issue is where the
+  user reads what the mail said); filing the mail on the server.
+- Account uniqueness per realm: **decided** (2026-09-29) — `accounts`
+  rebuilt (0015) with `realm`, the site for a `jira` account and `""`
+  for mailboxes, unique on (email, realm): the user's Atlassian login is
+  normally the address of their mailbox, which the inline `UNIQUE` of
+  0004 refused. Rejected: a synthetic address for the account (the
+  address is what a comment's `From` and the wizard show); dropping the
+  constraint (two mailboxes with one address would double every
+  notification); a key other than the site (an account per site is what
+  a token is for).
+- Data Center: **decided** (2026-09-29, the user's decision; the study
+  advised Cloud only) — Data Center and Server are supported in full
+  (REST v2, `startAt` paging, `expand=changelog`, wiki markup for
+  comments, a context path, a site that refuses anonymous requests),
+  behind one `Remote` interface both flavours implement. It is verified
+  by the fake site only: no Data Center instance is available, and the
+  manual tests run against a production Cloud site.
+- macOS first for Jira: **decided** (2026-09-29) — the order of
+  [macos-port.md §10](macos-port.md#10-adding-a-feature-keeping-the-parity)
+  (backend, GTK, then the mirrors) is reversed for the Jira accounts and
+  the conversation view: the pure UI logic is written first as a Go
+  reference in `ui/internal/jira`, `ui/internal/capabilities` and
+  `ui/internal/conversation` (tested on the Mac, which cannot build
+  GTK), ported 1:1 to `MalachiCore`, and the GTK widgets and the Windows
+  client follow; the msgids are in `po/` already (appended by hand,
+  `make po` renumbers them), the Windows ones listed in
+  `windows/parity-exclusions.txt`, and the Swift functions without a Go
+  mirror are marked "Swift-first" for the port. The user's Jira lives on
+  the Mac. The GTK UI followed (2026-09-30): the Go reference used as it
+  is through `i18n.Tr`, the Swift-first functions mirrored in
+  `ui/internal/window`, the assistant in `ui/internal/accountwizard`
+  (`jira.go`, `jira_flow.go`), the settings in `ui/internal/jiraaccount`,
+  the comment mode in `ui/internal/compose`. The Windows client followed
+  the same day ([windows-port.md §11.7](windows-port.md#117-jira-accounts-and-the-conversation-view)),
+  a port of the Swift checked against the GTK behaviour.
+- Conversation view: **decided** (2026-09-29) — selecting a folded
+  conversation row (two or more members in the folder; a Jira folder is
+  always grouped) shows every member stacked in the reading pane as
+  native cards on a timeline (at first oldest first and scrolled to the
+  newest; the order of today is below): each HTML body in a locked web view of its own, sized to
+  its document by a script of the app in the view's own world
+  (`macos-port.md` §5), never one composed document. The sanitiser
+  keeps classes, ids and `<style>` selectors, so in one document a
+  message's CSS could hide, restyle or forge the headers of the others,
+  and without JavaScript there is no isolation to prevent it; in a card
+  the headers are native text and the body one sanitiser output. Only
+  the newest member that is not an event is marked read; a card is
+  cheap (a body is fetched near the viewport, at most eight web views
+  live). Rejected: one document with the cards' headers in it; the
+  members expanded in the list instead (the GTK model, kept for member
+  rows). The GTK port (2026-09-30) measures with a script in an isolated
+  world: WebKitGTK cannot switch content script off alone, so a card's
+  view has the JavaScript engine on with script markup off, which the CSP
+  and the sanitiser back ([security.md §3.2](security.md#32-defences));
+  a snapshot of the document was rejected, since a long newsletter would
+  take hundreds of megabytes to measure. The GTK pane orders the
+  conversation as Jira shows an issue, opened at its top: what opened it
+  (the description, or the first message) folded to its header while
+  more follows, then the rest newest first (the user's decision,
+  2026-09-30: oldest first scrolled to the newest left the newest cut
+  off while the cards above it grew); the macOS client shows the same
+  order since that day (`ConversationLayout.displayOrder`), and the
+  model keeps the oldest first in both. Open: the Windows port, and a
+  card's page under a dark appearance (the document keeps its light
+  background).

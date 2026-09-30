@@ -13,6 +13,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -457,42 +458,45 @@ func (w *Window) scheduleMarkRead(id api.MessageID) {
 }
 
 // setMessageActionsSensitive enables the per-message header buttons and
-// win.* actions for the selected row: archive and junk only when the
-// account has such a folder and the message is not in it already, mark
-// read / unread according to the seen flag; the star button shows the
-// flagged state. A conversation row is read when every member is, flagged
-// when any is. An outbox message keeps only reply, forward and trash
-// (which cancels the send; the daemon refuses flags and moves). With on
-// false (or nothing selected) everything is off.
+// win.* actions for the selected row by the rules of messageActionState
+// (action_rules.go): what the row allows, as far as its account offers it.
+// An action the account does not offer at all leaves the header bar (it
+// stays in the menus, disabled), and Reply is relabelled Comment on an
+// account that comments on issues instead (jira.ReplyLabel). With on false
+// (or nothing selected) everything is off, and what is shown follows the
+// listed folder's account.
 func (w *Window) setMessageActionsSensitive(on bool) {
 	row, ok := w.selectedRow()
-	on = on && ok
-	s := row.Message
-	outbox := on && w.model.inOutbox(s)
-	flagged := on && hasFlag(s.Flags, api.FlagFlagged)
-	seen := hasFlag(s.Flags, api.FlagSeen)
-	unread := !seen
-	if on && row.Thread {
-		flagged = hasFlag(row.Summary.Flags, api.FlagFlagged)
-		unread = row.Summary.UnreadCount > 0
-		seen = row.Summary.UnreadCount < row.Summary.MessageCount
+	st := w.model.messageActionState(row, on && ok)
+	w.presentReply(w.replyButton, st.comment)
+	for _, b := range []struct {
+		button             *gtk.Button
+		enabled, supported bool
+	}{
+		{w.replyButton, st.reply, st.supported.Reply},
+		{w.replyAllButton, st.replyAll, st.supported.ReplyAll},
+		{w.forwardButton, st.forward, st.supported.Forward},
+	} {
+		b.button.SetSensitive(b.enabled)
+		b.button.SetVisible(b.supported)
 	}
-	for _, b := range []*gtk.Button{w.replyButton, w.replyAllButton, w.forwardButton} {
-		b.SetSensitive(on)
-	}
-	w.starButton.SetSensitive(on && !outbox)
-	setStar(w.starButton, flagged)
-	w.trashButton.SetTooltipText(trashTooltip(outbox))
+	w.trashButton.SetVisible(st.supported.Trash)
+	w.archiveButton.SetVisible(st.supported.Archive)
+	w.junkButton.SetVisible(st.supported.Junk)
+	w.starButton.SetSensitive(st.on && st.star)
+	setStar(w.starButton, st.flagged)
+	w.trashButton.SetTooltipText(trashTooltip(st.outbox))
 
 	enabled := map[string]bool{
-		"trash":        on,
-		"archive":      on && !outbox && w.canMoveToRole(s, api.RoleArchive),
-		"junk":         on && !outbox && w.canMoveToRole(s, api.RoleJunk),
-		"mark-read":    on && !outbox && unread,
-		"mark-unread":  on && !outbox && seen,
-		"toggle-flag":  on && !outbox,
-		"load-images":  on,
-		"trust-sender": on && !outbox,
+		"trash":         st.trash,
+		"archive":       st.archive,
+		"junk":          st.junk,
+		"mark-read":     st.markRead,
+		"mark-unread":   st.markUnread,
+		"toggle-flag":   st.on && st.toggleFlag,
+		"load-images":   st.on && st.loadImages,
+		"trust-sender":  st.on && st.trustSender,
+		"change-status": st.changeStatus,
 	}
 	for name, e := range enabled {
 		if a := w.actions[name]; a != nil {
@@ -501,11 +505,24 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 	}
 }
 
+// presentReply labels a Reply button: "Comment" with its own icon on an
+// account that comments on issues, "Reply" otherwise (jira.ReplyLabel).
+func (w *Window) presentReply(b *gtk.Button, comment bool) {
+	icon := "mail-reply-sender-symbolic"
+	if comment {
+		icon = commentIcon
+	}
+	b.SetIconName(icon)
+	b.SetTooltipText(jira.ReplyLabel(comment, i18n.Tr))
+}
+
+// commentIcon is the icon of Reply when it writes a comment on an issue.
+const commentIcon = "chat-message-new-symbolic"
+
 // canMoveToRole reports whether s can go to its account's role folder:
 // the folder exists and s is not in it.
 func (w *Window) canMoveToRole(s api.MessageSummary, role api.FolderRole) bool {
-	f, ok := w.model.folderByRole(s.AccountID, role)
-	return ok && f.ID != s.FolderID
+	return w.model.canMoveToRole(s, role)
 }
 
 // call runs one RPC in the background. what is the translated action in

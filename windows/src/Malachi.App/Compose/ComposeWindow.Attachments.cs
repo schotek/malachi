@@ -47,7 +47,7 @@ public sealed partial class ComposeWindow
     // What the page takes itself arrives as ComposeWebView.FilesDropped.
     private void OnEditorDragOver(object sender, DragEventArgs e)
     {
-        if (e.DataView.Contains(StandardDataFormats.StorageItems))
+        if (!IsComment && e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = DataPackageOperation.Copy;
             e.Handled = true;
@@ -56,7 +56,7 @@ public sealed partial class ComposeWindow
 
     private void OnEditorDrop(object sender, DragEventArgs e)
     {
-        if (!e.DataView.Contains(StandardDataFormats.StorageItems))
+        if (IsComment || !e.DataView.Contains(StandardDataFormats.StorageItems))
         {
             return;
         }
@@ -91,9 +91,13 @@ public sealed partial class ComposeWindow
 
     private void OnInsertImageClick(object sender, RoutedEventArgs e) => _ = InsertImageAsync();
 
-    // compose.attach: files to attach, as many as chosen.
+    // compose.attach: files to attach, as many as chosen; not in comment mode.
     private async Task AttachFilesAsync()
     {
+        if (IsComment)
+        {
+            return;
+        }
         var picked = await PickAsync(L10n.T("Attach Files"), multiple: true, filter: null);
         if (picked is null || closing)
         {
@@ -103,9 +107,14 @@ public sealed partial class ComposeWindow
     }
 
     // compose.insert-image: one picture, imported inline and inserted at the
-    // caret as cid:<contentId>.
+    // caret as cid:<contentId>; in comment mode only where a comment keeps
+    // pictures.
     private async Task InsertImageAsync()
     {
+        if (IsComment && !Malachi.Core.IssueTrackers.Jira.CommentAllows(Malachi.Core.IssueTrackers.JiraFormat.Image))
+        {
+            return;
+        }
         var picked = await PickAsync(L10n.T("Insert Image"), multiple: false, filter: (L10n.T("Images"), ImagePatterns));
         if (picked is not { Count: > 0 } || closing)
         {

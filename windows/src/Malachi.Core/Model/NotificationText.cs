@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/NotificationText.swift
-// (notificationBodyMax, notificationText); GTK: ui/internal/window/notify.go
-// (notificationBodyMax, notificationText). As on macOS the title is capped
+// (notificationBodyMax, notificationText, issueNotificationLine); GTK:
+// ui/internal/window/notify.go (notificationBodyMax, notificationText,
+// issueNotificationLine). As on macOS the title is capped
 // like the body, where GTK caps only the body (docs/windows-port.md §3.1,
 // U7): a sender's display name is hostile input too.
 //
@@ -14,6 +15,7 @@ using System;
 using System.Text;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
@@ -32,8 +34,12 @@ public static class NotificationText
     /// <summary>
     /// The title and body of a new-message notification (notify.go
     /// <c>notificationText</c>): the sender's display name or "New message",
-    /// the subject or "(No subject)". Notifications are not markup, but the
-    /// text is still attacker-controlled: both lines are trimmed and capped.
+    /// the subject or "(No subject)". A message of an issue (a description or
+    /// a comment of a Jira account) says which issue under its author:
+    /// "KEY: summary" from <see cref="MessageSummary.Issue"/>
+    /// (<see cref="IssueNotificationLine"/>), not from the subject.
+    /// Notifications are not markup, but the text is still
+    /// attacker-controlled: both lines are trimmed and capped.
     /// Windows-only: both are cleaned first (<see cref="DisplayText.CleanTrimmed"/>),
     /// as everywhere else the app shows them: a control character would make
     /// the toast's XML invalid and Windows would drop the notification, and
@@ -51,12 +57,35 @@ public static class NotificationText
                 title = name;
             }
         }
-        var body = DisplayText.CleanTrimmed(n.Message.Subject);
+        var body = n.Message.Issue is { } issue ? IssueNotificationLine(issue) : "";
+        if (body.Length == 0)
+        {
+            body = DisplayText.CleanTrimmed(n.Message.Subject);
+        }
         if (body.Length == 0)
         {
             body = L10n.T("(No subject)");
         }
         return (title, Capped(body));
+    }
+
+    /// <summary>
+    /// The line of a notification that names an issue (notify.go
+    /// <c>issueNotificationLine</c>): its key and summary, "ITSD-42: The
+    /// printer is on fire", or whichever of the two it has; "" when it has
+    /// neither. Both are the site's texts, hostile like a subject: cleaned to
+    /// one line without invisible characters (<see cref="Jira.Clean"/>).
+    /// </summary>
+    public static string IssueNotificationLine(MessageIssue issue)
+    {
+        ArgumentNullException.ThrowIfNull(issue);
+        var key = Jira.Clean(issue.Info.Key);
+        var summary = Jira.Clean(issue.Info.Summary);
+        if (key.Length == 0)
+        {
+            return summary;
+        }
+        return summary.Length == 0 ? key : key + ": " + summary;
     }
 
     // s cut to NotificationBodyMax UTF-8 bytes on a character boundary, with

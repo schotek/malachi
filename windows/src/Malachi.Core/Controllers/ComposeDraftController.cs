@@ -3,8 +3,11 @@
 
 // Port of macos/Sources/MalachiCore/Controllers/ComposeDraftController.swift
 // (composeRichText, ComposeDraftController); GTK: ui/internal/compose/draft.go
-// (richText, autosaveDelay, editorChanged, markDirty, refreshStatus, build,
-// save, saveFailed, send, deleteDraft, discard, closeRequest, cleanup).
+// (richText, autosaveDelay, editorChanged, markDirty, refreshStatus,
+// draftStatus, build, save, saveFailed, commentSaveFailure, send, queue,
+// queuedText, deleteDraft, discard, closeRequest, cleanup, closesUnasked,
+// deletesOnClose). A comment on an issue (IComposeForm.IsComment) goes
+// through it too, with the differences of GTK's comment branches.
 //
 // The lifecycle of the draft behind a compose window, without the widgets:
 // the window is reached through IComposeForm, the daemon through the
@@ -42,6 +45,7 @@ using Malachi.Core.Compose;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Html;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Settings;
 using Malachi.Core.Text;
 using Malachi.Core.Transport;
@@ -158,17 +162,31 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// </summary>
     public Func<Task<DraftCloseAnswer>> SaveDraftQuestion { get; set; } = static () => Task.FromResult(DraftCloseAnswer.Cancel);
 
-    /// <summary>closeRequest's first branch: the window may go without a question.</summary>
-    public bool CanCloseWithoutAsking => Draft.Discard || (!Draft.Dirty && !Draft.Saving);
+    /// <summary>
+    /// closeRequest's first branch (draft.go <c>closesUnasked</c>): the
+    /// window may go without a question. A comment, which no Drafts folder
+    /// keeps, goes unasked only while there is nothing in it
+    /// (<see cref="Jira.SendProblem"/>), a save under way or not (its copy
+    /// goes too, <see cref="Cleanup"/>).
+    /// </summary>
+    public bool CanCloseWithoutAsking => Draft.Discard || (IsComment ? !HasCommentText : !Draft.Dirty && !Draft.Saving);
+
+    /// <summary>The window writes a comment (<see cref="IComposeForm.IsComment"/>).</summary>
+    public bool IsComment => Form?.IsComment ?? false;
+
+    // The comment holds more than white space and invisible characters (the
+    // editor's last reported text).
+    private bool HasCommentText => Jira.SendProblem(Form?.EditorText() ?? "").Length == 0;
 
     /// <summary>
     /// The original a reply or forward refers to (compose.go <c>newWindow</c>:
-    /// <c>Params.InReplyTo</c> / <c>Params.Forwarding</c>).
+    /// <c>Params.InReplyTo</c> / <c>Params.Forwarding</c>), and for a comment
+    /// the issue it goes to (<see cref="Compose.ComposeParams.Comment"/>).
     /// </summary>
-    public void SetOriginal(MessageId? inReplyTo, MessageId? forwarding)
+    public void SetOriginal(MessageId? inReplyTo, MessageId? forwarding, DraftComment? comment = null)
     {
         scope.VerifyAccess();
-        Draft = Draft with { InReplyTo = inReplyTo, Forwarding = forwarding };
+        Draft = Draft with { InReplyTo = inReplyTo, Forwarding = forwarding, Comment = comment };
     }
 
     /// <summary>
@@ -294,6 +312,12 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             form.SetStatus(L10n.T("Sending…"));
         }
+        else if (form.IsComment)
+        {
+            // A comment is saved only against a crash, not as a draft the
+            // user keeps: nothing to say about it (draft.go draftStatus).
+            form.SetStatus("");
+        }
         else if (d.Saving)
         {
             form.SetStatus(L10n.T("Saving draft…"));
@@ -348,6 +372,12 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             d = d with { HtmlBody = form.EditorHtml() };
         }
+        // A comment has no recipients; of it draft.save reads only the
+        // visibility, and the issue goes back as it came.
+        if (form.IsComment && Draft.Comment is { } comment)
+        {
+            d = d with { Comment = comment with { Visibility = form.CommentVisibility } };
+        }
         // In draft.save params only the id of an attachment is read.
         DraftAttachment[] attachments =
         [
@@ -387,13 +417,25 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
             {
                 return;
             }
-            scope.PerformPastClose(client, API.DraftSave, new DraftSaveParams { Draft = wire }, outcome =>
-            {
-                if (!Draft.Closed)
+            scope.PerformPastClose(
+                async () =>
                 {
-                    Saved(reason, outcome);
-                }
-            });
+                    var res = await client.CallAsync(API.DraftSave, new DraftSaveParams { Draft = wire }, API.DraftSave.Timeout, CancellationToken.None);
+                    if (Draft.Closed && wire.Comment is not null)
+                    {
+                        // The window went while a comment was being saved:
+                        // no Drafts folder keeps it, so the copy goes too.
+                        FireOnTheWayOut(API.DraftDelete, new DraftDeleteParams { AccountId = wire.AccountId, DraftId = res.DraftId });
+                    }
+                    return res;
+                },
+                outcome =>
+                {
+                    if (!Draft.Closed)
+                    {
+                        Saved(reason, outcome);
+                    }
+                });
         });
     }
 
@@ -473,6 +515,23 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
                     return;
             }
         }
+        if (IsComment)
+        {
+            // A comment is saved to be sent (Send), and otherwise only
+            // against a crash: a failed autosave says nothing and tries again
+            // (draft.go commentSaveFailure).
+            if (reason == SaveReason.Autosave)
+            {
+                LogCommentAutosaveFailed(logger, error);
+                if (autosave is null)
+                {
+                    MarkDirty();
+                }
+                return;
+            }
+            Form?.Toast(RpcErrorText.Text(L10n.T("Sending"), error));
+            return;
+        }
         var text = RpcErrorText.Text(L10n.T("Saving the draft"), error);
         if (reason == SaveReason.Autosave)
         {
@@ -494,7 +553,11 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
 
     // Sending
 
-    /// <summary>send validates, saves if needed and queues the message.</summary>
+    /// <summary>
+    /// send validates, saves if needed and queues the message. A comment has
+    /// no recipients; it needs text (<see cref="Jira.SendProblem"/>, checked
+    /// on the editor's current content).
+    /// </summary>
     public void Send()
     {
         scope.VerifyAccess();
@@ -502,20 +565,53 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return;
         }
-        var (to, cc, bcc, ok) = form.Recipients();
-        if (!ok)
+        var comment = form.IsComment;
+        if (!comment)
         {
-            form.Toast(L10n.T("Fix the highlighted recipients"));
-            return;
-        }
-        if (to.Count + cc.Count + bcc.Count == 0)
-        {
-            form.Toast(L10n.T("Add at least one recipient"));
-            return;
+            var (to, cc, bcc, ok) = form.Recipients();
+            if (!ok)
+            {
+                form.Toast(L10n.T("Fix the highlighted recipients"));
+                return;
+            }
+            if (to.Count + cc.Count + bcc.Count == 0)
+            {
+                form.Toast(L10n.T("Add at least one recipient"));
+                return;
+            }
         }
         Draft = Draft with { Sending = true };
         form.SetSendEnabled(false);
         RefreshStatus();
+        if (!comment)
+        {
+            Queue();
+            return;
+        }
+        form.FlushEditor(() =>
+        {
+            // Runs before the Changed of the same report (EditorChannel):
+            // what it reports is the content being sent, not an edit.
+            flushed.Record(form.EditorHtml());
+            if (Draft.Closed)
+            {
+                return;
+            }
+            var problem = Jira.SendProblem(form.EditorText());
+            if (problem.Length > 0)
+            {
+                form.Toast(problem);
+                SendFailed();
+                return;
+            }
+            Queue();
+        });
+    }
+
+    // send's second half (draft.go queue): the explicit save, then
+    // message.send; a failure gives Send back.
+    private void Queue()
+    {
         Save(SaveReason.Explicit, error =>
         {
             if (error is not null || Form is not { } current || Draft.DraftId is not { } draftId)
@@ -540,8 +636,9 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
                     SendFailed();
                     return;
                 }
+                var comment = IsComment;
                 Draft = Draft with { Discard = true };
-                Sent?.Invoke(this, L10n.T("Message queued for sending"));
+                Sent?.Invoke(this, comment ? Jira.CommentQueued() : L10n.T("Message queued for sending"));
                 Form?.CloseWindow();
             });
         });
@@ -630,13 +727,23 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// closeRequest keeps the window open while there are unsaved edits and
     /// asks what to do with them (<see cref="SaveDraftQuestion"/>). True when
     /// the window may close now (<see cref="Cleanup"/> has run); false when it
-    /// stays.
+    /// stays. A comment has no Save Draft: the question is whether to discard
+    /// it (<see cref="ConfirmDiscard"/>), and its saved copy goes too.
     /// </summary>
     public async Task<bool> CloseRequestAsync()
     {
         scope.VerifyAccess();
         if (CanCloseWithoutAsking)
         {
+            Cleanup();
+            return true;
+        }
+        if (IsComment)
+        {
+            if (!await ConfirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard")) || Draft.Closed)
+            {
+                return false;
+            }
             Cleanup();
             return true;
         }
@@ -688,6 +795,12 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         {
             return true;
         }
+        if (form.IsComment)
+        {
+            // No Drafts folder keeps a comment: Quit asks its question
+            // (Discard this message?) unless it is empty.
+            return !HasCommentText;
+        }
         if (!Draft.Dirty)
         {
             // Content the editor reports unchanged since its last report (or
@@ -734,7 +847,10 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
     /// cleanup runs when the window really closes: late replies are dropped,
     /// the autosave is disarmed, the inline pictures forgotten. Idempotent. A
     /// save whose outcome is still awaited (the close question's) is answered
-    /// with a cancellation so nobody waits for ever.
+    /// with a cancellation so nobody waits for ever. A comment's saved copy
+    /// goes with the window unless it was sent (draft.go
+    /// <c>deletesOnClose</c>): no Drafts folder keeps it, the autosave is
+    /// only against a crash.
     /// </summary>
     public void Cleanup()
     {
@@ -742,6 +858,10 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
         if (Draft.Closed)
         {
             return;
+        }
+        if (IsComment && !Draft.Discard)
+        {
+            DeleteDraft();
         }
         Draft = Draft with { Closed = true };
         CancelAutosave();
@@ -809,6 +929,9 @@ public sealed partial class ComposeDraftController : ObservableObject, IDisposab
             }
             return true;
         });
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "comment autosave failed")]
+    private static partial void LogCommentAutosaveFailed(ILogger logger, Exception error);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "autosave failed again")]
     private static partial void LogAutosaveFailedAgain(ILogger logger, Exception error);

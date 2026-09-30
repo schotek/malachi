@@ -1,0 +1,40 @@
+{
+ "startAt": 0,
+ "maxResults": 50,
+ "total": 7,
+ "isLast": true,
+ "values": [
+  {
+   "id": "10000",
+   "key": "ITSD",
+   "name": "IT Service Desk",
+   "projectTypeKey": "service_desk"
+  },
+  {
+   "id": "10001",
+   "key": "WEB",
+   "name": "Web\nstránky",
+   "projectTypeKey": "software"
+  },
+  {
+   "id": "10000",
+   "key": "DUP",
+   "name": "duplicate id"
+  },
+  {
+   "id": "10003",
+   "key": "1BAD",
+   "name": "bad key"
+  },
+  {
+   "id": "10004",
+   "key": "MOB",
+   "name": "Mobile \u202eeliboM",
+   "projectTypeKey": "SERVICE_DESK"
+  },
+  {
+   "key": "NOID"
+  },
+  "x"
+ ]
+}

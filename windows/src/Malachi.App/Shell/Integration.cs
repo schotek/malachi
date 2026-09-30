@@ -54,6 +54,13 @@ public sealed partial class Integration : IDisposable
         Cache = new MessageCache(state.Client, mainToast, logs.CreateLogger<MessageCache>());
         Actions = new ActionsController(Mailbox, List, Cache, state.Settings, mainToast, logs.CreateLogger<ActionsController>());
         Compose = new ComposeController(state.Client, state.Settings, logger: logs.CreateLogger<ComposeController>());
+        // The Change Status menus of every view (window.go w.issues): their
+        // toasts over the main window.
+        Issues = new IssueActionsController(state.Client, id => Mailbox.Model.Account(id), logs.CreateLogger<IssueActionsController>());
+        Issues.ToastRequested += (_, text) => mainToast(text);
+        // The conversation view of the reading pane (conversation_controller.go):
+        // it follows the list's members and holds the cards' entries.
+        Conversation = new ConversationController(List, Cache);
 
         WireConnection();
         WireNotifications();
@@ -82,6 +89,9 @@ public sealed partial class Integration : IDisposable
     /// <summary>The compose windows and what they share.</summary>
     public ComposeController Compose { get; }
 
+    /// <summary>The conversation the reading pane shows, and its cards' entries.</summary>
+    public ConversationController Conversation { get; }
+
     /// <summary>
     /// Wave 2 (E5): the compose window factory. Sets
     /// <see cref="ComposeController.MakeWindow"/> and the hooks that open
@@ -94,7 +104,15 @@ public sealed partial class Integration : IDisposable
         Compose.MakeWindow = makeWindow;
         state.Hooks.OpenCompose = Compose.Open;
         state.Hooks.ComposeNew = () => Compose.Open(new ComposeParams { Kind = ComposeKind.New });
+        // New Message needs an account that writes mail (main.go
+        // OnAccountsChanged, capabilities.CanComposeNew): a Jira account only
+        // comments. The accounts are the main window's.
+        state.Hooks.CanComposeNew = () => Core.Model.Capabilities.CanComposeNew(Mailbox.Model.Accounts);
+        Mailbox.AccountsLoaded += (_, _) => state.Hooks.NotifyChanged();
     }
+
+    /// <summary>The Change Status menus of Jira issues, shared by every view of the window.</summary>
+    public IssueActionsController Issues { get; }
 
     /// <summary>Stops the controllers' work; the daemon has been stopped by then.</summary>
     public void Dispose()
@@ -104,6 +122,8 @@ public sealed partial class Integration : IDisposable
             t.Dispose();
         }
         tokens.Clear();
+        Conversation.Dispose();
+        Issues.Dispose();
         Compose.Dispose();
         Cache.Dispose();
         List.Dispose();
@@ -138,6 +158,7 @@ public sealed partial class Integration : IDisposable
         tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
         tokens.Add(hub.AddSyncState(Mailbox.HandleSyncState));
         tokens.Add(hub.AddAuthRequired(Mailbox.HandleAuthRequired));
+        tokens.Add(hub.AddMessagesChanged(Mailbox.HandleMessagesChanged));
         tokens.Add(hub.AddAccountsChanged(() =>
         {
             Mailbox.HandleAccountsChanged();
@@ -151,6 +172,10 @@ public sealed partial class Integration : IDisposable
     private void WireMailbox()
     {
         Mailbox.ListTitleChanged += (_, heading) => mainWindow.ShowListHeading(heading);
+        // notify.go handleMessagesChanged: the cache lets go of the account's
+        // messages (the daemon rebuilt them in place) before anything shows
+        // them again.
+        Mailbox.MessagesChanged += (_, n) => Cache.Evict(n.AccountId);
     }
 
     // window.go 337-360 and 411-433: the main window's commands act on the

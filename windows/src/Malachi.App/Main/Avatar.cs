@@ -6,7 +6,10 @@
 // show-initials) and ui/internal/style's monochrome-avatars rule. A disc
 // with the gradient of the sender's colour class and the initials of the
 // name, or the person symbol at half the size without a name; the
-// monochrome variant is the text colour at 12 % with the initials at 80 %.
+// monochrome variant is the text colour at 12 % with the initials at 80 %;
+// the accent variant (the user's own message on the conversation's
+// timeline, conversation_rows.go avatar.conversation-own) is the accent
+// fill of the theme with the text on it, over either.
 // The palette and the initials are Core's (AvatarPalette). Nothing is
 // fetched; the name is hostile input, only ever set as a TextBlock's text.
 // Decoration: the row's name says who wrote, so a screen reader skips it.
@@ -38,6 +41,12 @@ public sealed partial class Avatar : UserControl
     /// <summary>The neutral variant.</summary>
     public static readonly DependencyProperty MonochromeProperty = DependencyProperty.Register(
         nameof(Monochrome), typeof(bool), typeof(Avatar), new PropertyMetadata(false, (d, _) => ((Avatar)d).Redraw()));
+
+    /// <summary>The accent variant: the user's own message (convRail.Accent).</summary>
+    public static readonly DependencyProperty AccentProperty = DependencyProperty.Register(
+        nameof(Accent), typeof(bool), typeof(Avatar), new PropertyMetadata(false, (d, _) => ((Avatar)d).Redraw()));
+
+    private static readonly Windows.UI.ViewManagement.UISettings SystemColours = new();
 
     private readonly Ellipse disc = new();
     private readonly TextBlock initials = new()
@@ -94,6 +103,13 @@ public sealed partial class Avatar : UserControl
         set => SetValue(MonochromeProperty, value);
     }
 
+    /// <summary>The accent variant, over <see cref="Monochrome"/>.</summary>
+    public bool Accent
+    {
+        get => (bool)GetValue(AccentProperty);
+        set => SetValue(AccentProperty, value);
+    }
+
     private static Color Rgb(uint v) => Color.FromArgb(0xff, (byte)(v >> 16), (byte)(v >> 8), (byte)v);
 
     private void Redraw()
@@ -105,10 +121,21 @@ public sealed partial class Avatar : UserControl
         disc.Height = size;
         var text = Text ?? "";
         Brush foreground;
-        if (Monochrome)
+        var dark = ActualTheme == ElementTheme.Dark;
+        if (Accent)
+        {
+            // AccentFillColorDefault and TextOnAccentFillColorPrimary of the
+            // element's theme (@accent_bg_color, @accent_fg_color).
+            var accent = SystemColours.GetColorValue(dark
+                ? Windows.UI.ViewManagement.UIColorType.AccentLight2
+                : Windows.UI.ViewManagement.UIColorType.AccentDark1);
+            disc.Fill = new SolidColorBrush(accent);
+            foreground = new SolidColorBrush(dark ? Color.FromArgb(0xff, 0, 0, 0) : Color.FromArgb(0xff, 0xff, 0xff, 0xff));
+        }
+        else if (Monochrome)
         {
             // alpha(@window_fg_color, …): the text colour of the theme.
-            var fg = ActualTheme == ElementTheme.Dark ? Color.FromArgb(0xff, 0xff, 0xff, 0xff) : Color.FromArgb(0xff, 0, 0, 0);
+            var fg = dark ? Color.FromArgb(0xff, 0xff, 0xff, 0xff) : Color.FromArgb(0xff, 0, 0, 0);
             disc.Fill = new SolidColorBrush(fg) { Opacity = AvatarPalette.MonochromeFillOpacity };
             foreground = new SolidColorBrush(fg) { Opacity = AvatarPalette.MonochromeTextOpacity };
         }

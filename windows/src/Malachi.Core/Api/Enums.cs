@@ -108,6 +108,12 @@ public readonly record struct AccountKind(string Value) : IWireEnumeration<Accou
     /// <summary>Microsoft 365 / Outlook.com through the Graph API.</summary>
     public const string Graph = "graph";
 
+    /// <summary>
+    /// An issue tracker (Jira Cloud or Data Center): issues and their
+    /// comments as messages, spaces as folders; the account's <c>jira</c> block.
+    /// </summary>
+    public const string Jira = "jira";
+
     /// <summary>The value of a wire string.</summary>
     public static implicit operator AccountKind(string value) => new(value);
 
@@ -486,6 +492,198 @@ public readonly record struct ContactSource(string Value) : IWireEnumeration<Con
 
     /// <summary>The value of a wire string.</summary>
     public static implicit operator ContactSource(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>
+/// api.AccountCapability: what the user can do with an account and its
+/// messages (<see cref="Account.Capabilities"/>). Flags (seen, flagged) are
+/// always allowed; archive and junk also need the role folder.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<Capability>))]
+public readonly record struct Capability(string Value) : IWireEnumeration<Capability>
+{
+    /// <summary>Can be the From of a new message and the account a forward goes out of.</summary>
+    public const string Compose = "compose";
+
+    /// <summary>Its messages can be answered by e-mail.</summary>
+    public const string Reply = "reply";
+
+    /// <summary>… to all recipients.</summary>
+    public const string ReplyAll = "replyAll";
+
+    /// <summary>
+    /// Its messages can be forwarded; a jira message through a compose
+    /// account (<see cref="DraftCreateParams.MessageAccountId"/>).
+    /// </summary>
+    public const string Forward = "forward";
+
+    /// <summary>Reply creates a comment draft; the UI calls Reply "Comment".</summary>
+    public const string Comment = "comment";
+
+    /// <summary><c>message.move</c>.</summary>
+    public const string Move = "move";
+
+    /// <summary><c>message.delete</c>.</summary>
+    public const string Delete = "delete";
+
+    /// <summary>
+    /// The status of an issue can be changed (<c>issue.transitions</c>,
+    /// <c>issue.transition</c>): the Change Status menu.
+    /// </summary>
+    public const string Transition = "transition";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator Capability(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.JiraDeployment: where a Jira site runs.</summary>
+[JsonConverter(typeof(StringWireValueConverter<JiraDeployment>))]
+public readonly record struct JiraDeployment(string Value) : IWireEnumeration<JiraDeployment>
+{
+    /// <summary>Atlassian's cloud: REST v3, ADF, e-mail + API token (Basic).</summary>
+    public const string Cloud = "cloud";
+
+    /// <summary>Self-hosted Data Center: REST v2, wiki markup, personal access token (Bearer).</summary>
+    public const string Datacenter = "datacenter";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator JiraDeployment(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>
+/// api.VirtualFolder: a folder of a jira account computed over its spaces
+/// (<see cref="Folder.Virtual"/>); its role stays <c>none</c> and its name
+/// is an English fallback the UI replaces by the code.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<VirtualFolder>))]
+public readonly record struct VirtualFolder(string Value) : IWireEnumeration<VirtualFolder>
+{
+    /// <summary>Issues assigned to the user.</summary>
+    public const string AssignedToMe = "assignedToMe";
+
+    /// <summary>Issues the user watches.</summary>
+    public const string Watching = "watching";
+
+    /// <summary>Issues not in a closed status (<see cref="JiraConfig.ClosedStatuses"/>).</summary>
+    public const string Open = "open";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator VirtualFolder(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>
+/// api.NotificationMailMode: what a Jira notification mail in a mail
+/// account does. Absent (or empty) is <see cref="Sync"/>.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<NotificationMailMode>))]
+public readonly record struct NotificationMailMode(string Value) : IWireEnumeration<NotificationMailMode>
+{
+    /// <summary>The mail syncs its issue at once.</summary>
+    public const string Sync = "sync";
+
+    /// <summary><see cref="Sync"/>, and the mail is hidden in the mail account (a display filter).</summary>
+    public const string Hide = "hide";
+
+    /// <summary>Nothing.</summary>
+    public const string Ignore = "ignore";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator NotificationMailMode(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>
+/// api.IssueStatusCategory: the coarse class of an issue status. Empty
+/// when unknown; a client treats a value it does not know as empty.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<IssueStatusCategory>))]
+public readonly record struct IssueStatusCategory(string Value) : IWireEnumeration<IssueStatusCategory>
+{
+    /// <summary>To do.</summary>
+    public const string Todo = "todo";
+
+    /// <summary>In progress.</summary>
+    public const string InProgress = "inProgress";
+
+    /// <summary>Done.</summary>
+    public const string Done = "done";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator IssueStatusCategory(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.IssueItemKind: what part of an issue a message of a jira account is.</summary>
+[JsonConverter(typeof(StringWireValueConverter<IssueItemKind>))]
+public readonly record struct IssueItemKind(string Value) : IWireEnumeration<IssueItemKind>
+{
+    /// <summary>The issue itself, its description as the body.</summary>
+    public const string Description = "description";
+
+    /// <summary>A comment.</summary>
+    public const string Comment = "comment";
+
+    /// <summary>
+    /// A status or assignee change (<see cref="MessageIssue.Changes"/>);
+    /// stored seen, never notified, its body language-neutral.
+    /// </summary>
+    public const string Event = "event";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator IssueItemKind(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>api.CommentVisibility: who sees a comment of a service-desk request.</summary>
+[JsonConverter(typeof(StringWireValueConverter<CommentVisibility>))]
+public readonly record struct CommentVisibility(string Value) : IWireEnumeration<CommentVisibility>
+{
+    /// <summary>A reply the customer sees.</summary>
+    public const string Public = "public";
+
+    /// <summary>An internal note for the agents only.</summary>
+    public const string Internal = "internal";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator CommentVisibility(string value) => new(value);
+
+    /// <summary>The wire string.</summary>
+    public override string ToString() => Value ?? "";
+}
+
+/// <summary>
+/// api.IssueField: the field an event row changed; a client skips a change
+/// of a field it does not know.
+/// </summary>
+[JsonConverter(typeof(StringWireValueConverter<IssueField>))]
+public readonly record struct IssueField(string Value) : IWireEnumeration<IssueField>
+{
+    /// <summary>The status.</summary>
+    public const string Status = "status";
+
+    /// <summary>The assignee.</summary>
+    public const string Assignee = "assignee";
+
+    /// <summary>The value of a wire string.</summary>
+    public static implicit operator IssueField(string value) => new(value);
 
     /// <summary>The wire string.</summary>
     public override string ToString() => Value ?? "";

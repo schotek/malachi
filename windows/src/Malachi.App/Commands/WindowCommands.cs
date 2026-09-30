@@ -64,6 +64,7 @@ public sealed class WindowCommands
         ToggleFlag.CanExecute = () => flags.ToggleFlag;
         LoadImages.CanExecute = () => flags.LoadImages;
         TrustSender.CanExecute = () => flags.TrustSender;
+        ChangeStatus.CanExecute = () => flags.ChangeStatus;
     }
 
     /// <summary>app.compose (Ctrl+N).</summary>
@@ -74,6 +75,9 @@ public sealed class WindowCommands
 
     /// <summary>app.add-account.</summary>
     public AppCommand AddAccount { get; } = new(nameof(AddAccount));
+
+    /// <summary>app.add-jira-account: the Jira account assistant.</summary>
+    public AppCommand AddJiraAccount { get; } = new(nameof(AddJiraAccount));
 
     /// <summary>app.about.</summary>
     public AppCommand About { get; } = new(nameof(About));
@@ -123,6 +127,13 @@ public sealed class WindowCommands
     /// <summary>win.trust-sender (menu).</summary>
     public AppCommand TrustSender { get; } = new(nameof(TrustSender));
 
+    /// <summary>
+    /// win.change-status (menu, hidden while disabled): pops up the Change
+    /// Status menu of the issue card on display, where the row's account
+    /// changes the statuses of its issues.
+    /// </summary>
+    public AppCommand ChangeStatus { get; } = new(nameof(ChangeStatus));
+
     /// <summary>Closes a secondary window (Escape, Ctrl+W); the window may veto it with CanExecute.</summary>
     public AppCommand CloseWindow { get; } = new(nameof(CloseWindow));
 
@@ -153,7 +164,7 @@ public sealed class WindowCommands
                 return;
             }
             flags = value;
-            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender])
+            foreach (var c in (AppCommand[])[Reply, ReplyAll, Forward, Trash, Archive, Junk, MarkRead, MarkUnread, ToggleFlag, LoadImages, TrustSender, ChangeStatus])
             {
                 c.Refresh();
             }
@@ -166,7 +177,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, About, MarkRead, LoadImages, TrustSender,
+        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus,
     ];
 
     /// <summary>Re-validates every command.</summary>

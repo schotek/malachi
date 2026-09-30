@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/signin"
 )
 
 func TestAccountRowTitle(t *testing.T) {
@@ -152,5 +153,93 @@ func TestMoveAccount(t *testing.T) {
 	}
 	if got := moveAccount(nil, 0, 1); len(got) != 0 {
 		t.Errorf("empty: %v", got)
+	}
+}
+
+// Jira accounts in Settings → Accounts and in the sign-in banner (the port
+// of macOS JiraAccountsTests).
+
+func jiraTestAccount() api.Account {
+	return api.Account{
+		ID: "j1", Enabled: true, Capabilities: []api.AccountCapability{},
+		Config: api.AccountConfig{
+			Name: "Acme", Email: "jana@acme.example", Kind: api.AccountJira,
+			Jira: &api.JiraConfig{SiteURL: "https://acme.atlassian.net", Deployment: api.JiraCloud, Login: "jana@acme.example"},
+		},
+	}
+}
+
+func TestJiraAccountRowTitleAndSubtitle(t *testing.T) {
+	a := jiraTestAccount()
+	if accountRowTitle(a) != "Acme" || accountRowSubtitle(a) != "acme.atlassian.net" {
+		t.Errorf("named: %q / %q", accountRowTitle(a), accountRowSubtitle(a))
+	}
+	// Unnamed: the host is the title, the address under it.
+	a.Config.Name = ""
+	if accountRowTitle(a) != "acme.atlassian.net" || accountRowSubtitle(a) != "jana@acme.example" {
+		t.Errorf("unnamed: %q / %q", accountRowTitle(a), accountRowSubtitle(a))
+	}
+	// A site that is no URL: the address.
+	a.Config.Jira.SiteURL = "::"
+	if accountRowTitle(a) != "jana@acme.example" || accountRowSubtitle(a) != "jana@acme.example" {
+		t.Errorf("no site: %q / %q", accountRowTitle(a), accountRowSubtitle(a))
+	}
+	// Mail accounts as before.
+	m := api.Account{ID: "m", Config: api.AccountConfig{Name: "Work", Email: "me@example.invalid"}}
+	if accountRowTitle(m) != "Work" || accountRowSubtitle(m) != "me@example.invalid" {
+		t.Errorf("mail: %q / %q", accountRowTitle(m), accountRowSubtitle(m))
+	}
+	m.Config.Name = ""
+	if accountRowTitle(m) != "me@example.invalid" || accountRowSubtitle(m) != "me@example.invalid" {
+		t.Errorf("unnamed mail: %q / %q", accountRowTitle(m), accountRowSubtitle(m))
+	}
+}
+
+func TestAccountEditorByKind(t *testing.T) {
+	if accountEditor(jiraTestAccount()) != editorJira {
+		t.Error("a Jira account is edited in the mail assistant")
+	}
+	mail := api.Account{ID: "m", Config: api.AccountConfig{Email: "me@example.invalid"}}
+	graph := api.Account{ID: "g", Config: api.AccountConfig{Email: "me@example.invalid", Kind: api.AccountGraph}}
+	for _, a := range []api.Account{mail, graph} {
+		if accountEditor(a) != editorMailWizard {
+			t.Errorf("%s: not the mail assistant", a.ID)
+		}
+	}
+	if jiraEditor(0) != jiraEditSettings || jiraEditor(api.CodeAuthFailed) != jiraEditToken || jiraEditor(api.CodeAuthRequired) != jiraEditToken {
+		t.Error("jiraEditor")
+	}
+	if accountIcon(jiraTestAccount()) != jiraAccountIcon {
+		t.Error("the Jira account's icon")
+	}
+}
+
+func TestJiraAuthBannerNamesTheToken(t *testing.T) {
+	cases := []struct {
+		reason api.ErrorCode
+		want   string
+	}{
+		{api.CodeAuthRequired, "No API token is stored for Acme"},
+		{api.CodeAuthFailed, "The Jira site rejected the token of Acme"},
+		{api.CodeKeyringError, "The system keyring is unavailable; Acme cannot sign in"},
+		{api.CodeNetworkError, "Acme needs attention"},
+	}
+	a := jiraTestAccount()
+	for _, c := range cases {
+		if got := accountAuthBannerTitle(a, signin.KindOf(a.Config), c.reason, "Acme"); got != c.want {
+			t.Errorf("%d: %q, want %q", c.reason, got, c.want)
+		}
+	}
+	// Mail accounts keep the password's sentences.
+	mail := api.Account{ID: "m", Config: api.AccountConfig{Email: "me@example.invalid"}}
+	if got := accountAuthBannerTitle(mail, signin.Password, api.CodeAuthRequired, "Work"); got != "No password is stored for Work" {
+		t.Errorf("mail: %q", got)
+	}
+	// The token is entered again in the account's own assistant.
+	if got := authBannerButton(signin.KindOf(a.Config), api.CodeAuthFailed); got != "_Edit Account…" {
+		t.Errorf("button %q", got)
+	}
+	if got := authBannerButton(signin.KindOf(a.Config), api.CodeKeyringError); got != "Open Preferences" {
+		t.Errorf("keyring button %q", got)
 	}
 }

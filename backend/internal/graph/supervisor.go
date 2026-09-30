@@ -32,8 +32,9 @@ type SupervisorDeps struct {
 	// BuildDraft and DraftQuiet: see Deps; nil = drafts stay local.
 	BuildDraft func(ctx context.Context, accountID, draftID string) (store.DraftUpload, error)
 	DraftQuiet time.Duration
-	// Stored: see Deps; nil = nothing.
-	Stored func(ctx context.Context, messageID string, pol ingest.Policy)
+	// Stored: see Deps, with the account the message is of; nil =
+	// nothing.
+	Stored func(ctx context.Context, accountID, messageID string, pol ingest.Policy)
 }
 
 // Supervisor owns one Syncer per started account. It satisfies
@@ -131,7 +132,7 @@ func (sv *Supervisor) Start(a store.Account) {
 		BaseURL:    sv.deps.BaseURL,
 		HTTP:       sv.deps.HTTP,
 		DraftQuiet: sv.deps.DraftQuiet,
-		Stored:     sv.deps.Stored,
+		Stored:     sv.storedFor(id),
 	}
 	if sv.deps.BuildDraft != nil {
 		deps.BuildDraft = func(ctx context.Context, draftID string) (store.DraftUpload, error) {
@@ -154,6 +155,17 @@ func (sv *Supervisor) Start(a store.Account) {
 		err := syncer.Run(ctx)
 		sv.deps.Log.Debug("graph syncer stopped", "account", id, "after", time.Since(start), "err", err)
 	}()
+}
+
+// storedFor is Deps.Stored of the account's syncer: SupervisorDeps.Stored
+// with the account's id; nil when there is none.
+func (sv *Supervisor) storedFor(accountID string) func(ctx context.Context, messageID string, pol ingest.Policy) {
+	if sv.deps.Stored == nil {
+		return nil
+	}
+	return func(ctx context.Context, messageID string, pol ingest.Policy) {
+		sv.deps.Stored(ctx, accountID, messageID, pol)
+	}
 }
 
 // Stop ends the account's syncer, waits for it and forgets its state.

@@ -143,6 +143,10 @@ protocol MessageActionDelegate: AnyObject {
     /// addresses.go: an address chip's New Message, written from
     /// `account` (that of the message the chip sits on).
     func newMessage(to address: Address, account: AccountID)
+    /// The account a message belongs to, as the window knows it (the issue
+    /// card of a Jira message opens links of its site only); nil when
+    /// unknown.
+    func account(_ id: AccountID) -> Account?
     /// attachments.go: Preview (a click on the chip; `source` finds the
     /// chip of the part actually fetched, for the panel to zoom out of,
     /// once the file is ready: the chips are drawn again while a download

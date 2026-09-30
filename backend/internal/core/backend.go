@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/schotek/malachi/backend/internal/discover"
 	"github.com/schotek/malachi/backend/internal/graph"
 	"github.com/schotek/malachi/backend/internal/imap"
+	"github.com/schotek/malachi/backend/internal/jira"
 	"github.com/schotek/malachi/backend/internal/outbox"
 	"github.com/schotek/malachi/backend/internal/remoteimg"
 	"github.com/schotek/malachi/backend/internal/rpc"
@@ -68,6 +70,20 @@ type Backend struct {
 	// Discover backs account.discover; a field for the same reason.
 	Discover func(ctx context.Context, email string) (discover.Result, error)
 
+	// JiraHTTP carries every request to a Jira site (the jira supervisor,
+	// account.detectSite, account.listSpaces, account.test, a rebuild for
+	// message.download) when set; nil, in production, is the default
+	// transport. Tests point it at a fake site (internal/jira/jiratest)
+	// before StartSync.
+	JiraHTTP *http.Client
+	// DetectJiraSite, ListJiraSpaces and ProbeJira back account.detectSite,
+	// account.listSpaces and the jira probe of account.test. They default
+	// to internal/jira's over JiraHTTP and are fields so tests can
+	// substitute fakes.
+	DetectJiraSite func(ctx context.Context, rawURL string) (api.AccountDetectSiteResult, error)
+	ListJiraSpaces func(ctx context.Context, cfg api.JiraConfig, token string, counts bool) (api.AccountListSpacesResult, error)
+	ProbeJira      func(ctx context.Context, cfg api.JiraConfig, token string) (api.EndpointTestResult, error)
+
 	// GOA is the GNOME Online Accounts client behind account.linked and the
 	// tokens of Graph accounts. It connects lazily; without a session bus
 	// every call reports unavailable. Tests substitute a fake.
@@ -93,14 +109,18 @@ type Backend struct {
 	Directory contacts.Directory
 
 	// Supervisor runs one syncer per enabled account. New installs a
-	// kind dispatcher over imap.NewSupervisor (and the Graph supervisor);
-	// tests replace it with a recording fake before StartSync. The account
-	// and config services drive it.
+	// kind dispatcher over imap.NewSupervisor, the Graph supervisor and
+	// the Jira one; tests replace it with a recording fake before
+	// StartSync. The account and config services drive it.
 	Supervisor SyncSupervisor
 	// Delivery runs one outbox worker per enabled account, driven by the
 	// same hooks as Supervisor. New installs outbox.NewSupervisor; tests
 	// replace it with a recording fake.
 	Delivery OutboxSupervisor
+	// jiraSync is the Jira supervisor New installed behind Supervisor:
+	// message.download rebuilds a Jira message through it
+	// (jira.Supervisor.FetchMessage), whatever a test put in Supervisor.
+	jiraSync *jira.Supervisor
 
 	// syncNotifier is what the supervisors emit into (through
 	// outboxAwareNotifier): the coalescer over forwardingNotifier, so events
@@ -155,6 +175,10 @@ type Backend struct {
 	// (config.set, StartSync), so that what applies is what was written
 	// last.
 	prefMu sync.Mutex
+
+	// im is the state of the notification mail of issue-tracker accounts
+	// (issue_mail.go).
+	im issueMail
 }
 
 var _ api.Backend = (*Backend)(nil)
@@ -192,6 +216,16 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		oauthSessions:     map[string]oauthSession{},
 		rawKick:           make(chan struct{}, 1),
 	}
+	b.im.init()
+	b.DetectJiraSite = func(ctx context.Context, rawURL string) (api.AccountDetectSiteResult, error) {
+		return jira.DetectSite(ctx, b.JiraHTTP, rawURL)
+	}
+	b.ListJiraSpaces = func(ctx context.Context, cfg api.JiraConfig, token string, counts bool) (api.AccountListSpacesResult, error) {
+		return jira.ListSpaces(ctx, b.JiraHTTP, cfg, token, counts)
+	}
+	b.ProbeJira = func(ctx context.Context, cfg api.JiraConfig, token string) (api.EndpointTestResult, error) {
+		return jira.Probe(ctx, b.JiraHTTP, cfg, token)
+	}
 	b.OAuth = oauth2flow.NewManager(oauth2flow.Options{
 		Log:      log,
 		Identity: map[oauth2flow.Provider]oauth2flow.IdentityFunc{oauth2flow.Microsoft: b.graphIdentity},
@@ -219,7 +253,7 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
-		Stored:     b.storedUnder,
+		Stored:     b.afterMailStored,
 	})
 	graphSync := graph.NewSupervisor(graph.SupervisorDeps{
 		Store:      st,
@@ -235,9 +269,26 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Log:        log,
 		BuildDraft: b.buildDraft,
 		DraftQuiet: draftSyncQuiet,
-		Stored:     b.storedUnder,
+		Stored:     b.afterMailStored,
 	})
-	b.Supervisor = newKindSupervisor(imapSync, graphSync)
+	b.jiraSync = jira.NewSupervisor(jira.SupervisorDeps{
+		Store:    st,
+		Token:    b.PasswordFor,
+		Notifier: notifier,
+		Log:      log,
+		Stored:   b.afterIssueStored,
+		// JiraHTTP is read per request: tests set it after New.
+		HTTP: &http.Client{Transport: jiraTransport{b}},
+		Prefs: func() jira.SyncPrefs {
+			interval, _ := b.SyncPrefs()
+			pol := b.attachmentPolicy()
+			return jira.SyncPrefs{IntervalSeconds: interval,
+				AttachmentOfflineDays: pol.AttachmentOfflineDays, NeverStoreAttachments: pol.NeverStore}
+		},
+	})
+	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{
+		api.AccountIMAP: imapSync, api.AccountGraph: graphSync, api.AccountJira: b.jiraSync,
+	})
 	// Through b.Supervisor, not the values above: tests swap it.
 	trigger := func(id string, f api.FolderID, full bool) bool { return b.Supervisor.Trigger(id, f, full) }
 	imapOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
@@ -261,12 +312,41 @@ func New(version string, st *store.Store, cfg config.Config, log *slog.Logger) *
 		Changed:          b.outboxChanged,
 		Log:              log,
 	})
-	b.Delivery = newKindOutbox(imapOutbox, graphOutbox)
+	// An issue tracker's outbox holds comments, which the jira supervisor
+	// posts to their issues; the comment then arrives with the issue's
+	// refresh, so no Sent copy is kept (FilesSentCopy).
+	jiraOutbox := outbox.NewSupervisor(outbox.SupervisorDeps{
+		Store: st,
+		// No password: the token is the jira supervisor's.
+		Password:         func(context.Context, string) (string, error) { return "", nil },
+		Notifier:         notifier,
+		DeliverEntryFor:  func(store.Account) outbox.DeliverEntryFunc { return b.jiraSync.Deliver },
+		FilesSentCopyFor: func(store.Account) bool { return true },
+		Trigger:          trigger,
+		Changed:          b.outboxChanged,
+		Log:              log,
+	})
+	b.Delivery = newKindOutbox(map[api.AccountKind]OutboxSupervisor{
+		api.AccountIMAP: imapOutbox, api.AccountGraph: graphOutbox, api.AccountJira: jiraOutbox,
+	})
 	// The raw maintenance steps in the order they run: the conversion to
 	// the store's codec, then the attachments kept on the server only.
 	b.AddRawStep(newCodecStep(b))
 	b.AddRawStep(newAttachmentStep(b))
 	return b
+}
+
+// jiraTransport carries the requests of the Jira supervisor through the
+// transport of Backend.JiraHTTP when a test set one, else the default
+// transport. It reads the field per request, since New builds the
+// supervisor before a test can set it.
+type jiraTransport struct{ b *Backend }
+
+func (t jiraTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	if c := t.b.JiraHTTP; c != nil && c.Transport != nil {
+		return c.Transport.RoundTrip(r)
+	}
+	return http.DefaultTransport.RoundTrip(r)
 }
 
 // graphDeliverFor is the outbox delivery function of a Graph account: it
@@ -412,16 +492,23 @@ func (b *Backend) SyncPrefs() (intervalSeconds, offlineDays int) {
 }
 
 // StartSync runs both supervisors and starts a syncer and an outbox worker
-// for every enabled account in the store. Before that it stores the
-// runtime defaults that have no preference yet (SetRuntimeDefaults) and
-// sets the codec of new raw files. The returned channel is closed when
-// both Run methods have returned, i.e. after ctx is cancelled and every
-// syncer and worker has stopped.
+// for every enabled account in the store, and the worker that keeps the
+// notification mail of issue-tracker accounts in step with them
+// (issue_mail.go). Before that it stores the runtime defaults that have no
+// preference yet (SetRuntimeDefaults) and sets the codec of new raw files.
+// The returned channel is closed when both Run methods have returned and
+// that worker has stopped, i.e. after ctx is cancelled and every syncer
+// and worker has stopped.
 func (b *Backend) StartSync(ctx context.Context) <-chan struct{} {
 	b.applyStoredPreferences(ctx)
 	done := make(chan struct{})
+	issueMailDone := b.startIssueMail(ctx)
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		<-issueMailDone
+	}()
 	go func() {
 		defer wg.Done()
 		b.Supervisor.Run(ctx)
@@ -468,8 +555,10 @@ func (b *Backend) Sync() api.SyncService              { return &syncService{b} }
 // Maintain runs periodic housekeeping until ctx is cancelled: the one-off
 // seeding of recipient completion, the upgrade passes that link and index
 // the messages stored before threading and search existed, then the raw
-// maintenance loop (maintainRaw) beside the orphan attachment sweep at
-// start and hourly. It returns once all of it has stopped.
+// maintenance loop (maintainRaw) beside the orphan attachment sweep and
+// the evaluation of the notification mail of issue-tracker accounts
+// (reevaluateIssueMail) at start and hourly. It returns once all of it has
+// stopped.
 func (b *Backend) Maintain(ctx context.Context) {
 	if err := b.backfillCollectedAddresses(ctx); err != nil {
 		b.log.Warn("backfill collected addresses", "err", err)
@@ -497,6 +586,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 		}
 	}
 	sweep()
+	b.reevaluateIssueMail(ctx)
 	t := time.NewTicker(time.Hour)
 	defer t.Stop()
 	for {
@@ -505,6 +595,7 @@ func (b *Backend) Maintain(ctx context.Context) {
 			return
 		case <-t.C:
 			sweep()
+			b.reevaluateIssueMail(ctx)
 		}
 	}
 }

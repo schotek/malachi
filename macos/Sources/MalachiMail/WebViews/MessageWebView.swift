@@ -73,6 +73,18 @@ import WebKit
 ///   the document's world even if content JavaScript were ever on.
 /// - The context menu keeps Copy and Copy Link only (`willOpenMenu`):
 ///   Reload, Back, Open in New Window and the rest are gone.
+///
+/// The sized mode (`sized`, a card of the conversation view) changes none
+/// of the above: the document is still `viewerDocument(body:compact:)`
+/// around one sanitiser output, the same policy with the column's padding
+/// cut to the card's, content JavaScript stays off. A second script of the
+/// view's own, in the same `.defaultClient` world (`sizeScript`), reports
+/// the document's height through a third message handler, and the view
+/// takes that height (`WebHeightGovernor`: capped, and frozen for content
+/// that grows with the view), so the card sits in the conversation's
+/// scroll view at its full height; the scroll wheel goes on to that scroll
+/// view while the document fits, and the link under the pointer goes to
+/// `onHover` for the conversation's one status label.
 @MainActor
 final class MessageWebView: NSView {
     /// Called with a link the user activated, an http(s) or mailto target
@@ -84,6 +96,18 @@ final class MessageWebView: NSView {
     /// content rule list could not be installed (`ContentRules`): nothing
     /// is on display, and the next `load` tries again.
     var onUnavailable: (@MainActor () -> Void)?
+
+    /// Sized mode: the height the view should have now, in points
+    /// (`WebHeightGovernor`); the owner sets it as the view's height.
+    var onHeight: (@MainActor (CGFloat) -> Void)?
+
+    /// Sized mode: the link under the pointer ("" when none), for the
+    /// owner's status label; the view shows none of its own then.
+    var onHover: (@MainActor (String) -> Void)?
+
+    /// The view takes the height of its document (a conversation card)
+    /// instead of scrolling it in whatever height it is given.
+    let sized: Bool
 
     private let web: ViewerWebView
     private let handler: PartSchemeHandler
@@ -103,9 +127,14 @@ final class MessageWebView: NSView {
     private var rulesReady = false
     private var rulesCompiling = false
     private var pendingBody: String?
+    /// Sized mode: the document's height and what the view makes of it.
+    private var governor: WebHeightGovernor
+    /// Sized mode: the width the document was last laid out at.
+    private var laidOutWidth: CGFloat = 0
 
     static let hoverHandlerName = "hover"
     static let linkHandlerName = "link"
+    static let sizeHandlerName = "size"
     static let statusMaxChars = 512
 
     /// The content rule list: everything blocked, then the application's
@@ -122,13 +151,25 @@ final class MessageWebView: NSView {
     ]
     """
 
-    init(cache: MessageCache, zoom: Int) {
+    /// - Parameter sized: the sized mode of a conversation card (see the
+    ///   type's comment); the reading pane and the message windows use the
+    ///   view unsized.
+    init(cache: MessageCache, zoom: Int, sized: Bool = false) {
+        self.sized = sized
+        governor = WebHeightGovernor(zoom: Self.pageZoom(zoom))
         handler = PartSchemeHandler(cache: cache)
-        let config = Self.makeConfiguration(handler: handler, messages: messages)
+        let config = Self.makeConfiguration(handler: handler, messages: messages, sized: sized)
         web = ViewerWebView(frame: .zero, configuration: config)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         messages.target = self
+        if sized {
+            // The wheel scrolls the conversation while the document fits.
+            web.outerScroll = { [weak self] in
+                guard let self, self.governor.fits else { return nil }
+                return self.enclosingScrollView
+            }
+        }
 
         web.translatesAutoresizingMaskIntoConstraints = false
         web.navigationDelegate = self
@@ -216,7 +257,9 @@ final class MessageWebView: NSView {
     /// storage, no windows, our scheme handler, the view's script in its
     /// own content world, and a proxy nothing answers on for whatever the
     /// CSP might let through.
-    private static func makeConfiguration(handler: PartSchemeHandler, messages: ViewerMessageProxy) -> WKWebViewConfiguration {
+    private static func makeConfiguration(
+        handler: PartSchemeHandler, messages: ViewerMessageProxy, sized: Bool
+    ) -> WKWebViewConfiguration {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         config.defaultWebpagePreferences.allowsContentJavaScript = false
@@ -232,6 +275,11 @@ final class MessageWebView: NSView {
             WKUserScript(source: viewerScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
         controller.add(messages, contentWorld: .defaultClient, name: hoverHandlerName)
         controller.add(messages, contentWorld: .defaultClient, name: linkHandlerName)
+        if sized {
+            controller.addUserScript(
+                WKUserScript(source: sizeScript, injectionTime: .atDocumentEnd, forMainFrameOnly: true, in: .defaultClient))
+            controller.add(messages, contentWorld: .defaultClient, name: sizeHandlerName)
+        }
         // Nothing the document asks for may leave the process: the CSP
         // stops it first, this stops whatever might slip past the CSP.
         config.websiteDataStore.proxyConfigurations = [
@@ -276,6 +324,58 @@ final class MessageWebView: NSView {
     })();
     """
 
+    /// The sized mode's second script, in the view's own world like
+    /// `viewerScript`: it reports the document's height in CSS pixels to
+    /// the `size` handler whenever it changes (a ResizeObserver on the
+    /// document and on the column `viewerDocument` puts the message in, and
+    /// every picture that finishes loading). The height is where the
+    /// column ends, its overflow included, so it does not depend on the
+    /// view's own height unless the message's CSS makes it (`100vh`,
+    /// `height: 100%`): a report within a moment of a change of the view's
+    /// height alone says so (`v`), for `WebHeightGovernor` to stop such a
+    /// document from growing the view without end. It reads the layout
+    /// only; the document is not changed.
+    private static let sizeScript = """
+    (function () {
+        var last = -1, vw = window.innerWidth, vh = window.innerHeight, viewport = false, timer = null;
+        function post(h) {
+            try { window.webkit.messageHandlers['\(sizeHandlerName)'].postMessage({h: h, v: viewport}); } catch (e) {}
+        }
+        function measure() {
+            var col = document.getElementById('malachi-column');
+            var h = 0;
+            if (col) {
+                var r = col.getBoundingClientRect();
+                h = r.top + window.scrollY + Math.max(r.height, col.scrollHeight);
+            } else if (document.body) {
+                h = document.body.scrollHeight;
+            }
+            h = Math.ceil(h);
+            if (h !== last) { last = h; post(h); }
+        }
+        window.addEventListener('resize', function () {
+            var w = window.innerWidth, hh = window.innerHeight;
+            if (w === vw && hh !== vh) {
+                viewport = true;
+                if (timer !== null) { clearTimeout(timer); }
+                timer = setTimeout(function () { viewport = false; timer = null; }, 100);
+            } else {
+                viewport = false;
+            }
+            vw = w; vh = hh;
+        });
+        try {
+            var ro = new ResizeObserver(function () { measure(); });
+            ro.observe(document.documentElement);
+            var col = document.getElementById('malachi-column');
+            if (col) { ro.observe(col); }
+        } catch (e) {}
+        document.addEventListener('load', function () { measure(); }, true);
+        window.addEventListener('load', function () { measure(); });
+        measure();
+    })();
+    """
+
     // MARK: Content
 
     /// Shows a sanitised body fragment (htmlview `Load`). The fragment is
@@ -297,7 +397,8 @@ final class MessageWebView: NSView {
         }
         needsReload = false
         loadedBody = body
-        web.loadHTMLString(viewerDocument(body: body), baseURL: nil)
+        governor.reset()
+        web.loadHTMLString(viewerDocument(body: body, compact: sized), baseURL: nil)
     }
 
     /// Drops the current document (and its pictures). Without the rule
@@ -313,8 +414,34 @@ final class MessageWebView: NSView {
 
     /// Scales the content; `percent` is the text-zoom setting.
     func setZoom(_ percent: Int) {
-        let p = percent <= 0 ? 100 : percent
-        web.pageZoom = CGFloat(p) / 100
+        let z = Self.pageZoom(percent)
+        web.pageZoom = CGFloat(z)
+        // Sized mode: the last height at the new zoom at once; the document
+        // reports what it reflowed to.
+        if sized, let h = governor.setZoom(z) {
+            onHeight?(CGFloat(h))
+        }
+    }
+
+    /// The page zoom of a text-zoom setting (1 = 100 %).
+    private static func pageZoom(_ percent: Int) -> Double {
+        Double(percent <= 0 ? 100 : percent) / 100
+    }
+
+    /// Sized mode: a new width reflows the document, whose next report may
+    /// grow or shrink the view again, frozen or not.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        if sized, abs(newSize.width - laidOutWidth) >= 0.5 {
+            laidOutWidth = newSize.width
+            governor.widthChanged()
+        }
+    }
+
+    /// Sized mode: the document's height from `sizeScript`.
+    private func sizeReported(css: Double, viewport: Bool) {
+        guard sized, let h = governor.report(css: css, viewport: viewport) else { return }
+        onHeight?(CGFloat(h))
     }
 
     /// One message from the view's script, by handler name. Anything
@@ -327,6 +454,9 @@ final class MessageWebView: NSView {
         case Self.linkHandlerName:
             guard let dict = body as? [String: Any], let resolved = dict["resolved"] as? String else { return }
             linkActivated(ActivatedLink(raw: dict["raw"] as? String, resolved: resolved))
+        case Self.sizeHandlerName:
+            guard sized, let dict = body as? [String: Any], let h = (dict["h"] as? NSNumber)?.doubleValue else { return }
+            sizeReported(css: h, viewport: (dict["v"] as? Bool) ?? false)
         default:
             log.debug("script message from an unknown handler")
         }
@@ -340,6 +470,12 @@ final class MessageWebView: NSView {
     }
 
     private func showStatus(_ text: String) {
+        if sized {
+            // The conversation's one label, not a label per card.
+            statusBox.isHidden = true
+            onHover?(text)
+            return
+        }
         status.stringValue = text
         statusBox.isHidden = text.isEmpty
     }
@@ -413,6 +549,18 @@ extension MessageWebView: WKUIDelegate {
 private final class ViewerWebView: WKWebView {
     /// The link under the pointer, for the Copy Link fallback.
     var hoveredHref: String?
+
+    /// Sized mode: the scroll view the wheel scrolls instead of the
+    /// document, nil while the document has something to scroll itself.
+    var outerScroll: (@MainActor () -> NSScrollView?)?
+
+    override func scrollWheel(with event: NSEvent) {
+        if let outer = outerScroll?() {
+            outer.scrollWheel(with: event)
+            return
+        }
+        super.scrollWheel(with: event)
+    }
 
     /// The identifiers of WebKit's own Copy and Copy Link items.
     private static let keptItems: Set<String> = ["WKMenuItemIdentifierCopy", "WKMenuItemIdentifierCopyLink"]

@@ -112,6 +112,8 @@ public sealed partial class MessageWindow : Window, IMessageWindowHandle
         c.MarkUnread.Handler = () => router.MarkUnread(Id);
         c.LoadImages.Handler = () => router.LoadImages(Id);
         c.TrustSender.Handler = () => router.TrustSender(Id);
+        // msg.change-status: the Change Status menu of this window's card.
+        c.ChangeStatus.Handler = () => View.OpenStatusMenu();
         RefreshActions();
     }
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/ActionRules.swift (ActionFlags);
-// GTK: ui/internal/window/actions.go (setMessageActionsSensitive).
+// GTK: ui/internal/window/actions.go (setMessageActionsSensitive) and
+// action_rules.go (actionState).
 
 namespace Malachi.Core.Model;
 
@@ -67,4 +68,23 @@ public readonly record struct ActionFlags
 
     /// <summary>Always From This Sender.</summary>
     public bool TrustSender { get; init; }
+
+    /// <summary>
+    /// Reply writes a comment on the issue (the account has the comment
+    /// capability): the client labels it "Comment" (Jira.ReplyLabel).
+    /// </summary>
+    public bool Comment { get; init; }
+
+    /// <summary>
+    /// The row's account changes the status of the row's issue (GTK's
+    /// actionState.changeStatus: Jira.CanTransition, a message of an issue).
+    /// </summary>
+    public bool ChangeStatus { get; init; }
+
+    /// <summary>
+    /// The actions the account does not offer at all, whatever is selected
+    /// (Capabilities.Supported); with nothing selected, those of the listed
+    /// folder's account. None for a mail account.
+    /// </summary>
+    public MessageActionKind Unsupported { get; init; }
 }

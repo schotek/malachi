@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Port of the rows of ui/internal/window/folders.go (newHeaderRow,
+// Port of the rows of ui/internal/window/folders.go (newHeaderRow with its
+// kind capsule (model.go accountHeaderBadge),
 // newTwisty, newFolderRow, folderRow.setUnread, rebuildFolderList's
 // subtitle for a pinned folder) and favourites.go (newStar), with
 // ui/internal/style's sidebar rules (the star waits for the pointer or the
@@ -35,6 +36,15 @@ public sealed partial class SidebarRow : ObservableObject
     /// <summary>folders.go <c>folderIndent</c>: the indent per tree level, in pixels.</summary>
     public const int IndentPerLevel = 12;
 
+    /// <summary>
+    /// How far every folder row sits in from its heading, in pixels: GTK's
+    /// folder rows are <c>Adw.ActionRow</c>s, whose header box has a start
+    /// padding of 12 that the headings (plain rows) lack, so an account's
+    /// folders stand one step in from its name (measured on GTK's sidebar;
+    /// macOS's outline puts them a level in, 12 as well).
+    /// </summary>
+    public const int FolderInset = 12;
+
     /// <summary>folders.go <c>folderHeadingGap</c>: the space above a heading, in pixels.</summary>
     public const int HeadingGap = 3;
 
@@ -49,6 +59,7 @@ public sealed partial class SidebarRow : ObservableObject
         TwistyIcon = "";
         TwistyTooltip = "";
         Badge = "";
+        Capsule = "";
         StarIcon = "";
         StarTooltip = "";
     }
@@ -81,11 +92,20 @@ public sealed partial class SidebarRow : ObservableObject
     [ObservableProperty]
     public partial string Tooltip { get; private set; }
 
-    /// <summary>The indent of the tree level, in pixels.</summary>
+    /// <summary>The row's indent in pixels: 0 on a heading, <see cref="FolderInset"/> and the tree level's on a folder.</summary>
     [ObservableProperty]
     public partial double Indent { get; private set; }
 
-    /// <summary>The role icon (a GTK name, roleIcon); "" on a heading.</summary>
+    /// <summary>
+    /// After an account's heading, the capsule that says what kind of
+    /// account it is (JIRA, GOOGLE, M365, IMAP;
+    /// <see cref="FolderTree.AccountHeaderBadge"/>); "" on the Favourites
+    /// heading and a folder.
+    /// </summary>
+    [ObservableProperty]
+    public partial string Capsule { get; private set; }
+
+    /// <summary>The folder's icon (a GTK name, folderIcon: a Jira view's, else the role's); "" on a heading.</summary>
     [ObservableProperty]
     public partial string Icon { get; private set; }
 
@@ -164,6 +184,7 @@ public sealed partial class SidebarRow : ObservableObject
         {
             Kind = e.Favourite ? SidebarRowKind.FavouritesHeading : SidebarRowKind.AccountHeading;
             Title = e.Favourite ? L10n.T("Favourites") : e.Account is { } a ? FolderTree.AccountLabel(a) : "";
+            Capsule = !e.Favourite && e.Account is { } heading ? FolderTree.AccountHeaderBadge(heading) : "";
             Subtitle = "";
             Tooltip = "";
             Indent = 0;
@@ -184,10 +205,11 @@ public sealed partial class SidebarRow : ObservableObject
         var f = e.Folder!;
         Kind = SidebarRowKind.Folder;
         Title = FolderTree.FolderTitle(f);
+        Capsule = "";
         Subtitle = e.Favourite && several && e.Account is { } account ? FolderTree.AccountLabel(account) : "";
         Tooltip = DisplayText.Clean(f.Path);
-        Indent = IndentPerLevel * e.Depth;
-        Icon = FolderTree.RoleIcon(f.Role);
+        Indent = FolderInset + (IndentPerLevel * e.Depth);
+        Icon = FolderTree.FolderIcon(f);
         // Accounts without any nesting get no arrow column at all.
         SetTwisty(shown: e.Nested, active: e.Nested && e.HasChildren, collapsed: e.Collapsed);
         Badge = e.Badge > 0 ? e.Badge.ToString(CultureInfo.InvariantCulture) : "";
@@ -200,10 +222,10 @@ public sealed partial class SidebarRow : ObservableObject
         Dimmed = !f.Selectable;
     }
 
-    /// <summary>What a screen reader names the row: its text, and the unread count when there is one.</summary>
+    /// <summary>What a screen reader names the row: its text (a heading's with its capsule), and the unread count when there is one.</summary>
     public override string ToString()
     {
-        var name = Subtitle.Length > 0 ? Title + ", " + Subtitle : Title;
+        var name = Subtitle.Length > 0 ? Title + ", " + Subtitle : Capsule.Length > 0 ? Title + ", " + Capsule : Title;
         return Badge.Length > 0 ? name + ", " + Badge : name;
     }
 

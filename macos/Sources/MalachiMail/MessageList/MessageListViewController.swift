@@ -28,6 +28,12 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
     /// double-click or Return.
     var onSelectedMessageChanged: (@MainActor (MessageSummary?) -> Void)?
     var onActivateMessage: (@MainActor (MessageSummary) -> Void)?
+    /// Forwarded from the list controller: the selected row itself (a
+    /// conversation row puts the conversation in the pane).
+    var onSelectedRowChanged: (@MainActor (ListRow?) -> Void)?
+    /// Space and Shift-Space in the list (`up`): a page of the reading
+    /// pane's conversation; false when it shows none.
+    var onPageReader: (@MainActor (_ up: Bool) -> Bool)?
     /// The sign-in banner's button (window.go `onAuthBannerButton`: the
     /// preferences, or the online accounts panel).
     var onAuthBannerButton: (@MainActor () -> Void)?
@@ -133,6 +139,7 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         table.onActivate = { [weak self] in self?.activateSelected() ?? false }
         table.onFold = { [weak self] in self?.foldSelected(false) ?? false }
         table.onUnfold = { [weak self] in self?.foldSelected(true) ?? false }
+        table.onPage = { [weak self] up in self?.onPageReader?(up) ?? false }
 
         scroll.documentView = table
         scroll.hasVerticalScroller = true
@@ -243,6 +250,11 @@ final class MessageListViewController: NSViewController, NSTableViewDataSource, 
         list.onSelectedMessageChanged = { [weak self] s in
             selected?(s)
             self?.onSelectedMessageChanged?(s)
+        }
+        let selectedRow = list.onSelectedRowChanged
+        list.onSelectedRowChanged = { [weak self] r in
+            selectedRow?(r)
+            self?.onSelectedRowChanged?(r)
         }
         let activated = list.onActivateMessage
         list.onActivateMessage = { [weak self] s in

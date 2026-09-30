@@ -5,8 +5,8 @@
 // ui/internal/window/model.go (maxFolderDepth, accountLabel, hasFlag,
 // matchesFilter, enabledAccounts, visibleFolders, selfAddress, sortFolders,
 // favouriteSection, folderTree, markSubtree, badgeFor, sortSiblings,
-// roleRank, roleIcon, firstFolder) and folders.go (folderTitle,
-// folderCountsText).
+// roleRank, roleIcon, folderIcon, accountHeaderBadge, firstFolder) and
+// folders.go (folderTitle, folderCountsText).
 //
 // Swift's free functions are the static members of this class. Swift's
 // folderTree is FolderTreeRows: C# allows no member named like its type.
@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Text;
 
 namespace Malachi.Core.Model;
@@ -36,11 +37,16 @@ public static class FolderTree
     /// <summary>
     /// The sidebar header text for an account: its configured name, falling
     /// back to the address. Both are user-entered, shown as plain text
-    /// (model.go <c>accountLabel</c>).
+    /// (model.go <c>accountLabel</c>). A Jira account without a name falls
+    /// back to its site's host first (<see cref="Jira.AccountLabel"/>).
     /// </summary>
     public static string AccountLabel(Account a)
     {
         ArgumentNullException.ThrowIfNull(a);
+        if (Jira.IsJira(a.Config))
+        {
+            return Jira.AccountLabel(a.Config);
+        }
         var name = (a.Config.Name ?? "").Trim();
         return name.Length > 0 ? name : (a.Config.Email ?? "").Trim();
     }
@@ -360,15 +366,16 @@ public static class FolderTree
 
     /// <summary>
     /// Orders folders at one tree level (model.go <c>sortSiblings</c>):
-    /// special-use roles first (Inbox, Drafts, Sent, …), then alphabetically
-    /// by path, case-insensitively. Stable, so equal keys keep the server's
-    /// order.
+    /// special-use roles first (Inbox, Drafts, Sent, …), then the fixed views
+    /// of a Jira account (Assigned to Me, Watching, Open;
+    /// <see cref="Jira.VirtualRank"/>), then alphabetically by path,
+    /// case-insensitively. Stable, so equal keys keep the server's order.
     /// </summary>
     public static IReadOnlyList<Folder> SortSiblings(IEnumerable<Folder> list)
     {
         ArgumentNullException.ThrowIfNull(list);
         // The keys are computed once per folder; OrderBy and ThenBy are stable.
-        return [.. list.OrderBy(f => RoleRank(f.Role)).ThenBy(f => CodePoints.ToLower(f.Path ?? ""), CodePoints.Comparer)];
+        return [.. list.OrderBy(f => RoleRank(f.Role)).ThenBy(f => Jira.VirtualRank(f.Virtual)).ThenBy(f => CodePoints.ToLower(f.Path ?? ""), CodePoints.Comparer)];
     }
 
     /// <summary>
@@ -405,9 +412,50 @@ public static class FolderTree
     };
 
     /// <summary>
+    /// The icon of a folder's row (model.go <c>folderIcon</c>): the fixed
+    /// view's (<see cref="Jira.VirtualIcon"/>) for a virtual folder of a Jira
+    /// account, the role's (<see cref="RoleIcon"/>) otherwise.
+    /// </summary>
+    public static string FolderIcon(Folder f)
+    {
+        ArgumentNullException.ThrowIfNull(f);
+        var v = Jira.VirtualIcon(f.Virtual);
+        return v.Length > 0 ? v : RoleIcon(f.Role);
+    }
+
+    /// <summary>
+    /// The capsule after an account's heading in the sidebar, which says
+    /// what kind of account it is (model.go <c>accountHeaderBadge</c>):
+    /// "JIRA" for an issue-tracker account (<see cref="Jira.KindBadge"/>),
+    /// the provider a mail account signs in with ("GOOGLE", "M365";
+    /// <see cref="Provider.AccountProvider"/>), "IMAP" for a mail account
+    /// with a password. Brand and protocol names, never translated.
+    /// </summary>
+    public static string AccountHeaderBadge(Account a)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        if (Jira.IsJira(a.Config))
+        {
+            return Jira.KindBadge;
+        }
+        return Provider.AccountProvider(a.Config)?.Value switch
+        {
+            LinkedProvider.Google => GoogleBadge,
+            LinkedProvider.Microsoft365 => MicrosoftBadge,
+            _ => ImapBadge,
+        };
+    }
+
+    // The capsules of mail accounts (accountHeaderBadge).
+    private const string GoogleBadge = "GOOGLE";
+    private const string MicrosoftBadge = "M365";
+    private const string ImapBadge = "IMAP";
+
+    /// <summary>
     /// The display name of a folder (folders.go <c>folderTitle</c>): the
-    /// localised name for a role folder (whatever the server calls it), the
-    /// server's name otherwise. Plain text either way; Windows-only, the
+    /// localised name for a role folder (whatever the server calls it) and
+    /// for a fixed view of a Jira account
+    /// (<see cref="Jira.VirtualFolderTitle"/>), the server's name otherwise. Plain text either way; Windows-only, the
     /// server's name is cleaned for display (<see cref="DisplayText.Clean"/>,
     /// docs/security.md §4), since a server can name a folder with an
     /// override or a control character as a sender names a subject, and the
@@ -428,7 +476,7 @@ public static class FolderTree
             FolderRole.Archive => L10n.C("folder", "Archive"),
             FolderRole.All => L10n.C("folder", "All Mail"),
             FolderRole.Outbox => L10n.C("folder", "Outbox"),
-            _ => DisplayText.Clean(f.Name),
+            _ => Jira.VirtualFolderTitle(f.Virtual) is { Length: > 0 } view ? view : DisplayText.Clean(f.Name),
         };
     }
 

@@ -192,6 +192,8 @@ final class MessageViewController: NSViewController {
         remoteBar.onLoad = { [weak self] in self?.loadImages() }
         picturesBar.onLoad = { [weak self] in self?.downloadPictures() }
         header.addresses.onCopy = { [weak self] address in self?.copyAddress(address) }
+        header.issueCard.onOpen = { [weak self] url in self?.openIssueLink(url) }
+        header.issueCard.statusMenu = IssueTransitionMenu(state: state) { [weak self] in self?.transitionSubject }
         header.addresses.onWrite = { [weak self] address, account in
             self?.delegate?.newMessage(to: address, account: account)
         }
@@ -271,6 +273,12 @@ final class MessageViewController: NSViewController {
         if mode == .pane {
             draftBanner.reveal(delegate?.isDraft(s) == true)
         }
+        if readsWithoutBody(s) {
+            // A status or assignee change: its changes are the whole
+            // message, there is no body to fetch.
+            render(s, nil)
+            return
+        }
         if let lm = cache.loaded(s.id), lm.complete {
             render(s, lm)
             return
@@ -324,8 +332,10 @@ final class MessageViewController: NSViewController {
     func render(_ s: MessageSummary, _ lm: LoadedMessage?) {
         _ = view
         shownLoaded = lm
-        renderHeaders(s, lm?.msg)
-        if let lm, lm.bodySettled {
+        let issue = renderHeaders(s, lm?.msg)
+        if let text = issue?.eventBody {
+            renderEvent(text)
+        } else if let lm, lm.bodySettled {
             renderBody(lm)
         } else {
             loading()
@@ -359,8 +369,11 @@ final class MessageViewController: NSViewController {
 
     /// The headers: from the summary alone, or from the full message when
     /// `m` is not nil (recipients with Cc). The chips are
-    /// `renderAttachments`' business: they depend on the body too.
-    private func renderHeaders(_ s: MessageSummary, _ m: Message?) {
+    /// `renderAttachments`' business: they depend on the body too. A
+    /// message of a Jira account gets the issue card, and the issue's
+    /// summary is its subject (the card has the key); what it shows of the
+    /// issue is returned.
+    private func renderHeaders(_ s: MessageSummary, _ m: Message?) -> IssueReading? {
         var from = s.from
         var to = s.to
         var cc: [Address]?
@@ -373,9 +386,41 @@ final class MessageViewController: NSViewController {
             date = m.summary.date
             subject = m.summary.subject
         }
-        header.subject = subjectText(subject)
+        let issue = issueReading(s, m, site: issueSite(s))
+        header.subject = issue?.subject ?? subjectText(subject)
+        header.issueCard.show(issue?.card, openable: issue?.openable ?? false, transitions: canTransition(s))
+        refreshIssueBusy()
         header.addresses.show(s.id, account: s.accountId, from: from, to: to, cc: cc)
         header.date = date.isGoZero ? "" : formatDateTime(date)
+        return issue
+    }
+
+    /// The site of the Jira account `s` belongs to ("" when unknown): the
+    /// only site the card's key may open.
+    private func issueSite(_ s: MessageSummary) -> String {
+        delegate?.account(s.accountId)?.config.jira?.siteUrl ?? ""
+    }
+
+    /// The issue card's key: the issue in the browser, a refusal or a
+    /// failure as a toast in this view's window.
+    private func openIssueLink(_ url: String) {
+        guard let s = current else { return }
+        let window = view.window
+        let toasts = state.toasts
+        openIssue(url, site: issueSite(s)) { text in
+            windowToast(text, in: window, or: toasts)
+        }
+    }
+
+    /// An event of an issue (a status or assignee change) in place of a
+    /// body: its changes as sentences (`IssueReading.eventBody`), no bars.
+    private func renderEvent(_ text: String) {
+        cancelSpinner()
+        links = []
+        renderedBody = nil
+        header.hintVisible = false
+        hideBars()
+        showText(text)
     }
 
     /// The body, its state, or the error that prevented it: the sanitised
@@ -531,12 +576,7 @@ final class MessageViewController: NSViewController {
 
     /// Puts the bar in state `st` (remote.go `showRemoteBar`).
     func showRemoteBar(_ st: RemoteBarState) {
-        if st.loading {
-            remoteBar.text = L10n.T("Loading remote images…")
-        } else if st.blocked > 0 {
-            // TRANSLATORS: %d is the number of remote images the message tried to load.
-            remoteBar.text = L10n.N("%d remote image was blocked", "%d remote images were blocked", st.blocked)
-        }
+        remoteBar.setRemoteText(st)
         setBarLoading(st.loading)
         setBarVisible(st.visible)
     }
@@ -588,14 +628,7 @@ final class MessageViewController: NSViewController {
     func renderPicturesBar(_ lm: LoadedMessage) {
         guard mode != .embedded else { return }
         let st = picturesBarState(for: lm)
-        if st.loading {
-            picturesBar.text = L10n.T("Downloading pictures…")
-        } else if st.remote > 0 {
-            // TRANSLATORS: %d is the number of pictures of the message kept on the mail server only.
-            picturesBar.text = L10n.N(
-                "%d picture of this message is on the server only", "%d pictures of this message are on the server only",
-                st.remote)
-        }
+        picturesBar.setPicturesText(st)
         setLoading(picturesBar, st.loading)
         setVisible(picturesBar, st.visible)
     }
@@ -740,18 +773,8 @@ final class MessageViewController: NSViewController {
             guard let self else { return }
             self.onOpenEmbedded?(s, a, remote, chip)
         }
-        // The Assistant (ui/internal/assistant): hidden while it is not
-        // shown (its menu off, or the bridge not registered), disabled while
-        // no app handles the chosen Claude app's links (the file itself goes
-        // without the bridge, and never to the other app); for the panel
-        // (In App), while it cannot run or the bridge does not read this
-        // type (`AssistantController.canAsk`).
-        chip.assistantItem = { [weak self] in
-            guard let self, self.state.assistant.shown else { return nil }
-            self.state.assistant.refreshHandlers()
-            return self.state.assistant.canAsk(about: a)
-        }
-        chip.onAskAssistant = { [weak self, weak chip] in
+        // "Ask the Assistant…", as the Assistant allows it (MessageParts).
+        chip.offerAssistant(self.state.assistant) { [weak self, weak chip] in
             guard let self else { return }
             self.delegate?.askAssistant(about: a, of: s, remote: remote, from: chip?.window ?? self.view.window)
         }

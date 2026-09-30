@@ -7,6 +7,7 @@ import Foundation
 /// `Message`), a projection of a list summary. A search result adds where
 /// it lies (`origin`, with the full path and account as `originTooltip`)
 /// and the matched words of `snippet` (`highlights`, byte ranges into it).
+/// A message of a Jira account adds its issue (`issue`, `Jira.rowIssue`).
 public struct RowMessage: Sendable, Equatable {
     public var from: [Address]
     public var subject: String
@@ -18,10 +19,14 @@ public struct RowMessage: Sendable, Equatable {
     public var origin: String
     public var originTooltip: String
     public var highlights: [MatchRange]
+    /// The issue's key, summary and status, and whether the row is an
+    /// event (a status or assignee change); nil for a mail message.
+    public var issue: Jira.IssueRow?
 
     public init(
         from: [Address], subject: String, snippet: String, date: Date, unread: Bool, flagged: Bool,
-        hasAttachments: Bool, origin: String = "", originTooltip: String = "", highlights: [MatchRange] = []
+        hasAttachments: Bool, origin: String = "", originTooltip: String = "", highlights: [MatchRange] = [],
+        issue: Jira.IssueRow? = nil
     ) {
         self.from = from
         self.subject = subject
@@ -33,15 +38,19 @@ public struct RowMessage: Sendable, Equatable {
         self.origin = origin
         self.originTooltip = originTooltip
         self.highlights = highlights
+        self.issue = issue
     }
 }
 
 /// Projects a list summary onto what a row displays (model.go
-/// `summaryMessage`).
+/// `summaryMessage`). An event of an issue is never unread
+/// (`Jira.rowIssue`), whatever its flags.
 public func summaryMessage(_ s: MessageSummary) -> RowMessage {
-    RowMessage(
+    let issue = Jira.rowIssue(s)
+    return RowMessage(
         from: s.from, subject: s.subject, snippet: s.snippet, date: s.date,
-        unread: !hasFlag(s.flags, .seen), flagged: hasFlag(s.flags, .flagged), hasAttachments: s.hasAttachments
+        unread: issue?.unread ?? !hasFlag(s.flags, .seen), flagged: hasFlag(s.flags, .flagged),
+        hasAttachments: s.hasAttachments, issue: issue
     )
 }
 

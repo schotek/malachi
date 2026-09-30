@@ -37,6 +37,10 @@ public struct DraftState: Sendable, Equatable {
 
     public var inReplyTo: MessageID?
     public var forwarding: MessageID?
+    /// The issue of a comment draft as draft.create returned it
+    /// (`Draft.comment`), sent back with the form's visibility; nil for an
+    /// e-mail.
+    public var comment: DraftComment?
     /// The Drafts message the first save takes over (draft.open); cleared
     /// once a save went through.
     public var replaces: MessageID?
@@ -93,6 +97,19 @@ public protocol ComposeForm: AnyObject {
     func setSendEnabled(_ enabled: Bool)
     /// Closes the window without asking (the controller decided).
     func closeWindow()
+    /// The window writes a comment on an issue (`ComposeParams.comment`,
+    /// `Jira.commentCompose`): no recipients, subject or attachments, and
+    /// no Save Draft, since no Drafts folder keeps a comment.
+    var isComment: Bool { get }
+    /// The comment's visibility as chosen in the window
+    /// (`Jira.selectedVisibility` at first); public for an e-mail.
+    var commentVisibility: CommentVisibility { get }
+}
+
+extension ComposeForm {
+    /// An e-mail window.
+    public var isComment: Bool { false }
+    public var commentVisibility: CommentVisibility { .public }
 }
 
 /// compose/draft.go: autosave, `build`, `save`, `saveFailed`, `send`,
@@ -155,11 +172,16 @@ public final class ComposeDraftController {
     public var autosaveArmed: Bool { autosave != nil }
 
     /// The original a reply or forward refers to (compose.go `newWindow`:
-    /// `Params.InReplyTo` / `Params.Forwarding`).
-    public func setOriginal(inReplyTo: MessageID?, forwarding: MessageID?) {
+    /// `Params.InReplyTo` / `Params.Forwarding`), and for a comment the
+    /// issue it goes to (`ComposeParams.comment`).
+    public func setOriginal(inReplyTo: MessageID?, forwarding: MessageID?, comment: DraftComment? = nil) {
         draft.inReplyTo = inReplyTo
         draft.forwarding = forwarding
+        draft.comment = comment
     }
+
+    /// The window writes a comment (`ComposeForm.isComment`).
+    public var isComment: Bool { form?.isComment ?? false }
 
     /// The saved draft the window edits (compose.go `newWindow`:
     /// `Params.DraftID`, `Version`, `Replaces`): its id and version make
@@ -173,8 +195,23 @@ public final class ComposeDraftController {
     }
 
     /// closeRequest's first branch: the window may go without a question.
+    /// A comment, which no Drafts folder keeps, goes unasked only while
+    /// there is nothing in it (`Jira.sendProblem`), a save under way or
+    /// not (its copy goes too, `cleanup`).
     public var canCloseWithoutAsking: Bool {
-        draft.discard || (!draft.dirty && !draft.saving)
+        if draft.discard {
+            return true
+        }
+        if isComment {
+            return !hasCommentText
+        }
+        return !draft.dirty && !draft.saving
+    }
+
+    /// The comment holds more than white space and invisible characters
+    /// (the editor's last reported text).
+    private var hasCommentText: Bool {
+        Jira.sendProblem(form?.editorText() ?? "").isEmpty
     }
 
     // MARK: Dirty state and status
@@ -210,6 +247,10 @@ public final class ComposeDraftController {
         let d = draft
         if d.sending {
             form.setStatus(L10n.T("Sending…"))
+        } else if form.isComment {
+            // A comment is saved only against a crash, not as a draft the
+            // user keeps: nothing to say about it.
+            form.setStatus("")
         } else if d.saving {
             form.setStatus(L10n.T("Saving draft…"))
         } else if d.dirty {
@@ -246,6 +287,11 @@ public final class ComposeDraftController {
         if composeRichText {
             d.htmlBody = form.editorHTML()
         }
+        // Of a comment draft.save reads only the visibility; the issue
+        // goes back as it came.
+        if form.isComment, let c = draft.comment {
+            d.comment = DraftComment(issue: c.issue, visibility: form.commentVisibility)
+        }
         // In draft.save params only the id of an attachment is read.
         let atts = form.attachments.map { a in
             DraftAttachment(id: a.id, filename: "", contentType: "", size: 0, inline: false)
@@ -271,6 +317,7 @@ public final class ComposeDraftController {
         form.flushEditor { [weak self] in
             guard let self, !self.draft.closed, let wire = self.build() else { return }
             let client = self.client
+            let log = self.log
             Task { [weak self] in
                 let outcome: Result<DraftSaveResult, any Error>
                 do {
@@ -278,7 +325,14 @@ public final class ComposeDraftController {
                 } catch {
                     outcome = .failure(error)
                 }
-                guard let self, !self.draft.closed else { return }
+                guard let self, !self.draft.closed else {
+                    // The window went while a comment was being saved: no
+                    // Drafts folder keeps it, so the copy goes too.
+                    if wire.comment != nil, case .success(let res) = outcome {
+                        Self.forget(client: client, log: log, accountID: wire.accountId, draftID: res.draftId)
+                    }
+                    return
+                }
                 self.saved(reason, outcome)
             }
         }
@@ -353,6 +407,19 @@ public final class ComposeDraftController {
                 break
             }
         }
+        if isComment {
+            // A comment is saved to be sent (`send`), and otherwise only
+            // against a crash: a failed autosave says nothing.
+            if reason == .autosave {
+                log.debug("comment autosave: \(String(describing: error), privacy: .public)")
+                if autosave == nil {
+                    markDirty()
+                }
+                return
+            }
+            form?.toast(rpcErrorText(L10n.T("Sending"), error))
+            return
+        }
         let text = rpcErrorText(L10n.T("Saving the draft"), error)
         if reason == .autosave {
             // Do not nag every 30 s with the same failure (e.g. no backend).
@@ -371,17 +438,21 @@ public final class ComposeDraftController {
 
     // MARK: Sending
 
-    /// send validates, saves if needed and queues the message.
+    /// send validates, saves if needed and queues the message. A comment
+    /// has no recipients; it needs text (`Jira.sendProblem`, checked on
+    /// the editor's current content).
     public func send() {
         guard !draft.sending, let form else { return }
-        let (to, cc, bcc, ok) = form.recipients()
-        if !ok {
-            form.toast(L10n.T("Fix the highlighted recipients"))
-            return
-        }
-        if to.count + cc.count + bcc.count == 0 {
-            form.toast(L10n.T("Add at least one recipient"))
-            return
+        if !form.isComment {
+            let (to, cc, bcc, ok) = form.recipients()
+            if !ok {
+                form.toast(L10n.T("Fix the highlighted recipients"))
+                return
+            }
+            if to.count + cc.count + bcc.count == 0 {
+                form.toast(L10n.T("Add at least one recipient"))
+                return
+            }
         }
         draft.sending = true
         form.setSendEnabled(false)
@@ -392,6 +463,25 @@ public final class ComposeDraftController {
             self.form?.setSendEnabled(true)
             self.refreshStatus()
         }
+        guard form.isComment else {
+            queue(fail: fail)
+            return
+        }
+        form.flushEditor { [weak self] in
+            guard let self, !self.draft.closed, let form = self.form else { return }
+            let problem = Jira.sendProblem(form.editorText())
+            if !problem.isEmpty {
+                form.toast(problem)
+                fail()
+                return
+            }
+            self.queue(fail: fail)
+        }
+    }
+
+    /// send's second half: the explicit save, then message.send; `fail`
+    /// gives Send back.
+    private func queue(fail: @escaping @MainActor () -> Void) {
         save(reason: .explicit) { [weak self] err in
             guard let self else { return }
             if err != nil {
@@ -422,8 +512,9 @@ public final class ComposeDraftController {
                     self.form?.toast(rpcErrorText(L10n.T("Sending"), err))
                     fail()
                 case .success:
+                    let comment = self.isComment
                     self.draft.discard = true
-                    self.onSent?(L10n.T("Message queued for sending"))
+                    self.onSent?(comment ? Jira.commentQueued() : L10n.T("Message queued for sending"))
                     self.form?.closeWindow()
                 }
             }
@@ -454,12 +545,14 @@ public final class ComposeDraftController {
     /// Drafts folder); the window is closing, so a failure is only logged.
     private func deleteDraft() {
         guard let form, let id = draft.draftID else { return }
-        let accountID = form.account.id
-        let client = client
-        let log = log
+        Self.forget(client: client, log: log, accountID: form.account.id, draftID: id)
+    }
+
+    /// draft.delete in the background, a failure only logged.
+    private static func forget(client: RPCClient, log: Logger, accountID: AccountID, draftID: DraftID) {
         Task {
             do {
-                _ = try await client.call(API.DraftDelete.self, DraftDeleteParams(accountId: accountID, draftId: id))
+                _ = try await client.call(API.DraftDelete.self, DraftDeleteParams(accountId: accountID, draftId: draftID))
             } catch {
                 log.debug("draft.delete: \(String(describing: error), privacy: .public)")
             }
@@ -492,9 +585,16 @@ public final class ComposeDraftController {
 
     /// closeRequest keeps the window open while there are unsaved edits
     /// and asks what to do with them. True when the window may close now
-    /// (`cleanup` has run); false when it stays.
+    /// (`cleanup` has run); false when it stays. A comment has no Save
+    /// Draft: the question is whether to discard it.
     public func closeRequest() async -> Bool {
         if canCloseWithoutAsking {
+            cleanup()
+            return true
+        }
+        if isComment {
+            let ok = await confirmDiscard(L10n.T("Discard this message?"), "", L10n.T("_Discard"))
+            guard ok, !draft.closed else { return false }
             cleanup()
             return true
         }
@@ -526,8 +626,13 @@ public final class ComposeDraftController {
     /// dropped, the autosave is disarmed, the inline pictures forgotten.
     /// Idempotent. A save whose outcome is still awaited (the close
     /// question's) is answered with a cancellation so nobody waits forever.
+    /// A comment's saved copy goes with the window unless it was sent: no
+    /// Drafts folder keeps it (the autosave is only for a crash).
     public func cleanup() {
         guard !draft.closed else { return }
+        if isComment, !draft.discard {
+            deleteDraft()
+        }
         draft.closed = true
         cancelAutosave()
         for a in form?.attachments ?? [] where a.inline {

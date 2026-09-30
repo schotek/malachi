@@ -96,6 +96,14 @@ public abstract record DaemonNotification
     /// <summary><c>notify.accountsChanged</c>.</summary>
     public sealed record AccountsChanged : DaemonNotification;
 
+    /// <summary>
+    /// <c>notify.messagesChanged</c>: messages of an account were hidden,
+    /// shown again or rebuilt in place without arriving or leaving
+    /// (<see cref="MessagesChangedNotification"/>, Jira.cs).
+    /// </summary>
+    /// <param name="Payload">The account and its folders (empty = any).</param>
+    public sealed record MessagesChanged(MessagesChangedNotification Payload) : DaemonNotification;
+
     /// <summary>A notification of a newer daemon.</summary>
     /// <param name="Method">Its method.</param>
     public sealed record Unknown(string Method) : DaemonNotification;
@@ -136,12 +144,13 @@ public abstract record DaemonNotification
             API.Notify.SyncState => new SyncState(Params(method, parameters, ApiJsonContext.Wire.SyncStateNotification).State),
             API.Notify.AuthRequired => new AuthRequired(Params(method, parameters, ApiJsonContext.Wire.AuthRequiredNotification)),
             API.Notify.AccountsChanged => new AccountsChanged(),
+            API.Notify.MessagesChanged => new MessagesChanged(Params(method, parameters, ApiJsonContext.Wire.MessagesChangedNotification)),
             _ => new Unknown(method),
         };
     }
 
     private static bool HasParams(string method) =>
-        method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired;
+        method is API.Notify.NewMessage or API.Notify.SyncState or API.Notify.AuthRequired or API.Notify.MessagesChanged;
 
     private static T Params<T>(string method, JsonElement? parameters, JsonTypeInfo<T> info)
         where T : class

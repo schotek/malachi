@@ -124,14 +124,40 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
 
     // MARK: Actions
 
+    /// The group's "+": a menu of the two assistants, a mail account or a
+    /// Jira account.
     @objc private func addClicked(_ sender: Any?) {
-        guard let window = view.window else { return }
-        AccountWizardController.present(from: window, client: client, confirmTrust: confirmTrust) { [weak self] _, cfg in
-            guard let self else { return }
-            self.loadAccounts()
-            // TRANSLATORS: %s is the new account's e-mail address.
-            self.toast(L10n.T("Added %s", cfg.email))
+        let menu = NSMenu()
+        let mail = NSMenuItem(title: mn(L10n.T("_Add Account…")), action: #selector(addMailAccount(_:)), keyEquivalent: "")
+        let jira = NSMenuItem(title: mn(Jira.wizardTexts().addMenu), action: #selector(addJiraAccount(_:)), keyEquivalent: "")
+        for item in [mail, jira] {
+            item.target = self
+            menu.addItem(item)
         }
+        let below = NSPoint(x: 0, y: addButton.isFlipped ? addButton.bounds.maxY + 4 : -4)
+        menu.popUp(positioning: nil, at: below, in: addButton)
+    }
+
+    @objc private func addMailAccount(_ sender: Any?) {
+        guard let window = view.window else { return }
+        AccountWizardController.present(from: window, client: client, confirmTrust: confirmTrust) { [weak self] id, cfg in
+            self?.added(id, cfg)
+        }
+    }
+
+    @objc private func addJiraAccount(_ sender: Any?) {
+        guard let window = view.window else { return }
+        JiraWizardWindowController.present(from: window, client: client) { [weak self] id, cfg in
+            self?.added(id, cfg)
+        }
+    }
+
+    /// After account.add: the rows again, and the toast.
+    private func added(_ id: AccountID, _ cfg: AccountConfig) {
+        guard !closed else { return }
+        loadAccounts()
+        // TRANSLATORS: %s is the new account's e-mail address.
+        toast(L10n.T("Added %s", cfg.email))
     }
 
     /// Pauses or resumes through account.setEnabled; on failure the switch
@@ -166,15 +192,23 @@ final class AccountsPaneViewController: PreferencesPaneViewController, NSTableVi
     /// Opens the wizard prefilled with the account (accounts_page.go
     /// `editAccount`); with `signIn` only the browser sign-in again
     /// (accounts_page.go `signInAccount`, NewEditSignIn).
+    /// A Jira account opens its settings (`accountEditor`,
+    /// `JiraAccountWindowController`), where its token is replaced too.
     private func editAccount(_ id: AccountID, signIn: Bool = false) {
         guard let window = view.window, let i = index(of: id) else { return }
-        AccountWizardController.present(
-            from: window, client: client, editing: accounts[i], signIn: signIn, confirmTrust: confirmTrust
-        ) { [weak self] _, cfg in
-            guard let self else { return }
+        let saved: @MainActor (AccountID, AccountConfig) -> Void = { [weak self] _, cfg in
+            guard let self, !self.closed else { return }
             self.loadAccounts()
             // TRANSLATORS: %s is the edited account's e-mail address.
             self.toast(L10n.T("Saved %s", cfg.email))
+        }
+        switch accountEditor(accounts[i]) {
+        case .jira:
+            JiraAccountWindowController.present(from: window, client: client, account: accounts[i], onDone: saved)
+        case .mailWizard:
+            AccountWizardController.present(
+                from: window, client: client, editing: accounts[i], signIn: signIn, confirmTrust: confirmTrust, onDone: saved
+            )
         }
     }
 

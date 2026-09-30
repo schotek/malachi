@@ -153,6 +153,24 @@ public enum API {
         public static let name = "account.oauthCancel"
     }
 
+    /// What a Jira site address is (cloud or Data Center); nothing is
+    /// stored or authenticated.
+    public enum AccountDetectSite: RPCMethod {
+        public typealias Params = AccountDetectSiteParams
+        public typealias Result = AccountDetectSiteResult
+        public static let name = "account.detectSite"
+        public static let timeout = RPCTimeouts.detectSite
+    }
+
+    /// The spaces and statuses a Jira token sees; doubles as its sign-in
+    /// test.
+    public enum AccountListSpaces: RPCMethod {
+        public typealias Params = AccountListSpacesParams
+        public typealias Result = AccountListSpacesResult
+        public static let name = "account.listSpaces"
+        public static let timeout = RPCTimeouts.listSpaces
+    }
+
     // MARK: Folders
 
     public enum FolderList: RPCMethod {
@@ -380,6 +398,26 @@ public enum API {
         public static let name = "contact.search"
     }
 
+    // MARK: Issues
+
+    /// The status changes the site allows on the issue of a message
+    /// (an account with `Capability.transition`).
+    public enum IssueTransitions: RPCMethod {
+        public typealias Params = IssueTransitionsParams
+        public typealias Result = IssueTransitionsResult
+        public static let name = "issue.transitions"
+        public static let timeout = RPCTimeouts.transitions
+    }
+
+    /// Performs one of them; the daemon refreshes the issue before it
+    /// answers.
+    public enum IssueTransition: RPCMethod {
+        public typealias Params = IssueTransitionParams
+        public typealias Result = IssueTransitionResult
+        public static let name = "issue.transition"
+        public static let timeout = RPCTimeouts.transition
+    }
+
     // MARK: Tables
 
     /// Every method type, in the order of methods.go.
@@ -388,6 +426,7 @@ public enum API {
         AccountList.self, AccountAdd.self, AccountRemove.self, AccountSetEnabled.self,
         AccountUpdate.self, AccountDiscover.self, AccountTest.self, AccountLinked.self,
         AccountReorder.self, AccountOAuthStart.self, AccountOAuthWait.self, AccountOAuthCancel.self,
+        AccountDetectSite.self, AccountListSpaces.self,
         FolderList.self, FolderSubscribe.self,
         MessageList.self, MessageGet.self, MessageBody.self, MessagePart.self,
         MessageEmbedded.self, MessageDownload.self, MessageFlag.self, MessageMove.self, MessageDelete.self,
@@ -401,6 +440,7 @@ public enum API {
         ConfigGet.self, ConfigSet.self,
         SenderList.self, SenderAdd.self, SenderRemove.self,
         ContactSearch.self,
+        IssueTransitions.self, IssueTransition.self,
     ]
 
     /// api.AllMethods: every callable method name.
@@ -412,11 +452,15 @@ public enum API {
         public static let syncState = "notify.syncState"
         public static let authRequired = "notify.authRequired"
         public static let accountsChanged = "notify.accountsChanged"
+        /// `MessagesChangedNotification`: the folders it names are listed
+        /// again, and what was cached of their messages let go
+        /// (`MailboxController.handleMessagesChanged`).
+        public static let messagesChanged = "notify.messagesChanged"
     }
 
     /// api.AllNotifications: every server-initiated notification name.
     public static let allNotifications: [String] = [
-        Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged,
+        Notify.newMessage, Notify.syncState, Notify.authRequired, Notify.accountsChanged, Notify.messagesChanged,
     ]
 
     /// The limits the daemon enforces (types.go constants), for pre-checks.
@@ -461,6 +505,17 @@ public enum API {
         public static let maxSearchQueryBytes = 1024
         public static let maxSearchTerms = 32
         public static let maxSearchTotal = 1000
+        /// `JiraConfig`: spaces, closed statuses, entries of each string
+        /// list, and bytes of each entry (a metadata filter's pattern).
+        public static let maxJiraSpaces = 200
+        public static let maxJiraStatuses = 64
+        public static let maxJiraListEntries = 32
+        public static let maxJiraPatternBytes = 512
+        /// `JiraConfig.offlineDays`: the largest value, and what 0 means.
+        public static let maxJiraOfflineDays = 365
+        public static let defaultJiraOfflineDays = 30
+        /// `issue.transitions`: at most this many transitions.
+        public static let maxIssueTransitions = 100
     }
 }
 

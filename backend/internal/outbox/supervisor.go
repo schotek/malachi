@@ -16,16 +16,19 @@ import (
 // SupervisorDeps is what every worker of the supervisor shares. See Deps
 // for the meaning of the fields; Password takes the account id here.
 // DeliverFor, when set, picks the delivery function per account (a Graph
-// account sends through the service, not SMTP) and wins over Deliver.
+// account sends through the service, not SMTP) and wins over Deliver;
+// DeliverEntryFor, when set and not nil for the account, wins over both
+// (an issue tracker posts comments).
 type SupervisorDeps struct {
 	Store    *store.Store
 	Password func(ctx context.Context, accountID string) (string, error)
 	// AuthFailed is told which account's credentials the server refused
 	// (see Deps.AuthFailed); nil = nothing.
-	AuthFailed func(accountID string)
-	Notifier   api.Notifier
-	Deliver    DeliverFunc
-	DeliverFor func(a store.Account) DeliverFunc
+	AuthFailed      func(accountID string)
+	Notifier        api.Notifier
+	Deliver         DeliverFunc
+	DeliverFor      func(a store.Account) DeliverFunc
+	DeliverEntryFor func(a store.Account) DeliverEntryFunc
 	// FilesSentCopyFor says, per account, whether the delivery path files
 	// the Sent copy on the server itself (Deps.FilesSentCopy); nil = never.
 	FilesSentCopyFor func(a store.Account) bool
@@ -119,6 +122,10 @@ func (sv *Supervisor) Start(a store.Account) {
 	if sv.deps.DeliverFor != nil {
 		deliver = sv.deps.DeliverFor(a)
 	}
+	var deliverEntry DeliverEntryFunc
+	if sv.deps.DeliverEntryFor != nil {
+		deliverEntry = sv.deps.DeliverEntryFor(a)
+	}
 	filesSentCopy := false
 	if sv.deps.FilesSentCopyFor != nil {
 		filesSentCopy = sv.deps.FilesSentCopyFor(a)
@@ -133,6 +140,7 @@ func (sv *Supervisor) Start(a store.Account) {
 		},
 		Notifier:      sv.deps.Notifier,
 		Deliver:       deliver,
+		DeliverEntry:  deliverEntry,
 		FilesSentCopy: filesSentCopy,
 		Trigger:       sv.deps.Trigger,
 		Changed:       sv.deps.Changed,

@@ -15,6 +15,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -198,12 +199,12 @@ func (w *Window) rebuildFolderList() {
 	w.folderRows = make(map[rowKey]*folderRow, len(w.model.entries))
 	for _, e := range w.model.entries {
 		if e.Header && e.Favourite {
-			row, _ := newHeaderRow(i18n.T("Favourites"), false, false)
+			row, _ := newHeaderRow(i18n.T("Favourites"), "", false, false)
 			w.folderList.Append(row)
 			continue
 		}
 		if e.Header {
-			row, twisty := newHeaderRow(accountLabel(e.Account), e.Collapsed, true)
+			row, twisty := newHeaderRow(accountLabel(e.Account), accountHeaderBadge(e.Account), e.Collapsed, true)
 			acc := e.Account.ID
 			twisty.ConnectClicked(func() { w.toggleAccount(acc) })
 			w.folderList.Append(row)
@@ -257,10 +258,12 @@ func (w *Window) rebuildFolderList() {
 
 // newHeaderRow builds a heading row with its fold arrow: an account, or the
 // Favourites section, which does not fold (foldable false keeps the arrow's
-// space so the headings line up, but nothing to click). The row cannot be
-// selected or activated, so the row-selected handler never sees it; the
-// arrow is a button and receives its clicks regardless.
-func newHeaderRow(text string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.Button) {
+// space so the headings line up, but nothing to click). badge, when given,
+// is a capsule after the text (the kind of a Jira account,
+// accountHeaderBadge). The row cannot be selected or activated, so the
+// row-selected handler never sees it; the arrow is a button and receives
+// its clicks regardless.
+func newHeaderRow(text, badge string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.Button) {
 	row := gtk.NewListBoxRow()
 	row.SetActivatable(false)
 	row.SetSelectable(false)
@@ -269,7 +272,6 @@ func newHeaderRow(text string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.
 	label.SetUseMarkup(false)
 	label.SetXAlign(0)
 	label.SetEllipsize(pango.EllipsizeEnd)
-	label.SetHExpand(true)
 	label.AddCSSClass("caption-heading")
 	label.AddCSSClass("dim-label")
 
@@ -278,12 +280,26 @@ func newHeaderRow(text string, collapsed, foldable bool) (*gtk.ListBoxRow, *gtk.
 	box.SetMarginTop(folderHeadingGap)
 	box.Append(twisty)
 	box.Append(label)
+	if badge != "" {
+		// The capsule follows the name, so the name gives way to it when
+		// the sidebar is narrow; the empty rest of the row goes after both.
+		b := widget.NewKindBadge(badge)
+		b.SetMarginStart(6)
+		box.Append(b)
+		label.SetHExpand(false)
+		rest := gtk.NewBox(gtk.OrientationHorizontal, 0)
+		rest.SetHExpand(true)
+		box.Append(rest)
+	} else {
+		label.SetHExpand(true)
+	}
 	row.SetChild(box)
 	return row, twisty
 }
 
 // folderTitle is the display name of a folder: the localised name for a
-// role folder (whatever the server calls it), the server's name otherwise.
+// role folder (whatever the server calls it) and for a fixed view of a Jira
+// account (jira.VirtualFolderTitle), the server's name otherwise.
 func folderTitle(f api.Folder) string {
 	switch f.Role {
 	case api.RoleInbox:
@@ -302,6 +318,9 @@ func folderTitle(f api.Folder) string {
 		return i18n.C("folder", "All Mail")
 	case api.RoleOutbox:
 		return i18n.C("folder", "Outbox")
+	}
+	if view := jira.VirtualFolderTitle(f.Virtual, i18n.Tr); view != "" {
+		return view
 	}
 	return f.Name
 }
@@ -341,9 +360,15 @@ func newFolderRow(e folderEntry, subtitle string) *folderRow {
 		row.SetSubtitle(subtitle)
 		row.SetSubtitleLines(1)
 	}
-	row.SetTooltipText(e.Folder.Path)
+	// A fixed view of a Jira account has no path of its own worth showing
+	// (its id): the tooltip is its localised name.
+	tip := e.Folder.Path
+	if e.Folder.Virtual != "" {
+		tip = folderTitle(e.Folder)
+	}
+	row.SetTooltipText(tip)
 	row.SetMarginStart(folderIndent * e.Depth)
-	row.AddPrefix(gtk.NewImageFromIconName(roleIcon(e.Folder.Role)))
+	row.AddPrefix(gtk.NewImageFromIconName(folderIcon(e.Folder)))
 
 	// AddPrefix prepends, so the arrow goes in after the icon to end up left
 	// of it. Accounts without any nesting get no arrow column at all.
@@ -477,14 +502,20 @@ func (w *Window) updateFolderRow(k folderKey) {
 
 // onSyncFinished runs when an account leaves the syncing state: folders
 // are reloaded and, when the synced folder is the selected one (or the
-// whole account was synced), the list. Called by applySyncState (sync.go).
+// whole account was synced, or the selected folder is a view of a Jira
+// account), the list. Called by applySyncState (sync.go).
 func (w *Window) onSyncFinished(prev, cur api.SyncState) {
 	if prev.Status != api.SyncSyncing || cur.Status == api.SyncSyncing {
 		return
 	}
 	w.loadFolders(cur.AccountID, w.model.foldersGen)
 	sel := w.model.selected
-	if sel.Account == cur.AccountID && (cur.FolderID == "" || cur.FolderID == sel.Folder) {
+	if sel.Account != cur.AccountID {
+		return
+	}
+	// A virtual folder of a Jira account shows issues of every space, so
+	// any pass of its account reloads it.
+	if f, ok := w.model.folder(sel); cur.FolderID == "" || cur.FolderID == sel.Folder || (ok && f.Virtual != "") {
 		w.loadMessages()
 	}
 }

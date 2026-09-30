@@ -14,6 +14,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 )
 
 // Message is what a MessageRow displays; a projection of api.MessageSummary.
@@ -32,6 +33,11 @@ type Message struct {
 	Origin        string
 	OriginTooltip string
 	Highlights    []api.MatchRange
+
+	// Issue is the issue of a message of a Jira account: its key, summary
+	// and status, and whether the row is an event (a status or assignee
+	// change); nil for a mail message.
+	Issue *jira.IssueRow
 }
 
 // Thread is what a conversation row displays; a projection of
@@ -47,6 +53,11 @@ type Thread struct {
 	HasAttachments bool
 	Expanded       bool
 	Loading        bool // unfolded, members not answered yet
+
+	// Issue is the issue of a conversation of a Jira account, and the
+	// change its latest member stands for when that is an event; nil for
+	// mail.
+	Issue *jira.IssueRow
 }
 
 // Start margins of the row content: the plain one (message_row.blp), the
@@ -93,6 +104,14 @@ type MessageRow struct {
 	spinner    *adw.Spinner
 	badge      *gtk.Label
 
+	// The issue's parts of a row of a Jira account: the subject line with
+	// the key and the pills, and the change of an event row.
+	subjectLine  *gtk.Box
+	issueKey     *gtk.Label
+	statusPill   *gtk.Label
+	internalPill *gtk.Label
+	event        *gtk.Label
+
 	// thread says the row shows a conversation (the arrow is live), loading
 	// that its members are on their way (the spinner instead), reserve that
 	// a plain row keeps the arrow's place so every avatar of a grouped list
@@ -102,6 +121,13 @@ type MessageRow struct {
 	// showAvatar is the setting; avatarSize the current density's.
 	showAvatar bool
 	avatarSize int
+	// showPreview is the setting; an event row hides the preview whatever
+	// it says.
+	showPreview bool
+	// issue is what the row shows of an issue (nil for mail); eventRow
+	// says the row is an event message (not a conversation).
+	issue    *jira.IssueRow
+	eventRow bool
 }
 
 // NewMessageRow builds an empty row; call SetMessage or SetThread to fill it.
@@ -122,8 +148,16 @@ func NewMessageRow() *MessageRow {
 		expander:   b.GetObject("expander").Cast().(*gtk.Button),
 		spinner:    b.GetObject("expander_spinner").Cast().(*adw.Spinner),
 		badge:      b.GetObject("count_badge").Cast().(*gtk.Label),
-		showAvatar: true,
-		avatarSize: avatarSizeComfortable,
+
+		subjectLine:  b.GetObject("subject_line").Cast().(*gtk.Box),
+		issueKey:     b.GetObject("issue_key").Cast().(*gtk.Label),
+		statusPill:   b.GetObject("status_pill").Cast().(*gtk.Label),
+		internalPill: b.GetObject("internal_pill").Cast().(*gtk.Label),
+		event:        b.GetObject("event_label").Cast().(*gtk.Label),
+
+		showAvatar:  true,
+		showPreview: true,
+		avatarSize:  avatarSizeComfortable,
 	}
 }
 
@@ -148,7 +182,9 @@ func (r *MessageRow) SetMessage(m Message) {
 	r.RemoveCSSClass("thread-row")
 	r.RemoveCSSClass("thread-expanded")
 	r.thread, r.loading = false, false
+	r.issue = m.Issue
 	r.applyLead()
+	r.applyIssue()
 }
 
 // SetThread displays a conversation: the participants where the sender
@@ -175,8 +211,71 @@ func (r *MessageRow) SetThread(t Thread) {
 	r.badge.SetVisible(t.Count >= 2)
 	r.AddCSSClass("thread-row")
 	r.thread, r.loading = true, t.Loading
+	r.issue = t.Issue
 	r.applyLead()
+	r.applyIssue()
 	r.SetExpanded(t.Expanded)
+}
+
+// applyIssue shows the issue of a row of a Jira account over what
+// SetMessage or SetThread laid out: the key, the issue's summary for the
+// subject ("KEY: Summary" without the key), the status pill and the
+// Internal badge. A conversation whose latest member is an event shows the
+// change as its preview; an event message row is the actor and the change
+// on its first line, without a preview or an unread dot, and under its
+// conversation without the subject line either (one line). A mail row
+// hides all of it. Every text is the site's, plain.
+func (r *MessageRow) applyIssue() {
+	issue := r.issue
+	r.eventRow = issue != nil && issue.Event && !r.thread
+	if issue == nil {
+		r.issueKey.SetVisible(false)
+		r.statusPill.SetVisible(false)
+		r.internalPill.SetVisible(false)
+		r.event.SetVisible(false)
+		r.from.SetHExpand(true)
+		r.from.RemoveCSSClass("caption")
+		r.subjectLine.SetVisible(true)
+		r.preview.SetVisible(r.showPreview)
+		return
+	}
+	r.issueKey.SetText(issue.Key)
+	r.issueKey.SetVisible(issue.Key != "")
+	if issue.Summary != "" {
+		r.subject.SetText(issue.Summary)
+	}
+	SetStatusPill(r.statusPill, issue.Status, issue.StatusStyle)
+	SetInternalPill(r.internalPill, issue.InternalLabel)
+	r.internalPill.SetVisible(issue.Internal)
+	switch {
+	case r.thread:
+		if issue.Event && issue.EventText != "" {
+			r.preview.SetText(issue.EventText)
+			r.preview.SetAttributes(nil)
+		}
+		r.event.SetVisible(false)
+		r.subjectLine.SetVisible(true)
+	case r.eventRow:
+		// A symbol, not a word, leads the change after its actor.
+		r.event.SetText("→ " + issue.EventText)
+		r.event.SetTooltipText(issue.EventText)
+		r.event.SetVisible(true)
+		r.subjectLine.SetVisible(!r.member)
+		r.unreadDot.SetVisible(false)
+	default:
+		r.event.SetVisible(false)
+		r.subjectLine.SetVisible(true)
+	}
+	// The actor of an event gives way to the change and is set like it.
+	r.from.SetHExpand(!r.eventRow)
+	if r.eventRow {
+		r.from.AddCSSClass("caption")
+		r.from.RemoveCSSClass("heading")
+		r.subject.RemoveCSSClass("heading")
+	} else {
+		r.from.RemoveCSSClass("caption")
+	}
+	r.preview.SetVisible(r.showPreview && !r.eventRow)
 }
 
 // SetReserveExpander makes a plain row keep the fold arrow's place, so its
@@ -230,6 +329,9 @@ func (r *MessageRow) SetMember(on bool) {
 		r.RemoveCSSClass("thread-member")
 	}
 	r.applyLead()
+	if r.eventRow {
+		r.subjectLine.SetVisible(!on)
+	}
 }
 
 // applyLead lays the start of the row out: on a conversation row the
@@ -287,8 +389,12 @@ func (r *MessageRow) SetCompact(compact bool) {
 	r.applyLead()
 }
 
-// SetShowPreview shows or hides the snippet line.
-func (r *MessageRow) SetShowPreview(show bool) { r.preview.SetVisible(show) }
+// SetShowPreview shows or hides the snippet line (an event row never has
+// one).
+func (r *MessageRow) SetShowPreview(show bool) {
+	r.showPreview = show
+	r.preview.SetVisible(show && !r.eventRow)
+}
 
 // SetShowAvatar shows or hides the sender avatar (a member row of an
 // unfolded conversation never shows one).

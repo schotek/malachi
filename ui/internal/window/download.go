@@ -131,7 +131,8 @@ func (w *Window) endDownload(acc api.AccountID, id api.MessageID, m *api.Message
 // runs) redraws from what it last rendered, so the spinner never stays.
 func (w *Window) refreshChips(id api.MessageID) {
 	lm := w.loaded[id]
-	if s, ok := w.selectedMessage(); ok && s.ID == id {
+	w.conversationRefreshChips(id, lm)
+	if s, ok := w.selectedMessage(); ok && s.ID == id && !w.conversationShown() {
 		w.pane.refreshChips(id, lm)
 	}
 	if mw, ok := w.openMessages[id]; ok {

@@ -134,36 +134,85 @@ public sealed class EditorBridgeDriftTests
         Assert.Contains("content=\"" + EditorDocument.Csp + "\"", gtk, StringComparison.Ordinal);
     }
 
-    // The viewer document is htmlview.Document with the fixed title.
+    // The viewer document is htmlview.Document with the fixed title: the
+    // sheet is htmlview.columnCSS with the reader's padding (baseCSS), the
+    // page htmlview.document around it.
     [Fact]
     public void ViewerDocumentIsGtksWithTheTitle()
     {
         var source = Read("ui", "internal", "htmlview", "document.go");
         var csp = Regex.Match(source, "const CSP = \"([^\"]*)\"").Groups[1].Value;
-        var baseCss = GoRawString(source, "const baseCSS = `");
+        var baseCss = GtkColumnCss(source, "baseCSS");
         Assert.Equal(ViewerDocument.Csp, csp);
         Assert.Equal(ViewerDocument.BaseCss, baseCss);
-        // Document's return: raw strings and the names CSP, baseCSS and body,
-        // joined by +.
-        var start = source.IndexOf("func Document(body string) string {", StringComparison.Ordinal);
-        Assert.True(start >= 0, "htmlview.Document not found");
-        var ret = source[(source.IndexOf("return ", start, StringComparison.Ordinal) + "return ".Length)..source.IndexOf("\n}", start, StringComparison.Ordinal)];
+        Assert.Contains("return document(body, baseCSS)", source, StringComparison.Ordinal);
         const string body = "<p>x</p>";
-        var gtk = new StringBuilder();
-        foreach (Match token in Regex.Matches(ret, "`([^`]*)`|([A-Za-z]+)"))
+        var gtk = GoJoin(GoReturn(source, "func document(body, css string) string {"), name => name switch
         {
-            gtk.Append(token.Groups[1].Success ? token.Groups[1].Value : token.Groups[2].Value switch
-            {
-                "CSP" => csp,
-                "baseCSS" => baseCss,
-                "body" => body,
-                var other => throw new InvalidOperationException("unexpected name in htmlview.Document: " + other),
-            });
-        }
+            "CSP" => csp,
+            "css" => baseCss,
+            "body" => body,
+            _ => throw new InvalidOperationException("unexpected name in htmlview.document: " + name),
+        });
         var windows = ViewerDocument.Document(body);
         const string title = "<title>" + ViewerDocument.Title + "</title>";
         Assert.Equal(1, Occurrences(windows, title));
-        AssertSameText(gtk.ToString(), windows.Replace(title, "", StringComparison.Ordinal));
+        AssertSameText(gtk, windows.Replace(title, "", StringComparison.Ordinal));
+    }
+
+    // The card of the conversation view: htmlview.CompactDocument, the same
+    // page with the card's padding (compactCSS), and the fixed title.
+    [Fact]
+    public void CompactDocumentIsGtksWithTheTitle()
+    {
+        var source = Read("ui", "internal", "htmlview", "document.go");
+        var csp = Regex.Match(source, "const CSP = \"([^\"]*)\"").Groups[1].Value;
+        var compactCss = GtkColumnCss(source, "compactCSS");
+        Assert.Equal(ViewerDocument.CompactCss, compactCss);
+        Assert.Contains("return document(body, compactCSS)", source, StringComparison.Ordinal);
+        const string body = "<p>x</p>";
+        var gtk = GoJoin(GoReturn(source, "func document(body, css string) string {"), name => name switch
+        {
+            "CSP" => csp,
+            "css" => compactCss,
+            "body" => body,
+            _ => throw new InvalidOperationException("unexpected name in htmlview.document: " + name),
+        });
+        var windows = ViewerDocument.CompactDocument(body);
+        const string title = "<title>" + ViewerDocument.Title + "</title>";
+        Assert.Equal(1, Occurrences(windows, title));
+        AssertSameText(gtk, windows.Replace(title, "", StringComparison.Ordinal));
+    }
+
+    // htmlview.columnCSS with the padding the Go variable `name` passes it.
+    private static string GtkColumnCss(string source, string name)
+    {
+        var padding = Regex.Match(source, "var " + name + " = columnCSS\\(\"([^\"]*)\"\\)");
+        Assert.True(padding.Success, $"«var {name} = columnCSS(…)» not found");
+        return GoJoin(GoReturn(source, "func columnCSS(padding string) string {"), n =>
+            n == "padding" ? padding.Groups[1].Value : throw new InvalidOperationException("unexpected name in htmlview.columnCSS: " + n));
+    }
+
+    // The expression the first return of the Go function `signature` opens
+    // returns.
+    private static string GoReturn(string source, string signature)
+    {
+        var start = source.IndexOf(signature, StringComparison.Ordinal);
+        Assert.True(start >= 0, $"«{signature}» not found");
+        var from = source.IndexOf("return ", start, StringComparison.Ordinal) + "return ".Length;
+        return source[from..source.IndexOf("\n}", start, StringComparison.Ordinal)];
+    }
+
+    // A Go expression of raw strings and names joined by +, each name
+    // read through value.
+    private static string GoJoin(string expression, Func<string, string> value)
+    {
+        var joined = new StringBuilder();
+        foreach (Match token in Regex.Matches(expression, "`([^`]*)`|([A-Za-z]+)"))
+        {
+            joined.Append(token.Groups[1].Success ? token.Groups[1].Value : value(token.Groups[2].Value));
+        }
+        return joined.ToString();
     }
 
     private static string Read(params string[] parts) =>

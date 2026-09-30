@@ -204,6 +204,14 @@ public sealed record AccountConfig
     [JsonPropertyName("graph")]
     public GraphConfig? Graph { get; init; }
 
+    /// <summary>
+    /// The site of a Jira account (kind <c>jira</c> only); its
+    /// <see cref="Email"/> is the user's address (the cloud login) and its
+    /// token is <see cref="Credentials.Password"/>.
+    /// </summary>
+    [JsonPropertyName("jira")]
+    public JiraConfig? Jira { get; init; }
+
     /// <summary>Null is the daemon's default.</summary>
     [JsonPropertyName("syncIntervalSeconds")]
     public int? SyncIntervalSeconds { get; init; }
@@ -259,6 +267,31 @@ public sealed record Account
     /// <summary>The live state of its syncer.</summary>
     [JsonPropertyName("state")]
     public required SyncState State { get; init; }
+
+    /// <summary>
+    /// What the account can do. Null (a daemon that predates it) is
+    /// <see cref="API.MailCapabilities"/>, which is why it is not read as an
+    /// empty list: an empty list (a Jira account) can do none of them. Ask
+    /// <see cref="Can"/>.
+    /// </summary>
+    [JsonPropertyName("capabilities")]
+    public IReadOnlyList<Capability>? Capabilities { get; init; }
+
+    /// <summary>
+    /// api.Account.Can: whether the account has the capability, null
+    /// <see cref="Capabilities"/> read as <see cref="API.MailCapabilities"/>.
+    /// </summary>
+    public bool Can(Capability capability)
+    {
+        foreach (var have in Capabilities ?? API.MailCapabilities)
+        {
+            if (have == capability)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 /// <summary>api.AccountListResult.</summary>
@@ -579,7 +612,9 @@ public sealed record EndpointTestResult
 
 /// <summary>
 /// api.AccountTestResult: <see cref="Imap"/> and <see cref="Smtp"/> for an
-/// IMAP account, <see cref="Graph"/> for a Graph account.
+/// IMAP account, <see cref="Graph"/> for a Graph account, <see cref="Jira"/>
+/// for a Jira account (its capabilities carry <c>cloud</c> or
+/// <c>datacenter</c>, and <c>gateway</c> when the gateway route was used).
 /// </summary>
 public sealed record AccountTestResult
 {
@@ -594,4 +629,8 @@ public sealed record AccountTestResult
     /// <summary>The Graph mailbox's outcome.</summary>
     [JsonPropertyName("graph")]
     public EndpointTestResult? Graph { get; init; }
+
+    /// <summary>The Jira site's outcome.</summary>
+    [JsonPropertyName("jira")]
+    public EndpointTestResult? Jira { get; init; }
 }

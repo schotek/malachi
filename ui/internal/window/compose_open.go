@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/capabilities"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/i18n"
@@ -47,30 +48,54 @@ func (w *Window) openCompose(kind compose.Kind, id api.MessageID) {
 // whose pictures are on the mail server only (replyNeedsDownload) waits for
 // the download too, but goes on whatever its outcome. Only when the
 // backend cannot answer does the window open from what the pane knows.
+//
+// A reply on an account that comments (an issue) is a comment
+// (openComment); a forward of a message whose account writes no mail is
+// written in a mail account (forwardAccount), and draft.create finds the
+// message by MessageAccountID.
 func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api.MessageID) {
 	s, ok := w.summary(id)
 	if !ok || w.composing[id] {
 		return
 	}
+	own, known := w.model.account(s.AccountID)
+	if kind == compose.KindReply && known && own.Can(api.CapabilityComment) {
+		w.openComment(s)
+		return
+	}
+	// The account the draft is written in.
+	from := s.AccountID
+	var messageAccount api.AccountID
+	if kind == compose.KindForward && known && !own.Can(api.CapabilityCompose) {
+		target, ok := w.forwardAccount()
+		if !ok {
+			// Forward is off without such an account; this is only reached
+			// around the disabled action.
+			w.log.Warn("forward: no account writes mail")
+			return
+		}
+		from, messageAccount = target.ID, s.AccountID
+	}
 	lm := w.loaded[id]
 	src := composeSource(id, s, lm)
 	self := w.compose.SelfAddress()
-	if acc, ok := w.model.account(s.AccountID); ok {
+	if acc, ok := w.model.account(from); ok {
 		self = selfAddress(acc)
 	}
 	attribution := compose.Attribution(kind, src)
 	fallback := func() {
 		p := compose.Prefill(kind, src, self)
-		p.AccountID = s.AccountID
+		p.AccountID = from
 		p.Attribution = attribution
 		w.compose.Open(p)
 	}
 
 	params := api.DraftCreateParams{
-		AccountID:   s.AccountID,
-		Mode:        kind.Mode(),
-		MessageID:   id,
-		Attribution: attribution,
+		AccountID:        from,
+		Mode:             kind.Mode(),
+		MessageID:        id,
+		Attribution:      attribution,
+		MessageAccountID: messageAccount,
 	}
 	// create runs draft.create and opens the window; w.composing[id] is set.
 	create := func() {
@@ -90,7 +115,7 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 					return
 				}
 				p := compose.FromDraft(kind, res.Draft, res.Blocked)
-				p.AccountID = s.AccountID
+				p.AccountID = from
 				p.Skipped = len(res.Skipped)
 				p.Attribution = attribution
 				w.compose.Open(p)
@@ -140,6 +165,43 @@ func (w *Window) openComposeFrom(parent gtk.Widgetter, kind compose.Kind, id api
 					w.composing[id] = true
 					create()
 				})
+		})
+	}()
+}
+
+// forwardAccount is the mail account a message of an account that writes
+// no mail (an issue) is forwarded from (capabilities.ForwardFrom): the
+// account of the folder selected in the sidebar when it writes mail (an
+// issue a search found from a mailbox), else the first enabled one that
+// does; false when none does (Forward is off then).
+func (w *Window) forwardAccount() (api.Account, bool) {
+	return capabilities.ForwardFrom(w.model.accounts, w.model.selected.Account)
+}
+
+// openComment opens a comment on the issue of message s, whose account
+// comments (draft.create reply there): the compose window in its comment
+// mode (compose.Params.Comment). Nothing is quoted, so there is no
+// attribution, and no fallback either: without a comment draft from the
+// daemon there is nothing to write, only the toast.
+func (w *Window) openComment(s api.MessageSummary) {
+	id := s.ID
+	w.composing[id] = true
+	params := api.DraftCreateParams{AccountID: s.AccountID, Mode: api.ComposeReply, MessageID: id}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), composeTimeout)
+		defer cancel()
+		var res api.DraftCreateResult
+		err := w.client.Call(ctx, api.MethodDraftCreate, params, &res)
+		glib.IdleAdd(func() {
+			delete(w.composing, id)
+			if err != nil {
+				w.log.Warn("draft.create comment", "err", err)
+				w.Toast(widget.RPCErrorText(composeWhat(compose.KindReply), err))
+				return
+			}
+			p := compose.FromDraft(compose.KindReply, res.Draft, res.Blocked)
+			p.AccountID = s.AccountID
+			w.compose.Open(p)
 		})
 	}()
 }

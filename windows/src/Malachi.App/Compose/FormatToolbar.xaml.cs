@@ -14,14 +14,18 @@
 // ColorDialog sends it when the dialog is confirmed).
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Malachi.App.Resources;
 using Malachi.Core.Controllers;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Presentation;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Windows.UI;
 
 namespace Malachi.App.Compose;
@@ -103,6 +107,41 @@ public sealed partial class FormatToolbar : UserControl
         if (!LinkFlyout.IsOpen)
         {
             LinkFlyout.ShowAt(LinkButton);
+        }
+    }
+
+    /// <summary>
+    /// comment.go <c>restrictToolbar</c> (macOS <c>FormatToolbar.restrict</c>):
+    /// keeps only the controls of a comment's formats
+    /// (<see cref="CommentMode.RestrictedToolbar"/>); the others leave the
+    /// bar, and so does a separator left with nothing to separate.
+    /// </summary>
+    public void RestrictToComment()
+    {
+        // The controls by the format each applies (comment.go toolbarFormats).
+        var formats = new Dictionary<UIElement, JiraFormat>
+        {
+            [BoldButton] = JiraFormat.Bold,
+            [ItalicButton] = JiraFormat.Italic,
+            [UnderlineButton] = JiraFormat.Underline,
+            [BlockButton] = JiraFormat.Heading,
+            [AlignButton] = JiraFormat.Alignment,
+            [BulletedListButton] = JiraFormat.BulletList,
+            [NumberedListButton] = JiraFormat.NumberedList,
+            [QuoteButton] = JiraFormat.Quote,
+            [LinkButton] = JiraFormat.Link,
+            [ColorButton] = JiraFormat.Colour,
+            [ImageButton] = JiraFormat.Image,
+            [ClearButton] = JiraFormat.Clear,
+        };
+        var children = Bar.Children.ToList();
+        var items = children
+            .Select(c => c is Rectangle ? CommentToolItem.Divider : CommentToolItem.Control(formats.TryGetValue(c, out var f) ? f : null))
+            .ToList();
+        var shown = CommentMode.RestrictedToolbar(items);
+        for (var i = 0; i < children.Count; i++)
+        {
+            children[i].Visibility = shown[i] ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 

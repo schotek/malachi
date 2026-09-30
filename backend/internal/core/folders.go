@@ -6,6 +6,7 @@ package core
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/schotek/malachi/backend/internal/store"
 	"github.com/schotek/malachi/backend/pkg/api"
@@ -15,7 +16,9 @@ type folderService struct{ b *Backend }
 
 // List returns the account's folders as learned from the last LIST
 // (docs/api.md §4.2): unsubscribed folders only on request, role folders
-// always; role folders first in a fixed order, then the rest by path.
+// always; role folders first in a fixed order, then the views of an
+// issue-tracker account in theirs (the order its syncer stored them in),
+// then the rest by path (an issue-tracker account's spaces by name).
 // Before the first sync the list is empty, not an error.
 func (s *folderService) List(ctx context.Context, p api.FolderListParams) (*api.FolderListResult, error) {
 	a, err := s.b.requireAccount(ctx, string(p.AccountID))
@@ -32,15 +35,29 @@ func (s *folderService) List(ctx context.Context, p api.FolderListParams) (*api.
 			kept = append(kept, f)
 		}
 	}
+	byName := isIssueAccount(a)
 	sort.SliceStable(kept, func(i, j int) bool {
-		ri, rj := roleRank(kept[i].Role), roleRank(kept[j].Role)
+		fi, fj := kept[i], kept[j]
+		ri, rj := roleRank(fi.Role), roleRank(fj.Role)
 		if ri != rj {
 			return ri < rj
 		}
-		if kept[i].Path != kept[j].Path {
-			return kept[i].Path < kept[j].Path
+		vi, vj := fi.Virtual != "", fj.Virtual != ""
+		switch {
+		case vi != vj:
+			return vi
+		case vi && fi.Position != fj.Position:
+			return fi.Position < fj.Position
 		}
-		return kept[i].ID < kept[j].ID
+		if byName {
+			if ni, nj := strings.ToLower(fi.Name), strings.ToLower(fj.Name); ni != nj {
+				return ni < nj
+			}
+		}
+		if fi.Path != fj.Path {
+			return fi.Path < fj.Path
+		}
+		return fi.ID < fj.ID
 	})
 	out := make([]api.Folder, 0, len(kept))
 	for _, f := range kept {
@@ -100,5 +117,6 @@ func toAPIFolder(f store.Folder) api.Folder {
 		Synced:     !f.Unsynced,
 		Unread:     f.Unread,
 		Total:      f.Total,
+		Virtual:    f.Virtual,
 	}
 }

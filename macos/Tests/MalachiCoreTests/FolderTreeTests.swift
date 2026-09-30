@@ -133,6 +133,112 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         #expect(ids(sortFolders(accounts, folders, CollapseState(), FavouriteState())) == ["in@0"])
     }
 
+    // Jira accounts (Swift-first; mirror in folders_test.go when GTK gets
+    // them): the fixed views below the role folders, above the spaces.
+
+    @Test func jiraViewsSortAboveTheSpaces() {
+        let accounts = [jiraTestAccount("j")]
+        let folders: [AccountID: [Folder]] = ["j": [
+            testFolder("web", path: "Website"),
+            testFolder("itsd", path: "IT Service Desk"),
+            jiraView("open", .open),
+            jiraView("mine", .assignedToMe),
+            jiraView("watch", .watching),
+            // A queued comment keeps the outbox above the views; an empty
+            // one is not listed.
+            testFolder("out", path: "Outbox", role: .outbox, total: 1),
+        ]]
+        let want = ["out@0", "mine@0", "watch@0", "open@0", "itsd@0", "web@0"]
+        #expect(ids(sortFolders(accounts, folders, CollapseState(), FavouriteState())) == want)
+        var empty = folders
+        empty["j"]?.removeLast()
+        empty["j"]?.append(testFolder("out", path: "Outbox", role: .outbox))
+        #expect(ids(sortFolders(accounts, empty, CollapseState(), FavouriteState())) == Array(want.dropFirst()))
+        // A view this client does not know sorts like a space.
+        let later = [jiraView("later", "later", path: "Later"), testFolder("abc", path: "ABC"), jiraView("open", .open)]
+        #expect(sortSiblings(later).map(\.id.rawValue) == ["open", "abc", "later"])
+        // Mail accounts keep their order.
+        let mail = [testFolder("b", path: "beta"), testFolder("in", path: "INBOX", role: .inbox), testFolder("A", path: "Alpha")]
+        #expect(sortSiblings(mail).map(\.id.rawValue) == ["in", "A", "b"])
+    }
+
+    @Test func jiraViewsHaveTheirIconAndTitle() {
+        #expect(folderIcon(jiraView("mine", .assignedToMe)) == "folder-saved-search-symbolic")
+        #expect(folderIcon(jiraView("open", .open)) == "folder-saved-search-symbolic")
+        #expect(folderIcon(testFolder("in", path: "INBOX", role: .inbox)) == "mail-unread-symbolic")
+        #expect(folderIcon(testFolder("itsd", path: "IT Service Desk")) == "folder-symbolic")
+        #expect(folderIcon(testFolder("out", path: "Outbox", role: .outbox)) == "mail-send-symbolic")
+
+        // The daemon's English name is only a fallback: the code decides.
+        #expect(folderTitle(jiraView("mine", .assignedToMe, name: "assigned")) == "Assigned to Me")
+        #expect(folderTitle(jiraView("watch", .watching, name: "watching")) == "Watching")
+        #expect(folderTitle(jiraView("open", .open, name: "open")) == "Open")
+        #expect(folderTitle(jiraView("later", "later", name: "Later")) == "Later")
+        #expect(folderTitle(testFolder("itsd", path: "IT Service Desk", name: "IT Service Desk")) == "IT Service Desk")
+    }
+
+    /// The Czech titles of the views: the "folder" context entries that
+    /// `folderTitle` asks for, not the plain verb "Open".
+    @Test(.enabled(if: folderTreeLocaleDir != nil, "run `make -C macos locale` and export MALACHI_LOCALE_DIR"))
+    func jiraViewsInCzech() throws {
+        let dir = try #require(folderTreeLocaleDir)
+        let cs = Catalogue.load(from: dir, languages: ["cs"])
+        #expect(cs.context("folder", folderTitle(jiraView("mine", .assignedToMe))) == "Přiřazené mně")
+        #expect(cs.context("folder", folderTitle(jiraView("watch", .watching))) == "Sledované")
+        #expect(cs.context("folder", folderTitle(jiraView("open", .open))) == "Neuzavřené")
+    }
+
+    @Test func jiraAccountLabelFallsBackToTheSite() {
+        var a = jiraTestAccount("j", name: "  Acme Jira ")
+        #expect(accountLabel(a) == "Acme Jira")
+        a.config.name = " "
+        #expect(accountLabel(a) == "acme.atlassian.net")
+        a.config.jira?.siteUrl = "not a url"
+        #expect(accountLabel(a) == "jana@acme.example")
+        // A mail account is unchanged.
+        #expect(accountLabel(testAccount("m", name: "", email: " me@example.invalid ")) == "me@example.invalid")
+
+        #expect(accountHeaderBadge(jiraTestAccount("j")) == "JIRA")
+    }
+
+    /// jira_list_test.go `TestJiraSidebar`, the capsules: a mail account
+    /// names the provider it signs in with, else the protocol.
+    @Test func accountHeaderBadgeSaysTheKind() {
+        let mail = testAccount("a", email: "a@example.invalid")
+        #expect(accountHeaderBadge(mail) == "IMAP")
+        var google = mail
+        google.config.oauth2 = OAuth2Config(provider: .google)
+        var graph = mail
+        graph.config.kind = .graph
+        var office = mail
+        office.config.oauth2 = OAuth2Config(provider: .office365)
+        #expect(accountHeaderBadge(google) == "GOOGLE")
+        #expect(accountHeaderBadge(graph) == "M365")
+        #expect(accountHeaderBadge(office) == "M365")
+        // A provider this client does not name is a mail account like any.
+        var custom = mail
+        custom.config.oauth2 = OAuth2Config(provider: .custom)
+        #expect(accountHeaderBadge(custom) == "IMAP")
+    }
+
+    @Test func initialFolderPrefersTheMailInbox() {
+        // The Jira account comes first and has no Inbox: the mail
+        // account's Inbox still wins.
+        let accounts = [jiraTestAccount("j"), testAccount("m")]
+        let folders: [AccountID: [Folder]] = [
+            "j": [jiraView("mine", .assignedToMe), testFolder("itsd", path: "IT Service Desk")],
+            "m": [testFolder("arch", path: "Archive", role: .archive), testFolder("in", path: "INBOX", role: .inbox)],
+        ]
+        var m = MailModel(accounts: accounts, folders: folders)
+        m.rebuildEntries()
+        #expect(ids(m.entries) == ["#j", "mine@0", "itsd@0", "#m", "in@0", "arch@0"])
+        #expect(m.initialFolder() == FolderKey(account: "m", folder: "in"))
+        // Without a mail account the first view is it.
+        var jiraOnly = MailModel(accounts: [accounts[0]], folders: folders)
+        jiraOnly.rebuildEntries()
+        #expect(jiraOnly.initialFolder() == FolderKey(account: "j", folder: "mine"))
+    }
+
     @Test func folderCountsTextTest() {
         let cases: [(String, Folder, String)] = [
             ("empty", testFolder("in", path: "INBOX", role: .inbox), ""),
@@ -152,3 +258,32 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         }
     }
 }
+
+/// A virtual folder of a Jira account (role none, `virtual` set).
+private func jiraView(_ id: String, _ v: VirtualFolder, name: String? = nil, path: String? = nil) -> Folder {
+    var f = testFolder(id, path: path ?? id, name: name)
+    f.virtual = v
+    return f
+}
+
+/// A Jira Cloud account of the sidebar tests.
+private func jiraTestAccount(_ id: String, name: String = "") -> Account {
+    Account(
+        id: AccountID(id),
+        config: AccountConfig(
+            name: name, email: "jana@acme.example", kind: .jira,
+            jira: JiraConfig(siteUrl: "https://Acme.Atlassian.net:443", deployment: .cloud, login: "jana@acme.example")
+        ),
+        enabled: true,
+        state: SyncState(accountId: AccountID(id), status: .idle),
+        capabilities: []
+    )
+}
+
+/// The generated catalogues (`MALACHI_LOCALE_DIR`, as `make test-macos`
+/// exports it); nil skips the Czech case.
+private let folderTreeLocaleDir: URL? = {
+    guard let dir = ProcessInfo.processInfo.environment[Catalogue.localeDirEnv], !dir.isEmpty else { return nil }
+    let url = URL(fileURLWithPath: dir, isDirectory: true)
+    return Catalogue.availableLanguages(in: url).contains("cs") ? url : nil
+}()

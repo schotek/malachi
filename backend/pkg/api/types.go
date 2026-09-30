@@ -203,6 +203,12 @@ const (
 	// AccountGraph is a Microsoft 365 / Outlook.com account accessed through
 	// the Microsoft Graph API; the token comes from GraphConfig.Source.
 	AccountGraph AccountKind = "graph"
+	// AccountJira is an issue tracker read like mail (Jira Cloud or Data
+	// Center): the selected spaces and a few fixed views are its folders,
+	// every issue a thread whose description, comments and status or
+	// assignee changes are its messages. JiraConfig says where and how;
+	// the token is Credentials.Password.
+	AccountJira AccountKind = "jira"
 )
 
 // GraphSource says who holds the OAuth2 session of a Graph account.
@@ -226,12 +232,122 @@ type GraphConfig struct {
 	GOAAccountID string      `json:"goaAccountId,omitempty"`
 }
 
+// JiraDeployment says which kind of Jira site a JiraConfig names.
+type JiraDeployment string
+
+const (
+	JiraCloud      JiraDeployment = "cloud"      // REST v3, ADF, login + API token (Basic)
+	JiraDataCenter JiraDeployment = "datacenter" // REST v2, wiki markup, personal access token (Bearer)
+)
+
+// VirtualFolder names one of the fixed views of an issue-tracker account
+// (Folder.Virtual): folders the daemon fills with copies of the issues of
+// the account's selected spaces.
+type VirtualFolder string
+
+const (
+	VirtualAssignedToMe VirtualFolder = "assignedToMe" // issues assigned to the user
+	VirtualWatching     VirtualFolder = "watching"     // issues the user watches
+	VirtualOpen         VirtualFolder = "open"         // issues not in a closed status (JiraConfig.ClosedStatuses)
+)
+
+// NotificationMailMode says what the daemon does with a notification
+// e-mail of the site that arrives in one of the user's mail accounts
+// (JiraConfig.NotificationMail).
+type NotificationMailMode string
+
+const (
+	NotificationMailSync   NotificationMailMode = "sync"   // default ("" too): a notification mail syncs its issue at once
+	NotificationMailHide   NotificationMailMode = "hide"   // sync + hide the mail in the mail account (display filter)
+	NotificationMailIgnore NotificationMailMode = "ignore" // nothing
+)
+
+// Limits of JiraConfig (docs/api.md §4.1). Exceeding one is
+// invalidArgument.
+const (
+	MaxJiraSpaces          = 200 // JiraConfig.Spaces
+	MaxJiraStatuses        = 64  // JiraConfig.ClosedStatuses
+	MaxJiraListEntries     = 32  // NotificationSenders, BotNames, MetadataFilters, AuthorPrefixes, each
+	MaxJiraPatternBytes    = 512 // one entry of those lists
+	MaxJiraOfflineDays     = 365 // JiraConfig.OfflineDays
+	DefaultJiraOfflineDays = 30  // what JiraConfig.OfflineDays 0 means
+)
+
+// JiraConfig is present only when Kind == AccountJira. The zero value of
+// every field is its default.
+type JiraConfig struct {
+	// SiteURL is the site, normalised: https (http only for a loopback
+	// host, or when the user typed http for a Data Center site), no user
+	// info, query or fragment, no trailing slash; a Data Center site may
+	// carry a context path ("https://jira.example.org/jira").
+	SiteURL    string         `json:"siteUrl"`
+	Deployment JiraDeployment `json:"deployment"`
+	// CloudID is the cloud site's id (a UUID from /_edge/tenant_info);
+	// cloud only. It enables the route through the Atlassian API gateway
+	// that scoped API tokens need.
+	CloudID string `json:"cloudId,omitempty"`
+	// Login is the Atlassian account e-mail the API token belongs to
+	// (cloud: required, sent with the token as Basic authentication);
+	// empty for datacenter, whose personal access token stands alone.
+	Login string `json:"login,omitempty"`
+	// Spaces are the spaces (Jira projects) synchronised, 1..MaxJiraSpaces.
+	Spaces []SpaceRef `json:"spaces"`
+	// OfflineDays is the account's own retention window: issues updated
+	// within it are kept, and open issues assigned to the user whatever
+	// their age. 0 = DefaultJiraOfflineDays; 1..MaxJiraOfflineDays.
+	OfflineDays int `json:"offlineDays,omitempty"`
+	// OnlyMine keeps only the issues the user reports, is assigned, watches
+	// or updated recently, instead of every issue of the spaces.
+	OnlyMine bool `json:"onlyMine,omitempty"`
+	// HideEvents leaves status and assignee changes out of the threads.
+	HideEvents bool `json:"hideEvents,omitempty"`
+	// DisabledFolders are the virtual folders not shown; empty = all three.
+	DisabledFolders []VirtualFolder `json:"disabledFolders,omitempty"`
+	// ClosedStatuses decide the "open" folder: an issue in one of them is
+	// closed. Empty = the statuses of the category done.
+	ClosedStatuses []StatusRef `json:"closedStatuses,omitempty"`
+	// NotificationMail is what a notification e-mail of the site in a mail
+	// account does ("" = NotificationMailSync).
+	NotificationMail NotificationMailMode `json:"notificationMail,omitempty"`
+	// NotificationSenders recognise those e-mails by sender: "addr@host"
+	// or "@host". Empty = "@<site host>" for cloud, none for datacenter.
+	NotificationSenders []string `json:"notificationSenders,omitempty"`
+	// BotNames are the display names of integrations that post comments on
+	// someone else's behalf; such a comment is attributed to the person
+	// named in its header. Empty = no re-attribution.
+	BotNames []string `json:"botNames,omitempty"`
+	// MetadataFilters are RE2 patterns, each matched against a whole
+	// trimmed line of any comment; matching lines are removed, unless that
+	// would leave the comment empty.
+	MetadataFilters []string `json:"metadataFilters,omitempty"`
+	// AuthorPrefixes are words stripped from the start of a re-attributed
+	// author's name (such as an organisation name the bot puts in front of
+	// it), matched as whole words, ignoring case.
+	AuthorPrefixes []string `json:"authorPrefixes,omitempty"`
+}
+
+// SpaceRef names a space (a Jira project) of the site. Name is display
+// text, untrusted.
+type SpaceRef struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name,omitempty"`
+}
+
+// StatusRef names a workflow status of the site. Name is display text,
+// untrusted.
+type StatusRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
 // AccountConfig is the non-secret part of an account. Secrets (passwords,
-// refresh tokens) travel only in Credentials at add/test time and are stored
-// in the system keyring. They are never returned by any method.
+// refresh tokens, API tokens) travel only in Credentials at add/test time
+// and are stored in the system keyring. They are never returned by any
+// method.
 //
-// IMAP and SMTP are set for AccountIMAP and absent for AccountGraph; Graph
-// the other way round.
+// IMAP and SMTP are set for AccountIMAP only, Graph for AccountGraph only,
+// Jira for AccountJira only.
 type AccountConfig struct {
 	Name         string        `json:"name"`  // display name of the account
 	Email        string        `json:"email"` // primary address
@@ -241,6 +357,7 @@ type AccountConfig struct {
 	SMTP         *ServerConfig `json:"smtp,omitempty"`
 	OAuth2       *OAuth2Config `json:"oauth2,omitempty"`
 	Graph        *GraphConfig  `json:"graph,omitempty"`
+	Jira         *JiraConfig   `json:"jira,omitempty"`
 	SyncInterval int           `json:"syncIntervalSeconds,omitempty"` // 0 = default
 }
 
@@ -253,10 +370,12 @@ func (c AccountConfig) Protocol() AccountKind {
 }
 
 // Credentials carries secrets for account.add / account.update /
-// account.test. Exactly the fields relevant to the account are set: a
-// password for password endpoints, OAuthSession for an account whose
-// OAuth2/Graph source is "daemon", nothing for a GNOME Online Accounts
-// account (the token source holds it).
+// account.test (and account.listSpaces). Exactly the fields relevant to
+// the account are set: a password for password endpoints, and as Password
+// the API token (cloud) or personal access token (datacenter) of a jira
+// account; OAuthSession for an account whose OAuth2/Graph source is
+// "daemon"; nothing for a GNOME Online Accounts account (the token source
+// holds it).
 type Credentials struct {
 	Password string `json:"password,omitempty"`
 	// OAuthSession is the id of a complete account.oauthStart session: the
@@ -268,12 +387,56 @@ type Credentials struct {
 	OAuthSession string `json:"oauthSession,omitempty"`
 }
 
+// AccountCapability is something a client may offer for an account's
+// messages beyond reading them and setting flags (Account.Capabilities).
+type AccountCapability string
+
+const (
+	CapabilityCompose  AccountCapability = "compose"  // can be the From of a new message and the target of a forward
+	CapabilityReply    AccountCapability = "reply"    // its messages can be answered by e-mail
+	CapabilityReplyAll AccountCapability = "replyAll" // ... to all recipients
+	CapabilityForward  AccountCapability = "forward"  // its messages can be forwarded (for jira: into a compose account, DraftCreateParams.MessageAccountID)
+	CapabilityComment  AccountCapability = "comment"  // reply creates a comment draft (Draft.Comment); a client labels Reply "Comment"
+	CapabilityMove     AccountCapability = "move"     // message.move
+	CapabilityDelete   AccountCapability = "delete"   // message.delete
+	// CapabilityTransition: the status of an issue can be changed through
+	// issue.transitions and issue.transition.
+	CapabilityTransition AccountCapability = "transition"
+)
+
+// MailCapabilities is what a mail account (imap, graph) can do, and what a
+// client assumes of an account whose Capabilities is nil (a daemon from
+// before capabilities). Read-only: copy before changing.
+var MailCapabilities = []AccountCapability{
+	CapabilityCompose, CapabilityReply, CapabilityReplyAll, CapabilityForward, CapabilityMove, CapabilityDelete,
+}
+
 // Account is what account.list returns: config plus derived state.
 type Account struct {
 	ID      AccountID     `json:"id"`
 	Config  AccountConfig `json:"config"`
 	Enabled bool          `json:"enabled"`
 	State   SyncState     `json:"state"`
+	// Capabilities lists what a client may offer for the account's
+	// messages. This daemon always sends it (an empty list: nothing beyond
+	// reading and flags); nil, from an older daemon, means
+	// MailCapabilities. Use Can.
+	Capabilities []AccountCapability `json:"capabilities"`
+}
+
+// Can reports whether the account has the capability; nil Capabilities
+// means MailCapabilities.
+func (a Account) Can(c AccountCapability) bool {
+	caps := a.Capabilities
+	if caps == nil {
+		caps = MailCapabilities
+	}
+	for _, have := range caps {
+		if have == c {
+			return true
+		}
+	}
+	return false
 }
 
 type AccountListParams struct{}
@@ -475,11 +638,77 @@ type EndpointTestResult struct {
 }
 
 // AccountTestResult carries one entry per endpoint of the account kind:
-// imap and smtp for an IMAP account, graph for a Graph account.
+// imap and smtp for an IMAP account, graph for a Graph account, jira for
+// a Jira account (its Capabilities carry "cloud" or "datacenter", and
+// "gateway" when the Atlassian API gateway route was used).
 type AccountTestResult struct {
 	IMAP  *EndpointTestResult `json:"imap,omitempty"`
 	SMTP  *EndpointTestResult `json:"smtp,omitempty"`
 	Graph *EndpointTestResult `json:"graph,omitempty"`
+	Jira  *EndpointTestResult `json:"jira,omitempty"`
+}
+
+// AccountDetectSiteParams asks what kind of issue-tracker site a URL
+// names, before an account exists. URL is what the user typed: a host
+// ("acme.atlassian.net") or a full URL; https is assumed. Nothing is
+// stored and nothing is authenticated.
+type AccountDetectSiteParams struct {
+	URL string `json:"url"`
+}
+
+// AccountDetectSiteResult describes the site. Title and Version are
+// untrusted display text from the site.
+type AccountDetectSiteResult struct {
+	Kind       AccountKind    `json:"kind"`    // AccountJira
+	SiteURL    string         `json:"siteUrl"` // normalised, as JiraConfig.SiteURL
+	Deployment JiraDeployment `json:"deployment"`
+	CloudID    string         `json:"cloudId,omitempty"` // cloud only
+	Title      string         `json:"title,omitempty"`
+	Version    string         `json:"version,omitempty"`
+}
+
+// AccountListSpacesParams signs in to the site of a jira Config and lists
+// what the account settings choose from. Config's connection fields are
+// validated as for account.add; its spaces may be empty. With AccountID
+// set (editing an account) and no Credentials.Password, the stored token
+// of that account is used.
+type AccountListSpacesParams struct {
+	AccountID   AccountID     `json:"accountId,omitempty"`
+	Config      AccountConfig `json:"config"`
+	Credentials Credentials   `json:"credentials"`
+	// Counts asks for an estimate of each space's issues updated within
+	// Config.Jira.OfflineDays (Space.Issues).
+	Counts bool `json:"counts,omitempty"`
+}
+
+// Space is a space (a Jira project) of the site. Key and Name are
+// untrusted display text.
+type Space struct {
+	ID          string `json:"id"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	ServiceDesk bool   `json:"serviceDesk,omitempty"` // a service-desk space (internal comments exist)
+	Issues      int    `json:"issues"`                // estimated issues in the window; -1 = not counted
+}
+
+// IssueStatus is a workflow status of the site. Name is untrusted display
+// text.
+type IssueStatus struct {
+	ID       string              `json:"id"`
+	Name     string              `json:"name"`
+	Category IssueStatusCategory `json:"category"`
+}
+
+// SiteUser is the user the token signs in as. Untrusted display text.
+type SiteUser struct {
+	Name  string `json:"name"`
+	Email string `json:"email,omitempty"` // empty when the site does not reveal it
+}
+
+type AccountListSpacesResult struct {
+	User     SiteUser      `json:"user"`
+	Spaces   []Space       `json:"spaces"` // by name, at most 1000
+	Statuses []IssueStatus `json:"statuses"`
 }
 
 // ---------------------------------------------------------------------------
@@ -516,6 +745,11 @@ type Folder struct {
 	Synced bool `json:"synced"`
 	Unread int  `json:"unread"`
 	Total  int  `json:"total"`
+	// Virtual is set on a fixed view of an issue-tracker account: its
+	// messages are copies of messages of the account's space folders. Role
+	// stays "none" and Name is an English fallback; clients name the
+	// folder by this code.
+	Virtual VirtualFolder `json:"virtual,omitempty"`
 }
 
 type FolderListParams struct {
@@ -582,6 +816,9 @@ type MessageSummary struct {
 	// Outbox is present only for a message in the account's outbox folder
 	// (role "outbox"): its delivery state.
 	Outbox *OutboxInfo `json:"outbox,omitempty"`
+	// Issue is present only for a message of an issue-tracker account:
+	// the issue it belongs to and what part of it the message is.
+	Issue *MessageIssue `json:"issue,omitempty"`
 }
 
 // OutboxState is the delivery state of a queued message.
@@ -936,6 +1173,9 @@ type ThreadSummary struct {
 	// FolderIDs lists every folder of the account that contains at least
 	// one member, whatever the scope.
 	FolderIDs []FolderID `json:"folderIds"`
+	// Issue is present only for a thread of an issue-tracker account,
+	// which is one issue.
+	Issue *IssueInfo `json:"issue,omitempty"`
 }
 
 type ThreadListParams struct {
@@ -964,6 +1204,136 @@ type ThreadGetParams struct {
 type ThreadGetResult struct {
 	Thread   ThreadSummary    `json:"thread"`
 	Messages []MessageSummary `json:"messages"` // oldest first, at most MaxThreadMessages (the newest)
+}
+
+// ---------------------------------------------------------------------------
+// Issues (the messages of an issue-tracker account)
+// ---------------------------------------------------------------------------
+
+// IssueStatusCategory is the category of an issue's status. An open enum:
+// "" is unknown, and a client treats an unknown value as "".
+type IssueStatusCategory string
+
+const (
+	StatusCategoryTodo       IssueStatusCategory = "todo"
+	StatusCategoryInProgress IssueStatusCategory = "inProgress"
+	StatusCategoryDone       IssueStatusCategory = "done"
+)
+
+// IssueItemKind says what part of an issue a message is.
+type IssueItemKind string
+
+const (
+	IssueItemDescription IssueItemKind = "description" // the issue itself: its summary and description; the thread's first message
+	IssueItemComment     IssueItemKind = "comment"     // a comment
+	IssueItemEvent       IssueItemKind = "event"       // changes of watched fields (IssueChange), stored read and never notified
+)
+
+// CommentVisibility says who can read a comment of a service-desk issue.
+type CommentVisibility string
+
+const (
+	CommentPublic   CommentVisibility = "public"   // the customer too
+	CommentInternal CommentVisibility = "internal" // the service-desk team only
+)
+
+// IssueField names an issue field whose changes become event messages. An
+// open enum: a client skips a change of a field it does not know.
+type IssueField string
+
+const (
+	IssueFieldStatus   IssueField = "status"
+	IssueFieldAssignee IssueField = "assignee"
+)
+
+// IssueInfo describes an issue as the daemon last synchronised it. Every
+// string but Key and URL is untrusted display text from the site.
+type IssueInfo struct {
+	Key            string              `json:"key"` // "ITSD-42"
+	URL            string              `json:"url"` // <siteUrl>/browse/<key>, http(s) only
+	Summary        string              `json:"summary"`
+	Status         string              `json:"status"`
+	StatusCategory IssueStatusCategory `json:"statusCategory,omitempty"`
+	Type           string              `json:"type,omitempty"`
+	Priority       string              `json:"priority,omitempty"`
+	Assignee       string              `json:"assignee,omitempty"` // display name; "" = unassigned
+	Reporter       string              `json:"reporter,omitempty"`
+	AssignedToMe   bool                `json:"assignedToMe,omitempty"`
+	Watching       bool                `json:"watching,omitempty"`
+	// CommentVisibilities lists the visibilities a new comment may have:
+	// ["public","internal"] on a service-desk issue, empty elsewhere (a
+	// comment is then public).
+	CommentVisibilities []CommentVisibility `json:"commentVisibilities,omitempty"`
+}
+
+// IssueChange is one change an event message stands for. From and To are
+// display values ("" = none: unassigned, or no earlier value).
+type IssueChange struct {
+	Field IssueField `json:"field"`
+	From  string     `json:"from,omitempty"`
+	To    string     `json:"to,omitempty"`
+}
+
+// MessageIssue is MessageSummary.Issue: the issue (its fields flattened
+// into the same JSON object) and what the message is of it.
+type MessageIssue struct {
+	IssueInfo
+	Item       IssueItemKind     `json:"item"`
+	Visibility CommentVisibility `json:"visibility,omitempty"` // a comment of a service-desk issue
+	Changes    []IssueChange     `json:"changes,omitempty"`    // item "event"
+	// Via is the display name of the integration that posted a comment on
+	// someone else's behalf (JiraConfig.BotNames); the message's From is
+	// then the person named in the comment.
+	Via    string `json:"via,omitempty"`
+	Edited bool   `json:"edited,omitempty"` // the comment was edited after it was posted
+	// Mine: the account's own user wrote the item on the site (never set
+	// with Via: a relayed comment is someone else's).
+	Mine bool `json:"mine,omitempty"`
+}
+
+// Issue status transitions (issue.transitions, issue.transition; an
+// account with CapabilityTransition). Both name the issue by any message
+// of it: the message's thread is the issue.
+
+type IssueTransitionsParams struct {
+	AccountID AccountID `json:"accountId"`
+	MessageID MessageID `json:"messageId"` // any message of the issue
+}
+
+// IssueTransition is one status change the site offers the user on the
+// issue. Name and To are untrusted display text from the site.
+type IssueTransition struct {
+	ID   string `json:"id"`
+	Name string `json:"name"` // the transition's name, as the site's own status menu shows it
+	To   string `json:"to"`   // the name of the status it leads to
+	// ToCategory is the category of that status ("" when the site does
+	// not say).
+	ToCategory IssueStatusCategory `json:"toCategory,omitempty"`
+	// NeedsInput: the transition opens a screen on the site or has fields
+	// that must be filled; it cannot be performed here (issue.transition
+	// refuses it with invalidArgument). A client lists it disabled.
+	NeedsInput bool `json:"needsInput,omitempty"`
+}
+
+type IssueTransitionsResult struct {
+	Issue       IssueInfo         `json:"issue"`       // the issue as the daemon last synchronised it
+	Transitions []IssueTransition `json:"transitions"` // never null; in the site's order, at most MaxIssueTransitions
+}
+
+// MaxIssueTransitions bounds the transitions issue.transitions returns.
+const MaxIssueTransitions = 100
+
+type IssueTransitionParams struct {
+	AccountID    AccountID `json:"accountId"`
+	MessageID    MessageID `json:"messageId"`    // any message of the issue
+	TransitionID string    `json:"transitionId"` // IssueTransition.ID of a transition without NeedsInput
+}
+
+type IssueTransitionResult struct {
+	// Issue is the issue after the daemon refreshed it from the site (or
+	// as last synchronised when the refresh did not finish in time: the
+	// transition was performed all the same).
+	Issue IssueInfo `json:"issue"`
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,8 +1386,21 @@ type Draft struct {
 	// the draft replaces that message on the server. Set by draft.open when
 	// it built the draft from a message without loss; clients send it back
 	// unchanged. Never returned by draft.save or draft.list.
-	Replaces  MessageID `json:"replaces,omitempty"`
-	UpdatedAt time.Time `json:"updatedAt"` // server-set; ignored in params
+	Replaces MessageID `json:"replaces,omitempty"`
+	// Comment is set on a comment draft of an issue-tracker account
+	// (draft.create reply on an account with CapabilityComment): sending it
+	// posts a comment to the issue instead of an e-mail. In draft.save only
+	// Comment.Visibility is read.
+	Comment   *DraftComment `json:"comment,omitempty"`
+	UpdatedAt time.Time     `json:"updatedAt"` // server-set; ignored in params
+}
+
+// DraftComment says where a comment draft goes and who may read it.
+type DraftComment struct {
+	Issue IssueInfo `json:"issue"`
+	// Visibility "" is public; "internal" only when
+	// Issue.CommentVisibilities allows it.
+	Visibility CommentVisibility `json:"visibility"`
 }
 
 // DraftAttachment is a file in the backend's attachment store, created by
@@ -1101,6 +1484,11 @@ type DraftCreateParams struct {
 	// LF, at most MaxDraftAttributionBytes and MaxDraftAttributionLines; the
 	// backend escapes it. Empty = no line. Ignored for ComposeNew.
 	Attribution string `json:"attribution,omitempty"`
+	// MessageAccountID is the account of MessageID when it differs from
+	// AccountID (ComposeForward only): forwarding a message of another of
+	// the user's accounts, such as an issue tracker's from a mail account.
+	// Empty = AccountID.
+	MessageAccountID AccountID `json:"messageAccountId,omitempty"`
 }
 
 // QuoteForm says how much of the original a draft.create result quotes.
@@ -1500,3 +1888,15 @@ type AuthRequiredNotification struct {
 // and account.setEnabled, to every client including the caller. It carries
 // no payload: clients re-run account.list.
 type AccountsChangedNotification struct{}
+
+// MessagesChangedNotification says that messages of the account's folders
+// changed without arriving or being deleted: hidden or shown again (a
+// notification mail of an issue-tracker site hidden in a mail account), or
+// rebuilt in place under their ids (a jira account's items rendered with
+// other settings, a comment edited or re-attributed, an issue renamed).
+// Clients showing those folders drop what they cached of their messages
+// and list them again. FolderIDs empty = any folder of the account.
+type MessagesChangedNotification struct {
+	AccountID AccountID  `json:"accountId"`
+	FolderIDs []FolderID `json:"folderIds,omitempty"`
+}

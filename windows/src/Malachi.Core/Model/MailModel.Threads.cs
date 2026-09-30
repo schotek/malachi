@@ -25,6 +25,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Malachi.Core.Api;
+using Malachi.Core.IssueTrackers;
 
 namespace Malachi.Core.Model;
 
@@ -75,13 +76,15 @@ public sealed partial class MailModel
 
     /// <summary>
     /// Projects a conversation onto what its row displays (thread_model.go
-    /// <c>summaryThread</c>).
+    /// <c>summaryThread</c>); a conversation of a Jira account adds its issue
+    /// (<see cref="Jira.ThreadRowIssue"/>).
     /// </summary>
     public static RowThread SummaryThread(ThreadSummary t, bool expanded, bool loading)
     {
         ArgumentNullException.ThrowIfNull(t);
         return new RowThread
         {
+            Issue = Jira.ThreadRowIssue(t),
             Participants = t.Participants,
             Subject = t.Subject,
             Snippet = t.Snippet,
@@ -109,14 +112,26 @@ public sealed partial class MailModel
     /// <summary>
     /// Whether a conversation's listing has not changed in what would
     /// invalidate its fetched members (thread_model.go <c>sameShape</c>).
+    /// That includes the issue of a Jira conversation: its status, assignee
+    /// or priority can move without a new member (the account shows no
+    /// events), and every member carries it.
     /// </summary>
     public static bool SameShape(ThreadSummary a, ThreadSummary b)
     {
         ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(b);
         return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount
-            && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id;
+            && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id
+            && SameIssue(a.Issue, b.Issue);
     }
+
+    // The issue by value, as Go's reflect.DeepEqual compares it (a record
+    // compares its list by reference); a missing list is an empty one.
+    private static bool SameIssue(IssueInfo? a, IssueInfo? b) =>
+        ReferenceEquals(a, b)
+        || (a is not null && b is not null
+            && a with { CommentVisibilities = null } == b with { CommentVisibilities = null }
+            && (a.CommentVisibilities ?? []).SequenceEqual(b.CommentVisibilities ?? []));
 
     /// <summary>
     /// A new list with <paramref name="s"/> placed among
@@ -401,7 +416,10 @@ public sealed partial class MailModel
     /// row); an unlisted one is added at the top when the filter would list
     /// it. The filter is not applied to a listed conversation, the same
     /// policy as <see cref="FolderTree.MatchesFilter"/>. False means the
-    /// message carries no thread id and the list has to be loaded again.
+    /// message carries no thread id and the list has to be loaded again. A
+    /// message of an issue brings the issue as it is now (its status may
+    /// have moved), and an event of it never counts as unread
+    /// (<see cref="CountsUnread"/>).
     /// </summary>
     public bool ApplyNewMessage(MessageSummary s, MessageFilter filter, ListKey selected)
     {
@@ -427,13 +445,14 @@ public sealed partial class MailModel
                 Subject = s.Subject,
                 Participants = s.From,
                 MessageCount = 1,
-                UnreadCount = FolderTree.HasFlag(s.Flags, Flag.Seen) ? 0 : 1,
+                UnreadCount = CountsUnread(s) ? 1 : 0,
                 LatestDate = s.Date,
                 Latest = s,
                 Snippet = s.Snippet,
                 Flags = s.Flags,
                 HasAttachments = s.HasAttachments,
                 FolderIds = [s.FolderId],
+                Issue = s.Issue?.Info,
             };
             threads.Insert(0, fresh);
             Members[fresh.Id] = new ThreadMembers([s], Complete: true);
@@ -464,7 +483,8 @@ public sealed partial class MailModel
         t = t with
         {
             MessageCount = t.MessageCount + 1,
-            UnreadCount = FolderTree.HasFlag(s.Flags, Flag.Seen) ? t.UnreadCount : t.UnreadCount + 1,
+            UnreadCount = CountsUnread(s) ? t.UnreadCount + 1 : t.UnreadCount,
+            Issue = s.Issue?.Info ?? t.Issue,
         };
         if (s.Date >= t.LatestDate)
         {

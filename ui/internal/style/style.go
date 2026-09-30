@@ -182,6 +182,25 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("button.thread-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
 	b.WriteString("label.thread-count { padding: 0 6px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.1); }\n")
 	b.WriteString("list.message-list > row.thread-member:not(:selected):not(:hover):not(:active) { background-color: alpha(@window_fg_color, 0.03); }\n")
+	// The pills of a Jira account (widget/pill.go): an issue's status by
+	// its category (grey to do or unknown, blue in progress, green done),
+	// the orange Internal badge of a service-desk comment, and the JIRA
+	// capsule after the account's name in the sidebar. Tints of the palette
+	// under the default text colour, so they read in light and dark alike.
+	b.WriteString("label.issue-pill { padding: 0 7px; border-radius: 99px; font-size: 80%; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("label.issue-pill.status-in-progress { background-color: alpha(@blue_3, 0.3); }\n")
+	b.WriteString("label.issue-pill.status-done { background-color: alpha(@green_4, 0.3); }\n")
+	b.WriteString("label.issue-pill.internal-pill { background-color: alpha(@orange_3, 0.35); }\n")
+	// The issue card over a Jira message (window/issue_card.go): the
+	// card's own padding, the key as a link without a button's bulk, and
+	// the status pill as a menu button in the pill's shape and colours.
+	b.WriteString("box.issue-card { padding: 10px 12px; }\n")
+	b.WriteString("button.issue-key { min-height: 0; padding: 0 4px; }\n")
+	b.WriteString("menubutton.issue-status-button > button { min-height: 0; padding: 1px 8px; border-radius: 99px; font-size: 80%; font-weight: normal; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("menubutton.issue-status-button.status-in-progress > button { background-color: alpha(@blue_3, 0.3); }\n")
+	b.WriteString("menubutton.issue-status-button.status-done > button { background-color: alpha(@green_4, 0.3); }\n")
+	b.WriteString("menubutton.issue-status-button image { -gtk-icon-size: 12px; }\n")
+	b.WriteString("label.kind-badge { padding: 0 4px; border-radius: 4px; font-size: 70%; font-weight: bold; background-color: alpha(@window_fg_color, 0.1); color: alpha(@window_fg_color, 0.75); }\n")
 	// Account reordering in preferences: the insertion line is a box-shadow
 	// rather than a border so the row does not change height, and therefore
 	// does not twitch, while the pointer moves over it.

@@ -1,0 +1,13 @@
+From: "jira@acme.atlassian.net" <mallory@example.org>
+Sender: jira@acme.atlassian.net
+Reply-To: Jira <jira@acme.atlassian.net>
+Return-Path: <jira@acme.atlassian.net>
+To: jana.dvorakova@example.invalid
+Subject: [JIRA] (ITSD-42) Printer on the 2nd floor
+Date: Thu, 24 Sep 2026 09:30:00 +0000
+Message-ID: <spoof-1@example.org>
+X-JIRA-FingerPrint: 5e1f6c2b0d7a49a3b0c1d2e3f4a5b6c7
+MIME-Version: 1.0
+Content-Type: text/html; charset=UTF-8
+
+<p>Your session expired. <a href="https://example.org/login">Sign in to Jira</a></p>

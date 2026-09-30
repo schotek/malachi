@@ -34,6 +34,10 @@ gets the sanitiser's output only.
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
+            <!-- The chips are built in code (MessageChips); their looks. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/ChipStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
             <!-- The star is a flat toggle with the main window's look
                  (MessageCommandBar.xaml, GTK's flat header button in both):
                  the filled star in the accent colour says it is on, where
@@ -81,50 +85,6 @@ gets the sanitiser's output only.
                 <Setter Property="Height" Value="40" />
                 <Setter Property="LabelPosition" Value="Collapsed" />
             </Style>
-            <!-- The chips are built in code; their looks are here, so that the
-                 theme resources follow the window's colour scheme (style.go:
-                 .address-chip, .address-more, .attachment-chip, .chip-action). -->
-            <Style
-                x:Key="AddressChipStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="24" />
-                <Setter Property="Padding" Value="10,2,10,3" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-            </Style>
-            <Style
-                x:Key="MoreChipStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="24" />
-                <Setter Property="Padding" Value="10,2,10,3" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Style>
-            <Style
-                x:Key="ChipActionStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="0" />
-                <Setter Property="Padding" Value="8,3,8,3" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Background" Value="Transparent" />
-            </Style>
-            <Style x:Key="ChipNameStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-            </Style>
-            <Style x:Key="ChipSizeStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Style>
         </ResourceDictionary>
     </UserControl.Resources>
     <Grid x:Name="Root" Background="{ThemeResource LayerFillColorDefaultBrush}">
@@ -158,7 +118,8 @@ gets the sanitiser's output only.
                     Style="{StaticResource CommandRowButtonStyle}"
                     ToolTipService.ToolTip="{l:T Msgid='Reply'}">
                     <AppBarButton.Icon>
-                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('mail-reply-sender')}" />
+                        <!-- Reply, or Comment on an issue (ShowFlags). -->
+                        <FontIcon x:Name="ReplyGlyph" />
                     </AppBarButton.Icon>
                 </AppBarButton>
                 <AppBarButton
@@ -259,6 +220,9 @@ gets the sanitiser's output only.
                             <MenuFlyoutSeparator />
                             <MenuFlyoutItem x:Name="LoadImagesItem" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
                             <MenuFlyoutItem x:Name="TrustSenderItem" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                            <!-- The status of a Jira issue (hidden-when: action-disabled). -->
+                            <MenuFlyoutSeparator x:Name="ChangeStatusSeparator" Visibility="Collapsed" />
+                            <MenuFlyoutItem x:Name="ChangeStatusItem" Text="{l:T Msgid='Change Status'}" Visibility="Collapsed" />
                         </MenuFlyout>
                     </FlyoutBase.AttachedFlyout>
                 </AppBarButton>
@@ -462,6 +426,15 @@ gets the sanitiser's output only.
                     CornerRadius="18"
                     Style="{StaticResource AccentButtonStyle}"
                     l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                <!-- An issue tracker instead (the Jira assistant): flat. -->
+                <Button
+                    x:Name="AddJiraAccountButton"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddJiraAccountButton"
+                    CornerRadius="18"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below
@@ -504,6 +477,9 @@ gets the sanitiser's output only.
                             Padding="24,12,24,12"
                             HorizontalAlignment="Stretch"
                             Spacing="12">
+                            <!-- issue_card_slot: the issue card of a Jira message
+                                 (window/issue_card.go); hidden for mail. -->
+                            <local:IssueCardView x:Name="IssueCard" State="{x:Bind Reader.IssueCard, Mode=OneWay}" />
                             <TextBlock
                                 x:Name="SubjectLabel"
                                 AutomationProperties.AutomationId="MessageSubject"

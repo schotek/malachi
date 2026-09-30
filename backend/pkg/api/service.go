@@ -31,6 +31,8 @@ type AccountService interface {
 	OAuthStart(ctx context.Context, p AccountOAuthStartParams) (*AccountOAuthStartResult, error)
 	OAuthWait(ctx context.Context, p AccountOAuthWaitParams) (*AccountOAuthWaitResult, error)
 	OAuthCancel(ctx context.Context, p AccountOAuthCancelParams) (*AccountOAuthCancelResult, error)
+	DetectSite(ctx context.Context, p AccountDetectSiteParams) (*AccountDetectSiteResult, error)
+	ListSpaces(ctx context.Context, p AccountListSpacesParams) (*AccountListSpacesResult, error)
 }
 
 type FolderService interface {
@@ -98,6 +100,13 @@ type ContactService interface {
 	Search(ctx context.Context, p ContactSearchParams) (*ContactSearchResult, error)
 }
 
+// IssueService acts on the issues of an issue-tracker account (an account
+// with CapabilityTransition).
+type IssueService interface {
+	Transitions(ctx context.Context, p IssueTransitionsParams) (*IssueTransitionsResult, error)
+	Transition(ctx context.Context, p IssueTransitionParams) (*IssueTransitionResult, error)
+}
+
 // Backend is the complete server-side surface. The connection handshake
 // (system.hello, system.authenticate; docs/api.md §1.4) is not part of it:
 // the transport (internal/rpc) answers the handshake before any call of a
@@ -116,6 +125,7 @@ type Backend interface {
 	Config() ConfigService
 	Senders() SenderService
 	Contacts() ContactService
+	Issues() IssueService
 }
 
 // Notifier is how backend components push events to connected clients.
@@ -126,4 +136,5 @@ type Notifier interface {
 	SyncState(n SyncStateNotification)
 	AuthRequired(n AuthRequiredNotification)
 	AccountsChanged(n AccountsChangedNotification)
+	MessagesChanged(n MessagesChangedNotification)
 }

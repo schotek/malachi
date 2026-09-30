@@ -112,6 +112,29 @@ func keys(_ m: MailModel) -> [ListKey] {
         #expect(m.rows.count == 2)
     }
 
+    /// A Jira conversation whose issue moved without a new member (the
+    /// account shows no events): the reload drops the members it had, so
+    /// the row shows the issue as the listing has it now.
+    @Test func setThreadsIssueMoved() {
+        func listed(_ status: String, _ snippet: String) -> ThreadSummary {
+            let info = IssueInfo(key: "MOB-1", url: "", summary: "", status: status, commentVisibilities: [.public])
+            var s = member("m1", "t_m", 1, "petr")
+            s.snippet = snippet
+            s.issue = MessageIssue(info: info, item: .description)
+            var th = thr("t_m", 1, 0, s)
+            th.issue = info
+            return th
+        }
+        var m = groupedModel(listed("In Progress", "before"))
+        // The same issue listed again: the members stay (the row keeps the
+        // member it had, not the listing's).
+        m.setThreads([listed("In Progress", "again")], page: PageInfo(total: 1))
+        #expect(m.rows[0].message.snippet == "before", "unchanged issue: the kept member's row")
+        m.setThreads([listed("To Do", "after")], page: PageInfo(total: 1))
+        #expect(m.rows[0].message.issue?.info.status == "To Do")
+        #expect(m.rows[0].message.snippet == "after")
+    }
+
     @Test func setMembersEmptyDropsThread() {
         let a2 = member("a2", "t_a", 2, "bob")
         var m = groupedModel(thr("t_a", 2, 0, a2), thr("t_b", 1, 0, member("b1", "t_b", 1, "carol")))

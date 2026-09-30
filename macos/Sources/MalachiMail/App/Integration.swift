@@ -26,6 +26,10 @@ final class Integration {
     let cache: MessageCache
     let windows: MessageWindows
     let reader: MessageViewController
+    /// The reading pane: `reader`, or the whole conversation of a selected
+    /// conversation row (ConversationController, Integration+Conversation).
+    let conversation: ConversationController
+    let readingPane: ReadingPaneViewController
     /// The actions: the RPC half (actions.go, outbox.go, remote.go,
     /// compose_open.go) and its AppKit half behind `MessageActions` /
     /// `MessageActionDelegate`.
@@ -38,7 +42,7 @@ final class Integration {
     /// In App target): its controller, its view and its wiring.
     let assistantPanel: AssistantPanelHost
 
-    private weak var mainWindow: MainWindowController?
+    private(set) weak var mainWindow: MainWindowController?
     /// Toasts over the main window's message pane (window.go `Toast`).
     private let mainToast: @MainActor (String) -> Void
     private var tokens: [NotificationHub.Token] = []
@@ -76,6 +80,10 @@ final class Integration {
         cache = MessageCache(client: state.client, toast: mainToast)
         windows = MessageWindows(state: state, cache: cache)
         reader = windows.makePaneView()
+        conversation = ConversationController(list: list, cache: cache)
+        readingPane = ReadingPaneViewController(
+            reader: reader,
+            conversationView: ConversationViewController(state: state, cache: cache, controller: conversation))
         actions = ActionsController(mailbox: mailbox, list: list, cache: cache, settings: state.settings, toast: mainToast)
         messageActions = MessageActionsController(
             state: state, actions: actions, list: list, cache: cache, windows: windows
@@ -98,6 +106,8 @@ final class Integration {
         wireAssistantPanel()
         wireHooks()
         compose.install(into: state)
+        wireJira()
+        wireConversation()
     }
 
     /// window.go 337-360 and 411-433: the toolbar and menu act on the
@@ -153,13 +163,8 @@ final class Integration {
     /// change re-fetches every view showing a message of that account
     /// (outbox.go `refreshOutboxViews`).
     private func wireReading() {
-        listView.onSelectedMessageChanged = { [weak self] summary in
-            guard let self else { return }
-            if let summary {
-                self.reader.show(summary)
-            } else {
-                self.reader.clear()
-            }
+        listView.onSelectedRowChanged = { [weak self] row in
+            self?.readingPane.show(row)
         }
         listView.onActivateMessage = { [weak self] summary in
             self?.windows.openMessage(summary)
@@ -207,6 +212,8 @@ final class Integration {
     /// as the fallback when it is up for this account), the preferences
     /// otherwise (GNOME Online Accounts has no panel here).
     private func signInAgain(_ kind: SignInKind, reason: ErrorCode, accountId id: AccountID) {
+        // A Jira account signs in with a token, like a password: `editAccount`
+        // opens its own assistant (`accountEditor`) asking for it.
         if editsPassword(kind, reason), mailbox.model.account(id) != nil {
             editAccount(id, requestPassword: reason)
             return
@@ -255,6 +262,11 @@ final class Integration {
     /// notify.accountsChanged and notify.syncState after the save.
     private func editAccount(_ id: AccountID, requestPassword: ErrorCode? = nil) {
         guard let account = mailbox.model.account(id), let parent = mainWindow?.window else { return }
+        if accountEditor(account) == .jira {
+            // Its token, asked for with the same reason (Integration+Jira).
+            editJiraAccount(account, parent: parent, requestToken: requestPassword)
+            return
+        }
         AccountWizardController.present(
             from: parent, client: state.client, editing: account, requestPassword: requestPassword,
             confirmTrust: Self.confirmTrust(state.alerts)
@@ -404,7 +416,9 @@ final class Integration {
     // MARK: No Accounts page
 
     /// window.blp `no-accounts`: shown in the message pane instead of
-    /// "No Message Selected" while account.list is empty.
+    /// "No Message Selected" while account.list is empty. Under the button
+    /// for a mail account sits the one for an issue tracker (the Jira
+    /// assistant), as in the GTK window.
     private func showNoAccountsPage(_ show: Bool) {
         guard show != showingNoAccounts, let mainWindow else { return }
         showingNoAccounts = show
@@ -418,16 +432,28 @@ final class Integration {
             button.controlSize = .large
             button.bezelColor = .controlAccentColor
             button.keyEquivalent = "\r"
-            page.statusPage.setChild(button)
+            let jira = NSButton(
+                title: mn(Jira.wizardTexts().addMenu), target: self, action: #selector(addJiraAccount(_:)))
+            jira.bezelStyle = .rounded
+            jira.controlSize = .large
+            let buttons = NSStackView(views: [button, jira])
+            buttons.orientation = .vertical
+            buttons.alignment = .centerX
+            buttons.spacing = 12
+            page.statusPage.setChild(buttons)
             mainWindow.install(message: page)
         } else {
             // The reader shows "No Message Selected" itself while nothing
             // is selected.
-            mainWindow.install(message: reader)
+            mainWindow.install(message: readingPane)
         }
     }
 
     @objc private func addAccount(_ sender: Any?) {
         state.hooks.addAccount?(mainWindow?.window)
+    }
+
+    @objc private func addJiraAccount(_ sender: Any?) {
+        state.hooks.addJiraAccount?(mainWindow?.window)
     }
 }

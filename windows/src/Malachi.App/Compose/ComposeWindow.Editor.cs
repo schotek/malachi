@@ -34,7 +34,14 @@ public sealed partial class ComposeWindow
         editor.Channel.Changed += (_, _) => draft.EditorChanged();
         editor.Channel.StateChanged += (_, st) => FormatBar.ApplyState(FormatBarState.From(st));
         editor.Channel.KeyPressed += (_, key) => OnEditorKey(key);
-        editor.FilesDropped += (_, paths) => attachments.AttachFiles(paths);
+        editor.FilesDropped += (_, paths) =>
+        {
+            // A comment has no attachments: what is dropped is refused.
+            if (!IsComment)
+            {
+                attachments.AttachFiles(paths);
+            }
+        };
         editor.Crashed += (_, _) => OnEditorCrashed();
     }
 

@@ -202,11 +202,15 @@ public sealed partial class WindowTracker : IDisposable
         var c = tracked.Commands;
         var window = tracked.Window;
         c.NewMessage.Handler = () => hooks.ComposeNew?.Invoke();
-        c.NewMessage.CanExecute = () => hooks.ComposeNew is not null;
+        // New Message needs an account that writes mail (CanComposeNew): a
+        // Jira account only comments.
+        c.NewMessage.CanExecute = () => hooks.ComposeNew is not null && (hooks.CanComposeNew?.Invoke() ?? true);
         c.Preferences.Handler = () => hooks.OpenPreferences?.Invoke();
         c.Preferences.CanExecute = () => hooks.OpenPreferences is not null;
         c.AddAccount.Handler = () => hooks.AddAccount?.Invoke(window);
         c.AddAccount.CanExecute = () => hooks.AddAccount is not null;
+        c.AddJiraAccount.Handler = () => hooks.AddJiraAccount?.Invoke(window);
+        c.AddJiraAccount.CanExecute = () => hooks.AddJiraAccount is not null;
         c.CheckForNewMail.Handler = () => hooks.CheckForNewMail?.Invoke();
         c.CheckForNewMail.CanExecute = () => hooks.CheckForNewMail is not null;
         c.Search.Handler = () => hooks.FocusSearch?.Invoke();

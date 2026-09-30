@@ -102,7 +102,8 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 AutomationProperties.Name="{l:T Msgid='Reply'}"
                 Style="{StaticResource HeaderButtonStyle}"
                 ToolTipService.ToolTip="{l:T Msgid='Reply'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-reply-sender-symbolic')}" />
+                <!-- Reply, or Comment on an issue: glyph and label set in code (ShowFlags). -->
+                <FontIcon x:Name="ReplyGlyph" FontSize="16" />
             </Button>
             <Button
                 x:Name="ReplyAllButton"
@@ -200,6 +201,9 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuLoadImages" l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
                         <MenuFlyoutItem x:Name="MenuTrustSender" l:MnemonicLabel.Text="{l:T Msgid='Always Load Images From This _Sender'}" />
+                        <!-- The status of a Jira issue (hidden-when: action-disabled). -->
+                        <MenuFlyoutSeparator x:Name="MenuChangeStatusSeparator" Visibility="Collapsed" />
+                        <MenuFlyoutItem x:Name="MenuChangeStatus" Text="{l:T Msgid='Change Status'}" Visibility="Collapsed" />
                     </MenuFlyout>
                 </Button.Flyout>
             </Button>

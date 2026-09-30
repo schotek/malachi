@@ -10,9 +10,10 @@ import UniformTypeIdentifiers
 // the chips, removal, and the cid: registrations of inline pictures.
 
 extension ComposeWindowController {
-    /// `compose.attach`: files to attach, as many as chosen.
+    /// `compose.attach`: files to attach, as many as chosen. Not in
+    /// comment mode: a comment has no attachments.
     @objc func attachFiles(_ sender: Any?) {
-        guard let window else { return }
+        guard let window, !isComment else { return }
         let panel = NSOpenPanel()
         panel.title = L10n.T("Attach Files")
         panel.canChooseFiles = true
@@ -32,9 +33,9 @@ extension ComposeWindowController {
     }
 
     /// `compose.insert-image`: one picture, imported inline and inserted
-    /// at the caret as `cid:<contentId>`.
+    /// at the caret as `cid:<contentId>`. Not in comment mode.
     @objc func insertImage(_ sender: Any?) {
-        guard let window else { return }
+        guard let window, !isComment else { return }
         let panel = NSOpenPanel()
         panel.title = L10n.T("Insert Image")
         panel.canChooseFiles = true

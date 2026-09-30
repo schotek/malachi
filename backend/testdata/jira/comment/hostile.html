@@ -1,0 +1,27 @@
+<!-- A comment draft's HTML as a hostile client or a changed file could
+     make it: wiki markup meant to become macros, links, mentions, pictures,
+     tables and headings; links of every scheme; scripts, frames, forms and
+     pictures; invisible and bidirectional characters. Fictional data. -->
+<p onclick="steal()">Dobrý den,<script>alert(1)</script> {html}<b>injected</b>{html} {include:secret}</p>
+<p>[~admin] [Klikni|javascript:alert(1)] !https://tracker.example/pixel.png! [#anchor] [^report.pdf]</p>
+<p><a href="javascript:alert(1)">js</a> <a href="JaVaScRiPt:alert(2)">js2</a>
+<a href="data:text/html;base64,PHNjcmlwdD4=">data</a> <a href="vbscript:msgbox">vb</a>
+<a href="cid:pic@acme.example">cid</a> <a href="/secure/Dashboard.jspa">relative</a>
+<a href="//evil.example/x">protocol-relative</a> <a href="https://user:secret@evil.example/">userinfo</a>
+<a href=" https://ok.example/a b">space</a> <a href="https://acme.example/wiki|x">bar</a>
+<a href="mailto:jana@acme.example">mail</a> <a href="java&#x09;script:alert(3)">tab</a></p>
+<p>h1. fake heading</p>
+<p>bq. fake quote</p>
+<p>* fake bullet</p>
+<p># fake number</p>
+<p>||fake||table||</p>
+<p>----</p>
+<p>{color:red}red{color} {panel}p{panel} {code}x{code} {noformat}y{noformat}</p>
+<p>*bold* _em_ -strike- +under+ ^sup^ ~sub~ ??cite?? {{mono}} \\ break \ backslash &amp;copy; &amp;#65; e-mail C++ x-y</p>
+<p>emoji &#x1F600; rtl &#x202E;evil&#x202C; zero&#x200B;width</p>
+<iframe src="https://evil.example/"></iframe><img src="cid:x"><form><input value="typed"></form>
+<video src="https://evil.example/v.mp4">video text</video><svg><text>svg text</text></svg>
+<pre>{noformat}
+{html}<script>alert(1)</script>{html}
+[link|javascript:alert(1)]</pre>
+<blockquote><pre>{quote}escape{quote}</pre></blockquote>

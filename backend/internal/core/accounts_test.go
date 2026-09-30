@@ -47,6 +47,7 @@ func (*recNotifier) NewMessage(api.NewMessageNotification)             {}
 func (*recNotifier) SyncState(api.SyncStateNotification)               {}
 func (*recNotifier) AuthRequired(api.AuthRequiredNotification)         {}
 func (n *recNotifier) AccountsChanged(api.AccountsChangedNotification) { n.accountsChanged++ }
+func (*recNotifier) MessagesChanged(api.MessagesChangedNotification)   {}
 
 var _ auth.Keyring = (*memKeyring)(nil)
 var _ api.Notifier = (*recNotifier)(nil)

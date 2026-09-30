@@ -206,6 +206,13 @@ public sealed partial class MessageListPane : UserControl
     /// <summary>A request of <see cref="FocusList"/> still waiting lapses (the search box took the keyboard again).</summary>
     public void CancelFocusList() => EndFocusRequest();
 
+    /// <summary>
+    /// window.go addConversationPaging: Space pages down (up with Shift)
+    /// through the conversation the pane shows; true when it did, false when
+    /// the key does what it did (no conversation shown).
+    /// </summary>
+    internal Func<bool, bool>? PageConversation { get; set; }
+
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
     {
@@ -580,6 +587,12 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
+        if (e.Key == WinKey.Space && PageConversation is { } page && !ModifierDown(WinKey.Control) && !ModifierDown(WinKey.Menu)
+            && !ModifierDown(WinKey.LeftWindows) && !ModifierDown(WinKey.RightWindows))
+        {
+            e.Handled = page(ModifierDown(WinKey.Shift));
+            return;
+        }
         switch (e.Key)
         {
             case WinKey.Enter:
@@ -594,6 +607,9 @@ public sealed partial class MessageListPane : UserControl
                 break;
         }
     }
+
+    private static bool ModifierDown(WinKey key) =>
+        Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     // rowDoubleClicked (window.go row-activated); a double click on the
     // fold arrow is the arrow's.
@@ -654,17 +670,41 @@ public sealed partial class MessageListPane : UserControl
             }
             menu.Items.Add(item);
         }
-        Add(c.Reply, L10n.T("Reply"));
-        Add(c.ReplyAll, L10n.T("Reply All"));
-        Add(c.Forward, L10n.T("Forward"));
-        menu.Items.Add(new MenuFlyoutSeparator());
+        // What the account does not offer is left out (ActionPresentation);
+        // Reply is Comment on an issue.
+        void AddOffered(MessageActionKind kind, AppCommand command, string label)
+        {
+            if (ActionPresentation.Offers(flags, kind))
+            {
+                Add(command, label);
+            }
+        }
+        void Separate()
+        {
+            if (menu.Items.Count > 0 && menu.Items[^1] is not MenuFlyoutSeparator)
+            {
+                menu.Items.Add(new MenuFlyoutSeparator());
+            }
+        }
+        AddOffered(MessageActionKind.Reply, c.Reply, ActionPresentation.ReplyLabel(flags));
+        AddOffered(MessageActionKind.ReplyAll, c.ReplyAll, L10n.T("Reply All"));
+        AddOffered(MessageActionKind.Forward, c.Forward, L10n.T("Forward"));
+        Separate();
         Add(c.MarkUnread, L10n.T("Mark as _Unread"), mnemonic: true);
         Add(c.MarkRead, L10n.T("Mark as _Read"), mnemonic: true);
         Add(c.ToggleFlag, flags.Flagged ? L10n.T("Unstar") : L10n.T("Star"));
-        menu.Items.Add(new MenuFlyoutSeparator());
-        Add(c.Archive, L10n.T("Archive"));
-        Add(c.Junk, L10n.T("Mark as Junk"));
-        Add(c.Trash, Outbox.TrashTooltip(flags.Outbox));
+        if (c.ChangeStatus.IsEnabled)
+        {
+            Add(c.ChangeStatus, L10n.T("Change Status"));
+        }
+        Separate();
+        AddOffered(MessageActionKind.Archive, c.Archive, L10n.T("Archive"));
+        AddOffered(MessageActionKind.Junk, c.Junk, L10n.T("Mark as Junk"));
+        AddOffered(MessageActionKind.Trash, c.Trash, Outbox.TrashTooltip(flags.Outbox));
+        if (menu.Items[^1] is MenuFlyoutSeparator last)
+        {
+            menu.Items.Remove(last);
+        }
         e.Handled = true;
         if (MessageList.ContainerFromItem(row) is not ListViewItem container)
         {

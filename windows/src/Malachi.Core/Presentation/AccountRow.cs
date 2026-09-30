@@ -25,8 +25,11 @@ public sealed record AccountRow
     /// <summary>The account's name, or its address when unnamed (<see cref="AccountsPage.AccountRowTitle"/>).</summary>
     public required string Title { get; init; }
 
-    /// <summary>The address, the row's subtitle.</summary>
-    public required string Email { get; init; }
+    /// <summary>
+    /// The row's subtitle: the address, or a Jira account's site
+    /// (<see cref="AccountsPage.AccountRowSubtitle"/>).
+    /// </summary>
+    public required string Subtitle { get; init; }
 
     /// <summary>The short status beside the switch (<see cref="AccountsPage.AccountStatusText"/>); "" hides it.</summary>
     public required string Status { get; init; }
@@ -43,7 +46,11 @@ public sealed record AccountRow
     /// <summary>A call about this account is in flight: the row is insensitive.</summary>
     public required bool Busy { get; init; }
 
-    /// <summary>The GTK icon name of the account's provider (the generic mail icon on Windows, U6).</summary>
+    /// <summary>
+    /// The GTK icon name of the account's kind (<see cref="AccountsPage.AccountIcon"/>):
+    /// a Jira account's task list, else the provider's (the generic mail icon
+    /// on Windows, U6).
+    /// </summary>
     public required string Icon { get; init; }
 
     /// <summary>
@@ -58,12 +65,12 @@ public sealed record AccountRow
         {
             Account = account,
             Title = AccountsPage.AccountRowTitle(account),
-            Email = account.Config.Email,
+            Subtitle = AccountsPage.AccountRowSubtitle(account),
             Status = AccountsPage.AccountStatusText(account.State),
             OffersSignIn = AccountsPage.AccountRowOffersSignIn(account),
             Enabled = wanted ?? account.Enabled,
             Busy = busy,
-            Icon = Provider.ProviderIcon(Provider.AccountProvider(account.Config)),
+            Icon = AccountsPage.AccountIcon(account),
         };
     }
 }

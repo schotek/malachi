@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Compose/URLSyntax.swift; GTK: the slice
-// of Go's net/url (url.Parse, Hostname, PathUnescape, ParseQuery) that
-// ui/internal/compose/mailto.go, ui/internal/htmlview/links.go and
-// ui/internal/signin (BrowserURL) rely on.
+// of Go's net/url (url.Parse, Hostname, Port, PathUnescape, ParseQuery)
+// that ui/internal/compose/mailto.go, ui/internal/htmlview/links.go,
+// ui/internal/signin (BrowserURL) and ui/internal/jira (SiteHost,
+// IsIssueURL, CheckSiteInput; Swift's JiraURL.swift) rely on.
 //
 // Reproduced byte for byte, as the Swift port reproduces it, so that
 // ParseMailto, IsMasked and IsBrowserUrl read a URI exactly as the GTK UI
@@ -379,19 +380,28 @@ internal static class UrlSyntax
     }
 
     // URL.Hostname: splitHostPort, then the brackets of an IPv6 literal.
-    private static string HostnameWithoutPort(string host)
+    private static string HostnameWithoutPort(string host) => SplitHostPort(host).Host;
+
+    /// <summary>
+    /// url.splitHostPort, which URL.Hostname and URL.Port read: the digits
+    /// after the last colon as the port ("" without them), the rest as the
+    /// host without an IPv6 literal's brackets.
+    /// </summary>
+    public static (string Host, string Port) SplitHostPort(string hostPort)
     {
-        ReadOnlySpan<byte> h = Encoding.UTF8.GetBytes(host);
+        ReadOnlySpan<byte> h = Encoding.UTF8.GetBytes(hostPort);
+        ReadOnlySpan<byte> port = [];
         var colon = h.LastIndexOf((byte)':');
         if (colon >= 0 && ValidOptionalPort(h[colon..]))
         {
+            port = h[(colon + 1)..];
             h = h[..colon];
         }
         if (h.Length >= 2 && h[0] == (byte)'[' && h[^1] == (byte)']')
         {
             h = h[1..^1];
         }
-        return Encoding.UTF8.GetString(h);
+        return (Encoding.UTF8.GetString(h), Encoding.UTF8.GetString(port));
     }
 
     // validOptionalPort: empty, or a colon followed by digits only.

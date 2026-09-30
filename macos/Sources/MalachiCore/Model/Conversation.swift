@@ -1,0 +1,408 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+// ui/internal/conversation/conversation.go: the view logic of a whole
+// conversation in the reading pane. Selecting a folded conversation row of
+// the grouped list (two or more members in the folder; a Jira folder is
+// always grouped) shows every member the folder holds, stacked oldest first
+// with full bodies, instead of only the newest one; a member row and a
+// single-message row keep the single-message view.
+//
+// The port turns the answer of a folder-scoped thread.get (the summary and
+// the members, oldest first, at most `API.Limits.maxThreadMessages`, the
+// newest) into the items the pane stacks: a card per message (a mail
+// message, or the description or a comment of an issue, with the Jira
+// badges), a compact row per status or assignee change of an issue, and on
+// top a row that says how many older members are left out. It also picks
+// the one member opening the conversation marks read (the newest that is
+// not an event) and the item the pane scrolls to (the newest), and keeps
+// the items in step when a member arrives or goes while the conversation is
+// shown.
+//
+// The pane stacks native cards, each body in its own locked view, never one
+// composed document: a message's CSS could restyle or forge the headers of
+// the others. Headers are plain text only; every string here that comes
+// from a message is attacker-controlled.
+//
+// Go's Translator is the gettext shim here (L10n, keys = the GTK msgids),
+// as in JiraView.swift. Where Swift cannot follow Go literally: an empty Go
+// id ("") is nil here (`Item.message` of the truncated row, `markRead`),
+// and the account of `build` and `merge` may be left out (nil: nobody's
+// mail is the user's own) by a caller that reads only what does not depend
+// on it, as the list controller does for the member to mark read.
+
+import Foundation
+
+/// The conversation package: a namespace, so the Go names map 1:1
+/// (`conversation.Build` → `Conversation.build`).
+public enum Conversation {
+    /// conversation.IsConversationRow: a listed conversation whose
+    /// selection shows the whole conversation: two or more members in the
+    /// folder. The outbox is never grouped (the caller's rule, as for the
+    /// list).
+    public static func isConversationRow(_ t: ThreadSummary) -> Bool {
+        t.messageCount >= 2
+    }
+
+    /// conversation.ItemKind: what an item of the stack is.
+    public enum ItemKind: Sendable, Equatable {
+        /// A message card: a mail message, or the description or a comment
+        /// of an issue. Its body is shown in full.
+        case message
+        /// A compact row of an issue's status or assignee changes: native
+        /// text only (never a web view), never unread, never marked read.
+        case event
+        /// The row on top that says how many older members are left out
+        /// (thread.get returns the newest `API.Limits.maxThreadMessages`).
+        case truncated
+    }
+
+    /// conversation.Item: one entry of the stack.
+    public struct Item: Sendable, Equatable {
+        public var kind: ItemKind
+        /// The member (`.message` and `.event`); nil for `.truncated`.
+        public var message: MessageSummary?
+        /// The name the card's compact header shows: the display name (else
+        /// the address) of the first sender that has one, cleaned for one
+        /// line (`Jira.clean`); "" when there is none.
+        public var sender = ""
+        /// Marks an unread message card; an event is never unread, whatever
+        /// its flags.
+        public var unread = false
+        /// A member the account's own user wrote: the pane tints its avatar
+        /// with the accent colour and changes nothing else (the name stays
+        /// the sender's). An item of an issue says so itself
+        /// (`MessageIssue.mine`), and a comment an integration relayed
+        /// (`via`) is never the user's, whatever the site says; a mail
+        /// message is the user's when the address of its first sender is
+        /// the account's, compared without case and surrounding space (no
+        /// sender, no address or an account without one: not the user's).
+        /// An address is what the sender wrote: a forged From looks like
+        /// the user's own message.
+        public var mine = false
+        /// An internal comment of a service-desk issue, which shows the
+        /// badge `internalLabel` ("" when not internal). `via` names the
+        /// integration that posted a comment for its author ("via Issue
+        /// Sync"); `edited` is the badge of a comment changed after it was
+        /// posted. "" when not; always "" for mail. The texts are those of
+        /// `Jira.issueCard`.
+        public var `internal` = false
+        public var internalLabel = ""
+        public var via = ""
+        public var edited = ""
+        /// The sentences of an event, one per change (`Jira.eventLines`);
+        /// `eventText` is them on one line (`Jira.eventText`), for an
+        /// accessible name. Empty for other kinds.
+        public var eventLines: [String] = []
+        public var eventText = ""
+        /// The sentence of `.truncated` ("112 earlier messages are not
+        /// shown"); "" for other kinds.
+        public var text = ""
+
+        public init(kind: ItemKind, message: MessageSummary? = nil) {
+            self.kind = kind
+            self.message = message
+        }
+
+        /// The member's id; nil for the truncated row.
+        public var id: MessageID? {
+            kind == .truncated ? nil : message?.id
+        }
+    }
+
+    /// conversation.Model: what the reading pane shows of one conversation.
+    public struct Model: Sendable, Equatable {
+        /// The conversation; `merge` ignores a message of another one.
+        public var thread: ThreadID
+        /// The stack, oldest first by (date, id): a `.truncated` item on top
+        /// when `earlier` > 0, then the members. Empty when the conversation
+        /// has no member to show: the pane shows its empty page then, or,
+        /// when `remove` took the last shown member and `earlier` > 0, loads
+        /// the conversation again (`build` never leaves `earlier` > 0
+        /// without items).
+        public var items: [Item] = []
+        /// The issue card shown once above the stack of a Jira conversation
+        /// (`Jira.issueCard` without an item: no badges); nil for mail and
+        /// for an empty model.
+        public var issue: Jira.Card?
+        /// How many older members of the conversation in the folder are not
+        /// in `items`.
+        public var earlier = 0
+        /// The member opening the conversation marks read (after the usual
+        /// delay): the newest message card that is not a queued message of
+        /// the outbox, when it is unread; nil when it is read or there is
+        /// none. Older unread members stay unread, and events are never
+        /// marked. The model recomputes it after every change; a client acts
+        /// on it when the conversation is opened (and may when a member
+        /// arrives while the pane shows the end), never after a flag
+        /// change: a member the user marked unread stays unread.
+        public var markRead: MessageID?
+        /// The index into `items` the pane scrolls to when it opens the
+        /// conversation: the newest item; -1 when `items` is empty. Whether
+        /// an arrival scrolls (only when the pane was at the end) is the
+        /// client's decision.
+        public var scrollTo = -1
+
+        public init(thread: ThreadID) {
+            self.thread = thread
+        }
+
+        /// conversation.Model.Index: the position in `items` of the member
+        /// `id`; -1 when it is not shown.
+        public func index(_ id: MessageID?) -> Int {
+            guard let id, !id.rawValue.isEmpty else { return -1 }
+            return items.firstIndex { $0.kind != .truncated && $0.message?.id == id } ?? -1
+        }
+    }
+
+    /// conversation.Build: the model of a conversation from a
+    /// folder-scoped thread.get: `thread` is its summary, `members` its
+    /// folder members, `account` the account they belong to (its address
+    /// tells the user's own mail, `Item.mine`). The members are ordered
+    /// oldest first by (date, id) whatever order they come in; a member
+    /// without an id and a repeated id (the first is kept) are dropped;
+    /// beyond `API.Limits.maxThreadMessages` only the newest are kept. An event
+    /// whose changes this client does not know at all (the field is an open
+    /// enum) is left out, as `Jira.eventLines` leaves out such a change.
+    /// `earlier` counts the members of `thread.messageCount` that are not
+    /// among the members. The issue card is the thread's issue, else the
+    /// newest member's. No member to show makes an empty model with
+    /// `earlier` 0 (the conversation left the folder: nothing to load
+    /// again).
+    public static func build(_ thread: ThreadSummary, _ members: [MessageSummary], account: Account? = nil) -> Model {
+        var m = Model(thread: thread.id)
+        let list = sortedUnique(members)
+        var shown = list[...]
+        if shown.count > API.Limits.maxThreadMessages {
+            shown = shown.suffix(API.Limits.maxThreadMessages)
+        }
+        m.earlier = max(thread.messageCount, list.count) - shown.count
+        var items: [Item] = []
+        items.reserveCapacity(shown.count)
+        for s in shown {
+            if let it = memberItem(s, account) {
+                items.append(it)
+            }
+        }
+        if items.isEmpty {
+            return Model(thread: thread.id)
+        }
+        var info = thread.issue
+        if info == nil {
+            info = shown.last { $0.issue != nil }?.issue?.info
+        }
+        let card = info.map { Jira.issueCard($0) }
+        return assemble(m, items, card)
+    }
+
+    /// conversation.Merge: puts a member that arrived while the
+    /// conversation is shown in its place by (date, id), or replaces the
+    /// shown member with the same id by `arrived` (its flags, delivery state
+    /// or issue changed) and moves it if its date changed. A message without
+    /// an id, or of another conversation (a thread id that differs), leaves
+    /// the model as it is; which folder it is in is the caller's check, as
+    /// for the list. A member with an issue refreshes the issue card (an
+    /// event has changed the status). `account` is the conversation's
+    /// account, as for `build`. `markRead` and `scrollTo` follow the rules
+    /// of `build`; the model given is not modified.
+    public static func merge(_ m: Model, _ arrived: MessageSummary, account: Account? = nil) -> Model {
+        if arrived.id.rawValue.isEmpty {
+            return m
+        }
+        if !m.thread.rawValue.isEmpty, let t = arrived.threadId, !t.rawValue.isEmpty, t != m.thread {
+            return m
+        }
+        var items: [Item] = []
+        items.reserveCapacity(m.items.count + 1)
+        for it in m.items where it.kind != .truncated && it.message?.id != arrived.id {
+            items.append(it)
+        }
+        if let it = memberItem(arrived, account) {
+            let at = items.firstIndex { x in x.message.map { before(arrived, $0) } ?? false } ?? items.count
+            items.insert(it, at: at)
+        }
+        var card = m.issue
+        if let issue = arrived.issue {
+            card = Jira.issueCard(issue.info)
+        }
+        return assemble(m, items, card)
+    }
+
+    /// conversation.Remove: drops the member `id` (it was moved, deleted or
+    /// left the folder). An id that is not shown leaves the model as it is.
+    /// When the last shown member goes, the model becomes empty and keeps
+    /// `earlier`: a conversation with older members is loaded again.
+    /// `markRead` and `scrollTo` follow the rules of `build`; the model
+    /// given is not modified.
+    public static func remove(_ m: Model, _ id: MessageID) -> Model {
+        let at = m.index(id)
+        if at < 0 {
+            return m
+        }
+        var items: [Item] = []
+        items.reserveCapacity(m.items.count - 1)
+        var members = 0
+        for (i, it) in m.items.enumerated() where i != at {
+            items.append(it)
+            if it.kind != .truncated {
+                members += 1
+            }
+        }
+        if members == 0 {
+            var empty = Model(thread: m.thread)
+            empty.earlier = m.earlier
+            return empty
+        }
+        var out = m
+        out.items = items
+        out.markRead = markRead(items)
+        out.scrollTo = items.count - 1
+        return out
+    }
+
+    /// conversation.CardActions: the buttons a card offers on hover: Reply
+    /// (labelled Comment when `comment` is set), Reply All and Forward, as
+    /// the message toolbar would offer them for this member alone
+    /// (`Capabilities.available` with the member selected).
+    /// `composeAccount` says some enabled account can compose
+    /// (`Capabilities.Situation.composeAccount`): the forward of an issue
+    /// goes out from a mail account. An event offers none; the other
+    /// actions (move, trash, archive, junk) are never set here.
+    public static func cardActions(_ account: Account, _ m: MessageSummary, composeAccount: Bool) -> Capabilities.Actions {
+        if Jira.isEvent(m.issue) {
+            return Capabilities.Actions()
+        }
+        let a = Capabilities.available(Capabilities.Situation(
+            account: account, selected: true, outbox: m.outbox != nil, composeAccount: composeAccount))
+        return Capabilities.Actions(reply: a.reply, replyAll: a.replyAll, forward: a.forward, comment: a.comment)
+    }
+
+    /// conversation.assemble: completes `m` from its member items, oldest
+    /// first: the row of older members on top when `earlier` > 0, the issue
+    /// card, `markRead` and `scrollTo`. No member items make an empty model
+    /// (`thread` and `earlier` kept).
+    private static func assemble(_ m: Model, _ items: [Item], _ card: Jira.Card?) -> Model {
+        var out = Model(thread: m.thread)
+        out.earlier = m.earlier
+        if items.isEmpty {
+            return out
+        }
+        if out.earlier > 0 {
+            out.items.reserveCapacity(items.count + 1)
+            out.items.append(truncatedItem(out.earlier))
+        }
+        out.items.append(contentsOf: items)
+        out.issue = card
+        out.markRead = markRead(out.items)
+        out.scrollTo = out.items.count - 1
+        return out
+    }
+
+    /// conversation.truncatedItem: the row that says `n` older members are
+    /// left out.
+    private static func truncatedItem(_ n: Int) -> Item {
+        var it = Item(kind: .truncated)
+        // TRANSLATORS: at the top of a conversation in the reading pane; only its newest messages are shown.
+        it.text = L10n.N("%d earlier message is not shown", "%d earlier messages are not shown", n)
+        return it
+    }
+
+    /// conversation.memberItem: the item of member `s` of an account's
+    /// conversation; nil for an event without a change this client knows.
+    private static func memberItem(_ s: MessageSummary, _ account: Account?) -> Item? {
+        var it = Item(kind: .message, message: s)
+        it.sender = sender(s.from)
+        it.mine = mine(s, account)
+        if let issue = s.issue, Jira.isEvent(issue) {
+            let lines = Jira.eventLines(issue.changes)
+            if lines.isEmpty {
+                return nil
+            }
+            it.kind = .event
+            it.eventLines = lines
+            it.eventText = Jira.eventText(issue.changes)
+            return it
+        }
+        it.unread = !hasFlag(s.flags, .seen)
+        if let issue = s.issue {
+            let c = Jira.issueCard(issue.info, item: issue)
+            it.internal = c.internal
+            it.internalLabel = c.internalLabel
+            it.via = c.via
+            it.edited = c.edited
+        }
+        return it
+    }
+
+    /// conversation.markRead: the newest message card that is not queued in
+    /// the outbox when it is unread, else nil.
+    private static func markRead(_ items: [Item]) -> MessageID? {
+        for it in items.reversed() {
+            guard it.kind == .message, let s = it.message, s.outbox == nil else { continue }
+            return it.unread ? s.id : nil
+        }
+        return nil
+    }
+
+    /// conversation.mine: whether the user of `account` wrote member `s`
+    /// (`Item.mine`).
+    private static func mine(_ s: MessageSummary, _ account: Account?) -> Bool {
+        if let issue = s.issue {
+            return issue.mine == true && (issue.via ?? "").isEmpty
+        }
+        guard let first = s.from.first, let account else { return false }
+        let own = account.config.email.trimmingCharacters(in: .whitespacesAndNewlines)
+        let from = first.address.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !own.isEmpty && !from.isEmpty && equalFold(own, from)
+    }
+
+    /// strings.EqualFold: equal ignoring case, the folded scalars compared
+    /// literally as Go compares strings (no canonical equivalence, which
+    /// Swift's `==` on String would apply), as `CertTrust.foldKey` does.
+    private static func equalFold(_ a: String, _ b: String) -> Bool {
+        Array(a.lowercased().unicodeScalars) == Array(b.lowercased().unicodeScalars)
+    }
+
+    /// conversation.sender: the cleaned display name (else address) of the
+    /// first address that has one.
+    private static func sender(_ from: [Address]) -> String {
+        for a in from {
+            let name = Jira.clean(a.name ?? "")
+            if !name.isEmpty {
+                return name
+            }
+            let addr = Jira.clean(a.address)
+            if !addr.isEmpty {
+                return addr
+            }
+        }
+        return ""
+    }
+
+    /// conversation.sortedUnique: `members` without empty and repeated ids
+    /// (the first kept), oldest first by (date, id).
+    private static func sortedUnique(_ members: [MessageSummary]) -> [MessageSummary] {
+        var seen = Set<MessageID>()
+        var out: [MessageSummary] = []
+        out.reserveCapacity(members.count)
+        for s in members {
+            if s.id.rawValue.isEmpty || seen.contains(s.id) {
+                continue
+            }
+            seen.insert(s.id)
+            out.append(s)
+        }
+        // (date, id) is a total order once the ids are unique.
+        out.sort(by: before)
+        return out
+    }
+
+    /// conversation.before: orders members oldest first: by date, then by
+    /// id (thread.get's order).
+    private static func before(_ a: MessageSummary, _ b: MessageSummary) -> Bool {
+        if a.date != b.date {
+            return a.date < b.date
+        }
+        return a.id.rawValue < b.id.rawValue
+    }
+}

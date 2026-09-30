@@ -4,7 +4,8 @@
 import AppKit
 import MalachiCore
 
-/// The headers above the body (window.blp lines 465–539): subject, the
+/// The headers above the body (window.blp lines 465–539): the issue card
+/// of a Jira message (`IssueCardView`, hidden for mail), subject, the
 /// sender and recipient chips (`AddressHeaderView`), date, the attachment
 /// chips, the hint that only the plain text is shown, and a separator.
 /// Everything is server data shown as plain text; the labels are
@@ -24,6 +25,9 @@ final class MessageHeaderView: NSView {
 
     /// The From, To and Cc rows (`message_addresses`).
     let addresses = AddressHeaderView()
+
+    /// The issue a Jira message belongs to; hidden for mail.
+    let issueCard = IssueCardView()
 
     var date: String {
         get { dateLabel.stringValue }
@@ -78,7 +82,7 @@ final class MessageHeaderView: NSView {
         separator.boxType = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = FillStackView(fillingViews: [subjectLabel, addresses, dateLabel, chips, hintLabel, separator])
+        let stack = FillStackView(fillingViews: [issueCard, subjectLabel, addresses, dateLabel, chips, hintLabel, separator])
         stack.spacing = Self.spacing
         // GTK keeps 24 above the subject (window.blp `margin-top: 24`) and
         // the row spacing below the date; here the top matches the bottom

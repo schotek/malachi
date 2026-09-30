@@ -40,8 +40,8 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
     /// <summary>The name, or the address when unnamed.</summary>
     public string Title => row.Title;
 
-    /// <summary>The address.</summary>
-    public string Email => row.Email;
+    /// <summary>The address, or a Jira account's site.</summary>
+    public string Subtitle => row.Subtitle;
 
     /// <summary>The status beside the switch; its tooltip shows it whole.</summary>
     public string Status => row.Status;
@@ -81,9 +81,9 @@ public sealed partial class AccountRowView : INotifyPropertyChanged
             {
                 Changed(nameof(Title));
             }
-            if (old.Email != next.Email)
+            if (old.Subtitle != next.Subtitle)
             {
-                Changed(nameof(Email));
+                Changed(nameof(Subtitle));
             }
             if (old.Status != next.Status)
             {

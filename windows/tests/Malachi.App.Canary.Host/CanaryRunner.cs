@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Vladislav Janeček
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// The canary host's run (docs/windows-port.md §12): the app's viewer, editor
-// and previewer (or, in the control run, a WebView2 without any protection)
+// The canary host's run (docs/windows-port.md §12): the app's viewer, editor,
+// previewer and conversation card (or, in the control run, a WebView2
+// without any protection)
 // in one window beyond the edge of the screen, the steps of the
 // configuration played on them, and everything they did recorded. Pointer
 // actions go through the DevTools protocol (Input.dispatchMouseEvent), which
@@ -70,7 +71,12 @@ internal sealed class CanaryRunner
     private MessageWebView? viewer;
     private ComposeWebView? editor;
     private PreviewWebView? preview;
+    private CardWebView? card;
     private WebView2? control;
+
+    // The views of a protected run: the viewer, the editor, the previewer
+    // and a card of the conversation view.
+    private const int ViewCount = 4;
 
     public CanaryRunner(HostConfig config)
     {
@@ -111,8 +117,9 @@ internal sealed class CanaryRunner
                 viewer = new MessageWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)) };
                 editor = new ComposeWebView(registry);
                 preview = new PreviewWebView { FileTypes = new ShellFileTypes(), TypePolicy = new FileTypePolicy() };
+                card = new CardWebView { Parts = (_, _) => Task.FromResult(("image/png", Png)) };
                 var column = 0;
-                foreach (var view in new FrameworkElement[] { viewer, editor, preview })
+                foreach (var view in new FrameworkElement[] { viewer, editor, preview, card })
                 {
                     grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(ViewWidth) });
                     view.Width = ViewWidth;
@@ -123,6 +130,10 @@ internal sealed class CanaryRunner
                 }
                 viewer.LinkActivated += (_, link) => Add(HostEvent.Kinds.Link, "viewer", link.Resolved, detail: link.Raw);
                 viewer.HoveredLinkChanged += (_, _) => Add(HostEvent.Kinds.Hover, "viewer", null, detail: viewer.HoveredLink);
+                card.OnLink = link => Add(HostEvent.Kinds.Link, "card", link.Resolved, detail: link.Raw);
+                card.OnHover = text => Add(HostEvent.Kinds.Hover, "card", null, detail: text);
+                card.OnSize = (css, viewport, _) => Add(HostEvent.Kinds.Size, "card", null,
+                    detail: css.ToString("0.##", CultureInfo.InvariantCulture) + (viewport ? " viewport" : " -"));
                 editor.Channel.Ready += (_, _) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "ready");
                 editor.Channel.KeyPressed += (_, key) => Add(HostEvent.Kinds.Bridge, "editor", null, detail: "key " + key);
                 editor.FilesDropped += (_, paths) => Add(HostEvent.Kinds.Dropped, "editor", null, detail: string.Join("|", paths));
@@ -133,7 +144,7 @@ internal sealed class CanaryRunner
                     // last text again.
                     editor.Load(editor.Html);
                 };
-                foreach (var (name, view) in new (string, HardenedWebView)[] { ("viewer", viewer), ("editor", editor), ("preview", preview) })
+                foreach (var (name, view) in new (string, HardenedWebView)[] { ("viewer", viewer), ("editor", editor), ("preview", preview), ("card", card) })
                 {
                     view.Unavailable += (_, _) => Add(HostEvent.Kinds.Unavailable, name, null);
                     view.CoreWebViewInitialized += (_, _) => Initialized(name, view);
@@ -179,7 +190,7 @@ internal sealed class CanaryRunner
     // run is to be looked at.
     private void Place(Window w)
     {
-        var width = config.Mode == HostConfig.Modes.Control ? ViewWidth + 40 : (3 * ViewWidth) + 40;
+        var width = config.Mode == HostConfig.Modes.Control ? ViewWidth + 40 : (ViewCount * ViewWidth) + 40;
         var height = ViewHeight + 60;
         if (config.Visible)
         {
@@ -217,7 +228,7 @@ internal sealed class CanaryRunner
             {
                 unavailable = events.Any(e => e.Kind == HostEvent.Kinds.Unavailable);
             }
-            if (cores.Count == 3 || unavailable)
+            if (cores.Count == ViewCount || unavailable)
             {
                 return;
             }
@@ -331,7 +342,14 @@ internal sealed class CanaryRunner
                 }
                 break;
             case "zoom":
-                viewer!.Zoom = (int)step.X;
+                if (step.View == "card")
+                {
+                    card!.Zoom = (int)step.X;
+                }
+                else
+                {
+                    viewer!.Zoom = (int)step.X;
+                }
                 break;
             case "titles":
                 _ = BrowserWindows();
@@ -387,6 +405,9 @@ internal sealed class CanaryRunner
                 break;
             case "editor":
                 editor!.Load(html);
+                break;
+            case "card":
+                card!.Load(html, reload: false);
                 break;
             default:
                 core.NavigateToString(html);
@@ -671,6 +692,7 @@ internal sealed class CanaryRunner
             viewer?.Close();
             editor?.Close();
             preview?.Close();
+            card?.Close();
             control?.Close();
         }
         catch (Exception e) when (e is not OutOfMemoryException)

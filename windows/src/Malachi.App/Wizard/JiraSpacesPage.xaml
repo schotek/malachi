@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of macos/Sources/MalachiMail/AccountWizard/Jira/JiraSpacesPageController.swift;
+GTK: jira_wizard.blp spaces_page. The assistant's last page: the banner
+across the top, then a scrolling column clamped to 480 px with 24 px
+margins: the explanation (dim), the spaces the token sees as check boxes
+("KEY – Name" and the estimate of their issues in the offline window) in a
+card whose list scrolls on its own past 320 px (a site may list a thousand
+spaces, so the options below stay in reach), "No spaces" when there are
+none, why the account cannot be added yet (dim caption), and 12 px lower
+the options: Keep Issues Offline For, Only Issues Involving Me, and the
+account's address when a Data Center site does not reveal it; at the
+bottom the call under way and Add Account. The spaces' names come from the
+site and are plain text.
+-->
+<UserControl
+    x:Class="Malachi.App.Wizard.JiraSpacesPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Malachi.App.Wizard"
+    xmlns:tk="using:CommunityToolkit.WinUI.Controls"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Preferences/SettingsStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <InfoBar
+            x:Name="Banner"
+            Grid.Row="0"
+            AutomationProperties.AutomationId="JiraSpacesBanner"
+            CornerRadius="0"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Warning" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalScrollBarVisibility="Auto">
+            <Grid>
+                <StackPanel
+                    MaxWidth="480"
+                    Padding="24"
+                    Spacing="12">
+                    <TextBlock
+                        x:Name="Description"
+                        Margin="0,0,0,6"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextWrapping="Wrap" />
+
+                    <!-- spaces_list: a boxed list of check rows. -->
+                    <Border
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource ControlCornerRadius}">
+                        <Grid>
+                            <ListView
+                                x:Name="SpacesList"
+                                MaxHeight="320"
+                                Padding="0,4"
+                                AutomationProperties.AutomationId="JiraSpaces"
+                                IsItemClickEnabled="False"
+                                SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:JiraSpaceItem">
+                                        <Grid ColumnSpacing="8" ToolTipService.ToolTip="{x:Bind Title, Mode=OneWay}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox
+                                                Click="OnSpaceClick"
+                                                IsChecked="{x:Bind IsChecked, Mode=OneWay}"
+                                                IsEnabled="{x:Bind IsEnabled, Mode=OneWay}">
+                                                <TextBlock
+                                                    MaxLines="1"
+                                                    Text="{x:Bind Title, Mode=OneWay}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    TextWrapping="NoWrap" />
+                                            </CheckBox>
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Style="{StaticResource DimCaptionLabelStyle}"
+                                                Text="{x:Bind Count, Mode=OneWay}"
+                                                Visibility="{x:Bind CountVisibility, Mode=OneWay}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <!-- no_spaces_row: an insensitive row. -->
+                            <TextBlock
+                                x:Name="NoSpaces"
+                                Margin="16,14"
+                                Foreground="{ThemeResource TextFillColorDisabledBrush}"
+                                TextWrapping="Wrap"
+                                Visibility="Collapsed" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock
+                        x:Name="Problem"
+                        AutomationProperties.LiveSetting="Polite"
+                        Style="{StaticResource JiraStatusTextStyle}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+
+                    <StackPanel Margin="0,12,0,0" Spacing="{StaticResource SettingsCardSpacing}">
+                        <tk:SettingsCard x:Name="OfflineRow">
+                            <ComboBox
+                                x:Name="OfflineBox"
+                                AutomationProperties.AutomationId="JiraOffline"
+                                SelectionChanged="OnOfflineChanged" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="OnlyMineRow">
+                            <ToggleSwitch
+                                x:Name="OnlyMineSwitch"
+                                AutomationProperties.AutomationId="JiraOnlyMine"
+                                Toggled="OnOnlyMineToggled" />
+                        </tk:SettingsCard>
+                        <tk:SettingsCard x:Name="EmailRow" Visibility="Collapsed">
+                            <TextBox
+                                x:Name="EmailBox"
+                                MinWidth="{StaticResource SettingsEntryWidth}"
+                                AutomationProperties.AutomationId="JiraEmail"
+                                InputScope="EmailSmtpAddress"
+                                IsSpellCheckEnabled="False"
+                                IsTextPredictionEnabled="False"
+                                KeyDown="OnEmailKeyDown"
+                                TextChanged="OnEmailChanged" />
+                        </tk:SettingsCard>
+                    </StackPanel>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <local:JiraWizardButtonBar x:Name="Bar" Grid.Row="2" />
+    </Grid>
+</UserControl>

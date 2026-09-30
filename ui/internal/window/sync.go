@@ -15,6 +15,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/accountwizard"
 	"github.com/schotek/malachi/ui/internal/certtrust"
 	"github.com/schotek/malachi/ui/internal/i18n"
+	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/settingspanel"
 	"github.com/schotek/malachi/ui/internal/signin"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -334,10 +335,15 @@ func (w *Window) onCertBannerButton() {
 
 // editAccount opens the account assistant on account id (the cert banner,
 // an account's row in the status popover); its connection test offers to
-// trust a refused certificate.
+// trust a refused certificate. A Jira account opens its settings
+// (accountEditor).
 func (w *Window) editAccount(id api.AccountID) {
 	a, ok := w.model.account(id)
 	if !ok {
+		return
+	}
+	if accountEditor(a) == editorJira {
+		w.editJiraAccount(a, 0)
 		return
 	}
 	accountwizard.NewEdit(w.client, w.log, a).Present(w)
@@ -397,7 +403,8 @@ func (w *Window) startSync(params api.SyncTriggerParams) {
 func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	name := string(n.AccountID)
 	kind := signin.Password
-	if a, ok := w.model.account(n.AccountID); ok {
+	a, known := w.model.account(n.AccountID)
+	if known {
 		name = accountRowTitle(a)
 		kind = signin.KindOf(a.Config)
 	} else if n.AuthURL != "" {
@@ -411,7 +418,7 @@ func (w *Window) showAuthRequired(n api.AuthRequiredNotification) {
 	w.authBannerURL = n.AuthURL
 	w.authBannerReason = n.Reason
 	w.authBanner.SetUseMarkup(false)
-	w.authBanner.SetTitle(authBannerTitle(kind, n.Reason, name))
+	w.authBanner.SetTitle(accountAuthBannerTitle(a, kind, n.Reason, name))
 	w.authBanner.SetButtonLabel(authBannerButton(kind, n.Reason))
 	w.authBanner.SetRevealed(true)
 }
@@ -440,6 +447,13 @@ func (w *Window) onAuthBannerButton() {
 // the sign-in page to open when the daemon cannot start a fresh one, ""
 // for none), the preferences otherwise.
 func (w *Window) signInAgain(kind signin.Kind, reason api.ErrorCode, id api.AccountID, fallback string) {
+	// A Jira account's token is entered again in its own assistant; a
+	// keyring failure is not the token's fault and opens the preferences
+	// like a mail account's.
+	if a, ok := w.model.account(id); ok && accountEditor(a) == editorJira && editsPassword(kind, reason) {
+		w.editJiraAccount(a, reason)
+		return
+	}
 	if editsPassword(kind, reason) {
 		if a, ok := w.model.account(id); ok {
 			wz := accountwizard.NewEdit(w.client, w.log, a)
@@ -498,6 +512,17 @@ func (w *Window) signInInBrowser(id api.AccountID, fallback string) {
 			})
 		})
 	}()
+}
+
+// accountAuthBannerTitle is authBannerTitle for account a (the zero value
+// while it is not listed yet), which signs in the way kind says: a Jira
+// account names its token (jira.AuthBannerText), a keyring failure reads
+// as for mail.
+func accountAuthBannerTitle(a api.Account, kind signin.Kind, reason api.ErrorCode, account string) string {
+	if text := jira.AuthBannerText(a.Config.Protocol(), reason, account, i18n.Tr); text != "" {
+		return text
+	}
+	return authBannerTitle(kind, reason, account)
 }
 
 // authBannerTitle is the banner sentence for an account that signs in the

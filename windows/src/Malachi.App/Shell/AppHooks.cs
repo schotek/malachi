@@ -21,6 +21,8 @@ public sealed class AppHooks
 {
     private Action? openPreferences;
     private Action<Window?>? addAccount;
+    private Action<Window?>? addJiraAccount;
+    private Func<bool>? canComposeNew;
     private Action? composeNew;
     private Action? checkForNewMail;
     private Action? focusSearch;
@@ -41,6 +43,24 @@ public sealed class AppHooks
     {
         get => addAccount;
         set => Set(ref addAccount, value);
+    }
+
+    /// <summary>Opens the Jira account assistant over a window (app.add-jira-account).</summary>
+    public Action<Window?>? AddJiraAccount
+    {
+        get => addJiraAccount;
+        set => Set(ref addJiraAccount, value);
+    }
+
+    /// <summary>
+    /// Whether New Message is offered (capabilities.CanComposeNew over the
+    /// accounts): some account writes mail, or none is known yet. Null offers
+    /// it; <see cref="NotifyChanged"/> tells the commands it may have changed.
+    /// </summary>
+    public Func<bool>? CanComposeNew
+    {
+        get => canComposeNew;
+        set => Set(ref canComposeNew, value);
     }
 
     /// <summary>
@@ -99,6 +119,9 @@ public sealed class AppHooks
     /// none edits it (compose/manager.go FindDraft).
     /// </summary>
     public Func<Draft, bool>? RaiseDraft { get; set; }
+
+    /// <summary>What a hook answers changed (the accounts): the commands re-validate.</summary>
+    public void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
 
     private void Set<T>(ref T? field, T? value)
         where T : class

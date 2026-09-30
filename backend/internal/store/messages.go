@@ -70,6 +70,12 @@ type Message struct {
 	RemoteBytes     int64
 	StrippableBytes int64     // StrippableUnknown, StrippableNever, 0 nothing to leave on the server, >0 bytes
 	HydratedAt      time.Time // last made whole by message.download; zero = never
+
+	// Hidden is the display filter of migration 0015: a hidden row is left
+	// out of ListMessages, the thread queries, SearchMessages and the
+	// folder counts, and still found by id. Read only; UpsertMessages never
+	// writes it.
+	Hidden bool
 }
 
 // MessageRef identifies a message whose body is still to be fetched, by
@@ -561,6 +567,105 @@ func (s *Store) MoveByRemoteID(ctx context.Context, accountID, remoteID, targetF
 	return true, nil
 }
 
+// UpdateEnvelopeByRemoteID rewrites the subject, the sender and the date of
+// every copy of an issue-tracker item (the account's rows with the remote
+// id, in any folder): a renamed issue, or a relayed comment attributed to
+// its author. The full-text index follows (its trigger). A zero date keeps
+// the stored one. ErrNotFound when the account has no such row.
+func (s *Store) UpdateEnvelopeByRemoteID(ctx context.Context, accountID, remoteID, subject string, from []api.Address, date time.Time) error {
+	if remoteID == "" {
+		return ErrNotFound
+	}
+	fromJSON, err := encodeJSON(from, "[]")
+	if err != nil {
+		return fmt.Errorf("encode from: %w", err)
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE messages SET subject = ?, from_json = ?,
+			date = CASE WHEN ? THEN date ELSE ? END, updated_at = ?
+		WHERE account_id = ? AND remote_id != '' AND remote_id = ?`,
+		subject, fromJSON, boolInt(date.IsZero()), stamp(date), nowStamp(), accountID, remoteID)
+	if err != nil {
+		return fmt.Errorf("update envelope: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetFlagsByRemoteID gives every copy of an item (the account's rows with
+// the remote id, in any folder) the same flags, locally: no operation is
+// queued, the flags of an issue-tracker account live on this device only.
+// It returns the folders whose rows changed, sorted, recounted in the same
+// transaction. ErrNotFound when the account has no such row.
+func (s *Store) SetFlagsByRemoteID(ctx context.Context, accountID, remoteID string, flags []api.Flag) (folderIDs []string, err error) {
+	if remoteID == "" {
+		return nil, ErrNotFound
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("set flags by remote id: %w", err)
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `SELECT id, folder_id, flags FROM messages WHERE account_id = ? AND remote_id != '' AND remote_id = ? ORDER BY id`,
+		accountID, remoteID)
+	if err != nil {
+		return nil, fmt.Errorf("set flags by remote id: %w", err)
+	}
+	type copyRow struct{ id, folderID string }
+	var found int
+	var changed []copyRow
+	for rows.Next() {
+		var r copyRow
+		var stored string
+		if err := rows.Scan(&r.id, &r.folderID, &stored); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("set flags by remote id: %w", err)
+		}
+		found++
+		old, err := decodeFlags(stored)
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("decode flags of %s: %w", r.id, err)
+		}
+		if !sameFlags(old, flags) {
+			changed = append(changed, r)
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("set flags by remote id: %w", err)
+	}
+	if found == 0 {
+		return nil, ErrNotFound
+	}
+	encoded, unread, flagged := encodeFlags(flags)
+	now := nowStamp()
+	seen := map[string]bool{}
+	for _, r := range changed {
+		if _, err := tx.ExecContext(ctx, `UPDATE messages SET flags = ?, unread = ?, flagged = ?, updated_at = ? WHERE id = ?`,
+			encoded, unread, flagged, now, r.id); err != nil {
+			return nil, fmt.Errorf("set flags by remote id: %w", err)
+		}
+		if !seen[r.folderID] {
+			seen[r.folderID] = true
+			folderIDs = append(folderIDs, r.folderID)
+		}
+	}
+	sort.Strings(folderIDs)
+	for _, f := range folderIDs {
+		if _, _, err := recountFolderTx(ctx, tx, f); err != nil && !errors.Is(err, ErrNotFound) {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("set flags by remote id: %w", err)
+	}
+	return folderIDs, nil
+}
+
 // FindPendingMessage returns the oldest row of the folder that still waits
 // for a server UID (a local move) and carries the given Message-ID header;
 // ErrNotFound otherwise (always for an empty rfcMessageID).
@@ -794,8 +899,9 @@ func (s *Store) MarkBodyState(ctx context.Context, id string, state BodyState) e
 // malformed one) is ErrBadCursor. It does not encode the filter, so a
 // caller that changes the filter must start again from the first page.
 // sort "" means SortDateDesc; filter "" means api.FilterAll; limit <= 0
-// means 50. total counts the whole folder under the filter.
-// ErrNotFound when the account has no such folder.
+// means 50. total counts the whole folder under the filter. Hidden rows
+// (Message.Hidden) are left out. ErrNotFound when the account has no such
+// folder.
 func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor string, limit int, sortOrder api.SortOrder, listFilter api.MessageFilter) (items []Message, next string, total int, err error) {
 	if limit <= 0 {
 		limit = 50
@@ -824,7 +930,7 @@ func (s *Store) ListMessages(ctx context.Context, accountID, folderID, cursor st
 		return nil, "", 0, ErrNotFound
 	}
 
-	where := ` WHERE folder_id = ? AND account_id = ?`
+	where := ` WHERE folder_id = ? AND account_id = ? AND hidden = 0`
 	args := []any{folderID, accountID}
 	switch listFilter {
 	case "", api.FilterAll:
@@ -947,7 +1053,7 @@ const messageColumns = `id, account_id, folder_id, uid, remote_id, modseq, flags
 	from_json, to_json, cc_json, bcc_json, reply_to_json, subject, date, internal_date,
 	rfc_message_id, in_reply_to, references_json, size, snippet, has_attachments,
 	attachments_json, headers_json, has_html, body_state, thread_id, created_at, updated_at,
-	raw_state, remote_parts, remote_bytes, strippable_bytes, hydrated_at`
+	raw_state, remote_parts, remote_bytes, strippable_bytes, hydrated_at, hidden`
 
 func scanMessage(row scanner) (Message, error) {
 	m, _, err := scanMessageStamp(row)
@@ -961,14 +1067,15 @@ func scanMessageStamp(row scanner) (Message, string, error) {
 	var uid, modseq int64
 	var flags, from, to, cc, bcc, replyTo, date, internalDate, references, attachments, headers, state, created, updated string
 	var rawState, remoteParts, hydrated string
-	var hasAttachments, hasHTML int
+	var hasAttachments, hasHTML, hidden int
 	if err := row.Scan(&m.ID, &m.AccountID, &m.FolderID, &uid, &m.RemoteID, &modseq, &flags,
 		&from, &to, &cc, &bcc, &replyTo, &m.Subject, &date, &internalDate,
 		&m.RFCMessageID, &m.InReplyTo, &references, &m.Size, &m.Snippet, &hasAttachments,
 		&attachments, &headers, &hasHTML, &state, &m.ThreadID, &created, &updated,
-		&rawState, &remoteParts, &m.RemoteBytes, &m.StrippableBytes, &hydrated); err != nil {
+		&rawState, &remoteParts, &m.RemoteBytes, &m.StrippableBytes, &hydrated, &hidden); err != nil {
 		return Message{}, "", err
 	}
+	m.Hidden = hidden != 0
 	m.UID, m.ModSeq = uint32(uid), uint64(modseq)
 	var err error
 	if m.Flags, err = decodeFlags(flags); err != nil {

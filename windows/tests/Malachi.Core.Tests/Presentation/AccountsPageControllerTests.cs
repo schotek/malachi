@@ -72,7 +72,7 @@ public sealed class AccountsPageControllerTests
         var (c, _) = await h.LoadedAsync();
         var rows = c.Rows;
         Assert.Equal(["Work", "home@example.test", "g@example.test", "h@example.test"], rows.Select(r => r.Title));
-        Assert.Equal(["me@work.test", "home@example.test", "g@example.test", "h@example.test"], rows.Select(r => r.Email));
+        Assert.Equal(["me@work.test", "home@example.test", "g@example.test", "h@example.test"], rows.Select(r => r.Subtitle));
         Assert.Equal(["", "Paused", "Sign-in required", ""], rows.Select(r => r.Status));
         Assert.Equal([true, false, true, true], rows.Select(r => r.Enabled));
         // "Sign In…" only for an account of the browser sign-in that needs it.

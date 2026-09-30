@@ -57,9 +57,13 @@ enum RowMetrics {
 /// fold arrow or spinner and the avatar in front, then the sender line with
 /// the badge, the icons, the date and the unread dot, the subject and the
 /// preview; a search result also names its folder, and its preview is the
-/// excerpt with the matched words in bold. Every string from the mail is
-/// plain text: through `stringValue`, or an attributed string built from
-/// it with fonts and colours only.
+/// excerpt with the matched words in bold. A row of a Jira account shows
+/// the issue on the subject line (key, summary, status pill, the Internal
+/// badge of an internal comment); an event row (a status or assignee
+/// change) is compact: the actor and the change in the caption, no preview,
+/// never unread. Every string from the mail or the site is plain text:
+/// through `stringValue`, or an attributed string built from it with fonts
+/// and colours only.
 @MainActor
 final class MessageCellView: NSTableCellView {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("MessageCell")
@@ -80,6 +84,13 @@ final class MessageCellView: NSTableCellView {
     private let subject = NSTextField(labelWithString: "")
     private let preview = NSTextField(labelWithString: "")
     private let content = NSStackView()
+    /// The issue's parts of the subject line, and the change of an event
+    /// row after the actor.
+    private let issueKey = NSTextField(labelWithString: "")
+    private let statusPill = PillLabel()
+    private let internalPill = PillLabel()
+    private let eventLabel = NSTextField(labelWithString: "")
+    private let subjectLine = NSStackView()
 
     private var leadingConstraint: NSLayoutConstraint!
     private var topConstraint: NSLayoutConstraint!
@@ -100,6 +111,13 @@ final class MessageCellView: NSTableCellView {
     /// in the colour the selection asks for (`renderPreview`).
     private var previewText = ""
     private var previewHighlights: [NSRange] = []
+    /// The issue of a Jira row (nil for mail), whether the row is an event
+    /// row, the status pill's colour, and whether the row is selected (the
+    /// colours follow `backgroundStyle`).
+    private var issue: Jira.IssueRow?
+    private var event = false
+    private var statusStyle = Jira.StatusStyle.plain
+    private var emphasized = false
 
     init() {
         super.init(frame: .zero)
@@ -154,6 +172,32 @@ final class MessageCellView: NSTableCellView {
         badge.textColor = .labelColor
         badge.isHidden = true
 
+        // The issue key ("ITSD-42") in the caption with monospaced digits,
+        // the status and the Internal badge as pills after the summary.
+        issueKey.font = Typo.captionNumeric
+        issueKey.textColor = Tint.secondary
+        issueKey.isSelectable = false
+        issueKey.lineBreakMode = .byClipping
+        issueKey.maximumNumberOfLines = 1
+        issueKey.isHidden = true
+        issueKey.setContentHuggingPriority(.required, for: .horizontal)
+        issueKey.setContentCompressionResistancePriority(.required, for: .horizontal)
+        for pill in [statusPill, internalPill] {
+            pill.font = Typo.caption
+            pill.isHidden = true
+        }
+        // An event row's change, after the actor: it takes the width the
+        // actor leaves and truncates before the actor does.
+        eventLabel.font = Typo.caption
+        eventLabel.textColor = Tint.secondary
+        eventLabel.lineBreakMode = .byTruncatingTail
+        eventLabel.maximumNumberOfLines = 1
+        eventLabel.isSelectable = false
+        eventLabel.isHidden = true
+        let belowLow = NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1)
+        eventLabel.setContentHuggingPriority(belowLow, for: .horizontal)
+        eventLabel.setContentCompressionResistancePriority(belowLow, for: .horizontal)
+
         attachment.image = Icon.image("mail-attachment", size: .small)
         attachment.contentTintColor = Tint.secondary
         attachment.imageScaling = .scaleNone
@@ -188,14 +232,23 @@ final class MessageCellView: NSTableCellView {
         date.setContentCompressionResistancePriority(.required, for: .horizontal)
         unreadDot.isHidden = true
 
-        let line = NSStackView(views: [from, badge, attachment, star, origin, date, unreadDot])
+        let line = NSStackView(views: [from, eventLabel, badge, attachment, star, origin, date, unreadDot])
         line.orientation = .horizontal
         line.distribution = .fill
         line.setHuggingPriority(.defaultLow, for: .horizontal)
         line.alignment = .centerY
         line.spacing = RowMetrics.lineSpacing
 
-        let column = FillStackView(fillingViews: [line, subject, preview])
+        for v in [issueKey, subject, statusPill, internalPill] {
+            subjectLine.addArrangedSubview(v)
+        }
+        subjectLine.orientation = .horizontal
+        subjectLine.distribution = .fill
+        subjectLine.setHuggingPriority(.defaultLow, for: .horizontal)
+        subjectLine.alignment = .centerY
+        subjectLine.spacing = RowMetrics.lineSpacing
+
+        let column = FillStackView(fillingViews: [line, subjectLine, preview])
         column.spacing = RowMetrics.columnSpacing
         column.setContentHuggingPriority(.defaultLow, for: .horizontal)
         column.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -237,6 +290,7 @@ final class MessageCellView: NSTableCellView {
             applyLead()
         }
         setMember(row.member)
+        applyIssue()
     }
 
     /// Displays a message (message_row.go `SetMessage`). The first sender
@@ -253,6 +307,7 @@ final class MessageCellView: NSTableCellView {
         origin.toolTip = m.originTooltip.isEmpty ? nil : m.originTooltip
         origin.isHidden = m.origin.isEmpty
         badge.isHidden = true
+        issue = m.issue
         thread = false
         loading = false
         applyLead()
@@ -272,6 +327,7 @@ final class MessageCellView: NSTableCellView {
         // TRANSLATORS: tooltip of the member count of a conversation row.
         badge.toolTip = L10n.N("%d message", "%d messages", t.count)
         badge.isHidden = t.count < 2
+        issue = t.issue
         thread = true
         loading = t.loading
         reserve = false
@@ -319,6 +375,62 @@ final class MessageCellView: NSTableCellView {
         }
         preview.attributedStringValue = text
     }
+
+    /// The issue of a Jira row, over what `setMessage` / `setThread` laid
+    /// out: the key, the issue's summary for the subject ("KEY: Summary"
+    /// without the key), the status pill and the Internal badge. A
+    /// conversation whose latest member is an event shows the change as
+    /// its preview; an event message row is the actor and the change in the
+    /// caption, without a preview or an unread dot, and under its
+    /// conversation without the subject line either (one line). A mail row
+    /// hides all of it.
+    private func applyIssue() {
+        guard let issue else {
+            event = false
+            issueKey.isHidden = true
+            statusPill.isHidden = true
+            internalPill.isHidden = true
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+            applyColours()
+            return
+        }
+        issueKey.stringValue = issue.key
+        issueKey.isHidden = issue.key.isEmpty
+        // An issue without a summary keeps the message's subject.
+        if !issue.summary.isEmpty {
+            subject.stringValue = issue.summary
+        }
+        statusPill.setText(issue.status, maxCharacters: PillLabel.statusCharacters)
+        statusPill.toolTip = issue.status
+        statusPill.isHidden = issue.status.isEmpty
+        statusStyle = issue.statusStyle
+        internalPill.stringValue = issue.internalLabel
+        internalPill.isHidden = !issue.internal
+        event = issue.event && !thread
+        if thread {
+            if issue.event, !issue.eventText.isEmpty {
+                setPreview(issue.eventText, highlights: [])
+            }
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+        } else if event {
+            eventLabel.stringValue = Self.eventArrow + issue.eventText
+            eventLabel.toolTip = issue.eventText
+            eventLabel.isHidden = false
+            subjectLine.isHidden = member
+            preview.isHidden = true
+            unreadDot.isHidden = true
+            from.font = Typo.caption
+        } else {
+            eventLabel.isHidden = true
+            subjectLine.isHidden = false
+        }
+        applyColours()
+    }
+
+    /// What leads an event's change after its actor: a symbol, not a word.
+    private static let eventArrow = "→ "
 
     /// Turns the fold arrow of a conversation row (message_row.go
     /// `SetExpanded`).
@@ -384,22 +496,32 @@ final class MessageCellView: NSTableCellView {
     /// highlight, the label colours otherwise.
     override var backgroundStyle: NSView.BackgroundStyle {
         didSet {
-            let emphasized = backgroundStyle == .emphasized
-            let primary: NSColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
-            let secondary: NSColor = emphasized ? .alternateSelectedControlTextColor : Tint.secondary
-            from.textColor = primary
-            subject.textColor = primary
-            date.textColor = secondary
-            origin.textColor = secondary
-            preview.textColor = secondary
-            renderPreview()
-            attachment.contentTintColor = secondary
-            star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
-            unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent
-            badge.textColor = primary
-            badge.fill = emphasized ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.2) : Tint.fg(alpha: 0.1)
-            expander.contentTintColor = emphasized ? .alternateSelectedControlTextColor : nil
+            emphasized = backgroundStyle == .emphasized
+            applyColours()
         }
+    }
+
+    /// The colours for the selection state (`emphasized`); an event row is
+    /// in the secondary colour throughout, the status pill in its style's.
+    private func applyColours() {
+        let primary: NSColor = emphasized ? .alternateSelectedControlTextColor : .labelColor
+        let secondary: NSColor = emphasized ? .alternateSelectedControlTextColor : Tint.secondary
+        from.textColor = event ? secondary : primary
+        subject.textColor = primary
+        issueKey.textColor = secondary
+        eventLabel.textColor = secondary
+        IssuePill.paint(statusPill, IssuePill.colours(statusStyle), emphasized: emphasized)
+        IssuePill.paint(internalPill, IssuePill.internalColours, emphasized: emphasized)
+        date.textColor = secondary
+        origin.textColor = secondary
+        preview.textColor = secondary
+        renderPreview()
+        attachment.contentTintColor = secondary
+        star.contentTintColor = emphasized ? .alternateSelectedControlTextColor : Tint.accent
+        unreadDot.color = emphasized ? .alternateSelectedControlTextColor : Tint.accent
+        badge.textColor = primary
+        badge.fill = emphasized ? NSColor.alternateSelectedControlTextColor.withAlphaComponent(0.2) : Tint.fg(alpha: 0.1)
+        expander.contentTintColor = emphasized ? .alternateSelectedControlTextColor : nil
     }
 
     override func prepareForReuse() {
@@ -436,6 +558,21 @@ final class PillLabel: NSTextField {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
+    }
+
+    /// The most characters of a status a pill shows (widget/pill.go
+    /// `NewPill`: ellipsised at 24); the tooltip has the whole of it.
+    static let statusCharacters = 24
+
+    /// Shows `text`, cut to `maxCharacters` with an ellipsis: a status
+    /// name comes from the site and may be of any length, and a pill does
+    /// not shrink.
+    func setText(_ text: String, maxCharacters: Int) {
+        if text.count > maxCharacters, maxCharacters > 1 {
+            stringValue = text.prefix(maxCharacters - 1) + "…"
+        } else {
+            stringValue = text
+        }
     }
 
     override var intrinsicContentSize: NSSize {

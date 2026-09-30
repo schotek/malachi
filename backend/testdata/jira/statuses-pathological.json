@@ -1,0 +1,42 @@
+[
+ {
+  "id": "1",
+  "name": "To Do",
+  "statusCategory": {
+   "key": "new"
+  }
+ },
+ {
+  "id": "3",
+  "name": "In Progress",
+  "statusCategory": {
+   "key": "indeterminate"
+  }
+ },
+ {
+  "id": "10001",
+  "name": "Done",
+  "statusCategory": {
+   "key": "done"
+  }
+ },
+ {
+  "id": "10005",
+  "name": "Odd",
+  "statusCategory": {
+   "key": "undefined"
+  }
+ },
+ {
+  "id": "10006",
+  "name": "Weird",
+  "statusCategory": "done"
+ },
+ {
+  "id": "1",
+  "name": "Duplicate id"
+ },
+ {
+  "name": "No id"
+ }
+]

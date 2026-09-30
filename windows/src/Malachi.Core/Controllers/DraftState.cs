@@ -28,6 +28,13 @@ public sealed record DraftState
     /// <summary>The message a reply answers.</summary>
     public MessageId? InReplyTo { get; init; }
 
+    /// <summary>
+    /// The issue of a comment draft as <c>draft.create</c> returned it
+    /// (<see cref="Api.Draft.Comment"/>), sent back with the form's
+    /// visibility; null for an e-mail.
+    /// </summary>
+    public DraftComment? Comment { get; init; }
+
     /// <summary>The message a forward carries.</summary>
     public MessageId? Forwarding { get; init; }
 

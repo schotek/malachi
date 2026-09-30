@@ -145,6 +145,42 @@ public sealed class ThreadModelTests
         Assert.Equal(2, m.Rows.Count);
     }
 
+    /// <summary>
+    /// A Jira conversation whose issue moved without a new member (the
+    /// account shows no events): the reload drops the members it had, so the
+    /// row shows the issue as the listing has it now.
+    /// </summary>
+    [Fact]
+    public void SetThreadsIssueMoved()
+    {
+        static ThreadSummary Listed(string status, string snippet)
+        {
+            // Fresh lists every time, as every listing decodes its own.
+            var s = Member("m1", "t_m", 1, "petr") with
+            {
+                Snippet = snippet,
+                Issue = new MessageIssue
+                {
+                    Key = "MOB-1",
+                    Url = "",
+                    Summary = "",
+                    Status = status,
+                    CommentVisibilities = [CommentVisibility.Public],
+                    Item = IssueItemKind.Description,
+                },
+            };
+            return Thr("t_m", 1, 0, s) with { Issue = s.Issue.Info };
+        }
+        var m = GroupedModel(Listed("In Progress", "before"));
+        // The same issue listed again: the members stay (the row keeps the
+        // member it had, not the listing's).
+        m.SetThreads([Listed("In Progress", "again")], new PageInfo { Total = 1 });
+        Assert.Equal("before", m.Rows[0].Message.Snippet);
+        m.SetThreads([Listed("To Do", "after")], new PageInfo { Total = 1 });
+        Assert.Equal("To Do", m.Rows[0].Message.Issue?.Status);
+        Assert.Equal("after", m.Rows[0].Message.Snippet);
+    }
+
     [Fact]
     public void SetMembersEmptyDropsThread()
     {

@@ -141,6 +141,16 @@ public sealed partial class MainWindow : Window
     /// </summary>
     public void FocusSearch() => BeginSearch();
 
+    /// <summary>Puts the keyboard on the message list's selected row (the conversation view gives it back).</summary>
+    public void FocusMessageList() => ListPane.FocusList();
+
+    /// <summary>
+    /// window.go addConversationPaging: Space and Shift+Space in the message
+    /// list page through the conversation shown; <paramref name="page"/>
+    /// answers whether it used the key.
+    /// </summary>
+    internal void SetConversationPaging(Func<bool, bool> page) => ListPane.PageConversation = page;
+
     /// <summary>
     /// Called before every show: a window kept maximised the last time
     /// opens maximised (the first show; later shows keep what it is).

@@ -286,6 +286,13 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             Render(s, complete);
             return;
         }
+        if (IssueReading.ReadsWithoutBody(s))
+        {
+            // A status or assignee change: its changes are the whole
+            // message, there is no body to fetch.
+            Render(s, cache.Loaded(s.Id));
+            return;
+        }
         // The fetch first: it clears a stale body error before its retry, so
         // the render below shows the wait rather than the old error.
         cache.Fetch(s, lm =>
@@ -323,6 +330,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         CancelSpinner();
         OutboxVisible = false;
         DraftVisible = false;
+        IssueCard = null;
         HideBars();
         Html = null; // drop the pictures of the message before
         Page = hasAccounts ? ReaderPage.Empty : ReaderPage.NoAccounts;
@@ -331,15 +339,34 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>
     /// <c>account.list</c> answered (folders.go <c>loadAccounts</c>): the
     /// placeholder becomes No Accounts while there is none, unless a message
-    /// is on display.
+    /// or a conversation is on display.
     /// </summary>
     public void SetHasAccounts(bool has)
     {
         hasAccounts = has;
-        if (Mode == ReaderMode.Pane && Page != ReaderPage.Message)
+        if (Mode == ReaderMode.Pane && Page is not (ReaderPage.Message or ReaderPage.Conversation))
         {
             Page = has ? ReaderPage.Empty : ReaderPage.NoAccounts;
         }
+    }
+
+    /// <summary>
+    /// conversation_view.go <c>leaveForConversation</c>: the pane shows a
+    /// conversation instead (<see cref="ReaderPage.Conversation"/>): the
+    /// message it showed goes, its body and pictures, its bars, banners,
+    /// chips and card; a late answer for it is not rendered, and nothing of
+    /// it is drawn again.
+    /// </summary>
+    public void LeaveForConversation()
+    {
+        if (Mode != ReaderMode.Pane)
+        {
+            return;
+        }
+        Clear();
+        Chips = [];
+        SaveAll = [];
+        Page = ReaderPage.Conversation;
     }
 
     /// <summary>
@@ -427,8 +454,12 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             return;
         }
         renderedLoaded = lm;
-        RenderHeaders(s, lm?.Msg);
-        if (lm is { BodySettled: true })
+        var issue = RenderHeaders(s, lm?.Msg);
+        if (issue is { EventBody: { } eventBody })
+        {
+            RenderEvent(eventBody);
+        }
+        else if (lm is { BodySettled: true })
         {
             RenderBody(lm);
         }
@@ -567,7 +598,7 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
 
     // renderHeaders: from the summary alone, or from the full message when m
     // is not null (recipients with Cc).
-    private void RenderHeaders(MessageSummary s, Message? m)
+    private IssueReading? RenderHeaders(MessageSummary s, Message? m)
     {
         var from = s.From;
         var to = s.To;
@@ -583,8 +614,12 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             subject = m.Summary.Subject;
         }
         Subject = LoadedMessageText.SubjectText(subject);
+        // A message of a Jira account: the card, and the issue's summary
+        // for the subject.
+        var issue = RenderIssue(s, m);
         Addresses.Show(s.Id, s.AccountId, from, to, cc);
         DateText = date.IsGoZero ? "" : Format.FormatDateTime(date);
+        return issue;
     }
 
     // renderBody: the sanitised HTML in the viewer when there is one, the

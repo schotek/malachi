@@ -120,6 +120,32 @@ func TestSetThreadsKeepsCache(t *testing.T) {
 	}
 }
 
+// A Jira conversation whose issue moved without a new member (the account
+// shows no events): the reload drops the members it had, so the row shows
+// the issue as the listing has it now.
+func TestSetThreadsIssueMoved(t *testing.T) {
+	listed := func(status, snippet string) api.ThreadSummary {
+		info := api.IssueInfo{Key: "MOB-1", Status: status, CommentVisibilities: []api.CommentVisibility{api.CommentPublic}}
+		s := member("m1", "t_m", 1, "petr")
+		s.Snippet = snippet
+		s.Issue = &api.MessageIssue{IssueInfo: info, Item: api.IssueItemDescription}
+		th := thr("t_m", 1, 0, s)
+		th.Issue = &info
+		return th
+	}
+	m := groupedModel(listed("In Progress", "before"))
+	// The same issue listed again: the members stay (the row keeps the
+	// member it had, not the listing's).
+	m.setThreads([]api.ThreadSummary{listed("In Progress", "again")}, api.PageInfo{Total: 1})
+	if got := m.rows[0].Message.Snippet; got != "before" {
+		t.Fatalf("unchanged issue: row snippet %q, want the kept member's", got)
+	}
+	m.setThreads([]api.ThreadSummary{listed("To Do", "after")}, api.PageInfo{Total: 1})
+	if got := m.rows[0].Message; got.Issue == nil || got.Issue.Status != "To Do" || got.Snippet != "after" {
+		t.Fatalf("moved issue: row %+v", got)
+	}
+}
+
 func TestSetMembersEmptyDropsThread(t *testing.T) {
 	m := groupedModel(thr("t_a", 2, 0, member("a2", "t_a", 2, "bob")), thr("t_b", 1, 0, member("b1", "t_b", 1, "carol")))
 	m.setMembers("t_a", api.ThreadSummary{}, nil)

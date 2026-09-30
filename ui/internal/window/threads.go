@@ -233,6 +233,7 @@ func (w *Window) reconcileRows(neighbour bool) {
 		w.onMessageRowSelected(nil)
 	}
 	w.showListState()
+	w.conversationListChanged()
 }
 
 // newRowFor builds the widget of a row with the current appearance and

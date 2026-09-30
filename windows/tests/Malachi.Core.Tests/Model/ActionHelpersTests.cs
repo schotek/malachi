@@ -320,31 +320,28 @@ public sealed class ActionHelpersTests
     }
 
     // The sensitivity rule of setMessageActionsSensitive as a pure function
-    // (no Go counterpart; the GTK test is manual). The model's two answers
-    // come from a folder table as MailModel gives them: an inbox, an archive
-    // and an outbox, no junk folder.
+    // (no Go counterpart; the GTK test is manual) over a model whose account
+    // "a" (of a daemon before capabilities: the mail default) has an inbox,
+    // an archive and an outbox, no junk folder.
     [Fact]
     public void MessageActionStateTest()
     {
-        var roles = new Dictionary<FolderId, FolderRole>
+        static Folder F(string id, FolderRole role) => new()
         {
-            [new FolderId("in")] = FolderRole.Inbox,
-            [new FolderId("arch")] = FolderRole.Archive,
-            [new FolderId("out")] = FolderRole.Outbox,
+            Id = id,
+            AccountId = "a",
+            Name = id,
+            Path = id,
+            Role = role,
+            Subscribed = true,
+            Selectable = true,
+            Synced = true,
+            Unread = 0,
+            Total = 0,
         };
-        bool InOutbox(MessageSummary s) => s.Outbox is not null || roles.GetValueOrDefault(s.FolderId) == FolderRole.Outbox;
-        bool CanMoveToRole(MessageSummary s, FolderRole role)
-        {
-            foreach (var (id, r) in roles)
-            {
-                if (r == role)
-                {
-                    return id != s.FolderId;
-                }
-            }
-            return false;
-        }
-        ActionFlags State(ListRow? row, bool on = true) => ActionRules.MessageActionState(row, InOutbox, CanMoveToRole, on);
+        var model = new MailModel(
+            folders: [new(new AccountId("a"), [F("in", FolderRole.Inbox), F("arch", FolderRole.Archive), F("out", FolderRole.Outbox)])]);
+        ActionFlags State(ListRow? row, bool on = true) => ActionRules.MessageActionState(row, model, on);
 
         var s = Summary("1") with { AccountId = new AccountId("a"), FolderId = new FolderId("in"), Flags = [Flag.Seen] };
         var row = Row(s);

@@ -61,6 +61,9 @@ func (s *messageService) List(ctx context.Context, p api.MessageListParams) (*ap
 	if err := s.b.attachOutboxInfo(ctx, a.ID, string(p.FolderID), out); err != nil {
 		return nil, err
 	}
+	if err := s.b.decorateRows(ctx, a, items, out); err != nil {
+		return nil, err
+	}
 	return &api.MessageListResult{Messages: out, Page: api.PageInfo{NextCursor: next, Total: total}}, nil
 }
 
@@ -122,6 +125,11 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 	case !errors.Is(err, store.ErrNotFound):
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	sums := []api.MessageSummary{out.MessageSummary}
+	if err := s.b.decorateRows(ctx, a, []store.Message{m}, sums); err != nil {
+		return nil, err
+	}
+	out.MessageSummary = sums[0]
 	return &api.MessageGetResult{Message: out}, nil
 }
 
@@ -183,7 +191,11 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 }
 
 // Flag applies flag changes locally (all-or-nothing) and queues them for
-// the syncer, which is nudged at once.
+// the syncer, which is nudged at once. On an issue-tracker account the
+// flags are local only: the copies of each message in the account's other
+// folders take them at once, and the queued operation, which the syncer
+// drops without asking the site, only does the same again; no pass is
+// asked for.
 func (s *messageService) Flag(ctx context.Context, p api.MessageFlagParams) (*api.MessageFlagResult, error) {
 	ids, err := validateMessageIDs(p.MessageIDs)
 	if err != nil {
@@ -199,8 +211,45 @@ func (s *messageService) Flag(ctx context.Context, p api.MessageFlagParams) (*ap
 	if err := s.b.store.FlagMessages(ctx, a.ID, ids, p.Set, p.Clear); err != nil {
 		return nil, mutationError(err)
 	}
+	if isIssueAccount(a) {
+		if err := s.b.flagCopies(ctx, a.ID, ids); err != nil {
+			return nil, err
+		}
+		return &api.MessageFlagResult{}, nil
+	}
 	s.b.Supervisor.Trigger(a.ID, "", false)
 	return &api.MessageFlagResult{}, nil
+}
+
+// flagCopies gives the copies of the messages (the account's rows with
+// the same remote id, internal/jira's views) the flags each message has
+// now.
+func (b *Backend) flagCopies(ctx context.Context, accountID string, ids []string) error {
+	for _, id := range ids {
+		m, err := b.store.GetMessage(ctx, accountID, id)
+		switch {
+		case errors.Is(err, store.ErrNotFound):
+			continue
+		case err != nil:
+			return api.NewError(api.CodeStorageError, "%v", err)
+		}
+		if m.RemoteID == "" {
+			continue
+		}
+		if _, err := b.store.SetFlagsByRemoteID(ctx, accountID, m.RemoteID, m.Flags); err != nil && !errors.Is(err, store.ErrNotFound) {
+			return api.NewError(api.CodeStorageError, "%v", err)
+		}
+	}
+	return nil
+}
+
+// requireCapability refuses an operation the account's kind cannot do
+// (Account.Capabilities).
+func requireCapability(a store.Account, c api.AccountCapability) error {
+	if !can(a.Config, c) {
+		return api.NewError(api.CodeInvalidArgument, "account %s lacks the capability %q", a.ID, c)
+	}
+	return nil
 }
 
 // Move relocates the messages locally (ids stay stable) and queues the
@@ -215,6 +264,9 @@ func (s *messageService) Move(ctx context.Context, p api.MessageMoveParams) (*ap
 	}
 	a, err := s.b.requireAccount(ctx, string(p.AccountID))
 	if err != nil {
+		return nil, err
+	}
+	if err := requireCapability(a, api.CapabilityMove); err != nil {
 		return nil, err
 	}
 	target, err := s.b.store.GetFolder(ctx, a.ID, string(p.TargetFolderID))
@@ -249,6 +301,14 @@ func (s *messageService) Delete(ctx context.Context, p api.MessageDeleteParams) 
 	queued, err := s.b.store.OutboxEntries(ctx, a.ID, ids)
 	if err != nil {
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	// Cancelling what the outbox holds needs no capability: an issue
+	// tracker, which deletes nothing on its site, can still take back a
+	// queued comment.
+	if len(queued) < len(ids) {
+		if err := requireCapability(a, api.CapabilityDelete); err != nil {
+			return nil, err
+		}
 	}
 	permanent := p.Permanent
 	var trash store.Folder

@@ -44,6 +44,16 @@ type OutboxEntry struct {
 	LastError     string // technical text, at most maxOutboxErrorBytes
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	// Comment is set when the message is a comment of an issue-tracker
+	// account, delivered to its issue instead of by mail; nil otherwise.
+	Comment *OutboxComment
+}
+
+// OutboxComment is where a queued comment goes: the issue (its id on the
+// site) and the comment's visibility ("" public).
+type OutboxComment struct {
+	IssueID    string
+	Visibility api.CommentVisibility
 }
 
 // EnqueueInput is what EnqueueOutbox needs to turn a draft into a queued
@@ -64,6 +74,11 @@ type EnqueueInput struct {
 
 	EnvelopeFrom string
 	Recipients   []string
+
+	// Comment makes the queued message a comment of an issue-tracker
+	// account (OutboxEntry.Comment); nil for mail. Its IssueID must not be
+	// empty.
+	Comment *OutboxComment
 
 	// Build streams the raw RFC 5322 message; more than Limit bytes (<= 0 →
 	// api.MaxOutgoingMessageBytes) is ErrTooBig.
@@ -142,6 +157,9 @@ func (s *Store) EnqueueOutbox(ctx context.Context, in EnqueueInput) (Message, er
 	}
 	if in.Build == nil {
 		return Message{}, fmt.Errorf("enqueue outbox: nil builder")
+	}
+	if in.Comment != nil && in.Comment.IssueID == "" {
+		return Message{}, fmt.Errorf("enqueue outbox: comment without an issue")
 	}
 	// A cheap pre-check spares building a message for a draft that is
 	// already gone or stale; the transaction below is the authority.
@@ -239,11 +257,16 @@ func (s *Store) enqueueOutboxTx(ctx context.Context, in EnqueueInput, id string,
 	if err != nil {
 		return Message{}, nil, nil, fmt.Errorf("encode recipients: %w", err)
 	}
+	var issueID, visibility string
+	if in.Comment != nil {
+		issueID, visibility = in.Comment.IssueID, string(in.Comment.Visibility)
+	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO outbox (message_id, account_id, envelope_from, recipients_json, state, attempts,
-		                    next_attempt_at, last_error_code, last_error, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 0, '', 0, '', ?, ?)`,
-		id, accountID, in.EnvelopeFrom, recipients, string(OutboxQueued), now, now); err != nil {
+		                    next_attempt_at, last_error_code, last_error, issue_id, comment_visibility,
+		                    created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 0, '', 0, '', ?, ?, ?, ?)`,
+		id, accountID, in.EnvelopeFrom, recipients, string(OutboxQueued), issueID, visibility, now, now); err != nil {
 		return Message{}, nil, nil, fmt.Errorf("insert outbox entry: %w", err)
 	}
 
@@ -628,15 +651,18 @@ func dedupeStrings(in []string) []string {
 }
 
 const outboxColumns = `message_id, account_id, envelope_from, recipients_json, state, attempts,
-	next_attempt_at, last_error_code, last_error, created_at, updated_at`
+	next_attempt_at, last_error_code, last_error, created_at, updated_at, issue_id, comment_visibility`
 
 func scanOutbox(row scanner) (OutboxEntry, error) {
 	var e OutboxEntry
-	var recipients, state, next, created, updated string
+	var recipients, state, next, created, updated, issueID, visibility string
 	var code int
 	if err := row.Scan(&e.MessageID, &e.AccountID, &e.EnvelopeFrom, &recipients, &state, &e.Attempts,
-		&next, &code, &e.LastError, &created, &updated); err != nil {
+		&next, &code, &e.LastError, &created, &updated, &issueID, &visibility); err != nil {
 		return OutboxEntry{}, err
+	}
+	if issueID != "" {
+		e.Comment = &OutboxComment{IssueID: issueID, Visibility: api.CommentVisibility(visibility)}
 	}
 	if err := json.Unmarshal([]byte(recipients), &e.Recipients); err != nil {
 		return OutboxEntry{}, fmt.Errorf("decode recipients of %s: %w", e.MessageID, err)

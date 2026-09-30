@@ -12,8 +12,13 @@ public let maxFolderDepth = 32
 
 /// The sidebar header text for an account: its configured name, falling
 /// back to the address. Both are user-entered, shown as plain text
-/// (model.go `accountLabel`).
+/// (model.go `accountLabel`). A Jira account without a name falls back to
+/// its site's host first (`Jira.accountLabel`). Swift-first: mirror in
+/// model.go when GTK gets Jira accounts.
 public func accountLabel(_ a: Account) -> String {
+    if Jira.isJira(a.config) {
+        return Jira.accountLabel(a.config)
+    }
     let name = a.config.name.trimmingCharacters(in: .whitespacesAndNewlines)
     if !name.isEmpty {
         return name
@@ -241,13 +246,20 @@ public func badgeFor(_ list: [Folder], _ f: Folder, collapsed: Bool) -> Int {
 }
 
 /// Orders folders at one tree level (model.go `sortSiblings`): special-use
-/// roles first (Inbox, Drafts, Sent, …), then alphabetically by path,
-/// case-insensitively. Stable, so equal keys keep the server's order.
+/// roles first (Inbox, Drafts, Sent, …), then the fixed views of a Jira
+/// account (Assigned to Me, Watching, Open; `Jira.virtualRank`), then
+/// alphabetically by path, case-insensitively. Stable, so equal keys keep
+/// the server's order. Swift-first: mirror the views' rank in model.go
+/// when GTK gets Jira accounts.
 public func sortSiblings(_ list: [Folder]) -> [Folder] {
     list.sorted { a, b in
         let ra = roleRank(a.role), rb = roleRank(b.role)
         if ra != rb {
             return ra < rb
+        }
+        let va = Jira.virtualRank(a.virtual), vb = Jira.virtualRank(b.virtual)
+        if va != vb {
+            return va < vb
         }
         return a.path.lowercased() < b.path.lowercased()
     }
@@ -284,9 +296,40 @@ public func roleIcon(_ r: FolderRole) -> String {
     }
 }
 
+/// The icon of a folder's row: the fixed view's (`Jira.virtualIcon`) for
+/// a virtual folder of a Jira account, the role's (`roleIcon`) otherwise.
+/// Swift-first: mirror in folders.go when GTK gets Jira accounts.
+public func folderIcon(_ f: Folder) -> String {
+    let v = Jira.virtualIcon(f.virtual)
+    return v.isEmpty ? roleIcon(f.role) : v
+}
+
+/// The capsule after an account's heading in the sidebar, which says what
+/// kind of account it is (model.go `accountHeaderBadge`): "JIRA" for an
+/// issue-tracker account (`Jira.kindBadge`), the provider a mail account
+/// signs in with ("GOOGLE", "M365"; `accountProvider`), "IMAP" for a mail
+/// account with a password. Brand and protocol names, never translated.
+public func accountHeaderBadge(_ a: Account) -> String {
+    if Jira.isJira(a.config) {
+        return Jira.kindBadge
+    }
+    switch accountProvider(a.config) {
+    case .google?: return googleBadge
+    case .microsoft365?: return microsoftBadge
+    default: return imapBadge
+    }
+}
+
+// The capsules of mail accounts (`accountHeaderBadge`).
+let googleBadge = "GOOGLE"
+let microsoftBadge = "M365"
+let imapBadge = "IMAP"
+
 /// The display name of a folder (folders.go `folderTitle`): the localised
-/// name for a role folder (whatever the server calls it), the server's name
-/// otherwise. Plain text either way.
+/// name for a role folder (whatever the server calls it) and for a fixed
+/// view of a Jira account (`Jira.virtualFolderTitle`), the server's name
+/// otherwise. Plain text either way. Swift-first: mirror the views in
+/// folders.go when GTK gets Jira accounts.
 public func folderTitle(_ f: Folder) -> String {
     switch f.role {
     case .inbox: return L10n.C("folder", "Inbox")
@@ -297,7 +340,9 @@ public func folderTitle(_ f: Folder) -> String {
     case .archive: return L10n.C("folder", "Archive")
     case .all: return L10n.C("folder", "All Mail")
     case .outbox: return L10n.C("folder", "Outbox")
-    default: return f.name
+    default:
+        let view = Jira.virtualFolderTitle(f.virtual)
+        return view.isEmpty ? f.name : view
     }
 }
 

@@ -12,7 +12,7 @@ import (
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
-var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "read_message", "search_messages", "sync_status", "trigger_sync"}
+var readTools = []string{"create_draft", "get_attachment", "list_accounts", "list_folders", "list_messages", "list_transitions", "read_message", "search_messages", "sync_status", "trigger_sync"}
 
 const (
 	fxReplyAttribution   = "On Wed, 23 Sep 2026 10:00 UTC, Alice Example <alice@example.org> wrote:"
@@ -25,9 +25,9 @@ func TestToolGatingByFlags(t *testing.T) {
 		want         []string
 	}{
 		{false, false, readTools},
-		{true, false, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages")},
+		{true, false, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "transition_issue")},
 		{false, true, append(append([]string{}, readTools...), "send_message")},
-		{true, true, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "send_message")},
+		{true, true, append(append([]string{}, readTools...), "delete_messages", "mark_messages", "move_messages", "send_message", "transition_issue")},
 	}
 	for _, c := range cases {
 		sock := tempSocket(t)
@@ -54,13 +54,14 @@ func TestAnnotations(t *testing.T) {
 	want := map[string]ann{
 		"list_accounts": {true, false, true, false}, "list_folders": {true, false, true, false},
 		"list_messages": {true, false, true, false}, "read_message": {true, false, true, false},
-		"search_messages": {true, false, true, false},
-		"get_attachment":  {true, false, true, false}, "sync_status": {true, false, true, false},
+		"search_messages": {true, false, true, false}, "list_transitions": {true, false, true, false},
+		"get_attachment": {true, false, true, false}, "sync_status": {true, false, true, false},
 		"trigger_sync":  {false, false, true, false},
 		"create_draft":  {false, false, false, false},
 		"mark_messages": {false, false, true, false}, "move_messages": {false, false, true, false},
-		"delete_messages": {false, true, true, false},
-		"send_message":    {false, true, true, true},
+		"transition_issue": {false, false, true, false},
+		"delete_messages":  {false, true, true, false},
+		"send_message":     {false, true, true, true},
 	}
 	if len(tools) != len(want) {
 		t.Fatalf("%d tools, want %d", len(tools), len(want))

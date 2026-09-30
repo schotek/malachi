@@ -18,8 +18,8 @@ import (
 func TestKindDispatchLeavesUnknownKindsAlone(t *testing.T) {
 	imapSup, graphSup := newFakeSupervisor(), newFakeSupervisor()
 	imapOut, graphOut := newFakeOutbox(), newFakeOutbox()
-	k := newKindSupervisor(imapSup, graphSup)
-	o := newKindOutbox(imapOut, graphOut)
+	k := newKindSupervisor(map[api.AccountKind]SyncSupervisor{api.AccountIMAP: imapSup, api.AccountGraph: graphSup})
+	o := newKindOutbox(map[api.AccountKind]OutboxSupervisor{api.AccountIMAP: imapOut, api.AccountGraph: graphOut})
 
 	a := store.Account{ID: "acc_new", Config: api.AccountConfig{Name: "Issues", Email: "me@example.invalid", Kind: "tracker"}}
 	k.Start(a)

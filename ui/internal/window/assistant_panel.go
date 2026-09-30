@@ -563,8 +563,8 @@ func (p *assistantPanel) makeRow(it assistantpanel.Item) *transcriptRow {
 	return r
 }
 
-// plainLabel is a wrapping label for model or mail text: never markup.
-func plainLabel(classes ...string) *gtk.Label {
+// transcriptLabel is a wrapping label for model or mail text: never markup.
+func transcriptLabel(classes ...string) *gtk.Label {
 	l := gtk.NewLabel("")
 	l.SetUseMarkup(false)
 	l.SetWrap(true)
@@ -582,8 +582,8 @@ func userRow() *transcriptRow {
 	box := gtk.NewBox(gtk.OrientationVertical, 2)
 	box.AddCSSClass("assistant-user")
 	box.SetMarginStart(28)
-	label := plainLabel("caption", "dim-label")
-	text := plainLabel()
+	label := transcriptLabel("caption", "dim-label")
+	text := transcriptLabel()
 	text.SetSelectable(true)
 	box.Append(label)
 	box.Append(text)
@@ -602,7 +602,7 @@ func activityRow() *transcriptRow {
 	spinner := adw.NewSpinner()
 	check := gtk.NewImageFromIconName("object-select-symbolic")
 	check.AddCSSClass("dim-label")
-	label := plainLabel("caption", "dim-label")
+	label := transcriptLabel("caption", "dim-label")
 	label.SetHExpand(true)
 	box.Append(spinner)
 	box.Append(check)
@@ -620,7 +620,7 @@ func draftRow(open func()) *transcriptRow {
 	box := gtk.NewBox(gtk.OrientationHorizontal, 8)
 	box.AddCSSClass("assistant-card")
 	icon := gtk.NewImageFromIconName("document-edit-symbolic")
-	label := plainLabel()
+	label := transcriptLabel()
 	label.SetText(t.DraftReady)
 	label.SetHExpand(true)
 	button := gtk.NewButtonWithLabel(t.OpenDraft)
@@ -643,7 +643,7 @@ func lineRow(retry func(), offer func(assistantpanel.Offer)) *transcriptRow {
 	icon.AddCSSClass("error")
 	column := gtk.NewBox(gtk.OrientationVertical, 4)
 	column.SetHExpand(true)
-	label := plainLabel()
+	label := transcriptLabel()
 	button := gtk.NewButtonWithLabel(i18n.T("Try Again"))
 	button.AddCSSClass("chip-action")
 	button.ConnectClicked(retry)

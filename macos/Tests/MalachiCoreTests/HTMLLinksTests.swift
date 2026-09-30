@@ -74,6 +74,24 @@ struct HTMLLinksTests {
         #expect(doc.hasPrefix("<!DOCTYPE html>"))
         #expect(doc.hasSuffix("</body></html>"))
         #expect(viewerCSP == "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-inline'")
+        #expect(doc.contains("padding: 12px 24px 24px !important;"), "the reader's page margins")
+    }
+
+    /// The document of a conversation card: the same page, policy and
+    /// column, with the column's padding cut to the card's.
+    @Test func compactDocument() {
+        let body = "<p>a &amp; b</p>"
+        let doc = viewerDocument(body: body, compact: true)
+        let reader = viewerDocument(body: body)
+        for want in [viewerCSP, "<meta charset=\"utf-8\">", "<body><div id=\"malachi-column\"><p>a &amp; b</p></div></body>",
+                     "#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important; margin: 0 auto !important; padding: 4px 14px !important; position: relative !important;"] {
+            #expect(doc.contains(want), "compact document lacks \(want)")
+        }
+        #expect(!doc.contains("24px"), "no page margin")
+        #expect(doc.hasPrefix("<!DOCTYPE html>") && doc.hasSuffix("</body></html>"))
+        #expect(doc.replacingOccurrences(of: "padding: 4px 14px !important", with: "padding: 12px 24px 24px !important") == reader,
+                "only the padding differs")
+        #expect(viewerDocument(body: body, compact: false) == reader)
     }
 
     /// The decision over an activated link (remote.go `openLink`, plus

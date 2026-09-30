@@ -144,7 +144,14 @@ public partial class App : Application
             Notifications = s.Notifications,
             IsMainWindowActive = () => s.IsMainWindowActive,
             ShowMainWindow = s.ShowMainWindow,
-            NewMessage = () => s.Hooks.ComposeNew?.Invoke(),
+            // As app.compose: only while an account writes mail (CanComposeNew).
+            NewMessage = () =>
+            {
+                if (s.Hooks.CanComposeNew?.Invoke() ?? true)
+                {
+                    s.Hooks.ComposeNew?.Invoke();
+                }
+            },
             CheckForNewMail = () => s.Hooks.CheckForNewMail?.Invoke(),
             Quit = s.Quit,
             LoggerFactory = log,

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -20,8 +21,12 @@ import (
 // Account is a row of the accounts table. Config is the non-secret wire
 // form; secrets never enter the store.
 type Account struct {
-	ID        string
-	Email     string // normalised (NormalizeAddress); Config.Email keeps the user's form
+	ID    string
+	Email string // normalised (NormalizeAddress); Config.Email keeps the user's form
+	// Realm is where Email is unique: "" for a mailbox, the site of an
+	// issue-tracker account (RealmOf). Derived from Config on every write;
+	// a value set by the caller is ignored.
+	Realm     string
 	Name      string
 	Enabled   bool
 	Config    api.AccountConfig
@@ -30,7 +35,42 @@ type Account struct {
 	UpdatedAt time.Time
 }
 
-const accountColumns = `id, email, name, enabled, config, position, created_at, updated_at`
+const accountColumns = `id, email, realm, name, enabled, config, position, created_at, updated_at`
+
+// RealmOf is the realm an account's address is unique in (migration
+// 0015): "" for a mailbox (imap, graph), and for an issue-tracker account
+// its site, the lower-cased host[:port] and path of JiraConfig.SiteURL
+// without a trailing slash ("acme.atlassian.net",
+// "jira.example.org:8443/jira"); the scheme and a default port do not
+// count. "" as well for a jira config without a usable site URL, which
+// AddAccount and UpdateAccount refuse.
+func RealmOf(cfg api.AccountConfig) string {
+	if cfg.Protocol() != api.AccountJira || cfg.Jira == nil {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimSpace(cfg.Jira.SiteURL))
+	if err != nil || u.Host == "" || u.Opaque != "" {
+		return ""
+	}
+	host := u.Host
+	if port := u.Port(); (port == "443" && u.Scheme == "https") || (port == "80" && u.Scheme == "http") {
+		host = u.Hostname()
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]" // an IPv6 literal keeps its brackets
+		}
+	}
+	return strings.ToLower(host + strings.TrimRight(u.EscapedPath(), "/"))
+}
+
+// accountRealm fills a.Realm from a.Config; an issue-tracker account
+// without a site is an error.
+func accountRealm(a *Account) error {
+	a.Realm = RealmOf(a.Config)
+	if a.Realm == "" && a.Config.Protocol() == api.AccountJira {
+		return fmt.Errorf("jira account without a site URL")
+	}
+	return nil
+}
 
 // CheckAccountID reports an account id that cannot name the account's
 // directory of message files: one that could escape it (checkPathSegment),
@@ -57,11 +97,12 @@ func sameAccountDir(a, b string) bool {
 
 // AddAccount inserts a. a.ID is honoured when set (config.toml import) and
 // valid (CheckAccountID), otherwise generated; a.Email is normalised from
-// a.Config.Email when empty; Position is appended at the end and the
-// timestamps are filled in. ErrExists when an account with the same e-mail
-// (case-insensitive) or the same id already exists; ErrAccountIDTaken when
-// a.ID differs from another account's id only in case or Unicode
-// normalisation, which would share its directory of message files.
+// a.Config.Email when empty; a.Realm is derived from a.Config (RealmOf);
+// Position is appended at the end and the timestamps are filled in.
+// ErrExists when an account with the same e-mail (case-insensitive) in the
+// same realm or the same id already exists; ErrAccountIDTaken when a.ID
+// differs from another account's id only in case or Unicode normalisation,
+// which would share its directory of message files.
 func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	if a.ID == "" {
 		a.ID = newID("acc_")
@@ -73,6 +114,9 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 	}
 	if a.Email == "" {
 		return fmt.Errorf("add account: empty e-mail")
+	}
+	if err := accountRealm(a); err != nil {
+		return fmt.Errorf("add account: %w", err)
 	}
 	cfg, err := json.Marshal(a.Config)
 	if err != nil {
@@ -87,7 +131,7 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 
 	var existing string
 	err = tx.QueryRowContext(ctx,
-		`SELECT id FROM accounts WHERE email = ? OR id = ? LIMIT 1`, a.Email, a.ID).Scan(&existing)
+		`SELECT id FROM accounts WHERE (email = ? AND realm = ?) OR id = ? LIMIT 1`, a.Email, a.Realm, a.ID).Scan(&existing)
 	switch {
 	case err == nil:
 		return ErrExists
@@ -102,10 +146,10 @@ func (s *Store) AddAccount(ctx context.Context, a *Account) error {
 
 	stamp := nowStamp()
 	err = tx.QueryRowContext(ctx,
-		`INSERT INTO accounts (id, email, name, enabled, config, position, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM accounts), ?, ?)
+		`INSERT INTO accounts (id, email, realm, name, enabled, config, position, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), -1) + 1 FROM accounts), ?, ?)
 		 RETURNING position`,
-		a.ID, a.Email, a.Name, boolInt(a.Enabled), string(cfg), stamp, stamp).Scan(&a.Position)
+		a.ID, a.Email, a.Realm, a.Name, boolInt(a.Enabled), string(cfg), stamp, stamp).Scan(&a.Position)
 	if err != nil {
 		return fmt.Errorf("add account: %w", err)
 	}
@@ -171,15 +215,19 @@ func (s *Store) GetAccount(ctx context.Context, id string) (Account, error) {
 	return a, err
 }
 
-// UpdateAccount replaces name, e-mail and configuration of a.ID; Enabled and
-// Position are left alone. ErrNotFound for an unknown id, ErrExists when
-// another account already uses the e-mail (case-insensitive).
+// UpdateAccount replaces name, e-mail and configuration of a.ID (and the
+// realm derived from it); Enabled and Position are left alone. ErrNotFound
+// for an unknown id, ErrExists when another account of the same realm
+// already uses the e-mail (case-insensitive).
 func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 	if a.Email == "" {
 		a.Email = NormalizeAddress(a.Config.Email)
 	}
 	if a.Email == "" {
 		return fmt.Errorf("update account: empty e-mail")
+	}
+	if err := accountRealm(a); err != nil {
+		return fmt.Errorf("update account: %w", err)
 	}
 	cfg, err := json.Marshal(a.Config)
 	if err != nil {
@@ -201,7 +249,7 @@ func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 	}
 	var other string
 	err = tx.QueryRowContext(ctx,
-		`SELECT id FROM accounts WHERE email = ? AND id != ? LIMIT 1`, a.Email, a.ID).Scan(&other)
+		`SELECT id FROM accounts WHERE email = ? AND realm = ? AND id != ? LIMIT 1`, a.Email, a.Realm, a.ID).Scan(&other)
 	switch {
 	case err == nil:
 		return ErrExists
@@ -210,8 +258,8 @@ func (s *Store) UpdateAccount(ctx context.Context, a *Account) error {
 	}
 	stamp := nowStamp()
 	res, err := tx.ExecContext(ctx,
-		`UPDATE accounts SET email = ?, name = ?, config = ?, updated_at = ? WHERE id = ?`,
-		a.Email, a.Name, string(cfg), stamp, a.ID)
+		`UPDATE accounts SET email = ?, realm = ?, name = ?, config = ?, updated_at = ? WHERE id = ?`,
+		a.Email, a.Realm, a.Name, string(cfg), stamp, a.ID)
 	if err != nil {
 		return fmt.Errorf("update account: %w", err)
 	}
@@ -314,7 +362,9 @@ func (s *Store) SetAccountEnabled(ctx context.Context, id string, enabled bool) 
 // DeleteAccount removes the account row together with its mail cache
 // (folders, messages, pending operations — always, they are worthless
 // without the account; raw message files after the commit, and what a
-// reader keeps open on Windows with the next sweep). With
+// reader keeps open on Windows with the next sweep) and, for an
+// issue-tracker account, its issue tables, showing again (and recounting
+// the folders of) the mail of other accounts it hid. With
 // deleteLocalData it also deletes the account's drafts and attachments (rows
 // in the same transaction, files afterwards). ErrNotFound for an unknown id.
 func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bool) error {
@@ -337,6 +387,21 @@ func (s *Store) DeleteAccount(ctx context.Context, id string, deleteLocalData bo
 	// Messages go with their folders (ON DELETE CASCADE).
 	if _, err := tx.ExecContext(ctx, `DELETE FROM folders WHERE account_id = ?`, id); err != nil {
 		return fmt.Errorf("delete account folders: %w", err)
+	}
+	if err := unhideLinkedMailTx(ctx, tx, `l.issue_account_id = ?`, map[string][]string{}, id); err != nil {
+		return fmt.Errorf("delete account: %w", err)
+	}
+	for _, q := range []string{
+		`DELETE FROM issue_mail_links WHERE issue_account_id = ?`,
+		`DELETE FROM issue_items WHERE account_id = ?`,
+		`DELETE FROM issues WHERE account_id = ?`,
+		`DELETE FROM issue_spaces WHERE account_id = ?`,
+		`DELETE FROM meta WHERE key = '` + MetaIssueMePrefix + `' || ?`,
+		`DELETE FROM meta WHERE key = '` + MetaIssueMailPrefix + `' || ?`,
+	} {
+		if _, err := tx.ExecContext(ctx, q, id); err != nil {
+			return fmt.Errorf("delete account issues: %w", err)
+		}
 	}
 	if checkPathSegment(id) == nil {
 		// The raw files go after the commit, and what a reader keeps open
@@ -410,7 +475,7 @@ func scanAccount(row scanner) (Account, error) {
 	var a Account
 	var enabled int
 	var cfg, created, updated string
-	if err := row.Scan(&a.ID, &a.Email, &a.Name, &enabled, &cfg, &a.Position, &created, &updated); err != nil {
+	if err := row.Scan(&a.ID, &a.Email, &a.Realm, &a.Name, &enabled, &cfg, &a.Position, &created, &updated); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Account{}, err
 		}

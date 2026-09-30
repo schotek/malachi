@@ -26,6 +26,8 @@ const (
 	MethodAccountOAuthStart  = "account.oauthStart"
 	MethodAccountOAuthWait   = "account.oauthWait"
 	MethodAccountOAuthCancel = "account.oauthCancel"
+	MethodAccountDetectSite  = "account.detectSite"
+	MethodAccountListSpaces  = "account.listSpaces"
 
 	// Folders.
 	MethodFolderList      = "folder.list"
@@ -80,6 +82,10 @@ const (
 
 	// Contacts (recipient completion).
 	MethodContactSearch = "contact.search"
+
+	// Issues (the issues of an issue-tracker account).
+	MethodIssueTransitions = "issue.transitions"
+	MethodIssueTransition  = "issue.transition"
 )
 
 // Notification names (backend → client, no reply expected).
@@ -88,6 +94,7 @@ const (
 	NotifySyncState       = "notify.syncState"
 	NotifyAuthRequired    = "notify.authRequired"
 	NotifyAccountsChanged = "notify.accountsChanged"
+	NotifyMessagesChanged = "notify.messagesChanged"
 )
 
 // AllMethods lists every callable method. The RPC server uses it to register
@@ -97,6 +104,7 @@ var AllMethods = []string{
 	MethodAccountList, MethodAccountAdd, MethodAccountRemove, MethodAccountSetEnabled,
 	MethodAccountUpdate, MethodAccountDiscover, MethodAccountTest, MethodAccountLinked,
 	MethodAccountReorder, MethodAccountOAuthStart, MethodAccountOAuthWait, MethodAccountOAuthCancel,
+	MethodAccountDetectSite, MethodAccountListSpaces,
 	MethodFolderList, MethodFolderSubscribe,
 	MethodMessageList, MethodMessageGet, MethodMessageBody, MethodMessagePart,
 	MethodMessageEmbedded, MethodMessageDownload, MethodMessageFlag, MethodMessageMove, MethodMessageDelete,
@@ -110,9 +118,10 @@ var AllMethods = []string{
 	MethodConfigGet, MethodConfigSet,
 	MethodSenderList, MethodSenderAdd, MethodSenderRemove,
 	MethodContactSearch,
+	MethodIssueTransitions, MethodIssueTransition,
 }
 
 // AllNotifications lists every server-initiated notification.
 var AllNotifications = []string{
-	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged,
+	NotifyNewMessage, NotifySyncState, NotifyAuthRequired, NotifyAccountsChanged, NotifyMessagesChanged,
 }

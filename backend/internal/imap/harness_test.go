@@ -165,6 +165,7 @@ func (r *recorder) AuthRequired(n api.AuthRequiredNotification) {
 }
 
 func (r *recorder) AccountsChanged(api.AccountsChangedNotification) {}
+func (r *recorder) MessagesChanged(api.MessagesChangedNotification) {}
 
 func (r *recorder) newMessages() []api.NewMessageNotification {
 	r.mu.Lock()

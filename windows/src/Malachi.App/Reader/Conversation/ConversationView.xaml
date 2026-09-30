@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of ui/data/ui/conversation_view.blp (conversation_page); macOS:
+MessageView/ConversationViewController.swift (loadView). The conversation
+page of the reading pane: a folded conversation row of the grouped list
+shows every member the folder holds, as native cards on a timeline. The
+column is 900 wide at most, its gutter included, like the single message's
+(16 at the sides, 4 above, 16 below); the issue card of a Jira conversation
+sits on top in the cards' column (after the gutter, 12 below the top); the
+rows follow, added in code (ConversationView.xaml.cs). The link under the
+pointer in any card shows at the bottom left (an OSD caption, plain text,
+cut in the middle); the spinner stands in while the members load.
+-->
+<UserControl
+    x:Class="Malachi.App.Reader.Conversation.ConversationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:reader="using:Malachi.App.Reader"
+    AutomationProperties.AutomationId="ConversationPage"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/Conversation/ConversationStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid x:Name="Root">
+        <ScrollViewer
+            x:Name="Scroller"
+            AutomationProperties.AutomationId="ConversationScroller"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            IsTabStop="False"
+            VerticalAnchorRatio="0"
+            VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="Document">
+                <StackPanel
+                    x:Name="Column"
+                    MaxWidth="900"
+                    Padding="16,4,16,16">
+                    <!-- conversation_issue: the issue card, in the cards' column. -->
+                    <reader:IssueCardView
+                        x:Name="IssueCard"
+                        Margin="40,12,0,0"
+                        AutomationProperties.AutomationId="ConversationIssueCard" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- conversation_status: the link under the pointer. -->
+        <Border
+            x:Name="StatusBox"
+            Margin="6,0,0,6"
+            Padding="6,2,6,2"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Bottom"
+            Background="#B3000000"
+            CornerRadius="4"
+            IsHitTestVisible="False"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="StatusText"
+                MaxWidth="560"
+                FontSize="12"
+                Foreground="White"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+        </Border>
+
+        <!-- conversation_spinner. -->
+        <ProgressRing
+            x:Name="Spinner"
+            Width="32"
+            Height="32"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            AutomationProperties.Name="{l:T Msgid='Loading the message', Context='accessibility'}"
+            IsActive="False"
+            Visibility="Collapsed" />
+    </Grid>
+</UserControl>

@@ -45,7 +45,7 @@ type PreferencesDialog struct {
 	assist *Assistant
 
 	accountsGroup *adw.PreferencesGroup
-	addAccount    *gtk.Button
+	addAccount    *gtk.MenuButton
 	accountsEmpty *adw.ActionRow
 	accountRows   []*accountRow
 
@@ -131,7 +131,7 @@ func NewPreferences(s *settings.Store, c *client.Client, as *Assistant, log *slo
 		log:                  log.With("component", "preferences"),
 		assist:               as,
 		accountsGroup:        b.GetObject("accounts_group").Cast().(*adw.PreferencesGroup),
-		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.Button),
+		addAccount:           b.GetObject("add_account_button").Cast().(*gtk.MenuButton),
 		accountsEmpty:        b.GetObject("accounts_empty_row").Cast().(*adw.ActionRow),
 		launchAtLogin:        b.GetObject("launch_at_login").Cast().(*adw.SwitchRow),
 		runInBackground:      b.GetObject("run_in_background").Cast().(*adw.SwitchRow),

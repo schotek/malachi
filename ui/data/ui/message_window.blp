@@ -184,6 +184,12 @@ Adw.Window message_window {
             margin-end: 24;
             margin-top: 24;
 
+            // The issue card of a Jira message (window/issue_card.go), built
+            // from Go; hidden for mail.
+            Box issue_card_slot {
+              orientation: vertical;
+            }
+
             Label message_subject {
               xalign: 0;
               wrap: true;
@@ -408,6 +414,17 @@ menu message_menu_model {
     item {
       label: _("Always Load Images From This _Sender");
       action: "msg.trust-sender";
+    }
+  }
+
+  // The status of a Jira issue: pops up the Change Status menu of the
+  // issue card (window/issue_card.go); only where the account changes
+  // statuses.
+  section {
+    item {
+      label: _("Change Status");
+      action: "msg.change-status";
+      hidden-when: "action-disabled";
     }
   }
 }

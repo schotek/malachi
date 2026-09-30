@@ -277,8 +277,13 @@ func mailtoAddresses(s string) []api.Address {
 
 // quoter builds the quoted body of one original.
 type quoter struct {
-	b           *Backend
+	b *Backend
+	// account is the draft's account, into whose attachment store the
+	// original's parts are copied; source the original's account when it
+	// is another one (a forward of a jira message from a mail account),
+	// "" = account.
 	account     string
+	source      string
 	forward     bool
 	attribution string // validated, LF-separated, possibly empty
 	// remote are the original's parts kept on the mail server only, by
@@ -290,6 +295,14 @@ type quoter struct {
 	// what it says a part is when the file lacks the part's data
 	// (lostPart).
 	row store.Message
+}
+
+// sourceAccount is the account the original is read from.
+func (q *quoter) sourceAccount() string {
+	if q.source != "" {
+		return q.source
+	}
+	return q.account
 }
 
 // remoteParts lists the parts that any of the rows of one stored message
@@ -329,7 +342,7 @@ type quoteResult struct {
 // plain text. Nothing here fails the call but a store that will not take
 // a copy; a body that is not downloaded quotes nothing.
 func (q *quoter) quote(ctx context.Context, m store.Message) (quoteResult, error) {
-	text, _, state, err := q.b.store.GetMessageText(ctx, q.account, m.ID)
+	text, _, state, err := q.b.store.GetMessageText(ctx, q.sourceAccount(), m.ID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return quoteResult{}, api.NewError(api.CodeMessageNotFound, "unknown message %q", m.ID)
@@ -383,12 +396,12 @@ func (q *quoter) quote(ctx context.Context, m store.Message) (quoteResult, error
 // the whole file) names: no part copied can be an empty stand-in.
 func (q *quoter) openRaw(ctx context.Context, m store.Message) (store.RawMessage, *mime.Parsed) {
 	id := m.ID
-	f, err := q.b.store.OpenMessageRaw(ctx, q.account, id)
+	f, err := q.b.store.OpenMessageRaw(ctx, q.sourceAccount(), id)
 	if err != nil {
 		q.b.log.Warn("quote: raw message unavailable", "id", id, "err", err)
 		return nil, nil
 	}
-	after, err := q.b.store.GetMessage(ctx, q.account, id)
+	after, err := q.b.store.GetMessage(ctx, q.sourceAccount(), id)
 	if err != nil {
 		f.Close()
 		q.b.log.Warn("quote: message unavailable", "id", id, "err", err)

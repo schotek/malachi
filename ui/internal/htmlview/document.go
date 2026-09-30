@@ -28,18 +28,45 @@ const CSP = "default-src 'none'; img-src malachi-cid: data:; style-src 'unsafe-i
 // scrollbar narrows the page but not the headers' pane, so the column
 // moves right by half its width while there is room: `left` is the
 // smaller of half the scrollbar and half the room beside a 900 column.
-const baseCSS = `html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+//
+// A card of the conversation view (CompactDocument) uses the same sheet
+// with the column's padding cut to the card's: the card's own header sits
+// right above the body and its edges are the card's, so the reader's page
+// margins would set the text a whole gap below the header and in from the
+// card's edge (compactCSS).
+var baseCSS = columnCSS("12px 24px 24px")
+
+// compactCSS is baseCSS for a conversation card: 4 above and below the
+// body, the card's 14 at the sides (window.convCardPaddingH).
+var compactCSS = columnCSS("4px 14px")
+
+// columnCSS is the sheet with the column's padding (baseCSS).
+func columnCSS(padding string) string {
+	return `html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
 body { font-family: sans-serif; line-height: 1.35; overflow-wrap: anywhere; }
-#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important; margin: 0 auto !important; padding: 12px 24px 24px !important; position: relative !important; left: min(calc((100vw - 100%) / 2), max(0px, calc((100% - 900px) / 2))) !important; }
+#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important; margin: 0 auto !important; padding: ` + padding + ` !important; position: relative !important; left: min(calc((100vw - 100%) / 2), max(0px, calc((100% - 900px) / 2))) !important; }
 img { max-width: 100%; }
 pre { white-space: pre-wrap; }
 table { max-width: 100%; }
 blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }`
+}
 
 // Document wraps a sanitised body fragment in the page the view loads. The
 // fragment is inserted verbatim: it is the sanitiser's output and nothing
 // else may ever be passed here.
 func Document(body string) string {
+	return document(body, baseCSS)
+}
+
+// CompactDocument is Document for a card of the conversation view
+// (htmlview.Card): the same policy, the column's padding cut to the card's
+// (compactCSS). The fragment is the sanitiser's output of one message and
+// nothing else.
+func CompactDocument(body string) string {
+	return document(body, compactCSS)
+}
+
+func document(body, css string) string {
 	return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="` +
-		CSP + `"><style>` + baseCSS + `</style></head><body><div id="malachi-column">` + body + `</div></body></html>`
+		CSP + `"><style>` + css + `</style></head><body><div id="malachi-column">` + body + `</div></body></html>`
 }

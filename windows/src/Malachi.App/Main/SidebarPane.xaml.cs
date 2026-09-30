@@ -73,6 +73,7 @@ public sealed partial class SidebarPane : UserControl
         CommandBinding.Bind(NewMessageButton, commands.NewMessage);
         CommandBinding.Bind(MenuNewMessage, commands.NewMessage);
         CommandBinding.Bind(MenuAddAccount, commands.AddAccount);
+        CommandBinding.Bind(MenuAddJiraAccount, commands.AddJiraAccount);
         CommandBinding.Bind(MenuPreferences, commands.Preferences);
         CommandBinding.Bind(MenuAbout, commands.About);
         CommandBinding.Bind(MenuQuit, commands.Quit);

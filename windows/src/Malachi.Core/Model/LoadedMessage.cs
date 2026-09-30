@@ -37,6 +37,18 @@ public sealed class LoadedMessage
     public ulong Seq { get; set; }
 
     /// <summary>
+    /// The account the message belongs to, from the summary it was fetched
+    /// for (or its full message): <see cref="LoadedCache.RemoveAll(AccountId)"/>
+    /// finds the entries of an account whose messages the daemon rebuilt
+    /// (notify.messagesChanged). Null for an entry made without a summary.
+    /// </summary>
+    public AccountId? AccountId
+    {
+        get => field ?? Msg?.Summary.AccountId;
+        set;
+    }
+
+    /// <summary>
     /// The header half is in flight; a second fetch for the same id while one
     /// runs joins instead of asking the daemon twice.
     /// </summary>

@@ -115,6 +115,13 @@ public sealed record Draft
     public MessageId? Replaces { get; init; }
 
     /// <summary>
+    /// Set on a comment draft of a jira account (<c>draft.create</c> reply);
+    /// <c>draft.save</c> reads only its visibility. Sent back unchanged.
+    /// </summary>
+    [JsonPropertyName("comment")]
+    public DraftComment? Comment { get; init; }
+
+    /// <summary>
     /// Daemon-set; ignored in params (<c>DateTimeOffset.GoZero</c> in a
     /// <c>draft.create</c> result, and encoded so).
     /// </summary>
@@ -227,6 +234,14 @@ public sealed record DraftCreateParams
     /// <summary>Ignored for <c>new</c>.</summary>
     [JsonPropertyName("attribution")]
     public string? Attribution { get; init; }
+
+    /// <summary>
+    /// <c>forward</c> only: the account of <see cref="MessageId"/> when it is
+    /// not <see cref="AccountId"/> (a jira message forwarded from a mail
+    /// account).
+    /// </summary>
+    [JsonPropertyName("messageAccountId")]
+    public AccountId? MessageAccountId { get; init; }
 }
 
 /// <summary>

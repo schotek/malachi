@@ -2,6 +2,7 @@
 # Blueprint output, the gschema, the desktop file and the metainfo are added
 # by the Makefile's pot target. Keep this list in sync when adding files.
 ui/main.go
+ui/internal/accountwizard/jira_flow.go
 ui/internal/accountwizard/linked.go
 ui/internal/accountwizard/oauth.go
 ui/internal/accountwizard/results.go
@@ -14,6 +15,12 @@ ui/internal/compose/draft.go
 ui/internal/compose/prefill.go
 ui/internal/compose/rewrite.go
 ui/internal/compose/suggest.go
+ui/internal/jira/compose.go
+ui/internal/jira/jira.go
+ui/internal/jira/wizard.go
+ui/internal/jira/settings.go
+ui/internal/jira/transitions.go
+ui/internal/conversation/conversation.go
 ui/internal/settingspanel/settingspanel.go
 ui/internal/widget/consent.go
 ui/internal/widget/format.go
@@ -27,10 +34,12 @@ ui/internal/window/addresses.go
 ui/internal/window/assistant_panel.go
 ui/internal/window/attachments.go
 ui/internal/window/compose_open.go
+ui/internal/window/conversation_card.go
 ui/internal/window/drafts.go
 ui/internal/window/embedded.go
 ui/internal/window/favourites.go
 ui/internal/window/folders.go
+ui/internal/window/jira_editors.go
 ui/internal/window/message_view.go
 ui/internal/window/message_window.go
 ui/internal/window/messages.go

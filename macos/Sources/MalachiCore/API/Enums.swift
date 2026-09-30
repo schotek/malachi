@@ -64,6 +64,9 @@ public struct AccountKind: WireEnum {
     public static let imap: AccountKind = "imap"
     /// Microsoft 365 / Outlook.com through the Graph API.
     public static let graph: AccountKind = "graph"
+    /// An issue tracker (Jira Cloud or Data Center): issues and their
+    /// comments as messages, spaces as folders; the account's `jira` block.
+    public static let jira: AccountKind = "jira"
 }
 
 /// api.GraphSource: who holds the OAuth2 session of a Graph account.
@@ -262,4 +265,109 @@ public struct ContactSource: WireEnum {
     public static let sent: ContactSource = "sent"
     /// A system address book, read only.
     public static let addressBook: ContactSource = "addressBook"
+}
+
+/// api.AccountCapability: what the user can do with an account and its
+/// messages (`Account.capabilities`). Flags (seen, flagged) are always
+/// allowed; archive and junk also need the role folder.
+public struct Capability: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// Can be the From of a new message and the account a forward goes out of.
+    public static let compose: Capability = "compose"
+    public static let reply: Capability = "reply"
+    public static let replyAll: Capability = "replyAll"
+    /// Its messages can be forwarded; a jira message through a compose
+    /// account (`DraftCreateParams.messageAccountId`).
+    public static let forward: Capability = "forward"
+    /// Reply creates a comment draft; the UI calls Reply "Comment".
+    public static let comment: Capability = "comment"
+    public static let move: Capability = "move"
+    public static let delete: Capability = "delete"
+    /// The status of an issue can be changed (issue.transitions,
+    /// issue.transition): the Change Status menu.
+    public static let transition: Capability = "transition"
+}
+
+/// api.JiraDeployment: where a Jira site runs.
+public struct JiraDeployment: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// Atlassian's cloud: REST v3, ADF, e-mail + API token (Basic).
+    public static let cloud: JiraDeployment = "cloud"
+    /// Self-hosted Data Center: REST v2, wiki markup, personal access token (Bearer).
+    public static let datacenter: JiraDeployment = "datacenter"
+}
+
+/// api.VirtualFolder: a folder of a jira account computed over its spaces
+/// (`Folder.virtual`); its role stays `none` and its name is an English
+/// fallback the UI replaces by the code.
+public struct VirtualFolder: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    public static let assignedToMe: VirtualFolder = "assignedToMe"
+    public static let watching: VirtualFolder = "watching"
+    /// Issues not in a closed status (`JiraConfig.closedStatuses`).
+    public static let open: VirtualFolder = "open"
+}
+
+/// api.NotificationMailMode: what a Jira notification mail in a mail
+/// account does. Absent (or empty) is `sync`.
+public struct NotificationMailMode: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// The mail syncs its issue at once.
+    public static let sync: NotificationMailMode = "sync"
+    /// `sync`, and the mail is hidden in the mail account (a display filter).
+    public static let hide: NotificationMailMode = "hide"
+    public static let ignore: NotificationMailMode = "ignore"
+}
+
+/// api.IssueStatusCategory: the coarse class of an issue status. Empty
+/// when unknown; a client treats a value it does not know as empty.
+public struct IssueStatusCategory: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    public static let todo: IssueStatusCategory = "todo"
+    public static let inProgress: IssueStatusCategory = "inProgress"
+    public static let done: IssueStatusCategory = "done"
+}
+
+/// api.IssueItemKind: what part of an issue a message of a jira account is.
+public struct IssueItemKind: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// The issue itself, its description as the body.
+    public static let description: IssueItemKind = "description"
+    public static let comment: IssueItemKind = "comment"
+    /// A status or assignee change (`MessageIssue.changes`); stored seen,
+    /// never notified, its body language-neutral.
+    public static let event: IssueItemKind = "event"
+}
+
+/// api.CommentVisibility: who sees a comment of a service-desk request.
+public struct CommentVisibility: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    /// A reply the customer sees.
+    public static let `public`: CommentVisibility = "public"
+    /// An internal note for the agents only.
+    public static let `internal`: CommentVisibility = "internal"
+}
+
+/// api.IssueField: the field an event row changed; a client skips a change
+/// of a field it does not know.
+public struct IssueField: WireEnum {
+    public let rawValue: String
+    public init(rawValue: String) { self.rawValue = rawValue }
+
+    public static let status: IssueField = "status"
+    public static let assignee: IssueField = "assignee"
 }

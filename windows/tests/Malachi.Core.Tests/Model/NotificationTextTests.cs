@@ -121,6 +121,61 @@ public sealed class NotificationTextTests
         Assert.DoesNotContain("�", body, StringComparison.Ordinal);
     }
 
+    // A message of an issue: the author, and the issue's key and summary
+    // from Issue, whatever the subject says (Swift issueNotificationText).
+    [Fact]
+    public void IssueNotificationText()
+    {
+        static MessageIssue Issue(string key, string summary, IssueItemKind? item = null) => MessageIssue.Of(
+            new IssueInfo { Key = key, Url = "https://acme.atlassian.net/browse/" + key, Summary = summary, Status = "Open" },
+            item ?? IssueItemKind.Comment);
+        var n = new NewMessageNotification
+        {
+            AccountId = new AccountId("j"),
+            FolderId = new FolderId("f"),
+            Message = Summary("m") with
+            {
+                From = [new Address { Name = "Jana Dvořáková", Email = "jana@acme.example" }],
+                Subject = "ITSD-42: The printer is on fire",
+                Issue = Issue("ITSD-42", "The printer is on fire"),
+            },
+        };
+        var got = NotificationText.Of(n);
+        Assert.Equal("Jana Dvořáková", got.Title);
+        Assert.Equal("ITSD-42: The printer is on fire", got.Body);
+
+        // The issue, not the subject; a description like a comment.
+        n = n with { Message = n.Message with { Subject = "Re: something else", Issue = Issue("WEB-7", "  Broken\n link ", IssueItemKind.Description) } };
+        Assert.Equal("WEB-7: Broken link", NotificationText.Of(n).Body);
+
+        // Whichever of the two the issue has; the subject when it has neither.
+        n = n with { Message = n.Message with { Issue = Issue("WEB-7", "") } };
+        Assert.Equal("WEB-7", NotificationText.Of(n).Body);
+        n = n with { Message = n.Message with { Issue = Issue("", "Broken link") } };
+        Assert.Equal("Broken link", NotificationText.Of(n).Body);
+        n = n with { Message = n.Message with { Issue = Issue(" ", "\t") } };
+        Assert.Equal("Re: something else", NotificationText.Of(n).Body);
+        n = n with { Message = n.Message with { Subject = " " } };
+        Assert.Equal("(No subject)", NotificationText.Of(n).Body);
+
+        // Hostile text: one line, nothing invisible, capped like a subject.
+        var rlo = ((char)0x202E).ToString();
+        var zeroWidth = ((char)0x200B).ToString();
+        n = n with { Message = n.Message with { Issue = Issue("MOB-1" + zeroWidth, "Pay" + rlo + "\r\nnow" + (char)0 + new string('ž', 500)) } };
+        got = NotificationText.Of(n);
+        Assert.StartsWith("MOB-1: Pay now", got.Body, StringComparison.Ordinal);
+        foreach (var r in got.Body.EnumerateRunes())
+        {
+            var c = Rune.GetUnicodeCategory(r);
+            Assert.False(c is UnicodeCategory.Format or UnicodeCategory.Control, $"U+{r.Value:X4} in the body");
+        }
+        Assert.True(Encoding.UTF8.GetByteCount(got.Body) <= NotificationText.NotificationBodyMax + 3 && got.Body.EndsWith('…'));
+        Assert.DoesNotContain("\uFFFD", got.Body, StringComparison.Ordinal);
+
+        // A mail message is as before.
+        n = n with { Message = n.Message with { Issue = null, Subject = "  Lunch?  " } };
+        Assert.Equal("Lunch?", NotificationText.Of(n).Body);
+    }
     [Theory]
     [InlineData(0, 0)]
     [InlineData(-5, 0)]

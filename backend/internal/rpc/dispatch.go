@@ -51,7 +51,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	msg, thr, drf := b.Messages(), b.Threads(), b.Drafts()
 	srch, sync := b.Search(), b.Sync()
 	cfg, snd, att := b.Config(), b.Senders(), b.Attachments()
-	con := b.Contacts()
+	con, iss := b.Contacts(), b.Issues()
 
 	s.handlers[api.MethodSystemInfo] = wrap(sys.Info)
 	s.handlers[api.MethodSystemStorage] = wrap(sys.Storage)
@@ -68,6 +68,8 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodAccountOAuthStart] = wrap(acc.OAuthStart)
 	s.handlers[api.MethodAccountOAuthWait] = wrap(acc.OAuthWait)
 	s.handlers[api.MethodAccountOAuthCancel] = wrap(acc.OAuthCancel)
+	s.handlers[api.MethodAccountDetectSite] = wrap(acc.DetectSite)
+	s.handlers[api.MethodAccountListSpaces] = wrap(acc.ListSpaces)
 
 	s.handlers[api.MethodFolderList] = wrap(fol.List)
 	s.handlers[api.MethodFolderSubscribe] = wrap(fol.Subscribe)
@@ -110,4 +112,7 @@ func (s *Server) registerBackend(b api.Backend) {
 	s.handlers[api.MethodSenderRemove] = wrap(snd.Remove)
 
 	s.handlers[api.MethodContactSearch] = wrap(con.Search)
+
+	s.handlers[api.MethodIssueTransitions] = wrap(iss.Transitions)
+	s.handlers[api.MethodIssueTransition] = wrap(iss.Transition)
 }

@@ -216,7 +216,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         state?.hooks.composeNew?()
     }
 
+    /// The sender's tag picks the assistant: File ▸ Add Jira Account… is
+    /// `AddAccountTag.jira`, everything else the mail account wizard.
     @objc func addAccount(_ sender: Any?) {
+        if (sender as? NSMenuItem)?.tag == AddAccountTag.jira {
+            state?.hooks.addJiraAccount?(NSApp.keyWindow)
+            return
+        }
         state?.hooks.addAccount?(NSApp.keyWindow)
     }
 
@@ -269,8 +275,9 @@ extension AppDelegate: NSUserInterfaceValidations {
     func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
         guard let action = item.action else { return false }
         switch action {
-        case Action.newMessage: return state?.hooks.composeNew != nil
-        case Action.addAccount: return state?.hooks.addAccount != nil
+        case Action.newMessage: return state?.hooks.composeNew != nil && state?.hooks.canComposeNew?() != false
+        case Action.addAccount:
+            return (item.tag == AddAccountTag.jira ? state?.hooks.addJiraAccount : state?.hooks.addAccount) != nil
         case Action.showPreferences: return state?.hooks.openPreferences != nil
         case Action.setUpAssistant: return state?.hooks.openAISettings != nil
         case Action.setAssistantTarget:

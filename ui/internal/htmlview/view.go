@@ -7,6 +7,11 @@
 // backend's sanitiser is what makes the content safe, this view is what
 // keeps a sanitiser bug from becoming a compromise. It knows nothing about
 // mail beyond "here is a body fragment and a way to fetch its pictures".
+//
+// A card of the conversation view (Card, card.go) is the same view sized
+// to its document; the one difference is a script of the application's own
+// in an isolated world that reports the document's height (size.go), the
+// document itself still unable to run any.
 package htmlview
 
 import (
@@ -79,6 +84,9 @@ func New(log *slog.Logger, fetch PartFetcher) *View {
 		}
 	})
 	v.web.ConnectWebProcessTerminated(func(reason webkit.WebProcessTerminationReason) {
+		if reason == webkit.WebProcessTerminatedByApi {
+			return // Close ended it
+		}
 		v.log.Warn("web process terminated", "reason", int(reason))
 	})
 	return v
@@ -95,6 +103,18 @@ func (v *View) Clear() {
 	v.Load("")
 }
 
+// Close ends the view's web process at once, for a view whose window
+// closes: without it the process lives on until the Go wrapper of the view
+// is collected, and windows opened and closed one after another pile
+// processes up (conversation cards showed where that ends: the sandbox
+// runs out of namespaces and WebKit aborts). The view shows nothing
+// afterwards.
+func (v *View) Close() {
+	v.OnLink = nil
+	v.web.StopLoading()
+	v.web.TerminateWebProcess()
+}
+
 // SetZoom scales the content; percent is the text-zoom setting.
 func (v *View) SetZoom(percent int) {
 	if percent <= 0 {
@@ -108,12 +128,19 @@ func (v *View) SetZoom(percent int) {
 // is refused outright. Resource responses are allowed: the CSP has already
 // limited them to the application's own pictures.
 func (v *View) decidePolicy(decision webkit.PolicyDecisioner, t webkit.PolicyDecisionType) bool {
+	return decidePolicy(v.log, v.OnLink, decision, t)
+}
+
+// decidePolicy is the navigation policy of the viewer and of a
+// conversation card (Card): the initial load only, a user's link to
+// onLink (nil ignores it).
+func decidePolicy(log *slog.Logger, onLink func(string), decision webkit.PolicyDecisioner, t webkit.PolicyDecisionType) bool {
 	base := webkit.BasePolicyDecision(decision)
 	switch t {
 	case webkit.PolicyDecisionTypeNavigationAction, webkit.PolicyDecisionTypeNewWindowAction:
 		nav, ok := decision.(*webkit.NavigationPolicyDecision)
 		if !ok {
-			v.log.Warn("navigation decision of unexpected type; refusing")
+			log.Warn("navigation decision of unexpected type; refusing")
 			base.Ignore()
 			return true
 		}
@@ -124,10 +151,10 @@ func (v *View) decidePolicy(decision webkit.PolicyDecisioner, t webkit.PolicyDec
 			return true
 		}
 		base.Ignore()
-		if action.IsUserGesture() && AllowedLink(uri) && v.OnLink != nil {
-			v.OnLink(uri)
+		if action.IsUserGesture() && AllowedLink(uri) && onLink != nil {
+			onLink(uri)
 		} else {
-			v.log.Debug("navigation refused", "uri", uri)
+			log.Debug("navigation refused", "uri", uri)
 		}
 	default:
 		base.Use()
@@ -139,6 +166,12 @@ func (v *View) decidePolicy(decision webkit.PolicyDecisioner, t webkit.PolicyDec
 // selection and the link under the pointer. Reload, Back, Open in New
 // Window and the rest of WebKit's menu are gone.
 func (v *View) contextMenu(menu *webkit.ContextMenu, hit *webkit.HitTestResult) bool {
+	return inertContextMenu(menu, hit)
+}
+
+// inertContextMenu is the context menu of the viewer and of a conversation
+// card (Card): Copy, and Copy Link over a link.
+func inertContextMenu(menu *webkit.ContextMenu, hit *webkit.HitTestResult) bool {
 	menu.RemoveAll()
 	menu.Append(webkit.NewContextMenuItemFromStockAction(webkit.ContextMenuActionCopy))
 	if hit.ContextIsLink() {

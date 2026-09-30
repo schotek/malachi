@@ -45,6 +45,12 @@ const (
 // DeliverFunc is smtp.Deliver's signature; Deps.Deliver substitutes it.
 type DeliverFunc func(ctx context.Context, cfg api.ServerConfig, password, from string, rcpts []string, r io.Reader, size int64) error
 
+// DeliverEntryFunc delivers a queued entry by what the entry says rather
+// than by an SMTP envelope: the comment of an issue-tracker account goes to
+// its issue (jira.Supervisor.Deliver). Its errors follow DeliverFunc's:
+// a *smtp.SendError, or an *api.Error of the credential codes.
+type DeliverEntryFunc func(ctx context.Context, e store.OutboxEntry, r io.Reader, size int64) error
+
 // Deps is what a Worker needs. Store and Password are required; the rest
 // is optional (nil = default or no-op).
 type Deps struct {
@@ -61,6 +67,10 @@ type Deps struct {
 	Notifier api.Notifier
 	// Deliver runs one SMTP session; nil means smtp.Deliver.
 	Deliver DeliverFunc
+	// DeliverEntry, when set, delivers every entry instead of Deliver (an
+	// issue tracker's comments). A comment entry reaching a worker without
+	// it fails for good: mail cannot carry it.
+	DeliverEntry DeliverEntryFunc
 	// FilesSentCopy says the delivery path stores the Sent copy on the
 	// server itself (Microsoft Graph's sendMail does): after a delivery the
 	// local copy is dropped and the Sent folder re-synchronised, instead of
@@ -250,7 +260,15 @@ func (w *Worker) sendOne(ctx context.Context, e store.OutboxEntry) {
 		smtpCfg = *w.account.Config.SMTP
 	}
 	dctx, cancel := context.WithTimeout(ctx, deliverTimeout)
-	err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, size)
+	switch {
+	case w.deps.DeliverEntry != nil:
+		err = w.deps.DeliverEntry(dctx, e, f, size)
+	case e.Comment != nil:
+		err = &smtp.SendError{Err: api.NewError(api.CodeInvalidArgument, "a comment of an issue is not delivered by mail"),
+			Stage: smtp.StageData, Permanent: true}
+	default:
+		err = w.deps.Deliver(dctx, smtpCfg, password, e.EnvelopeFrom, e.Recipients, f, size)
+	}
 	cancel()
 	f.Close()
 	if err == nil {
@@ -288,23 +306,10 @@ func (w *Worker) succeed(ctx context.Context, e store.OutboxEntry) {
 	w.notifiedAuth = 0
 	w.mu.Unlock()
 
-	for _, rcpt := range e.Recipients {
-		if err := w.deps.Store.AddKnownSender(ctx, rcpt, api.KnownSenderSourceSent); err != nil {
-			w.log.Warn("record recipient as known sender", "err", err)
-		}
-	}
-	// Recipient completion. The message row is still there (it is dropped
-	// or filed below), so the recipients' display names are at hand; the
-	// envelope has only bare addresses. Cc and Bcc count as much as To:
-	// the user chose them all.
-	if msg, err := w.deps.Store.GetMessage(ctx, w.account.ID, id); err != nil {
-		w.log.Warn("read delivered message for recipient completion", "err", err)
-	} else {
-		addrs := make([]api.Address, 0, len(msg.To)+len(msg.CC)+len(msg.BCC))
-		addrs = append(append(append(addrs, msg.To...), msg.CC...), msg.BCC...)
-		if err := w.deps.Store.TouchCollectedAddresses(ctx, addrs, w.deps.Now()); err != nil {
-			w.log.Warn("record recipients for completion", "err", err)
-		}
+	// A comment has no recipients to remember: known senders and recipient
+	// completion are mail's.
+	if e.Comment == nil {
+		w.recordRecipients(ctx, e)
 	}
 	sent, err := w.deps.Store.FolderByRole(ctx, w.account.ID, api.RoleSent)
 	switch {
@@ -331,6 +336,30 @@ func (w *Worker) succeed(ctx context.Context, e store.OutboxEntry) {
 	w.log.Info("outbox delivered", "message", id, "attempts", e.Attempts+1, "sentCopy", true)
 	if sent.ID != "" && w.deps.Trigger != nil {
 		w.deps.Trigger(w.account.ID, api.FolderID(sent.ID), false)
+	}
+}
+
+// recordRecipients remembers the recipients of a delivered mail as known
+// senders (source sent) and for recipient completion.
+func (w *Worker) recordRecipients(ctx context.Context, e store.OutboxEntry) {
+	for _, rcpt := range e.Recipients {
+		if err := w.deps.Store.AddKnownSender(ctx, rcpt, api.KnownSenderSourceSent); err != nil {
+			w.log.Warn("record recipient as known sender", "err", err)
+		}
+	}
+	// Recipient completion. The message row is still there (it is dropped
+	// or filed after this), so the recipients' display names are at hand;
+	// the envelope has only bare addresses. Cc and Bcc count as much as To:
+	// the user chose them all.
+	msg, err := w.deps.Store.GetMessage(ctx, w.account.ID, e.MessageID)
+	if err != nil {
+		w.log.Warn("read delivered message for recipient completion", "err", err)
+		return
+	}
+	addrs := make([]api.Address, 0, len(msg.To)+len(msg.CC)+len(msg.BCC))
+	addrs = append(append(append(addrs, msg.To...), msg.CC...), msg.BCC...)
+	if err := w.deps.Store.TouchCollectedAddresses(ctx, addrs, w.deps.Now()); err != nil {
+		w.log.Warn("record recipients for completion", "err", err)
 	}
 }
 

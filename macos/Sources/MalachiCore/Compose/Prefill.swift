@@ -31,6 +31,9 @@ public func fromDraft(kind: ComposeKind, draft d: Draft, blocked: BlockedContent
     if p.bodyHTML.isEmpty {
         p.bodyHTML = escapeText(d.textBody)
     }
+    // A comment draft (draft.create reply on an account that comments)
+    // opens the window's comment mode.
+    p.comment = d.comment
     return p
 }
 

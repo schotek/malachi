@@ -232,6 +232,7 @@ internal sealed class MailFixture : IAsyncDisposable
             DaemonNotification.SyncState s => (API.Notify.SyncState, JsonCoding.EncodeToString(new SyncStateNotification { State = s.State })),
             DaemonNotification.AuthRequired a => (API.Notify.AuthRequired, JsonCoding.EncodeToString(a.Payload)),
             DaemonNotification.AccountsChanged => (API.Notify.AccountsChanged, "{}"),
+            DaemonNotification.MessagesChanged c => (API.Notify.MessagesChanged, JsonCoding.EncodeToString(c.Payload)),
             DaemonNotification.Unknown u => (u.Method, "{}"),
             _ => throw new ArgumentException($"no such notification: {n}", nameof(n)),
         };
@@ -565,7 +566,7 @@ internal sealed class MailFixture : IAsyncDisposable
     /// <summary>The conversation key of a message: its thread id, or its own id for one an older daemon never linked.</summary>
     private static ThreadId ThreadKey(MessageSummary s) => s.ThreadId ?? new ThreadId("unlinked:" + s.Id.Value);
 
-    /// <summary>Aggregates a conversation over its members (oldest first), as docs/api.md §4.4 describes thread.list's summary.</summary>
+    /// <summary>Aggregates a conversation over its members (oldest first), as docs/api.md §4.4 describes thread.list's summary; a jira thread's issue is the latest member's.</summary>
     private ThreadSummary Aggregate(ThreadId tid, List<MessageSummary> members, AccountId account)
     {
         var latest = members[^1];
@@ -602,6 +603,7 @@ internal sealed class MailFixture : IAsyncDisposable
             Flags = flags,
             HasAttachments = attachments,
             FolderIds = folderIds,
+            Issue = latest.Issue?.Info,
         };
     }
 

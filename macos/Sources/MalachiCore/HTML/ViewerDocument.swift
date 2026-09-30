@@ -31,20 +31,37 @@ public let viewerCSP = "default-src 'none'; img-src malachi-cid: data:; style-sr
 /// A classic scrollbar narrows the page but not the headers' pane, so the
 /// column moves right by half its width while there is room: `left` is
 /// the smaller of half the scrollbar and half the room beside a 900 column.
-let viewerBaseCSS = """
-html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
-body { font-family: sans-serif; line-height: 1.35; overflow-wrap: anywhere; }
-#malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important; margin: 0 auto !important; padding: 12px 24px 24px !important; position: relative !important; left: min(calc((100vw - 100%) / 2), max(0px, calc((100% - 900px) / 2))) !important; }
-img { max-width: 100%; }
-pre { white-space: pre-wrap; }
-table { max-width: 100%; }
-blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }
-"""
+///
+/// A card of the conversation view (`viewerDocument(body:compact:)`) uses
+/// the same sheet with the column's padding cut to the card's: the card's
+/// own header sits right above the body and its edges are the card's, so
+/// the reader's page margins would set the text a whole gap below the
+/// header and in from the card's edge (`viewerCompactCSS`).
+let viewerBaseCSS = viewerCSS(columnPadding: "12px 24px 24px")
+
+/// `viewerBaseCSS` for a conversation card: 4 above and below the body,
+/// the card's 14 at the sides (ConversationLayout.Metrics.cardPaddingH).
+let viewerCompactCSS = viewerCSS(columnPadding: "4px 14px")
+
+/// The sheet with the column's padding (`viewerBaseCSS`).
+func viewerCSS(columnPadding: String) -> String {
+    """
+    html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+    body { font-family: sans-serif; line-height: 1.35; overflow-wrap: anywhere; }
+    #malachi-column { display: block !important; box-sizing: border-box !important; width: min(100%, 900px) !important; margin: 0 auto !important; padding: \(columnPadding) !important; position: relative !important; left: min(calc((100vw - 100%) / 2), max(0px, calc((100% - 900px) / 2))) !important; }
+    img { max-width: 100%; }
+    pre { white-space: pre-wrap; }
+    table { max-width: 100%; }
+    blockquote { margin: 0.5em 0 0.5em 1em; padding-left: 0.75em; border-left: 2px solid #c0c0c0; }
+    """
+}
 
 /// htmlview.Document: wraps a sanitised body fragment in the page the view
 /// loads. The fragment is inserted verbatim: it is the sanitiser's output
-/// and nothing else may ever be passed here.
-public func viewerDocument(body: String) -> String {
+/// and nothing else may ever be passed here. `compact` takes the sheet of
+/// a conversation card (`viewerCompactCSS`); the policy is the same.
+public func viewerDocument(body: String, compact: Bool = false) -> String {
     "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\""
-        + viewerCSP + "\"><style>" + viewerBaseCSS + "</style></head><body><div id=\"malachi-column\">" + body + "</div></body></html>"
+        + viewerCSP + "\"><style>" + (compact ? viewerCompactCSS : viewerBaseCSS)
+        + "</style></head><body><div id=\"malachi-column\">" + body + "</div></body></html>"
 }

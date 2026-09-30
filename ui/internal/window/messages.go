@@ -33,12 +33,15 @@ func (w *Window) loadMessages() {
 	k := w.model.selected
 	gen := w.model.bumpList()
 	w.model.loadingMore = false
-	grouped := w.settings.GroupByConversation() && w.model.folderRole(k) != api.RoleOutbox
+	grouped := w.groupedListing(k)
 	if k != w.model.listFolder || grouped != w.model.grouped {
 		w.model.listFolder = k
 		w.model.grouped = grouped
 		w.model.clearMessages()
 		w.rebuildMessageRows()
+		// With nothing selected the actions follow the listed folder's
+		// account (a Jira folder has no Reply).
+		w.setMessageActionsSensitive(false)
 	}
 	if k == (folderKey{}) {
 		w.model.loading = false
@@ -92,6 +95,24 @@ func (w *Window) loadMessages() {
 			w.showListState()
 		})
 	}()
+}
+
+// groupedListing reports whether folder k is listed as conversations
+// (thread.list): with the "group by conversation" setting, and always for
+// a folder of a Jira account (alwaysGrouped); never the outbox.
+func (w *Window) groupedListing(k folderKey) bool {
+	return (w.settings.GroupByConversation() || w.model.alwaysGrouped(k)) && w.model.folderRole(k) != api.RoleOutbox
+}
+
+// groupingChanged runs when the "group by conversation" setting changed:
+// the folder is listed again in the other mode. A folder whose mode stays
+// (a Jira account's, the outbox) keeps its rows and is not asked again.
+func (w *Window) groupingChanged() {
+	m := &w.model
+	if !m.search.active && m.listFolder == m.selected && w.groupedListing(m.selected) == m.grouped {
+		return
+	}
+	w.loadMessages()
 }
 
 // setListFilter switches the list between all, unread and flagged

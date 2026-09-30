@@ -37,7 +37,7 @@ Flags and environment of the server:
 |---|---|
 | `-socket PATH` | the daemon socket, whose key file is `PATH.key`; default as the daemon and the UI resolve it (`api.SocketBase`): `MALACHI_SOCKET`, else `$XDG_RUNTIME_DIR/malachi/rpc.sock` (inside Flatpak the app's own runtime dir), else `$XDG_CACHE_HOME/malachi/run/rpc.sock` (`~/.cache/malachi/run/rpc.sock` without it) |
 | `-socket` on Windows | the same rules; Windows sets neither XDG variable, so the default is `%USERPROFILE%\.cache\malachi\run\rpc.sock`, as for the daemon and the Windows app. It is outside `AppData` on purpose: a bridge started by the MSIX Claude Desktop sees a redirected `AppData` (see [below](#claude-desktop-and-claude-code-status-install-uninstall)) but the same socket |
-| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages` |
+| `-allow-modify` | also offer `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
 | `-allow-send` | also offer `send_message` |
 | `-version` | print the version and exit |
 | `MALACHI_LOG_LEVEL`, `MALACHI_LOG_FORMAT` | as for the daemon; logs go to stderr, stdout carries only MCP frames |
@@ -73,7 +73,9 @@ registered at all, so it never appears in the client's tool list.
 - **Timeouts.** 2 s to connect, 5 s for the handshake
   (`api.HandshakeTimeout`), 30 s per daemon call (`malachid did not answer
   within 30s`), except `message.download`, which may take 2 minutes (see
-  [Attachments on the mail server](#attachments-on-the-mail-server)).
+  [Attachments on the mail server](#attachments-on-the-mail-server)), and
+  `issue.transition`, which may take 45 s (the daemon waits for the
+  issue's refresh).
 - **Errors from the daemon** reach the model as tool errors (never
   protocol errors, so the model can react): `<codeName> (<code>): <message>`
   with the message control-stripped and capped at 200 bytes, plus a hint for
@@ -84,8 +86,8 @@ registered at all, so it never appears in the client's tool list.
 
 | Tier | Flag | Tools |
 |---|---|---|
-| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `create_draft` |
-| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages` |
+| read and draft | always | `list_accounts`, `list_folders`, `list_messages`, `search_messages`, `read_message`, `get_attachment`, `sync_status`, `trigger_sync`, `list_transitions`, `create_draft` |
+| modify | `-allow-modify` | `mark_messages`, `move_messages`, `delete_messages`, `transition_issue` |
 | send | `-allow-send` | `send_message` |
 
 A draft is inert: it lives in the daemon's store and, once it has rested
@@ -105,7 +107,10 @@ destructive, only `send_message` open-world.
 ### list_accounts
 
 - input: none
-- output: JSON `{accounts: [{id, name, email, displayName, kind, enabled, status}]}`
+- output: JSON `{accounts: [{id, name, email, displayName, kind, enabled, status, capabilities}]}`;
+  `capabilities` is the account's list ([api.md §4.1](api.md#41-account),
+  the mail set when the daemon sends none): what `create_draft` can do
+  with the account
 - Only that projection: server settings, token sources and everything else
   in the daemon's `AccountConfig` never leave the bridge.
 
@@ -122,7 +127,13 @@ destructive, only `send_message` open-world.
   `dateAsc`)
 - output: a trusted header (count, total, next cursor), then a fenced JSON
   array of `{id, date, from, to, subject, snippet, flags, hasAttachments,
-  size, outbox?}`
+  size, outbox?, issue?}`; `issue` is `{key, status?, item?}` on a
+  message of an issue-tracker account (kind `jira`, [api.md §3](api.md#messagesummary)):
+  the issue's key and status as the site shows them, cleaned like any
+  mail string, and whether the message is the issue's `description`, a
+  `comment` or an `event` (a status or assignee change, whose body is one
+  `from → to` line per change). The subject of every such message is
+  `KEY: Summary`, so a tool that ignores `issue` still reads sensibly.
 
 ### search_messages
 
@@ -152,12 +163,15 @@ destructive, only `send_message` open-world.
   `body-state`, `html-withheld`, `remote-attachments: N (on the mail server
   only; get_attachment downloads them first)` when there are any, `body:
   chars A-B of N (truncated; call again with offset=B)`), then a fence
-  holding `from`, `to`, `cc`, `bcc`, `reply-to`, `subject`, the attachment
+  holding `from`, `to`, `cc`, `bcc`, `reply-to`, `subject`, on a message
+  of an issue-tracker account `issue`, `issue-status` and `issue-item`
+  (as `list_messages` gives them), the attachment
   list (`partId`, `filename`, `type`, `size`, `inline`, `remote`), the
   optional `headers` and `links` (at most 50), and the body slice. The
   `remote` marker follows the quoted filename, so a name cannot forge it;
   the count outside the fence is the one to trust. Reading never downloads
-  anything.
+  anything. A `from` of an issue-tracker account is a person on the site
+  under the reserved `.invalid` domain, never a mailbox to write to.
 
 ### get_attachment
 
@@ -200,13 +214,27 @@ destructive, only `send_message` open-world.
   deletes them.
 - `trigger_sync`: optional `accountId`, `folderId`, `full`; returns at once.
 
+### list_transitions
+
+- input: `accountId` (an issue-tracker account, kind `jira`, capability
+  `transition`), `messageId` (any message of the issue)
+- output: a trusted count line, then a fence with the issue's key,
+  summary and current status and one line per transition the site
+  offers: `id`, `name`, `to` (the status it leads to), `category` when
+  the site says, and `needsInput` for a transition with a screen or
+  required fields on the site, which `transition_issue` cannot perform
+  ([api.md §4.12](api.md#412-issue), `issue.transitions`).
+- A mail account, or a message of no issue, is the daemon's
+  `invalidArgument`; an issue the site no longer shows is `messageGone`.
+
 ### create_draft
 
 - input: `accountId`; optional `mode` (`reply` | `replyAll` | `forward`;
   omitted = a new message) with `messageId`; optional `to`, `cc`, `bcc`
   (`Name <user@host>` or `user@host`), `subject`, `body` (plain text),
   `attribution` (the line above the quote, at most 2048 bytes and 16
-  lines), `omitQuote`
+  lines), `omitQuote`, `messageAccountId` (forward only), `visibility`
+  (comment drafts only)
 - Without `mode` the draft is a new plain-text message: `textBody` only.
 - With `mode` the bridge asks the daemon for the template (`draft.create`,
   [api.md §4.5](api.md#45-draft)), exactly as the desktop client does:
@@ -243,6 +271,19 @@ destructive, only `send_message` open-world.
   says `remote attachments: N not attached, they are on the mail server
   only (<why>)`, the reason being the bridge's own words and the daemon's
   error code. The user can forward the message from Malachi Mail.
+- On an issue-tracker account (capability `comment`, kind `jira`) `mode:
+  reply` makes a comment draft of the message's issue (`draft.create`
+  `reply`, [api.md §4.5](api.md#45-draft)): `body` is the comment,
+  escaped like any body; `to`, `cc`, `bcc`, `subject`, `attribution` and
+  `omitQuote` are refused, and so is an empty `body`; `visibility` is
+  `public` (the default) or `internal`, which only a service-desk issue
+  takes. The output's fence names the issue (key, summary, status), the
+  visibility and the text. The other modes are refused on such an account
+  with what to do instead: its message goes out by e-mail with `mode:
+  forward` from a mail account, `messageAccountId` naming the issue
+  tracker's account (the original is read, and its remote files
+  downloaded, from that account; the draft and the copied parts are the
+  mail account's).
 - output: a trusted head with `draftId`, `version`, whether `send_message`
   is available, `mode`, `quoted`, the attachments bound and skipped, any
   non-zero sanitiser counters from the save and the `remote attachments`
@@ -265,15 +306,28 @@ destructive, only `send_message` open-world.
   (the daemon would expunge it) or in the Outbox (the daemon would cancel
   its delivery) makes the whole call fail; there is no `permanent` option.
 
+### transition_issue (`-allow-modify`)
+
+- input: `accountId`, `messageId`, `transitionId` (from `list_transitions`,
+  one without `needsInput`)
+- The daemon lists the transitions again, refuses one the issue does not
+  offer or one that needs input (`invalidArgument`), performs the
+  transition on the site (`issue.transition`) and waits up to 30 s for
+  the issue's refresh; the output is a trusted line and a fence with the
+  issue's key, summary and new status. A transition the site refuses
+  after all is its `serverError` with the site's message. Nothing else
+  of an issue can be changed here: no assignee, no fields, no comment
+  (that is `create_draft`).
+
 ### send_message (`-allow-send`)
 
 - input: `draftId`
 - Only a draft that `create_draft` of **this process** returned is accepted,
   at the version recorded then; any other id is refused without a daemon
   call. A `conflict` (the draft was edited in Malachi Mail) forgets the
-  draft: create a new one. Delivery is asynchronous; `sync_status`
-  reports `pendingOutbox` (still to be delivered) and `failedOutbox`
-  (delivery failed).
+  draft: create a new one. A comment draft is posted to its issue.
+  Delivery is asynchronous; `sync_status` reports `pendingOutbox` (still
+  to be delivered) and `failedOutbox` (delivery failed).
 
 ## Attachments on the mail server
 

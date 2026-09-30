@@ -56,12 +56,15 @@ public struct Draft: Codable, Sendable, Equatable {
     public var replaces: MessageID?
     /// Daemon-set; ignored in params (`Date.goZero` in a `draft.create` result).
     public var updatedAt: Date
+    /// Set on a comment draft of a jira account (`draft.create` reply);
+    /// `draft.save` reads only its `visibility`. Sent back unchanged.
+    public var comment: DraftComment?
 
     public init(
         id: DraftID? = nil, accountId: AccountID, version: Int = 0, to: [Address] = [], cc: [Address]? = nil,
         bcc: [Address]? = nil, subject: String = "", textBody: String = "", htmlBody: String? = nil,
         inReplyTo: MessageID? = nil, forwarding: MessageID? = nil, attachments: [DraftAttachment]? = nil,
-        replaces: MessageID? = nil, updatedAt: Date = .goZero
+        replaces: MessageID? = nil, updatedAt: Date = .goZero, comment: DraftComment? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -77,6 +80,7 @@ public struct Draft: Codable, Sendable, Equatable {
         self.attachments = attachments
         self.replaces = replaces
         self.updatedAt = updatedAt
+        self.comment = comment
     }
 }
 
@@ -158,16 +162,20 @@ public struct DraftCreateParams: Codable, Sendable, Equatable {
     public var mailto: String?
     /// Ignored for `new`.
     public var attribution: String?
+    /// `forward` only: the account of `messageId` when it is not
+    /// `accountId` (a jira message forwarded from a mail account).
+    public var messageAccountId: AccountID?
 
     public init(
         accountId: AccountID, mode: ComposeMode, messageId: MessageID? = nil, mailto: String? = nil,
-        attribution: String? = nil
+        attribution: String? = nil, messageAccountId: AccountID? = nil
     ) {
         self.accountId = accountId
         self.mode = mode
         self.messageId = messageId
         self.mailto = mailto
         self.attribution = attribution
+        self.messageAccountId = messageAccountId
     }
 }
 

@@ -31,8 +31,16 @@ bridge, the Assistant (the ✦ menu that hands mail to Claude Desktop or
 Claude Code with a prepared question, and the experimental panel that asks
 your own Claude Code inside the main window, with the rewrite in the
 compose window and the search in your own words; [AI agents](../README.md#the-assistant)),
-and the Czech translation read from `po/`. What is missing is
-listed under [Not on Windows, not yet](#not-on-windows-not-yet).
+**Jira accounts** (`kind: jira`, [docs/api.md §4.1](../docs/api.md#41-account):
+the assistant, the JIRA heading in the sidebar with the Assigned to Me /
+Watching / Open views above the spaces, the always-grouped list with
+status pills and event rows, the issue card with Change Status, Comment
+in place of Reply with the comment window and its visibility on a
+service-desk request, the account's settings window), the **conversation
+view** (a folded conversation row shows the whole conversation stacked in
+the reading pane, for mail and Jira alike), and the Czech translation
+read from `po/`. What is missing is listed under [Not on Windows, not
+yet](#not-on-windows-not-yet).
 
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
 `malachi-mcp.exe` in the app folder are AGPL-3.0-only, LICENSING.md). The
@@ -196,7 +204,14 @@ windows/
       Model/, Compose/, Html/,    the pure logic of the GTK UI and macOS ported 1:1
       Wizard/, Text/              (window model, threads, folding, favourites, search,
                                   addresses, mailto:, quoting, wizard fields and results,
-                                  the viewer and editor documents and the bridge, formats)
+                                  the viewer and editor documents and the bridge, formats,
+                                  the conversation view's model and layout)
+      IssueTrackers/              ui/internal/jira and ui/internal/capabilities (Swift
+                                  MalachiCore/Jira): the texts and view models of the Jira
+                                  assistant, sidebar, list, issue card, comment window and
+                                  account settings
+      Assistants/                 ui/internal/assistant: the Assistant's texts, prompts,
+                                  command line, events and Markdown
       Controllers/                the controllers over the RPC client, tested against an
                                   in-process fake daemon
       Presentation/               what macOS keeps untested in AppKit: the view models of
@@ -217,10 +232,13 @@ windows/
                                   the log), Commands/ (the command router, the WebView2 keys),
                                   Controls/, Localization/ ({l:T}, mnemonics), Resources/,
                                   Platform/ (the platform services' entry points), Main/ (the
-                                  main window's panes, command rows, status line), Reader/,
+                                  main window's panes, command rows, status line), Reader/
+                                  (the issue card; Conversation/: the conversation view),
                                   Windows/ (message, attached-message and preview windows),
-                                  Attachments/, Compose/, Wizard/, Preferences/, WebViews/
-                                  (the hardened viewer, editor and previewer)
+                                  Attachments/, Compose/ (with the comment mode), Wizard/
+                                  (with the Jira assistant), Preferences/ (with a Jira
+                                  account's settings), WebViews/ (the hardened viewer,
+                                  a conversation card's view, editor and previewer)
     Malachi.Credentials/          malachi-credentials.exe, the daemon's keyring helper over
                                   Credential Manager (NativeAOT); depends on nothing else
   tests/
@@ -232,8 +250,9 @@ windows/
     Malachi.Conventions.Tests/    repository checks: SPDX headers, the gschema keys against
                                   the settings, the strings check and the msgid coverage
     Malachi.App.Canary/           the network canary over the WebView2 layer: the real viewer,
-                                  editor and previewer against hostile documents and the raw
-                                  MIME corpus, with loopback listeners and a NetLog
+                                  conversation card, editor and previewer against hostile
+                                  documents and the raw MIME corpus, with loopback listeners
+                                  and a NetLog
     Malachi.App.Canary.Host/      its WinUI host, compiling src/Malachi.App/WebViews
     Malachi.App.UiTests/          UI smoke tests: the published app (build.ps1 app) driven
                                   through UI Automation on a data folder and a preferences
@@ -245,7 +264,7 @@ windows/
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
 nothing imports the Go modules (the API is re-declared from
 [docs/api.md](../docs/api.md), as on macOS). The tests are xUnit v3 on
-Microsoft.Testing.Platform: about 5,000 of them, two minutes for
+Microsoft.Testing.Platform: about 6,000 of them, a minute and a half for
 `make test-windows` (docs/windows-port.md §12).
 
 ## How it runs the daemon
@@ -397,7 +416,7 @@ confirmation dialogs.
 | The search box sits in the middle of the title bar (Ctrl+F, Ctrl+E); the Folder / Account / All Accounts scope bar shows over the list while a search runs; Enter opens the first result, Escape closes the search | A search bar over the message list (Ctrl+F, the search button) with the entry and the scope toggles | Where Windows 11 apps keep search (Outlook, Explorer, Settings) |
 | The status line (sync state, unsent messages, the connection; a click opens each account's state and action) runs across the whole bottom edge of the window | At the bottom of the sidebar, with the same popover | It stays in sight when a narrow window folds the sidebar away (as on macOS) |
 | At 900 effective pixels or less the sidebar folds into an overlay that the title bar's pane button opens; at 600 or less the list and the message are one stack, the title bar's back button returns to the list, and a click on the selected row shows it again | Collapsed split views that navigate between whole-window pages | Windows 11's own pane and back buttons in the title bar; the list stays in sight while the sidebar is open (docs/windows-port.md §11.1) |
-| The primary menu `…` has New Message, Add Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
+| The primary menu `…` has New Message, Add Account…, Add Jira Account…, Preferences, About Malachi Mail and Quit | New Message, Preferences, Keyboard Shortcuts, About Malachi Mail (a Jira account is added from *Preferences → Accounts*, the *+* menu, or from the empty window) | Windows has no menu bar or application menu to add an account or quit from; GTK's Keyboard Shortcuts opens nothing |
 | The sidebar's New Message is an accent (filled) button | A plain header-bar button | Windows 11's style for a pane's primary action (Fluent's accent button); kept after the parity review |
 | Windows keys: Ctrl+R Reply, Ctrl+Shift+R Reply All, Ctrl+Shift+F Forward, F5 Check for New Mail, Ctrl+E besides Ctrl+F for search; the setting `ctrl-r` (*Preferences → General → Keyboard*: `reply` by default, or `refresh`) gives Ctrl+R to Check for New Mail instead, as macOS's `command-r`. GTK's other keys stay: Ctrl+Q Quit, F10 the primary menu (while the sidebar shows it), Delete, A, J, U, S (also with the message view focused, never while typing), Escape; Ctrl+W also closes a secondary window | Ctrl+R Check for New Mail, no Reply/Forward keys, Escape | Ctrl+R is Reply in every Windows mail client and F5 is the Windows refresh key |
 | Mnemonics are WinUI access keys: Alt shows their key tips on the menus and buttons that carry a GTK mnemonic; a dialog's buttons have none | Underlined mnemonics | WinUI's form of mnemonics; a `ContentDialog`'s buttons take no access keys |
@@ -429,7 +448,7 @@ confirmation dialogs.
 | Quitting saves the unsaved changes of every message being written as drafts; only a draft that cannot be saved asks | The compose windows close; what was typed since the last automatic save is lost | Decided (docs/windows-port.md §0) |
 | While the app runs in the background, a notification-area icon offers Open, New Message, Check for New Mail and Quit | No icon | A background app is invisible on Windows otherwise |
 | The new-mail sound is the user's system sound for mail (`MailBeep`, *Desktop Mail Notification* in Control Panel → Sound) at the system sounds' volume, silent when none is set, skipped under Do Not Disturb, in a presentation, a full-screen program, the screen saver or a locked session; notifications themselves are silent | The sound theme's `message-new-email` | Windows' own event for it |
-| The account wizard is a window of its own, modal over the window it was opened from (520×640): its title bar carries Back (also Alt+Left and the mouse's back button) and the page's title; its close button, Escape and Ctrl+W cancel it (and a sign-in waiting in the browser). The pages slide in; the result rows' icons are green for success and red for an error | An `Adw.Dialog` over its parent with a header bar on each page | A window shows one `ContentDialog` at a time, and the wizard asks *Trust This Certificate?* in one of its own (docs/windows-port.md §11.3); the colours are macOS's |
+| The account wizard, and the Jira assistant with its pages site → credentials → spaces, are each a window of their own, modal over the window they were opened from (520×640): its title bar carries Back (also Alt+Left and the mouse's back button) and the page's title; its close button, Escape and Ctrl+W cancel it (and a sign-in waiting in the browser). The pages slide in; the result rows' icons are green for success and red for an error | An `Adw.Dialog` over its parent with a header bar on each page | A window shows one `ContentDialog` at a time, and the wizard asks *Trust This Certificate?* in one of its own (docs/windows-port.md §11.3); the colours are macOS's |
 | The wizard never shows the accounts of GNOME Online Accounts, and its GNOME Online Accounts page has neither *Open Online Accounts* nor *Check Again*; the sign-in banner of an account that GNOME Online Accounts holds keeps its button *Open Online Accounts*, which opens *Preferences* | Both, for accounts GNOME Online Accounts holds; the banner's button opens *Online Accounts* in GNOME Settings | GNOME Online Accounts does not exist on Windows (as macOS, whose table has the same row); the daemon offers its own browser sign-in instead, so the page is normally not reached; an account of GNOME Online Accounts (a configuration brought from Linux) is practically never seen here, and the Preferences are where it is edited or removed |
 | *Preferences* is one window for the app with a navigation pane (Accounts, General, Appearance, AI), only its icons below 720 px; the rows are Windows settings cards; *General* has, after GTK's groups (Startup, Reading, Deleting, Notifications, Mail), a *Keyboard* group (the `ctrl-r` choice) and a *Default Mail App* group; *Accounts* follows the accounts and their state while it is open | `Adw.PreferencesDialog` with a view switcher, built anew on every open | Windows Settings' form; the two groups are Windows' own; the window stays open beside the main window, where accounts change |
 | *Preferences* has no search field | `Adw.PreferencesDialog` with search | Decided (as macOS) |
@@ -451,7 +470,9 @@ confirmation dialogs.
 | A link the Assistant hands over is at most 32 000 characters | No limit | Windows' limit of a command line, which the link's handler must fit (the prompts are far shorter) |
 | An open assistant panel beside the panes takes its width from them: they are laid out for what it leaves (the sidebar folds below 900 px of it), and the list narrows, not below its minimum, so that the message pane keeps the width its buttons need | The breakpoints follow the window, and the panes' minimum widths keep the header bar's buttons whole | WinUI cuts off what does not fit instead of asking the window for room |
 | The remote-image and pictures bars put their buttons under the sentence, at the end and on as many lines as they need, when the pane leaves the sentence less than about 160 px | One row; the label never breaks a word, and the bar asks the window for the room | WinUI gives the sentence what is left, down to a letter a line (`Reader/BarPanel.cs`) |
-
+| The settings of a Jira account are a window of their own, modal over *Preferences* (the edit button on its row; *Edit Account…* from a banner): one scrolling page with the site (read only, *Replace Token…*), the spaces, the synchronisation, the folders with the closed statuses, the notification e-mails and the bot comments; a failed call in an `InfoBar` under the title bar, the call under way at the bottom left, Save and Cancel at the bottom right (`Preferences/JiraAccountWindow`) | A dialog with Cancel and Save in its header over one preferences page, the call under way as the header's subtitle and a banner for a failed call (`ui/internal/jiraaccount`) | A Windows dialog has its buttons at the bottom, the default first (as the mail assistant and macOS's sheet) |
+| In the comment window of a service-desk request, *Reply to Customer* and *Internal Note* are a `SelectorBar` beside the issue's key and summary | An `Adw.ToggleGroup` | WinUI has no segmented control; the `SelectorBar` is its choice between a few alternatives |
+| A conversation card's HTML view runs no script at all, like the message view: the app measures the document from outside (`CardSize`, run through WebView2's host scripting) when it loaded, when a picture arrived after it, and when the card's width, height or the text zoom changed, and caps the height with the same governor | The card's view runs a measuring script of the application in an isolated world of the page (the JavaScript engine on, script markup off), which reports every change of the height | With page script off no listener of an injected script fires in WebView2 (measured); a host script still runs, so nothing of the page's own has to (docs/windows-port.md §6.7, docs/security.md §3.2) |
 The link under the pointer is shown at the bottom of the message view as
 in GTK, and a masked link is confirmed before it opens; those are security
 features, not deviations.

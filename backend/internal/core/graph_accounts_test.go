@@ -98,8 +98,8 @@ func TestGraphAccountAddAndRoute(t *testing.T) {
 	b := newTestBackend(t, config.Default())
 	imapSup, graphSup := newFakeSupervisor(), newFakeSupervisor()
 	imapOut, graphOut := newFakeOutbox(), newFakeOutbox()
-	b.Supervisor = newKindSupervisor(imapSup, graphSup)
-	b.Delivery = newKindOutbox(imapOut, graphOut)
+	b.Supervisor = newKindSupervisor(map[api.AccountKind]SyncSupervisor{api.AccountIMAP: imapSup, api.AccountGraph: graphSup})
+	b.Delivery = newKindOutbox(map[api.AccountKind]OutboxSupervisor{api.AccountIMAP: imapOut, api.AccountGraph: graphOut})
 
 	// A password makes no sense for a Graph account; no keyring is needed.
 	if _, err := b.Accounts().Add(ctx, api.AccountAddParams{Config: graphConfig(), Credentials: api.Credentials{Password: "x"}}); errCode(t, err) != api.CodeInvalidArgument {
@@ -165,7 +165,7 @@ func TestGraphAccountAddAndRoute(t *testing.T) {
 
 func TestKindSupervisorRestartAcrossKinds(t *testing.T) {
 	imapSup, graphSup := newFakeSupervisor(), newFakeSupervisor()
-	k := newKindSupervisor(imapSup, graphSup)
+	k := newKindSupervisor(map[api.AccountKind]SyncSupervisor{api.AccountIMAP: imapSup, api.AccountGraph: graphSup})
 	a := store.Account{ID: "acc_1", Config: validConfig()}
 	k.Start(a)
 	a.Config = graphConfig()

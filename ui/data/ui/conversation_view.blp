@@ -1,0 +1,73 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The conversation page of the reading pane (window/conversation_view.go):
+// a folded conversation row of the grouped list shows every member the
+// folder holds, stacked oldest first, as native cards on a timeline. The
+// window adds the page to message_stack as "conversation" and fills the
+// column from Go (conversation_card.go, conversation_rows.go): the issue
+// card of a Jira conversation in conversation_issue, then one row per
+// item. The link under the pointer in any card shows in
+// conversation_status; the spinner stands in while the members load.
+Overlay conversation_page {
+  styles [
+    "conversation-pane",
+  ]
+
+  child: ScrolledWindow conversation_scroller {
+    hscrollbar-policy: never;
+    vexpand: true;
+    hexpand: true;
+    // The column is 900 wide at most, its gutter included, like the
+    // single message's.
+    child: Adw.Clamp conversation_clamp {
+      maximum-size: 900;
+      tightening-threshold: 900;
+
+      child: Box conversation_column {
+        orientation: vertical;
+        margin-start: 16;
+        margin-end: 16;
+        margin-top: 4;
+        margin-bottom: 16;
+        // The issue card, in the cards' column (after the gutter).
+        Box conversation_issue {
+          orientation: vertical;
+          margin-start: 40;
+          margin-top: 12;
+          visible: false;
+        }
+      };
+    };
+  };
+
+  [overlay]
+  Label conversation_status {
+    halign: start;
+    valign: end;
+    margin-start: 6;
+    margin-bottom: 6;
+    ellipsize: middle;
+    max-width-chars: 80;
+    visible: false;
+
+    styles [
+      "osd",
+      "caption",
+    ]
+  }
+
+  [overlay]
+  Adw.Spinner conversation_spinner {
+    halign: center;
+    valign: center;
+    width-request: 32;
+    height-request: 32;
+    visible: false;
+
+    accessibility {
+      label: C_("accessibility", "Loading the message");
+    }
+  }
+}

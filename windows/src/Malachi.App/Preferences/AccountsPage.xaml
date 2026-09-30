@@ -7,7 +7,8 @@ Port of macos/Sources/MalachiMail/Preferences/AccountsPaneViewController.swift,
 AccountRowCell.swift and AccountsTableView.swift; GTK: preferences.blp
 accounts_page and the rows of ui/internal/window/accounts_page.go. The
 group Mail Accounts (accounts_group) with its header suffix, the add
-button (add_account_button: list-add, "Add Account"), its description
+button (add_account_button: list-add, "Add Account", a menu of the two
+assistants: a mail account or a Jira account), its description
 (a failed load), the accounts' rows and the empty row (accounts_empty_row:
 "No accounts yet", "Use the + button to add one", insensitive). A row, in
 the order of the GTK row: the drag handle (its tooltip names the keys),
@@ -64,11 +65,23 @@ status and the controls go to a second line (AccountRowPanel).
                             VerticalAlignment="Center"
                             AutomationProperties.AutomationId="AddAccount"
                             AutomationProperties.Name="{l:T Msgid='Add Account'}"
-                            Click="OnAddClick"
                             IsEnabled="{x:Bind Controller.IsEnabled, Mode=OneWay}"
                             Style="{StaticResource SubtleButtonStyle}"
                             ToolTipService.ToolTip="{l:T Msgid='Add Account'}">
                             <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('list-add')}" />
+                            <!-- add_account_menu -->
+                            <Button.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                    <MenuFlyoutItem
+                                        AutomationProperties.AutomationId="AddMailAccount"
+                                        Click="OnAddClick"
+                                        l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                                    <MenuFlyoutItem
+                                        AutomationProperties.AutomationId="AddJiraAccount"
+                                        Click="OnAddJiraClick"
+                                        l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
+                                </MenuFlyout>
+                            </Button.Flyout>
                         </Button>
                     </Grid>
                     <TextBlock
@@ -123,7 +136,7 @@ status and the controls go to a second line (AccountRowPanel).
                                         VerticalAlignment="Center"
                                         FontSize="16"
                                         Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
-                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Email, Mode=OneWay}">
+                                    <StackPanel VerticalAlignment="Center" ToolTipService.ToolTip="{x:Bind Subtitle, Mode=OneWay}">
                                         <TextBlock
                                             MaxLines="1"
                                             Style="{StaticResource BodyLabelStyle}"
@@ -132,7 +145,7 @@ status and the controls go to a second line (AccountRowPanel).
                                         <TextBlock
                                             MaxLines="1"
                                             Style="{StaticResource DimCaptionLabelStyle}"
-                                            Text="{x:Bind Email, Mode=OneWay}"
+                                            Text="{x:Bind Subtitle, Mode=OneWay}"
                                             TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                     <TextBlock

@@ -90,7 +90,9 @@ enum AvatarPalette {
 /// Adw.Avatar: a circle with a gradient of the sender's colour class and
 /// the initials of the name, or a person symbol without a name. The
 /// monochrome variant (`ui/internal/style` "monochrome-avatars") is a
-/// tinted disc with the initials in the label colour.
+/// tinted disc with the initials in the label colour. The accent variant
+/// (the user's own message on the timeline of the conversation view) is a
+/// disc tinted with the accent colour, the initials in that colour.
 @MainActor
 final class AvatarView: NSView {
     /// The name the initials and the colour come from; hostile input, only
@@ -116,6 +118,16 @@ final class AvatarView: NSView {
     var monochrome = false {
         didSet {
             if monochrome != oldValue {
+                needsDisplay = true
+            }
+        }
+    }
+
+    /// Tinted with the accent colour, whatever `monochrome` says. The
+    /// message list never sets it.
+    var accent = false {
+        didSet {
+            if accent != oldValue {
                 needsDisplay = true
             }
         }
@@ -147,7 +159,11 @@ final class AvatarView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let circle = NSBezierPath(ovalIn: bounds)
         let foreground: NSColor
-        if monochrome {
+        if accent {
+            Tint.accent.withAlphaComponent(0.18).setFill()
+            circle.fill()
+            foreground = Tint.accent
+        } else if monochrome {
             Tint.fg(alpha: 0.12).setFill()
             circle.fill()
             foreground = Tint.fg(alpha: 0.8)

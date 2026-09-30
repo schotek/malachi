@@ -603,6 +603,389 @@ import Testing
         #expect(search.results.first?.ranges == [MatchRange(start: 12, end: 18)] && search.results.first?.score == 0.83)
     }
 
+    // MARK: Jira accounts (docs/api.md §3, §4.1–§4.5, §5; protocol 2, compatible addition)
+
+    static let jiraConfigJSON = #"""
+    {"siteUrl":"https://acme.atlassian.net","deployment":"cloud","cloudId":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+     "login":"jana.dvorakova@acme.example","spaces":[{"id":"10001","key":"ITSD","name":"IT Service Desk"},{"id":"10002","key":"WEB"}],
+     "offlineDays":90,"onlyMine":true,"hideEvents":true,"disabledFolders":["watching"],
+     "closedStatuses":[{"id":"6","name":"Closed"},{"id":"10005"}],"notificationMail":"hide",
+     "notificationSenders":["jira@acme.atlassian.net","@acme.example"],"botNames":["Relay Bot"],
+     "metadataFilters":["^Sent from .*$"],"authorPrefixes":["[EXT]"]}
+    """#
+
+    /// Every JiraConfig field survives a decode and an encode (an
+    /// account.update built from account.list must not drop one), and
+    /// nothing unset is written.
+    @Test func jiraAccountConfigRoundTrips() throws {
+        let r = try decode(AccountListResult.self, #"""
+        {"accounts":[{"id":"acc_j","config":{"name":"Acme Jira","email":"jana.dvorakova@acme.example","kind":"jira",
+           "jira":\#(Self.jiraConfigJSON),"syncIntervalSeconds":300},
+          "enabled":true,"state":{"accountId":"acc_j","status":"idle","progress":-1,"pendingOutbox":0},
+          "capabilities":[]}]}
+        """#)
+        let acc = try #require(r.accounts.first)
+        #expect(acc.config.protocolKind == .jira && acc.config.kind == .jira)
+        #expect(acc.config.imap == nil && acc.config.smtp == nil && acc.config.graph == nil && acc.config.oauth2 == nil)
+        let j = try #require(acc.config.jira)
+        #expect(j == JiraConfig(
+            siteUrl: "https://acme.atlassian.net", deployment: .cloud, cloudId: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+            login: "jana.dvorakova@acme.example",
+            spaces: [SpaceRef(id: "10001", key: "ITSD", name: "IT Service Desk"), SpaceRef(id: "10002", key: "WEB")],
+            offlineDays: 90, onlyMine: true, hideEvents: true, disabledFolders: [.watching],
+            closedStatuses: [StatusRef(id: "6", name: "Closed"), StatusRef(id: "10005")], notificationMail: .hide,
+            notificationSenders: ["jira@acme.atlassian.net", "@acme.example"], botNames: ["Relay Bot"],
+            metadataFilters: ["^Sent from .*$"], authorPrefixes: ["[EXT]"]))
+
+        // account.update echoes it verbatim, key for key.
+        let update = try encodeObject(AccountUpdateParams(accountId: acc.id, config: acc.config))
+        let cfg = try #require(update["config"] as? [String: Any])
+        #expect(cfg.keys.sorted() == ["email", "jira", "kind", "name", "syncIntervalSeconds"])
+        let jira = try #require(cfg["jira"] as? [String: Any])
+        let original = try #require(JSONSerialization.jsonObject(with: json(Self.jiraConfigJSON)) as? [String: Any])
+        #expect(jira.keys.sorted() == original.keys.sorted(), "every field is written back")
+        #expect(NSDictionary(dictionary: jira).isEqual(to: original), "and with the same values")
+        let back = try JSONCoding.decoder().decode(AccountConfig.self, from: JSONCoding.encoder().encode(acc.config))
+        #expect(back == acc.config)
+
+        // A minimal block: the three fields Go writes without omitempty, nothing else.
+        let minimal = JiraConfig(siteUrl: "https://jira.acme.example/jira", deployment: .datacenter, spaces: [SpaceRef(id: "1", key: "MOB")])
+        let obj = try encodeObject(minimal)
+        #expect(obj.keys.sorted() == ["deployment", "siteUrl", "spaces"], "nil and empty lists are left out")
+        #expect(obj["deployment"] as? String == "datacenter")
+        let space = try #require((obj["spaces"] as? [[String: Any]])?.first)
+        #expect(space.keys.sorted() == ["id", "key"])
+        #expect(try encodeObject(JiraConfig(siteUrl: "https://a.example", deployment: .cloud))["spaces"] as? [Any] != nil,
+                "spaces is always written")
+        // Set values are written, false and 0 included.
+        let off = try encodeObject(JiraConfig(siteUrl: "https://a.example", deployment: .cloud, offlineDays: 0, onlyMine: false))
+        #expect(off["offlineDays"] as? Int == 0 && off["onlyMine"] as? Bool == false && off["hideEvents"] == nil)
+
+        // What an older or terser daemon leaves out decodes as the default.
+        let bare = try decode(JiraConfig.self, #"{"siteUrl":"https://a.example","deployment":"cloud","spaces":null}"#)
+        #expect(bare == JiraConfig(siteUrl: "https://a.example", deployment: .cloud))
+        #expect(bare.cloudId == nil && bare.offlineDays == nil && bare.notificationMail == nil && bare.botNames.isEmpty)
+        #expect(try decode(JiraConfig.self, #"{"siteUrl":"https://a.example","deployment":"server"}"#).deployment == "server",
+                "an unknown deployment decodes as itself")
+
+        #expect(API.Limits.maxJiraSpaces == 200 && API.Limits.maxJiraStatuses == 64)
+        #expect(API.Limits.maxJiraListEntries == 32 && API.Limits.maxJiraPatternBytes == 512)
+        #expect(API.Limits.maxJiraOfflineDays == 365 && API.Limits.defaultJiraOfflineDays == 30)
+    }
+
+    /// Account.capabilities: absent (an older daemon) is nil and reads as
+    /// the mail set; an empty list (a Jira account) can do none of them.
+    @Test func accountCapabilities() throws {
+        let state = #"{"accountId":"a","status":"idle","progress":-1,"pendingOutbox":0}"#
+        let old = try decode(Account.self, #"{"id":"a","config":{"name":"n","email":"e@x"},"enabled":true,"state":\#(state)}"#)
+        #expect(old.capabilities == nil, "missing is nil, not []")
+        let null = try decode(Account.self, #"{"id":"a","config":{"name":"n","email":"e@x"},"enabled":true,"state":\#(state),"capabilities":null}"#)
+        #expect(null.capabilities == nil)
+        for c: Capability in [.compose, .reply, .replyAll, .forward, .move, .delete] {
+            #expect(old.can(c), "\(c) is a mail capability")
+        }
+        #expect(!old.can(.comment) && !old.can("archive"))
+        #expect(API.mailCapabilities == [.compose, .reply, .replyAll, .forward, .move, .delete])
+
+        let mail = try decode(Account.self, #"""
+        {"id":"a","config":{"name":"n","email":"e@x"},"enabled":true,"state":\#(state),
+         "capabilities":["compose","reply","replyAll","forward","move","delete"]}
+        """#)
+        #expect(mail.capabilities == API.mailCapabilities && mail.can(.delete) && !mail.can(.comment))
+
+        let m1 = try decode(Account.self, #"{"id":"j","config":{"name":"n","email":"e@x","kind":"jira"},"enabled":true,"state":\#(state),"capabilities":[]}"#)
+        #expect(m1.capabilities == [])
+        for c: Capability in [.compose, .reply, .replyAll, .forward, .comment, .move, .delete] {
+            #expect(!m1.can(c), "\(c) is not a capability of an empty list")
+        }
+        let m2 = try decode(Account.self, #"{"id":"j","config":{"name":"n","email":"e@x","kind":"jira"},"enabled":true,"state":\#(state),"capabilities":["comment","forward","teleport"]}"#)
+        #expect(m2.can(.comment) && m2.can(.forward) && !m2.can(.reply) && !m2.can(.compose))
+        #expect(m2.capabilities?.last == "teleport", "an unknown capability decodes as itself")
+
+        // Written only when known; an empty list stays an empty list.
+        #expect(try encodeObject(old)["capabilities"] == nil)
+        #expect((try encodeObject(m1)["capabilities"] as? [Any])?.isEmpty == true)
+        #expect(try JSONCoding.decoder().decode(Account.self, from: JSONCoding.encoder().encode(m1)).capabilities == [])
+        #expect(Account(id: "a", config: AccountConfig(name: "n", email: "e@x"), enabled: true,
+                        state: SyncState(accountId: "a", status: .idle)).can(.forward))
+    }
+
+    static let issueJSON = #"""
+    "key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer on 3rd floor jams",
+    "status":"In Progress","statusCategory":"inProgress","type":"Service Request","priority":"High",
+    "assignee":"Jana Dvořáková","reporter":"Petr Novák","assignedToMe":true,"watching":true,
+    "commentVisibilities":["public","internal"]
+    """#
+
+    static let issueSummaryJSON = #"""
+    {"id":"m_j1","accountId":"acc_j","folderId":"f_itsd","threadId":"t_j",
+     "from":[{"name":"Petr Novák","address":"petr.novak@acme.example"}],
+     "subject":"ITSD-42: Printer on 3rd floor jams","date":"2026-09-02T10:00:00Z","snippet":"Still jams",
+     "flags":["seen"],"hasAttachments":false,"size":321,
+     "issue":{\#(issueJSON),"item":"comment","visibility":"internal","via":"Relay Bot","edited":true}}
+    """#
+
+    static let eventSummaryJSON = #"""
+    {"id":"m_j2","accountId":"acc_j","folderId":"f_itsd","threadId":"t_j",
+     "from":[{"name":"Jana Dvořáková","address":"jana.dvorakova@acme.example"}],
+     "subject":"ITSD-42: Printer on 3rd floor jams","date":"2026-09-02T11:00:00Z","snippet":"To Do → In Progress",
+     "flags":["seen"],"hasAttachments":false,"size":0,
+     "issue":{"key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer on 3rd floor jams",
+              "status":"In Progress","item":"event",
+              "changes":[{"field":"status","from":"To Do","to":"In Progress"},{"field":"assignee","to":"Jana Dvořáková"}]}}
+    """#
+
+    /// MessageSummary.issue flattens IssueInfo beside the item fields, on
+    /// message.list, message.get (itself flattened) and thread members;
+    /// ThreadSummary.issue is the plain IssueInfo.
+    @Test func issueDecodesOnMessagesAndThreads() throws {
+        let list = try decode(MessageListResult.self, #"{"messages":[\#(Self.issueSummaryJSON),\#(Self.summaryJSON)],"page":{"total":2}}"#)
+        let issue = try #require(list.messages[0].issue)
+        #expect(issue.info == IssueInfo(
+            key: "ITSD-42", url: "https://acme.atlassian.net/browse/ITSD-42", summary: "Printer on 3rd floor jams",
+            status: "In Progress", statusCategory: .inProgress, type: "Service Request", priority: "High",
+            assignee: "Jana Dvořáková", reporter: "Petr Novák", assignedToMe: true, watching: true,
+            commentVisibilities: [.public, .internal]))
+        #expect(issue.item == .comment && issue.visibility == .internal && issue.via == "Relay Bot" && issue.edited == true)
+        #expect(issue.changes.isEmpty)
+        #expect(issue.mine == nil, "a relayed comment is never the user's own")
+        #expect(list.messages[1].issue == nil, "a mail message has none")
+
+        let get = try decode(MessageGetResult.self, #"""
+        {"message":{"id":"m_j1","accountId":"acc_j","folderId":"f_itsd","threadId":"t_j",
+          "from":[{"name":"Petr Novák","address":"petr.novak@acme.example"}],
+          "subject":"ITSD-42: Printer on 3rd floor jams","date":"2026-09-02T10:00:00Z","snippet":"Still jams",
+          "flags":[],"hasAttachments":false,"size":321,
+          "issue":{\#(Self.issueJSON),"item":"description","mine":true},
+          "attachments":[]}}
+        """#)
+        let m = get.message
+        #expect(m.summary.issue?.item == .description && m.summary.issue?.info.key == "ITSD-42")
+        #expect(m.summary.issue?.visibility == nil && m.summary.issue?.via == nil && m.summary.issue?.edited == nil)
+        #expect(m.summary.issue?.mine == true, "the account's own user wrote it")
+
+        // The encoding flattens too: no "info" and no "summary" key.
+        let obj = try encodeObject(m)
+        let wire = try #require(obj["issue"] as? [String: Any])
+        #expect(obj["summary"] == nil && wire["info"] == nil)
+        #expect(wire["key"] as? String == "ITSD-42" && wire["item"] as? String == "description")
+        #expect(wire["visibility"] == nil && wire["changes"] == nil, "omitempty")
+        #expect(wire["mine"] as? Bool == true)
+        #expect(try JSONCoding.decoder().decode(Message.self, from: JSONCoding.encoder().encode(m)) == m)
+        // mine is written only when known (omitempty).
+        let relayed = try #require(try encodeObject(list.messages[0])["issue"] as? [String: Any])
+        #expect(relayed["mine"] == nil && relayed["via"] as? String == "Relay Bot")
+        #expect(try decode(MessageIssue.self, #"{"key":"WEB-1","url":"u","summary":"s","status":"Open","item":"comment","mine":false}"#).mine == false)
+
+        // An event row: its changes, no visibility.
+        let event = try decode(MessageSummary.self, Self.eventSummaryJSON)
+        let e = try #require(event.issue)
+        #expect(e.item == .event && e.visibility == nil)
+        #expect(e.changes == [IssueChange(field: .status, from: "To Do", to: "In Progress"), IssueChange(field: .assignee, to: "Jana Dvořáková")])
+        #expect(e.info.statusCategory == nil && e.info.assignee == nil && e.info.commentVisibilities.isEmpty)
+        #expect(try JSONCoding.decoder().decode(MessageSummary.self, from: JSONCoding.encoder().encode(event)) == event)
+
+        // thread.list: the thread carries the issue, its latest member (an event here) its own.
+        let threads = try decode(ThreadListResult.self, #"""
+        {"threads":[{"id":"t_j","accountId":"acc_j","subject":"ITSD-42: Printer on 3rd floor jams",
+          "participants":[{"name":"Jana Dvořáková","address":"jana.dvorakova@acme.example"}],
+          "messageCount":3,"unreadCount":0,"latestDate":"2026-09-02T11:00:00Z",
+          "latest":\#(Self.eventSummaryJSON),"snippet":"To Do → In Progress","flags":["seen"],"hasAttachments":false,
+          "folderIds":["f_itsd","f_assigned"],"issue":{\#(Self.issueJSON)}},
+          \#(Self.threadJSON)],"page":{"total":2}}
+        """#)
+        let t = threads.threads[0]
+        #expect(t.issue?.key == "ITSD-42" && t.issue?.commentVisibilities == [.public, .internal])
+        #expect(t.latest.issue?.item == .event && t.latest.issue?.changes.count == 2)
+        #expect(threads.threads[1].issue == nil)
+        let get2 = try decode(ThreadGetResult.self, #"{"thread":\#(Self.threadJSON),"messages":[\#(Self.issueSummaryJSON),\#(Self.eventSummaryJSON)]}"#)
+        #expect(get2.messages.map { $0.issue?.item } == [.comment, .event])
+        #expect(try encodeObject(t)["issue"] as? [String: Any] != nil)
+        #expect(try encodeObject(threads.threads[1])["issue"] == nil)
+
+        // search results and notify.newMessage carry MessageSummary as it is.
+        let search = try decode(SearchQueryResult.self, #"{"results":[{"message":\#(Self.issueSummaryJSON),"snippet":"x","ranges":[],"score":1}],"page":{"total":1}}"#)
+        #expect(search.results.first?.message.issue?.info.key == "ITSD-42")
+    }
+
+    /// Open enums of the issue projection: a newer daemon's value decodes
+    /// as itself; the empty category is not a known one.
+    @Test func unknownIssueValuesDecode() throws {
+        let i = try decode(IssueInfo.self, #"{"key":"WEB-1","url":"https://acme.atlassian.net/browse/WEB-1","summary":"s","status":"Blocked","statusCategory":"blocked"}"#)
+        #expect(i.statusCategory == IssueStatusCategory("blocked"))
+        #expect(i.statusCategory != .todo && i.statusCategory != .inProgress && i.statusCategory != .done)
+        let empty = try decode(IssueInfo.self, #"{"key":"WEB-1","url":"u","summary":"s","status":"","statusCategory":""}"#)
+        #expect(empty.statusCategory == "" && empty.status == "")
+        let odd = try decode(MessageIssue.self, #"""
+        {"key":"MOB-7","url":"u","summary":"s","status":"Open","item":"worklog","visibility":"partners",
+         "changes":[{"field":"priority","from":"Low","to":"High"}]}
+        """#)
+        #expect(odd.item == "worklog" && odd.visibility == "partners" && odd.changes.first?.field == "priority")
+        #expect(throws: (any Error).self, "item is required") {
+            try decode(MessageIssue.self, #"{"key":"MOB-7","url":"u","summary":"s","status":"Open"}"#)
+        }
+        #expect(CommentVisibility.public.rawValue == "public" && CommentVisibility.internal.rawValue == "internal")
+        #expect(IssueItemKind.description.rawValue == "description" && IssueItemKind.event.description == "event")
+        #expect(VirtualFolder.open.rawValue == "open" && NotificationMailMode.sync.rawValue == "sync")
+    }
+
+    /// Folder.virtual (docs/api.md §4.2): the virtual folders of a jira
+    /// account first, role none; absent on every other folder.
+    @Test func virtualFoldersDecode() throws {
+        let r = try decode(FolderListResult.self, #"""
+        {"folders":[
+          {"id":"f_a","accountId":"acc_j","name":"Assigned to Me","path":"Assigned to Me","role":"none","subscribed":true,"selectable":true,"synced":true,"unread":2,"total":7,"virtual":"assignedToMe"},
+          {"id":"f_w","accountId":"acc_j","name":"Watching","path":"Watching","role":"none","subscribed":true,"selectable":true,"synced":true,"unread":0,"total":3,"virtual":"watching"},
+          {"id":"f_o","accountId":"acc_j","name":"Open","path":"Open","role":"none","subscribed":true,"selectable":true,"synced":true,"unread":2,"total":9,"virtual":"open"},
+          {"id":"f_x","accountId":"acc_j","name":"Later","path":"Later","role":"none","subscribed":true,"selectable":true,"synced":true,"unread":0,"total":0,"virtual":"starred"},
+          {"id":"f_itsd","accountId":"acc_j","name":"IT Service Desk","path":"IT Service Desk","role":"none","subscribed":true,"selectable":true,"synced":true,"unread":1,"total":40}
+        ]}
+        """#)
+        #expect(r.folders.map(\.virtual) == [.assignedToMe, .watching, .open, VirtualFolder("starred"), nil])
+        #expect(r.folders.allSatisfy { $0.role == .none })
+        #expect(try encodeObject(r.folders[0])["virtual"] as? String == "assignedToMe")
+        #expect(try encodeObject(r.folders[4])["virtual"] == nil)
+        let plain = Folder(id: "f", accountId: "a", name: "n", path: "n", role: .inbox, subscribed: true, selectable: true,
+                           synced: true, unread: 0, total: 0)
+        #expect(plain.virtual == nil)
+    }
+
+    /// Comment drafts (docs/api.md §4.5): Draft.comment comes with a
+    /// draft.create reply on a jira account and goes back in draft.save;
+    /// DraftCreateParams.messageAccountId only when set.
+    @Test func commentDraftsAndCrossAccountForward() throws {
+        let r = try decode(DraftCreateResult.self, #"""
+        {"draft":{"accountId":"acc_j","version":0,"to":[],"subject":"ITSD-42: Printer on 3rd floor jams","textBody":"",
+                  "inReplyTo":"m_j1","updatedAt":"0001-01-01T00:00:00Z",
+                  "comment":{"issue":{\#(Self.issueJSON)},"visibility":""}},
+         "quoted":"none",
+         "blocked":{"remoteImages":0,"remoteStyles":0,"remoteFonts":0,"scripts":0,"forms":0,"eventHandlers":0,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":0}}
+        """#)
+        let comment = try #require(r.draft.comment)
+        #expect(comment.issue.key == "ITSD-42" && comment.issue.commentVisibilities == [.public, .internal])
+        #expect(comment.visibility == "", "empty is public")
+        #expect(r.quoted == .none && r.draft.to.isEmpty)
+
+        var d = r.draft
+        d.comment?.visibility = .internal
+        let obj = try encodeObject(DraftSaveParams(draft: d))
+        let draft = try #require(obj["draft"] as? [String: Any])
+        let sent = try #require(draft["comment"] as? [String: Any])
+        #expect(sent["visibility"] as? String == "internal")
+        #expect((sent["issue"] as? [String: Any])?["key"] as? String == "ITSD-42")
+        #expect(try JSONCoding.decoder().decode(Draft.self, from: JSONCoding.encoder().encode(d)) == d)
+        // A mail draft has none, and does not write one.
+        let mail = try encodeObject(DraftSaveParams(draft: Draft(accountId: "a")))
+        #expect((mail["draft"] as? [String: Any])?["comment"] == nil)
+        #expect(try decode(Draft.self, #"{"accountId":"a","version":1,"to":[],"subject":"s","textBody":"t","updatedAt":"2026-09-02T10:00:00Z"}"#).comment == nil)
+        #expect(DraftComment(issue: comment.issue).visibility == "")
+
+        // Forward of a jira message from a mail account.
+        let fwd = try encodeObject(DraftCreateParams(accountId: "acc_mail", mode: .forward, messageId: "m_j1",
+                                                     attribution: "---", messageAccountId: "acc_j"))
+        #expect(fwd["messageAccountId"] as? String == "acc_j" && fwd["accountId"] as? String == "acc_mail")
+        let reply = try encodeObject(DraftCreateParams(accountId: "acc_j", mode: .reply, messageId: "m_j1"))
+        #expect(reply.keys.sorted() == ["accountId", "messageId", "mode"], "messageAccountId is left out when nil")
+        let back = try decode(DraftCreateParams.self, #"{"accountId":"a","mode":"forward","messageId":"m","messageAccountId":"j"}"#)
+        #expect(back.messageAccountId == "j")
+    }
+
+    /// account.detectSite, account.listSpaces and the jira probe of
+    /// account.test (docs/api.md §4.1).
+    @Test func jiraAccountMethods() throws {
+        #expect(try encodeObject(AccountDetectSiteParams(url: "acme.atlassian.net")) as NSDictionary == ["url": "acme.atlassian.net"])
+        let cloud = try decode(AccountDetectSiteResult.self, #"""
+        {"kind":"jira","siteUrl":"https://acme.atlassian.net","deployment":"cloud","cloudId":"0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0","title":"Acme","version":"1001.0.0-SNAPSHOT"}
+        """#)
+        #expect(cloud == AccountDetectSiteResult(
+            kind: .jira, siteUrl: "https://acme.atlassian.net", deployment: .cloud,
+            cloudId: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0", title: "Acme", version: "1001.0.0-SNAPSHOT"))
+        let dc = try decode(AccountDetectSiteResult.self, #"{"kind":"jira","siteUrl":"https://jira.acme.example/jira","deployment":"datacenter"}"#)
+        #expect(dc.deployment == .datacenter && dc.cloudId == nil && dc.title == nil && dc.version == nil)
+
+        let config = AccountConfig(name: "", email: "jana.dvorakova@acme.example", kind: .jira,
+                                   jira: JiraConfig(siteUrl: cloud.siteUrl, deployment: .cloud, cloudId: cloud.cloudId,
+                                                    login: "jana.dvorakova@acme.example"))
+        let params = try encodeObject(AccountListSpacesParams(config: config, credentials: Credentials(password: "token"), counts: true))
+        #expect(params.keys.sorted() == ["config", "counts", "credentials"], "accountId is left out when nil")
+        #expect(params["counts"] as? Bool == true)
+        #expect((params["credentials"] as? [String: Any])?["password"] as? String == "token")
+        let jira = try #require((params["config"] as? [String: Any])?["jira"] as? [String: Any])
+        #expect(jira.keys.sorted() == ["cloudId", "deployment", "login", "siteUrl", "spaces"])
+        #expect((jira["spaces"] as? [Any])?.isEmpty == true)
+        let editing = try encodeObject(AccountListSpacesParams(accountId: "acc_j", config: config))
+        #expect(editing["accountId"] as? String == "acc_j" && editing["counts"] == nil)
+        #expect((editing["credentials"] as? [String: Any])?.isEmpty == true, "no password: the stored token")
+
+        let spaces = try decode(AccountListSpacesResult.self, #"""
+        {"user":{"name":"Jana Dvořáková","email":"jana.dvorakova@acme.example"},
+         "spaces":[{"id":"10001","key":"ITSD","name":"IT Service Desk","serviceDesk":true,"issues":120},
+                   {"id":"10002","key":"WEB","name":"Website","issues":-1}],
+         "statuses":[{"id":"1","name":"To Do","category":"todo"},{"id":"6","name":"Closed","category":"done"},{"id":"9","name":"Odd","category":""}]}
+        """#)
+        #expect(spaces.user == SiteUser(name: "Jana Dvořáková", email: "jana.dvorakova@acme.example"))
+        #expect(spaces.spaces == [
+            Space(id: "10001", key: "ITSD", name: "IT Service Desk", serviceDesk: true, issues: 120),
+            Space(id: "10002", key: "WEB", name: "Website", issues: -1),
+        ])
+        #expect(spaces.statuses.map(\.category) == [.todo, .done, ""])
+        let none = try decode(AccountListSpacesResult.self, #"{"user":{"name":"jdvorakova"},"spaces":null,"statuses":null}"#)
+        #expect(none.user.email == nil && none.spaces.isEmpty && none.statuses.isEmpty)
+
+        let test = try decode(AccountTestResult.self, #"{"jira":{"ok":true,"capabilities":["cloud","gateway"],"latencyMs":210}}"#)
+        #expect(test.jira == EndpointTestResult(ok: true, capabilities: ["cloud", "gateway"], latencyMs: 210))
+        #expect(test.imap == nil && test.smtp == nil && test.graph == nil)
+        #expect(try encodeObject(AccountTestResult(imap: EndpointTestResult(ok: true, latencyMs: 1)))["jira"] == nil)
+    }
+
+    /// issue.transitions and issue.transition (docs/api.md §4.12): the
+    /// params encode with the JSON names of pkg/api, the
+    /// results decode, `needsInput` and `toCategory` are optional on the
+    /// wire, and the transition capability is one more `Capability`.
+    @Test func issueTransitionMethods() throws {
+        let list = try encodeObject(IssueTransitionsParams(accountId: "acc_j", messageId: "m_j1"))
+        #expect(list as NSDictionary == ["accountId": "acc_j", "messageId": "m_j1"])
+        let perform = try encodeObject(IssueTransitionParams(accountId: "acc_j", messageId: "m_j1", transitionId: "31"))
+        #expect(perform as NSDictionary == ["accountId": "acc_j", "messageId": "m_j1", "transitionId": "31"])
+
+        let r = try decode(IssueTransitionsResult.self, #"""
+        {"issue":{\#(Self.issueJSON)},
+         "transitions":[{"id":"11","name":"Start Progress","to":"In Progress","toCategory":"inProgress"},
+                        {"id":"21","name":"Done","to":"Done","toCategory":"done","needsInput":true},
+                        {"id":"41","name":"Escalate","to":"Escalated","toCategory":"blocked"}]}
+        """#)
+        #expect(r.issue.key == "ITSD-42" && r.issue.status == "In Progress" && r.issue.commentVisibilities == [.public, .internal])
+        #expect(r.transitions == [
+            IssueTransition(id: "11", name: "Start Progress", to: "In Progress", toCategory: .inProgress),
+            IssueTransition(id: "21", name: "Done", to: "Done", toCategory: .done, needsInput: true),
+            IssueTransition(id: "41", name: "Escalate", to: "Escalated", toCategory: "blocked"),
+        ])
+        #expect(r.transitions[0].needsInput == nil && r.transitions[2].toCategory == "blocked", "an unknown category decodes as itself")
+        let none = try decode(IssueTransitionsResult.self, #"{"issue":{\#(Self.issueJSON)},"transitions":null}"#)
+        #expect(none.transitions.isEmpty, "never null on the wire, but an old fixture may say so")
+        let done = try decode(IssueTransitionResult.self, #"{"issue":{"key":"ITSD-42","url":"https://acme.atlassian.net/browse/ITSD-42","summary":"Printer","status":"Done","statusCategory":"done"}}"#)
+        #expect(done.issue.status == "Done" && done.issue.statusCategory == .done && done.issue.assignee == nil)
+
+        let state = #"{"accountId":"j","status":"idle","progress":-1,"pendingOutbox":0}"#
+        let acc = try decode(Account.self, #"{"id":"j","config":{"name":"n","email":"e@x","kind":"jira"},"enabled":true,"state":\#(state),"capabilities":["comment","forward","transition"]}"#)
+        #expect(acc.can(.transition) && Capability.transition == "transition")
+        #expect(!API.mailCapabilities.contains(.transition), "mail accounts never change statuses")
+        #expect(API.Limits.maxIssueTransitions == 100)
+    }
+
+    /// notify.messagesChanged (docs/api.md §5): the payload decodes, also
+    /// as a notification.
+    @Test func messagesChangedNotification() throws {
+        let n = try decode(MessagesChangedNotification.self, #"{"accountId":"acc_mail","folderIds":["f_inbox"]}"#)
+        #expect(n == MessagesChangedNotification(accountId: "acc_mail", folderIds: ["f_inbox"]))
+        #expect(try decode(MessagesChangedNotification.self, #"{"accountId":"acc_mail"}"#).folderIds.isEmpty)
+        let raw = RPCNotification(
+            method: API.Notify.messagesChanged,
+            line: json(#"{"jsonrpc":"2.0","method":"notify.messagesChanged","params":{"accountId":"acc_mail","folderIds":["f_inbox"]}}"#))
+        #expect(try raw.params(MessagesChangedNotification.self) == n)
+        #expect(try DaemonNotification(raw) == .messagesChanged(n))
+    }
+
     // MARK: Go habits
 
     @Test func nullOrMissingSliceReadsAsEmpty() throws {
@@ -840,6 +1223,7 @@ import Testing
         "account.list", "account.add", "account.remove", "account.setEnabled",
         "account.update", "account.discover", "account.test", "account.linked",
         "account.reorder", "account.oauthStart", "account.oauthWait", "account.oauthCancel",
+        "account.detectSite", "account.listSpaces",
         "folder.list", "folder.subscribe",
         "message.list", "message.get", "message.body", "message.part",
         "message.embedded", "message.download", "message.flag", "message.move", "message.delete",
@@ -853,15 +1237,20 @@ import Testing
         "config.get", "config.set",
         "sender.list", "sender.add", "sender.remove",
         "contact.search",
+        "issue.transitions", "issue.transition",
     ]
 
     @Test func methodTableMatchesGo() {
-        #expect(API.allMethods.count == 48)
-        #expect(Set(API.allMethods).count == 48, "no duplicates")
+        #expect(API.allMethods.count == 52)
+        #expect(Set(API.allMethods).count == 52, "no duplicates")
         #expect(API.allMethods == Self.goMethods)
         #expect(API.methods.count == API.allMethods.count)
         #expect(API.systemInfo == API.SystemInfo.name)
-        #expect(API.allNotifications == ["notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged"])
+        #expect(API.allNotifications == [
+            "notify.newMessage", "notify.syncState", "notify.authRequired", "notify.accountsChanged", "notify.messagesChanged",
+        ])
+        #expect(API.AccountDetectSite.name == "account.detectSite" && API.AccountListSpaces.name == "account.listSpaces")
+        #expect(API.IssueTransitions.name == "issue.transitions" && API.IssueTransition.name == "issue.transition")
     }
 
     @Test func timeoutsFollowThePlan() {
@@ -882,10 +1271,19 @@ import Testing
         // The daemon's download budget is 4 minutes; the client waits 5.
         #expect(RPCTimeouts.download == .seconds(300) && API.MessageDownload.timeout == RPCTimeouts.download)
         #expect(API.SystemStorage.timeout == .seconds(5))
+        // Like account.discover and account.test: a site lookup, a sign-in with listing.
+        #expect(API.AccountDetectSite.timeout == .seconds(15) && RPCTimeouts.detectSite == .seconds(15))
+        #expect(API.AccountListSpaces.timeout == .seconds(45) && RPCTimeouts.listSpaces == .seconds(45))
+        // One value for both, as in the GTK UI (issue_actions.go
+        // `issueTimeout`): the listing may be slow, and the change waits
+        // for the daemon's refresh (up to 30 s).
+        #expect(API.IssueTransitions.timeout == .seconds(45) && RPCTimeouts.transitions == .seconds(45))
+        #expect(API.IssueTransition.timeout == .seconds(45) && RPCTimeouts.transition == .seconds(45))
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",
                                     "account.add", "account.update", "account.discover", "account.test",
-                                    "account.oauthStart", "account.oauthWait", "message.download"]
+                                    "account.oauthStart", "account.oauthWait", "message.download",
+                                    "account.detectSite", "account.listSpaces", "issue.transitions", "issue.transition"]
         for m in API.methods where !special.contains(m.name) {
             #expect(m.timeout == RPCTimeouts.default, "\(m.name) should use the default timeout")
         }

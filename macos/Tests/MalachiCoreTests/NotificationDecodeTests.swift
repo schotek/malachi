@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import MalachiCore
 
-/// `DaemonNotification` over the four notifications of docs/api.md §5, as
+/// `DaemonNotification` over the notifications of docs/api.md §5, as
 /// the transport hands them over (the whole line, params decoded on demand).
 @Suite struct NotificationDecodeTests {
     private func raw(_ method: String, _ params: String) -> RPCNotification {
@@ -60,6 +60,22 @@ import Testing
         #expect(try DaemonNotification(bare) == .accountsChanged)
     }
 
+    @Test func messagesChanged() throws {
+        let n = try DaemonNotification(raw("notify.messagesChanged", #"{"accountId":"acc_1","folderIds":["f_inbox","f_work"]}"#))
+        #expect(n == .messagesChanged(MessagesChangedNotification(accountId: "acc_1", folderIds: ["f_inbox", "f_work"])))
+        // No folder named, or the list left out or null: any folder of the account.
+        for params in [#"{"accountId":"acc_1"}"#, #"{"accountId":"acc_1","folderIds":[]}"#, #"{"accountId":"acc_1","folderIds":null}"#] {
+            #expect(try DaemonNotification(raw("notify.messagesChanged", params))
+                        == .messagesChanged(MessagesChangedNotification(accountId: "acc_1")))
+        }
+        #expect(throws: DecodingError.self) {
+            try DaemonNotification(raw("notify.messagesChanged", #"{"folderIds":["f_inbox"]}"#))
+        }
+        #expect(throws: DecodingError.self) {
+            try DaemonNotification(raw("notify.messagesChanged", #"{"accountId":"acc_1","folderIds":"f_inbox"}"#))
+        }
+    }
+
     @Test func unknownMethodIsKeptByName() throws {
         let n = try DaemonNotification(raw("notify.somethingNewer", #"{"x":1}"#))
         #expect(n == .unknown(method: "notify.somethingNewer"))
@@ -80,6 +96,7 @@ import Testing
             (API.Notify.syncState, #"{"state":{"accountId":"acc_1","status":"idle","progress":-1,"pendingOutbox":0}}"#),
             (API.Notify.authRequired, #"{"accountId":"acc_1","reason":1200,"message":"m"}"#),
             (API.Notify.accountsChanged, "{}"),
+            (API.Notify.messagesChanged, #"{"accountId":"acc_1","folderIds":["f_inbox"]}"#),
         ]
         #expect(samples.map(\.0) == API.allNotifications)
         for (method, params) in samples {

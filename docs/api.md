@@ -298,7 +298,8 @@ Time      RFC 3339 string, UTC
   "subject": "…", "date": "2026-09-02T10:00:00Z",
   "snippet": "plain text, ≤ ~200 chars, derived by the backend",
   "flags": ["seen"], "hasAttachments": false, "size": 4321,
-  "outbox": OutboxInfo (opt)
+  "outbox": OutboxInfo (opt),
+  "issue": MessageIssue (opt)
 }
 ```
 
@@ -316,6 +317,53 @@ OutboxInfo { "state": "queued|sending|sent|failed", "attempts": 1,
   `failed`: a permanent failure, `outbox.retry` re-queues it.
 - `error`: the last failure (a network, server, TLS, timeout or auth code
   from §2), absent before the first attempt and after a success.
+
+`issue` is present only for a message of an issue-tracker account (kind
+`jira`, §4.1): the issue the message belongs to, and what part of it the
+message is. The fields of `IssueInfo` are flattened into the `issue`
+object:
+
+```jsonc
+IssueInfo { "key": "ITSD-42", "url": "https://acme.atlassian.net/browse/ITSD-42",
+            "summary": "Printer on the 2nd floor", "status": "In Progress",
+            "statusCategory": "todo|inProgress|done" (opt), "type": "Bug" (opt),
+            "priority": "High" (opt), "assignee": "Jana Dvořáková" (opt), "reporter": "…" (opt),
+            "assignedToMe": true (opt), "watching": true (opt),
+            "commentVisibilities": ["public", "internal"] (opt) }
+MessageIssue = IssueInfo + { "item": "description|comment|event",
+            "visibility": "public|internal" (opt), "changes": [IssueChange] (opt),
+            "via": "…" (opt), "edited": true (opt), "mine": true (opt) }
+IssueChange { "field": "status|assignee", "from": "To Do" (opt), "to": "In Progress" (opt) }
+```
+
+- An issue is a thread (§4.4). Its messages are `item: "description"`
+  (the issue itself, its first message, with the description as the
+  body), `"comment"` (one comment each) and `"event"` (a change of the
+  status or the assignee, unless the account hides events). Every one has
+  the subject `KEY: Summary`, so a client or tool that knows nothing of
+  issues still shows something sensible. `from` is the author with the
+  display name the site shows and an address under the reserved `.invalid`
+  domain (a person on the site, never a mailbox to write to).
+- `url` is `<siteUrl>/browse/<key>`, always `https:` or `http:`; `key` is
+  the site's issue key. Every other string is untrusted display text from
+  the site. `statusCategory` is an open enum: an unknown value is to be
+  treated as absent. `assignee` absent means unassigned.
+- An `event` message is stored read and never produces
+  `notify.newMessage`; its `snippet` and text are language-neutral values,
+  one line per change, `<from> → <to>` with `—` for an empty side ("To Do →
+  In Progress", "— → Jana Dvořáková"). A client builds its own sentence
+  from `changes` and skips a change of a `field` it does not know.
+- `visibility` is set on a comment of a service-desk issue: `internal`
+  comments are for the service-desk team only, `public` ones reach the
+  customer. `commentVisibilities` lists what a new comment on the issue
+  may be (`draft.create`, §4.5): both on a service-desk issue, absent
+  elsewhere (public only).
+- `via` is the display name of an integration that posted the comment on
+  someone else's behalf (`jira.botNames`, §4.1): `from` is then the person
+  the comment names as its author. `edited`: the comment was changed after
+  it was posted; the message shows the current text. `mine`: the
+  account's own user wrote the item on the site (never set together with
+  `via`), so a client can tell the user's own comments apart.
 
 ### Message (message.get)
 
@@ -478,13 +526,15 @@ of the account's syncer (§3), `idle` with `progress: -1` and no `lastSync`
 before the first pass. Identical to `sync.status`.
 
 ```jsonc
-Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": SyncState }
+Account { "id": "acc_1", "config": AccountConfig, "enabled": true, "state": SyncState,
+          "capabilities": ["compose", "reply", "replyAll", "forward", "move", "delete"] }
 AccountConfig {
   "name": "Work", "email": "me@example.org", "displayName": "Me" (opt),
-  "kind": "imap|graph" (opt, default imap),
+  "kind": "imap|graph|jira" (opt, default imap),
   "imap": ServerConfig (imap only), "smtp": ServerConfig (imap only),
   "oauth2": OAuth2Config (opt; imap, or graph with source daemon),
   "graph": GraphConfig (graph only),
+  "jira": JiraConfig (jira only),
   "syncIntervalSeconds": 300 (opt)
 }
 ServerConfig { "host": "imap.example.org", "port": 993, "security": "tls|starttls|none",
@@ -494,6 +544,20 @@ OAuth2Config { "source": "goa|daemon" (opt), "goaAccountId": "account_1788683507
                "provider": "google|office365|custom", "clientId" (opt), "tenantId" (opt),
                "authUrl" (opt), "tokenUrl" (opt), "scopes": [] (opt) }
 GraphConfig  { "source": "goa|daemon", "goaAccountId": "account_1788512854_0" (with source goa) }
+JiraConfig {
+  "siteUrl": "https://acme.atlassian.net", "deployment": "cloud|datacenter",
+  "cloudId": "UUID" (opt; cloud only), "login": "me@example.org" (cloud only),
+  "spaces": [SpaceRef],                       // 1–200
+  "offlineDays": 30 (opt; 0 = 30, at most 365),
+  "onlyMine": false (opt), "hideEvents": false (opt),
+  "disabledFolders": ["assignedToMe|watching|open"] (opt),
+  "closedStatuses": [StatusRef] (opt),         // ≤ 64; empty = the statuses of the category done
+  "notificationMail": "sync|hide|ignore" (opt, default sync),
+  "notificationSenders": ["jira@example.org", "@example.org"] (opt),
+  "botNames": ["…"] (opt), "metadataFilters": ["RE2 pattern"] (opt), "authorPrefixes": ["…"] (opt)
+}
+SpaceRef  { "id": "10001", "key": "ITSD", "name": "IT Service Desk" (opt) }
+StatusRef { "id": "3", "name": "In Progress" (opt) }
 ```
 
 `kind` selects the protocol behind the account. `imap` (the default when
@@ -504,6 +568,109 @@ Graph API; it has no servers of its own, only a token source. With
 asks it for access tokens (`goaAccountId` is the GOA account id) and holds
 them in memory only; refresh tokens never reach Malachi. A Graph account
 sends and receives through Graph alone — no IMAP or SMTP is involved.
+
+`jira` is an issue tracker read like mail: a Jira site, Atlassian Cloud
+(`deployment: "cloud"`, REST API v3) or Data Center / Server
+(`"datacenter"`, REST API v2). Its folders are the selected `spaces` (Jira
+projects) and three fixed views of them (§4.2); every issue is a thread
+whose messages are its description, its comments and the changes of its
+status and assignee (`MessageSummary.issue`, §3). The account reads the
+site only; the one thing it writes is a comment (`draft.create` `reply`,
+§4.5). The token is `credentials.password`: on Cloud an API token, sent
+with `login` (the Atlassian account's e-mail) as HTTP Basic
+authentication, and through the Atlassian API gateway
+(`https://api.atlassian.com/ex/jira/<cloudId>`, which scoped tokens need)
+when the site refuses it and `cloudId` is known; on Data Center a personal
+access token, sent as a Bearer token. `email` is the user's own address
+(on Cloud normally `login`).
+
+- `siteUrl` is the normalised form `account.detectSite` returns: `https`
+  (`http` only for a loopback host, or a Data Center site the user typed
+  with `http`), no user info, query or fragment, no trailing slash; a Data
+  Center site may have a context path.
+- `offlineDays` is the account's own window (the `offlineDays` preference,
+  §4.8, does not apply): issues updated within it are kept, and open
+  issues assigned to the user whatever their age (at most 500). On the
+  first synchronisation the items created in the last 3 days are unread
+  (except the user's own and events), older ones read; later, new items of
+  others arrive unread.
+- `onlyMine` keeps only the issues the user reports, is assigned to,
+  watches or updated recently (and those a notification mail named), not
+  every issue of the spaces. `hideEvents` leaves the status and assignee
+  changes out of the threads. `disabledFolders` hides views.
+- `closedStatuses` decide what the `open` view leaves out; empty means the
+  statuses of the category done (`account.listSpaces` lists the site's
+  statuses).
+- `notificationMail` is what a notification e-mail of the site arriving in
+  one of the user's mail accounts (`imap`, `graph`) does: `sync` (the
+  default) makes the daemon synchronise its issue at once; `hide` does
+  that too and hides the mail in its mail account — a display filter: the
+  message leaves every listing, count, search and notification
+  (`message.get` still returns it by id) but nothing about it changes on
+  the mail server, not a flag, and it is shown again when the setting
+  changes, the `jira` account is paused or removed, its space is
+  deselected or its issue leaves the account; `ignore` does nothing. A
+  mail counts as a notification when every address of its `From` matches
+  `notificationSenders` (an address, or `@host` for any address of
+  exactly that host, without regard to ASCII case; a display name never
+  counts; empty means `@<site host>` on Cloud and nobody on Data Center,
+  whose notifications match nothing until a sender is configured), and
+  its subject holds, within its first 1024 bytes, an issue key in
+  parentheses or square brackets (`[JIRA] (ITSD-42) Printer`,
+  `IT Service Desk: Printer (ITSD-42)`; a space key of 2 to 10 capitals
+  and digits, to the letter, and a number; a space whose key holds
+  anything else is not recognised) whose space is a selected one; the
+  first such key counts.
+  For `hide` that issue must also be stored in the `jira` account: a
+  message about an issue the account does not hold stays visible. The
+  first enabled `jira` account in the accounts' order that knows a
+  message takes it. The issue of a message that arrived within the last
+  15 minutes is fetched before the message is announced (the daemon waits
+  for it at most 5 seconds), so that a hidden message produces no
+  `notify.newMessage`; mail older than the account's `offlineDays` asks
+  for nothing, nor does mail older than what is stored of its issue, and
+  an issue the site did not give is not asked for again for 10 minutes.
+  With `hide`, mail that was stored before the account took it (before
+  its first synchronisation, or before `hide`, the senders, the spaces or
+  the window were set) is looked through, within the account's
+  `offlineDays`, when the account's first synchronisation with that
+  configuration ends and at once after `account.update`; the daemon
+  judges what is hidden again every hour.
+- `botNames` are the display names of integrations that post comments on
+  someone else's behalf (the settings UI may suggest one): such a comment
+  is shown as written by the person it names in its header, with `via`
+  set (§3); `authorPrefixes` are words stripped from the start of that
+  person's name (such as an organisation name the bot puts in front of
+  it), matched as whole words ignoring case. `metadataFilters` are RE2
+  patterns, each matched against a whole trimmed line of any comment;
+  matching lines are removed unless that would leave the comment empty.
+  Empty lists: nothing is re-attributed or removed. A change of any of
+  them (or of `hideEvents`) rebuilds the stored messages in place, under
+  their ids, on the next pass, which ends with `notify.messagesChanged`
+  on the account (§5).
+
+`capabilities` lists what a client may offer for the account's messages
+beyond reading them and setting flags; a client reads the list and never
+derives it from `kind`:
+
+| Capability | Meaning |
+|---|---|
+| `compose` | the account can send a new message, and is where a forward is written |
+| `reply`, `replyAll` | its messages can be answered by e-mail (`draft.create`) |
+| `forward` | its messages can be forwarded; a `jira` account's from a mail account (`draft.create` `messageAccountId`, §4.5) |
+| `comment` | reply writes a comment to the issue (`draft.create` `reply` returns a comment draft); a client names the action Comment |
+| `move`, `delete` | `message.move`, `message.delete` |
+| `transition` | the status of its issues can be changed (`issue.transitions`, `issue.transition`, §4.12) |
+
+`imap` and `graph` accounts have `["compose", "reply", "replyAll",
+"forward", "move", "delete"]`; a `jira` account `["comment", "forward",
+"transition"]`.
+Flags (`message.flag`) are always allowed, and so is `message.delete` of
+an account's outbox messages (cancelling a queued send or comment). Archiving and
+marking as junk still depend on folders with those roles, which a `jira`
+account does not have. The daemon always sends the list, `[]` when there
+is nothing to offer; a client talking to an older daemon, which sends
+none, assumes the list of the mail accounts.
 
 An `imap` account whose endpoints use `authMethod: "oauth2"` signs in with
 an access token through SASL XOAUTH2 (OAUTHBEARER when that is all the
@@ -540,15 +707,17 @@ the backend. A `goa` account takes no credentials at all.
 #### `account.add`
 - params: `{ "config": AccountConfig, "credentials": { "password": "…" (opt), "oauthSession": "s_…" (opt) } }`
 - result: `{ "accountId": "acc_2" }`
-- errors: invalidArgument, keyringError, conflict (same e-mail already configured, case-insensitive),
-  oauthClientMissing (source `daemon` and no client id for the provider)
+- errors: invalidArgument, keyringError, conflict (same e-mail already configured in the same
+  realm, case-insensitive: every mail account shares one realm, a `jira` account's realm is its
+  site, so it may have the address of a mailbox), oauthClientMissing (source `daemon` and no
+  client id for the provider)
 
 Validation (all failures are invalidArgument; free-text fields are trimmed):
 - `name` required, `displayName` optional; both valid UTF-8, no CR/LF/NUL,
   at most 256 bytes;
 - `email` a bare, syntactically valid address (no display name);
-- `kind` absent, `imap` or `graph`;
-- for `imap`: `imap` and `smtp` required, `graph` absent; `host` an IP
+- `kind` absent, `imap`, `graph` or `jira`;
+- for `imap`: `imap` and `smtp` required, `graph` and `jira` absent; `host` an IP
   literal or hostname of DNS labels (≤ 253 bytes), `port` 1–65535,
   `security` one of `tls|starttls|none` where `none` is accepted only for
   `localhost` or a loopback IP, `username` required (≤ 256 bytes, no
@@ -571,14 +740,32 @@ Validation (all failures are invalidArgument; free-text fields are trimmed):
   `source`: `provider` `office365|custom`, `custom` needs `https`
   `authUrl` and `tokenUrl`, at most 32 scopes without whitespace, no
   `goaAccountId`;
-- for `graph`: `imap` and `smtp` absent; with `graph.source: "goa"` a
+- for `graph`: `imap`, `smtp` and `jira` absent; with `graph.source: "goa"` a
   `goaAccountId` (letters, digits and `_`, ≤ 128 bytes) and no `oauth2`;
   with `graph.source: "daemon"` no `goaAccountId` and an `oauth2` block
   `{source: "daemon", provider: "office365"}` with optional `clientId`
   and `tenantId` (letters, digits, `.` and `-`, not starting with `.`,
   ≤ 64 bytes; default `common`);
+- for `jira`: `jira` required, `imap`, `smtp`, `oauth2` and `graph`
+  absent; `siteUrl` a URL that normalises as `account.detectSite` does
+  (stored normalised), `https` for `cloud` unless its host is a loopback
+  one; `deployment` `cloud` or `datacenter`; for `cloud` a `login` that is
+  a bare address, for `datacenter` no `login`;
+  `cloudId` empty or a UUID (stored lower-cased), `cloud` only; 1–200
+  `spaces` (`api.MaxJiraSpaces`), each with a non-empty `id` and `key`, no
+  `id` twice; at most 64 `closedStatuses` (`api.MaxJiraStatuses`), each
+  with a non-empty `id`; the `id`, `key` and `name` of spaces and statuses
+  at most 256 bytes of valid UTF-8 without control characters;
+  `offlineDays` 0–365; `disabledFolders` of the three view codes, none
+  twice; `notificationMail` absent, `sync`, `hide` or `ignore`;
+  `notificationSenders` entries `addr@host` or `@host` (stored
+  lower-cased); `notificationSenders`, `botNames`, `metadataFilters` and
+  `authorPrefixes` at most 32 entries each (`api.MaxJiraListEntries`), each
+  at most 512 bytes of valid UTF-8 without control characters, and every
+  `metadataFilters` entry a valid RE2 pattern;
 - `syncIntervalSeconds` 0 or ≥ 60;
-- `credentials.password` only when an endpoint uses `password`;
+- `credentials.password` only when an endpoint uses `password`, or for a
+  `jira` account (its token);
   `credentials.oauthSession` only with source `daemon`, and it must name a
   completed session whose verified mailbox is the account's address (a
   sign-in that named no mailbox is refused), for the same provider and
@@ -614,7 +801,10 @@ fails with `keyringError`, the account stays in `authRequired`, and
 - errors: invalidArgument, accountNotFound, storageError
 
 The mail cache (folders, messages, raw files, operation log) is always
-removed with the account; the syncer is stopped first.
+removed with the account; the syncer is stopped first. A `jira` account
+takes its issues with it, and the notification mails it hid in mail
+accounts (`notificationMail: "hide"`) are shown again
+(`notify.messagesChanged`).
 `deleteLocalData: true` also deletes the account's drafts and attachments
 (rows and files); `false` keeps them, orphaned, until a later phase defines
 what happens to local data of a removed account. Keyring secrets are
@@ -628,7 +818,10 @@ A waiting `account.oauthStart` sign-in of the account is cancelled.
 
 Pauses (`false`) or resumes (`true`) an account. A paused account keeps its
 configuration and local data, is never synchronised and reports
-`state.status = "disabled"`.
+`state.status = "disabled"`. A paused `jira` account shows the
+notification mails it hid in the mail accounts (`notificationMail:
+"hide"`), and takes no notification mail; resumed, it hides them again
+(`notify.messagesChanged`).
 
 #### `account.reorder`
 - params: `{ "accountIds": ["acc_2", "acc_1"] }`
@@ -648,11 +841,16 @@ persistent and is followed by `notify.accountsChanged`.
 - params: `{ "accountId", "config": AccountConfig, "credentials": { "password": "…" (opt), "oauthSession": "s_…" (opt) } }`
 - result: `{}`
 - errors: invalidArgument (same rules as `account.add`), accountNotFound,
-  conflict (another account already uses the e-mail), keyringError,
-  oauthClientMissing, storageError
+  conflict (another account of the same realm already uses the e-mail),
+  keyringError, oauthClientMissing, storageError
 
 Replaces the whole configuration; `enabled` is not touched. An empty
-password keeps the stored one; a given password replaces it in the
+password keeps the stored one — except for a `jira` account whose site
+(its realm) changes, an account that becomes a `jira` one, and a `jira`
+account that becomes one with a `password` endpoint: a secret is never
+sent to a site it was not given for, so such a change needs
+`credentials.password` (invalidArgument without it). A given password
+replaces it in the
 keyring, and if the keyring refuses, the configuration is reverted so the
 row and the keyring never disagree. `credentials.oauthSession` replaces
 the stored refresh token the same way; if the keyring refuses, the session
@@ -665,7 +863,10 @@ change cancels a waiting re-sign-in of the account. Without a session, a
 token is deleted, a waiting re-sign-in is cancelled and a new one opened
 for the new configuration, so the engines' `notify.authRequired` carries
 its `authUrl` (§5); moving an account to source `daemon` without a
-session opens one likewise. Emits `notify.accountsChanged`.
+session opens one likewise. A `jira` account's notification mail follows
+its new configuration (`notificationMail`, `notificationSenders`,
+`spaces`, `offlineDays`): what it no longer hides is shown, what it hides
+now is hidden (`notify.messagesChanged`). Emits `notify.accountsChanged`.
 
 #### `account.discover`
 Suggests server settings for an address. Nothing is stored and nothing is
@@ -732,15 +933,18 @@ yet and yield `none`.
 Connectivity test without persisting anything. Validates like `account.add`
 (the same `invalidArgument` cases, including a password for an account
 without a `password` endpoint), then probes the endpoints of the account
-kind: `imap` and `smtp` concurrently, or the `graph` mailbox.
+kind: `imap` and `smtp` concurrently, the `graph` mailbox, or the `jira`
+site.
 
 - params: same as `account.add`, plus `"accountId"` (opt): with it and an
   empty `credentials.password`, the stored password of that account is
   used; for source `daemon` the token of `credentials.oauthSession`
   (read, not consumed) or, with `accountId`, the stored sign-in
-- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph) }`
-- errors: invalidArgument; with `accountId` and `password` endpoints:
-  accountNotFound, authRequired (no stored password), keyringError. Each
+- result: `{ "imap": EndpointTestResult (imap), "smtp": EndpointTestResult (imap), "graph": EndpointTestResult (graph), "jira": EndpointTestResult (jira) }`
+- errors: invalidArgument (also a `jira` account's `accountId` of another
+  site); with `accountId` and `password` endpoints (or a `jira`
+  account): accountNotFound, authRequired (no stored password),
+  keyringError. Each
   endpoint reports its own outcome; for source `daemon` an unknown
   `accountId` is reported per endpoint as `accountNotFound`
 
@@ -783,6 +987,16 @@ session bus or no GNOME Online Accounts, `invalidArgument` when the
 signed-in mailbox is not `config.email`, otherwise the network/server
 codes above; `capabilities` is `["graph"]`.
 
+A Jira probe signs in to the site with the token (with `accountId` and an
+empty `credentials.password`, the account's stored one, used only when
+that account is a `jira` account of the same site: invalidArgument
+otherwise) and reads the signed-in user. `error.code` is `authFailed` (the site refused the token,
+on Cloud also through the API gateway), `authRequired` (no token given and
+no `accountId`), otherwise the network, TLS and server codes above
+(`serverError` also for a site that is not Jira);
+`capabilities` is `["cloud"]` or `["datacenter"]`, plus `"gateway"` when
+the site was reached through the Atlassian API gateway.
+
 #### `account.linked`
 Lists accounts other desktop services are signed in to and that Malachi
 can use: the Microsoft 365 and Google accounts of GNOME Online Accounts
@@ -807,7 +1021,8 @@ endpoints and `source: "goa"` for `google`, with the servers and user
 names GNOME Online Accounts reports (a Google account whose mail is
 switched off there, or that names no IMAP/SMTP servers, is not listed).
 `name` and `displayName` may be replaced before `account.add`.
-`configured` says a Malachi account with that address exists already.
+`configured` says a Malachi mail account with that address exists already
+(a `jira` account with the same address does not count).
 `attentionNeeded` mirrors GNOME Online Accounts: the service wants the
 user to sign in again; adding the account still works, syncing will report
 `authRequired` until then. `name` and `email` are untrusted text from the
@@ -886,6 +1101,65 @@ its tokens leave the backend's memory and it can no longer be passed as
 `credentials.oauthSession` (a re-sign-in's token is stored already). A
 failed, cancelled or expired session is left as it is.
 
+#### `account.detectSite`
+Finds out what kind of issue-tracker site a URL names, for the
+add-account flow of a `jira` account. Nothing is stored and nothing is
+authenticated.
+
+- params: `{ "url": "acme.atlassian.net" }` — a host name or a full URL; `https` is assumed
+- result: `{ "kind": "jira", "siteUrl": "https://acme.atlassian.net", "deployment": "cloud|datacenter",
+  "cloudId": "UUID" (opt), "title": "…" (opt), "version": "…" (opt) }`
+- errors: invalidArgument (not a usable URL), networkError, tlsError,
+  serverTimeout, serverError (the site answered, but it is not Jira)
+
+The daemon asks the site anonymously what it is (its server info and, for
+Atlassian Cloud, its tenant info), following redirects to `https` only.
+`siteUrl` is the normalised URL a `JiraConfig` needs (§4.1), `cloudId` the
+id of a Cloud site, which enables the API gateway route. `title` and
+`version` are untrusted display text from the site; a Data Center site
+that refuses anonymous requests is still recognised, without them. A
+client allows the call 15 s.
+
+#### `account.listSpaces`
+Signs in to the site of a `jira` configuration and lists what the
+account settings choose from: the spaces, the site's statuses (for
+`closedStatuses`) and the user the token belongs to. Nothing is stored.
+
+- params: `{ "accountId" (opt), "config": AccountConfig, "credentials": { "password": "…" (opt) },
+  "counts": bool (opt) }`
+- result: `{ "user": SiteUser, "spaces": [Space], "statuses": [IssueStatus] }`
+- errors: invalidArgument (`config` is not of kind `jira`, its
+  connection fields fail the `account.add` rules, or `accountId` names an
+  account of another site), authRequired (no token
+  given and no `accountId`), authFailed (the site refused the token),
+  keyringError, accountNotFound, networkError, tlsError, serverTimeout,
+  serverError
+
+```jsonc
+SiteUser    { "name": "Jana Dvořáková", "email": "jana@example.org" (opt) }
+Space       { "id": "10001", "key": "ITSD", "name": "IT Service Desk", "serviceDesk": true (opt),
+              "issues": 120 }                        // -1 = not counted
+IssueStatus { "id": "3", "name": "In Progress", "category": "todo|inProgress|done" }
+```
+
+Of `config` only the connection is validated, by the `account.add`
+rules: `kind` `jira` and nothing of the other kinds, `siteUrl`,
+`deployment`, `login`, `cloudId` and `offlineDays`. `name`, `email` and
+`jira.spaces` may be missing: the call is how the spaces are chosen, and
+how a Data Center wizard learns the address. With `accountId` and an
+empty `credentials.password` the stored token of that account is used, so
+an existing account's settings can be edited without typing it again;
+only when that account is a `jira` account of the same site (its realm),
+invalidArgument otherwise — a token never goes to another site.
+`spaces` are the spaces the user may browse, by name, at most 1000;
+`serviceDesk` marks a service-desk space (its comments may be internal).
+With `counts` every space's `issues` is an estimate of its issues updated
+within `jira.offlineDays` (30 when 0), otherwise -1. `category` of a
+status is an open enum, as in §3. Every name is untrusted display text
+from the site; `user.email` is absent when the site does not reveal it (a
+Data Center wizard then asks for the address). A client allows the call
+45 s.
+
 ### 4.2 folder
 
 #### `folder.list`
@@ -895,7 +1169,8 @@ failed, cancelled or expired session is left as it is.
 ```jsonc
 Folder { "id": "f_1", "accountId", "parentId" (opt), "name": "Inbox", "path": "Inbox",
          "role": "none|inbox|sent|drafts|trash|junk|archive|all|outbox",
-         "subscribed": true, "selectable": true, "synced": true, "unread": 3, "total": 120 }
+         "subscribed": true, "selectable": true, "synced": true, "unread": 3, "total": 120,
+         "virtual": "assignedToMe|watching|open" (opt) }
 ```
 
 Folder lists are not paginated: even large accounts have at most a few
@@ -922,7 +1197,21 @@ within the `offlineDays` window and lag the server by at most one sync.
 Without `includeUnsubscribed`, unsubscribed folders are omitted except role
 folders, which are always listed. Order: role folders first (inbox, drafts,
 sent, archive, junk, trash, outbox), then the rest by `path`. Before the first
-successful sync the list is empty (not an error).
+successful sync the list is empty (not an error). `unread` and `total`
+never count hidden messages (a notification mail hidden by a `jira`
+account, §4.1).
+
+A `jira` account lists its views first — `assignedToMe` (issues assigned
+to the user), `watching` (issues the user watches) and `open` (issues not
+in a closed status), those of `jira.disabledFolders` left out — and then
+one folder per selected space, by name; every one has role `none`. A view
+carries `virtual` with its code, and a client names it by that code (its
+`name` is an English fallback). Its messages are copies of the messages in
+the space folders, restricted to the issues in view, with ids of their
+own and the same `threadId`; flags set on one copy apply to all of them
+(`message.flag`, §4.3). Views cover the selected spaces only. Once a
+comment is queued the account has the outbox folder (role `outbox`) like
+any other (§4.3 `message.send`).
 
 #### `folder.subscribe`
 - params: `{ "accountId", "folderId", "subscribed": bool }`
@@ -955,13 +1244,15 @@ across syncs; new messages inserted before the position are simply not seen
 by an in-progress pagination. A cursor is bound to the `sort` it was issued
 for. It does **not** encode `filter`, so a client that changes the filter must
 start again from the first page rather than reuse the cursor it holds.
-Clients refresh from the start on `notify.newMessage`. `page.total` is
-the folder's local count after `filter`. Only messages within
-the `offlineDays` window exist locally. `threadId` names the conversation
-the message belongs to: an opaque id, assigned when the message is stored,
-the same for every member across the account's folders (Microsoft Graph
-accounts carry the server's conversation id, other accounts a locally
-computed one; see `docs/architecture.md` §3.4). It is empty only for a
+Clients refresh from the start on `notify.newMessage` and
+`notify.messagesChanged`. `page.total` is the folder's local count after
+`filter`. Only messages within the `offlineDays` window exist locally. A
+hidden message (a notification mail a `jira` account hides, §4.1) is not
+listed; `message.get` still returns it by id. `threadId` names the
+conversation the message belongs to: an opaque id, assigned when the
+message is stored, the same for every member across the account's
+folders (Microsoft Graph accounts carry the server's conversation id,
+other accounts a locally computed one; see `docs/architecture.md` §3.4). It is empty only for a
 message stored by an older daemon that has not been linked yet, and it
 can change when two partial conversations turn out to be one (the larger
 keeps its id).
@@ -1188,6 +1479,12 @@ Save All and a forward (`draft.create`) work on it. A body that is still
 requests: a picture kept on the server (`message.body` `remotePictures`)
 is fetched only when the user asks for the message's pictures.
 
+On a `jira` account there is no stored message on a server to download:
+the daemon reads the item from the site again and builds the message the
+way the sync does, so the result replaces what the client shows;
+`messageGone` when the site no longer has the item (deleted, or its issue
+out of reach), and the next sync removes it.
+
 A message with nothing missing answers at once, without contacting the
 server; `failed` messages answer at once too. Calls for the same message
 share one download, and an account runs at most two at a time. The
@@ -1232,14 +1529,17 @@ Local-first: the flags are updated in the store atomically for all ids
 (all-or-nothing per call), an operation-log entry is queued and the syncer
 pushes it; the result does not wait for the server. `folder.list` counters
 reflect the change at once. A server-side conflict is resolved server-wins
-on the next sync, after the queued change has been pushed.
+on the next sync, after the queued change has been pushed. On a `jira`
+account the flags are local only (the site has no read state): nothing is
+sent to the site, and the copies of the message in the account's other
+folders (§4.2) take the same flags.
 
 #### `message.move`
 - params: `{ "accountId", "messageIds": [..], "targetFolderId" }`
 - result: `{}`
-- errors: invalidArgument (ids as above, target not selectable),
-  accountNotFound, folderNotFound (unknown target), messageNotFound,
-  storageError
+- errors: invalidArgument (ids as above, target not selectable, an account
+  without the `move` capability, §4.1), accountNotFound, folderNotFound
+  (unknown target), messageNotFound, storageError
 
 Local-first as above. Ids already in the target folder are ignored. The
 moved message keeps its `id` (it is a local id, not the IMAP UID) — except
@@ -1252,8 +1552,10 @@ deletes the draft it is the copy of (§4.5).
 #### `message.delete`
 - params: `{ "accountId", "messageIds": [..], "permanent": bool (opt) }`
 - result: `{}`
-- errors: invalidArgument, accountNotFound, folderNotFound (no folder with
-  role `trash` while `permanent` is false), messageNotFound, storageError
+- errors: invalidArgument (also an account without the `delete`
+  capability, §4.1, unless every id is an outbox message), accountNotFound,
+  folderNotFound (no folder with role `trash` while `permanent` is false),
+  messageNotFound, storageError
 
 With `permanent: false` (default) messages not already in the Trash role
 folder are moved there (same rules as `message.move`); messages already in
@@ -1270,7 +1572,11 @@ Builds the message from a saved draft and queues it into the outbox.
 - params: `{ "accountId", "draftId", "version": 3 }`
 - result: `{ "outboxId": "m_7" }` — the id of the queued message
 - errors: accountNotFound, draftNotFound, conflict (version mismatch),
-  invalidArgument (no recipients, or an invalid recipient address),
+  invalidArgument (no recipients, or an invalid recipient address; a
+  comment draft with recipients or attachments, whose issue is no longer
+  stored, whose visibility the issue does not allow, or whose body is
+  empty or longer than 32 767 characters in the site's format — see
+  below),
   attachmentTooBig (built message over `api.MaxOutgoingMessageBytes`,
   36 MiB; `data` = `{ "limit", "size" }`), storageError
 
@@ -1320,6 +1626,35 @@ until then `outbox.state` is `sent`. Without a Sent folder the local copy
 is dropped after delivery (servers such as Gmail or Office 365 file the
 copy themselves).
 
+A comment draft (`Draft.comment`, §4.5) of a `jira` account is not an
+e-mail: it has no recipients and no attachments, and it is queued like any
+message but delivered by posting it as a comment to its issue with its
+visibility. The queued message is `From` the user as the site names them
+(else the account's `displayName`) at the account's `email`, its subject
+is the issue's, and while it waits it is a member of the issue's thread
+(§4.4). Its body is converted to the site's own format — the Atlassian
+Document Format on Cloud, wiki markup on Data Center — from the sanitised
+HTML (or the text of a plain-text draft): paragraphs, line breaks, bold,
+italic, underline, strike-through, code, code blocks, headings, lists,
+quotes and rules are kept, links only to `http`, `https` and `mailto`
+targets, pictures are dropped and everything else becomes its text; the
+user's text is never read as the site's markup. `message.send` refuses a
+comment that is empty after the conversion or longer than 32 767
+characters (Jira's limit; on Cloud the document's JSON counts). An
+`internal` comment carries Jira Service Management's `sd.public.comment`
+property; every comment carries `io.github.schotek.malachi.outbox` with the
+outbox message's id, by which a retry after an attempt whose answer was
+lost finds the comment the site took, instead of posting it twice. The
+outbox rules above apply (states, retries with backoff, `failed` with the
+reason, `outbox.retry`, `message.delete` to cancel): a refused token defers
+the account's queue and sends `notify.authRequired`; the site's answers
+400, 403, 404, 413 and any other 4xx fail for good; network failures,
+timeouts, 429 and 5xx are retried. After the post the daemon refreshes the
+issue and waits for it (at most 30 seconds), so the comment is normally in
+the issue's thread (read, not announced) by the time the outbox message
+goes; no Sent copy is kept, and neither known senders nor recipient
+completion learn anything from a comment.
+
 Outbox messages: `message.flag` and `message.move` reject them with
 invalidArgument; `message.delete` cancels the send and removes the message
 permanently whatever `permanent` says (no Trash), and returns conflict while
@@ -1360,6 +1695,13 @@ members **in that folder** (a conversation with two messages in the inbox
 and one in Sent has `messageCount: 2` in the inbox), except `folderIds`,
 which always names every folder of the account with a member.
 
+On a `jira` account a thread is one issue (§3): its id is the issue's,
+its members are the description, the comments and the events, and the
+`ThreadSummary` carries `issue` (`IssueInfo`, without the per-message
+fields). `latest` may be an event; a client shows it from
+`latest.issue.changes`. Hidden messages (§4.1 `notificationMail`) are no
+member of any thread listing.
+
 #### `thread.list`
 - params: `{ "accountId", "folderId", "page": Page, "sort": SortOrder (opt),
   "filter": MessageFilter (opt) }`
@@ -1377,7 +1719,8 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
                 "snippet": "…",                    // of the latest member
                 "flags": ["flagged", "seen"],      // union over the members
                 "hasAttachments": true,
-                "folderIds": ["f_inbox", "f_sent"] }
+                "folderIds": ["f_inbox", "f_sent"],
+                "issue": IssueInfo (opt) }             // a jira account's thread
 ```
 
 - Order: by the date of the latest member in the folder, `dateDesc` by
@@ -1413,9 +1756,10 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
 members in that folder are returned and `thread` is aggregated over them,
 exactly as `thread.list` of that folder reports it; without it every
 member of the account is returned and `thread` covers them all
-(`folderIds` is the same either way). At most `api.MaxThreadMessages`
-(500) members are returned, the newest; `messageCount` still counts them
-all. A member in the outbox folder carries `outbox` as in `message.list`.
+(`folderIds` is the same either way), each message once: the copies in
+the views of a `jira` account (§4.2) are left out. At most
+`api.MaxThreadMessages` (500) members are returned, the newest;
+`messageCount` still counts them all. A member in the outbox folder carries `outbox` as in `message.list`.
 
 Actions stay per message: `message.flag`, `message.move` and
 `message.delete` take the `messageIds` of the members a client wants to
@@ -1439,9 +1783,11 @@ Draft { "id": "d_1" (absent on first save), "accountId", "version": 1,
         "inReplyTo": "m_123" (opt, local id), "forwarding": "m_124" (opt),
         "attachments": [DraftAttachment] (opt),
         "replaces": "m_125" (opt; draft.open → draft.save only),
+        "comment": DraftComment (opt; a comment draft of a jira account),
         "updatedAt": Time }
 DraftAttachment { "id": "att_…", "filename": "safe-name.pdf", "contentType": "application/pdf",
                   "size": 12345, "inline": false, "contentId": "…@malachi.local" (opt) }
+DraftComment { "issue": IssueInfo, "visibility": "public|internal" }   // "" = public
 ```
 
 Bodies:
@@ -1463,6 +1809,19 @@ Bodies:
   ≤ 25 MiB in total. Subject and address names must not contain CR, LF or
   NUL; all strings must be valid UTF-8.
 
+A comment draft is a draft of a `jira` account that `draft.create`
+`reply` made: `comment` names the issue it goes to (as the daemon last
+synchronised it) and its `visibility`, `""` or `public` for everyone who
+sees the issue, `internal` for the service-desk team only (allowed only
+when `issue.commentVisibilities` has it). The issue is the one of the
+message `inReplyTo` names, which every draft of a `jira` account must
+have; in `draft.save` only `comment.visibility` is read of `comment`, and
+the subject becomes the issue's (`KEY: Summary`). It has no recipients,
+no attachments, no `forwarding` and no `replaces`, and it stays local: no
+copy goes to a Drafts folder. `draft.list` returns `comment` with the issue
+(empty when the issue is no longer stored). `message.send` posts it
+(§4.3).
+
 The UI editor keeps its own live copy of the HTML; the backend's copy is
 the one that is sent. `draft.save` therefore echoes what it stored
 (`htmlBody`, `textBody`) and what it removed (`blocked`) so the UI can be
@@ -1473,7 +1832,10 @@ honest about removals. Reopening a draft always yields the sanitised form.
 - result: `{ "draftId": "d_1", "version": 2, "textBody": "…", "htmlBody": "…" (opt),
              "blocked": BlockedContent, "attachments": [DraftAttachment] (opt) }`
 - errors: invalidArgument (limits, bad address, CR/LF in header fields,
-  both `inReplyTo` and `forwarding`), conflict (stored version ≠ supplied
+  both `inReplyTo` and `forwarding`; on a comment draft recipients,
+  attachments, `forwarding`, `replaces` or a `visibility` the issue does
+  not allow; a draft of a `jira` account whose `inReplyTo` is missing or
+  names no stored message of an issue of the account), conflict (stored version ≠ supplied
   version), draftNotFound (`id` given but unknown), attachmentNotFound
   (listed attachment unknown, of another account, or bound to another
   draft), attachmentTooBig (sum over 25 MiB), sanitizeFailed (nothing is
@@ -1545,13 +1907,19 @@ backend has none.
 - params: `{ "accountId", "mode": "new" | "reply" | "replyAll" | "forward",
              "messageId" (opt; required unless mode is new),
              "mailto": "mailto:…" (opt, new only),
-             "attribution": "On …, X wrote:" (opt; reply and forward) }`
+             "attribution": "On …, X wrote:" (opt; reply and forward),
+             "messageAccountId" (opt; forward only) }`
 - result: `{ "draft": Draft, "quoted": "html" | "text" | "none",
              "blocked": BlockedContent, "skipped": [Attachment] (opt) }`
 - errors: invalidArgument (mode, a missing `messageId`, `mailto` or
   `messageId` with the wrong mode, an attribution over its caps or with
-  control characters), accountNotFound, messageNotFound, storageError
-  (a copy of a part could not be stored; nothing is left behind)
+  control characters, a mode the account's capabilities do not allow — a
+  forward needs `compose` of `accountId` and `forward` of the message's
+  account —, `messageAccountId` with another mode than `forward`, a
+  message of a `jira` account whose issue is not stored),
+  accountNotFound (also `messageAccountId`),
+  messageNotFound, storageError (a copy of a part could not be stored;
+  nothing is left behind)
 
 Per mode:
 
@@ -1573,6 +1941,21 @@ Per mode:
 - `new`: an empty draft, or the `mailto:` URI parsed — `to` (the path and
   `to=`), `cc`, `bcc`, `subject`, `body`; nothing else is interpreted,
   unusable addresses are dropped, the body is escaped into `htmlBody`.
+
+On a `jira` account (capability `comment`) `reply` is the only mode: it
+returns a comment draft of the message's issue (`comment` set, visibility
+`""`, the subject `KEY: Summary`, `inReplyTo` the message, no recipients,
+an empty body, `quoted: "none"`; `attribution` is not used); `new`,
+`replyAll` and `forward` are invalidArgument there. A message of a `jira`
+account is forwarded by e-mail from a mail account instead: `accountId` is
+the mail account (capability `compose`), `messageId` the message and
+`messageAccountId` its `jira` account (capability `forward`). The draft is
+the mail account's, built as any forward (`Fwd:`, the quote, the parts
+copied into the mail account's attachment store, `forwarding` naming the
+message), and it is sent by e-mail like any other. `messageAccountId` may
+name any other account of the user whose messages can be forwarded, a
+mailbox too. Without it (or equal to `accountId`) the message is looked up
+in `accountId`.
 
 The quote. With `quoted: "html"` the original's HTML was sanitised **in
 compose mode** — exactly what `draft.save` will do to it — and placed
@@ -1676,7 +2059,11 @@ the background after the upgrade.
 Scope: `folderId` searches that folder; `accountId` alone every folder of
 the account except the Trash and Junk roles; neither, every **enabled**
 account the same way (a paused account is searched only when named). An
-`in:` filter names the folders itself and reaches Trash and Junk too.
+`in:` filter names the folders itself and reaches Trash and Junk too. The
+views of a `jira` account (§4.2) hold copies of messages of its space
+folders and are searched only when the scope names them (`folderId` or
+`in:`), so a message is found once. A hidden message (§4.1
+`notificationMail`) is never found.
 
 Query syntax (parsed by the backend, compiled to a parameterised FTS5
 expression; nothing typed is ever operator syntax):
@@ -1737,9 +2124,11 @@ because one account is paused. Triggers coalesce: a trigger during a running
 pass schedules one more pass, not several. `full: true` ignores the
 per-folder change detection so every selectable folder is walked and its
 flags re-read; on a `graph` account it additionally discards the folders'
-delta cursors and re-enumerates the retention window. It does not discard
-local data (only a server-side UIDVALIDITY change does). Queued local
-operations are pushed first.
+delta cursors and re-enumerates the retention window; on a `jira` account
+it enumerates the issues of the account's window again instead of asking
+for the ones updated since the last pass. It does not discard local data
+(only a server-side UIDVALIDITY change does). Queued local operations are
+pushed first.
 
 A `graph` account keeps its delta cursors across daemon restarts: a restart
 resumes every folder where the last pass left off instead of re-enumerating
@@ -1949,6 +2338,61 @@ Server, and an address book that fails or times out all leave the
 address-book part simply empty, never an error. A query is at least one
 character; clients wait for two before asking.
 
+### 4.12 issue
+
+The issues of an issue-tracker account (`kind: jira`, §4.1), named by any
+message of the issue: the message's thread is the issue. Both methods need
+the account's `transition` capability (§4.1); on any other account they
+answer `invalidArgument`. They go to the site at once (the daemon's own
+client of the account, so the same token and route as the sync), unlike
+the local-first message operations.
+
+```jsonc
+IssueTransition { "id": "31", "name": "Start Progress", "to": "In Progress",
+                  "toCategory": "todo" | "inProgress" | "done" (opt),
+                  "needsInput": true (opt) }
+```
+
+`name` and `to` are untrusted display text from the site: the
+transition's name as the site's own status menu shows it, and the name of
+the status it leads to. `needsInput` says the transition opens a screen on
+the site or has fields that must be filled in (Jira's `hasScreen`, or a
+field with `required`): the daemon cannot perform it, and a client lists
+it disabled with a hint that it needs fields on the site.
+
+#### `issue.transitions`
+- params: `{ "accountId", "messageId" }`
+- result: `{ "issue": IssueInfo, "transitions": [IssueTransition] }` —
+  `issue` as the daemon last synchronised it (§3); `transitions` never
+  null, in the site's order, at most `api.MaxIssueTransitions` (100),
+  those the site marks unavailable to the user left out
+- errors: invalidArgument (an account without the capability, a message
+  of no issue, an empty id), accountNotFound, messageNotFound (the
+  message), messageGone (the site no longer shows the issue, or hides it
+  from the user), authFailed (the site refused the token), serverError
+  (the site's answer, its message in `error.message`), serverTimeout,
+  networkError, tlsError, keyringError, storageError
+
+#### `issue.transition`
+- params: `{ "accountId", "messageId", "transitionId" }` — the id of a
+  transition from `issue.transitions` without `needsInput`
+- result: `{ "issue": IssueInfo }` — the issue after the daemon refreshed
+  it from the site, so its `status` is the new one and the event row of
+  the change (§3, `issue.item: "event"`, the user's own: read, never
+  announced) is stored; when the refresh did not finish within 30 s, the
+  issue as last synchronised (the transition was performed all the same
+  and the next pass brings the change)
+- errors: those of `issue.transitions`, and invalidArgument for a
+  transition the issue does not offer or one with `needsInput` (checked
+  against the site's current list before anything is changed); a
+  transition the site refuses after all (a 400, such as a validator of
+  the workflow) is serverError with the site's cleaned message
+
+The daemon lists the transitions again before performing one, so a
+transition that stopped being offered since the client listed them is
+refused rather than sent. Clients allow 20 s for `issue.transitions` and
+45 s for `issue.transition`.
+
 ## 5. Notifications
 
 | Method | params |
@@ -1957,6 +2401,7 @@ character; clients wait for two before asking.
 | `notify.syncState` | `{ "state": SyncState }` |
 | `notify.authRequired` | `{ "accountId", "reason": 1200\|1201\|1202, "message": "…", "authUrl": "https://…" (opt) }` |
 | `notify.accountsChanged` | `{}` |
+| `notify.messagesChanged` | `{ "accountId", "folderIds": ["f_1"] (opt) }` |
 
 Notifications are sent only to connections that completed the handshake
 (§1.4).
@@ -1975,6 +2420,33 @@ leaves `syncing` instead. Folders with role `sent`, `drafts`, `trash`,
 message is not new mail). The `message` carries `threadId`, so a client
 showing conversations (§4.4) merges the arrival into its thread row
 instead of listing again.
+
+On a `jira` account `notify.newMessage` is sent for a description or a
+comment by someone else that arrives after the account's first
+synchronisation, once, from the space folder (not for the copies in the
+views, §4.2); never for an event, for the user's own items, or on the
+first synchronisation. A mail hidden as a notification of an
+issue-tracker site (§4.1 `notificationMail: "hide"`) produces none.
+
+`notify.messagesChanged` is sent when messages of an account changed
+without arriving or leaving. Two cases. Messages were hidden or shown
+again: notification mails a `jira` account hides once their issue is
+stored, and shows again when its `notificationMail`, its senders or its
+spaces change, the issue leaves it, or the account is paused or removed;
+`accountId` is then the mail account the messages are in, not the `jira`
+account. Or messages of a `jira` account changed in place, keeping their
+ids: a pass rebuilt stored items with other rendering settings (bot
+names, metadata filters, `hideEvents`), a comment was edited or
+re-attributed (its `from` and `date` too), an issue was renamed (every
+message of its thread retitled); `accountId` is then the `jira` account,
+and the pass sends it once, when it ends. In both cases `folderIds` names
+the folders concerned (absent: any folder of the account); a client
+showing one drops what it cached of their messages (bodies, headers,
+`message.get` results), lists it again (`message.list` or `thread.list`)
+and re-reads the counts (`folder.list`), which the daemon has recounted
+by then; what it displays of them (a reading pane, a conversation's
+cards) it fetches again. Changes within 250 ms are gathered into one
+notification per account; a change that takes longer sends several.
 
 `notify.syncState` is sent immediately on every change of `status`,
 `folderId`, `error`, `lastSync`, `pendingOutbox` or `failedOutbox`, and for
@@ -2219,3 +2691,33 @@ some. Clients must be able to resynchronise their view via `sync.status`,
   downloaded message in the daemon's memory only and the parts stay
   `remote`, served from memory while the copy lasts; new `message.body`
   field `remotePictures`.
+- **2** (2026-09-29, compatible addition: issue-tracker accounts): new
+  account kind `jira` (Jira Cloud and Data Center) with
+  `AccountConfig.jira` (`JiraConfig`, limits `api.MaxJira*`) and its token
+  in `credentials.password`; a `jira` account's folders are its selected
+  spaces and the views `assignedToMe`, `watching` and `open`
+  (`Folder.virtual`), every issue is a thread (`ThreadSummary.issue`) of
+  its description, comments and status or assignee changes
+  (`MessageSummary.issue`); addresses are unique per realm, so a `jira`
+  account may share a mailbox's address. New `Account.capabilities` (nil
+  from an older daemon means the mail list); `message.move` and
+  `message.delete` answer invalidArgument for an account without the
+  capability (a delete of outbox messages only needs none). New
+  `account.detectSite` and `account.listSpaces`;
+  `account.test` result gained `jira`. Comment drafts (`Draft.comment`,
+  `draft.create` `reply` on a `jira` account, posted by `message.send`),
+  forwarding a message of another account, a `jira` message from a mail
+  account (`DraftCreateParams.messageAccountId`). Notification mails of the site
+  may trigger a sync of their issue or be hidden in their mail account
+  (`jira.notificationMail`): hidden messages leave listings, counts and
+  search; new `notify.messagesChanged`, also sent by a `jira` account whose
+  stored messages a pass rebuilt in place. `thread.get` without `folderId`
+  and account-wide `search.query` leave out the views' copies.
+- **2** (2026-09-30, compatible addition: issue status transitions): new
+  capability `transition` (a `jira` account now has `["comment",
+  "forward", "transition"]`) and new `issue.transitions` /
+  `issue.transition` (§4.12): the transitions the site offers on the issue
+  of a message, those needing input on the site marked, and one performed
+  by its id followed by a refresh of the issue; new limit
+  `api.MaxIssueTransitions`; no new error codes (a transition the site
+  refuses is serverError, an issue it no longer shows messageGone).

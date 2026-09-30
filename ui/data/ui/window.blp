@@ -649,16 +649,35 @@ Adw.ApplicationWindow main_window {
                       title: _("No Accounts");
                       description: _("Add a mail account to start reading and sending mail.");
 
-                      child: Button {
-                        label: _("_Add Account…");
-                        use-underline: true;
+                      child: Box {
+                        orientation: vertical;
+                        spacing: 12;
                         halign: center;
-                        action-name: "app.add-account";
 
-                        styles [
-                          "suggested-action",
-                          "pill",
-                        ]
+                        Button {
+                          label: _("_Add Account…");
+                          use-underline: true;
+                          halign: center;
+                          action-name: "app.add-account";
+
+                          styles [
+                            "suggested-action",
+                            "pill",
+                          ]
+                        }
+
+                        // An issue tracker instead (the Jira assistant).
+                        Button {
+                          label: _("Add _Jira Account…");
+                          use-underline: true;
+                          halign: center;
+                          action-name: "app.add-jira-account";
+
+                          styles [
+                            "flat",
+                            "pill",
+                          ]
+                        }
                       };
                     };
                   }
@@ -684,6 +703,12 @@ Adw.ApplicationWindow main_window {
                           margin-start: 24;
                           margin-end: 24;
                           margin-top: 24;
+
+                          // The issue card of a Jira message (window/issue_card.go), built
+                          // from Go; hidden for mail.
+                          Box issue_card_slot {
+                            orientation: vertical;
+                          }
 
                           Label message_subject {
                             xalign: 0;
@@ -941,6 +966,17 @@ menu message_menu_model {
     item {
       label: _("Always Load Images From This _Sender");
       action: "win.trust-sender";
+    }
+  }
+
+  // The status of a Jira issue: pops up the Change Status menu of the
+  // issue card (window/issue_card.go); only where the account changes
+  // statuses.
+  section {
+    item {
+      label: _("Change Status");
+      action: "win.change-status";
+      hidden-when: "action-disabled";
     }
   }
 }

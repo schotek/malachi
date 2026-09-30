@@ -579,10 +579,16 @@ public final class ActionsController {
     /// A reply or reply to all of a message whose pictures are kept on the
     /// mail server only downloads it first as well (`replyNeedsDownload`),
     /// so the quote has them; a failure is only logged and the reply goes
-    /// on (the compose window says what draft.create left out).
+    /// on (the compose window says what draft.create left out). A comment
+    /// (a reply on an account that comments) quotes nothing and downloads
+    /// nothing.
     public func openCompose(_ kind: ComposeKind, _ id: MessageID, from parent: AnyObject? = nil) {
         guard let s = summary(id), !composing.contains(id) else { return }
         composing.insert(id)
+        if kind == .reply, mailbox.model.account(s.accountId)?.can(.comment) == true {
+            createDraft(kind, s)
+            return
+        }
         if kind == .reply || kind == .replyAll, replyNeedsDownload(cache.loaded(id)) {
             let cache = cache
             Task { @MainActor [weak self] in
@@ -633,27 +639,50 @@ public final class ActionsController {
     /// The draft.create half of `openCompose` for message `s`, whose id is
     /// in `composing` (compose_open.go `create`): the template from the
     /// backend with what it could not import (`skipped`), or the fallback.
+    /// A reply on an account that comments (an issue) is a comment
+    /// (`createComment`); a forward of a message whose account writes no
+    /// mail is written in a mail account (`forwardAccount`), and
+    /// draft.create finds the message by `messageAccountId`.
     private func createDraft(_ kind: ComposeKind, _ s: MessageSummary) {
         let id = s.id
+        let own = mailbox.model.account(s.accountId)
+        if kind == .reply, own?.can(.comment) == true {
+            createComment(s)
+            return
+        }
+        // The account the draft is written in.
+        var from = s.accountId
+        var messageAccount: AccountID?
+        if kind == .forward, let own, !own.can(.compose) {
+            guard let target = forwardAccount() else {
+                // Forward is off without such an account; an accelerator
+                // bypasses that.
+                composing.remove(id)
+                log.warning("forward: no account writes mail")
+                return
+            }
+            from = target.id
+            messageAccount = s.accountId
+        }
         let src = composeSource(summary: s, loaded: cache.loaded(id))
         // The account's own address, for Reply All exclusion; the first
         // account's when the message's is unknown (compose.Manager
         // `SelfAddress`).
-        let me = mailbox.model.account(s.accountId).map(selfAddress)
+        let me = mailbox.model.account(from).map(selfAddress)
             ?? mailbox.model.enabledAccounts.first.map(selfAddress)
             ?? Address(address: "")
         let attributionLine = attribution(kind: kind, source: src)
         let fallback: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             var p = prefill(kind: kind, source: src, self: me)
-            p.accountID = s.accountId
+            p.accountID = from
             p.attribution = attributionLine
             self.openCompose?(p)
         }
 
         let params = DraftCreateParams(
-            accountId: s.accountId, mode: kind.mode, messageId: id,
-            attribution: attributionLine.isEmpty ? nil : attributionLine
+            accountId: from, mode: kind.mode, messageId: id,
+            attribution: attributionLine.isEmpty ? nil : attributionLine, messageAccountId: messageAccount
         )
         mailbox.perform(API.DraftCreate.self, params, timeout: RPCTimeouts.compose) { [weak self] outcome in
             guard let self else { return }
@@ -668,9 +697,42 @@ public final class ActionsController {
                 fallback()
             case .success(let res):
                 var p = fromDraft(kind: kind, draft: res.draft, blocked: res.blocked)
-                p.accountID = s.accountId
+                p.accountID = from
                 p.skipped = res.skipped?.count ?? 0
                 p.attribution = attributionLine
+                self.openCompose?(p)
+            }
+        }
+    }
+
+    /// The mail account a message of an account that writes no mail (an
+    /// issue) is forwarded from (`Capabilities.forwardFrom`): the account
+    /// of the folder selected in the sidebar when it writes mail (an issue
+    /// a search found from a mailbox), else the first enabled one that
+    /// does; nil when none does (Forward is off then).
+    private func forwardAccount() -> Account? {
+        let m = mailbox.model
+        return Capabilities.forwardFrom(m.accounts, from: m.selected?.account ?? "")
+    }
+
+    /// A comment on the issue of message `s`, whose account comments
+    /// (draft.create reply there): the compose window in comment mode
+    /// (`ComposeParams.comment`). Nothing is quoted, so there is no
+    /// attribution, and no fallback either: without a comment draft from
+    /// the daemon there is nothing to write, only the toast.
+    private func createComment(_ s: MessageSummary) {
+        let id = s.id
+        let params = DraftCreateParams(accountId: s.accountId, mode: .reply, messageId: id)
+        mailbox.perform(API.DraftCreate.self, params, timeout: RPCTimeouts.compose) { [weak self] outcome in
+            guard let self else { return }
+            self.composing.remove(id)
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("draft.create comment: \(String(describing: err), privacy: .public)")
+                self.toast(rpcErrorText(composeWhat(.reply), err))
+            case .success(let res):
+                var p = fromDraft(kind: .reply, draft: res.draft, blocked: res.blocked)
+                p.accountID = s.accountId
                 self.openCompose?(p)
             }
         }

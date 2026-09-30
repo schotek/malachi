@@ -124,6 +124,7 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 		// carries its URL.
 		s.b.ensureReauthSession(a.ID)
 	}
+	s.b.invalidateIssueTrackers()
 	if a.Enabled {
 		s.b.Supervisor.Start(a)
 		s.b.Delivery.Start(a)
@@ -133,10 +134,11 @@ func (s *accountService) Add(ctx context.Context, p api.AccountAddParams) (*api.
 }
 
 // checkCredentials applies the credential rules shared by add, update and
-// test: a password only for password endpoints, a sign-in session only for
-// an account with the backend's own sign-in.
+// test: a password only for password endpoints or a jira account (its
+// token), a sign-in session only for an account with the backend's own
+// sign-in.
 func checkCredentials(c api.AccountConfig, cr api.Credentials) error {
-	if cr.Password != "" && !usesAuth(c, api.AuthPassword) {
+	if cr.Password != "" && !usesAuth(c, api.AuthPassword) && c.Protocol() != api.AccountJira {
 		return api.NewError(api.CodeInvalidArgument, "password given but no endpoint uses password authentication")
 	}
 	if _, daemon := daemonOAuth(c); cr.OAuthSession != "" && !daemon {
@@ -160,7 +162,11 @@ func (s *accountService) Remove(ctx context.Context, p api.AccountRemoveParams) 
 	s.b.Delivery.Stop(string(p.AccountID))
 	s.b.dl.stopAccount(string(p.AccountID))
 	s.b.mem.dropAccount(string(p.AccountID))
+	// The mail an issue-tracker account hid in the mail accounts is shown
+	// again, and the clients told.
+	s.b.showIssueMail(ctx, string(p.AccountID))
 	err := s.b.store.DeleteAccount(ctx, string(p.AccountID), p.DeleteLocalData)
+	s.b.invalidateIssueTrackers()
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return nil, api.NewError(api.CodeAccountNotFound, "unknown account %q", p.AccountID)
@@ -192,8 +198,9 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
 	}
+	a, err := s.b.store.GetAccount(ctx, string(p.AccountID))
 	if p.Enabled {
-		if a, err := s.b.store.GetAccount(ctx, string(p.AccountID)); err != nil {
+		if err != nil {
 			s.b.log.Warn("start sync after enabling account", "id", p.AccountID, "err", err)
 		} else {
 			s.b.Supervisor.Start(a)
@@ -205,6 +212,13 @@ func (s *accountService) SetEnabled(ctx context.Context, p api.AccountSetEnabled
 		s.b.Delivery.Stop(string(p.AccountID))
 		s.b.dl.stopAccount(string(p.AccountID))
 		s.b.mem.dropAccount(string(p.AccountID))
+	}
+	if err == nil {
+		// A paused issue-tracker account shows the mail it hid; one
+		// resumed hides it again.
+		s.b.issueAccountChanged(ctx, a, a)
+	} else {
+		s.b.invalidateIssueTrackers()
 	}
 	s.b.accountsChanged()
 	return &api.AccountSetEnabledResult{}, nil
@@ -259,6 +273,11 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 		return nil, api.NewError(api.CodeAccountNotFound, "unknown account %q", p.AccountID)
 	case err != nil:
 		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if p.Credentials.Password == "" && secretMoves(existing.Config, p.Config) {
+		// The stored secret belongs to another site (or kind): it is
+		// never sent to this one.
+		return nil, api.NewError(api.CodeInvalidArgument, "the account's new site or server needs its own password or token")
 	}
 	_, daemon := daemonOAuth(p.Config)
 	_, wasDaemon := daemonOAuth(existing.Config)
@@ -342,6 +361,9 @@ func (s *accountService) Update(ctx context.Context, p api.AccountUpdateParams) 
 		s.b.Supervisor.Restart(updated)
 		s.b.Delivery.Restart(updated)
 	}
+	// What an issue-tracker account does with its notification mail, its
+	// senders or its spaces may have changed.
+	s.b.issueAccountChanged(ctx, existing, updated)
 	s.b.accountsChanged()
 	return &api.AccountUpdateResult{}, nil
 }
@@ -391,8 +413,9 @@ func (s *accountService) Discover(ctx context.Context, p api.AccountDiscoverPara
 }
 
 // Test validates like Add, then probes the endpoints of the account kind
-// (IMAP and SMTP concurrently, or the Graph mailbox). Each endpoint reports
-// its own outcome; the call itself fails only for an invalid configuration.
+// (IMAP and SMTP concurrently, the Graph mailbox, or the Jira site, see
+// testJira). Each endpoint reports its own outcome; the call itself fails
+// only for an invalid configuration.
 // The password is used for the connections and never logged; so is a
 // token, which comes from GNOME Online Accounts, from the session named by
 // credentials.oauthSession (not consumed) or from the stored sign-in of
@@ -414,6 +437,9 @@ func (s *accountService) Test(ctx context.Context, p api.AccountTestParams) (*ap
 	}
 	if p.Config.Protocol() == api.AccountGraph {
 		return &api.AccountTestResult{Graph: s.testGraph(ctx, p, grant)}, nil
+	}
+	if p.Config.Protocol() == api.AccountJira {
+		return s.testJira(ctx, p)
 	}
 	password := p.Credentials.Password
 	switch {
@@ -533,7 +559,11 @@ func (s *accountService) Linked(ctx context.Context, _ api.AccountLinkedParams) 
 	}
 	configured := make(map[string]bool, len(existing))
 	for _, a := range existing {
-		configured[a.Email] = true
+		// Only a mailbox configures the address: an issue-tracker account
+		// sharing it (another realm) does not.
+		if a.Realm == "" {
+			configured[a.Email] = true
+		}
 	}
 	for _, a := range accounts {
 		cfg, _, ok := goaConfigFor(a)
@@ -682,9 +712,11 @@ func (b *Backend) accountsChanged() {
 	}
 }
 
-// toAPIAccount derives the wire form with the live sync state (stateFor).
+// toAPIAccount derives the wire form with the live sync state (stateFor)
+// and the capabilities of the account kind.
 func (b *Backend) toAPIAccount(a store.Account) api.Account {
-	return api.Account{ID: api.AccountID(a.ID), Config: a.Config, Enabled: a.Enabled, State: b.stateFor(a)}
+	return api.Account{ID: api.AccountID(a.ID), Config: a.Config, Enabled: a.Enabled, State: b.stateFor(a),
+		Capabilities: capabilitiesFor(a.Config)}
 }
 
 // usesAuth reports whether an IMAP or SMTP endpoint of the account uses the
@@ -717,6 +749,9 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		return bad("displayName must be valid UTF-8 without line breaks (limit %d bytes)", maxAccountNameBytes)
 	}
 
+	if k := c.Protocol(); c.Jira != nil && k != api.AccountJira {
+		return bad("jira settings do not apply to an %s account", k)
+	}
 	switch c.Protocol() {
 	case api.AccountIMAP:
 		if c.Graph != nil {
@@ -786,8 +821,12 @@ func validateAccountConfig(c *api.AccountConfig) error {
 		default:
 			return bad("graph: source must be goa or daemon")
 		}
+	case api.AccountJira:
+		if err := validateJira(c); err != nil {
+			return err
+		}
 	default:
-		return bad("kind must be imap or graph")
+		return bad("kind must be imap, graph or jira")
 	}
 
 	if c.SyncInterval != 0 && c.SyncInterval < api.SyncIntervalMin {

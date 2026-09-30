@@ -183,7 +183,7 @@ public sealed partial class ActionsController
     /// <c>setMessageActionsSensitive</c>).
     /// </summary>
     public ActionFlags ActionFlagsFor(ListRow? row) =>
-        ActionRules.MessageActionState(row, Mailbox.Model.InOutbox, Mailbox.Model.CanMoveToRole);
+        ActionRules.MessageActionState(row, Mailbox.Model);
 
     /// <summary>Swift <c>flags(for:)</c>: <see cref="ActionFlagsFor"/> for a single message (a message window's commands).</summary>
     public ActionFlags FlagsFor(MessageSummary s)
@@ -770,7 +770,8 @@ public sealed partial class ActionsController
     /// mail server only downloads it first as well
     /// (<see cref="ComposeSources.ReplyNeedsDownload"/>), so the quote has
     /// them; a failure is only logged and the reply goes on (the compose
-    /// window says what <c>draft.create</c> left out).
+    /// window says what <c>draft.create</c> left out). A comment (a reply on
+    /// an account that comments) quotes nothing and downloads nothing.
     /// </para>
     /// </remarks>
     public void OpenCompose(ComposeKind kind, MessageId id, object? parent = null)
@@ -781,6 +782,11 @@ public sealed partial class ActionsController
             return;
         }
         composing.Add(id);
+        if (kind == ComposeKind.Reply && Mailbox.Model.Account(s.AccountId)?.Can(Capability.Comment) == true)
+        {
+            CreateDraft(kind, s);
+            return;
+        }
         var lm = Cache.Loaded(id);
         if ((kind is ComposeKind.Reply or ComposeKind.ReplyAll) && ComposeSources.ReplyNeedsDownload(lm))
         {
@@ -846,15 +852,41 @@ public sealed partial class ActionsController
 
     // compose_open.go create: the draft.create half of OpenCompose for
     // message s, whose id is in composing: the template from the backend
-    // with what it could not import (Skipped), or the fallback.
+    // with what it could not import (Skipped), or the fallback. A reply on
+    // an account that comments (an issue) is a comment (CreateComment); a
+    // forward of a message whose account writes no mail is written in a
+    // mail account (ForwardAccount), and draft.create finds the message by
+    // MessageAccountId.
     private void CreateDraft(ComposeKind kind, MessageSummary s)
     {
         var id = s.Id;
+        var own = Mailbox.Model.Account(s.AccountId);
+        if (kind == ComposeKind.Reply && own?.Can(Capability.Comment) == true)
+        {
+            CreateComment(s);
+            return;
+        }
+        // The account the draft is written in.
+        var from = s.AccountId;
+        AccountId? messageAccount = null;
+        if (kind == ComposeKind.Forward && own is not null && !own.Can(Capability.Compose))
+        {
+            if (ForwardAccount() is not { } target)
+            {
+                // Forward is off without such an account; an accelerator
+                // bypasses that.
+                composing.Remove(id);
+                LogNoForwardAccount(logger);
+                return;
+            }
+            from = target.Id;
+            messageAccount = s.AccountId;
+        }
         var src = ComposeSources.ComposeSource(s, Cache.Loaded(id));
         // The account's own address, for Reply All exclusion; the first
         // account's when the message's is unknown (compose.Manager
         // SelfAddress).
-        var me = Mailbox.Model.Account(s.AccountId) is { } account
+        var me = Mailbox.Model.Account(from) is { } account
             ? FolderTree.SelfAddress(account)
             : Mailbox.Model.EnabledAccounts is { Count: > 0 } enabled
                 ? FolderTree.SelfAddress(enabled[0])
@@ -864,16 +896,17 @@ public sealed partial class ActionsController
         var attribution = Prefill.Attribution(kind, src);
         void Fallback() => OpenComposeRequested?.Invoke(this, Prefill.Create(kind, src, me) with
         {
-            AccountId = s.AccountId,
+            AccountId = from,
             Attribution = attribution,
         });
 
         var parameters = new DraftCreateParams
         {
-            AccountId = s.AccountId,
+            AccountId = from,
             Mode = kind.Mode,
             MessageId = id,
             Attribution = attribution.Length == 0 ? null : attribution,
+            MessageAccountId = messageAccount,
         };
         Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
         {
@@ -891,10 +924,43 @@ public sealed partial class ActionsController
             }
             OpenComposeRequested?.Invoke(this, Prefill.FromDraft(kind, res.Draft, res.Blocked) with
             {
-                AccountId = s.AccountId,
+                AccountId = from,
                 Skipped = res.Skipped?.Count ?? 0,
                 Attribution = attribution,
             });
+        }, RpcTimeouts.Compose);
+    }
+
+    // The mail account a message of an account that writes no mail (an
+    // issue) is forwarded from (Capabilities.ForwardFrom): the account of the
+    // folder selected in the sidebar when it writes mail (an issue a search
+    // found from a mailbox), else the first enabled one that does; null when
+    // none does (Forward is off then).
+    private Account? ForwardAccount()
+    {
+        var m = Mailbox.Model;
+        return Capabilities.ForwardFrom(m.Accounts, m.Selected?.Account ?? new AccountId(""));
+    }
+
+    // A comment on the issue of message s, whose account comments
+    // (draft.create reply there): the compose window in comment mode
+    // (ComposeParams.Comment). Nothing is quoted, so there is no attribution,
+    // and no fallback either: without a comment draft from the daemon there
+    // is nothing to write, only the toast.
+    private void CreateComment(MessageSummary s)
+    {
+        var id = s.Id;
+        var parameters = new DraftCreateParams { AccountId = s.AccountId, Mode = ComposeMode.Reply, MessageId = id };
+        Mailbox.Scope.Perform(Mailbox.Client, API.DraftCreate, parameters, outcome =>
+        {
+            composing.Remove(id);
+            if (!outcome.TryGetValue(out var res, out var error))
+            {
+                LogDraftCreateFailed(logger, "comment", error!);
+                toast(RpcErrorText.Text(ComposeSources.ComposeWhat(ComposeKind.Reply), error));
+                return;
+            }
+            OpenComposeRequested?.Invoke(this, Prefill.FromDraft(ComposeKind.Reply, res.Draft, res.Blocked) with { AccountId = s.AccountId });
         }, RpcTimeouts.Compose);
     }
 
@@ -1062,6 +1128,9 @@ public sealed partial class ActionsController
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "{Method} failed")]
     private static partial void LogCallFailed(ILogger logger, string method, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "forward: no account writes mail")]
+    private static partial void LogNoForwardAccount(ILogger logger);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "draft.create {Mode} failed")]
     private static partial void LogDraftCreateFailed(ILogger logger, string mode, Exception error);
