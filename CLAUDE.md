@@ -781,7 +781,8 @@ a nepřidalo žádný msgid: sidebar (`model.go` `accountLabel`,
 `sortSiblings` s `VirtualRank`, `folderIcon`, `accountHeaderBadge`;
 `folders.go` kapsle druhu za jménem každého účtu — JIRA, u pošty
 poskytovatel `GOOGLE`/`M365` podle `signin.Provider`, jinak `IMAP`; GTK
-první, macOS a Windows ukazují zatím jen JIRA —, názvy pohledů), seznam
+první, macOS od 2026-09-30 (`FolderTree.swift` `accountHeaderBadge`),
+Windows s portem —, názvy pohledů), seznam
 (`groupedListing` = nastavení nebo `alwaysGrouped`, `groupingChanged`
 nechá jira složku být, `countsUnread`, `widget/message_row.go` klíč,
 pilulky `widget/pill.go` a řádky událostí; CSS pilulek v
@@ -810,10 +811,11 @@ jinak nastavení; nikdy poštovní průvodce), `notify.messagesChanged`
 (`accountAuthBannerTitle`). Zobrazení konverzace (macOS a GTK, reference
 `ui/internal/conversation`, pro Windows „Conversation view: macOS
 first“): výběr sbaleného řádku vlákna (≥ 2 členů ve složce; jira složky
-vždy) ukáže v panelu čtení celé vlákno jako nativní karty od nejstarší
-s časovou osou v levém okraji, u jira kartou issue nahoře a událostmi jako
-kompaktní řádky, přečtený se označí jen nejnovější člen, který není
-událost; každá HTML karta má vlastní uzamčený WKWebView v režimu `sized`
+vždy) ukáže v panelu čtení celé vlákno jako nativní karty s časovou osou
+v levém okraji, řazené jako issue v Jiře (viz GTK níže; macOS stejně od
+2026-09-30, `ConversationLayout.displayOrder`), u jira kartou issue nahoře
+a událostmi jako kompaktní řádky, přečtený se označí jen nejnovější člen,
+který není událost; každá HTML karta má vlastní uzamčený WKWebView v režimu `sized`
 (výšku hlásí skript aplikace ve vlastním světě, JS obsahu vypnutý, strop
 4000 pt, nejvýš 8 živých pohledů; `ConversationLayout.swift`,
 `ConversationViewController.swift`), nikdy jeden složený dokument — CSS
@@ -822,7 +824,7 @@ jedné zprávy by přepsalo hlavičky ostatních. GTK: `window/conversation_*.go
 issue, u pošty nejstarší neořezaná zpráva — sbalená na hlavičku
 a náhled, dokud následuje jiná zpráva, pak ostatní od nejnovější,
 `convDisplayOrder`, otevřené nahoře — rozhodnutí uživatele 2026-09-30,
-model i macOS zůstávají od nejstarší; řádek starších zpráv dole; controller
+model zůstává od nejstarší; řádek starších zpráv dole; controller
 a layout čisté a testované, stránka `conversation_view.blp`
 přidaná do `message_stack` při prvním použití, karty znovu používají
 čipy, adresy a lišty panelu přes vlastní `messageView`, mezerník
@@ -834,6 +836,21 @@ registrovaným jen tam (`size.go`, Go bere jen ověřené číslo), strop
 4000 px a zmrazení výšky (`webHeightGovernor`); samostatný pohled zprávy
 má JS dál vypnutý úplně (`docs/security.md` §3.2). `MALACHI_DATA_DIR` přebíjí
 datový adresář i na macOS (`Daemon/Paths.swift`, jako na Windows).
+macOS dorovnaný na GTK port (2026-09-30; Windows port bere toto chování
+jako výchozí): řazení konverzace se sbalenou úvodní kartou (šipka
+`CardFoldButton`, náhled ze `snippet`, volba uživatele platí do výběru
+jiné konverzace), kapsle druhu u všech účtů, *Přidat účet Jira…* i na
+prázdném okně, stránka Účty se po výměně tokenu načte znovu, uložení
+nastavení přeskočí zašedlé pole odesílatelů, „Změnit stav“ v Dalších
+akcích je mimo issue skryté (v menu baru zašedlé jako ostatní položky),
+komentář se otevře bez `message.download`, `issue.transitions` čeká 45 s
+jako GTK, klíč issue, který nejde otevřít, je text k označení, pilulka
+stavu se ořízne na 24 znaků (`PillLabel.statusCharacters`) a celý stav má
+tooltip, selhané `message.get` se v konverzaci neopakuje (`noGet`)
+a model postavený po selhaném `thread.get` ze seznamu se po příchodu členů
+postaví znovu (`listing`), čipy příloh v kartách mají „Zeptat se
+asistenta…“. Ikony poskytovatelů v Předvolbách → Účty macOS nemá (SF
+Symbols je neobsahuje, řádek pošty má obálku; tabulka v `macos/README.md`).
 
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně

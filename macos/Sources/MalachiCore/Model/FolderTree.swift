@@ -304,12 +304,26 @@ public func folderIcon(_ f: Folder) -> String {
     return v.isEmpty ? roleIcon(f.role) : v
 }
 
-/// The capsule beside an account's heading in the sidebar: the kind badge
-/// ("JIRA", `Jira.kindBadge`) of an issue-tracker account, "" for a mail
-/// account. Swift-first: mirror in folders.go when GTK gets Jira accounts.
+/// The capsule after an account's heading in the sidebar, which says what
+/// kind of account it is (model.go `accountHeaderBadge`): "JIRA" for an
+/// issue-tracker account (`Jira.kindBadge`), the provider a mail account
+/// signs in with ("GOOGLE", "M365"; `accountProvider`), "IMAP" for a mail
+/// account with a password. Brand and protocol names, never translated.
 public func accountHeaderBadge(_ a: Account) -> String {
-    Jira.isJira(a.config) ? Jira.kindBadge : ""
+    if Jira.isJira(a.config) {
+        return Jira.kindBadge
+    }
+    switch accountProvider(a.config) {
+    case .google?: return googleBadge
+    case .microsoft365?: return microsoftBadge
+    default: return imapBadge
+    }
 }
+
+// The capsules of mail accounts (`accountHeaderBadge`).
+let googleBadge = "GOOGLE"
+let microsoftBadge = "M365"
+let imapBadge = "IMAP"
 
 /// The display name of a folder (folders.go `folderTitle`): the localised
 /// name for a role folder (whatever the server calls it) and for a fixed

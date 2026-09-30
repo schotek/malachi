@@ -416,7 +416,9 @@ final class Integration {
     // MARK: No Accounts page
 
     /// window.blp `no-accounts`: shown in the message pane instead of
-    /// "No Message Selected" while account.list is empty.
+    /// "No Message Selected" while account.list is empty. Under the button
+    /// for a mail account sits the one for an issue tracker (the Jira
+    /// assistant), as in the GTK window.
     private func showNoAccountsPage(_ show: Bool) {
         guard show != showingNoAccounts, let mainWindow else { return }
         showingNoAccounts = show
@@ -430,7 +432,15 @@ final class Integration {
             button.controlSize = .large
             button.bezelColor = .controlAccentColor
             button.keyEquivalent = "\r"
-            page.statusPage.setChild(button)
+            let jira = NSButton(
+                title: mn(Jira.wizardTexts().addMenu), target: self, action: #selector(addJiraAccount(_:)))
+            jira.bezelStyle = .rounded
+            jira.controlSize = .large
+            let buttons = NSStackView(views: [button, jira])
+            buttons.orientation = .vertical
+            buttons.alignment = .centerX
+            buttons.spacing = 12
+            page.statusPage.setChild(buttons)
             mainWindow.install(message: page)
         } else {
             // The reader shows "No Message Selected" itself while nothing
@@ -441,5 +451,9 @@ final class Integration {
 
     @objc private func addAccount(_ sender: Any?) {
         state.hooks.addAccount?(mainWindow?.window)
+    }
+
+    @objc private func addJiraAccount(_ sender: Any?) {
+        state.hooks.addJiraAccount?(mainWindow?.window)
     }
 }

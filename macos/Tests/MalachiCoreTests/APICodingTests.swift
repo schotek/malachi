@@ -1274,8 +1274,10 @@ import Testing
         // Like account.discover and account.test: a site lookup, a sign-in with listing.
         #expect(API.AccountDetectSite.timeout == .seconds(15) && RPCTimeouts.detectSite == .seconds(15))
         #expect(API.AccountListSpaces.timeout == .seconds(45) && RPCTimeouts.listSpaces == .seconds(45))
-        // One request to the site; the request and the daemon's refresh (up to 30 s).
-        #expect(API.IssueTransitions.timeout == .seconds(20) && RPCTimeouts.transitions == .seconds(20))
+        // One value for both, as in the GTK UI (issue_actions.go
+        // `issueTimeout`): the listing may be slow, and the change waits
+        // for the daemon's refresh (up to 30 s).
+        #expect(API.IssueTransitions.timeout == .seconds(45) && RPCTimeouts.transitions == .seconds(45))
         #expect(API.IssueTransition.timeout == .seconds(45) && RPCTimeouts.transition == .seconds(45))
         let special: Set<String> = ["system.info", "system.hello", "system.authenticate", "message.body",
                                     "message.part", "attachment.get", "message.embedded", "draft.create", "draft.open",

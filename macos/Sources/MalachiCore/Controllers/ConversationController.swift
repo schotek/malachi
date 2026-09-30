@@ -10,9 +10,12 @@ import Foundation
 // the pane (ConversationViewController) lays the cards out and tells this
 // controller which of them are near enough to need a body.
 //
-// Swift-first: the GTK reading pane follows (ui/internal/window/window.go
-// shows, and marks read, the newest folder member of a conversation row
-// today); Windows ports this after it.
+// Swift-first: the GTK reading pane is its port
+// (ui/internal/window/conversation_controller.go), and two rules it added
+// came back here: a message.get that failed is not asked again (`noGet`),
+// and a model built from what the listing knew, after thread.get failed,
+// is built anew once the members arrive (`listing`). Windows ports this
+// after it.
 
 extension ListRow {
     /// A folded conversation row of the grouped list whose selection shows
@@ -37,8 +40,9 @@ extension ListRow {
 /// them to the cache's caps while it is shown.
 ///
 /// The mark-as-read timer is the list controller's (`announceSelection`
-/// arms it for `Conversation.Model.markRead`); this controller only exposes
-/// the model.
+/// arms it for `Conversation.Model.markRead` once the members are known);
+/// this controller exposes the model, and has the list arm the timer when
+/// the members arrive only after a thread.get that failed.
 @MainActor
 public final class ConversationController {
     /// What changed, for the pane.
@@ -46,12 +50,14 @@ public final class ConversationController {
         /// A conversation was selected; its members are on their way
         /// (`model` is nil).
         case loading
-        /// The model was built anew: the pane lays the stack out and
-        /// scrolls to `model.scrollTo`.
+        /// The model was built anew: the pane lays the stack out in the
+        /// order it shows (`ConversationLayout.displayOrder`) and opens at
+        /// its top.
         case opened
         /// The shown conversation changed (a member arrived or went, its
-        /// flags or issue changed): the pane reconciles its cards by id and
-        /// keeps what the user reads in place.
+        /// flags or issue changed, the daemon rebuilt its messages): the
+        /// pane reconciles its cards by id and keeps what the user reads in
+        /// place.
         case updated
         /// Nothing is shown any more.
         case cleared
@@ -83,9 +89,20 @@ public final class ConversationController {
     /// The members whose entry was asked for and has not settled, and
     /// whether message.get was part of the request.
     private var pending: [MessageID: Bool] = [:]
+    /// The members whose message.get failed: not asked again for this
+    /// conversation (the pane asks on every scroll), the summary serves
+    /// their cards.
+    private var noGet: Set<MessageID> = []
     /// The conversation's summary as last known (the row's, then
     /// thread.get's).
     private var summary: ThreadSummary?
+    /// The model was built from what the listing knew, after thread.get
+    /// failed: the members, once they arrive, build it anew.
+    private var listing = false
+    /// The list generation (`MailModel.listGen`) in which thread.get failed
+    /// for the conversation: it is not asked again until the list lists the
+    /// folder anew.
+    private var failedGen: UInt64?
     /// Bumped with every selection: a late answer for a conversation left
     /// meanwhile is dropped.
     private var gen: UInt64 = 0
@@ -131,12 +148,8 @@ public final class ConversationController {
             }
             return true
         }
-        gen += 1
+        reset()
         thread = tid
-        model = nil
-        members = []
-        loaded = [:]
-        pending = [:]
         summary = row.summary
         onChange?(.loading)
         requestMembers(tid)
@@ -145,39 +158,56 @@ public final class ConversationController {
 
     /// Shows nothing (another kind of row, or none, is selected).
     public func clear() {
-        gen += 1
         let had = thread != nil
-        thread = nil
-        model = nil
-        members = []
-        loaded = [:]
-        pending = [:]
-        summary = nil
+        reset()
         if had {
             onChange?(.cleared)
         }
     }
 
+    /// Forgets the conversation on display.
+    private func reset() {
+        gen += 1
+        thread = nil
+        model = nil
+        members = []
+        loaded = [:]
+        pending = [:]
+        noGet = []
+        summary = nil
+        listing = false
+        failedGen = nil
+    }
+
     /// Asks the list for the folder members of `tid`; they arrive through
     /// `membersChanged`, a failure builds from what the listing told
-    /// (`buildFromListing`).
+    /// (`buildFromListing`) and is remembered, so that thread.get is not
+    /// asked again before the list lists the folder anew.
     private func requestMembers(_ tid: ThreadID) {
         let g = gen
         list.ensureMembers(tid, { [weak self] in
             guard let self, self.gen == g else { return }
             self.membersChanged(tid)
         }, failed: { [weak self] in
-            guard let self, self.gen == g, self.thread == tid, self.model == nil else { return }
-            self.buildFromListing(tid)
+            guard let self, self.gen == g, self.thread == tid else { return }
+            self.failedGen = self.list.mailbox.model.listGen
+            if self.model == nil {
+                self.buildFromListing(tid)
+            }
         })
     }
 
     /// thread.get failed (the list has said why): the conversation as the
     /// listing knows it, its newest member, with the row of the older ones
-    /// on top.
+    /// left out. Nothing is marked read without the members; once they
+    /// arrive the model is built anew (`listing`).
     private func buildFromListing(_ tid: ThreadID) {
         guard let t = summary else { return }
-        let known = list.mailbox.model.members[tid]?.list ?? [t.latest]
+        var known = list.mailbox.model.members[tid]?.list ?? []
+        if known.isEmpty {
+            known = [t.latest]
+        }
+        listing = true
         members = known
         model = Conversation.build(t, known, account: account(t.accountId))
         onChange?(.opened)
@@ -189,11 +219,17 @@ public final class ConversationController {
     /// (`ListController.onThreadMembersChanged`), or they arrived: the model
     /// is built the first time, then kept in step by merging what changed
     /// and removing what went (`Conversation.merge`, `remove`). Members the
-    /// list lost to a reload are asked for again.
+    /// list lost to a reload are asked for again, unless thread.get failed
+    /// for this listing of the folder already. A model built from the
+    /// listing after such a failure is not merged into: the members build
+    /// it anew (the row of older members it showed would stay otherwise),
+    /// and only then is the newest one marked read.
     public func membersChanged(_ tid: ThreadID) {
         guard tid == thread, let mem = list.mailbox.model.members[tid] else { return }
         if !mem.complete {
-            requestMembers(tid)
+            if failedGen != list.mailbox.model.listGen {
+                requestMembers(tid)
+            }
             return
         }
         if let t = list.row(for: ListKey(thread: tid))?.summary {
@@ -202,10 +238,17 @@ public final class ConversationController {
         guard let t = summary else { return }
         // The account tells the user's own mail (`Conversation.Item.mine`).
         let own = account(t.accountId)
-        guard let current = model else {
+        guard let current = model, !listing else {
+            let recovered = listing
+            listing = false
             members = mem.list
             model = Conversation.build(t, mem.list, account: own)
             onChange?(.opened)
+            if recovered {
+                // The list's own wait for the members ended with the
+                // thread.get that failed.
+                list.markConversationRead(tid)
+            }
             return
         }
         var m = current
@@ -252,6 +295,7 @@ public final class ConversationController {
         guard tid == thread else { return }
         loaded = [:]
         pending = [:]
+        noGet = []
         bodyGen += 1
         if model != nil {
             onChange?(.updated)
@@ -263,11 +307,12 @@ public final class ConversationController {
     /// The card of member `id` is near the viewport: its body is fetched
     /// unless held already (message.body; message.get as well when
     /// `details`, or when the message has attachments, whose chips need
-    /// it). An event has no body. The entry is held in `loaded` and
-    /// announced through `onLoaded` whenever a half of it arrives.
+    /// it, unless it failed for this member before). An event has no body.
+    /// The entry is held in `loaded` and announced through `onLoaded`
+    /// whenever a half of it arrives.
     public func needsBody(_ id: MessageID, details: Bool = false) {
         guard let s = member(id), !readsWithoutBody(s) else { return }
-        let full = details || s.hasAttachments
+        let full = (details || s.hasAttachments) && !noGet.contains(id)
         if let lm = loaded[id], lm.bodySettled, !full || lm.msg != nil {
             return
         }
@@ -282,6 +327,9 @@ public final class ConversationController {
             guard let self, self.gen == g, self.bodyGen == bg, self.member(id) != nil else { return }
             if !lm.getting, !lm.fetching {
                 self.pending[id] = nil
+                if full, lm.msg == nil {
+                    self.noGet.insert(id) // logged by the cache; the summary serves
+                }
             }
             self.loaded[id] = lm
             self.onLoaded?(id, lm)

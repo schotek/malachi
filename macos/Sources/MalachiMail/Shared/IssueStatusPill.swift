@@ -12,7 +12,10 @@ import MalachiCore
 /// the keyboard) calls `onClick`, which pops the Change Status menu up
 /// under it (`IssueTransitionMenu`). While a transition runs `busy` shows
 /// a small spinner in place of the chevron and the pill stops taking
-/// clicks. The text is `stringValue` on a label, never markup.
+/// clicks. The text is `stringValue` on a label, never markup; a long
+/// status is cut at `PillLabel.statusCharacters` and the label's tooltip
+/// has the whole of it (issue_card.go `statusText`), while the rest of a
+/// menu button says what it does (`menuToolTip`).
 @MainActor
 final class IssueStatusPill: NSView {
     /// The pill was clicked (only while `menuIndicator` is on and not
@@ -32,9 +35,13 @@ final class IssueStatusPill: NSView {
     private static let padding: CGFloat = RowMetrics.badgePadding
     private static let verticalPadding: CGFloat = 1
 
-    var text: String {
-        get { label.stringValue }
-        set { label.stringValue = newValue }
+    /// The status, whole (the label may show less of it).
+    var text = "" {
+        didSet {
+            let max = PillLabel.statusCharacters
+            label.stringValue = text.count > max ? text.prefix(max - 1) + "…" : text
+            label.toolTip = text.isEmpty ? nil : text
+        }
     }
 
     /// Shows the chevron and takes clicks.
@@ -43,6 +50,11 @@ final class IssueStatusPill: NSView {
             guard menuIndicator != oldValue else { return }
             applyState()
         }
+    }
+
+    /// The tooltip of the pill while it is a menu button ("Change Status").
+    var menuToolTip = "" {
+        didSet { applyState() }
     }
 
     /// A transition runs: the spinner instead of the chevron, no clicks.
@@ -119,6 +131,7 @@ final class IssueStatusPill: NSView {
         } else {
             spinner.stopAnimation(nil)
         }
+        toolTip = menuIndicator && !menuToolTip.isEmpty ? menuToolTip : nil
         setAccessibilityRole(menuIndicator ? .popUpButton : .staticText)
         setAccessibilityEnabled(clickable)
         window?.invalidateCursorRects(for: self)
@@ -172,7 +185,7 @@ final class IssueStatusPill: NSView {
     }
 
     override func accessibilityValue() -> Any? {
-        label.stringValue
+        text
     }
 
     override func accessibilityPerformPress() -> Bool {

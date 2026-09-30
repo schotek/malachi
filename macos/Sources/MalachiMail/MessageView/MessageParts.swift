@@ -7,7 +7,8 @@ import MalachiCore
 // The parts of a message display that the single-message pane
 // (MessageViewController) and the cards of the conversation view
 // (ConversationCardView) draw alike: the texts of the remote-image and
-// pictures bars, and the attachment chips with their actions.
+// pictures bars, the attachment chips with their actions, the chips'
+// "Ask the Assistant…" and the keyboard focus across a rebuild of the chips.
 
 extension RemoteBarView {
     /// The remote-image bar's text for state `st` (remote.go
@@ -36,15 +37,70 @@ extension RemoteBarView {
     }
 }
 
+extension AttachmentChipView {
+    /// Gives the chip's menu "Ask the Assistant…" (attachments.go
+    /// `bindAskItem`, ui/internal/assistant): hidden while the Assistant is
+    /// not shown (its menu off, or the bridge not registered), disabled
+    /// while no app handles the chosen Claude app's links (the file itself
+    /// goes without the bridge, and never to the other app); for the panel
+    /// (In App), while it cannot run or the bridge does not read this type
+    /// (`AssistantController.canAsk`). `ask` runs the item.
+    func offerAssistant(_ assistant: AssistantController, ask: @escaping @MainActor () -> Void) {
+        let a = attachment
+        assistantItem = { [weak assistant] in
+            guard let assistant, assistant.shown else { return nil }
+            assistant.refreshHandlers()
+            return assistant.canAsk(about: a)
+        }
+        onAskAssistant = ask
+    }
+}
+
+/// The keyboard focus across a rebuild of a message's chips (attachments.go
+/// `renderAttachments`): made before the chips go, it takes the focus out
+/// of the chip (or Save All) that holds it, and `restore` puts it on the
+/// chip at the same place afterwards, or on the body when there is none.
+/// Nothing happens when no chip held the focus.
+@MainActor
+struct ChipFocus {
+    private let at: Int?
+    private weak var window: NSWindow?
+
+    /// `chips` are the chips on display, about to be rebuilt, in `window`.
+    init(_ chips: [NSView], in window: NSWindow?) {
+        self.window = window
+        if let focus = window?.firstResponder as? NSView {
+            at = chips.firstIndex { focus === $0 || focus.isDescendant(of: $0) }
+        } else {
+            at = nil
+        }
+        if at != nil {
+            window?.makeFirstResponder(nil)
+        }
+    }
+
+    /// The focus goes to the chip of `chips` (the new ones) at the place of
+    /// the one that held it, else to `body` (nil: it stays with the window).
+    func restore(to chips: [NSView], else body: NSView?) {
+        guard let at, let window else { return }
+        let target = at < chips.count ? ((chips[at] as? AttachmentChipView)?.control ?? chips[at]) : nil
+        if target.map({ window.makeFirstResponder($0) }) != true, let body {
+            window.makeFirstResponder(body)
+        }
+    }
+}
+
 /// The attachment chips of one message (attachments.go `buildChip`,
 /// `buildSaveAll`) from a `ChipPlan`: each chip's actions close over the
 /// attachment and the message it belongs to and go to the delegate; View
-/// (an attached message) goes to `openEmbedded`. `window` is the window
+/// (an attached message) goes to `openEmbedded`, "Ask the Assistant…" is
+/// offered as `assistant` allows (`offerAssistant`). `window` is the window
 /// the view is in when a chip has none to name (it is being rebuilt).
 @MainActor
 struct AttachmentChipFactory {
     weak var delegate: (any MessageActionDelegate)?
     let cache: MessageCache
+    let assistant: AssistantController
     let openEmbedded: (@MainActor (_ containing: MessageSummary, _ attachment: Attachment, _ remote: Bool, _ chip: NSView?) -> Void)?
     let window: @MainActor () -> NSWindow?
     /// The chip on display for a part, for Quick Look to zoom out of.
@@ -81,6 +137,9 @@ struct AttachmentChipFactory {
         }
         chip.onView = { [weak chip] in
             openEmbedded?(s, a, remote, chip)
+        }
+        chip.offerAssistant(assistant) { [weak chip] in
+            delegate?.askAssistant(about: a, of: s, remote: remote, from: chip?.window ?? window())
         }
         return chip
     }

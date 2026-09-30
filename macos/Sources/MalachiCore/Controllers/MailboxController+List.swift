@@ -757,8 +757,10 @@ public final class ListController {
     /// `tid` marks read (`Conversation.Model.markRead`: the newest message
     /// that is not an event, when it is unread; older unread members stay
     /// unread), once the folder members are known; nothing when the
-    /// selection has moved on by then.
-    private func markConversationRead(_ tid: ThreadID) {
+    /// selection has moved on by then, or when thread.get fails. The
+    /// conversation view's controller calls it again when the members
+    /// arrive after such a failure (`ConversationController.membersChanged`).
+    func markConversationRead(_ tid: ThreadID) {
         // The previous selection's timer goes now, whatever the wait.
         scheduleMarkRead(nil)
         ensureMembers(tid) { [weak self] in

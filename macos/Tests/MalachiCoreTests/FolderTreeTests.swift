@@ -199,7 +199,26 @@ func ids(_ entries: [FolderEntry]) -> [String] {
         #expect(accountLabel(testAccount("m", name: "", email: " me@example.invalid ")) == "me@example.invalid")
 
         #expect(accountHeaderBadge(jiraTestAccount("j")) == "JIRA")
-        #expect(accountHeaderBadge(testAccount("m")) == "")
+    }
+
+    /// jira_list_test.go `TestJiraSidebar`, the capsules: a mail account
+    /// names the provider it signs in with, else the protocol.
+    @Test func accountHeaderBadgeSaysTheKind() {
+        let mail = testAccount("a", email: "a@example.invalid")
+        #expect(accountHeaderBadge(mail) == "IMAP")
+        var google = mail
+        google.config.oauth2 = OAuth2Config(provider: .google)
+        var graph = mail
+        graph.config.kind = .graph
+        var office = mail
+        office.config.oauth2 = OAuth2Config(provider: .office365)
+        #expect(accountHeaderBadge(google) == "GOOGLE")
+        #expect(accountHeaderBadge(graph) == "M365")
+        #expect(accountHeaderBadge(office) == "M365")
+        // A provider this client does not name is a mail account like any.
+        var custom = mail
+        custom.config.oauth2 = OAuth2Config(provider: .custom)
+        #expect(accountHeaderBadge(custom) == "IMAP")
     }
 
     @Test func initialFolderPrefersTheMailInbox() {

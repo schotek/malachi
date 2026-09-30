@@ -11,7 +11,9 @@ import Testing
 // MailFixture: a conversation row shows the whole conversation through a
 // folder-scoped thread.get and marks only its newest message read; a member
 // row keeps the single message; arrivals, flag changes and removals reach
-// the model; bodies are fetched per card, message.get only when needed.
+// the model; bodies are fetched per card, message.get only when needed and
+// not again once it failed; a conversation shown from the listing, after
+// thread.get failed, is built anew when its members arrive.
 
 private struct Timeout: Error {}
 
@@ -324,6 +326,32 @@ private final class Harness {
         #expect(h.changes == [.loading, .opened])
         try await Task.sleep(for: .milliseconds(150))
         #expect(h.marks.isEmpty, "nothing is marked without the members")
+
+        // The list telling of the members for other reasons does not ask
+        // again.
+        h.conversation.membersChanged("t1")
+        #expect(h.list.applyFlags(["a3"], set: [.flagged]) == ["a3"])
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await h.fixture.callCount(API.ThreadGet.name) == 1)
+        #expect(shape(h.conversation.model) == ["more", "a3"])
+
+        // A reload lists the conversation anew and asks again; the members
+        // build the model anew (the row of older members goes) and mark.
+        await h.fixture.succeed(API.ThreadGet.name)
+        await h.fixture.addMessage(msg("a4", 8, thread: "t1", from: "gina"))
+        h.mailbox.reloadMessages?()
+        try await waitUntil { shape(h.conversation.model) == ["a1", "a2", "a3", "a4"] }
+        #expect(await h.fixture.callCount(API.ThreadGet.name) == 2)
+        #expect(h.conversation.model?.earlier == 0)
+        #expect(h.changes.last == .opened)
+        try await waitUntil { !h.marks.isEmpty }
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(h.marks == ["a4"], "marked once the members arrived")
+
+        // From then on the model follows the list as any other.
+        let count = h.changes.count
+        #expect(h.list.applyFlags(["a4"], set: [.seen]) == ["a4"])
+        #expect(h.changes.count == count + 1 && h.changes.last == .updated)
     }
 
     @Test func issueConversationMarksItsNewestCommentNeverAnEvent() async throws {
@@ -411,5 +439,38 @@ private final class Harness {
         // Another conversation forgets the entries.
         try await h.select(ListKey(thread: "t3"))
         #expect(h.conversation.loaded.isEmpty)
+    }
+
+    /// A failed message.get is not asked again on every scroll; the summary
+    /// serves the card.
+    @Test func failedGetIsNotAskedAgain() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        await h.fixture.fail(API.MessageGet.name, with: RPCError(code: .messageNotFound, message: "gone"))
+        try await h.select(ListKey(thread: "t1"))
+        for _ in 0..<3 {
+            h.conversation.needsBody("a3")
+            try await waitUntil {
+                guard let lm = h.conversation.loaded["a3"] else { return false }
+                return lm.body != nil && !lm.getting && !lm.fetching
+            }
+            h.cache.evict("a3") // the cache let go of it meanwhile
+        }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.callCount(API.MessageGet.name) == 1)
+        #expect(h.conversation.loaded["a3"]?.body != nil, "the body is held all the same")
+        #expect(h.conversation.loaded["a3"]?.msg == nil)
+
+        // The recipients' disclosure does not ask for it again either.
+        h.conversation.needsBody("a3", details: true)
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.callCount(API.MessageGet.name) == 1)
+
+        // The daemon rebuilt the conversation's messages: asked anew.
+        await h.fixture.succeed(API.MessageGet.name)
+        h.conversation.refresh("t1")
+        h.conversation.needsBody("a3")
+        try await waitUntil { h.conversation.loaded["a3"]?.complete == true }
+        #expect(await h.fixture.callCount(API.MessageGet.name) == 2)
     }
 }

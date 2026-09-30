@@ -409,7 +409,10 @@ final class JiraAccountViewController: NSViewController, NSTableViewDataSource, 
     @objc private func saveClicked(_ sender: Any?) {
         controller.setName(nameEntry.field.stringValue)
         // What is still in the field of a list is meant to be in the list.
-        for e in editors where !e.field.stringValue.isEmpty {
+        // A list that does not matter in the mode chosen (the senders while
+        // notification e-mails are left alone) is not looked at: its field
+        // is disabled and could not take the focus (dialog.go `onSave`).
+        for e in editors where e.isEnabled && !e.field.stringValue.isEmpty {
             if !e.commit() {
                 view.window?.makeFirstResponder(e.field)
                 e.field.scrollToVisible(e.field.bounds)

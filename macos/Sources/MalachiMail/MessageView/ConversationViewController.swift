@@ -6,19 +6,23 @@ import MalachiCore
 
 /// The whole conversation in the reading pane (ConversationController,
 /// ui/internal/conversation): selecting a conversation row stacks every
-/// member the folder holds, oldest first, the newest scrolled into view.
-/// A Jira conversation has its issue card once on top; its description and
-/// comments are cards (`ConversationCardView`), its status and assignee
-/// changes compact rows (`ConversationEventRow`); older members left out
-/// by thread.get's cap are one row on top (`ConversationTruncatedRow`).
+/// member the folder holds as Jira shows an issue
+/// (`ConversationLayout.displayOrder`, conversation_view.go): what opened
+/// the conversation first, folded to its header and a preview while more
+/// follows, then the rest newest first, the pane opened at its top; the
+/// model keeps the oldest first. A Jira conversation has its issue card
+/// once on top; its description and comments are cards
+/// (`ConversationCardView`), its status and assignee changes compact rows
+/// (`ConversationEventRow`); older members left out by thread.get's cap
+/// are one row at the bottom (`ConversationTruncatedRow`).
 ///
 /// The pane is slightly grey and the messages are cards on it, in one
 /// column no wider than 900 points. A gutter at the column's leading edge
 /// carries the timeline (`ConversationLayout.rails`, `ConversationRow`): a
-/// thin line from the first item to the last, on it the avatar of each
-/// message's sender at the top of its card (tinted with the accent colour
-/// for the user's own message) and a dot for each event and for the row
-/// of older members. The issue card keeps to the cards' column.
+/// thin line from the first item shown to the last, on it the avatar of
+/// each message's sender at the top of its card (tinted with the accent
+/// colour for the user's own message) and a dot for each event and for the
+/// row of older members. The issue card keeps to the cards' column.
 ///
 /// A stack of native cards in one scroll view, never one composed
 /// document: each card's body is its own locked view with one sanitiser
@@ -28,7 +32,9 @@ import MalachiCore
 /// exists only for the nearest few HTML cards (`ConversationLayout.live`);
 /// the others keep the height they last had. While heights settle (bodies
 /// arriving, web views measuring their documents) the item the user reads
-/// stays in place, and until the user scrolls that is the newest one.
+/// stays in place, and until the user scrolls that is the top of the
+/// conversation, where an arrival shows (right under the card that opened
+/// it, or on top).
 /// Links under the pointer show in one status label at the bottom of the
 /// pane. The list keeps the keyboard: Space and Shift-Space page through
 /// the conversation (`page(up:)`).
@@ -68,8 +74,14 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// The rows of the cards and of the events: each with its piece of the
     /// timeline.
     private var rows: [MessageID: ConversationRow] = [:]
-    /// The rows of the model's items, in order.
+    /// The rows of the model's items, in the order shown
+    /// (`ConversationLayout.displayOrder`).
     private var itemViews: [NSView] = []
+    /// The user's folds and unfolds of the card that opened the
+    /// conversation on show (`cardSetFolded`), which win over the default
+    /// of `ConversationLayout.displayOrder` until another conversation is
+    /// shown.
+    private var folds: [MessageID: Bool] = [:]
     /// The pane is narrow: the items show the short date.
     private var compactDates = false
     private let statusBox = NSView()
@@ -78,7 +90,8 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     private var spinnerWork: DispatchWorkItem?
     private var settingsTokens: [Settings.ChangeToken] = []
 
-    /// The item kept in view until the user scrolls: the newest, on open.
+    /// What is kept in view until the user scrolls: the top of the
+    /// conversation (`topAnchor`), from when it is opened.
     private var pinned: Anchor?
     /// Where the user was, for a change of the pane's width.
     private var lastAnchor: Anchor?
@@ -134,7 +147,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             clamp.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
         // The user scrolled: from now on the item under the viewport's top
-        // is what stays in place, no longer the newest.
+        // is what stays in place, no longer the top of the conversation.
         scroll.onUserScroll = { [weak self] in self?.pinned = nil }
         NotificationCenter.default.addObserver(
             self, selector: #selector(liveScrollStarted(_:)), name: NSScrollView.willStartLiveScrollNotification,
@@ -221,9 +234,11 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         }
     }
 
-    /// A conversation built anew: every item laid out, the newest scrolled
-    /// to (its top at the viewport's top, as far as the stack allows), and
-    /// the cards near it asked for their bodies.
+    /// A conversation built anew (conversation_view.go `open`): what
+    /// opened it first (folded while more follows), then the rest newest
+    /// first, the top of the conversation pinned at the viewport's top, and
+    /// the cards near it asked for their bodies. Nothing below can push the
+    /// newest message out of view while the heights settle.
     private func open() {
         removeAll()
         guard let model = controller.model else { return }
@@ -232,40 +247,47 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         apply(model)
         anchorDepth -= 1
         view.layoutSubtreeIfNeeded()
-        if model.scrollTo >= 0, model.scrollTo < itemViews.count {
-            pinned = Anchor(view: itemViews[model.scrollTo], offset: 0)
-        }
-        restore(pinned ?? Anchor(view: issueBox, offset: 0))
+        pinned = topAnchor
+        restore(pinned)
         updateLive()
     }
 
-    /// The shown conversation changed: the cards are reconciled by id and
-    /// what the user reads stays in place; an arrival while the pane shows
-    /// the end is scrolled to.
+    /// The shown conversation changed (conversation_view.go `update`): the
+    /// cards are reconciled by id and what the user reads stays in place;
+    /// while the pane shows its top, it stays there, so an arrival (under
+    /// the opening card, or on top) is in view.
     private func update() {
         guard let model = controller.model else { return }
-        let atEnd = isAtEnd()
-        let newestBefore = itemViews.last
+        if isAtStart() {
+            pinned = topAnchor
+        }
         preservingAnchor {
             apply(model)
         }
-        if atEnd, let newest = itemViews.last, newest !== newestBefore {
-            pinned = Anchor(view: newest, offset: 0)
-            restore(pinned)
-        }
     }
 
-    /// Puts `model`'s items into the stack, reusing the views of the members
-    /// shown already, each in a row with its piece of the timeline.
+    /// The model's items in the order the pane shows them, and which of
+    /// them opened the conversation.
+    private func shownOrder(_ model: Conversation.Model) -> ConversationLayout.Display {
+        ConversationLayout.displayOrder(model.items.filter { $0.kind == .truncated || $0.id != nil })
+    }
+
+    /// Puts `model`'s items into the stack in the order shown
+    /// (`ConversationLayout.displayOrder`: what opened the conversation,
+    /// then the rest newest first), reusing the views of the members shown
+    /// already, each in a row with its piece of the timeline; the opening
+    /// card folds as the user or the default says (conversation_view.go
+    /// `apply`).
     private func apply(_ model: Conversation.Model) {
         showIssue(model)
-        let items = model.items.filter { $0.kind == .truncated || $0.id != nil }
+        let display = shownOrder(model)
+        let items = display.items
         let rails = ConversationLayout.rails(items)
         let monochrome = state.settings.monochromeAvatars
         var desired: [NSView] = []
         var cardIDs = Set<MessageID>()
         var eventIDs = Set<MessageID>()
-        for (item, rail) in zip(items, rails) {
+        for (i, (item, rail)) in zip(items, rails).enumerated() {
             let row: ConversationRow
             switch item.kind {
             case .truncated:
@@ -274,11 +296,19 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             case .message:
                 guard let id = item.id else { continue }
                 cardIDs.insert(id)
+                // A card that stops being the opener is open, without the
+                // arrow.
+                let opening = i == display.root
+                let folded = folds[id] ?? display.rootFolded
                 if let card = cards[id], let shown = rows[id] {
                     card.update(item)
+                    card.setFold(opening, folded: folded)
                     row = shown
                 } else {
-                    row = ConversationRow(content: makeCard(item, id), mark: .avatar)
+                    let card = makeCard(item, id)
+                    card.setFold(opening, folded: folded)
+                    card.render(controller.loaded[id])
+                    row = ConversationRow(content: card, mark: .avatar)
                     replaceRow(id, row)
                     events[id] = nil
                 }
@@ -316,7 +346,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         if !desired.contains(where: { $0 === truncatedItem }) {
             detach(truncatedItem)
         }
-        // The stack after the issue box, in the model's order.
+        // The stack after the issue box, in the order shown.
         for (i, v) in desired.enumerated() {
             let at = i + 1
             let arranged = stack.arrangedSubviews
@@ -344,7 +374,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// changed).
     private func applyRails() {
         guard let model = controller.model else { return }
-        let items = model.items.filter { $0.kind == .truncated || $0.id != nil }
+        let items = shownOrder(model).items
         let monochrome = state.settings.monochromeAvatars
         for (item, rail) in zip(items, ConversationLayout.rails(items)) {
             let row = item.kind == .truncated ? truncatedItem : item.id.flatMap { rows[$0] }
@@ -352,12 +382,12 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         }
     }
 
+    /// The card of `item`, yet to be folded and rendered (`apply`).
     private func makeCard(_ item: Conversation.Item, _ id: MessageID) -> ConversationCardView {
         let card = ConversationCardView(item)
         card.host = self
         card.compactDate = compactDates
         card.refreshActions()
-        card.render(controller.loaded[id])
         cards[id] = card
         return card
     }
@@ -381,6 +411,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         events = [:]
         rows = [:]
         itemViews = []
+        folds = [:]
         pinned = nil
         lastAnchor = nil
         issueBox.isHidden = true
@@ -451,9 +482,19 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
 
     // MARK: Scroll position
 
+    /// The top of the conversation (conversation_view.go `topAnchor`): the
+    /// issue card of a Jira conversation, else the first item shown (the
+    /// card that opened it, or the newest). It is the top of the document,
+    /// so the pane's inset above that item stays in view too, and whatever
+    /// the model puts on top later is what the pane shows.
+    private var topAnchor: Anchor {
+        Anchor(view: clamp, offset: 0)
+    }
+
     /// Runs `change` (which alters heights) and brings the item the user
-    /// reads back to where it was on screen (the pinned one until the user
-    /// scrolls). Nested changes are laid out once, by the outermost.
+    /// reads back to where it was on screen (the top of the conversation
+    /// until the user scrolls). Nested changes are laid out once, by the
+    /// outermost.
     private func preservingAnchor(_ change: () -> Void) {
         if anchorDepth > 0 {
             change()
@@ -497,9 +538,10 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         v.convert(v.bounds, to: clamp)
     }
 
-    private func isAtEnd() -> Bool {
-        let clip = scroll.contentView.bounds
-        return clip.maxY >= clamp.frame.height - 1
+    /// The viewport is at the top of the conversation, where an arrival
+    /// shows.
+    private func isAtStart() -> Bool {
+        scroll.contentView.bounds.minY < 1
     }
 
     @objc private func clipBoundsChanged(_ note: Notification) {
@@ -550,7 +592,8 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// Asks for the bodies of the cards near the viewport, gives web views
     /// to the nearest HTML cards and takes them from the rest
     /// (`ConversationLayout.live`), and lets go of far entries beyond the
-    /// controller's budget.
+    /// controller's budget. A folded card is none of them: no body, no
+    /// view while folded (`ConversationCardView.setFolded`).
     private func updateLive() {
         guard controller.model != nil else { return }
         let clip = scroll.contentView.bounds
@@ -558,7 +601,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         var frames: [ConversationLayout.Span] = []
         var html: [Bool] = []
         for v in itemViews {
-            guard let card = (v as? ConversationRow)?.content as? ConversationCardView else { continue }
+            guard let card = (v as? ConversationRow)?.content as? ConversationCardView, !card.folded else { continue }
             let f = frameInDocument(card)
             ordered.append(card)
             frames.append(ConversationLayout.Span(Double(f.minY), Double(f.maxY)))
@@ -633,12 +676,27 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         Typo.body(zoom: state.settings.textZoom, monospace: state.settings.monospacePlainText)
     }
 
+    var assistant: AssistantController { state.assistant }
+
     func actions(for s: MessageSummary) -> Capabilities.Actions {
         controller.actions(for: s)
     }
 
+    func held(_ id: MessageID) -> LoadedMessage? {
+        controller.loaded[id]
+    }
+
     func cardNeedsDetails(_ card: ConversationCardView) {
         controller.needsBody(card.id, details: true)
+    }
+
+    /// conversation_view.go `setCardFolded`. The card changes its height
+    /// through `cardHeightChanging`, which keeps what the user reads in
+    /// place and has the live cards looked at again: an opened card is
+    /// asked for its body.
+    func cardSetFolded(_ card: ConversationCardView, _ folded: Bool) {
+        folds[card.id] = folded
+        card.setFolded(folded)
     }
 
     func cardHeightChanging(_ change: () -> Void) {
