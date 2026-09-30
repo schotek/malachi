@@ -318,13 +318,9 @@ gets the sanitiser's output only.
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
             Visibility="{x:Bind local:ReaderBind.Visible(Reader.RemoteBarVisible), Mode=OneWay}">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <!-- The buttons under the sentence when the pane is too narrow
+                 for both (BarPanel). -->
+            <local:BarPanel LineSpacing="6" Spacing="12">
                 <!-- Named with the bar's sentence (Loading remote images…),
                      as the body's spinner is named. -->
                 <ProgressRing
@@ -338,7 +334,6 @@ gets the sanitiser's output only.
                     Visibility="{x:Bind local:ReaderBind.Visible(Reader.RemoteBarLoading), Mode=OneWay}" />
                 <TextBlock
                     x:Name="RemoteLabel"
-                    Grid.Column="1"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="RemoteLabel"
                     Style="{StaticResource BodyLabelStyle}"
@@ -346,7 +341,6 @@ gets the sanitiser's output only.
                     TextWrapping="Wrap" />
                 <Button
                     x:Name="RemoteLoad"
-                    Grid.Column="2"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="LoadImagesButton"
                     Click="OnLoadImages"
@@ -354,14 +348,13 @@ gets the sanitiser's output only.
                     l:MnemonicLabel.Text="{l:T Msgid='Load _Images'}" />
                 <Button
                     x:Name="RemoteTrust"
-                    Grid.Column="3"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="TrustSenderButton"
                     Click="OnTrustSender"
                     ToolTipService.ToolTip="{l:T Msgid='Load remote images now and whenever this sender writes'}"
                     Visibility="{x:Bind local:ReaderBind.TrustVisible(Reader.RemoteBarLoading, Reader.TrustVisible), Mode=OneWay}"
                     l:MnemonicLabel.Text="{l:T Msgid='Always From This _Sender'}" />
-            </Grid>
+            </local:BarPanel>
         </Border>
 
         <!-- pictures_bar (window/remote.go): how many pictures the HTML
@@ -379,12 +372,7 @@ gets the sanitiser's output only.
             BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
             BorderThickness="0,0,0,1"
             Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarVisible), Mode=OneWay}">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
+            <local:BarPanel LineSpacing="6" Spacing="12">
                 <!-- Named with the bar's sentence (Downloading pictures…),
                      as the remote-image bar's spinner is named. -->
                 <ProgressRing
@@ -398,7 +386,6 @@ gets the sanitiser's output only.
                     Visibility="{x:Bind local:ReaderBind.Visible(Reader.PicturesBarLoading), Mode=OneWay}" />
                 <TextBlock
                     x:Name="PicturesLabel"
-                    Grid.Column="1"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="PicturesLabel"
                     Style="{StaticResource BodyLabelStyle}"
@@ -406,13 +393,12 @@ gets the sanitiser's output only.
                     TextWrapping="Wrap" />
                 <Button
                     x:Name="PicturesDownload"
-                    Grid.Column="2"
                     VerticalAlignment="Center"
                     AutomationProperties.AutomationId="DownloadPicturesButton"
                     Click="OnDownloadPictures"
                     Visibility="{x:Bind local:ReaderBind.Hidden(Reader.PicturesBarLoading), Mode=OneWay}"
                     l:MnemonicLabel.Text="{l:T Msgid='_Download Pictures'}" />
-            </Grid>
+            </local:BarPanel>
         </Border>
 
         <!-- message_stack. -->

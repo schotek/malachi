@@ -449,6 +449,7 @@ confirmation dialogs.
 | In the panel's answers, `code` is in the monospaced face without a tinted background | Monospaced on a light tint | A WinUI text run has no background |
 | A link the Assistant hands over is at most 32 000 characters | No limit | Windows' limit of a command line, which the link's handler must fit (the prompts are far shorter) |
 | An open assistant panel beside the panes takes its width from them: they are laid out for what it leaves (the sidebar folds below 900 px of it), and the list narrows, not below its minimum, so that the message pane keeps the width its buttons need | The breakpoints follow the window, and the panes' minimum widths keep the header bar's buttons whole | WinUI cuts off what does not fit instead of asking the window for room |
+| The remote-image and pictures bars put their buttons under the sentence, at the end and on as many lines as they need, when the pane leaves the sentence less than about 160 px | One row; the label never breaks a word, and the bar asks the window for the room | WinUI gives the sentence what is left, down to a letter a line (`Reader/BarPanel.cs`) |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK, and a masked link is confirmed before it opens; those are security
