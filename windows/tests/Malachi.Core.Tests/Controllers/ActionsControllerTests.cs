@@ -19,7 +19,9 @@
 // draftOpensForEditing's activation of the row through
 // ListController.activate; the model rule it goes by is checked instead.
 // Beyond Swift: the message windows hear of every seen change (SeenChanged,
-// GTK refreshSeen, which macOS leaves to AppKit's menu validation), and a
+// GTK refreshSeen, which macOS leaves to AppKit's menu validation), reading,
+// trashing and moving withdraw the notifications only once the daemon
+// agreed (actions.go's callThen success halves), and a
 // confirmation that fails runs nothing and is logged, and the assistant
 // panel's Open Draft stops at the last page and after the page limit
 // (assistant_panel.go findDraft). The cache is the real MessageCache, as in
@@ -119,6 +121,40 @@ public sealed class ActionsControllerTests
         Assert.Equal(0, h.Unread(Inbox));
         Assert.Equal("m2:true", h.Log.Seen[^1]);
         Assert.Equal(10, h.Log.Seen.Count);
+    }
+
+    [Fact]
+    public async Task ReadingTrashingAndMovingWithdrawTheNotifications()
+    {
+        await using var h = await StartAsync(messages: In(Inbox, Msg("m1", 1), Msg("m2", 2), Msg("m3", 3), Msg("m4", 4)));
+
+        // Read: withdrawn once the daemon agreed; marking unread withdraws nothing.
+        await h.Run(() => h.Actions.SetSeen(["m1"], true));
+        await h.IdleAsync();
+        Assert.Equal(["m1"], IdsOf(h.Mailbox.Withdrawn));
+        await h.Run(() => h.Actions.SetSeen(["m1"], false));
+        await h.IdleAsync();
+        Assert.Equal(["m1"], IdsOf(h.Mailbox.Withdrawn));
+
+        // A refused change withdraws nothing.
+        h.Fixture.Fail(API.MessageFlag.Name, Error(ErrorCode.ServerError, "500"));
+        await h.Run(() => h.Actions.SetSeen(["m2"], true));
+        await h.IdleAsync();
+        Assert.Equal(["m1"], IdsOf(h.Mailbox.Withdrawn));
+        h.Fixture.Succeed(API.MessageFlag.Name);
+
+        // Trashed and archived: withdrawn with the move.
+        await h.Run(() => h.Actions.Trash(["m2"], "s-m2"));
+        await h.IdleAsync();
+        await h.Run(() => h.Actions.Archive(["m3"]));
+        await h.IdleAsync();
+        Assert.Equal(["m1", "m2", "m3"], IdsOf(h.Mailbox.Withdrawn));
+
+        // A refused move withdraws nothing.
+        h.Fixture.Fail(API.MessageMove.Name, Error(ErrorCode.ServerError, "500"));
+        await h.Run(() => h.Actions.Archive(["m4"]));
+        await h.IdleAsync();
+        Assert.Equal(["m1", "m2", "m3"], IdsOf(h.Mailbox.Withdrawn));
     }
 
     [Fact]

@@ -405,6 +405,11 @@ internal sealed class ActionsControllerHarness : IAsyncDisposable
             List!.RefreshOutboxViews(acc);
         });
 
+        /// <summary>The messages whose notifications the actions withdrew, in order.</summary>
+        public List<MessageId> Withdrawn { get; } = [];
+
+        public void WithdrawNotifications(IReadOnlyList<MessageId> ids) => Withdrawn.AddRange(ids);
+
         private static T Required<T>(Outcome<T> outcome) =>
             outcome.TryGetValue(out var value, out var error) ? value : throw new InvalidOperationException("the fixture failed a load", error);
     }

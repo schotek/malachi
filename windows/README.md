@@ -22,7 +22,8 @@ message windows and attached messages, attachments with a previewer of
 the app's own (those the daemon keeps on the mail server downloaded when
 they are opened, saved or forwarded, and the pictures it keeps there on
 request), message actions with context menus, notifications with the
-system's new-mail sound, compose with the rich-text editor, drafts (kept
+system's new-mail sound (withdrawn once their message is read, moved or
+deleted, here or elsewhere), compose with the rich-text editor, drafts (kept
 in the Drafts folder and opened from it for editing), reply and forward
 with the quoted original, `mailto:` links and the *Default apps*
 registration, the Preferences window, launch at login, running in the

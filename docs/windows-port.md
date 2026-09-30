@@ -1448,6 +1448,27 @@ exception types, and whatever `IsSupported`, `Register`, `Show` or
 0x8007007E, with an icon Windows cannot read a `FileNotFoundException`
 0x80070002; the app starts either way).
 
+Outdated notifications are withdrawn, as in GTK and macOS (notify.go
+`withdrawNotifications`, 2026-09-28): a message that arrives read shows
+nothing, and `NotificationPolicy.Deliver` says whether it asked for a
+toast, which `PlatformServices` hands to the mailbox
+(`PlatformContext.NotificationShown`,
+`MailboxController.RecordNotification`). The mailbox keeps the last 50
+notified messages with their folder (`NotifiedMessages`, the port of
+`notified.go`; the oldest pushed out is withdrawn) and withdraws them when
+the actions read, trash, archive or junk them (on the daemon's success),
+after each sync pass of the account when `message.get` says the message
+was read, left its folder or is gone (one check per account at a time, an
+answer that tells nothing ends it until the next pass), for the selected
+folder when the main window becomes active or a folder is selected in it,
+and for accounts removed or paused. `PlatformServices.WithdrawNotifications`
+turns the messages into their tags (`DesktopNotification.TagOf`, the same
+as the toast's) and `NotificationService.Withdraw` removes each with
+`AppNotificationManager.RemoveByTagAsync`; a tag without a toast is no
+error. The main window's activation is handled after the window tracker
+took it (`Integration.WireNotifications`, through the UI queue), so the
+window counts as active.
+
 **Background, tray, launch at login.** `DispatcherShutdownMode.OnExplicitShutdown`;
 one main window for the process, hidden on close when *Run in background*
 is on (otherwise the last visible window quits, the GApplication rule). While

@@ -14,7 +14,8 @@
 // applySyncState, triggerSync, triggerAccountSync, startSync), outbox.go
 // (trackOutbox, cancelSendFrom), status.go (showOutbox), window.go
 // (refreshListTitle, showConnectionState's data side) and actions.go
-// (callThen).
+// (callThen); the notifications' withdrawal is
+// MailboxController.Notifications.cs.
 //
 // What changes on Windows (docs/windows-port.md §7): the RPC plumbing is a
 // ControllerScope the list half (MailboxController.List.cs) and the actions
@@ -393,6 +394,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             Model.Folders.Clear();
             Model.FolderErr.Clear();
             HasAccounts = res.Accounts.Count > 0;
+            WithdrawAccountNotifications();
             AccountsLoaded?.Invoke(this, res.Accounts);
             // sync.status may have answered before the accounts were known,
             // and the status line and its popover follow the account set
@@ -637,10 +639,12 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
 
     /// <summary>
     /// Makes <paramref name="k"/> the current folder (folders.go
-    /// <c>selectFolder</c>): highlights its row, announces it and loads its
-    /// messages. Idempotent for the already selected and listed folder,
-    /// which only re-highlights the row and refreshes the title, whose
-    /// counts a folder reload may have changed.
+    /// <c>selectFolder</c>): highlights its row, announces it, loads its
+    /// messages and, while the main window is active, withdraws the folder's
+    /// notifications (<see cref="WithdrawViewedNotifications"/>). Idempotent
+    /// for the already selected and listed folder, which only re-highlights
+    /// the row and refreshes the title, whose counts a folder reload may
+    /// have changed.
     /// </summary>
     private void Select(FolderKey k)
     {
@@ -655,6 +659,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         FolderSelected?.Invoke(this, new FolderSelection(k, Model.SelectedFav));
         Highlight(k, Model.SelectedFav);
         RequestReloadMessages();
+        WithdrawViewedNotifications();
     }
 
     /// <summary>Nothing selected any more: clears the highlight and the list.</summary>
@@ -1046,10 +1051,11 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
 
     /// <summary>
     /// Runs when an account leaves the syncing state (folders.go
-    /// <c>onSyncFinished</c>): folders are reloaded and, when the synced
-    /// folder is the selected one (or the whole account was synced), the
-    /// list. A virtual folder of a Jira account shows issues of every space,
-    /// so any pass of its account reloads it.
+    /// <c>onSyncFinished</c>): folders are reloaded, the account's
+    /// notifications are checked (<see cref="VerifyNotifications"/>) and,
+    /// when the synced folder is the selected one (or the whole account was
+    /// synced), the list. A virtual folder of a Jira account shows issues of
+    /// every space, so any pass of its account reloads it.
     /// </summary>
     internal void OnSyncFinished(SyncState? prev, SyncState cur)
     {
@@ -1058,6 +1064,7 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
             return;
         }
         LoadFolders(cur.AccountId, Model.FoldersGen);
+        VerifyNotifications(cur.AccountId);
         if (Model.Selected is { } sel && sel.Account == cur.AccountId
             && (cur.FolderId is null || cur.FolderId == sel.Folder || IsVirtual(sel)))
         {

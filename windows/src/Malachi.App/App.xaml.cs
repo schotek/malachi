@@ -143,6 +143,9 @@ public partial class App : Application
             Settings = s.Settings,
             Notifications = s.Notifications,
             IsMainWindowActive = () => s.IsMainWindowActive,
+            // The mailbox remembers the notification, to withdraw it once it
+            // is outdated (the integration exists before the first message).
+            NotificationShown = n => s.Integration?.Mailbox.RecordNotification(n),
             ShowMainWindow = s.ShowMainWindow,
             // As app.compose: only while an account writes mail (CanComposeNew).
             NewMessage = () =>

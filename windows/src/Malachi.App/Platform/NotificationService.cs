@@ -33,9 +33,14 @@
 // The toast is plain text only: the title and body are mail data (the
 // sender, the subject), which AppNotificationBuilder escapes into its XML.
 // The sound is the app's own switch (NewMailSound), so the toast is muted.
+// An outdated toast is withdrawn by its tag (Withdraw; notify.go
+// WithdrawNotification, Swift removeDeliveredNotifications), which the
+// mailbox asks for (MailboxController.Notifications.cs).
 
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Malachi.Core;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Notifications;
@@ -116,6 +121,37 @@ internal sealed partial class NotificationService : IDesktopNotifier
 #pragma warning restore CA1031
         {
             LogNotShown(logger, e.HResult, e);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Withdraw(IReadOnlyList<string> tags)
+    {
+        ArgumentNullException.ThrowIfNull(tags);
+        if (!supported || tags.Count == 0)
+        {
+            return;
+        }
+        _ = RemoveAsync([.. tags]);
+    }
+
+    // AppNotificationManager.RemoveByTagAsync, one tag after another (the
+    // toast of a message is its tag, DesktopNotification.TagOf); a tag with
+    // no toast under it is no error. Nothing is thrown back.
+    private async Task RemoveAsync(string[] tags)
+    {
+        foreach (var tag in tags)
+        {
+            try
+            {
+                await AppNotificationManager.Default.RemoveByTagAsync(tag);
+            }
+#pragma warning disable CA1031 // A notification that stays is logged; nothing else depends on it.
+            catch (Exception e)
+#pragma warning restore CA1031
+            {
+                LogNotWithdrawn(logger, e.HResult, e);
+            }
         }
     }
 
@@ -221,6 +257,9 @@ internal sealed partial class NotificationService : IDesktopNotifier
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: a notification was not shown (0x{HResult:X8})")]
     private static partial void LogNotShown(ILogger logger, int hResult, Exception error);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "notifications: an outdated notification was not withdrawn (0x{HResult:X8})")]
+    private static partial void LogNotWithdrawn(ILogger logger, int hResult, Exception error);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "notifications: the click handler failed")]
     private static partial void LogHandlerFailed(ILogger logger, Exception error);

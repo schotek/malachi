@@ -5,7 +5,8 @@
 // (deliver); GTK: ui/internal/window/notify.go (notifyNewMessage) and
 // window.go (playNewMailSound). The rules are GTK's: nothing at all while
 // the user is looking at the main window (Window.IsActive; Swift
-// isMainWindowKey), then the notification behind desktop-notifications and,
+// isMainWindowKey) or for a message that arrives read, then the
+// notification behind desktop-notifications and,
 // independently of it, the sound behind notification-sound. Moved out of the
 // view layer, where macOS keeps it untested (docs/windows-port.md §7.4); the
 // toast and the sound are behind IDesktopNotifier and INewMailSound.
@@ -15,6 +16,7 @@
 
 using System;
 using Malachi.Core.Api;
+using Malachi.Core.Model;
 using Malachi.Core.Settings;
 
 namespace Malachi.Core.Presentation;
@@ -54,17 +56,21 @@ public sealed class NotificationPolicy
 
     /// <summary>
     /// Shows a desktop notification (and plays the sound) for a new message
-    /// unless the user is looking at the main window right now (Swift
-    /// <c>deliver</c>, notify.go <c>notifyNewMessage</c>).
+    /// unless the user is looking at the main window right now, or has read
+    /// the message elsewhere before it arrived here (Swift <c>deliver</c>,
+    /// notify.go <c>notifyNewMessage</c>). True when a notification was
+    /// asked for, for the caller to remember, so that it can be withdrawn
+    /// once it is outdated (<c>MailboxController.RecordNotification</c>).
     /// </summary>
-    public void Deliver(NewMessageNotification n)
+    public bool Deliver(NewMessageNotification n)
     {
         ArgumentNullException.ThrowIfNull(n);
-        if (isMainWindowActive())
+        if (isMainWindowActive() || FolderTree.HasFlag(n.Message.Flags, Flag.Seen))
         {
-            return;
+            return false;
         }
-        if (settings.DesktopNotifications)
+        var posted = settings.DesktopNotifications;
+        if (posted)
         {
             notifier.Show(DesktopNotification.For(n));
         }
@@ -72,5 +78,6 @@ public sealed class NotificationPolicy
         {
             sound.Play();
         }
+        return posted;
     }
 }

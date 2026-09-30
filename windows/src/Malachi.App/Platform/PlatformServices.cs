@@ -21,7 +21,8 @@
 //   UI thread:          SetRunningInBackground(true) when the main window is
 //                       hidden in the background (closed with Run in
 //                       Background, or never shown after --background), false
-//                       when it is shown again;
+//                       when it is shown again; WithdrawNotifications(ids)
+//                       when the mailbox finds notifications outdated;
 //   on the way out:     Stop(), on the UI thread (Main's thread after
 //                       Application.Start returned is the same one).
 // LaunchAtLogin, Mailto and OpenDefaultApps are for Preferences.
@@ -34,9 +35,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Security;
 using System.Threading;
 using System.Threading.Tasks;
+using Malachi.Core.Api;
 using Malachi.Core.Presentation;
 using Malachi.Platform.Windows.Notifications;
 using Malachi.Platform.Windows.Registration;
@@ -63,6 +66,7 @@ public static partial class PlatformServices
     private static List<NotificationActivation>? early = [];
     private static DispatcherQueue? dispatcher;
     private static PlatformContext? current;
+    private static IDesktopNotifier? notifier;
     private static IDisposable? newMessage;
     private static BackgroundTray? tray;
     private static bool background;
@@ -154,9 +158,17 @@ public static partial class PlatformServices
             LogNotInitialized(logger);
         }
         var exe = ExecutablePath;
-        IDesktopNotifier notifier = notifications is { } n ? n : new NoNotifier();
+        notifier = notifications is { } n ? n : new NoNotifier();
         var policy = new NotificationPolicy(context.Settings, context.IsMainWindowActive, notifier, new NewMailSound(logger));
-        newMessage = context.Notifications.AddNewMessage(policy.Deliver);
+        // A notification that was shown is remembered, so that it can be
+        // withdrawn once it is outdated (WithdrawNotifications).
+        newMessage = context.Notifications.AddNewMessage(m =>
+        {
+            if (policy.Deliver(m))
+            {
+                context.NotificationShown?.Invoke(m);
+            }
+        });
         tray = new BackgroundTray(context, queue, exe, logger);
         tray.SetVisible(background);
         var selfRegistration = SelfRegistration.IsAllowed();
@@ -173,6 +185,19 @@ public static partial class PlatformServices
         {
             Deliver(activation);
         }
+    }
+
+    /// <summary>
+    /// Withdraws the desktop notifications of these messages from the
+    /// notification centre (notify.go <c>WithdrawNotification</c>), by the
+    /// tags they were shown with (<see cref="DesktopNotification.TagOf"/>).
+    /// The mailbox decides which (MailboxController.Notifications.cs). Call
+    /// it on the UI thread; nothing before <see cref="Start"/>. Never throws.
+    /// </summary>
+    public static void WithdrawNotifications(IReadOnlyList<MessageId> ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        notifier?.Withdraw([.. ids.Select(DesktopNotification.TagOf)]);
     }
 
     /// <summary>
@@ -201,6 +226,7 @@ public static partial class PlatformServices
         Quietly("the notification-area icon", () => icon?.Dispose());
         var handler = newMessage;
         newMessage = null;
+        notifier = null;
         Quietly("the notify.newMessage handler", () => handler?.Dispose());
         NotificationService? service;
         lock (Gate)
@@ -349,6 +375,10 @@ public static partial class PlatformServices
     private sealed class NoNotifier : IDesktopNotifier
     {
         public void Show(DesktopNotification notification)
+        {
+        }
+
+        public void Withdraw(IReadOnlyList<string> tags)
         {
         }
     }

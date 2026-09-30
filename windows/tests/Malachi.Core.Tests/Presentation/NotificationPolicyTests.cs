@@ -5,10 +5,12 @@
 // (notifyNewMessage) and macos/Sources/MalachiMail/Notifications/
 // NotificationService.swift (deliver), which neither GTK nor macOS tests
 // (notify_test.go and NotificationTextTests cover only the texts, in
-// NotificationTextTests here): nothing while the main window is active,
-// the notification behind desktop-notifications, the sound behind
-// notification-sound and independent of it (the parity report's N2).
-// Windows-only: the sound is skipped in quiet hours, the notification not.
+// NotificationTextTests here): nothing while the main window is active or
+// for a message that arrives read, the notification behind
+// desktop-notifications, the sound behind notification-sound and
+// independent of it (the parity report's N2). Windows-only: the sound is
+// skipped in quiet hours, the notification not; the tag that shows a
+// notification is the one that withdraws it.
 
 using System;
 using System.Collections.Generic;
@@ -35,7 +37,8 @@ public sealed class NotificationPolicyTests
         var h = new Harness { Active = active, Quiet = quiet };
         h.Settings.DesktopNotifications = notifications;
         h.Settings.NotificationSound = sound;
-        h.Policy.Deliver(New("m1"));
+        // True exactly when a notification was asked for (the caller records it).
+        Assert.Equal(shown, h.Policy.Deliver(New("m1")));
         Assert.Equal(shown ? 1 : 0, h.Notifier.Shown.Count);
         Assert.Equal(played ? 1 : 0, h.Sound.Played);
         // Quiet hours are only asked about for a sound that would play.
@@ -56,6 +59,31 @@ public sealed class NotificationPolicyTests
     }
 
     [Fact]
+    public void AMessageReadElsewhereBeforeItArrivedIsNotAnnounced()
+    {
+        // notify.go notifyNewMessage: read on another device (or flagged
+        // seen by a server rule) before it reached this daemon.
+        var h = new Harness();
+        h.Settings.NotificationSound = true;
+        Assert.False(h.Policy.Deliver(New("m1", flags: [Flag.Seen])));
+        Assert.Empty(h.Notifier.Shown);
+        Assert.Equal(0, h.Sound.Played);
+        Assert.True(h.Policy.Deliver(New("m2", flags: [Flag.Flagged])));
+        Assert.Single(h.Notifier.Shown);
+    }
+
+    [Fact]
+    public void AMessagesTagIsWhatWithdrawsIt()
+    {
+        Assert.Equal("message-m_123", DesktopNotification.TagOf(new MessageId("m_123")));
+        // An id too long for a tag is shortened the same way for both.
+        var id = new string('x', 90);
+        var tag = DesktopNotification.TagOf(new MessageId(id));
+        Assert.Equal(DesktopNotification.MaxIdentifierLength, tag.Length);
+        Assert.Equal(DesktopNotification.For(New(id)).Tag, tag);
+    }
+
+    [Fact]
     public void TheSettingsAndTheWindowAreReadForEveryMessage()
     {
         var h = new Harness();
@@ -72,7 +100,7 @@ public sealed class NotificationPolicyTests
         Assert.Equal(2, h.Sound.Played);
     }
 
-    private static NewMessageNotification New(string id, string? from = null, string subject = "s") => new()
+    private static NewMessageNotification New(string id, string? from = null, string subject = "s", Flag[]? flags = null) => new()
     {
         AccountId = new AccountId("acc"),
         FolderId = new FolderId("f"),
@@ -85,6 +113,7 @@ public sealed class NotificationPolicyTests
             Subject = subject,
             Date = DateTimeOffset.MinValue,
             Snippet = "",
+            Flags = flags ?? [],
             HasAttachments = false,
             Size = 0,
         },
@@ -119,6 +148,10 @@ public sealed class NotificationPolicyTests
         public List<DesktopNotification> Shown { get; } = [];
 
         public void Show(DesktopNotification notification) => Shown.Add(notification);
+
+        public void Withdraw(IReadOnlyList<string> tags)
+        {
+        }
     }
 
     private sealed class RecordingSound : INewMailSound

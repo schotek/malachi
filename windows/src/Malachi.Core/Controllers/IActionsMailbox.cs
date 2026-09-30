@@ -3,15 +3,17 @@
 
 // The part of macos/Sources/MalachiCore/Controllers/MailboxController.swift
 // that ActionsController.swift uses (model, perform, adjustCounts,
-// moveCounts, noteOutboxCancelled, noteOutboxCancelFailed, onOutboxChanged);
-// GTK: the Window fields and methods actions.go and outbox.go reach
-// (model, client, updateFolderRow, outboxCancelled, onOutboxChanged).
+// moveCounts, noteOutboxCancelled, noteOutboxCancelFailed, onOutboxChanged,
+// withdrawNotifications); GTK: the Window fields and methods actions.go and
+// outbox.go reach (model, client, updateFolderRow, outboxCancelled,
+// onOutboxChanged, withdrawNotifications).
 //
 // Swift's ActionsController holds the MailboxController itself. The C#
 // controllers of the main window are written side by side, so the actions
 // name the members they use here, and the mailbox controller implements
 // them; nothing else stands between the two.
 
+using System.Collections.Generic;
 using Malachi.Core.Api;
 using Malachi.Core.Controllers.Infrastructure;
 using Malachi.Core.Model;
@@ -69,4 +71,11 @@ public interface IActionsMailbox
     /// folders are reloaded and the views showing the outbox refreshed.
     /// </summary>
     void OnOutboxChanged(AccountId acc);
+
+    /// <summary>
+    /// The messages were read, moved or trashed here: their desktop
+    /// notifications, if the app still shows any, are withdrawn (notify.go
+    /// <c>withdrawNotifications</c>).
+    /// </summary>
+    void WithdrawNotifications(IReadOnlyList<MessageId> ids);
 }

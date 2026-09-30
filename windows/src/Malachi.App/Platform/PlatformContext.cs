@@ -9,6 +9,7 @@
 // showMainWindow in macos/Sources/MalachiMail/App/AppState.swift.
 
 using System;
+using Malachi.Core.Api;
 using Malachi.Core.Presentation;
 using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -33,6 +34,13 @@ public sealed class PlatformContext
     /// no notification and no sound then (notify.go <c>w.IsActive()</c>).
     /// </summary>
     public required Func<bool> IsMainWindowActive { get; init; }
+
+    /// <summary>
+    /// A desktop notification was shown for this message: the mailbox
+    /// remembers it, to withdraw it once it is outdated (the tail of
+    /// notify.go <c>notifyNewMessage</c>; MailboxController.RecordNotification).
+    /// </summary>
+    public Action<NewMessageNotification>? NotificationShown { get; init; }
 
     /// <summary>
     /// Shows the main window, creating it if needed, and brings it to the

@@ -22,9 +22,11 @@
 
 using System;
 using System.Collections.Generic;
+using Malachi.App.Platform;
 using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 
 namespace Malachi.App.Shell;
 
@@ -149,13 +151,32 @@ public sealed partial class Integration : IDisposable
         }));
     }
 
-    // window/notify.go handleNotification.
+    // window/notify.go handleNotification, and the withdrawal of outdated
+    // desktop notifications: the mailbox decides which, the platform removes
+    // them; the main window becoming active counts as viewing the selected
+    // folder (window.go, is-active). The activation is handled after the
+    // window tracker has taken it, so the window counts as active.
     private void WireNotifications()
     {
         var hub = state.Notifications;
         // GTK order: the desktop notification first (PlatformServices subscribed
         // before this), then the list.
         tokens.Add(hub.AddNewMessage(Mailbox.HandleNewMessage));
+        Mailbox.OnWithdrawNotifications = PlatformServices.WithdrawNotifications;
+        Mailbox.IsMainWindowActive = () => state.IsMainWindowActive;
+        mainWindow.Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+            {
+                mainWindow.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!Mailbox.Scope.IsClosed)
+                    {
+                        Mailbox.WithdrawViewedNotifications();
+                    }
+                });
+            }
+        };
         tokens.Add(hub.AddSyncState(Mailbox.HandleSyncState));
         tokens.Add(hub.AddAuthRequired(Mailbox.HandleAuthRequired));
         tokens.Add(hub.AddMessagesChanged(Mailbox.HandleMessagesChanged));

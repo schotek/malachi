@@ -208,7 +208,8 @@ public sealed partial class ActionsController
     /// Changes the seen flag of the messages that do not have it so yet,
     /// optimistically (rows, unread badge of the folder, commands, the
     /// message windows through <see cref="SeenChanged"/>), and sends one
-    /// <c>message.flag</c>; a failure puts everything back (actions.go
+    /// <c>message.flag</c>; a failure puts everything back, success in
+    /// marking read withdraws their desktop notifications (actions.go
     /// <c>setSeenIDs</c>). The messages are of one folder (a conversation
     /// row's members are).
     /// </summary>
@@ -262,7 +263,14 @@ public sealed partial class ActionsController
             API.MessageFlag,
             new MessageFlagParams { AccountId = k.Account, MessageIds = changing, Set = change.Set, Clear = change.Clear },
             what,
-            onError: _ => Apply(!seen));
+            onError: _ => Apply(!seen),
+            onOk: _ =>
+            {
+                if (seen)
+                {
+                    Mailbox.WithdrawNotifications(changing);
+                }
+            });
     }
 
     // Flagged
@@ -389,8 +397,8 @@ public sealed partial class ActionsController
     }
 
     // The confirmed half of Trash: the rows go at once, the windows close,
-    // the folder counts follow, message.delete runs and a failure puts
-    // everything back.
+    // the folder counts follow, message.delete runs, a failure puts
+    // everything back and success withdraws the desktop notifications.
     private void MoveToTrash(List<MessageSummary> msgs)
     {
         MessageId[] ids = [.. msgs.Select(s => s.Id)];
@@ -412,11 +420,16 @@ public sealed partial class ActionsController
         var what = n == 1
             ? L10n.T("Moving the message to Trash")
             : L10n.N("Moving %d message to Trash", "Moving %d messages to Trash", n);
-        Call(API.MessageDelete, new MessageDeleteParams { AccountId = acc, MessageIds = ids }, what, onError: _ =>
-        {
-            restore();
-            undo();
-        });
+        Call(
+            API.MessageDelete,
+            new MessageDeleteParams { AccountId = acc, MessageIds = ids },
+            what,
+            onError: _ =>
+            {
+                restore();
+                undo();
+            },
+            onOk: _ => Mailbox.WithdrawNotifications(ids));
     }
 
     /// <summary>
@@ -506,9 +519,9 @@ public sealed partial class ActionsController
     /// error toast, for the number moved; <paramref name="missing"/> is the
     /// toast when the account has no such folder. The rows go at once and
     /// come back on failure; the folder counts follow the messages to the
-    /// target (<see cref="TrackMoves"/>). Outbox messages are left out (the
-    /// daemon refuses moves on them), and a message already in the target
-    /// folder is a no-op.
+    /// target (<see cref="TrackMoves"/>), and success withdraws their desktop
+    /// notifications. Outbox messages are left out (the daemon refuses moves
+    /// on them), and a message already in the target folder is a no-op.
     /// </summary>
     public void MoveToRole(IReadOnlyList<MessageId> ids, FolderRole role, string missing, Func<int, string> what)
     {
@@ -546,7 +559,8 @@ public sealed partial class ActionsController
             {
                 restore();
                 undo();
-            });
+            },
+            onOk: _ => Mailbox.WithdrawNotifications(moving));
     }
 
     // Outbox

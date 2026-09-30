@@ -62,17 +62,23 @@ public sealed record DesktopNotification
     {
         ArgumentNullException.ThrowIfNull(n);
         var (title, body) = NotificationText.Of(n);
-        var message = n.Message.Id.Value ?? "";
         return new DesktopNotification
         {
             Title = title,
             Body = body,
             Group = Identifier(n.AccountId.Value ?? ""),
-            Tag = Identifier("message-" + message),
+            Tag = TagOf(n.Message.Id),
             AccountId = n.AccountId,
             MessageId = n.Message.Id,
         };
     }
+
+    /// <summary>
+    /// The <see cref="Tag"/> of message <paramref name="id"/>'s notification:
+    /// notified.go's <c>notificationID</c> made to fit
+    /// (<see cref="Identifier"/>), which is what withdraws it again.
+    /// </summary>
+    public static string TagOf(MessageId id) => Identifier(NotifiedMessages.NotificationId(id));
 
     /// <summary>
     /// <paramref name="s"/> when it fits <see cref="MaxIdentifierLength"/>
