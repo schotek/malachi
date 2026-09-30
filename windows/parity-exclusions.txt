@@ -75,7 +75,6 @@ folder\004Open	Jira account: macOS first
 Open %s in the Browser	Jira account: macOS first
 Status	Jira account: macOS first
 Unassigned	Jira account: macOS first
-jira value\004None	Jira account: macOS first
 Assignee	Jira account: macOS first
 Priority	Jira account: macOS first
 Type	Jira account: macOS first
