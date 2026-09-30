@@ -71,8 +71,11 @@ public sealed record HostEvent
         /// <summary>A request the gate answered; <see cref="Detail"/>: its status.</summary>
         public const string Request = "request";
 
-        /// <summary>The viewer handed on a link; <see cref="Detail"/>: the attribute as written.</summary>
+        /// <summary>The viewer or a card handed on a link; <see cref="Detail"/>: the attribute as written.</summary>
         public const string Link = "link";
+
+        /// <summary>A conversation card measured its document; <see cref="Detail"/>: the height in CSS pixels, then "viewport" or "-".</summary>
+        public const string Size = "size";
 
         /// <summary>The viewer's hover label changed.</summary>
         public const string Hover = "hover";

@@ -99,6 +99,7 @@ public sealed class ReaderHub : IDisposable
             {
                 reader.IssueBusyChanged(e.Account, e.Key);
             }
+            Conversation?.IssueBusyChanged(e.Account, e.Key);
         };
         integration.Issues.IssueChanged += (_, e) =>
         {
@@ -106,6 +107,7 @@ public sealed class ReaderHub : IDisposable
             {
                 reader.ApplyIssue(e.Account, e.Issue);
             }
+            Conversation?.ApplyIssue(e.Account, e.Issue);
         };
         registry.MakeMessageWindow = s => new MessageWindow(Services, s);
         registry.MakeEmbeddedWindow = (containing, attachment, result) => new EmbeddedMessageWindow(Services, containing, attachment, result);
@@ -113,6 +115,12 @@ public sealed class ReaderHub : IDisposable
         Pane = new MessageView(ReaderMode.Pane, Services, mainWindow.Commands) { HostWindow = mainWindow };
         registry.Track(Pane.Reader);
         mainWindow.Reader = Pane;
+        // The pane's conversation page (window.go conversationPane); the list
+        // keeps the keyboard (a chip that had it gives it back there).
+        Conversation = new Conversation.ConversationView(Services, integration.Conversation, () => mainWindow, mainWindow.FocusMessageList);
+        Pane.HostConversation(Conversation);
+        var conversation = Conversation;
+        mainWindow.SetConversationPaging(up => conversation.Shown && conversation.PageBy(up));
 
         WireMainCommands(mainWindow.Commands, router);
         // win.change-status pops up the Change Status menu of the issue card
@@ -127,6 +135,9 @@ public sealed class ReaderHub : IDisposable
 
     /// <summary>The main window's message pane.</summary>
     public MessageView Pane { get; }
+
+    /// <summary>The pane's conversation page.</summary>
+    internal Conversation.ConversationView? Conversation { get; }
 
     /// <summary>Closes the previewer and lets the pane go; the message windows close with the app.</summary>
     public void Dispose()
@@ -163,8 +174,35 @@ public sealed class ReaderHub : IDisposable
     {
         var list = integration.List;
         var registry = Services.Windows;
+        // window.go onMessageRowSelected → showConversation: a folded
+        // conversation row shows the whole conversation (not while a search
+        // shows its results); any other row clears it and is the
+        // single-message view's. The row is announced before its message.
+        var conversationShown = false;
+        list.SelectedRowChanged += (_, row) =>
+        {
+            var conversation = integration.Conversation;
+            if (row is not { ShowsConversation: true, Key.Thread: { } tid } || list.SearchActive)
+            {
+                conversation.Clear();
+                conversationShown = false;
+                return;
+            }
+            if (conversation.Thread != tid || Pane.Reader.Page != ReaderPage.Conversation)
+            {
+                // The single-message view drops what it showed; a late
+                // answer for it is not rendered.
+                Pane.Reader.LeaveForConversation();
+            }
+            conversation.Show(row);
+            conversationShown = true;
+        };
         list.SelectedMessageChanged += (_, s) =>
         {
+            if (conversationShown)
+            {
+                return;
+            }
             if (s is null)
             {
                 Pane.Reader.Clear();
@@ -178,11 +216,26 @@ public sealed class ReaderHub : IDisposable
         list.ActivateDraft += (_, s) => integration.Actions.OpenDraft(s.Id);
         list.OutboxRefreshed += (_, account) => RefetchOutbox(account);
         integration.Mailbox.AccountsLoaded += (_, accounts) => Pane.Reader.SetHasAccounts(accounts.Count > 0);
-        integration.Cache.MessageLoaded += (_, e) => registry.ShowLoaded(e.Id, e.Loaded);
-        integration.Cache.RemoteBarChanged += (_, e) => registry.RefreshRemoteBar(e.Id, e.Loaded);
+        // The cache's news reach the views and the conversation's card of the
+        // message (window.go conversationShowLoaded, conversationRefreshBars,
+        // conversationRefreshChips).
+        integration.Cache.MessageLoaded += (_, e) =>
+        {
+            registry.ShowLoaded(e.Id, e.Loaded);
+            Conversation?.ShowLoaded(e.Id, e.Loaded);
+        };
+        integration.Cache.RemoteBarChanged += (_, e) =>
+        {
+            registry.RefreshRemoteBar(e.Id, e.Loaded);
+            Conversation?.RefreshBars(e.Id, e.Loaded);
+        };
         // download.go refreshChips: a download began to show its spinner or
         // ended.
-        integration.Cache.ChipsChanged += (_, e) => registry.RefreshChips(e.Id, e.Loaded);
+        integration.Cache.ChipsChanged += (_, e) =>
+        {
+            registry.RefreshChips(e.Id, e.Loaded);
+            Conversation?.RefreshChips(e.Id, e.Loaded);
+        };
     }
 
     // MessageActionsController.installHooks: the message windows follow the

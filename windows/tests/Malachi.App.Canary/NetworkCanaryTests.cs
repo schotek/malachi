@@ -7,7 +7,10 @@
 // the raw corpus make no connection, no DNS lookup, no navigation, no window
 // and no download, in the viewer, the editor and the previewer, and no URL
 // request passes the gate (so the inner layers are checked apart from the
-// resolver rule that hides the rest). The control run shows that the same
+// resolver rule that hides the rest). The conversation card is the viewer's
+// twin (the same profile, gate and settings, its documents served as the
+// viewer's), with the host's size measurement on top. The control run shows
+// that the same
 // document in an unprotected WebView2 does reach the canaries and that the
 // NetLog checks see connections, URL requests and names, so a silent
 // canary means something. The recovery run shows that a renderer that dies
@@ -23,7 +26,10 @@ namespace Malachi.App.Canary;
 
 public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<CanaryFixture>
 {
-    private static readonly string[] Views = ["viewer", "editor", "preview"];
+    private static readonly string[] Views = ["viewer", "editor", "preview", "card"];
+
+    // The views that hand links on (the reader, the conversation view).
+    private static readonly string[] LinkViews = ["viewer", "card"];
 
     // Vectors an unprotected WebView2 reached in every run of the spike
     // (SPIKES.md §2c, column base) and of this canary; the preconnect (a
@@ -141,11 +147,11 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         var results = ProtectedResults();
         foreach (var e in results.Events.Where(e => e.Kind == HostEvent.Kinds.Navigation && e.Stopped == false))
         {
-            Assert.StartsWith("malachi-doc://" + e.View + "/", e.Uri, StringComparison.Ordinal);
+            Assert.StartsWith(DocumentsOf(e.View), e.Uri, StringComparison.Ordinal);
         }
         foreach (var e in results.Events.Where(e => e.Kind is HostEvent.Kinds.Completed or HostEvent.Kinds.Source))
         {
-            Assert.True(e.Uri is null || e.Uri.StartsWith("malachi-doc://" + e.View + "/", StringComparison.Ordinal) || e.Uri == "about:blank",
+            Assert.True(e.Uri is null || e.Uri.StartsWith(DocumentsOf(e.View), StringComparison.Ordinal) || e.Uri == "about:blank",
                 e.Kind + " in " + e.View + " at " + e.Uri);
         }
         Assert.All(results.Events.Where(e => e.Kind is HostEvent.Kinds.Frame or HostEvent.Kinds.ExternalScheme),
@@ -183,6 +189,7 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         var results = ProtectedResults();
         Assert.All(results.Events.Where(e => e.Kind == HostEvent.Kinds.NewWindow), e => Assert.True(e.Stopped, "new window: " + e.Uri));
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "viewer-blank");
+        Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.NewWindow && e.Phase == "card-blank");
         Assert.DoesNotContain(results.Events, e => e.Kind == HostEvent.Kinds.Window);
     }
 
@@ -220,12 +227,12 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         foreach (var e in results.Events.Where(e => e.Kind == HostEvent.Kinds.Request && e.Uri is { } u && !u.StartsWith("shown:", StringComparison.Ordinal)))
         {
             var uri = e.Uri!;
-            if (uri.StartsWith("malachi-doc://" + e.View + "/", StringComparison.Ordinal))
+            if (uri.StartsWith(DocumentsOf(e.View), StringComparison.Ordinal))
             {
                 served += e.Detail == "200" ? 1 : 0;
                 Assert.True(e.Detail is "200" or "403", "document answered " + e.Detail);
             }
-            else if ((e.View == "viewer" && uri.StartsWith("malachi-cid:", StringComparison.Ordinal))
+            else if ((e.View is "viewer" or "card" && uri.StartsWith("malachi-cid:", StringComparison.Ordinal))
                 || (e.View == "editor" && uri.StartsWith("cid:", StringComparison.Ordinal)))
             {
                 // Served (at once when the stand-in fetcher answers
@@ -252,10 +259,34 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
         Assert.Contains(links, e => e.Phase == "viewer-middle" && e.Uri == fixture.Protected.Canary("middle").Origin + "/middle");
         // A form submit and a refresh are not links.
         Assert.DoesNotContain(links, e => e.Phase is "viewer-form" or "viewer-refresh");
-        // Nothing but the viewer hands links on.
-        Assert.All(links, e => Assert.Equal("viewer", e.View));
+        // Nothing but the viewer and the card hands links on; the card's
+        // click reaches the conversation view as the viewer's reaches the
+        // reader, and its hover label too.
+        Assert.All(links, e => Assert.Contains(e.View, LinkViews));
+        Assert.Contains(links, e => e.View == "card" && e.Phase == "card-nav" && e.Uri == nav && e.Detail == nav);
+        Assert.DoesNotContain(links, e => e.Phase is "card-form" or "card-refresh");
         Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Hover && e.Phase == "viewer-hover"
             && e.Detail is { Length: > 0 } d && d.Contains("/hover", StringComparison.Ordinal));
+        Assert.Contains(results.Events, e => e.Kind == HostEvent.Kinds.Hover && e.View == "card" && e.Phase == "card-hover"
+            && e.Detail is { Length: > 0 } d && d.Contains("/hover", StringComparison.Ordinal));
+    }
+
+    // The card's height is the host's measurement of its document (CardSize,
+    // with page script off): a document 500 pixels tall reports at least
+    // that, and at a text zoom of 150 % half as much again (the CSS zoom is
+    // in what the host reads).
+    [Fact]
+    public void TheCardMeasuresItsDocument()
+    {
+        var results = ProtectedResults();
+        static double Height(HostEvent e) => double.Parse(e.Detail!.Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
+        var sizes = results.Events.Where(e => e.Kind == HostEvent.Kinds.Size && e.View == "card").ToList();
+        var plain = sizes.Where(e => e.Phase == "card-size").Select(Height).ToList();
+        Assert.NotEmpty(plain);
+        Assert.InRange(plain.Max(), 500, 540);
+        var zoomed = sizes.Where(e => e.Phase == "card-zoom").Select(Height).ToList();
+        Assert.NotEmpty(zoomed);
+        Assert.InRange(zoomed.Max(), 750, 810);
     }
 
     // The security audit's masked links (F3 §1): the viewer hands each to
@@ -354,6 +385,7 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
     [InlineData("viewer")]
     [InlineData("editor")]
     [InlineData("preview")]
+    [InlineData("card")]
     public void ACrashedRendererShowsTheDocumentAgainOnce(string view)
     {
         var results = RecoveryResults();
@@ -475,7 +507,11 @@ public sealed class NetworkCanaryTests(CanaryFixture fixture) : IClassFixture<Ca
     // The navigation of the view's own document, allowed.
     private static bool IsOwnDocument(HostEvent e, string view) =>
         e.Kind == HostEvent.Kinds.Navigation && e.Stopped == false
-        && e.Uri is { } uri && uri.StartsWith("malachi-doc://" + view + "/", StringComparison.Ordinal);
+        && e.Uri is { } uri && uri.StartsWith(DocumentsOf(view), StringComparison.Ordinal);
+
+    // Where a view's documents are served: its profile's host (a card is in
+    // the viewer's profile, WebViewKind.Viewer).
+    private static string DocumentsOf(string view) => "malachi-doc://" + (view == "card" ? "viewer" : view) + "/";
 
     // The embedded resource of the previewer's own page (its PDF).
     private static bool IsPreviewContent(HostEvent e) =>

@@ -76,11 +76,6 @@ public sealed partial class MessageView : UserControl
     // scroll, and the body keeps the rest.
     private const double HeaderShare = 2.0 / 3.0;
 
-    // Copy Address: another program may hold the clipboard open for a moment
-    // (a clipboard manager, a remote desktop session); tried this many times,
-    // this far apart, as WinForms' Clipboard.SetDataObject does.
-    private const int ClipboardAttempts = 5;
-    private static readonly TimeSpan ClipboardRetryDelay = TimeSpan.FromMilliseconds(50);
 
     private readonly ReaderServices services;
     private readonly WindowCommands? commands;
@@ -93,9 +88,11 @@ public sealed partial class MessageView : UserControl
     // their top.
     private MessageId? headersOf;
 
-    // Save All of the message on display, following AttachmentOpener's run.
-    private Button? saveAllButton;
-    private MessageId? saveAllOf;
+    // The chips of the message on display (MessageChips).
+    private readonly MessageChips chips;
+
+    // The pane's conversation page (window.go convPageName), the pane only.
+    private Conversation.ConversationView? conversation;
 
     /// <summary>A view of <paramref name="mode"/>; <paramref name="commands"/> drive its command row (none for an attached message).</summary>
     public MessageView(ReaderMode mode, ReaderServices services, WindowCommands? commands)
@@ -119,6 +116,7 @@ public sealed partial class MessageView : UserControl
         Reader.Addresses.RowChanged += (_, kind) => FillAddressRow(kind);
         services.Attachments.SavingAllChanged += OnSavingAllChanged;
         InitializeComponent();
+        chips = new MessageChips(services, this, () => HostWindow, FocusBody, logger);
 
         // The issue card of a Jira message (issue_card.go): its menu acts on
         // the message on display, its key opens the issue in the browser.
@@ -157,8 +155,26 @@ public sealed partial class MessageView : UserControl
     /// <summary>The window the view is in: where its dialogs and toasts go.</summary>
     public Window? HostWindow { get; set; }
 
-    /// <summary>win.change-status / msg.change-status: pops up the Change Status menu of the card on display.</summary>
-    public bool OpenStatusMenu() => IssueCard.OpenStatusMenu();
+    /// <summary>
+    /// win.change-status / msg.change-status: pops up the Change Status menu
+    /// of the card on display: the message's, or the issue card on top of the
+    /// conversation shown.
+    /// </summary>
+    public bool OpenStatusMenu() =>
+        Reader.Page == ReaderPage.Conversation ? conversation?.OpenStatusMenu() == true : IssueCard.OpenStatusMenu();
+
+    /// <summary>
+    /// The pane's conversation page (window.go conversationPane): shown in
+    /// place of the message while the reader's page is
+    /// <see cref="ReaderPage.Conversation"/>.
+    /// </summary>
+    internal void HostConversation(Conversation.ConversationView view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        conversation = view;
+        view.Visibility = ReaderBind.PageVisible(Reader.Page, nameof(ReaderPage.Conversation));
+        Pages.Children.Add(view);
+    }
 
     // issue_card.go openKey: the issue in the browser (a URL of the
     // account's own site, the card checked it); a failure is a toast.
@@ -214,6 +230,7 @@ public sealed partial class MessageView : UserControl
         services.Attachments.SavingAllChanged -= OnSavingAllChanged;
         Reader.Close();
         web?.Close();
+        conversation?.Close();
     }
 
     // The command row: the window's commands (window.blp's action-name and
@@ -336,10 +353,15 @@ public sealed partial class MessageView : UserControl
                 {
                     headersOf = null; // the next message, even the same one, starts at the top
                 }
+                if (conversation is not null)
+                {
+                    conversation.Visibility = ReaderBind.PageVisible(Reader.Page, nameof(ReaderPage.Conversation));
+                }
                 FadeIn(Reader.Page switch
                 {
                     ReaderPage.Empty => EmptyPage,
                     ReaderPage.NoAccounts => NoAccountsPage,
+                    ReaderPage.Conversation when conversation is not null => conversation,
                     _ => MessagePage,
                 });
                 break;
@@ -483,7 +505,9 @@ public sealed partial class MessageView : UserControl
         services.Router.DownloadPictures(s.Id, text => services.ToastIn(window, text));
     }
 
-    // Address rows (addresses.go fill).
+    // Address rows (addresses.go fill) and attachment chips
+    // (attachments.go renderAttachments): MessageChips, shared with the
+    // cards of the conversation view.
 
     private (TextBlock Label, WrapBox Box) RowOf(AddressRowKind kind) => kind switch
     {
@@ -494,383 +518,21 @@ public sealed partial class MessageView : UserControl
 
     private void FillAddressRow(AddressRowKind kind)
     {
-        var row = Reader.Addresses.Row(kind);
         var (label, box) = RowOf(kind);
-        // A chip about to go may hold the focus: the body is somewhere
-        // harmless to put it.
-        if (XamlRoot is not null && FocusManager.GetFocusedElement(XamlRoot) is DependencyObject focused && IsInside(focused, box))
-        {
-            FocusBody();
-        }
-        box.Children.Clear();
-        foreach (var chip in row.Chips)
-        {
-            box.Children.Add(AddressButton(chip));
-        }
-        if (row.More > 0)
-        {
-            box.Children.Add(MoreChip(kind, row));
-        }
-        label.Visibility = ReaderBind.Visible(row.Visible);
-        box.Visibility = ReaderBind.Visible(row.Visible);
+        chips.FillAddressRow(Reader.Addresses.Row(kind), label, box, Reader.Addresses.Expand, () => RowOf(kind).Box);
     }
 
-    // addresses.go chip: the name on a pill, the whole address as its
-    // tooltip; a click opens the menu, built the first time it opens.
-    private Button AddressButton(AddressChip chip)
-    {
-        var button = new Button
-        {
-            Content = new TextBlock { Text = chip.Label, TextWrapping = TextWrapping.NoWrap },
-            Style = Look("AddressChipStyle"),
-        };
-        AutomationProperties.SetName(button, Format.FormatAddress(chip.Address));
-        if (chip.Tooltip is { } tip)
-        {
-            ToolTipService.SetToolTip(button, tip);
-        }
-        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
-        menu.Opening += (_, _) =>
-        {
-            if (menu.Items.Count == 0)
-            {
-                FillAddressMenu(menu, chip);
-            }
-        };
-        button.Flyout = menu;
-        return button;
-    }
-
-    // addresses.go addressMenu: the name and the address on top, as text,
-    // then Copy Address and New Message.
-    private void FillAddressMenu(MenuFlyout menu, AddressChip chip)
-    {
-        if (chip.MenuName.Length > 0)
-        {
-            menu.Items.Add(new MenuFlyoutItem { Text = chip.MenuName, IsEnabled = false, FontWeight = FontWeights.SemiBold });
-        }
-        if (chip.MenuAddress.Length > 0)
-        {
-            menu.Items.Add(new MenuFlyoutItem { Text = chip.MenuAddress, IsEnabled = false });
-        }
-        if (menu.Items.Count > 0)
-        {
-            menu.Items.Add(new MenuFlyoutSeparator());
-        }
-        var copy = new MenuFlyoutItem { IsEnabled = chip.CanAct };
-        MnemonicLabel.Apply(copy, L10n.T("_Copy Address"));
-        copy.Click += (_, _) => _ = CopyAddressAsync(chip);
-        var write = new MenuFlyoutItem { IsEnabled = chip.CanAct };
-        MnemonicLabel.Apply(write, L10n.T("_New Message"));
-        write.Click += (_, _) => services.Router.NewMessage(chip.Address, chip.Account);
-        menu.Items.Add(copy);
-        menu.Items.Add(write);
-    }
-
-    // The chip's Copy Address: the bare address on the clipboard, and a
-    // toast that says so. The clipboard is the system's: while another
-    // program holds it open, SetContent throws (CLIPBRD_E_CANT_OPEN), which in
-    // a menu item's handler would end the application. It is tried again a
-    // few times; failing that, a toast says so and the log has the kind only,
-    // never the address. Flushed, so the address stays on the clipboard after
-    // the application quits.
-    private async Task CopyAddressAsync(AddressChip chip)
-    {
-        if (!chip.CanAct)
-        {
-            return;
-        }
-        var window = HostWindow;
-        for (var attempt = 1; ; attempt++)
-        {
-            try
-            {
-                var package = new DataPackage();
-                package.SetText(chip.Email);
-                Clipboard.SetContent(package);
-                break;
-            }
-            catch (Exception e) when (e is COMException or UnauthorizedAccessException)
-            {
-                if (attempt >= ClipboardAttempts)
-                {
-                    LogCopyFailed(logger, e.GetType().Name, e.HResult);
-                    // Windows-only string: GTK's clipboard cannot refuse.
-                    services.ToastIn(window, L10n.T("The address could not be copied"));
-                    return;
-                }
-            }
-            await Task.Delay(ClipboardRetryDelay);
-        }
-        try
-        {
-            Clipboard.Flush();
-        }
-        catch (Exception e) when (e is COMException or UnauthorizedAccessException)
-        {
-            // On the clipboard all the same, until the application quits.
-            LogFlushFailed(logger, e.GetType().Name, e.HResult);
-        }
-        services.ToastIn(window, L10n.T("Address copied"));
-    }
-
-    // addresses.go moreChip: "+N more" unfolds every line of the message; a
-    // click leaves the focus alone, from the keyboard the focus moves on to
-    // the first chip the unfold revealed.
-    private Button MoreChip(AddressRowKind kind, AddressRow row)
-    {
-        var button = new Button
-        {
-            Content = row.MoreText,
-            Style = Look("MoreChipStyle"),
-            AllowFocusOnInteraction = false,
-        };
-        var at = row.Chips.Count;
-        button.Click += (_, _) =>
-        {
-            var keyboard = button.FocusState == FocusState.Keyboard;
-            Reader.Addresses.Expand();
-            var box = RowOf(kind).Box;
-            if (keyboard && at < box.Children.Count && box.Children[at] is Control next)
-            {
-                next.Focus(FocusState.Keyboard);
-            }
-        };
-        return button;
-    }
-
-    // Attachment chips (attachments.go renderAttachments, buildChip,
-    // buildSaveAll).
-
-    // The chip that holds the focus (one used a moment ago, whose download
-    // starts or ends now) goes with the rest; the focus goes to the chip in
-    // its place, from the keyboard when it came from the keyboard, or to the
-    // body when there is none there that can take it (renderAttachments,
-    // MessageViewController.swift renderAttachments). The new chips are
-    // added before the old ones go, so the focus moves from the old chip
-    // straight to its successor, never to what WinUI would pick for a
-    // focused element that leaves the tree.
-    private void FillAttachments()
-    {
-        var chips = AttachmentChips.Children;
-        var (focusAt, how) = FocusedChip();
-        var old = chips.Count;
-        saveAllButton = null;
-        saveAllOf = null;
-        var icons = services.Icons.StartBatch();
-        foreach (var chip in Reader.Chips)
-        {
-            chips.Add(AttachmentButton(chip, icons));
-        }
-        if (Reader.SaveAll.Count > 0 && Reader.Current is { } s)
-        {
-            saveAllButton = SaveAllButton(s, Reader.SaveAll, Reader.SaveAllRemote);
-            saveAllOf = s.Id;
-            chips.Add(saveAllButton);
-        }
-        if (focusAt >= 0 && !(old + focusAt < chips.Count && chips[old + focusAt] is Control next && next.Focus(how)))
-        {
-            // A disabled chip (on a wrapper) takes no focus, and fewer
-            // chips may leave none in its place.
-            FocusBody();
-        }
-        for (var i = 0; i < old; i++)
-        {
-            chips.RemoveAt(0);
-        }
-        AttachmentChips.Visibility = ReaderBind.Visible(chips.Count > 0);
-    }
-
-    // The position of the chip (or Save All) that holds the focus, and how
-    // to give it to the one in its place (attachments.go focusedChip): -1
-    // when none does.
-    private (int At, FocusState How) FocusedChip()
-    {
-        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused)
-        {
-            return (-1, FocusState.Unfocused);
-        }
-        for (var e = focused; e is not null; e = VisualTreeHelper.GetParent(e))
-        {
-            if (VisualTreeHelper.GetParent(e) is { } parent && ReferenceEquals(parent, AttachmentChips) && e is UIElement chip)
-            {
-                var how = focused is Control { FocusState: FocusState.Keyboard } ? FocusState.Keyboard : FocusState.Programmatic;
-                return (AttachmentChips.Children.IndexOf(chip), how);
-            }
-        }
-        return (-1, FocusState.Unfocused);
-    }
-
-    // One attachment: the click previews it (an attached message opens in
-    // its own window), the arrow offers View, Open and Save As…. The
-    // actions close over the chip, so it never acts on another message; a
-    // chip of a part on the mail server downloads the message first.
-    private FrameworkElement AttachmentButton(AttachmentChip chip, IconLookups<ImageSource>.Batch icons)
-    {
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        var icon = ChipIcons.For(icons, chip.Attachment.Filename);
-        icon.VerticalAlignment = VerticalAlignment.Center;
-        content.Children.Add(icon);
-        content.Children.Add(new TextBlock { Text = chip.Label, Style = Look("ChipNameStyle") });
-        if (chip.SizeText.Length > 0)
-        {
-            content.Children.Add(new TextBlock { Text = chip.SizeText, Style = Look("ChipSizeStyle") });
-        }
-        if (chip.OnServer)
-        {
-            content.Children.Add(RemoteIndicator(chip));
-        }
-        var button = new SplitButton
-        {
-            Content = content,
-            // The SplitButton's own style is not public: set, not based on.
-            Padding = new Thickness(8, 3, 8, 3),
-            MinHeight = 0,
-            IsEnabled = chip.Available,
-        };
-        AutomationProperties.SetName(button, chip.Name);
-        // The reason of a chip that cannot be used is "" until message.body
-        // answered: no tooltip, rather than an empty one.
-        var tooltip = chip.Tooltip.Length > 0 ? chip.Tooltip : null;
-        if (tooltip is not null)
-        {
-            AutomationProperties.SetHelpText(button, tooltip);
-        }
-
-        var menu = new MenuFlyout { Placement = FlyoutPlacementMode.BottomEdgeAlignedLeft };
-        if (chip.Nested)
-        {
-            var view = new MenuFlyoutItem();
-            MnemonicLabel.Apply(view, L10n.T("_View"));
-            view.Click += (_, _) => OpenAttached(chip);
-            menu.Items.Add(view);
-        }
-        var open = new MenuFlyoutItem { IsEnabled = chip.CanOpen };
-        MnemonicLabel.Apply(open, L10n.T("_Open"));
-        open.Click += (_, _) => _ = services.Attachments.OpenAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
-        var save = new MenuFlyoutItem();
-        MnemonicLabel.Apply(save, L10n.T("Save _As…"));
-        save.Click += (_, _) => _ = services.Attachments.SaveAsAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
-        menu.Items.Add(open);
-        // assistant.go bindAskItem: "Ask the Assistant…" while the Assistant
-        // is shown, enabled while the chosen target can take the file (for
-        // In App, a type the bridge reads); looked at again as the menu opens.
-        var ask = new MenuFlyoutItem { Text = Core.Assistants.Assistant.Texts().AskFile };
-        ask.Click += (_, _) => services.State.MainWindow?.AssistantActions?.AskAboutAttachment(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
-        menu.Opening += (_, _) =>
-        {
-            var assistant = services.State.Assistant;
-            assistant.RefreshHandlers();
-            var shown = assistant.Shown;
-            if (shown && !menu.Items.Contains(ask))
-            {
-                menu.Items.Insert(menu.Items.IndexOf(open) + 1, ask);
-            }
-            else if (!shown)
-            {
-                menu.Items.Remove(ask);
-            }
-            ask.IsEnabled = assistant.CanAskFile(chip.Attachment.ContentType);
-        };
-        menu.Items.Add(save);
-        button.Flyout = menu;
-        button.Click += (_, _) =>
-        {
-            if (chip.Nested)
-            {
-                OpenAttached(chip);
-            }
-            else
-            {
-                _ = services.Preview.ShowAsync(chip.Attachment, chip.Message, chip.OnServer, HostWindow);
-            }
-        };
-        if (chip.Available)
-        {
-            if (tooltip is not null)
-            {
-                ToolTipService.SetToolTip(button, tooltip);
-            }
-            return button;
-        }
-        // A disabled control shows no tooltip: the reason goes on a wrapper.
-        var wrapper = new Border { Child = button, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
-        if (tooltip is not null)
-        {
-            ToolTipService.SetToolTip(wrapper, tooltip);
-        }
-        return wrapper;
-    }
-
-    // attachments.go remoteIndicator: after the size of a part on the mail
-    // server only, the server glyph with the reason as its tooltip, dimmed
-    // like the size, or a spinner while the message is being downloaded.
-    private static FrameworkElement RemoteIndicator(AttachmentChip chip)
-    {
-        if (chip.Downloading)
-        {
-            var spinner = new ProgressRing
-            {
-                Width = 14,
-                Height = 14,
-                IsActive = true,
-                VerticalAlignment = VerticalAlignment.Center,
-            };
-            AutomationProperties.SetName(spinner, L10n.T("Downloading…"));
-            return spinner;
-        }
-        var glyph = Icons.Create("network-server", Icons.Small);
-        glyph.VerticalAlignment = VerticalAlignment.Center;
-        glyph.Opacity = 0.55; // GTK's .dim-label
-        ToolTipService.SetToolTip(glyph, chip.ServerTooltip);
-        AutomationProperties.SetName(glyph, chip.ServerTooltip);
-        return glyph;
-    }
-
-    // A style of the view's resources (MessageView.xaml).
-    private Style Look(string key) => (Style)Resources[key];
-
-    private void OpenAttached(AttachmentChip chip) =>
-        _ = services.Windows.OpenEmbeddedAsync(chip.Message, chip.Attachment, chip.OnServer, HostWindow);
-
-    // buildSaveAll: flat, as dense as the chips beside it; disabled while
-    // the run lasts, which AttachmentOpener keeps by message, so a button
-    // rebuilt by a re-render, or the same message's in another window, is
-    // disabled too. remote: some are on the mail server only, the message
-    // is downloaded once first.
-    private Button SaveAllButton(MessageSummary s, IReadOnlyList<Attachment> atts, bool remote)
-    {
-        var mnemonic = Mnemonic.Parse(L10n.T("Save _All"));
-        var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        content.Children.Add(Icons.Create("document-save", Icons.Small));
-        content.Children.Add(new TextBlock { Text = mnemonic.Label, Style = Look("ChipNameStyle") });
-        var button = new Button
-        {
-            Content = content,
-            Style = Look("ChipActionStyle"),
-            AccessKey = mnemonic.AccessKey ?? "",
-            IsEnabled = !services.Attachments.IsSavingAll(s.Id),
-        };
-        AutomationProperties.SetName(button, mnemonic.Label);
-        AutomationProperties.SetAutomationId(button, "SaveAllButton");
-        button.Click += (_, _) => _ = services.Attachments.SaveAllAsync(atts, s, remote, HostWindow);
-        return button;
-    }
+    private void FillAttachments() =>
+        chips.FillAttachments(AttachmentChips, Reader.Chips, Reader.SaveAll, Reader.SaveAllRemote, Reader.Current);
 
     private void OnSavingAllChanged(object? sender, MessageId id)
     {
-        if (!closed && saveAllButton is { } button && saveAllOf == id)
+        if (!closed)
         {
-            button.IsEnabled = !services.Attachments.IsSavingAll(id);
+            chips.SavingAllChanged(id);
         }
     }
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "opening an issue failed: {Kind}")]
     private static partial void LogOpenIssueFailed(ILogger logger, string kind);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "copying an address failed: {Kind} 0x{HResult:X8}")]
-    private static partial void LogCopyFailed(ILogger logger, string kind, int hResult);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "flushing the clipboard failed: {Kind} 0x{HResult:X8}")]
-    private static partial void LogFlushFailed(ILogger logger, string kind, int hResult);
 }

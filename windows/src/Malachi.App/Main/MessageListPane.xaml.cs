@@ -206,6 +206,13 @@ public sealed partial class MessageListPane : UserControl
     /// <summary>A request of <see cref="FocusList"/> still waiting lapses (the search box took the keyboard again).</summary>
     public void CancelFocusList() => EndFocusRequest();
 
+    /// <summary>
+    /// window.go addConversationPaging: Space pages down (up with Shift)
+    /// through the conversation the pane shows; true when it did, false when
+    /// the key does what it did (no conversation shown).
+    /// </summary>
+    internal Func<bool, bool>? PageConversation { get; set; }
+
     /// <summary>A conversation row's fold arrow (threads.go toggleThread).</summary>
     internal void ToggleThread(MessageRow row)
     {
@@ -580,6 +587,12 @@ public sealed partial class MessageListPane : UserControl
         {
             return;
         }
+        if (e.Key == WinKey.Space && PageConversation is { } page && !ModifierDown(WinKey.Control) && !ModifierDown(WinKey.Menu)
+            && !ModifierDown(WinKey.LeftWindows) && !ModifierDown(WinKey.RightWindows))
+        {
+            e.Handled = page(ModifierDown(WinKey.Shift));
+            return;
+        }
         switch (e.Key)
         {
             case WinKey.Enter:
@@ -594,6 +607,9 @@ public sealed partial class MessageListPane : UserControl
                 break;
         }
     }
+
+    private static bool ModifierDown(WinKey key) =>
+        Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     // rowDoubleClicked (window.go row-activated); a double click on the
     // fold arrow is the arrow's.

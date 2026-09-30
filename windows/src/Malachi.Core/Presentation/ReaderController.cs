@@ -339,15 +339,34 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     /// <summary>
     /// <c>account.list</c> answered (folders.go <c>loadAccounts</c>): the
     /// placeholder becomes No Accounts while there is none, unless a message
-    /// is on display.
+    /// or a conversation is on display.
     /// </summary>
     public void SetHasAccounts(bool has)
     {
         hasAccounts = has;
-        if (Mode == ReaderMode.Pane && Page != ReaderPage.Message)
+        if (Mode == ReaderMode.Pane && Page is not (ReaderPage.Message or ReaderPage.Conversation))
         {
             Page = has ? ReaderPage.Empty : ReaderPage.NoAccounts;
         }
+    }
+
+    /// <summary>
+    /// conversation_view.go <c>leaveForConversation</c>: the pane shows a
+    /// conversation instead (<see cref="ReaderPage.Conversation"/>): the
+    /// message it showed goes, its body and pictures, its bars, banners,
+    /// chips and card; a late answer for it is not rendered, and nothing of
+    /// it is drawn again.
+    /// </summary>
+    public void LeaveForConversation()
+    {
+        if (Mode != ReaderMode.Pane)
+        {
+            return;
+        }
+        Clear();
+        Chips = [];
+        SaveAll = [];
+        Page = ReaderPage.Conversation;
     }
 
     /// <summary>

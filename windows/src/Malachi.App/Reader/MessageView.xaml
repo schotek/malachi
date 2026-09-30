@@ -34,6 +34,10 @@ gets the sanitiser's output only.
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
+            <!-- The chips are built in code (MessageChips); their looks. -->
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/ChipStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
             <!-- The star is a flat toggle with the main window's look
                  (MessageCommandBar.xaml, GTK's flat header button in both):
                  the filled star in the accent colour says it is on, where
@@ -80,50 +84,6 @@ gets the sanitiser's output only.
                 <Setter Property="Width" Value="40" />
                 <Setter Property="Height" Value="40" />
                 <Setter Property="LabelPosition" Value="Collapsed" />
-            </Style>
-            <!-- The chips are built in code; their looks are here, so that the
-                 theme resources follow the window's colour scheme (style.go:
-                 .address-chip, .address-more, .attachment-chip, .chip-action). -->
-            <Style
-                x:Key="AddressChipStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="24" />
-                <Setter Property="Padding" Value="10,2,10,3" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
-            </Style>
-            <Style
-                x:Key="MoreChipStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="24" />
-                <Setter Property="Padding" Value="10,2,10,3" />
-                <Setter Property="CornerRadius" Value="12" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
-            </Style>
-            <Style
-                x:Key="ChipActionStyle"
-                BasedOn="{StaticResource DefaultButtonStyle}"
-                TargetType="Button">
-                <Setter Property="MinHeight" Value="0" />
-                <Setter Property="Padding" Value="8,3,8,3" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Background" Value="Transparent" />
-            </Style>
-            <Style x:Key="ChipNameStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-            </Style>
-            <Style x:Key="ChipSizeStyle" TargetType="TextBlock">
-                <Setter Property="FontSize" Value="11" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
             </Style>
         </ResourceDictionary>
     </UserControl.Resources>

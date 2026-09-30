@@ -160,6 +160,30 @@ public sealed class EditorBridgeDriftTests
         AssertSameText(gtk, windows.Replace(title, "", StringComparison.Ordinal));
     }
 
+    // The card of the conversation view: htmlview.CompactDocument, the same
+    // page with the card's padding (compactCSS), and the fixed title.
+    [Fact]
+    public void CompactDocumentIsGtksWithTheTitle()
+    {
+        var source = Read("ui", "internal", "htmlview", "document.go");
+        var csp = Regex.Match(source, "const CSP = \"([^\"]*)\"").Groups[1].Value;
+        var compactCss = GtkColumnCss(source, "compactCSS");
+        Assert.Equal(ViewerDocument.CompactCss, compactCss);
+        Assert.Contains("return document(body, compactCSS)", source, StringComparison.Ordinal);
+        const string body = "<p>x</p>";
+        var gtk = GoJoin(GoReturn(source, "func document(body, css string) string {"), name => name switch
+        {
+            "CSP" => csp,
+            "css" => compactCss,
+            "body" => body,
+            _ => throw new InvalidOperationException("unexpected name in htmlview.document: " + name),
+        });
+        var windows = ViewerDocument.CompactDocument(body);
+        const string title = "<title>" + ViewerDocument.Title + "</title>";
+        Assert.Equal(1, Occurrences(windows, title));
+        AssertSameText(gtk, windows.Replace(title, "", StringComparison.Ordinal));
+    }
+
     // htmlview.columnCSS with the padding the Go variable `name` passes it.
     private static string GtkColumnCss(string source, string name)
     {

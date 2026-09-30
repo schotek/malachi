@@ -18,4 +18,11 @@ public enum ReaderPage
 
     /// <summary>The headers and the body.</summary>
     Message,
+
+    /// <summary>
+    /// The whole conversation of a folded conversation row (the pane only,
+    /// window.go <c>convPageName</c>): the pane's conversation view, which
+    /// the reader leaves empty (<see cref="ReaderController.LeaveForConversation"/>).
+    /// </summary>
+    Conversation,
 }

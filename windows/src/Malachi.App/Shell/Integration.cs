@@ -58,6 +58,9 @@ public sealed partial class Integration : IDisposable
         // toasts over the main window.
         Issues = new IssueActionsController(state.Client, id => Mailbox.Model.Account(id), logs.CreateLogger<IssueActionsController>());
         Issues.ToastRequested += (_, text) => mainToast(text);
+        // The conversation view of the reading pane (conversation_controller.go):
+        // it follows the list's members and holds the cards' entries.
+        Conversation = new ConversationController(List, Cache);
 
         WireConnection();
         WireNotifications();
@@ -85,6 +88,9 @@ public sealed partial class Integration : IDisposable
 
     /// <summary>The compose windows and what they share.</summary>
     public ComposeController Compose { get; }
+
+    /// <summary>The conversation the reading pane shows, and its cards' entries.</summary>
+    public ConversationController Conversation { get; }
 
     /// <summary>
     /// Wave 2 (E5): the compose window factory. Sets
@@ -116,6 +122,7 @@ public sealed partial class Integration : IDisposable
             t.Dispose();
         }
         tokens.Clear();
+        Conversation.Dispose();
         Issues.Dispose();
         Compose.Dispose();
         Cache.Dispose();

@@ -283,6 +283,15 @@ public abstract partial class HardenedWebView : UserControl
     {
     }
 
+    /// <summary>
+    /// The current document's navigation completed (its load event, so its
+    /// pictures have been asked for and answered): what a view measures of
+    /// its document it can measure now (a conversation card's height).
+    /// </summary>
+    private protected virtual void OnDocumentLoaded()
+    {
+    }
+
     /// <summary>The view cannot show documents (before <see cref="Unavailable"/> is raised).</summary>
     private protected virtual void OnUnavailable()
     {
@@ -599,6 +608,7 @@ public abstract partial class HardenedWebView : UserControl
         documentNavigation = null;
         if (args.IsSuccess)
         {
+            OnDocumentLoaded();
             return;
         }
         WebViewLog.DocumentFailed(log, args.WebErrorStatus);

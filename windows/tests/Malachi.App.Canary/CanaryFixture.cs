@@ -5,13 +5,15 @@
 // for all its assertions and side by side, so the whole takes well under two
 // minutes:
 //
-// - protected: the app's viewer, editor and previewer (MessageWebView,
-//   ComposeWebView, PreviewWebView in the app's WebViewEnvironment) over the
+// - protected: the app's viewer, editor, previewer and conversation card
+//   (MessageWebView, ComposeWebView, PreviewWebView, CardWebView in the
+//   app's WebViewEnvironment) over the
 //   hostile document, its active twin (hover, press, link, form, target,
 //   middle click, mailto, download, the security audit's masked links), a
 //   meta refresh, the previewer's SVG, PDF (its link clicked, its open
 //   action), picture and text, and every HTML part of backend/testdata/mime
-//   raw in the viewer and the editor;
+//   raw in the viewer, the editor and the card; the card also measures a
+//   document of a known height, at two zooms;
 // - control: the same hostile document in a WebView2 without any
 //   protection (only its reach beyond the machine cut off: a dead proxy and
 //   no name but 127.0.0.1 resolved), which must reach the canaries: the
@@ -206,6 +208,28 @@ public sealed class CanaryFixture : IAsyncLifetime
         Add("editor", "flush");
         steps.Add(new HostStep { View = "editor", Op = "drop", X = 200, Y = 100, Name = DroppedFile, Ms = 500 });
 
+        // The card: the hostile document passive and active (its links
+        // reach the conversation view as the viewer's reach the reader), and
+        // a document of a known height, measured by the host, at 100 % and
+        // at 150 %.
+        Add("card", "load", "card-passive", passive, ms: 2500);
+        Add("card", "load", "card-hover", active, ms: 200);
+        Add("card", "hover", target: "hover", ms: 1200);
+        Add("card", "click", "card-nav", target: "pinglink");
+        steps.Add(new HostStep { View = "card", Op = "await", Phase = "card-nav", Target = HostEvent.Kinds.Link, Ms = LinkLimit, InPhase = true });
+        Add("card", "wait", "card-nav", ms: 1200);
+        Add("card", "click", "card-form", target: "sub", ms: 1200);
+        Add("card", "click", "card-blank", target: "blank", ms: 800);
+        Add("card", "click", "card-unc", target: "unc", ms: 800);
+        Add("card", "load", "card-refresh", refresh, ms: 2000);
+        Add("card", "load", "card-size", "<div style='height:500px'>tall</div>");
+        steps.Add(new HostStep { View = "card", Op = "await", Phase = "card-size", Target = HostEvent.Kinds.Size, Ms = LinkLimit, InPhase = true });
+        Add("card", "wait", "card-size", ms: 300);
+        steps.Add(new HostStep { View = "card", Op = "zoom", Phase = "card-zoom", X = 150 });
+        steps.Add(new HostStep { View = "card", Op = "await", Phase = "card-zoom", Target = HostEvent.Kinds.Size, Ms = LinkLimit, InPhase = true });
+        Add("card", "wait", "card-zoom", ms: 300);
+        steps.Add(new HostStep { View = "card", Op = "zoom", Phase = "card-zoom-back", X = 100, Ms = 300 });
+
         // The viewer's text zoom, set while a message is on display.
         Add("viewer", "load", "viewer-zoom", "<p>zoom</p>", ms: 200);
         steps.Add(new HostStep { View = "viewer", Op = "zoom", X = 150, Ms = 200 });
@@ -233,6 +257,7 @@ public sealed class CanaryFixture : IAsyncLifetime
             var phase = "corpus-" + (i++).ToString(System.Globalization.CultureInfo.InvariantCulture) + "-" + file;
             Add("viewer", "load", phase, html, ms: 250);
             Add("editor", "load", html: html, ms: 250);
+            Add("card", "load", html: html, ms: 250);
         }
         return steps;
     }
@@ -294,6 +319,9 @@ public sealed class CanaryFixture : IAsyncLifetime
 
         Add("editor", "load", "editor-crash", "<p>text</p>", 300);
         CrashTwice("editor");
+
+        Add("card", "load", "card-crash", "<p>crash</p>", 300);
+        CrashTwice("card");
 
         steps.Add(new HostStep
         {
