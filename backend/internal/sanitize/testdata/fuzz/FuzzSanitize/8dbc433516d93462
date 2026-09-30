@@ -1,0 +1,3 @@
+go test fuzz v1
+string("<p><tABle ><p >0")
+int(0)

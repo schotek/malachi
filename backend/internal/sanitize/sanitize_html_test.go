@@ -411,6 +411,13 @@ func TestCapsFailClosed(t *testing.T) {
 		"output": {HTML: "<p>" + strings.Repeat("y", 500) + "</p>", MaxOutputSize: 100},
 		"policy": {HTML: "<p>x</p>", Policy: "whatever"},
 		"mode":   {HTML: "<p>x</p>", Mode: Mode(7)},
+		// Output that breaks a cap its input kept, so that sanitising it
+		// again would fail or change it: the body's wrapper nests one
+		// level deeper, the view adds rel to a link, settling copies a
+		// link (reopenedLink).
+		"wrapped depth": {HTML: `<body bgcolor="#fff">` + strings.Repeat("<div>", maxDepth-1) + "x"},
+		"link attrs":    {HTML: linkWithAttrs(maxAttrs - 1)},
+		"settled links": {HTML: strings.Repeat(`<a href="https://c.example/">c</a>`, maxLinks-2) + reopenedLink},
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -448,6 +455,22 @@ func TestCapsFailClosed(t *testing.T) {
 	if _, err := Sanitize(Input{HTML: strings.Repeat("<div>", maxDepth-5) + "x" + strings.Repeat("</div>", maxDepth-5), Policy: api.RemoteBlock}); err != nil {
 		t.Errorf("depth just under the cap: %v", err)
 	}
+	// So is output right at them: no wrapper, no rel in a draft, one link
+	// fewer.
+	view(t, strings.Repeat("<div>", maxDepth-1)+"x")
+	compose(t, linkWithAttrs(maxAttrs-1), nil)
+	view(t, strings.Repeat(`<a href="https://c.example/">c</a>`, maxLinks-3)+reopenedLink)
+}
+
+// linkWithAttrs is a link with n more attributes, all of them kept.
+func linkWithAttrs(n int) string {
+	var b strings.Builder
+	b.WriteString(`<a href="https://x.example/"`)
+	for i := 1; i <= n; i++ {
+		b.WriteString(" aria-a" + strings.Repeat("x", i) + `="1"`)
+	}
+	b.WriteString(">l</a>")
+	return b.String()
 }
 
 func TestTextRendering(t *testing.T) {
@@ -496,6 +519,44 @@ func TestLeadingWhitespaceDropped(t *testing.T) {
 		t.Errorf("text = %q", out.Text)
 	}
 }
+
+// Markup cannot spell every tree the parser builds or the walk leaves
+// behind: a <p> foster parented into the <p> around a quirks-mode <table>,
+// a <p>, <li> or heading that an unwrapped element kept inside another, a
+// link foster parented into a link. The output is the tree the parser
+// builds from its serialisation, so sanitising it again (checkClean in
+// view and compose) changes nothing.
+func TestOutputSettles(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"paragraph foster parented into a paragraph", `<p><tABle ><p >0`, `<p></p><p>0</p><table></table><p></p>`},
+		{"paragraph in an unwrapped marquee", `<p><marquee><p>x</p></marquee></p>`, `<p></p><p>x</p><p></p>`},
+		{"list item in an unwrapped fieldset", `<li><fieldset><li>x`, `<li></li><li>x</li>`},
+		{"heading in an unknown element", `<h1><foo><h2>x</h2></foo></h1>`, `<h1></h1><h2>x</h2>`},
+		{"formatting the parser reopens", `<p><b><table><p>x`, `<p><b></b></p><p><b>x</b></p><table></table><p></p>`},
+		{"link foster parented into a link", `<a href="https://a.example/">1<table><a href="https://b.example/">2</table>`,
+			`<a href="https://a.example/" rel="noopener noreferrer">1</a><a href="https://b.example/" rel="noopener noreferrer">2</a><table></table>`},
+		// The parser sorts a link's attributes; the rel the walk appends
+		// stays last, where sanitising the output again puts it.
+		{"link attribute order", `<a title="t" href="https://x.example/" style="color: red">l</a>`,
+			`<a href="https://x.example/" style="color: red" title="t" rel="noopener noreferrer">l</a>`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			wantHTML(t, view(t, c.src), c.want)
+			compose(t, c.src, nil)
+		})
+	}
+	// Settling can copy a link: the parser reopens the outer <a> inside the
+	// <p>. The copy's target is one Links already lists.
+	out := view(t, reopenedLink)
+	wantHTML(t, out, `<a href="https://a.example/" rel="noopener noreferrer"></a><p><a href="https://a.example/" rel="noopener noreferrer"></a><a href="https://b.example/" rel="noopener noreferrer">x</a></p>`)
+	if len(out.Links) != 2 || out.Links[0].Href != "https://a.example/" || out.Links[1].Href != "https://b.example/" {
+		t.Errorf("links = %+v", out.Links)
+	}
+}
+
+// reopenedLink settles into three links from two (TestOutputSettles).
+const reopenedLink = `<a href="https://a.example/"><marquee><p><a href="https://b.example/">x</a></p></marquee></a>`
 
 func TestVersion(t *testing.T) {
 	if Version == "0-stub" {

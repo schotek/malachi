@@ -17,8 +17,9 @@
 // normalisation a browser would apply (url.go), CSS in style="" and <style>
 // is re-emitted through a property allow-list by a filter that never keeps
 // what it does not understand (css.go), and the new tree is serialised with
-// html.Render — never by regex over the source. The plain-text form is
-// rendered from that same tree (text.go).
+// html.Render — never by regex over the source — and parsed again until the
+// parser builds back what was serialised (settle): markup cannot spell every
+// tree. The plain-text form is rendered from that same tree (text.go).
 //
 // What that gives:
 //   - no <script>, <iframe>, <object>, <embed>, <applet>, <form> and
@@ -41,7 +42,8 @@
 //     presentational attributes move to a wrapping <div class="malachi-body">;
 //   - caps on input size, output size, nesting depth, node count, attribute
 //     count and CSS rules; a cap breach is an error, not a truncation;
-//   - sanitising the output again (under RemoteBlock) is the identity.
+//   - sanitising the output again (under RemoteBlock) is the identity: the
+//     output is settled and keeps within the caps its input had to.
 //
 // The library decision (docs/architecture.md §7): own code over
 // golang.org/x/net/html. E-mail depends on <style> blocks and inline CSS
@@ -52,6 +54,7 @@ package sanitize
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"sort"
 	"strings"
 
@@ -207,12 +210,12 @@ func sanitize(in Input) (Output, error) {
 		}
 	}
 
-	var buf bytes.Buffer
-	if err := html.Render(&buf, root); err != nil {
+	root, markup, err := settle(root, max+w.inlined)
+	if err != nil {
 		return Output{}, err
 	}
-	if buf.Len()-w.inlined > max {
-		return Output{}, errors.New("output too large")
+	if err := withinCaps(root); err != nil {
+		return Output{}, err
 	}
 
 	links := w.links
@@ -225,7 +228,7 @@ func sanitize(in Input) (Output, error) {
 	}
 	sort.Strings(cids)
 	return Output{
-		HTML:    buf.String(),
+		HTML:    string(markup),
 		Text:    renderText(root, max),
 		Blocked: w.blocked,
 		Links:   links,
@@ -271,4 +274,143 @@ func headAndBody(doc *html.Node) (head, body *html.Node) {
 		}
 	}
 	return head, body
+}
+
+// maxSettleRounds bounds how often settle parses the output again. Output
+// the parser leaves alone takes one parse; output it rearranges has taken
+// two in all fuzzing so far, and the rest is headroom.
+const maxSettleRounds = 4
+
+// settle serialises root and parses the markup again until the parser
+// builds a tree that serialises to the same markup, and returns that
+// markup with the tree it was serialised from: root itself when nothing
+// moved, as for nearly all mail, because a reparsed tree joins the text
+// nodes a removed element split and the text form would then read two
+// halves of a broken UTF-8 sequence as one character. Markup cannot spell
+// every tree. The
+// parser builds some it cannot rebuild from their own serialisation:
+// without a doctype it runs in quirks mode, where a <table> does not close
+// an open <p>, so a <p> met inside that table is foster parented into the
+// outer <p>, and "<p><table><p>0" becomes a <p> nested in a <p>. The walk
+// makes more by unwrapping elements: <marquee> is a scope boundary that a
+// <p> inside it does not close across, and an unknown element between two
+// headings keeps the inner one nested. Parsed again, the markup of such a
+// tree comes out rearranged (the nested <p> closes the outer one, whose
+// end tag then opens an empty <p>), so sanitising the output again would
+// change it; settled, it is the rearranged form. Each serialisation counts
+// against limit; output that has not settled after maxSettleRounds parses
+// fails.
+func settle(root *html.Node, limit int) (*html.Node, []byte, error) {
+	markup, err := render(root, limit)
+	if err != nil {
+		return nil, nil, err
+	}
+	for range maxSettleRounds {
+		doc, err := html.ParseWithOptions(bytes.NewReader(markup), html.ParseOptionEnableScripting(false))
+		if err != nil {
+			return nil, nil, err
+		}
+		reparsed := reroot(doc)
+		again, err := render(reparsed, limit)
+		if err != nil {
+			return nil, nil, err
+		}
+		if bytes.Equal(again, markup) {
+			return root, markup, nil
+		}
+		root, markup = reparsed, again
+	}
+	return nil, nil, errors.New("output does not settle")
+}
+
+// render serialises root; markup over limit bytes is an error.
+func render(root *html.Node, limit int) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := html.Render(&buf, root); err != nil {
+		return nil, err
+	}
+	if buf.Len() > limit {
+		return nil, errors.New("output too large")
+	}
+	return buf.Bytes(), nil
+}
+
+// reroot gives a parsed document the shape sanitize serialises: the
+// <style> elements the parser put into the head, then what it put into
+// the body, the leading whitespace trimmed as in the walk. It only ever
+// sees the sanitiser's own markup, whose <style> elements come first and
+// all land in the head.
+//
+// A rel attribute goes back to the end, where the walk appends it:
+// x/net/html sorts the attributes of a formatting element (<a>, <b>,
+// <font>, …) as it parses it, which moves the rel="noopener noreferrer"
+// of a link in front of a title or style that the walk kept before it.
+func reroot(doc *html.Node) *html.Node {
+	root := &html.Node{Type: html.DocumentNode}
+	head, body := headAndBody(doc)
+	for _, n := range detachChildren(head) {
+		if n.Type == html.ElementNode && n.Data == "style" {
+			root.AppendChild(n)
+		}
+	}
+	for _, n := range trimLeadingSpace(detachChildren(body)) {
+		root.AppendChild(n)
+	}
+	for n := range root.Descendants() {
+		if i := slices.IndexFunc(n.Attr, func(a html.Attribute) bool { return a.Key == "rel" }); i >= 0 {
+			rel := n.Attr[i]
+			n.Attr = append(slices.Delete(n.Attr, i, i+1), rel)
+		}
+	}
+	return root
+}
+
+func detachChildren(n *html.Node) []*html.Node {
+	if n == nil {
+		return nil
+	}
+	var out []*html.Node
+	for c := n.FirstChild; c != nil; c = n.FirstChild {
+		n.RemoveChild(c)
+		out = append(out, c)
+	}
+	return out
+}
+
+// withinCaps checks the settled tree against the caps the walk puts on its
+// input, measured as the walk would measure them, so that sanitising the
+// output again cannot fail where this run succeeded. The output can
+// outgrow what the walk counted: the <body> wrapper adds a level of
+// nesting, links gain a rel attribute, and settling adds elements (an
+// empty <p> for an end tag whose start was closed early, a copy of a
+// formatting element the parser reopens).
+func withinCaps(root *html.Node) error {
+	nodes, links := 0, 0
+	var check func(n *html.Node, depth int) error
+	check = func(n *html.Node, depth int) error {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if nodes++; nodes > maxNodes {
+				return errors.New("output has too many nodes")
+			}
+			if depth > maxDepth {
+				return errors.New("output nests too deep")
+			}
+			if c.Type != html.ElementNode || c.Data == "style" {
+				continue // the walk reads a <style>'s text without visiting it
+			}
+			if len(c.Attr) > maxAttrs {
+				return errors.New("output has too many attributes")
+			}
+			if c.Data == "a" && attrValue(c, "href") != "" {
+				if links++; links > maxLinks {
+					return errors.New("output has too many links")
+				}
+			}
+			if err := check(c, depth+1); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return check(root, 1)
 }

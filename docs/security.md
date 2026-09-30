@@ -76,7 +76,10 @@ Layer 1 — **backend sanitiser** (`backend/internal/sanitize`), the primary
 defence. Requirements are listed in that package's documentation; summary:
 
 - parse to a tree (`golang.org/x/net/html` family), never regex the source;
-  re-serialise from the tree;
+  re-serialise from the tree, and parse the result again until the parser
+  builds back what was serialised: markup cannot spell every tree (without
+  a doctype a `<p>` can end up foster parented into another `<p>`), so
+  unsettled output would change when sanitised again;
 - element allow-list (text formatting, lists, tables, images, links,
   `<div>/<span>`, basic structure); everything else dropped with children
   kept or dropped depending on the element;
@@ -131,7 +134,9 @@ defence. Requirements are listed in that package's documentation; summary:
 - **fail closed**: any parser error or cap breach withholds the HTML
   (`message.body` sets `htmlWithheld` and still serves the plain text;
   `draft.save` fails with `sanitizeFailed`). Sanitising the output again
-  is the identity, which the fuzz target checks.
+  is the identity, which the fuzz target checks; output that would break a
+  cap when sanitised again (the body's wrapper nesting one level deeper,
+  a link's added `rel`) is refused like input that breaks it.
 
 Layer 2 — **the UI webview** (WebKitGTK 6.0):
 
