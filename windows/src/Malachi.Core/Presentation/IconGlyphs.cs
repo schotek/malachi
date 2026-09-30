@@ -96,6 +96,15 @@ public static class IconGlyphs
         ["preferences-system"] = G(0xE713),
         ["applications-graphics"] = G(0xE790),
         ["applications-science"] = G(0xF196),
+        // The Assistant (ui/internal/assistant): its own sparkle is
+        // ChatSparkle, the panel's toggle DockRight, the context chip's
+        // all mail the stacked layers (macOS tray.2), a finished tool the
+        // check mark, several pinned contexts the list.
+        ["malachi-assistant"] = G(0xEAB7),
+        ["sidebar-show-right"] = G(0xE90D),
+        ["mail-inbox"] = G(0xE81E),
+        ["object-select"] = G(0xE73E),
+        ["view-list"] = G(0xEA37),
     }.ToFrozenDictionary(StringComparer.Ordinal);
 
     /// <summary>Whether <paramref name="gtkName"/> has a glyph of its own.</summary>

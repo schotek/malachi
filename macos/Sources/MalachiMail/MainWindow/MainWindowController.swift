@@ -12,7 +12,15 @@ import Quartz
 /// and the toast overlay. The panes' content is installed by the sidebar,
 /// list and reader parts (`install(sidebar:)`, `install(list:)`,
 /// `install(message:)`), the status bar by the app (`install(statusBar:)`),
-/// and so are the message actions (`messageActions`).
+/// and so are the message actions (`messageActions`) and the assistant
+/// panel (`install(assistant:)`), which exists while
+/// `AssistantController.panelShown` (the Assistant shown, In App chosen):
+/// the window follows that state with the split view's inspector and the
+/// toolbar's inspector section. While `AssistantController.canRunInApp`
+/// the search field also offers "Search in Your Own Words" (its
+/// magnifier's menu, ⌥↩): the typed words go to the user's Claude Code
+/// (`SearchConversion`), and the query it answers replaces them and is
+/// searched as if typed and Return pressed.
 /// The window is one instance for the application's life: with "Run in
 /// Background" it hides instead of closing.
 @MainActor
@@ -45,6 +53,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private let toolbarDelegate: MainToolbar
+    /// The toolbar's Assistant menu (ui/internal/assistant), with Summarize
+    /// Unread in This Folder.
+    private let assistantMenu: AssistantMenu
+    private var assistantToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
+    /// The search in the user's own words, made on first use.
+    private var conversion: SearchConversion?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
 
     init(state: AppState) {
@@ -78,7 +93,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         w.contentViewController = content
         // The toolbar's tracking separators need the split view, so the
         // toolbar comes after the content (the plan's ordering).
-        toolbarDelegate = MainToolbar(splitView: split.splitView)
+        assistantMenu = AssistantMenu(state: state, includesUnread: true)
+        toolbarDelegate = MainToolbar(
+            splitView: split.splitView, assistantMenu: assistantMenu, showsAssistant: state.assistant.shown,
+            showsPanel: state.assistant.panelShown)
         super.init(window: w)
         w.delegate = self
         w.toolbar = toolbarDelegate.makeToolbar()
@@ -101,6 +119,25 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             self?.setListSeparator(visible: !collapsed)
         }
         setListSeparator(visible: !split.isListCollapsed)
+        // The Assistant button follows `AssistantController.shown`: the
+        // `assistant-menu` setting while the bridge is registered (the
+        // window lives as long as the application).
+        // The assistant panel follows `panelShown`: the same, and the
+        // `assistant-target` preference.
+        let assistant = state.assistant
+        split.assistantAllowed = assistant.panelShown
+        assistantToken = assistant.onChange { [weak self] in
+            guard let self, let toolbar = self.window?.toolbar else { return }
+            self.toolbarDelegate.setAssistant(visible: assistant.shown, in: toolbar)
+            self.updateAssistantPanel()
+        }
+        assistantTargetToken = state.settings.onChange(.assistantTarget) { [weak self] in
+            self?.updateAssistantPanel()
+        }
+        toolbarDelegate.onSearchOwnWords = { [weak self] words in
+            self?.searchInOwnWords(words)
+        }
+        toolbarDelegate.setOwnWords(available: assistant.canRunInApp)
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
         split.listContainer.install(StatusPageViewController(
@@ -139,6 +176,88 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         content.install(statusBar: vc)
     }
 
+    /// The assistant panel's view (the split view's inspector).
+    func install(assistant vc: NSViewController) {
+        split.assistantContainer.install(vc)
+    }
+
+    /// Opens the assistant panel, while it exists.
+    func revealAssistant() {
+        split.revealAssistant()
+    }
+
+    /// The panel and its toolbar toggle exist while the Assistant is shown
+    /// and In App is chosen; otherwise the panel folds.
+    private func updateAssistantPanel() {
+        let allowed = state.assistant.panelShown
+        split.assistantAllowed = allowed
+        if let toolbar = window?.toolbar {
+            toolbarDelegate.setAssistantPanel(visible: allowed, in: toolbar)
+        }
+        let ownWords = state.assistant.canRunInApp
+        toolbarDelegate.setOwnWords(available: ownWords)
+        if !ownWords, toolbarDelegate.converting {
+            conversion?.cancel()
+            toolbarDelegate.endConverting(text: nil)
+        }
+    }
+
+    // MARK: Search in your own words
+
+    /// "Search in Your Own Words" with the field's `words`: the field shows
+    /// that it converts, then the query replaces the words and is searched
+    /// for (the list unfolds when a narrow window folded it, as the status
+    /// bar's Outbox does); a failure is a toast and the words stay. The
+    /// first request ever asks for consent on this window.
+    private func searchInOwnWords(_ words: String) {
+        guard state.assistant.canRunInApp, !toolbarDelegate.converting else { return }
+        let conversion = searchConversion()
+        toolbarDelegate.beginConverting()
+        let started = conversion.convert(words) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .query(let query):
+                self.toolbarDelegate.endConverting(text: query)
+                if self.split.isListCollapsed {
+                    self.split.toggleMessageList(nil)
+                }
+                self.onSearchReturn?(query)
+            case .failed(let text):
+                self.toolbarDelegate.endConverting(text: nil)
+                self.toasts.show(text)
+            case .declined:
+                self.toolbarDelegate.endConverting(text: nil)
+            }
+        }
+        if !started {
+            toolbarDelegate.endConverting(text: nil)
+        }
+    }
+
+    /// Ends a search in the user's own words under way (the application
+    /// quits); the typed words go back into the field.
+    func cancelSearchInOwnWords() {
+        conversion?.cancel()
+        toolbarDelegate.endConverting(text: nil)
+    }
+
+    private func searchConversion() -> SearchConversion {
+        if let conversion {
+            return conversion
+        }
+        let request = AssistantRequest(settings: state.settings, locator: state.claudeCode)
+        let alerts = state.alerts
+        request.consent = { [weak self] in
+            let t = Assistant.panelTexts()
+            return await alerts.confirm(
+                on: self?.window, heading: t.consentHeading, body: t.consentBody, confirmLabel: t.allow,
+                declineLabel: t.cancel)
+        }
+        let c = SearchConversion(request: request)
+        conversion = c
+        return c
+    }
+
     private func setListSeparator(visible: Bool) {
         guard let toolbar = window?.toolbar else { return }
         toolbarDelegate.setListSeparator(visible: visible, in: toolbar)
@@ -167,9 +286,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 
     // MARK: Actions
 
-    /// The split view's actions (⌃⌘S, ⌥⌘L) also while no view of the window
-    /// has the keyboard focus: the responder chain then starts at the window
-    /// and reaches this controller, not the split view controller.
+    /// The split view's actions (⌃⌘S, ⌥⌘L, the assistant panel's toggle)
+    /// also while no view of the window has the keyboard focus: the
+    /// responder chain then starts at the window and reaches this
+    /// controller, not the split view controller.
     override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
         if let target = MainContentViewController.splitTarget(split, forAction: action) {
             return target
@@ -279,6 +399,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         messageActions?.trustSender()
     }
 
+    /// The Assistant menu's message actions (the item's tag) on the
+    /// selection.
+    @objc func askAssistant(_ sender: Any?) {
+        guard let a = AssistantMenu.action(tag: (sender as? NSMenuItem)?.tag) else { return }
+        messageActions?.askAssistant(a)
+    }
+
+    /// Summarize Unread in This Folder, the main window's only.
+    @objc func summarizeUnread(_ sender: Any?) {
+        messageActions?.summarizeUnread()
+    }
+
     // MARK: Validation
 
     /// Whether `action` is allowed for the selection (actions.go
@@ -300,6 +432,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         case Action.moveToTrash: return f.trash
         case Action.loadImages: return f.loadImages
         case Action.trustSender: return f.trustSender
+        // A message not in the Outbox, and the chosen Claude app can read
+        // the mail (ui/internal/assistant `Pick`, no fallback).
+        case Action.askAssistant: return f.on && !f.outbox && state.assistant.pick(needsBridge: true).ok
+        case Action.summarizeUnread:
+            return (messageActions?.canSummarizeUnread ?? false) && state.assistant.pick(needsBridge: true).ok
         default: return nil
         }
     }

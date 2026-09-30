@@ -76,9 +76,10 @@ final class MainContentViewController: NSViewController {
     // MARK: Responder chain
 
     /// The split view's own actions (⌃⌘S `toggleSidebar:`, ⌥⌘L
-    /// `toggleMessageList:`) keep working while the keyboard focus is in
-    /// the status bar: the bar is not under the split view controller in
-    /// the responder chain, but under this one.
+    /// `toggleMessageList:`, the assistant panel's `toggleInspector:`) keep
+    /// working while the keyboard focus is in the status bar: the bar is
+    /// not under the split view controller in the responder chain, but
+    /// under this one.
     override func supplementalTarget(forAction action: Selector, sender: Any?) -> Any? {
         if let target = Self.splitTarget(split, forAction: action) {
             return target
@@ -90,7 +91,7 @@ final class MainContentViewController: NSViewController {
     /// view's, nil otherwise. Shared with the window controller, which the
     /// chain reaches when no view of the window has the focus.
     static func splitTarget(_ split: MainSplitViewController, forAction action: Selector) -> Any? {
-        guard action == Action.toggleSidebar || action == Action.toggleMessageList,
+        guard action == Action.toggleSidebar || action == Action.toggleMessageList || action == Action.toggleInspector,
               split.responds(to: action) else { return nil }
         return split
     }

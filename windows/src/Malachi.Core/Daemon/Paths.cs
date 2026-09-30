@@ -18,7 +18,9 @@
 // point the app's writes at another program's key. The bundled programs
 // are found beside the app's executable: malachi-mcp.exe, and
 // malachi-credentials.exe, the keyring helper that stands in for macOS's
-// malachi-keychain. Directories are made private by
+// malachi-keychain. The assistant's working directory (Swift's
+// ClaudeCodeLocator.defaultDirectory, in the Caches directory there) is in
+// the data directory with the rest. Directories are made private by
 // IPrivateDirectoryFactory (a protected DACL) instead of mode 0700.
 
 using System;
@@ -115,6 +117,16 @@ public sealed record Paths
 
     /// <summary>The daemon's log file.</summary>
     public string DaemonLog => Path.Combine(LogDir, DaemonLogName);
+
+    /// <summary>
+    /// The working directory of the user's Claude Code for the assistant
+    /// panel and its one-shot requests, empty and private
+    /// (<c>%LOCALAPPDATA%\Malachi Mail\assistant</c>, or under
+    /// <c>MALACHI_DATA_DIR</c>; Swift's <c>ClaudeCodeLocator.defaultDirectory</c>
+    /// in the Caches directory, GTK's <c>~/.cache/malachi/assistant</c>).
+    /// Created private on demand, by whoever runs Claude Code there.
+    /// </summary>
+    public string AssistantDir => Path.Combine(DataDir, "assistant");
 
     /// <summary>The daemon's connection key beside the socket (api.KeyPath).</summary>
     public string KeyFile => RpcAuth.KeyPath(Socket);

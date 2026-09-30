@@ -9,7 +9,7 @@
 //
 // HKCU\Software\io.github.schotek.Malachi holds the gschema keys under their
 // gschema names: REG_DWORD for b and i (i read as a signed 32-bit number),
-// REG_SZ for the enum nicks, REG_MULTI_SZ for as. A value of another type
+// REG_SZ for s (enum nicks too), REG_MULTI_SZ for as. A value of another type
 // reads as unset (the default applies). A watcher thread waits on
 // RegNotifyChangeKeyValue, re-arms it before it reads, diffs every value
 // against a snapshot and raises Changed per changed name, so a reg add or a

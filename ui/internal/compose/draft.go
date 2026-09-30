@@ -439,6 +439,7 @@ func (w *Window) cleanup() {
 			editor.UnregisterCID(a.ContentID)
 		}
 	}
+	w.rewrite.close()
 	w.m.remove(w)
 }
 

@@ -13,6 +13,12 @@ import MalachiCore
 /// ⌘R is the user's choice (Settings → General → Keyboard, `command-r`):
 /// Mail.app's Reply, or the GTK UI's Check for New Mail; `apply(commandR:)`
 /// moves the key equivalents of the four affected items.
+///
+/// The Message menu ends with the Assistant submenu (ui/internal/assistant,
+/// `AssistantMenu`), hidden while the `assistant-menu` setting is off
+/// (`apply(assistantMenu:)`). The View menu's Show/Hide Assistant toggles
+/// the assistant panel of the main window and exists while the panel does
+/// (`apply(assistantPanel:)`: the Assistant shown and In App chosen).
 @MainActor
 enum MainMenu {
     /// The items whose key equivalents follow the `command-r` setting.
@@ -21,6 +27,11 @@ enum MainMenu {
         static let replyAll = NSUserInterfaceItemIdentifier("malachi.menu.replyAll")
         static let forward = NSUserInterfaceItemIdentifier("malachi.menu.forward")
         static let checkForNewMail = NSUserInterfaceItemIdentifier("malachi.menu.checkForNewMail")
+        /// The Assistant submenu and the separator before it.
+        static let assistant = NSUserInterfaceItemIdentifier("malachi.menu.assistant")
+        static let assistantSeparator = NSUserInterfaceItemIdentifier("malachi.menu.assistantSeparator")
+        /// View ▸ Show/Hide Assistant: the assistant panel.
+        static let assistantPanel = NSUserInterfaceItemIdentifier("malachi.menu.assistantPanel")
     }
 
     struct KeyEquivalent: Equatable {
@@ -61,13 +72,17 @@ enum MainMenu {
     /// Help opens the README.
     static let helpURL = URL(string: "https://github.com/schotek/malachi#readme")
 
+    /// The Assistant submenu's delegate, which fills it on open; the menu
+    /// holds its delegate weakly.
+    private static var assistantMenu: AssistantMenu?
+
     static func build(_ state: AppState) -> NSMenu {
         let bar = NSMenu()
         bar.addItem(submenu(appMenu(), title: appName))
         bar.addItem(submenu(fileMenu(), title: "File")) // macOS-only string
         bar.addItem(submenu(editMenu(), title: "Edit")) // macOS-only string
         bar.addItem(submenu(viewMenu(), title: "View")) // macOS-only string
-        bar.addItem(submenu(messageMenu(), title: L10n.T("Message")))
+        bar.addItem(submenu(messageMenu(state), title: L10n.T("Message")))
         bar.addItem(submenu(formatMenu(), title: "Format")) // macOS-only string
         let windows = windowMenu()
         bar.addItem(submenu(windows, title: "Window")) // macOS-only string
@@ -76,6 +91,8 @@ enum MainMenu {
         bar.addItem(submenu(help, title: "Help")) // macOS-only string
         NSApp.helpMenu = help
         apply(commandR: state.settings.commandR, to: bar)
+        apply(assistantMenu: state.assistant.shown, to: bar)
+        apply(assistantPanel: state.assistant.panelShown, to: bar)
         return bar
     }
 
@@ -87,6 +104,19 @@ enum MainMenu {
         set(keys.replyAll, on: ItemID.replyAll, in: bar)
         set(keys.forward, on: ItemID.forward, in: bar)
         set(keys.checkForNewMail, on: ItemID.checkForNewMail, in: bar)
+    }
+
+    /// Shows or hides the Assistant submenu with its separator.
+    static func apply(assistantMenu visible: Bool, to bar: NSMenu? = NSApp.mainMenu) {
+        guard let bar else { return }
+        find(ItemID.assistant, in: bar)?.isHidden = !visible
+        find(ItemID.assistantSeparator, in: bar)?.isHidden = !visible
+    }
+
+    /// Shows or hides View ▸ Show/Hide Assistant.
+    static func apply(assistantPanel visible: Bool, to bar: NSMenu? = NSApp.mainMenu) {
+        guard let bar else { return }
+        find(ItemID.assistantPanel, in: bar)?.isHidden = !visible
     }
 
     // MARK: Menus
@@ -177,6 +207,9 @@ enum MainMenu {
         // Titles alternate between Show and Hide in validation.
         m.addItem(item("Hide Sidebar", Action.toggleSidebar, key: "s", mods: [.command, .control])) // macOS-only string
         m.addItem(item("Hide Message List", Action.toggleMessageList, key: "l", mods: [.command, .option])) // macOS-only string
+        // The assistant panel (ui/internal/assistant); the split view
+        // validates the title.
+        m.addItem(item(Assistant.panelTexts().show, Action.toggleInspector, id: ItemID.assistantPanel))
         m.addItem(.separator())
         // The list's filter, the toolbar's filter menu too.
         FilterMenu.items().forEach { m.addItem($0) }
@@ -186,7 +219,7 @@ enum MainMenu {
         return m
     }
 
-    private static func messageMenu() -> NSMenu {
+    private static func messageMenu(_ state: AppState) -> NSMenu {
         let m = NSMenu()
         m.addItem(item(mn(L10n.T("_Send")), Action.sendMessage, key: "\r"))
         m.addItem(.separator())
@@ -204,6 +237,16 @@ enum MainMenu {
         m.addItem(item(L10n.T("Archive"), Action.archive, key: "a", mods: []))
         m.addItem(item(L10n.T("Mark as Junk"), Action.markAsJunk, key: "j", mods: []))
         m.addItem(item(L10n.T("Move to Trash"), Action.moveToTrash, key: "\u{8}", mods: []))
+        // The Assistant (ui/internal/assistant): the toolbar button's items;
+        // Summarize Unread stays off where the window has no folder.
+        let separator = NSMenuItem.separator()
+        separator.identifier = ItemID.assistantSeparator
+        m.addItem(separator)
+        let assistant = AssistantMenu(state: state, includesUnread: true)
+        assistantMenu = assistant
+        let it = submenu(assistant.menu, title: assistant.menu.title)
+        it.identifier = ItemID.assistant
+        m.addItem(it)
         return m
     }
 

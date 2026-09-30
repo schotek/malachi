@@ -35,6 +35,40 @@ public sealed class PaneLayoutTests
     [InlineData(999, 460)]
     public void TheListKeepsItsRange(int stored, int width) => Assert.Equal(width, PaneLayout.ClampList(stored));
 
+    // window.blp assistant_split and its breakpoint: inline wider than
+    // 1180, the fraction of the width within 280 to 480, never wider than
+    // the window.
+    [Theory]
+    [InlineData(1180, false)]
+    [InlineData(1181, true)]
+    [InlineData(900, false)]
+    [InlineData(2560, true)]
+    public void TheAssistantPanelIsAPaneOnlyInAWideWindow(double width, bool inline) =>
+        Assert.Equal(inline, PaneLayout.AssistantInline(width));
+
+    [Theory]
+    [InlineData(1500, 420)]
+    [InlineData(1000, 280)]
+    [InlineData(2560, 480)]
+    [InlineData(200, 200)]
+    [InlineData(0, 0)]
+    public void TheAssistantPanelTakesItsShareOfTheWidth(double width, double panel) =>
+        Assert.Equal(panel, PaneLayout.AssistantWidth(width), 3);
+
+    [Fact]
+    public void TheListGivesWayToWhatTheMessageNeeds()
+    {
+        // 400 for the message pane's buttons: the list narrows further, not
+        // below its minimum, and the sidebar keeps its width.
+        Assert.Equal(new PaneWidths(240, 310), PaneLayout.Widths(PaneMode.Wide, 1200, 240, 310, 400));
+        Assert.Equal(new PaneWidths(240, 300), PaneLayout.Widths(PaneMode.Wide, 940, 240, 380, 400));
+        Assert.Equal(new PaneWidths(240, 280), PaneLayout.Widths(PaneMode.Wide, 900, 240, 380, 400));
+        Assert.Equal(new PaneWidths(240, 350), PaneLayout.Widths(PaneMode.Medium, 750, 240, 460, 400));
+        Assert.Equal(new PaneWidths(240, 500), PaneLayout.Widths(PaneMode.Narrow, 500, 240, 380, 400));
+        // Without a minimum of its own the message keeps MessageMinimum.
+        Assert.Equal(PaneLayout.Widths(PaneMode.Wide, 901, 320, 460), PaneLayout.Widths(PaneMode.Wide, 901, 320, 460, PaneLayout.MessageMinimum));
+    }
+
     [Fact]
     public void AWideWindowGetsTheStoredWidths() =>
         Assert.Equal(new PaneWidths(240, 380), PaneLayout.Widths(PaneMode.Wide, 1200, 240, 380));

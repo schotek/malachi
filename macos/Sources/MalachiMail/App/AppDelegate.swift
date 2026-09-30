@@ -17,6 +17,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var integration: Integration?
     private var appearance: AppearanceController?
     private var commandRToken: Settings.ChangeToken?
+    private var assistantMenuToken: AssistantController.Token?
+    private var assistantTargetToken: Settings.ChangeToken?
     /// `mailto:` URLs AppKit delivered before the shell was wired (the
     /// open-URL event may arrive before `applicationDidFinishLaunching`
     /// returns); opened as soon as `hooks.openMailto` exists.
@@ -67,6 +69,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         commandRToken = settings.onChange(.commandR) {
             MainMenu.apply(commandR: settings.commandR)
         }
+        // The Message menu's Assistant follows `AssistantController.shown`
+        // (the setting while the bridge is registered), View ▸ Show
+        // Assistant `panelShown` (that, and In App chosen).
+        let assistant = state.assistant
+        assistantMenuToken = assistant.onChange {
+            MainMenu.apply(assistantMenu: assistant.shown)
+            MainMenu.apply(assistantPanel: assistant.panelShown)
+        }
+        assistantTargetToken = settings.onChange(.assistantTarget) {
+            MainMenu.apply(assistantPanel: assistant.panelShown)
+        }
+        // What the Assistant menu may use: looked up once now, again
+        // whenever one of its menus opens.
+        state.assistant.refresh()
 
         let wc = MainWindowController(state: state)
         mainWindow = wc
@@ -89,6 +105,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         connection.start()
     }
 
+    /// Coming to the front asks the Assistant's state again (the Claude
+    /// apps' link handlers now, the bridge's registration in the
+    /// background): a change made outside, such as Claude Desktop
+    /// rewriting its configuration or `malachi-mcp install` in a terminal,
+    /// shows in the menus and the settings without waiting for a menu to
+    /// open, and a status that failed at launch is asked again.
+    func applicationDidBecomeActive(_ notification: Foundation.Notification) {
+        state?.assistant.refresh()
+    }
+
     /// Quitting stops the daemon this app started (up to 15 s while its
     /// syncers log out), off the main thread so the windows stay
     /// responsive; "Run in Background" keeps everything alive by hiding
@@ -99,6 +125,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// takes one whose write was still in flight.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         purgeOpenDir()
+        // The assistant panel's Claude Code ends with the application, and
+        // so do a sign-in of Claude Code nobody waits for any more and a
+        // search in the user's own words under way.
+        integration?.assistantPanel.close()
+        state?.claudeCode.cancelSignIn()
+        mainWindow?.cancelSearchInOwnWords()
         guard let state else {
             return .terminateNow
         }
@@ -213,6 +245,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
     }
 
+    /// The Assistant menu's "Open In" choice (the item's tag): the
+    /// `assistant-target` preference, which Settings → AI shows too.
+    @objc func setAssistantTarget(_ sender: Any?) {
+        guard let state, let t = AssistantMenu.target(tag: (sender as? NSMenuItem)?.tag) else { return }
+        state.settings.assistantTarget = t
+    }
+
+    /// The Assistant menu's "Set Up the Assistant…": Settings on the AI
+    /// page, where "Register with Claude" is.
+    @objc func setUpAssistant(_ sender: Any?) {
+        state?.hooks.openAISettings?()
+    }
+
     @objc func openHelp(_ sender: Any?) {
         guard let url = MainMenu.helpURL else { return }
         NSWorkspace.shared.open(url)
@@ -227,6 +272,13 @@ extension AppDelegate: NSUserInterfaceValidations {
         case Action.newMessage: return state?.hooks.composeNew != nil
         case Action.addAccount: return state?.hooks.addAccount != nil
         case Action.showPreferences: return state?.hooks.openPreferences != nil
+        case Action.setUpAssistant: return state?.hooks.openAISettings != nil
+        case Action.setAssistantTarget:
+            // Checked: the preference; enabled: an app handles the links,
+            // for In App: Claude Code was found (and the bridge is there).
+            guard let state, let t = AssistantMenu.target(tag: (item as? NSMenuItem)?.tag) else { return false }
+            (item as? NSMenuItem)?.state = state.settings.assistantTarget == t ? .on : .off
+            return state.assistant.availability(t).handler
         default: return true
         }
     }

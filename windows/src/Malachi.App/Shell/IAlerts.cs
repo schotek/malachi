@@ -4,6 +4,7 @@
 // Port of macos/Sources/MalachiMail/App/Contracts.swift (Alerts,
 // SaveDraftAnswer as Core's DraftCloseAnswer); GTK: widget/rpc.go
 // ConfirmDestructive, compose/draft.go (the close question),
+// widget/consent.go (Send Mail to Claude?, through ConfirmAsync),
 // window/remote.go (Open This Link?), accountwizard/trust.go (Trust This
 // Certificate?), and main.go's app.about. The dialogs go on the window
 // that owns the action, or the main window when it is null (Windows has no
@@ -33,6 +34,15 @@ public interface IAlerts
     /// </summary>
     Task<(bool Confirmed, bool Extra)> ConfirmDestructiveExtraAsync(
         Window? window, string heading, string body, string confirmLabel, string extraLabel, bool extraDefault);
+
+    /// <summary>
+    /// A question without a destructive answer (macOS Alerts.confirm):
+    /// <paramref name="confirmLabel"/> leads as the default (Return),
+    /// <paramref name="declineLabel"/> takes Escape; true when confirmed. The
+    /// Assistant's "Send Mail to Claude?" (Allow / Cancel) and "Restart
+    /// Claude Desktop?" (Restart Claude Desktop / Later).
+    /// </summary>
+    Task<bool> ConfirmAsync(Window? window, string heading, string body, string confirmLabel, string declineLabel);
 
     /// <summary>"Save changes to this draft?": Save Draft (the default) / Discard / Cancel.</summary>
     Task<DraftCloseAnswer> SaveDraftQuestionAsync(Window? window);

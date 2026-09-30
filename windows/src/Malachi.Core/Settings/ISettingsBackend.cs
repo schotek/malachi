@@ -7,7 +7,7 @@
 // in HKCU\Software\io.github.schotek.Malachi (RegistrySettingsBackend in
 // Malachi.Platform.Windows); the tests and a store that cannot be opened use
 // InMemorySettingsBackend (docs/windows-port.md §8). The typed values are
-// the GSettings ones: b, i, s (enum nicks) and as.
+// the GSettings ones: b, i, s (enum nicks and plain strings) and as.
 
 using System;
 using System.Collections.Generic;

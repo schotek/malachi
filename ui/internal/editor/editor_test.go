@@ -48,3 +48,39 @@ func TestJSString(t *testing.T) {
 		t.Errorf("not a string literal: %s", got)
 	}
 }
+
+// The rewrite's answer goes in as plain text: never markup (macOS
+// EditorBridgeTests rewriteInsertion).
+func TestRewriteInsertion(t *testing.T) {
+	for _, c := range []struct {
+		text     string
+		below    bool
+		cmd, arg string
+	}{
+		{"Dobrý den.", false, "insertText", "Dobrý den."},
+		{"<b>x</b> & 'y'", false, "insertText", "<b>x</b> & 'y'"},
+		{"a\n\nb <i>", false, "insertHTML", "a<br><br>b &lt;i&gt;"},
+		{"a\r\nb", false, "insertHTML", "a<br>b"},
+		{"x & y", true, "insertHTML", "<br>x &amp; y<br>"},
+		{"a\nb", true, "insertHTML", "<br>a<br>b<br>"},
+		{"</script>\"", true, "insertHTML", "<br>&lt;/script&gt;&#34;<br>"},
+	} {
+		cmd, arg := RewriteInsertion(c.text, c.below)
+		if cmd != c.cmd || arg != c.arg {
+			t.Errorf("RewriteInsertion(%q, %v) = (%q, %q), want (%q, %q)", c.text, c.below, cmd, arg, c.cmd, c.arg)
+		}
+	}
+}
+
+// The page posts the passage of a rewrite; the bridge has both functions.
+func TestRewriteMessage(t *testing.T) {
+	m, err := decodeMessage(`{"type":"rewrite","selected":true,"text":"a\nb"}`)
+	if err != nil || m.Type != "rewrite" || !m.Selected || m.Text != "a\nb" {
+		t.Errorf("rewrite: %+v %v", m, err)
+	}
+	for _, fn := range []string{"rewriteTarget(attribution)", "rewriteApply(below, c, a)", "post({type: 'rewrite'"} {
+		if !strings.Contains(bridgeJS, fn) {
+			t.Errorf("bridgeJS lacks %s", fn)
+		}
+	}
+}

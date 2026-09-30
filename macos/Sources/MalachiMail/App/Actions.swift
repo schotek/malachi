@@ -13,9 +13,10 @@ import MalachiCore
 ///
 /// Names follow the GTK actions (`app.compose` → `newMessage:`, `win.trash`
 /// → `moveToTrash:`, …). Standard AppKit selectors (`performClose:`,
-/// `toggleSidebar:`, `hide:`, `terminate:`, the Edit menu) are not repeated
-/// here. `openHelp:` is deliberately not `showHelp:`, which NSApplication
-/// implements itself (it would open a non-existent help book first).
+/// `toggleSidebar:`, `toggleInspector:`, `hide:`, `terminate:`, the Edit
+/// menu) are not repeated here. `openHelp:` is deliberately not
+/// `showHelp:`, which NSApplication implements itself (it would open a
+/// non-existent help book first).
 @MainActor
 @objc protocol MalachiActions {
     // Application (ui/main.go `addActions`).
@@ -42,6 +43,15 @@ import MalachiCore
     @objc optional func moveToTrash(_ sender: Any?)
     @objc optional func loadImages(_ sender: Any?)
     @objc optional func trustSender(_ sender: Any?)
+
+    // The Assistant menu (ui/internal/assistant). A message action's tag
+    // is its index in `Assistant.messageActions`; Summarize Unread is the
+    // main window's only; the target's tag is its index in
+    // `AssistantController.targets`. The last two are the application's.
+    @objc optional func askAssistant(_ sender: Any?)
+    @objc optional func summarizeUnread(_ sender: Any?)
+    @objc optional func setAssistantTarget(_ sender: Any?)
+    @objc optional func setUpAssistant(_ sender: Any?)
 
     // Compose window (compose.blp).
     @objc optional func sendMessage(_ sender: Any?)
@@ -93,6 +103,11 @@ enum Action {
     static let loadImages = #selector(MalachiActions.loadImages(_:))
     static let trustSender = #selector(MalachiActions.trustSender(_:))
 
+    static let askAssistant = #selector(MalachiActions.askAssistant(_:))
+    static let summarizeUnread = #selector(MalachiActions.summarizeUnread(_:))
+    static let setAssistantTarget = #selector(MalachiActions.setAssistantTarget(_:))
+    static let setUpAssistant = #selector(MalachiActions.setUpAssistant(_:))
+
     static let sendMessage = #selector(MalachiActions.sendMessage(_:))
     static let saveDraft = #selector(MalachiActions.saveDraft(_:))
     static let attachFiles = #selector(MalachiActions.attachFiles(_:))
@@ -118,6 +133,9 @@ enum Action {
     /// The native split-view action, sent by the toolbar's sidebar item and
     /// the View menu.
     static let toggleSidebar = #selector(NSSplitViewController.toggleSidebar(_:))
+    /// The native inspector toggle: the assistant panel of the main window
+    /// (the toolbar's inspector item, View ▸ Show/Hide Assistant).
+    static let toggleInspector = #selector(NSSplitViewController.toggleInspector(_:))
 
     /// The single-letter accelerators of the GTK UI (`a`, `j`, `u`, `s`,
     /// Delete): a menu item with one of these must not fire while the user

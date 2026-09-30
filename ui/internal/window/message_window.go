@@ -11,6 +11,7 @@ import (
 
 	"github.com/schotek/malachi/backend/pkg/api"
 	"github.com/schotek/malachi/ui/data"
+	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/compose"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
@@ -98,7 +99,31 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	add("junk", !outbox && w.canMoveToRole(s, api.RoleJunk), func() { w.junkFrom(mw, id) })
 	add("load-images", true, func() { w.loadRemoteImages(id) })
 	add("trust-sender", !outbox, func() { w.trustSender(id) })
+	// The Assistant menu (assistant.go) on this message, never an outbox
+	// one; enabled as the menu opens, while the chosen target can run it.
+	ask := gio.NewSimpleAction("assistant", glib.NewVariantType("s"))
+	ask.SetEnabled(false)
+	ask.ConnectActivate(func(v *glib.Variant) {
+		if v != nil {
+			w.askAssistantAbout(&mw.Window.Window, assistant.Action(v.String()), s, mw.view.say)
+		}
+	})
+	g.AddAction(ask)
 	mw.InsertActionGroup("msg", g)
+	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
+		_, ok := w.assist.pick(true)
+		ask.SetEnabled(ok && !outbox)
+	})
+	activeHandle := mw.NotifyProperty("is-active", func() {
+		if mw.IsActive() {
+			w.assist.Refresh()
+		}
+	})
+	mw.ConnectCloseRequest(func() bool {
+		unbind()
+		mw.HandlerDisconnect(activeHandle)
+		return false
+	})
 	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button", "junk": "junk_button"} {
 		b.GetObject(obj).Cast().(*gtk.Button).SetActionName("msg." + name)
 	}

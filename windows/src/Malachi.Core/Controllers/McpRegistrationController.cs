@@ -9,7 +9,17 @@
 // Windows differences. The group description reports what GTK reports
 // there and macOS only toasts or logs (docs/windows-port.md §3.1, U2 and
 // U3): a bridge missing beside the app, and a status the bridge did not
-// give; a later status that succeeds puts the page's own text back. Every
+// give. As GTK's bindMCP now does, a failed status check is repeated after
+// each of the statusRetryDelays (1, 2 and 4 s) while the last known state
+// stays shown, and only when the repeats are used up and no state is known
+// (neither answered nor adopted) does the description say "The MCP bridge
+// did not answer: %s"; a later status that succeeds, or one adopted, puts
+// the page's own text back (GTK leaves its text until the dialog closes).
+// The repeats wait on the injected TimeProvider, detached as every wait on
+// the clock (docs/windows-port.md §7.2), and a newer call cancels a repeat
+// still waiting. ChangeAsync is Swift's change(registered:); its task is
+// completed with null at once when the controller closes, where Swift's
+// resumes once the dropped reply comes back. Every
 // call passes --command with the bridge's canonical path, so the entry
 // the bridge writes and compares is spelt the same whichever way the app
 // was started, and --claude-desktop-config when the Microsoft Store's
@@ -54,17 +64,24 @@ namespace Malachi.Core.Controllers;
 /// </summary>
 /// <remarks>
 /// The switch is on when at least one client reports the bridge as
-/// registered. The row is insensitive before the first status and while a
-/// call runs; a failed install or uninstall shows a toast (the bridge's
-/// one-line reason, or that no Claude app is installed) and the switch goes
-/// back to the last state the bridge confirmed. A failed status check puts
-/// its reason into the group's description and the row stays insensitive
-/// until the page comes up again and asks once more. Without a bridge
-/// beside the application (<see cref="Paths.McpBridge"/> null) the row stays
-/// insensitive and the description says so, once. A status asked while a
-/// call runs is skipped (that call's answer is the newer status); the reply
-/// of a call a newer one overtook, and every reply after
-/// <see cref="Close"/>, is dropped. Create it, and call it, on the UI
+/// registered. A state not known yet is never shown as "off" for long: the
+/// page hands over the application's last status (<see cref="Adopt"/>),
+/// which is shown at once, and so is every newer one the application learns
+/// while no call of the page runs. The row is insensitive while the state is
+/// not known and while an install or uninstall runs; a status check of a
+/// known state leaves it sensitive. A failed install or uninstall shows a
+/// toast (the bridge's one-line reason, or that no Claude app is installed)
+/// and the switch goes back to the last state the bridge confirmed. A failed
+/// status check has no toast: it is logged, the last known state stays, and
+/// the check is repeated after each of the status retry delays (a Claude app
+/// may be rewriting its file just then); once they are used up with no
+/// state known, its reason goes into the group's description, and the row
+/// stays insensitive until the page comes up again and asks once more.
+/// Without a bridge beside the application (<see cref="Paths.McpBridge"/>
+/// null) the row stays insensitive and the description says so, once. A
+/// status asked while a call runs is skipped (that call's answer is the
+/// newer status); the reply of a call a newer one overtook, and every reply
+/// after <see cref="Close"/>, is dropped. Create it, and call it, on the UI
 /// thread.
 /// </remarks>
 public sealed partial class McpRegistrationController : ObservableObject, IDisposable
@@ -74,6 +91,13 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
 
     /// <summary>How long one bridge call may take (mcpsetup.Timeout).</summary>
     public static readonly TimeSpan DefaultTimeout = BridgeRunner.DefaultTimeout;
+
+    /// <summary>
+    /// The pauses before the automatic repeats of a failed status check
+    /// (preferences.go <c>mcpStatusRetryDelays</c>): 1, 2 and 4 s.
+    /// </summary>
+    public static readonly IReadOnlyList<TimeSpan> DefaultStatusRetryDelays =
+        [TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4)];
 
     // How install says that neither Claude app is installed: the start of
     // its one-line reason on stderr, compared case-insensitively.
@@ -85,14 +109,25 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     private readonly string? bridge;
     private readonly BridgeRunner runner;
     private readonly TimeSpan timeout;
+    private readonly IReadOnlyList<TimeSpan> statusRetryDelays;
     private readonly ClaudeDesktopPackage claudeDesktop;
+    private readonly TimeProvider time;
     private readonly ControllerScope scope;
     private readonly ILogger logger;
+
+    // What ChangeAsync waits for, by the op of its call: answered with the
+    // status, or null when the call yielded none or was dropped.
+    private readonly Dictionary<int, Action<McpStatus?>> answers = [];
 
     // Bumped by every call; the reply of an older one is dropped.
     private int op;
     private bool inFlight;
     private bool reportedMissing;
+
+    // The automatic repeats of a failed status check used so far; back to
+    // none after any answered call. retry: the repeat waiting, if any.
+    private int statusRetries;
+    private CancellationTokenSource? retry;
 
     /// <summary>A controller for <paramref name="bridge"/>, on the calling (UI) thread.</summary>
     /// <param name="bridge">
@@ -102,21 +137,30 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     /// </param>
     /// <param name="runner">How the bridge is run; the default runs the real thing.</param>
     /// <param name="timeout">How long one call may take (<see cref="DefaultTimeout"/>).</param>
+    /// <param name="statusRetryDelays">
+    /// The pauses before repeating a failed status check, one repeat each
+    /// (<see cref="DefaultStatusRetryDelays"/>).
+    /// </param>
     /// <param name="claudeDesktop">The Microsoft Store's Claude Desktop (<see cref="ClaudeDesktopPackage.ForCurrentUser"/>).</param>
+    /// <param name="time">The clock of the repeats; the system's when null.</param>
     /// <param name="logger">Receives the subcommand and the kind of a failure, never a path or a reason.</param>
     /// <param name="pending">Counts the controller's background work; one of its own when null.</param>
     public McpRegistrationController(
         string? bridge,
         BridgeRunner? runner = null,
         TimeSpan? timeout = null,
+        IReadOnlyList<TimeSpan>? statusRetryDelays = null,
         ClaudeDesktopPackage? claudeDesktop = null,
+        TimeProvider? time = null,
         ILogger<McpRegistrationController>? logger = null,
         PendingWork? pending = null)
     {
         this.bridge = bridge is null ? null : CanonicalPath(bridge);
         this.runner = runner ?? new BridgeRunner();
         this.timeout = timeout ?? DefaultTimeout;
+        this.statusRetryDelays = statusRetryDelays is null ? DefaultStatusRetryDelays : [.. statusRetryDelays];
         this.claudeDesktop = claudeDesktop ?? ClaudeDesktopPackage.ForCurrentUser();
+        this.time = time ?? TimeProvider.System;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
         scope = new ControllerScope(pending);
     }
@@ -162,7 +206,7 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     [ObservableProperty]
     public partial bool IsRegistered { get; private set; }
 
-    /// <summary>The row's sensitivity: a bridge is there, its status is known and no call is in flight.</summary>
+    /// <summary>The row's sensitivity: a bridge is there, its status is known and no install or uninstall is in flight.</summary>
     [ObservableProperty]
     public partial bool IsEnabled { get; private set; }
 
@@ -268,11 +312,22 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         return current;
     }
 
-    /// <summary>Drops every reply still in flight and ends a status run; nothing is emitted afterwards.</summary>
+    /// <summary>
+    /// Drops every reply still in flight, ends a status run and a repeat
+    /// waiting; nothing is emitted afterwards, and every
+    /// <see cref="ChangeAsync"/> still waiting gets null.
+    /// </summary>
     public void Close()
     {
         scope.VerifyAccess();
         scope.Close();
+        CancelRetry();
+        var waiting = new List<Action<McpStatus?>>(answers.Values);
+        answers.Clear();
+        foreach (var done in waiting)
+        {
+            done(null);
+        }
     }
 
     /// <summary>Closes the controller.</summary>
@@ -303,6 +358,30 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
     }
 
     /// <summary>
+    /// Takes a status reported elsewhere (the application's last, which the
+    /// assistant keeps): shown at once and the row sensitive, so the switch
+    /// never shows "off" only because this page has not asked yet, and it
+    /// follows what the application learns later; the page's own description
+    /// is back. Nothing while a call runs (its answer is newer), without a
+    /// bridge, once closed, or when it is the status already shown.
+    /// </summary>
+    public void Adopt(McpStatus status)
+    {
+        ArgumentNullException.ThrowIfNull(status);
+        scope.VerifyAccess();
+        if (IsClosed || bridge is null || inFlight || status == Status)
+        {
+            return;
+        }
+        Status = status;
+        IsRegistered = status.IsRegistered;
+        statusRetries = 0;
+        SetDescription(null);
+        SetEnabled(true);
+        RegisteredChanged?.Invoke(this, IsRegistered);
+    }
+
+    /// <summary>
     /// Runs <c>install</c> or <c>uninstall</c> and shows what the bridge
     /// reports afterwards; on failure the switch goes back and a toast says
     /// why (Swift <c>set(registered:)</c>).
@@ -323,11 +402,49 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         Run(want ? Command.Install : Command.Uninstall, bridge);
     }
 
-    private void Run(Command command, string path)
+    /// <summary>
+    /// <see cref="SetRegistered"/> that returns once the bridge answered,
+    /// after the events: the status the bridge reported, or null when the
+    /// call failed (its toast was shown), there is no bridge, a newer call
+    /// overtook it or the controller closed (Swift <c>change(registered:)</c>,
+    /// which the Claude Desktop restart awaits between quitting the app and
+    /// starting it again).
+    /// </summary>
+    public Task<McpStatus?> ChangeAsync(bool want)
+    {
+        scope.VerifyAccess();
+        if (IsClosed)
+        {
+            return Task.FromResult<McpStatus?>(null);
+        }
+        if (bridge is null)
+        {
+            ReportMissing();
+            RegisteredChanged?.Invoke(this, IsRegistered);
+            return Task.FromResult<McpStatus?>(null);
+        }
+        var answer = new TaskCompletionSource<McpStatus?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Run(want ? Command.Install : Command.Uninstall, bridge, s => answer.TrySetResult(s));
+        return answer.Task;
+    }
+
+    // Runs command; done gets its status, or null when it yielded none or
+    // its reply was dropped, exactly once.
+    private void Run(Command command, string path, Action<McpStatus?>? done = null)
     {
         var my = ++op;
+        if (done is not null)
+        {
+            answers[my] = done;
+        }
         inFlight = true;
-        SetEnabled(false);
+        CancelRetry();
+        // A status check of a known state keeps the row sensitive: flipping
+        // the switch meanwhile overtakes it.
+        if (command != Command.Status || Status is null)
+        {
+            SetEnabled(false);
+        }
         var run = runner;
         var limit = timeout;
         var desktop = claudeDesktop;
@@ -349,8 +466,10 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
 
     private void Answered(int my, Command command, Outcome<(McpStatus? Status, McpCallFailure? Failure)> outcome)
     {
+        answers.Remove(my, out var done);
         if (my != op)
         {
+            done?.Invoke(null);
             return;
         }
         inFlight = false;
@@ -361,6 +480,7 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
         {
             Status = status;
             IsRegistered = status.IsRegistered;
+            statusRetries = 0;
             // The bridge answers again: the page's own description is back.
             SetDescription(null);
         }
@@ -369,16 +489,77 @@ public sealed partial class McpRegistrationController : ObservableObject, IDispo
             LogCallFailed(logger, CommandName(command), failure.GetType().Name);
             if (command == Command.Status)
             {
-                // The group says so, as GTK's does (preferences.go bindMCP);
-                // the row stays insensitive until the page asks again.
-                // TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
-                SetDescription(L10n.T("The MCP bridge did not answer: %s", failure.Reason));
+                // No toast (preferences.go bindMCP): the last known state
+                // stays (the row sensitive when there is one), and the check
+                // is repeated shortly. Only when the repeats are used up and
+                // no state is known does the group say why, as GTK's does;
+                // the row then stays insensitive until the page asks again.
+                if (Status is not null)
+                {
+                    SetEnabled(true);
+                }
+                if (!RetryStatus(my) && Status is null)
+                {
+                    // TRANSLATORS: %s is a one-line reason from the malachi-mcp bridge.
+                    SetDescription(L10n.T("The MCP bridge did not answer: %s", failure.Reason));
+                }
+                done?.Invoke(null);
                 return;
             }
             ToastRequested?.Invoke(this, failure.Toast(registering: command == Command.Install));
         }
         SetEnabled(true);
         RegisteredChanged?.Invoke(this, IsRegistered);
+        done?.Invoke(status);
+    }
+
+    // Repeats the failed status check of call my after the next of the
+    // status retry delays, unless a newer call came meanwhile (its answer is
+    // newer; it cancels the wait) or the page closed. False when the repeats
+    // are used up (the page's next appearance asks again).
+    private bool RetryStatus(int my)
+    {
+        if (statusRetries >= statusRetryDelays.Count)
+        {
+            return false;
+        }
+        var delay = statusRetryDelays[statusRetries];
+        statusRetries++;
+        var cts = new CancellationTokenSource();
+        retry = cts;
+        scope.RunDetached(async lifetime =>
+        {
+            try
+            {
+                using var wait = CancellationTokenSource.CreateLinkedTokenSource(lifetime, cts.Token);
+                await Task.Delay(delay, time, wait.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return; // a newer call, or the page closed
+            }
+            finally
+            {
+                if (ReferenceEquals(retry, cts))
+                {
+                    retry = null;
+                }
+                cts.Dispose();
+            }
+            if (IsClosed || inFlight || my != op)
+            {
+                return;
+            }
+            Load();
+        });
+        return true;
+    }
+
+    // Cancels the repeat waiting, if any.
+    private void CancelRetry()
+    {
+        retry?.Cancel();
+        retry = null;
     }
 
     // No bridge beside the application: the row stays insensitive and the

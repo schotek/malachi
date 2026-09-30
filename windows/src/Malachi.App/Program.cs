@@ -12,10 +12,17 @@
 //    (make run-windows) and takes its Ctrl+C (a graceful Quit) and its
 //    closing (the daemon stops by itself; nothing restarts it). Before
 //    anything touches System.Console.
-// 2. The log (the data directory's logs, and the terminal).
-// 3. The notifications' hook (PlatformServices.InitializeEarly): the
+// 2. The working directory leaves the app's folder for the user's profile
+//    (Windows-only: a launch from Explorer, a shortcut or make run-windows
+//    starts the app in its own folder): everything the app starts inherits
+//    it, and a Claude Desktop, browser or viewer it started would keep the
+//    folder from being removed or updated as long as it runs. The
+//    MALACHI_* variables that name a path and were given relative keep
+//    meaning what they meant where the app was started.
+// 3. The log (the data directory's logs, and the terminal).
+// 4. The notifications' hook (PlatformServices.InitializeEarly): the
 //    handler before Register(), both before the single instance.
-// 4. The single instance: AppInstance.FindOrRegisterForKey with the app
+// 5. The single instance: AppInstance.FindOrRegisterForKey with the app
 //    id. A second launch redirects its activation (its command line with
 //    a mailto: URI or --background, a notification's click) to the first
 //    and exits once the first has taken it, however long that takes, or
@@ -25,7 +32,7 @@
 //    passes the right to come to the front on (APP-SPIKES.md §5.2). The
 //    first instance takes redirected activations on a worker thread and
 //    hands them to the UI thread.
-// 5. The application, on a DispatcherQueueSynchronizationContext.
+// 6. The application, on a DispatcherQueueSynchronizationContext.
 
 using System;
 using System.Collections.Generic;
@@ -58,10 +65,40 @@ public static partial class Program
     private static App? app;
     private static ILogger logger = Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
 
+    // The MALACHI_* variables whose value is a path (DaemonSupervisor,
+    // Paths, Catalogue); MALACHI_DAEMON may also be none.
+    private static readonly string[] PathVariables =
+        ["MALACHI_DATA_DIR", "MALACHI_SOCKET", "MALACHI_DAEMON", "MALACHI_KEYRING_HELPER", "MALACHI_LOCALE_DIR"];
+
+    // Step 2: a relative path in a path variable becomes absolute against
+    // the directory the app was started in, then the working directory is
+    // the user's profile (the system folder when there is none).
+    private static void LeaveLaunchDirectory()
+    {
+        foreach (var name in PathVariables)
+        {
+            var value = Environment.GetEnvironmentVariable(name);
+            if (value is { Length: > 0 } && value.IndexOfAny(['\\', '/']) >= 0 && !System.IO.Path.IsPathFullyQualified(value))
+            {
+                Environment.SetEnvironmentVariable(name, System.IO.Path.GetFullPath(value));
+            }
+        }
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        try
+        {
+            Environment.CurrentDirectory = profile.Length > 0 ? profile : Environment.SystemDirectory;
+        }
+        catch (Exception e) when (e is System.IO.IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        {
+            // Where the app was started, then: nothing else depends on it.
+        }
+    }
+
     [STAThread]
     private static int Main()
     {
         var console = ConsoleAttachment.Initialize(OnConsoleControl);
+        LeaveLaunchDirectory();
         var paths = Paths.Resolve();
         string? logDirectory = paths.LogDir;
         try

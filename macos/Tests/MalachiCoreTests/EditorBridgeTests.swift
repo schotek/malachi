@@ -64,7 +64,78 @@ struct EditorBridgeTests {
         #expect(decoded == ["a\"b\\c </script>\u{2028}"])
     }
 
-    /// The script is the GTK one plus the two WKWebView additions.
+    /// The script is the GTK one plus the three WKWebView additions: the
+    /// GTK script's lines are all there, in order, and what is not the
+    /// GTK's is the documented additions.
+    @Test func bridgeScriptIsGTKsPlusTheAdditions() {
+        // ui/internal/editor/bridge.go's bridgeJS, the keydown line as GTK
+        // has it.
+        let gtk = #"""
+        (() => {
+          const post = m => window.webkit.messageHandlers.malachi.postMessage(JSON.stringify(m));
+          let seq = 0, timer = null;
+          const flush = () => {
+            if (timer) { clearTimeout(timer); timer = null; }
+            post({type: 'changed', seq: ++seq, html: document.body.innerHTML, text: document.body.innerText});
+            return seq;
+          };
+          const schedule = () => { if (timer) clearTimeout(timer); timer = setTimeout(flush, 250); };
+          const q = c => { try { return document.queryCommandState(c); } catch (e) { return false; } };
+          const state = () => post({
+            type: 'state',
+            bold: q('bold'), italic: q('italic'), underline: q('underline'), strike: q('strikethrough'),
+            ul: q('insertUnorderedList'), ol: q('insertOrderedList'),
+            block: String(document.queryCommandValue('formatBlock') || '').toLowerCase(),
+            align: q('justifyCenter') ? 'center' : q('justifyRight') ? 'right' : 'left',
+            link: !!(document.getSelection().anchorNode && document.getSelection().anchorNode.parentElement &&
+                     document.getSelection().anchorNode.parentElement.closest('a'))
+          });
+          document.execCommand('styleWithCSS', false, false);
+          document.addEventListener('input', () => { schedule(); state(); });
+          document.addEventListener('selectionchange', state);
+          document.addEventListener('keydown', e => {
+            if (!e.ctrlKey || e.altKey || e.metaKey) return;
+            const cmd = {b: 'bold', i: 'italic', u: 'underline'}[e.key.toLowerCase()];
+            if (cmd) { e.preventDefault(); document.execCommand(cmd); state(); }
+          });
+          window.malachi = {
+            flush,
+            focusStart() {
+              document.body.focus();
+              const sel = document.getSelection();
+              sel.removeAllRanges();
+              const r = document.createRange();
+              r.setStart(document.body, 0);
+              r.collapse(true);
+              sel.addRange(r);
+            }
+          };
+          post({type: 'ready'});
+        })();
+        """#
+        let keydownGTK = "    if (!e.ctrlKey || e.altKey || e.metaKey) return;"
+        let keydownMac = "    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;"
+        let mine = bridgeJS.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var extra: [String] = []
+        var i = 0
+        for line in mine {
+            let want = gtk.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            if i < want.count, line == want[i] || (want[i] == keydownGTK && line == keydownMac) {
+                i += 1
+            } else {
+                extra.append(line)
+            }
+        }
+        #expect(i == gtk.split(separator: "\n", omittingEmptySubsequences: false).count, "a GTK line is missing or out of order")
+        // The additions: exec, then the rewrite's two functions.
+        #expect(extra.first == "  window.malachi.exec = (c, a) => { document.execCommand(c, false, a == null ? null : a); state(); };")
+        #expect(extra.dropFirst().first == "  let passage = null;")
+        #expect(extra.contains("  window.malachi.rewriteTarget = attribution => {"))
+        #expect(extra.contains("  window.malachi.rewriteApply = (below, c, a) => {"))
+        #expect(extra.last == "  };")
+    }
+
+    /// The script is the GTK one plus the WKWebView additions.
     @Test func bridgeScript() {
         #expect(bridgeJS.hasPrefix("(() => {\n"))
         #expect(bridgeJS.hasSuffix("\n})();"))
@@ -75,5 +146,50 @@ struct EditorBridgeTests {
         #expect(bridgeJS.contains("post({type: 'ready'});"))
         #expect(bridgeJS.contains("focusStart()"))
         #expect(bridgeJS.contains("setTimeout(flush, 250)"))
+        // The rewrite: the selection when it holds more than white space,
+        // the text before the attribution's div, or the whole body; its
+        // text read through the selection (line breaks as the page renders
+        // them), which is put back; the answer by one editing command,
+        // reported like typing.
+        #expect(bridgeJS.contains("sel.toString().trim()"))
+        #expect(bridgeJS.contains("document.body.querySelectorAll('div')).find(d => collapsed(d.innerText) === want)"))
+        #expect(bridgeJS.contains("r.selectNodeContents(document.body);"))
+        #expect(bridgeJS.contains("if (saved) sel.addRange(saved);"))
+        #expect(bridgeJS.contains("return JSON.stringify({selected: false, text});"))
+        #expect(bridgeJS.contains("if (below) r.collapse(false);"))
+        #expect(bridgeJS.contains("document.execCommand(c, false, a);\n    schedule();\n    state();"))
+        #expect(!bridgeJS.contains("innerHTML ="), "the page's HTML is never written by the bridge")
+    }
+
+    /// The answer goes in as plain text: one line with insertText, several
+    /// as escaped HTML with line breaks, below the passage on a line of its
+    /// own; never markup of its own.
+    @Test func rewriteInsertion() {
+        #expect(MalachiCore.rewriteInsertion("Dobrý den.", below: false) == ("insertText", "Dobrý den."))
+        #expect(MalachiCore.rewriteInsertion("<b>x</b> & 'y'", below: false) == ("insertText", "<b>x</b> & 'y'"))
+        #expect(MalachiCore.rewriteInsertion("a\n\nb <i>", below: false) == ("insertHTML", "a<br><br>b &lt;i&gt;"))
+        #expect(MalachiCore.rewriteInsertion("a\r\nb", below: false) == ("insertHTML", "a<br>b"))
+        #expect(MalachiCore.rewriteInsertion("x & y", below: true) == ("insertHTML", "<br>x &amp; y<br>"))
+        #expect(MalachiCore.rewriteInsertion("a\nb", below: true) == ("insertHTML", "<br>a<br>b<br>"))
+        #expect(MalachiCore.rewriteInsertion("</script>\"", below: true) == ("insertHTML", "<br>&lt;/script&gt;&#34;<br>"))
+    }
+
+    @Test func rewriteScripts() {
+        #expect(RewriteTarget.script(attribution: "On 1 May, Jana wrote:") == "window.malachi.rewriteTarget(\"On 1 May, Jana wrote:\")")
+        #expect(RewriteTarget.script(attribution: "") == "window.malachi.rewriteTarget(\"\")")
+        // The attribution is mail data (a sender's name): a string literal.
+        #expect(RewriteTarget.script(attribution: "a\")</script>\n") == "window.malachi.rewriteTarget(\"a\\\")\\u003c/script\\u003e\\n\")")
+        #expect(rewriteApplyScript("Hi", below: false) == "window.malachi.rewriteApply(false, \"insertText\", \"Hi\")")
+        #expect(rewriteApplyScript("a\nb", below: true) == "window.malachi.rewriteApply(true, \"insertHTML\", \"\\u003cbr\\u003ea\\u003cbr\\u003eb\\u003cbr\\u003e\")")
+    }
+
+    @Test func rewriteTargetDecode() {
+        #expect(RewriteTarget.decode(#"{"selected":true,"text":"a\nb"}"#) == RewriteTarget(selected: true, text: "a\nb"))
+        #expect(RewriteTarget.decode(#"{"selected":false,"text":""}"#) == RewriteTarget(selected: false, text: ""))
+        #expect(RewriteTarget.decode(#"{"text":"x"}"#) == RewriteTarget(selected: false, text: "x"))
+        #expect(RewriteTarget.decode("not json") == nil)
+        #expect(RewriteTarget.decode(#"{"selected":"yes"}"#) == nil)
+        #expect(RewriteTarget.decode(nil) == nil)
+        #expect(RewriteTarget.decode(42) == nil)
     }
 }

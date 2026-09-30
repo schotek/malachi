@@ -60,6 +60,7 @@ func main() {
 	// by then), before any window or action can use them.
 	var (
 		prefs   *settings.Store
+		assist  *window.Assistant
 		mainWin *window.Window
 		mgr     *compose.Manager
 		// serviceHold is set when started with --gapplication-service (the
@@ -73,7 +74,14 @@ func main() {
 		addUninstalledIconPath()
 		prefs = settings.Open(log)
 		style.Apply(prefs)
+		// The Assistant menus (window/assistant.go) ask whether the Claude
+		// apps are there and the bridge is registered; "Set Up the
+		// Assistant…" opens the AI page of the preferences.
+		assist = window.NewAssistant(prefs, log)
+		assist.AddActions(app, func() { openPreferences(app, prefs, rpc, assist, log, "ai") })
+		assist.Refresh()
 		mgr = compose.NewManager(app, rpc, log, prefs)
+		mgr.Assistant = assist
 		mgr.OnSent = func(text string) {
 			if mainWin != nil {
 				// A short confirmation: the outbox folder and the "sent"
@@ -101,7 +109,7 @@ func main() {
 	// reused; when it really closes the application exits with it.
 	show := func() {
 		if mainWin == nil {
-			mainWin = window.New(app, rpc, log, prefs, mgr, sup)
+			mainWin = window.New(app, rpc, log, prefs, assist, mgr, sup)
 		}
 		mainWin.Present()
 		if serviceHold {
@@ -124,6 +132,10 @@ func main() {
 		}
 	})
 	app.ConnectShutdown(func() {
+		// The assistant panel's Claude Code ends with the application.
+		if mainWin != nil {
+			mainWin.CloseAssistant()
+		}
 		window.SweepOpenedAttachments(log)
 		rpc.Close()
 		// Quitting the application quits the daemon it started; "Run in
@@ -133,7 +145,7 @@ func main() {
 		sup.Stop()
 	})
 
-	addActions(app, rpc, log, func() *settings.Store { return prefs }, show, func() *compose.Manager { return mgr })
+	addActions(app, rpc, log, func() *settings.Store { return prefs }, func() *window.Assistant { return assist }, show, func() *compose.Manager { return mgr })
 	os.Exit(app.Run(os.Args))
 }
 
@@ -157,9 +169,10 @@ func addUninstalledIconPath() {
 	gtk.IconThemeGetForDisplay(display).AddSearchPath(dir)
 }
 
-// addActions registers application actions. store yields the settings store,
-// which exists only after startup has run; show presents the main window.
-func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, show func(), composer func() *compose.Manager) {
+// addActions registers application actions. store and assist yield the
+// settings store and the Assistant state, which exist only after startup
+// has run; show presents the main window.
+func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, store func() *settings.Store, assist func() *window.Assistant, show func(), composer func() *compose.Manager) {
 	newMessage := gio.NewSimpleAction("compose", nil)
 	newMessage.ConnectActivate(func(*glib.Variant) { composer().Open(compose.Params{}) })
 	app.AddAction(newMessage)
@@ -188,7 +201,7 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 
 	prefs := gio.NewSimpleAction("preferences", nil)
 	prefs.ConnectActivate(func(*glib.Variant) {
-		window.NewPreferences(store(), rpc, log).Present(app.ActiveWindow())
+		openPreferences(app, store(), rpc, assist(), log, "")
 	})
 	app.AddAction(prefs)
 	app.SetAccelsForAction("app.preferences", []string{"<Control>comma"})
@@ -214,6 +227,16 @@ func addActions(app *adw.Application, rpc *client.Client, log *slog.Logger, stor
 	for action, accel := range window.MessageAccels {
 		app.SetAccelsForAction(action, []string{accel})
 	}
+}
+
+// openPreferences presents the preferences dialog over the active window,
+// on the page named page ("" for the first).
+func openPreferences(app *adw.Application, s *settings.Store, rpc *client.Client, assist *window.Assistant, log *slog.Logger, page string) {
+	d := window.NewPreferences(s, rpc, assist, log)
+	if page != "" {
+		d.SetVisiblePageName(page)
+	}
+	d.Present(app.ActiveWindow())
 }
 
 func newLogger() *slog.Logger {

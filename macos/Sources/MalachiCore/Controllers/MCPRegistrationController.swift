@@ -53,12 +53,18 @@ public struct MCPStatus: Codable, Equatable, Sendable {
 /// docs/mcp.md). The application never touches those files itself.
 ///
 /// The switch is on when at least one client reports the bridge as
-/// registered. The row is insensitive before the first status and while a
-/// call runs; a failed install or uninstall shows a toast (the bridge's
-/// one-line reason, or that no Claude app is installed) and the switch goes
-/// back to the last state the bridge confirmed; a failed status check has
-/// no sentence of its own, as in GTK: it is logged and the row simply
-/// stays insensitive until the page comes up again and asks once more.
+/// registered. A state not known yet is never shown as "off" for long: the
+/// page hands over the application's last status (`adopt`), which is
+/// shown at once, and so is every newer one the application learns while
+/// no call of the page runs. The row is insensitive while the state is not
+/// known and while an install or uninstall runs; a status check of a known
+/// state leaves it sensitive. A failed install or uninstall shows a toast
+/// (the bridge's one-line reason, or that no Claude app is installed) and
+/// the switch goes back to the last state the bridge confirmed; a failed
+/// status check has no sentence of its own, as in GTK: it is logged, the
+/// last known state stays, and the check is repeated after
+/// `statusRetryDelays` (a Claude app may be rewriting its file just then;
+/// GTK preferences.go `bindMCP` repeats it after the same pauses).
 /// Without a bridge beside the application (`Paths.mcpBridge`
 /// nil) the row stays insensitive and a toast says so, once. A status
 /// asked while a call runs is skipped (that call's answer is the newer
@@ -73,6 +79,8 @@ public final class MCPRegistrationController {
 
     /// How long one bridge call may take.
     public nonisolated static let defaultTimeout: Duration = .seconds(15)
+    /// The pauses before the automatic repeats of a failed status check.
+    public nonisolated static let defaultStatusRetryDelays: [Duration] = [.seconds(1), .seconds(2), .seconds(4)]
     /// The most of the bridge's stderr that is kept: its first line, cut at
     /// this many bytes.
     public nonisolated static let reasonLimit = 200
@@ -85,7 +93,7 @@ public final class MCPRegistrationController {
     /// What the switch shows: the last state the bridge confirmed.
     public private(set) var isRegistered = false
     /// The row's sensitivity: a bridge is there, its status is known and no
-    /// call is in flight.
+    /// install or uninstall is in flight.
     public private(set) var isEnabled = false
     /// The window closed: late replies are dropped.
     public private(set) var closed = false
@@ -102,6 +110,10 @@ public final class MCPRegistrationController {
     private let bridge: String?
     private let runner: BridgeRunner
     private let timeout: Duration
+    private let statusRetryDelays: [Duration]
+    /// The automatic repeats of a failed status check used so far; back to
+    /// none after any answered call.
+    private var statusRetries = 0
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "mcp")
     /// Bumped by every call; the reply of an older one is dropped.
     private var op = 0
@@ -113,10 +125,16 @@ public final class MCPRegistrationController {
     ///     when there is none beside the application.
     ///   - runner: how the bridge is run; the default runs the real thing.
     ///   - timeout: how long one call may take.
-    public init(bridge: String?, runner: BridgeRunner = BridgeRunner(), timeout: Duration = MCPRegistrationController.defaultTimeout) {
+    ///   - statusRetryDelays: the pauses before repeating a failed status
+    ///     check, one repeat each.
+    public init(
+        bridge: String?, runner: BridgeRunner = BridgeRunner(), timeout: Duration = MCPRegistrationController.defaultTimeout,
+        statusRetryDelays: [Duration] = MCPRegistrationController.defaultStatusRetryDelays
+    ) {
         self.bridge = bridge
         self.runner = runner
         self.timeout = timeout
+        self.statusRetryDelays = statusRetryDelays
     }
 
     /// Drops every reply still in flight; nothing is emitted afterwards.
@@ -139,6 +157,21 @@ public final class MCPRegistrationController {
         run(.status, bridge)
     }
 
+    /// Takes a status reported elsewhere (the application's last, which
+    /// `AssistantController` keeps): shown at once and the row sensitive,
+    /// so the switch never shows "off" only because this page has not
+    /// asked yet, and it follows what the application learns later. Nothing
+    /// while a call runs (its answer is newer), without a bridge, or when it
+    /// is the status already shown.
+    public func adopt(_ s: MCPStatus) {
+        guard !closed, bridge != nil, !inFlight, s != status else { return }
+        status = s
+        isRegistered = s.isRegistered
+        statusRetries = 0
+        setEnabled(true)
+        onRegistered?(isRegistered)
+    }
+
     // MARK: Changes
 
     /// Runs `install` or `uninstall` and shows what the bridge reports
@@ -153,35 +186,85 @@ public final class MCPRegistrationController {
         run(want ? .install : .uninstall, bridge)
     }
 
+    /// `set(registered:)` that returns once the bridge answered, after the
+    /// callbacks: the status the bridge reported, or nil when the call
+    /// failed (its toast was shown), there is no bridge, a newer call
+    /// overtook it or the controller closed. `ClaudeDesktopController`
+    /// awaits it between quitting Claude Desktop and starting it again.
+    public func change(registered want: Bool) async -> MCPStatus? {
+        guard !closed else { return nil }
+        guard let bridge else {
+            reportMissing()
+            onRegistered?(isRegistered)
+            return nil
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<MCPStatus?, Never>) in
+            run(want ? .install : .uninstall, bridge) { cont.resume(returning: $0) }
+        }
+    }
+
     // MARK: Internals
 
-    private func run(_ command: Command, _ bridge: String) {
+    /// Runs `command`; `done` gets its status, or nil when it yielded none
+    /// or its reply was dropped, exactly once.
+    private func run(_ command: Command, _ bridge: String, done: (@MainActor (MCPStatus?) -> Void)? = nil) {
         op += 1
         let my = op
         inFlight = true
-        setEnabled(false)
+        // A status check of a known state keeps the row sensitive: flipping
+        // the switch meanwhile overtakes it.
+        if command != .status || status == nil {
+            setEnabled(false)
+        }
         let runner = runner
         let timeout = timeout
         Task { [weak self] in
             let outcome = await Self.invoke(runner, bridge, command, timeout)
-            guard let self, !self.closed, my == self.op else { return }
+            guard let self, !self.closed, my == self.op else {
+                done?(nil)
+                return
+            }
             self.inFlight = false
+            var answer: MCPStatus?
             switch outcome {
             case .success(let s):
                 self.status = s
                 self.isRegistered = s.isRegistered
+                self.statusRetries = 0
+                answer = s
             case .failure(let f):
                 self.log.warning("malachi-mcp \(command.rawValue, privacy: .public): \(f.reason, privacy: .private)")
                 guard command != .status else {
                     // No sentence of its own (preferences.go `bindMCP`): the
-                    // row simply stays insensitive; the next time the page
-                    // comes up it asks again.
+                    // last known state stays (the row sensitive when there
+                    // is one), and the check is repeated shortly.
+                    if self.status != nil {
+                        self.setEnabled(true)
+                    }
+                    self.retryStatus(after: my)
+                    done?(nil)
                     return
                 }
                 self.onToast?(f.toast(registering: command == .install))
             }
             self.setEnabled(true)
             self.onRegistered?(self.isRegistered)
+            done?(answer)
+        }
+    }
+
+    /// Repeats a failed status check after the next of
+    /// `statusRetryDelays`, unless a newer call came meanwhile (its answer
+    /// is newer) or the repeats are used up (the page's next appearance
+    /// asks again).
+    private func retryStatus(after my: Int) {
+        guard statusRetries < statusRetryDelays.count else { return }
+        let delay = statusRetryDelays[statusRetries]
+        statusRetries += 1
+        Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !self.closed, !self.inFlight, self.op == my else { return }
+            self.load()
         }
     }
 

@@ -18,6 +18,8 @@ import (
 
 	coreglib "github.com/diamondburned/gotk4/pkg/core/glib"
 	"github.com/diamondburned/gotk4/pkg/gio/v2"
+
+	"github.com/schotek/malachi/ui/internal/assistant"
 )
 
 // SchemaID must match the gschema, desktop file and application ID.
@@ -70,6 +72,19 @@ const (
 	KeyWindowWidth     = "window-width"
 	KeyWindowHeight    = "window-height"
 	KeyWindowMaximized = "window-maximized"
+)
+
+// Keys of the Assistant menu (ui/internal/assistant): whether it is shown
+// (while the malachi-mcp bridge is registered, assistant.Shown) and where
+// it opens Claude; and of its panel (the In App target): the model, the
+// claude executable ("" looks in the usual places) and whether the user
+// allowed sending mail to Claude. They must match the gschema.
+const (
+	KeyAssistantMenu       = "assistant-menu"
+	KeyAssistantTarget     = "assistant-target"
+	KeyAssistantModel      = "assistant-model"
+	KeyAssistantClaudePath = "assistant-claude-path"
+	KeyAssistantConsent    = "assistant-consent"
 )
 
 // ColorScheme is the nick of the ColorScheme enum in the gschema.
@@ -125,6 +140,12 @@ var defaults = map[string]any{
 	KeyWindowWidth:     1200,
 	KeyWindowHeight:    760,
 	KeyWindowMaximized: false,
+
+	KeyAssistantMenu:       true,
+	KeyAssistantTarget:     string(assistant.Desktop),
+	KeyAssistantModel:      string(assistant.Sonnet),
+	KeyAssistantClaudePath: "",
+	KeyAssistantConsent:    false,
 }
 
 // Store reads and writes preferences. All methods must be called from the
@@ -256,6 +277,47 @@ func (s *Store) TextZoom() int { return s.integer(KeyTextZoom) }
 func (s *Store) SetTextZoom(v int) {
 	s.set(KeyTextZoom, min(max(v, TextZoomMin), TextZoomMax))
 }
+
+func (s *Store) AssistantMenu() bool     { return s.boolean(KeyAssistantMenu) }
+func (s *Store) SetAssistantMenu(v bool) { s.set(KeyAssistantMenu, v) }
+
+// AssistantTarget is the stored target as assistant.ParseTarget reads it:
+// an unknown nick is Desktop.
+func (s *Store) AssistantTarget() assistant.Target {
+	return assistant.ParseTarget(s.str(KeyAssistantTarget))
+}
+
+// SetAssistantTarget ignores values outside the enum.
+func (s *Store) SetAssistantTarget(v assistant.Target) {
+	for _, t := range assistant.Targets {
+		if v == t {
+			s.set(KeyAssistantTarget, string(v))
+			return
+		}
+	}
+}
+
+// AssistantModel is the stored model as assistant.ParseModel reads it: an
+// unknown nick is Sonnet.
+func (s *Store) AssistantModel() assistant.Model {
+	return assistant.ParseModel(s.str(KeyAssistantModel))
+}
+
+// SetAssistantModel ignores values outside the enum.
+func (s *Store) SetAssistantModel(v assistant.Model) {
+	for _, m := range assistant.Models {
+		if v == m {
+			s.set(KeyAssistantModel, string(v))
+			return
+		}
+	}
+}
+
+func (s *Store) AssistantClaudePath() string     { return s.str(KeyAssistantClaudePath) }
+func (s *Store) SetAssistantClaudePath(v string) { s.set(KeyAssistantClaudePath, v) }
+
+func (s *Store) AssistantConsent() bool     { return s.boolean(KeyAssistantConsent) }
+func (s *Store) SetAssistantConsent(v bool) { s.set(KeyAssistantConsent, v) }
 
 // CollapsedFolders and CollapsedAccounts are the folded-away nodes of the
 // folder sidebar, each entry one node. The window package owns the encoding

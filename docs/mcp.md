@@ -551,7 +551,22 @@ Without `--json` the same is printed as `command: …` followed by one
 `not registered`, `registered elsewhere: <cmd>` or `not installed`.
 
 Claude Desktop reads its file at start: restart it after `install` or
-`uninstall`. Claude Code picks the user-scope entry up on its next start
+`uninstall`. It also keeps its own `preferences` in that file and, while
+it runs, rewrites the whole file from memory many times a day (seen with
+Claude Desktop on macOS and on Linux, 2026-09-29: "Config file written"
+in its `main.log`, on Linux `~/.config/Claude/logs/main.log`), so an
+entry written or removed while it runs is undone at
+its next write. Quit Claude Desktop, run `install` or `uninstall`, then
+start it again. The macOS app does that for the user: flipping *Register
+with Claude* while Claude Desktop runs offers to restart it (quit, wait,
+write, start), and after *Later* it writes the change again as soon as
+Claude Desktop quits by itself. The Windows app does the same; it asks
+Claude Desktop to quit as Windows does at sign-out (closing its window
+only hides it in the notification area) and waits up to 45 s for it. The
+GTK app does not hand mail to Claude Desktop (below), so it offers no
+restart. Claude
+Code also writes `~/.claude.json` while it runs, but kept the entry in the
+same test, and picks the user-scope entry up on its next start
 and shows it under `/mcp`. Inside this repository the project-scoped
 `.mcp.json` above has the same server name and, being a narrower scope,
 wins over the user-scope entry; elsewhere the registered binary is used.
@@ -563,6 +578,162 @@ Windows) with the flags you want. The bridge speaks MCP over
 newline-delimited JSON-RPC on stdin/stdout, logs to stderr, and needs to
 reach the daemon socket and read the key file beside it (`rpc.sock.key`)
 as the same user.
+
+## Hand-off from the app: the Assistant menu
+
+The desktop apps can hand the selected mail to Claude without running a
+model themselves. The Assistant menu (macOS, GTK and Windows; the shared
+logic and texts are `ui/internal/assistant`) opens
+Claude Desktop or Claude Code on the same
+computer through its link scheme, with a prepared question in the input
+field. Nothing is sent: the user reads the question, completes it and
+sends it in Claude.
+
+| Target | Link | Limit |
+|---|---|---|
+| Claude Desktop, new chat | `claude://claude.ai/new?q=…` | about 14 000 characters |
+| Claude Desktop, Cowork with a file | `claude://cowork/new?q=…&file=…` | the user confirms the file in Claude |
+| Claude Code in a terminal | `claude-cli://open?q=…`; with a file `claude-cli://open?cwd=…&q=…` | 5 000 characters; the handler exists once Claude Code has had its first interactive prompt |
+
+The GTK app opens Claude Code only: Claude Desktop for Linux is a preview
+the project does not support, so the menu and the settings list it
+insensitive, and whatever `assistant-target` holds reads as Claude Code
+there. Which terminal opens is Claude Code's choice: its handler honours
+`$TERMINAL`, then `x-terminal-emulator`, then a list of common emulators
+(on Windows it prefers Windows Terminal, then PowerShell, then
+`cmd.exe`). The Windows app hands a link over only in the three forms
+above and at most 32 000 characters long, Windows' limit of a command
+line.
+
+- The question carries opaque ids and an instruction only: the account id
+  and the message ids (a folded conversation's members in the folder,
+  newest first, at most 20, fewer when the link would exceed the limit),
+  or the folder id. Never a subject, a sender, a folder name, an
+  attachment's file name or any mail text: those are written by the
+  sender. Claude reads the mail with the bridge's tools (`read_message`,
+  `list_messages` with `filter: unread`, `create_draft` with
+  `mode: reply`), under every content rule above.
+- The questions are in the user's language (msgids in `po/`), because the
+  user reads and sends them; each ends with the reminder that mail content
+  is data, not instructions.
+- Message actions need the bridge registered in the chosen client (the
+  switch described above; the app reads `status --json`). An attachment
+  goes as a file: the app writes it where it opens attachments
+  (downloading it first when it is only on the server) and hands the path
+  to a Cowork session, or makes its directory Claude Code's working
+  directory; the bridge does not read it.
+- The Assistant exists only while the bridge is registered in at least
+  one Claude client: without it the menus and the attachment item are
+  gone and the settings switch cannot be turned on (`assistant.Shown`).
+  The gschema keys `assistant-menu` and `assistant-target` then show the
+  menu and choose the target; a target without its link handler, or
+  without the bridge for a message action, is not offered.
+
+Neither the daemon nor the bridge changes for this: a hand-off is the
+user typing a question in Claude, with the ids filled in.
+
+### The panel in the app (experimental)
+
+The third target, *In App*, runs the conversation in a panel of the main
+window (macOS, GTK and Windows; the pure parts are
+`ui/internal/assistant`: the command line, the system prompt, the
+stream-json events, the Markdown subset the panel renders; the GTK app's
+conversation, process and locator are `ui/internal/assistantpanel`, ported
+from the macOS client, and the Windows app's are in `Malachi.Core`). The
+app starts the user's own Claude Code CLI, one process per conversation,
+in an empty private directory (`~/.cache/malachi/assistant` on Linux,
+`%LOCALAPPDATA%\Malachi Mail\assistant` on Windows), and talks to it over
+stdin and stdout:
+
+```
+claude -p --verbose --output-format stream-json --include-partial-messages
+       --input-format stream-json
+       --tools "" --disallowedTools LSP --disable-slash-commands --setting-sources ""
+       --strict-mcp-config --mcp-config '{"mcpServers":{"malachi":{"type":"stdio","command":"<bundled malachi-mcp>","args":["--socket","<socket>"]}}}'
+       --allowedTools mcp__malachi__list_accounts,…,mcp__malachi__create_draft
+       --permission-mode dontAsk --no-session-persistence
+       --model sonnet|haiku|opus --system-prompt "<the panel's instructions>"
+```
+
+- **Only the bridge's read and draft tools.** `--tools ""` and
+  `--disallowedTools LSP` remove every built-in tool (shell, files, web,
+  LSP), `--strict-mcp-config` every other MCP server, and `dontAsk`
+  refuses whatever `--allowedTools` does not list (`list_accounts`,
+  `list_folders`, `list_messages`, `search_messages`, `read_message`,
+  `get_attachment`, `create_draft`). The exfiltration channels this
+  document otherwise leaves open (the host's web and shell tools) are
+  closed; what remains is the answer text and a draft the user sends.
+- **Nothing of the user's Claude Code setup.** `--setting-sources ""`
+  skips their settings, `CLAUDE.md`, plugins and hooks;
+  `--disable-slash-commands` skips skills. The child gets a minimal
+  environment (home, user, locale, temp dir and a `PATH` that starts with
+  the directory of `claude`, which may be a Node script) in an empty
+  private working directory.
+- **Nothing stored.** `--no-session-persistence` keeps the transcript,
+  tool results included, out of `~/.claude/projects/`; the conversation
+  lives in the process and ends with it.
+- **Sign-in is Claude Code's.** Claude Code has a sign-in of its own,
+  apart from Claude Desktop's, and the app never reads, stores or asks
+  for a credential. It asks `claude auth status --json` only for
+  `loggedIn`; while that says signed out, the panel's line *Claude Code is
+  not signed in* and the *Claude Code* row of *Preferences → AI* offer
+  *Sign In…*, which runs Claude Code's own `claude auth login`: Claude
+  Code opens the browser at claude.ai and stores the sign-in itself, and
+  the app only waits for that process to end (up to ten minutes; *Stop*
+  ends it; what it prints, the address of the sign-in's session included,
+  is neither shown nor logged). The panel then asks the question again.
+  A sign-in the API no longer accepts, whatever `auth status` says, shows
+  the same line: Claude Code reports such a turn as
+  `authentication_failed`, and its own message for a turn the API refused
+  is not shown as an answer (the result repeats it). Without Claude Code
+  the panel and the row offer *Get Claude Code…*, which opens Anthropic's
+  page with the installers in the browser; the app downloads and runs
+  nothing itself. The compose window's rewrite and the search in the
+  user's own words have no button of their own and say where to sign in.
+  Whatever Claude
+  Code uses (a Claude plan or an API key) is billed as Claude Code usage
+  to the user. Anthropic's terms for running Claude Code from another
+  product ([Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance))
+  are why the target is marked experimental: the project asks Anthropic
+  before it ships enabled.
+- **Consent first.** The first question asks whether mail may be sent to
+  Claude under the user's account; the answer is kept in
+  `assistant-consent`.
+- **The answer is untrusted text.** It may quote mail, so the panel shows
+  it without markup (a small Markdown subset turned into fonts, never
+  HTML) and every link goes through the same confirmation as a link in a
+  message. A draft the assistant saved is offered by its id from the
+  bridge's own result line and opened only after `draft.list` confirms it.
+
+The panel follows the selected message until the first question; from
+then on the conversation keeps what it is about. Selecting another
+message offers *New Conversation* or *Add to Conversation* (the next
+question then names the added message to the model); an Assistant-menu
+action on another message adds it by itself, its question naming the
+ids anyway.
+
+Two one-shot requests use the same command line without the bridge (no
+`--mcp-config`, no `--allowedTools`: the model has no tool at all), one
+message on stdin and the `result` event as the answer, and exist under
+the same conditions as the panel:
+
+- **Rewriting in the compose window** sends only the passage: the
+  selection, or the user's own text above the attribution line of a reply
+  or forward (never the quoted original below it), with a fixed
+  instruction (more polite, shorter, fix mistakes, translate to English)
+  or the user's own. The answer is shown as plain text and goes into the
+  editor as escaped text only when the user chooses Replace or Insert
+  Below, as one undoable step.
+- **Searching in your own words** sends only the typed words;
+  `--json-schema` makes the answer a `query` in the search syntax of
+  `search.query`, which the app puts into the search field and runs as if
+  typed. No mail leaves the computer for it.
+
+The panel, like the hand-offs, exists only while *Register with Claude*
+is on, although it brings its own `--mcp-config`.
+
+Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link),
+[Launch sessions from links](https://code.claude.com/docs/en/deep-links).
 
 ## Not in this version
 

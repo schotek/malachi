@@ -21,6 +21,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/pango"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/preview"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -29,8 +30,9 @@ import (
 // The attachment chips under the headers of a message (message_attachments
 // in the .blp files): one per attachment with its icon, name and size. A
 // click shows the attachment in the desktop's previewer (Sushi, see
-// ui/internal/preview), the arrow offers Open in the default application
-// and Save As…, and Save All appears with two or more. Names and types are
+// ui/internal/preview), the arrow offers Open in the default application,
+// Ask the Assistant… while the Assistant is shown (assistant.go) and
+// Save As…, and Save All appears with two or more. Names and types are
 // server data and are shown as plain text (CLAUDE.md rule 3); programs and
 // scripts are previewed but never opened directly (docs/security.md §4);
 // the content comes through message.part, so a part over
@@ -206,6 +208,9 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 		viewAction.ConnectActivate(func(*glib.Variant) { view() })
 		g.AddAction(viewAction)
 	}
+	askAction := gio.NewSimpleAction("ask", nil)
+	askAction.ConnectActivate(func(*glib.Variant) { v.askAboutAttachment(acc, id, a, remote) })
+	v.bindAskItem(arrow, g, askAction, a.ContentType)
 	box.InsertActionGroup("att", g)
 
 	switch {
@@ -231,12 +236,16 @@ func (v *messageView) buildChip(acc api.AccountID, id api.MessageID, a api.Attac
 
 // chipMenu is the arrow's menu; the actions resolve on the chip. An
 // attached message (nested) also offers to be viewed in its own window.
+// "Ask the Assistant…" hides while its action is missing (bindAskItem).
 func chipMenu(nested bool) *gio.Menu {
 	m := gio.NewMenu()
 	if nested {
 		m.Append(i18n.T("_View"), "att.view")
 	}
 	m.Append(i18n.T("_Open"), "att.open")
+	ask := gio.NewMenuItem(assistant.Texts(tr).AskFile, "att.ask")
+	ask.SetAttributeValue("hidden-when", glib.NewVariantString("action-missing"))
+	m.AppendItem(ask)
 	m.Append(i18n.T("Save _As…"), "att.save")
 	return m
 }

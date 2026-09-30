@@ -15,7 +15,11 @@
 // Swift has no counterpart of (Go's context), kills the run the same way.
 // Process.Start hands the bridge every inheritable handle of the app, which
 // Go and Foundation never do; it runs at the SpawnGate, so the handles the
-// daemon's start makes inheritable for a moment are not among them.
+// daemon's start makes inheritable for a moment are not among them. The
+// environment and the working directory of a run can be the caller's
+// (Swift's environment and directory, for ClaudeCodeLocator's runs of
+// claude with Assistant.ChildEnvironment in the panel's private
+// directory); a given environment replaces the app's entirely.
 
 using System;
 using System.Buffers;
@@ -65,8 +69,25 @@ public sealed class BridgeRunner
     /// killed with its children), and <see cref="OperationCanceledException"/>
     /// when <paramref name="cancellationToken"/> ends it first.
     /// </summary>
+    public Task<BridgeRunnerOutput> RunAsync(
+        string executable, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken = default) =>
+        RunAsync(executable, arguments, timeout, environment: null, workingDirectory: null, cancellationToken);
+
+    /// <summary>
+    /// Runs <paramref name="executable"/> as
+    /// <see cref="RunAsync(string, IReadOnlyList{string}, TimeSpan, CancellationToken)"/>
+    /// does, with <paramref name="environment"/> in place of the app's whole
+    /// environment when it is given (Swift's <c>environment</c>) and in
+    /// <paramref name="workingDirectory"/> when it is given, the app's
+    /// otherwise (Swift's <c>directory</c>).
+    /// </summary>
     public async Task<BridgeRunnerOutput> RunAsync(
-        string executable, IReadOnlyList<string> arguments, TimeSpan timeout, CancellationToken cancellationToken = default)
+        string executable,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        IReadOnlyDictionary<string, string>? environment,
+        string? workingDirectory = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrEmpty(executable);
         ArgumentNullException.ThrowIfNull(arguments);
@@ -81,6 +102,18 @@ public sealed class BridgeRunner
         foreach (var argument in arguments)
         {
             start.ArgumentList.Add(argument);
+        }
+        if (environment is not null)
+        {
+            start.Environment.Clear();
+            foreach (var (name, value) in environment)
+            {
+                start.Environment[name] = value;
+            }
+        }
+        if (workingDirectory is not null)
+        {
+            start.WorkingDirectory = workingDirectory;
         }
         cancellationToken.ThrowIfCancellationRequested();
         var process = Start(start);

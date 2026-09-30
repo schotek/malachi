@@ -83,6 +83,21 @@ public enum SettingsKey
     /// <summary><c>text-zoom</c>.</summary>
     TextZoom,
 
+    /// <summary><c>assistant-menu</c>.</summary>
+    AssistantMenu,
+
+    /// <summary><c>assistant-target</c>.</summary>
+    AssistantTarget,
+
+    /// <summary><c>assistant-model</c>.</summary>
+    AssistantModel,
+
+    /// <summary><c>assistant-claude-path</c>.</summary>
+    AssistantClaudePath,
+
+    /// <summary><c>assistant-consent</c>.</summary>
+    AssistantConsent,
+
     /// <summary><c>ctrl-r</c>, Windows only: what Ctrl+R does.</summary>
     CtrlR,
 }

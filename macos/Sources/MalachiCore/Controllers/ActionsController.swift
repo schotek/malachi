@@ -70,6 +70,11 @@ public final class ActionsController {
     /// (compose_open.go `composing`): a second click while it runs does
     /// nothing.
     private var composing: Set<MessageID> = []
+    /// The drafts the assistant panel's Open Draft is looking up.
+    private var findingDrafts: Set<DraftID> = []
+    /// The pages of draft.list one Open Draft reads at most.
+    static let draftListPageLimit = 500
+    static let draftListMaxPages = 20
 
     /// - Parameters:
     ///   - mailbox: the folder half (badges, the RPC plumbing).
@@ -637,14 +642,15 @@ public final class ActionsController {
         let me = mailbox.model.account(s.accountId).map(selfAddress)
             ?? mailbox.model.enabledAccounts.first.map(selfAddress)
             ?? Address(address: "")
+        let attributionLine = attribution(kind: kind, source: src)
         let fallback: @MainActor () -> Void = { [weak self] in
             guard let self else { return }
             var p = prefill(kind: kind, source: src, self: me)
             p.accountID = s.accountId
+            p.attribution = attributionLine
             self.openCompose?(p)
         }
 
-        let attributionLine = attribution(kind: kind, source: src)
         let params = DraftCreateParams(
             accountId: s.accountId, mode: kind.mode, messageId: id,
             attribution: attributionLine.isEmpty ? nil : attributionLine
@@ -664,6 +670,7 @@ public final class ActionsController {
                 var p = fromDraft(kind: kind, draft: res.draft, blocked: res.blocked)
                 p.accountID = s.accountId
                 p.skipped = res.skipped?.count ?? 0
+                p.attribution = attributionLine
                 self.openCompose?(p)
             }
         }
@@ -695,6 +702,63 @@ public final class ActionsController {
                 self.openCompose?(fromDraft(kind: .edit, draft: res.draft, blocked: res.blocked))
                 if let n = res.skipped?.count, n > 0 {
                     self.toast(draftSkippedText(n))
+                }
+            }
+        }
+    }
+
+    // MARK: The assistant panel
+
+    /// The assistant panel's Open Draft (ui/internal/assistant, the In App
+    /// target): the draft `id` of account `account`, which Claude Code
+    /// saved through the bridge's create_draft, opens in the compose
+    /// window, or the window already editing it comes to the front. The
+    /// ids come from the bridge's own line of the tool result
+    /// (`Assistant.parseDraftResult`), so the draft is looked up with
+    /// draft.list first (pages of 500, the cursor followed), and only a
+    /// draft the daemon lists is opened; one that is gone (sent, deleted,
+    /// or never there) says so. A second request while one runs does
+    /// nothing.
+    public func openSavedDraft(account: AccountID, id: DraftID) {
+        guard !id.rawValue.isEmpty, !findingDrafts.contains(id) else { return }
+        findingDrafts.insert(id)
+        findDraft(account, id, cursor: nil, page: 0) { [weak self] outcome in
+            guard let self else { return }
+            self.findingDrafts.remove(id)
+            switch outcome {
+            case .failure(let err):
+                self.log.warning("draft.list: \(String(describing: err), privacy: .public)")
+                self.toast(rpcErrorText(L10n.T("Opening the draft"), err))
+            case .success(nil):
+                self.toast(Assistant.panelTexts().draftGone)
+            case .success(let draft?):
+                if self.raiseDraft?(draft) == true {
+                    return
+                }
+                self.openCompose?(fromDraft(kind: .edit, draft: draft, blocked: BlockedContent()))
+            }
+        }
+    }
+
+    /// Pages draft.list of `account` for draft `id`: the draft, nil when
+    /// the last page (or the page limit) came without it, or the error.
+    private func findDraft(
+        _ account: AccountID, _ id: DraftID, cursor: String?, page: Int,
+        _ done: @escaping @MainActor (Result<Draft?, any Error>) -> Void
+    ) {
+        let params = DraftListParams(accountId: account, page: Page(cursor: cursor, limit: Self.draftListPageLimit))
+        mailbox.perform(API.DraftList.self, params) { [weak self] outcome in
+            guard let self else { return }
+            switch outcome {
+            case .failure(let err):
+                done(.failure(err))
+            case .success(let res):
+                if let d = res.drafts.first(where: { $0.id == id }) {
+                    done(.success(d))
+                } else if let next = res.page.nextCursor, !next.isEmpty, next != cursor, page + 1 < Self.draftListMaxPages {
+                    self.findDraft(account, id, cursor: next, page: page + 1, done)
+                } else {
+                    done(.success(nil))
                 }
             }
         }

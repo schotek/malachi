@@ -1,0 +1,231 @@
+// SPDX-FileCopyrightText: 2026 Vladislav Janeček
+// SPDX-License-Identifier: GPL-3.0-or-later
+using Gtk 4.0;
+using Adw 1;
+// The assistant panel of the main window (ui/internal/assistant, the In App
+// target), put into window.blp's assistant_panel_bin. Object IDs are looked
+// up from ui/internal/window/assistant_panel.go; every text comes from
+// ui/internal/assistant and is set there, and everything the model or mail
+// wrote is plain text (labels without markup, the answers a text buffer
+// with tags). From the top: the header with New Conversation, the context
+// chip, the quick actions, the bar "Another message is selected", the
+// transcript with its spinner, the waiting action, the question field with
+// Send or Stop and the line that says where the mail goes.
+Adw.ToolbarView assistant_panel {
+  [top]
+  Adw.HeaderBar {
+    title-widget: Adw.WindowTitle assistant_title {};
+
+    [end]
+    Button assistant_new {
+      icon-name: "document-edit-symbolic";
+    }
+  }
+
+  content: Box {
+    orientation: vertical;
+
+    Box {
+      orientation: vertical;
+      spacing: 8;
+      margin-top: 10;
+      margin-bottom: 10;
+      margin-start: 12;
+      margin-end: 12;
+
+      Box assistant_chip {
+        halign: start;
+        spacing: 4;
+
+        styles [
+          "assistant-chip",
+        ]
+
+        Image assistant_chip_icon {}
+
+        Label assistant_chip_label {
+          use-markup: false;
+          ellipsize: end;
+          xalign: 0;
+        }
+
+        Button assistant_chip_remove {
+          icon-name: "window-close-symbolic";
+          valign: center;
+
+          styles [
+            "flat",
+            "circular",
+          ]
+        }
+      }
+
+      // Summarize, Draft a Reply…, Tasks and Deadlines, added from Go.
+      Adw.WrapBox assistant_actions {
+        child-spacing: 6;
+        line-spacing: 6;
+      }
+
+      Box assistant_bar {
+        orientation: vertical;
+        spacing: 6;
+        visible: false;
+
+        styles [
+          "assistant-card",
+        ]
+
+        Label assistant_bar_label {
+          use-markup: false;
+          wrap: true;
+          xalign: 0;
+        }
+
+        Adw.WrapBox {
+          child-spacing: 6;
+          line-spacing: 6;
+
+          Button assistant_bar_new {
+            styles [
+              "chip-action",
+            ]
+          }
+
+          Button assistant_bar_add {
+            styles [
+              "chip-action",
+            ]
+          }
+        }
+      }
+    }
+
+    Separator {}
+
+    ScrolledWindow assistant_scroller {
+      vexpand: true;
+      hscrollbar-policy: never;
+
+      child: Box {
+        orientation: vertical;
+        spacing: 10;
+        margin-top: 12;
+        margin-bottom: 12;
+        margin-start: 12;
+        margin-end: 12;
+
+        Box assistant_transcript {
+          orientation: vertical;
+          spacing: 10;
+        }
+
+        // While a question is under way and nothing above shows it
+        // (assistantpanel.Controller.Waiting): until Claude Code answers,
+        // between a tool and more text.
+        Adw.Spinner assistant_waiting {
+          halign: start;
+          visible: false;
+        }
+      };
+    }
+
+    Separator {}
+
+    Box {
+      orientation: vertical;
+      spacing: 6;
+      margin-top: 8;
+      margin-bottom: 10;
+      margin-start: 12;
+      margin-end: 12;
+
+      Box assistant_pending {
+        spacing: 4;
+        visible: false;
+
+        Label assistant_pending_label {
+          use-markup: false;
+          ellipsize: end;
+          xalign: 0;
+
+          styles [
+            "caption-heading",
+            "dim-label",
+          ]
+        }
+
+        Button assistant_pending_cancel {
+          icon-name: "window-close-symbolic";
+          valign: center;
+
+          styles [
+            "flat",
+            "circular",
+          ]
+        }
+      }
+
+      Box {
+        spacing: 6;
+
+        Overlay {
+          hexpand: true;
+
+          child: ScrolledWindow assistant_input_scroller {
+            hscrollbar-policy: never;
+            propagate-natural-height: true;
+            max-content-height: 112;
+
+            styles [
+              "assistant-input",
+            ]
+
+            child: TextView assistant_input {
+              wrap-mode: word_char;
+              accepts-tab: false;
+              top-margin: 6;
+              bottom-margin: 6;
+              left-margin: 8;
+              right-margin: 8;
+            };
+          };
+
+          [overlay]
+          Label assistant_placeholder {
+            use-markup: false;
+            halign: start;
+            valign: start;
+            margin-top: 6;
+            margin-start: 9;
+            ellipsize: end;
+            can-target: false;
+
+            styles [
+              "dim-label",
+            ]
+          }
+        }
+
+        Button assistant_send {
+          valign: end;
+          use-underline: true;
+
+          styles [
+            "suggested-action",
+          ]
+        }
+      }
+
+      Label assistant_footer {
+        use-markup: false;
+        wrap: true;
+        xalign: 0;
+
+        styles [
+          "caption",
+          "dim-label",
+        ]
+      }
+    }
+  };
+}

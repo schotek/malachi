@@ -12,7 +12,9 @@ import MalachiCore
 /// button titled "Cancel" in English, so a monitor does it here for a
 /// translated title), and the destructive button follows with
 /// `hasDestructiveAction` and no key. The draft question keeps Save Draft
-/// as its Return default.
+/// as its Return default, and a question without a destructive answer
+/// (`confirm`) leads with its confirmation as the Return default and takes
+/// Escape on the other button.
 @MainActor
 final class AppAlerts: Alerts {
     func confirmDestructive(on window: NSWindow?, heading: String, body: String, confirmLabel: String) async -> Bool {
@@ -52,6 +54,18 @@ final class AppAlerts: Alerts {
         default:
             return .cancel
         }
+    }
+
+    func confirm(on window: NSWindow?, heading: String, body: String, confirmLabel: String, declineLabel: String) async -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = heading
+        alert.informativeText = body
+        let confirm = alert.addButton(withTitle: mn(confirmLabel))
+        confirm.keyEquivalent = "\r"
+        let decline = alert.addButton(withTitle: mn(declineLabel))
+        decline.keyEquivalent = "\u{1b}"
+        return await run(alert, on: window) == .alertFirstButtonReturn
     }
 
     func openLinkQuestion(on window: NSWindow?, text: String, href: String) async -> Bool {

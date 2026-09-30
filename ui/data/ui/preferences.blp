@@ -15,9 +15,11 @@ using Adw 1;
 // until config.get reports them (a daemon that does not know them never
 // does), and storage_row shows what system.storage says, asked again every
 // few seconds while the dialog is open (hidden for a daemon without it).
-// The "AI" page has no setting of its own: the switch shows what
+// On the "AI" page the MCP switch has no setting of its own: it shows what
 // malachi-mcp reports about the Claude configuration files
-// (ui/internal/mcpsetup).
+// (ui/internal/mcpsetup). The Assistant group under it is bound to the
+// assistant-* keys and depends on that switch; its texts come from
+// ui/internal/assistant, set in Go (window/preferences.go bindAssistant).
 Adw.PreferencesDialog preferences_dialog {
   title: _("Preferences");
   search-enabled: true;
@@ -294,6 +296,33 @@ Adw.PreferencesDialog preferences_dialog {
       Adw.SwitchRow mcp_switch {
         title: _("Register with Claude");
         subtitle: _("Adds the malachi-mcp bridge to Claude Desktop and Claude Code on this computer");
+      }
+    }
+
+    Adw.PreferencesGroup assistant_group {
+      Adw.SwitchRow assistant_menu_switch {
+        use-markup: false;
+      }
+
+      Adw.ComboRow assistant_target {
+        use-markup: false;
+      }
+
+      // In App only: the claude the panel runs, and the model.
+      Adw.ActionRow assistant_claude_code {
+        use-markup: false;
+        subtitle-selectable: true;
+        visible: false;
+
+        [suffix]
+        Button assistant_claude_choose {
+          valign: center;
+        }
+      }
+
+      Adw.ComboRow assistant_model {
+        use-markup: false;
+        visible: false;
       }
     }
   }

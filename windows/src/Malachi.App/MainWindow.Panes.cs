@@ -171,8 +171,13 @@ public sealed partial class MainWindow
     }
 
     // Return: the first result, without waiting for the pause.
-    private void OnSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args) =>
-        list?.SearchFieldReturn(args.QueryText ?? "");
+    private void OnSearchSubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (!converting)
+        {
+            list?.SearchFieldReturn(args.QueryText ?? "");
+        }
+    }
 
     // Escape empties the box and ends the search; the list takes the
     // keyboard (search.go onSearchModeChanged).
@@ -183,6 +188,7 @@ public sealed partial class MainWindow
             return;
         }
         e.Handled = true;
+        CancelOwnWords();
         SearchBox.Text = "";
         list.SearchFieldEnded();
         ListPane.FocusList();
@@ -227,7 +233,7 @@ public sealed partial class MainWindow
             return;
         }
         laidOut = true;
-        layout.Resize(width);
+        layout.Resize(LayoutWidth(width));
         ApplyLayout();
     }
 
@@ -239,7 +245,16 @@ public sealed partial class MainWindow
         {
             return;
         }
-        var widths = PaneLayout.Widths(layout.Mode, Root.ActualWidth, state.Settings.FolderPaneWidth, state.Settings.MessageListWidth);
+        ApplyAssistantLayout();
+        // The panes share what an open inline assistant panel leaves them.
+        var content = Root.ActualWidth;
+        if (AssistantSplit.IsPaneOpen && AssistantSplit.DisplayMode == SplitViewDisplayMode.Inline)
+        {
+            content -= AssistantSplit.OpenPaneLength;
+        }
+        // The message pane keeps what its buttons need (GTK's minimum width).
+        var messageMinimum = Math.Max(PaneLayout.MessageMinimum, MessageCommands.MinimumWidth);
+        var widths = PaneLayout.Widths(layout.Mode, content, state.Settings.FolderPaneWidth, state.Settings.MessageListWidth, messageMinimum);
         var inline = layout.SidebarInline;
         PaneSplit.DisplayMode = inline ? SplitViewDisplayMode.Inline : SplitViewDisplayMode.Overlay;
         PaneSplit.OpenPaneLength = widths.Sidebar;
@@ -263,7 +278,7 @@ public sealed partial class MainWindow
         {
             ListColumn.MinWidth = PaneLayout.ListMinimum;
             ListColumn.MaxWidth = PaneLayout.ListMaximum;
-            MessageColumn.MinWidth = PaneLayout.MessageMinimum;
+            MessageColumn.MinWidth = messageMinimum;
             ListColumn.Width = new GridLength(widths.List);
             MessageColumn.Width = new GridLength(1, GridUnitType.Star);
             ListSplitter.Visibility = Visibility.Visible;

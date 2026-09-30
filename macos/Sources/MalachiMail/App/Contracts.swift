@@ -44,6 +44,12 @@ protocol Alerts: AnyObject {
     /// Save Draft (default) / Cancel / Discard (destructive).
     func saveDraftQuestion(on window: NSWindow?) async -> SaveDraftAnswer
 
+    /// A question whose two answers are both safe: `confirmLabel` (the
+    /// default: Return) / `declineLabel` (Escape). True for
+    /// `confirmLabel`. "Restart Claude Desktop?" after a change of
+    /// "Register with Claude" (`ClaudeDesktopController`).
+    func confirm(on window: NSWindow?, heading: String, body: String, confirmLabel: String, declineLabel: String) async -> Bool
+
     /// "Open This Link?" for a link whose text says one site and whose
     /// target is another (`text` is the visible text, `href` the target).
     /// True when the user wants it opened.
@@ -81,6 +87,16 @@ protocol MessageActions: AnyObject {
     func markUnread()
     func loadImages()
     func trustSender()
+
+    /// The Assistant menu (ui/internal/assistant): a message action on the
+    /// selection, a conversation row's folder members newest first or the
+    /// one message, handed to Claude.
+    func askAssistant(_ action: Assistant.Action)
+    /// Summarize Unread in This Folder, for the folder selected in the
+    /// sidebar.
+    func summarizeUnread()
+    /// A folder is selected and it is not an Outbox.
+    var canSummarizeUnread: Bool { get }
 }
 
 /// The same actions addressed by message rather than by selection: what a
@@ -142,6 +158,12 @@ protocol MessageActionDelegate: AnyObject {
     /// While it runs the message's Save All buttons stay disabled
     /// (`MessageCache.isSavingAll`, attachments.go `savingAll`).
     func saveAllAttachments(_ attachments: [Attachment], of summary: MessageSummary, remote: Bool, from window: NSWindow?)
+    /// The Assistant menu of a message window: a message action on that
+    /// one message (ui/internal/assistant).
+    func askAssistant(_ action: Assistant.Action, about summary: MessageSummary, from window: NSWindow?)
+    /// A chip's "Ask the Assistant…": the file handed to Claude, downloaded
+    /// first when `remote`.
+    func askAssistant(about attachment: Attachment, of summary: MessageSummary, remote: Bool, from window: NSWindow?)
 }
 
 /// The formatted-text editor of a compose window (ui/internal/editor
@@ -174,6 +196,17 @@ protocol EditorView: AnyObject {
     func exec(_ command: String, _ argument: String?)
     /// editor.FocusStart: caret to the start of the body (replies).
     func focusStart()
+    /// The assistant's rewrite (the bridge's rewriteTarget, as in GTK's,
+    /// ui/internal/assistant): notes the passage to rewrite, the selection
+    /// when it holds more than white space, otherwise the user's own text
+    /// before the `div` holding `attribution` (the whole body when "" or
+    /// not found), and hands it over; nil when the page is not ready or
+    /// the script failed.
+    func rewriteTarget(attribution: String, _ done: @escaping @MainActor (RewriteTarget?) -> Void)
+    /// Puts `text` in place of the passage `rewriteTarget` noted, or below
+    /// it, as plain text (`rewriteInsertion`): one edit the page's undo
+    /// takes back, reported as a change like typing.
+    func applyRewrite(_ text: String, below: Bool)
 
     /// editor.RegisterCID / RegisterFetcher / UnregisterCID for the
     /// `cid:` scheme of this process (shared registry).

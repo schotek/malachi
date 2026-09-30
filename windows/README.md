@@ -27,7 +27,11 @@ in the Drafts folder and opened from it for editing), reply and forward
 with the quoted original, `mailto:` links and the *Default apps*
 registration, the Preferences window, launch at login, running in the
 background with a notification-area icon, Preferences → AI for the MCP
-bridge, and the Czech translation read from `po/`. What is missing is
+bridge, the Assistant (the ✦ menu that hands mail to Claude Desktop or
+Claude Code with a prepared question, and the experimental panel that asks
+your own Claude Code inside the main window, with the rewrite in the
+compose window and the search in your own words; [AI agents](../README.md#the-assistant)),
+and the Czech translation read from `po/`. What is missing is
 listed under [Not on Windows, not yet](#not-on-windows-not-yet).
 
 Licence: GPL-3.0-or-later (everything outside `backend/`; `malachid.exe` and
@@ -241,7 +245,7 @@ windows/
 The dependency direction is `App -> Platform.Windows -> Core`, never back;
 nothing imports the Go modules (the API is re-declared from
 [docs/api.md](../docs/api.md), as on macOS). The tests are xUnit v3 on
-Microsoft.Testing.Platform: about 4,000 of them, two minutes for
+Microsoft.Testing.Platform: about 5,000 of them, two minutes for
 `make test-windows` (docs/windows-port.md §12).
 
 ## How it runs the daemon
@@ -322,8 +326,9 @@ from `backend\`.
 | RPC key | `rpc.sock.key` beside the socket: a new key at every daemon start, removed when it stops cleanly, read afresh for every connection and kept nowhere ([docs/api.md §1.4](../docs/api.md#14-handshake)) |
 | Logs | `%LOCALAPPDATA%\Malachi Mail\logs\`: `MalachiMail.log` (the app, `MALACHI_LOG_LEVEL`) and `malachid.log` (the daemon), each rotated at 4 MiB; also the terminal under `make run-windows` |
 | WebView2 data | `%LOCALAPPDATA%\Malachi Mail\WebView2\` (InPrivate profiles; only browser-level state is written; the crash dumps of dead renderers, which can hold a message or a draft, are deleted at start and exit) |
-| Attachments being opened | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit, entries older than an hour swept) |
-| Preferences | `HKCU\Software\io.github.schotek.Malachi` (`MALACHI_SETTINGS_KEY` names another key of that family), the gschema's keys plus `ctrl-r`; a `reg add` reaches the running app |
+| Attachments being opened, or handed to Claude | `%LOCALAPPDATA%\Malachi Mail\open\<random>\` (private, emptied at start and exit, entries older than an hour swept) |
+| The assistant panel's Claude Code | the user's own `claude.exe` (the path in *Preferences → AI*, else `%USERPROFILE%\.local\bin\claude.exe`, else the `PATH`), run in `%LOCALAPPDATA%\Malachi Mail\assistant` (empty, private); nothing of the conversation is written anywhere |
+| Preferences | `HKCU\Software\io.github.schotek.Malachi` (`MALACHI_SETTINGS_KEY` names another key of that family), the gschema's keys (the Assistant's `assistant-menu`, `assistant-target`, `assistant-model`, `assistant-claude-path` and `assistant-consent` among them) plus `ctrl-r`; a `reg add` reaches the running app |
 | Passwords, sign-ins | Credential Manager, generic credentials `io.github.schotek.Malachi/<accountId>/<key>` |
 | Launch at login | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `Malachi Mail` = `"<exe>" --background`; the user's switch in Windows Settings (`...\Explorer\StartupApproved\Run`) is respected, never overwritten |
 | `mailto:` | `HKCU\Software\Classes\io.github.schotek.Malachi.mailto`, `HKCU\Software\Clients\Mail\Malachi Mail`, `HKCU\Software\RegisteredApplications`, written at start when missing or stale, so the app is offered in *Settings → Apps → Default apps* |
@@ -436,6 +441,16 @@ confirmation dialogs.
 | *Preferences → Accounts* shows a Google or Microsoft 365 account with the generic envelope glyph, as any other | The provider's GNOME Online Accounts icon (`goa-account-google`, `goa-account-ms365`) when the icon theme has it | Windows has no such icons, and the app ships no brand icons (docs/windows-port.md §3.1, U6) |
 | A new-mail notification's title, the sender's name, is cut to 200 bytes with an ellipsis, as its body is | Only the body is capped | A display name is hostile input as much as a subject; as macOS (docs/windows-port.md §3.1, U7) |
 | The daemon's key file (`rpc.sock.key`) is opened as itself (a link or junction is refused, never followed) and used only when it is a file on disk (not a pipe or a device), the current user (or the token's default owner, as in an elevated run) owns it, and its DACL lets nobody but the user, SYSTEM, Administrators and OWNER RIGHTS read, write or append its data, change its DACL or take it (a NULL DACL is refused), besides being 65 bytes in the key format; otherwise the connection is refused (*Backend unavailable*, the reason in the log). The file inherits its directory's ACL, so a `MALACHI_SOCKET` directory must be private | The Go clients check the file's type, size and format | Defence in depth, the counterpart of macOS's owner and mode check (docs/windows-port.md §5) |
+| *Open In* of the Assistant offers Claude Desktop, Claude Code and *In App (Experimental)*; Claude Desktop gets the prepared question through `claude://claude.ai/new`, and an attachment as a Cowork task (`claude://cowork/new`) | Claude Desktop is listed insensitive, and a stored `desktop` reads as Claude Code | Claude Desktop runs on Windows, as on macOS; GTK leaves out only its Linux preview |
+| Flipping *Register with Claude* while Claude Desktop runs asks *Restart Claude Desktop?*: *Restart Claude Desktop* asks it to quit as Windows does at sign-out (the Restart Manager's session end, to its root process), waits up to 45 s, writes the change and starts it again (its window comes up); *Later* writes now, and a *Claude Desktop* row with *Restart* under the switch says it picks up the change when it restarts, until it quits, when the change is written once more | No Claude Desktop, no offer | macOS's offer: Claude Desktop rewrites its configuration from memory while it runs (docs/mcp.md). Closing its window only hides it in the notification area; the session end is what an Electron app quits on, in about 20 s measured, so the wait is longer than macOS's 20 s |
+| The assistant panel (and the rewrite and the search in your own words) runs only a `claude.exe`: the native installer's `%USERPROFILE%\.local\bin\claude.exe`, then the `PATH`; *Choose…* offers `.exe` files; an npm install (`claude.cmd`) reads as not found | Any executable `claude`: `~/.local/bin`, `~/.claude/local`, Homebrew, nvm, `~/.npm-global/bin`, the `PATH` | npm's `claude.cmd` runs through `cmd.exe`, whose parsing of a command line cannot carry the JSON arguments of the panel's command line safely (decided) |
+| The panel's Claude Code is ended by closing its input and, 2 s later, killing its process tree (the bridge it started with it); its environment keeps what a Windows program needs to start (`SystemRoot`, `windir`, the profile, application data and temporary folders, the program folders, `PATHEXT`, `ComSpec`, the processor, `LANG` and `LC_*`) and a `PATH` of its own folder and the system's | SIGTERM, then SIGKILL 2 s later; `HOME`, `USER`, `LOGNAME`, `LANG`, `LC_*`, `TMPDIR`, `SHELL` and a Unix `PATH` | Windows has no SIGTERM for a program without a console, and `claude -p` ends at the end of its input |
+| *Sign In…* runs `claude.exe auth login` with that same environment, and a sign-in that is stopped or out of time is ended by killing its process tree | The child environment and the desktop session (`DISPLAY`, `WAYLAND_DISPLAY`, `XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS`, `BROWSER`, …); SIGTERM, then SIGKILL 2 s later | Claude Code opens the browser through the Windows shell, which needs no session variables |
+| The Assistant menu's *Open In* is a submenu of radio items | A section headed *Open In* | A WinUI menu has no section headings |
+| In the panel's answers, `code` is in the monospaced face without a tinted background | Monospaced on a light tint | A WinUI text run has no background |
+| A link the Assistant hands over is at most 32 000 characters | No limit | Windows' limit of a command line, which the link's handler must fit (the prompts are far shorter) |
+| An open assistant panel beside the panes takes its width from them: they are laid out for what it leaves (the sidebar folds below 900 px of it), and the list narrows, not below its minimum, so that the message pane keeps the width its buttons need | The breakpoints follow the window, and the panes' minimum widths keep the header bar's buttons whole | WinUI cuts off what does not fit instead of asking the window for room |
+| The remote-image and pictures bars put their buttons under the sentence, at the end and on as many lines as they need, when the pane leaves the sentence less than about 160 px | One row; the label never breaks a word, and the bar asks the window for the room | WinUI gives the sentence what is left, down to a letter a line (`Reader/BarPanel.cs`) |
 
 The link under the pointer is shown at the bottom of the message view as
 in GTK, and a masked link is confirmed before it opens; those are security
@@ -547,9 +562,16 @@ features, not deviations.
   date and failed with CS8012. Should it come back (a build given an
   `ArtifactsPivots` of its own), `build.ps1 clean` clears the stale
   libraries.
-- **`build\malachid.exe is in use`.** A daemon started from `build\` is
-  running (`make run-backend`); that copy is left as it is, and the app
-  folder gets its own.
+- **`… is in use, moved to build\windows\replaced\…`.** A program still
+  runs that file: Claude Desktop or Claude Code the registered
+  `malachi-mcp.exe` (the app folder's, or `build\`'s through `.mcp.json`),
+  or `make run-backend` the daemon in `build\`. The build moves it out of
+  the way and puts the new one in its place; the program goes on with the
+  old one and gets the new one at its next start, and a later build removes
+  the moved file once it is free.
+- **`MalachiMail.exe (pid …) still runs from …`.** The app is running,
+  perhaps in the background with its icon in the notification area; quit
+  it (Ctrl+Q, or Quit on the icon) and build again. Nothing was removed.
 - **The network canary is skipped or fails.** `Malachi.App.Canary` starts
   its WinUI host beyond the edge of the screen, so it needs an interactive
   desktop session and the WebView2 runtime; without either, and on a CI

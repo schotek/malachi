@@ -11,6 +11,11 @@ import MalachiCore
 /// D9).
 @MainActor
 final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
+    /// The pages, in the order of the tabs.
+    enum Page: Int {
+        case accounts, general, appearance, ai
+    }
+
     private static var shared: PreferencesWindowController?
 
     let accountsPane: AccountsPaneViewController
@@ -23,12 +28,19 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
 
     /// Opens the settings, or brings the open window to the front.
     /// `bridge` is the path of the bundled `malachi-mcp` for the AI page
-    /// (`Paths.mcpBridge`; nil when there is none beside the application).
+    /// (`Paths.mcpBridge`; nil when there is none beside the application),
+    /// `assistant` what the page's Assistant group reports on (nil leaves
+    /// the choice of the Claude app without its problem), `claudeDesktop`
+    /// and `confirmRestart` the offer to restart Claude Desktop around a
+    /// change of "Register with Claude" (nil: the change is written at
+    /// once, as in GTK).
     /// `confirmRemoval` renders the "Remove this account?" alert,
     /// `confirmTrust` the account wizard's "Trust This Certificate?".
     @discardableResult
     static func show(
         client: RPCClient, settings: Settings, bridge: String? = Paths.resolve().mcpBridge?.path,
+        assistant: AssistantController? = nil, claudeDesktop: ClaudeDesktopController? = nil,
+        confirmRestart: PrefsConfirmRestart? = nil,
         confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
     ) -> PreferencesWindowController {
         if let open = shared {
@@ -37,7 +49,8 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
             return open
         }
         let c = PreferencesWindowController(
-            client: client, settings: settings, bridge: bridge, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust)
+            client: client, settings: settings, bridge: bridge, assistant: assistant, claudeDesktop: claudeDesktop,
+            confirmRestart: confirmRestart, confirmRemoval: confirmRemoval, confirmTrust: confirmTrust)
         shared = c
         c.showWindow(nil)
         c.window?.makeKeyAndOrderFront(nil)
@@ -45,8 +58,9 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     }
 
     private init(
-        client: RPCClient, settings: Settings, bridge: String?, confirmRemoval: @escaping PrefsConfirmRemoval,
-        confirmTrust: @escaping WizardConfirmTrust
+        client: RPCClient, settings: Settings, bridge: String?, assistant: AssistantController?,
+        claudeDesktop: ClaudeDesktopController?, confirmRestart: PrefsConfirmRestart?,
+        confirmRemoval: @escaping PrefsConfirmRemoval, confirmTrust: @escaping WizardConfirmTrust
     ) {
         self.settings = settings
         let toasts = toasts
@@ -77,7 +91,10 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
         // The AI page asks the bridge for its status whenever it comes up.
         generalPane.configure(settings: settings, client: client) { text in toasts.show(text) }
         appearancePane.configure(settings: settings)
-        aiPane.configure(bridge: bridge) { text in toasts.show(text) }
+        aiPane.configure(
+            bridge: bridge, settings: settings, assistant: assistant, claudeDesktop: claudeDesktop,
+            confirmRestart: confirmRestart
+        ) { text in toasts.show(text) }
         _ = generalPane.view
 
         tabs.tabStyle = .toolbar
@@ -105,6 +122,13 @@ final class PreferencesWindowController: NSWindowController, NSWindowDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("not used")
+    }
+
+    /// Shows `page` (the Assistant menu's "Set Up the Assistant…" wants
+    /// the AI page).
+    func select(_ page: Page) {
+        guard tabs.tabViewItems.indices.contains(page.rawValue) else { return }
+        tabs.selectedTabViewItemIndex = page.rawValue
     }
 
     func windowWillClose(_ notification: Foundation.Notification) {

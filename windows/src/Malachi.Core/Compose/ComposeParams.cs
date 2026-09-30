@@ -76,6 +76,16 @@ public sealed record ComposeParams
     /// </summary>
     public int Skipped { get; init; }
 
+    /// <summary>
+    /// The line above the quoted original of a reply or a forward (the
+    /// <c>attribution</c> handed to <c>draft.create</c>,
+    /// <see cref="Prefill.Attribution"/>), "" when not known (a new message,
+    /// a draft opened from Drafts; compose.Params <c>Attribution</c>). For
+    /// the assistant's rewrite: the user's own text is what the editor holds
+    /// above it. Mail data (a sender's name): never printed.
+    /// </summary>
+    public string Attribution { get; init => field = value ?? ""; } = "";
+
     /// <inheritdoc/>
     public bool Equals(ComposeParams? other) =>
         other is not null && Kind == other.Kind && AccountId == other.AccountId
@@ -85,7 +95,7 @@ public sealed record ComposeParams
         && InReplyTo == other.InReplyTo && Forwarding == other.Forwarding
         && Attachments.SequenceEqual(other.Attachments) && Blocked == other.Blocked
         && DraftId == other.DraftId && Version == other.Version && Replaces == other.Replaces
-        && Skipped == other.Skipped;
+        && Skipped == other.Skipped && string.Equals(Attribution, other.Attribution, StringComparison.Ordinal);
 
     /// <inheritdoc/>
     public override int GetHashCode() => HashCode.Combine(Kind, AccountId, To.Count, Subject, BodyHtml, DraftId, Version);
@@ -100,7 +110,7 @@ public sealed record ComposeParams
         $"ComposeParams(kind: {Kind}, accountId: {Id(AccountId)}, to: {To.Count}, cc: {Cc.Count}, bcc: {Bcc.Count}, "
         + $"subject: {Subject.Length} chars, bodyHtml: {BodyHtml.Length} chars, inReplyTo: {Id(InReplyTo)}, "
         + $"forwarding: {Id(Forwarding)}, attachments: {Attachments.Count}, draftId: {Id(DraftId)}, version: {Version}, "
-        + $"replaces: {Id(Replaces)}, skipped: {Skipped})");
+        + $"replaces: {Id(Replaces)}, skipped: {Skipped}, attribution: {Attribution.Length} chars)");
 
     private static string Id<T>(T? id)
         where T : struct => id is { } value ? value.ToString() ?? "" : "null";

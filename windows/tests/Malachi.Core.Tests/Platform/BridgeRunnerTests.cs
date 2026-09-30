@@ -11,7 +11,9 @@
 // holds the pipes shows. Added: both streams at their cap at once (they
 // are read concurrently), an orphan holding the pipes after a normal exit
 // (the EOF grace), the caller's cancellation, the spawn gate the start
-// waits at, and the stand-in's own rules. Swift bounds a run on the wall
+// waits at, the stand-in's own rules, and the caller's environment and
+// working directory (Swift added them for ClaudeCodeLocator without a
+// test; the stand-in claude of Malachi.FakeClaude records both). Swift bounds a run on the wall
 // clock (a 0.3 s timeout within 3 s), which times the stand-in's start as
 // much as the kill, and a .NET stand-in may take seconds to start on a busy
 // machine: here a timeout passes on the runner's fake clock, the stand-in
@@ -19,6 +21,7 @@
 // whose process was killed.
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -28,6 +31,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Malachi.Core.Platform;
 using Malachi.FakeBridge;
+using Malachi.FakeClaude;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -309,6 +313,44 @@ public sealed class BridgeRunnerTests
         var missing = new BridgeRunner().RunAsync(Path.Combine(dir.Path, "missing.exe"), StatusJson, TimeSpan.FromSeconds(5), cancellationToken);
         Assert.False(SpawnGate.IsHeldByCurrentThread);
         await Assert.ThrowsAsync<BridgeRunnerException>(() => missing);
+    }
+
+    /// <summary>
+    /// Swift's environment and directory (ClaudeCodeLocator's runs): a given
+    /// environment replaces the app's whole environment and a given directory
+    /// is the working directory; without them the run has the app's. The
+    /// stand-in claude records both.
+    /// </summary>
+    [Fact]
+    public async Task TheEnvironmentAndTheDirectoryAreTheCallers()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "the stand-in claude is a Windows program");
+        using var dir = new TemporaryDirectory();
+        var claude = new FakeClaudeScript([]).CreateIn(dir.Path);
+        var work = Path.Combine(dir.Path, "work");
+        Directory.CreateDirectory(work);
+        var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["MALACHI_RUNNER_TEST"] = "a b;c" };
+        if (Environment.GetEnvironmentVariable("SystemRoot") is { Length: > 0 } root)
+        {
+            env["SystemRoot"] = root;
+        }
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var r = await new BridgeRunner().RunAsync(claude, ["-p"], ProcessStart, env, work, cancellationToken);
+        Assert.Equal(0, r.Status);
+        var seen = FakeClaudeScript.Env(dir.Path);
+        Assert.Equal(env.Keys.Order(StringComparer.OrdinalIgnoreCase), seen.Keys.Order(StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal("a b;c", seen["MALACHI_RUNNER_TEST"]);
+        Assert.Equal(Path.TrimEndingDirectorySeparator(work), Path.TrimEndingDirectorySeparator(FakeClaudeScript.Cwd(dir.Path)), ignoreCase: true);
+
+        var inherited = await new BridgeRunner().RunAsync(claude, ["-p"], ProcessStart, cancellationToken);
+        Assert.Equal(0, inherited.Status);
+        var app = FakeClaudeScript.Env(dir.Path);
+        Assert.False(app.ContainsKey("MALACHI_RUNNER_TEST"));
+        Assert.Equal(Environment.GetEnvironmentVariable("PATH"), app.First(kv => kv.Key.Equals("PATH", StringComparison.OrdinalIgnoreCase)).Value);
+        Assert.Equal(
+            Path.TrimEndingDirectorySeparator(Environment.CurrentDirectory),
+            Path.TrimEndingDirectorySeparator(FakeClaudeScript.Cwd(dir.Path)),
+            ignoreCase: true);
     }
 
     [Fact]

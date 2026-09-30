@@ -293,6 +293,70 @@ public sealed class EditorChannelTests
         Assert.Throws<ArgumentNullException>(() => channel.ExecScript(null!, null));
     }
 
+    // editor.go RewriteTarget, ApplyRewrite and answerRewrites: without the
+    // bridge a rewrite is answered at once with the empty target and nothing
+    // is evaluated; the page's "rewrite" answers every rewrite waiting, in
+    // order, once; ApplyRewrite is ignored until the bridge runs.
+    [Fact]
+    public void RewriteWaitsForThePassage()
+    {
+        var channel = new EditorChannel();
+        var got = new List<string>();
+        void Note(string who, RewriteTarget t) => got.Add(who + ":" + (t.Selected ? "sel:" : "own:") + t.Text);
+        Assert.Null(channel.BeginRewriteTarget("On 1 May, Jana wrote:", t => Note("early", t)));
+        Assert.Equal(["early:own:"], got);
+        Assert.Null(channel.ApplyRewriteScript("Hi", below: false));
+
+        channel.Receive("""{"type":"ready"}""");
+        Assert.Equal(EditorBridge.RewriteTargetScript("On 1 May, Jana wrote:"), channel.BeginRewriteTarget("On 1 May, Jana wrote:", t => Note("a", t)));
+        Assert.NotNull(channel.BeginRewriteTarget("", t => Note("b", t)));
+        Assert.Single(got);
+        Assert.NotNull(channel.Receive("""{"type":"rewrite","selected":true,"text":"Hello"}"""));
+        Assert.Equal(["early:own:", "a:sel:Hello", "b:sel:Hello"], got);
+        // Answered once: a second message finds nobody waiting.
+        channel.Receive("""{"type":"rewrite","text":"again"}""");
+        Assert.Equal(3, got.Count);
+        Assert.Equal(EditorBridge.RewriteApplyScript("a\nb", below: true), channel.ApplyRewriteScript("a\nb", below: true));
+        Assert.Throws<ArgumentNullException>(() => channel.BeginRewriteTarget(null!, _ => { }));
+        Assert.Throws<ArgumentNullException>(() => channel.ApplyRewriteScript(null!, below: false));
+    }
+
+    // Windows, as its flush waiters: a rewrite never hangs. The document
+    // going (Load), the page dying (Crashed, as editor.go's web process
+    // terminated) and a failed evaluation (RewriteFailed) answer the
+    // rewrites waiting with the empty target; a rewrite message is no
+    // changed and raises nothing else.
+    [Fact]
+    public void RewriteIsAnsweredWhenTheDocumentGoes()
+    {
+        var channel = new EditorChannel();
+        var events = new List<string>();
+        channel.Changed += (_, _) => events.Add("changed");
+        channel.StateChanged += (_, _) => events.Add("state");
+        var got = new List<RewriteTarget>();
+        channel.Receive("""{"type":"ready"}""");
+        channel.BeginRewriteTarget("", got.Add);
+        channel.RewriteFailed();
+        Assert.Equal([new RewriteTarget()], got);
+
+        channel.BeginRewriteTarget("", got.Add);
+        channel.Load("<p>x</p>");
+        Assert.Equal(2, got.Count);
+        Assert.Null(channel.ApplyRewriteScript("Hi", below: false));
+
+        channel.Receive("""{"type":"ready"}""");
+        channel.BeginRewriteTarget("", got.Add);
+        channel.Crashed();
+        Assert.Equal([new RewriteTarget(), new RewriteTarget(), new RewriteTarget()], got);
+        Assert.Null(channel.BeginRewriteTarget("", got.Add));
+        Assert.Equal(4, got.Count);
+
+        channel.Receive("""{"type":"ready"}""");
+        channel.Receive("""{"type":"rewrite","text":"t"}""");
+        Assert.Empty(events);
+        Assert.Equal("", channel.Text);
+    }
+
     [Theory]
     [InlineData("3", 3L)]
     [InlineData(" 42 ", 42L)]
