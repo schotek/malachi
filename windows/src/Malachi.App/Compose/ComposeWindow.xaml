@@ -16,9 +16,10 @@ A compose window, top to bottom as compose.blp:
   window shows Send without its label and no app icon
   (ComposeWindow.HeaderBar.cs);
 - under the toast overlay: the card of header fields (margins 12, 12, 12, 6),
-  the formatting bar (margins 6), the plain-text hint (hidden while rich text
-  is sent), the editor filling the rest, the attachment chips (margins 12, 6,
-  hidden while there are none);
+  or in comment mode the card of the issue in its place
+  (ComposeWindow.Comment.cs), the formatting bar (margins 6), the plain-text
+  hint (hidden while rich text is sent), the editor filling the rest, the
+  attachment chips (margins 12, 6, hidden while there are none);
 - the status line at the bottom (margins 12, 4).
 -->
 <Window
@@ -191,7 +192,7 @@ A compose window, top to bottom as compose.blp:
                                     x:Name="InsertImageItem"
                                     Click="OnInsertImageClick"
                                     l:MnemonicLabel.Text="{l:T Msgid='Insert _Image…'}" />
-                                <MenuFlyoutSeparator />
+                                <MenuFlyoutSeparator x:Name="DiscardSeparator" />
                                 <MenuFlyoutItem
                                     x:Name="DiscardItem"
                                     Click="OnDiscardClick"
@@ -235,6 +236,56 @@ A compose window, top to bottom as compose.blp:
                 x:Name="Header"
                 Grid.Row="0"
                 Margin="12,12,12,6" />
+
+            <!-- comment_header: comment mode only, in place of header_rows.
+                 The issue a comment goes to (title and summary set in code,
+                 plain text from the site) and, on a service-desk request,
+                 who reads it (the items added in code). -->
+            <Border
+                x:Name="CommentHeader"
+                Grid.Row="0"
+                Margin="12,12,12,6"
+                Padding="12,10"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource OverlayCornerRadius}"
+                Visibility="Collapsed">
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        x:Name="CommentTitle"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ComposeCommentTitle"
+                        MaxLines="1"
+                        Style="{StaticResource HeadingLabelStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <SelectorBar
+                        x:Name="CommentVisibilityBar"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="ComposeCommentVisibility"
+                        SelectionChanged="OnCommentVisibilityChanged"
+                        Visibility="Collapsed" />
+                    <TextBlock
+                        x:Name="CommentSummary"
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        MaxLines="2"
+                        Style="{StaticResource DimLabelStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                </Grid>
+            </Border>
 
             <!-- format_toolbar -->
             <local:FormatToolbar

@@ -67,6 +67,7 @@ mailbox's entries (research 03 D-L5), its headings not selectable.
                             l:MnemonicLabel.Text="{l:T Msgid='_New Message'}"
                             KeyboardAcceleratorTextOverride="Ctrl+N" />
                         <MenuFlyoutItem x:Name="MenuAddAccount" l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                        <MenuFlyoutItem x:Name="MenuAddJiraAccount" l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
                         <MenuFlyoutSeparator />
                         <!-- Windows-only string: the key name beside the item. -->
                         <MenuFlyoutItem

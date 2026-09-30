@@ -12,7 +12,9 @@
 // through IComposeForm; the attachments are Core's
 // ComposeAttachmentsController, the recipient completion Core's
 // SuggestionsController, the header's rules ComposeHeaderRules; the account
-// list arrives from ComposeController through IComposeWindowHandle.
+// list arrives from ComposeController through IComposeWindowHandle. A comment
+// on an issue is written in the same window, in its comment mode
+// (ComposeWindow.Comment.cs).
 //
 // Windows specifics (docs/windows-port.md §6.5, §11.3, §11.5):
 // - the window is tracked (WindowTracker.Track, WindowKind.Compose): its
@@ -47,6 +49,7 @@ using Malachi.Core.Compose;
 using Malachi.Core.Controllers;
 using Malachi.Core.Html;
 using Malachi.Core.I18n;
+using Malachi.Core.IssueTrackers;
 using Malachi.Core.Presentation;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Composition.SystemBackdrops;
@@ -161,7 +164,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             Prefill(Header.Subject, p.Subject);
             Header.SetCcBccVisible(cc: p.Cc.Count > 0, bcc: p.Bcc.Count > 0);
             UpdateTitle();
-            draft.SetOriginal(p.InReplyTo, p.Forwarding);
+            draft.SetOriginal(p.InReplyTo, p.Forwarding, p.Comment);
             // A draft opened from the Drafts folder is the user's already: its id
             // and version make the saves updates, and closing never deletes it.
             draft.SetOpened(p.DraftId, p.Version, p.Replaces, fromDrafts: p.Kind == ComposeKind.Edit);
@@ -183,6 +186,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             FormatBar.Visibility = ComposeDraftController.RichText ? Visibility.Visible : Visibility.Collapsed;
             PlainTextHint.Visibility = ComposeDraftController.RichText ? Visibility.Collapsed : Visibility.Visible;
             InsertImageItem.IsEnabled = ComposeDraftController.RichText;
+            ApplyCommentMode();
         }
         catch
         {
@@ -204,11 +208,19 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     /// <inheritdoc/>
     Account IComposeForm.Account => Account;
 
-    /// <summary>compose.go <c>account</c>: the selected identity.</summary>
+    /// <summary>
+    /// compose.go <c>account</c>: the selected identity; a comment's is the
+    /// issue's account (ComposeController.CommentAccount), which writes no
+    /// mail and is not in From.
+    /// </summary>
     private Account Account
     {
         get
         {
+            if (IsComment && parameters.AccountId is { } issueAccount)
+            {
+                return compose.CommentAccount(issueAccount);
+            }
             var i = Header.SelectedAccountIndex;
             if (i < accounts.Count)
             {
@@ -313,7 +325,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             [.. accounts.Select(ComposeHeaderRules.FromLabel)],
             index,
             ComposeHeaderRules.FromEnabled(accounts.Count, ComposeHeaderRules.FromLocked(parameters), found));
-        if (placeholder)
+        if (placeholder && !IsComment)
         {
             SetStatus(L10n.T("Using placeholder account"));
         }
@@ -387,10 +399,11 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     }
 
     // compose.go updateTitle: the subject, or "New Message", as the
-    // window's caption (the taskbar, Alt+Tab) and in the header bar.
+    // window's caption (the taskbar, Alt+Tab) and in the header bar; a
+    // comment names its issue (Jira.CommentTitle).
     private void UpdateTitle()
     {
-        var title = ComposeHeaderRules.WindowTitle(Header.Subject.Text);
+        var title = parameters.Comment is { } c ? Jira.CommentTitle(c.Issue.Key) : ComposeHeaderRules.WindowTitle(Header.Subject.Text);
         Title = title;
         TitleText.Text = title;
     }
@@ -469,6 +482,8 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         c.Send.Handler = draft.Send;
         c.Send.CanExecute = () => sendEnabled;
         c.SaveDraft.Handler = () => draft.Save(SaveReason.Explicit);
+        // No Drafts folder keeps a comment: Ctrl+S does nothing.
+        c.SaveDraft.CanExecute = () => !IsComment;
         c.CloseWindow.Handler = RequestClose;
         c.CloseWindow.CanExecute = () => !PopupOpen;
     }
@@ -482,10 +497,16 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     private void OnSaveDraftClick(object sender, RoutedEventArgs e) => Tracked.Commands.SaveDraft.TryExecute();
 
     // Once shown, the keyboard is in To (compose.blp focus-widget); a
-    // reply's editor takes it at the start of the body once it is ready.
+    // reply's editor takes it at the start of the body once it is ready. A
+    // comment has no rows: it is written in the editor.
     private void OnRootLoaded(object sender, RoutedEventArgs e)
     {
         Root.Loaded -= OnRootLoaded;
+        if (IsComment)
+        {
+            FocusEditor();
+            return;
+        }
         Header.FocusTo();
     }
 

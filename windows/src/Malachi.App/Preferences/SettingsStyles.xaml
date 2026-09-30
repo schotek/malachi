@@ -76,6 +76,14 @@ windows that use it, not into App.xaml.
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
     </Style>
 
+    <!-- The text under a field of the Jira assistant (jira_wizard.blp
+         site_status, spaces_problem; the caption class): dim, or a problem
+         in the critical colour (the GTK error class). -->
+    <Style x:Key="JiraStatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource DimCaptionLabelStyle}" />
+    <Style x:Key="JiraProblemTextStyle" TargetType="TextBlock" BasedOn="{StaticResource CaptionLabelStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+    </Style>
+
     <!-- A button bar at the bottom of a wizard page: right-aligned, 12 px
          margins, 8 px apart (account_wizard.blp). -->
     <Style x:Key="WizardButtonBarStyle" TargetType="StackPanel">

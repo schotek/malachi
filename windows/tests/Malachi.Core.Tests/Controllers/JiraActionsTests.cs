@@ -284,6 +284,13 @@ public sealed class JiraActionsTests
         Assert.False(h.Compose.Placeholder);
         Assert.Equal([Jira, MailA], h.Compose.KnownAccounts.Select(a => a.Id)); // a comment window finds its account
         Assert.Equal("petr@example.invalid", h.Compose.SelfAddress.Email);
+
+        // The comment window is pinned to its issue tracker as listed; until
+        // the list is there, to one that carries the id.
+        Assert.Same(h.Compose.KnownAccounts[0], h.Compose.CommentAccount(Jira));
+        var unknown = h.Compose.CommentAccount("k");
+        Assert.Equal(("k", AccountKind.Jira, true), (unknown.Id.Value, unknown.Config.Kind, unknown.Enabled));
+        Assert.Equal([Capability.Comment], unknown.Capabilities);
     }
 
     [Fact]

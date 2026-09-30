@@ -230,6 +230,7 @@ public sealed partial class MessageView : UserControl
             // enabled state are wired, not a Command: a XamlUICommand
             // would replace the label with its own empty one.
             Main.CommandBinding.Bind(AddAccountButton, commands.AddAccount);
+            Main.CommandBinding.Bind(AddJiraAccountButton, commands.AddJiraAccount);
         }
         if (commands is null || Reader.Mode == ReaderMode.Pane)
         {

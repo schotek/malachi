@@ -76,6 +76,9 @@ public sealed class WindowCommands
     /// <summary>app.add-account.</summary>
     public AppCommand AddAccount { get; } = new(nameof(AddAccount));
 
+    /// <summary>app.add-jira-account: the Jira account assistant.</summary>
+    public AppCommand AddJiraAccount { get; } = new(nameof(AddJiraAccount));
+
     /// <summary>app.about.</summary>
     public AppCommand About { get; } = new(nameof(About));
 
@@ -174,7 +177,7 @@ public sealed class WindowCommands
     /// <summary>Every command, for re-validating them all (a hook was wired).</summary>
     public IEnumerable<AppCommand> All =>
     [
-        .. byShortcut.Values, AddAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus,
+        .. byShortcut.Values, AddAccount, AddJiraAccount, About, MarkRead, LoadImages, TrustSender, ChangeStatus,
     ];
 
     /// <summary>Re-validates every command.</summary>

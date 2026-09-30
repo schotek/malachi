@@ -98,6 +98,11 @@ public sealed partial class Integration : IDisposable
         Compose.MakeWindow = makeWindow;
         state.Hooks.OpenCompose = Compose.Open;
         state.Hooks.ComposeNew = () => Compose.Open(new ComposeParams { Kind = ComposeKind.New });
+        // New Message needs an account that writes mail (main.go
+        // OnAccountsChanged, capabilities.CanComposeNew): a Jira account only
+        // comments. The accounts are the main window's.
+        state.Hooks.CanComposeNew = () => Core.Model.Capabilities.CanComposeNew(Mailbox.Model.Accounts);
+        Mailbox.AccountsLoaded += (_, _) => state.Hooks.NotifyChanged();
     }
 
     /// <summary>The Change Status menus of Jira issues, shared by every view of the window.</summary>

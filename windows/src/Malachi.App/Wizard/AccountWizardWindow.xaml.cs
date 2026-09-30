@@ -11,26 +11,18 @@
 // back.
 //
 // Windows (docs/windows-port.md §11.3, windows/README.md): an owned modal
-// window over the window it was opened from, 520×640 effective pixels
-// like the Adw.Dialog, centred on its owner and kept on its display. Its
-// title bar carries Back and the visible page's title (the header bar each
-// GTK page has); its close button and Escape (and Ctrl+W, the tracked
-// window's Close) cancel the wizard, which also cancels a sign-in the
-// browser still has (WizardController.Close, as GTK's closed handler). A
-// save that succeeded closes it after the caller's completion ran. The
-// certificate confirmation is the shell's ContentDialog on this window.
-// Nothing here logs a field: the password goes from its box to the
-// controller only.
-//
-// A modal window disables its owner, and Windows activates the next
-// enabled window when the active one goes away: the owner is enabled
-// again and brought to the front before the wizard goes (Closed), as a
-// Win32 dialog hands back its owner, so the keyboard returns to the window
-// the wizard was opened from. The window's name stays the wizard's title
-// (Add Account, Edit Account, Sign In) while the header shows the page's.
-// It cannot be minimised or maximised, whatever asks (UIA exposes the
-// caption buttons a dialog presenter hides); Alt+Left and the mouse's
-// back button go back a page, as in Adw.NavigationView.
+// window over the window it was opened from (ModalDialog), 520×640
+// effective pixels like the Adw.Dialog. Its title bar carries Back and the
+// visible page's title (the header bar each GTK page has); its close button
+// and Escape (and Ctrl+W, the tracked window's Close) cancel the wizard,
+// which also cancels a sign-in the browser still has
+// (WizardController.Close, as GTK's closed handler). A save that succeeded
+// closes it after the caller's completion ran. The certificate confirmation
+// is the shell's ContentDialog on this window. Nothing here logs a field:
+// the password goes from its box to the controller only. The window's name
+// stays the wizard's title (Add Account, Edit Account, Sign In) while the
+// header shows the page's; Alt+Left and the mouse's back button go back a
+// page, as in Adw.NavigationView.
 
 using System;
 using Malachi.App.Shell;
@@ -39,17 +31,10 @@ using Malachi.Core.Controllers;
 using Malachi.Core.I18n;
 using Malachi.Core.Presentation;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
-using Windows.Graphics;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.UI.WindowsAndMessaging;
-using VirtualKey = Windows.System.VirtualKey;
-using VirtualKeyModifiers = Windows.System.VirtualKeyModifiers;
 using WizardPage = Malachi.Core.Controllers.WizardController.WizardPage;
 
 namespace Malachi.App.Wizard;
@@ -72,10 +57,8 @@ public sealed partial class AccountWizardWindow : Window
     private readonly SignInHintPage signInHint;
     private readonly OAuthPage oauth;
     private readonly TestingPage testing;
+    private readonly ModalDialog modal;
     private WizardPage? visible;
-
-    // The window the wizard is modal over.
-    private HWND owner;
 
     // A focus the controller asked for before the identity page was shown.
     private WizardController.IdentityField? focusRequest;
@@ -114,6 +97,7 @@ public sealed partial class AccountWizardWindow : Window
             AppWindow.SetIcon(icon);
         }
         Tracked = state.Windows.Track(this, WindowKind.Wizard, Root, ToastsHost);
+        modal = new ModalDialog(this);
 
         wizard.Owner = WindowPresenter.Handle(this);
         wizard.ConfirmTrust = p => state.Alerts.ConfirmTrustCertificateAsync(this, p.Heading, p.Body, p.Details, p.ConfirmLabel);
@@ -139,11 +123,13 @@ public sealed partial class AccountWizardWindow : Window
             }
         };
         Pages.Navigated += (_, _) => DispatcherQueue.TryEnqueue(FocusPage);
-        AddBackKeys();
-        AppWindow.Changed += (sender, _) => KeepRestored(sender);
+        ModalDialog.AddBackKeys(Root, GoBack);
         Closed += (_, _) =>
         {
-            ReturnToOwner();
+            if (modal.ReturnToOwner() is { } activated)
+            {
+                LogReturned(logger, activated);
+            }
             wizard.Close();
         };
     }
@@ -187,44 +173,9 @@ public sealed partial class AccountWizardWindow : Window
         }
         var w = new AccountWizardWindow(state, editing, signIn, requestPassword, done);
         w.wizard.Start();
-        w.Present(owner);
+        w.modal.Present(owner, ContentWidth, ContentHeight);
+        LogPresented(w.logger, w.visible ?? WizardPage.Identity, w.wizard.IsEditing, w.wizard.SignInMode);
         return w;
-    }
-
-    // An owned, modal, fixed-size window centred on its owner (the
-    // Adw.Dialog over its parent, the macOS sheet).
-    private void Present(Window owner)
-    {
-        var hwnd = (HWND)WindowPresenter.Handle(this);
-        var ownerHwnd = WindowPresenter.Handle(owner);
-        this.owner = (HWND)ownerHwnd;
-        PInvoke.SetWindowLongPtr(hwnd, WINDOW_LONG_PTR_INDEX.GWLP_HWNDPARENT, ownerHwnd);
-        var presenter = OverlappedPresenter.CreateForDialog();
-        presenter.IsModal = true;
-        presenter.IsResizable = false;
-        presenter.IsMaximizable = false;
-        presenter.IsMinimizable = false;
-        AppWindow.SetPresenter(presenter);
-
-        var dpi = PInvoke.GetDpiForWindow((HWND)ownerHwnd);
-        var scale = dpi == 0 ? 1.0 : dpi / 96.0;
-        var area = DisplayArea.GetFromWindowId(owner.AppWindow.Id, DisplayAreaFallback.Nearest).WorkArea;
-        // The content is extended into the title bar, whose height the
-        // client size leaves out: the page and its header take 520×640
-        // together, as the Adw.Dialog's content does.
-        var caption = AppWindow.TitleBar.Height;
-        AppWindow.ResizeClient(new SizeInt32(
-            Math.Min((int)Math.Round(ContentWidth * scale), area.Width),
-            Math.Min((int)Math.Round(ContentHeight * scale) - caption, area.Height)));
-        var size = AppWindow.Size;
-        var o = owner.AppWindow;
-        var x = o.Position.X + ((o.Size.Width - size.Width) / 2);
-        var y = o.Position.Y + ((o.Size.Height - size.Height) / 2);
-        x = Math.Clamp(x, area.X, Math.Max(area.X, area.X + area.Width - size.Width));
-        y = Math.Clamp(y, area.Y, Math.Max(area.Y, area.Y + area.Height - size.Height));
-        AppWindow.Move(new PointInt32(x, y));
-        WindowPresenter.Present(this);
-        LogPresented(logger, visible ?? WizardPage.Identity, wizard.IsEditing, wizard.SignInMode);
     }
 
     // WizardRootViewController.showStack: the last page is visible; a page
@@ -342,28 +293,8 @@ public sealed partial class AccountWizardWindow : Window
 
     private void OnBackRequested(TitleBar sender, object args) => wizard.Back();
 
-    // Adw.NavigationView's other ways back: Alt+Left and the mouse's back
-    // button, while there is a page to go back to.
-    private void AddBackKeys()
-    {
-        var back = new KeyboardAccelerator { Key = VirtualKey.Left, Modifiers = VirtualKeyModifiers.Menu };
-        back.Invoked += (_, e) =>
-        {
-            e.Handled = true;
-            GoBack();
-        };
-        Root.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
-        Root.KeyboardAccelerators.Add(back);
-        Root.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, e) =>
-        {
-            if (e.GetCurrentPoint(Root).Properties.IsXButton1Pressed)
-            {
-                e.Handled = true;
-                GoBack();
-            }
-        }), handledEventsToo: true);
-    }
-
+    // Alt+Left and the mouse's back button, while there is a page to go
+    // back to.
     private void GoBack()
     {
         if (wizard.CanGoBack)
@@ -372,41 +303,6 @@ public sealed partial class AccountWizardWindow : Window
         }
     }
 
-    // A modal dialog stays as it was placed: minimised or maximised (by UIA
-    // or a system command, the presenter hides those buttons only), it is
-    // restored.
-    private void KeepRestored(AppWindow window)
-    {
-        if (window.Presenter is OverlappedPresenter { State: not OverlappedPresenterState.Restored } p)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                if (p.State != OverlappedPresenterState.Restored)
-                {
-                    p.Restore();
-                }
-            });
-        }
-    }
-
-    // The wizard is going: its owner is enabled again first and, if the
-    // wizard had the keyboard, activated, so that Windows does not hand the
-    // activation to another window (the owner is still disabled when the
-    // modal window is destroyed).
-    private void ReturnToOwner()
-    {
-        if (owner == HWND.Null)
-        {
-            return;
-        }
-        var wasActive = PInvoke.GetForegroundWindow() == (HWND)WindowPresenter.Handle(this);
-        PInvoke.EnableWindow(owner, true);
-        if (wasActive && PInvoke.IsWindowVisible(owner))
-        {
-            PInvoke.SetForegroundWindow(owner);
-        }
-        LogReturned(logger, wasActive);
-    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "account wizard opened on {Page}, edit {Editing}, sign-in {SignIn}")]
     private static partial void LogPresented(ILogger logger, WizardPage page, bool editing, bool signIn);

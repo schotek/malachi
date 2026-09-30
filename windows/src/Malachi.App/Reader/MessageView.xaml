@@ -466,6 +466,15 @@ gets the sanitiser's output only.
                     CornerRadius="18"
                     Style="{StaticResource AccentButtonStyle}"
                     l:MnemonicLabel.Text="{l:T Msgid='_Add Account…'}" />
+                <!-- An issue tracker instead (the Jira assistant): flat. -->
+                <Button
+                    x:Name="AddJiraAccountButton"
+                    Padding="24,8"
+                    HorizontalAlignment="Center"
+                    AutomationProperties.AutomationId="AddJiraAccountButton"
+                    CornerRadius="18"
+                    Style="{StaticResource SubtleButtonStyle}"
+                    l:MnemonicLabel.Text="{l:T Msgid='Add _Jira Account…'}" />
             </StackPanel>
 
             <!-- "message": the headers stay put at the top; the body below

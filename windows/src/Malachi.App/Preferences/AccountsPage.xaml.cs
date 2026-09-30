@@ -187,6 +187,11 @@ public sealed partial class AccountsPage : UserControl
     private void OnAddClick(object sender, RoutedEventArgs e) =>
         AccountWizardWindow.Show(state, window, done: (_, config) => Controller.AccountAdded(config));
 
+    // jira_editors.go addJiraAccount: the Jira assistant; the page reloads
+    // once it added the account and says so.
+    private void OnAddJiraClick(object sender, RoutedEventArgs e) =>
+        JiraWizardWindow.Show(state, window, done: (_, config) => Controller.AccountAdded(config));
+
     private void OnRowToggled(object sender, RoutedEventArgs e)
     {
         if (reverting || sender is not ToggleSwitch toggle || toggle.DataContext is not AccountRowView row || row.Applying)
@@ -210,10 +215,17 @@ public sealed partial class AccountsPage : UserControl
 
     // accounts_page.go editAccount / signInAccount / presentEdit: the
     // wizard over this window; once it saved, the page reloads and says so.
+    // A Jira account opens its settings (EditorOf), where its token is
+    // replaced too (jira_editors.go editJiraAccount).
     private void OpenWizard(object sender, bool signIn)
     {
         if ((sender as FrameworkElement)?.DataContext is not AccountRowView row || Controller.Account(row.Id) is not { } account)
         {
+            return;
+        }
+        if (!signIn && Core.Model.AccountsPage.EditorOf(account) == Core.Model.AccountEditor.Jira)
+        {
+            JiraAccountWindow.Show(state, window, account, done: (_, config) => Controller.AccountSaved(config));
             return;
         }
         AccountWizardWindow.Show(state, window, account, signIn, done: (_, config) => Controller.AccountSaved(config));

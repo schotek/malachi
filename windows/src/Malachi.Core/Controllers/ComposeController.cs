@@ -112,6 +112,30 @@ public sealed partial class ComposeController : ObservableObject, IDisposable
     /// </summary>
     public IReadOnlyList<Account> KnownAccounts => known;
 
+    /// <summary>
+    /// Manager.commentAccount: the issue-tracker account a comment window is
+    /// pinned to, as the backend listed it, or one that carries its id until
+    /// the list is there (only the id reaches the backend).
+    /// </summary>
+    public Account CommentAccount(AccountId id)
+    {
+        foreach (var a in known)
+        {
+            if (a.Id == id)
+            {
+                return a;
+            }
+        }
+        return new Account
+        {
+            Id = id,
+            Config = new AccountConfig { Name = "", Email = "", Kind = AccountKind.Jira },
+            Enabled = true,
+            State = new SyncState { AccountId = id, Status = SyncStatus.Idle },
+            Capabilities = [Capability.Comment],
+        };
+    }
+
     /// <summary>Manager.SelfAddress: the first account's address, for Reply All exclusion.</summary>
     public Address SelfAddress
     {

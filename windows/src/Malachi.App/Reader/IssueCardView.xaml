@@ -26,7 +26,7 @@ but the labels comes from the site and is plain.
         <ResourceDictionary>
             <!-- menubutton.issue-status-button: the pill's shape and colours,
                  its fill switched by the visual states below. -->
-            <Style x:Key="StatusButtonStyle" TargetType="DropDownButton" BasedOn="{StaticResource DefaultDropDownButtonStyle}">
+            <Style x:Key="StatusButtonStyle" TargetType="DropDownButton">
                 <Setter Property="Padding" Value="8,1,6,1" />
                 <Setter Property="MinHeight" Value="0" />
                 <Setter Property="CornerRadius" Value="11" />
