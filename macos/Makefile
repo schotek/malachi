@@ -22,8 +22,42 @@ endif
 # built on, but every rebuild is a new identity, so the Keychain asks again
 # whether malachi-keychain may read the stored passwords. A self-signed
 # code-signing certificate from Keychain Access (make macos SIGN='Malachi Dev')
-# keeps the identity stable across rebuilds.
+# keeps the identity stable across rebuilds. A release is signed with a
+# Developer ID Application identity (SIGN='Developer ID Application: …'),
+# and then every binary also gets the hardened runtime and a secure
+# timestamp, which notarisation requires. Each binary carries a fixed
+# identifier: without one codesign derives it from the linker's UUID, a
+# new one per build, and the Keychain would ask again after every release
+# even with Developer ID.
 SIGN          ?= -
+RELEASE_SIGN  := $(findstring Developer ID Application,$(SIGN))
+CODESIGN      := codesign --force --sign "$(SIGN)"$(if $(RELEASE_SIGN), --options runtime --timestamp)
+# Under the hardened runtime the app needs this to send Apple events.
+ENTITLEMENTS  := Resources/MalachiMail.entitlements
+
+# The architectures of the Swift binaries: empty is this Mac's own, the
+# quick build for development. The root Makefile's macos-dmg builds arm64
+# and x86_64, a universal bundle, and hands over malachid and malachi-mcp
+# joined the same way in GO_DIR. Several architectures put SwiftPM's
+# products in another directory, which --show-bin-path with the same flags
+# names.
+ARCHS         ?=
+SWIFT_BUILD   := $(strip swift build -c release $(foreach a,$(ARCHS),--arch $(a)))
+GO_DIR        ?= $(BUILD_DIR)
+
+# The disk image a release carries, named after the architectures it runs on.
+DMG_ARCH      := $(if $(word 2,$(ARCHS)),universal,$(or $(ARCHS),$(shell uname -m)))
+DMG           := $(BUILD_DIR)/Malachi-Mail-$(VERSION)-$(DMG_ARCH).dmg
+
+# Notarisation through notarytool: a keychain profile stored once with
+# `xcrun notarytool store-credentials` (NOTARY_PROFILE), or an App Store
+# Connect API key, as CI uses (NOTARY_KEY = the .p8 file, NOTARY_KEY_ID,
+# NOTARY_ISSUER).
+NOTARY_PROFILE ?=
+NOTARY_KEY     ?=
+NOTARY_KEY_ID  ?=
+NOTARY_ISSUER  ?=
+NOTARY_AUTH    := $(if $(NOTARY_PROFILE),--keychain-profile "$(NOTARY_PROFILE)",--key "$(NOTARY_KEY)" --key-id "$(NOTARY_KEY_ID)" --issuer "$(NOTARY_ISSUER)")
 
 # The SDK the app records as linked against: AppKit picks the design by it
 # (Liquid Glass from 26 on). SwiftPM's default build system records the
@@ -58,12 +92,12 @@ HELPER        := malachi-keychain
 APP           := $(BUILD_DIR)/Malachi Mail.app
 CONTENTS      := $(APP)/Contents
 
-.PHONY: build locale icon app test run clean
+.PHONY: build locale icon app dmg notarize test run clean
 
-## build: compile the Swift package (release); a warning fails the build
+## build: compile the Swift package (release) for ARCHS; a warning fails the build
 build:
-	swift build -c release -Xswiftc -warnings-as-errors --product $(HELPER)
-	swift build -c release -Xswiftc -warnings-as-errors --product $(EXE) $(LINK_SDK)
+	$(SWIFT_BUILD) -Xswiftc -warnings-as-errors --product $(HELPER)
+	$(SWIFT_BUILD) -Xswiftc -warnings-as-errors --product $(EXE) $(LINK_SDK)
 
 ## locale: generate .lproj directories from po/malachi.pot and po/*.po
 locale:
@@ -87,28 +121,77 @@ icon:
 	iconutil -c icns -o "$(ICNS)" "$(ICONSET)"
 
 ## app: assemble build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside
+# The licences go into Contents/Resources, as into the Windows app folder
+# (LICENSING.md). With ARCHS every executable is checked to run on each.
 app: build locale icon
-	@test -x "$(BUILD_DIR)/malachid" -a -x "$(BUILD_DIR)/malachi-mcp" || { \
-		echo "macos: $(BUILD_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
-	@set -e; bin="$$(swift build -c release --show-bin-path)"; \
+	@test -x "$(GO_DIR)/malachid" -a -x "$(GO_DIR)/malachi-mcp" || { \
+		echo "macos: $(GO_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
+	@set -e; bin="$$($(SWIFT_BUILD) --show-bin-path)"; \
 	rm -rf "$(APP)"; \
 	mkdir -p "$(CONTENTS)/MacOS" "$(CONTENTS)/Resources"; \
 	cp "$$bin/$(EXE)" "$(CONTENTS)/MacOS/$(EXE)"; \
 	cp "$$bin/$(HELPER)" "$(CONTENTS)/MacOS/$(HELPER)"; \
-	cp "$(BUILD_DIR)/malachid" "$(BUILD_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/"; \
+	cp "$(GO_DIR)/malachid" "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/"; \
+	for arch in $(ARCHS); do \
+		for f in "$(CONTENTS)"/MacOS/*; do \
+			lipo "$$f" -verify_arch "$$arch" || { echo "macos: $$f has no $$arch code" >&2; exit 1; }; \
+		done; \
+	done; \
 	cp -R "$(LOCALE_DIR)"/*.lproj "$(CONTENTS)/Resources/"; \
 	cp "$(ICNS)" "$(CONTENTS)/Resources/Malachi.icns"; \
+	cp "$(ROOT)/LICENSE" "$(CONTENTS)/Resources/LICENSE.txt"; \
+	cp "$(ROOT)/backend/LICENSE" "$(CONTENTS)/Resources/LICENSE-backend.txt"; \
+	cp "$(ROOT)/LICENSING.md" "$(CONTENTS)/Resources/LICENSING.md"; \
 	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@FULL_VERSION@/$(VERSION)/g' \
 	    -e 's/@BUNDLE_ID@/$(APP_ID)/g' -e 's/@EXECUTABLE@/$(EXE)/g' \
 	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' \
 	    Resources/Info.plist.in > "$(CONTENTS)/Info.plist"; \
 	plutil -lint "$(CONTENTS)/Info.plist" >/dev/null; \
+	plutil -lint "$(ENTITLEMENTS)" >/dev/null; \
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"; \
-	codesign --force --sign "$(SIGN)" "$(CONTENTS)/MacOS/malachid"; \
-	codesign --force --sign "$(SIGN)" "$(CONTENTS)/MacOS/malachi-mcp"; \
-	codesign --force --sign "$(SIGN)" "$(CONTENTS)/MacOS/$(HELPER)"; \
-	codesign --force --sign "$(SIGN)" "$(APP)"; \
-	echo "built $(APP) ($(VERSION), languages: $(LANGS))"
+	for f in malachid malachi-mcp $(HELPER); do \
+		$(CODESIGN) --identifier "$(APP_ID).$$f" "$(CONTENTS)/MacOS/$$f"; \
+	done; \
+	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \
+	codesign --verify --strict --deep "$(APP)"; \
+	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"
+
+## dmg: put the bundle into build/Malachi-Mail-<version>-<arch>.dmg beside a link to /Applications
+# A Developer ID build signs the image as well. hdiutil on CI runners now
+# and then fails with "Resource busy"; a second attempt goes through.
+dmg: app
+	@set -e; stage="$(BUILD_DIR)/macos/dmg"; \
+	rm -rf "$$stage" "$(DMG)"; mkdir -p "$$stage"; \
+	ditto "$(APP)" "$$stage/Malachi Mail.app"; \
+	ln -s /Applications "$$stage/Applications"; \
+	n=0; until hdiutil create -quiet -volname "Malachi Mail" -srcfolder "$$stage" -fs HFS+ -format UDZO -ov "$(DMG)"; do \
+		n=$$((n + 1)); [ $$n -lt 3 ] || exit 1; sleep 5; \
+	done; \
+	rm -rf "$$stage"; \
+	$(if $(RELEASE_SIGN),codesign --force --sign "$(SIGN)" --timestamp "$(DMG)";) \
+	hdiutil verify -quiet "$(DMG)"; \
+	echo "built $(DMG)"
+
+## notarize: have Apple notarise the DMG, staple the ticket to it and check what Gatekeeper says (Developer ID only)
+# notarytool exits non-zero for a rejected submission too; the verdict is
+# read from its JSON either way, and a rejection prints Apple's log.
+notarize:
+	@test -n "$(RELEASE_SIGN)" || { echo "macos: notarize needs SIGN='Developer ID Application: …'" >&2; exit 1; }
+	@test -f "$(DMG)" || { echo "macos: $(DMG) is missing; run make dmg with the same VERSION and ARCHS first" >&2; exit 1; }
+	@set -e; out="$(BUILD_DIR)/macos/notary.json"; \
+	xcrun notarytool submit "$(DMG)" $(NOTARY_AUTH) --wait --timeout 1h --output-format json > "$$out" || true; \
+	id="$$(plutil -extract id raw -o - "$$out" 2>/dev/null || true)"; \
+	status="$$(plutil -extract status raw -o - "$$out" 2>/dev/null || true)"; \
+	echo "notarisation $${id:-(none)}: $${status:-no answer}"; \
+	if [ "$$status" != Accepted ]; then \
+		cat "$$out" >&2; \
+		[ -z "$$id" ] || xcrun notarytool log "$$id" $(NOTARY_AUTH) >&2; \
+		exit 1; \
+	fi; \
+	xcrun stapler staple "$(DMG)"; \
+	xcrun stapler validate "$(DMG)"; \
+	spctl --assess --type open --context context:primary-signature --verbose=2 "$(DMG)"; \
+	spctl --assess --type execute --verbose=2 "$(APP)"
 
 ## test: run the Swift tests (with the generated catalogues, so the Czech cases run) and the script tests
 test: locale
@@ -120,6 +203,6 @@ test: locale
 run: app
 	"$(CONTENTS)/MacOS/$(EXE)"
 
-## clean: remove the SwiftPM scratch directory, the catalogues and the bundle
+## clean: remove the SwiftPM scratch directory, the catalogues, the bundle and the disk images
 clean:
-	rm -rf .build "$(LOCALE_DIR)" "$(ICONSET)" "$(ICNS)" "$(APP)"
+	rm -rf .build "$(LOCALE_DIR)" "$(ICONSET)" "$(ICNS)" "$(APP)" "$(BUILD_DIR)"/Malachi-Mail-*.dmg

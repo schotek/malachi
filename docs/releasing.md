@@ -223,3 +223,80 @@ it again). The arm64 zip is cross-built and has not run anywhere.
 
 Release notes stay in `NEWS` for every platform; the AppStream metainfo
 it feeds is Linux's.
+
+## 8. macOS
+
+`make macos-dmg` builds the macOS client's release artefact, on a Mac:
+
+```bash
+make macos-dmg                                                    # universal, signed ad hoc
+make macos-dmg SIGN='Developer ID Application: Name (TEAMID)'      # a release
+make macos-notarize SIGN='Developer ID Application: Name (TEAMID)' NOTARY_PROFILE=malachi
+# -> build/Malachi-Mail-<version>-universal.dmg
+```
+
+`macos-dmg` builds the Swift package for **arm64** and **x86_64**,
+`malachid` and `malachi-mcp` with `-X main.version` for both, joined by
+`lipo` (`build/macos/go`), assembles the bundle with the licences in
+`Contents/Resources`, checks that every executable runs on both
+architectures, signs it, and puts it into a compressed disk image beside a
+link to `/Applications`. `ARCHS=` builds this Mac's architecture alone.
+With a Developer ID Application identity every executable gets the
+hardened runtime, a secure timestamp and a fixed identifier
+(`io.github.schotek.Malachi.<binary>`, so that the Keychain recognises
+`malachi-keychain` across releases), the bundle the entitlement of
+`macos/Resources/MalachiMail.entitlements`, and the image is signed too.
+`macos-notarize` submits the image to Apple's notary service, waits for the
+verdict (printing Apple's log on a rejection), staples the ticket to the
+image and prints Gatekeeper's assessment of the image and of the app. The
+tree must be clean, or the version says `-dirty`.
+
+`.github/workflows/macos.yml` does the same in CI on the `macos-26` runner
+(Xcode 26, whose SDK gives the app its macOS 26 design), on pushes to
+`main`, on `v*` tags, by hand and on pull requests that touch what the
+client is built from: `make test-macos`, then `make macos-dmg`, signed and
+notarised when the repository has the five secrets below and the run is
+not a pull request, otherwise ad hoc. The DMG is the run's artifact; a tag
+attaches it to its release (a draft when the tag has none yet) **only when
+it was notarised**, so an ad-hoc image never reaches a release.
+
+Setting it up, once, by the owner:
+
+1. **Apple Developer Program** membership (99 USD a year); an individual
+   membership signs with the owner's name.
+2. **A Developer ID Application certificate**, which only the account
+   holder can create: in Xcode, *Settings → Accounts → Manage
+   Certificates → + → Developer ID Application*, or on
+   developer.apple.com under *Certificates*. Export it with its private
+   key from Keychain Access as a `.p12` with a password.
+3. **An App Store Connect API key** for notarytool: App Store Connect →
+   *Users and Access → Integrations → App Store Connect API → Team Keys*,
+   access *Developer*. The `.p8` downloads once; note its Key ID and the
+   Issuer ID above the list.
+4. **The secrets**, in *Settings → Secrets and variables → Actions →
+   Secrets* or with gh (without `--body` it asks for the value):
+
+   ```bash
+   base64 -i DeveloperID.p12 | gh secret set MACOS_CERTIFICATE
+   gh secret set MACOS_CERTIFICATE_PASSWORD
+   gh secret set MACOS_NOTARY_KEY < AuthKey_KEYID.p8
+   gh secret set MACOS_NOTARY_KEY_ID --body KEYID
+   gh secret set MACOS_NOTARY_ISSUER --body ISSUER-UUID
+   ```
+
+5. For notarising by hand, the same key stored once in the login keychain:
+   `xcrun notarytool store-credentials malachi --key AuthKey_KEYID.p8
+   --key-id KEYID --issuer ISSUER-UUID`, then `NOTARY_PROFILE=malachi`.
+
+The workflow puts the certificate into a temporary keychain of the run
+with Apple's Developer ID intermediates beside it and removes the keychain
+and the key file at the end. Without the secrets it warns and signs ad
+hoc.
+
+What a user meets: the notarised app opens after macOS's usual question
+about an app downloaded from the internet. Whoever ran an ad-hoc build
+before is asked by the Keychain once per stored password (*Always
+Allow*); later releases, signed with the same Developer ID, read them
+without asking. Not done yet: updates (Sparkle or similar; today a new DMG
+replaces the app by hand), an App Sandbox
+([macos-port.md §12](macos-port.md#12-what-the-port-took-and-what-is-still-open)).

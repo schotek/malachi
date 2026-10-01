@@ -578,9 +578,15 @@ Mail.app`: `MalachiMail` and `malachi-keychain` from SwiftPM's bin path,
 `malachid` and `malachi-mcp` from `build/`, the `.lproj` directories,
 `Info.plist` rendered from `Resources/Info.plist.in` (version, bundle id,
 `CFBundleLocalizations`, the `mailto:` URL type) and checked with
-`plutil`, then `codesign` of each binary and of the bundle with `SIGN`
-(ad hoc by default; the README says what that costs at the Keychain and
-how a self-signed identity avoids it). No `.xcodeproj` is kept; Xcode
+`plutil`, the licences, then `codesign` of each binary (with a fixed
+identifier) and of the bundle with `SIGN` (ad hoc by default; the README
+says what that costs at the Keychain and how a self-signed identity
+avoids it). `make macos-dmg` builds the same for arm64 and x86_64 (`ARCHS`,
+the Go binaries joined by `lipo` in the root Makefile's `macos-go`) into a
+disk image, `make macos-notarize` has Apple notarise it; with a Developer
+ID every binary gets the hardened runtime and the bundle
+`Resources/MalachiMail.entitlements` ([releasing.md §8](releasing.md#8-macos),
+CI in `.github/workflows/macos.yml`). No `.xcodeproj` is kept; Xcode
 opens `Package.swift`.
 
 ## 12. What the port took, and what is still open
@@ -670,9 +676,10 @@ said, so the two clients are at parity again and the order of §10
 holds for what comes next. The Windows client followed the same day
 ([windows-port.md §11.7](windows-port.md#117-jira-accounts-and-the-conversation-view)).
 
-**Distribution is still ahead.** The bundle is ad-hoc signed for the
-machine it was built on. Not done: Apple Developer Program membership,
-Developer ID signing and notarisation; App Sandbox entitlements (note
+**Distribution is partly in place.** CI builds a universal DMG, signed
+with a Developer ID and notarised once the owner's Apple Developer Program
+membership and the repository's secrets exist (until then ad hoc,
+[releasing.md §8](releasing.md#8-macos)). Not done: App Sandbox entitlements (note
 that a sandbox moves the data into the app container and the socket with
 it, which the MCP bridge's default path does not survive); `malachid` as
 a LaunchAgent (today the app starts and stops it, like the GTK UI); an

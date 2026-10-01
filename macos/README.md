@@ -70,10 +70,17 @@ make run-macos    # runs the bundled executable from the terminal: the app's and
                   # daemon's logs stay visible, Ctrl+C reaches both
 make test-macos   # generates the catalogues, then swift test (the Czech cases need them)
 open "build/Malachi Mail.app"   # the Finder way: Dock icon, notifications, About panel
+make macos-dmg    # the universal bundle (arm64 and x86_64) in
+                  # build/Malachi-Mail-<version>-universal.dmg beside a link to /Applications
 ```
 
-The three targets exist on Darwin only; on Linux they print a hint and
-exit. Quick iteration without the bundle:
+The targets exist on Darwin only; on Linux they print a hint and
+exit. `make macos` builds for this Mac's architecture alone; `make
+macos-dmg` builds Swift, `malachid` and `malachi-mcp` for both and joins
+each with `lipo` (`ARCHS=` gives a DMG of this Mac's architecture). A
+release DMG is signed with a Developer ID and notarised, by CI or by hand
+([docs/releasing.md §8](../docs/releasing.md#8-macos)). Quick iteration
+without the bundle:
 
 ```sh
 swift build --package-path macos                       # or open macos/Package.swift in Xcode
@@ -93,17 +100,29 @@ translations. The keyring helper is found beside the executable in
 ### Signing, and why the Keychain asks
 
 The bundle and the three binaries inside it are signed with the identity
-in `SIGN`, ad hoc (`-`) by default. That is enough for the machine it was
-built on; another Mac would show Gatekeeper's "damaged" dialog, since
-Developer ID signing and notarisation are not part of this phase.
+in `SIGN`, ad hoc (`-`) by default, each binary with a fixed identifier
+(`io.github.schotek.Malachi.malachi-keychain` and so on). Ad hoc is enough
+for the machine it was built on; on another Mac Gatekeeper refuses the
+app until the user allows it in *System Settings → Privacy & Security*.
+A release is signed with a Developer ID Application identity: then every
+binary also gets the hardened runtime and a secure timestamp, the bundle
+the entitlement of `Resources/MalachiMail.entitlements` (Apple events, for
+restarting Claude Desktop), and `make macos-notarize` has Apple notarise
+the DMG ([docs/releasing.md §8](../docs/releasing.md#8-macos)).
 
-Ad-hoc signing has one cost: every rebuild is a new code identity, and the
-login keychain ties each stored password to the identity that created it.
-So after a rebuild the first password read brings the Keychain's own
+Ad-hoc signing has one cost: every rebuild that changes a binary is a new
+code identity, and the login keychain ties each stored password to the
+identities allowed to read it, one item at a time. So after such a
+rebuild the first read of each password brings the Keychain's own
 "malachi-keychain wants to use your confidential information" prompt;
-answer *Always Allow* once per build and it stays quiet until the next
-rebuild. A self-signed code-signing certificate made in Keychain Access
-keeps the identity stable across rebuilds:
+answer *Always Allow* once per item and build and it stays quiet until
+the next one. A build from another checkout (a worktree) is another
+identity too, and an item it writes (a new account, a rotated Microsoft
+refresh token) asks again in this one. A Developer ID keeps the identity
+stable across builds and releases (the fixed identifier and the team);
+after the first switch to it each item asks once more. A self-signed
+code-signing certificate made in Keychain Access keeps it stable for the
+machine:
 
 ```sh
 make macos SIGN='Malachi Dev'     # the certificate's common name
@@ -425,9 +444,10 @@ took the same map):
   only. The GTK UI also searches the system address books through
   Evolution Data Server; there is no equivalent here and the daemon
   degrades silently.
-- **Distribution**: Developer ID signing and notarisation, an App
-  Sandbox, a LaunchAgent for the daemon and an update mechanism are not
-  there; the bundle is built for the machine it was built on
+- **Distribution**: a universal DMG, signed with a Developer ID and
+  notarised by CI (`.github/workflows/macos.yml`, [docs/releasing.md
+  §8](../docs/releasing.md#8-macos)); an App Sandbox, a LaunchAgent for the
+  daemon and an update mechanism are not there
   ([docs/macos-port.md](../docs/macos-port.md) §12).
 
 ## Troubleshooting

@@ -307,9 +307,19 @@ stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
 hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
-rebuildu se Keychain jednou zeptá (`make macos SIGN='…'` to řeší).
-Kontributorský popis `docs/macos-port.md`. `make macos` / `run-macos` /
-`test-macos` jsou jen na Darwinu.
+rebuildu, který změní binárku, se Keychain zeptá jednou za každou položku
+(`make macos SIGN='…'` to řeší); binárky mají pevný identifikátor
+`io.github.schotek.Malachi.<binárka>`. Distribuce: `make macos-dmg`
+(universal arm64 + x86_64, Go spojené `lipo`, `ARCHS=` jen tento Mac)
+a `make macos-notarize`; s Developer ID hardened runtime, timestamp
+a `Resources/MalachiMail.entitlements` (Apple events kvůli restartu
+Claude Desktop); CI `.github/workflows/macos.yml` na `macos-26` (Xcode 26
+kvůli SDK pro Liquid Glass) testuje, staví DMG, s pěti secrets
+`MACOS_*` podepisuje a notarizuje, k release tagu připojí jen
+notarizovaný DMG (`docs/releasing.md` §8; členství v Apple Developer
+Program a secrets zatím chybí, do té doby ad hoc).
+Kontributorský popis `docs/macos-port.md`. `make macos` / `macos-dmg` /
+`macos-notarize` / `run-macos` / `test-macos` jsou jen na Darwinu.
 
 Windows klient (`windows/`, C#/.NET 10, WinUI 3 na Windows App SDK 2.5
 z komponentových balíčků, ne z metabalíčku, Windows 11, x64 a ARM64,

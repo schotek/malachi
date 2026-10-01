@@ -24,6 +24,7 @@ on:
       - windows/**
       - macos/**
       - .github/workflows/windows.yml
+      - .github/workflows/macos.yml
   pull_request:
     paths:
       - packaging/debian/**

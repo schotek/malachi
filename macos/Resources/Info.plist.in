@@ -60,5 +60,9 @@ Template for the bundle's Info.plist; macos/Makefile substitutes the
 			<string>Editor</string>
 		</dict>
 	</array>
+	<!-- macOS-only string: what macOS shows if it asks whether the app may
+	     send Apple events (Resources/MalachiMail.entitlements). -->
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Malachi Mail asks Claude Desktop to quit and opens it again, so that Claude reads its new connection to your mail.</string>
 </dict>
 </plist>

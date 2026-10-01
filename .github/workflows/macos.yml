@@ -1,0 +1,208 @@
+# The macOS client and its disk image.
+#
+# One job on the macos-26 image (Apple silicon, Xcode 26 by default, whose
+# SDK gives the app its macOS 26 design; LINK_SDK in macos/Makefile), and
+# one that attaches the image to a tag's release:
+#
+#   app      the Swift tests, then the universal bundle in
+#            build/Malachi-Mail-<version>-universal.dmg: Swift for arm64 and
+#            x86_64, malachid and malachi-mcp for both joined by lipo,
+#            signed with the Developer ID of the repository's secrets and
+#            notarised by Apple, kept as the run's artifact
+#   release  a notarised DMG of a v* tag onto its GitHub release
+#
+# Every step is a target of the root Makefile (make test-macos, make
+# macos-dmg, make macos-notarize), so what CI does is what a Mac does; how
+# to set the secrets up is in docs/releasing.md §8. Without the five
+# MACOS_* secrets, and always on pull requests (a fork's get no secrets,
+# and a check needs no notarised image), the bundle is signed ad hoc: the
+# DMG is then good for testing on a Mac that lets it through Gatekeeper by
+# hand, and never reaches a release.
+#
+# The daemon's go vet and go test run on Windows (windows.yml); on macOS
+# the same Go code only builds here, and two of its tests do not pass on a
+# Mac for reasons of the platform, not of the code.
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - macos/**
+      - backend/**
+      - po/**
+      - docs/malachi_icon.png
+      - Makefile
+      - LICENSE
+      - LICENSING.md
+      - .github/workflows/macos.yml
+      # The Go reference logic the Swift ports and their tests follow; one
+      # test reads ui/internal/assistant/events_test.go itself.
+      - ui/internal/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the running build pointless.
+# Tags are kept: their artifact ends up on a release.
+concurrency:
+  group: macos-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  app:
+    name: app (universal)
+    runs-on: macos-26
+    timeout-minutes: 90
+    outputs:
+      notarized: ${{ steps.notarize.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # git describe needs the tags, so no shallow clone.
+          fetch-depth: 0
+
+      - name: Read the Go version of backend/go.mod
+        # Its minor version, set up at the newest patch release, as in the
+        # Windows workflow: the binaries go into the DMG, which must carry
+        # the patch releases' security fixes.
+        id: go
+        run: |
+          minor="$(sed -nE 's/^go ([0-9]+\.[0-9]+).*/\1/p' backend/go.mod)"
+          [ -n "$minor" ] || { echo '::error::backend/go.mod has no go directive'; exit 1; }
+          echo "version=$minor" >> "$GITHUB_OUTPUT"
+          echo "Go $minor"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Check the SDK
+        # An SDK older than 26 builds an app that looks like macOS 14 on
+        # every system (macos/Makefile, LINK_SDK).
+        run: |
+          sdk="$(xcrun --show-sdk-version)"
+          echo "$(xcodebuild -version | head -n 1), macOS SDK $sdk, $(swift --version 2>&1 | head -n 1)"
+          [ "${sdk%%.*}" -ge 26 ] || { echo "::error::macOS SDK $sdk is older than 26"; exit 1; }
+
+      - name: Test
+        # The script tests, the string check and swift test with the
+        # generated catalogues, as make test-macos runs them on a Mac.
+        run: make test-macos
+
+      - name: Decide on signing
+        id: sign
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            echo 'A pull request: the bundle is signed ad hoc and not notarised.'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          elif [ -n "$CERTIFICATE" ] && [ -n "$CERTIFICATE_PASSWORD" ] && [ -n "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER" ]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo '::warning title=Not signed::the MACOS_* secrets are not all set (docs/releasing.md §8); the DMG is signed ad hoc, not notarised, and no release gets it'
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Put the Developer ID into a keychain of its own
+        # A temporary keychain, unlocked for the run and first in the search
+        # list, holding the certificate with its private key, which codesign
+        # may use without asking; the Developer ID intermediates from Apple
+        # beside it, as an exported .p12 carries the certificate alone. The
+        # API key for notarytool goes into a file of the runner's temporary
+        # directory. Both are removed by the last step.
+        id: keychain
+        if: steps.sign.outputs.enabled == 'true'
+        env:
+          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -f pkcs12 -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          for ca in DeveloperIDG2CA DeveloperIDCA; do
+            if curl -fsSL -o "$RUNNER_TEMP/$ca.cer" "https://www.apple.com/certificateauthority/$ca.cer"; then
+              security import "$RUNNER_TEMP/$ca.cer" -k "$keychain" >/dev/null 2>&1 || true
+            else
+              echo "::warning::could not download Apple's $ca intermediate"
+            fi
+          done
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' | head -n 1)"
+          [ -n "$identity" ] || { echo '::error::MACOS_CERTIFICATE holds no Developer ID Application identity'; exit 1; }
+          echo "Signing as $identity"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$NOTARY_KEY" > "$RUNNER_TEMP/notary.p8"
+
+      - name: Build the DMG
+        # Universal (make macos-dmg's default ARCHS), signed with the
+        # Developer ID when there is one, else ad hoc.
+        env:
+          SIGN: ${{ steps.keychain.outputs.identity || '-' }}
+        run: make macos-dmg SIGN="$SIGN"
+
+      - name: Notarise
+        # notarytool waits for Apple's verdict (usually minutes); the ticket
+        # is stapled to the DMG and Gatekeeper's assessment of the image and
+        # of the app is printed.
+        id: notarize
+        if: steps.sign.outputs.enabled == 'true'
+        env:
+          SIGN: ${{ steps.keychain.outputs.identity }}
+          NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.MACOS_NOTARY_ISSUER }}
+        run: make macos-notarize SIGN="$SIGN" NOTARY_KEY="$RUNNER_TEMP/notary.p8" NOTARY_KEY_ID="$NOTARY_KEY_ID" NOTARY_ISSUER="$NOTARY_ISSUER"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: malachi-macos-universal
+          path: build/Malachi-Mail-*-universal.dmg
+          if-no-files-found: error
+
+      - name: Remove the keychain and the API key
+        if: always() && steps.sign.outputs.enabled == 'true'
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/notary.p8" "$RUNNER_TEMP/certificate.p12"
+
+  release:
+    name: Attach the DMG to the release
+    needs: [app]
+    # Only a notarised image: an ad-hoc one would not open on another Mac
+    # without going round Gatekeeper.
+    if: startsWith(github.ref, 'refs/tags/v') && needs.app.outputs.notarized == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: malachi-macos-universal
+      - name: Upload
+        # As in the other workflows: the release notes stay manual, this
+        # only creates a draft if the tag has no release yet.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --draft --title "Malachi Mail ${GITHUB_REF_NAME#v}" --notes ''
+          gh release upload "$GITHUB_REF_NAME" ./*.dmg \
+            --clobber --repo "$GITHUB_REPOSITORY"

@@ -94,7 +94,7 @@ UI_TAGS     := -tags nosound
 $(warning gsound not found via pkg-config; building the UI without notification sound (install gsound-devel))
 endif
 
-.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos run-macos test-macos windows run-windows test-windows help FORCE
+.PHONY: all build backend mcp ui blueprint data schemas locale pot po run run-dev run-backend run-frontend test lint fmt vet clean flatpak flatpak-run deb rpm macos macos-dmg macos-notarize macos-go run-macos test-macos windows run-windows test-windows help FORCE
 
 all: build
 
@@ -288,19 +288,55 @@ UNAME_S := $(shell uname -s)
 endif
 
 ## macos: build the macOS app bundle build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside (macOS only)
+## macos-dmg: build the universal app into build/Malachi-Mail-<version>-universal.dmg; SIGN= a Developer ID for a release (macOS only)
+## macos-notarize: have Apple notarise that DMG and staple the ticket to it (macOS only; docs/releasing.md §8)
 ## run-macos: build the macOS app and run it from the terminal so the daemon log stays visible (macOS only)
 ## test-macos: run the Swift tests of the macOS client (macOS only)
 ifeq ($(UNAME_S),Darwin)
-macos: backend mcp
-	$(MAKE) -C macos app BUILD_DIR=$(CURDIR)/$(BUILD_DIR) VERSION=$(VERSION) APP_ID=$(APP_ID)
+# ARCHS picks the architectures of the bundle. Empty, as for macos, it is
+# this Mac's own, with the Go binaries of the backend and mcp targets; with
+# ARCHS (macos-dmg's default is arm64 x86_64) macos-go builds malachid and
+# malachi-mcp once per architecture and joins them with lipo in
+# build/macos/go. Recursive, so that a target's own ARCHS counts; ARCHS=
+# on the command line gives a DMG of this Mac's architecture alone.
+MACOS_GO_DIR = $(if $(strip $(ARCHS)),$(CURDIR)/$(BUILD_DIR)/macos/go,$(CURDIR)/$(BUILD_DIR))
+MACOS_VARS   = BUILD_DIR=$(CURDIR)/$(BUILD_DIR) GO_DIR=$(MACOS_GO_DIR) VERSION=$(VERSION) APP_ID=$(APP_ID) ARCHS='$(strip $(ARCHS))'
+
+macos: macos-go
+	$(MAKE) -C macos app $(MACOS_VARS)
+
+macos-dmg: ARCHS ?= arm64 x86_64
+macos-dmg: macos-go
+	$(MAKE) -C macos dmg $(MACOS_VARS)
+
+macos-notarize: ARCHS ?= arm64 x86_64
+macos-notarize:
+	$(MAKE) -C macos notarize $(MACOS_VARS)
+
+# GOARCH calls x86_64 amd64. cgo stays on for every slice, as in the build
+# for this Mac alone.
+macos-go:
+	@set -e; \
+	if [ -z '$(strip $(ARCHS))' ]; then $(MAKE) --no-print-directory backend mcp; exit 0; fi; \
+	out='$(BUILD_DIR)/macos/go'; mkdir -p "$$out"; \
+	for bin in malachid malachi-mcp; do \
+		slices=''; \
+		for arch in $(ARCHS); do \
+			case $$arch in x86_64) goarch=amd64 ;; *) goarch=$$arch ;; esac; \
+			echo "go build $$bin ($$arch)"; \
+			(cd backend && CGO_ENABLED=1 GOOS=darwin GOARCH=$$goarch $(GO) build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o "../$$out/$$bin-$$arch" ./cmd/$$bin); \
+			slices="$$slices $$out/$$bin-$$arch"; \
+		done; \
+		lipo -create $$slices -output "$$out/$$bin"; \
+	done
 
 run-macos: macos
-	$(MAKE) -C macos run BUILD_DIR=$(CURDIR)/$(BUILD_DIR)
+	$(MAKE) -C macos run $(MACOS_VARS)
 
 test-macos:
 	$(MAKE) -C macos test
 else
-macos run-macos test-macos:
+macos macos-dmg macos-notarize macos-go run-macos test-macos:
 	@echo "$@ needs macOS (this is $(UNAME_S)); see macos/README.md" >&2; exit 1
 endif
 
