@@ -28,6 +28,7 @@ private func waitUntil(_ timeout: Duration = .seconds(5), _ cond: @MainActor () 
 
 private let account: AccountID = "a"
 private let inbox = FolderKey(account: "a", folder: "in")
+private let sentBox = FolderKey(account: "a", folder: "sent")
 /// 2026-09-01T10:00:00Z.
 private let base = Date(timeIntervalSince1970: 1_788_256_800)
 
@@ -58,6 +59,20 @@ private func shape(_ m: Conversation.Model?) -> [String] {
     (m?.items ?? []).map { it in it.kind == .truncated ? "more" : (it.message?.id.rawValue ?? "") }
 }
 
+/// The user's reply in Sent, in conversation `thread`.
+private func reply(_ id: String, _ hours: Int, thread: String) -> MessageSummary {
+    var s = msg(id, hours, thread: thread, from: "a", .seen)
+    s.folderId = sentBox.folder
+    return s
+}
+
+/// `shape` with the sent cards marked "sent:".
+private func sentShape(_ m: Conversation.Model?) -> [String] {
+    (m?.items ?? []).map { it in
+        it.kind == .truncated ? "more" : (it.sent ? "sent:" : "") + (it.message?.id.rawValue ?? "")
+    }
+}
+
 @MainActor
 private final class Harness {
     let fixture: MailFixture
@@ -75,14 +90,16 @@ private final class Harness {
 
     static let info = SystemInfo(version: "fake", protocolVersion: API.protocolVersion, pid: 7, storePath: "/tmp/s.db")
 
-    init(messages list: [MessageSummary] = messages(), grouped: Bool = true) async throws {
+    init(messages list: [MessageSummary] = messages(), sent: [MessageSummary] = [], grouped: Bool = true) async throws {
         fixture = try MailFixture()
         await fixture.setAccounts([testAccount("a", email: "a@example.invalid")])
         await fixture.setFolders([
             testFolder("in", path: "INBOX", role: .inbox),
+            testFolder("sent", path: "Sent", role: .sent),
             testFolder("trash", path: "Trash", role: .trash),
         ], for: account)
         await fixture.setMessages(list, in: inbox)
+        await fixture.setMessages(sent, in: sentBox)
         try await fixture.start()
         client = RPCClient(socketPath: fixture.path)
         scratch = ScratchSettings()
@@ -139,7 +156,9 @@ private final class Harness {
         #expect(h.shown == [true])
         #expect(h.conversation.thread == "t1")
         #expect(h.changes == [.loading, .opened])
-        #expect(await h.fixture.threadGetRequests == [ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in")])
+        #expect(await h.fixture.threadGetRequests == [
+            ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in", withSent: true),
+        ])
         #expect(shape(h.conversation.model) == ["a1", "a2", "a3"])
         #expect(h.conversation.model?.markRead == "a3")
         #expect(h.conversation.model?.scrollTo == 2)
@@ -210,6 +229,62 @@ private final class Harness {
         try await h.select(ListKey(message: "a3"))
         #expect(h.shown == [false])
         #expect(await h.fixture.threadGetRequests.isEmpty)
+    }
+
+    /// The user's replies in Sent stand among the members by date as sent
+    /// cards: never marked read, never among what the conversation's
+    /// actions take; one message and the user's reply to it are a
+    /// conversation row.
+    @Test func repliesInSentAreSentCards() async throws {
+        let h = try await Harness(sent: [reply("r1", 2, thread: "t1"), reply("r2", 6, thread: "t2")])
+        defer { Task { await h.stop() } }
+        #expect(h.list.rows.map { $0.key } == [
+            ListKey(thread: "t3"), ListKey(thread: "t2"), ListKey(thread: "t1"),
+        ], "a message and the user's reply are a conversation row")
+        #expect(h.list.rows[1].showsConversation && h.list.rows[1].summary?.sentCount == 1)
+
+        try await h.select(ListKey(thread: "t1"))
+        #expect(sentShape(h.conversation.model) == ["a1", "a2", "sent:r1", "a3"])
+        #expect(h.conversation.model?.markRead == "a3")
+        #expect(h.list.mailbox.model.rowIDs(h.list.rows[2]) == ["a1", "a2", "a3"], "the reply is no member")
+        #expect(h.conversation.member("r1")?.folderId == sentBox.folder, "its card has a body to ask for")
+
+        try await h.select(ListKey(thread: "t2"))
+        #expect(sentShape(h.conversation.model) == ["b1", "sent:r2"])
+        #expect(h.list.mailbox.model.rowIDs(h.list.rows[1]) == ["b1"])
+        #expect(h.list.mailbox.model.sentMessage("r2")?.id == "r2", "the card's reply and forward find it")
+        #expect(await h.fixture.threadGetRequests.allSatisfy { $0.withSent == true })
+    }
+
+    /// A reply that lands in Sent asks for the conversation again: a single
+    /// message the user answered becomes a conversation row, the selection
+    /// moves to it, and the conversation shows the reply.
+    @Test func replyArrivingInSentJoinsTheConversation() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        try await h.select(ListKey(thread: "t2", message: "b1"))
+        #expect(h.shown == [false])
+
+        let r = reply("r9", 7, thread: "t2")
+        await h.fixture.addMessage(r)
+        h.mailbox.handleNewMessage(NewMessageNotification(accountId: account, folderId: sentBox.folder, message: r))
+        try await waitUntil { h.list.selectedKey == ListKey(thread: "t2") && h.conversation.model != nil }
+        #expect(sentShape(h.conversation.model) == ["b1", "sent:r9"])
+
+        // Into a conversation on show.
+        try await h.select(ListKey(thread: "t1"))
+        let r2 = reply("r10", 8, thread: "t1")
+        await h.fixture.addMessage(r2)
+        h.mailbox.handleNewMessage(NewMessageNotification(accountId: account, folderId: sentBox.folder, message: r2))
+        try await waitUntil { h.conversation.model?.index("r10") ?? -1 >= 0 }
+        #expect(sentShape(h.conversation.model) == ["a1", "a2", "a3", "sent:r10"])
+        #expect(h.changes.last == .updated)
+
+        // Gone from Sent: the next answer drops the card.
+        await h.fixture.setMessages([], in: sentBox)
+        h.list.refetchMembers("t1")
+        try await waitUntil { h.conversation.model?.index("r10") == -1 }
+        #expect(sentShape(h.conversation.model) == ["a1", "a2", "a3"])
     }
 
     @Test func membersFollowTheList() async throws {
@@ -439,6 +514,40 @@ private final class Harness {
         // Another conversation forgets the entries.
         try await h.select(ListKey(thread: "t3"))
         #expect(h.conversation.loaded.isEmpty)
+    }
+
+    /// Show Quoted Text on a card: the whole body is asked for and the
+    /// choice holds through the pane's asking again (every scroll) until
+    /// another conversation is shown; Hide shows the trimmed body held.
+    @Test func quotedTextHoldsForTheConversation() async throws {
+        let h = try await Harness()
+        defer { Task { await h.stop() } }
+        try await h.select(ListKey(thread: "t1"))
+        h.conversation.needsBody("a1")
+        try await waitUntil { h.conversation.loaded["a1"]?.body != nil }
+        #expect(await h.fixture.bodyRequests.map(\.trimQuoted) == [true])
+        #expect(!h.conversation.quotedRevealed("a1"))
+
+        h.conversation.setQuoted("a1", true)
+        try await waitUntil { h.conversation.loaded["a1"]?.quotedShown == true && h.conversation.loaded["a1"]?.body != nil }
+        #expect(h.conversation.quotedRevealed("a1"))
+        h.conversation.needsBody("a1")
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(await h.fixture.bodyRequests.map(\.trimQuoted) == [true, nil], "held: not asked again")
+
+        h.conversation.setQuoted("a1", false)
+        #expect(h.conversation.loaded["a1"]?.quotedShown == false && h.conversation.loaded["a1"]?.body != nil)
+        h.conversation.setQuoted("a1", true)
+        #expect(await h.fixture.bodyRequests.count == 2, "both variants held")
+        h.conversation.setQuoted("zz", true)
+        #expect(!h.conversation.quotedRevealed("zz"), "not a member")
+
+        try await h.select(ListKey(thread: "t3"))
+        try await h.select(ListKey(thread: "t1"))
+        #expect(!h.conversation.quotedRevealed("a1"), "another conversation forgot it")
+        h.conversation.needsBody("a1")
+        try await waitUntil { h.conversation.loaded["a1"]?.quotedShown == false }
+        #expect(await h.fixture.bodyRequests.count == 2, "the trimmed body was held by the cache")
     }
 
     /// A failed message.get is not asked again on every scroll; the summary

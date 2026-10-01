@@ -114,16 +114,27 @@ extension ConversationLayout {
     /// conversation_layout.go `convDisplay`: the stack as the pane shows it
     /// (`displayOrder`): the items in order, which of them opened the
     /// conversation (`root`, an index into `items`; -1 when it is not
-    /// shown), and whether that card starts folded to its header.
+    /// shown), whether that card starts folded to its header, and how every
+    /// card starts (`folded`, by message id: `Conversation.defaultFolds`).
     public struct Display: Sendable, Equatable {
         public var items: [Conversation.Item]
         public var root: Int
         public var rootFolded: Bool
+        public var folded: [MessageID: Bool]
 
-        public init(items: [Conversation.Item] = [], root: Int = -1, rootFolded: Bool = false) {
+        public init(
+            items: [Conversation.Item] = [], root: Int = -1, rootFolded: Bool = false, folded: [MessageID: Bool] = [:]
+        ) {
             self.items = items
             self.root = root
             self.rootFolded = rootFolded
+            self.folded = folded
+        }
+
+        /// The id of the card that opened the conversation; nil when it is
+        /// not shown.
+        public var opening: MessageID? {
+            root >= 0 && root < items.count ? items[root].id : nil
         }
     }
 
@@ -132,18 +143,22 @@ extension ConversationLayout {
     /// conversation first (`root`: the issue's description, or the oldest
     /// message of a mail conversation that thread.get did not cut), then
     /// the rest newest first, so that the newest is what the pane opens on
-    /// right under it, and the row of older members left out last. The
-    /// opening card starts folded while another message card follows it (a
+    /// right under it, and the row of older members left out last. How the
+    /// cards start is `Conversation.defaultFolds`: the opening card folded
+    /// while another card that is not the user's sent reply follows it (a
     /// conversation of one message and its status changes shows that
-    /// message whole). The model (`Conversation.Model`) keeps the items
-    /// oldest first; `items` is not changed.
+    /// message whole), the sent cards folded, the rest open. The model
+    /// (`Conversation.Model`) keeps the items oldest first; `items` is not
+    /// changed.
     public static func displayOrder(_ items: [Conversation.Item]) -> Display {
         var d = Display()
         d.items.reserveCapacity(items.count)
         let opening = root(items)
+        var openingID: MessageID?
         if opening >= 0 {
             d.items.append(items[opening])
             d.root = 0
+            openingID = items[opening].id
         }
         var truncated: [Conversation.Item] = []
         for i in items.indices.reversed() where i != opening {
@@ -152,11 +167,10 @@ extension ConversationLayout {
                 continue
             }
             d.items.append(items[i])
-            if items[i].kind == .message {
-                d.rootFolded = opening >= 0
-            }
         }
         d.items.append(contentsOf: truncated)
+        d.folded = Conversation.defaultFolds(items, opening: openingID)
+        d.rootFolded = opening >= 0 && (openingID.flatMap { d.folded[$0] } ?? false)
         return d
     }
 

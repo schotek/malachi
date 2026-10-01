@@ -1,0 +1,28 @@
+From: Grace <grace@example.org>
+To: Heidi <heidi@example.org>
+Subject: Re: Questions
+Date: Wed, 1 Oct 2026 15:00:00 +0200
+Message-ID: <interleaved@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Hi Heidi, answers inline.
+
+On Tue, 30 Sep 2026 at 09:00, Heidi <heidi@example.org> wrote:
+> 1. Is the build green?
+
+Yes.
+
+> 2. Can we ship on Friday?
+
+Not before Monday.
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<div>Hi Heidi, answers inline.</div><div class="gmail_quote"><div class="gmail_attr">On Tue, 30 Sep 2026 at 09:00, Heidi &lt;heidi@example.org&gt; wrote:</div><blockquote class="gmail_quote">1. Is the build green?</blockquote><div>Yes.</div><blockquote class="gmail_quote">2. Can we ship on Friday?</blockquote><div>Not before Monday.</div></div>
+
+--alt--

@@ -141,7 +141,9 @@ func (s *messageService) Get(ctx context.Context, p api.MessageGetParams) (*api.
 // stored. An HTML part that cannot be shown safely is withheld, not an
 // error: the text is still there and the caller learns why from
 // htmlWithheld. The pictures the HTML shows that are on the mail server
-// only are counted (remotePictures), never fetched.
+// only are counted (remotePictures), never fetched. Under trimQuoted the
+// sanitiser cuts the quoted history off the HTML (sanitizeInto adjusts
+// the text to match), and a body shown as text only has its text cut.
 func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*api.MessageBodyResult, error) {
 	if p.AccountID == "" || p.MessageID == "" {
 		return nil, api.NewError(api.CodeInvalidArgument, "accountId and messageId are required")
@@ -182,11 +184,14 @@ func (s *messageService) Body(ctx context.Context, p api.MessageBodyParams) (*ap
 		SanitizerVersion: sanitize.Version,
 	}
 	if state == store.BodyFetched && hasHTML {
-		s.b.renderHTML(ctx, m, policy, res)
+		s.b.renderHTML(ctx, m, policy, p.TrimQuoted, res)
+	}
+	if p.TrimQuoted && state == store.BodyFetched && (!hasHTML || res.HTMLWithheld) {
+		res.Text, res.QuotedTrimmed = sanitize.TrimQuotedText(res.Text)
 	}
 	s.b.log.Debug("message body", "id", m.ID, "bodyState", state, "hasHtml", hasHTML,
 		"remoteContent", policy, "htmlWithheld", res.HTMLWithheld, "blocked", res.Blocked,
-		"remotePictures", res.RemotePictures)
+		"remotePictures", res.RemotePictures, "quotedTrimmed", res.QuotedTrimmed)
 	return res, nil
 }
 

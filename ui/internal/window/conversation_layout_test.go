@@ -216,7 +216,7 @@ func TestConvRailsMessagesHaveAvatarsEventsAndTheOlderRowDots(t *testing.T) {
 		railMember("c1", 10, "", &api.MessageIssue{IssueInfo: railIssue, Item: api.IssueItemComment, Mine: true}),
 		railMember("e1", 20, "", status),
 		railMember("c2", 30, "", &api.MessageIssue{IssueInfo: railIssue, Item: api.IssueItemComment, Via: "Issue Sync", Mine: true}),
-	}, railAccount, convIdentity{})
+	}, nil, railAccount, convIdentity{})
 	var kinds []conversation.ItemKind
 	for _, it := range m.Items {
 		kinds = append(kinds, it.Kind)
@@ -241,7 +241,7 @@ func TestConvRailsMessagesHaveAvatarsEventsAndTheOlderRowDots(t *testing.T) {
 
 func TestConvRailsOwnMailIsTinted(t *testing.T) {
 	members := []api.MessageSummary{railMember("m1", 0, "", nil), railMember("m2", 10, "Petr@acme.example", nil), railMember("m3", 20, "", nil)}
-	m := conversation.Build(railThread(3), members, railAccount, convIdentity{})
+	m := conversation.Build(railThread(3), members, nil, railAccount, convIdentity{})
 	want := []convRail{
 		{Marker: markAvatar, Below: true},
 		{Marker: markAvatar, Accent: true, Above: true, Below: true},
@@ -251,7 +251,7 @@ func TestConvRailsOwnMailIsTinted(t *testing.T) {
 		t.Errorf("rails:\n got %+v\nwant %+v", got, want)
 	}
 	// Without the account's address nothing is.
-	plain := conversation.Build(railThread(3), members[:2], api.Account{ID: "a1"}, convIdentity{})
+	plain := conversation.Build(railThread(3), members[:2], nil, api.Account{ID: "a1"}, convIdentity{})
 	for i, r := range convRails(plain.Items) {
 		if r.Accent {
 			t.Errorf("item %d tinted without an address", i)
@@ -497,6 +497,11 @@ func TestConvDisplayOrder(t *testing.T) {
 		it.Message.Issue = &api.MessageIssue{Item: kind}
 		return it
 	}
+	sent := func(id string) conversation.Item {
+		it := msg(id)
+		it.Sent = true
+		return it
+	}
 	truncated := conversation.Item{Kind: conversation.ItemTruncated, Text: "2 earlier messages are not shown"}
 
 	cases := []struct {
@@ -518,6 +523,9 @@ func TestConvDisplayOrder(t *testing.T) {
 			truncated, issue("desc", api.IssueItemDescription), issue("c1", api.IssueItemComment),
 		}, []string{"desc", "c1", "…"}, 0, true},
 		{"an event first is no opening", []conversation.Item{event("e"), msg("m")}, []string{"m", "e"}, -1, false},
+		{"a message and the user's reply: the message stays open", []conversation.Item{msg("a"), sent("r")}, []string{"a", "r"}, 0, false},
+		{"the user's reply opened it: folded", []conversation.Item{sent("r"), msg("a")}, []string{"r", "a"}, 0, true},
+		{"replies among messages", []conversation.Item{msg("a"), sent("r1"), msg("b"), sent("r2")}, []string{"a", "r2", "b", "r1"}, 0, true},
 		{"nothing", nil, nil, -1, false},
 	}
 	for _, c := range cases {
@@ -531,6 +539,29 @@ func TestConvDisplayOrder(t *testing.T) {
 		}
 		if !reflect.DeepEqual(before, c.items) {
 			t.Errorf("%s: the model's items were changed", c.name)
+		}
+		// The opening card's id names it, "" without one.
+		if want := api.MessageID(""); d.root >= 0 {
+			if want = d.items[d.root].Message.ID; d.opening != want {
+				t.Errorf("%s: opening %q, want %q", c.name, d.opening, want)
+			}
+		} else if d.opening != want {
+			t.Errorf("%s: opening %q without a root", c.name, d.opening)
+		}
+		// Every card has its start (conversation.DefaultFolds): a sent
+		// card folded, any other but the opening one open.
+		for _, it := range d.items {
+			folded, ok := d.folded[it.Message.ID]
+			if ok != (it.Kind == conversation.ItemMessage) {
+				t.Errorf("%s: %s has a fold %v", c.name, it.Message.ID, ok)
+			}
+			if it.Kind == conversation.ItemMessage && d.root >= 0 && it.Message.ID == d.items[d.root].Message.ID {
+				if folded != c.folded {
+					t.Errorf("%s: the opening card folded %v", c.name, folded)
+				}
+			} else if folded != it.Sent {
+				t.Errorf("%s: %s folded %v", c.name, it.Message.ID, folded)
+			}
 		}
 	}
 

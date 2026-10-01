@@ -118,6 +118,15 @@ struct ConversationTests {
         }
     }
 
+    /// sent_test.go TestIsConversationRowCountsSent.
+    @Test func isConversationRowCountsSent() {
+        for (count, sent, want) in [(1, 0, false), (1, 1, true), (0, 2, true), (2, 0, true), (0, 1, false), (1, -5, false)] {
+            var t = mailThread(count)
+            t.sentCount = sent
+            #expect(Conversation.isConversationRow(t) == want, "count \(count), sent \(sent)")
+        }
+    }
+
     @Test func build() {
         var queued = mail("m4", 40, false)
         queued.outbox = OutboxInfo(state: .queued, attempts: 0)
@@ -482,6 +491,204 @@ struct ConversationTests {
     }
 }
 
+// MARK: The user's replies in Sent (sent_test.go)
+
+/// Petr's reply in his Sent folder fs (thread.get's sent). Unread on
+/// purpose: a sent card is never unread.
+private func reply(_ id: String, _ min: Int) -> MessageSummary {
+    MessageSummary(
+        id: MessageID(id), accountId: "a1", folderId: "fs", threadId: "t1", from: [petr], to: [jana],
+        subject: "Re: Quarterly report", date: at(min), snippet: "Thanks", flags: [], hasAttachments: false, size: 0)
+}
+
+/// `shape` with the sent cards marked "sent:".
+private func sentShape(_ m: Conversation.Model) -> [String] {
+    zip(shape(m), m.items).map { s, it in it.sent ? "sent:" + (it.message?.id.rawValue ?? "") : s }
+}
+
+struct ConversationSentTests {
+    @Test func buildWithSent() {
+        var thread = mailThread(2)
+        thread.sentCount = 2
+        let members = [mail("m2", 20, false), mail("m1", 0, true)]
+        let sent = [reply("r2", 30), reply("r1", 10), reply("r1", 10), reply("", 5)]
+        let m = Conversation.build(thread, members, sent: sent, account: mailAccount)
+        #expect(sentShape(m) == ["msg:m1", "sent:r1", "msg:m2", "sent:r2"])
+        // The newest folder member is marked read, not the newer reply; a
+        // sent card is never unread and is the user's own.
+        #expect(m.markRead == "m2" && m.scrollTo == 3 && m.earlier == 0)
+        let r = m.items[m.index("r2")]
+        #expect(!r.unread && r.mine && r.sender == "Petr Svoboda" && r.kind == .message)
+
+        // Only replies, all of them unread: the newest member is marked.
+        let only = Conversation.build(mailThread(1), [mail("m1", 0, false)], sent: [reply("r1", 10)], account: mailAccount)
+        #expect(sentShape(only) == ["msg:m1", "sent:r1"] && only.markRead == "m1")
+    }
+
+    @Test func buildWithSentPathological() {
+        // A sent message with a member's id is the member.
+        let dup = Conversation.build(mailThread(1), [mail("m1", 0, true)], sent: [reply("m1", 5)], account: mailAccount)
+        #expect(sentShape(dup) == ["msg:m1"])
+        // Sent alone is no conversation of the folder.
+        for (name, members) in [("none", [MessageSummary]()), ("no id", [mail("", 0, true)])] {
+            let m = Conversation.build(mailThread(0), members, sent: [reply("r1", 0), reply("r2", 1)], account: mailAccount)
+            #expect(m.items.isEmpty && m.earlier == 0 && m.scrollTo == -1 && m.markRead == nil && m.thread == "t1", "\(name)")
+        }
+        // A sent event (never from a mail account) is left out.
+        let j = Conversation.build(
+            jiraThread(1), [issueMsg("d", 0, true, item(.description))], sent: [statusEvent("e1", 5, "To Do", "Done")],
+            account: jiraAccount)
+        #expect(sentShape(j) == ["msg:d"])
+        // Equal dates order by id, as members do.
+        let same = Conversation.build(mailThread(1), [mail("m", 10, true)], sent: [reply("a", 10), reply("z", 10)], account: mailAccount)
+        #expect(sentShape(same) == ["sent:a", "msg:m", "sent:z"])
+        // Beyond the cap only the newest replies stay.
+        let many = (0..<(API.Limits.maxThreadMessages + 3)).map { reply(String(format: "r%04d", $0), $0 + 1) }
+        let capped = Conversation.build(mailThread(1), [mail("m", 0, true)], sent: many, account: mailAccount)
+        #expect(capped.items.count == API.Limits.maxThreadMessages + 1)
+        #expect(capped.index("r0002") < 0 && capped.index("r0003") == 1)
+    }
+
+    /// When older members are left out, a reply older than the oldest
+    /// member shown is too: it would sit among the members the row says are
+    /// missing.
+    @Test func buildWithSentCut() {
+        let m = Conversation.build(
+            mailThread(5), [mail("m4", 40, true), mail("m5", 50, true)], sent: [reply("r1", 10), reply("r4", 45)],
+            account: mailAccount)
+        #expect(sentShape(m) == ["more", "msg:m4", "sent:r4", "msg:m5"] && m.earlier == 3)
+        let merged = Conversation.mergeSent(m, reply("r0", 5), account: mailAccount)
+        #expect(sentShape(merged) == ["more", "msg:m4", "sent:r4", "msg:m5"], "older reply merged into a cut conversation")
+    }
+
+    @Test func mergeSent() {
+        let base = Conversation.build(mailThread(2), [mail("m1", 0, true), mail("m2", 20, false)], account: mailAccount)
+        let m = Conversation.mergeSent(base, reply("r1", 10), account: mailAccount)
+        #expect(sentShape(m) == ["msg:m1", "sent:r1", "msg:m2"] && m.markRead == "m2" && m.scrollTo == 2)
+        #expect(base.items.count == 2, "MergeSent changed the model given")
+        // A changed reply moves to its date; a newer one is last, and still
+        // not marked.
+        var moved = reply("r1", 30)
+        moved.flags = [.flagged]
+        let m2 = Conversation.mergeSent(m, moved, account: mailAccount)
+        #expect(sentShape(m2) == ["msg:m1", "msg:m2", "sent:r1"] && m2.markRead == "m2" && m2.scrollTo == 2)
+        #expect(m2.items[2].message?.flags.count == 1, "the reply was not replaced")
+        // Left alone: no id, another conversation, a member's id, an event.
+        var other = reply("r9", 5)
+        other.threadId = "t2"
+        var event = statusEvent("e", 5, "A", "B")
+        event.threadId = "t1"
+        for (name, s) in [("no id", reply("", 5)), ("other thread", other), ("member id", reply("m1", 5)), ("event", event)] {
+            #expect(sentShape(Conversation.mergeSent(m, s, account: mailAccount)) == sentShape(m), "\(name)")
+        }
+        // An empty model stays empty.
+        let empty = Conversation.build(mailThread(0), [], account: mailAccount)
+        #expect(Conversation.mergeSent(empty, reply("r1", 0), account: mailAccount).items.isEmpty)
+        // A member arriving with a reply's id takes its place.
+        let m3 = Conversation.merge(m, mail("r1", 10, false), account: mailAccount)
+        #expect(sentShape(m3) == ["msg:m1", "msg:r1", "msg:m2"] && !m3.items[1].sent)
+    }
+
+    @Test func removeWithSent() {
+        let m = Conversation.build(
+            mailThread(2), [mail("m1", 0, true), mail("m2", 20, false)], sent: [reply("r1", 10), reply("r2", 30)],
+            account: mailAccount)
+        let r = Conversation.remove(m, "r2")
+        #expect(sentShape(r) == ["msg:m1", "sent:r1", "msg:m2"] && r.scrollTo == 2 && r.markRead == "m2")
+        // The members go, the replies stay behind: no conversation of the
+        // folder is left.
+        let gone = Conversation.remove(Conversation.remove(m, "m1"), "m2")
+        #expect(gone.items.isEmpty && gone.scrollTo == -1 && gone.markRead == nil)
+        let cut = Conversation.build(mailThread(4), [mail("m3", 20, true)], sent: [reply("r3", 30)], account: mailAccount)
+        let cutGone = Conversation.remove(cut, "m3")
+        #expect(cutGone.items.isEmpty && cutGone.earlier == 3)
+    }
+}
+
+// MARK: Folding (fold_test.go)
+
+/// A card dated by its id's length, as fold_test.go's `card`.
+private func card(_ id: String, sent: Bool) -> Conversation.Item {
+    var it = Conversation.Item(kind: .message, message: mail(id, id.count, true))
+    it.sent = sent
+    return it
+}
+
+struct ConversationFoldTests {
+    @Test func defaultFolds() {
+        let event = Conversation.Item(kind: .event, message: mail("e", 0, true))
+        var more = Conversation.Item(kind: .truncated)
+        more.text = "2 earlier messages are not shown"
+        let noID = Conversation.Item(kind: .message, message: mail("", 0, true))
+        let cases: [(String, [Conversation.Item], MessageID?, [MessageID: Bool])] = [
+            ("nothing", [], nil, [:]),
+            ("one message", [card("a", sent: false)], "a", ["a": false]),
+            ("opening folded while another follows", [card("a", sent: false), card("bb", sent: false)], "a",
+             ["a": true, "bb": false]),
+            ("a message and its status changes", [card("a", sent: false), event, more], "a", ["a": false]),
+            ("a message and the user's replies", [card("a", sent: false), card("rr", sent: true), card("rrr", sent: true)], "a",
+             ["a": false, "rr": true, "rrr": true]),
+            ("replies among messages", [card("a", sent: false), card("rr", sent: true), card("bbb", sent: false)], "a",
+             ["a": true, "rr": true, "bbb": false]),
+            ("the user's reply opened it", [card("r", sent: true), card("aa", sent: false)], "r", ["r": true, "aa": false]),
+            ("no opening", [more, card("a", sent: false), card("bb", sent: false)], nil, ["a": false, "bb": false]),
+            // Pathological: every card a reply. The newest opens.
+            ("all sent", [card("r", sent: true), card("rrr", sent: true), card("rr", sent: true)], "r",
+             ["r": true, "rr": true, "rrr": false]),
+            ("a repeated id keeps its first state", [card("a", sent: false), card("bb", sent: true), card("bb", sent: false)], "a",
+             ["a": false, "bb": true]),
+            ("no id", [noID, card("a", sent: false)], nil, ["a": false]),
+        ]
+        for (name, items, opening, want) in cases {
+            #expect(Conversation.defaultFolds(items, opening: opening) == want, "\(name)")
+        }
+    }
+
+    @Test func folds() {
+        let items = [card("a", sent: false), card("rr", sent: true), card("bbb", sent: false)]
+        var f = Conversation.Folds()
+        f.show("t1")
+        #expect(f.state(items, opening: "a") == ["a": true, "rr": true, "bbb": false], "defaults")
+        f.set("a", false)
+        f.set("bbb", true)
+        f.set("", true)
+        var want: [MessageID: Bool] = ["a": false, "rr": true, "bbb": true]
+        #expect(f.state(items, opening: "a") == want, "choices")
+        // An update of the same conversation keeps the choices; a card that
+        // arrives starts as its default.
+        f.show("t1")
+        let more = items + [card("cccc", sent: false)]
+        want["cccc"] = false
+        #expect(f.state(more, opening: "a") == want, "after an arrival")
+        // Collapse All, then a card arrives: it starts open, and the button
+        // offers Collapse All again.
+        f.setAll(items, Conversation.FoldAll.collapse.folded)
+        #expect(Conversation.foldAllOffer(f.state(items, opening: "a")) == .expand, "after Collapse All")
+        #expect(Conversation.foldAllOffer(f.state(more, opening: "a")) == .collapse, "after an arrival")
+        f.setAll(more, Conversation.FoldAll.expand.folded)
+        #expect(f.state(more, opening: "a") == ["a": false, "rr": false, "bbb": false, "cccc": false], "after Expand All")
+        // Another conversation forgets them.
+        f.show("t2")
+        let other = f.state(items, opening: "a")
+        #expect(other["a"] == true && other["rr"] == true, "another conversation")
+    }
+
+    @Test func foldAllOffer() {
+        let cases: [([MessageID: Bool], Conversation.FoldAll, String)] = [
+            ([:], .none, ""),
+            (["a": false], .none, ""),
+            (["a": true, "b": false], .collapse, "Collapse All"),
+            (["a": false, "b": false], .collapse, "Collapse All"),
+            (["a": true, "b": true], .expand, "Expand All"),
+        ]
+        for (state, want, label) in cases {
+            let got = Conversation.foldAllOffer(state)
+            #expect(got == want && got.label == label, "\(state)")
+        }
+        #expect(Conversation.FoldAll.collapse.folded && !Conversation.FoldAll.expand.folded && !Conversation.FoldAll.none.folded)
+    }
+}
+
 // MARK: The catalogue
 
 /// The generated catalogues (`MALACHI_LOCALE_DIR`, as `make test-macos`
@@ -497,8 +704,11 @@ private let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
 private let template = repoRoot.appendingPathComponent("po/malachi.pot")
 private let port = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/Conversation.swift")
+private let foldPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationFold.swift")
+private let quotedPort = repoRoot.appendingPathComponent("macos/Sources/MalachiCore/Model/ConversationQuoted.swift")
 private let haveSources = FileManager.default.fileExists(atPath: template.path)
-    && FileManager.default.fileExists(atPath: port.path)
+    && FileManager.default.fileExists(atPath: port.path) && FileManager.default.fileExists(atPath: foldPort.path)
+    && FileManager.default.fileExists(atPath: quotedPort.path)
 
 struct ConversationTranslationTests {
     /// conversation_test.go TestBuildTruncated in Czech: the three plural
@@ -513,19 +723,35 @@ struct ConversationTranslationTests {
         #expect(cs.plural(one, other, 7) == "7 starších zpráv není zobrazeno")
     }
 
-    /// po_test.go TestMsgidsInTemplate for the port: the one msgid of its
-    /// own is the template's plural entry that names
-    /// ui/internal/conversation, and the port asks for it with that plural.
+    /// po_test.go TestMsgidsInTemplate for the port: its msgids are the
+    /// template's five entries that name ui/internal/conversation (the
+    /// plural of the older members' row, conversation.go; Collapse All and
+    /// Expand All, fold.go; Show and Hide Quoted Text, quoted.go), and the
+    /// port asks for each the same way.
     @Test(.enabled(if: haveSources, "po/malachi.pot or the port's source is not next to this file"))
-    func portUsesTheTemplatesEntry() throws {
+    func portUsesTheTemplatesEntries() throws {
         let pot = try String(contentsOf: template, encoding: .utf8)
         let entries = pot.components(separatedBy: "\n\n").filter { $0.contains("ui/internal/conversation/") }
-        #expect(entries.count == 1, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
-        let entry = entries.first ?? ""
-        #expect(entry.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
+        #expect(entries.count == 5, "po/malachi.pot names ui/internal/conversation in \(entries.count) entries")
+        let all = entries.joined(separator: "\n\n")
+        #expect(all.contains("msgid \"%d earlier message is not shown\"\nmsgid_plural \"%d earlier messages are not shown\""))
+        #expect(all.contains("msgid \"Collapse All\"\nmsgstr"))
+        #expect(all.contains("msgid \"Expand All\"\nmsgstr"))
         let src = try String(contentsOf: port, encoding: .utf8)
         let calls = src.components(separatedBy: "L10n.").dropFirst().map { $0.prefix(90) }
         #expect(calls.count == 1, "the port translates \(calls.count) strings of its own")
         #expect(calls.first?.hasPrefix("N(\"%d earlier message is not shown\", \"%d earlier messages are not shown\"") == true)
+        let fold = try String(contentsOf: foldPort, encoding: .utf8)
+        let foldCalls = Array(fold.components(separatedBy: "L10n.").dropFirst())
+        #expect(foldCalls.count == 2, "the fold port translates \(foldCalls.count) strings")
+        #expect(foldCalls.first?.hasPrefix("T(\"Collapse All\")") == true)
+        #expect(foldCalls.last?.hasPrefix("T(\"Expand All\")") == true)
+        #expect(all.contains("msgid \"Show Quoted Text\"\nmsgstr"))
+        #expect(all.contains("msgid \"Hide Quoted Text\"\nmsgstr"))
+        let quoted = try String(contentsOf: quotedPort, encoding: .utf8)
+        let quotedCalls = Array(quoted.components(separatedBy: "L10n.").dropFirst())
+        #expect(quotedCalls.count == 2, "the quoted port translates \(quotedCalls.count) strings")
+        #expect(quotedCalls.first?.hasPrefix("T(\"Hide Quoted Text\")") == true)
+        #expect(quotedCalls.last?.hasPrefix("T(\"Show Quoted Text\")") == true)
     }
 }

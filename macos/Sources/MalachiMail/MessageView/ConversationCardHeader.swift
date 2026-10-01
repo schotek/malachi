@@ -4,9 +4,9 @@
 import AppKit
 import MalachiCore
 
-/// The header of a card of the conversation view: the fold arrow of the
-/// card that opened the conversation (conversation_card.go `setFold`;
-/// hidden on the others), an unread dot, the sender, the disclosure of the
+/// The header of a card of the conversation view: the fold arrow of a
+/// card that folds (conversation_card.go `setFold`; every message card),
+/// an unread dot, the sender, the disclosure of the
 /// recipients, who relayed the comment ("via …"), the Internal and Edited
 /// badges of an issue's comment, and at the trailing edge the date, with
 /// Reply (Comment on an issue), Reply All and Forward before it while the
@@ -227,7 +227,7 @@ final class UnreadDot: NSView {
     }
 }
 
-/// The fold arrow of the card that opened the conversation: borderless, a
+/// The fold arrow of a card of the conversation: borderless, a
 /// chevron that points to the side while the card is folded and down while
 /// it is open, as the arrow of a conversation row in the list.
 @MainActor

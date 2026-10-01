@@ -207,6 +207,12 @@ struct ConversationDisplayOrderTests {
         Conversation.Item(kind: .message, message: railMember(id, 0, issue: MessageIssue(info: railIssue, item: kind)))
     }
 
+    private func sent(_ id: String) -> Conversation.Item {
+        var it = msg(id)
+        it.sent = true
+        return it
+    }
+
     private var truncated: Conversation.Item {
         var it = Conversation.Item(kind: .truncated)
         it.text = "2 earlier messages are not shown"
@@ -244,6 +250,15 @@ struct ConversationDisplayOrderTests {
                 items: [truncated, issue("desc", .description), issue("c1", .comment)],
                 want: ["desc", "c1", "…"], root: 0, folded: true),
             Case(name: "an event first is no opening", items: [event("e"), msg("m")], want: ["m", "e"], root: -1, folded: false),
+            Case(
+                name: "a message and the user's reply: the message stays open", items: [msg("a"), sent("r")],
+                want: ["a", "r"], root: 0, folded: false),
+            Case(
+                name: "the user's reply opened it: folded", items: [sent("r"), msg("a")], want: ["r", "a"], root: 0,
+                folded: true),
+            Case(
+                name: "replies among messages", items: [msg("a"), sent("r1"), msg("b"), sent("r2")],
+                want: ["a", "r2", "b", "r1"], root: 0, folded: true),
             Case(name: "nothing", items: [], want: [], root: -1, folded: false),
         ]
         for c in cases {
@@ -252,6 +267,19 @@ struct ConversationDisplayOrderTests {
             #expect(ids(d.items) == c.want, "\(c.name)")
             #expect(d.root == c.root && d.rootFolded == c.folded, "\(c.name)")
             #expect(c.items == before, "\(c.name): the model's items were changed")
+            // Every card has its start (`Conversation.defaultFolds`): a sent
+            // card folded, any other but the opening one open.
+            for item in d.items {
+                let id = item.message?.id ?? ""
+                let folded = d.folded[id]
+                #expect((folded != nil) == (item.kind == .message), "\(c.name): \(id) has a fold \(String(describing: folded))")
+                guard item.kind == .message, let folded else { continue }
+                if id == d.opening {
+                    #expect(folded == c.folded, "\(c.name): the opening card folded \(folded)")
+                } else {
+                    #expect(folded == item.sent, "\(c.name): \(id) folded \(folded)")
+                }
+            }
         }
 
         // The timeline runs from the opening card down to the row of older

@@ -970,6 +970,13 @@ type MessageBodyParams struct {
 	// Empty = use the stored policy (config.get); "block" and "allow" are the
 	// only accepted overrides, "knownSenders" here is invalidArgument.
 	RemoteContent RemoteContentPolicy `json:"remoteContent,omitempty"`
+	// TrimQuoted asks for the body without the quoted history of a reply
+	// (Gmail's quote, a cited blockquote, Outlook's header block and what
+	// follows it, a "-----Original Message-----" separator, ">" lines after
+	// "On … wrote:"); MessageBodyResult.QuotedTrimmed says whether anything
+	// was cut. The client asks again without it to show the whole message.
+	// false (the default) returns the body exactly as before.
+	TrimQuoted bool `json:"trimQuoted,omitempty"`
 }
 
 // BlockedContent summarises what the sanitiser removed or neutralised so the
@@ -1046,6 +1053,15 @@ type MessageBodyResult struct {
 	RemoteContent RemoteContentPolicy `json:"remoteContent"`
 	// SanitizerVersion identifies the sanitiser ruleset; bump on any rule change.
 	SanitizerVersion string `json:"sanitizerVersion"`
+	// QuotedTrimmed is set only when MessageBodyParams.TrimQuoted cut a
+	// quoted history off: HTML, Text, Blocked, Links, InlineParts and
+	// RemotePictures then all describe the trimmed body (Text is the text
+	// alternative cut by the same rules, or the text rendering of the
+	// trimmed HTML when they find nothing to cut in it). A message without
+	// HTML, or whose HTML is withheld, has its Text trimmed. false: the
+	// whole body, nothing was found to cut or cutting would have left
+	// nothing to show.
+	QuotedTrimmed bool `json:"quotedTrimmed,omitempty"`
 }
 
 // MessagePartParams names one MIME part of a received message, by the
@@ -1176,6 +1192,15 @@ type ThreadSummary struct {
 	// Issue is present only for a thread of an issue-tracker account,
 	// which is one issue.
 	Issue *IssueInfo `json:"issue,omitempty"`
+	// SentCount, in a folder's scope, is how many members of the thread
+	// in the account's folders of role "sent" are not in that folder (a
+	// copy with the same Message-ID header there counts as in it): the
+	// user's own replies the folder lacks. It is not part of MessageCount
+	// or any other aggregate. 0 when the folder is itself a sent folder or
+	// the outbox, for an issue-tracker account (it has no sent folder),
+	// and in the account-wide scope of thread.get (the sent members are
+	// members there).
+	SentCount int `json:"sentCount"`
 }
 
 type ThreadListParams struct {
@@ -1199,11 +1224,22 @@ type ThreadGetParams struct {
 	// FolderID restricts the members (and the summary) to one folder;
 	// empty = every member of the account.
 	FolderID FolderID `json:"folderId,omitempty"`
+	// WithSent, with FolderID, also returns the members the summary's
+	// SentCount counts (ThreadGetResult.Sent). Ignored without FolderID.
+	WithSent bool `json:"withSent,omitempty"`
 }
 
 type ThreadGetResult struct {
 	Thread   ThreadSummary    `json:"thread"`
 	Messages []MessageSummary `json:"messages"` // oldest first, at most MaxThreadMessages (the newest)
+	// Sent are the members of the thread in the account's sent folders
+	// that are not among the folder's members, compared by Message-ID
+	// header as well as by id, one per Message-ID (SentCount counts them):
+	// oldest first, at most MaxThreadMessages (the newest). Only with
+	// WithSent and FolderID; absent otherwise and when there are none.
+	// They are not part of Thread's aggregates and are never the folder's
+	// members (actions on the conversation are not theirs).
+	Sent []MessageSummary `json:"sent,omitempty"`
 }
 
 // ---------------------------------------------------------------------------

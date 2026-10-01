@@ -347,6 +347,14 @@ public sealed partial class MessageView : UserControl
             case nameof(ReaderController.SaveAll):
                 FillAttachments();
                 break;
+            case nameof(ReaderController.QuotedOffer):
+                if (Reader.QuotedOffer is null)
+                {
+                    MoveFocusOutOf(QuotedButton);
+                }
+                QuotedButton.Show(Reader.QuotedOffer);
+                QuotedRow.Visibility = QuotedButton.Visibility;
+                break;
             case nameof(ReaderController.Page):
                 if (Reader.Page != ReaderPage.Message)
                 {
@@ -366,6 +374,10 @@ public sealed partial class MessageView : UserControl
                 break;
         }
     }
+
+    // The "•••" under the body: its quoted history shows, or goes again
+    // (MessageViewController.swift toggleQuoted).
+    private void OnQuotedClick(object sender, RoutedEventArgs e) => Reader.ToggleQuoted();
 
     // message_stack's crossfade (0.2 s): the page coming in fades in; its
     // Visibility follows the binding, which runs after this handler.

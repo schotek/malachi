@@ -79,6 +79,11 @@ public final class MailboxController {
     /// half). The notification's summary carries its account and folder ids
     /// filled in.
     public var onNewMessageForList: (@MainActor (NewMessageNotification) -> Void)?
+    /// The list's share of a notify.newMessage for another folder of the
+    /// listed folder's account (installed by the list extension): a reply
+    /// the user sent may belong to a listed conversation
+    /// (`ListController.applyNewMessageElsewhere`).
+    public var onNewMessageElsewhere: (@MainActor (NewMessageNotification) -> Void)?
     /// The account's outbox contents changed and its folder list was
     /// reloaded: refresh the views showing the outbox (outbox.go
     /// `refreshOutboxViews`).
@@ -94,6 +99,11 @@ public final class MailboxController {
     /// cache let them go (`onMessagesChanged` ran just before). Called
     /// together with `reloadMessages`, before it.
     public var refreshShown: (@MainActor (AccountID) -> Void)?
+    /// The list's `refreshShownSent`, installed by the list extension: a
+    /// sent folder of the selected folder's account changed
+    /// (notify.messagesChanged), and the conversation shown may show the
+    /// user's replies in it.
+    public var refreshShownSent: (@MainActor (AccountID) -> Void)?
     /// The backend went away: fold a conversation waiting for its members
     /// back (window.go `showConnectionState`, `collapseLoading` + `syncRows`).
     public var collapseLoading: (@MainActor () -> Void)?
@@ -617,15 +627,22 @@ public final class MailboxController {
     /// of those named — or any folder of the account when none is named,
     /// or a virtual folder of the account, which shows copies of every
     /// space's issues — what the pane shows of it is fetched again
-    /// (`refreshShown`) and it is listed again. Swift-first: mirror in
-    /// notify.go when GTK gets Jira accounts.
+    /// (`refreshShown`) and it is listed again. A sent folder named without
+    /// the selected one has the conversation shown ask for the user's
+    /// replies again (`refreshShownSent`). Swift-first: mirror in notify.go
+    /// when GTK gets Jira accounts.
     public func handleMessagesChanged(_ n: MessagesChangedNotification) {
         guard let account = model.account(n.accountId), account.enabled else { return }
         loadFolders(n.accountId, model.foldersGen)
         onMessagesChanged?(n)
-        guard let sel = model.selected, sel.account == n.accountId,
-              n.folderIds.isEmpty || n.folderIds.contains(sel.folder) || model.folder(sel)?.virtual != nil
-        else { return }
+        guard let sel = model.selected, sel.account == n.accountId else { return }
+        guard n.folderIds.isEmpty || n.folderIds.contains(sel.folder) || model.folder(sel)?.virtual != nil else {
+            // The user's replies a conversation shows live in Sent.
+            if n.folderIds.contains(where: { model.folderRole(FolderKey(account: n.accountId, folder: $0)) == .sent }) {
+                refreshShownSent?(n.accountId)
+            }
+            return
+        }
         refreshShown?(n.accountId)
         reloadMessages?()
     }
@@ -639,7 +656,8 @@ public final class MailboxController {
     /// the folder's counts move, the total always, the unread count for an
     /// unseen message; a message for the listed folder goes to the list
     /// through `onNewMessageForList` first, unless the list holds it already
-    /// (delivered twice: the counts were adjusted the first time).
+    /// (delivered twice: the counts were adjusted the first time), and one
+    /// for another folder of its account through `onNewMessageElsewhere`.
     public func handleNewMessage(_ n: NewMessageNotification) {
         let k = FolderKey(account: n.accountId, folder: n.folderId)
         var s = n.message
@@ -654,6 +672,8 @@ public final class MailboxController {
                 return
             }
             onNewMessageForList?(NewMessageNotification(accountId: n.accountId, folderId: n.folderId, message: s))
+        } else if n.accountId == model.listFolder?.account {
+            onNewMessageElsewhere?(NewMessageNotification(accountId: n.accountId, folderId: n.folderId, message: s))
         }
         let unread = hasFlag(s.flags, .seen) ? 0 : 1
         model.adjustCounts(k, unread, 1)

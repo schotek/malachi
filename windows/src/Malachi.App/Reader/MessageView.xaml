@@ -453,6 +453,7 @@ gets the sanitiser's output only.
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <ScrollViewer
@@ -621,6 +622,21 @@ gets the sanitiser's output only.
                         x:Name="HtmlSlot"
                         Visibility="{x:Bind local:ReaderBind.BodyVisible(Reader.BodyPage, 'Html'), Mode=OneWay}" />
                 </Grid>
+
+                <!-- The "•••" under the body, which scrolls on its own: it
+                     shows or hides the quoted history the daemon cut
+                     (MessageViewController.swift quotedButton), in sight at
+                     the bottom of the message, in the same clamp. Never in
+                     an attached message's window. -->
+                <Border
+                    x:Name="QuotedRow"
+                    Grid.Row="3"
+                    MaxWidth="900"
+                    Padding="24,4,24,8"
+                    HorizontalAlignment="Stretch"
+                    Visibility="Collapsed">
+                    <local:QuotedTextButton x:Name="QuotedButton" Click="OnQuotedClick" />
+                </Border>
             </Grid>
         </Grid>
     </Grid>

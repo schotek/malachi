@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiCore/Model/LoadedMessage.swift (the pane text:
-// subjectText, bodyText, showsHTML); GTK: ui/internal/window/message_view.go
+// subjectText, bodyText, showsHTML, quotedTextOffer); GTK: ui/internal/window/message_view.go
 // (subjectText, bodyText) and attachments.go (showsHTML).
 
 using Malachi.Core.Api;
@@ -65,4 +65,23 @@ public static class LoadedMessageText
     /// </summary>
     public static bool ShowsHtml(MessageBodyResult? b) =>
         b is not null && b.BodyState == BodyState.Fetched && !string.IsNullOrEmpty(b.Html);
+
+    /// <summary>
+    /// The button for what <paramref name="lm"/> shows (null: none; Swift
+    /// <c>quotedTextOffer</c>): Hide while the whole body shows (or is on its
+    /// way, or failed: the way back to the trimmed one), Show when the daemon
+    /// cut the quoted history from the body on display.
+    /// </summary>
+    public static QuotedTextOffer? QuotedTextOfferFor(LoadedMessage? lm)
+    {
+        if (lm is null)
+        {
+            return null;
+        }
+        if (lm.QuotedShown)
+        {
+            return QuotedTextOffer.Hide;
+        }
+        return lm.Err is null && lm.Body is { IsQuotedTrimmed: true } ? QuotedTextOffer.Show : null;
+    }
 }

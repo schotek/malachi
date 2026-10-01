@@ -315,6 +315,9 @@ public sealed class ConversationLayoutTests
             ["desc", "c1", "…"], 0, true
         },
         { "an event first is no opening", [Event("e"), Msg("m")], ["m", "e"], -1, false },
+        { "a message and the user's reply: the message stays open", [Msg("a"), Sent("r")], ["a", "r"], 0, false },
+        { "the user's reply opened it: folded", [Sent("r"), Msg("a")], ["r", "a"], 0, true },
+        { "replies among messages", [Msg("a"), Sent("r1"), Msg("b"), Sent("r2")], ["a", "r2", "b", "r1"], 0, true },
         { "nothing", [], [], -1, false },
     };
 
@@ -330,6 +333,26 @@ public sealed class ConversationLayoutTests
         Assert.True(want.SequenceEqual(d.Items.Select(ShownId)), $"{name}: order {string.Join(",", d.Items.Select(ShownId))}");
         Assert.Equal((root, folded), (d.Root, d.RootFolded));
         Assert.Equal(before, items); // the model's items are not changed
+        // Every card has its start (Conversation.DefaultFolds): a sent card
+        // folded, any other but the opening one open.
+        foreach (var item in d.Items)
+        {
+            var id = item.Id ?? new MessageId("");
+            var has = d.Folded.TryGetValue(id, out var cardFolded);
+            Assert.True(has == (item.Kind == ConversationItemKind.Message), $"{name}: {id.Value} has a fold {has}");
+            if (!has)
+            {
+                continue;
+            }
+            if (id == d.Opening)
+            {
+                Assert.True(cardFolded == folded, $"{name}: the opening card folded {cardFolded}");
+            }
+            else
+            {
+                Assert.True(cardFolded == item.Sent, $"{name}: {id.Value} folded {cardFolded}");
+            }
+        }
     }
 
     // The timeline follows the order shown: from the opening card down to
@@ -347,6 +370,8 @@ public sealed class ConversationLayoutTests
     private static ConversationItem Msg(string id) => new() { Kind = ConversationItemKind.Message, Message = RailMember(id, 0) };
 
     private static ConversationItem Event(string id) => new() { Kind = ConversationItemKind.Event, Message = RailMember(id, 0) };
+
+    private static ConversationItem Sent(string id) => Msg(id) with { Sent = true };
 
     private static ConversationItem IssueItem(string id, string kind) =>
         Msg(id) with { Message = RailMember(id, 0, issue: MessageIssue.Of(RailIssue, kind)) };

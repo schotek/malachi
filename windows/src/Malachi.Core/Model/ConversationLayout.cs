@@ -148,10 +148,12 @@ public static partial class ConversationLayout
     /// (<see cref="Root"/>: the issue's description, or the oldest message of
     /// a mail conversation that thread.get did not cut), then the rest newest
     /// first, so that the newest is what the pane opens on right under it,
-    /// and the row of older members left out last. The opening card starts
-    /// folded while another message card follows it (a conversation of one
-    /// message and its status changes shows that message whole). The model
-    /// keeps the items oldest first; <paramref name="items"/> is not changed.
+    /// and the row of older members left out last. How the cards start is
+    /// <see cref="Conversation.DefaultFolds"/>: the opening card folded while
+    /// another card that is not the user's sent reply follows it (a
+    /// conversation of one message and its status changes shows that message
+    /// whole), the sent cards folded, the rest open. The model keeps the
+    /// items oldest first; <paramref name="items"/> is not changed.
     /// </summary>
     public static Display DisplayOrder(IReadOnlyList<ConversationItem> items)
     {
@@ -159,11 +161,12 @@ public static partial class ConversationLayout
         var shown = new List<ConversationItem>(items.Count);
         var root = Root(items);
         var shownRoot = -1;
-        var folded = false;
+        MessageId? opening = null;
         if (root >= 0)
         {
             shown.Add(items[root]);
             shownRoot = 0;
+            opening = items[root].Id;
         }
         var truncated = new List<ConversationItem>();
         for (var i = items.Count - 1; i >= 0; i--)
@@ -178,13 +181,11 @@ public static partial class ConversationLayout
                 continue;
             }
             shown.Add(items[i]);
-            if (items[i].Kind == ConversationItemKind.Message)
-            {
-                folded = root >= 0;
-            }
         }
         shown.AddRange(truncated);
-        return new Display(shown, shownRoot, folded);
+        var folds = Conversation.DefaultFolds(items, opening);
+        var rootFolded = root >= 0 && opening is { } id && folds.TryGetValue(id, out var f) && f;
+        return new Display(shown, shownRoot, rootFolded, folds);
     }
 
     /// <summary>

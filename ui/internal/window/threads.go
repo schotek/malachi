@@ -102,7 +102,9 @@ func (w *Window) toggleThread(tid api.ThreadID) {
 
 // ensureMembers makes the folder members of a conversation known,
 // through thread.get when needed, and runs then afterwards (at once when
-// they are). A failed fetch folds the row back and says why.
+// they are). A failed fetch folds the row back and says why. thread.get
+// asks for the user's replies in Sent too (withSent), which the
+// conversation view shows beside the members (threadMembers.sent).
 func (w *Window) ensureMembers(tid api.ThreadID, then func()) {
 	mem := w.model.members[tid]
 	if mem == nil {
@@ -120,10 +122,41 @@ func (w *Window) ensureMembers(tid api.ThreadID, then func()) {
 	if mem.fetching {
 		return
 	}
+	w.fetchMembers(tid, false)
+}
+
+// refetchMembers asks thread.get for conversation tid again while the
+// model keeps what it holds of it, so nothing blinks: the user's replies
+// in Sent changed (one arrived, or a message that may carry a reply's
+// Message-ID arrived in the folder; the window cannot compare Message-IDs,
+// the daemon does), or the shown conversation's sent folder changed. The
+// answer replaces the members, the replies and the summary (SentCount, so
+// a single message the user answered becomes a conversation row, and the
+// selection follows it in syncRows) and reaches the conversation view
+// through syncRows. A fetch in flight is followed by one more, since it
+// may have been answered before the change. A failure is only logged,
+// unless someone waits for the members. A port of the macOS client's
+// ListController.refetchMembers.
+func (w *Window) refetchMembers(tid api.ThreadID) {
+	mem := w.model.members[tid]
+	if mem == nil {
+		return
+	}
+	if mem.fetching {
+		mem.again = true
+		return
+	}
+	w.fetchMembers(tid, true)
+}
+
+// fetchMembers is the thread.get of ensureMembers and refetchMembers;
+// quiet: a failure nobody waits for is only logged.
+func (w *Window) fetchMembers(tid api.ThreadID, quiet bool) {
+	mem := w.model.members[tid]
 	mem.fetching = true
 	k := w.model.listFolder
 	gen := w.model.listGen
-	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder}
+	params := api.ThreadGetParams{AccountID: k.Account, ThreadID: tid, FolderID: k.Folder, WithSent: true}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 		defer cancel()
@@ -140,14 +173,19 @@ func (w *Window) ensureMembers(tid api.ThreadID, then func()) {
 			mem.fetching = false
 			waiters := mem.waiters
 			mem.waiters = nil
+			again := mem.again
+			mem.again = false
 			if err != nil {
 				w.log.Warn("thread.get", "err", err)
+				if quiet && len(waiters) == 0 {
+					return
+				}
 				w.Toast(widget.RPCErrorText(i18n.T("Loading the conversation"), err))
 				w.model.setExpanded(tid, false)
 				w.syncRows()
 				return
 			}
-			w.model.setMembers(tid, res.Thread, res.Messages)
+			w.model.setMembers(tid, res.Thread, res.Messages, res.Sent)
 			w.syncRows()
 			if row, ok := w.selectedRow(); ok && row.Key.Thread == tid {
 				w.setMessageActionsSensitive(true)
@@ -155,8 +193,69 @@ func (w *Window) ensureMembers(tid api.ThreadID, then func()) {
 			for _, fn := range waiters {
 				fn()
 			}
+			if again {
+				w.refetchMembers(tid)
+			}
 		})
 	}()
+}
+
+// refetchReplies follows a message that arrived in the listed folder into
+// conversation tid (onNewMessage, after applyNewMessage): a conversation
+// that shows the user's replies is asked for again, since the arrival may
+// be one of them (a Bcc to oneself), which only the daemon tells by its
+// Message-ID.
+func (w *Window) refetchReplies(tid api.ThreadID) {
+	if tid == "" {
+		return
+	}
+	replies := false
+	if i, ok := w.model.tindex[tid]; ok && i < len(w.model.threads) {
+		replies = w.model.threads[i].SentCount > 0
+	}
+	if mem := w.model.members[tid]; replies || (mem != nil && len(mem.sent) > 0) {
+		w.refetchMembers(tid)
+	}
+}
+
+// applyNewMessageElsewhere takes notify.newMessage for another folder of
+// the listed folder's account (onNewMessage): a message in a sent folder
+// that belongs to a listed conversation is the user's reply to it, so the
+// conversation is asked for again (refetchMembers): its SentCount changes
+// (a single message becomes a conversation row) and the conversation view,
+// when it shows it, gets the reply. Nothing in flat mode, and nothing
+// while a sent folder or the outbox is listed (their conversations have
+// no replies of their own). s carries its account and folder.
+func (w *Window) applyNewMessageElsewhere(s api.MessageSummary) {
+	m := &w.model
+	k := m.listFolder
+	if !m.grouped || m.loading || k.Account != s.AccountID || k.Folder == s.FolderID || s.ThreadID == "" {
+		return
+	}
+	if _, listed := m.tindex[s.ThreadID]; !listed {
+		return
+	}
+	if m.folderRole(folderKey{Account: s.AccountID, Folder: s.FolderID}) != api.RoleSent {
+		return
+	}
+	if role := m.folderRole(k); role == api.RoleSent || role == api.RoleOutbox {
+		return
+	}
+	w.refetchMembers(s.ThreadID)
+}
+
+// refreshShownSent: notify.messagesChanged named a sent folder of account
+// acc and not the selected folder (handleMessagesChanged): the user's
+// replies the conversation on show holds are asked for again.
+func (w *Window) refreshShownSent(acc api.AccountID) {
+	if !w.model.grouped {
+		return
+	}
+	row, ok := w.selectedRow()
+	if !ok || row.Message.AccountID != acc || !rowShowsConversation(row) {
+		return
+	}
+	w.refetchMembers(row.Key.Thread)
 }
 
 // fetchExpandedMembers asks for the members of every unfolded conversation

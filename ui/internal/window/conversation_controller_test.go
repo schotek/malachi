@@ -81,6 +81,8 @@ type convWindow struct {
 	ctrl     *conversationController
 	changes  []convChange
 	loads    []api.MessageID
+	// switched are the messages whose held variant convFetch showed.
+	switched []api.MessageID
 }
 
 var convBase = time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
@@ -121,11 +123,20 @@ func newConvWindow(t *testing.T, list []api.MessageSummary) *convWindow {
 	w.caller = &convCaller{handlers: map[string]func(any) (any, error){
 		api.MethodThreadGet: func(p any) (any, error) {
 			params := p.(api.ThreadGetParams)
-			return api.ThreadGetResult{Thread: w.threadSummary(params.ThreadID), Messages: w.folderMembers(params.ThreadID)}, nil
+			res := api.ThreadGetResult{Thread: w.threadSummary(params.ThreadID), Messages: w.folderMembers(params.ThreadID)}
+			if params.WithSent {
+				res.Sent = w.sentMembers(params.ThreadID)
+			}
+			return res, nil
 		},
+		// Trimmed with trimQuoted (something was cut), else whole.
 		api.MethodMessageBody: func(p any) (any, error) {
-			id := p.(api.MessageBodyParams).MessageID
-			return api.MessageBodyResult{MessageID: id, BodyState: api.BodyFetched, Text: "body of " + string(id)}, nil
+			params := p.(api.MessageBodyParams)
+			id := params.MessageID
+			if params.TrimQuoted {
+				return api.MessageBodyResult{MessageID: id, BodyState: api.BodyFetched, Text: "body of " + string(id), QuotedTrimmed: true}, nil
+			}
+			return api.MessageBodyResult{MessageID: id, BodyState: api.BodyFetched, Text: "body of " + string(id) + "\n> old"}, nil
 		},
 		api.MethodMessageGet: func(p any) (any, error) {
 			id := p.(api.MessageGetParams).MessageID
@@ -142,24 +153,62 @@ func newConvWindow(t *testing.T, list []api.MessageSummary) *convWindow {
 // folderMembers are the daemon's members of tid in the folder, oldest
 // first.
 func (w *convWindow) folderMembers(tid api.ThreadID) []api.MessageSummary {
+	return w.membersIn(tid, w.folder.Folder)
+}
+
+// sentMembers are the daemon's members of tid in the account's sent
+// folder ("sent"), which the folder lacks (the fake has no Message-IDs:
+// by id), oldest first.
+func (w *convWindow) sentMembers(tid api.ThreadID) []api.MessageSummary {
+	return w.membersIn(tid, convSentFolder)
+}
+
+// membersIn are the daemon's members of tid in folder, oldest first.
+func (w *convWindow) membersIn(tid api.ThreadID, folder api.FolderID) []api.MessageSummary {
 	var out []api.MessageSummary
 	for _, s := range w.messages {
-		if s.ThreadID == tid {
+		if s.ThreadID == tid && s.FolderID == folder {
 			out = append(out, s)
 		}
 	}
 	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].Date.Before(out[j-1].Date); j-- {
+		for j := i; j > 0 && (out[j].Date.Before(out[j-1].Date) || out[j].Date.Equal(out[j-1].Date) && out[j].ID < out[j-1].ID); j-- {
 			out[j], out[j-1] = out[j-1], out[j]
 		}
 	}
 	return out
 }
 
+// convSentFolder is the account's sent folder.
+const convSentFolder api.FolderID = "sent"
+
+// convReply is the user's reply in Sent, in conversation thread.
+func convReply(id string, hours int, thread string) api.MessageSummary {
+	s := convMsg(id, hours, thread, "a", false, api.FlagSeen)
+	s.FolderID = convSentFolder
+	return s
+}
+
+// refetch is the list's refetchMembers: thread.get for tid again, its
+// answer (members, replies, summary) into the list, which the
+// conversation hears.
+func (w *convWindow) refetch(tid api.ThreadID) {
+	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true}
+	var res api.ThreadGetResult
+	if err := w.caller.Call(context.Background(), api.MethodThreadGet, params, &res); err != nil {
+		return
+	}
+	w.queue = append(w.queue, func() {
+		w.threads[tid] = res.Thread
+		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, complete: true}
+		w.listChanged()
+	})
+}
+
 // threadSummary is the daemon's summary of tid in the folder.
 func (w *convWindow) threadSummary(tid api.ThreadID) api.ThreadSummary {
 	list := w.folderMembers(tid)
-	t := api.ThreadSummary{ID: tid, AccountID: "a", MessageCount: len(list)}
+	t := api.ThreadSummary{ID: tid, AccountID: "a", MessageCount: len(list), SentCount: len(w.sentMembers(tid))}
 	for _, s := range list {
 		if !hasFlag(s.Flags, api.FlagSeen) {
 			t.UnreadCount++
@@ -181,7 +230,7 @@ func (w *convWindow) list() {
 	w.threads = map[api.ThreadID]api.ThreadSummary{}
 	w.members = map[api.ThreadID]*threadMembers{}
 	for _, s := range w.messages {
-		if _, ok := w.threads[s.ThreadID]; ok {
+		if _, ok := w.threads[s.ThreadID]; ok || s.FolderID != w.folder.Folder {
 			continue
 		}
 		t := w.threadSummary(s.ThreadID)
@@ -250,7 +299,7 @@ func (w *convWindow) convEnsureMembers(tid api.ThreadID, then func()) {
 		return
 	}
 	mem.fetching = true
-	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder}
+	params := api.ThreadGetParams{AccountID: w.folder.Account, ThreadID: tid, FolderID: w.folder.Folder, WithSent: true}
 	var res api.ThreadGetResult
 	err := w.caller.Call(context.Background(), api.MethodThreadGet, params, &res)
 	w.queue = append(w.queue, func() {
@@ -266,7 +315,7 @@ func (w *convWindow) convEnsureMembers(tid api.ThreadID, then func()) {
 			return
 		}
 		w.threads[tid] = res.Thread
-		w.members[tid] = &threadMembers{list: res.Messages, complete: true}
+		w.members[tid] = &threadMembers{list: res.Messages, sent: res.Sent, complete: true}
 		w.listChanged()
 		for _, fn := range waiters {
 			fn()
@@ -287,11 +336,17 @@ func (w *convWindow) convComposeAccount() bool {
 	return len(capabilities.ForwardAccounts(w.accounts)) > 0
 }
 
-func (w *convWindow) convFetch(s api.MessageSummary, full bool, then func(*loadedMessage)) {
+func (w *convWindow) convFetch(s api.MessageSummary, full, quoted bool, then func(*loadedMessage)) {
 	lm := w.loaded[s.ID]
 	if lm == nil {
 		lm = &loadedMessage{}
 		w.loaded[s.ID] = lm
+	}
+	// switchQuoted: a variant held shows at once wherever the message is
+	// (the window's fan-out reaches the conversation through adopt).
+	if lm.showQuoted(quoted) && lm.body != nil {
+		w.switched = append(w.switched, s.ID)
+		w.ctrl.adopt(s.ID, lm)
 	}
 	if lm.body != nil && (!full || lm.msg != nil) {
 		then(lm)
@@ -321,14 +376,18 @@ func (w *convWindow) convFetch(s api.MessageSummary, full bool, then func(*loade
 	}
 	if lm.body == nil && !lm.fetching {
 		lm.fetching = true
+		lm.err = nil
+		q := lm.quotedShown
 		var res api.MessageBodyResult
-		err := w.caller.Call(context.Background(), api.MethodMessageBody, api.MessageBodyParams{AccountID: s.AccountID, MessageID: s.ID}, &res)
+		err := w.caller.Call(context.Background(), api.MethodMessageBody, bodyParams(s.AccountID, s.ID, q, lm.switchPolicy), &res)
 		w.queue = append(w.queue, func() {
-			lm.fetching = false
+			current := lm.bodyAnswered(q)
 			if err != nil {
-				lm.err = err
+				if current {
+					lm.err = err
+				}
 			} else {
-				lm.body = &res
+				lm.store(&res, q, false)
 			}
 			settle()
 		})
@@ -366,7 +425,7 @@ func TestConversationRowShowsTheWholeConversation(t *testing.T) {
 	if want := []convChange{convLoading, convOpened}; !reflect.DeepEqual(w.changes, want) {
 		t.Errorf("changes %v", w.changes)
 	}
-	if got := w.caller.calls; len(got) != 1 || !reflect.DeepEqual(got[0].params, api.ThreadGetParams{AccountID: "a", ThreadID: "t1", FolderID: "in"}) {
+	if got := w.caller.calls; len(got) != 1 || !reflect.DeepEqual(got[0].params, api.ThreadGetParams{AccountID: "a", ThreadID: "t1", FolderID: "in", WithSent: true}) {
 		t.Errorf("thread.get: %+v", got)
 	}
 	m := w.ctrl.model
@@ -778,5 +837,183 @@ func TestConversationRefreshLetsGoOfTheBodies(t *testing.T) {
 	w.flush()
 	if w.ctrl.loaded["a2"] != nil {
 		t.Error("a body asked for before the refresh landed")
+	}
+}
+
+// sentShape is convShape with the sent cards marked "sent:".
+func sentShape(m *conversation.Model) []string {
+	if m == nil {
+		return nil
+	}
+	out := []string{}
+	for _, it := range m.Items {
+		switch {
+		case it.Kind == conversation.ItemTruncated:
+			out = append(out, "more")
+		case it.Sent:
+			out = append(out, "sent:"+string(it.Message.ID))
+		default:
+			out = append(out, string(it.Message.ID))
+		}
+	}
+	return out
+}
+
+// bodyTrims is whether each message.body call asked for trimQuoted.
+func (f *convCaller) bodyTrims() []bool {
+	out := []bool{}
+	for _, c := range f.calls {
+		if c.method == api.MethodMessageBody {
+			out = append(out, c.params.(api.MessageBodyParams).TrimQuoted)
+		}
+	}
+	return out
+}
+
+// The user's replies in Sent stand among the members by date as sent
+// cards: never marked read, never among the members; one message and the
+// user's reply to it are a conversation row. A port of the macOS client's
+// repliesInSentAreSentCards.
+func TestConversationRepliesInSentAreSentCards(t *testing.T) {
+	w := newConvWindow(t, append(convMessages(), convReply("r1", 2, "t1"), convReply("r2", 6, "t2")))
+	row := w.row("t2", "", false)
+	if !rowShowsConversation(row) || row.Summary.SentCount != 1 {
+		t.Errorf("a message and the user's reply are no conversation row: %+v", row.Summary)
+	}
+
+	w.selectRow(w.row("t1", "", false))
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"a1", "a2", "sent:r1", "a3"}) {
+		t.Errorf("t1 shape %v", got)
+	}
+	if w.ctrl.model.MarkRead != "a3" {
+		t.Errorf("mark read %q", w.ctrl.model.MarkRead)
+	}
+	var ids []api.MessageID
+	for _, s := range w.members["t1"].list {
+		ids = append(ids, s.ID)
+	}
+	if !reflect.DeepEqual(ids, []api.MessageID{"a1", "a2", "a3"}) {
+		t.Errorf("the reply is a member: %v", ids)
+	}
+	if s, ok := w.ctrl.member("r1"); !ok || s.FolderID != convSentFolder {
+		t.Errorf("its card has no body to ask for: %+v %v", s, ok)
+	}
+
+	w.selectRow(w.row("t2", "", false))
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"b1", "sent:r2"}) {
+		t.Errorf("t2 shape %v", got)
+	}
+	for _, c := range w.caller.calls {
+		if p, ok := c.params.(api.ThreadGetParams); ok && !p.WithSent {
+			t.Errorf("thread.get without withSent: %+v", p)
+		}
+	}
+}
+
+// A reply that lands in Sent has the list ask for the conversation again
+// (refetchMembers): a single message the user answered becomes a
+// conversation row, and a conversation on show gets the reply; gone from
+// Sent, the next answer drops the card. A port of the macOS client's
+// replyArrivingInSentJoinsTheConversation.
+func TestConversationReplyArrivingInSentJoinsIt(t *testing.T) {
+	w := newConvWindow(t, convMessages())
+	if w.selectRow(w.row("t2", "b1", false)) {
+		t.Fatal("a single message shows a conversation")
+	}
+	w.messages["r9"] = convReply("r9", 7, "t2")
+	w.refetch("t2")
+	w.flush()
+	row := w.row("t2", "", false)
+	if !rowShowsConversation(row) {
+		t.Fatalf("the answered message is no conversation row: %+v", row.Summary)
+	}
+	w.selectRow(row)
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"b1", "sent:r9"}) {
+		t.Errorf("t2 shape %v", got)
+	}
+
+	// Into a conversation on show.
+	w.selectRow(w.row("t1", "", false))
+	w.messages["r10"] = convReply("r10", 8, "t1")
+	w.refetch("t1")
+	w.flush()
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"a1", "a2", "a3", "sent:r10"}) {
+		t.Errorf("t1 shape %v", got)
+	}
+	if w.changes[len(w.changes)-1] != convUpdated {
+		t.Errorf("changes %v", w.changes)
+	}
+
+	// Gone from Sent: the next answer drops the card.
+	delete(w.messages, "r10")
+	w.refetch("t1")
+	w.flush()
+	if got := sentShape(w.ctrl.model); !reflect.DeepEqual(got, []string{"a1", "a2", "a3"}) {
+		t.Errorf("after the reply went %v", got)
+	}
+}
+
+// Show Quoted Text on a card: the whole body is asked for and the choice
+// holds through the pane's asking again (every scroll) until another
+// conversation is shown; Hide shows the trimmed body held. A port of the
+// macOS client's quotedTextHoldsForTheConversation.
+func TestConversationQuotedTextHoldsForTheConversation(t *testing.T) {
+	w := newConvWindow(t, convMessages())
+	w.selectRow(w.row("t1", "", false))
+	w.ctrl.needsBody("a1", false)
+	w.flush()
+	if got := w.caller.bodyTrims(); !reflect.DeepEqual(got, []bool{true}) {
+		t.Errorf("trimmed by default: %v", got)
+	}
+	if lm := w.ctrl.loaded["a1"]; lm == nil || quotedOffer(lm) != conversation.QuotedShow {
+		t.Errorf("no Show Quoted Text: %+v", lm)
+	}
+	if w.ctrl.quotedRevealed("a1") {
+		t.Error("revealed before the user asked")
+	}
+
+	w.ctrl.setQuoted("a1", true, false)
+	if lm := w.ctrl.loaded["a1"]; lm == nil || quotedOffer(lm) != conversation.QuotedHide {
+		t.Errorf("the whole body on its way offers no way back: %+v", lm)
+	}
+	w.flush()
+	if lm := w.ctrl.loaded["a1"]; lm == nil || !lm.quotedShown || lm.body == nil || lm.body.Text != "body of a1\n> old" {
+		t.Errorf("the whole body: %+v", lm)
+	}
+	if !w.ctrl.quotedRevealed("a1") {
+		t.Error("not revealed")
+	}
+	w.ctrl.needsBody("a1", false)
+	w.flush()
+	if got := w.caller.bodyTrims(); !reflect.DeepEqual(got, []bool{true, false}) {
+		t.Errorf("held: not asked again: %v", got)
+	}
+
+	w.ctrl.setQuoted("a1", false, false)
+	if lm := w.ctrl.loaded["a1"]; lm == nil || lm.quotedShown || lm.body == nil || lm.body.Text != "body of a1" {
+		t.Errorf("the trimmed body at once: %+v", lm)
+	}
+	w.ctrl.setQuoted("a1", true, false)
+	w.flush()
+	if n := w.caller.count(api.MethodMessageBody); n != 2 {
+		t.Errorf("both variants held: %d requests", n)
+	}
+	w.ctrl.setQuoted("zz", true, false)
+	if w.ctrl.quotedRevealed("zz") {
+		t.Error("not a member")
+	}
+
+	w.selectRow(w.row("t3", "", false))
+	w.selectRow(w.row("t1", "", false))
+	if w.ctrl.quotedRevealed("a1") {
+		t.Error("another conversation forgot it")
+	}
+	w.ctrl.needsBody("a1", false)
+	w.flush()
+	if lm := w.ctrl.loaded["a1"]; lm == nil || lm.quotedShown {
+		t.Errorf("trimmed again: %+v", lm)
+	}
+	if n := w.caller.count(api.MethodMessageBody); n != 2 {
+		t.Errorf("the trimmed body was held by the cache: %d requests", n)
 	}
 }

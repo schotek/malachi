@@ -8,9 +8,12 @@ MessageView/ConversationViewController.swift (loadView). The conversation
 page of the reading pane: a folded conversation row of the grouped list
 shows every member the folder holds, as native cards on a timeline. The
 column is 900 wide at most, its gutter included, like the single message's
-(16 at the sides, 4 above, 16 below); the issue card of a Jira conversation
-sits on top in the cards' column (after the gutter, 12 below the top); the
-rows follow, added in code (ConversationView.xaml.cs). The link under the
+(16 at the sides, 4 above, 16 below); above everything the Collapse All /
+Expand All button (fold.go FoldAllOffer, macOS foldAllButton: small, at the
+trailing end of the cards' column, 4 below the top, hidden while fewer than
+two cards fold); the issue card of a Jira conversation sits on top in the
+cards' column (after the gutter, 12 below the top); the rows follow, added
+in code (ConversationView.xaml.cs). The link under the
 pointer in any card shows at the bottom left (an OSD caption, plain text,
 cut in the middle); the spinner stands in while the members load.
 -->
@@ -43,6 +46,16 @@ cut in the middle); the spinner stands in while the members load.
                     x:Name="Column"
                     MaxWidth="900"
                     Padding="16,4,16,16">
+                    <!-- Collapse All / Expand All; its text is set in code. -->
+                    <HyperlinkButton
+                        x:Name="FoldAllButton"
+                        Margin="40,4,0,0"
+                        Padding="4,1,4,1"
+                        HorizontalAlignment="Right"
+                        AutomationProperties.AutomationId="ConversationFoldAll"
+                        Click="OnFoldAllClick"
+                        FontSize="12"
+                        Visibility="Collapsed" />
                     <!-- conversation_issue: the issue card, in the cards' column. -->
                     <reader:IssueCardView
                         x:Name="IssueCard"

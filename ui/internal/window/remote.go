@@ -122,19 +122,21 @@ func (w *Window) loadRemoteImages(id api.MessageID) {
 // fetchRemoteImages is the message.body call under allow for a request the
 // bar already shows as loading (lm.loadingImages); it ends the request
 // either way, with the images on display or the bar back as it was and a
-// toast.
+// toast. It asks for the variant of the body on display (with its quoted
+// history or without); the other variant, under the policy before, goes.
 func (w *Window) fetchRemoteImages(id api.MessageID, lm *loadedMessage) {
 	s, ok := w.summary(id)
 	if !ok {
 		w.imagesDone(id, lm)
 		return
 	}
+	quoted := lm.quotedShown
+	params := bodyParams(s.AccountID, id, quoted, api.RemoteAllow)
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 		defer cancel()
 		var res api.MessageBodyResult
-		err := w.client.Call(ctx, api.MethodMessageBody,
-			api.MessageBodyParams{AccountID: s.AccountID, MessageID: id, RemoteContent: api.RemoteAllow}, &res)
+		err := w.client.Call(ctx, api.MethodMessageBody, params, &res)
 		glib.IdleAdd(func() {
 			if err != nil {
 				w.log.Warn("message.body (allow)", "err", err)
@@ -143,7 +145,7 @@ func (w *Window) fetchRemoteImages(id api.MessageID, lm *loadedMessage) {
 				return
 			}
 			lm.loadingImages = false
-			lm.body, lm.err = &res, nil
+			lm.store(&res, quoted, true)
 			if w.loaded[id] == nil {
 				w.storeLoaded(id, lm)
 			}
@@ -423,15 +425,16 @@ func (w *Window) downloadPictures(id api.MessageID, say func(string)) {
 				failed(err)
 				return
 			}
-			// Decided on the main loop, where the body on display is.
-			policy := picturesPolicy(lm)
+			// Decided on the main loop, where the body on display is: its
+			// policy and its variant.
+			quoted := lm.quotedShown
+			params := bodyParams(acc, id, quoted, picturesPolicy(lm))
 			go func() {
 				// The policy may let the daemon fetch remote images first.
 				ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 				defer cancel()
 				var res api.MessageBodyResult
-				err := w.client.Call(ctx, api.MethodMessageBody,
-					api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy}, &res)
+				err := w.client.Call(ctx, api.MethodMessageBody, params, &res)
 				glib.IdleAdd(func() {
 					if err != nil {
 						w.log.Warn("message.body (pictures)", "err", err)
@@ -439,7 +442,7 @@ func (w *Window) downloadPictures(id api.MessageID, say func(string)) {
 						return
 					}
 					lm.loadingPictures = false
-					lm.body, lm.err = &res, nil
+					lm.store(&res, quoted, true)
 					if w.loaded[id] == nil {
 						w.storeLoaded(id, lm)
 					}
@@ -539,30 +542,31 @@ func reloadAfterDownload(lm *loadedMessage) bool {
 
 // reloadPictures asks for the body of message id again, under the policy
 // of the body on display (picturesPolicy: remote images the user loaded
-// stay), and shows it wherever the message is on display. The daemon
-// answers from its store and memory. A body that replaced the one on
-// display meanwhile, or Download Pictures started meanwhile, wins over the
+// stay) and in its variant (with the quoted history or without), and shows
+// it wherever the message is on display. The daemon answers from its store
+// and memory. A body that replaced the one on display meanwhile (the other
+// variant included), or Download Pictures started meanwhile, wins over the
 // answer; a failure is only logged and the body on display stays. Main
 // loop.
 func (w *Window) reloadPictures(acc api.AccountID, id api.MessageID, lm *loadedMessage) {
 	shown := lm.body
-	policy := picturesPolicy(lm)
+	quoted := lm.quotedShown
+	params := bodyParams(acc, id, quoted, picturesPolicy(lm))
 	go func() {
 		// The policy may let the daemon fetch remote images first.
 		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
 		defer cancel()
 		var res api.MessageBodyResult
-		err := w.client.Call(ctx, api.MethodMessageBody,
-			api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy}, &res)
+		err := w.client.Call(ctx, api.MethodMessageBody, params, &res)
 		glib.IdleAdd(func() {
 			if err != nil {
 				w.log.Warn("message.body (pictures again)", "err", err)
 				return
 			}
-			if lm.body != shown || lm.loadingPictures {
+			if lm.body != shown || lm.quotedShown != quoted || lm.loadingPictures {
 				return
 			}
-			lm.body, lm.err = &res, nil
+			lm.store(&res, quoted, true)
 			if w.loaded[id] == nil {
 				w.storeLoaded(id, lm)
 			}

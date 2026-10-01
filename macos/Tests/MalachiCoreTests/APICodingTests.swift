@@ -254,6 +254,29 @@ import Testing
         #expect(r.messages.count == 2 && r.messages[1].threadId == "t_9")
     }
 
+    /// docs/api.md §4.4 (2026-10-01): `sentCount` on the summary (0 when an
+    /// older daemon leaves it out), `withSent` on the request (left out
+    /// when not asked for) and `sent` on the answer (empty when absent).
+    @Test func threadSentReplies() throws {
+        #expect(try decode(ThreadSummary.self, Self.threadJSON).sentCount == 0, "absent is 0")
+        let withCount = Self.threadJSON.replacingOccurrences(of: #""hasAttachments":true"#, with: #""hasAttachments":true,"sentCount":2"#)
+        let t = try decode(ThreadSummary.self, withCount)
+        #expect(t.sentCount == 2 && t.messageCount == 3 && t.folderIds == ["f_inbox", "f_sent"])
+        let roundTrip = try JSONCoding.decoder().decode(ThreadSummary.self, from: JSONCoding.encoder().encode(t))
+        #expect(roundTrip == t)
+
+        let r = try decode(ThreadGetResult.self, #"{"thread":\#(withCount),"messages":[\#(Self.summaryJSON)],"sent":[\#(Self.summaryJSON)]}"#)
+        #expect(r.messages.count == 1 && r.sent.count == 1)
+        #expect(try decode(ThreadGetResult.self, #"{"thread":\#(withCount),"messages":[]}"#).sent.isEmpty)
+
+        let plain = String(decoding: try JSONCoding.encoder().encode(ThreadGetParams(accountId: "a", threadId: "t")), as: UTF8.self)
+        #expect(!plain.contains("withSent"))
+        let asked = String(
+            decoding: try JSONCoding.encoder().encode(ThreadGetParams(accountId: "a", threadId: "t", folderId: "f", withSent: true)),
+            as: UTF8.self)
+        #expect(asked.contains(#""withSent":true"#))
+    }
+
     @Test func draftSaveExample() throws {
         let r = try decode(DraftSaveResult.self, #"""
         {"draftId":"d_1","version":2,"textBody":"hi","htmlBody":"<p>hi</p>",

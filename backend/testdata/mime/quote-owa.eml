@@ -1,0 +1,27 @@
+From: Erin <erin@example.org>
+To: Frank <frank@example.org>
+Subject: RE: Meeting
+Date: Wed, 1 Oct 2026 14:00:00 +0200
+Message-ID: <owa-reply@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Yes, Thursday works. Calendar<https://calendar.example.org/t>
+
+________________________________
+From: Frank <frank@example.org>
+Sent: Wednesday, October 1, 2026 9:00 AM
+To: Erin <erin@example.org>
+Subject: Meeting
+
+Can we meet on Thursday? Room<https://rooms.example.org/a>
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<html><head><style type="text/css" style="display:none;"> P {margin-top:0;margin-bottom:0;} </style></head><body dir="ltr"><div class="elementToProof" style="font-family: Aptos, sans-serif; font-size: 12pt;">Yes, Thursday works. <a href="https://calendar.example.org/t">Calendar</a></div><div id="appendonsend"></div><hr style="display:inline-block;width:98%" tabindex="-1"><div id="divRplyFwdMsg" dir="ltr"><font face="Calibri, sans-serif" style="font-size:11pt" color="#000000"><b>From:</b> Frank &lt;frank@example.org&gt;<br><b>Sent:</b> Wednesday, October 1, 2026 9:00 AM<br><b>To:</b> Erin &lt;erin@example.org&gt;<br><b>Subject:</b> Meeting</font><div>&nbsp;</div></div><div><p>Can we meet on Thursday? <a href="https://rooms.example.org/a">Room</a> <img src="https://track.example.org/p.gif" width="1" height="1"></p></div></body></html>
+
+--alt--

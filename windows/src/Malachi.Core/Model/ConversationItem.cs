@@ -31,8 +31,16 @@ public sealed record ConversationItem
     /// </summary>
     public string Sender { get; init; } = "";
 
-    /// <summary>An unread message card; an event is never unread, whatever its flags.</summary>
+    /// <summary>An unread message card; an event and a sent card are never unread, whatever their flags.</summary>
     public bool Unread { get; init; }
+
+    /// <summary>
+    /// A card of the user's reply in a sent folder that the folder lacks
+    /// (thread.get's sent): not a member of the folder, so never marked read,
+    /// never counted as a member and never among the messages the
+    /// conversation's actions take; it starts folded (DefaultFolds).
+    /// </summary>
+    public bool Sent { get; init; }
 
     /// <summary>
     /// A member the account's own user wrote: the pane tints its avatar with

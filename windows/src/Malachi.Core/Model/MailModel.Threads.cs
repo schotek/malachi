@@ -101,12 +101,13 @@ public sealed partial class MailModel
     /// <summary>
     /// What thread.list tells of a conversation's folder members: the newest
     /// one, which for a single-message conversation is all of them
-    /// (thread_model.go <c>membersFromListing</c>).
+    /// (thread_model.go <c>membersFromListing</c>), unless the user's replies
+    /// in Sent are part of it: those only thread.get returns.
     /// </summary>
     public static ThreadMembers MembersFromListing(ThreadSummary t)
     {
         ArgumentNullException.ThrowIfNull(t);
-        return new ThreadMembers([t.Latest], Complete: t.MessageCount <= 1);
+        return new ThreadMembers([t.Latest], Complete: t.MessageCount <= 1 && t.SentCount <= 0);
     }
 
     /// <summary>
@@ -114,7 +115,9 @@ public sealed partial class MailModel
     /// invalidate its fetched members (thread_model.go <c>sameShape</c>).
     /// That includes the issue of a Jira conversation: its status, assignee
     /// or priority can move without a new member (the account shows no
-    /// events), and every member carries it.
+    /// events), and every member carries it. It includes the count of the
+    /// user's replies in Sent too (<see cref="ThreadSummary.SentCount"/>): the
+    /// fetched ones are kept with the members.
     /// </summary>
     public static bool SameShape(ThreadSummary a, ThreadSummary b)
     {
@@ -122,7 +125,7 @@ public sealed partial class MailModel
         ArgumentNullException.ThrowIfNull(b);
         return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount
             && a.LatestDate == b.LatestDate && a.Latest.Id == b.Latest.Id
-            && SameIssue(a.Issue, b.Issue);
+            && SameIssue(a.Issue, b.Issue) && a.SentCount == b.SentCount;
     }
 
     // The issue by value, as Go's reflect.DeepEqual compares it (a record
@@ -341,11 +344,12 @@ public sealed partial class MailModel
     }
 
     /// <summary>
-    /// Stores the thread.get answer: the folder members, oldest first, and
+    /// Stores the thread.get answer: the folder members, oldest first, the
+    /// user's replies in Sent the folder lacks (<paramref name="sent"/>) and
     /// the summary as the daemon aggregated it. An empty list means the
     /// conversation left the folder meanwhile; its row goes.
     /// </summary>
-    public void SetMembers(ThreadId tid, ThreadSummary t, IReadOnlyList<MessageSummary> list)
+    public void SetMembers(ThreadId tid, ThreadSummary t, IReadOnlyList<MessageSummary> list, IReadOnlyList<MessageSummary>? sent = null)
     {
         ArgumentNullException.ThrowIfNull(t);
         ArgumentNullException.ThrowIfNull(list);
@@ -360,7 +364,7 @@ public sealed partial class MailModel
             return;
         }
         threads[i] = t;
-        Members[tid] = new ThreadMembers([.. list], Complete: true);
+        Members[tid] = new ThreadMembers([.. list], Complete: true) { Sent = [.. sent ?? []] };
         ReindexMembers();
         RebuildRows();
     }
@@ -664,7 +668,7 @@ public sealed partial class MailModel
             {
                 continue;
             }
-            var snap = new ThreadSnapshot(i, threads[i], new ThreadMembers([.. mem.List], Complete: true), expanded.Contains(tid));
+            var snap = new ThreadSnapshot(i, threads[i], new ThreadMembers([.. mem.List], Complete: true) { Sent = mem.Sent }, expanded.Contains(tid));
             var gone = byThread[tid].ToHashSet();
             MessageSummary[] kept = [.. mem.List.Where(s => !gone.Contains(s.Id))];
             if (kept.Length == 0)
@@ -720,7 +724,9 @@ public sealed partial class MailModel
 
     /// <summary>
     /// Lays the grouped list out: a conversation with one member is a plain
-    /// row; one with more is a conversation row, followed by its members
+    /// row; one with more, or with one and the user's replies in Sent
+    /// (<see cref="Conversation.IsConversationRow"/>), is a conversation row,
+    /// followed by its members
     /// (oldest first) when unfolded and known. The rows are a new list; the
     /// one handed out before stays as it was.
     /// </summary>
@@ -735,7 +741,7 @@ public sealed partial class MailModel
             {
                 latest = mem.List[^1];
             }
-            if (t.MessageCount <= 1)
+            if (!Conversation.IsConversationRow(t))
             {
                 output.Add(new ListRow { Key = new ListKey(t.Id, latest.Id), Message = latest });
                 continue;
@@ -809,6 +815,28 @@ public sealed partial class MailModel
     /// message.
     /// </summary>
     public IReadOnlyList<MessageId>? RowIds(ListRow r) => RowMessages(r)?.Select(s => s.Id).ToArray();
+
+    /// <summary>
+    /// The user's reply in Sent <paramref name="id"/> that a listed
+    /// conversation shows besides its folder members
+    /// (<see cref="ThreadMembers.Sent"/>), for the actions of its card in the
+    /// conversation view (reply, forward): never a member, never in
+    /// <see cref="RowIds"/>.
+    /// </summary>
+    public MessageSummary? SentMessage(MessageId id)
+    {
+        foreach (var mem in Members.Values)
+        {
+            foreach (var s in mem.Sent)
+            {
+                if (s.Id == id)
+                {
+                    return s;
+                }
+            }
+        }
+        return null;
+    }
 
     /// <summary><see cref="RowIds"/> with the summaries.</summary>
     public IReadOnlyList<MessageSummary>? RowMessages(ListRow r)

@@ -539,8 +539,10 @@ func (w *Window) onOutboxChanged(acc api.AccountID) {
 
 // onNewMessage inserts a notified message at the top of the list when it
 // belongs to the selected folder, and adjusts the folder's counts: the
-// total always, the unread count for an unread message. Called by
-// handleNotification (notify.go).
+// total always, the unread count for an unread message. A message in
+// another folder of the listed account may be the user's reply to a listed
+// conversation (applyNewMessageElsewhere). Called by handleNotification
+// (notify.go).
 func (w *Window) onNewMessage(n api.NewMessageNotification) {
 	k := folderKey{Account: n.AccountID, Folder: n.FolderID}
 	s := n.Message
@@ -565,6 +567,7 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			sel, _ := w.selectedKey()
 			if w.model.applyNewMessage(s, w.model.listFilter, sel) {
 				w.syncRows()
+				w.refetchReplies(s.ThreadID)
 			} else {
 				w.loadMessages()
 			}
@@ -574,6 +577,9 @@ func (w *Window) onNewMessage(n api.NewMessageNotification) {
 			w.messageList.Prepend(r)
 			w.showListState()
 		}
+	} else if n.AccountID == w.model.listFolder.Account {
+		// A reply the user sent may belong to a listed conversation.
+		w.applyNewMessageElsewhere(s)
 	}
 	unread := 0
 	if !hasFlag(s.Flags, api.FlagSeen) {

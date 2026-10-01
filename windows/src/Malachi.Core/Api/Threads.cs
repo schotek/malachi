@@ -74,6 +74,16 @@ public sealed record ThreadSummary
     /// </summary>
     [JsonPropertyName("issue")]
     public IssueInfo? Issue { get; init; }
+
+    /// <summary>
+    /// In a folder's scope: how many members of the thread in the account's
+    /// folders of role <c>sent</c> the folder lacks (the user's own replies;
+    /// compared by Message-ID as well), part of no other field. 0 in a sent
+    /// folder, the outbox, a jira account and the account-wide summary of
+    /// thread.get. Absent from an older daemon (before 2026-10-01): 0.
+    /// </summary>
+    [JsonPropertyName("sentCount")]
+    public int SentCount { get; init; }
 }
 
 /// <summary>
@@ -120,6 +130,10 @@ public sealed record ThreadListResult
 /// <summary>
 /// api.ThreadGetParams. <see cref="FolderId"/> restricts the members and the
 /// summary to one folder; null = every member of the account.
+/// <see cref="WithSent"/>, with <see cref="FolderId"/>, also returns the
+/// members <see cref="ThreadSummary.SentCount"/> counts
+/// (<see cref="ThreadGetResult.Sent"/>); ignored without it, left out when
+/// null.
 /// </summary>
 public sealed record ThreadGetParams
 {
@@ -134,11 +148,21 @@ public sealed record ThreadGetParams
     /// <summary>The folder to restrict to.</summary>
     [JsonPropertyName("folderId")]
     public FolderId? FolderId { get; init; }
+
+    /// <summary>Also the user's replies in Sent the folder lacks.</summary>
+    [JsonPropertyName("withSent")]
+    public bool? WithSent { get; init; }
 }
 
 /// <summary>
 /// api.ThreadGetResult: <see cref="Messages"/> oldest first, at most
-/// <see cref="API.Limits.MaxThreadMessages"/> (the newest).
+/// <see cref="API.Limits.MaxThreadMessages"/> (the newest). <see cref="Sent"/>
+/// (only with <see cref="ThreadGetParams.WithSent"/> and a folder; empty when
+/// the daemon leaves it out) are the user's replies in the account's sent
+/// folders that the folder lacks, one per Message-ID, oldest first, at most
+/// <see cref="API.Limits.MaxThreadMessages"/> (the newest), each with its sent
+/// folder's <c>folderId</c>: not members of the folder and in none of
+/// <see cref="Thread"/>'s aggregates.
 /// </summary>
 public sealed record ThreadGetResult
 {
@@ -150,4 +174,9 @@ public sealed record ThreadGetResult
     [JsonPropertyName("messages")]
     [JsonConverter(typeof(NullAsEmptyListConverter<MessageSummary>))]
     public IReadOnlyList<MessageSummary> Messages { get; init => field = value ?? []; } = [];
+
+    /// <summary>The user's replies in Sent the folder lacks, oldest first.</summary>
+    [JsonPropertyName("sent")]
+    [JsonConverter(typeof(NullAsEmptyListConverter<MessageSummary>))]
+    public IReadOnlyList<MessageSummary> Sent { get; init => field = value ?? []; } = [];
 }

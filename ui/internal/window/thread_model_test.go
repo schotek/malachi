@@ -68,7 +68,7 @@ func TestRebuildRowsCollapsedAndExpanded(t *testing.T) {
 		t.Fatalf("expanded, incomplete: %v %+v", got, m.rows[0])
 	}
 	a1 := member("a1", "t_a", 1, "alice")
-	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{a1, a2})
+	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{a1, a2}, nil)
 	want = []listKey{{Thread: "t_a"}, {Thread: "t_a", Message: "a1"}, {Thread: "t_a", Message: "a2"}, {Thread: "t_b", Message: "b1"}}
 	if got := keys(m); !reflect.DeepEqual(got, want) || m.rows[0].Loading || !m.rows[1].Member {
 		t.Fatalf("expanded rows = %v, %+v", got, m.rows[0])
@@ -97,7 +97,7 @@ func TestSetThreadsKeepsCache(t *testing.T) {
 	a1 := member("a1", "t_a", 1, "alice")
 	m := groupedModel(thr("t_a", 2, 1, a2))
 	m.setExpanded("t_a", true)
-	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{a1, a2})
+	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{a1, a2}, nil)
 
 	// Same shape: the members survive the reload, the row stays open.
 	m.setThreads([]api.ThreadSummary{thr("t_a", 2, 1, a2)}, api.PageInfo{Total: 1})
@@ -146,9 +146,78 @@ func TestSetThreadsIssueMoved(t *testing.T) {
 	}
 }
 
+// One message and the user's reply in Sent are a conversation row
+// (conversation.IsConversationRow): its members are not complete before
+// thread.get brought the reply, which stays out of the members. A port of
+// the macOS client's ThreadModelTests.oneMemberAndARepliesRow.
+func TestOneMemberAndARepliesRow(t *testing.T) {
+	b1 := member("b1", "t_b", 1, "carol")
+	listed := thr("t_b", 1, 0, b1)
+	listed.SentCount = 1
+	m := groupedModel(listed)
+	if got := keys(m); !reflect.DeepEqual(got, []listKey{{Thread: "t_b"}}) {
+		t.Fatalf("rows %v", got)
+	}
+	if !m.rows[0].Thread || m.members["t_b"].complete {
+		t.Fatalf("a conversation row whose members are asked for: %+v %+v", m.rows[0], m.members["t_b"])
+	}
+	if !rowShowsConversation(m.rows[0]) {
+		t.Error("the row does not show the conversation")
+	}
+	if ids := m.rowIDs(m.rows[0]); ids != nil {
+		t.Errorf("the members are asked for first: %v", ids)
+	}
+
+	r1 := member("r1", "t_b", 2, "me")
+	r1.FolderID = "f_sent"
+	m.setMembers("t_b", listed, []api.MessageSummary{b1}, []api.MessageSummary{r1})
+	if ids := m.rowIDs(m.rows[0]); !reflect.DeepEqual(ids, []api.MessageID{"b1"}) {
+		t.Errorf("row ids %v", ids)
+	}
+	if _, _, ok := m.message("r1"); ok {
+		t.Error("the reply is a member")
+	}
+	if s, ok := m.sentMessage("r1"); !ok || s.FolderID != "f_sent" {
+		t.Errorf("sent message %+v %v", s, ok)
+	}
+	if _, ok := m.memberOf["r1"]; ok {
+		t.Error("the reply is indexed as a member")
+	}
+
+	// A reload with the same shape keeps the reply; another count drops
+	// what was fetched.
+	m.setThreads([]api.ThreadSummary{listed}, api.PageInfo{Total: 1})
+	if got := m.members["t_b"].sent; len(got) != 1 || got[0].ID != "r1" {
+		t.Errorf("kept sent %v", got)
+	}
+	more := listed
+	more.SentCount = 2
+	if sameShape(listed, more) {
+		t.Error("another count of replies is the same shape")
+	}
+	m.setThreads([]api.ThreadSummary{more}, api.PageInfo{Total: 1})
+	if mem := m.members["t_b"]; mem.complete || len(mem.sent) != 0 {
+		t.Errorf("after another count: %+v", mem)
+	}
+
+	// A removal and its undo keep the replies.
+	m.setMembers("t_b", more, []api.MessageSummary{b1}, []api.MessageSummary{r1})
+	removed, ok := m.removeMessages([]api.MessageID{"b1"})
+	if !ok {
+		t.Fatal("removal refused")
+	}
+	if len(m.threads) != 0 {
+		t.Error("the folder lacks its member: the row goes")
+	}
+	m.restoreRemoval(removed)
+	if got := m.members["t_b"].sent; len(got) != 1 || got[0].ID != "r1" {
+		t.Errorf("restored sent %v", got)
+	}
+}
+
 func TestSetMembersEmptyDropsThread(t *testing.T) {
 	m := groupedModel(thr("t_a", 2, 0, member("a2", "t_a", 2, "bob")), thr("t_b", 1, 0, member("b1", "t_b", 1, "carol")))
-	m.setMembers("t_a", api.ThreadSummary{}, nil)
+	m.setMembers("t_a", api.ThreadSummary{}, nil, nil)
 	if len(m.threads) != 1 || m.threads[0].ID != "t_b" || m.total != 1 || len(m.rows) != 1 {
 		t.Fatalf("after drop: %v total %d", keys(m), m.total)
 	}
@@ -159,7 +228,7 @@ func TestApplyNewMessageExistingThread(t *testing.T) {
 	b1 := member("b1", "t_b", 5, "carol")
 	m := groupedModel(thr("t_b", 1, 0, b1, api.FlagSeen), thr("t_a", 2, 1, a2))
 	m.setExpanded("t_a", true)
-	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{member("a1", "t_a", 1, "alice"), a2})
+	m.setMembers("t_a", thr("t_a", 2, 1, a2), []api.MessageSummary{member("a1", "t_a", 1, "alice"), a2}, nil)
 
 	a3 := member("a3", "t_a", 9, "Alice") // a known address, capitalised: no new participant
 	a3.HasAttachments = true
@@ -235,7 +304,7 @@ func TestApplyFlagsAggregates(t *testing.T) {
 	// Members known: the union is exact.
 	a1 := member("a1", "t_a", 1, "alice", api.FlagFlagged)
 	m.setExpanded("t_a", true)
-	m.setMembers("t_a", thr("t_a", 2, 1, m.threads[0].Latest, api.FlagFlagged, api.FlagSeen), []api.MessageSummary{a1, m.threads[0].Latest})
+	m.setMembers("t_a", thr("t_a", 2, 1, m.threads[0].Latest, api.FlagFlagged, api.FlagSeen), []api.MessageSummary{a1, m.threads[0].Latest}, nil)
 	changed = m.applyFlags([]api.MessageID{"a1", "a2"}, nil, []api.Flag{api.FlagFlagged, api.FlagSeen})
 	if len(changed) != 2 {
 		t.Fatalf("changed = %v", changed)
@@ -269,7 +338,7 @@ func TestRemoveMessagesAndRestore(t *testing.T) {
 		t.Fatal("removed from an incomplete conversation")
 	}
 	m.setExpanded("t_a", true)
-	m.setMembers("t_a", thr("t_a", 2, 2, a2), []api.MessageSummary{a1, a2})
+	m.setMembers("t_a", thr("t_a", 2, 2, a2), []api.MessageSummary{a1, a2}, nil)
 
 	// One member goes: the conversation shrinks to a single row.
 	r, ok := m.removeMessages([]api.MessageID{"a2"})
@@ -303,7 +372,7 @@ func TestCollapseLoading(t *testing.T) {
 	m.setExpanded("t_a", true)
 	m.setExpanded("t_b", true)
 	m.members["t_a"].fetching = true
-	m.setMembers("t_b", thr("t_b", 3, 0, member("b3", "t_b", 3, "carol")), []api.MessageSummary{member("b1", "t_b", 1, "x"), member("b2", "t_b", 2, "y"), member("b3", "t_b", 3, "carol")})
+	m.setMembers("t_b", thr("t_b", 3, 0, member("b3", "t_b", 3, "carol")), []api.MessageSummary{member("b1", "t_b", 1, "x"), member("b2", "t_b", 2, "y"), member("b3", "t_b", 3, "carol")}, nil)
 	m.collapseLoading()
 	if m.expanded["t_a"] || !m.expanded["t_b"] || m.members["t_a"].fetching || len(m.rows) != 5 {
 		t.Fatalf("expanded %v rows %d", m.expanded, len(m.rows))

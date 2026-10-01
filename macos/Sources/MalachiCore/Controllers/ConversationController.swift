@@ -21,8 +21,9 @@ extension ListRow {
     /// A folded conversation row of the grouped list whose selection shows
     /// the whole conversation in the reading pane: a conversation row (not
     /// a member row, not a single-message row) with two or more members in
-    /// the folder (`Conversation.isConversationRow`). Every other row shows
-    /// its message alone.
+    /// the folder, or one and the user's replies in Sent
+    /// (`Conversation.isConversationRow`). Every other row shows its message
+    /// alone.
     public var showsConversation: Bool {
         guard thread, !member, key.thread != nil, let summary else { return false }
         return Conversation.isConversationRow(summary)
@@ -32,7 +33,9 @@ extension ListRow {
 /// Which conversation the reading pane shows and what of it is loaded. The
 /// members come from the list controller (`ensureMembers`: thread.get
 /// scoped to the listed folder, shared with the unfolded row and the
-/// actions), the bodies from the message cache, one card at a time and only
+/// actions), with the user's replies in Sent the folder lacks
+/// (`ThreadMembers.sent`, cards with `Conversation.Item.sent`: never marked
+/// read, never among the members the actions take), the bodies from the message cache, one card at a time and only
 /// for the cards the pane asks for (`needsBody`): message.body alone, and
 /// message.get too only for a card that needs what it adds to the summary
 /// (attachments, the Cc of the recipients' disclosure). The entries of the
@@ -86,6 +89,8 @@ public final class ConversationController {
 
     /// The folder members the model was last built or merged from.
     private var members: [MessageSummary] = []
+    /// The user's replies in Sent the model was last built or merged from.
+    private var sent: [MessageSummary] = []
     /// The members whose entry was asked for and has not settled, and
     /// whether message.get was part of the request.
     private var pending: [MessageID: Bool] = [:]
@@ -106,6 +111,10 @@ public final class ConversationController {
     /// Bumped with every selection: a late answer for a conversation left
     /// meanwhile is dropped.
     private var gen: UInt64 = 0
+    /// The cards whose quoted history the user revealed (Show Quoted Text):
+    /// kept through updates and a rebuild of the messages, forgotten with
+    /// the conversation.
+    private var quoted = QuotedReveal()
     /// Bumped by `refresh`: a body asked for before the daemon rebuilt the
     /// conversation's messages is dropped when it arrives, so that it
     /// cannot land in `loaded` beside the fresh one.
@@ -150,6 +159,7 @@ public final class ConversationController {
         }
         reset()
         thread = tid
+        quoted.show(tid.rawValue)
         summary = row.summary
         onChange?(.loading)
         requestMembers(tid)
@@ -171,12 +181,14 @@ public final class ConversationController {
         thread = nil
         model = nil
         members = []
+        sent = []
         loaded = [:]
         pending = [:]
         noGet = []
         summary = nil
         listing = false
         failedGen = nil
+        quoted.clear()
     }
 
     /// Asks the list for the folder members of `tid`; they arrive through
@@ -209,7 +221,8 @@ public final class ConversationController {
         }
         listing = true
         members = known
-        model = Conversation.build(t, known, account: account(t.accountId))
+        sent = list.mailbox.model.members[tid]?.sent ?? []
+        model = Conversation.build(t, known, sent: sent, account: account(t.accountId))
         onChange?(.opened)
     }
 
@@ -218,7 +231,8 @@ public final class ConversationController {
     /// The list's model changed the members of conversation `tid`
     /// (`ListController.onThreadMembersChanged`), or they arrived: the model
     /// is built the first time, then kept in step by merging what changed
-    /// and removing what went (`Conversation.merge`, `remove`). Members the
+    /// and removing what went (`Conversation.merge`, `remove`), and so are
+    /// the user's replies in Sent (`Conversation.mergeSent`). Members the
     /// list lost to a reload are asked for again, unless thread.get failed
     /// for this listing of the folder already. A model built from the
     /// listing after such a failure is not merged into: the members build
@@ -242,7 +256,8 @@ public final class ConversationController {
             let recovered = listing
             listing = false
             members = mem.list
-            model = Conversation.build(t, mem.list, account: own)
+            sent = mem.sent
+            model = Conversation.build(t, mem.list, sent: mem.sent, account: own)
             onChange?(.opened)
             if recovered {
                 // The list's own wait for the members ended with the
@@ -265,7 +280,23 @@ public final class ConversationController {
             loaded[s.id] = nil
             pending[s.id] = nil
         }
+        // The replies after the members: a member that took a reply's
+        // place (`merge`) is not merged back as a reply.
+        var sentBefore: [MessageID: MessageSummary] = [:]
+        for s in sent where sentBefore[s.id] == nil {
+            sentBefore[s.id] = s
+        }
+        let sentNow = Set(mem.sent.map(\.id))
+        for s in sent where !sentNow.contains(s.id) && !now.contains(s.id) {
+            m = Conversation.remove(m, s.id)
+            loaded[s.id] = nil
+            pending[s.id] = nil
+        }
+        for s in mem.sent where sentBefore[s.id] != s {
+            m = Conversation.mergeSent(m, s, account: own)
+        }
         members = mem.list
+        sent = mem.sent
         if m.items.isEmpty, m.earlier > 0 {
             // Every shown member went while older ones are left out: the
             // conversation is loaded again.
@@ -309,11 +340,14 @@ public final class ConversationController {
     /// `details`, or when the message has attachments, whose chips need
     /// it, unless it failed for this member before). An event has no body.
     /// The entry is held in `loaded` and announced through `onLoaded`
-    /// whenever a half of it arrives.
+    /// whenever a half of it arrives. The body is the variant the user
+    /// chose for the card: without its quoted history unless revealed
+    /// (`setQuoted`).
     public func needsBody(_ id: MessageID, details: Bool = false) {
         guard let s = member(id), !readsWithoutBody(s) else { return }
         let full = (details || s.hasAttachments) && !noGet.contains(id)
-        if let lm = loaded[id], lm.bodySettled, !full || lm.msg != nil {
+        let reveal = quoted.isRevealed(id)
+        if let lm = loaded[id], lm.quotedShown == reveal, lm.bodySettled, !full || lm.msg != nil {
             return
         }
         // Asked already (the pane asks on every scroll): the answer comes.
@@ -335,10 +369,28 @@ public final class ConversationController {
             self.onLoaded?(id, lm)
         }
         if full {
-            cache.fetch(s, then)
+            cache.fetch(s, quoted: reveal, then)
         } else {
-            cache.fetchBody(s, then)
+            cache.fetchBody(s, quoted: reveal, then)
         }
+    }
+
+    /// Whether the quoted history of the card of member `id` shows.
+    public func quotedRevealed(_ id: MessageID) -> Bool {
+        quoted.isRevealed(id)
+    }
+
+    /// The card's Show Quoted Text (`on`) or Hide Quoted Text: the choice
+    /// holds while the conversation is shown, and the card's body switches
+    /// to that variant (the one held, or fetched as `needsBody` does;
+    /// `details` as there).
+    public func setQuoted(_ id: MessageID, _ on: Bool, details: Bool = false) {
+        guard member(id) != nil else { return }
+        quoted.set(id, on)
+        // A request for the other variant is in flight: this one is asked
+        // for beside it.
+        pending[id] = nil
+        needsBody(id, details: details)
     }
 
     /// The cache has news about member `id` (its `onLoaded` fan-out: the

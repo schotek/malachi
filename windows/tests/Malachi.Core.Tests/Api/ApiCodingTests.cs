@@ -359,6 +359,31 @@ public sealed partial class ApiCodingTests
         Assert.Equal("t_9", r.Messages[1].ThreadId);
     }
 
+    /// <summary>
+    /// docs/api.md §4.4 (2026-10-01): <c>sentCount</c> on the summary (0 when
+    /// an older daemon leaves it out), <c>withSent</c> on the request (left
+    /// out when not asked for) and <c>sent</c> on the answer (empty when
+    /// absent).
+    /// </summary>
+    [Fact]
+    public void ThreadSentReplies()
+    {
+        Assert.Equal(0, Decode<ThreadSummary>(ThreadJson).SentCount); // absent is 0
+        var withCount = ThreadJson.Replace("\"hasAttachments\":true", "\"hasAttachments\":true,\"sentCount\":2", StringComparison.Ordinal);
+        var t = Decode<ThreadSummary>(withCount);
+        Assert.Equal((2, 3), (t.SentCount, t.MessageCount));
+        Assert.Equal<FolderId>(["f_inbox", "f_sent"], t.FolderIds);
+        Assert.Equal(2, Decode<ThreadSummary>(JsonCoding.EncodeToString(t)).SentCount);
+
+        var r = Decode<ThreadGetResult>($$$"""{"thread":{{{withCount}}},"messages":[{{{SummaryJson}}}],"sent":[{{{SummaryJson}}}]}""");
+        Assert.Equal((1, 1), (r.Messages.Count, r.Sent.Count));
+        Assert.Empty(Decode<ThreadGetResult>($$$"""{"thread":{{{withCount}}},"messages":[]}""").Sent);
+
+        Assert.Null(Member(EncodeObject(new ThreadGetParams { AccountId = "a", ThreadId = "t" }), "withSent"));
+        var asked = EncodeObject(new ThreadGetParams { AccountId = "a", ThreadId = "t", FolderId = "f", WithSent = true });
+        Assert.True(asked.GetProperty("withSent").GetBoolean());
+    }
+
     [Fact]
     public void DraftSaveExample()
     {

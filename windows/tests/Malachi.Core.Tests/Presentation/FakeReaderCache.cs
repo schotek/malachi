@@ -67,10 +67,20 @@ internal sealed class FakeReaderCache : IReaderCache
         return lm;
     }
 
-    public void Fetch(MessageSummary s, Action<LoadedMessage> done)
+    /// <summary>The variant every fetch asked for, in order (null: the entry's).</summary>
+    public List<bool?> FetchQuoted { get; } = [];
+
+    public void Fetch(MessageSummary s, Action<LoadedMessage> done, bool? quoted = null)
     {
         FetchCalls++;
+        FetchQuoted.Add(quoted);
         var lm = Entry(s.Id);
+        if (quoted is { } on && lm.ShowQuoted(on) && lm.Body is null)
+        {
+            // The other variant has yet to come: the test answers it.
+            fetches.Add((s, done));
+            return;
+        }
         if (lm.Complete)
         {
             done(lm);

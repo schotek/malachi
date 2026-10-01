@@ -33,7 +33,8 @@ const remoteFetchBudget = 10 * time.Second
 // server only (res.RemotePictures). It never returns an error: the caller
 // already has the text, and a missing formatted version is a state of the
 // result, not a failure of the call. It never contacts the mail server.
-func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.RemoteContentPolicy, res *api.MessageBodyResult) {
+// trim cuts the quoted history off (message.body trimQuoted).
+func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.RemoteContentPolicy, trim bool, res *api.MessageBodyResult) {
 	accountID, id := m.AccountID, m.ID
 	f, err := b.store.OpenMessageRaw(ctx, accountID, id)
 	if err != nil {
@@ -80,6 +81,7 @@ func (b *Backend) renderHTML(ctx context.Context, m store.Message, policy api.Re
 		Policy:        policy,
 		KnownCIDs:     known,
 		MaxOutputSize: viewHTMLCap,
+		TrimQuoted:    trim,
 	}
 	b.sanitizeInto(ctx, id, in, partOf, res)
 	res.RemotePictures = b.remotePictures(ctx, m, cur, parsed, res.InlineParts)
@@ -153,7 +155,10 @@ func (b *Backend) withholdHTML(res *api.MessageBodyResult, id, why string, err e
 // when the sanitiser refuses it. partOf maps a Content-ID to the part number
 // InlineParts reports; nil when the caller inlined the pictures itself (an
 // attached message, embedded.go). It returns the Content-IDs whose
-// references survived.
+// references survived. When the sanitiser cut a quoted history off, the
+// text res already holds is cut to match: by the plain-text rules when
+// they find the quote in it, else replaced by the text of the trimmed HTML,
+// so that it never shows what the HTML hides.
 func (b *Backend) sanitizeInto(ctx context.Context, id string, in sanitize.Input, partOf map[string]string, res *api.MessageBodyResult) []string {
 	if in.Policy == api.RemoteAllow {
 		in.RemoteImage = b.remoteImageHook(ctx, in)
@@ -167,6 +172,14 @@ func (b *Backend) sanitizeInto(ctx context.Context, id string, in sanitize.Input
 	res.Blocked = out.Blocked
 	res.Links = out.Links
 	res.SanitizerVersion = out.Version
+	if out.QuotedTrimmed {
+		res.QuotedTrimmed = true
+		if text, ok := sanitize.TrimQuotedText(res.Text); ok {
+			res.Text = text
+		} else {
+			res.Text = out.Text
+		}
+	}
 	if partOf != nil && len(out.CIDs) > 0 {
 		res.InlineParts = make(map[string]string, len(out.CIDs))
 		for _, cid := range out.CIDs {

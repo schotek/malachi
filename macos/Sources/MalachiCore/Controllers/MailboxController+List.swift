@@ -155,6 +155,9 @@ public final class ListController {
     private var waiters: [ThreadID: [@MainActor () -> Void]] = [:]
     /// What runs instead when that thread.get fails.
     private var failureWaiters: [ThreadID: [@MainActor () -> Void]] = [:]
+    /// Conversations whose thread.get in flight is followed by another
+    /// (`refetchMembers`).
+    private var refetchAfter: Set<ThreadID> = []
     private var markReadTask: Task<Void, Never>?
     private var markReadID: MessageID?
     private var settingsToken: Settings.ChangeToken?
@@ -170,6 +173,8 @@ public final class ListController {
         mailbox.model.listFilter = .all
         mailbox.reloadMessages = { [weak self] in self?.loadMessages() }
         mailbox.onNewMessageForList = { [weak self] n in self?.applyNewMessage(n) }
+        mailbox.onNewMessageElsewhere = { [weak self] n in self?.applyNewMessageElsewhere(n) }
+        mailbox.refreshShownSent = { [weak self] acc in self?.refreshShownSent(acc) }
         mailbox.refreshOutboxViews = { [weak self] acc in self?.refreshOutboxViews(acc) }
         mailbox.refreshShown = { [weak self] acc in self?.refreshShown(acc) }
         mailbox.collapseLoading = { [weak self] in self?.collapseLoadingRows() }
@@ -192,6 +197,7 @@ public final class ListController {
         settingsToken = nil
         waiters = [:]
         failureWaiters = [:]
+        refetchAfter = []
     }
 
     // MARK: Loading
@@ -619,7 +625,9 @@ public final class ListController {
     /// failed fetch folds the row back and says why (threads.go
     /// `ensureMembers`), and runs `failed` instead of `then`. Neither runs
     /// when the list moved on meanwhile (another folder, a reload, the
-    /// connection lost).
+    /// connection lost). thread.get asks for the user's replies in Sent
+    /// too (`withSent`), which the conversation view shows beside the
+    /// members (`ThreadMembers.sent`).
     public func ensureMembers(
         _ tid: ThreadID, _ then: (@MainActor () -> Void)?, failed: (@MainActor () -> Void)? = nil
     ) {
@@ -637,10 +645,35 @@ public final class ListController {
         if mem.fetching {
             return
         }
+        fetchMembers(tid)
+    }
+
+    /// Asks thread.get for conversation `tid` again while the model keeps
+    /// what it holds of it, so nothing blinks: the user's replies in Sent
+    /// changed (one arrived, or a message that may carry a reply's
+    /// Message-ID arrived in the folder; the client cannot compare
+    /// Message-IDs, the daemon does), or the shown conversation's sent
+    /// folder changed. The answer replaces the members, the replies and
+    /// the summary (`sentCount`, so a single message the user answered
+    /// becomes a conversation row) and reaches the conversation view
+    /// through `onThreadMembersChanged`. A fetch in flight is followed by
+    /// one more, since it may have been answered before the change. A
+    /// failure is only logged, unless someone waits for the members.
+    public func refetchMembers(_ tid: ThreadID) {
+        guard let mem = mailbox.model.members[tid] else { return }
+        if mem.fetching {
+            refetchAfter.insert(tid)
+            return
+        }
+        fetchMembers(tid, quiet: true)
+    }
+
+    /// The thread.get of `ensureMembers` and `refetchMembers`.
+    private func fetchMembers(_ tid: ThreadID, quiet: Bool = false) {
         guard let k = mailbox.model.listFolder else { return }
         mailbox.model.members[tid]?.fetching = true
         let gen = mailbox.model.listGen
-        let params = ThreadGetParams(accountId: k.account, threadId: tid, folderId: k.folder)
+        let params = ThreadGetParams(accountId: k.account, threadId: tid, folderId: k.folder, withSent: true)
         mailbox.perform(API.ThreadGet.self, params) { [weak self] outcome in
             guard let self, gen == self.mailbox.model.listGen, self.mailbox.model.members[tid] != nil else { return }
             self.mailbox.model.members[tid]?.fetching = false
@@ -648,9 +681,13 @@ public final class ListController {
             let failing = self.failureWaiters[tid] ?? []
             self.waiters[tid] = nil
             self.failureWaiters[tid] = nil
+            let again = self.refetchAfter.remove(tid) != nil
             switch outcome {
             case .failure(let err):
                 self.log.warning("thread.get: \(String(describing: err), privacy: .public)")
+                if quiet, waiting.isEmpty, failing.isEmpty {
+                    return
+                }
                 self.mailbox.toast(rpcErrorText(L10n.T("Loading the conversation"), err))
                 self.mailbox.model.setExpanded(tid, false)
                 self.syncRows()
@@ -658,7 +695,7 @@ public final class ListController {
                     fn()
                 }
             case .success(let res):
-                self.mailbox.model.setMembers(tid, res.thread, res.messages)
+                self.mailbox.model.setMembers(tid, res.thread, res.messages, sent: res.sent)
                 self.syncRows()
                 if let row = self.selectedRow, row.key.thread == tid {
                     self.refreshActionFlags()
@@ -666,6 +703,9 @@ public final class ListController {
                 self.onThreadMembersChanged?(tid)
                 for fn in waiting {
                     fn()
+                }
+                if again {
+                    self.refetchMembers(tid)
                 }
             }
         }
@@ -698,6 +738,7 @@ public final class ListController {
         mailbox.model.collapseLoading()
         waiters = [:]
         failureWaiters = [:]
+        refetchAfter = []
         syncRows()
         showLoadMore()
     }
@@ -889,6 +930,14 @@ public final class ListController {
                 syncRows()
                 if let tid = s.threadId {
                     onThreadMembersChanged?(tid)
+                    // A conversation that shows the user's replies: the
+                    // arrival may be one of them (a Bcc to oneself), which
+                    // only the daemon tells by its Message-ID.
+                    let model = mailbox.model
+                    let replies = model.tindex[tid].map { model.threads[$0].sentCount > 0 } ?? false
+                    if replies || !(model.members[tid]?.sent.isEmpty ?? true) {
+                        refetchMembers(tid)
+                    }
                 }
             } else {
                 loadMessages()
@@ -898,6 +947,35 @@ public final class ListController {
         if matchesFilter(s, m.listFilter), mailbox.model.insertMessage(at: 0, s) {
             reconcile(.keep)
         }
+    }
+
+    /// notify.newMessage for another folder of the listed folder's account
+    /// (`MailboxController.onNewMessageElsewhere`): a message in a sent
+    /// folder that belongs to a listed conversation is the user's reply to
+    /// it, so the conversation is asked for again (`refetchMembers`): its
+    /// `sentCount` changes (a single message becomes a conversation row) and
+    /// the conversation view, when it shows it, gets the reply. Nothing in
+    /// flat mode, and nothing while a sent folder or the outbox is listed
+    /// (their conversations have no replies of their own).
+    public func applyNewMessageElsewhere(_ n: NewMessageNotification) {
+        let m = mailbox.model
+        guard m.grouped, !m.loading, let k = m.listFolder, k.account == n.accountId, k.folder != n.folderId,
+              let tid = n.message.threadId, m.tindex[tid] != nil,
+              m.folderRole(FolderKey(account: n.accountId, folder: n.folderId)) == .sent
+        else { return }
+        let listed = folderRole(k)
+        guard listed != .sent, listed != .outbox else { return }
+        refetchMembers(tid)
+    }
+
+    /// notify.messagesChanged named a sent folder of the account of the
+    /// selected conversation (`MailboxController.refreshShownSent`), whose
+    /// folder is not named itself (`refreshShown` covers that): the user's
+    /// replies it shows are asked for again.
+    public func refreshShownSent(_ acc: AccountID) {
+        guard mailbox.model.grouped, let row = selectedRow, row.message.accountId == acc, row.showsConversation,
+              let tid = row.key.thread else { return }
+        refetchMembers(tid)
     }
 
     /// Changes the flags of the given messages in the model, refreshes their

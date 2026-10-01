@@ -10,7 +10,11 @@ import MalachiCore
 /// (`ConversationLayout.displayOrder`, conversation_view.go): what opened
 /// the conversation first, folded to its header and a preview while more
 /// follows, then the rest newest first, the pane opened at its top; the
-/// model keeps the oldest first. A Jira conversation has its issue card
+/// model keeps the oldest first. The user's replies in Sent that the folder
+/// lacks are cards among them by date, folded. Every card folds and opens
+/// with its arrow (`Conversation.Folds`, fold.go), and one button above the
+/// conversation folds or opens them all (Collapse All / Expand All,
+/// `Conversation.foldAllOffer`). A Jira conversation has its issue card
 /// once on top; its description and comments are cards
 /// (`ConversationCardView`), its status and assignee changes compact rows
 /// (`ConversationEventRow`); older members left out by thread.get's cap
@@ -64,6 +68,12 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     private let scroll = ConversationScrollView()
     private let clamp: ClampView
     private let stack = FillStackView()
+    /// Collapse All / Expand All, at the trailing end of a strip above the
+    /// conversation; hidden while fewer than two cards fold.
+    private let foldAllBox = NSView()
+    private let foldAllButton = NSButton(title: "", target: nil, action: nil)
+    /// What the button offers now.
+    private var foldAll = Conversation.FoldAll.none
     private let issueBox = NSView()
     private let issueCard = IssueCardView()
     private let truncatedRow = ConversationTruncatedRow()
@@ -77,11 +87,13 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// The rows of the model's items, in the order shown
     /// (`ConversationLayout.displayOrder`).
     private var itemViews: [NSView] = []
-    /// The user's folds and unfolds of the card that opened the
-    /// conversation on show (`cardSetFolded`), which win over the default
-    /// of `ConversationLayout.displayOrder` until another conversation is
-    /// shown.
-    private var folds: [MessageID: Bool] = [:]
+    /// The user's folds and unfolds of the cards of the conversation on
+    /// show (`cardSetFolded`, Collapse All / Expand All), which win over
+    /// the default (`Conversation.defaultFolds`) until another conversation
+    /// is shown.
+    private var folds = Conversation.Folds()
+    /// The cards' fold state as last applied (`Conversation.Folds.state`).
+    private var foldState: [MessageID: Bool] = [:]
     /// The pane is narrow: the items show the short date.
     private var compactDates = false
     private let statusBox = NSView()
@@ -134,6 +146,27 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         issueBox.isHidden = true
         issueCard.onOpen = { [weak self] url in self?.openIssueLink(url) }
         issueCard.statusMenu = IssueTransitionMenu(state: state) { [weak self] in self?.transitionSubject }
+        // Collapse All / Expand All: a small borderless text button at the
+        // trailing end of the cards' column, above everything else.
+        foldAllButton.isBordered = false
+        foldAllButton.bezelStyle = .inline
+        foldAllButton.setButtonType(.momentaryChange)
+        foldAllButton.font = Typo.caption
+        foldAllButton.contentTintColor = .linkColor
+        foldAllButton.target = self
+        foldAllButton.action = #selector(foldAllClicked(_:))
+        foldAllButton.translatesAutoresizingMaskIntoConstraints = false
+        foldAllBox.translatesAutoresizingMaskIntoConstraints = false
+        foldAllBox.addSubview(foldAllButton)
+        NSLayoutConstraint.activate([
+            foldAllButton.topAnchor.constraint(equalTo: foldAllBox.topAnchor, constant: Self.foldAllTop),
+            foldAllButton.bottomAnchor.constraint(equalTo: foldAllBox.bottomAnchor),
+            foldAllButton.trailingAnchor.constraint(equalTo: foldAllBox.trailingAnchor),
+            foldAllButton.leadingAnchor.constraint(
+                greaterThanOrEqualTo: foldAllBox.leadingAnchor, constant: ConversationMetrics.gutter),
+        ])
+        foldAllBox.isHidden = true
+        stack.addArrangedSubview(foldAllBox)
         stack.addArrangedSubview(issueBox)
         clamp.setChild(stack)
 
@@ -213,6 +246,11 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
 
     /// Above the first row's own gap.
     private static let topInset: CGFloat = 4
+    /// Above the Collapse All / Expand All button, under the top inset.
+    private static let foldAllTop: CGFloat = 4
+    /// The views of the stack before the model's items: the strip of the
+    /// Collapse All button and the issue card.
+    private static let headViews = 2
 
     // MARK: Model
 
@@ -275,19 +313,22 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// Puts `model`'s items into the stack in the order shown
     /// (`ConversationLayout.displayOrder`: what opened the conversation,
     /// then the rest newest first), reusing the views of the members shown
-    /// already, each in a row with its piece of the timeline; the opening
-    /// card folds as the user or the default says (conversation_view.go
-    /// `apply`).
+    /// already, each in a row with its piece of the timeline; every card
+    /// folds as the user or the default says (`Conversation.Folds.state`,
+    /// conversation_view.go `apply`), and the Collapse All / Expand All
+    /// button follows.
     private func apply(_ model: Conversation.Model) {
         showIssue(model)
         let display = shownOrder(model)
         let items = display.items
+        folds.show(model.thread)
+        foldState = folds.state(items, opening: display.opening)
         let rails = ConversationLayout.rails(items)
         let monochrome = state.settings.monochromeAvatars
         var desired: [NSView] = []
         var cardIDs = Set<MessageID>()
         var eventIDs = Set<MessageID>()
-        for (i, (item, rail)) in zip(items, rails).enumerated() {
+        for (item, rail) in zip(items, rails) {
             let row: ConversationRow
             switch item.kind {
             case .truncated:
@@ -296,17 +337,15 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             case .message:
                 guard let id = item.id else { continue }
                 cardIDs.insert(id)
-                // A card that stops being the opener is open, without the
-                // arrow.
-                let opening = i == display.root
-                let folded = folds[id] ?? display.rootFolded
+                let foldable = Conversation.foldable(item)
+                let folded = foldState[id] ?? false
                 if let card = cards[id], let shown = rows[id] {
                     card.update(item)
-                    card.setFold(opening, folded: folded)
+                    card.setFold(foldable, folded: folded)
                     row = shown
                 } else {
                     let card = makeCard(item, id)
-                    card.setFold(opening, folded: folded)
+                    card.setFold(foldable, folded: folded)
                     card.render(controller.loaded[id])
                     row = ConversationRow(content: card, mark: .avatar)
                     replaceRow(id, row)
@@ -346,9 +385,10 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         if !desired.contains(where: { $0 === truncatedItem }) {
             detach(truncatedItem)
         }
-        // The stack after the issue box, in the order shown.
+        // The stack after the fold strip and the issue box, in the order
+        // shown.
         for (i, v) in desired.enumerated() {
-            let at = i + 1
+            let at = i + Self.headViews
             let arranged = stack.arrangedSubviews
             if at < arranged.count, arranged[at] === v {
                 continue
@@ -359,6 +399,44 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
             stack.insertArrangedSubview(v, at: min(at, stack.arrangedSubviews.count))
         }
         itemViews = desired
+        showFoldAll()
+    }
+
+    /// The Collapse All / Expand All button for the cards' fold state
+    /// (`Conversation.foldAllOffer`); hidden while fewer than two fold.
+    private func showFoldAll() {
+        foldAll = Conversation.foldAllOffer(foldState)
+        let label = foldAll.label
+        foldAllButton.title = label
+        foldAllButton.setAccessibilityLabel(label)
+        foldAllBox.isHidden = foldAll == .none
+    }
+
+    /// Collapse All or Expand All: every card of the conversation shown
+    /// folds or opens (`Conversation.Folds.setAll`); a card that arrives
+    /// later starts as its default. Until the user scrolls the top of the
+    /// conversation stays in view; otherwise the item under the viewport's
+    /// top keeps its place, its header in view.
+    @objc private func foldAllClicked(_ sender: Any?) {
+        guard let model = controller.model, foldAll != .none else { return }
+        let display = shownOrder(model)
+        folds.setAll(display.items, foldAll.folded)
+        foldState = folds.state(display.items, opening: display.opening)
+        preservingAnchor(at: pinned ?? headerAnchor(currentAnchor())) {
+            for (id, card) in cards where card.foldable {
+                card.setFolded(foldState[id] ?? false)
+            }
+        }
+        showFoldAll()
+    }
+
+    /// `anchor` with the item's top kept in view: a viewport inside the
+    /// item (its top above the viewport's) moves to the item's top, so a
+    /// card that folds keeps its header where the user can see it.
+    private func headerAnchor(_ anchor: Anchor?) -> Anchor? {
+        guard var a = anchor else { return nil }
+        a.offset = min(a.offset, 0)
+        return a
     }
 
     /// The row of member `id` from now on; one it had before (the member
@@ -411,7 +489,10 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         events = [:]
         rows = [:]
         itemViews = []
-        folds = [:]
+        folds = Conversation.Folds()
+        foldState = [:]
+        foldAll = .none
+        foldAllBox.isHidden = true
         pinned = nil
         lastAnchor = nil
         issueBox.isHidden = true
@@ -419,7 +500,8 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
         hover("")
     }
 
-    /// The issue card of a Jira conversation, once on top; its key opens
+    /// The issue card of a Jira conversation, once on top (under the fold
+    /// strip); its key opens
     /// the issue only on the account's own site, its status pill is the
     /// Change Status menu on an account that changes statuses.
     private func showIssue(_ model: Conversation.Model) {
@@ -495,12 +577,12 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// reads back to where it was on screen (the top of the conversation
     /// until the user scrolls). Nested changes are laid out once, by the
     /// outermost.
-    private func preservingAnchor(_ change: () -> Void) {
+    private func preservingAnchor(at fixed: Anchor? = nil, _ change: () -> Void) {
         if anchorDepth > 0 {
             change()
             return
         }
-        let anchor = pinned ?? currentAnchor()
+        let anchor = fixed ?? pinned ?? currentAnchor()
         anchorDepth += 1
         change()
         anchorDepth -= 1
@@ -513,7 +595,7 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// its top the viewport's top is.
     private func currentAnchor() -> Anchor? {
         let top = scroll.contentView.bounds.minY
-        for v in [issueBox] + itemViews where !v.isHidden && v.superview != nil {
+        for v in [foldAllBox, issueBox] + itemViews where !v.isHidden && v.superview != nil {
             let f = frameInDocument(v)
             if f.maxY > top + 0.5 {
                 return Anchor(view: v, offset: top - f.minY)
@@ -693,10 +775,27 @@ final class ConversationViewController: NSViewController, MessageDisplay, Conver
     /// conversation_view.go `setCardFolded`. The card changes its height
     /// through `cardHeightChanging`, which keeps what the user reads in
     /// place and has the live cards looked at again: an opened card is
-    /// asked for its body.
+    /// asked for its body. Until the user scrolls the top of the
+    /// conversation stays in view; otherwise the card keeps its header
+    /// where it was (in view). The Collapse All / Expand All button
+    /// follows.
     func cardSetFolded(_ card: ConversationCardView, _ folded: Bool) {
-        folds[card.id] = folded
-        card.setFolded(folded)
+        folds.set(card.id, folded)
+        foldState[card.id] = folded
+        let own = rows[card.id].map { row in
+            Anchor(view: row, offset: scroll.contentView.bounds.minY - frameInDocument(row).minY)
+        }
+        preservingAnchor(at: pinned ?? headerAnchor(own)) {
+            card.setFolded(folded)
+        }
+        showFoldAll()
+    }
+
+    /// The card's "•••": the controller switches its body to the variant
+    /// asked for (`ConversationController.setQuoted`), held or fetched, and
+    /// the card shows it when it arrives (`showLoaded`, `onLoaded`).
+    func cardSetQuoted(_ card: ConversationCardView, _ on: Bool) {
+        controller.setQuoted(card.id, on, details: card.detailsOpen)
     }
 
     func cardHeightChanging(_ change: () -> Void) {

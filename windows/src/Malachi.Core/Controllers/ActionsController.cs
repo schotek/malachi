@@ -170,9 +170,11 @@ public sealed partial class ActionsController
     /// What the window knows of message <paramref name="id"/>
     /// (message_view.go <c>summary</c>): the list's summary, or the cached
     /// full message's for a message window outliving the folder it was
-    /// opened from.
+    /// opened from, or the user's reply in Sent that a conversation shows
+    /// (<see cref="MailModel.SentMessage"/>; its card's reply and forward).
     /// </summary>
-    public MessageSummary? Summary(MessageId id) => Mailbox.Model.Message(id)?.Summary ?? Cache.Summary(id);
+    public MessageSummary? Summary(MessageId id) =>
+        Mailbox.Model.Message(id)?.Summary ?? Cache.Summary(id) ?? Mailbox.Model.SentMessage(id);
 
     // The known ones of the given messages, in order (actions.go summaries).
     private List<MessageSummary> Summaries(IEnumerable<MessageId> ids) => [.. ids.Select(Summary).OfType<MessageSummary>()];

@@ -27,7 +27,10 @@ namespace Malachi.Core.Controllers;
 /// Which conversation the reading pane shows and what of it is loaded. The
 /// members come from the list controller (<see cref="ListController.EnsureMembers"/>:
 /// thread.get scoped to the listed folder, shared with the unfolded row and
-/// the actions), the bodies from the message cache, one card at a time and
+/// the actions), with the user's replies in Sent the folder lacks
+/// (<see cref="ThreadMembers.Sent"/>, cards with
+/// <see cref="ConversationItem.Sent"/>: never marked read, never among the
+/// members the actions take), the bodies from the message cache, one card at a time and
 /// only for the cards the pane asks for (<see cref="NeedsBody"/>):
 /// <c>message.body</c> alone, and <c>message.get</c> too only for a card that
 /// needs what it adds to the summary (attachments, the Cc of the recipients'
@@ -62,8 +65,16 @@ public sealed partial class ConversationController : IDisposable
     // cards.
     private readonly HashSet<MessageId> noGet = [];
 
+    // The cards whose quoted history the user revealed (Show Quoted Text):
+    // kept through updates and a rebuild of the messages, forgotten with the
+    // conversation.
+    private readonly QuotedReveal quoted = new();
+
     // The folder members the model was last built or merged from.
     private IReadOnlyList<MessageSummary> members = [];
+
+    // The user's replies in Sent the model was last built or merged from.
+    private IReadOnlyList<MessageSummary> sent = [];
 
     // The conversation's summary as last known (the row's, then thread.get's).
     private ThreadSummary? summary;
@@ -163,6 +174,7 @@ public sealed partial class ConversationController : IDisposable
         }
         Reset();
         Thread = tid;
+        quoted.Show(tid.Value);
         summary = row.Summary;
         Changed?.Invoke(this, Change.Loading);
         RequestMembers(tid);
@@ -187,12 +199,14 @@ public sealed partial class ConversationController : IDisposable
         Thread = null;
         Model = null;
         members = [];
+        sent = [];
         loaded.Clear();
         pending.Clear();
         noGet.Clear();
         summary = null;
         listing = false;
         failedGen = null;
+        quoted.Clear();
     }
 
     // Asks the list for the folder members of tid; they arrive through
@@ -238,7 +252,8 @@ public sealed partial class ConversationController : IDisposable
         var known = Mail.Members.TryGetValue(tid, out var mem) && mem.List.Count > 0 ? mem.List : [t.Latest];
         listing = true;
         members = known;
-        Model = Conversation.Build(t, known, Account(t.AccountId));
+        sent = mem?.Sent ?? [];
+        Model = Conversation.Build(t, known, Account(t.AccountId), sent);
         Changed?.Invoke(this, Change.Opened);
     }
 
@@ -253,9 +268,11 @@ public sealed partial class ConversationController : IDisposable
     /// <paramref name="tid"/> (<see cref="ListController.ThreadMembersChanged"/>),
     /// or they arrived: the model is built the first time, then kept in step
     /// by merging what changed and removing what went
-    /// (<see cref="Conversation.Merge"/>, <see cref="Conversation.Remove"/>).
-    /// Members the list lost to a reload are asked for again, unless
-    /// thread.get failed for this listing of the folder already. A model
+    /// (<see cref="Conversation.Merge"/>, <see cref="Conversation.Remove"/>),
+    /// and so are the user's replies in Sent
+    /// (<see cref="Conversation.MergeSent"/>). Members the list lost to a
+    /// reload are asked for again, unless thread.get failed for this listing
+    /// of the folder already. A model
     /// built from the listing after such a failure is not merged into: the
     /// members build it anew (the row of older members it showed would stay
     /// otherwise), and only then is the newest one marked read.
@@ -289,7 +306,8 @@ public sealed partial class ConversationController : IDisposable
             var recovered = listing;
             listing = false;
             members = mem.List;
-            Model = Conversation.Build(t, mem.List, own);
+            sent = mem.Sent;
+            Model = Conversation.Build(t, mem.List, own, mem.Sent);
             Changed?.Invoke(this, Change.Opened);
             if (recovered)
             {
@@ -322,7 +340,32 @@ public sealed partial class ConversationController : IDisposable
                 pending.Remove(s.Id);
             }
         }
+        // The replies after the members: a member that took a reply's place
+        // (Merge) is not merged back as a reply.
+        var sentBefore = new Dictionary<MessageId, MessageSummary>();
+        foreach (var s in sent)
+        {
+            sentBefore.TryAdd(s.Id, s);
+        }
+        var sentNow = mem.Sent.Select(s => s.Id).ToHashSet();
+        foreach (var s in sent)
+        {
+            if (!sentNow.Contains(s.Id) && !now.Contains(s.Id))
+            {
+                m = Conversation.Remove(m, s.Id);
+                loaded.Remove(s.Id);
+                pending.Remove(s.Id);
+            }
+        }
+        foreach (var s in mem.Sent)
+        {
+            if (!sentBefore.TryGetValue(s.Id, out var was) || !SameSummary(was, s))
+            {
+                m = Conversation.MergeSent(m, s, own);
+            }
+        }
         members = mem.List;
+        sent = mem.Sent;
         if (m.Items.Count == 0 && m.Earlier > 0)
         {
             // Every shown member went while older ones are left out: the
@@ -380,7 +423,9 @@ public sealed partial class ConversationController : IDisposable
     /// message has attachments, whose chips need it, unless it failed for
     /// this member before). An event has no body. The entry is held in
     /// <see cref="Loaded"/> and announced through <see cref="EntryLoaded"/>
-    /// whenever a half of it arrives.
+    /// whenever a half of it arrives. The body is the variant the user chose
+    /// for the card: without its quoted history unless revealed
+    /// (<see cref="SetQuoted"/>).
     /// </summary>
     public void NeedsBody(MessageId id, bool details = false)
     {
@@ -389,7 +434,8 @@ public sealed partial class ConversationController : IDisposable
             return;
         }
         var full = (details || s.HasAttachments) && !noGet.Contains(id);
-        if (loaded.TryGetValue(id, out var held) && held.BodySettled && (!full || held.Msg is not null))
+        var reveal = quoted.IsRevealed(id);
+        if (loaded.TryGetValue(id, out var held) && held.QuotedShown == reveal && held.BodySettled && (!full || held.Msg is not null))
         {
             return;
         }
@@ -420,12 +466,34 @@ public sealed partial class ConversationController : IDisposable
         }
         if (full)
         {
-            Cache.Fetch(s, Then);
+            Cache.Fetch(s, Then, reveal);
         }
         else
         {
-            Cache.FetchBody(s, Then);
+            Cache.FetchBody(s, Then, reveal);
         }
+    }
+
+    /// <summary>Whether the quoted history of the card of member <paramref name="id"/> shows.</summary>
+    public bool QuotedRevealed(MessageId id) => quoted.IsRevealed(id);
+
+    /// <summary>
+    /// The card's Show Quoted Text (<paramref name="on"/>) or Hide Quoted
+    /// Text: the choice holds while the conversation is shown, and the card's
+    /// body switches to that variant (the one held, or fetched as
+    /// <see cref="NeedsBody"/> does; <paramref name="details"/> as there).
+    /// </summary>
+    public void SetQuoted(MessageId id, bool on, bool details = false)
+    {
+        if (Member(id) is null)
+        {
+            return;
+        }
+        quoted.Set(id, on);
+        // A request for the other variant is in flight: this one is asked
+        // for beside it.
+        pending.Remove(id);
+        NeedsBody(id, details);
     }
 
     /// <summary>

@@ -135,6 +135,44 @@ func keys(_ m: MailModel) -> [ListKey] {
         #expect(m.rows[0].message.snippet == "after")
     }
 
+    /// One message and the user's reply in Sent are a conversation row
+    /// (`Conversation.isConversationRow`): its members are not complete
+    /// before thread.get brought the reply, which stays out of the members.
+    @Test func oneMemberAndARepliesRow() throws {
+        let b1 = member("b1", "t_b", 1, "carol")
+        var listed = thr("t_b", 1, 0, b1)
+        listed.sentCount = 1
+        var m = groupedModel(listed)
+        #expect(keys(m) == [ListKey(thread: "t_b")])
+        #expect(m.rows[0].thread && m.members["t_b"]?.complete == false)
+        #expect(m.rowIDs(m.rows[0]) == nil, "the members are asked for first")
+
+        var r1 = member("r1", "t_b", 2, "me")
+        r1.folderId = "f_sent"
+        m.setMembers("t_b", listed, [b1], sent: [r1])
+        #expect(m.rowIDs(m.rows[0]) == ["b1"])
+        #expect(m.message("r1") == nil && m.sentMessage("r1")?.folderId == "f_sent")
+        #expect(m.memberOf["r1"] == nil)
+
+        // A reload with the same shape keeps the reply; another count drops
+        // what was fetched.
+        m.setThreads([listed], page: PageInfo(total: 1))
+        #expect(m.members["t_b"]?.sent.map(\.id) == ["r1"])
+        var more = listed
+        more.sentCount = 2
+        #expect(!sameShape(listed, more))
+        m.setThreads([more], page: PageInfo(total: 1))
+        #expect(m.members["t_b"]?.complete == false && m.members["t_b"]?.sent.isEmpty == true)
+
+        // A removal and its undo keep the replies.
+        m.setMembers("t_b", more, [b1], sent: [r1])
+        let removed = m.removeMessages(["b1"])
+        let removal = try #require(removed)
+        #expect(m.threads.isEmpty, "the folder lacks its member: the row goes")
+        m.restoreRemoval(removal)
+        #expect(m.members["t_b"]?.sent.map(\.id) == ["r1"])
+    }
+
     @Test func setMembersEmptyDropsThread() {
         let a2 = member("a2", "t_a", 2, "bob")
         var m = groupedModel(thr("t_a", 2, 0, a2), thr("t_b", 1, 0, member("b1", "t_b", 1, "carol")))

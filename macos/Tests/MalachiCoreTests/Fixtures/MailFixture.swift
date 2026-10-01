@@ -13,7 +13,10 @@ import Foundation
 /// `sync.status`, `sync.trigger` (recorded in `triggers`) and `config.get`.
 /// The list phase adds `message.list/get/body/flag/move/delete` and
 /// `thread.list/get` over `messages` (per folder), `bodies` and `details`,
-/// with the folder counters following every change; the requests are
+/// with the folder counters following every change (a folder-scoped
+/// conversation counts and, with `withSent`, returns the members in the
+/// account's folders of role sent that the folder lacks, by id: the fixture
+/// has no Message-IDs); the requests are
 /// recorded in `listRequests`, `threadListRequests`, `threadGetRequests`,
 /// `flagRequests`, `moveRequests` and `deleteRequests`. A handler that
 /// needs no fixture state can go straight to `on(_:_:)`.
@@ -50,6 +53,7 @@ actor MailFixture {
     private(set) var listRequests: [MessageListParams] = []
     private(set) var threadListRequests: [ThreadListParams] = []
     private(set) var threadGetRequests: [ThreadGetParams] = []
+    private(set) var bodyRequests: [MessageBodyParams] = []
     private(set) var flagRequests: [MessageFlagParams] = []
     private(set) var moveRequests: [MessageMoveParams] = []
     private(set) var deleteRequests: [MessageDeleteParams] = []
@@ -257,6 +261,7 @@ actor MailFixture {
             return try encode(MessageGetResult(message: details[p.messageId] ?? Message(summary: found.summary)))
         case API.MessageBody.name:
             let p = try decode(MessageBodyParams.self, params)
+            bodyRequests.append(p)
             try requireAccount(p.accountId)
             guard let found = locate(p.messageId), found.key.account == p.accountId else {
                 throw RPCError(code: .messageNotFound, message: "unknown message \(p.messageId.rawValue)")
@@ -488,7 +493,9 @@ actor MailFixture {
     /// Aggregates a conversation over `members` (oldest first), as
     /// docs/api.md §4.4 describes thread.list's summary; a jira thread's
     /// `issue` is the latest member's.
-    private func aggregate(_ tid: ThreadID, _ members: [MessageSummary], account acc: AccountID) -> ThreadSummary {
+    private func aggregate(
+        _ tid: ThreadID, _ members: [MessageSummary], account acc: AccountID, folder: FolderID? = nil
+    ) -> ThreadSummary {
         let latest = members[members.count - 1]
         var flags: [Flag] = []
         var senders: [Address] = []
@@ -510,8 +517,23 @@ actor MailFixture {
             id: tid, accountId: acc, subject: stripMarkers(latest.subject), participants: frontParticipants([], senders),
             messageCount: members.count, unreadCount: unread, latestDate: latest.date, latest: latest,
             snippet: latest.snippet, flags: flags, hasAttachments: attachments, folderIds: folderIds,
-            issue: latest.issue?.info
+            issue: latest.issue?.info,
+            sentCount: folder.map { sent(tid, FolderKey(account: acc, folder: $0), members).count } ?? 0
         )
+    }
+
+    /// The members of conversation `tid` in the sent folders of `key`'s
+    /// account that are not among `members` (the folder's), oldest first;
+    /// none in a sent folder, the outbox and a jira account.
+    private func sent(_ tid: ThreadID, _ key: FolderKey, _ members: [MessageSummary]) -> [MessageSummary] {
+        let role = folder(key)?.role
+        let jira = accounts.first { $0.id == key.account }?.config.kind == .jira
+        guard role != .sent, role != .outbox, !jira else { return [] }
+        let own = Set(members.map(\.id))
+        let list = (folders[key.account] ?? []).filter { $0.role == .sent }.flatMap { f in
+            (messages[FolderKey(account: key.account, folder: f.id)] ?? []).filter { threadKey($0) == tid && !own.contains($0.id) }
+        }
+        return sorted(list, .dateAsc)
     }
 
     /// Drops leading Re:/Fwd: markers, the way the daemon names a thread.
@@ -537,7 +559,7 @@ actor MailFixture {
         }
         return groups.map { tid, list in
             let members = sorted(list, .dateAsc)
-            return (aggregate(tid, members, account: key.account), members)
+            return (aggregate(tid, members, account: key.account, folder: key.folder), members)
         }
     }
 
@@ -578,8 +600,14 @@ actor MailFixture {
             throw RPCError(code: .threadNotFound, message: "unknown thread \(p.threadId.rawValue)")
         }
         let members = sorted(pool, .dateAsc)
-        let summary = aggregate(p.threadId, members, account: p.accountId)
-        return ThreadGetResult(thread: summary, messages: Array(members.suffix(API.Limits.maxThreadMessages)))
+        let summary = aggregate(p.threadId, members, account: p.accountId, folder: p.folderId)
+        var replies: [MessageSummary] = []
+        if p.withSent == true, let fid = p.folderId {
+            replies = sent(p.threadId, FolderKey(account: p.accountId, folder: fid), members)
+        }
+        return ThreadGetResult(
+            thread: summary, messages: Array(members.suffix(API.Limits.maxThreadMessages)),
+            sent: Array(replies.suffix(API.Limits.maxThreadMessages)))
     }
 
     private func encode<T: Encodable>(_ value: T) throws -> Data {

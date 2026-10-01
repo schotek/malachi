@@ -41,6 +41,8 @@ func TestCSS(t *testing.T) {
 		"row.folder-row:not(.favourite) button.folder-star.starred",
 		"menubutton.status-line > button { min-height: 0;",
 		"box.remote-bar",
+		"button.quoted-text { min-height: 0;",
+		"button.fold-all { min-height: 0;",
 		"box.attachment-chip button, button.chip-action { min-height: 0;",
 		"box.attachment-chip menubutton.chip-arrow > button",
 		"list.message-list > row { border-radius: 0; margin: 0; }",

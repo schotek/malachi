@@ -23,8 +23,9 @@ public sealed record ConversationModel
 
     /// <summary>
     /// The stack, oldest first by (date, id): a Truncated row on top when
-    /// Earlier > 0, then the members. Empty when the conversation has no
-    /// member to show: the pane shows its empty page then, or, when Remove
+    /// Earlier > 0, then the members and the sent cards. Empty when the
+    /// conversation has no member to show (sent cards alone are no
+    /// conversation of the folder): the pane shows its empty page then, or, when Remove
     /// took the last shown member and Earlier > 0, loads the conversation
     /// again.
     /// </summary>
@@ -37,13 +38,17 @@ public sealed record ConversationModel
     /// </summary>
     public JiraCard? Issue { get; init; }
 
-    /// <summary>How many older members of the conversation in the folder are not in Items.</summary>
+    /// <summary>
+    /// How many older members of the conversation in the folder are not in
+    /// Items (sent cards older than the oldest member shown are left out
+    /// then, and not counted).
+    /// </summary>
     public int Earlier { get; init; }
 
     /// <summary>
     /// The member opening the conversation marks read (after the usual
-    /// delay): the newest message card that is not a queued message of the
-    /// outbox, when it is unread; null when it is read or there is none.
+    /// delay): the newest message card that is neither a queued message of
+    /// the outbox nor a sent card, when it is unread; null when it is read or there is none.
     /// Older unread members stay unread, and events are never marked. A
     /// client acts on it when the conversation is opened, never after a flag
     /// change: a member the user marked unread stays unread.

@@ -365,7 +365,10 @@ public sealed record MessageGetResult
 /// <summary>
 /// api.MessageBodyParams. <see cref="RemoteContent"/> overrides the stored
 /// preference for this call only: <c>block</c> or <c>allow</c>;
-/// <c>knownSenders</c> is invalidArgument.
+/// <c>knownSenders</c> is invalidArgument. <see cref="TrimQuoted"/> asks for
+/// the body without the quoted history under the new text (the result's
+/// <see cref="MessageBodyResult.QuotedTrimmed"/> says whether any was cut);
+/// null, never false, asks for the whole body, so the key is left out.
 /// </summary>
 public sealed record MessageBodyParams
 {
@@ -380,6 +383,10 @@ public sealed record MessageBodyParams
     /// <summary>The per-call override; null uses the stored preference.</summary>
     [JsonPropertyName("remoteContent")]
     public RemoteContentPolicy? RemoteContent { get; init; }
+
+    /// <summary>Cut the quoted history off; false is stored as null.</summary>
+    [JsonPropertyName("trimQuoted")]
+    public bool? TrimQuoted { get; init => field = value == true ? true : null; }
 }
 
 /// <summary>
@@ -528,6 +535,19 @@ public sealed record MessageBodyResult
     /// <summary>The sanitiser ruleset that produced <see cref="Html"/>.</summary>
     [JsonPropertyName("sanitizerVersion")]
     public required string SanitizerVersion { get; init; }
+
+    /// <summary>
+    /// Asked with <see cref="MessageBodyParams.TrimQuoted"/>: the quoted
+    /// history was cut, and everything above describes the body without it.
+    /// Absent (an older daemon, or nothing to cut) is false
+    /// (<see cref="IsQuotedTrimmed"/>).
+    /// </summary>
+    [JsonPropertyName("quotedTrimmed")]
+    public bool? QuotedTrimmed { get; init; }
+
+    /// <summary><see cref="QuotedTrimmed"/> as Go reads it: absent is false.</summary>
+    [JsonIgnore]
+    public bool IsQuotedTrimmed => QuotedTrimmed == true;
 }
 
 /// <summary>

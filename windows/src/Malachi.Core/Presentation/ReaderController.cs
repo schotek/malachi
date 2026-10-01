@@ -33,8 +33,11 @@
 // message's view, whose pictures arrive inlined); once the pictures it
 // counted are downloaded, the body asked for again may carry the same HTML,
 // whose malachi-cid: pictures load now, so the viewer is told to load it
-// again (HtmlReloadRequested; GTK loads every render anyway).
-// UI-thread-affine.
+// again (HtmlReloadRequested; GTK loads every render anyway). The "•••"
+// under the body (QuotedOffer, ToggleQuoted) shows or hides the quoted
+// history the daemon cut from it, the choice held until the view shows
+// another message (QuotedReveal; macOS quotedButton, toggleQuoted;
+// Swift-first). UI-thread-affine.
 
 using System;
 using System.Collections.Generic;
@@ -67,6 +70,10 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     private readonly TimeProvider time;
     private readonly SynchronizationContext? context;
     private readonly ILogger logger;
+
+    // The messages whose quoted history the user revealed here; the pane
+    // forgets them when it shows another message.
+    private readonly QuotedReveal quoted = new();
 
     private ITimer? spinner;
     private int spinnerTicket;
@@ -238,6 +245,15 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool DraftVisible { get; private set; }
 
+    /// <summary>
+    /// The "•••" under the body that shows or hides its quoted history
+    /// (<see cref="LoadedMessageText.QuotedTextOfferFor"/>); null hides it.
+    /// Never for an attached message, whose body message.embedded renders
+    /// whole, nor for an issue's event.
+    /// </summary>
+    [ObservableProperty]
+    public partial QuotedTextOffer? QuotedOffer { get; private set; }
+
     /// <summary>The attachment chips; empty hides the box.</summary>
     [ObservableProperty]
     public partial IReadOnlyList<AttachmentChip> Chips { get; private set; } = [];
@@ -275,13 +291,15 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
             failedHtml = null;
         }
         Current = s;
+        quoted.Show(s.Id.Value);
         var gen = ++bodyGen;
         Page = ReaderPage.Message;
         if (Mode == ReaderMode.Pane)
         {
             DraftVisible = IsDraft?.Invoke(s) == true;
         }
-        if (cache.Loaded(s.Id) is { Complete: true } complete)
+        var reveal = quoted.IsRevealed(s.Id);
+        if (cache.Loaded(s.Id) is { Complete: true } complete && complete.QuotedShown == reveal)
         {
             Render(s, complete);
             return;
@@ -295,14 +313,17 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         }
         // The fetch first: it clears a stale body error before its retry, so
         // the render below shows the wait rather than the old error.
-        cache.Fetch(s, lm =>
-        {
-            if (closed || gen != bodyGen || Current?.Id != s.Id)
+        cache.Fetch(
+            s,
+            lm =>
             {
-                return; // the view moved on
-            }
-            Render(s, lm);
-        });
+                if (closed || gen != bodyGen || Current?.Id != s.Id)
+                {
+                    return; // the view moved on
+                }
+                Render(s, lm);
+            },
+            reveal);
         if (gen == bodyGen)
         {
             Render(s, cache.Loaded(s.Id));
@@ -322,6 +343,8 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         }
         bodyGen++;
         Current = null;
+        quoted.Clear();
+        QuotedOffer = null;
         Links = [];
         renderedBody = null;
         renderedLoaded = null;
@@ -472,7 +495,35 @@ public sealed partial class ReaderController : ObservableObject, IDisposable
         {
             RenderOutboxBanner(lm?.Msg);
         }
+        QuotedOffer = Mode == ReaderMode.Embedded || issue is { EventBody: not null } ? null : LoadedMessageText.QuotedTextOfferFor(lm);
         Rendered?.Invoke(this, new ReaderRender(s, lm));
+    }
+
+    /// <summary>
+    /// The "•••" under the body (macOS <c>toggleQuoted</c>): its quoted
+    /// history shows, or goes again (the variant held, or fetched); the
+    /// choice holds until the view shows another message.
+    /// </summary>
+    public void ToggleQuoted()
+    {
+        if (Mode == ReaderMode.Embedded || closed || Current is not { } s || QuotedOffer is not { } offer)
+        {
+            return;
+        }
+        var on = offer == QuotedTextOffer.Show;
+        quoted.Set(s.Id, on);
+        cache.Fetch(
+            s,
+            lm =>
+            {
+                if (closed || Current?.Id != s.Id)
+                {
+                    return;
+                }
+                Render(s, lm);
+            },
+            on);
+        Render(s, cache.Loaded(s.Id));
     }
 
     /// <summary>

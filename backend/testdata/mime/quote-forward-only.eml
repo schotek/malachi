@@ -1,0 +1,25 @@
+From: Ivan <ivan@example.org>
+To: Judy <judy@example.org>
+Subject: Fwd: Report
+Date: Wed, 1 Oct 2026 16:00:00 +0200
+Message-ID: <forward-only@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+---------- Forwarded message ---------
+From: Mallory <mallory@example.org>
+Date: Tue, 30 Sep 2026 at 08:00
+Subject: Report
+To: Ivan <ivan@example.org>
+
+The report is attached.
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<div dir="ltr"><br><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">---------- Forwarded message ---------<br>From: <b>Mallory</b> &lt;mallory@example.org&gt;<br>Date: Tue, 30 Sep 2026 at 08:00<br>Subject: Report<br>To: Ivan &lt;ivan@example.org&gt;<br></div><br><br><div dir="ltr">The report is attached.</div></div></div>
+
+--alt--

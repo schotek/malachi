@@ -296,7 +296,7 @@ public sealed class MailboxControllerListTests
         }));
         await h.IdleAsync();
         Assert.Equal(6, h.List.Rows.Count);
-        Assert.Equal([new ThreadGetParams { AccountId = "a", ThreadId = "t1", FolderId = "in" }], h.Fixture.ThreadGetRequests);
+        Assert.Equal([new ThreadGetParams { AccountId = "a", ThreadId = "t1", FolderId = "in", WithSent = true }], h.Fixture.ThreadGetRequests);
         Assert.Equal(["T:t3", "b1", "T:t1", "a1", "a2", "a3"], Ids(h.List.Rows));
         Assert.False(h.List.Rows[2].Loading);
         Assert.True(h.List.Rows[3].Member && h.List.Rows[4].Member && h.List.Rows[5].Member);

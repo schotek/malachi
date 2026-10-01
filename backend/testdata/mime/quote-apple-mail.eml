@@ -1,0 +1,25 @@
+From: Carol <carol@example.org>
+To: Dave <dave@example.org>
+Subject: Re: Photos
+Date: Wed, 1 Oct 2026 13:00:00 +0200
+Message-ID: <apple-reply@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Thanks, they are lovely!
+
+Carol
+
+> On 30. 9. 2026, at 20:00, Dave <dave@example.org> wrote:
+> 
+> Here are the photos.
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<html><head><meta http-equiv="content-type" content="text/html; charset=utf-8"></head><body style="overflow-wrap: break-word; -webkit-nbsp-mode: space; line-break: after-white-space;">Thanks, they are lovely!<div><br></div><div>Carol<br id="lineBreakAtBeginningOfMessage"><div><br><blockquote type="cite"><div>On 30. 9. 2026, at 20:00, Dave &lt;dave@example.org&gt; wrote:</div><br class="Apple-interchange-newline"><div><div>Here are the photos.</div><img src="https://photos.example.org/1.jpg" width="400"></div></blockquote></div><br></div></body></html>
+
+--alt--

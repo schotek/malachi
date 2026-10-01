@@ -143,7 +143,9 @@ func issueNotificationLine(issue *api.MessageIssue) string {
 // entries; and when the selected folder is one of those named — or any
 // folder of the account when none is named, or a virtual folder of the
 // account, which shows copies of every space's issues — what the pane
-// shows of it is fetched again (refreshShown) and it is listed again.
+// shows of it is fetched again (refreshShown) and it is listed again. A
+// sent folder named without the selected one has the conversation shown
+// ask for the user's replies again (refreshShownSent).
 func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
 	a, ok := w.model.account(n.AccountID)
 	if !ok || !a.Enabled {
@@ -157,6 +159,12 @@ func (w *Window) handleMessagesChanged(n api.MessagesChangedNotification) {
 	}
 	f, known := w.model.folder(sel)
 	if len(n.FolderIDs) > 0 && !slices.Contains(n.FolderIDs, sel.Folder) && !(known && f.Virtual != "") {
+		// The user's replies a conversation shows live in Sent.
+		if slices.ContainsFunc(n.FolderIDs, func(id api.FolderID) bool {
+			return w.model.folderRole(folderKey{Account: n.AccountID, Folder: id}) == api.RoleSent
+		}) {
+			w.refreshShownSent(n.AccountID)
+		}
 		return
 	}
 	w.refreshShown(n.AccountID)

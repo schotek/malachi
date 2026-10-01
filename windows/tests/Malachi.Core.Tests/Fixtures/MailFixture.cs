@@ -39,8 +39,11 @@ namespace Malachi.Core.Tests.Fixtures;
 /// <c>thread.list/get</c> over the messages of every folder
 /// (<see cref="SetMessages"/>), <see cref="SetBody"/> and
 /// <see cref="SetDetail"/>, with the folder counters following every
-/// change; the requests are recorded in <see cref="ListRequests"/>,
-/// <see cref="ThreadListRequests"/>, <see cref="ThreadGetRequests"/>,
+/// change (a folder-scoped conversation counts and, with withSent, returns
+/// the members in the account's folders of role sent that the folder lacks,
+/// by id: the fixture has no Message-IDs); the requests are recorded in
+/// <see cref="ListRequests"/>, <see cref="ThreadListRequests"/>,
+/// <see cref="ThreadGetRequests"/>, <see cref="BodyRequests"/>,
 /// <see cref="FlagRequests"/>, <see cref="MoveRequests"/> and
 /// <see cref="DeleteRequests"/>. A handler that needs no fixture state can
 /// go straight to <see cref="On"/>.
@@ -72,6 +75,7 @@ internal sealed class MailFixture : IAsyncDisposable
     private readonly List<MessageListParams> listRequests = [];
     private readonly List<ThreadListParams> threadListRequests = [];
     private readonly List<ThreadGetParams> threadGetRequests = [];
+    private readonly List<MessageBodyParams> bodyRequests = [];
     private readonly List<MessageFlagParams> flagRequests = [];
     private readonly List<MessageMoveParams> moveRequests = [];
     private readonly List<MessageDeleteParams> deleteRequests = [];
@@ -124,6 +128,8 @@ internal sealed class MailFixture : IAsyncDisposable
     public IReadOnlyList<ThreadListParams> ThreadListRequests => Snapshot(threadListRequests);
 
     public IReadOnlyList<ThreadGetParams> ThreadGetRequests => Snapshot(threadGetRequests);
+
+    public IReadOnlyList<MessageBodyParams> BodyRequests => Snapshot(bodyRequests);
 
     public IReadOnlyList<MessageFlagParams> FlagRequests => Snapshot(flagRequests);
 
@@ -309,6 +315,7 @@ internal sealed class MailFixture : IAsyncDisposable
             case "message.body":
                 {
                     var q = JsonCoding.Decode<MessageBodyParams>(p);
+                    bodyRequests.Add(q);
                     RequireAccount(q.AccountId);
                     if (Locate(q.MessageId) is not { } found || found.Key.Account != q.AccountId)
                     {
@@ -567,7 +574,7 @@ internal sealed class MailFixture : IAsyncDisposable
     private static ThreadId ThreadKey(MessageSummary s) => s.ThreadId ?? new ThreadId("unlinked:" + s.Id.Value);
 
     /// <summary>Aggregates a conversation over its members (oldest first), as docs/api.md §4.4 describes thread.list's summary; a jira thread's issue is the latest member's.</summary>
-    private ThreadSummary Aggregate(ThreadId tid, List<MessageSummary> members, AccountId account)
+    private ThreadSummary Aggregate(ThreadId tid, List<MessageSummary> members, AccountId account, FolderId? folder = null)
     {
         var latest = members[^1];
         var flags = new List<Flag>();
@@ -604,7 +611,30 @@ internal sealed class MailFixture : IAsyncDisposable
             HasAttachments = attachments,
             FolderIds = folderIds,
             Issue = latest.Issue?.Info,
+            SentCount = folder is { } f ? Sent(tid, new FolderKey(account, f), members).Count : 0,
         };
+    }
+
+    /// <summary>
+    /// The members of conversation <paramref name="tid"/> in the sent folders
+    /// of <paramref name="key"/>'s account that are not among
+    /// <paramref name="members"/> (the folder's), oldest first; none in a sent
+    /// folder, the outbox and a jira account.
+    /// </summary>
+    private List<MessageSummary> Sent(ThreadId tid, FolderKey key, List<MessageSummary> members)
+    {
+        var role = FolderOf(key)?.Role;
+        var jira = accounts.FirstOrDefault(a => a.Id == key.Account)?.Config.Kind == AccountKind.Jira;
+        if (role == FolderRole.Sent || role == FolderRole.Outbox || jira)
+        {
+            return [];
+        }
+        var own = members.Select(s => s.Id).ToHashSet();
+        var list = (folders.TryGetValue(key.Account, out var fs) ? fs : [])
+            .Where(f => f.Role == FolderRole.Sent)
+            .SelectMany(f => messages.TryGetValue(new FolderKey(key.Account, f.Id), out var l) ? l : [])
+            .Where(s => ThreadKey(s) == tid && !own.Contains(s.Id));
+        return Sorted(list, SortOrder.DateAsc);
     }
 
     /// <summary>Drops leading Re:/Fwd: markers, the way the daemon names a thread.</summary>
@@ -644,7 +674,7 @@ internal sealed class MailFixture : IAsyncDisposable
         return [.. groups.Select(e =>
         {
             var members = Sorted(e.Value, SortOrder.DateAsc);
-            return (Aggregate(e.Key, members, key.Account), members);
+            return (Aggregate(e.Key, members, key.Account, key.Folder), members);
         })];
     }
 
@@ -687,8 +717,14 @@ internal sealed class MailFixture : IAsyncDisposable
             throw Error(ErrorCode.ThreadNotFound, $"unknown thread {p.ThreadId}");
         }
         var members = Sorted(pool, SortOrder.DateAsc);
-        var summary = Aggregate(p.ThreadId, members, p.AccountId);
-        return new ThreadGetResult { Thread = summary, Messages = members.TakeLast(API.Limits.MaxThreadMessages).ToList() };
+        var summary = Aggregate(p.ThreadId, members, p.AccountId, p.FolderId);
+        List<MessageSummary> replies = p.WithSent == true && p.FolderId is { } folder ? Sent(p.ThreadId, new FolderKey(p.AccountId, folder), members) : [];
+        return new ThreadGetResult
+        {
+            Thread = summary,
+            Messages = members.TakeLast(API.Limits.MaxThreadMessages).ToList(),
+            Sent = replies.TakeLast(API.Limits.MaxThreadMessages).ToList(),
+        };
     }
 
     // The daemon's flag rules (docs/api.md §4.3, message.flag; thread.list's aggregates).

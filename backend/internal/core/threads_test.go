@@ -5,7 +5,9 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -256,4 +258,65 @@ func sortedFolders(ids ...api.FolderID) []api.FolderID {
 		}
 	}
 	return out
+}
+
+// The user's own replies in Sent: counted on the rows of another folder
+// and returned on request, never as members.
+func TestThreadSent(t *testing.T) {
+	m := seedThreadedMailbox(t)
+	ctx := context.Background()
+	svc := m.b.Threads()
+
+	res, err := svc.List(ctx, api.ThreadListParams{AccountID: m.acc, FolderID: m.inbox})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, th := range res.Threads {
+		want := 0
+		if th.ID == "t_a" {
+			want = 1
+		}
+		if th.SentCount != want {
+			t.Errorf("%s: sentCount %d, want %d", th.ID, th.SentCount, want)
+		}
+	}
+	sentList, err := svc.List(ctx, api.ThreadListParams{AccountID: m.acc, FolderID: m.sent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, th := range sentList.Threads {
+		if th.SentCount != 0 {
+			t.Errorf("in Sent, %s: sentCount %d", th.ID, th.SentCount)
+		}
+	}
+
+	got, err := svc.Get(ctx, api.ThreadGetParams{AccountID: m.acc, ThreadID: "t_a", FolderID: m.inbox, WithSent: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Messages) != 2 || got.Thread.MessageCount != 2 || got.Thread.SentCount != 1 ||
+		len(got.Sent) != 1 || got.Sent[0].ID != m.a2 || got.Sent[0].FolderID != m.sent || got.Sent[0].ThreadID != "t_a" ||
+		got.Sent[0].From == nil || got.Sent[0].Flags == nil {
+		t.Fatalf("with sent = %+v", got)
+	}
+	without, err := svc.Get(ctx, api.ThreadGetParams{AccountID: m.acc, ThreadID: "t_a", FolderID: m.inbox})
+	if err != nil || without.Sent != nil || without.Thread.SentCount != 1 {
+		t.Fatalf("without sent = %+v, %v", without, err)
+	}
+	all, err := svc.Get(ctx, api.ThreadGetParams{AccountID: m.acc, ThreadID: "t_a", WithSent: true})
+	if err != nil || all.Sent != nil || all.Thread.SentCount != 0 || len(all.Messages) != 3 {
+		t.Fatalf("account-wide = %+v, %v", all, err)
+	}
+	inSent, err := svc.Get(ctx, api.ThreadGetParams{AccountID: m.acc, ThreadID: "t_a", FolderID: m.sent, WithSent: true})
+	if err != nil || inSent.Sent != nil || inSent.Thread.SentCount != 0 {
+		t.Fatalf("in Sent = %+v, %v", inSent, err)
+	}
+	none, err := svc.Get(ctx, api.ThreadGetParams{AccountID: m.acc, ThreadID: "t_b", FolderID: m.inbox, WithSent: true})
+	if err != nil || none.Sent != nil {
+		t.Fatalf("no reply = %+v, %v", none, err)
+	}
+	// The field is left out of the JSON when there is nothing.
+	if b, err := json.Marshal(none); err != nil || strings.Contains(string(b), `"sent"`) {
+		t.Errorf("json = %s, %v", b, err)
+	}
 }

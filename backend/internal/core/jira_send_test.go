@@ -137,9 +137,13 @@ func testJiraComments(t *testing.T, mode jiratest.Mode) {
 			t.Errorf("wiki %v: %q", err, wiki)
 		}
 	}
-	thread, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: desc.ThreadID, FolderID: webFolder.ID})
+	thread, err := b.Threads().Get(ctx, api.ThreadGetParams{AccountID: id, ThreadID: desc.ThreadID, FolderID: webFolder.ID, WithSent: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	// An issue tracker has no sent folder: the user's comment is a member.
+	if thread.Sent != nil || thread.Thread.SentCount != 0 {
+		t.Errorf("sent of an issue = %+v, count %d", thread.Sent, thread.Thread.SentCount)
 	}
 	var mine *api.MessageSummary
 	for i, m := range thread.Messages {

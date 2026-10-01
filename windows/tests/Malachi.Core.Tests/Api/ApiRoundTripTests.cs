@@ -58,7 +58,7 @@ public sealed class ApiRoundTripTests
         """{"remoteImages":3,"remoteStyles":1,"remoteFonts":0,"scripts":1,"forms":0,"eventHandlers":2,"dangerousUrls":0,"embeddedFrames":0,"trackingPixels":1}""";
 
     private const string Body =
-        """{"messageId":"m_1","bodyState":"fetched","hasHtml":true,"html":"<p>é & 'x' <b>\u2028</b></p>","htmlWithheld":false,"text":"plain","blocked":@blocked@,"links":[{"text":"Click here","href":"https://real.destination/x"}],"inlineParts":{"image001@example.org":"2.1"},"remotePictures":1,"remoteContent":"block","sanitizerVersion":"1"}""";
+        """{"messageId":"m_1","bodyState":"fetched","hasHtml":true,"html":"<p>é & 'x' <b>\u2028</b></p>","htmlWithheld":false,"text":"plain","blocked":@blocked@,"links":[{"text":"Click here","href":"https://real.destination/x"}],"inlineParts":{"image001@example.org":"2.1"},"remotePictures":1,"remoteContent":"block","sanitizerVersion":"1","quotedTrimmed":true}""";
 
     private const string DraftAttachment =
         """{"id":"att_1","filename":"a.png","contentType":"image/png","size":100,"inline":true,"contentId":"abc@malachi.local"}""";
@@ -67,7 +67,7 @@ public sealed class ApiRoundTripTests
         """{"id":"d_1","accountId":"acc_1","version":3,"to":[@address@],"cc":[@address@],"bcc":[@address@],"subject":"Re: Lunch","textBody":"> hi","htmlBody":"<p>hi</p>","inReplyTo":"m_1","forwarding":"m_2","attachments":[@draftattachment@],"replaces":"m_9","comment":{"issue":@issue@,"visibility":"internal"},"updatedAt":"2026-09-02T10:00:00.1234567Z"}""";
 
     private const string Thread =
-        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@}""";
+        """{"id":"t_9","accountId":"acc_1","subject":"Lunch","participants":[@address@],"messageCount":3,"unreadCount":1,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"plain","flags":["flagged","seen"],"hasAttachments":true,"folderIds":["f_inbox","f_sent"],"issue":@issue@,"sentCount":2}""";
 
     private const string Certificate =
         """{"sha256":"@pin@","subject":"127.0.0.1","issuer":"CA","dnsNames":["mail.example.org"],"ipAddresses":["127.0.0.1"],"notBefore":"2024-01-02T03:04:05Z","notAfter":"2044-01-02T03:04:05Z","selfSigned":true}""";
@@ -206,7 +206,7 @@ public sealed class ApiRoundTripTests
         [nameof(MessageListResult)] = Case<MessageListResult>("""{"messages":[@summary@],"page":@pageinfo@}"""),
         [nameof(MessageGetParams)] = Case<MessageGetParams>("""{"accountId":"acc_1","messageId":"m_1"}"""),
         [nameof(MessageGetResult)] = Case<MessageGetResult>("""{"message":@message@}"""),
-        [nameof(MessageBodyParams)] = Case<MessageBodyParams>("""{"accountId":"acc_1","messageId":"m_1","remoteContent":"allow"}"""),
+        [nameof(MessageBodyParams)] = Case<MessageBodyParams>("""{"accountId":"acc_1","messageId":"m_1","remoteContent":"allow","trimQuoted":true}"""),
         [nameof(BlockedContent)] = Case<BlockedContent>(Blocked),
         [nameof(Link)] = Case<Link>("""{"text":"Click here","href":"https://real.destination/x"}"""),
         [nameof(MessageBodyResult)] = Case<MessageBodyResult>(Body),
@@ -249,8 +249,8 @@ public sealed class ApiRoundTripTests
         [nameof(ThreadSummary)] = Case<ThreadSummary>(Thread),
         [nameof(ThreadListParams)] = Case<ThreadListParams>("""{"accountId":"acc_1","folderId":"f_inbox","page":@page@,"sort":"dateDesc","filter":"flagged"}"""),
         [nameof(ThreadListResult)] = Case<ThreadListResult>("""{"threads":[@thread@],"page":@pageinfo@}"""),
-        [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox"}"""),
-        [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@]}"""),
+        [nameof(ThreadGetParams)] = Case<ThreadGetParams>("""{"accountId":"acc_1","threadId":"t_9","folderId":"f_inbox","withSent":true}"""),
+        [nameof(ThreadGetResult)] = Case<ThreadGetResult>("""{"thread":@thread@,"messages":[@summary@,@summary@],"sent":[@summary@]}"""),
         // Tls.cs
         [nameof(CertificateInfo)] = Case<CertificateInfo>(Certificate),
         [nameof(TlsErrorData)] = Case<TlsErrorData>("""{"reason":"pinMismatch","certificate":@certificate@,"expectedSha256":"@pin@"}"""),
@@ -280,6 +280,24 @@ public sealed class ApiRoundTripTests
         ["Preferences without the storage members"] = Case<Preferences>(
             """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0,"compressStore":null,"neverStoreAttachments":null}""",
             """{"syncIntervalSeconds":0,"remoteContent":"block","offlineDays":0}"""),
+        // A daemon from before the user's replies in Sent (2026-10-01): no
+        // sentCount (0), no sent (empty); a request that does not ask for
+        // them leaves withSent out.
+        ["ThreadSummary without sentCount"] = Case<ThreadSummary>(
+            """{"id":"t","accountId":"a","subject":"","messageCount":1,"unreadCount":0,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"","hasAttachments":false}""",
+            """{"id":"t","accountId":"a","subject":"","participants":[],"messageCount":1,"unreadCount":0,"latestDate":"2026-09-02T10:00:00Z","latest":@summary@,"snippet":"","flags":[],"hasAttachments":false,"folderIds":[],"sentCount":0}"""),
+        ["ThreadGetResult without sent"] = Case<ThreadGetResult>(
+            """{"thread":@thread@,"messages":[]}""",
+            """{"thread":@thread@,"messages":[],"sent":[]}"""),
+        ["ThreadGetParams without withSent"] = Case<ThreadGetParams>(
+            """{"accountId":"a","threadId":"t","withSent":null}""",
+            """{"accountId":"a","threadId":"t"}"""),
+        // trimQuoted is asked for or left out, never false; a daemon that
+        // cut nothing, or one from before the parameter, leaves
+        // quotedTrimmed out.
+        ["MessageBodyParams with trimQuoted false"] = Case<MessageBodyParams>(
+            """{"accountId":"a","messageId":"m","trimQuoted":false}""",
+            """{"accountId":"a","messageId":"m"}"""),
         ["MessageBodyResult without links"] = Case<MessageBodyResult>(
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"remoteContent":"block","sanitizerVersion":"1"}""",
             """{"messageId":"m","bodyState":"pending","hasHtml":false,"text":"","blocked":@blocked@,"links":[],"remoteContent":"block","sanitizerVersion":"1"}"""),

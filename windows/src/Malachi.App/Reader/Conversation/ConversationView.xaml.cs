@@ -12,7 +12,11 @@
 // conversation row of the grouped list stacks every member the folder holds
 // as Jira shows an issue: what opened the conversation first, folded to its
 // header while more follows, then the rest newest first
-// (ConversationLayout.DisplayOrder), the pane opened at its top. A Jira
+// (ConversationLayout.DisplayOrder), the pane opened at its top. The user's
+// replies in Sent that the folder lacks are cards among them by date,
+// folded. Every card folds and opens with its arrow (ConversationFolds,
+// fold.go), and one button above the conversation folds or opens them all
+// (Collapse All / Expand All, Conversation.FoldAllOffer). A Jira
 // conversation has its issue card once on top; its description and
 // comments are cards (ConversationCard), its status and assignee changes
 // compact rows, and older members left out by thread.get's cap one row at
@@ -32,10 +36,13 @@
 // ScrollViewer's own anchoring (every row an anchor candidate, the anchor at
 // the viewport's top), where GTK moves the adjustment back itself; at the
 // top of the conversation the view stays at the top, so an arrival under
-// the opening card is in view, as GTK's pinned anchor keeps it. The wheel
-// over a card whose document fits scrolls the column (the card forwards
-// it); the list keeps the keyboard, and Space and Shift+Space page through
-// the conversation.
+// the opening card is in view, as GTK's pinned anchor keeps it. A card the
+// user folds, alone or with Collapse All, whose top was above the viewport
+// is brought back with its header at the viewport's top (macOS
+// headerAnchor), which the ScrollViewer's anchoring alone would leave above
+// it. The wheel over a card whose document fits scrolls the column (the
+// card forwards it); the list keeps the keyboard, and Space and Shift+Space
+// page through the conversation.
 
 using System;
 using System.Collections.Generic;
@@ -51,6 +58,7 @@ using Malachi.Core.Settings;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Foundation;
@@ -75,6 +83,10 @@ internal sealed partial class ConversationView : UserControl
     // libadwaita's body text, which the text-zoom setting scales.
     private const double BaseBodyFontSize = 14;
 
+    // The children of the column before the model's items: the Collapse All
+    // button and the issue card (macOS headViews).
+    private const int HeadViews = 2;
+
     private readonly ConversationController ctrl;
     private readonly Dictionary<MessageId, ConversationCard> cards = [];
     private readonly Dictionary<MessageId, ConversationEventRow> events = [];
@@ -85,7 +97,14 @@ internal sealed partial class ConversationView : UserControl
     private List<ConversationRow> items = [];
     private TextBlock? truncated;
     private ConversationRow? truncatedRow;
-    private Dictionary<MessageId, bool>? folds;
+
+    // The user's folds and unfolds of the cards of the conversation on show
+    // (SetCardFolded, Collapse All / Expand All), which win over the default
+    // (Conversation.DefaultFolds) until another conversation is shown; the
+    // cards' fold state as last applied; what the button above offers.
+    private ConversationFolds folds = new();
+    private Dictionary<MessageId, bool> foldState = [];
+    private ConversationFoldAll foldAll;
     private bool compact;
     private double width = -1;
     private bool liveScheduled;
@@ -187,6 +206,18 @@ internal sealed partial class ConversationView : UserControl
 
     /// <summary>The card of member <paramref name="id"/> is near and needs its body (and message.get with <paramref name="details"/>).</summary>
     public void NeedsBody(MessageId id, bool details) => ctrl.NeedsBody(id, details);
+
+    /// <summary>
+    /// The card's "•••": the controller switches its body to the variant
+    /// asked for (<see cref="ConversationController.SetQuoted"/>), held or
+    /// fetched, and the card shows it when it arrives (EntryLoaded,
+    /// ShowLoaded; macOS <c>cardSetQuoted</c>).
+    /// </summary>
+    public void SetCardQuoted(ConversationCard card, bool on)
+    {
+        ArgumentNullException.ThrowIfNull(card);
+        ctrl.SetQuoted(card.Id, on, card.DetailsOpen);
+    }
 
     /// <summary>
     /// conversationShowLoaded: the cache has news about member
@@ -316,17 +347,19 @@ internal sealed partial class ConversationView : UserControl
     }
 
     /// <summary>
-    /// setCardFolded: folds or opens the card that opened the conversation at
-    /// the user's request (its arrow, a click on its preview); the choice
-    /// holds while the conversation is shown. An opened card asks for its
-    /// body.
+    /// setCardFolded: folds or opens a card at the user's request (its arrow,
+    /// a click on its preview); the choice holds while the conversation is
+    /// shown. An opened card asks for its body. Until the user scrolls the
+    /// top of the conversation stays in view; otherwise the card keeps its
+    /// header in view. The Collapse All / Expand All button follows.
     /// </summary>
     public void SetCardFolded(ConversationCard card, bool folded)
     {
         ArgumentNullException.ThrowIfNull(card);
-        folds ??= [];
-        folds[card.Id] = folded;
-        card.SetFolded(folded);
+        folds.Set(card.Id, folded);
+        foldState[card.Id] = folded;
+        KeepingHeader(rows.GetValueOrDefault(card.Id), () => card.SetFolded(folded));
+        ShowFoldAll();
         ScheduleLiveUpdate();
     }
 
@@ -423,8 +456,9 @@ internal sealed partial class ConversationView : UserControl
 
     // apply: the model's items into the column in the order shown
     // (DisplayOrder), reusing the rows of the members shown already, each
-    // with its piece of the timeline; the opening card folds as the user or
-    // the default says.
+    // with its piece of the timeline; every card folds as the user or the
+    // default says (ConversationFolds.State), and the Collapse All / Expand
+    // All button follows.
     private void Apply(ConversationModel? m)
     {
         if (m is null)
@@ -434,6 +468,8 @@ internal sealed partial class ConversationView : UserControl
         ShowIssue(m);
         var display = L.DisplayOrder(m.Items);
         var shown = display.Items;
+        folds.Show(m.Thread);
+        foldState = folds.State(shown, display.Opening);
         var rails = L.Rails(shown);
         var monochrome = Services.State.Settings.MonochromeAvatars;
         var desired = new List<ConversationRow>(shown.Count);
@@ -507,8 +543,7 @@ internal sealed partial class ConversationView : UserControl
             row.Show(rails[i], it.Sender, monochrome);
             if (row.Card is { } rowCard)
             {
-                var folded = folds is not null && folds.TryGetValue(rowCard.Id, out var chosen) ? chosen : display.RootFolded;
-                rowCard.SetFold(i == display.Root, folded);
+                rowCard.SetFold(Core.Model.Conversation.Foldable(it), foldState.GetValueOrDefault(rowCard.Id));
             }
             desired.Add(row);
         }
@@ -530,12 +565,13 @@ internal sealed partial class ConversationView : UserControl
         {
             Detach(truncatedRow);
         }
-        // The column after the issue card, in the order shown.
+        // The column after the Collapse All button and the issue card, in the
+        // order shown.
         var children = Column.Children;
         for (var i = 0; i < desired.Count; i++)
         {
             var r = desired[i];
-            var at = i + 1;
+            var at = i + HeadViews;
             var now = children.IndexOf(r);
             if (now == at)
             {
@@ -552,6 +588,83 @@ internal sealed partial class ConversationView : UserControl
             children.Insert(Math.Min(at, children.Count), r);
         }
         items = desired;
+        ShowFoldAll();
+    }
+
+    // The Collapse All / Expand All button for the cards' fold state
+    // (Conversation.FoldAllOffer); hidden while fewer than two fold.
+    private void ShowFoldAll()
+    {
+        foldAll = Core.Model.Conversation.FoldAllOffer(foldState);
+        var label = foldAll.Label;
+        FoldAllButton.Content = label;
+        AutomationProperties.SetName(FoldAllButton, label);
+        FoldAllButton.Visibility = foldAll == ConversationFoldAll.None ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    // Collapse All or Expand All: every card of the conversation shown folds
+    // or opens (ConversationFolds.SetAll); a card that arrives later starts
+    // as its default. Until the user scrolls the top of the conversation
+    // stays in view; otherwise the item under the viewport's top keeps its
+    // header in view.
+    private void OnFoldAllClick(object sender, RoutedEventArgs e)
+    {
+        if (ctrl.Model is not { } m || foldAll == ConversationFoldAll.None)
+        {
+            return;
+        }
+        var display = L.DisplayOrder(m.Items);
+        folds.SetAll(display.Items, foldAll.Folded);
+        foldState = folds.State(display.Items, display.Opening);
+        KeepingHeader(RowAtTop(), () =>
+        {
+            foreach (var (id, card) in cards)
+            {
+                if (card.Foldable)
+                {
+                    card.SetFolded(foldState.GetValueOrDefault(id));
+                }
+            }
+        });
+        ShowFoldAll();
+        ScheduleLiveUpdate();
+    }
+
+    // The row under the viewport's top; null at the top of the conversation
+    // or above the rows (the button, the issue card).
+    private ConversationRow? RowAtTop()
+    {
+        var top = Scroller.VerticalOffset;
+        foreach (var r in items)
+        {
+            if (SpanOf(r) is { } span && span.Max > top + 0.5)
+            {
+                return span.Min <= top ? r : null;
+            }
+        }
+        return null;
+    }
+
+    // Runs change, which folds or opens cards, and brings row's header back
+    // to the viewport's top when the viewport began inside row (its top
+    // above the viewport's): a card that folds keeps its header where the
+    // user sees it (macOS headerAnchor). At the top of the conversation, and
+    // for a row whose top is in view, the ScrollViewer's own anchoring keeps
+    // what the user reads.
+    private void KeepingHeader(ConversationRow? row, Action change)
+    {
+        var top = Scroller.VerticalOffset;
+        var inside = row is not null && top > 0.5 && SpanOf(row) is { } before && before.Min < top;
+        change();
+        if (!inside)
+        {
+            return;
+        }
+        Scroller.UpdateLayout();
+        if (SpanOf(row!) is { } after)
+        {
+            Scroller.ChangeView(null, Math.Clamp(after.Min, 0, Math.Max(0, Scroller.ScrollableHeight)), null, disableAnimation: true);
+        }
     }
 
     // replaceRow: row is member id's; the one it had before (the member was
@@ -583,7 +696,10 @@ internal sealed partial class ConversationView : UserControl
     // removeAll: everything out (another conversation, or none).
     private void RemoveAll()
     {
-        folds = null;
+        folds = new ConversationFolds();
+        foldState = [];
+        foldAll = ConversationFoldAll.None;
+        FoldAllButton.Visibility = Visibility.Collapsed;
         layoutTries = 0;
         foreach (var c in cards.Values)
         {

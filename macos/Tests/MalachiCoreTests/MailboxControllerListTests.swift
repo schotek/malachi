@@ -378,7 +378,9 @@ private final class Harness {
         h.list.toggleThread("t1")
         #expect(h.list.rows[2].expanded && h.list.rows[2].loading)
         try await waitUntil { h.list.rows.count == 6 }
-        #expect(await h.fixture.threadGetRequests == [ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in")])
+        #expect(await h.fixture.threadGetRequests == [
+            ThreadGetParams(accountId: "a", threadId: "t1", folderId: "in", withSent: true),
+        ])
         #expect(ids(h.list.rows) == ["T:t3", "b1", "T:t1", "a1", "a2", "a3"])
         #expect(!h.list.rows[2].loading)
         #expect(h.list.rows[3].member && h.list.rows[4].member && h.list.rows[5].member)

@@ -45,6 +45,12 @@
 //   - sanitising the output again (under RemoteBlock) is the identity: the
 //     output is settled and keeps within the caps its input had to.
 //
+// On request (Input.TrimQuoted, view only) the quoted history of a reply
+// is cut off the parsed tree before the walk (quote.go), so the trimmed
+// output is the walk's output over fewer nodes and every guarantee above
+// holds for it too; Version covers the ruleset, not the trimming, whose
+// untrimmed output is the same with or without it.
+//
 // The library decision (docs/architecture.md §7): own code over
 // golang.org/x/net/html. E-mail depends on <style> blocks and inline CSS
 // that general-purpose sanitisers drop, and the remote-content policy, the
@@ -127,6 +133,12 @@ type Input struct {
 	// ok = false drops the reference. nil (the usual case) leaves cid: to
 	// KnownCIDs. ModeView only.
 	InlineCID func(contentID string) (mediaType string, data []byte, ok bool)
+	// TrimQuoted cuts the quoted history off the body (quote.go): Output
+	// then describes the trimmed body, and QuotedTrimmed says whether
+	// anything was cut. When the cut would leave nothing shown, or the
+	// trimmed body fails, the whole body is sanitised as without it.
+	// ModeView only.
+	TrimQuoted bool
 }
 
 // Output is the only form of HTML that may cross the API.
@@ -143,6 +155,8 @@ type Output struct {
 	// referenced inline attachments bound.
 	CIDs    []string
 	Version string
+	// QuotedTrimmed is set when Input.TrimQuoted cut a quoted history off.
+	QuotedTrimmed bool
 }
 
 // Sanitize runs the ruleset. It fails closed: on error the Output carries
@@ -155,21 +169,43 @@ func Sanitize(in Input) (Output, error) {
 	return out, nil
 }
 
+// sanitize runs the ruleset, trimming the quoted history first when asked
+// and falling back to the whole body when the trimmed one cannot be shown.
 func sanitize(in Input) (Output, error) {
+	if in.TrimQuoted && in.Mode != ModeView {
+		return Output{}, errors.New("quote trimming is for the view only")
+	}
+	out, retry, err := run(in, in.TrimQuoted)
+	if retry {
+		return sanitizeWhole(in)
+	}
+	return out, err
+}
+
+// sanitizeWhole sanitises the body without trimming it.
+func sanitizeWhole(in Input) (Output, error) {
+	out, _, err := run(in, false)
+	return out, err
+}
+
+// run is one pass of the ruleset, over the body with its quoted history
+// cut off when trim. retry is set when a cut was made but its output must
+// not be used: the trimmed body failed, or it shows nothing.
+func run(in Input, trim bool) (out Output, retry bool, err error) {
 	switch in.Mode {
 	case ModeView:
 		if in.Policy != api.RemoteBlock && in.Policy != api.RemoteAllow {
-			return Output{}, errors.New("unsupported remote content policy")
+			return Output{}, false, errors.New("unsupported remote content policy")
 		}
 	case ModeCompose:
 		if in.Policy != api.RemoteBlock {
-			return Output{}, errors.New("compose mode requires the block policy")
+			return Output{}, false, errors.New("compose mode requires the block policy")
 		}
 	default:
-		return Output{}, errors.New("unknown mode")
+		return Output{}, false, errors.New("unknown mode")
 	}
 	if len(in.HTML) > maxInputBytes {
-		return Output{}, errors.New("input too large")
+		return Output{}, false, errors.New("input too large")
 	}
 	max := in.MaxOutputSize
 	if max <= 0 {
@@ -178,10 +214,11 @@ func sanitize(in Input) (Output, error) {
 
 	doc, err := html.ParseWithOptions(strings.NewReader(in.HTML), html.ParseOptionEnableScripting(false))
 	if err != nil {
-		return Output{}, err
+		return Output{}, false, err
 	}
 	w := &walker{in: in, view: in.Mode == ModeView, cids: make(map[string]bool)}
 	head, body := headAndBody(doc)
+	cut := trim && trimQuoted(body)
 	if head != nil {
 		// Nothing a head holds is content, but its <style> elements are
 		// hoisted and its <link>, <meta> and <base> are counted.
@@ -192,7 +229,7 @@ func sanitize(in Input) (Output, error) {
 		kids = trimLeadingSpace(w.children(body, 0))
 	}
 	if w.err != nil {
-		return Output{}, w.err
+		return Output{}, cut, w.err
 	}
 
 	root := &html.Node{Type: html.DocumentNode}
@@ -212,10 +249,14 @@ func sanitize(in Input) (Output, error) {
 
 	root, markup, err := settle(root, max+w.inlined)
 	if err != nil {
-		return Output{}, err
+		return Output{}, cut, err
 	}
 	if err := withinCaps(root); err != nil {
-		return Output{}, err
+		return Output{}, cut, err
+	}
+
+	if cut && !shows(root) {
+		return Output{}, true, nil
 	}
 
 	links := w.links
@@ -234,7 +275,9 @@ func sanitize(in Input) (Output, error) {
 		Links:   links,
 		CIDs:    cids,
 		Version: Version,
-	}, nil
+
+		QuotedTrimmed: cut,
+	}, false, nil
 }
 
 // trimLeadingSpace removes the whitespace before the first real content:

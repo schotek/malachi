@@ -12,6 +12,7 @@ import (
 	"github.com/diamondburned/gotk4/pkg/gtk/v4"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/htmlview"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
@@ -46,9 +47,27 @@ var loadedSeq uint64
 // message.get is only logged (the summary headers stay) and retried the
 // next time the message is shown; a failed body is retried the same way.
 type loadedMessage struct {
-	msg  *api.Message
+	msg *api.Message
+	// body is the body on display: without the quoted history (message.body
+	// with trimQuoted), or whole while quotedShown.
 	body *api.MessageBodyResult
 	err  error // message.body failure
+
+	// quotedShown: the quoted history is shown, body is the whole body,
+	// asked for without trimQuoted (the view's Show Quoted Text,
+	// conversation.QuotedReveal). Off by default: a body comes trimmed.
+	quotedShown bool
+	// otherBody is the other variant of the body, kept for switching back
+	// without asking the daemon again; dropped when body is replaced under
+	// another remote-content policy (the remote images, the pictures),
+	// which it would not have. fetchingOther: a message.body for it is in
+	// flight (a switch while the request for the variant shown before
+	// ran). switchPolicy is the remote-content policy the variant switched
+	// to is asked with when it has to be fetched (picturesPolicy of the
+	// body shown before the switch: images the user loaded stay loaded).
+	otherBody     *api.MessageBodyResult
+	fetchingOther bool
+	switchPolicy  api.RemoteContentPolicy
 
 	seq uint64 // insertion order in Window.loaded
 
@@ -86,12 +105,78 @@ func (lm *loadedMessage) complete() bool { return lm.msg != nil && lm.body != ni
 // bodySettled reports whether the body half has an answer (content or error).
 func (lm *loadedMessage) bodySettled() bool { return lm.body != nil || lm.err != nil }
 
-// size is what the entry costs the cache: its body.
+// size is what the entry costs the cache: its body, both variants of it.
 func (lm *loadedMessage) size() int {
-	if lm.body == nil {
-		return 0
+	n := 0
+	for _, b := range []*api.MessageBodyResult{lm.body, lm.otherBody} {
+		if b != nil {
+			n += len(b.HTML) + len(b.Text)
+		}
 	}
-	return len(lm.body.HTML) + len(lm.body.Text)
+	return n
+}
+
+// showQuoted shows the body with its quoted history (on) or without: the
+// two variants trade places (body, otherBody, and their requests in
+// flight), and a body error belongs to the variant left. true when
+// anything changed; body is then nil when the variant has yet to be
+// fetched. A port of the macOS client's LoadedMessage.showQuoted.
+func (lm *loadedMessage) showQuoted(on bool) bool {
+	if on == lm.quotedShown {
+		return false
+	}
+	if lm.otherBody == nil {
+		lm.switchPolicy = picturesPolicy(lm)
+	}
+	lm.quotedShown = on
+	lm.body, lm.otherBody = lm.otherBody, lm.body
+	lm.fetching, lm.fetchingOther = lm.fetchingOther, lm.fetching
+	lm.err = nil
+	return true
+}
+
+// store keeps a message.body answer asked for the variant quoted (with
+// the quoted history or not): as body when that variant is still shown,
+// else as otherBody. replacing (an answer under another remote-content
+// policy) drops the other variant shown before.
+func (lm *loadedMessage) store(res *api.MessageBodyResult, quoted, replacing bool) {
+	if quoted != lm.quotedShown {
+		lm.otherBody = res
+		return
+	}
+	lm.body, lm.err = res, nil
+	if replacing {
+		lm.otherBody = nil
+	}
+}
+
+// bodyAnswered ends the in-flight request for the variant quoted: the
+// flag of the variant shown, or of the other one after a switch; whether
+// it is the variant shown is returned.
+func (lm *loadedMessage) bodyAnswered(quoted bool) bool {
+	if quoted == lm.quotedShown {
+		lm.fetching = false
+		return true
+	}
+	lm.fetchingOther = false
+	return false
+}
+
+// quotedOffer is the "•••" button under a body for what lm shows
+// (conversation.OfferQuoted): Hide while the whole body shows (or is on
+// its way, or failed: the way back to the trimmed one), Show when the
+// daemon cut the quoted history from the body on display; none for nil.
+func quotedOffer(lm *loadedMessage) conversation.QuotedOffer {
+	if lm == nil {
+		return conversation.QuotedNone
+	}
+	return conversation.OfferQuoted(lm.quotedShown, lm.err != nil, lm.body != nil && lm.body.QuotedTrimmed)
+}
+
+// bodyParams are the message.body parameters for the variant quoted of
+// the body of message id: without trimQuoted only for the whole body.
+func bodyParams(acc api.AccountID, id api.MessageID, quoted bool, policy api.RemoteContentPolicy) api.MessageBodyParams {
+	return api.MessageBodyParams{AccountID: acc, MessageID: id, RemoteContent: policy, TrimQuoted: !quoted}
 }
 
 // messageView is one message display, shared in shape by the main pane and
@@ -155,6 +240,15 @@ type messageView struct {
 	// toast shows a message in the owning window, when it wired one.
 	toast func(string)
 
+	// The "•••" under the body (quoted.go): its row, nil on the view of an
+	// attached message and on a conversation card's share (the card has
+	// its own); what it offers now; and the work its click does (Show
+	// Quoted Text: on), which the owner supplies.
+	quotedRow    gtk.Widgetter
+	quotedButton *gtk.Button
+	quotedNow    conversation.QuotedOffer
+	onQuoted     func(on bool)
+
 	links []api.Link // of the body on display, for link activation
 
 	// spinner is the pending "reveal the spinner" timer, 0 when none.
@@ -182,6 +276,7 @@ func newMessageView(w *Window, parent *gtk.Window, b *gtk.Builder) *messageView 
 		trustButton: b.GetObject("remote_trust").Cast().(*gtk.Button),
 	}
 	v.addresses = newAddressHeader(v, b)
+	v.bindQuotedButton(b)
 	if slot := b.GetObject("issue_card_slot"); slot != nil {
 		v.card = newIssueCard(w, parent, func() (issueSubject, bool) { return subjectOf(v.shown) })
 		slot.Cast().(*gtk.Box).Append(v.card)
@@ -335,6 +430,7 @@ func (v *messageView) renderHeaders(s api.MessageSummary, m *api.Message) *issue
 // bars.
 func (v *messageView) renderEvent(text string) {
 	v.cancelSpinner()
+	v.showQuotedButton(conversation.QuotedNone)
 	v.links = nil
 	v.hint.SetVisible(false)
 	v.setBarVisible(false)
@@ -393,8 +489,9 @@ func (v *messageView) renderBody(lm *loadedMessage) {
 }
 
 // render shows whatever lm holds so far: full headers once message.get
-// answered, the body once message.body did, and the attachment chips from
-// both. A nil lm shows the summary and the loading placeholder.
+// answered, the body once message.body did, the attachment chips from
+// both, and the "•••" under a body whose quoted history was cut (or
+// shows). A nil lm shows the summary and the loading placeholder.
 func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 	v.shown, v.shownLoaded = s, lm
 	if lm == nil {
@@ -404,15 +501,19 @@ func (v *messageView) render(s api.MessageSummary, lm *loadedMessage) {
 			v.loading()
 		}
 		v.renderAttachments(s, nil)
+		v.showQuotedButton(conversation.QuotedNone)
 		return
 	}
 	issue := v.renderHeaders(s, lm.msg)
 	if issue != nil && issue.event {
 		v.renderEvent(issue.eventBody)
-	} else if lm.bodySettled() {
-		v.renderBody(lm)
 	} else {
-		v.loading()
+		if lm.bodySettled() {
+			v.renderBody(lm)
+		} else {
+			v.loading()
+		}
+		v.showQuotedButton(quotedOffer(lm))
 	}
 	v.renderAttachments(s, lm)
 }
@@ -480,6 +581,8 @@ func (w *Window) showMessage(id api.MessageID) {
 		return
 	}
 	gen := w.model.bumpBody()
+	// What the user revealed of another message is forgotten.
+	w.paneQuoted.Show(string(id))
 	labels := w.paneLabels()
 	labels.render(s, nil)
 	w.outboxBanner.SetRevealed(false)
@@ -490,7 +593,7 @@ func (w *Window) showMessage(id api.MessageID) {
 		// there is no body to fetch.
 		return
 	}
-	w.fetchMessage(s.AccountID, id, func(lm *loadedMessage) {
+	w.fetchMessageQuoted(s.AccountID, id, w.paneQuoted.IsRevealed(id), func(lm *loadedMessage) {
 		if gen != w.model.bodyGen {
 			return // the pane moved on
 		}
@@ -534,26 +637,66 @@ func (w *Window) fetchMessage(acc api.AccountID, id api.MessageID, done func(*lo
 		}()
 	}
 	if lm.body == nil && !lm.fetching {
-		lm.fetching = true
-		lm.err = nil // a retry after a failure
-		go func() {
-			// The stored policy may let the daemon fetch remote images first.
-			ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
-			defer cancel()
-			var res api.MessageBodyResult
-			err := w.client.Call(ctx, api.MethodMessageBody, api.MessageBodyParams{AccountID: acc, MessageID: id}, &res)
-			glib.IdleAdd(func() {
-				lm.fetching = false
-				if err != nil {
-					w.log.Warn("message.body", "err", err)
-					lm.err = err
-				} else {
-					lm.body = &res
-				}
-				w.settleLoaded(id, lm)
-			})
-		}()
+		w.startBody(acc, id, lm)
 	}
+}
+
+// startBody runs message.body for id into lm (the body half of
+// fetchMessage and fetchBodyOnly), for the variant of the body the entry
+// shows (quotedShown). An answer that arrives after a view switched to the
+// other variant is kept aside for switching back (loadedMessage.store);
+// its failure is only logged.
+func (w *Window) startBody(acc api.AccountID, id api.MessageID, lm *loadedMessage) {
+	quoted := lm.quotedShown
+	params := bodyParams(acc, id, quoted, lm.switchPolicy)
+	lm.fetching = true
+	lm.err = nil // a retry after a failure
+	go func() {
+		// The stored policy may let the daemon fetch remote images first.
+		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
+		defer cancel()
+		var res api.MessageBodyResult
+		err := w.client.Call(ctx, api.MethodMessageBody, params, &res)
+		glib.IdleAdd(func() {
+			current := lm.bodyAnswered(quoted)
+			if err != nil {
+				w.log.Warn("message.body", "err", err)
+				if current {
+					lm.err = err
+				}
+			} else {
+				lm.store(&res, quoted, false)
+			}
+			w.settleLoaded(id, lm)
+		})
+	}()
+}
+
+// switchQuoted shows the variant quoted of the body of message id (with
+// its quoted history or without, loadedMessage.showQuoted): a variant held
+// already shows at once wherever the message is on display (showLoaded),
+// one to fetch is the caller's next step (fetchMessage, fetchBodyOnly).
+// The entry grew by the variant it keeps aside, so the cache is pruned.
+func (w *Window) switchQuoted(id api.MessageID, lm *loadedMessage, quoted bool) {
+	if !lm.showQuoted(quoted) {
+		return
+	}
+	pruneLoaded(w.loaded, maxLoaded, maxLoadedBytes)
+	if lm.body != nil {
+		w.showLoaded(id, lm)
+	}
+}
+
+// fetchMessageQuoted is fetchMessage for the variant quoted of the body
+// (switchQuoted first): the view that shows the message names the variant
+// the user chose for it there.
+func (w *Window) fetchMessageQuoted(acc api.AccountID, id api.MessageID, quoted bool, done func(*loadedMessage)) {
+	lm := w.loadedFor(id)
+	if lm.account == "" {
+		lm.account = acc
+	}
+	w.switchQuoted(id, lm, quoted)
+	w.fetchMessage(acc, id, done)
 }
 
 // settleLoaded runs on the main loop after one half of lm arrived: the
@@ -613,7 +756,8 @@ func pruneLoaded(m map[api.MessageID]*loadedMessage, limit, maxBytes int) {
 
 // summary is what the window knows about message id: the list entry, or
 // the cached full message when the list has moved on (a message window
-// outliving the folder it was opened from).
+// outliving the folder it was opened from), or the user's reply in Sent
+// that a conversation shows (mailModel.sentMessage).
 func (w *Window) summary(id api.MessageID) (api.MessageSummary, bool) {
 	if s, _, ok := w.model.message(id); ok {
 		return s, true
@@ -621,7 +765,9 @@ func (w *Window) summary(id api.MessageID) (api.MessageSummary, bool) {
 	if lm := w.loaded[id]; lm != nil && lm.msg != nil {
 		return lm.msg.MessageSummary, true
 	}
-	return api.MessageSummary{}, false
+	// The user's reply in Sent a conversation shows (its card's reply and
+	// forward, its images).
+	return w.model.sentMessage(id)
 }
 
 // openMessageWindow opens message id in its own window, or raises the
@@ -649,7 +795,7 @@ func (w *Window) openMessageWindow(id api.MessageID) {
 	if readsWithoutBody(s) {
 		return // an event of an issue: nothing to fetch
 	}
-	w.fetchMessage(s.AccountID, id, func(lm *loadedMessage) {
+	w.fetchMessageQuoted(s.AccountID, id, mw.quoted.IsRevealed(id), func(lm *loadedMessage) {
 		if mw.closed {
 			return
 		}

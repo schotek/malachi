@@ -13,6 +13,7 @@ import (
 	"github.com/schotek/malachi/ui/data"
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/widget"
 )
 
@@ -32,6 +33,10 @@ type MessageWindow struct {
 
 	// closed is set from close-request so late fetch replies are dropped.
 	closed bool
+
+	// quoted is whether the user revealed the quoted history of the
+	// message (its "•••", quoted.go): kept while the window is open.
+	quoted conversation.QuotedReveal
 
 	title  *adw.WindowTitle
 	view   *messageView
@@ -74,6 +79,8 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	mw.view.trust = func() { w.trustSender(id) }
 	mw.view.toast = func(text string) { mw.toasts.AddToast(widget.PlainToast(text)) }
 	mw.view.pictures = func() { w.downloadPictures(id, mw.view.say) }
+	mw.quoted.Show(string(id))
+	mw.view.onQuoted = func(on bool) { w.setWindowQuoted(mw, on) }
 
 	// The "msg" action group: the header buttons and the menu bind to it,
 	// so their sensitivity follows the actions. Moves and trash close the

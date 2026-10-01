@@ -1,0 +1,18 @@
+From: Mallory <mallory@example.org>
+To: Me <me@example.invalid>
+Subject: Re: Not really a quote
+Date: Wed, 1 Oct 2026 18:00:00 +0200
+Message-ID: <quote-hostile@example.org>
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<HTML><HEAD><STYLE>.gmail_quote{display:block} /* <div class="gmail_quote"> */</STYLE><TITLE><div id="divRplyFwdMsg">x</div></TITLE></HEAD>
+<BODY>
+<P>Visible top <SCRIPT>document.write('<div class="gmail_quote">')</SCRIPT></P>
+<svg><blockquote type="cite"><text>svg quote</text></blockquote></svg>
+<TABLE><TR><TD><BLOCKQUOTE TYPE="CITE">cited in a cell</BLOCKQUOTE></TD><TD>reply in the next cell</TD></TR></TABLE>
+<DIV CLASS="GMAIL_QUOTE"><DIV>quoted <a href="javascript:alert(1)" onclick="x()">evil</a> <img src="https://remote.invalid/q.png" alt="q"></DIV>
+<BLOCKQUOTE TYPE="CITE"><DIV ID="DIVRPLYFWDMSG">nested markers</DIV></BLOCKQUOTE>
+<!-- trailing comment -->
+<P>&nbsp;</P><P><BR></P>
+</BODY></HTML>

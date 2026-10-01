@@ -1271,7 +1271,7 @@ attachment marked `remote` is on the mail server only (§3).
 **The only method that returns message content, and it returns only
 sanitised content.**
 
-- params: `{ "accountId", "messageId", "remoteContent": "block" | "allow" (opt, per-call override) }`
+- params: `{ "accountId", "messageId", "remoteContent": "block" | "allow" (opt, per-call override), "trimQuoted": true (opt) }`
 - result:
 
 ```jsonc
@@ -1289,7 +1289,8 @@ sanitised content.**
   "inlineParts": { "image001@…": "2.1" },
   "remotePictures": 0,                   // (opt) pictures of inlineParts kept on the server only
   "remoteContent": "block",              // the policy that was applied
-  "sanitizerVersion": "1"
+  "sanitizerVersion": "1",
+  "quotedTrimmed": true                  // (opt) trimQuoted cut a quoted history off
 }
 ```
 
@@ -1356,6 +1357,49 @@ message in the daemon's memory, and otherwise stores it whole) it asks for
 the body again, and the count is 0 while the pictures are available. A
 picture the stored file turned out to lack (after a crash) counts too.
 Showing a message never makes the daemon contact the mail server.
+
+`trimQuoted` asks for the body without the quoted history of a reply, as
+Gmail's "trimmed content" does: the client shows the result with a button
+(•••) under it and asks again without `trimQuoted` to show the whole
+message. `quotedTrimmed` is `true` only when something was actually cut
+(absent otherwise); without `trimQuoted` the result is exactly what it
+would be without the parameter. The view runs without JavaScript, so the
+cut is the daemon's: the sanitiser removes the history from the parsed
+tree before its walk (`backend/internal/sanitize/quote.go`), so the
+trimmed `html` carries every guarantee above, and `blocked`, `links`,
+`inlineParts` and `remotePictures` describe the trimmed body (under
+`allow` only its images are fetched). `text` is cut to match: the text
+alternative cut by the plain-text rules when they find the quote in it,
+otherwise the text rendering of the trimmed `html`. A message without
+HTML, or whose HTML is withheld, has its `text` cut by the plain-text
+rules. The detection is conservative (when in doubt, everything is shown)
+and takes the first of these markers, in document order, that qualifies:
+
+- a nested quote, cut only when nothing visible follows it at any level
+  (a reply written below or between quoted passages is never trimmed):
+  Gmail's `class="gmail_quote"` / `gmail_quote_container`, a
+  `<blockquote type="cite">` (Apple Mail, Thunderbird), any `<blockquote>`
+  right after an attribution line; the attribution line before it
+  ("On … wrote:", "Dne … napsal(a):", "Am … schrieb …:", Gmail's
+  `gmail_attr`, Thunderbird's `moz-cite-prefix`) goes with it;
+- the start of a history, which runs to the end of the body: Outlook on
+  the web's `#divRplyFwdMsg`, `#appendonsend`,
+  `#mail-editor-reference-message-container`; Outlook's separator (`<hr>`
+  or a `<div>` with a top border) followed by a header block whose bold
+  labels name From, then Sent or Date, and To or Subject (English, Czech,
+  Slovak, German, French, Spanish, Italian, Dutch, Polish and more); a
+  `-----Original Message-----` line or a translation of it;
+- in plain text: a `-----Original Message-----` line, a line of
+  underscores followed by such a header block, or an attribution line
+  followed by nothing but `>`-quoted and blank lines.
+
+Empty elements, line breaks and separators right before the cut go with
+it. Nothing is cut when the cut part shows nothing, or when nothing would
+be left to show above it: a forward that is only the forwarded message
+stays whole, and so does a bare quote. The trimming is not part of the
+ruleset `sanitizerVersion` names (the whole body is the same with or
+without it). `draft.create` quotes the whole body and the MCP bridge
+reads it whole.
 
 `bodyState` says whether content exists at all: `pending` (the sync engine
 has not downloaded the body yet; `text` empty), `tooBig` (over the daemon's
@@ -1720,7 +1764,8 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
                 "flags": ["flagged", "seen"],      // union over the members
                 "hasAttachments": true,
                 "folderIds": ["f_inbox", "f_sent"],
-                "issue": IssueInfo (opt) }             // a jira account's thread
+                "issue": IssueInfo (opt),          // a jira account's thread
+                "sentCount": 1 }                   // the user's replies in Sent the folder lacks
 ```
 
 - Order: by the date of the latest member in the folder, `dateDesc` by
@@ -1738,6 +1783,16 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
   `api.MaxThreadParticipants` (8), taken from the newest 64 members.
 - `flags`: every flag some member carries. Read state comes from
   `unreadCount`; `seen` here only says that some member was read.
+- `sentCount`: how many members of the thread in the account's folders of
+  role `sent` the folder lacks, so that a client shows a conversation of
+  one message and the user's reply to it as a conversation. A sent member
+  whose `Message-ID` header a member of the folder carries (a Bcc to
+  oneself, a Gmail label) is the folder's; members sharing a `Message-ID`
+  count once, a member without one counts on its own; hidden messages do
+  not count. It is part of no other field (`messageCount`, `unreadCount`,
+  `participants`, … are the folder's). Always 0 in a folder of role
+  `sent`, in the outbox, in a `jira` account (it has no sent folder) and in
+  the account-wide summary of `thread.get`.
 - `filter`: `unread` keeps threads with an unread member in the folder,
   `flagged` those with a flagged member; `page.total` counts threads after
   the filter.
@@ -1746,8 +1801,9 @@ ThreadSummary { "id": "t_9", "accountId": "acc_1",
   and vice versa.
 
 #### `thread.get`
-- params: `{ "accountId", "threadId", "folderId" (opt) }`
-- result: `{ "thread": ThreadSummary, "messages": [MessageSummary] }`
+- params: `{ "accountId", "threadId", "folderId" (opt), "withSent": bool (opt) }`
+- result: `{ "thread": ThreadSummary, "messages": [MessageSummary],
+  "sent": [MessageSummary] (opt) }`
 - errors: invalidArgument, accountNotFound, folderNotFound (a `folderId`
   that is not the account's), threadNotFound (no member in the account,
   or none in `folderId` when given), storageError
@@ -1760,6 +1816,18 @@ member of the account is returned and `thread` covers them all
 the views of a `jira` account (§4.2) are left out. At most
 `api.MaxThreadMessages` (500) members are returned, the newest;
 `messageCount` still counts them all. A member in the outbox folder carries `outbox` as in `message.list`.
+
+`withSent` (with `folderId`; ignored without it) adds `sent`: the members
+`thread.sentCount` counts — the user's replies in the account's sent
+folders that the folder lacks, compared by `Message-ID` as well as by id,
+one per `Message-ID` — oldest first, at most `api.MaxThreadMessages`, the
+newest, each as `message.list` of its own folder would return it
+(`folderId` is the sent folder's). A client places them in the
+conversation by date; they are not members of the folder, and nothing of
+`thread` describes them. `sent` is absent when there are none, without
+`withSent`, in a sent folder, the outbox and a `jira` account. Nothing
+announces a change of them on its own: a client showing them asks again
+when `notify.newMessage` or a change in a sent folder names the thread.
 
 Actions stay per message: `message.flag`, `message.move` and
 `message.delete` take the `messageIds` of the members a client wants to
@@ -2753,3 +2821,14 @@ some. Clients must be able to resynchronise their view via `sync.status`,
 - **2** (2026-10-01, compatible addition: Markdown pasted into compose):
   new `draft.markdown` (§4.5), text pasted into the compose editor rendered
   as sanitised HTML when it reads as Markdown; no new error codes.
+- **2** (2026-10-01, compatible addition: the user's replies in a
+  conversation): `ThreadSummary.sentCount` (`thread.list`, `thread.get`
+  with `folderId`) counts the members in the account's sent folders that
+  the folder lacks; `thread.get` gained `withSent`, which returns them as
+  `sent`, outside the folder's members and aggregates; no new error codes.
+- **2** (2026-10-01, compatible addition: trimmed quoted history):
+  `message.body` gained `trimQuoted`, which cuts the quoted history of a
+  reply off the body, and the result `quotedTrimmed`, set only when
+  something was cut; `html`, `text`, `blocked`, `links`, `inlineParts`
+  and `remotePictures` then describe the trimmed body. Without the
+  parameter the result is unchanged; no new error codes.

@@ -18,7 +18,10 @@ public sealed record ListRow
     /// <summary>The row's address.</summary>
     public required ListKey Key { get; init; }
 
-    /// <summary>A folded conversation (two or more members).</summary>
+    /// <summary>
+    /// A folded conversation: two or more members, or one and the user's
+    /// replies in Sent (<see cref="Conversation.IsConversationRow"/>).
+    /// </summary>
     public bool Thread { get; init; }
 
     /// <summary>An expanded member, indented under its conversation row.</summary>
@@ -43,7 +46,8 @@ public sealed record ListRow
     /// A folded conversation row of the grouped list whose selection shows
     /// the whole conversation in the reading pane: a conversation row (not a
     /// member row, not a single-message row) with two or more members in the
-    /// folder (<see cref="Conversation.IsConversationRow"/>). Every other row
+    /// folder, or one and the user's replies in Sent
+    /// (<see cref="Conversation.IsConversationRow"/>). Every other row
     /// shows its message alone.
     /// </summary>
     public bool ShowsConversation => Thread && !Member && Key.Thread is not null && Summary is { } s && Conversation.IsConversationRow(s);

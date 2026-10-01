@@ -6,7 +6,8 @@
 // (TestIsConversationRow, TestBuild, TestBuildItems,
 // TestBuildIssueFallsBackToNewestMember, TestBuildTruncated,
 // TestBuildCapsMembers, TestMine, TestSenderIsCleaned, TestMerge,
-// TestRemove, TestCardActions) and po_test.go. The process-wide catalogue
+// TestRemove, TestCardActions) and po_test.go; ConversationSentTests and
+// ConversationFoldTests use its fixtures. The process-wide catalogue
 // is English here; the Czech plural of the truncated row is read from
 // po/cs.po, and the model's one msgid is checked against the template.
 
@@ -28,14 +29,14 @@ public sealed class ConversationTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 9, 1, 9, 0, 0, TimeSpan.Zero);
 
-    private static DateTimeOffset At(int min) => T0.AddMinutes(min);
+    internal static DateTimeOffset At(int min) => T0.AddMinutes(min);
 
-    private static readonly Address Jana = new() { Name = "Jana Dvořáková", Email = "jana@acme.example" };
-    private static readonly Address Petr = new() { Name = "Petr Svoboda", Email = "petr@acme.example" };
+    internal static readonly Address Jana = new() { Name = "Jana Dvořáková", Email = "jana@acme.example" };
+    internal static readonly Address Petr = new() { Name = "Petr Svoboda", Email = "petr@acme.example" };
 
     // The accounts of the two conversations: Petr's mailbox (the mail of the
     // tests is Jana's, written to him) and his account on the Jira site.
-    private static readonly Account MailAccount = new()
+    internal static readonly Account MailAccount = new()
     {
         Id = "a1",
         Config = new AccountConfig { Name = "Work", Email = "petr@acme.example" },
@@ -43,7 +44,7 @@ public sealed class ConversationTests
         State = new SyncState { AccountId = "a1", Status = SyncStatus.Idle },
     };
 
-    private static readonly Account JiraAccount = new()
+    internal static readonly Account JiraAccount = new()
     {
         Id = "j1",
         Config = new AccountConfig { Name = "Acme Jira", Email = "petr@acme.example", Kind = AccountKind.Jira },
@@ -55,7 +56,7 @@ public sealed class ConversationTests
     private static Account AccountOf(ThreadSummary t) => t.AccountId == JiraAccount.Id ? JiraAccount : MailAccount;
 
     // A member of the mail conversation t1 in folder f1.
-    private static MessageSummary Mail(string id, int min, bool seen) => new()
+    internal static MessageSummary Mail(string id, int min, bool seen) => new()
     {
         Id = id,
         AccountId = "a1",
@@ -87,7 +88,7 @@ public sealed class ConversationTests
 
     // A member of the issue ITSD-42 (thread tj of account j1); item is the
     // message's part of it, its issue members replaced by Issue's.
-    private static MessageSummary IssueMsg(string id, int min, bool seen, MessageIssue item) => new()
+    internal static MessageSummary IssueMsg(string id, int min, bool seen, MessageIssue item) => new()
     {
         Id = id,
         AccountId = "j1",
@@ -110,12 +111,12 @@ public sealed class ConversationTests
         },
     };
 
-    private static MessageIssue Item(string kind) => MessageIssue.Of(Issue, kind);
+    internal static MessageIssue Item(string kind) => MessageIssue.Of(Issue, kind);
 
-    private static MessageSummary StatusEvent(string id, int min, string from, string to) =>
+    internal static MessageSummary StatusEvent(string id, int min, string from, string to) =>
         IssueMsg(id, min, false, Item(IssueItemKind.Event) with { Changes = [new IssueChange { Field = IssueField.Status, From = from, To = to }] });
 
-    private static ThreadSummary MailThread(int count) => new()
+    internal static ThreadSummary MailThread(int count) => new()
     {
         Id = "t1",
         AccountId = "a1",
@@ -128,10 +129,10 @@ public sealed class ConversationTests
         HasAttachments = false,
     };
 
-    private static ThreadSummary JiraThread(int count) => MailThread(count) with { Id = "tj", AccountId = "j1", Subject = "", Issue = Issue };
+    internal static ThreadSummary JiraThread(int count) => MailThread(count) with { Id = "tj", AccountId = "j1", Subject = "", Issue = Issue };
 
     // shape: an item as "kind:id" ("more" for the truncated row).
-    private static string[] Shape(ConversationModel m) =>
+    internal static string[] Shape(ConversationModel m) =>
         [.. m.Items.Select(it => it.Kind switch
         {
             ConversationItemKind.Message => "msg:" + it.Id!.Value.Value,
@@ -146,6 +147,17 @@ public sealed class ConversationTests
     [InlineData(3, true)]
     [InlineData(612, true)]
     public void IsConversationRow(int count, bool want) => Assert.Equal(want, Conversation.IsConversationRow(MailThread(count)));
+
+    // sent_test.go TestIsConversationRowCountsSent.
+    [Theory]
+    [InlineData(1, 0, false)]
+    [InlineData(1, 1, true)]
+    [InlineData(0, 2, true)]
+    [InlineData(2, 0, true)]
+    [InlineData(0, 1, false)]
+    [InlineData(1, -5, false)]
+    public void IsConversationRowCountsSent(int count, int sent, bool want) =>
+        Assert.Equal(want, Conversation.IsConversationRow(MailThread(count) with { SentCount = sent }));
 
     private static readonly MessageSummary Queued = Mail("m4", 40, false) with { Outbox = new OutboxInfo { State = OutboxState.Queued, Attempts = 0 } };
 

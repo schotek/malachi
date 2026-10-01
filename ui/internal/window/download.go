@@ -114,6 +114,9 @@ func (w *Window) endDownload(acc api.AccountID, id api.MessageID, m *api.Message
 		// Pictures that go missing from now on may ask for the body once
 		// more (recheckPictures).
 		lm.picturesRechecked = false
+		if b := lm.otherBody; b != nil && b.BodyState != api.BodyFetched {
+			lm.otherBody = nil // fetched again when switched to
+		}
 		switch {
 		case lm.body != nil && lm.body.BodyState != api.BodyFetched && !lm.fetching:
 			lm.body, lm.err = nil, nil

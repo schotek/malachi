@@ -24,10 +24,12 @@ protocol ConversationCardHost: AnyObject {
     /// The recipients' disclosure opened: the full message (Cc) is asked
     /// for.
     func cardNeedsDetails(_ card: ConversationCardView)
-    /// The user folds or opens the card that opened the conversation (its
-    /// arrow, a click on its preview): the choice holds while the
-    /// conversation is shown.
+    /// The user folds or opens a card (its arrow, a click on its preview):
+    /// the choice holds while the conversation is shown.
     func cardSetFolded(_ card: ConversationCardView, _ folded: Bool)
+    /// The "•••" under the card's body: its quoted history shows (`on`)
+    /// or goes again; the choice holds while the conversation is shown.
+    func cardSetQuoted(_ card: ConversationCardView, _ on: Bool)
     /// Runs `change`, which alters the card's height, keeping what the user
     /// reads in place.
     func cardHeightChanging(_ change: () -> Void)
@@ -66,11 +68,13 @@ protocol ConversationCardHost: AnyObject {
 /// keeps the height it last had. The card is an accessibility group named
 /// by its sender and date.
 ///
-/// The card that opened the conversation folds (conversation_card.go
-/// `setFold`, `setFolded`): an arrow at the start of its header, and while
-/// folded only the header and a preview of its text (the summary's
-/// snippet, two lines at most) show. A folded card holds no web view and
-/// asks for no body; the arrow, or a click on the preview, opens it.
+/// Every card folds (conversation_card.go `setFold`, `setFolded`; fold.go):
+/// an arrow at the start of its header, and while folded only the header
+/// and a preview of its text (the summary's snippet, two lines at most)
+/// show. A folded card holds no web view and asks for no body; the arrow,
+/// or a click on the preview, opens it. How it starts is the pane's
+/// (`Conversation.Folds`): the card that opened the conversation and the
+/// user's replies in Sent folded, the rest open.
 @MainActor
 final class ConversationCardView: NSView {
     let id: MessageID
@@ -85,12 +89,11 @@ final class ConversationCardView: NSView {
     private(set) var live = false
     /// The recipients' disclosure is open.
     private(set) var detailsOpen = false
-    /// The card opened the conversation (`ConversationLayout.Display.root`):
-    /// its header has the fold arrow.
+    /// The card folds (`Conversation.foldable`): its header has the fold
+    /// arrow.
     private(set) var foldable = false
     /// Folded to its header and the preview: no body, no web view
-    /// (`setFolded`). Only ever set on the card that opened the
-    /// conversation.
+    /// (`setFolded`). Only ever set on a card that folds.
     private(set) var folded = false
 
     /// The short date of the list instead of the full date and time (a
@@ -127,6 +130,8 @@ final class ConversationCardView: NSView {
     private var picturesBar: RemoteBarView?
     private var textView: MessageBodyTextView?
     private var chipViews: [NSView] = []
+    /// The "•••" under the body (`quotedTextOffer`).
+    private var quotedButton: QuotedTextButton?
 
     /// The body area for HTML and for the wait: the web view while live,
     /// else blank at `bodyHeight`.
@@ -150,7 +155,7 @@ final class ConversationCardView: NSView {
 
     /// The places in `content`, under the header and the preview.
     private enum Slot: Int, CaseIterable {
-        case banner, remote, pictures, text, body
+        case banner, remote, pictures, text, body, quoted
     }
 
     /// The hairline around the card. What the card holds keeps inside it:
@@ -373,10 +378,9 @@ final class ConversationCardView: NSView {
 
     // MARK: Fold
 
-    /// Makes the card the one that opened the conversation (`on`), which
-    /// folds to its header and a preview of its text
-    /// (`ConversationLayout.displayOrder`), and folds or opens it; off: an
-    /// ordinary card, open (conversation_card.go `setFold`).
+    /// Makes the card one that folds (`on`, `Conversation.foldable`) to its
+    /// header and a preview of its text, and folds or opens it; off: a card
+    /// without the arrow, open (conversation_card.go `setFold`).
     func setFold(_ on: Bool, folded: Bool) {
         foldable = on
         header.foldButton.isHidden = !on
@@ -551,6 +555,32 @@ final class ConversationCardView: NSView {
         renderBody(lm)
         renderBars(lm)
         renderChips(lm)
+        renderQuoted(lm)
+    }
+
+    /// The "•••" under the body for what `lm` holds: Show Quoted Text when
+    /// the daemon cut the quoted history, Hide Quoted Text while it shows.
+    /// An entry let go (nil) keeps the button as it was.
+    private func renderQuoted(_ lm: LoadedMessage?) {
+        guard let lm else { return }
+        let offer = quotedTextOffer(lm)
+        guard offer != quotedButton?.offer else { return }
+        changingHeight {
+            let b = quotedButton ?? makeQuotedButton()
+            b.show(offer)
+        }
+    }
+
+    private func makeQuotedButton() -> QuotedTextButton {
+        let b = QuotedTextButton(insets: NSEdgeInsets(
+            top: Self.textInset, left: Self.paddingH, bottom: Self.paddingV, right: Self.paddingH))
+        b.onToggle = { [weak self] in
+            guard let self, let offer = self.quotedButton?.offer else { return }
+            self.host?.cardSetQuoted(self, offer == .show)
+        }
+        quotedButton = b
+        install(b, .quoted)
+        return b
     }
 
     /// Redraws the bars and leaves the body alone. Their buttons never

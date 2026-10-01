@@ -3,24 +3,27 @@
 
 // Port of macos/Sources/MalachiCore/Model/Conversation.swift; GTK:
 // ui/internal/conversation/conversation.go (IsConversationRow, Build, Merge,
-// Remove, CardActions, assemble, truncatedItem, memberItem, markRead, mine,
-// sender, sortedUnique, before).
+// MergeSent, Remove, CardActions, assemble, truncatedItem, memberItem,
+// withSent, markRead, mine, sender, sortedUnique, before).
 //
 // The view logic of a whole conversation in the reading pane. Selecting a
-// folded conversation row of the grouped list (two or more members in the
-// folder; a Jira folder is always grouped) shows every member the folder
-// holds with full bodies, instead of only the newest one; a member row and a
-// single-message row keep the single-message view. This turns the answer of
-// a folder-scoped thread.get (the summary and the members, oldest first, at
-// most MaxThreadMessages, the newest) into the items the pane stacks: a card
-// per message (a mail message, or the description or a comment of an issue,
-// with the Jira badges), a compact row per status or assignee change of an
-// issue, and a row that says how many older members are left out. It also
-// picks the one member opening the conversation marks read (the newest that
-// is not an event) and the item the pane scrolls to (the newest), and keeps
-// the items in step when a member arrives or goes while the conversation is
-// shown. The model is oldest first; the order the pane shows is
-// ConversationLayout's.
+// folded conversation row of the grouped list (two or more messages: members
+// in the folder and the user's replies in Sent; a Jira folder is always
+// grouped) shows every member the folder holds, and the user's replies the
+// folder lacks, with full bodies, instead of only the newest one; a member
+// row and a single-message row keep the single-message view. This turns the
+// answer of a folder-scoped thread.get with withSent (the summary, the
+// members and the sent ones, each oldest first, at most MaxThreadMessages,
+// the newest) into the items the pane stacks: a card per message (a mail
+// message, the user's reply in Sent, or the description or a comment of an
+// issue, with the Jira badges), a compact row per status or assignee change
+// of an issue, and a row that says how many older members are left out. It
+// also picks the one member opening the conversation marks read (the newest
+// folder member that is not an event) and the item the pane scrolls to (the
+// newest), keeps the items in step when a member arrives or goes while the
+// conversation is shown, and decides which cards are folded to their header
+// (Conversation.Fold.cs, fold.go). The model is oldest first; the order the
+// pane shows is ConversationLayout's.
 //
 // The pane stacks native cards, each body in its own locked view, never one
 // composed document: a message's CSS could restyle or forge the headers of
@@ -42,17 +45,20 @@ namespace Malachi.Core.Model;
 /// The conversation package: a namespace, so the Go names map 1:1
 /// (<c>conversation.Build</c> → <c>Conversation.Build</c>).
 /// </summary>
-public static class Conversation
+public static partial class Conversation
 {
     /// <summary>
     /// conversation.IsConversationRow: a listed conversation whose selection
-    /// shows the whole conversation: two or more members in the folder. The
-    /// outbox is never grouped (the caller's rule, as for the list).
+    /// shows the whole conversation: two or more messages, the members in the
+    /// folder and the user's replies in Sent it lacks
+    /// (<see cref="ThreadSummary.SentCount"/>) together, so that a message and
+    /// the user's reply to it are a conversation. The outbox is never grouped
+    /// (the caller's rule, as for the list).
     /// </summary>
     public static bool IsConversationRow(ThreadSummary t)
     {
         ArgumentNullException.ThrowIfNull(t);
-        return t.MessageCount >= 2;
+        return t.MessageCount + Math.Max(t.SentCount, 0) >= 2;
     }
 
     /// <summary>
@@ -60,17 +66,27 @@ public static class Conversation
     /// thread.get: <paramref name="thread"/> is its summary,
     /// <paramref name="members"/> its folder members, <paramref name="account"/>
     /// the account they belong to (its address tells the user's own mail,
-    /// <see cref="ConversationItem.Mine"/>). The members are ordered oldest
+    /// <see cref="ConversationItem.Mine"/>), <paramref name="sent"/> the
+    /// user's replies in Sent the folder lacks (thread.get's sent with
+    /// withSent; null or empty without; after the account here, where Go has
+    /// it before, so that the calls without it read as before). The members are ordered oldest
     /// first by (date, id) whatever order they come in; a member without an
     /// id and a repeated id (the first is kept) are dropped; beyond
     /// MaxThreadMessages only the newest are kept. An event whose changes this
     /// client does not know at all is left out. Earlier counts the members of
-    /// the thread's count that are not among the members. The issue card is
-    /// the thread's issue, else the newest member's. No member to show makes
-    /// an empty model with Earlier 0 (the conversation left the folder:
-    /// nothing to load again).
+    /// the thread's count that are not among the members. The sent ones are
+    /// put among the members by (date, id) as cards with
+    /// <see cref="ConversationItem.Sent"/> set, under the same rules (no id, a
+    /// repeated id, beyond MaxThreadMessages), and without an id that is a
+    /// member's (the member wins) or an event; when older members are left
+    /// out (Earlier > 0), a sent one older than the oldest member shown is
+    /// left out too. The issue card is the thread's issue, else the newest
+    /// member's. No member to show makes an empty model with Earlier 0 (the
+    /// conversation left the folder: nothing to load again), whatever sent
+    /// there is.
     /// </summary>
-    public static ConversationModel Build(ThreadSummary thread, IReadOnlyList<MessageSummary> members, Account? account = null)
+    public static ConversationModel Build(
+        ThreadSummary thread, IReadOnlyList<MessageSummary> members, Account? account = null, IReadOnlyList<MessageSummary>? sent = null)
     {
         ArgumentNullException.ThrowIfNull(thread);
         ArgumentNullException.ThrowIfNull(members);
@@ -89,6 +105,7 @@ public static class Conversation
         {
             return new ConversationModel { Thread = thread.Id };
         }
+        items = WithSent(items, sent ?? [], list, m.Earlier > 0, account);
         var info = thread.Issue;
         for (var i = shown.Count - 1; info is null && i >= 0; i--)
         {
@@ -105,8 +122,9 @@ public static class Conversation
     /// conversation (a thread id that differs), leaves the model as it is;
     /// which folder it is in is the caller's check, as for the list. A member
     /// with an issue refreshes the issue card (an event has changed the
-    /// status). MarkRead and ScrollTo follow the rules of Build; the model
-    /// given is not modified.
+    /// status). A sent card with the member's id gives way to it. MarkRead
+    /// and ScrollTo follow the rules of Build; the model given is not
+    /// modified.
     /// </summary>
     public static ConversationModel Merge(ConversationModel m, MessageSummary arrived, Account? account = null)
     {
@@ -127,10 +145,64 @@ public static class Conversation
     }
 
     /// <summary>
-    /// conversation.Remove: drops the member <paramref name="id"/> (it was
-    /// moved, deleted or left the folder). An id that is not shown leaves the
-    /// model as it is. When the last shown member goes, the model becomes
-    /// empty and keeps Earlier: a conversation with older members is loaded
+    /// conversation.MergeSent: Merge for a sent card: the user's reply in
+    /// Sent that the folder lacks arrived or changed (a thread.get with
+    /// withSent answered again). It is put in its place by (date, id) as a
+    /// card with <see cref="ConversationItem.Sent"/> set, or replaces the sent
+    /// card with its id. A message without an id, of another conversation,
+    /// with the id of a member, or an event leaves the model as it is, and so
+    /// does an empty model (sent cards alone are no conversation); when older
+    /// members are left out (Earlier > 0), one older than the oldest member
+    /// shown is dropped. That it is in the folder's answer's sent
+    /// (deduplicated by Message-ID there) is the caller's check. MarkRead and
+    /// ScrollTo follow the rules of Build; the model given is not modified.
+    /// </summary>
+    public static ConversationModel MergeSent(ConversationModel m, MessageSummary arrived, Account? account = null)
+    {
+        ArgumentNullException.ThrowIfNull(m);
+        ArgumentNullException.ThrowIfNull(arrived);
+        if (arrived.Id.Value.Length == 0 || (m.Thread.Value.Length > 0 && arrived.ThreadId is { } t && t.Value.Length > 0 && t != m.Thread))
+        {
+            return m;
+        }
+        var at = m.Index(arrived.Id);
+        if (at >= 0 && !m.Items[at].Sent)
+        {
+            return m;
+        }
+        var members = new List<ConversationItem>(m.Items.Count);
+        var sent = new List<MessageSummary>(m.Items.Count + 1);
+        foreach (var it in m.Items)
+        {
+            if (it.Kind == ConversationItemKind.Truncated || it.Message!.Id == arrived.Id)
+            {
+                continue;
+            }
+            if (it.Sent)
+            {
+                sent.Add(it.Message);
+            }
+            else
+            {
+                members.Add(it);
+            }
+        }
+        if (members.Count == 0)
+        {
+            return m;
+        }
+        sent.Add(arrived);
+        var shown = members.Select(it => it.Message!).ToList();
+        var items = WithSent(members, sent, shown, m.Earlier > 0, account);
+        return Assemble(m, items, m.Issue);
+    }
+
+    /// <summary>
+    /// conversation.Remove: drops the member or sent card
+    /// <paramref name="id"/> (it was moved, deleted or left the folder or
+    /// Sent). An id that is not shown leaves the model as it is. When the last
+    /// shown member goes, the model becomes empty and keeps Earlier, whatever
+    /// sent cards are left: a conversation with older members is loaded
     /// again. MarkRead and ScrollTo follow the rules of Build; the model given
     /// is not modified.
     /// </summary>
@@ -143,7 +215,7 @@ public static class Conversation
             return m;
         }
         var items = m.Items.Where((_, i) => i != at).ToList();
-        if (!items.Any(it => it.Kind != ConversationItemKind.Truncated))
+        if (!items.Any(it => it.Kind != ConversationItemKind.Truncated && !it.Sent))
         {
             return new ConversationModel { Thread = m.Thread, Earlier = m.Earlier };
         }
@@ -177,13 +249,14 @@ public static class Conversation
         return new CapabilityActions { Reply = a.Reply, ReplyAll = a.ReplyAll, Forward = a.Forward, Comment = a.Comment };
     }
 
-    // assemble: m completed from its member items, oldest first: the row of
-    // older members on top when Earlier > 0, the issue card, MarkRead and
-    // ScrollTo. No member items make an empty model (Thread and Earlier kept).
+    // assemble: m completed from its member and sent items, oldest first: the
+    // row of older members on top when Earlier > 0, the issue card, MarkRead
+    // and ScrollTo. No member items make an empty model (Thread and Earlier
+    // kept).
     private static ConversationModel Assemble(ConversationModel m, List<ConversationItem> items, JiraCard? card)
     {
         var output = new ConversationModel { Thread = m.Thread, Earlier = m.Earlier };
-        if (items.Count == 0)
+        if (!items.Any(it => !it.Sent))
         {
             return output;
         }
@@ -227,14 +300,56 @@ public static class Conversation
         return it;
     }
 
-    // markRead: the newest message card that is not queued in the outbox when
-    // it is unread, else null.
+    // withSent: puts the sent cards among the member items (oldest first) by
+    // (date, id): sent without empty, repeated and members' ids (members are
+    // the folder's members known, shown or not), the newest
+    // MaxThreadMessages, and, when older members are left out (cut), none
+    // older than the oldest member item. A sent event is left out.
+    private static List<ConversationItem> WithSent(
+        List<ConversationItem> items, IReadOnlyList<MessageSummary> sent, IReadOnlyList<MessageSummary> members, bool cut, Account? account)
+    {
+        if (sent.Count == 0)
+        {
+            return items;
+        }
+        var taken = members.Select(s => s.Id).ToHashSet();
+        var list = SortedUnique(sent).Where(s => !taken.Contains(s.Id) && !Jira.IsEvent(s.Issue)).ToList();
+        if (list.Count > API.Limits.MaxThreadMessages)
+        {
+            list = list.Skip(list.Count - API.Limits.MaxThreadMessages).ToList();
+        }
+        var output = new List<ConversationItem>(items.Count + list.Count);
+        var first = items.Count > 0 ? items[0].Message : null;
+        var i = 0;
+        foreach (var s in list)
+        {
+            if (cut && first is not null && Before(s, first))
+            {
+                continue;
+            }
+            while (i < items.Count && Before(items[i].Message!, s))
+            {
+                output.Add(items[i]);
+                i++;
+            }
+            // An event is filtered out above, so the item is a card.
+            if (MemberItem(s, account) is { } it)
+            {
+                output.Add(it with { Sent = true, Unread = false });
+            }
+        }
+        output.AddRange(items.Skip(i));
+        return output;
+    }
+
+    // markRead: the newest message card that is neither queued in the outbox
+    // nor a sent card when it is unread, else null.
     private static MessageId? MarkRead(List<ConversationItem> items)
     {
         for (var i = items.Count - 1; i >= 0; i--)
         {
             var it = items[i];
-            if (it.Kind != ConversationItemKind.Message || it.Message!.Outbox is not null)
+            if (it.Kind != ConversationItemKind.Message || it.Sent || it.Message!.Outbox is not null)
             {
                 continue;
             }
@@ -287,6 +402,6 @@ public static class Conversation
     }
 
     // before: members oldest first: by date, then by id (thread.get's order).
-    private static bool Before(MessageSummary a, MessageSummary b) =>
+    internal static bool Before(MessageSummary a, MessageSummary b) =>
         a.Date != b.Date ? a.Date < b.Date : CodePoints.Compare(a.Id.Value, b.Id.Value) < 0;
 }

@@ -98,9 +98,11 @@ public final class ActionsController {
 
     /// What the window knows of message `id` (message_view.go `summary`):
     /// the list's summary, or the cached full message's for a message
-    /// window outliving the folder it was opened from.
+    /// window outliving the folder it was opened from, or the user's reply
+    /// in Sent that a conversation shows (`MailModel.sentMessage`; its
+    /// card's reply and forward).
     public func summary(_ id: MessageID) -> MessageSummary? {
-        mailbox.model.message(id)?.summary ?? cache.summary(id)
+        mailbox.model.message(id)?.summary ?? cache.summary(id) ?? mailbox.model.sentMessage(id)
     }
 
     /// The known ones of the given messages, in order (actions.go

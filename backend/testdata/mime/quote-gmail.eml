@@ -1,0 +1,29 @@
+From: Alice <alice@example.org>
+To: Bob <bob@example.org>
+Subject: Re: Lunch
+Date: Wed, 1 Oct 2026 12:00:00 +0200
+Message-ID: <gmail-reply@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Sounds good, see you at noon.
+
+On Wed, 1 Oct 2026 at 10:00, Bob <bob@example.org>
+wrote:
+
+> Lunch tomorrow?
+>
+> On Tue, 30 Sep 2026 at 18:00, Alice <alice@example.org> wrote:
+>
+>> Anyone?
+>>
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<div dir="ltr">Sounds good, see you at noon.</div><br><div class="gmail_quote gmail_quote_container"><div dir="ltr" class="gmail_attr">On Wed, 1 Oct 2026 at 10:00, Bob &lt;<a href="mailto:bob@example.org">bob@example.org</a>&gt; wrote:<br></div><blockquote class="gmail_quote" style="margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex"><div dir="ltr">Lunch tomorrow? <a href="https://maps.example.org/place">here</a></div><br><div class="gmail_quote"><div dir="ltr" class="gmail_attr">On Tue, 30 Sep 2026 at 18:00, Alice &lt;alice@example.org&gt; wrote:<br></div><blockquote class="gmail_quote"><div dir="ltr">Anyone?</div></blockquote></div></blockquote></div>
+
+--alt--

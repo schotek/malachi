@@ -4,7 +4,6 @@
 package window
 
 import (
-	"context"
 	"math"
 	"reflect"
 
@@ -29,8 +28,14 @@ import (
 // issue: what opened the conversation first, folded to its header while
 // more follows, then the rest newest first (convDisplayOrder; the model and
 // the macOS client keep the oldest first), the pane opened at its top; a
-// member row and a single-message row keep the single-message view. A Jira
-// conversation has its issue card once on top; its description and
+// member row and a single-message row keep the single-message view. The
+// user's replies in Sent that the folder lacks are cards among them by
+// date, folded. Every card folds and opens with its arrow
+// (conversation.Folds), and one button above the conversation folds or
+// opens them all (Collapse All / Expand All, conversation.FoldAllOffer).
+// Under an open card's body a "•••" shows the quoted history the daemon
+// cut from it (quoted.go). A Jira conversation has its issue card once on
+// top; its description and
 // comments are cards (conversation_card.go), its status and assignee
 // changes compact rows, and older members left out by thread.get's cap are
 // one row at the bottom (conversation_rows.go). Only the newest member that
@@ -88,6 +93,10 @@ type conversationView struct {
 	issueBox *gtk.Box
 	status   *gtk.Label
 	spinner  *adw.Spinner
+	// foldAllButton is Collapse All / Expand All above the conversation,
+	// hidden while fewer than two cards fold; foldAll what it offers now.
+	foldAllButton *gtk.Button
+	foldAll       conversation.FoldAll
 
 	// The issue card on show and what it was built from.
 	issueCard  *issueCard
@@ -112,10 +121,13 @@ type conversationView struct {
 	// card that goes live (takeWebView, returnWebView).
 	webPool []*htmlview.Card
 
-	// folds are the user's folds and unfolds of the card that opened the
-	// conversation on show (setCardFolded), which win over the default of
-	// convDisplayOrder until another conversation is shown.
-	folds map[api.MessageID]bool
+	// folds are the user's folds and unfolds of the cards of the
+	// conversation on show (setCardFolded, Collapse All / Expand All),
+	// which win over the default (conversation.DefaultFolds) until another
+	// conversation is shown; foldState the cards' fold state as last
+	// applied (conversation.Folds.State).
+	folds     conversation.Folds
+	foldState map[api.MessageID]bool
 
 	// layoutTick is the frame callback that runs updateLive again once the
 	// rows are laid out (afterLayout), 0 when none is pending; layoutTries
@@ -143,19 +155,21 @@ func (w *Window) conversationPane() *conversationView {
 	installConvCSS()
 	b := data.Builder("conversation_view.ui")
 	cv := &conversationView{
-		w:        w,
-		page:     b.GetObject("conversation_page").Cast().(*gtk.Overlay),
-		scroller: b.GetObject("conversation_scroller").Cast().(*gtk.ScrolledWindow),
-		clamp:    b.GetObject("conversation_clamp").Cast().(*adw.Clamp),
-		column:   b.GetObject("conversation_column").Cast().(*gtk.Box),
-		issueBox: b.GetObject("conversation_issue").Cast().(*gtk.Box),
-		status:   b.GetObject("conversation_status").Cast().(*gtk.Label),
-		spinner:  b.GetObject("conversation_spinner").Cast().(*adw.Spinner),
-		cards:    map[api.MessageID]*convCard{},
-		events:   map[api.MessageID]*convEventRow{},
-		rows:     map[api.MessageID]*convRow{},
+		w:             w,
+		page:          b.GetObject("conversation_page").Cast().(*gtk.Overlay),
+		scroller:      b.GetObject("conversation_scroller").Cast().(*gtk.ScrolledWindow),
+		clamp:         b.GetObject("conversation_clamp").Cast().(*adw.Clamp),
+		column:        b.GetObject("conversation_column").Cast().(*gtk.Box),
+		issueBox:      b.GetObject("conversation_issue").Cast().(*gtk.Box),
+		status:        b.GetObject("conversation_status").Cast().(*gtk.Label),
+		spinner:       b.GetObject("conversation_spinner").Cast().(*adw.Spinner),
+		foldAllButton: b.GetObject("conversation_fold_all").Cast().(*gtk.Button),
+		cards:         map[api.MessageID]*convCard{},
+		events:        map[api.MessageID]*convEventRow{},
+		rows:          map[api.MessageID]*convRow{},
 	}
 	cv.status.SetUseMarkup(false)
+	cv.foldAllButton.ConnectClicked(cv.foldAllClicked)
 	cv.ctrl = newConversationController(convWindowHost{w}, i18n.Tr)
 	cv.ctrl.onChange = cv.modelChanged
 	cv.ctrl.onLoaded = func(id api.MessageID, lm *loadedMessage) {
@@ -219,6 +233,7 @@ func (w *Window) showConversation(r listRow) bool {
 		w.model.bumpBody()
 		w.scheduleMarkRead("")
 		w.pane.leaveForConversation()
+		w.paneQuoted.Clear()
 	}
 	w.outboxBanner.SetRevealed(false)
 	w.draftBanner.SetRevealed(false)
@@ -313,6 +328,7 @@ func (v *messageView) leaveForConversation() {
 	v.showPicturesBar(picturesBarState{})
 	v.showText("")
 	v.renderAttachments(api.MessageSummary{}, nil)
+	v.showQuotedButton(conversation.QuotedNone)
 	v.shown, v.shownLoaded = api.MessageSummary{}, nil
 }
 
@@ -361,7 +377,12 @@ func (h convWindowHost) convComposeAccount() bool {
 	return len(capabilities.ForwardAccounts(h.w.model.accounts)) > 0
 }
 
-func (h convWindowHost) convFetch(s api.MessageSummary, full bool, then func(*loadedMessage)) {
+func (h convWindowHost) convFetch(s api.MessageSummary, full, quoted bool, then func(*loadedMessage)) {
+	lm := h.w.loadedFor(s.ID)
+	if lm.account == "" {
+		lm.account = s.AccountID
+	}
+	h.w.switchQuoted(s.ID, lm, quoted)
 	if full {
 		h.w.fetchMessage(s.AccountID, s.ID, then)
 		return
@@ -383,25 +404,7 @@ func (w *Window) fetchBodyOnly(acc api.AccountID, id api.MessageID, then func(*l
 	if lm.fetching {
 		return
 	}
-	lm.fetching = true
-	lm.err = nil // a retry after a failure
-	go func() {
-		// The stored policy may let the daemon fetch remote images first.
-		ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
-		defer cancel()
-		var res api.MessageBodyResult
-		err := w.client.Call(ctx, api.MethodMessageBody, api.MessageBodyParams{AccountID: acc, MessageID: id}, &res)
-		glib.IdleAdd(func() {
-			lm.fetching = false
-			if err != nil {
-				w.log.Warn("message.body", "err", err)
-				lm.err = err
-			} else {
-				lm.body = &res
-			}
-			w.settleLoaded(id, lm)
-		})
-	}()
+	w.startBody(acc, id, lm)
 }
 
 // modelChanged follows the controller.
@@ -509,22 +512,88 @@ func (cv *conversationView) update() {
 	cv.scheduleLiveUpdate()
 }
 
-// setCardFolded folds or opens the card that opened the conversation at
-// the user's request (its arrow, a click on its preview); the choice holds
-// while the conversation is shown. An opened card asks for its body.
+// setCardFolded folds or opens a card at the user's request (its arrow, a
+// click on its preview); the choice holds while the conversation is shown.
+// An opened card asks for its body. Until the user scrolls the top of the
+// conversation stays in view; otherwise the card keeps its header where it
+// was (in view). The Collapse All / Expand All button follows.
 func (cv *conversationView) setCardFolded(c *convCard, folded bool) {
-	if cv.folds == nil {
-		cv.folds = map[api.MessageID]bool{}
+	cv.folds.Set(c.id, folded)
+	if cv.foldState == nil {
+		cv.foldState = map[api.MessageID]bool{}
 	}
-	cv.folds[c.id] = folded
+	cv.foldState[c.id] = folded
+	if cv.pinned == nil {
+		if row := cv.rows[c.id]; row != nil {
+			if top, ok := cv.topOf(row); ok {
+				cv.last = convHeaderAnchor(&convAnchor{widget: row, offset: cv.scroller.VAdjustment().Value() - top})
+			}
+		}
+	}
 	c.setFolded(folded)
+	cv.showFoldAll()
 	cv.scheduleLiveUpdate()
 }
 
-// topAnchor is the top of the conversation: the issue card of a Jira
-// conversation, else the first item (the card that opened it, or the
-// newest); nil for none.
+// foldAllClicked is Collapse All or Expand All: every card of the
+// conversation shown folds or opens (conversation.Folds.SetAll); a card
+// that arrives later starts as its default. Until the user scrolls the top
+// of the conversation stays in view; otherwise the item under the
+// viewport's top keeps its place, its header in view.
+func (cv *conversationView) foldAllClicked() {
+	m := cv.ctrl.model
+	if m == nil || cv.foldAll == conversation.FoldAllNone {
+		return
+	}
+	display := convDisplayOrder(m.Items)
+	cv.folds.SetAll(display.items, cv.foldAll.Folded())
+	cv.foldState = cv.folds.State(display.items, display.opening)
+	if cv.pinned == nil {
+		cv.last = convHeaderAnchor(cv.currentAnchor())
+	}
+	for id, c := range cv.cards {
+		if c.foldable {
+			c.setFolded(cv.foldState[id])
+		}
+	}
+	cv.showFoldAll()
+	cv.scheduleLiveUpdate()
+}
+
+// showFoldAll shows the Collapse All / Expand All button for the cards'
+// fold state (conversation.FoldAllOffer); hidden while fewer than two
+// fold.
+func (cv *conversationView) showFoldAll() {
+	cv.foldAll = conversation.FoldAllOffer(cv.foldState)
+	if cv.foldAll == conversation.FoldAllNone {
+		if cv.foldAllButton.HasFocus() {
+			cv.scroller.GrabFocus()
+		}
+		cv.foldAllButton.SetVisible(false)
+		return
+	}
+	cv.foldAllButton.SetLabel(cv.foldAll.Label(i18n.Tr))
+	cv.foldAllButton.SetVisible(true)
+}
+
+// convHeaderAnchor is a with the item's top kept in view: a viewport
+// inside the item (its top above the viewport's) moves to the item's top,
+// so a card that folds keeps its header where the user can see it; nil for
+// nil.
+func convHeaderAnchor(a *convAnchor) *convAnchor {
+	if a == nil {
+		return nil
+	}
+	return &convAnchor{widget: a.widget, offset: min(a.offset, 0)}
+}
+
+// topAnchor is the top of the conversation: the Collapse All / Expand All
+// button when it shows, else the issue card of a Jira conversation, else
+// the first item (the card that opened it, or the newest); nil for none.
 func (cv *conversationView) topAnchor() *convAnchor {
+	if cv.foldAllButton.IsVisible() {
+		return &convAnchor{widget: cv.foldAllButton}
+	}
 	if cv.issueBox.IsVisible() {
 		return &convAnchor{widget: cv.issueBox}
 	}
@@ -537,12 +606,15 @@ func (cv *conversationView) topAnchor() *convAnchor {
 // apply puts the model's items into the column in the order shown
 // (convDisplayOrder: what opened the conversation, then the rest newest
 // first), reusing the widgets of the members shown already, each in a row
-// with its piece of the timeline; the opening card folds as the user or
-// the default says.
+// with its piece of the timeline; every card folds as the user or the
+// default says (conversation.Folds.State), and the Collapse All / Expand
+// All button follows.
 func (cv *conversationView) apply(m *conversation.Model) {
 	cv.showIssue(m)
 	display := convDisplayOrder(m.Items)
 	items := display.items
+	cv.folds.Show(m.Thread)
+	cv.foldState = cv.folds.State(items, display.opening)
 	rails := convRails(items)
 	desired := make([]*convRow, 0, len(items))
 	cardIDs := map[api.MessageID]bool{}
@@ -593,11 +665,7 @@ func (cv *conversationView) apply(m *conversation.Model) {
 		}
 		row.show(rails[i], it.Sender)
 		if row.card != nil {
-			folded, chosen := cv.folds[it.Message.ID]
-			if !chosen {
-				folded = display.rootFolded
-			}
-			row.card.setFold(i == display.root, folded)
+			row.card.setFold(conversation.Foldable(it), cv.foldState[it.Message.ID])
 		}
 		desired = append(desired, row)
 	}
@@ -636,6 +704,7 @@ func (cv *conversationView) apply(m *conversation.Model) {
 		prev = r
 	}
 	cv.items = desired
+	cv.showFoldAll()
 }
 
 // replaceRow makes row the row of member id; the one it had before (the
@@ -657,7 +726,10 @@ func (cv *conversationView) detach(r *convRow) {
 // removeAll takes everything out (another conversation, or none).
 func (cv *conversationView) removeAll() {
 	cv.stopKinetic()
-	cv.folds = nil
+	cv.folds = conversation.Folds{}
+	cv.foldState = nil
+	cv.foldAll = conversation.FoldAllNone
+	cv.foldAllButton.SetVisible(false)
 	// A conversation laid out anew waits for its own layout.
 	cv.layoutTries = 0
 	for _, c := range cv.cards {
@@ -756,7 +828,10 @@ func (cv *conversationView) spanOf(w gtk.Widgetter) (convSpan, bool) {
 // how far below its top the viewport's top is.
 func (cv *conversationView) currentAnchor() *convAnchor {
 	top := cv.scroller.VAdjustment().Value()
-	candidates := make([]gtk.Widgetter, 0, len(cv.items)+1)
+	candidates := make([]gtk.Widgetter, 0, len(cv.items)+2)
+	if cv.foldAllButton.IsVisible() {
+		candidates = append(candidates, cv.foldAllButton)
+	}
 	if cv.issueBox.IsVisible() {
 		candidates = append(candidates, cv.issueBox)
 	}

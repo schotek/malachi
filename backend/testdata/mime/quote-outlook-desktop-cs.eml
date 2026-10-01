@@ -1,0 +1,84 @@
+From: =?utf-8?q?Jan_Svoboda?= <jan@example.org>
+To: Petr =?utf-8?q?Nov=C3=A1k?= <petr@example.org>
+Subject: RE: Faktura za =?utf-8?q?z=C3=A1=C5=99=C3=AD?=
+Date: Wed, 1 Oct 2026 10:15:00 +0200
+Message-ID: <outlook-cs@example.org>
+In-Reply-To: <faktura@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"; type="multipart/alternative"
+
+--rel
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Dobrý den,
+
+fakturu jsem zaplatil, potvrzení v příloze.
+
+Jan
+
+Od: Petr Novák <petr@example.org>
+Odesláno: středa 1. října 2026 9:12
+Komu: Jan Svoboda <jan@example.org>
+Předmět: Faktura za září
+
+Dobrý den, posílám fakturu za září.
+Petr
+
+--alt
+Content-Type: text/html; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta http-equiv="Content-Type" content="text/html; charset=utf-8"><meta name="Generator" content="Microsoft Word 15 (filtered medium)">
+<style><!--
+p.MsoNormal, li.MsoNormal, div.MsoNormal {margin:0cm; font-size:11.0pt; font-family:"Calibri",sans-serif;}
+@page WordSection1 {size:612.0pt 792.0pt; margin:70.85pt 70.85pt 70.85pt 70.85pt;}
+div.WordSection1 {page:WordSection1;}
+--></style></head>
+<body lang="CS" link="#0563C1" vlink="#954F72" style="word-wrap:break-word">
+<div class="WordSection1">
+<p class="MsoNormal">Dobrý den,<o:p></o:p></p>
+<p class="MsoNormal"><o:p>&nbsp;</o:p></p>
+<p class="MsoNormal">fakturu jsem zaplatil, potvrzení v příloze. <img width="120" height="40" src="cid:image001.png@01DC0000.00000000" alt="podpis"><o:p></o:p></p>
+<p class="MsoNormal"><o:p>&nbsp;</o:p></p>
+<p class="MsoNormal">Jan<o:p></o:p></p>
+<p class="MsoNormal"><o:p>&nbsp;</o:p></p>
+<div>
+<div style="border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0cm 0cm 0cm">
+<p class="MsoNormal"><b>Od:</b> Petr Novák &lt;<a href="mailto:petr@example.org">petr@example.org</a>&gt;
+<br>
+<b>Odesláno:</b> středa 1. října 2026 9:12<br>
+<b>Komu:</b> Jan Svoboda &lt;jan@example.org&gt;<br>
+<b>Předmět:</b> Faktura za září<o:p></o:p></p>
+</div>
+</div>
+<p class="MsoNormal"><o:p>&nbsp;</o:p></p>
+<p class="MsoNormal">Dobrý den, posílám fakturu za září. <a href="https://pay.example.org/invoice/9">Zaplatit</a><o:p></o:p></p>
+<p class="MsoNormal"><img width="300" height="100" src="https://tracker.example.org/banner.png" alt="banner"> <img src="cid:image002.png@01DC0000.00000000" alt="logo"><o:p></o:p></p>
+<p class="MsoNormal">Petr<o:p></o:p></p>
+</div>
+</body>
+</html>
+
+--alt--
+--rel
+Content-Type: image/png
+Content-ID: <image001.png@01DC0000.00000000>
+Content-Disposition: inline; filename="image001.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--rel
+Content-Type: image/png
+Content-ID: <image002.png@01DC0000.00000000>
+Content-Disposition: inline; filename="image002.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==
+
+--rel--

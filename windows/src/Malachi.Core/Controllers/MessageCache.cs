@@ -8,7 +8,10 @@
 // downloadPictures, pictureFailed, lostPicture, reloadPictures), outbox.go
 // (refetchMessage), attachments.go (fetchAttachment), embedded.go
 // (fetchEmbedded) and download.go (download, beginDownload, endDownload,
-// refreshChips, partData, embeddedData).
+// refreshChips, partData, embeddedData). The two variants of a body (with
+// and without its quoted history, message.body's trimQuoted) are
+// Swift-first: switchQuoted, bodyParams and the variant every request for a
+// body is asked for.
 //
 // Every fire-and-forget call goes through ControllerScope.Perform, which
 // starts the call after the caller's turn as Swift's Task does
@@ -197,14 +200,21 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     /// A failed <c>message.get</c> is only logged (the summary headers stay)
     /// and retried the next time; a failed body sets
     /// <see cref="LoadedMessage.Err"/> and is retried the same way.
+    /// <paramref name="quoted"/> is the variant of the body the view shows:
+    /// with its quoted history (true) or without (false, <c>message.body</c>
+    /// with trimQuoted); null keeps the variant the entry shows. A switch
+    /// shows the variant held already (<see cref="LoadedMessage.ShowQuoted"/>),
+    /// else fetches it, and every view showing the message hears about it
+    /// (<see cref="MessageLoaded"/>).
     /// </summary>
-    public void Fetch(MessageSummary s, Action<LoadedMessage> done)
+    public void Fetch(MessageSummary s, Action<LoadedMessage> done, bool? quoted = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
         var lm = Cache.LoadedFor(s.Id);
         lm.AccountId = s.AccountId;
+        SwitchQuoted(s.Id, lm, quoted);
         if (lm.Complete)
         {
             done(lm);
@@ -228,15 +238,17 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     /// <see cref="Fetch"/>'s does, at once when the body (or its error, which
     /// is retried the same way) is there already and nothing is in flight. A
     /// card of the conversation view whose message has no attachments needs
-    /// nothing <c>message.get</c> adds to its summary.
+    /// nothing <c>message.get</c> adds to its summary. <paramref name="quoted"/>
+    /// as for <see cref="Fetch"/>.
     /// </summary>
-    public void FetchBody(MessageSummary s, Action<LoadedMessage> done)
+    public void FetchBody(MessageSummary s, Action<LoadedMessage> done, bool? quoted = null)
     {
         ArgumentNullException.ThrowIfNull(s);
         ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
         var lm = Cache.LoadedFor(s.Id);
         lm.AccountId = s.AccountId;
+        SwitchQuoted(s.Id, lm, quoted);
         if (lm.Body is not null && !lm.Getting && !lm.Fetching)
         {
             done(lm);
@@ -248,6 +260,28 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
             StartBody(s, lm);
         }
     }
+
+    // Shows the variant quoted of the body of lm (null: as it is); a variant
+    // held already is shown at once wherever the message is on display, one
+    // to fetch is the caller's next step.
+    private void SwitchQuoted(MessageId id, LoadedMessage lm, bool? quoted)
+    {
+        if (quoted is not { } on || !lm.ShowQuoted(on))
+        {
+            return;
+        }
+        // The entry grew by the variant it keeps aside.
+        Cache.Prune();
+        if (lm.Body is not null)
+        {
+            scope.Raise(MessageLoaded, this, new MessageCacheEntry(id, lm));
+        }
+    }
+
+    // The message.body parameters for the variant quoted of the body of s:
+    // without trimQuoted only for the whole body.
+    private static MessageBodyParams BodyParams(AccountId accountId, MessageId id, bool quoted, RemoteContentPolicy? remoteContent = null) =>
+        new() { AccountId = accountId, MessageId = id, RemoteContent = remoteContent, TrimQuoted = !quoted };
 
     // Queues done for the next settle of lm.
     private void Wait(LoadedMessage lm, Action<LoadedMessage> done)
@@ -279,23 +313,39 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         }, RpcTimeouts.Default);
     }
 
-    // message.body for s into lm (the second half of Fetch).
+    // message.body for s into lm (the second half of Fetch), for the variant
+    // the entry shows. An answer that arrives after the view switched to the
+    // other variant is kept aside for switching back (LoadedMessage.Store);
+    // its failure is only logged.
     private void StartBody(MessageSummary s, LoadedMessage lm)
     {
         var id = s.Id;
+        var quoted = lm.QuotedShown;
+        var parameters = BodyParams(s.AccountId, id, quoted, lm.SwitchPolicy);
         lm.Fetching = true;
         lm.Err = null; // a retry after a failure
-        scope.Perform(Client, API.MessageBody, new MessageBodyParams { AccountId = s.AccountId, MessageId = id }, outcome =>
+        scope.Perform(Client, API.MessageBody, parameters, outcome =>
         {
-            lm.Fetching = false;
+            var current = quoted == lm.QuotedShown;
+            if (current)
+            {
+                lm.Fetching = false;
+            }
+            else
+            {
+                lm.FetchingOther = false;
+            }
             if (outcome.TryGetValue(out var res, out var err))
             {
-                lm.Body = res;
+                lm.Store(res, quoted);
             }
             else
             {
                 LogBodyFailed(logger, err!);
-                lm.Err = err;
+                if (current)
+                {
+                    lm.Err = err;
+                }
             }
             Settle(id, lm);
         });
@@ -390,7 +440,8 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
         ArgumentNullException.ThrowIfNull(done);
         scope.VerifyAccess();
         var id = s.Id;
-        var parameters = new MessageBodyParams { AccountId = s.AccountId, MessageId = id, RemoteContent = RemoteContentPolicy.Allow };
+        var quoted = lm.QuotedShown;
+        var parameters = BodyParams(s.AccountId, id, quoted, RemoteContentPolicy.Allow);
         scope.Perform(Client, API.MessageBody, parameters, outcome =>
         {
             if (!outcome.TryGetValue(out var res, out var err))
@@ -402,8 +453,7 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
                 return;
             }
             lm.LoadingImages = false;
-            lm.Body = res;
-            lm.Err = null;
+            lm.Store(res, quoted, replacing: true);
             if (Cache[id] is null)
             {
                 Cache.Store(id, lm);
@@ -478,12 +528,14 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     {
         var id = s.Id;
         Outcome<MessageBodyResult> outcome;
+        var quoted = lm.QuotedShown;
         try
         {
             await DownloadAsync(s.AccountId, id);
-            // Back on the UI thread after the download: the policy of the
-            // body on display now.
-            var parameters = new MessageBodyParams { AccountId = s.AccountId, MessageId = id, RemoteContent = RemoteBar.PicturesPolicy(lm) };
+            // Back on the UI thread after the download: the policy and the
+            // variant of the body on display now.
+            quoted = lm.QuotedShown;
+            var parameters = BodyParams(s.AccountId, id, quoted, RemoteBar.PicturesPolicy(lm));
             outcome = Outcome.Success(await Client.CallAsync(API.MessageBody, parameters, API.MessageBody.Timeout, ct));
         }
 #pragma warning disable CA1031 // Every failure of either call is the request's outcome, toasted below.
@@ -505,8 +557,7 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
             done(Outcome.Failure<LoadedMessage>(err!));
             return;
         }
-        lm.Body = res;
-        lm.Err = null;
+        lm.Store(res, quoted, replacing: true);
         if (Cache[id] is null)
         {
             Cache.Store(id, lm);
@@ -553,7 +604,8 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
     private void ReloadPictures(AccountId accountId, MessageId id, LoadedMessage lm)
     {
         var shown = lm.Body;
-        var parameters = new MessageBodyParams { AccountId = accountId, MessageId = id, RemoteContent = RemoteBar.PicturesPolicy(lm) };
+        var quoted = lm.QuotedShown;
+        var parameters = BodyParams(accountId, id, quoted, RemoteBar.PicturesPolicy(lm));
         scope.Perform(Client, API.MessageBody, parameters, outcome =>
         {
             if (!outcome.TryGetValue(out var res, out var err))
@@ -561,12 +613,11 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
                 LogReloadFailed(logger, err!);
                 return;
             }
-            if (!ReferenceEquals(lm.Body, shown) || lm.LoadingPictures)
+            if (!ReferenceEquals(lm.Body, shown) || lm.QuotedShown != quoted || lm.LoadingPictures)
             {
                 return;
             }
-            lm.Body = res;
-            lm.Err = null;
+            lm.Store(res, quoted, replacing: true);
             if (Cache[id] is null)
             {
                 Cache.Store(id, lm);
@@ -773,6 +824,10 @@ public sealed partial class MessageCache : IDisposable, IActionsCache, IReaderCa
             // Pictures that go missing from now on may ask for the body once
             // more (RemoteBar.RecheckPictures).
             lm.PicturesRechecked = false;
+            if (lm.OtherBody is { } other && other.BodyState != BodyState.Fetched)
+            {
+                lm.OtherBody = null; // fetched again when switched to
+            }
             if (lm.Body is { } b && b.BodyState != BodyState.Fetched && !lm.Fetching)
             {
                 lm.Body = null;

@@ -281,7 +281,7 @@ func TestBuild(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			m := Build(tc.thread, tc.members, accountOf(tc.thread), tr)
+			m := Build(tc.thread, tc.members, nil, accountOf(tc.thread), tr)
 			wantShape := tc.shape
 			if tc.earlier > 0 {
 				wantShape = append([]string{"more"}, wantShape...)
@@ -334,7 +334,7 @@ func TestBuildItems(t *testing.T) {
 			},
 		}),
 	}
-	m := Build(jiraThread(3), members, jiraAccount, tr)
+	m := Build(jiraThread(3), members, nil, jiraAccount, tr)
 	want := []Item{
 		{Kind: ItemMessage, Message: members[0], Sender: "Jana Dvořáková"},
 		{
@@ -369,11 +369,11 @@ func TestBuildIssueFallsBackToNewestMember(t *testing.T) {
 	newer.Issue.Status = "Done"
 	thread := jiraThread(2)
 	thread.Issue = nil
-	m := Build(thread, []api.MessageSummary{newer, older}, jiraAccount, tr)
+	m := Build(thread, []api.MessageSummary{newer, older}, nil, jiraAccount, tr)
 	if m.Issue == nil || m.Issue.Status != "Done" {
 		t.Errorf("Issue = %+v, want the newest member's (status Done)", m.Issue)
 	}
-	if m := Build(mailThread(2), []api.MessageSummary{mail("m1", 0, true), mail("m2", 1, true)}, mailAccount, tr); m.Issue != nil {
+	if m := Build(mailThread(2), []api.MessageSummary{mail("m1", 0, true), mail("m2", 1, true)}, nil, mailAccount, tr); m.Issue != nil {
 		t.Errorf("mail conversation has an issue card: %+v", *m.Issue)
 	}
 }
@@ -383,7 +383,7 @@ func TestBuildTruncated(t *testing.T) {
 	for i := range api.MaxThreadMessages {
 		members = append(members, mail(fmt.Sprintf("m%03d", i), i, i != api.MaxThreadMessages-1))
 	}
-	m := Build(mailThread(612), members, mailAccount, tr)
+	m := Build(mailThread(612), members, nil, mailAccount, tr)
 	if len(m.Items) != 501 || m.Items[0].Kind != ItemTruncated {
 		t.Fatalf("items = %d, first %v; want 501 with the truncated row first", len(m.Items), m.Items[0].Kind)
 	}
@@ -400,7 +400,7 @@ func TestBuildTruncated(t *testing.T) {
 		t.Errorf("Index: m000 %d, m499 %d", m.Index("m000"), m.Index("m499"))
 	}
 
-	one := Build(mailThread(3), members[:2], mailAccount, tr)
+	one := Build(mailThread(3), members[:2], nil, mailAccount, tr)
 	if got, want := one.Items[0].Text, "1 earlier message is not shown"; got != want {
 		t.Errorf("singular text = %q, want %q", got, want)
 	}
@@ -409,7 +409,7 @@ func TestBuildTruncated(t *testing.T) {
 		3: "3 starší zprávy nejsou zobrazeny",
 		7: "7 starších zpráv není zobrazeno",
 	} {
-		m := Build(mailThread(2+n), members[:2], mailAccount, czech{})
+		m := Build(mailThread(2+n), members[:2], nil, mailAccount, czech{})
 		if got := m.Items[0].Text; got != want {
 			t.Errorf("Czech, %d older: %q, want %q", n, got, want)
 		}
@@ -422,7 +422,7 @@ func TestBuildCapsMembers(t *testing.T) {
 	for i := range n {
 		members = append(members, mail(fmt.Sprintf("m%03d", i), i, true))
 	}
-	m := Build(mailThread(n), members, mailAccount, tr)
+	m := Build(mailThread(n), members, nil, mailAccount, tr)
 	if len(m.Items) != api.MaxThreadMessages+1 || m.Earlier != 10 {
 		t.Fatalf("items %d, Earlier %d; want %d and 10", len(m.Items), m.Earlier, api.MaxThreadMessages+1)
 	}
@@ -492,7 +492,7 @@ func TestMine(t *testing.T) {
 				other = issueMsg("c0", -10, true, api.MessageIssue{Item: api.IssueItemComment})
 			}
 			m := Build(api.ThreadSummary{ID: tc.msg.ThreadID, AccountID: tc.account.ID, MessageCount: 2},
-				[]api.MessageSummary{other, tc.msg}, tc.account, tr)
+				[]api.MessageSummary{other, tc.msg}, nil, tc.account, tr)
 			at := m.Index(tc.msg.ID)
 			if at < 0 {
 				t.Fatalf("the member is not shown: %v", shape(m))
@@ -516,7 +516,7 @@ func TestMine(t *testing.T) {
 	}
 
 	// The truncated row is nobody's.
-	cut := Build(mailThread(5), []api.MessageSummary{from("m1", 0, petr), from("m2", 1, petr)}, mailAccount, tr)
+	cut := Build(mailThread(5), []api.MessageSummary{from("m1", 0, petr), from("m2", 1, petr)}, nil, mailAccount, tr)
 	if cut.Items[0].Kind != ItemTruncated || cut.Items[0].Mine || !cut.Items[1].Mine {
 		t.Errorf("truncated conversation: %+v", cut.Items)
 	}
@@ -534,7 +534,7 @@ func TestSenderIsCleaned(t *testing.T) {
 	bare.From = []api.Address{{Address: " petr@acme.example "}}
 	none := mail("m4", 3, true)
 	none.From = nil
-	m := Build(mailThread(4), []api.MessageSummary{hostile, long, bare, none}, mailAccount, tr)
+	m := Build(mailThread(4), []api.MessageSummary{hostile, long, bare, none}, nil, mailAccount, tr)
 	if got := m.Items[0].Sender; got != "Jana Dvořáková" {
 		t.Errorf("hostile sender = %q", got)
 	}
@@ -550,7 +550,7 @@ func TestSenderIsCleaned(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
-	base := Build(mailThread(3), []api.MessageSummary{mail("m1", 0, true), mail("m2", 10, true), mail("m3", 20, true)}, mailAccount, tr)
+	base := Build(mailThread(3), []api.MessageSummary{mail("m1", 0, true), mail("m2", 10, true), mail("m3", 20, true)}, nil, mailAccount, tr)
 	before := shape(base)
 
 	t.Run("newest arrival", func(t *testing.T) {
@@ -599,7 +599,7 @@ func TestMerge(t *testing.T) {
 		}
 	})
 	t.Run("the truncated row stays on top", func(t *testing.T) {
-		cut := Build(mailThread(5), []api.MessageSummary{mail("m2", 10, true), mail("m3", 20, true)}, mailAccount, tr)
+		cut := Build(mailThread(5), []api.MessageSummary{mail("m2", 10, true), mail("m3", 20, true)}, nil, mailAccount, tr)
 		m := Merge(cut, mail("m0", -10, false), mailAccount, tr)
 		if got, want := shape(m), []string{"more", "msg:m0", "msg:m2", "msg:m3"}; !reflect.DeepEqual(got, want) {
 			t.Errorf("items = %v, want %v", got, want)
@@ -612,7 +612,7 @@ func TestMerge(t *testing.T) {
 		j := Build(jiraThread(2), []api.MessageSummary{
 			issueMsg("d", 0, true, api.MessageIssue{Item: api.IssueItemDescription}),
 			issueMsg("c1", 10, false, api.MessageIssue{Item: api.IssueItemComment}),
-		}, jiraAccount, tr)
+		}, nil, jiraAccount, tr)
 		ev := statusEvent("e1", 20, "In Progress", "Done")
 		ev.Issue.Status = "Done"
 		ev.Issue.StatusCategory = api.StatusCategoryDone
@@ -629,7 +629,7 @@ func TestMerge(t *testing.T) {
 		}
 	})
 	t.Run("into an empty model", func(t *testing.T) {
-		empty := Build(mailThread(0), nil, mailAccount, tr)
+		empty := Build(mailThread(0), nil, nil, mailAccount, tr)
 		m := Merge(empty, mail("m1", 0, false), mailAccount, tr)
 		if got := shape(m); !reflect.DeepEqual(got, []string{"msg:m1"}) || m.MarkRead != "m1" || m.ScrollTo != 0 {
 			t.Errorf("items %v, MarkRead %q, ScrollTo %d", got, m.MarkRead, m.ScrollTo)
@@ -641,7 +641,7 @@ func TestMerge(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-	base := Build(mailThread(5), []api.MessageSummary{mail("m1", 0, false), mail("m2", 10, false), mail("m3", 20, false)}, mailAccount, tr)
+	base := Build(mailThread(5), []api.MessageSummary{mail("m1", 0, false), mail("m2", 10, false), mail("m3", 20, false)}, nil, mailAccount, tr)
 	before := shape(base)
 
 	m := Remove(base, "m3")
@@ -674,7 +674,7 @@ func TestRemove(t *testing.T) {
 	j := Build(jiraThread(2), []api.MessageSummary{
 		issueMsg("c1", 0, false, api.MessageIssue{Item: api.IssueItemComment}),
 		statusEvent("e1", 10, "To Do", "Done"),
-	}, jiraAccount, tr)
+	}, nil, jiraAccount, tr)
 	if m := Remove(j, "e1"); m.Issue == nil || m.MarkRead != "c1" || m.ScrollTo != 0 {
 		t.Errorf("event removed: Issue %v, MarkRead %q, ScrollTo %d", m.Issue, m.MarkRead, m.ScrollTo)
 	}

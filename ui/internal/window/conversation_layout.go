@@ -187,12 +187,15 @@ type convRail struct {
 
 // convDisplay is the stack as the pane shows it (convDisplayOrder): the
 // items in order, which of them opened the conversation (root, an index
-// into items; -1 when it is not shown), and whether that card starts
-// folded to its header.
+// into items; -1 when it is not shown) and its id (opening, "" then),
+// whether that card starts folded to its header, and how every card starts
+// (folded, by message id: conversation.DefaultFolds).
 type convDisplay struct {
 	items      []conversation.Item
 	root       int
+	opening    api.MessageID
 	rootFolded bool
+	folded     map[api.MessageID]bool
 }
 
 // convDisplayOrder is the order the pane shows the model's items in, as
@@ -200,17 +203,19 @@ type convDisplay struct {
 // issue's description, or the oldest message of a mail conversation that
 // thread.get did not cut), then the rest newest first, so that the newest
 // is what the pane opens on right under it, and the row of older members
-// left out last. The opening card starts folded while another message card
+// left out last. How the cards start is conversation.DefaultFolds: the
+// opening card folded while another card that is not the user's sent reply
 // follows it (a conversation of one message and its status changes shows
-// that message whole). The model (ui/internal/conversation) keeps the
-// items oldest first, as the macOS client shows them; items is not
-// changed.
+// that message whole), the sent cards folded, the rest open. The model
+// (ui/internal/conversation) keeps the items oldest first, as the macOS
+// client shows them; items is not changed.
 func convDisplayOrder(items []conversation.Item) convDisplay {
 	d := convDisplay{items: make([]conversation.Item, 0, len(items)), root: -1}
 	root := convRoot(items)
 	if root >= 0 {
 		d.items = append(d.items, items[root])
 		d.root = 0
+		d.opening = items[root].Message.ID
 	}
 	var truncated []conversation.Item
 	for i := len(items) - 1; i >= 0; i-- {
@@ -220,12 +225,11 @@ func convDisplayOrder(items []conversation.Item) convDisplay {
 			truncated = append(truncated, items[i])
 		default:
 			d.items = append(d.items, items[i])
-			if items[i].Kind == conversation.ItemMessage {
-				d.rootFolded = root >= 0
-			}
 		}
 	}
 	d.items = append(d.items, truncated...)
+	d.folded = conversation.DefaultFolds(items, d.opening)
+	d.rootFolded = root >= 0 && d.folded[d.opening]
 	return d
 }
 

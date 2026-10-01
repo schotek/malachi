@@ -236,15 +236,22 @@ public struct MessageGetResult: Codable, Sendable, Equatable {
 
 /// api.MessageBodyParams. `remoteContent` overrides the stored preference
 /// for this call only: `block` or `allow`; `knownSenders` is invalidArgument.
+/// `trimQuoted` asks for the body without the quoted history under the new
+/// text (the result's `quotedTrimmed` says whether any was cut); nil, never
+/// false, asks for the whole body, so the key is left out.
 public struct MessageBodyParams: Codable, Sendable, Equatable {
     public var accountId: AccountID
     public var messageId: MessageID
     public var remoteContent: RemoteContentPolicy?
+    public var trimQuoted: Bool?
 
-    public init(accountId: AccountID, messageId: MessageID, remoteContent: RemoteContentPolicy? = nil) {
+    public init(
+        accountId: AccountID, messageId: MessageID, remoteContent: RemoteContentPolicy? = nil, trimQuoted: Bool? = nil
+    ) {
         self.accountId = accountId
         self.messageId = messageId
         self.remoteContent = remoteContent
+        self.trimQuoted = trimQuoted == true ? true : nil
     }
 }
 
@@ -325,12 +332,16 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
     /// A client offers to load images only under `block`.
     public var remoteContent: RemoteContentPolicy
     public var sanitizerVersion: String
+    /// Asked with `trimQuoted`: the quoted history was cut, and everything
+    /// above describes the body without it. Absent (an older daemon, or
+    /// nothing to cut) is false (`isQuotedTrimmed`).
+    public var quotedTrimmed: Bool?
 
     public init(
         messageId: MessageID, bodyState: BodyState, hasHtml: Bool, html: String? = nil, htmlWithheld: Bool? = nil,
         text: String, blocked: BlockedContent = BlockedContent(), links: [Link] = [],
         inlineParts: [String: String]? = nil, remotePictures: Int? = nil, remoteContent: RemoteContentPolicy,
-        sanitizerVersion: String
+        sanitizerVersion: String, quotedTrimmed: Bool? = nil
     ) {
         self.messageId = messageId
         self.bodyState = bodyState
@@ -344,7 +355,11 @@ public struct MessageBodyResult: Codable, Sendable, Equatable {
         self.remotePictures = remotePictures
         self.remoteContent = remoteContent
         self.sanitizerVersion = sanitizerVersion
+        self.quotedTrimmed = quotedTrimmed
     }
+
+    /// `quotedTrimmed` as Go reads it: absent is false.
+    public var isQuotedTrimmed: Bool { quotedTrimmed == true }
 
     /// `remotePictures` as Go reads it: absent is 0.
     public var remotePictureCount: Int { max(remotePictures ?? 0, 0) }

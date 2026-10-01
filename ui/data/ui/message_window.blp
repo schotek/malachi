@@ -385,6 +385,32 @@ Adw.Window message_window {
             };
           }
         }
+
+        // The "•••" under the body (window/quoted.go): shows or hides the
+        // quoted history the daemon cut from it; hidden while there is
+        // nothing to offer. Under the body area, which scrolls on its own (a
+        // web view), so it stays in sight at the bottom of the message. Its
+        // face, tooltip and accessible name come from Go.
+        Adw.Clamp quoted_row {
+          maximum-size: 900;
+          tightening-threshold: 900;
+          visible: false;
+
+          child: Box {
+            margin-start: 24;
+            margin-end: 24;
+            margin-top: 4;
+            margin-bottom: 8;
+
+            Button quoted_button {
+              halign: start;
+
+              styles [
+                "quoted-text",
+              ]
+            }
+          };
+        }
       };
     };
   };

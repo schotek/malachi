@@ -17,9 +17,28 @@ import Foundation
 @MainActor
 public final class LoadedMessage {
     public var msg: Message?
+    /// The body on display: without the quoted history (message.body with
+    /// `trimQuoted`), or whole while `quotedShown`.
     public var body: MessageBodyResult?
     /// The message.body failure.
     public var err: (any Error)?
+
+    /// The quoted history is shown: `body` is the whole body, asked for
+    /// without `trimQuoted` (the view's Show Quoted Text, `QuotedReveal`).
+    /// Off by default: a body comes trimmed.
+    public private(set) var quotedShown = false
+    /// The other variant of the body, kept for switching back without
+    /// asking the daemon again; dropped when `body` is replaced under
+    /// another remote-content policy (the remote images, the pictures),
+    /// which it would not have.
+    public var otherBody: MessageBodyResult?
+    /// A message.body for the other variant is in flight (a switch while
+    /// the request for the variant shown before ran).
+    public var fetchingOther = false
+    /// The remote-content policy the variant switched to is asked with
+    /// when it has to be fetched (`picturesPolicy` of the body shown before
+    /// the switch: images the user loaded stay loaded).
+    public var switchPolicy: RemoteContentPolicy?
 
     /// Insertion order in `LoadedCache`.
     public var seq: UInt64
@@ -71,14 +90,50 @@ public final class LoadedMessage {
     /// Nothing is left to fetch.
     public var complete: Bool { msg != nil && body != nil }
 
+    /// Shows the body with its quoted history (`on`) or without: the two
+    /// variants trade places (`body`, `otherBody`, and their requests in
+    /// flight), and a body error belongs to the variant left. True when
+    /// anything changed; `body` is then nil when the variant has yet to be
+    /// fetched.
+    @discardableResult
+    public func showQuoted(_ on: Bool) -> Bool {
+        guard on != quotedShown else { return false }
+        if otherBody == nil {
+            switchPolicy = picturesPolicy(self)
+        }
+        quotedShown = on
+        swap(&body, &otherBody)
+        swap(&fetching, &fetchingOther)
+        err = nil
+        return true
+    }
+
+    /// Stores a message.body answer asked for the variant `quoted` (with
+    /// the quoted history or not): as `body` when that variant is still
+    /// shown, else as `otherBody`. `replacing` (an answer under another
+    /// remote-content policy) drops the other variant shown before.
+    public func store(_ res: MessageBodyResult, quoted: Bool, replacing: Bool = false) {
+        if quoted == quotedShown {
+            body = res
+            err = nil
+            if replacing {
+                otherBody = nil
+            }
+        } else {
+            otherBody = res
+        }
+    }
+
     /// The body half has an answer (content or error).
     public var bodySettled: Bool { body != nil || err != nil }
 
     /// What the entry costs the cache: its body (an HTML body carries its
     /// inlined pictures).
     public var size: Int {
-        guard let body else { return 0 }
-        return (body.html?.utf8.count ?? 0) + body.text.utf8.count
+        [body, otherBody].reduce(0) { total, b in
+            guard let b else { return total }
+            return total + (b.html?.utf8.count ?? 0) + b.text.utf8.count
+        }
     }
 }
 
@@ -173,6 +228,34 @@ public func subjectText(_ subject: String) -> String {
         return s
     }
     return L10n.T("(No subject)")
+}
+
+/// The button under a body that shows or hides the quoted history the
+/// daemon cut from it (`MessageBodyParams.trimQuoted`).
+public enum QuotedTextOffer: Sendable, Equatable {
+    /// The body is trimmed: Show Quoted Text.
+    case show
+    /// The whole body shows: Hide Quoted Text.
+    case hide
+
+    /// The button's tooltip and accessibility label
+    /// (conversation.QuotedTextLabel).
+    public var label: String {
+        Conversation.quotedTextLabel(shown: self == .hide)
+    }
+}
+
+/// The button for what `lm` shows (nil: none): Hide while the whole body
+/// shows (or is on its way, or failed: the way back to the trimmed one),
+/// Show when the daemon cut the quoted history from the body on display.
+@MainActor
+public func quotedTextOffer(_ lm: LoadedMessage?) -> QuotedTextOffer? {
+    guard let lm else { return nil }
+    if lm.quotedShown {
+        return .hide
+    }
+    guard lm.err == nil, let b = lm.body, b.isQuotedTrimmed else { return nil }
+    return .show
 }
 
 /// What the body label shows for a message.body result (message_view.go

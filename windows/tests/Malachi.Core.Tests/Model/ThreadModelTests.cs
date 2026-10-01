@@ -181,6 +181,48 @@ public sealed class ThreadModelTests
         Assert.Equal("after", m.Rows[0].Message.Snippet);
     }
 
+    /// <summary>
+    /// One message and the user's reply in Sent are a conversation row
+    /// (<see cref="Conversation.IsConversationRow"/>): its members are not
+    /// complete before thread.get brought the reply, which stays out of the
+    /// members.
+    /// </summary>
+    [Fact]
+    public void OneMemberAndARepliesRow()
+    {
+        var b1 = Member("b1", "t_b", 1, "carol");
+        var listed = Thr("t_b", 1, 0, b1) with { SentCount = 1 };
+        var m = GroupedModel(listed);
+        Assert.Equal([new ListKey("t_b")], Keys(m));
+        Assert.True(m.Rows[0].Thread);
+        Assert.False(m.Members["t_b"].Complete);
+        Assert.Null(m.RowIds(m.Rows[0])); // the members are asked for first
+
+        var r1 = Member("r1", "t_b", 2, "me") with { FolderId = "f_sent" };
+        m.SetMembers("t_b", listed, [b1], [r1]);
+        Assert.Equal(["b1"], m.RowIds(m.Rows[0])!.Select(id => id.Value).ToArray());
+        Assert.Null(m.Message("r1"));
+        Assert.Equal("f_sent", m.SentMessage("r1")?.FolderId.Value);
+        Assert.False(m.MemberOf.ContainsKey("r1"));
+
+        // A reload with the same shape keeps the reply; another count drops
+        // what was fetched.
+        m.SetThreads([listed], new PageInfo { Total = 1 });
+        Assert.Equal(["r1"], m.Members["t_b"].Sent.Select(s => s.Id.Value).ToArray());
+        var more = listed with { SentCount = 2 };
+        Assert.False(MailModel.SameShape(listed, more));
+        m.SetThreads([more], new PageInfo { Total = 1 });
+        Assert.False(m.Members["t_b"].Complete);
+        Assert.Empty(m.Members["t_b"].Sent);
+
+        // A removal and its undo keep the replies.
+        m.SetMembers("t_b", more, [b1], [r1]);
+        var removal = Assert.NotNull(m.RemoveMessages(["b1"]));
+        Assert.Empty(m.Threads); // the folder lacks its member: the row goes
+        m.RestoreRemoval(removal);
+        Assert.Equal(["r1"], m.Members["t_b"].Sent.Select(s => s.Id.Value).ToArray());
+    }
+
     [Fact]
     public void SetMembersEmptyDropsThread()
     {

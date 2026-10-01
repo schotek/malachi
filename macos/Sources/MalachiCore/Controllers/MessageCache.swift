@@ -130,10 +130,17 @@ public final class MessageCache {
     /// entry calls `then` at once (message_view.go `fetchMessage`). A failed
     /// message.get is only logged (the summary headers stay) and retried the
     /// next time; a failed body sets `err` and is retried the same way.
-    public func fetch(_ s: MessageSummary, _ then: @escaping Waiter) {
+    ///
+    /// `quoted` is the variant of the body the view shows: with its quoted
+    /// history (true) or without (false, message.body with `trimQuoted`);
+    /// nil keeps the variant the entry shows. A switch shows the variant
+    /// held already (`LoadedMessage.showQuoted`), else fetches it, and
+    /// every view showing the message hears about it (`onLoaded`).
+    public func fetch(_ s: MessageSummary, quoted: Bool? = nil, _ then: @escaping Waiter) {
         let id = s.id
         let lm = cache.loadedFor(id)
         lm.accountId = s.accountId
+        switchQuoted(id, lm, quoted)
         if lm.complete {
             then(lm)
             return
@@ -153,9 +160,10 @@ public final class MessageCache {
     /// retried the same way) is there already and nothing is in flight. A
     /// card of the conversation view whose message has no attachments needs
     /// nothing message.get adds to its summary.
-    public func fetchBody(_ s: MessageSummary, _ then: @escaping Waiter) {
+    public func fetchBody(_ s: MessageSummary, quoted: Bool? = nil, _ then: @escaping Waiter) {
         let lm = cache.loadedFor(s.id)
         lm.accountId = s.accountId
+        switchQuoted(s.id, lm, quoted)
         if lm.body != nil, !lm.getting, !lm.fetching {
             then(lm)
             return
@@ -164,6 +172,26 @@ public final class MessageCache {
         if lm.body == nil, !lm.fetching {
             startBody(s, lm)
         }
+    }
+
+    /// Shows the variant `quoted` of the body of `lm` (nil: as it is); a
+    /// variant held already is shown at once wherever the message is on
+    /// display, one to fetch is the caller's next step.
+    private func switchQuoted(_ id: MessageID, _ lm: LoadedMessage, _ quoted: Bool?) {
+        guard let quoted, lm.showQuoted(quoted) else { return }
+        // The entry grew by the variant it keeps aside.
+        cache.prune()
+        if lm.body != nil {
+            onLoaded?(id, lm)
+        }
+    }
+
+    /// The message.body parameters for the variant `quoted` of the body of
+    /// `s`: without `trimQuoted` only for the whole body.
+    private func bodyParams(
+        _ s: MessageSummary, quoted: Bool, remoteContent: RemoteContentPolicy? = nil
+    ) -> MessageBodyParams {
+        MessageBodyParams(accountId: s.accountId, messageId: s.id, remoteContent: remoteContent, trimQuoted: !quoted)
     }
 
     /// message.get for `s` into `lm` (the first half of `fetch`).
@@ -191,28 +219,39 @@ public final class MessageCache {
         }
     }
 
-    /// message.body for `s` into `lm` (the second half of `fetch`).
+    /// message.body for `s` into `lm` (the second half of `fetch`), for
+    /// the variant the entry shows. An answer that arrives after the view
+    /// switched to the other variant is kept aside for switching back
+    /// (`LoadedMessage.store`); its failure is only logged.
     private func startBody(_ s: MessageSummary, _ lm: LoadedMessage) {
         let id = s.id
         let client = client
+        let quoted = lm.quotedShown
+        let params = bodyParams(s, quoted: quoted, remoteContent: lm.switchPolicy)
         lm.fetching = true
         lm.err = nil // a retry after a failure
         Task { [weak self] in
             let outcome: Result<MessageBodyResult, any Error>
             do {
-                outcome = .success(try await client.call(
-                    API.MessageBody.self, MessageBodyParams(accountId: s.accountId, messageId: id)))
+                outcome = .success(try await client.call(API.MessageBody.self, params))
             } catch {
                 outcome = .failure(error)
             }
             guard let self else { return }
-            lm.fetching = false
+            let current = quoted == lm.quotedShown
+            if current {
+                lm.fetching = false
+            } else {
+                lm.fetchingOther = false
+            }
             switch outcome {
             case .failure(let err):
                 self.log.warning("message.body: \(String(describing: err), privacy: .public)")
-                lm.err = err
+                if current {
+                    lm.err = err
+                }
             case .success(let res):
-                lm.body = res
+                lm.store(res, quoted: quoted)
             }
             self.settle(id, lm)
         }
@@ -292,12 +331,12 @@ public final class MessageCache {
     ) {
         let id = s.id
         let client = client
+        let quoted = lm.quotedShown
+        let params = bodyParams(s, quoted: quoted, remoteContent: .allow)
         Task { [weak self] in
             let outcome: Result<MessageBodyResult, any Error>
             do {
-                outcome = .success(try await client.call(
-                    API.MessageBody.self,
-                    MessageBodyParams(accountId: s.accountId, messageId: id, remoteContent: .allow)))
+                outcome = .success(try await client.call(API.MessageBody.self, params))
             } catch {
                 outcome = .failure(error)
             }
@@ -310,8 +349,7 @@ public final class MessageCache {
                 then(.failure(err))
             case .success(let res):
                 lm.loadingImages = false
-                lm.body = res
-                lm.err = nil
+                lm.store(res, quoted: quoted, replacing: true)
                 if self.cache[id] == nil {
                     self.cache.store(id, lm)
                 }
@@ -363,12 +401,14 @@ public final class MessageCache {
         let client = client
         Task { [weak self] in
             let outcome: Result<MessageBodyResult, any Error>
+            var quoted = lm.quotedShown
             do {
                 guard let self else { return }
                 try await self.download(accountID: s.accountId, messageID: id)
-                // Back on the main actor after the download: the policy of
-                // the body on display now.
-                let params = MessageBodyParams(accountId: s.accountId, messageId: id, remoteContent: picturesPolicy(lm))
+                // Back on the main actor after the download: the policy and
+                // the variant of the body on display now.
+                quoted = lm.quotedShown
+                let params = self.bodyParams(s, quoted: quoted, remoteContent: picturesPolicy(lm))
                 outcome = .success(try await client.call(API.MessageBody.self, params))
             } catch {
                 outcome = .failure(error)
@@ -382,8 +422,7 @@ public final class MessageCache {
                 self.refreshRemoteBar(id, lm)
                 then(.failure(err))
             case .success(let res):
-                lm.body = res
-                lm.err = nil
+                lm.store(res, quoted: quoted, replacing: true)
                 if self.cache[id] == nil {
                     self.cache.store(id, lm)
                 }
@@ -425,7 +464,9 @@ public final class MessageCache {
     /// is only logged and the body on display stays.
     private func reloadPictures(_ accountID: AccountID, _ id: MessageID, _ lm: LoadedMessage) {
         let shown = lm.body
-        let params = MessageBodyParams(accountId: accountID, messageId: id, remoteContent: picturesPolicy(lm))
+        let quoted = lm.quotedShown
+        let params = MessageBodyParams(
+            accountId: accountID, messageId: id, remoteContent: picturesPolicy(lm), trimQuoted: !quoted)
         let client = client
         Task { [weak self] in
             let outcome: Result<MessageBodyResult, any Error>
@@ -439,9 +480,8 @@ public final class MessageCache {
             case .failure(let err):
                 self.log.warning("message.body (pictures again): \(String(describing: err), privacy: .public)")
             case .success(let res):
-                guard lm.body == shown, !lm.loadingPictures else { return }
-                lm.body = res
-                lm.err = nil
+                guard lm.body == shown, lm.quotedShown == quoted, !lm.loadingPictures else { return }
+                lm.store(res, quoted: quoted, replacing: true)
                 if self.cache[id] == nil {
                     self.cache.store(id, lm)
                 }
@@ -626,6 +666,9 @@ public final class MessageCache {
                 // Pictures that go missing from now on may ask for the body
                 // once more (`recheckPictures`).
                 lm.picturesRechecked = false
+                if let b = lm.otherBody, b.bodyState != .fetched {
+                    lm.otherBody = nil // fetched again when switched to
+                }
                 if let b = lm.body, b.bodyState != .fetched, !lm.fetching {
                     lm.body = nil
                     lm.err = nil

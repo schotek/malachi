@@ -139,7 +139,34 @@ func (s *threadService) Get(ctx context.Context, p api.ThreadGetParams) (*api.Th
 	if err := s.b.decorateThreads(ctx, a, []store.Message{row.Latest}, threads); err != nil {
 		return nil, err
 	}
-	return &api.ThreadGetResult{Thread: threads[0], Messages: all}, nil
+	res := &api.ThreadGetResult{Thread: threads[0], Messages: all}
+	if p.WithSent && folderID != "" {
+		if res.Sent, err = s.sent(ctx, a, string(p.ThreadID), folderID); err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+// sent is the thread's members in the account's sent folders that the
+// folder lacks (store.ThreadSentMessages), decorated as members are; nil
+// when there are none.
+func (s *threadService) sent(ctx context.Context, a store.Account, threadID, folderID string) ([]api.MessageSummary, error) {
+	rows, err := s.b.store.ThreadSentMessages(ctx, a.ID, threadID, folderID, api.MaxThreadMessages)
+	if err != nil {
+		return nil, api.NewError(api.CodeStorageError, "%v", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	out := make([]api.MessageSummary, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, toAPISummary(m))
+	}
+	if err := s.b.decorateRows(ctx, a, rows, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // toAPIThread maps a store row; the subject loses its reply markers and
@@ -166,5 +193,6 @@ func toAPIThread(r store.ThreadRow) api.ThreadSummary {
 		Flags:          nonNilFlags(r.Flags),
 		HasAttachments: r.HasAttachments,
 		FolderIDs:      folders,
+		SentCount:      r.SentCount,
 	}
 }

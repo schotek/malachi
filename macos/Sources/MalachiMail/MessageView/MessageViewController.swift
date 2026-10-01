@@ -91,6 +91,14 @@ final class MessageViewController: NSViewController {
     private let picturesBar = RemoteBarView.pictures()
     private let textScroll = NSScrollView()
     private let textClamp: ClampView
+    /// The "•••" under the body that shows or hides its quoted history
+    /// (`quotedTextOffer`); not for an attached message, whose body
+    /// message.embedded renders whole.
+    private let quotedButton = QuotedTextButton(insets: NSEdgeInsets(
+        top: 4, left: MessageBodyTextView.horizontalInset, bottom: 8, right: MessageBodyTextView.horizontalInset))
+    /// The messages whose quoted history the user revealed here; the pane
+    /// forgets them when it shows another message.
+    private var quoted = QuotedReveal()
     private let loadingPage = NSView()
     private let loadingSpinner = Spinner(size: 32)
     private let bodyContainer = NSView()
@@ -163,6 +171,14 @@ final class MessageViewController: NSViewController {
         messagePage.spacing = 0
         messagePage.addArrangedSubview(headerClamp)
         messagePage.addArrangedSubview(bodyContainer)
+        // Under the body area, which scrolls on its own (a web view): the
+        // button stays in sight at the bottom of the message.
+        let quotedClamp = ClampView(maximum: 900, tight: 900, child: quotedButton)
+        quotedClamp.setContentHuggingPriority(.required, for: .vertical)
+        quotedButton.onToggle = { [weak self] in self?.toggleQuoted() }
+        if mode != .embedded {
+            messagePage.addArrangedSubview(quotedClamp)
+        }
 
         pages.translatesAutoresizingMaskIntoConstraints = false
         pages.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -269,6 +285,7 @@ final class MessageViewController: NSViewController {
             scrollToTopPending = true
         }
         current = s
+        quoted.show(s.id.rawValue)
         setPage(message: true)
         if mode == .pane {
             draftBanner.reveal(delegate?.isDraft(s) == true)
@@ -279,13 +296,14 @@ final class MessageViewController: NSViewController {
             render(s, nil)
             return
         }
-        if let lm = cache.loaded(s.id), lm.complete {
+        let reveal = quoted.isRevealed(s.id)
+        if let lm = cache.loaded(s.id), lm.complete, lm.quotedShown == reveal {
             render(s, lm)
             return
         }
         // The fetch first: it clears a stale body error before its retry,
         // so the render below shows the wait rather than the old error.
-        cache.fetch(s) { [weak self] lm in
+        cache.fetch(s, quoted: reveal) { [weak self] lm in
             guard let self, self.mode != .embedded, self.current?.id == s.id else {
                 return // the pane moved on
             }
@@ -299,6 +317,7 @@ final class MessageViewController: NSViewController {
         guard mode == .pane else { return }
         _ = view
         current = nil
+        quoted.clear()
         shownLoaded = nil
         links = []
         renderedBody = nil
@@ -344,7 +363,22 @@ final class MessageViewController: NSViewController {
         if mode != .embedded {
             renderOutboxBanner(lm?.msg)
         }
+        quotedButton.show(mode == .embedded || issue?.eventBody != nil ? nil : quotedTextOffer(lm))
         onRender?(s, lm)
+    }
+
+    /// The "•••" under the body: its quoted history shows, or goes again
+    /// (the variant held, or fetched); the choice holds until the view
+    /// shows another message.
+    private func toggleQuoted() {
+        guard mode != .embedded, let s = current, let offer = quotedButton.offer else { return }
+        let on = offer == .show
+        quoted.set(s.id, on)
+        cache.fetch(s, quoted: on) { [weak self] lm in
+            guard let self, self.current?.id == s.id else { return }
+            self.render(s, lm)
+        }
+        render(s, cache.loaded(s.id))
     }
 
     /// Redraws the remote-image bar and the pictures bar for `lm` and

@@ -20,6 +20,14 @@
 // the single-message pane's own code (MessageChips over an AddressHeader of
 // the card's), the bars the reader's texts (RemoteBar): their buttons act on
 // this card's message exactly as they do in the pane.
+//
+// Every card folds (setFold, setFolded; fold.go): an arrow at the start of
+// its header, and while folded only the header and a preview of its text
+// (the summary's snippet) show; a folded card holds no web view and asks
+// for no body. How it starts is the pane's (ConversationFolds): the card
+// that opened the conversation and the user's replies in Sent folded, the
+// rest open. The "•••" under the body shows or hides the quoted history the
+// daemon cut (renderQuoted; macOS ConversationCardView.renderQuoted).
 
 using System;
 using System.Collections.Generic;
@@ -51,9 +59,7 @@ internal sealed partial class ConversationCard : UserControl
     private bool hovering;
     private bool focused;
 
-    // The fold of the card that opened the conversation (SetFold), and the
-    // parts of the top the fold hid, shown again when it opens.
-    private bool foldable;
+    // The parts of the top the fold hid, shown again when it opens.
     private readonly List<UIElement> foldHidden = [];
 
     // The body: the web view while the card is live, the height the HTML body
@@ -125,7 +131,10 @@ internal sealed partial class ConversationCard : UserControl
     /// <summary>The body is HTML (it wants a web view while near).</summary>
     public bool IsHtml { get; private set; }
 
-    /// <summary>Folded to its header (no body, no view).</summary>
+    /// <summary>The card folds (<see cref="Core.Model.Conversation.Foldable"/>): its header has the fold arrow.</summary>
+    public bool Foldable { get; private set; }
+
+    /// <summary>Folded to its header (no body, no view); only ever set on a card that folds.</summary>
     public bool Folded { get; private set; }
 
     /// <summary>The recipients are open (the card needs message.get).</summary>
@@ -155,21 +164,21 @@ internal sealed partial class ConversationCard : UserControl
         // The card is read by its sender and date, as the list's row by its own.
         AutomationProperties.SetName(this, item.Sender);
         RefreshActions();
-        if (foldable)
+        if (Foldable)
         {
             ShowFoldState(); // the snippet may have changed
         }
     }
 
     /// <summary>
-    /// setFold: makes the card the one that opened the conversation
-    /// (<paramref name="on"/>), which folds to its header and a preview of its
-    /// text (ConversationLayout.DisplayOrder), and folds or opens it; off: an
-    /// ordinary card, open.
+    /// setFold: makes the card one that folds (<paramref name="on"/>,
+    /// <see cref="Core.Model.Conversation.Foldable"/>) to its header and a
+    /// preview of its text, and folds or opens it; off: a card without the
+    /// arrow, open.
     /// </summary>
     public void SetFold(bool on, bool folded)
     {
-        foldable = on;
+        Foldable = on;
         FoldButton.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         SetFolded(on && folded);
     }
@@ -261,6 +270,7 @@ internal sealed partial class ConversationCard : UserControl
         RenderBody(lm);
         RenderBars(lm);
         RenderChips(lm);
+        RenderQuoted(lm);
     }
 
     /// <summary>renderBars: redraws the remote-image and pictures bars of an HTML body and leaves the body alone; the bars are made when first shown.</summary>
@@ -372,6 +382,28 @@ internal sealed partial class ConversationCard : UserControl
         Disclosure.Visibility = Folded ? Visibility.Collapsed : Visibility.Visible;
         Bars.Visibility = Folded ? Visibility.Collapsed : Visibility.Visible;
         Body.Visibility = Folded ? Visibility.Collapsed : Visibility.Visible;
+        QuotedButton.Visibility = !Folded && QuotedButton.Offer is not null ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // renderQuoted: the "•••" under the body for what lm holds: Show Quoted
+    // Text when the daemon cut the quoted history, Hide Quoted Text while it
+    // shows. An entry let go (null) keeps the button as it was.
+    private void RenderQuoted(LoadedMessage? lm)
+    {
+        if (lm is null)
+        {
+            return;
+        }
+        QuotedButton.Show(LoadedMessageText.QuotedTextOfferFor(lm));
+    }
+
+    // The "•••": the pane switches the body to the other variant.
+    private void OnQuotedClick(object sender, RoutedEventArgs e)
+    {
+        if (QuotedButton.Offer is { } offer)
+        {
+            pane.SetCardQuoted(this, offer == QuotedTextOffer.Show);
+        }
     }
 
     private void OnFoldClick(object sender, RoutedEventArgs e) => pane.SetCardFolded(this, !Folded);

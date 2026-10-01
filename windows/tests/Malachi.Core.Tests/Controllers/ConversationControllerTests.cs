@@ -11,8 +11,10 @@
 // flag changes and removals reach the model; bodies are fetched per card,
 // message.get only when needed and not again once it failed; a
 // conversation shown from the listing, after thread.get failed, is built
-// anew when its members arrive. Swift sleeps through the mark-as-read
-// delay; here the clock is moved.
+// anew when its members arrive; the user's replies in Sent are sent cards
+// and a reply that lands in Sent joins the conversation; Show Quoted Text
+// holds for the conversation. Swift sleeps through the mark-as-read delay;
+// here the clock is moved.
 
 using System;
 using System.Collections.Generic;
@@ -31,6 +33,7 @@ public sealed class ConversationControllerTests
 {
     private static readonly AccountId Account = "a";
     private static readonly FolderKey Inbox = new("a", "in");
+    private static readonly FolderKey SentBox = new("a", "sent");
     private static readonly TimeSpan Delay = TimeSpan.FromSeconds(1);
 
     // 2026-09-01T10:00:00Z.
@@ -50,7 +53,7 @@ public sealed class ConversationControllerTests
         Assert.Equal("t1", c.Conversation.Thread?.Value);
         Assert.Equal([Change.Loading, Change.Opened], c.Changes);
         var asked = Assert.Single(h.Fixture.ThreadGetRequests);
-        Assert.Equal(("a", "t1", "in"), (asked.AccountId.Value, asked.ThreadId.Value, asked.FolderId?.Value));
+        Assert.Equal(("a", "t1", "in", (bool?)true), (asked.AccountId.Value, asked.ThreadId.Value, asked.FolderId?.Value, asked.WithSent));
         Assert.Equal(["a1", "a2", "a3"], Shape(c.Conversation.Model));
         Assert.Equal("a3", c.Conversation.Model?.MarkRead?.Value);
         Assert.Equal(2, c.Conversation.Model?.ScrollTo);
@@ -384,6 +387,110 @@ public sealed class ConversationControllerTests
         Assert.Empty(c.Conversation.Loaded);
     }
 
+    // The user's replies in Sent stand among the members by date as sent
+    // cards: never marked read, never among what the conversation's actions
+    // take; one message and the user's reply to it are a conversation row.
+    [Fact]
+    public async Task RepliesInSentAreSentCards()
+    {
+        await using var c = await Conv.StartAsync(sent: [Reply("r1", 2, "t1"), Reply("r2", 6, "t2")]);
+        var h = c.H;
+        // A message and the user's reply are a conversation row.
+        Assert.Equal([new ListKey(Thread: "t3"), new ListKey(Thread: "t2"), new ListKey(Thread: "t1")], h.List.Rows.Select(r => r.Key));
+        Assert.True(h.List.Rows[1].ShowsConversation);
+        Assert.Equal(1, h.List.Rows[1].Summary?.SentCount);
+
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+        Assert.Equal(["a1", "a2", "sent:r1", "a3"], SentShape(c.Conversation.Model));
+        Assert.Equal("a3", c.Conversation.Model?.MarkRead?.Value);
+        var model = await h.On(() => h.Mailbox.Model);
+        Assert.Equal(["a1", "a2", "a3"], Ids(await h.On(() => model.RowIds(h.List.Rows[2])!))); // the reply is no member
+        Assert.Equal((FolderId?)SentBox.Folder, await h.On(() => c.Conversation.Member("r1")?.FolderId)); // its card has a body to ask for
+
+        await c.SelectAsync(new ListKey(Thread: "t2"));
+        Assert.Equal(["b1", "sent:r2"], SentShape(c.Conversation.Model));
+        Assert.Equal(["b1"], Ids(await h.On(() => model.RowIds(h.List.Rows[1])!)));
+        Assert.Equal("r2", await h.On(() => model.SentMessage("r2")?.Id.Value)); // the card's reply and forward find it
+        Assert.All(h.Fixture.ThreadGetRequests, q => Assert.True(q.WithSent));
+    }
+
+    // A reply that lands in Sent asks for the conversation again: a single
+    // message the user answered becomes a conversation row, the selection
+    // moves to it, and the conversation shows the reply.
+    [Fact]
+    public async Task ReplyArrivingInSentJoinsTheConversation()
+    {
+        await using var c = await Conv.StartAsync();
+        var h = c.H;
+        await c.SelectAsync(new ListKey("t2", "b1"));
+        Assert.Equal([false], c.Shown);
+
+        var r = Reply("r9", 7, "t2");
+        h.Fixture.AddMessage(r);
+        await h.On(() => h.Mailbox.HandleNewMessage(InSent(r)));
+        await h.IdleAsync();
+        Assert.Equal(new ListKey(Thread: "t2"), await h.On(() => h.List.SelectedKey));
+        Assert.Equal(["b1", "sent:r9"], SentShape(c.Conversation.Model));
+
+        // Into a conversation on show.
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+        var r2 = Reply("r10", 8, "t1");
+        h.Fixture.AddMessage(r2);
+        await h.On(() => h.Mailbox.HandleNewMessage(InSent(r2)));
+        await h.IdleAsync();
+        Assert.Equal(["a1", "a2", "a3", "sent:r10"], SentShape(c.Conversation.Model));
+        Assert.Equal(Change.Updated, c.Changes[^1]);
+
+        // Gone from Sent: the next answer drops the card.
+        h.Fixture.SetMessages([], Account, SentBox.Folder);
+        await h.On(() => h.List.RefetchMembers("t1"));
+        await h.IdleAsync();
+        Assert.Equal(["a1", "a2", "a3"], SentShape(c.Conversation.Model));
+    }
+
+    // Show Quoted Text on a card: the whole body is asked for and the choice
+    // holds through the pane's asking again (every scroll) until another
+    // conversation is shown; Hide shows the trimmed body held.
+    [Fact]
+    public async Task QuotedTextHoldsForTheConversation()
+    {
+        await using var c = await Conv.StartAsync();
+        var h = c.H;
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+        await h.On(() => c.Conversation.NeedsBody("a1"));
+        await h.IdleAsync();
+        Assert.NotNull(c.Conversation.Loaded["a1"].Body);
+        Assert.Equal(new bool?[] { true }, h.Fixture.BodyRequests.Select(q => q.TrimQuoted));
+        Assert.False(c.Conversation.QuotedRevealed("a1"));
+
+        await h.On(() => c.Conversation.SetQuoted("a1", true));
+        await h.IdleAsync();
+        Assert.True(c.Conversation.Loaded["a1"].QuotedShown && c.Conversation.Loaded["a1"].Body is not null);
+        Assert.True(c.Conversation.QuotedRevealed("a1"));
+        await h.On(() => c.Conversation.NeedsBody("a1"));
+        await h.IdleAsync();
+        Assert.Equal(new bool?[] { true, null }, h.Fixture.BodyRequests.Select(q => q.TrimQuoted)); // held: not asked again
+
+        await h.On(() =>
+        {
+            c.Conversation.SetQuoted("a1", false);
+            Assert.True(!c.Conversation.Loaded["a1"].QuotedShown && c.Conversation.Loaded["a1"].Body is not null);
+            c.Conversation.SetQuoted("a1", true);
+            c.Conversation.SetQuoted("zz", true);
+            Assert.False(c.Conversation.QuotedRevealed("zz")); // not a member
+        });
+        await h.IdleAsync();
+        Assert.Equal(2, h.Fixture.BodyRequests.Count); // both variants held
+
+        await c.SelectAsync(new ListKey(Thread: "t3"));
+        await c.SelectAsync(new ListKey(Thread: "t1"));
+        Assert.False(c.Conversation.QuotedRevealed("a1")); // another conversation forgot it
+        await h.On(() => c.Conversation.NeedsBody("a1"));
+        await h.IdleAsync();
+        Assert.False(c.Conversation.Loaded["a1"].QuotedShown);
+        Assert.Equal(2, h.Fixture.BodyRequests.Count); // the trimmed body was held by the cache
+    }
+
     // A failed message.get is not asked again on every scroll; the summary
     // serves the card.
     [Fact]
@@ -454,6 +561,15 @@ public sealed class ConversationControllerTests
 
     private static NewMessageNotification New(MessageSummary s) => new() { AccountId = Account, FolderId = Inbox.Folder, Message = s };
 
+    // The user's reply in Sent, in conversation thread.
+    private static MessageSummary Reply(string id, int hours, string thread) => Msg(id, hours, thread, "a", Flag.Seen) with { FolderId = SentBox.Folder };
+
+    private static NewMessageNotification InSent(MessageSummary s) => new() { AccountId = Account, FolderId = SentBox.Folder, Message = s };
+
+    // Shape with the sent cards marked "sent:".
+    private static List<string> SentShape(ConversationModel? m) =>
+        [.. (m?.Items ?? []).Select(it => it.Kind == ConversationItemKind.Truncated ? "more" : (it.Sent ? "sent:" : "") + (it.Message?.Id.Value ?? ""))];
+
     private static List<string> Shape(ConversationModel? m) =>
         [.. (m?.Items ?? []).Select(it => it.Kind == ConversationItemKind.Truncated ? "more" : it.Message?.Id.Value ?? "")];
 
@@ -482,15 +598,22 @@ public sealed class ConversationControllerTests
 
         public List<MessageId> Loads { get; } = [];
 
-        public static async Task<Conv> StartAsync(MessageSummary[]? messages = null, bool grouped = true)
+        public static async Task<Conv> StartAsync(MessageSummary[]? messages = null, bool grouped = true, MessageSummary[]? sent = null)
         {
             Conv? c = null;
             var h = await MailboxControllerHarness.StartAsync(
                 f =>
                 {
                     f.SetAccounts([TestAccount("a", email: "a@example.invalid")]);
-                    f.SetFolders([TestFolder("in", "INBOX", FolderRole.Inbox) with { AccountId = Account }, TestFolder("trash", "Trash", FolderRole.Trash) with { AccountId = Account }], Account);
+                    f.SetFolders(
+                    [
+                        TestFolder("in", "INBOX", FolderRole.Inbox) with { AccountId = Account },
+                        TestFolder("sent", "Sent", FolderRole.Sent) with { AccountId = Account },
+                        TestFolder("trash", "Trash", FolderRole.Trash) with { AccountId = Account },
+                    ],
+                    Account);
                     f.SetMessages(messages ?? Messages(), Account, Inbox.Folder);
+                    f.SetMessages(sent ?? [], Account, SentBox.Folder);
                 },
                 withList: true,
                 wire: h =>

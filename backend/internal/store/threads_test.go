@@ -763,3 +763,94 @@ func FuzzLinkThreads(f *testing.F) {
 		s.Close()
 	})
 }
+
+// The sent members of a conversation read in a folder: the user's replies
+// in the sent folders that the folder lacks, each Message-ID once.
+func TestThreadSentMembers(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	inbox := seedFolder(t, s, "acc", "INBOX", api.RoleInbox)
+	sent := seedFolder(t, s, "acc", "Sent", api.RoleSent)
+	sent2 := seedFolder(t, s, "acc", "Sent Items", api.RoleSent)
+	trash := seedFolder(t, s, "acc", "Trash", api.RoleTrash)
+	outbox, err := s.OutboxFolder(ctx, "acc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := linked(t, s, inbox, 1, "a", "")
+	r1 := linked(t, s, sent, 2, "r1", "a", "a")
+	r1copy := linked(t, s, sent2, 2, "r1", "a", "a") // the same message in a second sent folder
+	r2 := linked(t, s, sent, 4, "r2", "a", "a")
+	bcc := linked(t, s, inbox, 4, "r2", "a", "a") // a Bcc to oneself: the folder has it
+	noID := seedThread(t, s, sent, Message{UID: 5, InReplyTo: "a", References: []string{"a"}, Subject: "no id"})
+	x := linked(t, s, trash, 6, "x", "a", "a")
+	queued := linked(t, s, outbox, 7, "q", "a", "a")
+	hidden := linked(t, s, sent, 8, "h", "a", "a")
+	if _, _, err := s.SetMessageHidden(ctx, hidden.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	b := linked(t, s, inbox, 9, "b", "r2", "a", "r2")
+	tid := sameThread(t, s, a, r1, r1copy, r2, bcc, noID, x, queued, hidden, b)
+	other := linked(t, s, inbox, 10, "c", "")
+
+	items, _, _, err := s.ListThreads(ctx, "acc", inbox.ID, "", 0, "", "")
+	if err != nil || len(items) != 2 {
+		t.Fatalf("inbox threads: %+v %v", items, err)
+	}
+	counts := map[string]int{}
+	for _, it := range items {
+		counts[it.ID] = it.SentCount
+	}
+	// r1 (once for its two copies) and the row without a Message-ID; not
+	// r2 (the inbox has its copy), the trash, the outbox or the hidden row.
+	if counts[tid] != 2 || counts[threadOf(t, s, other)] != 0 || items[0].MessageCount+items[1].MessageCount != 4 {
+		t.Errorf("sent counts = %v (%+v)", counts, items)
+	}
+	got, err := s.ThreadSentMessages(ctx, "acc", tid, inbox.ID, 0)
+	if err != nil || len(got) != 2 || got[0].RFCMessageID != "r1" || (got[0].ID != r1.ID && got[0].ID != r1copy.ID) || got[1].ID != noID.ID {
+		t.Fatalf("sent members = %+v %v", got, err)
+	}
+	got, err = s.ThreadSentMessages(ctx, "acc", tid, inbox.ID, 1)
+	if err != nil || len(got) != 1 || got[0].ID != noID.ID {
+		t.Fatalf("capped sent members = %+v %v", got, err)
+	}
+	row, err := s.GetThread(ctx, "acc", tid, inbox.ID)
+	if err != nil || row.SentCount != 2 || row.MessageCount != 3 {
+		t.Fatalf("thread in the inbox: %+v %v", row, err)
+	}
+
+	// The trash is an ordinary folder: every sent member counts.
+	if row, err := s.GetThread(ctx, "acc", tid, trash.ID); err != nil || row.SentCount != 3 {
+		t.Errorf("thread in the trash: %+v %v", row, err)
+	}
+	// A sent folder, the outbox and the account-wide scope have none.
+	for _, f := range []Folder{sent, sent2, outbox} {
+		row, err := s.GetThread(ctx, "acc", tid, f.ID)
+		if err != nil || row.SentCount != 0 {
+			t.Errorf("thread in %s: %+v %v", f.Mailbox, row, err)
+		}
+		if got, err := s.ThreadSentMessages(ctx, "acc", tid, f.ID, 0); err != nil || len(got) != 0 {
+			t.Errorf("sent members in %s: %+v %v", f.Mailbox, got, err)
+		}
+	}
+	if row, err := s.GetThread(ctx, "acc", tid, ""); err != nil || row.SentCount != 0 {
+		t.Errorf("account-wide: %+v %v", row, err)
+	}
+	if got, err := s.ThreadSentMessages(ctx, "acc", "t_nope", inbox.ID, 0); err != nil || len(got) != 0 {
+		t.Errorf("unknown thread: %+v %v", got, err)
+	}
+	if _, err := s.ThreadSentMessages(ctx, "acc", tid, "f_nope", 0); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown folder: %v", err)
+	}
+
+	// A virtual folder (an issue tracker's view) has none either.
+	views, _, err := s.UpsertFolders(ctx, "jira", []Folder{
+		{Mailbox: "view:assignedToMe", Name: "Mine", Path: "Mine", Virtual: api.VirtualAssignedToMe, Selectable: true, Subscribed: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.sentScope(ctx, "jira", views[0].ID); err != nil || ok {
+		t.Errorf("virtual folder scope: %v %v", ok, err)
+	}
+}

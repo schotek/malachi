@@ -29,8 +29,10 @@ public interface IReaderCache
     /// <paramref name="s"/> as far as the cache lacks them and calls
     /// <paramref name="done"/> on the UI thread after every answer, at once
     /// for a complete entry (message_view.go <c>fetchMessage</c>).
+    /// <paramref name="quoted"/> is the variant of the body the view shows
+    /// (with its quoted history or without; null keeps the entry's).
     /// </summary>
-    void Fetch(MessageSummary s, Action<LoadedMessage> done);
+    void Fetch(MessageSummary s, Action<LoadedMessage> done, bool? quoted = null);
 
     /// <summary><c>message.part</c> for one attachment (attachments.go <c>fetchAttachment</c>).</summary>
     Task<MessagePartResult> FetchAttachmentAsync(

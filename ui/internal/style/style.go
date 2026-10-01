@@ -205,6 +205,14 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("menubutton.issue-status-button.status-done > button { background-color: alpha(@green_4, 0.3); }\n")
 	b.WriteString("menubutton.issue-status-button image { -gtk-icon-size: 12px; }\n")
 	b.WriteString("label.kind-badge { padding: 0 4px; border-radius: 4px; font-size: 70%; font-weight: bold; background-color: alpha(@window_fg_color, 0.1); color: alpha(@window_fg_color, 0.75); }\n")
+	// The "•••" under a body whose quoted history the daemon cut
+	// (window/quoted.go): a small grey capsule as Gmail has it, a size
+	// down. The Collapse All / Expand All button above a conversation
+	// (conversation_view.blp): flat text in the accent colour, a link
+	// without a button's bulk.
+	b.WriteString("button.quoted-text { min-height: 0; min-width: 0; padding: 0 8px; border-radius: 99px; font-size: 80%; font-weight: bold; background-color: alpha(@window_fg_color, 0.08); }\n")
+	b.WriteString("button.quoted-text:hover { background-color: alpha(@window_fg_color, 0.14); }\n")
+	b.WriteString("button.fold-all { min-height: 0; padding: 2px 4px; font-size: 90%; font-weight: normal; color: @accent_color; }\n")
 	// Account reordering in preferences: the insertion line is a box-shadow
 	// rather than a border so the row does not change height, and therefore
 	// does not twitch, while the pointer moves over it.

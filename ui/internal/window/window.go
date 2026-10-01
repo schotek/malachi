@@ -25,6 +25,7 @@ import (
 	"github.com/schotek/malachi/ui/internal/assistant"
 	"github.com/schotek/malachi/ui/internal/client"
 	"github.com/schotek/malachi/ui/internal/compose"
+	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/settings"
 	"github.com/schotek/malachi/ui/internal/signin"
@@ -195,9 +196,12 @@ type Window struct {
 	listStatusPage  *adw.StatusPage
 	listRetryButton *gtk.Button
 
-	toasts         *adw.ToastOverlay
-	messageStack   *gtk.Stack
-	pane           *messageView // the message pane's display (message_view.go)
+	toasts       *adw.ToastOverlay
+	messageStack *gtk.Stack
+	pane         *messageView // the message pane's display (message_view.go)
+	// paneQuoted is what the user revealed of the quoted history of the
+	// message in the pane (quoted.go): forgotten with another message.
+	paneQuoted     conversation.QuotedReveal
 	starButton     *gtk.ToggleButton
 	archiveButton  *gtk.Button
 	trashButton    *gtk.Button
@@ -327,6 +331,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		}
 	}
 	w.pane.toast = w.Toast
+	w.pane.onQuoted = w.setPaneQuoted
 	w.registerActions()
 	// The main window lives as long as the application: no unbinding.
 	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel)
@@ -519,6 +524,7 @@ func (w *Window) onMessageRowSelected(row *gtk.ListBoxRow) {
 	}
 	if row == nil {
 		w.hideConversation()
+		w.paneQuoted.Clear()
 		w.messageStack.SetVisibleChildName(w.emptyPageName())
 		w.outboxBanner.SetRevealed(false)
 		w.draftBanner.SetRevealed(false)

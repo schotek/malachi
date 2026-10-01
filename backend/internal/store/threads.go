@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -304,6 +305,10 @@ type ThreadRow struct {
 	HasAttachments bool          // any member in scope
 	Participants   []api.Address // distinct senders, newest first, at most api.MaxThreadParticipants; never nil
 	FolderIDs      []string      // every folder of the account with a member; sorted, never nil
+	// SentCount, in a folder's scope, counts the members in the account's
+	// sent folders the folder lacks (sentScope, ThreadSentMessages); 0
+	// account-wide.
+	SentCount int
 }
 
 // threadGroup is one row of the grouped query.
@@ -527,10 +532,120 @@ func threadScope(accountID, threadID, folderID string) (string, []any) {
 	return where, args
 }
 
+// The user's own replies live in the sent folders, not in the folder a
+// conversation is read in. In a folder's scope, a thread's sent members
+// are its visible rows in the account's folders of role sent that the
+// folder lacks: a row whose Message-ID header a visible member of the
+// folder has (a Bcc to oneself, a Gmail label) is the folder's, and of the
+// rows sharing a Message-ID only one counts. A row without a Message-ID is
+// one sent member of its own. A sent folder and the outbox have none (the
+// outbox holds the user's queued mail itself), nor does an issue-tracker
+// account (no folder of role sent).
+
+// sentMembers is the FROM and WHERE of the sent members of the threads of
+// the account; its parameters are the account id twice and the folder id,
+// and the caller appends its thread condition on s.thread_id.
+const sentMembers = ` FROM messages s
+	WHERE s.account_id = ? AND s.hidden = 0
+		AND s.folder_id IN (SELECT id FROM folders WHERE account_id = ? AND role = '` + string(api.RoleSent) + `')
+		AND (s.rfc_message_id = '' OR NOT EXISTS (SELECT 1 FROM messages f
+			WHERE f.folder_id = ? AND f.thread_id = s.thread_id AND f.rfc_message_id = s.rfc_message_id AND f.hidden = 0))`
+
+// sentScope reports whether the folder's threads can have sent members:
+// it is not a sent folder, the outbox or a virtual folder. ErrNotFound when
+// the account has no such folder.
+func (s *Store) sentScope(ctx context.Context, accountID, folderID string) (bool, error) {
+	var role, virtual string
+	err := s.db.QueryRowContext(ctx, `SELECT role, virtual FROM folders WHERE id = ? AND account_id = ?`, folderID, accountID).Scan(&role, &virtual)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, ErrNotFound
+	case err != nil:
+		return false, fmt.Errorf("folder role: %w", err)
+	}
+	r := api.FolderRole(role)
+	return r != api.RoleSent && r != api.RoleOutbox && virtual == "", nil
+}
+
+// ThreadSentMessages lists the sent members of a thread read in folderID
+// (see sentMembers), oldest first; when more than limit exist the newest
+// limit are returned, still oldest first. Of the rows sharing a Message-ID
+// the one with the lowest id stands for them. limit <= 0 means
+// api.MaxThreadMessages. Empty (never ErrNotFound) when there is none or
+// the folder has none (sentScope); ErrNotFound when the account has no
+// such folder.
+func (s *Store) ThreadSentMessages(ctx context.Context, accountID, threadID, folderID string, limit int) ([]Message, error) {
+	if limit <= 0 {
+		limit = api.MaxThreadMessages
+	}
+	ok, err := s.sentScope(ctx, accountID, folderID)
+	if err != nil || !ok || threadID == "" {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `SELECT `+messageColumns+` FROM (
+			SELECT `+messageColumns+` FROM (
+				SELECT s.*, ROW_NUMBER() OVER (
+					PARTITION BY CASE WHEN s.rfc_message_id = '' THEN 'id:' || s.id ELSE 'mid:' || s.rfc_message_id END
+					ORDER BY s.id) AS rn`+sentMembers+` AND s.thread_id = ?)
+			WHERE rn = 1 ORDER BY date DESC, id DESC LIMIT ?)
+		ORDER BY date ASC, id ASC`, accountID, accountID, folderID, threadID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("thread sent messages: %w", err)
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		m, err := scanMessage(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("thread sent messages: %w", err)
+	}
+	return out, nil
+}
+
+// sentCounts counts the sent members (sentMembers) of the threads read in
+// folderID, each Message-ID once; one query for the ids given (a page of
+// thread.list is within one chunk).
+func (s *Store) sentCounts(ctx context.Context, accountID, folderID string, ids []string) (map[string]int, error) {
+	out := map[string]int{}
+	ok, err := s.sentScope(ctx, accountID, folderID)
+	if err != nil || !ok {
+		return out, err
+	}
+	for _, chunk := range chunkStrings(ids, linkChunk) {
+		args := append([]any{accountID, accountID, folderID}, toAny(chunk)...)
+		rows, err := s.db.QueryContext(ctx, `SELECT s.thread_id,
+				COUNT(DISTINCT NULLIF(s.rfc_message_id, '')) + SUM(s.rfc_message_id = '')`+sentMembers+
+			` AND s.thread_id IN (`+inPlaceholders(len(chunk))+`) GROUP BY s.thread_id`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("thread sent counts: %w", err)
+		}
+		for rows.Next() {
+			var tid string
+			var n int
+			if err := rows.Scan(&tid, &n); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("scan thread sent count: %w", err)
+			}
+			out[tid] = n
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, fmt.Errorf("thread sent counts: %w", err)
+		}
+	}
+	return out, nil
+}
+
 // threadRows completes the grouped rows with the newest member, the
-// participants, the flag union and the folders, in the order given.
-// folderID "" scopes the details to the whole account but its virtual
-// folders; the folders are every one with a visible member.
+// participants, the flag union, the folders and, in a folder's scope, the
+// sent count, in the order given. folderID "" scopes the details to the
+// whole account but its virtual folders; the folders are every one with a
+// visible member.
 func (s *Store) threadRows(ctx context.Context, accountID, folderID string, groups []threadGroup) ([]ThreadRow, error) {
 	out := make([]ThreadRow, 0, len(groups))
 	if len(groups) == 0 {
@@ -653,6 +768,14 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 		}
 	}
 
+	var sentCount map[string]int
+	if folderID != "" {
+		var err error
+		if sentCount, err = s.sentCounts(ctx, accountID, folderID, ids); err != nil {
+			return nil, err
+		}
+	}
+
 	// The newest members in full.
 	heads := make([]string, 0, len(groups))
 	for _, g := range groups {
@@ -694,6 +817,7 @@ func (s *Store) threadRows(ctx context.Context, accountID, folderID string, grou
 			MessageCount: g.count, UnreadCount: g.unread,
 			Flags: normalizeFlags(d.flags), HasAttachments: g.att != 0,
 			Participants: d.participants, FolderIDs: d.folders,
+			SentCount: sentCount[g.id],
 		}
 		if row.Participants == nil {
 			row.Participants = []api.Address{}

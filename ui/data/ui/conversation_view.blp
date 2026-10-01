@@ -8,7 +8,7 @@ using Adw 1;
 // window adds the page to message_stack as "conversation" and fills the
 // column from Go (conversation_card.go, conversation_rows.go): the issue
 // card of a Jira conversation in conversation_issue, then one row per
-// item. The link under the pointer in any card shows in
+// item; above them the Collapse All / Expand All button. The link under the pointer in any card shows in
 // conversation_status; the spinner stands in while the members load.
 Overlay conversation_page {
   styles [
@@ -31,6 +31,21 @@ Overlay conversation_page {
         margin-end: 16;
         margin-top: 4;
         margin-bottom: 16;
+
+        // Collapse All / Expand All (conversation_view.go showFoldAll): a
+        // small flat link at the trailing end above everything else,
+        // hidden while fewer than two cards fold; the label comes from Go.
+        Button conversation_fold_all {
+          halign: end;
+          margin-top: 8;
+          visible: false;
+
+          styles [
+            "flat",
+            "fold-all",
+          ]
+        }
+
         // The issue card, in the cards' column (after the gutter).
         Box conversation_issue {
           orientation: vertical;

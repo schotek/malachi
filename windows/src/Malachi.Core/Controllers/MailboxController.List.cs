@@ -86,6 +86,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
 
     // What runs instead when that thread.get fails.
     private readonly Dictionary<ThreadId, List<Action>> failureWaiters = [];
+
+    // Conversations whose thread.get in flight is followed by another
+    // (RefetchMembers).
+    private readonly HashSet<ThreadId> refetchAfter = [];
     private CancellationTokenSource? markReadTimer;
     private MessageId? markReadId;
     private SettingsChangeToken? settingsToken;
@@ -116,6 +120,8 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         Model.ListFilter = MessageFilter.All;
         mailbox.ReloadMessages = LoadMessages;
         mailbox.OnNewMessageForList = ApplyNewMessage;
+        mailbox.OnNewMessageElsewhere = ApplyNewMessageElsewhere;
+        mailbox.RefreshShownSent = RefreshShownSent;
         mailbox.RefreshOutboxViews = RefreshOutboxViews;
         mailbox.CollapseLoading = CollapseLoadingRows;
         mailbox.RefreshShown = RefreshShown;
@@ -317,6 +323,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         settingsToken = null;
         waiters.Clear();
         failureWaiters.Clear();
+        refetchAfter.Clear();
     }
 
     /// <summary>Closes the list (<see cref="Close"/>).</summary>
@@ -886,7 +893,9 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
     /// they are). A failed fetch folds the row back and says why (threads.go
     /// <c>ensureMembers</c>), and runs <paramref name="failed"/> instead of
     /// <paramref name="then"/>. Neither runs when the list moved on meanwhile
-    /// (another folder, a reload, the connection lost).
+    /// (another folder, a reload, the connection lost). thread.get asks for
+    /// the user's replies in Sent too (withSent), which the conversation view
+    /// shows beside the members (<see cref="ThreadMembers.Sent"/>).
     /// </summary>
     public void EnsureMembers(ThreadId tid, Action? then, Action? failed = null)
     {
@@ -920,13 +929,47 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         {
             return;
         }
+        FetchMembers(tid, mem);
+    }
+
+    /// <summary>
+    /// Asks thread.get for conversation <paramref name="tid"/> again while
+    /// the model keeps what it holds of it, so nothing blinks: the user's
+    /// replies in Sent changed (one arrived, or a message that may carry a
+    /// reply's Message-ID arrived in the folder; the client cannot compare
+    /// Message-IDs, the daemon does), or the shown conversation's sent folder
+    /// changed. The answer replaces the members, the replies and the summary
+    /// (SentCount, so a single message the user answered becomes a
+    /// conversation row) and reaches the conversation view through
+    /// <see cref="ThreadMembersChanged"/>. A fetch in flight is followed by
+    /// one more, since it may have been answered before the change. A
+    /// failure is only logged, unless someone waits for the members.
+    /// </summary>
+    public void RefetchMembers(ThreadId tid)
+    {
+        Scope.VerifyAccess();
+        if (!Model.Members.TryGetValue(tid, out var mem))
+        {
+            return;
+        }
+        if (mem.Fetching)
+        {
+            refetchAfter.Add(tid);
+            return;
+        }
+        FetchMembers(tid, mem, quiet: true);
+    }
+
+    // The thread.get of EnsureMembers and RefetchMembers.
+    private void FetchMembers(ThreadId tid, ThreadMembers mem, bool quiet = false)
+    {
         if (Model.ListFolder is not { } k)
         {
             return;
         }
         Model.Members[tid] = mem with { Fetching = true };
         var gen = Model.ListGen;
-        var parameters = new ThreadGetParams { AccountId = k.Account, ThreadId = tid, FolderId = k.Folder };
+        var parameters = new ThreadGetParams { AccountId = k.Account, ThreadId = tid, FolderId = k.Folder, WithSent = true };
         Mailbox.Perform(API.ThreadGet, parameters, outcome =>
         {
             if (gen != Model.ListGen || !Model.Members.TryGetValue(tid, out var now))
@@ -936,9 +979,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             Model.Members[tid] = now with { Fetching = false };
             var waiting = waiters.Remove(tid, out var w) ? w : [];
             var failing = failureWaiters.Remove(tid, out var f) ? f : [];
+            var again = refetchAfter.Remove(tid);
             if (!outcome.TryGetValue(out var res, out var err))
             {
                 LogThreadGetFailed(logger, err!.Message);
+                if (quiet && waiting.Count == 0 && failing.Count == 0)
+                {
+                    return;
+                }
                 Mailbox.Toast(RpcErrorText.Text(L10n.T("Loading the conversation"), err));
                 Model.SetExpanded(tid, false);
                 SyncRows();
@@ -948,7 +996,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 }
                 return;
             }
-            Model.SetMembers(tid, res.Thread, res.Messages);
+            Model.SetMembers(tid, res.Thread, res.Messages, res.Sent);
             SyncRows();
             if (SelectedRow is { } row && row.Key.Thread == tid)
             {
@@ -958,6 +1006,10 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
             foreach (var fn in waiting)
             {
                 fn();
+            }
+            if (again)
+            {
+                RefetchMembers(tid);
             }
         });
     }
@@ -1006,6 +1058,7 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         Model.CollapseLoading();
         waiters.Clear();
         failureWaiters.Clear();
+        refetchAfter.Clear();
         SyncRows();
         ShowLoadMore();
     }
@@ -1303,6 +1356,14 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
                 if (s.ThreadId is { } tid)
                 {
                     ThreadMembersChanged?.Invoke(this, tid);
+                    // A conversation that shows the user's replies: the
+                    // arrival may be one of them (a Bcc to oneself), which
+                    // only the daemon tells by its Message-ID.
+                    var replies = Model.TIndex.TryGetValue(tid, out var ti) && Model.Threads[ti].SentCount > 0;
+                    if (replies || (Model.Members.TryGetValue(tid, out var mem) && mem.Sent.Count > 0))
+                    {
+                        RefetchMembers(tid);
+                    }
                 }
             }
             else
@@ -1315,6 +1376,52 @@ public sealed partial class ListController : ObservableObject, IDisposable, IAct
         {
             Reconcile(SelectionHint.Keep);
         }
+    }
+
+    /// <summary>
+    /// notify.newMessage for another folder of the listed folder's account
+    /// (<see cref="MailboxController.OnNewMessageElsewhere"/>): a message in a
+    /// sent folder that belongs to a listed conversation is the user's reply
+    /// to it, so the conversation is asked for again
+    /// (<see cref="RefetchMembers"/>): its SentCount changes (a single
+    /// message becomes a conversation row) and the conversation view, when it
+    /// shows it, gets the reply. Nothing in flat mode, and nothing while a
+    /// sent folder or the outbox is listed (their conversations have no
+    /// replies of their own).
+    /// </summary>
+    public void ApplyNewMessageElsewhere(NewMessageNotification n)
+    {
+        ArgumentNullException.ThrowIfNull(n);
+        Scope.VerifyAccess();
+        if (!Model.Grouped || Model.Loading || Model.ListFolder is not { } k || k.Account != n.AccountId || k.Folder == n.FolderId
+            || n.Message.ThreadId is not { } tid || !Model.TIndex.ContainsKey(tid)
+            || Model.FolderRole(new FolderKey(n.AccountId, n.FolderId)) != Api.FolderRole.Sent)
+        {
+            return;
+        }
+        var listed = FolderRoleOf(k);
+        if (listed == Api.FolderRole.Sent || listed == Api.FolderRole.Outbox)
+        {
+            return;
+        }
+        RefetchMembers(tid);
+    }
+
+    /// <summary>
+    /// notify.messagesChanged named a sent folder of the account of the
+    /// selected conversation (<see cref="MailboxController.RefreshShownSent"/>),
+    /// whose folder is not named itself (RefreshShown covers that): the
+    /// user's replies it shows are asked for again.
+    /// </summary>
+    public void RefreshShownSent(AccountId acc)
+    {
+        Scope.VerifyAccess();
+        if (!Model.Grouped || SelectedRow is not { } row || row.Message.AccountId != acc || !row.ShowsConversation
+            || row.Key.Thread is not { } tid)
+        {
+            return;
+        }
+        RefetchMembers(tid);
     }
 
     /// <summary>

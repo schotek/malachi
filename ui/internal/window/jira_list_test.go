@@ -96,7 +96,7 @@ func TestJiraApplyNewMessageCarriesTheIssue(t *testing.T) {
 	}
 	m := &mailModel{grouped: true, listFolder: folderKey{Account: "j", Folder: "web"}}
 	m.setThreads([]api.ThreadSummary{t1}, api.PageInfo{Total: 1})
-	m.setMembers("issue-WEB-1", t1, []api.MessageSummary{first, latest})
+	m.setMembers("issue-WEB-1", t1, []api.MessageSummary{first, latest}, nil)
 
 	// A new comment comes with the issue as it is now: the row follows.
 	moved := listIssue("WEB-1", "In Progress", api.StatusCategoryInProgress)

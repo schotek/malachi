@@ -52,9 +52,13 @@ type convHost interface {
 	// convFetch has the message cache fetch message s: its body
 	// (message.body) and, with full, the whole message (message.get) as
 	// well, each only when the cache lacks it and no request is in flight.
-	// then runs on the main loop after every answer with the cache entry
-	// so far, and at once when the entry has what was asked for.
-	convFetch(s api.MessageSummary, full bool, then func(*loadedMessage))
+	// quoted is the variant of the body the card shows: with its quoted
+	// history (true) or without (message.body with trimQuoted); a variant
+	// held already shows at once wherever the message is on display
+	// (switchQuoted). then runs on the main loop after every answer with
+	// the cache entry so far, and at once when the entry has what was
+	// asked for.
+	convFetch(s api.MessageSummary, full, quoted bool, then func(*loadedMessage))
 }
 
 // convChange is what changed, for the pane.
@@ -79,16 +83,19 @@ const (
 // rowShowsConversation reports a folded conversation row of the grouped
 // list whose selection shows the whole conversation in the reading pane: a
 // conversation row (not a member row, not a single-message row) with two
-// or more members in the folder (conversation.IsConversationRow). Every
-// other row shows its message alone. The outbox is never grouped.
+// or more members in the folder, or one and the user's replies in Sent
+// (conversation.IsConversationRow). Every other row shows its message
+// alone. The outbox is never grouped.
 func rowShowsConversation(r listRow) bool {
 	return r.Thread && !r.Member && r.Key.Thread != "" && r.Key.Message == "" &&
 		conversation.IsConversationRow(r.Summary)
 }
 
 // conversationController holds which conversation the pane shows and what
-// of it is loaded. The members come from the list (convEnsureMembers), the
-// bodies from the message cache, one card at a time and only for the cards
+// of it is loaded. The members come from the list (convEnsureMembers),
+// with the user's replies in Sent the folder lacks (threadMembers.sent,
+// cards with conversation.Item.Sent: never marked read, never among the
+// members the actions take), the bodies from the message cache, one card at a time and only for the cards
 // the pane asks for (needsBody): message.body alone, and message.get too
 // only for a card that needs what it adds to the summary (the attachment
 // chips, the Cc of the recipients). The entries of the cards are held here
@@ -120,8 +127,13 @@ type conversationController struct {
 	onLoaded func(api.MessageID, *loadedMessage)
 
 	// members are the folder members the model was last built or merged
-	// from.
+	// from; sent the user's replies in Sent likewise.
 	members []api.MessageSummary
+	sent    []api.MessageSummary
+	// quoted are the cards whose quoted history the user revealed (Show
+	// Quoted Text): kept through updates and a rebuild of the messages,
+	// forgotten with the conversation.
+	quoted conversation.QuotedReveal
 	// pending are the members whose entry was asked for and has not
 	// settled, and whether message.get was part of the request; noGet the
 	// members whose message.get failed, not asked again for this
@@ -184,6 +196,7 @@ func (c *conversationController) show(row listRow) bool {
 	}
 	c.reset()
 	c.thread = tid
+	c.quoted.Show(string(tid))
 	c.summary = row.Summary
 	c.emit(convLoading)
 	c.requestMembers()
@@ -206,6 +219,8 @@ func (c *conversationController) reset() {
 	c.model = nil
 	c.issue = nil
 	c.members = nil
+	c.sent = nil
+	c.quoted.Clear()
 	c.loaded = map[api.MessageID]*loadedMessage{}
 	c.pending = map[api.MessageID]bool{}
 	c.noGet = map[api.MessageID]bool{}
@@ -235,7 +250,8 @@ func (c *conversationController) requestMembers() {
 // membersChanged is called whenever the list changed (the window's syncRows)
 // and when the asked members arrived: the model is built the first time,
 // then kept in step by merging what changed and removing what went
-// (conversation.Merge, Remove). Members the list lost to a reload are asked
+// (conversation.Merge, Remove), and so are the user's replies in Sent
+// (conversation.MergeSent; a refetch of the list brings them). Members the list lost to a reload are asked
 // for again; when thread.get failed, the conversation is built from what
 // the listing told (its newest member, with the row of the older ones on
 // top), and nothing is marked read.
@@ -270,7 +286,7 @@ func (c *conversationController) membersChanged() {
 	own, _ := c.host.convAccount(c.summary.AccountID)
 	if c.model == nil || c.listing {
 		c.listing = false
-		c.open(mem.list, own)
+		c.open(mem.list, mem.sent, own)
 		return
 	}
 	current := *c.model
@@ -302,11 +318,38 @@ func (c *conversationController) membersChanged() {
 		delete(c.loaded, s.ID)
 		delete(c.pending, s.ID)
 	}
+	// The replies after the members: a member that took a reply's place
+	// (Merge) is not merged back as a reply.
+	sentBefore := make(map[api.MessageID]api.MessageSummary, len(c.sent))
+	for _, s := range c.sent {
+		if _, ok := sentBefore[s.ID]; !ok {
+			sentBefore[s.ID] = s
+		}
+	}
+	sentNow := make(map[api.MessageID]bool, len(mem.sent))
+	for _, s := range mem.sent {
+		sentNow[s.ID] = true
+	}
+	for _, s := range c.sent {
+		if sentNow[s.ID] || now[s.ID] {
+			continue
+		}
+		m = conversation.Remove(m, s.ID)
+		delete(c.loaded, s.ID)
+		delete(c.pending, s.ID)
+	}
+	for _, s := range mem.sent {
+		if b, ok := sentBefore[s.ID]; ok && reflect.DeepEqual(b, s) {
+			continue
+		}
+		m = conversation.MergeSent(m, s, own, c.tr)
+	}
 	c.members = append([]api.MessageSummary(nil), mem.list...)
+	c.sent = append([]api.MessageSummary(nil), mem.sent...)
 	if len(m.Items) == 0 && m.Earlier > 0 {
 		// Every shown member went while older ones are left out: what the
 		// list holds now is the conversation.
-		c.open(mem.list, own)
+		c.open(mem.list, mem.sent, own)
 		return
 	}
 	if reflect.DeepEqual(m, current) {
@@ -317,10 +360,12 @@ func (c *conversationController) membersChanged() {
 	c.emit(convUpdated)
 }
 
-// open builds the model from members and announces it.
-func (c *conversationController) open(members []api.MessageSummary, own api.Account) {
+// open builds the model from members and the user's replies in Sent and
+// announces it.
+func (c *conversationController) open(members, sent []api.MessageSummary, own api.Account) {
 	c.members = append([]api.MessageSummary(nil), members...)
-	m := conversation.Build(c.summary, c.members, own, c.tr)
+	c.sent = append([]api.MessageSummary(nil), sent...)
+	m := conversation.Build(c.summary, c.members, c.sent, own, c.tr)
 	c.model = &m
 	c.issue = convIssueOf(c.summary, c.members)
 	c.emit(convOpened)
@@ -335,7 +380,7 @@ func (c *conversationController) buildFromListing(mem *threadMembers) {
 	}
 	own, _ := c.host.convAccount(c.summary.AccountID)
 	c.listing = true
-	c.open(known, own)
+	c.open(known, mem.sent, own)
 }
 
 // convIssueOf is the issue a model's card is built from, as
@@ -392,14 +437,17 @@ func (c *conversationController) takeMarkRead() api.MessageID {
 // fetched unless held already (message.body; message.get as well when
 // details, or when the message has attachments, whose chips need it). An
 // event has no body. The entry is held in loaded and announced through
-// onLoaded whenever a half of it arrives.
+// onLoaded whenever a half of it arrives. The body is the variant the user
+// chose for the card: without its quoted history unless revealed
+// (setQuoted).
 func (c *conversationController) needsBody(id api.MessageID, details bool) {
 	s, ok := c.member(id)
 	if !ok || jira.IsEvent(s.Issue) {
 		return
 	}
 	full := (details || s.HasAttachments) && !c.noGet[id]
-	if lm := c.loaded[id]; lm != nil && lm.bodySettled() && (!full || lm.msg != nil) {
+	reveal := c.quoted.IsRevealed(id)
+	if lm := c.loaded[id]; lm != nil && lm.quotedShown == reveal && lm.bodySettled() && (!full || lm.msg != nil) {
 		return
 	}
 	// Asked already (the pane asks on every scroll): the answer comes.
@@ -408,7 +456,7 @@ func (c *conversationController) needsBody(id api.MessageID, details bool) {
 	}
 	c.pending[id] = full
 	g, bg := c.gen, c.bodyGen
-	c.host.convFetch(s, full, func(lm *loadedMessage) {
+	c.host.convFetch(s, full, reveal, func(lm *loadedMessage) {
 		if c.gen != g || c.bodyGen != bg {
 			return
 		}
@@ -426,6 +474,27 @@ func (c *conversationController) needsBody(id api.MessageID, details bool) {
 			c.onLoaded(id, lm)
 		}
 	})
+}
+
+// quotedRevealed reports whether the quoted history of the card of member
+// id shows.
+func (c *conversationController) quotedRevealed(id api.MessageID) bool {
+	return c.quoted.IsRevealed(id)
+}
+
+// setQuoted is the card's Show Quoted Text (on) or Hide Quoted Text: the
+// choice holds while the conversation is shown, and the card's body
+// switches to that variant (the one held, or fetched as needsBody does;
+// details as there).
+func (c *conversationController) setQuoted(id api.MessageID, on, details bool) {
+	if _, ok := c.member(id); !ok {
+		return
+	}
+	c.quoted.Set(id, on)
+	// A request for the other variant is in flight: this one is asked for
+	// beside it.
+	delete(c.pending, id)
+	c.needsBody(id, details)
 }
 
 // adopt: the window has news about member id (its fan-out: the remote

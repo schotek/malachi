@@ -913,6 +913,37 @@ Windows bez překladu: `go test ./internal/window` v Toolbxu a
 vlastníka proti skutečnému Jira Cloud (token zadá sám, komentář jen do
 issue, které určí).
 
+Odeslané odpovědi v konverzaci a skrytá citovaná historie (2026-10-01,
+všechny tři klienty; macOS otestovaný vlastníkem, GTK a Windows napsané
+na Macu bez překladu — čeká `make build`, `go test ./internal/window/...`
+a `make lint` v Toolbxu a `build.ps1 app`/`test`/`lint` na Windows).
+Kompatibilní rozšíření protokolu 2 (`docs/api.md` §4.4 a `message.body`):
+`ThreadSummary.sentCount` (členové vlákna ve složkách role `sent`, které
+vypsaná složka nemá, podle Message-ID; 0 v Odeslaných, Outboxu
+a virtuálních složkách) a `thread.get` `withSent` → `sent` (jen se
+`folderId`, nikdy členové složky ani agregáty). Řádek je konverzace při
+`messageCount + sentCount ≥ 2` (`conversation.IsConversationRow`);
+odeslané karty (`Item.Sent`) jsou v časové ose podle data, startují
+sbalené, nikdy nepřečtené ani označované, akce nad vláknem a počty
+nepřečtených je nezahrnují, karta má Odpovědět/Všem/Přeposlat. Klient
+duplicity nevidí (Message-ID zná jen démon), proto se znovu ptá
+`thread.get`: příchod do Odeslaných vypsaného účtu, příchod do vypsané
+složky ve vláknu s odpověďmi a `notify.messagesChanged` jmenující
+Odeslané. Sbalit jde každá karta (`ui/internal/conversation/fold.go`:
+`DefaultFolds`, `Folds` platné do výběru jiné konverzace, `FoldAllOffer`
+→ tlačítko Sbalit vše / Rozbalit vše nad konverzací). Citovaná historie:
+`message.body` `trimQuoted` → `quotedTrimmed`; démon ořízne strom před
+sanitizací (`internal/sanitize/quote.go`, `quote_text.go`: Gmail,
+cite blockquote, Outlook web i desktop s lokalizovanými hlavičkami,
+Původní zpráva, `>` za „napsal(a):“), jen když citace jde do konce
+a nad ní je viditelný text, při pochybnosti nic; MCP most a
+`draft.create` dostávají celé tělo. Klienti se ptají s `trimQuoted`,
+drží obě varianty v cache zprávy, tlačítko „•••“ (Zobrazit / Skrýt
+citovaný text) pod tělem v kartách konverzace, panelu čtení i okně
+zprávy (přiložené zprávy ne); odhalení platí do jiné konverzace či
+zprávy, okno ho drží, dokud je otevřené (`QuotedReveal`, Swift první,
+port v `ui/internal/conversation/quoted.go` a `Malachi.Core`).
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).

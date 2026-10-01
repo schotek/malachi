@@ -192,6 +192,14 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     public Action<NewMessageNotification>? OnNewMessageForList { get; set; }
 
     /// <summary>
+    /// The list's share of a notify.newMessage for another folder of the
+    /// listed folder's account (installed by the list half; Swift
+    /// <c>onNewMessageElsewhere</c>): a reply the user sent may belong to a
+    /// listed conversation (<see cref="ListController.ApplyNewMessageElsewhere"/>).
+    /// </summary>
+    public Action<NewMessageNotification>? OnNewMessageElsewhere { get; set; }
+
+    /// <summary>
     /// The account's outbox contents changed and its folder list was
     /// reloaded: refresh the views showing the outbox (outbox.go
     /// <c>refreshOutboxViews</c>; Swift <c>refreshOutboxViews</c>).
@@ -213,6 +221,14 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// before it.
     /// </summary>
     public Action<AccountId>? RefreshShown { get; set; }
+
+    /// <summary>
+    /// The list's <c>refreshShownSent</c>, installed by the list half (Swift
+    /// <c>refreshShownSent</c>): a sent folder of the selected folder's
+    /// account changed (notify.messagesChanged), and the conversation shown
+    /// may show the user's replies in it.
+    /// </summary>
+    public Action<AccountId>? RefreshShownSent { get; set; }
 
     /// <summary>
     /// notify.messagesChanged for an account the window shows, before
@@ -962,7 +978,9 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// when the selected folder is one of those named — or any folder of the
     /// account when none is named, or a virtual folder of the account, which
     /// shows copies of every space's issues — what the pane shows of it is
-    /// fetched again (<see cref="RefreshShown"/>) and it is listed again.
+    /// fetched again (<see cref="RefreshShown"/>) and it is listed again. A
+    /// sent folder named without the selected one has the conversation shown
+    /// ask for the user's replies again (<see cref="RefreshShownSent"/>).
     /// </summary>
     public void HandleMessagesChanged(MessagesChangedNotification n)
     {
@@ -974,9 +992,17 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
         }
         LoadFolders(n.AccountId, Model.FoldersGen);
         Scope.Raise(MessagesChanged, this, n);
-        if (Model.Selected is not { } sel || sel.Account != n.AccountId
-            || !(n.FolderIds.Count == 0 || System.Linq.Enumerable.Contains(n.FolderIds, sel.Folder) || IsVirtual(sel)))
+        if (Model.Selected is not { } sel || sel.Account != n.AccountId)
         {
+            return;
+        }
+        if (!(n.FolderIds.Count == 0 || System.Linq.Enumerable.Contains(n.FolderIds, sel.Folder) || IsVirtual(sel)))
+        {
+            // The user's replies a conversation shows live in Sent.
+            if (System.Linq.Enumerable.Any(n.FolderIds, f => Model.FolderRole(new FolderKey(n.AccountId, f)) == FolderRole.Sent))
+            {
+                RefreshShownSent?.Invoke(n.AccountId);
+            }
             return;
         }
         RefreshShown?.Invoke(n.AccountId);
@@ -1000,7 +1026,8 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
     /// unread count for an unseen message; a message for the listed folder
     /// goes to the list through <see cref="OnNewMessageForList"/> first,
     /// unless the list holds it already (delivered twice: the counts were
-    /// adjusted the first time).
+    /// adjusted the first time), and one for another folder of its account
+    /// through <see cref="OnNewMessageElsewhere"/>.
     /// </summary>
     public void HandleNewMessage(NewMessageNotification n)
     {
@@ -1023,6 +1050,10 @@ public sealed partial class MailboxController : ObservableObject, IDisposable, I
                 return;
             }
             OnNewMessageForList?.Invoke(n with { Message = s });
+        }
+        else if (Model.ListFolder is { } listed && n.AccountId == listed.Account)
+        {
+            OnNewMessageElsewhere?.Invoke(n with { Message = s });
         }
         var unread = FolderTree.HasFlag(s.Flags, Flag.Seen) ? 0 : 1;
         Model.AdjustCounts(k, unread, 1);

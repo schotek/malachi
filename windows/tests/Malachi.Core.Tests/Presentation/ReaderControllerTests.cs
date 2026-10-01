@@ -5,7 +5,8 @@
 // (showMessage with bodyGen, render, renderHeaders, renderBody, loading
 // with bodySpinnerDelay), remote.go (showRemoteBar, showPicturesBar),
 // outbox.go (renderOutboxBanner), download.go (refreshChips), embedded.go
-// (show, loadImages) and window.go (emptyPageName), which macOS keeps
+// (show, loadImages), window.go (emptyPageName) and the quoted-text button
+// (MessageViewController.swift quotedButton, toggleQuoted), which macOS keeps
 // untested in MessageViewController.swift and
 // EmbeddedWindowController.swift. The cache is a fake that answers when the
 // test says; the spinner runs on a fake clock.
@@ -644,5 +645,74 @@ public sealed class ReaderControllerTests
         cache.EmbeddedGate.SetResult();
         await load;
         Assert.Equal("Inner", r.Subject);
+    }
+
+    /// <summary>
+    /// The "•••" under the body (MessageViewController.swift quotedButton,
+    /// toggleQuoted): offered when the daemon cut the quoted history, it
+    /// asks the cache for the whole body and hides it again with the variant
+    /// held; what was revealed holds for the message on display only, and an
+    /// attached message's view never offers it.
+    /// </summary>
+    [Fact]
+    public void TheQuotedTextButtonSwitchesTheBody()
+    {
+        var r = Make();
+        var s = Summary("m1");
+        var lm = cache.Entry("m1");
+        lm.Msg = Message(s);
+        lm.Body = Model.QuotedTextLogicTests.Body("m1", whole: false);
+        r.Show(s);
+        Assert.Equal(QuotedTextOffer.Show, r.QuotedOffer);
+        Assert.Equal("<p>new</p>", r.Html);
+
+        // Show Quoted Text: the whole body is asked for; the way back stays
+        // offered while it comes.
+        r.ToggleQuoted();
+        Assert.Equal([true], cache.FetchQuoted);
+        Assert.Equal(QuotedTextOffer.Hide, r.QuotedOffer);
+        lm.Store(Model.QuotedTextLogicTests.Body("m1", whole: true), quoted: true);
+        cache.Settle("m1");
+        Assert.Equal("<p>new</p><blockquote>old</blockquote>", r.Html);
+        Assert.Equal(QuotedTextOffer.Hide, r.QuotedOffer);
+
+        // Hide Quoted Text: the trimmed body is held.
+        r.ToggleQuoted();
+        Assert.Equal([true, false], cache.FetchQuoted);
+        Assert.Equal("<p>new</p>", r.Html);
+        Assert.Equal(QuotedTextOffer.Show, r.QuotedOffer);
+
+        // Revealed, then another message and back: the pane forgot it and
+        // asks for the trimmed body again.
+        r.ToggleQuoted();
+        Assert.True(lm.QuotedShown);
+        r.Show(Summary("m2"));
+        Assert.Null(r.QuotedOffer);
+        r.Show(s);
+        Assert.False(cache.FetchQuoted[^1]);
+        Assert.False(lm.QuotedShown);
+        Assert.Equal(QuotedTextOffer.Show, r.QuotedOffer);
+        r.Clear();
+        Assert.Null(r.QuotedOffer);
+
+        // Nothing cut: no button.
+        var plain = cache.Entry("m3");
+        plain.Msg = Message(Summary("m3"));
+        plain.Body = Model.QuotedTextLogicTests.Body("m3", whole: false, cut: false);
+        r.Show(Summary("m3"));
+        Assert.Null(r.QuotedOffer);
+
+        // An attached message's view never offers it.
+        var e = Make(ReaderMode.Embedded);
+        e.ShowEmbedded(s, Attachment("2", "fwd.eml", "message/rfc822"), new MessageEmbeddedResult
+        {
+            PartId = "2",
+            Message = Message(Summary("m1", "Inner")),
+            Body = Model.QuotedTextLogicTests.Body("m1", whole: false),
+        });
+        Assert.Null(e.QuotedOffer);
+        var asked = cache.FetchQuoted.Count;
+        e.ToggleQuoted();
+        Assert.Equal(asked, cache.FetchQuoted.Count);
     }
 }

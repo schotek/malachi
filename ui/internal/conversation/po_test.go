@@ -48,9 +48,13 @@ func exercise(tr Translator) {
 			},
 		}),
 	}
-	m := Build(jiraThread(3), members, jiraAccount, tr)
+	m := Build(jiraThread(3), members, nil, jiraAccount, tr)
 	Merge(m, issueMsg("c2", 20, false, api.MessageIssue{Item: api.IssueItemComment}), jiraAccount, tr)
-	Build(jiraThread(4), members, jiraAccount, tr)
+	Build(jiraThread(4), members, nil, jiraAccount, tr)
+	FoldAllCollapse.Label(tr)
+	FoldAllExpand.Label(tr)
+	QuotedTextLabel(false, tr)
+	QuotedTextLabel(true, tr)
 }
 
 // template reads po/malachi.pot: every entry, and whether it names a file

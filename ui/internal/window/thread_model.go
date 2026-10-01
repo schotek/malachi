@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/schotek/malachi/backend/pkg/api"
+	"github.com/schotek/malachi/ui/internal/conversation"
 	"github.com/schotek/malachi/ui/internal/i18n"
 	"github.com/schotek/malachi/ui/internal/jira"
 	"github.com/schotek/malachi/ui/internal/widget"
@@ -34,7 +35,7 @@ type listKey struct {
 // listRow is what one row of the list stands for.
 type listRow struct {
 	Key     listKey
-	Thread  bool               // a folded conversation (two or more members)
+	Thread  bool               // a folded conversation: two or more members, or one and the user's replies in Sent (conversation.IsConversationRow)
 	Member  bool               // an expanded member, indented under its conversation row
 	Message api.MessageSummary // the message the row shows; on a conversation row its newest folder member
 	Summary api.ThreadSummary  // conversation rows: the aggregates the row shows
@@ -46,12 +47,22 @@ type listRow struct {
 
 // threadMembers is what the window knows of one conversation's folder
 // members, oldest first: only the newest one (from thread.list) until
-// thread.get answers, then all of them.
+// thread.get answers, then all of them. sent are the user's replies in
+// Sent that the folder lacks, as thread.get with withSent returned them
+// (oldest first): never members, so no action, count or mark-as-read of
+// the conversation takes them; only the conversation view shows them.
+// complete covers them too: a conversation the listing says has some
+// (api.ThreadSummary.SentCount) is not complete before thread.get
+// answered.
 type threadMembers struct {
 	list     []api.MessageSummary
+	sent     []api.MessageSummary
 	complete bool
 	fetching bool
-	waiters  []func() // run once the members are known (threads.go)
+	// again: thread.get is asked once more when the one in flight answers
+	// (refetchMembers in threads.go).
+	again   bool
+	waiters []func() // run once the members are known (threads.go)
 }
 
 // threadSnapshot is one conversation's whole state, for undoing a removal.
@@ -88,6 +99,9 @@ func (m *mailModel) setThreads(list []api.ThreadSummary, page api.PageInfo) {
 		m.tindex[t.ID] = len(m.threads)
 		m.threads = append(m.threads, t)
 		if prev, ok := prevMembers[t.ID]; ok && prev.complete && sameShape(prevSummary[t.ID], t) {
+			// A thread.get of the list before (a refetch) answers into a
+			// list that is gone: nothing is in flight for this one.
+			prev.fetching, prev.again = false, false
 			m.members[t.ID] = prev
 		} else {
 			m.members[t.ID] = membersFromListing(t)
@@ -102,19 +116,22 @@ func (m *mailModel) setThreads(list []api.ThreadSummary, page api.PageInfo) {
 
 // membersFromListing is what thread.list tells of a conversation's folder
 // members: the newest one, which for a single-message conversation is all
-// of them.
+// of them, unless the user's replies in Sent are part of it: those only
+// thread.get returns.
 func membersFromListing(t api.ThreadSummary) *threadMembers {
-	return &threadMembers{list: []api.MessageSummary{t.Latest}, complete: t.MessageCount <= 1}
+	return &threadMembers{list: []api.MessageSummary{t.Latest}, complete: t.MessageCount <= 1 && t.SentCount <= 0}
 }
 
 // sameShape reports whether a conversation's listing has not changed in
 // what would invalidate its fetched members. That includes the issue of a
 // Jira conversation: its status, assignee or priority can move without a
 // new member (the account shows no events), and every member carries it.
+// It includes the count of the user's replies in Sent too (SentCount): the
+// fetched ones are kept with the members.
 func sameShape(a, b api.ThreadSummary) bool {
 	return a.MessageCount == b.MessageCount && a.UnreadCount == b.UnreadCount &&
 		a.LatestDate.Equal(b.LatestDate) && a.Latest.ID == b.Latest.ID &&
-		reflect.DeepEqual(a.Issue, b.Issue)
+		reflect.DeepEqual(a.Issue, b.Issue) && a.SentCount == b.SentCount
 }
 
 // forgetMembers forgets the fetched folder members of conversation tid:
@@ -189,9 +206,10 @@ func (m *mailModel) setExpanded(tid api.ThreadID, on bool) {
 }
 
 // setMembers stores the thread.get answer: the folder members, oldest
-// first, and the summary as the daemon aggregated it. An empty list means
-// the conversation left the folder meanwhile; its row goes.
-func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list []api.MessageSummary) {
+// first, the user's replies in Sent the folder lacks (sent) and the
+// summary as the daemon aggregated it. An empty list means the
+// conversation left the folder meanwhile; its row goes.
+func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list, sent []api.MessageSummary) {
 	i, ok := m.tindex[tid]
 	if !ok {
 		return
@@ -202,7 +220,8 @@ func (m *mailModel) setMembers(tid api.ThreadID, t api.ThreadSummary, list []api
 		return
 	}
 	m.threads[i] = t
-	m.members[tid] = &threadMembers{list: append([]api.MessageSummary(nil), list...), complete: true}
+	m.members[tid] = &threadMembers{list: append([]api.MessageSummary(nil), list...),
+		sent: append([]api.MessageSummary(nil), sent...), complete: true}
 	m.reindexMembers()
 	m.rebuildRows()
 }
@@ -521,7 +540,8 @@ func (m *mailModel) removeMessages(ids []api.MessageID) (removal, bool) {
 		i := m.tindex[tid]
 		mem := m.members[tid]
 		snap := threadSnapshot{index: i, summary: m.threads[i], expanded: m.expanded[tid],
-			members: threadMembers{list: append([]api.MessageSummary(nil), mem.list...), complete: true}}
+			members: threadMembers{list: append([]api.MessageSummary(nil), mem.list...),
+				sent: append([]api.MessageSummary(nil), mem.sent...), complete: true}}
 		gone := byThread[tid]
 		kept := mem.list[:0:0]
 		for _, s := range mem.list {
@@ -584,8 +604,9 @@ func (m *mailModel) restoreRemoval(r removal) {
 }
 
 // rebuildRows lays the grouped list out: a conversation with one member
-// is a plain row; one with more is a conversation row, followed by its
-// members (oldest first) when unfolded and known.
+// is a plain row; one with more, or with one and the user's replies in
+// Sent (conversation.IsConversationRow), is a conversation row, followed
+// by its members (oldest first) when unfolded and known.
 func (m *mailModel) rebuildRows() {
 	m.rows = m.rows[:0]
 	for _, t := range m.threads {
@@ -594,7 +615,7 @@ func (m *mailModel) rebuildRows() {
 		if mem != nil && len(mem.list) > 0 {
 			latest = mem.list[len(mem.list)-1]
 		}
-		if t.MessageCount <= 1 {
+		if !conversation.IsConversationRow(t) {
 			m.rows = append(m.rows, listRow{Key: listKey{Thread: t.ID, Message: latest.ID}, Message: latest})
 			continue
 		}
@@ -686,6 +707,21 @@ func (m *mailModel) rowIDs(r listRow) []api.MessageID {
 		out = append(out, s.ID)
 	}
 	return out
+}
+
+// sentMessage is the user's reply in Sent id that a listed conversation
+// shows besides its folder members (threadMembers.sent), for the actions
+// of its card in the conversation view (reply, forward): never a member,
+// never in rowIDs.
+func (m *mailModel) sentMessage(id api.MessageID) (api.MessageSummary, bool) {
+	for _, mem := range m.members {
+		for _, s := range mem.sent {
+			if s.ID == id {
+				return s, true
+			}
+		}
+	}
+	return api.MessageSummary{}, false
 }
 
 // rowMessages is rowIDs with the summaries.

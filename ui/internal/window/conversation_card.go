@@ -26,7 +26,8 @@ import (
 // the Jira badges via, Internal and Edited, the date, and on hover Reply —
 // Comment on an issue —, Reply All and Forward as the account allows
 // them), the recipients, the attachment chips, the remote-image and
-// pictures bars, and the body: plain text in a label, HTML in a view of
+// pictures bars, the body, and under it the "•••" that shows the quoted
+// history the daemon cut from it (quoted.go). The body is: plain text in a label, HTML in a view of
 // its own sized to its document (htmlview.Card; never one document for
 // the conversation: a message's CSS must not reach another's headers).
 // Headers are plain text; the body's HTML is the sanitiser's output only.
@@ -34,8 +35,13 @@ import (
 // (convRow). A port of the macOS client's ConversationCardView.swift and
 // ConversationCardHeader.swift.
 //
-// A card is cheap: the recipients, the chips, the bars and the hint are
-// made when first needed, and the web view exists only while the pane
+// Every card folds (setFold, conversation.Folds): an arrow at the start of
+// its header, and while folded only the header and a preview of its text
+// show. How it starts is the pane's: the card that opened the conversation
+// and the user's replies in Sent folded, the rest open.
+//
+// A card is cheap: the recipients, the chips, the bars, the hint and the
+// "•••" are made when first needed, and the web view exists only while the pane
 // keeps the card live (setLive, near the viewport); otherwise the body
 // keeps the height it last had, on the white of the page.
 //
@@ -85,13 +91,19 @@ type convCard struct {
 	hint        *gtk.Label
 	bars        *gtk.Box
 
-	// The fold of the card that opened the conversation (setFold): the
-	// arrow in the header, the preview under it while folded, and the
-	// parts of the top the fold hid, shown again when it opens.
+	// The fold of the card (setFold): the arrow in the header, the preview
+	// under it while folded, and the parts of the top the fold hid, shown
+	// again when it opens.
 	foldable, folded bool
 	fold             *gtk.Button
 	preview          *gtk.Label
 	foldHidden       []gtk.Widgetter
+
+	// The "•••" under the body (renderQuoted), made when first offered,
+	// and what it offers now.
+	quotedBox    *gtk.Box
+	quotedButton *gtk.Button
+	quotedNow    conversation.QuotedOffer
 
 	// The body: "wait", "text" or "html".
 	body *gtk.Stack
@@ -209,8 +221,7 @@ func (c *convCard) buildHeader() {
 	flow.SetHExpand(true)
 
 	group := gtk.NewBox(gtk.OrientationHorizontal, 6)
-	// The fold arrow of the card that opened the conversation (setFold);
-	// hidden on the others.
+	// The fold arrow (setFold); hidden on a card that does not fold.
 	c.fold = gtk.NewButtonFromIconName("pan-down-symbolic")
 	c.fold.AddCSSClass("flat")
 	c.fold.AddCSSClass("conversation-card-button")
@@ -352,9 +363,9 @@ func (c *convCard) update(item conversation.Item) {
 	}
 }
 
-// setFold makes the card the one that opened the conversation (on), which
-// folds to its header and a preview of its text (convDisplayOrder), and
-// folds or opens it; off: an ordinary card, open.
+// setFold makes the card one that folds (on, conversation.Foldable) to its
+// header and a preview of its text, and folds or opens it; off: a card
+// without the arrow, open.
 func (c *convCard) setFold(on, folded bool) {
 	c.foldable = on
 	c.fold.SetVisible(on)
@@ -409,6 +420,9 @@ func (c *convCard) showFoldState() {
 	c.disclosure.SetVisible(!c.folded)
 	c.bars.SetVisible(!c.folded)
 	c.body.SetVisible(!c.folded)
+	if c.quotedBox != nil {
+		c.quotedBox.SetVisible(!c.folded && c.quotedNow != conversation.QuotedNone)
+	}
 }
 
 // setCompact shows the short date of a narrow pane, or the full one.
@@ -518,6 +532,44 @@ func (c *convCard) render(lm *loadedMessage) {
 	c.renderBody(lm)
 	c.renderBars(lm)
 	c.renderChips(lm)
+	c.renderQuoted(lm)
+}
+
+// renderQuoted shows the "•••" under the body for what lm holds: Show
+// Quoted Text when the daemon cut the quoted history, Hide Quoted Text
+// while it shows (quotedOffer). An entry let go (nil) keeps the button as
+// it was.
+func (c *convCard) renderQuoted(lm *loadedMessage) {
+	if lm == nil {
+		return
+	}
+	o := quotedOffer(lm)
+	if c.quotedBox == nil {
+		if o == conversation.QuotedNone {
+			return
+		}
+		c.quotedButton = newQuotedButton()
+		c.quotedButton.SetFocusOnClick(false)
+		c.quotedButton.ConnectClicked(func() {
+			if c.quotedNow != conversation.QuotedNone {
+				c.cv.ctrl.setQuoted(c.id, c.quotedNow == conversation.QuotedShow, c.detailsOpen)
+			}
+		})
+		c.quotedBox = gtk.NewBox(gtk.OrientationHorizontal, 0)
+		c.quotedBox.SetMarginStart(convCardPaddingH - 1)
+		c.quotedBox.SetMarginEnd(convCardPaddingH - 1)
+		c.quotedBox.SetMarginTop(6)
+		c.quotedBox.SetMarginBottom(convCardPaddingV - 1)
+		c.quotedBox.Append(c.quotedButton)
+		c.root.Append(c.quotedBox)
+	}
+	c.quotedNow = o
+	if o != conversation.QuotedNone {
+		setQuotedLabel(c.quotedButton, o)
+	} else if c.quotedButton.HasFocus() {
+		c.body.GrabFocus()
+	}
+	c.quotedBox.SetVisible(!c.folded && o != conversation.QuotedNone)
 }
 
 // renderBody shows the body, its error, or the wait; the same body again

@@ -8,14 +8,14 @@ makeDetails, makeRemoteBar, makePicturesBar, convBar); macOS:
 MessageView/ConversationCardView.swift and ConversationCardHeader.swift.
 One message of the conversation view, a card with a hairline border and
 rounded corners that clip its body: the top part (card padding less the
-border) with the header (the fold arrow of the card that opened the
-conversation, the unread dot, the sender, the recipients' disclosure, the
+border) with the header (the fold arrow, every card's, the unread dot, the sender, the recipients' disclosure, the
 Jira badges via, Internal and Edited, which go to a second line where they
 do not fit, then the hover buttons, which keep their room while hidden, and
 the date), the recipients, the attachment chips and the hint; the folded
 card's preview; the remote-image and pictures bars; and the body: the wait,
 plain text, or the HTML host, white, in which the card's web view sits
-while the card is live. Every text is set in code, plain (Text properties
+while the card is live; and under it the "•••" that shows or hides the
+quoted history the daemon cut (ConversationCardView.swift quotedButton). Every text is set in code, plain (Text properties
 only); the web view gets the sanitiser's output only.
 -->
 <UserControl
@@ -288,6 +288,12 @@ only); the web view gets the sanitiser's output only.
                     Background="White"
                     Visibility="Collapsed" />
             </Grid>
+
+            <!-- The "•••" under the body, while the card is open. -->
+            <reader:QuotedTextButton
+                x:Name="QuotedButton"
+                Margin="13,6,13,9"
+                Click="OnQuotedClick" />
         </StackPanel>
     </Border>
 </UserControl>
