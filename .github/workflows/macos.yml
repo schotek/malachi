@@ -1,7 +1,7 @@
 # The macOS client and its disk image.
 #
 # One job on the macos-26 image (Apple silicon, Xcode 26 by default, whose
-# SDK gives the app its macOS 26 design; LINK_SDK in macos/Makefile), and
+# SDK gives the app its macOS 26 design; SDK_VERSION in macos/Makefile), and
 # one that attaches the image to a tag's release:
 #
 #   app      the Swift tests, then the universal bundle in
@@ -83,7 +83,7 @@ jobs:
 
       - name: Check the SDK
         # An SDK older than 26 builds an app that looks like macOS 14 on
-        # every system (macos/Makefile, LINK_SDK).
+        # every system (macos/Makefile, SDK_VERSION).
         run: |
           sdk="$(xcrun --show-sdk-version)"
           echo "$(xcodebuild -version | head -n 1), macOS SDK $sdk, $(swift --version 2>&1 | head -n 1)"

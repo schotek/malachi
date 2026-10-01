@@ -60,15 +60,17 @@ NOTARY_ISSUER  ?=
 NOTARY_AUTH    := $(if $(NOTARY_PROFILE),--keychain-profile "$(NOTARY_PROFILE)",--key "$(NOTARY_KEY)" --key-id "$(NOTARY_KEY_ID)" --issuer "$(NOTARY_ISSUER)")
 
 # The SDK the app records as linked against: AppKit picks the design by it
-# (Liquid Glass from 26 on). SwiftPM's default build system records the
-# deployment target instead, so without this the app got the macOS 14 look
-# on any newer system. MACOS_MIN is Package.swift's `platforms` minimum.
-# Only the app gets it: malachi-keychain has no UI, and a changed binary is
-# a new code identity the Keychain would ask about again for every stored
-# password, so the helper links exactly as before.
+# (Liquid Glass from 26 on). SwiftPM's new build system (Swift 6.4) records
+# the deployment target instead, so without this the app got the macOS 14
+# look on any newer system. app writes the SDK into the bundle's copy of
+# the executable with vtool, whatever built it: the linker flag that does
+# the same (-platform_version) breaks SwiftPM's universal build in Xcode
+# 26, which hands it to clang as clang's own arguments. MACOS_MIN is
+# Package.swift's `platforms` minimum. Only the app gets it:
+# malachi-keychain has no UI, and a changed binary is a new code identity
+# the Keychain would ask about again for every stored password.
 MACOS_MIN     := 14.0
 SDK_VERSION   := $(shell xcrun --show-sdk-version 2>/dev/null)
-LINK_SDK      := $(if $(SDK_VERSION),-Xlinker -platform_version -Xlinker macos -Xlinker $(MACOS_MIN) -Xlinker $(SDK_VERSION))
 
 # Localisation: the GTK catalogue in po/ is the single source of truth; the
 # generated .lproj directories are copied into Contents/Resources and read by
@@ -92,12 +94,16 @@ HELPER        := malachi-keychain
 APP           := $(BUILD_DIR)/Malachi Mail.app
 CONTENTS      := $(APP)/Contents
 
+# set_sdk: shell statements for app's recipe that write SDK_VERSION into the
+# executable $(1) and check that each of its architectures records it.
+set_sdk = vtool -set-build-version macos $(MACOS_MIN) $(SDK_VERSION) -replace -output "$(1).sdk" "$(1)"; mv "$(1).sdk" "$(1)"; for arch in $$(lipo -archs "$(1)"); do vtool -arch "$$arch" -show-build "$(1)" | grep -Eq '^ *sdk $(SDK_VERSION)$$' || { echo "macos: $(1) does not record SDK $(SDK_VERSION) for $$arch" >&2; exit 1; }; done;
+
 .PHONY: build locale icon app dmg notarize test run clean
 
 ## build: compile the Swift package (release) for ARCHS; a warning fails the build
 build:
 	$(SWIFT_BUILD) -Xswiftc -warnings-as-errors --product $(HELPER)
-	$(SWIFT_BUILD) -Xswiftc -warnings-as-errors --product $(EXE) $(LINK_SDK)
+	$(SWIFT_BUILD) -Xswiftc -warnings-as-errors --product $(EXE)
 
 ## locale: generate .lproj directories from po/malachi.pot and po/*.po
 locale:
@@ -132,6 +138,7 @@ app: build locale icon
 	cp "$$bin/$(EXE)" "$(CONTENTS)/MacOS/$(EXE)"; \
 	cp "$$bin/$(HELPER)" "$(CONTENTS)/MacOS/$(HELPER)"; \
 	cp "$(GO_DIR)/malachid" "$(GO_DIR)/malachi-mcp" "$(CONTENTS)/MacOS/"; \
+	$(if $(SDK_VERSION),$(call set_sdk,$(CONTENTS)/MacOS/$(EXE))) \
 	for arch in $(ARCHS); do \
 		for f in "$(CONTENTS)"/MacOS/*; do \
 			lipo "$$f" -verify_arch "$$arch" || { echo "macos: $$f has no $$arch code" >&2; exit 1; }; \
