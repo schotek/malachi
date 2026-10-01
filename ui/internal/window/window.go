@@ -200,7 +200,6 @@ type Window struct {
 	pane           *messageView // the message pane's display (message_view.go)
 	starButton     *gtk.ToggleButton
 	archiveButton  *gtk.Button
-	junkButton     *gtk.Button
 	trashButton    *gtk.Button
 	messageMenu    *gtk.MenuButton
 	assistButton   *gtk.MenuButton
@@ -292,7 +291,6 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 		messageStack:   b.GetObject("message_stack").Cast().(*gtk.Stack),
 		starButton:     b.GetObject("star_button").Cast().(*gtk.ToggleButton),
 		archiveButton:  b.GetObject("archive_button").Cast().(*gtk.Button),
-		junkButton:     b.GetObject("junk_button").Cast().(*gtk.Button),
 		trashButton:    b.GetObject("trash_button").Cast().(*gtk.Button),
 		messageMenu:    b.GetObject("message_menu").Cast().(*gtk.MenuButton),
 		assistButton:   b.GetObject("assistant_button").Cast().(*gtk.MenuButton),
@@ -331,7 +329,7 @@ func New(app *adw.Application, c *client.Client, log *slog.Logger, s *settings.S
 	w.pane.toast = w.Toast
 	w.registerActions()
 	// The main window lives as long as the application: no unbinding.
-	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions)
+	as.bindAssistantButton(w.assistButton, "win", true, w.syncAssistantActions, w.openAssistantPanel)
 	w.assistantPanel = newAssistantPanel(w, b)
 	// A Claude app may have been installed or registered meanwhile.
 	w.NotifyProperty("is-active", func() {

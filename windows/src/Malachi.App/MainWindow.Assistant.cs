@@ -11,8 +11,10 @@
 // Summarize Unread in This Folder), shown while the Assistant is, and the
 // assistant panel on the right (AssistantSplit) with its toggle beside the ✦
 // button, shown while In App is chosen; a panel that may no longer be shown
-// folds. The panel follows the list's selection. Its width and whether it is
-// a pane or an overlay follow the window's width (Core's PaneLayout).
+// folds. With In App chosen the ✦ button has no menu and opens the panel
+// (Assistant.ButtonOpensPanel). The panel follows the list's selection. Its
+// width and whether it is a pane or an overlay follow the window's width
+// (Core's PaneLayout).
 //
 // Windows differences: the panel is not resized by dragging (GTK's
 // Adw.OverlaySplitView neither; macOS keeps a dragged width), and an overlay
@@ -42,6 +44,10 @@ public sealed partial class MainWindow
     private AssistantActions? assistantActions;
     private AssistantPanelHost? assistantHost;
 
+    // The ✦ button's menu, its flyout while the button is a menu
+    // (Assistant.ButtonOpensPanel says when it opens the panel instead).
+    private AssistantMenu? assistantMenu;
+
     // The panel's pane state is being set from code, not by the toggle.
     private bool assistantSyncing;
 
@@ -68,8 +74,9 @@ public sealed partial class MainWindow
             setUp: () => PreferencesWindow.Show(state)?.ShowAi(),
             canSummarizeUnread: () => actions.CanSummarizeUnread,
             summarizeUnread: () => actions.SummarizeUnread(this));
+        assistantMenu = menu;
         var button = MessageCommands.Assistant;
-        button.Flyout = menu.Flyout;
+        button.Click += (_, _) => OnAssistantButtonClick();
         ToolTipService.SetToolTip(button, texts.Assistant);
         AutomationProperties.SetName(button, texts.Assistant);
 
@@ -79,6 +86,15 @@ public sealed partial class MainWindow
 
         integration.List.SelectedMessageChanged += (_, _) => host.FollowSelection();
         integration.List.SelectionCleared += (_, _) => host.FollowSelection();
+        // The quick action Summarize Unread in This Folder acts on the
+        // sidebar's folder under the Assistant menu item's condition, and
+        // follows it wherever the list's heading does (a folder selected,
+        // the folders known) and with the search.
+        AssistantPanelView.UnreadFolderAvailable = () => actions.CanSummarizeUnread;
+        AssistantPanelView.SummarizeUnreadRequested = actions.SummarizeUnreadInPanel;
+        integration.List.Mailbox.ListTitleChanged += (_, _) => AssistantPanelView.UpdateQuickActions();
+        integration.List.SearchBarChanged += (_, _) => AssistantPanelView.UpdateQuickActions();
+        AssistantPanelView.UpdateQuickActions();
         state.Assistant.Changed += (_, _) => SyncAssistant();
         SetupOwnWords();
         // The application asks again whenever it becomes active (macOS
@@ -103,12 +119,33 @@ public sealed partial class MainWindow
         SetAssistantOpen(true);
     }
 
+    // The ✦ button with In App chosen (Assistant.ButtonOpensPanel; GTK
+    // openAssistantPanel): the panel unfolds and its question field, under
+    // the quick actions, takes the keyboard; an open panel stays open and
+    // only gets the keyboard (its toggle folds it). The state is asked for
+    // again, as the menu asks when it opens. With a Claude app the button
+    // has its flyout, and the click only opens it.
+    private void OnAssistantButtonClick()
+    {
+        if (MessageCommands.Assistant.Flyout is not null || !state.Assistant.PanelShown)
+        {
+            return;
+        }
+        state.Assistant.Refresh();
+        RevealAssistant();
+        // After the panel has unfolded.
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, AssistantPanelView.FocusInput);
+    }
+
     // The ✦ button while the Assistant is shown, the panel's toggle while the
-    // panel may be; a panel that may not be folds.
+    // panel may be; a panel that may not be folds. The ✦ button is the menu,
+    // or the panel's opener while In App is chosen.
     private void SyncAssistant()
     {
         var assistant = state.Assistant;
         MessageCommands.Assistant.Visibility = assistant.Shown ? Visibility.Visible : Visibility.Collapsed;
+        var opensPanel = Assistant.ButtonOpensPanel(assistant.Settings.AssistantTarget, hasPanel: true);
+        MessageCommands.Assistant.Flyout = opensPanel ? null : assistantMenu?.Flyout;
         var panel = assistant.PanelShown;
         MessageCommands.AssistantPanel.Visibility = panel ? Visibility.Visible : Visibility.Collapsed;
         if (!panel)

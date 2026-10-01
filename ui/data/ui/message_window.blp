@@ -71,22 +71,20 @@ Adw.Window message_window {
         tooltip-text: _("Star");
       }
 
-      [end]
-      Button archive_button {
-        icon-name: "folder-download-symbolic";
-        tooltip-text: _("Archive");
-      }
-
-      [end]
-      Button junk_button {
-        icon-name: "mail-mark-junk-symbolic";
-        tooltip-text: _("Mark as Junk");
-      }
-
+      // Two groups, Archive and Trash, then Star, the Assistant and More
+      // Actions: the gap is the trash button's margin. Mark as Junk has no
+      // button (More Actions and the J shortcut).
       [end]
       Button trash_button {
         icon-name: "user-trash-symbolic";
         tooltip-text: _("Move to Trash");
+        margin-end: 12;
+      }
+
+      [end]
+      Button archive_button {
+        icon-name: "folder-download-symbolic";
+        tooltip-text: _("Archive");
       }
     }
 
@@ -393,6 +391,15 @@ Adw.Window message_window {
 }
 
 menu message_menu_model {
+  // Mark as Junk has no header button; disabled where the message has no
+  // junk folder to go to (message_window.go).
+  section {
+    item {
+      label: _("Mark as Junk");
+      action: "msg.junk";
+    }
+  }
+
   section {
     item {
       label: _("Mark as _Unread");

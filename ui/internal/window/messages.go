@@ -24,6 +24,7 @@ import (
 // until the reply, so the list never flickers through the loading state
 // and the selection survives (by key).
 func (w *Window) loadMessages() {
+	w.syncPanelActions()
 	if w.model.search.active {
 		// The list shows search results; a reload of the folder (a sync,
 		// a selection) is a new search only if it changes the scope.

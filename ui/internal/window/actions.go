@@ -489,7 +489,6 @@ func (w *Window) setMessageActionsSensitive(on bool) {
 	}
 	w.trashButton.SetVisible(st.supported.Trash)
 	w.archiveButton.SetVisible(st.supported.Archive)
-	w.junkButton.SetVisible(st.supported.Junk)
 	w.starButton.SetSensitive(st.on && st.star)
 	setStar(w.starButton, st.flagged)
 	w.trashButton.SetTooltipText(trashTooltip(st.outbox))

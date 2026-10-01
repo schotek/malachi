@@ -903,6 +903,25 @@ claude -p --verbose --output-format stream-json --include-partial-messages
   message. A draft the assistant saved is offered by its id from the
   bridge's own result line and opened only after `draft.list` confirms it.
 
+With *In App* chosen, the main window's Assistant button (✦) has no
+menu: a click unfolds the panel, the main window brought forward, and
+puts the keyboard into its question field under the quick actions; an
+open panel stays open and only gets the keyboard (the panel's own toggle
+folds it), and a panel that cannot run says why there (*Sign In…*,
+*Get Claude Code…*). A message window has no panel, so its ✦ button
+keeps the menu, whose actions bring the main window forward and run in
+the panel on that window's message. The other entries do not change: the
+Message menu of the macOS menu bar, an attachment's *Ask the Assistant…*,
+and *Open In*, which is in the message window's menu and the settings
+(`assistant.ButtonOpensPanel`).
+
+The panel's quick actions (`assistant.PanelActions`) are *Summarize*,
+*Draft a Reply…* and *Tasks and Deadlines* on what the panel is about,
+and *Summarize Unread in This Folder* on the folder selected in the
+sidebar, under the condition of the Assistant menu's item (a folder, not
+an Outbox, on GTK and Windows no search instead of it); a button that
+cannot run is insensitive.
+
 The panel follows the selected message until the first question; from
 then on the conversation keeps what it is about. Selecting another
 message offers *New Conversation* or *Add to Conversation* (the next

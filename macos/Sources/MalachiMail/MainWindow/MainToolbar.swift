@@ -35,7 +35,6 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         static let replyAll = NSToolbarItem.Identifier("replyAll")
         static let forward = NSToolbarItem.Identifier("forward")
         static let trash = NSToolbarItem.Identifier("trash")
-        static let junk = NSToolbarItem.Identifier("junk")
         static let archive = NSToolbarItem.Identifier("archive")
         static let star = NSToolbarItem.Identifier("star")
         static let assistant = NSToolbarItem.Identifier("assistant")
@@ -57,13 +56,22 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// sidebar toggle sits at the sidebar section's trailing end, by the
     /// divider it folds. The search field closes the message section, at
     /// the toolbar's trailing end, where Mail has it.
+    /// The message actions are two groups (window.blp: the gap is
+    /// `trash_button`'s `margin-end`):
+    /// Archive and Trash, then Star, Assistant and More Actions. A `.space`
+    /// between them splits the run of bordered items into two Liquid Glass
+    /// capsules; an `NSToolbarItemGroup` is not used, because its subitems
+    /// are no toolbar items of their own (the Assistant button comes and
+    /// goes by `setAssistant`, `ActionPresentation` hides items one by one,
+    /// the star is a view item). Mark as Junk has no button: it is in the
+    /// menus only.
     static let defaultItems: [NSToolbarItem.Identifier] = [
         .flexibleSpace, .toggleSidebar,
         .sidebarTrackingSeparator,
         ID.newMessage, ID.filter, ID.refresh, .flexibleSpace,
         ID.listSeparator,
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions, ID.search,
+        ID.archive, ID.trash, .space, ID.star, ID.assistant, ID.moreActions, ID.search,
     ]
 
     /// The inspector section after the search field while the assistant
@@ -76,7 +84,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// The items of the message section, for the message window's toolbar.
     static let messageSectionItems: [NSToolbarItem.Identifier] = [
         ID.reply, ID.replyAll, ID.forward, .flexibleSpace,
-        ID.trash, ID.junk, ID.archive, ID.star, ID.assistant, ID.moreActions,
+        ID.archive, ID.trash, .space, ID.star, ID.assistant, ID.moreActions,
     ]
 
     private weak var splitView: NSSplitView?
@@ -85,6 +93,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     private let assistantMenu: AssistantMenu?
     /// Whether the Assistant button is in the toolbar (`assistant-menu`).
     private var showsAssistant: Bool
+    /// Whether the Assistant button opens the assistant panel instead of
+    /// its menu (`Assistant.buttonOpensPanel`: In App chosen, the main
+    /// window's toolbar); a click then calls `onOpenAssistantPanel`, which
+    /// the window installs.
+    private var assistantOpensPanel = false
+    var onOpenAssistantPanel: (@MainActor () -> Void)?
     /// Whether the inspector section is in the toolbar (the assistant
     /// panel exists); only a toolbar with sections has one.
     private var showsPanel: Bool
@@ -111,6 +125,20 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// was typed is kept for when the conversion fails.
     private(set) var converting = false
     private var typedWords = ""
+
+    /// The search field folds to a magnifier button while no search is on
+    /// (a deviation, macos/README.md). `NSSearchToolbarItem` folds only
+    /// when the toolbar runs out of room and has no public way to stay
+    /// folded, so `ID.search` is one of two items in the same place:
+    /// `searchLens`, a plain button, or `searchItem`, the field, which
+    /// unfolds on a click on the lens, ⌘F and text put into it by the app
+    /// (`expandSearch`) and folds again once it is empty and has lost the
+    /// keyboard, never while it holds text or converts (`collapseSearchIfIdle`).
+    private var searchItem: NSSearchToolbarItem?
+    private var searchLens: NSToolbarItem?
+    private var searchExpanded = false
+    /// The toolbar `makeToolbar` made, where the two search items swap.
+    private weak var toolbar: NSToolbar?
 
     /// - Parameters:
     ///   - splitView: the split view whose dividers 0 and 1 the tracking
@@ -141,6 +169,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         tb.displayMode = .iconOnly
         tb.allowsUserCustomization = false
         tb.autosavesConfiguration = false
+        toolbar = tb
         return tb
     }
 
@@ -171,6 +200,25 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         } else if let current {
             toolbar.removeItem(at: current)
         }
+    }
+
+    /// Makes the Assistant button the panel's opener or its menu, as the
+    /// `assistant-target` preference changes (`Assistant.buttonOpensPanel`;
+    /// only the main window's toolbar has the panel). The button is one of
+    /// two items in its place, a plain button or an `NSMenuToolbarItem`,
+    /// and swaps where it stands.
+    func setAssistant(opensPanel: Bool, in toolbar: NSToolbar) {
+        let opens = opensPanel && splitView != nil
+        guard opens != assistantOpensPanel else { return }
+        assistantOpensPanel = opens
+        items[ID.assistant] = nil
+        guard let current = toolbar.items.firstIndex(where: { $0.itemIdentifier == ID.assistant }) else { return }
+        toolbar.removeItem(at: current)
+        toolbar.insertItem(withItemIdentifier: ID.assistant, at: current)
+    }
+
+    @objc private func assistantPanelClicked(_ sender: Any?) {
+        onOpenAssistantPanel?()
     }
 
     /// Puts the Assistant button into `toolbar` (right before More
@@ -279,6 +327,7 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             // list in GTK): a search is on while it holds text, and the
             // scope bar appears over the list (a deviation, macos/README.md).
             // The field reports every change; the pause is timed here.
+            // Folded to the lens while no search is on (`searchExpanded`).
             let it = NSSearchToolbarItem(itemIdentifier: id)
             it.label = L10n.T("Search")
             it.searchField.placeholderString = L10n.T("Search Mail")
@@ -288,7 +337,17 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.searchField.target = self
             it.searchField.action = #selector(searchFieldChanged(_:))
             it.searchField.searchMenuTemplate = ownWords ? ownWordsMenu : nil
-            return it
+            searchItem = it
+            let lens = NSToolbarItem(itemIdentifier: id)
+            lens.image = Icon.symbol("magnifyingglass", size: .toolbar, description: L10n.T("Search"))
+            lens.label = L10n.T("Search")
+            lens.paletteLabel = L10n.T("Search")
+            lens.toolTip = L10n.T("Search Mail") + " (⌘F)"
+            lens.isBordered = true
+            lens.target = self
+            lens.action = #selector(searchLensClicked(_:))
+            searchLens = lens
+            return searchExpanded ? it : lens
         case ID.reply:
             return button(id, image: Icon.reply, label: L10n.T("Reply"), action: Action.reply)
         case ID.replyAll:
@@ -297,8 +356,6 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             return button(id, image: Icon.forward, label: L10n.T("Forward"), action: Action.forward)
         case ID.trash:
             return button(id, image: Icon.trash, label: L10n.T("Move to Trash"), action: Action.moveToTrash)
-        case ID.junk:
-            return button(id, image: Icon.junk, label: L10n.T("Mark as Junk"), action: Action.markAsJunk)
         case ID.archive:
             return button(id, image: Icon.archive, label: L10n.T("Archive"), action: Action.archive)
         case ID.star:
@@ -315,6 +372,19 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             it.showsIndicator = false
             it.isBordered = true
             it.menu = assistantMenu.menu
+            if assistantOpensPanel {
+                // In App (`setAssistant(opensPanel:in:)`): the same look,
+                // a plain button that opens the panel instead of the menu.
+                let button = NSToolbarItem(itemIdentifier: id)
+                button.image = it.image
+                button.label = it.label
+                button.paletteLabel = it.paletteLabel
+                button.toolTip = it.toolTip
+                button.isBordered = it.isBordered
+                button.target = self
+                button.action = #selector(assistantPanelClicked(_:))
+                return button
+            }
             return it
         case ID.moreActions:
             let it = NSMenuToolbarItem(itemIdentifier: id)
@@ -333,12 +403,12 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     // MARK: Search field
 
     private var searchField: NSSearchField? {
-        (items[ID.search] as? NSSearchToolbarItem)?.searchField
+        searchItem?.searchField
     }
 
-    /// ⌘F (Edit → Find…): the search field takes the keyboard.
+    /// ⌘F (Edit → Find…): the search field unfolds and takes the keyboard.
     func focusSearch() {
-        (items[ID.search] as? NSSearchToolbarItem)?.beginSearchInteraction()
+        expandSearch(focus: true)
     }
 
     /// Puts `text` into the search field without its typing pause; the
@@ -347,6 +417,57 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         searchWork?.cancel()
         searchWork = nil
         searchField?.stringValue = text
+        if text.isEmpty {
+            scheduleSearchCollapse()
+        } else {
+            expandSearch(focus: false)
+        }
+    }
+
+    /// The lens: the field unfolds and takes the keyboard.
+    @objc private func searchLensClicked(_ sender: Any?) {
+        expandSearch(focus: true)
+    }
+
+    /// Unfolds the lens into the field (in its place in the toolbar) and,
+    /// with `focus`, gives the field the keyboard.
+    private func expandSearch(focus: Bool) {
+        guard let item = searchItem else { return }
+        guard !searchExpanded else {
+            if focus {
+                item.beginSearchInteraction()
+            }
+            return
+        }
+        searchExpanded = true
+        swapSearchItems()
+        guard focus else { return }
+        // The field is laid out in the window once the toolbar has placed it.
+        DispatchQueue.main.async { [weak item] in
+            item?.beginSearchInteraction()
+        }
+    }
+
+    /// Folds the field back to the lens once it is idle: empty, without
+    /// the keyboard and not converting. A field with text is a search on
+    /// show, which the lens would hide. Run after the event that may have
+    /// ended the search, never from inside the field's own callbacks.
+    private func scheduleSearchCollapse() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.searchExpanded, !self.converting,
+                  let field = self.searchField, field.stringValue.isEmpty, field.currentEditor() == nil
+            else { return }
+            self.searchExpanded = false
+            self.swapSearchItems()
+        }
+    }
+
+    /// Puts the item `searchExpanded` asks for in `ID.search`'s place.
+    private func swapSearchItems() {
+        items[ID.search] = searchExpanded ? searchItem as NSToolbarItem? : searchLens
+        guard let toolbar, let at = toolbar.items.firstIndex(where: { $0.itemIdentifier == ID.search }) else { return }
+        toolbar.removeItem(at: at)
+        toolbar.insertItem(withItemIdentifier: ID.search, at: at)
     }
 
     /// Offers "Search in Your Own Words" (the magnifier's menu and ⌥↩) or
@@ -381,6 +502,11 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         field.placeholderString = L10n.T("Search Mail")
         field.stringValue = text ?? typedWords
         typedWords = ""
+        if field.stringValue.isEmpty {
+            scheduleSearchCollapse()
+        } else {
+            expandSearch(focus: false)
+        }
     }
 
     /// The magnifier's "Search in Your Own Words".
@@ -426,6 +552,21 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
             }
             return true
         }
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)) {
+            // Escape ends the search at once: the field empties, gives up
+            // the keyboard and folds to the lens.
+            guard !converting else { return true }
+            searchWork?.cancel()
+            searchWork = nil
+            let hadText = !field.stringValue.isEmpty
+            field.stringValue = ""
+            if hadText {
+                onSearchText?("")
+            }
+            searchItem?.endSearchInteraction()
+            scheduleSearchCollapse()
+            return true
+        }
         guard commandSelector == #selector(NSResponder.insertNewline(_:)) else {
             return false
         }
@@ -442,6 +583,14 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
         searchWork?.cancel()
         searchWork = nil
         onSearchText?("")
+        // The ✕ gives up the keyboard as it clears; a field emptied by
+        // typing keeps it and folds only once it loses it.
+        scheduleSearchCollapse()
+    }
+
+    /// The field lost the keyboard: an empty field folds to the lens.
+    func controlTextDidEndEditing(_ obj: Notification) {
+        scheduleSearchCollapse()
     }
 
     private func button(_ id: NSToolbarItem.Identifier, image: NSImage, label: String, action: Selector) -> NSToolbarItem {
@@ -461,6 +610,10 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
     /// The More Actions menu (window.blp `message_menu_model`).
     private func messageMenu() -> NSMenu {
         let m = NSMenu()
+        // Validated like the Message menu's item (disabled where there is
+        // no junk folder to go to; ActionPresentation hides nothing in menus).
+        m.addItem(withTitle: L10n.T("Mark as Junk"), action: Action.markAsJunk, keyEquivalent: "")
+        m.addItem(.separator())
         m.addItem(withTitle: mn(L10n.T("Mark as _Unread")), action: Action.markAsUnread, keyEquivalent: "")
         m.addItem(withTitle: mn(L10n.T("Mark as _Read")), action: Action.markAsRead, keyEquivalent: "")
         m.addItem(.separator())
@@ -471,7 +624,8 @@ final class MainToolbar: NSObject, NSToolbarDelegate, NSSearchFieldDelegate, NSM
 }
 
 /// The star of the message header bar (window.blp `star_button`): a
-/// push-on/push-off button whose image and tooltip follow the flagged state
+/// plain push button whose image (yellow and filled when flagged) and
+/// tooltip follow the flagged state
 /// (actions.go `setStar`). Validation goes through the responder chain like
 /// an image item's would.
 @MainActor
@@ -489,7 +643,10 @@ final class StarToolbarItem: NSToolbarItem {
     override init(itemIdentifier: NSToolbarItem.Identifier) {
         button = NSButton(image: Icon.star, target: nil, action: Action.toggleFlag)
         super.init(itemIdentifier: itemIdentifier)
-        button.setButtonType(.pushOnPushOff)
+        // A plain push button: an "on" state would fill the Liquid Glass
+        // bezel with the accent colour, as for a primary action; the
+        // flagged state is the image's alone (macos/README.md).
+        button.setButtonType(.momentaryPushIn)
         button.bezelStyle = .toolbar
         button.imageScaling = .scaleProportionallyDown
         button.imagePosition = .imageOnly
@@ -515,7 +672,7 @@ final class StarToolbarItem: NSToolbarItem {
 
     private func applyState() {
         button.image = flagged ? Icon.starFilled : Icon.star
-        button.state = flagged ? .on : .off
+        button.contentTintColor = flagged ? .systemYellow : nil
         let t = flagged ? L10n.T("Unstar") : L10n.T("Star")
         toolTip = t
         button.toolTip = t

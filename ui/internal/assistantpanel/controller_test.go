@@ -268,6 +268,31 @@ func TestPendingActionsAndPrompts(t *testing.T) {
 	})
 }
 
+// Summarize Unread in This Folder as a quick action: it needs a folder the
+// window allows, not a selected message, and waits while a turn runs.
+func TestCanSummarizeUnread(t *testing.T) {
+	fake := newFakeClaude(t, "true", "", answerTurn("ok"))
+	h := newHarness(t, fake, true, testBridge)
+	if !h.panel.CanSummarizeUnread(true) || h.panel.CanRunActions() {
+		t.Errorf("without a message: unread %v, actions %v", h.panel.CanSummarizeUnread(true), h.panel.CanRunActions())
+	}
+	if h.panel.CanSummarizeUnread(false) {
+		t.Error("unread without a folder")
+	}
+	h.panel.SummarizeUnread("a", "in")
+	if h.panel.CanSummarizeUnread(true) {
+		t.Errorf("unread while phase %v", h.panel.Phase())
+	}
+	h.turn()
+	if !h.panel.CanSummarizeUnread(true) {
+		t.Errorf("no unread after the turn, phase %v", h.panel.Phase())
+	}
+	h.panel.Close()
+	if h.panel.CanSummarizeUnread(true) {
+		t.Error("unread after Close")
+	}
+}
+
 // The context follows the selection; a removed context comes back with the
 // next selection; the chip's text.
 func TestContextFollowsTheSelection(t *testing.T) {

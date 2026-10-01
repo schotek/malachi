@@ -59,7 +59,13 @@ final class AssistantPanelViewController: NSViewController {
     private let footer = assistantLabel(size: 11, color: .secondaryLabelColor)
 
     /// The quick actions, in the order of the row.
-    static let quickActions: [Assistant.Action] = [.summarize, .draftReply, .tasks]
+    static let quickActions: [Assistant.Action] = Assistant.panelActions
+
+    /// Whether the window has a folder Summarize Unread in This Folder can
+    /// run on (the Assistant menu item's condition), and the action itself
+    /// on that folder; `Integration` installs both.
+    var unreadFolderAvailable: (@MainActor () -> Bool)?
+    var onSummarizeUnread: (@MainActor () -> Void)?
 
     init(controller: AssistantPanelController) {
         self.controller = controller
@@ -131,7 +137,7 @@ final class AssistantPanelViewController: NSViewController {
             b.bezelStyle = .push
             b.controlSize = .small
             b.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
-            b.tag = Assistant.messageActions.firstIndex(of: a) ?? -1
+            b.tag = Self.quickActions.firstIndex(of: a) ?? -1
             actionButtons.append(b)
             actionsFlow.addView(b)
         }
@@ -262,6 +268,14 @@ final class AssistantPanelViewController: NSViewController {
         updateState()
     }
 
+    /// Puts the keyboard into the question field once the panel has
+    /// unfolded (the Assistant button opened it).
+    func focusInput() {
+        DispatchQueue.main.async { [weak self] in
+            self?.input.focus()
+        }
+    }
+
     // MARK: Items
 
     private func makeItemView(_ item: AssistantPanelController.Item) -> any AssistantItemView {
@@ -324,9 +338,7 @@ final class AssistantPanelViewController: NSViewController {
                 removable: c.effectiveContext != nil)
         }
         selectionBar.isHidden = !c.anotherSelected
-        for b in actionButtons {
-            b.isEnabled = c.canRunActions
-        }
+        updateQuickActions()
         let pending = c.pendingLabel
         pendingLabel.stringValue = pending
         pendingRow.isHidden = pending.isEmpty
@@ -376,8 +388,24 @@ final class AssistantPanelViewController: NSViewController {
     }
 
     @objc private func quickAction(_ sender: NSButton) {
-        guard Assistant.messageActions.indices.contains(sender.tag) else { return }
-        controller.run(Assistant.messageActions[sender.tag])
+        guard Self.quickActions.indices.contains(sender.tag) else { return }
+        let a = Self.quickActions[sender.tag]
+        if a == .unread {
+            onSummarizeUnread?()
+        } else {
+            controller.run(a)
+        }
+    }
+
+    /// Enables the quick actions: Summarize Unread in This Folder by the
+    /// folder, the others by the panel's context. The window calls it too
+    /// when the folder changes.
+    func updateQuickActions() {
+        let folder = unreadFolderAvailable?() ?? false
+        for (i, b) in actionButtons.enumerated() where Self.quickActions.indices.contains(i) {
+            b.isEnabled = Self.quickActions[i] == .unread
+                ? controller.canSummarizeUnread(folder: folder) : controller.canRunActions
+        }
     }
 
     @objc private func cancelPending(_ sender: Any?) {

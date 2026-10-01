@@ -7,8 +7,9 @@ Port of the message page's header bar of ui/data/ui/window.blp: Reply,
 Reply All and Forward at the start; at the end, packed right to left, More
 Actions (message_menu_model), the Assistant's ✦ button and its panel's
 toggle (window.blp assistant_button, assistant_panel_button, shown only
-while the Assistant is), the Star toggle, Archive, Mark as Junk and Move to
-Trash, so that they read Trash, Junk, Archive, Star, panel, ✦, More; and of
+while the Assistant is), the Star toggle, Move to Trash and Archive, so
+that they read Archive, Trash | Star, panel, ✦, More (Mark as Junk is in
+More Actions only); and of
 ui/internal/window/actions.go (setMessageActionsSensitive, setStar: the
 star's icon and tooltip, the trash's tooltip for an outbox message);
 macOS: MainWindow/MainToolbar.swift (the message section). Every button
@@ -128,22 +129,9 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
             VerticalAlignment="Center"
             Orientation="Horizontal"
             Spacing="2">
-            <Button
-                x:Name="TrashButton"
-                AutomationProperties.AutomationId="TrashButton"
-                AutomationProperties.Name="{l:T Msgid='Move to Trash'}"
-                Style="{StaticResource HeaderButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='Move to Trash'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('user-trash-symbolic')}" />
-            </Button>
-            <Button
-                x:Name="JunkButton"
-                AutomationProperties.AutomationId="JunkButton"
-                AutomationProperties.Name="{l:T Msgid='Mark as Junk'}"
-                Style="{StaticResource HeaderButtonStyle}"
-                ToolTipService.ToolTip="{l:T Msgid='Mark as Junk'}">
-                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('mail-mark-junk-symbolic')}" />
-            </Button>
+            <!-- Two groups, Archive and Trash, then Star, the Assistant and
+                 More Actions: the gap is the trash button's margin
+                 (window.blp trash_button margin-end). -->
             <Button
                 x:Name="ArchiveButton"
                 AutomationProperties.AutomationId="ArchiveButton"
@@ -151,6 +139,15 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 Style="{StaticResource HeaderButtonStyle}"
                 ToolTipService.ToolTip="{l:T Msgid='Archive'}">
                 <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('folder-download-symbolic')}" />
+            </Button>
+            <Button
+                x:Name="TrashButton"
+                Margin="0,0,12,0"
+                AutomationProperties.AutomationId="TrashButton"
+                AutomationProperties.Name="{l:T Msgid='Move to Trash'}"
+                Style="{StaticResource HeaderButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Move to Trash'}">
+                <FontIcon FontSize="16" Glyph="{x:Bind res:Icons.Glyph('user-trash-symbolic')}" />
             </Button>
             <!-- star_button: a toggle showing the selection's flagged state;
                  its glyph is set in code only (ShowFlags), so no one-time
@@ -196,6 +193,9 @@ selection's ActionFlags; icon-only buttons are named by their tooltips.
                 <Button.Flyout>
                     <!-- message_menu_model. -->
                     <MenuFlyout Placement="BottomEdgeAlignedRight">
+                        <!-- win.junk: no header button, disabled where there is no junk folder to go to. -->
+                        <MenuFlyoutItem x:Name="MenuJunk" Text="{l:T Msgid='Mark as Junk'}" />
+                        <MenuFlyoutSeparator />
                         <MenuFlyoutItem x:Name="MenuMarkUnread" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Unread'}" />
                         <MenuFlyoutItem x:Name="MenuMarkRead" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Read'}" />
                         <MenuFlyoutSeparator />

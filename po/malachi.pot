@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-09-30 12:51+0000\n"
+"POT-Creation-Date: 2026-10-01 11:17+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -1178,7 +1178,7 @@ msgstr ""
 
 #. TRANSLATORS: menu item; "Jira" is a product name.
 #: ui/internal/jira/wizard.go:78 ui/data/ui/preferences.ui:366
-#: ui/data/ui/window.ui:633
+#: ui/data/ui/window.ui:627
 msgid "Add _Jira Account…"
 msgstr ""
 
@@ -1526,7 +1526,7 @@ msgid "Add %s"
 msgstr ""
 
 #. TRANSLATORS: menu of the status changes a Jira issue allows.
-#: ui/internal/jira/transitions.go:87 ui/data/ui/message_window.ui:411
+#: ui/internal/jira/transitions.go:87 ui/data/ui/message_window.ui:412
 #: ui/data/ui/window.ui:936
 msgid "Change Status"
 msgstr ""
@@ -1538,7 +1538,7 @@ msgstr ""
 
 #: ui/internal/jira/transitions.go:98
 #: ui/internal/window/conversation_card.go:143 ui/internal/window/folders.go:89
-#: ui/internal/window/messages.go:263
+#: ui/internal/window/messages.go:264
 msgid "Loading…"
 msgstr ""
 
@@ -2101,7 +2101,7 @@ msgstr ""
 msgid "_Copy Address"
 msgstr ""
 
-#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:894
+#: ui/internal/window/addresses.go:178 ui/data/ui/window.ui:888
 msgid "_New Message"
 msgstr ""
 
@@ -2251,20 +2251,20 @@ msgid "Forward"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:487 ui/data/ui/compose.ui:110
-#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:200
-#: ui/data/ui/window.ui:687
+#: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:195
+#: ui/data/ui/window.ui:681
 msgid "From"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:487 ui/data/ui/compose.ui:138
-#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:226
-#: ui/data/ui/window.ui:713
+#: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:221
+#: ui/data/ui/window.ui:707
 msgid "To"
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:487 ui/data/ui/compose.ui:176
-#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:254
-#: ui/data/ui/window.ui:741
+#: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:249
+#: ui/data/ui/window.ui:735
 msgid "Cc"
 msgstr ""
 
@@ -2281,23 +2281,23 @@ msgid ""
 msgstr ""
 
 #: ui/internal/window/conversation_card.go:633 ui/data/ui/embedded_window.ui:61
-#: ui/data/ui/message_window.ui:120 ui/data/ui/message_window.ui:401
-#: ui/data/ui/window.ui:546 ui/data/ui/window.ui:926
+#: ui/data/ui/message_window.ui:115 ui/data/ui/message_window.ui:402
+#: ui/data/ui/window.ui:540 ui/data/ui/window.ui:926
 msgid "Load _Images"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:634 ui/data/ui/message_window.ui:126
-#: ui/data/ui/window.ui:552
+#: ui/internal/window/conversation_card.go:634 ui/data/ui/message_window.ui:121
+#: ui/data/ui/window.ui:546
 msgid "Always From This _Sender"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:635 ui/data/ui/message_window.ui:128
-#: ui/data/ui/window.ui:554
+#: ui/internal/window/conversation_card.go:635 ui/data/ui/message_window.ui:123
+#: ui/data/ui/window.ui:548
 msgid "Load remote images now and whenever this sender writes"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:655 ui/data/ui/message_window.ui:157
-#: ui/data/ui/window.ui:583
+#: ui/internal/window/conversation_card.go:655 ui/data/ui/message_window.ui:152
+#: ui/data/ui/window.ui:577
 msgid "_Download Pictures"
 msgstr ""
 
@@ -2396,7 +2396,7 @@ msgid_plural "%d unread of %d"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:612
+#: ui/internal/window/folders.go:414 ui/data/ui/window.ui:606
 msgid "No Accounts"
 msgstr ""
 
@@ -2429,58 +2429,58 @@ msgstr ""
 msgid "Downloading…"
 msgstr ""
 
-#: ui/internal/window/messages.go:86 ui/internal/window/messages.go:261
+#: ui/internal/window/messages.go:87 ui/internal/window/messages.go:262
 #: ui/internal/window/threads.go:46
 msgid "Loading messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:175 ui/internal/window/threads.go:82
+#: ui/internal/window/messages.go:176 ui/internal/window/threads.go:82
 msgid "Loading more messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:253
+#: ui/internal/window/messages.go:254
 msgid "Select a folder"
 msgstr ""
 
-#: ui/internal/window/messages.go:254
+#: ui/internal/window/messages.go:255
 msgid "Choose a folder in the sidebar to see its messages."
 msgstr ""
 
-#: ui/internal/window/messages.go:256
+#: ui/internal/window/messages.go:257
 msgid "Not Synchronised"
 msgstr ""
 
-#: ui/internal/window/messages.go:257
+#: ui/internal/window/messages.go:258
 msgid ""
 "Messages moved here are archived on the server; the folder itself is not "
 "downloaded."
 msgstr ""
 
-#: ui/internal/window/messages.go:260
+#: ui/internal/window/messages.go:261
 msgid "Messages Unavailable"
 msgstr ""
 
-#: ui/internal/window/messages.go:265
+#: ui/internal/window/messages.go:266
 msgid "No Unread Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:266
+#: ui/internal/window/messages.go:267
 msgid "Everything in this folder has been read."
 msgstr ""
 
-#: ui/internal/window/messages.go:268
+#: ui/internal/window/messages.go:269
 msgid "No Flagged Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:269
+#: ui/internal/window/messages.go:270
 msgid "No message in this folder carries a flag."
 msgstr ""
 
-#: ui/internal/window/messages.go:271
+#: ui/internal/window/messages.go:272
 msgid "No Messages"
 msgstr ""
 
-#: ui/internal/window/messages.go:272
+#: ui/internal/window/messages.go:273
 msgid "This folder is empty."
 msgstr ""
 
@@ -2534,8 +2534,8 @@ msgstr ""
 msgid "Cancel Sending"
 msgstr ""
 
-#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:86
-#: ui/data/ui/window.ui:503
+#: ui/internal/window/outbox.go:242 ui/data/ui/message_window.ui:74
+#: ui/data/ui/window.ui:489
 msgid "Move to Trash"
 msgstr ""
 
@@ -2669,48 +2669,48 @@ msgid_plural "%d pictures of this message are on the server only"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/search.go:246
+#: ui/internal/window/search.go:247
 msgid "Loading more results"
 msgstr ""
 
-#: ui/internal/window/search.go:298 ui/internal/window/search_ownwords.go:147
+#: ui/internal/window/search.go:299 ui/internal/window/search_ownwords.go:147
 #: ui/data/ui/window.ui:239
 msgid "Search Mail"
 msgstr ""
 
-#: ui/internal/window/search.go:302
+#: ui/internal/window/search.go:303
 msgid "Search Failed"
 msgstr ""
 
-#: ui/internal/window/search.go:303
+#: ui/internal/window/search.go:304
 msgid "Searching"
 msgstr ""
 
-#: ui/internal/window/search.go:305
+#: ui/internal/window/search.go:306
 msgid "Searching…"
 msgstr ""
 
-#: ui/internal/window/search.go:307
+#: ui/internal/window/search.go:308
 msgid "No Results"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Folder search scope; %s is a folder.
-#: ui/internal/window/search.go:330
+#: ui/internal/window/search.go:331
 #, c-format
 msgid "Search in %s"
 msgstr ""
 
-#: ui/internal/window/search.go:332
+#: ui/internal/window/search.go:333
 msgid "Select a folder to search in it"
 msgstr ""
 
 #. TRANSLATORS: tooltip of the Account search scope; %s is an account.
-#: ui/internal/window/search.go:336
+#: ui/internal/window/search.go:337
 #, c-format
 msgid "Search every folder of %s except Trash and Junk"
 msgstr ""
 
-#: ui/internal/window/search.go:340
+#: ui/internal/window/search.go:341
 msgid "Search every account except Trash and Junk"
 msgstr ""
 
@@ -2960,15 +2960,15 @@ msgstr ""
 msgid "Loading the conversation"
 msgstr ""
 
-#: ui/internal/window/window.go:681
+#: ui/internal/window/window.go:679
 msgid "New mail"
 msgstr ""
 
-#: ui/internal/window/window.go:751 ui/data/ui/window.ui:222
+#: ui/internal/window/window.go:749 ui/data/ui/window.ui:222
 msgid "Search"
 msgstr ""
 
-#: ui/internal/window/window.go:757 ui/data/ui/window.ui:192
+#: ui/internal/window/window.go:755 ui/data/ui/window.ui:192
 msgid "Messages"
 msgstr ""
 
@@ -3220,7 +3220,7 @@ msgid "Right"
 msgstr ""
 
 #: ui/data/ui/conversation_view.ui:66 ui/data/ui/embedded_window.ui:267
-#: ui/data/ui/message_window.ui:363 ui/data/ui/window.ui:849
+#: ui/data/ui/message_window.ui:358 ui/data/ui/window.ui:843
 msgctxt "accessibility"
 msgid "Loading the message"
 msgstr ""
@@ -3233,23 +3233,23 @@ msgstr ""
 msgid "Message"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:74 ui/data/ui/window.ui:489
+#: ui/data/ui/message_window.ui:81 ui/data/ui/window.ui:497
 msgid "Archive"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:80 ui/data/ui/window.ui:496
+#: ui/data/ui/message_window.ui:386 ui/data/ui/window.ui:910
 msgid "Mark as Junk"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:391 ui/data/ui/window.ui:916
+#: ui/data/ui/message_window.ui:392 ui/data/ui/window.ui:916
 msgid "Mark as _Unread"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:395 ui/data/ui/window.ui:920
+#: ui/data/ui/message_window.ui:396 ui/data/ui/window.ui:920
 msgid "Mark as _Read"
 msgstr ""
 
-#: ui/data/ui/message_window.ui:405 ui/data/ui/window.ui:930
+#: ui/data/ui/message_window.ui:406 ui/data/ui/window.ui:930
 msgid "Always Load Images From This _Sender"
 msgstr ""
 
@@ -3530,7 +3530,7 @@ msgid ""
 "computer"
 msgstr ""
 
-#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:621
+#: ui/data/ui/preferences.ui:362 ui/data/ui/window.ui:615
 msgid "_Add Account…"
 msgstr ""
 
@@ -3585,35 +3585,35 @@ msgstr ""
 msgid "Load More"
 msgstr ""
 
-#: ui/data/ui/window.ui:516
+#: ui/data/ui/window.ui:510
 msgid "This message is a draft"
 msgstr ""
 
-#: ui/data/ui/window.ui:517
+#: ui/data/ui/window.ui:511
 msgid "Edit"
 msgstr ""
 
-#: ui/data/ui/window.ui:600
+#: ui/data/ui/window.ui:594
 msgid "No Message Selected"
 msgstr ""
 
-#: ui/data/ui/window.ui:601
+#: ui/data/ui/window.ui:595
 msgid "Select a message to read it here."
 msgstr ""
 
-#: ui/data/ui/window.ui:613
+#: ui/data/ui/window.ui:607
 msgid "Add a mail account to start reading and sending mail."
 msgstr ""
 
-#: ui/data/ui/window.ui:900
+#: ui/data/ui/window.ui:894
 msgid "_Preferences"
 msgstr ""
 
-#: ui/data/ui/window.ui:904
+#: ui/data/ui/window.ui:898
 msgid "_Keyboard Shortcuts"
 msgstr ""
 
-#: ui/data/ui/window.ui:908
+#: ui/data/ui/window.ui:902
 msgid "_About Malachi Mail"
 msgstr ""
 

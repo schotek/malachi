@@ -139,6 +139,19 @@ internal sealed partial class AssistantActions
     public bool CanSummarizeUnread =>
         Model.Selected is { } k && !list.SearchActive && Model.FolderRole(k) != FolderRole.Outbox;
 
+    /// <summary>
+    /// The panel's quick action Summarize Unread in This Folder, for the
+    /// folder selected in the sidebar: in the panel, which says itself what
+    /// it lacks to run (Assistant.PanelActions).
+    /// </summary>
+    public void SummarizeUnreadInPanel()
+    {
+        if (CanSummarizeUnread && Model.Selected is { } k)
+        {
+            Panel?.SummarizeUnread(k);
+        }
+    }
+
     /// <summary>Summarize Unread in This Folder, for the folder selected in the sidebar.</summary>
     public void SummarizeUnread(Window? window)
     {

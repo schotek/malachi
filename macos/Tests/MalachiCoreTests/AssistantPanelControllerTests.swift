@@ -395,6 +395,24 @@ private func folded(
         ])
     }
 
+    /// Summarize Unread in This Folder as a quick action: it needs a folder
+    /// the window allows, not a selected message, and waits while a turn
+    /// runs (TestCanSummarizeUnread).
+    @Test func canSummarizeUnread() async throws {
+        let fake = try FakeClaude(turns: [answerTurn("ok")])
+        let h = try PanelHarness(fake: fake)
+        defer { h.stop() }
+        #expect(h.panel.canSummarizeUnread(folder: true))
+        #expect(!h.panel.canRunActions)
+        #expect(!h.panel.canSummarizeUnread(folder: false))
+        h.panel.summarizeUnread(accountID: "a", folderID: "in")
+        #expect(!h.panel.canSummarizeUnread(folder: true))
+        try await h.turn()
+        #expect(h.panel.canSummarizeUnread(folder: true))
+        h.panel.close()
+        #expect(!h.panel.canSummarizeUnread(folder: true))
+    }
+
     /// The context follows the selection; a removed context comes back
     /// with the next selection; the chip's text.
     @Test func contextFollowsTheSelection() throws {

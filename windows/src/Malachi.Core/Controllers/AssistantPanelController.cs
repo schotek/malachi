@@ -435,6 +435,15 @@ public sealed partial class AssistantPanelController : IDisposable
     /// </summary>
     public bool CanRunActions => CurrentPhase == Phase.Idle && !IsClosed && QuickTarget is not null;
 
+    /// <summary>
+    /// Whether the quick action Summarize Unread in This Folder can run
+    /// (Controller.CanSummarizeUnread): <paramref name="folder"/> says
+    /// whether the window has a folder it can be summarised for (the
+    /// Assistant menu item's condition), and nothing is under way. It needs
+    /// no selected message.
+    /// </summary>
+    public bool CanSummarizeUnread(bool folder) => folder && CurrentPhase == Phase.Idle && !IsClosed;
+
     /// <summary>The question field's placeholder for the waiting action.</summary>
     public string Placeholder
     {

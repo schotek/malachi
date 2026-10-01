@@ -554,6 +554,15 @@ func (c *Controller) CanRunActions() bool {
 	return c.phase == PhaseIdle && !c.closed && c.quickTarget() != nil
 }
 
+// CanSummarizeUnread says whether the quick action Summarize Unread in This
+// Folder can run: folder says whether the window has a folder it can be
+// summarised for (the Assistant menu item's condition: one is selected,
+// not an Outbox, no search replaces it), and nothing is under way. It
+// needs no selected message.
+func (c *Controller) CanSummarizeUnread(folder bool) bool {
+	return folder && c.phase == PhaseIdle && !c.closed
+}
+
 // quickTarget is what the quick actions act on: the chip's context before
 // the conversation's first question, the newest pinned context after it
 // (none when that is all mail).

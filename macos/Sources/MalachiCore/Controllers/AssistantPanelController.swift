@@ -427,6 +427,14 @@ public final class AssistantPanelController {
         phase == .idle && !closed && quickTarget != nil
     }
 
+    /// Controller.CanSummarizeUnread: whether the quick action Summarize
+    /// Unread in This Folder can run: `folder` says whether the window has
+    /// a folder it can be summarised for (the Assistant menu item's
+    /// condition), and nothing is under way. It needs no selected message.
+    public func canSummarizeUnread(folder: Bool) -> Bool {
+        folder && phase == .idle && !closed
+    }
+
     /// What the quick actions act on: the chip's context before the
     /// conversation's first question, the newest pinned context after it
     /// (none when that is all mail).

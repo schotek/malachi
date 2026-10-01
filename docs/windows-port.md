@@ -1847,7 +1847,7 @@ overlay; at 600 or less list and message form one stack with Back (GTK). Command
 rows per pane: sidebar (New Message, the primary menu `…`: New Message, Add
 Account…, Preferences, About, Quit), list (folder title and counts, Check
 for New Mail, the All/Unread/Flagged `SelectorBar`, hidden while
-searching), message (Reply, Reply All, Forward, Trash, Junk, Archive, Star,
+searching), message (Reply, Reply All, Forward; Archive, Trash; Star, ✦,
 More). The status line runs across the bottom edge (26 px, spinner,
 connection glyph, caption) and opens the per-account flyout. 1200×760,
 minimum 360×294. The caption is *Folder – Malachi Mail*, the folder's name
@@ -1906,8 +1906,9 @@ Malachi Mail` and a Windows-only *Quit*, with the keys beside them; GTK's
 dead `_Keyboard Shortcuts` is left out), the list's Check for New Mail and
 title with its counts (`MessageListPane`, no search toggle: the box is in
 the title bar), the message page's Reply, Reply All, Forward and, packed
-from the end as in the Blueprint, Trash, Junk, Archive, the Star toggle and
-More Actions (`message_menu_model`; `MessageCommandBar`). Every button runs
+from the end as in the Blueprint, Archive and Trash, a gap, then the Star
+toggle, the Assistant and More Actions (`message_menu_model`, which holds
+Mark as Junk; `MessageCommandBar`). Every button runs
 a `WindowCommands` command (the per-message ones are `SelectionActions`,
 the port of the selection half of `MessageActionsController.swift`) and is
 enabled while it is; the star and the trash follow the flags (Star or
@@ -2040,7 +2041,7 @@ commands their handlers, the selection's actions through
 `MessageActionRouter`), in `Windows/MessageWindow` and in
 `Windows/EmbeddedMessageWindow`. From the top, as `window.blp`'s
 `message_page`: in a message window the command row (Reply, Reply All,
-Forward; Trash, Junk, Archive, Star, More with `message_menu_model`),
+Forward; Archive, Trash; Star, ✦, More with `message_menu_model`),
 40-pixel `AppBarButton`s bound to the window's `WindowCommands`, the star
 and the trash button showing the flags (Star/Unstar, Move to Trash/Cancel
 Sending); the star is an `AppBarToggleButton` with the main window's look

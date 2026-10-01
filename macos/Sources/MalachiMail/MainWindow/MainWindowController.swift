@@ -58,6 +58,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     private let assistantMenu: AssistantMenu
     private var assistantToken: AssistantController.Token?
     private var assistantTargetToken: Settings.ChangeToken?
+    /// The assistant panel's view, for the Assistant button that opens it.
+    private weak var assistantPanel: AssistantPanelViewController?
     /// The search in the user's own words, made on first use.
     private var conversion: SearchConversion?
     private let log = Logger(subsystem: "io.github.schotek.Malachi", category: "window")
@@ -137,6 +139,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         toolbarDelegate.onSearchOwnWords = { [weak self] words in
             self?.searchInOwnWords(words)
         }
+        toolbarDelegate.onOpenAssistantPanel = { [weak self] in
+            self?.openAssistantPanel()
+        }
+        if let toolbar = w.toolbar {
+            toolbarDelegate.setAssistant(
+                opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: toolbar)
+        }
         toolbarDelegate.setOwnWords(available: assistant.canRunInApp)
         w.setFrameAutosaveName(Self.frameAutosaveName)
 
@@ -179,11 +188,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
     /// The assistant panel's view (the split view's inspector).
     func install(assistant vc: NSViewController) {
         split.assistantContainer.install(vc)
+        assistantPanel = vc as? AssistantPanelViewController
     }
 
     /// Opens the assistant panel, while it exists.
     func revealAssistant() {
         split.revealAssistant()
+    }
+
+    /// The Assistant button with In App chosen (`Assistant.buttonOpensPanel`):
+    /// the panel unfolds and its question field, under the quick actions,
+    /// takes the keyboard; an open panel stays open and only gets the
+    /// keyboard (the inspector toggle folds it). The state is asked for
+    /// again, as the Assistant menu asks when it opens.
+    private func openAssistantPanel() {
+        state.assistant.refresh()
+        revealAssistant()
+        assistantPanel?.focusInput()
     }
 
     /// The panel and its toolbar toggle exist while the Assistant is shown
@@ -193,6 +214,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         split.assistantAllowed = allowed
         if let toolbar = window?.toolbar {
             toolbarDelegate.setAssistantPanel(visible: allowed, in: toolbar)
+            toolbarDelegate.setAssistant(
+                opensPanel: Assistant.buttonOpensPanel(state.settings.assistantTarget, hasPanel: true), in: toolbar)
         }
         let ownWords = state.assistant.canRunInApp
         toolbarDelegate.setOwnWords(available: ownWords)

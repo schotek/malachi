@@ -134,6 +134,23 @@ final class Integration {
             reading?(summary)
             self?.assistantPanel.followSelection()
         }
+        // The quick action Summarize Unread in This Folder acts on the
+        // sidebar's folder, under the Assistant menu item's condition, and
+        // follows it wherever the list's title does (a folder selected, a
+        // search, the folders known).
+        let panelView = assistantPanel.viewController
+        panelView.unreadFolderAvailable = { [weak self] in
+            self?.messageActions.canSummarizeUnread ?? false
+        }
+        panelView.onSummarizeUnread = { [weak self] in
+            self?.messageActions.assistant.summarizeUnreadInPanel()
+        }
+        let title = mailbox.onListTitleChanged
+        mailbox.onListTitleChanged = { [weak panelView] t, s in
+            title?(t, s)
+            panelView?.updateQuickActions()
+        }
+        panelView.updateQuickActions()
     }
 
     // MARK: Wiring

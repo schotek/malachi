@@ -121,7 +121,7 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 	unbind := w.assist.bindAssistantButton(b.GetObject("assistant_button").Cast().(*gtk.MenuButton), "msg", false, func() {
 		_, ok := w.assist.pick(true)
 		ask.SetEnabled(ok && !outbox)
-	})
+	}, nil)
 	activeHandle := mw.NotifyProperty("is-active", func() {
 		if mw.IsActive() {
 			w.assist.Refresh()
@@ -132,11 +132,11 @@ func newMessageWindow(w *Window, s api.MessageSummary) *MessageWindow {
 		mw.HandlerDisconnect(activeHandle)
 		return false
 	})
-	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button", "junk": "junk_button"} {
+	for name, obj := range map[string]string{"trash": "trash_button", "archive": "archive_button"} {
 		b.GetObject(obj).Cast().(*gtk.Button).SetActionName("msg." + name)
 	}
 	for obj, supported := range map[string]bool{
-		"trash_button": st.supported.Trash, "archive_button": st.supported.Archive, "junk_button": st.supported.Junk,
+		"trash_button": st.supported.Trash, "archive_button": st.supported.Archive,
 		"reply_all_button": st.supported.ReplyAll, "forward_button": st.supported.Forward,
 		"reply_button": st.supported.Reply,
 	} {

@@ -514,25 +514,22 @@ Adw.ApplicationWindow main_window {
                   sensitive: false;
                 }
 
-                [end]
-                Button archive_button {
-                  icon-name: "folder-download-symbolic";
-                  tooltip-text: _("Archive");
-                  action-name: "win.archive";
-                }
-
-                [end]
-                Button junk_button {
-                  icon-name: "mail-mark-junk-symbolic";
-                  tooltip-text: _("Mark as Junk");
-                  action-name: "win.junk";
-                }
-
+                // Two groups, Archive and Trash, then Star, the Assistant and
+                // More Actions: the gap is the trash button's margin. Mark as
+                // Junk has no button (More Actions and the J shortcut).
                 [end]
                 Button trash_button {
                   icon-name: "user-trash-symbolic";
                   tooltip-text: _("Move to Trash");
                   action-name: "win.trash";
+                  margin-end: 12;
+                }
+
+                [end]
+                Button archive_button {
+                  icon-name: "folder-download-symbolic";
+                  tooltip-text: _("Archive");
+                  action-name: "win.archive";
                 }
               }
 
@@ -945,6 +942,15 @@ menu primary_menu {
 }
 
 menu message_menu_model {
+  // Mark as Junk has no header button; disabled where the selection has
+  // no junk folder to go to (actions.go setMessageActionsSensitive).
+  section {
+    item {
+      label: _("Mark as Junk");
+      action: "win.junk";
+    }
+  }
+
   section {
     item {
       label: _("Mark as _Unread");

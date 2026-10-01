@@ -258,7 +258,6 @@ public sealed partial class MessageView : UserControl
         ReplyAllButton.Command = commands.ReplyAll.Command;
         ForwardButton.Command = commands.Forward.Command;
         TrashButton.Command = commands.Trash.Command;
-        JunkButton.Command = commands.Junk.Command;
         ArchiveButton.Command = commands.Archive.Command;
         // A toggle is not given the command: its click flips it before the
         // command runs, so the click runs the command and the button then
@@ -268,6 +267,7 @@ public sealed partial class MessageView : UserControl
             commands.ToggleFlag.TryExecute();
             ShowFlags();
         };
+        JunkItem.Command = commands.Junk.Command;
         MarkUnreadItem.Command = commands.MarkUnread.Command;
         MarkReadItem.Command = commands.MarkRead.Command;
         LoadImagesItem.Command = commands.LoadImages.Command;
@@ -308,7 +308,6 @@ public sealed partial class MessageView : UserControl
         ForwardButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Forward);
         TrashButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Trash);
         ArchiveButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Archive);
-        JunkButton.Visibility = Main.ActionPresentation.Shown(f, MessageActionKind.Junk);
         var status = commands.ChangeStatus.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
         ChangeStatusItem.Visibility = status;
         ChangeStatusSeparator.Visibility = status;

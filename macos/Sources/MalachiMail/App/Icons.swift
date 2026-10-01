@@ -142,7 +142,6 @@ enum Icon {
     static var replyAll: NSImage { image("mail-reply-all", size: .toolbar) }
     static var forward: NSImage { image("mail-forward", size: .toolbar) }
     static var trash: NSImage { image("user-trash", size: .toolbar) }
-    static var junk: NSImage { image("mail-mark-junk", size: .toolbar) }
     static var archive: NSImage { image("folder-download", size: .toolbar) }
     static var star: NSImage { image("non-starred", size: .toolbar) }
     static var starFilled: NSImage { image("starred", size: .toolbar) }

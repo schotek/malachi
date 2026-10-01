@@ -10,8 +10,8 @@ MessageBodyTextView; GTK: the message pane of ui/data/ui/window.blp
 their object ids (ui/internal/window/message_view.go). One message display
 in three modes (Core's ReaderController, docs/windows-port.md §11.3), from
 the top: the command row of the pane or window (the Adw.HeaderBar: Reply,
-Reply All, Forward at the start; Trash, Junk, Archive, Star and More at the
-end, GTK packing [end] from the right), the outbox and draft banners
+Reply All, Forward at the start; Archive and Trash, then Star, Assistant and
+More at the end, GTK packing [end] from the right), the outbox and draft banners
 (InfoBars), the remote-image bar (a bar of its own, as in GTK: two
 buttons, reachable by Tab), the pictures bar under it (pictures of the
 HTML kept on the mail server only, Download Pictures; not in an attached
@@ -148,24 +148,9 @@ gets the sanitiser's output only.
                 HorizontalAlignment="Right"
                 Orientation="Horizontal"
                 Spacing="2">
-                <AppBarButton
-                    x:Name="TrashButton"
-                    AutomationProperties.AutomationId="TrashButton"
-                    Style="{StaticResource CommandRowButtonStyle}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('user-trash')}" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton
-                    x:Name="JunkButton"
-                    AutomationProperties.AutomationId="JunkButton"
-                    Label="{l:T Msgid='Mark as Junk'}"
-                    Style="{StaticResource CommandRowButtonStyle}"
-                    ToolTipService.ToolTip="{l:T Msgid='Mark as Junk'}">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('mail-mark-junk')}" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
+                <!-- Two groups, Archive and Trash, then Star, the Assistant
+                     and More Actions: the gap is the trash button's margin
+                     (message_window.blp trash_button margin-end). -->
                 <AppBarButton
                     x:Name="ArchiveButton"
                     AutomationProperties.AutomationId="ArchiveButton"
@@ -174,6 +159,15 @@ gets the sanitiser's output only.
                     ToolTipService.ToolTip="{l:T Msgid='Archive'}">
                     <AppBarButton.Icon>
                         <FontIcon Glyph="{x:Bind res:Icons.Glyph('folder-download')}" />
+                    </AppBarButton.Icon>
+                </AppBarButton>
+                <AppBarButton
+                    x:Name="TrashButton"
+                    Margin="0,0,12,0"
+                    AutomationProperties.AutomationId="TrashButton"
+                    Style="{StaticResource CommandRowButtonStyle}">
+                    <AppBarButton.Icon>
+                        <FontIcon Glyph="{x:Bind res:Icons.Glyph('user-trash')}" />
                     </AppBarButton.Icon>
                 </AppBarButton>
                 <!-- GTK's star ToggleButton: its state, icon (starred or
@@ -215,6 +209,9 @@ gets the sanitiser's output only.
                          shows no drop-down chevron; OnMore opens it). -->
                     <FlyoutBase.AttachedFlyout>
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
+                            <!-- msg.junk: no header button, disabled where there is no junk folder to go to. -->
+                            <MenuFlyoutItem x:Name="JunkItem" Text="{l:T Msgid='Mark as Junk'}" />
+                            <MenuFlyoutSeparator />
                             <MenuFlyoutItem x:Name="MarkUnreadItem" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Unread'}" />
                             <MenuFlyoutItem x:Name="MarkReadItem" l:MnemonicLabel.Text="{l:T Msgid='Mark as _Read'}" />
                             <MenuFlyoutSeparator />

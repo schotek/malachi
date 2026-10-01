@@ -406,24 +406,104 @@ func (a *Assistant) assistantMenu(prefix string, unread bool) (menu *gio.Menu, u
 // Summarize Unread in This Folder) on the prefix.* actions, visible while
 // the Assistant is shown. Opening it asks for the state again (the menu
 // uses the last known one) and calls opening first, which brings the
-// window's actions up to date. The returned function stops following.
-func (a *Assistant) bindAssistantButton(b *gtk.MenuButton, prefix string, unread bool, opening func()) (unbind func()) {
+// window's actions up to date. In the window with the panel (openPanel
+// not nil) and In App chosen, the button has no menu and a click calls
+// openPanel instead (assistant.ButtonOpensPanel). The returned function
+// stops following.
+func (a *Assistant) bindAssistantButton(b *gtk.MenuButton, prefix string, unread bool, opening, openPanel func()) (unbind func()) {
 	menu, update := a.assistantMenu(prefix, unread)
-	b.SetMenuModel(menu)
+	opensPanel := func() bool { return assistant.ButtonOpensPanel(a.target(), openPanel != nil) }
+	// setModel gives b its menu, or none while a click opens the panel
+	// (the create-popup function keeps the button sensitive without one).
+	hasMenu := false
+	setModel := func() {
+		want := !opensPanel()
+		if want == hasMenu {
+			return
+		}
+		hasMenu = want
+		if want {
+			b.SetMenuModel(menu)
+		} else {
+			b.SetMenuModel(nil)
+		}
+	}
+	setModel()
 	b.SetIconName(assistantIcon)
 	b.SetTooltipText(assistant.Texts(tr).Assistant)
 	b.SetCreatePopupFunc(func(*gtk.MenuButton) {
 		a.Refresh()
+		setModel()
+		if opensPanel() {
+			// No popup to wait for: the button, which GTK keeps pressed
+			// until its popup closes, comes up again at once.
+			b.SetActive(false)
+			openPanel()
+			return
+		}
 		opening()
 		update()
 	})
 	sync := func() {
 		b.SetVisible(a.shown())
+		setModel()
 		update()
 		opening()
 	}
 	sync()
 	return a.OnChange(sync)
+}
+
+// openAssistantPanel is the main window's Assistant button with In App
+// chosen (assistant.ButtonOpensPanel): it unfolds the panel, the window
+// brought forward, and puts the focus into its question field, where the
+// quick actions are; an open panel stays open and only gets the focus
+// (its own toggle folds it).
+func (w *Window) openAssistantPanel() {
+	p := w.assistantPanel
+	if p == nil {
+		return
+	}
+	p.reveal()
+	// After the panel has unfolded.
+	glib.IdleAdd(func() { p.input.GrabFocus() })
+}
+
+// runQuick is a quick action of the panel (assistant.PanelActions):
+// Summarize Unread in This Folder on the folder selected in the sidebar,
+// under the condition of the Assistant menu's item (canSummarizeUnread),
+// the others on the panel's context.
+func (p *assistantPanel) runQuick(a assistant.Action) {
+	if a != assistant.Unread {
+		p.ctl.Run(a)
+		return
+	}
+	if p.w.canSummarizeUnread() {
+		p.summarizeUnread(p.w.model.selected)
+	}
+}
+
+// canRunQuick says whether the panel's button of quick action a is
+// enabled: Summarize Unread in This Folder by the folder, the others by
+// the panel's context.
+func (p *assistantPanel) canRunQuick(a assistant.Action) bool {
+	if a == assistant.Unread {
+		return p.ctl.CanSummarizeUnread(p.w.canSummarizeUnread())
+	}
+	return p.ctl.CanRunActions()
+}
+
+// syncPanelActions enables the panel's quick actions again when the folder
+// they may act on changes (another folder, a search opened or closed);
+// the panel's own changes come through its updateState.
+func (w *Window) syncPanelActions() {
+	p := w.assistantPanel
+	if p == nil {
+		return
+	}
+	for i, b := range p.actions {
+		b.SetSensitive(p.canRunQuick(quickActions[i]))
+	}
 }
 
 // newestFirst is the ids of a row, newest first, as a prompt takes them: a

@@ -318,7 +318,7 @@ vlastní přihlášení démona v prohlížeči (client ID v `config.toml`),
 doplňování příjemců jen ze sebraných adres. Odchylky od GTK jen z tabulky
 v `macos/README.md` (unified toolbar, skládání panelů bez navigace zpět,
 stavový pruh přes spodek okna místo patičky sidebaru, bez tlačítka
-hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
+hlavní nabídky (je v menu baru), bannery jako karty se symbolem, seznam se stránkuje sám, filtr v toolbaru jako v Mailu, hledací pole v toolbaru s pruhem rozsahu, bez hledání sbalené na lupu, Settings bez hledání, ⌥⌘↑/↓, volba ⌘R, pořadí tlačítek NSAlert,
 quarantine na přílohách, zvuk Glass); `.blp` jsou reference, nová
 funkce jde nejdřív do backendu a GTK, pak sem. Ad-hoc podpis: po každém
 rebuildu, který změní binárku, se Keychain zeptá jednou za každou položku
@@ -428,7 +428,11 @@ existuje jen se zapnutým „Registrovat v Claude“, bez náhradního cíle,
 nabídka restartu Claude Desktop, který za běhu přepisuje svou
 konfiguraci) a B1 (třetí cíl „V aplikaci (experimentální)“: panel vpravo
 v hlavním okně nad `claude -p` se stream-json, souhlas při prvním dotazu,
-rychlé akce, odpověď jako podmnožina Markdownu bez HTML, karta
+✦ v liště hlavního okna je s tímto cílem bez nabídky a panel jen otevře
+a dá fokus poli dotazu (`assistant.ButtonOpensPanel`; okno zprávy nabídku
+nechává, platí ve všech třech klientech), rychlé akce
+(`assistant.PanelActions`, včetně Shrnout nepřečtené ve složce vybrané
+v postranním panelu), odpověď jako podmnožina Markdownu bez HTML, karta
 „Otevřít koncept“, rozhovor drží kontext s lištou „Vybrali jste jinou
 zprávu“) a B2 (jen s cílem „V aplikaci“: tlačítko ✦ v okně Nová zpráva
 upraví výběr, jinak vlastní text nad hlavičkou citace — Zdvořileji,

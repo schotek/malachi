@@ -48,7 +48,7 @@ import (
 // on the server yet.
 
 // quickActions are the panel's buttons, in order.
-var quickActions = []assistant.Action{assistant.Summarize, assistant.DraftReply, assistant.Tasks}
+var quickActions = assistant.PanelActions
 
 // glibLoop runs the panel's callbacks on the GTK main loop.
 type glibLoop struct{}
@@ -180,7 +180,7 @@ func newAssistantPanel(w *Window, b *gtk.Builder) *assistantPanel {
 		a := a
 		btn := gtk.NewButtonWithLabel(assistant.Label(tr, a))
 		btn.AddCSSClass("chip-action")
-		btn.ConnectClicked(func() { p.ctl.Run(a) })
+		btn.ConnectClicked(func() { p.runQuick(a) })
 		actions.Append(btn)
 		p.actions = append(p.actions, btn)
 	}
@@ -369,8 +369,8 @@ func (p *assistantPanel) updateState() {
 		p.chipRemove.SetVisible(c.EffectiveContext() != nil)
 	}
 	p.bar.SetVisible(c.AnotherSelected())
-	for _, b := range p.actions {
-		b.SetSensitive(c.CanRunActions())
+	for i, b := range p.actions {
+		b.SetSensitive(p.canRunQuick(quickActions[i]))
 	}
 	label := c.PendingLabel()
 	p.pendingLabel.SetText(label)

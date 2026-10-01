@@ -109,6 +109,14 @@ final class AssistantActions {
         return model.folderRole(k) != .outbox
     }
 
+    /// The panel's quick action Summarize Unread in This Folder, for the
+    /// folder selected in the sidebar: in the panel, which says itself
+    /// what it lacks to run (assistant.PanelActions).
+    func summarizeUnreadInPanel() {
+        guard canSummarizeUnread, let k = model.selected else { return }
+        panel?.summarizeUnread(k)
+    }
+
     /// Summarize Unread in This Folder, for the folder selected in the
     /// sidebar.
     func summarizeUnread(from window: NSWindow?) {

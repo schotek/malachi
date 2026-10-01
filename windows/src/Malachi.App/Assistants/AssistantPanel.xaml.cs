@@ -37,8 +37,9 @@ namespace Malachi.App.Assistants;
 /// <summary>The assistant panel of the main window (assistant_panel.blp).</summary>
 public sealed partial class AssistantPanel : UserControl
 {
-    // assistant_panel.go quickActions: the panel's buttons, in order.
-    private static readonly AssistantAction[] QuickActions = [AssistantAction.Summarize, AssistantAction.DraftReply, AssistantAction.Tasks];
+    // assistant_panel.go quickActions: the panel's buttons, in order
+    // (Assistant.PanelActions).
+    private static readonly IReadOnlyList<AssistantAction> QuickActions = Assistant.PanelActions;
 
     // How close to its end the transcript counts as at its end (GTK 24 px).
     private const double EndSlack = 24;
@@ -66,7 +67,7 @@ public sealed partial class AssistantPanel : UserControl
         foreach (var a in QuickActions)
         {
             var button = new Button { Content = Assistant.Label(a) };
-            button.Click += (_, _) => controller?.Run(a);
+            button.Click += (_, _) => RunQuick(a);
             Actions.Children.Add(button);
             actionButtons.Add(button);
         }
@@ -122,6 +123,45 @@ public sealed partial class AssistantPanel : UserControl
     /// <summary>The question field takes the keyboard.</summary>
     public void FocusInput() => Input.Focus(FocusState.Programmatic);
 
+    /// <summary>
+    /// Whether the main window has a folder Summarize Unread in This Folder
+    /// can run on (the Assistant menu item's condition); the main window
+    /// installs it with <see cref="SummarizeUnreadRequested"/>.
+    /// </summary>
+    public Func<bool>? UnreadFolderAvailable { get; set; }
+
+    /// <summary>The quick action Summarize Unread in This Folder, on the main window's folder.</summary>
+    public Action? SummarizeUnreadRequested { get; set; }
+
+    /// <summary>
+    /// Enables the quick actions: Summarize Unread in This Folder by the
+    /// folder, the others by the panel's context. The main window calls it
+    /// too when its folder changes.
+    /// </summary>
+    public void UpdateQuickActions()
+    {
+        var folder = UnreadFolderAvailable?.Invoke() ?? false;
+        for (var i = 0; i < actionButtons.Count && i < QuickActions.Count; i++)
+        {
+            actionButtons[i].IsEnabled = controller is { } c
+                && (QuickActions[i] == AssistantAction.Unread ? c.CanSummarizeUnread(folder) : c.CanRunActions);
+        }
+    }
+
+    // A quick action: Summarize Unread in This Folder on the main window's
+    // folder, the others on the panel's context.
+    private void RunQuick(AssistantAction a)
+    {
+        if (a == AssistantAction.Unread)
+        {
+            SummarizeUnreadRequested?.Invoke();
+        }
+        else
+        {
+            controller?.Run(a);
+        }
+    }
+
     private static void SetTip(Button button, string text)
     {
         ToolTipService.SetToolTip(button, text);
@@ -151,10 +191,7 @@ public sealed partial class AssistantPanel : UserControl
             ChipRemove.Visibility = c.EffectiveContext is null ? Visibility.Collapsed : Visibility.Visible;
         }
         Bar.Visibility = c.AnotherSelected ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var b in actionButtons)
-        {
-            b.IsEnabled = c.CanRunActions;
-        }
+        UpdateQuickActions();
         var label = c.PendingLabel;
         PendingLabel.Text = label;
         PendingRow.Visibility = label.Length == 0 ? Visibility.Collapsed : Visibility.Visible;

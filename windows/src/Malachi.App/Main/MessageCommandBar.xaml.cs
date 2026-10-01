@@ -47,8 +47,8 @@ public sealed partial class MessageCommandBar : UserControl
         CommandBinding.Bind(ReplyAllButton, windowCommands.ReplyAll);
         CommandBinding.Bind(ForwardButton, windowCommands.Forward);
         CommandBinding.Bind(TrashButton, windowCommands.Trash);
-        CommandBinding.Bind(JunkButton, windowCommands.Junk);
         CommandBinding.Bind(ArchiveButton, windowCommands.Archive);
+        CommandBinding.Bind(MenuJunk, windowCommands.Junk);
         CommandBinding.Bind(MenuMarkUnread, windowCommands.MarkUnread);
         CommandBinding.Bind(MenuMarkRead, windowCommands.MarkRead);
         CommandBinding.Bind(MenuLoadImages, windowCommands.LoadImages);
@@ -91,7 +91,6 @@ public sealed partial class MessageCommandBar : UserControl
         ForwardButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Forward);
         TrashButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Trash);
         ArchiveButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Archive);
-        JunkButton.Visibility = ActionPresentation.Shown(flags, MessageActionKind.Junk);
         var status = c.ChangeStatus.IsEnabled ? Visibility.Visible : Visibility.Collapsed;
         MenuChangeStatus.Visibility = status;
         MenuChangeStatusSeparator.Visibility = status;

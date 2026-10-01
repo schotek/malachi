@@ -319,6 +319,29 @@ public sealed class AssistantPanelControllerTests
             (await h.ContentsAsync()).OfType<UserContent>());
     }
 
+    /// <summary>Summarize Unread in This Folder as a quick action: a folder the window allows, no selected message, nothing under way (TestCanSummarizeUnread).</summary>
+    [Fact]
+    public async Task CanSummarizeUnread()
+    {
+        RequireWindows();
+        await using var h = await Harness.CreateAsync(Fake(CannedStreamJson.AnswerTurn("ok")));
+        await h.On(() =>
+        {
+            Assert.True(h.Panel.CanSummarizeUnread(true));
+            Assert.False(h.Panel.CanRunActions);
+            Assert.False(h.Panel.CanSummarizeUnread(false));
+            h.Panel.SummarizeUnread("a", "in");
+            Assert.False(h.Panel.CanSummarizeUnread(true));
+        });
+        await h.TurnAsync();
+        await h.On(() =>
+        {
+            Assert.True(h.Panel.CanSummarizeUnread(true));
+            h.Panel.Close();
+            Assert.False(h.Panel.CanSummarizeUnread(true));
+        });
+    }
+
     /// <summary>The context follows the selection; a removed context comes back with the next selection; the chip's text.</summary>
     [Fact]
     public async Task ContextFollowsTheSelection()

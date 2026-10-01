@@ -88,6 +88,7 @@ func (w *Window) onSearchModeChanged() {
 		return
 	}
 	st.active = on
+	w.syncPanelActions()
 	st.shown, st.focusFirst = false, false
 	st.params = api.SearchQueryParams{}
 	w.model.bumpList()
