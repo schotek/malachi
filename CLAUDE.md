@@ -36,7 +36,8 @@ běžících proti reálné schránce. Stub v `internal/sanitize` selhává
 ### 3. Email je nepřátelský vstup
 Každý parser MIME, každý renderer, každý handler odkazu vychází z předpokladu,
 že vstup je záměrně poškozený. Testy pro nový parsovací kód musí obsahovat
-patologické případy (do `backend/testdata/mime`), ne jen šťastnou cestu.
+patologické případy (do `backend/testdata/mime`, dokumenty příloh do
+`backend/testdata/documents`), ne jen šťastnou cestu.
 V UI: `SetUseMarkup(false)` na všem, co zobrazuje data ze serveru (na macOS
 `stringValue`, na Windows `TextBlock.Text`/`TextBox.Text`; nikdy
 `NSAttributedString(html:)`, XAML ani RTF nad čímkoli ze zprávy, HTML jen
@@ -84,7 +85,9 @@ klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
 - Go: standardní formátování, `golangci-lint`, errors wrapované s kontextem
 - Struktura balíčků: `internal/` pro implementaci, `pkg/api/` pro veřejný kontrakt
 - MCP most (`backend/cmd/malachi-mcp`) je klient démona jako UI: z `backend/`
-  importuje jen `pkg/api`, žádné volání nepošle před dokončeným handshakem
+  importuje jen `pkg/api` a vlastní `cmd/malachi-mcp/internal/extract`, který
+  čte text PDF, DOCX a XLSX jen v podřízeném procesu sebe sama (`__extract`),
+  žádné volání nepošle před dokončeným handshakem
   (`api.ClientHandshake`), nikdy nevrací HTML, každý řetězec z pošty prochází
   `clean()` a ohradou s nonce, mutující nástroje jen za přepínačem (`docs/mcp.md`)
 - Dva Go moduly (`backend/`, `ui/`) + `go.work` v kořeni; `ui/go.mod` má
@@ -127,7 +130,12 @@ klientů naráz (`Controller.Waiting` → `waiting` → `IsWaiting`).
   ji u C# hlídá kompilátor (IDE0073 podle `windows/.editorconfig`), u
   ostatních typů `Malachi.Conventions.Tests`. Do `backend/`
   nepřidávej závislosti pod copyleftem silnějším než MPL/LGPL, jinak by
-  komerční licence jádra nebyla udělitelná
+  komerční licence jádra nebyla udělitelná. `THIRD-PARTY-NOTICES.md` nese
+  oznámení třetích stran `malachi-mcp` (jeho Go moduly a komponenty
+  `pdfium.wasm`) a jde do každého balíčku; nový modul v mostu nebo povýšení
+  go-pdfium = aktualizovat ho (`docs/releasing.md` §9). Na macOS má jen
+  `malachi-mcp` oprávnění `allow-unsigned-executable-memory` (kompilátor
+  wazero), aplikace ani ostatní binárky ne
 
 ## Prostředí
 
@@ -266,7 +274,9 @@ lišty (Ctrl+F, Ctrl+E), pruh rozsahu nad seznamem, logika v `Malachi.Core`
 čtení + koncepty (nové, odpověď, odpověď všem, přeposlání přes
 `draft.create`), `--allow-modify` / `--allow-send` přes
 `MALACHI_MCP_ALLOW_MODIFY` / `MALACHI_MCP_ALLOW_SEND`; nikdy nevrací HTML,
-obsah pošty v ohradě s nonce; podpříkazy `status`/`install`/`uninstall
+obsah pošty v ohradě s nonce; `get_attachment` vrací i text PDF, DOCX
+a XLSX, čtený v podřízeném procesu mostu (PDF přes PDFium ve WebAssembly),
+s cache v paměti (`docs/mcp.md`, Documents); podpříkazy `status`/`install`/`uninstall
 --json` zapisují registraci do konfigurace Claude Desktop a Claude Code a
 Předvolby → AI → MCP je ve všech třech UI jen přepínač nad nimi (GTK
 `ui/internal/mcpsetup`, macOS `MCPRegistrationController`, Windows

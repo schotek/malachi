@@ -30,6 +30,11 @@ on:
       - packaging/debian/**
       - scripts/build.sh
       - scripts/build-deb.sh
+      # The licences scripts/build.sh installs.
+      - LICENSE
+      - LICENSING.md
+      - THIRD-PARTY-NOTICES.md
+      - backend/LICENSE
       - .github/workflows/deb.yml
   workflow_dispatch:
 

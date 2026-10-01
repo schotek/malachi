@@ -109,6 +109,10 @@ binary also gets the hardened runtime and a secure timestamp, the bundle
 the entitlement of `Resources/MalachiMail.entitlements` (Apple events, for
 restarting Claude Desktop), and `make macos-notarize` has Apple notarise
 the DMG ([docs/releasing.md §8](../docs/releasing.md#8-macos)).
+`malachi-mcp` alone is signed, in every build, with
+`Resources/malachi-mcp.entitlements` (unsigned executable memory, for the
+PDFium it runs in WebAssembly; without it the hardened runtime kills the
+bridge at the first PDF).
 
 Ad-hoc signing has one cost: every rebuild that changes a binary is a new
 code identity, and the login keychain ties each stored password to the

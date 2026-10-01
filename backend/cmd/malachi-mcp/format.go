@@ -35,8 +35,8 @@ const (
 	maxBodyChars     = 64_000
 	maxLinks         = 50
 
-	defaultAttachmentTextBytes = 64 << 10  // per get_attachment call
-	maxAttachmentTextBytes     = 256 << 10 // a larger text attachment is never fetched
+	defaultAttachmentTextBytes = 64 << 10  // per get_attachment call, also of a document's text
+	maxAttachmentTextBytes     = 256 << 10 // a larger text attachment is never fetched; also the most of a document's text per call
 	maxAttachmentImageBytes    = 3 << 20   // under the 5 MB most models accept
 
 	maxMutateIDs         = 100 // per mark/move/delete call (the daemon allows 1000)
@@ -49,14 +49,42 @@ const (
 	maxSessionDownloadBytes = 256 << 20
 
 	// maxReplacedPercent is how much of a text attachment may be invalid
-	// UTF-8 (replaced by U+FFFD) before it is refused as not text at all.
+	// UTF-8 (replaced by U+FFFD) before it is refused as not text at all,
+	// and how much of a document's text may be U+FFFD before it is
+	// withheld as undecodable (== extract's MaxGarbledPercent, test-asserted).
 	maxReplacedPercent = 10
+
+	// maxAttachmentDocumentBytes is the largest PDF, DOCX or XLSX that is
+	// fetched and read: the most message.part carries (== extract's
+	// MaxInputBytes, test-asserted).
+	maxAttachmentDocumentBytes = api.MaxAttachmentDataBytes
+
+	// Document workers (extract_runner.go): at most this many at once, and
+	// a call waits at most workerWaitTimeout for one of them.
+	maxConcurrentWorkers = 2
+	workerWaitTimeout    = 60 * time.Second
+
+	// maxQueuedDocuments more calls may read a document beside those with
+	// a worker (fetching it or waiting for a worker, its bytes in memory);
+	// a call beyond them is answered busy before it fetches anything
+	// (doc_cache.go).
+	maxQueuedDocuments = 2
+	maxDocumentReads   = maxConcurrentWorkers + maxQueuedDocuments
+
+	// The cache of extracted documents (doc_cache.go), in memory only.
+	maxDocCacheEntries = 8
+	maxDocCacheBytes   = 8 << 20
+	docCacheIdle       = 15 * time.Minute
 )
 
 // downloadTimeout bounds one message.download: the daemon takes up to 4
 // minutes and finishes a download the bridge gave up on, so a later call
 // finds the message whole. A variable so a test can run out of it.
 var downloadTimeout = 2 * time.Minute
+
+// workerTimeout bounds one document worker, from its start to its reply;
+// then it is killed. A variable so a test can run out of it.
+var workerTimeout = 30 * time.Second
 
 // untrustedNote is appended to the description of every tool whose output
 // carries mail content.
@@ -199,6 +227,8 @@ func truncateRunes(s string, offset, max int) (out string, total, end int) {
 
 // sliceBytes returns up to limit bytes of s from byte offset, cut on rune
 // boundaries, the byte length of s, and the byte offset just past the slice.
+// Short of the end, the slice holds at least one character, even one
+// longer than limit, so that paging by the returned end always moves on.
 func sliceBytes(s string, offset, limit int) (out string, total, end int) {
 	total = len(s)
 	if offset < 0 {
@@ -216,6 +246,12 @@ func sliceBytes(s string, offset, limit int) (out string, total, end int) {
 	}
 	for end > offset && end < total && !utf8.RuneStart(s[end]) {
 		end--
+	}
+	if end == offset && offset < total {
+		end++
+		for end < total && !utf8.RuneStart(s[end]) {
+			end++
+		}
 	}
 	return s[offset:end], total, end
 }

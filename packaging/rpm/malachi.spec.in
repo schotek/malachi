@@ -4,7 +4,11 @@ Release:        1%{?dist}
 Summary:        Mail client for the GNOME desktop
 
 # The daemon and its API are AGPL-3.0-only (dual-licensed, see LICENSING.md);
-# the GTK interface and everything else GPL-3.0-or-later.
+# the GTK interface and everything else GPL-3.0-or-later. malachi-mcp also
+# carries third-party code under permissive licences (its Go modules and
+# the PDFium it embeds), listed in THIRD-PARTY-NOTICES.md, which
+# scripts/build-rpm.sh marks as a licence file beside LICENSE and
+# LICENSING.md; this tag names the project's own licences.
 License:        AGPL-3.0-only AND GPL-3.0-or-later
 URL:            https://github.com/schotek/malachi
 

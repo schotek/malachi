@@ -29,6 +29,11 @@ on:
       - packaging/rpm/**
       - scripts/build.sh
       - scripts/build-rpm.sh
+      # The licences scripts/build.sh installs.
+      - LICENSE
+      - LICENSING.md
+      - THIRD-PARTY-NOTICES.md
+      - backend/LICENSE
       - .github/workflows/rpm.yml
   workflow_dispatch:
 

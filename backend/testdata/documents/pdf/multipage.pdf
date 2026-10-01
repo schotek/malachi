@@ -1,0 +1,73 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [10 0 R 12 0 R 14 0 R] /Count 3 >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 11 0 R >>
+endobj
+11 0 obj
+<< /Length 101 >>
+stream
+BT
+/F1 12 Tf
+16 TL
+72 720 Td
+(Page one says hello to the reader.) Tj
+(It has two lines of text.) '
+ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 13 0 R >>
+endobj
+13 0 obj
+<< /Length 27 >>
+stream
+0 0 1 rg 72 72 100 100 re f
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 15 0 R >>
+endobj
+15 0 obj
+<< /Length 103 >>
+stream
+BT
+/F1 12 Tf
+16 TL
+72 720 Td
+(Page three ends the document here.) Tj
+(Last line of the last page.) '
+ET
+endstream
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000000 65535 f 
+0000000136 00000 n 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000233 00000 n 
+0000000361 00000 n 
+0000000514 00000 n 
+0000000642 00000 n 
+0000000720 00000 n 
+0000000848 00000 n 
+trailer
+<< /Size 16 /Root 1 0 R >>
+startxref
+1003
+%%EOF

@@ -11,6 +11,10 @@
 # PREFIX is compiled into the UI (the locale directory), DESTDIR only moves
 # the files: a distribution package stages into DESTDIR with PREFIX=/usr, so
 # the installed binary still looks in /usr/share/locale.
+#
+# LICENSEDIR is where the licences and THIRD-PARTY-NOTICES.md go: by default
+# $PREFIX/share/licenses/<app-id>, the Flatpak's place for them; the rpm
+# passes /usr/share/licenses/malachi and the deb /usr/share/doc/malachi.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -19,6 +23,7 @@ cd "$ROOT"
 APP_ID="io.github.schotek.Malachi"
 PREFIX="${PREFIX:-/app}"
 DESTDIR="${DESTDIR:-}"
+LICENSEDIR="${LICENSEDIR:-$PREFIX/share/licenses/$APP_ID}"
 
 make PREFIX="$PREFIX" build data
 
@@ -35,6 +40,14 @@ if [[ "${1:-}" == "install" ]]; then
     # is reachable only through `flatpak run --command=malachi-mcp` and the
     # socket then lives in the app's own runtime directory.
     install -Dm755 build/malachi-mcp "$DESTDIR$PREFIX/bin/malachi-mcp"
+    # The licences travel with the binaries (LICENSING.md): the interface is
+    # GPL-3.0-or-later, malachid and malachi-mcp AGPL-3.0-only, and
+    # THIRD-PARTY-NOTICES.md carries the notices of the code inside
+    # malachi-mcp (its Go modules and the PDFium it embeds).
+    install -Dm644 LICENSE "$DESTDIR$LICENSEDIR/LICENSE"
+    install -Dm644 backend/LICENSE "$DESTDIR$LICENSEDIR/LICENSE-backend"
+    install -Dm644 LICENSING.md "$DESTDIR$LICENSEDIR/LICENSING.md"
+    install -Dm644 THIRD-PARTY-NOTICES.md "$DESTDIR$LICENSEDIR/THIRD-PARTY-NOTICES.md"
     install -Dm644 "data/$APP_ID.desktop" \
         "$DESTDIR$PREFIX/share/applications/$APP_ID.desktop"
     # DBusActivatable=true in the desktop file; flatpak build-export rejects

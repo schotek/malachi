@@ -352,7 +352,7 @@ function Test-AppFolder {
     # fails (Malachi.App.csproj, MalachiInsightsResource).
     $expected = @('MalachiMail.exe', 'MalachiMail.pri', 'malachid.exe', 'malachi-mcp.exe', 'malachi-credentials.exe',
         'Microsoft.WindowsAppRuntime.Insights.Resource.dll', 'Assets\Malachi.ico',
-        'LICENSE.txt', 'LICENSE-backend.txt', 'LICENSING.md')
+        'LICENSE.txt', 'LICENSE-backend.txt', 'LICENSING.md', 'THIRD-PARTY-NOTICES.md')
     foreach ($language in (Get-Languages)) {
         $expected += "locale\$language.po"
     }
@@ -441,9 +441,12 @@ function Invoke-AppBuild {
     }
     # The app is GPL-3.0-or-later, malachid and malachi-mcp AGPL-3.0-only
     # (LICENSING.md); .txt so that a double click opens them.
+    # THIRD-PARTY-NOTICES.md carries the notices of the code inside
+    # malachi-mcp (its Go modules and the PDFium it embeds).
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSE') -Destination (Join-Path $AppDir 'LICENSE.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'backend\LICENSE') -Destination (Join-Path $AppDir 'LICENSE-backend.txt')
     Copy-Item -LiteralPath (Join-Path $Root 'LICENSING.md') -Destination $AppDir
+    Copy-Item -LiteralPath (Join-Path $Root 'THIRD-PARTY-NOTICES.md') -Destination $AppDir
     Test-AppFolder
     if ($Arch -eq $HostArch) {
         Copy-DevBinary (Join-Path $AppDir 'malachi-credentials.exe')

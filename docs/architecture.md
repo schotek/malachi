@@ -1829,3 +1829,48 @@ components) is open ([macos-port.md §12](macos-port.md#12-what-the-port-took-an
   model keeps the oldest first in both. Open: the Windows port, and a
   card's page under a dark appearance (the document keeps its light
   background).
+- Document text in the MCP bridge, and its PDF engine: **decided**
+  (2026-10-01) — `get_attachment` returns the text of PDF, DOCX and XLSX
+  attachments, extracted by the bridge alone
+  (`cmd/malachi-mcp/internal/extract`, which Go's `internal` rule keeps
+  out of the daemon and the UI) and always in a child process of the
+  bridge's own executable, one per document, with a memory watchdog and
+  a deadline ([mcp.md](mcp.md), [security.md](security.md)); DOCX and XLSX
+  with the standard library only. PDF: PDFium (`chromium/7961`, built
+  without V8 and XFA) compiled to WebAssembly and embedded by
+  `github.com/klippa-app/go-pdfium` v1.19.8 (`webassembly`, MIT), run by
+  `github.com/tetratelabs/wazero` v1.12.0 (Apache-2.0): pure Go without
+  cgo, the same tree on every platform (§6), with PDFium's bundled
+  libraries (FreeType, HarfBuzz, ICU, libjpeg-turbo, OpenJPEG,
+  Little CMS, zlib, abseil and others) listed in `THIRD-PARTY-NOTICES.md`. Pinned to
+  v1.19.8, the last release for Go 1.25 (`backend/go.mod` says 1.25, and
+  the rpm builds with Fedora's Go). PDFium is boxed even inside the
+  worker: nothing of the host file system is mounted (go-pdfium mounts
+  `/` by default), its linear memory stops at 256 MiB and grows without
+  copying the whole of it again and again, wazero stops it at the
+  document's deadline, and every document gets a runtime and a module
+  instance of its own (`pdf_engine.go`). Measured on an Apple M4: a
+  worker's cold start is 0.46 s, nearly all of it compiling the 5.2 MB
+  module with four threads (0.72 s with two, which is why the worker runs
+  four; no compiled code is cached on disk, where a writable directory
+  would be code another process could replace); then about 110 pages/s
+  of LibreOffice output and 47 of Chrome's (PDFium's own page analysis),
+  at 330–400 MiB resident, most of it the compile. The spike's hostile
+  files (Flate and text bombs, cycles, 2 million nested arrays, broken
+  cross-references; 464 in all) all ended within 4.2 s and 0.7 GiB with
+  text or a refusal. `malachi-mcp` grows by 9.3–9.7 MB per target
+  (6.5–7.1 MB → 15.8–16.8 MB), a universal macOS binary by about 19 MB;
+  under the hardened runtime it needs
+  `com.apple.security.cs.allow-unsigned-executable-memory`, since wazero
+  writes the code it compiles. Rejected: the pure-Go readers
+  (`ledongthuc/pdf`, `dslipak/pdf`), which on the spike's corpus gave one
+  table cell or glyph per line or words glued together, no text from form
+  XObjects and no AES-256 or PDF 2.0, and on its hostile files infinite
+  loops, fatal stack overflows and allocations of gigabytes, where PDFium
+  kept Chrome's reading order, opened every encryption with an empty
+  password and recovered text from 294 of 360 damaged files; PDFium
+  through cgo (a C++ parser in a native process, a C toolchain per target
+  and code per platform); poppler's `pdftotext` (GPL, and a program to
+  ship); wazero's interpreter (about 16 times slower). Not included:
+  OCR, form fields, annotations and embedded files; a password is never
+  asked for.

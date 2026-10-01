@@ -245,10 +245,10 @@ func UserMessage(text string) []byte {
 }
 
 // AttachmentReadable says whether get_attachment returns an attachment of
-// this content type as content (text or an image, as the bridge's
-// tools_read.go decides; anything else comes back as metadata only):
-// compared without case and parameters. For target App the attachment
-// item is there only for these.
+// this content type as it is (text or an image, as the bridge's
+// tools_read.go decides): compared without case and parameters. For
+// target App the attachment item is there only for these; documents,
+// which the bridge returns as extracted text, are deliberately not offered.
 func AttachmentReadable(contentType string) bool {
 	base, _, _ := strings.Cut(contentType, ";")
 	switch asciiLower(strings.TrimSpace(base)) {

@@ -400,10 +400,11 @@ public static partial class Assistant
 
     /// <summary>
     /// Whether get_attachment returns an attachment of this content type as
-    /// content (text or an image, as the bridge's tools_read.go decides;
-    /// anything else comes back as metadata only; assistant.AttachmentReadable):
-    /// compared without case (ASCII only) and parameters. For the In App
-    /// target the attachment item is there only for these.
+    /// it is (text or an image, as the bridge's tools_read.go decides;
+    /// assistant.AttachmentReadable): compared without case (ASCII only) and
+    /// parameters. For the In App target the attachment item is there only
+    /// for these; documents, which the bridge returns as extracted text, are
+    /// deliberately not offered.
     /// </summary>
     public static bool AttachmentReadable(string contentType)
     {

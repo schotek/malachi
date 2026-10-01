@@ -64,6 +64,7 @@ type fakeBackend struct {
 	reduced           map[string]bool // messages whose parts answer partNotDownloaded until a download
 	held              map[string]bool // messages held in memory (neverStoreAttachments): remote parts are served
 	holdOnDownload    bool            // a download holds the message, its parts staying remote
+	rebuild           func()          // run by a download first, outside mu: Microsoft 365 rebuilding the message
 	flagCalls         []api.MessageFlagParams
 	moveCalls         []api.MessageMoveParams
 	deleteCalls       []api.MessageDeleteParams
@@ -290,6 +291,12 @@ func (s fakeMessages) Download(_ context.Context, p api.MessageDownloadParams) (
 	})
 	if err := s.f.gate(api.MethodMessageDownload); err != nil {
 		return nil, err
+	}
+	s.f.mu.Lock()
+	rebuild := s.f.rebuild
+	s.f.mu.Unlock()
+	if rebuild != nil {
+		rebuild()
 	}
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -611,7 +618,7 @@ func newFixture() *fakeBackend {
 		Attachments: []api.Attachment{
 			{PartID: "2", Filename: "notes.txt", ContentType: "text/plain", Size: 12},
 			{PartID: "3", Filename: "logo.png", ContentType: "image/png", Size: int64(len(pngBytes))},
-			{PartID: "4", Filename: "report.pdf", ContentType: "application/pdf", Size: 5 << 20},
+			{PartID: "4", Filename: "report.pdf", ContentType: "application/pdf", Size: int64(len(fxReportPDF))},
 			{PartID: "5", Filename: "page.html", ContentType: "text/html", Size: 100},
 			{PartID: "6", Filename: "big.png", ContentType: "image/png", Size: maxAttachmentImageBytes + 1},
 			{PartID: "7", Filename: "fake.png", ContentType: "image/png", Size: 20},
@@ -621,6 +628,7 @@ func newFixture() *fakeBackend {
 			{PartID: "11", Filename: "pic.svg", ContentType: "image/svg+xml", Size: 50},
 			{PartID: "12", Filename: "long.txt", ContentType: "text/plain", Size: 100 << 10},
 			{PartID: "13", Filename: "svgbytes.png", ContentType: "image/png", Size: 60},
+			{PartID: "14", Filename: "archive.zip", ContentType: "application/zip", Size: 2048},
 		},
 		Headers: map[string]string{"List-Unsubscribe": "<mailto:u@example.org>"},
 	}
@@ -640,6 +648,12 @@ func newFixture() *fakeBackend {
 		{PartID: "4", Filename: `notes.txt" remote`, ContentType: "text/plain", Size: 12},
 	}}
 	m7.HasAttachments, m7.Size = true, 6<<20
+	// m10 keeps an archive on the mail server only, a type that is never
+	// returned and so never downloaded. It is not listed, only read.
+	m10 := api.Message{MessageSummary: summary("m10", fxInbox, alice, "Old archive"), Attachments: []api.Attachment{
+		{PartID: "2", Filename: "backup.zip", ContentType: "application/zip", Size: 3 << 20, Remote: true},
+	}}
+	m10.HasAttachments, m10.Size = true, 4<<20
 
 	body := func(id api.MessageID, state api.BodyState, text string) api.MessageBodyResult {
 		return api.MessageBodyResult{
@@ -675,7 +689,7 @@ func newFixture() *fakeBackend {
 			fxTrash:  {m4.MessageSummary},
 			fxOutbox: {m5.MessageSummary},
 		},
-		messages: map[api.MessageID]api.Message{"m1": m1, "m2": m2, "m3": m3, "m4": m4, "m5": m5, "m6": m6, "m7": m7},
+		messages: map[api.MessageID]api.Message{"m1": m1, "m2": m2, "m3": m3, "m4": m4, "m5": m5, "m6": m6, "m7": m7, "m10": m10},
 		searchResults: []api.SearchResult{
 			{Message: m1.MessageSummary, Snippet: "Hello Bob,\nnumbers attached.", Ranges: []api.MatchRange{{Start: 11, End: 18}}},
 			{Message: m3.MessageSummary, Snippet: fxFakeEnd + " numbers"},
@@ -699,7 +713,9 @@ func newFixture() *fakeBackend {
 			"m1/10": {PartID: "10", ContentType: "text/plain", Filename: "nul.txt", Size: 7, Data: []byte("abc\x00def")},
 			"m1/12": {PartID: "12", ContentType: "text/plain", Filename: "long.txt", Size: 100 << 10, Data: bytes.Repeat([]byte("x"), 100<<10)},
 			"m1/13": {PartID: "13", ContentType: "image/png", Filename: "svgbytes.png", Size: 60, Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>`)},
+			"m1/4":  {PartID: "4", ContentType: "application/pdf", Filename: "report.pdf", Size: int64(len(fxReportPDF)), Data: fxReportPDF},
 			"m7/2":  {PartID: "2", ContentType: "text/csv", Filename: "data.csv", Size: 200 << 10, Data: fxRemoteCSV},
+			"m7/3":  {PartID: "3", ContentType: "application/pdf", Filename: "scan.pdf", Size: 5 << 20, Data: fxScanPDF},
 			"m7/4":  {PartID: "4", ContentType: "text/plain", Filename: "notes.txt", Size: 12, Data: []byte("hello, notes")},
 		},
 		states: []api.SyncState{{
@@ -717,3 +733,64 @@ func newFixture() *fakeBackend {
 // fxRemoteCSV is the content of m7's data.csv, which is on the mail
 // server only until a download.
 var fxRemoteCSV = append([]byte("id,value\n"), bytes.Repeat([]byte("1,remote data line\n"), (200<<10)/18)...)
+
+// fxReportPDF is m1's report.pdf and fxScanPDF m7's scan.pdf (on the mail
+// server only until a download): real one-page PDFs with a text layer.
+var (
+	fxReportPDF = minimalPDF("Quarterly report", "Revenue grew in the third quarter.")
+	fxScanPDF   = minimalPDF("Archived scan", "Kept on the mail server.")
+)
+
+// minimalPDF is a one-page PDF showing lines of ASCII text in Helvetica,
+// with a correct cross-reference table: what any PDF reader takes text
+// from.
+func minimalPDF(lines ...string) []byte {
+	var content strings.Builder
+	content.WriteString("BT /F1 12 Tf 14 TL 72 720 Td\n")
+	esc := strings.NewReplacer(`\`, `\\`, "(", `\(`, ")", `\)`)
+	for _, l := range lines {
+		fmt.Fprintf(&content, "(%s) Tj T*\n", esc.Replace(l))
+	}
+	content.WriteString("ET")
+	objects := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", content.Len(), content.String()),
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.4\n")
+	offsets := make([]int, 0, len(objects))
+	for i, o := range objects {
+		offsets = append(offsets, b.Len())
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
+	return b.Bytes()
+}
+
+// setPart puts part att of message msg into the fixture with data, in
+// place of the part with its id; a zero size is the data's.
+func setPart(fb *fakeBackend, msg api.MessageID, att api.Attachment, data []byte) {
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if att.Size == 0 {
+		att.Size = int64(len(data))
+	}
+	m := fb.messages[msg]
+	m.Attachments = slices.Clone(m.Attachments)
+	if i := slices.IndexFunc(m.Attachments, func(a api.Attachment) bool { return a.PartID == att.PartID }); i >= 0 {
+		m.Attachments[i] = att
+	} else {
+		m.Attachments = append(m.Attachments, att)
+	}
+	m.HasAttachments = true
+	fb.messages[msg] = m
+	fb.parts[string(msg)+"/"+att.PartID] = api.MessagePartResult{PartID: att.PartID, ContentType: att.ContentType, Filename: att.Filename, Size: att.Size, Data: data}
+}

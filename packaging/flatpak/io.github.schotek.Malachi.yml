@@ -111,6 +111,11 @@ modules:
   #   - name: gsound  (meson; https://gitlab.gnome.org/GNOME/gsound.git, tag 1.0.3)
   - name: malachi
     buildsystem: simple
+    # build.sh installs LICENSE, the daemon's LICENSE-backend, LICENSING.md
+    # and THIRD-PARTY-NOTICES.md (the notices of the code inside malachi-mcp)
+    # into /app/share/licenses/io.github.schotek.Malachi. flatpak-builder
+    # 1.4.5+ also records the module's top-level LICENSE and LICENSING.md in
+    # the malachi/ directory beside them; those two are copies.
     build-commands:
       - PREFIX=/app ./scripts/build.sh install
     sources:

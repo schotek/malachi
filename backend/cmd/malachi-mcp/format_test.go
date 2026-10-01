@@ -73,6 +73,36 @@ func TestSliceBytes(t *testing.T) {
 	}
 }
 
+// A limit smaller than the character at the offset still returns that
+// character, so that paging by the returned end always moves on.
+func TestSliceBytesAlwaysMovesOn(t *testing.T) {
+	// CJK (3 bytes), ASCII, an emoji (4 bytes), a Latin letter (2 bytes).
+	s := string([]rune{0x4E2D, 'a', 0x1F600, 0xE9, 0x6587})
+	for limit := 1; limit <= 5; limit++ {
+		var got strings.Builder
+		for offset, calls := 0, 0; offset < len(s); calls++ {
+			out, total, end := sliceBytes(s, offset, limit)
+			if end <= offset || total != len(s) || calls > len(s) {
+				t.Fatalf("limit %d, offset %d: end %d of %d", limit, offset, end, total)
+			}
+			if len(out) > limit && utf8.RuneCountInString(out) != 1 {
+				t.Errorf("limit %d, offset %d: %q is over the limit by more than its one character", limit, offset, out)
+			}
+			got.WriteString(out)
+			offset = end
+		}
+		if got.String() != s {
+			t.Errorf("limit %d: pages make %q", limit, got.String())
+		}
+	}
+	if out, _, end := sliceBytes(s, 1, 1); out != "a" || end != 4 {
+		t.Errorf("mid-character offset: %q, %d", out, end)
+	}
+	if out, _, end := sliceBytes(s, len(s), 1); out != "" || end != len(s) {
+		t.Errorf("at the end: %q, %d", out, end)
+	}
+}
+
 func TestParseAddresses(t *testing.T) {
 	as, err := parseAddresses([]string{"Alice <alice@example.org>", " bob@example.com ", ""})
 	if err != nil || len(as) != 2 || as[0].Name != "Alice" || as[1].Address != "bob@example.com" || as[1].Name != "" {

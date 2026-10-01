@@ -315,8 +315,8 @@ func (a *Assistant) NewRequest() *assistantpanel.Request {
 // canAskFile says whether an attachment's "Ask the Assistant…" can run for
 // a part of contentType: the chosen Claude app is installed (the file goes
 // without the bridge); for In App, the panel can run (it reads the file
-// through the bridge's get_attachment) and the bridge returns this type's
-// content (assistant.AttachmentReadable).
+// through the bridge's get_attachment) and the panel offers the type
+// (assistant.AttachmentReadable: text and images, never documents).
 func (a *Assistant) canAskFile(contentType string) bool {
 	if a.target() == assistant.App {
 		_, ok := a.pick(true)

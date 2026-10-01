@@ -37,7 +37,9 @@ VERSION="${VERSION//-/+}-1"
 ARCH="$(dpkg-architecture -qDEB_HOST_ARCH)"
 
 rm -rf "$STAGE"
-PREFIX=/usr DESTDIR="$STAGE" ./scripts/build.sh install
+# The licences and THIRD-PARTY-NOTICES.md go where Debian keeps a package's
+# documentation, /usr/share/doc/<package>.
+PREFIX=/usr LICENSEDIR=/usr/share/doc/"$PKG" DESTDIR="$STAGE" ./scripts/build.sh install
 
 # dpkg-shlibdeps reads the ELF files and names the packages that own the
 # libraries they actually link, with the minimal version each symbol needs.

@@ -556,8 +556,9 @@ into it as well.
   forwarded `From`.
 - Charset decoding is best-effort with replacement characters; never a
   crash, never a hang.
-- Every new parser gets pathological samples in `testdata/mime` and a fuzz
-  target.
+- Every new parser gets pathological samples in `testdata/mime` (or its
+  domain's testdata directory: `jira`, `autoconfig`, `documents`) and a
+  fuzz target.
 - `Message-ID`, `In-Reply-To` and `References` only ever link
   conversations (architecture §3.4): matched exactly, never used as an
   identity, capped at 50 references per message (repeats count once), 512
@@ -1367,9 +1368,44 @@ Defences:
   format characters) and placed inside a fence whose delimiter carries a
   per-call random nonce, with trusted fields outside; links and extra
   headers are listed only on request;
-- attachments: a short allow-list of text and image types decided from
-  the declared type and size before fetching, then the bytes are sniffed
-  and refused on mismatch; HTML and SVG never;
+- attachments: a short allow-list of text, image and document (PDF, DOCX,
+  XLSX) types decided from the declared type and size before fetching (a
+  document in `application/octet-stream` or a known wrong label only when
+  the ASCII-lower-cased last extension of its name names the format),
+  then the bytes are checked and refused on mismatch (sniffed for text
+  and images; `%PDF-` or a ZIP signature for documents, an OLE2 compound
+  file, a password-protected or older Office file, refused before any
+  parser runs); HTML and SVG never;
+- documents are parsed only in a worker: the bridge's own executable
+  started again for one document (`__extract`), never in the bridge's
+  process, the daemon or the UI (`cmd/malachi-mcp/internal/extract`,
+  which Go's `internal` rule keeps out of both). A parser fed a document
+  built to attack it can panic, overflow its stack, exhaust memory or
+  loop; in the worker that ends one call with a withheld result, not
+  every tool of the session. The worker has a memory watchdog (1 GiB) and
+  its own deadline, is killed after 30 s, at most two run at once, and it
+  gets the document on stdin and nothing of the bridge's connections or
+  the daemon's key. At most four calls hold a fetched document at once
+  (two with a worker, two fetching or waiting for one); a call for another
+  document beyond them is answered busy before it fetches anything, and
+  calls for the same document share one reading, so parallel calls cannot
+  multiply the documents in memory or the workers. Its reply is
+  untrusted: checked strictly against the protocol (closed sets of
+  refusal codes, bounded counts, at most 1 MiB of valid UTF-8), its text
+  cleaned and fenced like mail and withheld when more than 10 % is
+  undecodable, its stderr discarded unread, and the lines outside the
+  fence are the bridge's wording of counts and codes. PDF text comes from PDFium compiled to WebAssembly and run by
+  wazero inside the worker, with no host file system and its memory
+  capped; DOCX and XLSX are read with the standard library under ZIP and
+  XML caps (entries, unpacked bytes, depth, tokens; no DOCTYPE, UTF-8
+  only). Nothing is executed or fetched (no macros, scripts, external
+  relationships, embedded files or form fields); a password is never
+  asked for or accepted; hidden content is included in the text and
+  flagged in a trusted line; the extracted text is cached in memory only
+  (8 documents, 15 minutes) and never logged, and only outcomes the same
+  bytes give again are kept (not a timeout, a busy reader or a PDF engine
+  that could not be started, which is also never taken for a damaged
+  file);
 - caps on everything: body characters, attachment bytes, list size,
   ids per mutation, drafts and downloads per process;
 - drafts carry only escaped plain text from the agent; HTML and
@@ -1510,6 +1546,13 @@ Advisories) rather than a public issue. No bug bounty.
 - [ ] New MCP tool or output field: is every mail-derived string cleaned
       and inside the nonce fence, is the tool behind the right flag, are
       its annotations set, and is its output capped?
+- [ ] New document format for `get_attachment`, a change to a reader in
+      `cmd/malachi-mcp/internal/extract` or another PDF engine: does it
+      run only in the worker, is every structural and volume cap kept and
+      tested, does the parent's byte check and the worker's reply check
+      still refuse what does not fit, is nothing executed, fetched or
+      opened from the host file system, and are there hostile samples in
+      `testdata/documents` and a fuzz target?
 - [ ] New RPC method or notification: is it served, or sent, only on a
       connection that completed the handshake?
 - [ ] Change to the daemon's handling of a connection before it has

@@ -27,6 +27,11 @@ on:
     paths:
       - packaging/flatpak/**
       - scripts/**
+      # The licences scripts/build.sh installs.
+      - LICENSE
+      - LICENSING.md
+      - THIRD-PARTY-NOTICES.md
+      - backend/LICENSE
       - .github/workflows/flatpak.yml
   workflow_dispatch:
 

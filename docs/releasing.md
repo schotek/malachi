@@ -141,9 +141,13 @@ make deb          # → build/malachi_<version>_<arch>.deb
 It stages `scripts/build.sh install` with `PREFIX=/usr` and a `DESTDIR`,
 lets `dpkg-shlibdeps` read the two binaries for their library dependencies,
 and adds what no ELF header states: the GSettings backend and the
-libadwaita floor. The schema is shipped as XML, never as a compiled cache —
-dpkg's trigger on `/usr/share/glib-2.0/schemas` recompiles it, and a cache
-in the package would collide with every other application's.
+libadwaita floor. The licences and `THIRD-PARTY-NOTICES.md` (§9) go to
+`/usr/share/doc/malachi`; `scripts/build-rpm.sh` puts them into
+`/usr/share/licenses/malachi`, marked as licence files, and the Flatpak
+into `/app/share/licenses/io.github.schotek.Malachi`. The schema is
+shipped as XML, never as a compiled cache — dpkg's trigger on
+`/usr/share/glib-2.0/schemas` recompiles it, and a cache in the package
+would collide with every other application's.
 
 The package version is the `git describe` output with its hyphens turned
 into `+` and a `-1` revision appended (`0.1.0+21+g4f543f4-1`), because dpkg
@@ -237,19 +241,38 @@ make macos-notarize SIGN='Developer ID Application: Name (TEAMID)' NOTARY_PROFIL
 
 `macos-dmg` builds the Swift package for **arm64** and **x86_64**,
 `malachid` and `malachi-mcp` with `-X main.version` for both, joined by
-`lipo` (`build/macos/go`), assembles the bundle with the licences in
-`Contents/Resources`, checks that every executable runs on both
-architectures, signs it, and puts it into a compressed disk image beside a
-link to `/Applications`. `ARCHS=` builds this Mac's architecture alone.
-With a Developer ID Application identity every executable gets the
-hardened runtime, a secure timestamp and a fixed identifier
-(`io.github.schotek.Malachi.<binary>`, so that the Keychain recognises
-`malachi-keychain` across releases), the bundle the entitlement of
-`macos/Resources/MalachiMail.entitlements`, and the image is signed too.
+`lipo` (`build/macos/go`), assembles the bundle with the licences and
+`THIRD-PARTY-NOTICES.md` (§9) in `Contents/Resources`, checks that every
+executable runs on both architectures, signs it, and puts it into a
+compressed disk image beside a link to `/Applications`. `ARCHS=` builds
+this Mac's architecture alone. With a Developer ID Application identity
+every executable gets the hardened runtime, a secure timestamp and a fixed
+identifier (`io.github.schotek.Malachi.<binary>`, so that the Keychain
+recognises `malachi-keychain` across releases), the bundle the entitlement
+of `macos/Resources/MalachiMail.entitlements`, and the image is signed too.
 `macos-notarize` submits the image to Apple's notary service, waits for the
 verdict (printing Apple's log on a rejection), staples the ticket to the
 image and prints Gatekeeper's assessment of the image and of the app. The
 tree must be clean, or the version says `-dirty`.
+
+`malachi-mcp`, and no other binary, is also signed with
+`com.apple.security.cs.allow-unsigned-executable-memory` from
+`macos/Resources/malachi-mcp.entitlements`: it reads PDF attachments with
+PDFium compiled to WebAssembly, which wazero turns into native code in
+memory it maps itself, and the hardened runtime kills the process at the
+first PDF without that entitlement (`allow-jit` is not enough). Ad-hoc
+builds carry it too, but there it changes nothing: only a Developer ID
+build gets the hardened runtime, so an ad-hoc build never shows the
+problem. To check the bridge's signing without a Developer ID, sign a
+copy ad hoc with the hardened runtime and have it read a PDF attachment
+(`get_attachment`); without the entitlement it exits with status 137
+(killed) at the first PDF:
+
+```bash
+cp build/malachi-mcp /tmp/malachi-mcp
+codesign --force --sign - --options runtime \
+    --entitlements macos/Resources/malachi-mcp.entitlements /tmp/malachi-mcp
+```
 
 `.github/workflows/macos.yml` does the same in CI on the `macos-26` runner
 (Xcode 26, whose SDK gives the app its macOS 26 design), on pushes to
@@ -300,3 +323,68 @@ Allow*); later releases, signed with the same Developer ID, read them
 without asking. Not done yet: updates (Sparkle or similar; today a new DMG
 replaces the app by hand), an App Sandbox
 ([macos-port.md §12](macos-port.md#12-what-the-port-took-and-what-is-still-open)).
+
+## 9. Third-party notices
+
+[`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md) in the repository
+root carries the copyright notices and licence texts of the third-party
+code in `malachi-mcp`, which the permissive licences of that code require
+in a binary distribution. Every package ships it beside `LICENSE`, the
+daemon's licence and `LICENSING.md`: `Contents/Resources` of the macOS
+app (and so the DMG), the Windows app folder (and so its zip, checked by
+`build.ps1`'s `Test-AppFolder`), and through `scripts/build.sh install`
+`/usr/share/licenses/malachi` in the rpm, `/usr/share/doc/malachi` in
+the deb and `/app/share/licenses/io.github.schotek.Malachi` in the
+Flatpak.
+
+It lists two kinds of components, and both must be checked before a
+release whenever `backend/go.mod` changed:
+
+- **The Go modules linked into the bridge.** The list is what
+  `go list -deps` names, the same on every platform:
+
+  ```bash
+  cd backend
+  for t in darwin/arm64 linux/amd64 windows/amd64; do
+      GOOS=${t%/*} GOARCH=${t#*/} go list -deps \
+          -f '{{if .Module}}{{.Module.Path}}{{end}}' ./cmd/malachi-mcp
+  done | sort -u
+  ```
+
+  A new module gets a row and its LICENSE (and NOTICE, if it has one)
+  from the module cache (`go mod download -json <module>@<version>`
+  names the directory); a module whose LICENSE changed gets the new text.
+- **What `pdfium.wasm` contains.** `github.com/klippa-app/go-pdfium`
+  embeds PDFium compiled to WebAssembly (`webassembly/pdfium.wasm` in the
+  module), built by its authors with Emscripten in standalone mode from
+  the `wasm-standalone` branch of their fork
+  [jerbob92/pdfium-binaries](https://github.com/jerbob92/pdfium-binaries/tree/wasm-standalone)
+  (V8 and XFA off; upstream it is the still open
+  [pull request 103](https://github.com/bblanchon/pdfium-binaries/pull/103)),
+  without a licence file of its own. The licence list of an upstream
+  pdfium-binaries release is no shortcut: its script misses HarfBuzz and
+  lists libpng and libtiff, which only XFA links. The PDFium version
+  of a go-pdfium release can be read from the `Version:` of
+  `.github/workflows/pdfium.pc` in the commit that last changed the
+  `.wasm` (`chromium/7961` for v1.19.8). The libraries inside are the
+  ones PDFium's GN files at that version link into the `pdfium` target
+  with those settings
+  (`core/fxcrt`, `core/fxcodec`, `core/fxge`, `core/fpdfapi/edit`,
+  `third_party/BUILD.gn`), at the revisions its `DEPS` pins; text in the
+  module (`strings`) confirms them (ICU's `icu_78` classes, OpenJPEG's
+  and Little CMS's messages, HarfBuzz's `HB_FONT_FUNCS`). The licence
+  texts come from those revisions on pdfium.googlesource.com and
+  chromium.googlesource.com, and those of Emscripten and musl from
+  Emscripten's repository. An upgrade of go-pdfium means doing this
+  again, and a library that comes or goes changes the list.
+
+The file does not yet cover the other programs, whose third-party code
+also asks for notices in a binary distribution: the Go modules of
+`malachid` (among them `modernc.org/sqlite` and `modernc.org/libc`, the
+`emersion` mail libraries, `klauspost/compress`, `godbus/dbus`,
+`BurntSushi/toml`) and of the GTK interface (gotk4 and its bindings,
+`KarpelesLab/weak`, `go4.org/unsafe/assume-no-moving-gc`), both also
+built on the Go standard library, and the .NET runtime, Windows Community
+Toolkit and the other NuGet packages in the Windows app folder (which
+also waits for the decision in [LICENSING.md](../LICENSING.md)). The
+macOS client itself links only Apple's system frameworks.

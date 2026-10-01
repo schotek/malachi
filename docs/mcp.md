@@ -3,7 +3,9 @@
 `malachi-mcp` lets an AI agent (Claude Code, Gemini CLI, Cursor, Zed or any
 other Model Context Protocol client) read and act on the user's mail through
 a running `malachid`. It is a second client of the daemon's JSON-RPC socket,
-exactly like the desktop UI: it imports only `backend/pkg/api`, authenticates
+exactly like the desktop UI: it imports only `backend/pkg/api` (and its own
+document reader `cmd/malachi-mcp/internal/extract`, which no other part can
+import), authenticates
 every connection with the daemon's per-run key as every client does, holds no
 mail logic, and everything it can do is a subset of [api.md](api.md). Nothing
 in the daemon or the contract changed for it.
@@ -29,7 +31,9 @@ Without a subcommand the binary is the stdio server. A first argument that
 does not start with `-` is one of the setup subcommands `status`, `install`
 and `uninstall`, which register the binary with the Claude apps and exit
 (see [Claude Desktop and Claude Code](#claude-desktop-and-claude-code-status-install-uninstall)
-below).
+below). The first argument `__extract` is internal: the bridge starts
+itself that way as the document worker of `get_attachment`
+([Documents](#documents)); it is not in the usage and not for people.
 
 Flags and environment of the server:
 
@@ -176,14 +180,35 @@ destructive, only `send_message` open-world.
 ### get_attachment
 
 - input: `accountId`, `messageId`, `partId`; optional `offset` and `limit`
-  (bytes of a text attachment, default 64 KiB, max 256 KiB)
+  (bytes of the text of a text attachment or a document, default 64 KiB,
+  max 256 KiB; a limit smaller than the character at the offset returns
+  that one character, so paging always moves on)
 - The part must be one that `read_message` lists. The decision is taken
-  from the declared type and size **before** anything is fetched:
+  from the declared type and size, and for a document in a generic type
+  from its file name, **before** anything is fetched:
   - text: `text/plain`, `text/csv`, `text/tab-separated-values`,
     `text/markdown`, `text/calendar`, `application/json`, at most 256 KiB;
   - image: `image/png`, `image/jpeg`, `image/gif`, `image/webp`, at most
     3 MiB;
-  - anything else (PDF, Office files, archives, `text/html`,
+  - document: `application/pdf`,
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+    (.docx) and
+    `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`
+    (.xlsx), at most 16 MiB (`api.MaxAttachmentDataBytes`, the most
+    `message.part` carries); a larger one is withheld unfetched. Mail
+    programs often send a document as `application/octet-stream`, and some
+    under a known wrong label; such a part counts as a document when the
+    last extension of its name (made clean, only ASCII letters
+    lower-cased, so no other character can pass for one) is one the table
+    allows: `application/octet-stream` with `.pdf`, `.docx` or `.xlsx`,
+    `application/x-pdf` with `.pdf`, `application/msword` with `.docx`,
+    `application/vnd.ms-excel` with `.xlsx`, `application/zip` and
+    `application/x-zip-compressed` with `.docx` or `.xlsx`. The extension
+    names exactly one format, which the bytes must then be; the trusted
+    line says the format was taken from the name and confirmed from the
+    content;
+  - anything else (.doc, .xls, PowerPoint, OpenDocument, RTF,
+    macro-enabled files and templates, archives, `text/html`,
     `image/svg+xml`, attached messages) returns metadata only.
 - A part of a type that is returned is asked for with `message.part`
   first, also one kept on the mail server only (`remote`), which the
@@ -194,16 +219,126 @@ destructive, only `send_message` open-world.
   downloaded (`message.download`) and the part asked for once more (see
   [Attachments on the mail server](#attachments-on-the-mail-server)). On
   Microsoft 365 a download may renumber the parts; when the part asked for
-  is no longer the same, the tool says to call `read_message` again rather
-  than return another file.
-- After the fetch the bytes are sniffed (`http.DetectContentType`): an image
-  whose bytes do not match the declared type, and "text" that sniffs as
+  is no longer the same (another name or type, or another size while
+  another part has the name, type and size it was listed with), the tool
+  says to call `read_message` again rather than return another file. Its
+  size alone may change with the rebuild, as the daemon allows too.
+- After the fetch the bytes decide. An image whose bytes do not match the
+  declared type (`http.DetectContentType`), and "text" that sniffs as
   HTML or binary or contains NUL, is withheld. Text is made valid UTF-8
   (`replacedBytes` reported; more than 10 % replaced is refused as not
-  text), cleaned, and paged.
+  text), cleaned, and paged. A PDF must start with `%PDF-`, a DOCX or XLSX
+  with a ZIP signature; an OLE2 compound file in their place (an Office
+  file protected with a password, or an older .doc or .xls) is withheld
+  before any worker starts, and so is anything else that is not the
+  format.
 - output: a trusted metadata line (plus `downloaded: fetched from the mail
-  server first` after a download), then either a fenced text block or an
-  MCP image content block with the sniffed MIME type.
+  server first` after a download, and for a document the lines below),
+  then either a fenced text block or an MCP image content block with the
+  sniffed MIME type. A withheld attachment is a normal result, `content
+  not returned: <reason>; the user can open it in Malachi Mail`, never a
+  tool error; the reason is the bridge's own words.
+
+#### Documents
+
+The text of a PDF, DOCX or XLSX is extracted by the bridge itself, never
+by the daemon or the UI (the parsers are `cmd/malachi-mcp/internal/extract`,
+which Go's `internal` rule keeps out of both), and never in the bridge's
+own process:
+
+- **A worker per document.** The bridge starts its own executable again
+  (`os.Executable`, not a `PATH` lookup) as `malachi-mcp __extract 1
+  <pdf|docx|xlsx>`, writes the document to its stdin and reads one reply
+  from its stdout; the worker inherits nothing of the MCP connection, the
+  daemon connection or its key, and starts no process. It runs with a
+  memory watchdog (1 GiB, a soft limit at 512 MiB) and a deadline of its
+  own, and is killed after 30 s. A document built to crash, hang or
+  exhaust a reader ends that one call with a withheld result; the
+  session's other tools go on. The worker's stderr is discarded unread.
+- **Calls at once.** Tool calls run at once, and a call reading a
+  document holds its bytes from the fetch until its worker is done. At
+  most two workers run at once, and at most two more calls read a
+  document meanwhile (fetching it, or waiting at most 60 s for a worker);
+  a call for another document beyond those four is withheld as busy at
+  once, before anything is fetched. Calls for the same document share one
+  reading: a call for a document that another call is reading waits for
+  that call and answers with its outcome, whatever it is; only when that
+  call ended without one (it was cancelled, or fetching the document
+  failed, perhaps on a message the server rebuilt) does a waiting call
+  start over, from `message.get`. A waiting call that is cancelled ends
+  alone.
+- **The reply is untrusted.** It is checked against the protocol (a
+  header line within 4 KiB, refusal codes and details from closed sets,
+  every count within bounds, at most 1 MiB of valid UTF-8 text, exactly
+  as many bytes as announced). The text is cleaned and fenced like any
+  mail text and withheld when more than 10 % of it is undecodable
+  (U+FFFD); everything said about the document outside the fence is the
+  bridge's wording of counts and codes.
+- **PDF**: the text layer, page by page in reading order, each page after
+  a `--- page N ---` line, read by PDFium compiled to WebAssembly and run
+  by wazero inside the worker (no host file system, its memory capped):
+  no layout, no pictures, no OCR, no form fields, annotations, bookmarks,
+  metadata or embedded files, nothing executed. A PDF with an empty user
+  password is read, one that needs a password is withheld (the bridge
+  never asks for one), copy restrictions are ignored like any text
+  extractor does. A page whose text is mostly undecodable (a font without
+  a character map) is left out and counted; a PDF with no text layer at
+  all (a scan) is withheld.
+- **DOCX**: the body in order, a line per paragraph, lists as `- `
+  indented by level, tables a line per row with tab-separated cells;
+  tracked changes as accepted (deleted text left out); field results, not
+  their codes; link text, never the URL; then comments, footnotes,
+  endnotes and the distinct headers and footers, each under a `---`
+  heading.
+- **XLSX**: a `--- sheet N: <name> ---` line per sheet in workbook order
+  (`(hidden)` after a hidden one), then a line per row with content: the
+  row number, then the cells from column A, tab-separated. Values as
+  stored, not as displayed: numbers to 15 significant digits, a
+  percentage as its value times 100 with `%`, dates as `YYYY-MM-DD` and
+  times as `HH:MM[:SS]`, booleans as `TRUE`/`FALSE`, a formula as its
+  last calculated value, never its text; cell comments after the sheets.
+  Chartsheets, pivot caches, defined names, charts and embedded objects
+  are not read.
+- **Trusted lines** after the metadata: `document: PDF, 42 pages; text
+  extracted by the bridge (no layout, pictures or OCR)` (for a workbook
+  its sheets and rows), `document-notes: …` with what was left out or
+  added (pages without text, undecodable pages, hidden sheets, formulas,
+  dropped columns, comments and notes, tracked changes, `hidden content
+  included`), the `text: bytes A-B of N` paging line, and `cut: …` when a
+  volume cap stopped the text, saying where (the 1 MiB cap stops a PDF
+  within a page: the lines of that page that fit are in the text, the
+  rest of it and the pages after it are not).
+- **Caps.** 16 MiB of document; 1 MiB of text (the rest cut at a line
+  boundary and said so); 500 PDF pages and 256 KiB of text per page; in a
+  DOCX or XLSX 2 000 ZIP entries, 64 MiB unpacked per part and 128 MiB in
+  all, XML nested at most 128 deep, 8 million XML tokens per part and 16
+  million in all, a single tag at most 1 MiB, any DOCTYPE refused, only
+  UTF-8 XML; 256 sheets, 100 000 rows per sheet, 500 000 cells, 256
+  columns and 16 384 cell elements per row, and row lines worth four times
+  the text cap read in all; 10 000 comments and notes. Volume caps cut,
+  structural caps withhold.
+- **Withheld**, each with its reason: a password, an older or
+  macro-enabled or template Office format, a PowerPoint file, content
+  that is not the format, a damaged file, no text layer, undecodable
+  text, a structural cap, a reader that failed, crashed or broke the
+  protocol ("the document reader stopped on this file (it may be damaged
+  or built to attack readers)"), more than 30 s, more than 1 GiB, every
+  worker busy, a worker that could not be started, a PDF engine that
+  could not be started in the worker ("the PDF reader could not be
+  started; call again later": the machine's doing, such as memory, not
+  the file's, so not cached; it has an exit status of its own, no reply),
+  and a bridge binary replaced while it ran ("restart the Claude
+  client"). A cancelled call is a tool error.
+- **Cache.** The text is the same for the same bytes, so an offset stays
+  valid across calls; to save a page the work, the bridge keeps the
+  outcome of the last 8 documents (8 MiB at most, 15 minutes after last
+  use) in memory, keyed by account, message, part id and the file name,
+  declared type and size of the current `message.get` (after a download,
+  the size the message lists then, which a Microsoft 365 rebuild may have
+  changed). A hit needs no `message.part`, no download and no worker.
+  Outcomes of the moment (a timeout, a worker or a PDF engine not
+  started, every worker busy, a cancelled call, a replaced binary) are not
+  kept. Nothing of it is written or logged.
 
 ### sync_status, trigger_sync
 
@@ -405,16 +540,23 @@ in front of a model that holds tools, so:
   block, all of which can hide text from a human. ZWNJ and ZWJ are kept
   for the scripts that need them.
 - **Capped.** Body 16 000 characters per call by default, 64 000 at most;
-  text attachments 64 KiB per call, 256 KiB at most; images 3 MiB; lists
-  100 messages; mutations 100 ids; 20 drafts per process; downloads from
-  the mail server 256 MiB per process. Claude Code warns above 10 000
-  tokens per tool result and stops at 25 000.
+  text attachments 64 KiB per call, 256 KiB at most; images 3 MiB;
+  documents 16 MiB, of which at most 1 MiB of text and 500 PDF pages,
+  paged like a text attachment, and the ZIP and XML caps of
+  [Documents](#documents); lists 100 messages; mutations 100 ids; 20
+  drafts per process; downloads from the mail server 256 MiB per
+  process. Claude Code warns above 10 000 tokens per tool result and
+  stops at 25 000.
 - **Opt-in extras.** Links and extra headers are listed only on request:
   every URL in the context is a potential exfiltration channel through the
   host's own tools, which the bridge cannot gate.
 - **Hidden text is included.** For an HTML-only message the daemon derives
   `text` from every text node, so text hidden by CSS in the desktop view is
-  visible to the model. The bridge cannot tell the two apart.
+  visible to the model. The bridge cannot tell the two apart. A document's
+  text includes its hidden content too (hidden text of a DOCX, hidden
+  sheets, rows and columns of an XLSX, invisible text of a PDF), and the
+  trusted `document-notes` line says `hidden content included` when there
+  is any.
 - **Nothing content-bearing is logged.** Logs carry tool and method names,
   durations, error code names, counts and opaque ids; never subjects,
   addresses, bodies, attachment names, folder names, draft content or the
@@ -432,6 +574,8 @@ who starts the client), what they accept (allow-lists, caps, session-scoped
 drafts, no permanent delete, no config or credential surface, no account
 management), what it makes the daemon download (attachments kept on the
 mail server, from the account's own server, within 256 MiB per process),
+that it parses documents only in a separate, killable process whose
+answer it trusts no more than the document,
 and that it talks only to a daemon that proved the per-run key
 ([api.md §1.4](api.md#14-handshake)). What it can only mitigate:
 whether the model follows instructions it reads. The fence, the cleaning
@@ -786,6 +930,13 @@ the same conditions as the panel:
 The panel, like the hand-offs, exists only while *Register with Claude*
 is on, although it brings its own `--mcp-config`.
 
+With the *In App* target, an attachment's *Ask the Assistant…* item is
+offered only for the text and image types (`assistant.AttachmentReadable`);
+documents, which the bridge returns as extracted text, are deliberately
+not offered there. The model may still call `get_attachment` on a
+document by itself and gets its text under the rules of
+[Documents](#documents).
+
 Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/articles/14729294-open-claude-desktop-with-a-link),
 [Launch sessions from links](https://code.claude.com/docs/en/deep-links).
 
@@ -794,6 +945,11 @@ Link formats: [Open Claude Desktop with a link](https://support.claude.com/en/ar
 - threads, attached messages (`message.embedded`), draft listing and deletion, the
   agent's own attachments on drafts (only what `draft.create` imports from
   the original travels);
+- documents other than PDF, DOCX and XLSX (.doc, .xls, PowerPoint,
+  OpenDocument, RTF), OCR, PDF form fields, annotations and embedded
+  files, the pictures of a document, documents embedded in another, the
+  text of formulas, password-protected documents (the bridge never asks
+  for a password), slides;
 - structured tool output (`structuredContent`); the results are text;
 - notifications (new mail as an MCP resource change);
 - the recipient policy above;

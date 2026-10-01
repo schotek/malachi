@@ -315,8 +315,9 @@ public sealed class AssistantController : IDisposable
     /// <paramref name="contentType"/> (Swift <c>canAsk(about:)</c>, GTK
     /// <c>canAskFile</c>): the chosen Claude app is installed (the file goes
     /// without the bridge); for In App, the panel can run (it reads the file
-    /// through the bridge's <c>get_attachment</c>) and the bridge returns
-    /// this type's content (<see cref="Assistant.AttachmentReadable"/>).
+    /// through the bridge's <c>get_attachment</c>) and the panel offers the
+    /// type (<see cref="Assistant.AttachmentReadable"/>: text and images,
+    /// never documents).
     /// </summary>
     public bool CanAskFile(string contentType)
     {

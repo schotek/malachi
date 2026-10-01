@@ -34,6 +34,11 @@ RELEASE_SIGN  := $(findstring Developer ID Application,$(SIGN))
 CODESIGN      := codesign --force --sign "$(SIGN)"$(if $(RELEASE_SIGN), --options runtime --timestamp)
 # Under the hardened runtime the app needs this to send Apple events.
 ENTITLEMENTS  := Resources/MalachiMail.entitlements
+# And malachi-mcp this, for the native code wazero makes of the PDFium it
+# embeds (the file says why). The bridge alone: never the app, malachid or
+# malachi-keychain. Signed into every build, with or without the hardened
+# runtime, so that an ad-hoc build carries what a release does.
+MCP_ENTITLEMENTS := Resources/malachi-mcp.entitlements
 
 # The architectures of the Swift binaries: empty is this Mac's own, the
 # quick build for development. The root Makefile's macos-dmg builds arm64
@@ -127,8 +132,9 @@ icon:
 	iconutil -c icns -o "$(ICNS)" "$(ICONSET)"
 
 ## app: assemble build/Malachi Mail.app with malachid, malachi-mcp and malachi-keychain inside
-# The licences go into Contents/Resources, as into the Windows app folder
-# (LICENSING.md). With ARCHS every executable is checked to run on each.
+# The licences and THIRD-PARTY-NOTICES.md go into Contents/Resources, as
+# into the Windows app folder (LICENSING.md). With ARCHS every executable
+# is checked to run on each.
 app: build locale icon
 	@test -x "$(GO_DIR)/malachid" -a -x "$(GO_DIR)/malachi-mcp" || { \
 		echo "macos: $(GO_DIR)/malachid or malachi-mcp is missing; run 'make backend mcp' in $(ROOT) first" >&2; exit 1; }
@@ -149,16 +155,19 @@ app: build locale icon
 	cp "$(ROOT)/LICENSE" "$(CONTENTS)/Resources/LICENSE.txt"; \
 	cp "$(ROOT)/backend/LICENSE" "$(CONTENTS)/Resources/LICENSE-backend.txt"; \
 	cp "$(ROOT)/LICENSING.md" "$(CONTENTS)/Resources/LICENSING.md"; \
+	cp "$(ROOT)/THIRD-PARTY-NOTICES.md" "$(CONTENTS)/Resources/THIRD-PARTY-NOTICES.md"; \
 	sed -e 's/@VERSION@/$(SHORT_VERSION)/g' -e 's/@FULL_VERSION@/$(VERSION)/g' \
 	    -e 's/@BUNDLE_ID@/$(APP_ID)/g' -e 's/@EXECUTABLE@/$(EXE)/g' \
 	    -e 's|@LOCALIZATIONS@|$(LOCALIZATIONS)|g' \
 	    Resources/Info.plist.in > "$(CONTENTS)/Info.plist"; \
 	plutil -lint "$(CONTENTS)/Info.plist" >/dev/null; \
 	plutil -lint "$(ENTITLEMENTS)" >/dev/null; \
+	plutil -lint "$(MCP_ENTITLEMENTS)" >/dev/null; \
 	printf 'APPL????' > "$(CONTENTS)/PkgInfo"; \
-	for f in malachid malachi-mcp $(HELPER); do \
+	for f in malachid $(HELPER); do \
 		$(CODESIGN) --identifier "$(APP_ID).$$f" "$(CONTENTS)/MacOS/$$f"; \
 	done; \
+	$(CODESIGN) --identifier "$(APP_ID).malachi-mcp" --entitlements "$(MCP_ENTITLEMENTS)" "$(CONTENTS)/MacOS/malachi-mcp"; \
 	$(CODESIGN) --entitlements "$(ENTITLEMENTS)" "$(APP)"; \
 	codesign --verify --strict --deep "$(APP)"; \
 	echo "built $(APP) ($(VERSION), $(or $(ARCHS),$(shell uname -m)), languages: $(LANGS))"

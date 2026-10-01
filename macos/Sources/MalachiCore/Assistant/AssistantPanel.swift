@@ -293,10 +293,11 @@ extension Assistant {
     // MARK: Attachments
 
     /// assistant.AttachmentReadable: whether get_attachment returns an
-    /// attachment of this content type as content (text or an image, as
-    /// the bridge's tools_read.go decides; anything else comes back as
-    /// metadata only): compared without case (ASCII only) and parameters.
-    /// For the In App target the attachment item is there only for these.
+    /// attachment of this content type as it is (text or an image, as the
+    /// bridge's tools_read.go decides): compared without case (ASCII only)
+    /// and parameters. For the In App target the attachment item is there
+    /// only for these; documents, which the bridge returns as extracted
+    /// text, are deliberately not offered.
     public static func attachmentReadable(_ contentType: String) -> Bool {
         let b = Array(contentType.utf8)
         let base = trimSpace(b, 0, b.firstIndex(of: UInt8(ascii: ";")) ?? b.count)

@@ -37,6 +37,7 @@ on:
       - Makefile
       - LICENSE
       - LICENSING.md
+      - THIRD-PARTY-NOTICES.md
       - .github/workflows/macos.yml
       # The Go reference logic the Swift ports and their tests follow; one
       # test reads ui/internal/assistant/events_test.go itself.

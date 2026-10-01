@@ -190,6 +190,7 @@ func TestLogsContainNoContent(t *testing.T) {
 	h.ok(t, "list_messages", map[string]any{"accountId": "a1", "folderId": "f_in"})
 	h.ok(t, "read_message", map[string]any{"accountId": "a1", "messageId": "m1", "includeLinks": true})
 	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m1", "partId": "2"})
+	h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m1", "partId": "4"}) // a document, read by a worker
 	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "to": []string{"SENTINEL-NAME <sentinel@example.test>"}, "subject": "SENTINEL-SUBJECT", "body": "SENTINEL-BODY"})
 	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "reply", "messageId": "m1", "body": "SENTINEL-REPLY", "attribution": "SENTINEL-ATTR"})
 	h.ok(t, "create_draft", map[string]any{"accountId": "a1", "mode": "forward", "messageId": "m1", "omitQuote": true})
@@ -202,7 +203,7 @@ func TestLogsContainNoContent(t *testing.T) {
 	mustContain(t, logs, "connected to malachid", fmt.Sprintf("protocol=%d", api.ProtocolVersion))
 	mustNotContain(t, logs,
 		"alice@example.org", "Alice", "Quarterly", "Hello Bob", "notes.txt", "hello, notes", "example.org/x",
-		"logo.png", "report.pdf", "SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML,
+		"logo.png", "report.pdf", "Revenue grew", "SENTINEL", "sentinel@example.test", "SECRET-ERROR-TEXT", fxHTML,
 		daemonKeyHex(t, h.sock))
 }
 

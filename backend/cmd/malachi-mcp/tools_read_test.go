@@ -222,7 +222,7 @@ func TestGetAttachmentImage(t *testing.T) {
 func TestGetAttachmentWithheldWithoutFetching(t *testing.T) {
 	h := newHarness(t, newFixture(), false, false)
 	cases := map[string]string{
-		"4":  "unsupported type application/pdf",
+		"14": "unsupported type application/zip",
 		"5":  "HTML attachments are never returned",
 		"6":  "too big",
 		"11": "SVG is never returned",
@@ -391,8 +391,8 @@ func TestGetAttachmentDownloadsRemote(t *testing.T) {
 // A type that is never returned is never downloaded either.
 func TestGetAttachmentRemoteWithheldTypeNoDownload(t *testing.T) {
 	h := newHarness(t, newFixture(), false, false)
-	out := h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m7", "partId": "3"})
-	mustContain(t, out, "content not returned: unsupported type application/pdf")
+	out := h.ok(t, "get_attachment", map[string]any{"accountId": "a1", "messageId": "m10", "partId": "2"})
+	mustContain(t, out, "content not returned: unsupported type application/zip")
 	if order, downloads := h.calls(); len(downloads) != 0 || !reflect.DeepEqual(order, []string{"get"}) {
 		t.Fatalf("calls %v, downloads %+v", order, downloads)
 	}

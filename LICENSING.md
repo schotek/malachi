@@ -13,8 +13,8 @@ Malachi Mail is made of two independently licensed parts.
 Every source file carries an `SPDX-License-Identifier` header saying which
 of the two applies to it. The built macOS app and Windows app folder carry
 `malachid` and `malachi-mcp` beside the client, each under its own licence
-(the Windows folder has `LICENSE.txt`, `LICENSE-backend.txt` and this
-file).
+(the Windows folder has `LICENSE.txt`, `LICENSE-backend.txt`, this file
+and `THIRD-PARTY-NOTICES.md`).
 
 ## The core is dual-licensed
 
@@ -70,6 +70,23 @@ with and distributed together with these Microsoft platform components,
 added here, with the notices of those components in the app folder.
 Until then there is no published Windows binary, and the client is built
 from source (`windows/README.md`).
+
+## Third-party components
+
+`malachi-mcp` links third-party Go modules and embeds PDFium, compiled to
+WebAssembly together with the libraries it is built with (FreeType,
+HarfBuzz, ICU, libjpeg-turbo, OpenJPEG, Little CMS, zlib and others), to
+read the text of PDF attachments. All of them are under permissive
+licences (BSD, MIT, Apache-2.0, the FreeType License, the IJG licence,
+Unicode-3.0, Zlib) and none under a copyleft one, so they do not stand
+in the way of the core's commercial licence (whose licensees keep these
+notices as well). Their copyright notices and licence texts are in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md), which every package
+ships beside the licences: the macOS app in `Contents/Resources`, the
+Windows app folder, and the rpm, deb and Flatpak with the licences in
+their usual directories
+([docs/releasing.md §9](docs/releasing.md#9-third-party-notices)). The
+third-party code of the other programs is not listed there yet.
 
 ## Contributions
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/schotek/malachi/backend/cmd/malachi-mcp/internal/extract"
 	"github.com/schotek/malachi/backend/pkg/api"
 )
 
@@ -52,7 +53,13 @@ func (b *bridge) registerReadTools(srv *mcp.Server) {
 	}, b.readMessage)
 	mcp.AddTool(srv, &mcp.Tool{
 		Name: "get_attachment",
-		Description: "Fetch one attachment of a message by the partId from read_message. Text attachments (text/plain, csv, markdown, calendar, json) come back as text, paged with offset and limit; PNG, JPEG, GIF and WebP images come back as an image; any other type (PDF, Office files, archives, HTML, SVG, attached messages) returns metadata only. " +
+		Description: "Fetch one attachment of a message by the partId from read_message. Text attachments (text/plain, csv, markdown, calendar, json) come back as text, paged with offset and limit. " +
+			"PDF, Word (.docx) and Excel (.xlsx) documents come back as their extracted text, paged the same way: PDF pages start with a '--- page N ---' line; " +
+			"a spreadsheet gives a line per sheet and one line per row (the row number, then the cells from column A, tab-separated), formulas as their last calculated value and dates as YYYY-MM-DD; " +
+			"Word comments, notes, headers and footers follow the body; hidden text is included. " +
+			"A part sent as application/octet-stream counts as a document when its name ends in .pdf, .docx or .xlsx. " +
+			"There is no OCR, so a scanned PDF has no text, and a password-protected document returns metadata only. " +
+			"PNG, JPEG, GIF and WebP images come back as an image; any other type (older .doc and .xls, PowerPoint, archives, HTML, SVG, attached messages) returns metadata only. " +
 			"An attachment of a type that is returned but kept on the mail server only (remote) is downloaded from the account's own mail server first, which can take up to two minutes." + untrustedNote,
 		Annotations: annRead(),
 	}, b.getAttachment)
@@ -492,8 +499,8 @@ type getAttachmentIn struct {
 	AccountID string `json:"accountId" jsonschema:"account id from list_accounts"`
 	MessageID string `json:"messageId" jsonschema:"message id from list_messages"`
 	PartID    string `json:"partId" jsonschema:"partId from the attachment list of read_message"`
-	Offset    int    `json:"offset,omitempty" jsonschema:"byte offset into a text attachment for paging, default 0"`
-	Limit     int    `json:"limit,omitempty" jsonschema:"bytes of a text attachment to return, default 65536, max 262144"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"byte offset into the text of a text attachment or document for paging, default 0"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"bytes of the text of a text attachment or document to return, default 65536, max 262144"`
 }
 
 var textAttachmentTypes = map[string]bool{
@@ -512,27 +519,137 @@ var imageAttachmentTypes = map[string]bool{
 	"image/webp": true,
 }
 
-// attachmentKind decides from the declared type and size alone how an
-// attachment is returned: "text", "image", or "" with the reason it is
-// withheld.
-func attachmentKind(declared string, size int64) (kind, reason string) {
+// documentTypes are the declared types of the documents whose text is
+// returned. Everything else of the kind (.doc and .xls, PowerPoint,
+// OpenDocument, RTF, macro-enabled files, templates) is withheld.
+var documentTypes = map[string]extract.Format{
+	"application/pdf": extract.PDF,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": extract.DOCX,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":       extract.XLSX,
+}
+
+// documentByName are the declared types that mail programs put on a
+// document they did not label properly: a generic type, or a known wrong
+// one. Such a part counts as a document when the last extension of its
+// name is one of its row here, which names exactly one format; the bytes
+// then have to be that format (checkDocumentBytes, and the worker).
+var documentByName = map[string]map[string]extract.Format{
+	"application/octet-stream":     {".pdf": extract.PDF, ".docx": extract.DOCX, ".xlsx": extract.XLSX},
+	"application/x-pdf":            {".pdf": extract.PDF},
+	"application/msword":           {".docx": extract.DOCX},
+	"application/vnd.ms-excel":     {".xlsx": extract.XLSX},
+	"application/zip":              {".docx": extract.DOCX, ".xlsx": extract.XLSX},
+	"application/x-zip-compressed": {".docx": extract.DOCX, ".xlsx": extract.XLSX},
+}
+
+// attachmentPlan is how an attachment is returned, decided before a byte
+// of it is fetched.
+type attachmentPlan struct {
+	kind   string         // "text", "image" or "document"
+	format extract.Format // of a document
+	byName bool           // a document whose format comes from its file name
+}
+
+// attachmentKind decides from the declared type and size, and for a
+// document in a generic or wrong type from its file name, how an
+// attachment is returned; a plan without a kind comes with the reason it
+// is withheld.
+func attachmentKind(declared, filename string, size int64) (attachmentPlan, string) {
+	tooBig := func(limit int) string { return fmt.Sprintf("too big: %d bytes, limit %d", size, limit) }
 	switch {
 	case textAttachmentTypes[declared]:
 		if size > maxAttachmentTextBytes {
-			return "", fmt.Sprintf("too big: %d bytes, limit %d", size, maxAttachmentTextBytes)
+			return attachmentPlan{}, tooBig(maxAttachmentTextBytes)
 		}
-		return "text", ""
+		return attachmentPlan{kind: "text"}, ""
 	case imageAttachmentTypes[declared]:
 		if size > maxAttachmentImageBytes {
-			return "", fmt.Sprintf("too big: %d bytes, limit %d", size, maxAttachmentImageBytes)
+			return attachmentPlan{}, tooBig(maxAttachmentImageBytes)
 		}
-		return "image", ""
+		return attachmentPlan{kind: "image"}, ""
 	case declared == "text/html":
-		return "", "HTML attachments are never returned"
+		return attachmentPlan{}, "HTML attachments are never returned"
 	case declared == "image/svg+xml":
-		return "", "SVG is never returned"
+		return attachmentPlan{}, "SVG is never returned"
 	}
-	return "", "unsupported type " + declared
+	plan := attachmentPlan{kind: "document"}
+	if f, ok := documentTypes[declared]; ok {
+		plan.format = f
+	} else if f, ok := documentByName[declared][fileExtension(filename)]; ok {
+		plan.format, plan.byName = f, true
+	} else {
+		return attachmentPlan{}, "unsupported type " + declared
+	}
+	if size > maxAttachmentDocumentBytes {
+		return attachmentPlan{}, tooBig(maxAttachmentDocumentBytes)
+	}
+	return plan, ""
+}
+
+// fileExtension is the last extension of a file name as it is shown (made
+// clean and one line), with only its ASCII letters lower-cased, so that no
+// other character can turn into one of them (U+212A KELVIN SIGN is no "k",
+// U+017F LATIN SMALL LETTER LONG S no "s", as they would be for
+// strings.ToLower or EqualFold); "" for a name without one.
+func fileExtension(name string) string {
+	name = oneLine(name)
+	i := strings.LastIndexByte(name, '.')
+	if i < 0 || strings.ContainsAny(name[i:], `/\`) {
+		return ""
+	}
+	return asciiLower(name[i:])
+}
+
+// asciiLower lower-cases the ASCII letters of s and nothing else.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if 'A' <= c && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// The signatures the bytes of a document must start with.
+var (
+	pdfSignature = []byte("%PDF-")
+	zipSignature = []byte("PK\x03\x04")
+	cfbSignature = []byte{0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1}
+)
+
+// checkDocumentBytes is the check of a fetched document's bytes before a
+// worker reads them (the worker checks them again): "" when they may be
+// format f, else why the document is withheld. A PDF starts with %PDF-,
+// a DOCX or XLSX is a ZIP; an OLE2 compound file in their place is an
+// Office file with a password or a .doc or .xls, and goes no further.
+func checkDocumentBytes(f extract.Format, data []byte) string {
+	switch f {
+	case extract.PDF:
+		if bytes.HasPrefix(data, pdfSignature) {
+			return ""
+		}
+	case extract.DOCX, extract.XLSX:
+		if bytes.HasPrefix(data, cfbSignature) {
+			return officeCFBReason
+		}
+		if bytes.HasPrefix(data, zipSignature) {
+			return ""
+		}
+	}
+	return fmt.Sprintf("content does not look like %s (detected %s)", aFormat(f), mediaType(http.DetectContentType(data)))
+}
+
+// listedElsewhere reports whether a part other than want's id has want's
+// file name, type and size.
+func listedElsewhere(atts []api.Attachment, want api.Attachment) bool {
+	for _, a := range atts {
+		if a.PartID != want.PartID && a.Filename == want.Filename &&
+			mediaType(a.ContentType) == mediaType(want.ContentType) && a.Size == want.Size {
+			return true
+		}
+	}
+	return false
 }
 
 // findAttachment returns the attachment with the part id, nil if none.
@@ -573,7 +690,7 @@ func mediaType(ct string) string {
 	return strings.ToLower(strings.TrimSpace(ct))
 }
 
-func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in getAttachmentIn) (*mcp.CallToolResult, any, error) {
+func (b *bridge) getAttachment(ctx context.Context, req *mcp.CallToolRequest, in getAttachmentIn) (*mcp.CallToolResult, any, error) {
 	if in.AccountID == "" || in.MessageID == "" || in.PartID == "" {
 		return toolErrorf("accountId, messageId and partId are required"), nil, nil
 	}
@@ -595,12 +712,36 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	declared := mediaType(att.ContentType)
 	meta := fmt.Sprintf("partId=%s filename=%q contentType=%s size=%d (the name is untrusted mail content)",
 		att.PartID, oneLine(att.Filename), declared, att.Size)
-	withheld := func(reason string) *mcp.CallToolResult {
-		return textResult(meta + "\ncontent not returned: " + reason + "; the user can open it in Malachi Mail")
-	}
-	kind, reason := attachmentKind(declared, att.Size)
-	if kind == "" {
+	withheld := func(reason string) *mcp.CallToolResult { return withheldResult(meta, reason) }
+	plan, reason := attachmentKind(declared, att.Filename, att.Size)
+	if plan.kind == "" {
 		return withheld(reason), nil, nil
+	}
+
+	// A document read before is answered from the cache: no message.part,
+	// no download, no worker. One that another call is reading is answered
+	// with that call's outcome, and when too many are being read, busy
+	// (doc_cache.go); when that reading ends without an outcome, this call
+	// starts over. Else this call reads it, and the calls for it that come
+	// meanwhile wait for its outcome: outcome, set once there is one. It
+	// is cached under cacheKey: key, or after a download the part as the
+	// message then lists it.
+	key := docKey{acc: acc, msg: mid, part: in.PartID, filename: att.Filename, contentType: declared, size: att.Size}
+	cacheKey := key
+	var outcome *docEntry
+	if plan.kind == "document" {
+		e, r, again, err := b.awaitDocument(ctx, key, plan.format)
+		switch {
+		case err != nil:
+			return toolErrorf("cancelled"), nil, nil
+		case again:
+			// The message may have been rebuilt meanwhile: its listing
+			// is read anew.
+			return b.getAttachment(ctx, req, in)
+		case r == nil:
+			return documentResult(meta, plan, e, in), nil, nil
+		}
+		defer func() { b.docs.end(key, r, outcome) }()
 	}
 
 	// The part is asked for first, also one message.get calls remote: the
@@ -617,14 +758,21 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 		}
 		downloaded = true
 		// Microsoft 365 rebuilds a message it serves again: the part must
-		// still be the one the model asked for.
+		// still be the one the model asked for. Its size may change with
+		// the rebuild (the daemon, too, takes the only part of a name and
+		// type for it), but not when another part now has the name, type
+		// and size it was listed with: then that one is it.
 		now := findAttachment(m.Attachments, in.PartID)
-		if now == nil || now.Filename != att.Filename || mediaType(now.ContentType) != declared {
+		if now == nil || now.Filename != att.Filename || mediaType(now.ContentType) != declared ||
+			(now.Size != att.Size && listedElsewhere(m.Attachments, *att)) {
 			return toolErrorf("the mail server rebuilt message %s when it was downloaded and its part ids changed; call read_message again for the new ones", in.MessageID)
 		}
-		if k, reason := attachmentKind(declared, now.Size); k == "" {
+		if p, reason := attachmentKind(declared, now.Filename, now.Size); p.kind == "" {
 			return withheld(reason)
 		}
+		// What is read now is the part as the message lists it from now
+		// on, which is what a later call's key will say.
+		cacheKey.size = now.Size
 		return nil
 	}
 	part := func() (*api.MessagePartResult, error) {
@@ -647,10 +795,21 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	if downloaded {
 		meta += "\ndownloaded: fetched from the mail server first"
 	}
-	// The daemon reports the declared type; the bytes decide here.
-	sniffed := mediaType(http.DetectContentType(res.Data))
 
-	if kind == "image" {
+	switch plan.kind {
+	case "document":
+		e, cacheable, cancelled := b.readDocument(ctx, plan.format, res.Data)
+		if cancelled {
+			return toolErrorf("cancelled"), nil, nil
+		}
+		if cacheable {
+			b.docs.put(cacheKey, e)
+		}
+		outcome = &e
+		return documentResult(meta, plan, e, in), nil, nil
+	case "image":
+		// The daemon reports the declared type; the bytes decide here.
+		sniffed := mediaType(http.DetectContentType(res.Data))
 		if len(res.Data) > maxAttachmentImageBytes {
 			return withheld(fmt.Sprintf("too big: %d bytes, limit %d", len(res.Data), maxAttachmentImageBytes)), nil, nil
 		}
@@ -666,7 +825,7 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	if len(res.Data) > maxAttachmentTextBytes {
 		return withheld(fmt.Sprintf("too big: %d bytes, limit %d", len(res.Data), maxAttachmentTextBytes)), nil, nil
 	}
-	if !strings.HasPrefix(sniffed, "text/") || sniffed == "text/html" || bytes.IndexByte(res.Data, 0) >= 0 {
+	if sniffed := mediaType(http.DetectContentType(res.Data)); !strings.HasPrefix(sniffed, "text/") || sniffed == "text/html" || bytes.IndexByte(res.Data, 0) >= 0 {
 		return withheld(fmt.Sprintf("content does not look like text (detected %s)", sniffed)), nil, nil
 	}
 	raw := string(res.Data)
@@ -676,27 +835,219 @@ func (b *bridge) getAttachment(ctx context.Context, _ *mcp.CallToolRequest, in g
 	if runes := utf8.RuneCountInString(valid); runes > 0 && replaced*100 > runes*maxReplacedPercent {
 		return withheld(fmt.Sprintf("not text: %d of %d characters are not valid UTF-8", replaced, runes)), nil, nil
 	}
-	text := clean(valid)
-	slice, total, end := sliceBytes(text, in.Offset, clampLimit(in.Limit, defaultAttachmentTextBytes, maxAttachmentTextBytes))
-	start := in.Offset
-	if start < 0 {
-		start = 0
+	trailing := ""
+	if replaced > 0 {
+		trailing = fmt.Sprintf("replacedBytes: %d (invalid UTF-8 shown as U+FFFD)", replaced)
 	}
-	if start > total {
-		start = total
-	}
+	return pagedText(meta, clean(valid), in.Offset, in.Limit, trailing), nil, nil
+}
+
+// withheldResult is an attachment whose content is not returned, and why,
+// in the bridge's own words: a normal result, not a tool error.
+func withheldResult(meta, reason string) *mcp.CallToolResult {
+	return textResult(meta + "\ncontent not returned: " + reason + "; the user can open it in Malachi Mail")
+}
+
+// pagedText is the result of a text, a text attachment's or a document's:
+// meta, the line saying which bytes of the text the slice from offset is
+// (limit bytes, by default and at most those of a text attachment), the
+// trailing line if any, then the slice in a fence. The text is cleaned.
+func pagedText(meta, text string, offset, limit int, trailing string) *mcp.CallToolResult {
+	slice, total, end := sliceBytes(text, offset, clampLimit(limit, defaultAttachmentTextBytes, maxAttachmentTextBytes))
+	start := end - len(slice)
 	if end < total {
 		meta += fmt.Sprintf("\ntext: bytes %d-%d of %d (truncated; call again with offset=%d)", start, end, total, end)
 	} else {
 		meta += fmt.Sprintf("\ntext: bytes %d-%d of %d", start, end, total)
 	}
-	if replaced > 0 {
-		meta += fmt.Sprintf("\nreplacedBytes: %d (invalid UTF-8 shown as U+FFFD)", replaced)
+	if trailing != "" {
+		meta += "\n" + trailing
 	}
 	return &mcp.CallToolResult{Content: []mcp.Content{
 		&mcp.TextContent{Text: meta},
 		&mcp.TextContent{Text: fenced(newNonce(), slice)},
-	}}, nil, nil
+	}}
+}
+
+// readDocument turns the fetched bytes of a document into what is kept of
+// it: its cleaned text and facts, or the reason it is withheld. cacheable
+// says whether the outcome may be cached (doc_cache.go); cancelled that
+// the tool call ended first.
+func (b *bridge) readDocument(ctx context.Context, f extract.Format, data []byte) (e docEntry, cacheable, cancelled bool) {
+	e.format = f
+	if len(data) > maxAttachmentDocumentBytes {
+		e.reason = fmt.Sprintf("too big: %d bytes, limit %d", len(data), maxAttachmentDocumentBytes)
+		return e, true, false
+	}
+	if reason := checkDocumentBytes(f, data); reason != "" {
+		e.reason = reason
+		return e, true, false
+	}
+	x := b.extractDocument(ctx, f, data)
+	switch {
+	case x.busy:
+		e.reason = workerFailureReason(x)
+	case x.outcome == extract.Cancelled:
+		return e, false, true
+	case x.outcome == extract.Refused:
+		e.reason = refusalReason(f, x.refusal)
+	case x.outcome == extract.OK:
+		// The worker's text is as untrusted as the document: cleaned like
+		// any mail text, and withheld when too much of it could not be
+		// decoded (fonts without a character map that the reader's own
+		// per-page check did not catch).
+		text := clean(x.res.Text)
+		if bad, runes := strings.Count(text, string(utf8.RuneError)), utf8.RuneCountInString(text); runes > 0 && bad*100 > runes*maxReplacedPercent {
+			e.reason = fmt.Sprintf("not text: %d of %d characters could not be decoded", bad, runes)
+		} else {
+			e.text, e.facts = text, x.res.Facts
+		}
+	default:
+		e.reason = workerFailureReason(x)
+	}
+	return e, x.cacheable(), false
+}
+
+// documentResult is the result of a document from what is kept of it:
+// withheld with its reason, or the trusted lines about it (counts and
+// flags, worded here) and one page of its text.
+func documentResult(meta string, plan attachmentPlan, e docEntry, in getAttachmentIn) *mcp.CallToolResult {
+	if e.reason != "" {
+		return withheldResult(meta, e.reason)
+	}
+	meta += "\n" + documentLine(e.format, e.facts, plan.byName)
+	if notes := documentNotes(e.format, e.facts); notes != "" {
+		meta += "\ndocument-notes: " + notes
+	}
+	return pagedText(meta, e.text, in.Offset, in.Limit, cutLine(e.facts))
+}
+
+// documentLine is the trusted line naming what the text was taken from.
+func documentLine(f extract.Format, facts extract.Facts, byName bool) string {
+	var b strings.Builder
+	b.WriteString("document: ")
+	b.WriteString(formatName(f))
+	switch f {
+	case extract.PDF:
+		b.WriteString(", " + plural(facts.Pages, "page", "pages"))
+	case extract.XLSX:
+		b.WriteString(", " + plural(facts.Sheets, "sheet", "sheets") + ", " + plural(facts.Rows, "row", "rows") + " with content")
+	}
+	if byName {
+		b.WriteString(" (format taken from the file name and confirmed from the content)")
+	}
+	b.WriteString("; text extracted by the bridge (")
+	switch f {
+	case extract.PDF:
+		b.WriteString("no layout, pictures or OCR")
+	case extract.DOCX:
+		b.WriteString("no formatting or pictures")
+	case extract.XLSX:
+		b.WriteString("cell values only, no formatting, pictures or charts")
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// documentNotes are the trusted notes about the text: what was left out,
+// cut or added, from the facts; "" when there are none.
+func documentNotes(f extract.Format, facts extract.Facts) string {
+	lim := extract.DefaultLimits()
+	var notes []string
+	add := func(cond bool, format string, args ...any) {
+		if cond {
+			notes = append(notes, fmt.Sprintf(format, args...))
+		}
+	}
+	switch f {
+	case extract.PDF:
+		add(facts.PagesWithoutText > 0, "%s without text (scans or pictures)", plural(facts.PagesWithoutText, "page", "pages"))
+		add(facts.PagesUndecodable > 0, "%s left out as undecodable", plural(facts.PagesUndecodable, "page", "pages"))
+		add(facts.PagesCut > 0, "%s longer than %d bytes of text, cut there", plural(facts.PagesCut, "page", "pages"), lim.MaxPageBytes)
+	case extract.DOCX:
+		var after []string
+		for _, c := range []struct {
+			n           int
+			one, others string
+		}{
+			{facts.Comments, "comment", "comments"},
+			{facts.Footnotes, "footnote", "footnotes"},
+			{facts.Endnotes, "endnote", "endnotes"},
+			{facts.HeadersFooters, "header or footer", "headers and footers"},
+		} {
+			if c.n > 0 {
+				after = append(after, plural(c.n, c.one, c.others))
+			}
+		}
+		add(len(after) > 0, "after the body: %s", strings.Join(after, ", "))
+		add(facts.TrackedChanges, "tracked changes shown as accepted (deleted text left out)")
+	case extract.XLSX:
+		add(facts.SheetsHidden > 0, "%s included, marked (hidden)", plural(facts.SheetsHidden, "hidden sheet", "hidden sheets"))
+		add(facts.SheetsSkipped > 0, "%s not read", plural(facts.SheetsSkipped, "chart or dialog sheet", "chart or dialog sheets"))
+		switch {
+		case facts.Formulas > 0 && facts.Uncalculated > 0:
+			add(true, "formulas shown as their last calculated value: %s (%d never calculated, shown empty)", plural(facts.Formulas, "cell", "cells"), facts.Uncalculated)
+		case facts.Formulas > 0:
+			add(true, "formulas shown as their last calculated value: %s", plural(facts.Formulas, "cell", "cells"))
+		}
+		add(facts.ColumnsDropped > 0, "%s beyond the first %d columns of a row left out", plural(facts.ColumnsDropped, "cell", "cells"), lim.MaxColumns)
+		add(facts.CellsUnresolved > 0, "%s naming a shared string that does not exist, shown empty", plural(facts.CellsUnresolved, "cell", "cells"))
+		add(facts.Comments > 0, "%s after the sheets", plural(facts.Comments, "cell comment", "cell comments"))
+	}
+	add(facts.HiddenContent, "hidden content included")
+	return strings.Join(notes, "; ")
+}
+
+// cutLine is the trusted line saying where a volume cap cut the text, ""
+// when none did.
+func cutLine(facts extract.Facts) string {
+	if !facts.Cut {
+		return ""
+	}
+	lim := extract.DefaultLimits()
+	var what string
+	switch facts.CutAt {
+	case extract.CutTextBytes:
+		what = fmt.Sprintf("the text stops at %d bytes", lim.MaxTextBytes)
+	case extract.CutPages:
+		what = fmt.Sprintf("only the first %d pages are read", lim.MaxPages)
+	case extract.CutSheets:
+		what = fmt.Sprintf("only the first %d sheets are read", lim.MaxSheets)
+	case extract.CutRows:
+		what = fmt.Sprintf("a sheet has more than %d rows with content", lim.MaxRowsPerSheet)
+	case extract.CutCells:
+		what = fmt.Sprintf("the workbook has more than %d cells with content", lim.MaxCells)
+	case extract.CutNotes:
+		return fmt.Sprintf("cut: there are more than %d comments and notes; the rest of them are not included", lim.MaxNotes)
+	default:
+		what = "the text is cut"
+	}
+	var where string
+	switch {
+	case facts.CutAt == extract.CutTextBytes && facts.CutPage > 0:
+		// The text cap stops a PDF inside a page: the lines of that page
+		// that fit are in the text.
+		return fmt.Sprintf("cut: %s, within page %d; the rest of page %d and the pages after it are not included",
+			what, facts.CutPage, facts.CutPage)
+	case facts.CutPage > 0:
+		where = fmt.Sprintf("page %d", facts.CutPage)
+	case facts.CutSheet > 0 && facts.CutRow > 0:
+		where = fmt.Sprintf("sheet %d row %d", facts.CutSheet, facts.CutRow)
+	case facts.CutSheet > 0:
+		where = fmt.Sprintf("sheet %d", facts.CutSheet)
+	}
+	if where == "" {
+		return "cut: " + what + "; the rest is not included"
+	}
+	return "cut: " + what + "; from " + where + " on it is not included"
+}
+
+// plural is n with the noun for its number.
+func plural(n int, one, others string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, others)
 }
 
 // --- sync_status / trigger_sync -------------------------------------------

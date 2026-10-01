@@ -47,6 +47,7 @@ on:
       - docs/api.md
       - LICENSE
       - LICENSING.md
+      - THIRD-PARTY-NOTICES.md
       - .gitattributes
   workflow_dispatch:
     inputs:

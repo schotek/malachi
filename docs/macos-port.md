@@ -585,9 +585,11 @@ avoids it). `make macos-dmg` builds the same for arm64 and x86_64 (`ARCHS`,
 the Go binaries joined by `lipo` in the root Makefile's `macos-go`) into a
 disk image, `make macos-notarize` has Apple notarise it; with a Developer
 ID every binary gets the hardened runtime and the bundle
-`Resources/MalachiMail.entitlements` ([releasing.md §8](releasing.md#8-macos),
-CI in `.github/workflows/macos.yml`). No `.xcodeproj` is kept; Xcode
-opens `Package.swift`.
+`Resources/MalachiMail.entitlements`, and `malachi-mcp` alone, in every
+build, `Resources/malachi-mcp.entitlements`
+([releasing.md §8](releasing.md#8-macos), CI in
+`.github/workflows/macos.yml`). No `.xcodeproj` is kept; Xcode opens
+`Package.swift`.
 
 ## 12. What the port took, and what is still open
 

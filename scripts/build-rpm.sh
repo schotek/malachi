@@ -41,7 +41,8 @@ VERSION="${VERSION//-/^}"
 ARCH="$(rpm --eval '%{_arch}')"
 
 rm -rf "$STAGE" "$TOPDIR"
-PREFIX=/usr DESTDIR="$STAGE" ./scripts/build.sh install
+# The licences and THIRD-PARTY-NOTICES.md go to %{_licensedir}/<package>.
+PREFIX=/usr LICENSEDIR=/usr/share/licenses/"$PKG" DESTDIR="$STAGE" ./scripts/build.sh install
 
 # The schema cache belongs to the package manager, not to the package: RPM
 # has a file trigger on %{_datadir}/glib-2.0/schemas that compiles it.
@@ -56,11 +57,17 @@ mkdir -p "$TOPDIR"/{BUILD,RPMS,SPECS}
 #
 # Translations are marked %lang(<code>) so that a system configured with
 # %_install_langs installs only the ones it wants; without the mark rpm has
-# no way to tell a catalogue from an ordinary file.
+# no way to tell a catalogue from an ordinary file. The licences are marked
+# %license, which rpm installs even where documentation is left out
+# (--excludedocs, tsflags=nodocs).
 FILELIST="$TOPDIR/filelist"
 (cd "$STAGE" && find . \( -type f -o -type l \) -printf '/%P\n' | sort |
-    awk -F/ '$0 ~ "^/usr/share/locale/" { print "%lang(" $5 ") " $0; next } { print }'
+    awk -F/ '$0 ~ "^/usr/share/locale/" { print "%lang(" $5 ") " $0; next }
+             $0 ~ "^/usr/share/licenses/" { print "%license " $0; next }
+             { print }'
 ) > "$FILELIST"
+# The one directory that is this package's alone.
+echo "%dir /usr/share/licenses/$PKG" >> "$FILELIST"
 test -s "$FILELIST"
 
 # Filled in with bash substitution rather than sed: the staging path and the

@@ -27,8 +27,9 @@ import os
 /// application: the actions run in the panel (`AssistantPanelHost`), which
 /// unfolds, takes the selection (or a message window's message) as its
 /// context and asks the user's Claude Code; an attachment is asked about
-/// through the bridge's get_attachment, so only the types it reads
-/// (`Assistant.attachmentReadable`) can be.
+/// through the bridge's get_attachment, so only the types it returns as
+/// they are (`Assistant.attachmentReadable`: text and images) can be;
+/// documents, which it returns as extracted text, are deliberately not.
 ///
 /// `MessageActionsController` owns one and forwards the menus' and the
 /// chips' requests.
@@ -201,8 +202,8 @@ extension AssistantController {
     /// Whether an attachment's "Ask the Assistant…" can run: the chosen
     /// Claude app is installed (the file goes without the bridge); for In
     /// App, the panel can run (it reads the file through the bridge's
-    /// get_attachment) and the bridge returns this type's content
-    /// (`Assistant.attachmentReadable`).
+    /// get_attachment) and the panel offers the type
+    /// (`Assistant.attachmentReadable`: text and images, never documents).
     func canAsk(about a: Attachment) -> Bool {
         if settings.assistantTarget == .app {
             return pick(needsBridge: true).ok && Assistant.attachmentReadable(a.contentType)
