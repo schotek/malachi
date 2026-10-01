@@ -34,6 +34,7 @@ func TestCSS(t *testing.T) {
 		"list.folder-list row.folder-row { min-height: 24px;",
 		"row.folder-row > box.header > box.title { margin-top: 2px;",
 		"label.unread-badge {",
+		"label.thread-count { min-width: 8px; min-height: 18px;",
 		"button.folder-twisty",
 		"button.folder-star",
 		"row.folder-row:hover button.folder-star",

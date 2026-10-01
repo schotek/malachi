@@ -126,20 +126,29 @@ result as bold runs built in code (never markup).
                             ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.EventTooltip), Mode=OneWay}"
                             Visibility="{x:Bind res:Bind.Visible(Row.IsEventRow), Mode=OneWay}" />
                     </Grid>
-                    <!-- The member count of a conversation row; hidden below two. -->
+                    <!-- The member count of a conversation row; hidden below two.
+                         A disc 18 across, a capsule with more digits; tight
+                         line bounds centre the digits rather than the line box. -->
                     <Border
                         x:Name="CountBadge"
                         Grid.Column="1"
-                        Padding="6,0"
+                        Height="18"
+                        MinWidth="18"
+                        Padding="5,0"
                         VerticalAlignment="Center"
-                        CornerRadius="8"
+                        CornerRadius="9"
                         ToolTipService.ToolTip="{x:Bind main:MessageRowView.Tip(Row.CountTooltip), Mode=OneWay}"
                         Visibility="{x:Bind res:Bind.VisibleIfText(Row.CountText), Mode=OneWay}">
                         <!-- style.go label.thread-count: the text colour at 10 %. -->
                         <Border.Background>
                             <SolidColorBrush Opacity="0.1" Color="{ThemeResource TextFillColorPrimary}" />
                         </Border.Background>
-                        <TextBlock Style="{StaticResource CaptionLabelStyle}" Text="{x:Bind Row.CountText, Mode=OneWay}" />
+                        <TextBlock
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource CaptionLabelStyle}"
+                            Text="{x:Bind Row.CountText, Mode=OneWay}"
+                            TextLineBounds="Tight" />
                     </Border>
                     <FontIcon
                         x:Name="AttachmentIcon"

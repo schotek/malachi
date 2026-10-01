@@ -179,12 +179,12 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("list.message-list > row { border-radius: 0; margin: 0; }\n")
 	b.WriteString("list.message-list > row:last-child { border-bottom: none; }\n")
 	// Conversation rows of the grouped list (message_row.blp): a small fold
-	// arrow, a pill with the member count, and the members of an expanded
-	// conversation on a faint tint so they read as one group. The tint is
-	// for the resting state only: the rule outranks the sidebar style's
+	// arrow, the member count in a disc 18px across (a capsule with more
+	// digits), and the members of an expanded conversation on a faint tint
+	// so they read as one group. The tint is for the resting state only: the rule outranks the sidebar style's
 	// hover and selection tints and would hide them.
 	b.WriteString("button.thread-twisty { min-width: 20px; min-height: 20px; padding: 0; margin: 0; }\n")
-	b.WriteString("label.thread-count { padding: 0 6px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.1); }\n")
+	b.WriteString("label.thread-count { min-width: 8px; min-height: 18px; padding: 0 5px; border-radius: 99px; background-color: alpha(@window_fg_color, 0.1); }\n")
 	b.WriteString("list.message-list > row.thread-member:not(:selected):not(:hover):not(:active) { background-color: alpha(@window_fg_color, 0.03); }\n")
 	// The pills of a Jira account (widget/pill.go): an issue's status by
 	// its category (grey to do or unknown, blue in progress, green done),

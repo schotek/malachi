@@ -77,7 +77,7 @@ final class MessageCellView: NSTableCellView {
     private let spinner = Spinner(size: 16)
     private let avatar = AvatarView(size: RowMetrics.avatarComfortable)
     private let from = NSTextField(labelWithString: "")
-    private let badge = PillLabel()
+    private let badge = CountBadgeView(padding: RowMetrics.badgePadding)
     private let attachment = NSImageView()
     private let star = NSImageView()
     private let origin = NSTextField(labelWithString: "")
@@ -325,7 +325,7 @@ final class MessageCellView: NSTableCellView {
         from.toolTip = t.participants.map(formatAddress).joined(separator: "\n")
         fill(subject: t.subject, snippet: t.snippet, date: t.date, unread: t.unread > 0, flagged: t.flagged, attachments: t.hasAttachments)
         origin.isHidden = true
-        badge.stringValue = threadCountText(t.count)
+        badge.text = threadCountText(t.count)
         // TRANSLATORS: tooltip of the member count of a conversation row.
         badge.toolTip = L10n.N("%d message", "%d messages", t.count)
         badge.isHidden = t.count < 2
