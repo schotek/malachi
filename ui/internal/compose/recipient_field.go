@@ -77,6 +77,21 @@ func newRecipientField(scroll *gtk.ScrolledWindow, row *adw.WrapBox, label *gtk.
 	}
 	scroll.SetPropagateNaturalHeight(true)
 	scroll.SetMaxContentHeight(recipientLines*recipientLineHeight + (recipientLines-1)*recipientLineGap)
+	// A scrollbar that may show makes the scrolled window at least as tall
+	// as the scrollbar's own minimum, which is more than one line of badges.
+	// So the scrollbar exists only while the badges overflow; until then
+	// the field is just as tall as its content.
+	scroll.SetPolicy(gtk.PolicyNever, gtk.PolicyExternal)
+	adj := scroll.VAdjustment()
+	adj.ConnectChanged(func() {
+		policy := gtk.PolicyExternal
+		if adj.Upper() > adj.PageSize()+0.5 {
+			policy = gtk.PolicyAutomatic
+		}
+		if _, v := scroll.Policy(); v != policy {
+			scroll.SetPolicy(gtk.PolicyNever, policy)
+		}
+	})
 
 	f.entry = gtk.NewEntry()
 	f.entry.SetHasFrame(false)
@@ -272,6 +287,9 @@ func (f *recipientField) rebuild() {
 func (f *recipientField) newBadge(i int, tok recipients.Token) *gtk.Box {
 	b := gtk.NewBox(gtk.OrientationHorizontal, 0)
 	b.AddCSSClass("recipient-token")
+	// The entry sets the height of a line; the capsule keeps its own and
+	// stays clear of the capsules on the lines above and below.
+	b.SetVAlign(gtk.AlignCenter)
 	if !tok.Valid() {
 		b.AddCSSClass("invalid")
 	}
