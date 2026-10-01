@@ -7,11 +7,11 @@ import MalachiCore
 /// The folder sidebar (window.blp lines 36–86): the outline of accounts,
 /// pinned folders and folders with their badges and stars, and the status
 /// page that replaces it while there is nothing to list. A native source
-/// list, as decided in the plan: headings are group rows that fold with the
-/// hover button, folders fold with the disclosure triangle, Left/Right are
-/// the outline's own. The status line GTK has at the bottom of the sidebar
-/// is the window's status bar here (`StatusBarViewController`), so the
-/// outline runs to the bottom.
+/// list: headings and folders fold with the disclosure chevron at the start
+/// of the row, always visible like the GTK twisty (the hover button of
+/// group rows was easy to miss); Left/Right are the outline's own. The
+/// status line GTK has at the bottom of the sidebar is the window's status
+/// bar here (`StatusBarViewController`), so the outline runs to the bottom.
 ///
 /// The controller owns every decision; this view mirrors `model.entries`
 /// and sends clicks back. It installs the sidebar-facing callbacks of the
@@ -209,17 +209,14 @@ final class FolderSidebarViewController: NSViewController, NSOutlineViewDelegate
 
     // MARK: NSOutlineViewDelegate
 
-    func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {
-        item is FavouritesNode || item is AccountNode
-    }
-
     func outlineView(_ outlineView: NSOutlineView, shouldSelectItem item: Any) -> Bool {
         guard let node = item as? FolderNode, let folder = node.entry.folder else { return false }
         return folder.selectable
     }
 
     func outlineView(_ outlineView: NSOutlineView, shouldShowOutlineCellForItem item: Any) -> Bool {
-        // The Favourites section does not fold (folders.go `newHeaderRow`).
+        // The Favourites section does not fold; its chevron's space stays,
+        // so the headings line up (folders.go `newHeaderRow`).
         !(item is FavouritesNode)
     }
 

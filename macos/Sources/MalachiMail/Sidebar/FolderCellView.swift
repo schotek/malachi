@@ -180,7 +180,7 @@ final class FolderCellView: NSTableCellView {
 }
 
 /// A heading row (folders.go `newHeaderRow`): the Favourites section or an
-/// account. The outline's source-list style draws it as a group row; the
+/// account, an ordinary row with the disclosure chevron before it; the
 /// text is plain. An account's heading carries its kind in a small capsule
 /// after the name ("JIRA", "GOOGLE", "M365", "IMAP"; `accountHeaderBadge`);
 /// the Favourites heading has none.
@@ -211,7 +211,8 @@ final class SidebarHeaderCellView: NSTableCellView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            // A gap after the disclosure chevron, which sits right at the cell.
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
             row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
