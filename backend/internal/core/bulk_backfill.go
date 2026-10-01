@@ -6,12 +6,14 @@ package core
 import (
 	"context"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/schotek/malachi/backend/internal/bulk"
 	"github.com/schotek/malachi/backend/internal/mime"
 	"github.com/schotek/malachi/backend/internal/store"
+	"github.com/schotek/malachi/backend/pkg/api"
 )
 
 // metaBulkClassified records the upgrade pass that classifies the messages
@@ -45,6 +47,9 @@ func (b *Backend) backfillBulk(ctx context.Context) error {
 		}
 	}
 	var classified int
+	// changed are the accounts with a row that became bulk mail: their
+	// lists were shown without the tag and are told to list again.
+	changed := map[string]bool{}
 	prev := ""
 	for {
 		if err := ctx.Err(); err != nil {
@@ -71,6 +76,9 @@ func (b *Backend) backfillBulk(ctx context.Context) error {
 			}
 			r := bulk.Classify(headers)
 			verdicts = append(verdicts, store.BulkVerdict{ID: c.ID, Bulk: r.Stored(), ListID: r.ListID})
+			if r.Kind != "" {
+				changed[c.AccountID] = true
+			}
 		}
 		if err := b.store.SetBulkBatch(ctx, verdicts); err != nil {
 			return err
@@ -90,6 +98,14 @@ func (b *Backend) backfillBulk(ctx context.Context) error {
 	}
 	if classified > 0 {
 		b.log.Info("bulk mail classified for existing messages", "messages", classified)
+	}
+	accounts := make([]string, 0, len(changed))
+	for acc := range changed {
+		accounts = append(accounts, acc)
+	}
+	sort.Strings(accounts)
+	for _, acc := range accounts {
+		b.syncNotifier.MessagesChanged(api.MessagesChangedNotification{AccountID: api.AccountID(acc)})
 	}
 	return nil
 }

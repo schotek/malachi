@@ -2644,7 +2644,7 @@ first synchronisation. A mail hidden as a notification of an
 issue-tracker site (§4.1 `notificationMail: "hide"`) produces none.
 
 `notify.messagesChanged` is sent when messages of an account changed
-without arriving or leaving. Two cases. Messages were hidden or shown
+without arriving or leaving. Three cases. Messages were hidden or shown
 again: notification mails a `jira` account hides once their issue is
 stored, and shows again when its `notificationMail`, its senders or its
 spaces change, the issue leaves it, or the account is paused or removed;
@@ -2654,7 +2654,11 @@ ids: a pass rebuilt stored items with other rendering settings (bot
 names, metadata filters, `hideEvents`), a comment was edited or
 re-attributed (its `from` and `date` too), an issue was renamed (every
 message of its thread retitled); `accountId` is then the `jira` account,
-and the pass sends it once, when it ends. In both cases `folderIds` names
+and the pass sends it once, when it ends. Or the background pass over
+existing mail classified messages as bulk mail (`MessageSummary.bulk`,
+after migration 0016 or a new rule version): sent once per account with
+such messages, when the pass ends, without `folderIds`. In every case
+`folderIds` names
 the folders concerned (absent: any folder of the account); a client
 showing one drops what it cached of their messages (bodies, headers,
 `message.get` results), lists it again (`message.list` or `thread.list`)

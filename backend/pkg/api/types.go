@@ -2041,7 +2041,8 @@ type AccountsChangedNotification struct{}
 // changed without arriving or being deleted: hidden or shown again (a
 // notification mail of an issue-tracker site hidden in a mail account), or
 // rebuilt in place under their ids (a jira account's items rendered with
-// other settings, a comment edited or re-attributed, an issue renamed).
+// other settings, a comment edited or re-attributed, an issue renamed), or
+// classified as bulk mail by the background pass over existing mail.
 // Clients showing those folders drop what they cached of their messages
 // and list them again. FolderIDs empty = any folder of the account.
 type MessagesChangedNotification struct {
