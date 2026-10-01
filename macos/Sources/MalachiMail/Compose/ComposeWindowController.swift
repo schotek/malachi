@@ -124,7 +124,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
         w.toolbar = toolbarDelegate.makeToolbar()
         w.contentView = buildContent()
         w.setFrame(NSRect(origin: .zero, size: Self.defaultSize), display: false)
-        w.initialFirstResponder = isComment ? editor.view : header.toField
+        w.initialFirstResponder = isComment ? editor.view : header.toField.editor
         w.autorecalculatesKeyViewLoop = true
         chips.onRemove = { [weak self] id in
             self?.removeAttachment(id)
@@ -296,7 +296,7 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
                 self?.account.id ?? ComposeController.placeholderAccounts[0].id
             }
             s.onChanged = { [weak self] in
-                guard let self else { return }
+                guard let self, !self.draft.draft.closed else { return }
                 self.validateRow(field)
                 self.draft.markDirty()
             }
@@ -460,13 +460,11 @@ final class ComposeWindowController: NSWindowController, NSWindowDelegate, NSTex
 
     // MARK: Rows
 
-    /// compose.go `validateRow`: flags a recipient row with unparsable
-    /// tokens. True when the row is fine.
+    /// compose.go `validateRow`: whether a recipient row is free of
+    /// unparsable tokens. The row shows them itself, as red badges.
     @discardableResult
-    func validateRow(_ field: NSTextField) -> Bool {
-        let invalid = AddressList.parse(field.stringValue).invalid
-        header.setInvalid(field, !invalid.isEmpty)
-        return invalid.isEmpty
+    func validateRow(_ field: RecipientTokenField) -> Bool {
+        field.resolved().invalid.isEmpty
     }
 
     /// compose.go `updateTitle`: the subject, or "New Message"; a comment
@@ -586,8 +584,8 @@ extension ComposeWindowController: ComposeForm {
 
     func recipients() -> (to: [Address], cc: [Address], bcc: [Address], ok: Bool) {
         var ok = true
-        func parse(_ f: NSTextField) -> [Address] {
-            let (addresses, invalid) = AddressList.parse(f.stringValue)
+        func parse(_ f: RecipientTokenField) -> [Address] {
+            let (addresses, invalid) = f.resolved()
             if !invalid.isEmpty {
                 ok = false
             }

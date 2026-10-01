@@ -3,20 +3,23 @@
 
 // Port of the panel side of macos/Sources/MalachiMail/Compose/
 // RecipientSuggestionsController.swift (show's frame under the field,
-// hide, the field delegate's doCommandBy keys, controlTextDidEndEditing,
-// accept's text and caret); GTK: ui/internal/compose/suggest.go
-// (newSuggestions: a popover under the entry that never takes the focus,
-// the capture-phase key controller, the focus-leave hide; accept's SetText
-// and SetPosition). The logic is Core's SuggestionsController; this is the
+// hide, the row's commandInterceptor keys, onEditingEnded, accept's
+// field.add); GTK: ui/internal/compose/suggest.go (newSuggestions: a
+// popover under the entry that never takes the focus, the capture-phase key
+// controller, the focus-leave hide; accept). The logic is Core's SuggestionsController; this is the
 // popup (docs/windows-port.md §11.3: not an AutoSuggestBox, which takes the
 // focus, preselects nothing and does not accept on Tab).
 //
-// A Popup constrained to the window, placed under the row and as wide as
-// it, holding a SuggestionList whose rows never take the focus: typing goes
-// on in the row. The row's PreviewKeyDown (it sees the key before the
-// TextBox and before the window's accelerators) hands Down, Up, Enter, Tab
-// and Escape to the controller while the popup shows; Shift+Tab is GTK's
-// ISO_Left_Tab and goes on. The popup is outside the window's tree, so it
+// A Popup constrained to the window, placed under the row (all of it, where
+// the row has wrapped onto several lines) and as wide as it, holding a
+// SuggestionList whose rows never take the focus: typing goes on in the
+// row. The row's PreviewKeyDown (it sees the key before its box and before
+// the window's accelerators) hands Down, Up, Enter, Tab and Escape to the
+// controller while the popup shows; Shift+Tab is GTK's ISO_Left_Tab and goes
+// on. A picked suggestion is an address the row takes as a badge
+// (RecipientTokenBox.Add), and the typed text goes with it; a click on the
+// popup holds back the commit of the typed text that the box's focus loss
+// would make. The popup is outside the window's tree, so it
 // takes the row's theme when it opens. Nor does UI Automation find it
 // there, and the keyboard never leaves the row: the row tells Narrator
 // politely which suggestion is selected when the popup opens and whenever
@@ -24,11 +27,12 @@
 // GTK's popover list on its own).
 
 using System;
+using Malachi.Core.Api;
 using Malachi.Core.Presentation;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Windows.UI.Core;
@@ -39,17 +43,21 @@ namespace Malachi.App.Compose;
 /// <summary>The recipient popup of one To, Cc or Bcc row.</summary>
 internal sealed class RecipientSuggestions : IDisposable
 {
-    private readonly TextBox field;
+    private readonly RecipientTokenBox field;
     private readonly SuggestionsController controller;
     private readonly SuggestionList list = new();
     private readonly Popup popup;
     private bool disposed;
 
+    // A pointer is pressed on the popup, until the dispatcher has been
+    // round: the focus loss that may come with it commits nothing.
+    private bool pressing;
+
     // The suggestion last told to Narrator; empty while the popup is hidden.
     private string announced = "";
 
     /// <summary>Attaches the popup of <paramref name="controller"/> to <paramref name="field"/>.</summary>
-    public RecipientSuggestions(TextBox field, SuggestionsController controller)
+    public RecipientSuggestions(RecipientTokenBox field, SuggestionsController controller)
     {
         ArgumentNullException.ThrowIfNull(field);
         ArgumentNullException.ThrowIfNull(controller);
@@ -67,8 +75,10 @@ internal sealed class RecipientSuggestions : IDisposable
         field.LostFocus += OnLostFocus;
         field.SizeChanged += OnFieldSizeChanged;
         controller.Changed += OnChanged;
-        controller.Accepted += OnAccepted;
+        controller.Picked += OnPicked;
         list.RowClicked += OnRowClicked;
+        list.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnListPressed), handledEventsToo: true);
+        field.HoldsCommit = () => pressing;
     }
 
     /// <summary>The completion's logic.</summary>
@@ -89,8 +99,10 @@ internal sealed class RecipientSuggestions : IDisposable
         field.LostFocus -= OnLostFocus;
         field.SizeChanged -= OnFieldSizeChanged;
         controller.Changed -= OnChanged;
-        controller.Accepted -= OnAccepted;
+        controller.Picked -= OnPicked;
         list.RowClicked -= OnRowClicked;
+        list.RemoveHandler(UIElement.PointerPressedEvent, new PointerEventHandler(OnListPressed));
+        field.HoldsCommit = null;
         popup.IsOpen = false;
         controller.Dispose();
     }
@@ -139,11 +151,17 @@ internal sealed class RecipientSuggestions : IDisposable
             AutomationNotificationKind.Other, AutomationNotificationProcessing.MostRecent, label, "io.github.schotek.Malachi.suggestion");
     }
 
-    // accept: the row gets the new text, the caret after the separator.
-    private void OnAccepted(object? sender, SuggestionAcceptance a)
+    // accept: the row makes a badge of the address, and the keyboard is its.
+    private void OnPicked(object? sender, Address address)
     {
-        field.Text = a.Text;
-        field.Select(Math.Clamp(a.Caret, 0, a.Text.Length), 0);
+        field.Add(address);
+        field.FocusInput();
+    }
+
+    private void OnListPressed(object sender, PointerRoutedEventArgs e)
+    {
+        pressing = true;
+        _ = field.DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () => pressing = false);
     }
 
     private void OnRowClicked(object? sender, int index) => controller.Accept(index);

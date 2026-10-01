@@ -8,17 +8,18 @@ import MalachiCore
 /// `header_rows`): one line per field, a label of uniform width and the
 /// field beside it, separated by hairlines: From (a pop-up of identities),
 /// To with the Cc/Bcc button, Cc and Bcc (hidden until asked for),
-/// Subject. A recipient row with an unparsable token is shown in red with
-/// a red underline (D8 of the plan). Everything typed here is plain text.
+/// Subject. The recipient rows are `RecipientTokenField`s (finished
+/// addresses as badges; an unparsable entry is a red-tinted badge, D8 of
+/// the plan) and grow by lines. Everything typed here is plain text.
 @MainActor
 final class ComposeHeaderView: NSBox {
     static let rowHeight: CGFloat = 30
     static let horizontalInset: CGFloat = 12
 
     let fromPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-    let toField = NSTextField()
-    let ccField = NSTextField()
-    let bccField = NSTextField()
+    let toField = RecipientTokenField()
+    let ccField = RecipientTokenField()
+    let bccField = RecipientTokenField()
     let subjectField = NSTextField()
     let ccBccButton = NSButton(title: L10n.T("Cc/Bcc"), target: nil, action: nil)
 
@@ -32,13 +33,15 @@ final class ComposeHeaderView: NSBox {
     private let ccSeparatorRow: NSGridRow
     private let bccRow: NSGridRow
     private let bccSeparatorRow: NSGridRow
-    private var underlines: [ObjectIdentifier: NSView] = [:]
 
     init() {
         let fromLabel = Self.label(L10n.T("From"))
         let toLabel = Self.label(L10n.T("To"))
         let ccLabel = Self.label(L10n.T("Cc"))
         let bccLabel = Self.label(L10n.T("Bcc"))
+        let toLabelBox = Self.firstLine(toLabel)
+        let ccLabelBox = Self.firstLine(ccLabel)
+        let bccLabelBox = Self.firstLine(bccLabel)
         let subjectLabel = Self.label(L10n.T("Subject"))
 
         fromPopup.isBordered = false
@@ -48,39 +51,35 @@ final class ComposeHeaderView: NSBox {
         fromPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
         fromPopup.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
-        for f in [toField, ccField, bccField, subjectField] {
-            Self.configureField(f)
-        }
+        Self.configureField(subjectField)
         ccBccButton.isBordered = false
         ccBccButton.controlSize = .small
         ccBccButton.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
         ccBccButton.contentTintColor = .secondaryLabelColor
         ccBccButton.setContentHuggingPriority(.required, for: .horizontal)
 
-        var underlines: [ObjectIdentifier: NSView] = [:]
-        let toContainer = Self.fieldContainer(toField, underlines: &underlines)
-        let ccContainer = Self.fieldContainer(ccField, underlines: &underlines)
-        let bccContainer = Self.fieldContainer(bccField, underlines: &underlines)
-        let subjectContainer = Self.fieldContainer(subjectField, underlines: &underlines)
-        self.underlines = underlines
+        let subjectContainer = Self.fieldContainer(subjectField)
+        // The button stays level with the first line of a row that wraps.
+        ccBccButton.translatesAutoresizingMaskIntoConstraints = false
+        ccBccButton.heightAnchor.constraint(equalToConstant: RecipientTokenField.rowHeight).isActive = true
 
-        let toLine = NSStackView(views: [toContainer, ccBccButton])
+        let toLine = NSStackView(views: [toField, ccBccButton])
         toLine.orientation = .horizontal
         toLine.distribution = .fill
         ccBccButton.setContentHuggingPriority(.required, for: .horizontal)
         ccBccButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         toLine.spacing = 12
-        toLine.alignment = .centerY
+        toLine.alignment = .top
         toLine.translatesAutoresizingMaskIntoConstraints = false
 
         grid = NSGridView(views: [
             [fromLabel, fromPopup],
             [Self.separator()],
-            [toLabel, toLine],
+            [toLabelBox, toLine],
             [Self.separator()],
-            [ccLabel, ccContainer],
+            [ccLabelBox, ccField],
             [Self.separator()],
-            [bccLabel, bccContainer],
+            [bccLabelBox, bccField],
             [Self.separator()],
             [subjectLabel, subjectContainer],
         ])
@@ -95,8 +94,14 @@ final class ComposeHeaderView: NSBox {
         // column is the GTK SizeGroup: as wide as its widest label.
         grid.column(at: 0).width = [fromLabel, toLabel, ccLabel, bccLabel, subjectLabel]
             .map { $0.intrinsicContentSize.width }.max() ?? 0
+        // The recipient rows (To, Cc, Bcc) take their height from the badges
+        // and grow with the lines they wrap onto; the others are one line.
         for i in stride(from: 0, to: grid.numberOfRows, by: 2) {
-            grid.row(at: i).height = Self.rowHeight
+            if (2...6).contains(i) {
+                grid.row(at: i).yPlacement = .top
+            } else {
+                grid.row(at: i).height = Self.rowHeight
+            }
         }
         for i in stride(from: 1, to: grid.numberOfRows, by: 2) {
             grid.row(at: i).height = 1
@@ -162,14 +167,7 @@ final class ComposeHeaderView: NSBox {
     }
 
     /// The recipient rows, in order.
-    var recipientFields: [NSTextField] { [toField, ccField, bccField] }
-
-    /// compose.go `validateRow`'s look: red text and a red underline while
-    /// the row holds an unparsable token.
-    func setInvalid(_ field: NSTextField, _ invalid: Bool) {
-        field.textColor = invalid ? .systemRed : .labelColor
-        underlines[ObjectIdentifier(field)]?.isHidden = !invalid
-    }
+    var recipientFields: [RecipientTokenField] { [toField, ccField, bccField] }
 
     // MARK: From
 
@@ -228,29 +226,34 @@ final class ComposeHeaderView: NSBox {
         f.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
     }
 
-    /// The field over its (hidden) red underline.
-    private static func fieldContainer(_ field: NSTextField, underlines: inout [ObjectIdentifier: NSView]) -> NSView {
+    /// The subject field in a row of the height of one line.
+    private static func fieldContainer(_ field: NSTextField) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        let underline = NSView()
-        underline.translatesAutoresizingMaskIntoConstraints = false
-        underline.wantsLayer = true
-        underline.layer?.backgroundColor = NSColor.systemRed.cgColor
-        underline.isHidden = true
         container.addSubview(field)
-        container.addSubview(underline)
         NSLayoutConstraint.activate([
             field.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             field.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             field.centerYAnchor.constraint(equalTo: container.centerYAnchor),
             container.heightAnchor.constraint(equalToConstant: rowHeight),
-            underline.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            underline.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            underline.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
-            underline.heightAnchor.constraint(equalToConstant: 1),
         ])
-        underlines[ObjectIdentifier(field)] = underline
         return container
+    }
+
+    /// A row label as tall as one line of the row, so it stays level with
+    /// the first line however many the recipients wrap onto.
+    private static func firstLine(_ label: NSTextField) -> NSView {
+        let box = NSView()
+        box.translatesAutoresizingMaskIntoConstraints = false
+        label.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(label)
+        NSLayoutConstraint.activate([
+            box.heightAnchor.constraint(equalToConstant: rowHeight),
+            label.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            label.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+        ])
+        return box
     }
 
     private static func separator() -> NSBox {

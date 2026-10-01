@@ -13,7 +13,6 @@ Adw.Window compose_window {
   default-height: 640;
   width-request: 360;
   height-request: 420;
-  focus-widget: to_row;
   // Capture phase: these must win over the WebKit view, which otherwise
   // claims the key events.
   ShortcutController {
@@ -138,19 +137,25 @@ Adw.Window compose_window {
             Label to_label {
               label: _("To");
               xalign: 0;
+              valign: start;
+              height-request: 30;
 
               styles [
                 "dim-label",
               ]
             }
 
-            Entry to_row {
+            ScrolledWindow to_scroll {
               hexpand: true;
-              has-frame: false;
+              focusable: false;
+              hscrollbar-policy: never;
+              vscrollbar-policy: automatic;
 
-              accessibility {
-                labelled-by: to_label;
-              }
+              child: Adw.WrapBox to_row {
+                child-spacing: 4;
+                line-spacing: 2;
+                valign: center;
+              };
             }
 
             Button cc_bcc_button {
@@ -174,19 +179,25 @@ Adw.Window compose_window {
             Label cc_label {
               label: _("Cc");
               xalign: 0;
+              valign: start;
+              height-request: 30;
 
               styles [
                 "dim-label",
               ]
             }
 
-            Entry cc_row {
+            ScrolledWindow cc_scroll {
               hexpand: true;
-              has-frame: false;
+              focusable: false;
+              hscrollbar-policy: never;
+              vscrollbar-policy: automatic;
 
-              accessibility {
-                labelled-by: cc_label;
-              }
+              child: Adw.WrapBox cc_row {
+                child-spacing: 4;
+                line-spacing: 2;
+                valign: center;
+              };
             }
           }
 
@@ -201,19 +212,25 @@ Adw.Window compose_window {
             Label bcc_label {
               label: _("Bcc");
               xalign: 0;
+              valign: start;
+              height-request: 30;
 
               styles [
                 "dim-label",
               ]
             }
 
-            Entry bcc_row {
+            ScrolledWindow bcc_scroll {
               hexpand: true;
-              has-frame: false;
+              focusable: false;
+              hscrollbar-policy: never;
+              vscrollbar-policy: automatic;
 
-              accessibility {
-                labelled-by: bcc_label;
-              }
+              child: Adw.WrapBox bcc_row {
+                child-spacing: 4;
+                line-spacing: 2;
+                valign: center;
+              };
             }
           }
 

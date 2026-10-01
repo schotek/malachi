@@ -170,8 +170,8 @@ final class AddressHeaderView: NSView {
 /// tint is drawn, not set on a layer, so it follows the appearance.
 @MainActor
 class PillButton: NSButton {
-    static let height: CGFloat = 24
-    static let padding: CGFloat = 10
+    static let height = CapsuleStyle.height
+    static let padding = CapsuleStyle.padding
 
     var onClick: (@MainActor () -> Void)?
 
@@ -195,7 +195,7 @@ class PillButton: NSButton {
         (cell as? NSButtonCell)?.highlightsBy = []
         imagePosition = .noImage
         attributedTitle = NSAttributedString(string: title, attributes: [
-            .font: Typo.chip,
+            .font: CapsuleStyle.font,
             .foregroundColor: filled ? NSColor.labelColor : Tint.secondary,
         ])
         target = self
@@ -212,8 +212,7 @@ class PillButton: NSButton {
     }
 
     private var capsule: NSBezierPath {
-        let r = bounds.height / 2
-        return NSBezierPath(roundedRect: bounds, xRadius: r, yRadius: r)
+        CapsuleStyle.path(in: bounds)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -223,7 +222,7 @@ class PillButton: NSButton {
         } else if hovering {
             alpha = 0.12
         } else {
-            alpha = filled ? 0.07 : 0
+            alpha = filled ? CapsuleStyle.restingAlpha : 0
         }
         if alpha > 0 {
             Tint.fg(alpha: alpha).setFill()

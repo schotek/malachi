@@ -218,6 +218,10 @@ public final class ComposeDraftController {
 
     /// markDirty records an edit and arms the autosave timer.
     public func markDirty() {
+        // A change that arrives while the window closes (a field commits as
+        // it loses the keyboard) must not arm the autosave of a cleaned-up
+        // draft.
+        guard !draft.closed else { return }
         draft.dirty = true
         refreshStatus()
         if autosave == nil {

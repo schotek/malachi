@@ -33,9 +33,12 @@
 //   inside that event;
 // - Quit saves the draft without asking (SaveForQuitAsync) and asks the
 //   close question only when that failed (CloseForQuitAsync);
-// - TextBox.TextChanged also comes for the window's own prefill and for an
-//   accepted suggestion, after the setter returned: a row counts as edited
-//   when its text differs from the text last seen in it.
+// - TextBox.TextChanged also comes for the window's own prefill, after the
+//   setter returned: the Subject counts as edited when its text differs from
+//   the text last seen in it. The recipient rows (RecipientTokenBox) raise
+//   Changed only for the user's edits that change their Text (a prefill and
+//   committing typed text into a badge do not), and are frozen when the
+//   window cleans its draft up.
 
 using System;
 using System.Collections.Generic;
@@ -158,9 +161,9 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             WireAttachments();
 
             // Prefill before the change handlers so it does not count as an edit.
-            Prefill(Header.To, AddressList.Format(p.To));
-            Prefill(Header.Cc, AddressList.Format(p.Cc));
-            Prefill(Header.Bcc, AddressList.Format(p.Bcc));
+            Header.To.Text = AddressList.Format(p.To);
+            Header.Cc.Text = AddressList.Format(p.Cc);
+            Header.Bcc.Text = AddressList.Format(p.Bcc);
             Prefill(Header.Subject, p.Subject);
             Header.SetCcBccVisible(cc: p.Cc.Count > 0, bcc: p.Bcc.Count > 0);
             UpdateTitle();
@@ -254,9 +257,11 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
     public (IReadOnlyList<Address> To, IReadOnlyList<Address> Cc, IReadOnlyList<Address> Bcc, bool Ok) Recipients()
     {
         var ok = true;
-        IReadOnlyList<Address> Parse(TextBox row)
+        IReadOnlyList<Address> Parse(RecipientTokenBox row)
         {
-            var (addresses, invalid) = AddressList.Parse(row.Text);
+            // What the row holds, as its model resolves it: parsing its text
+            // again would read some entries differently.
+            var (addresses, invalid) = row.Resolved();
             if (invalid.Count > 0)
             {
                 ok = false;
@@ -408,13 +413,6 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         TitleText.Text = title;
     }
 
-    // compose.go validateRow: flags a recipient row with unparsable tokens.
-    private void ValidateRow(TextBox row)
-    {
-        var (_, invalid) = AddressList.Parse(row.Text);
-        Header.SetInvalid(row, invalid.Count > 0);
-    }
-
     // compose.go wireRows.
     private void WireRows()
     {
@@ -423,19 +421,27 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
             var controller = new SuggestionsController(
                 state.Client,
                 () => CallAccount,
-                () => (row.Text, Suggest.ScalarOffset(Math.Clamp(row.SelectionStart, 0, row.Text.Length), row.Text)),
+                // The typed text after the last badge, and its end: the badges
+                // are no part of what is completed.
+                () => (row.Pending, Suggest.ScalarOffset(row.Pending.Length, row.Pending)),
                 logger: state.Logs.CreateLogger<SuggestionsController>());
             var s = new RecipientSuggestions(row, controller);
             suggestions.Add(s);
-            row.TextChanged += (_, _) =>
+            // The value changed (a badge, typed text: the draft is dirty), and
+            // the typed text did (what is asked of the address books).
+            row.Changed += (_, _) =>
             {
-                if (closing || !Edited(row))
+                if (!closing)
                 {
-                    return;
+                    draft.MarkDirty();
                 }
-                ValidateRow(row);
-                draft.MarkDirty();
-                controller.TextChanged();
+            };
+            row.PendingChanged += (_, _) =>
+            {
+                if (!closing)
+                {
+                    controller.TextChanged();
+                }
             };
         }
         Header.Subject.TextChanged += (_, _) =>
@@ -522,7 +528,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
         if (draft.CanCloseWithoutAsking)
         {
-            draft.Cleanup();
+            CleanupDraft();
             closing = true;
             return;
         }
@@ -546,7 +552,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
         if (draft.CanCloseWithoutAsking)
         {
-            draft.Cleanup();
+            CleanupDraft();
             CloseForGood();
             return Task.FromResult(true);
         }
@@ -593,6 +599,16 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
     }
 
+    // The draft's cleanup. The recipient rows are frozen first: closing
+    // takes the keyboard from the typed text, which a row would commit, and
+    // that commit must not mark the cleaned-up draft dirty (and so arm its
+    // autosave) again.
+    private void CleanupDraft()
+    {
+        Header.FreezeRecipients();
+        draft.Cleanup();
+    }
+
     private void CloseForGood()
     {
         if (closing)
@@ -616,7 +632,7 @@ public sealed partial class ComposeWindow : Window, IComposeForm, IComposeWindow
         }
         FormatBar.HidePopups();
         CloseRewrite();
-        draft.Cleanup();
+        CleanupDraft();
         attachments.Dispose();
         editor.Close();
         compose.Remove(this);

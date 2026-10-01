@@ -944,6 +944,32 @@ zprávy (přiložené zprávy ne); odhalení platí do jiné konverzace či
 zprávy, okno ho drží, dokud je otevřené (`QuotedReveal`, Swift první,
 port v `ui/internal/conversation/quoted.go` a `Malachi.Core`).
 
+Příjemci jako badge (2026-10-01, všechny tři klienty; macOS otestovaný
+vlastníkem, GTK a Windows napsané na Macu bez překladu — čeká `make build`,
+`go test ./internal/compose/... ./internal/recipients/...` a `make lint`
+v Toolbxu a `build.ps1 app`/`test`/`lint` na Windows). V okně Nová zpráva
+se dokončená adresa v polích Komu, Kopie a Skrytá zavře do kapsle
+s křížkem, vzhledem stejné jako kapsle adresy v hlavičce přijaté zprávy;
+neplatný záznam je červená kapsle. Všechna pravidla drží čistý model
+`ui/internal/recipients` (`Tokens`: tokeny + rozepsaný text; bez gotk4,
+proto vlastní balíček; port `MalachiCore/Compose/RecipientTokens.swift`
+a `Malachi.Core/Compose/RecipientTokens.cs` i s testy): zavírá čárka,
+středník, Enter, Tab, ztráta fokusu a výběr z našeptávače, mezera jen za
+samotnou platnou adresou; vložení dělí i po řádcích (nejvýš 64 KiB);
+strop 1000 tokenů jen zastaví automatické dělení, zbytek zůstane
+rozepsaný, nic se nezahodí; popisek a tooltip jsou bez znaků řízení směru
+textu. Odeslání i uložení konceptu čtou `Resolved()` modelu, nikdy znovu
+parsovaný text pole (ten je ztrátový: dvě neplatné kapsle se mohou spojit
+v jednu platnou adresu, jméno s dvojtečkou se zpět nepřečte). Pohledy
+(`RecipientTokenField.swift`, `compose/recipient_field.go` nad
+`Adw.WrapBox`, `RecipientTokenBox.xaml`) pravidla neobsahují: Backspace
+v prázdném editoru označí poslední kapsli a další ji smaže, šipky kapslemi
+procházejí, dvojklik vrátí kapsli do textu, pole má nejvýš 4 řádky a pak
+se posouvá, změna se hlásí jen při skutečné změně textu. Zbývá:
+`compose/address.go` opakuje dělení a formátování z `recipients`;
+`AddressList.format` nedává jméno s dvojtečkou do uvozovek (starší chyba,
+týká se předvyplnění odpovědi).
+
 Rozhodnutí i otevřené otázky: viz `docs/architecture.md` §7 (mimo jiné
 jazyk UI, sanitizační knihovna, definice účtů, uložení těl zpráv včetně
 komprese a příloh na vyžádání, Microsoft účty).

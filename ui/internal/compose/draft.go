@@ -340,6 +340,10 @@ func (w *Window) send() {
 	}
 	comment := w.isComment()
 	if !comment {
+		// Typed text becomes badges now, so that what is wrong shows red.
+		for _, f := range []*recipientField{w.to, w.cc, w.bcc} {
+			f.commitPending()
+		}
 		to, cc, bcc, ok := w.recipients()
 		if !ok {
 			w.toast(i18n.T("Fix the highlighted recipients"))
@@ -539,6 +543,9 @@ func (w *Window) cleanup() {
 	}
 	for _, s := range w.suggest {
 		s.hide() // a pending search must not touch the rows after this
+	}
+	for _, f := range []*recipientField{w.to, w.cc, w.bcc} {
+		f.close() // a focus loss while the window goes must not mark it dirty
 	}
 	for _, a := range w.attachments {
 		if a.Inline {

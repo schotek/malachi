@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of RecipientBadgeView of macos/Sources/MalachiMail/Compose/
+RecipientTokenField.swift; GTK: ui/internal/compose/recipient_field.go (the
+badge). One finished recipient of a To, Cc or Bcc row: the capsule of an
+address chip of a received message (ChipStyles.xaml, RecipientBadgeStyle)
+with a small Remove cross on its right. A selected badge is in the accent
+colours, an entry that is no address (invalid) in the system's critical
+ones. The text is the token's label, plain, trimmed with an ellipsis when
+long, the whole address its tooltip and its name for Narrator; the cross is
+a real button named Remove that never takes the keyboard from the row.
+Names and addresses are user and server data, shown only as text.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.RecipientBadge"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="using:Malachi.App.Localization"
+    xmlns:res="using:Malachi.App.Resources"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Reader/ChipStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border
+        x:Name="Root"
+        DoubleTapped="OnDoubleTapped"
+        PointerPressed="OnPointerPressed"
+        Style="{StaticResource RecipientBadgeStyle}">
+        <Grid ColumnSpacing="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="LabelText"
+                MaxWidth="240"
+                VerticalAlignment="Center"
+                AutomationProperties.AccessibilityView="Raw"
+                MaxLines="1"
+                Style="{StaticResource ChipNameStyle}"
+                TextTrimming="CharacterEllipsis"
+                TextWrapping="NoWrap" />
+            <Button
+                x:Name="RemoveButton"
+                Grid.Column="1"
+                Width="20"
+                Height="20"
+                MinWidth="0"
+                MinHeight="0"
+                Padding="0"
+                VerticalAlignment="Center"
+                AllowFocusOnInteraction="False"
+                AutomationProperties.Name="{l:T Msgid='Remove'}"
+                Click="OnRemoveClick"
+                CornerRadius="10"
+                IsTabStop="False"
+                Style="{StaticResource SubtleButtonStyle}"
+                ToolTipService.ToolTip="{l:T Msgid='Remove'}">
+                <FontIcon
+                    x:Name="CrossIcon"
+                    AutomationProperties.AccessibilityView="Raw"
+                    FontSize="9"
+                    Glyph="{x:Bind res:Icons.Glyph('window-close-symbolic')}" />
+            </Button>
+        </Grid>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="LookStates">
+                <VisualState x:Name="Normal" />
+                <VisualState x:Name="Selected">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
+                        <Setter Target="LabelText.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="CrossIcon.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="Invalid">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource SystemFillColorCriticalBackgroundBrush}" />
+                        <Setter Target="LabelText.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="CrossIcon.Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+                <VisualState x:Name="InvalidSelected">
+                    <VisualState.Setters>
+                        <Setter Target="Root.Background" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                        <Setter Target="LabelText.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                        <Setter Target="CrossIcon.Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Border>
+</UserControl>

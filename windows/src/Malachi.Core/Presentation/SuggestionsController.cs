@@ -105,6 +105,13 @@ public sealed partial class SuggestionsController : IDisposable
     /// </summary>
     public event EventHandler<SuggestionAcceptance>? Accepted;
 
+    /// <summary>
+    /// A suggestion was accepted, as the address picked: what a recipient
+    /// field of badges takes (RecipientTokens.Add) instead of the text of
+    /// <see cref="Accepted"/>. Raised just before it; the popup has hidden.
+    /// </summary>
+    public event EventHandler<Address>? Picked;
+
     /// <summary>What the popup shows, in order (suggest.go <c>contacts</c>).</summary>
     public IReadOnlyList<Contact> Contacts { get; private set; } = [];
 
@@ -241,10 +248,12 @@ public sealed partial class SuggestionsController : IDisposable
             return;
         }
         var c = Contacts[index];
+        var picked = new Address { Name = c.Name, Email = c.Address };
         var (text, caret) = field();
         var (_, range) = Suggest.TokenAt(text, caret);
-        var (newText, newCaret) = Suggest.ReplaceToken(text, range, new Address { Name = c.Name, Email = c.Address });
+        var (newText, newCaret) = Suggest.ReplaceToken(text, range, picked);
         Hide();
+        scope.Raise(Picked, this, picked);
         suppressText = newText;
         scope.Raise(Accepted, this, new SuggestionAcceptance(newText, Suggest.IndexAtScalarOffset(newCaret, newText)));
     }

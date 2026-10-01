@@ -12,15 +12,18 @@ above it), Subject. The labels share one column (the size group); the rows
 are 30 px high and padded 12 px left and right, the separators run from edge
 to edge. The fields sit on the card rather than being controls of their own:
 no background, no border, no focus rectangle (the caret says which one takes
-typing), the From drop-down flat with a tint under the pointer. A recipient
-row holding an unparsable token turns red with a red underline (GTK's
-.error). Everything typed or listed here is plain text.
+typing), the From drop-down flat with a tint under the pointer. The
+recipient rows are RecipientTokenBoxes: the finished addresses are badges,
+an unparsable entry a red one (GTK's .error was a red row), and a row grows
+by the lines its badges wrap onto. Everything typed or listed here is plain
+text.
 -->
 <UserControl
     x:Class="Malachi.App.Compose.ComposeHeader"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:l="using:Malachi.App.Localization"
+    xmlns:local="using:Malachi.App.Compose"
     IsTabStop="False">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -56,8 +59,7 @@ row holding an unparsable token turns red with a red underline (GTK's
             </ResourceDictionary.ThemeDictionaries>
 
             <!-- A field on the card (Entry has-frame: false): the text on the
-                 card, 30 px high, a caret and nothing else. BorderBrush is
-                 the underline of the invalid state. -->
+                 card, 30 px high, a caret and nothing else. -->
             <Style x:Key="ComposeFieldTextBoxStyle" TargetType="TextBox">
                 <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
                 <Setter Property="Background" Value="Transparent" />
@@ -97,12 +99,8 @@ row holding an unparsable token turns red with a red underline (GTK's
                 </Setter>
             </Style>
 
-            <!-- validateRow's error class: red text, a red underline. -->
-            <Style x:Key="ComposeInvalidFieldTextBoxStyle" TargetType="TextBox" BasedOn="{StaticResource ComposeFieldTextBoxStyle}">
-                <Setter Property="Foreground" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-                <Setter Property="BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
-            </Style>
-
+            <!-- The recipient labels override the alignment: they stay level
+                 with the first line of a row that wraps onto more. -->
             <Style x:Key="ComposeFieldLabelStyle" TargetType="TextBlock" BasedOn="{StaticResource DimLabelStyle}">
                 <Setter Property="Margin" Value="12,0,0,0" />
                 <Setter Property="VerticalAlignment" Value="Center" />
@@ -177,6 +175,8 @@ row holding an unparsable token turns red with a red underline (GTK's
             <TextBlock
                 x:Name="ToLabel"
                 Grid.Row="2"
+                Margin="12,5,0,0"
+                VerticalAlignment="Top"
                 Style="{StaticResource ComposeFieldLabelStyle}"
                 Text="{l:T Msgid='To'}" />
             <Grid
@@ -188,16 +188,16 @@ row holding an unparsable token turns red with a red underline (GTK's
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBox
+                <local:RecipientTokenBox
                     x:Name="ToBox"
                     AutomationProperties.AutomationId="ComposeTo"
-                    AutomationProperties.LabeledBy="{x:Bind ToLabel}"
-                    Style="{StaticResource ComposeFieldTextBoxStyle}" />
+                    AutomationProperties.LabeledBy="{x:Bind ToLabel}" />
                 <Button
                     x:Name="CcBccButton"
                     Grid.Column="1"
+                    Margin="0,2,0,0"
                     Padding="8,2,8,2"
-                    VerticalAlignment="Center"
+                    VerticalAlignment="Top"
                     AutomationProperties.AutomationId="ComposeCcBcc"
                     Click="OnCcBccClick"
                     Content="{l:T Msgid='Cc/Bcc'}"
@@ -214,17 +214,18 @@ row holding an unparsable token turns red with a red underline (GTK's
             <TextBlock
                 x:Name="CcLabel"
                 Grid.Row="4"
+                Margin="12,5,0,0"
+                VerticalAlignment="Top"
                 Style="{StaticResource ComposeFieldLabelStyle}"
                 Text="{l:T Msgid='Cc'}"
                 Visibility="Collapsed" />
-            <TextBox
+            <local:RecipientTokenBox
                 x:Name="CcBox"
                 Grid.Row="4"
                 Grid.Column="1"
                 Margin="0,0,12,0"
                 AutomationProperties.AutomationId="ComposeCc"
                 AutomationProperties.LabeledBy="{x:Bind CcLabel}"
-                Style="{StaticResource ComposeFieldTextBoxStyle}"
                 Visibility="Collapsed" />
 
             <Rectangle
@@ -237,17 +238,18 @@ row holding an unparsable token turns red with a red underline (GTK's
             <TextBlock
                 x:Name="BccLabel"
                 Grid.Row="6"
+                Margin="12,5,0,0"
+                VerticalAlignment="Top"
                 Style="{StaticResource ComposeFieldLabelStyle}"
                 Text="{l:T Msgid='Bcc'}"
                 Visibility="Collapsed" />
-            <TextBox
+            <local:RecipientTokenBox
                 x:Name="BccBox"
                 Grid.Row="6"
                 Grid.Column="1"
                 Margin="0,0,12,0"
                 AutomationProperties.AutomationId="ComposeBcc"
                 AutomationProperties.LabeledBy="{x:Bind BccLabel}"
-                Style="{StaticResource ComposeFieldTextBoxStyle}"
                 Visibility="Collapsed" />
 
             <Rectangle Grid.Row="7" Style="{StaticResource ComposeSeparatorStyle}" />

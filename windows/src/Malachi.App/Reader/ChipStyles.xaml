@@ -5,8 +5,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 The looks of the chips a message display builds in code (MessageChips): the
 address chips and "+N more", the attachment chips' texts and Save All
-(style.go: .address-chip, .address-more, .attachment-chip, .chip-action).
-Merged into the views that build them (MessageView, the conversation view),
+(style.go: .address-chip, .address-more, .attachment-chip, .chip-action),
+and the recipient badges of the compose window (RecipientBadge).
+Merged into the views that build them (MessageView, the conversation view,
+RecipientBadge),
 so that the theme resources follow the window's colour scheme; not into
 App.xaml.
 -->
@@ -22,6 +24,16 @@ App.xaml.
         <Setter Property="CornerRadius" Value="12" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="FontSize" Value="12" />
+        <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
+    </Style>
+    <!-- A finished recipient of the compose window (RecipientBadge): the look
+         of an address chip on a Border, because it holds a Remove button of
+         its own, which a Button cannot. Padding leaves room on the right
+         for that button. -->
+    <Style x:Key="RecipientBadgeStyle" TargetType="Border">
+        <Setter Property="MinHeight" Value="24" />
+        <Setter Property="Padding" Value="10,0,2,0" />
+        <Setter Property="CornerRadius" Value="12" />
         <Setter Property="Background" Value="{ThemeResource SubtleFillColorSecondaryBrush}" />
     </Style>
     <Style

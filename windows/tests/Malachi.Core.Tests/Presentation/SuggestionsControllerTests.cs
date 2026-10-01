@@ -230,6 +230,20 @@ public sealed class SuggestionsControllerTests
     }
 
     [Fact]
+    public async Task AnAcceptanceIsPickedAsAnAddress()
+    {
+        await using var h = await Harness.StartAsync();
+        h.Script.Answer = [Ann];
+        await h.Type("an");
+        await h.PauseAsync();
+        await h.Run(() => h.Suggestions.Accept(0));
+        var picked = Assert.Single(h.Picks);
+        Assert.Equal("Ann Example", picked.Name);
+        Assert.Equal("ann@example.org", picked.Email);
+        Assert.False(h.Suggestions.IsVisible);
+    }
+
+    [Fact]
     public async Task TheAcceptedTextStartsNoSearch()
     {
         await using var h = await Harness.StartAsync();
@@ -444,6 +458,8 @@ public sealed class SuggestionsControllerTests
 
         public List<SuggestionAcceptance> Acceptances { get; } = [];
 
+        public List<Address> Picks { get; } = [];
+
         public int Changes { get; private set; }
 
         public static async Task<Harness> StartAsync()
@@ -458,6 +474,7 @@ public sealed class SuggestionsControllerTests
                 var s = new SuggestionsController(h.Client, () => "acc1", () => h.Field, h.Time, h.Pending);
                 s.Changed += (_, _) => h.Changes++;
                 s.Accepted += (_, a) => h.Acceptances.Add(a);
+                s.Picked += (_, a) => h.Picks.Add(a);
                 return s;
             });
             return h;

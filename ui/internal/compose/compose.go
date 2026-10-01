@@ -35,9 +35,9 @@ type Window struct {
 
 	title   *adw.WindowTitle
 	from    *gtk.DropDown
-	to      *gtk.Entry
-	cc      *gtk.Entry
-	bcc     *gtk.Entry
+	to      *recipientField
+	cc      *recipientField
+	bcc     *recipientField
 	subject *gtk.Entry
 
 	// The Cc and Bcc lines start hidden; the button reveals them, and
@@ -98,6 +98,16 @@ type Window struct {
 	draft draftState
 }
 
+// recipientFieldFrom binds the recipient row id ("to", "cc", "bcc") of the
+// builder: its scrolled wrap box and label (compose.blp).
+func recipientFieldFrom(b *gtk.Builder, id string) *recipientField {
+	return newRecipientField(
+		b.GetObject(id+"_scroll").Cast().(*gtk.ScrolledWindow),
+		b.GetObject(id+"_row").Cast().(*adw.WrapBox),
+		b.GetObject(id+"_label").Cast().(*gtk.Label),
+		i18n.T("Remove"))
+}
+
 // newWindow builds and prefills a window; Manager.Open presents it.
 func newWindow(m *Manager, p Params) *Window {
 	b := data.Builder("compose.ui")
@@ -108,9 +118,9 @@ func newWindow(m *Manager, p Params) *Window {
 		params:      p,
 		title:       b.GetObject("window_title").Cast().(*adw.WindowTitle),
 		from:        b.GetObject("from_row").Cast().(*gtk.DropDown),
-		to:          b.GetObject("to_row").Cast().(*gtk.Entry),
-		cc:          b.GetObject("cc_row").Cast().(*gtk.Entry),
-		bcc:         b.GetObject("bcc_row").Cast().(*gtk.Entry),
+		to:          recipientFieldFrom(b, "to"),
+		cc:          recipientFieldFrom(b, "cc"),
+		bcc:         recipientFieldFrom(b, "bcc"),
 		subject:     b.GetObject("subject_row").Cast().(*gtk.Entry),
 		ccBcc:       b.GetObject("cc_bcc_button").Cast().(*gtk.Button),
 		ccBox:       b.GetObject("cc_box").Cast().(*gtk.Box),
@@ -169,9 +179,9 @@ func newWindow(m *Manager, p Params) *Window {
 
 	// Prefill before connecting change handlers so it does not count as
 	// an edit.
-	w.to.SetText(FormatAddressList(p.To))
-	w.cc.SetText(FormatAddressList(p.CC))
-	w.bcc.SetText(FormatAddressList(p.BCC))
+	w.to.SetAddresses(p.To)
+	w.cc.SetAddresses(p.CC)
+	w.bcc.SetAddresses(p.BCC)
 	w.subject.SetText(p.Subject)
 	w.setCcBccVisible(len(p.CC) > 0, len(p.BCC) > 0)
 	w.updateTitle()
@@ -190,6 +200,8 @@ func newWindow(m *Manager, p Params) *Window {
 	w.wireActions()
 	w.wireToolbar()
 	w.wireRows()
+	// The To entry takes the focus when the window opens.
+	w.SetFocus(w.to.entry)
 	w.wireRewrite(b)
 	if !richText {
 		// Text-only phase (see richText): no formatting to offer, no
@@ -300,15 +312,20 @@ func (w *Window) self() api.Address {
 }
 
 func (w *Window) wireRows() {
-	for _, row := range []*gtk.Entry{w.to, w.cc, w.bcc} {
-		row := row
-		s := newSuggestions(w, row)
+	for _, f := range []*recipientField{w.to, w.cc, w.bcc} {
+		f := f
+		s := newSuggestions(w, f)
 		w.suggest = append(w.suggest, s)
-		row.ConnectChanged(func() {
-			w.validateRow(row)
-			w.markDirty()
-			s.onChanged()
-		})
+		// A focus loss that is only the window going to the background, or a
+		// click on a suggestion, is not the end of the half-typed address.
+		f.skipCommit = func() bool { return !w.IsActive() || s.hover }
+		f.changed = func() {
+			if !w.draft.closed {
+				w.markDirty()
+			}
+		}
+		f.typed = s.onChanged
+		f.wireKeys() // after the completion's keys: they come first
 	}
 	w.subject.ConnectChanged(func() {
 		w.updateTitle()
@@ -361,28 +378,20 @@ func (w *Window) updateTitle() {
 	}
 }
 
-// validateRow flags a recipient row with unparsable tokens.
-func (w *Window) validateRow(row *gtk.Entry) bool {
-	_, invalid := ParseAddressList(row.Text())
-	if len(invalid) > 0 {
-		row.AddCSSClass("error")
-		return false
-	}
-	row.RemoveCSSClass("error")
-	return true
-}
-
-// recipients parses the three rows; ok is false when any token is invalid.
+// recipients reads the three rows as they would be with the typed text
+// committed; ok is false when any entry is not an address. It goes through
+// the fields' models, not through their text: parsing that again would
+// join or split entries differently.
 func (w *Window) recipients() (to, cc, bcc []api.Address, ok bool) {
 	ok = true
-	parse := func(row *gtk.Entry) []api.Address {
-		addrs, invalid := ParseAddressList(row.Text())
+	read := func(f *recipientField) []api.Address {
+		addrs, invalid := f.resolved()
 		if len(invalid) > 0 {
 			ok = false
 		}
 		return addrs
 	}
-	return parse(w.to), parse(w.cc), parse(w.bcc), ok
+	return read(w.to), read(w.cc), read(w.bcc), ok
 }
 
 // wireActions registers the "compose." action group on the window.

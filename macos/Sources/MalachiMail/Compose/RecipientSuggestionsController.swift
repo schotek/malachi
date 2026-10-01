@@ -7,19 +7,19 @@ import os
 
 /// Recipient completion of one To, Cc or Bcc row (ui/internal/compose/
 /// suggest.go): a borderless panel under the field offering what
-/// contact.search returns for the address token under the caret. The
-/// backend ranks and merges; this finds the token (`tokenAt`), asks after a
-/// pause in typing, and inserts the answer (`replaceToken`). The panel
-/// never takes the focus, so typing goes on in the row; the arrow keys,
-/// Return, Tab and Escape are read off the row's field editor. The
-/// controller is the field's delegate; the window hears about edits
-/// through `onChanged`.
+/// contact.search returns for the text typed after the row's last badge
+/// (`RecipientTokenField.pending`). The backend ranks and merges; this asks
+/// after a pause in typing and hands the answer to the row (`add`, which
+/// makes a badge of it). The panel never takes the focus, so typing goes on
+/// in the row; the arrow keys, Return, Tab and Escape reach it through the
+/// row's `commandInterceptor`. The window hears about edits through
+/// `onChanged`.
 @MainActor
-final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+final class RecipientSuggestionsController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     static let rowHeight: CGFloat = 36
     private static let padding = NSEdgeInsets(top: 4, left: 10, bottom: 4, right: 10)
 
-    let field: NSTextField
+    let field: RecipientTokenField
 
     /// Every edit of the row (the window validates it and marks the draft
     /// dirty), including an accepted suggestion.
@@ -33,7 +33,7 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
     /// Guards replies of a search the text has outrun.
     private var gen: UInt64 = 0
     private var timer: Task<Void, Never>?
-    /// accept's text change must not start a search of its own.
+    /// accept's change must not start a search of its own.
     private var suppress = false
     /// After `cleanup`: a pending search must not touch the row.
     private var closed = false
@@ -47,7 +47,7 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
     ///   - field: the recipient row; the controller becomes its delegate.
     ///   - client: the transport for contact.search.
     ///   - account: the sender identity's id (its address books are asked).
-    init(field: NSTextField, client: RPCClient, account: @escaping @MainActor () -> AccountID) {
+    init(field: RecipientTokenField, client: RPCClient, account: @escaping @MainActor () -> AccountID) {
         self.field = field
         self.client = client
         self.account = account
@@ -98,7 +98,9 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
             scroll.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
         ])
         panel.contentView = backdrop
-        field.delegate = self
+        field.onChange = { [weak self] in self?.fieldChanged() }
+        field.onEditingEnded = { [weak self] in self?.hide() }
+        field.commandInterceptor = { [weak self] selector in self?.command(selector) ?? false }
     }
 
     /// The panel's background around `content`: Liquid Glass from macOS 26,
@@ -129,26 +131,22 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
     func cleanup() {
         hide()
         closed = true
-        if field.delegate === self {
-            field.delegate = nil
-        }
+        field.onChange = nil
+        field.onEditingEnded = nil
+        field.commandInterceptor = nil
     }
 
-    // MARK: NSTextFieldDelegate
+    // MARK: The row
 
-    func controlTextDidChange(_ obj: Foundation.Notification) {
-        guard !suppress else { return }
+    private func fieldChanged() {
         onChanged?()
+        guard !suppress else { return }
         textChanged()
-    }
-
-    func controlTextDidEndEditing(_ obj: Foundation.Notification) {
-        hide()
     }
 
     /// onKey: drives the panel from the row while it is shown; everything
     /// else, and every key while it is hidden, goes on to the row.
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+    private func command(_ commandSelector: Selector) -> Bool {
         guard panel.isVisible else { return false }
         switch commandSelector {
         case #selector(NSResponder.moveDown(_:)):
@@ -173,20 +171,16 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
 
     // MARK: Searching
 
-    /// The caret as a scalar offset into the field's text (GTK's character
-    /// position); the end of the text when the row is not being edited.
-    private var caret: Int {
-        let text = field.stringValue
-        guard let editor = field.currentEditor() else { return text.unicodeScalars.count }
-        let loc = min(max(editor.selectedRange.location, 0), text.utf16.count)
-        return scalarOffset(of: String.Index(utf16Offset: loc, in: text), in: text)
+    /// The typed text after the last badge.
+    private var typed: String {
+        field.pending.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// onChanged: finds the token under the caret and, after a pause in
-    /// typing, asks for suggestions.
+    /// onChanged: takes the typed text and, after a pause in typing, asks
+    /// for suggestions.
     private func textChanged() {
         cancelTimer()
-        let (token, _) = tokenAt(field.stringValue, caret: caret)
+        let token = typed
         if token.unicodeScalars.count < suggestMinChars {
             hide()
             return
@@ -224,8 +218,7 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
                 self.log.debug("contact.search: \(String(describing: err), privacy: .public)")
                 self.hide()
             case .success(let res):
-                let (now, _) = tokenAt(self.field.stringValue, caret: self.caret)
-                guard now == token else { return }
+                guard self.typed == token else { return }
                 self.show(res.contacts)
             }
         }
@@ -242,7 +235,7 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         table.reloadData()
         table.selectRowIndexes(IndexSet(integer: 0), byExtendingSelection: false)
         guard let window = field.window else { return }
-        let fieldRect = window.convertToScreen(field.convert(field.bounds, to: nil))
+        let fieldRect = window.convertToScreen(field.convert(field.anchorRect, to: nil))
         let height = CGFloat(min(list.count, suggestLimit)) * Self.rowHeight
         let frame = NSRect(x: fieldRect.minX, y: fieldRect.minY - height - 2, width: fieldRect.width, height: height)
         panel.setFrame(frame, display: true)
@@ -280,25 +273,15 @@ final class RecipientSuggestionsController: NSObject, NSTextFieldDelegate, NSTab
         table.scrollRowToVisible(next)
     }
 
-    /// accept replaces the token under the caret with the chosen contact
-    /// and leaves the caret after the separator, ready for the next
-    /// recipient.
+    /// accept turns the typed text into the chosen contact's badge; the
+    /// row's editor is then ready for the next recipient.
     private func accept(_ i: Int) {
         guard i >= 0, i < contacts.count else { return }
         let c = contacts[i]
-        let text = field.stringValue
-        let (_, range) = tokenAt(text, caret: caret)
-        let (newText, caretOffset) = replaceToken(in: text, range: range, with: Address(name: c.name, address: c.address))
         hide()
         suppress = true
-        field.stringValue = newText
-        if let editor = field.currentEditor() {
-            let idx = index(atScalarOffset: caretOffset, in: newText)
-            editor.selectedRange = NSRange(location: idx.utf16Offset(in: newText), length: 0)
-        }
+        field.add(Address(name: c.name, address: c.address))
         suppress = false
-        // GTK's SetText fires the row's changed handler (validation, dirty).
-        onChanged?()
     }
 
     @objc private func rowClicked(_ sender: Any?) {

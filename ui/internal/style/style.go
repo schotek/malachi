@@ -161,6 +161,17 @@ func CSS(textZoomPercent int, monospace, monochromeAvatars bool) string {
 	b.WriteString("menubutton.address-chip > button:active, menubutton.address-chip > button:checked { background-color: alpha(@window_fg_color, 0.18); }\n")
 	b.WriteString("button.address-more { color: alpha(@window_fg_color, 0.7); }\n")
 	b.WriteString("label.address-label { min-height: 24px; font-size: 90%; }\n")
+	// The recipient fields of the compose window (compose/recipient_field.go):
+	// the same capsule and tint as an address chip, with a small × inside.
+	// A selected badge takes the accent, an entry that is not an address the
+	// error colours. The entry beside them stays as it was.
+	b.WriteString("box.recipient-token { min-height: 24px; padding: 0 2px 0 10px; border-radius: 99px; font-size: 90%; background-color: alpha(@window_fg_color, 0.07); }\n")
+	b.WriteString("box.recipient-token:hover { background-color: alpha(@window_fg_color, 0.12); }\n")
+	b.WriteString("box.recipient-token button { min-width: 18px; min-height: 18px; padding: 0; margin: 3px 0 3px 2px; }\n")
+	b.WriteString("box.recipient-token button image { -gtk-icon-size: 12px; }\n")
+	b.WriteString("box.recipient-token.invalid { background-color: alpha(@error_bg_color, 0.2); color: @error_color; }\n")
+	b.WriteString("box.recipient-token.selected { background-color: @accent_bg_color; color: @accent_fg_color; }\n")
+	b.WriteString("box.recipient-token.selected.invalid { background-color: @error_bg_color; color: @error_fg_color; }\n")
 	// The name and address on top of a chip's menu, inset like its items.
 	b.WriteString("box.address-card { padding: 6px 12px; }\n")
 	// The All / Unread / Flagged switch above the message list: it is a

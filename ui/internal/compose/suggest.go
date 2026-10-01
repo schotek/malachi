@@ -36,6 +36,7 @@ const (
 // suggestions is the completion state of one recipient row.
 type suggestions struct {
 	w       *Window
+	field   *recipientField
 	entry   *gtk.Entry
 	popover *gtk.Popover
 	list    *gtk.ListBox
@@ -43,14 +44,17 @@ type suggestions struct {
 	contacts []api.Contact // what the rows show, in order
 	gen      uint64        // guards replies of a search the text has outrun
 	timer    glib.SourceHandle
-	suppress bool // accept's SetText must not start a search of its own
+	hover    bool // the pointer is over the popover: a click there is no focus loss
 }
 
-// newSuggestions attaches completion to a recipient row.
-func newSuggestions(w *Window, entry *gtk.Entry) *suggestions {
-	s := &suggestions{w: w, entry: entry}
+// newSuggestions attaches completion to a recipient field: it reads the
+// text being typed from the field's entry, shows its popover under the
+// whole row and hands a picked contact to the field as a badge.
+func newSuggestions(w *Window, field *recipientField) *suggestions {
+	entry := field.entry
+	s := &suggestions{w: w, field: field, entry: entry}
 	s.popover = gtk.NewPopover()
-	s.popover.SetParent(entry)
+	s.popover.SetParent(field.scroll)
 	s.popover.SetAutohide(false)
 	s.popover.SetHasArrow(false)
 	s.popover.SetPosition(gtk.PosBottom)
@@ -63,6 +67,10 @@ func newSuggestions(w *Window, entry *gtk.Entry) *suggestions {
 	s.list.SetCanFocus(false)
 	s.list.ConnectRowActivated(func(row *gtk.ListBoxRow) { s.accept(row.Index()) })
 	s.popover.SetChild(s.list)
+	motion := gtk.NewEventControllerMotion()
+	motion.ConnectEnter(func(_, _ float64) { s.hover = true })
+	motion.ConnectLeave(func() { s.hover = false })
+	s.list.AddController(motion)
 
 	// Capture phase, so the row's own handling of Return and Tab (and
 	// the window's bubble-phase Escape) see the keys only when the
@@ -80,9 +88,6 @@ func newSuggestions(w *Window, entry *gtk.Entry) *suggestions {
 // onChanged runs on every edit of the row: it finds the token under the
 // caret and, after a pause in typing, asks for suggestions.
 func (s *suggestions) onChanged() {
-	if s.suppress {
-		return
-	}
 	s.cancelTimer()
 	_, _, token := tokenAt(s.entry.Text(), s.entry.Position())
 	if utf8.RuneCountInString(token) < suggestMinChars {
@@ -137,7 +142,7 @@ func (s *suggestions) show(contacts []api.Contact) {
 		s.list.Append(suggestionRow(c))
 	}
 	s.list.SelectRow(s.list.RowAtIndex(0))
-	width, height := s.entry.AllocatedWidth(), s.entry.AllocatedHeight()
+	width, height := s.field.scroll.AllocatedWidth(), s.field.scroll.AllocatedHeight()
 	rect := gdk.NewRectangle(0, 0, width, height)
 	s.popover.SetPointingTo(&rect)
 	s.popover.SetSizeRequest(width, -1)
@@ -148,6 +153,7 @@ func (s *suggestions) show(contacts []api.Contact) {
 
 // hide closes the popover and forgets any search in flight.
 func (s *suggestions) hide() {
+	s.hover = false
 	s.cancelTimer()
 	s.gen++
 	if s.popover.Visible() {
@@ -202,21 +208,15 @@ func (s *suggestions) move(delta int) {
 	s.list.SelectRow(s.list.RowAtIndex(i))
 }
 
-// accept replaces the token under the caret with the chosen contact and
-// leaves the caret after the separator, ready for the next recipient.
+// accept turns the chosen contact into a badge; the half-typed text it
+// completed goes with it.
 func (s *suggestions) accept(i int) {
 	if i < 0 || i >= len(s.contacts) {
 		return
 	}
 	c := s.contacts[i]
-	text := s.entry.Text()
-	start, end, _ := tokenAt(text, s.entry.Position())
-	newText, caret := replaceToken(text, start, end, api.Address{Name: c.Name, Address: c.Address})
 	s.hide()
-	s.suppress = true
-	s.entry.SetText(newText)
-	s.entry.SetPosition(caret)
-	s.suppress = false
+	s.field.add(api.Address{Name: c.Name, Address: c.Address})
 }
 
 // suggestionRow builds one row: the source icon, the name over the

@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Port of macos/Sources/MalachiMail/Compose/ComposeHeaderView.swift
-// (setCcBccVisible, setInvalid, setAccounts, selectedAccountIndex, the
-// From pop-up's action); GTK: ui/internal/compose/compose.go
-// (setCcBccVisible, showCcBcc, validateRow's error class, setAccounts'
-// drop-down, the From row's "selected" notification). The rules are Core's
-// (ComposeHeaderRules); the compose window reads the fields and decides.
+// (setCcBccVisible, setAccounts, selectedAccountIndex, the From pop-up's
+// action); GTK: ui/internal/compose/compose.go (setCcBccVisible,
+// showCcBcc, setAccounts' drop-down, the From row's "selected"
+// notification). The rules are Core's (ComposeHeaderRules); the compose
+// window reads the fields and decides. The recipient rows are
+// RecipientTokenBoxes: an unparsable entry shows as a red badge there, which
+// replaces validateRow's red row.
 
 using System;
 using System.Collections.Generic;
@@ -32,19 +34,32 @@ public sealed partial class ComposeHeader : UserControl
     public event EventHandler? FromChanged;
 
     /// <summary>The To row.</summary>
-    public TextBox To => ToBox;
+    public RecipientTokenBox To => ToBox;
 
     /// <summary>The Cc row.</summary>
-    public TextBox Cc => CcBox;
+    public RecipientTokenBox Cc => CcBox;
 
     /// <summary>The Bcc row.</summary>
-    public TextBox Bcc => BccBox;
+    public RecipientTokenBox Bcc => BccBox;
+
+    /// <summary>
+    /// The window is closing: the recipient rows change nothing and say
+    /// nothing from now on (the commit of a focus lost on the way out must
+    /// not mark the cleaned-up draft dirty).
+    /// </summary>
+    public void FreezeRecipients()
+    {
+        foreach (var field in RecipientFields)
+        {
+            field.Freeze();
+        }
+    }
 
     /// <summary>The Subject row.</summary>
     public TextBox Subject => SubjectBox;
 
     /// <summary>The recipient rows, in order (compose.go <c>suggest</c>'s rows).</summary>
-    public IReadOnlyList<TextBox> RecipientFields => [ToBox, CcBox, BccBox];
+    public IReadOnlyList<RecipientTokenBox> RecipientFields => [ToBox, CcBox, BccBox];
 
     /// <summary>The selected identity's index (<c>from.Selected()</c>), 0 when none is.</summary>
     public int SelectedAccountIndex => Math.Max(FromBox.SelectedIndex, 0);
@@ -91,24 +106,13 @@ public sealed partial class ComposeHeader : UserControl
         if (!shown && CcBccButton.FocusState != FocusState.Unfocused)
         {
             // The button goes away under the keyboard: Cc takes it.
-            CcBox.Focus(FocusState.Programmatic);
+            CcBox.FocusInput();
         }
         CcBccButton.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>validateRow's look: red text and underline while <paramref name="field"/> holds an unparsable token.</summary>
-    public void SetInvalid(TextBox field, bool invalid)
-    {
-        ArgumentNullException.ThrowIfNull(field);
-        var style = (Style)Resources[invalid ? "ComposeInvalidFieldTextBoxStyle" : "ComposeFieldTextBoxStyle"];
-        if (!ReferenceEquals(field.Style, style))
-        {
-            field.Style = style;
-        }
-    }
-
     /// <summary>compose.blp's focus-widget: the To row.</summary>
-    public void FocusTo() => ToBox.Focus(FocusState.Programmatic);
+    public void FocusTo() => ToBox.FocusInput();
 
     private void OnFromSelectionChanged(object sender, SelectionChangedEventArgs e)
     {

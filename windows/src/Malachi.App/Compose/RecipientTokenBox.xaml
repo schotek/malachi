@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Vladislav Janeček
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Port of the RecipientTokenField of macos/Sources/MalachiMail/Compose/
+RecipientTokenField.swift; GTK: ui/internal/compose/recipient_field.go. A To,
+Cc or Bcc row of the compose window as Outlook has it: the finished
+addresses as badges (RecipientBadge) with a Remove cross, then the box the
+rest is typed into, all in lines of the row; a full line wraps onto the
+next and the row grows, up to four lines, after which it scrolls inside
+itself. The box is borderless, on the card (the style of the card's other
+fields, without its underline: an entry that is no address is a red badge).
+Every decision on when text becomes a badge is RecipientTokens'; the code
+behind only shows the model and forwards the keys.
+-->
+<UserControl
+    x:Class="Malachi.App.Compose.RecipientTokenBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Malachi.App.Compose"
+    IsTabStop="False">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!-- The typing box on the card: the text, a caret and nothing
+                 else (ComposeHeader's ComposeFieldTextBoxStyle without its
+                 underline, 24 px high like a badge). -->
+            <Style x:Key="RecipientInputStyle" TargetType="TextBox">
+                <Setter Property="Foreground" Value="{ThemeResource TextControlForeground}" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0,2,0,2" />
+                <Setter Property="MinHeight" Value="24" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="UseSystemFocusVisuals" Value="False" />
+                <Setter Property="IsSpellCheckEnabled" Value="False" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="TextBox">
+                            <Grid Background="{TemplateBinding Background}">
+                                <ScrollViewer
+                                    x:Name="ContentElement"
+                                    Padding="{TemplateBinding Padding}"
+                                    VerticalAlignment="Center"
+                                    AutomationProperties.AccessibilityView="Raw"
+                                    Foreground="{TemplateBinding Foreground}"
+                                    HorizontalScrollBarVisibility="Hidden"
+                                    HorizontalScrollMode="Auto"
+                                    IsDeferredScrollingEnabled="False"
+                                    IsTabStop="False"
+                                    VerticalScrollBarVisibility="Disabled"
+                                    VerticalScrollMode="Disabled"
+                                    ZoomMode="Disabled" />
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <!-- Four lines of badges (24 px, 4 px apart) and the panel's 3 px above
+         and below; more scroll. -->
+    <ScrollViewer
+        x:Name="Scroller"
+        MaxHeight="114"
+        HorizontalScrollBarVisibility="Disabled"
+        HorizontalScrollMode="Disabled"
+        IsTabStop="False"
+        VerticalScrollBarVisibility="Auto"
+        VerticalScrollMode="Auto">
+        <local:RecipientWrapPanel x:Name="Wrap" Background="Transparent" PointerPressed="OnBackgroundPressed">
+            <!-- Always the last child: the panel gives it the rest of the line. -->
+            <TextBox
+                x:Name="InputBox"
+                LostFocus="OnInputLostFocus"
+                Paste="OnInputPaste"
+                PreviewKeyDown="OnInputKeyDown"
+                Style="{StaticResource RecipientInputStyle}"
+                TextChanged="OnInputTextChanged" />
+        </local:RecipientWrapPanel>
+    </ScrollViewer>
+</UserControl>

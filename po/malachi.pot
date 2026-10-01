@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: malachi\n"
 "Report-Msgid-Bugs-To: https://github.com/schotek/malachi/issues\n"
-"POT-Creation-Date: 2026-10-01 11:59+0000\n"
+"POT-Creation-Date: 2026-10-01 12:09+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -842,62 +842,62 @@ msgstr ""
 msgid "Check for new mail and show notifications in the background"
 msgstr ""
 
-#: ui/internal/compose/compose.go:166
+#: ui/internal/compose/compose.go:108 ui/internal/compose/compose.go:631
+#: ui/internal/jira/settings.go:123 ui/internal/window/assistant_panel.go:182
+msgid "Remove"
+msgstr ""
+
+#: ui/internal/compose/compose.go:176
 msgid "The editor crashed; your last text was restored"
 msgstr ""
 
-#: ui/internal/compose/compose.go:275 ui/internal/compose/draft.go:173
+#: ui/internal/compose/compose.go:287 ui/internal/compose/draft.go:173
 msgid "Using placeholder account"
 msgstr ""
 
-#: ui/internal/compose/compose.go:360 ui/data/ui/compose.ui:10
-#: ui/data/ui/compose.ui:49
+#: ui/internal/compose/compose.go:377 ui/data/ui/compose.ui:10
+#: ui/data/ui/compose.ui:48
 msgid "New Message"
 msgstr ""
 
-#: ui/internal/compose/compose.go:487 ui/data/ui/compose.ui:348
-#: ui/data/ui/compose.ui:544
+#: ui/internal/compose/compose.go:496 ui/data/ui/compose.ui:371
+#: ui/data/ui/compose.ui:567
 msgid "Paragraph"
 msgstr ""
 
-#: ui/internal/compose/compose.go:490
+#: ui/internal/compose/compose.go:499
 #, c-format
 msgid "Heading %s"
 msgstr ""
 
-#: ui/internal/compose/compose.go:519 ui/data/ui/compose.ui:55
+#: ui/internal/compose/compose.go:528 ui/data/ui/compose.ui:54
 msgid "Attach Files"
 msgstr ""
 
-#: ui/internal/compose/compose.go:542
+#: ui/internal/compose/compose.go:551
 msgid "Only local files can be attached"
 msgstr ""
 
-#: ui/internal/compose/compose.go:551 ui/data/ui/compose.ui:441
+#: ui/internal/compose/compose.go:560 ui/data/ui/compose.ui:464
 msgid "Insert Image"
 msgstr ""
 
-#: ui/internal/compose/compose.go:553
+#: ui/internal/compose/compose.go:562
 msgid "Images"
 msgstr ""
 
-#: ui/internal/compose/compose.go:567
+#: ui/internal/compose/compose.go:576
 msgid "Only local images can be inserted"
-msgstr ""
-
-#: ui/internal/compose/compose.go:581
-#, c-format
-msgid "Attaching %s…"
 msgstr ""
 
 #: ui/internal/compose/compose.go:590
 #, c-format
-msgid "Attaching %s"
+msgid "Attaching %s…"
 msgstr ""
 
-#: ui/internal/compose/compose.go:622 ui/internal/jira/settings.go:123
-#: ui/internal/window/assistant_panel.go:182
-msgid "Remove"
+#: ui/internal/compose/compose.go:599
+#, c-format
+msgid "Attaching %s"
 msgstr ""
 
 #: ui/internal/compose/draft.go:163 ui/internal/window/outbox.go:68
@@ -931,48 +931,48 @@ msgstr ""
 msgid "Saving the draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:345
+#: ui/internal/compose/draft.go:349
 msgid "Fix the highlighted recipients"
 msgstr ""
 
-#: ui/internal/compose/draft.go:349
+#: ui/internal/compose/draft.go:353
 msgid "Add at least one recipient"
 msgstr ""
 
-#: ui/internal/compose/draft.go:403 ui/internal/compose/draft.go:586
+#: ui/internal/compose/draft.go:407 ui/internal/compose/draft.go:593
 msgid "Sending"
 msgstr ""
 
-#: ui/internal/compose/draft.go:422
+#: ui/internal/compose/draft.go:426
 msgid "Message queued for sending"
 msgstr ""
 
-#: ui/internal/compose/draft.go:473 ui/internal/compose/draft.go:486
+#: ui/internal/compose/draft.go:477 ui/internal/compose/draft.go:490
 msgid "Discard this message?"
 msgstr ""
 
-#: ui/internal/compose/draft.go:473 ui/internal/compose/draft.go:486
-#: ui/internal/compose/draft.go:500 ui/internal/compose/rewrite.go:106
-#: ui/data/ui/compose.ui:537
+#: ui/internal/compose/draft.go:477 ui/internal/compose/draft.go:490
+#: ui/internal/compose/draft.go:504 ui/internal/compose/rewrite.go:106
+#: ui/data/ui/compose.ui:560
 msgid "_Discard"
 msgstr ""
 
-#: ui/internal/compose/draft.go:498
+#: ui/internal/compose/draft.go:502
 msgid "Save changes to this draft?"
 msgstr ""
 
-#: ui/internal/compose/draft.go:499 ui/internal/widget/consent.go:23
+#: ui/internal/compose/draft.go:503 ui/internal/widget/consent.go:23
 #: ui/internal/widget/rpc.go:193 ui/internal/window/assistant_panel.go:201
 #: ui/internal/window/remote.go:266 ui/internal/window/remote.go:292
 #: ui/data/ui/account_wizard.ui:401 ui/data/ui/jira_account.ui:25
 msgid "_Cancel"
 msgstr ""
 
-#: ui/internal/compose/draft.go:501 ui/data/ui/compose.ui:520
+#: ui/internal/compose/draft.go:505 ui/data/ui/compose.ui:543
 msgid "_Save Draft"
 msgstr ""
 
-#: ui/internal/compose/draft.go:596
+#: ui/internal/compose/draft.go:603
 #, c-format
 msgid "%d unsafe element was removed from the message"
 msgid_plural "%d unsafe elements were removed from the message"
@@ -980,7 +980,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. TRANSLATORS: %d is the number of files of the forwarded (or quoted) message that the new one lacks.
-#: ui/internal/compose/draft.go:607
+#: ui/internal/compose/draft.go:614
 #, c-format
 msgid "%d attachment of the original could not be attached"
 msgid_plural "%d attachments of the original could not be attached"
@@ -2134,7 +2134,7 @@ msgid_plural "+%d more"
 msgstr[0] ""
 msgstr[1] ""
 
-#: ui/internal/window/assistant_panel.go:412 ui/data/ui/compose.ui:66
+#: ui/internal/window/assistant_panel.go:412 ui/data/ui/compose.ui:65
 msgid "_Send"
 msgstr ""
 
@@ -2270,19 +2270,19 @@ msgstr ""
 msgid "Forward"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:110
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:109
 #: ui/data/ui/embedded_window.ui:104 ui/data/ui/message_window.ui:195
 #: ui/data/ui/window.ui:682
 msgid "From"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:138
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:137
 #: ui/data/ui/embedded_window.ui:130 ui/data/ui/message_window.ui:221
 #: ui/data/ui/window.ui:708
 msgid "To"
 msgstr ""
 
-#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:176
+#: ui/internal/window/conversation_card.go:507 ui/data/ui/compose.ui:183
 #: ui/data/ui/embedded_window.ui:158 ui/data/ui/message_window.ui:249
 #: ui/data/ui/window.ui:736
 msgid "Cc"
@@ -3135,107 +3135,107 @@ msgstr ""
 msgid "Add _Anyway"
 msgstr ""
 
-#: ui/data/ui/compose.ui:62
+#: ui/data/ui/compose.ui:61
 msgid "Send (Ctrl+Enter)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:79
+#: ui/data/ui/compose.ui:78
 msgid "Draft Menu"
 msgstr ""
 
-#: ui/data/ui/compose.ui:156
+#: ui/data/ui/compose.ui:163
 msgid "Cc/Bcc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:205
+#: ui/data/ui/compose.ui:220
 msgid "Bcc"
 msgstr ""
 
-#: ui/data/ui/compose.ui:231
+#: ui/data/ui/compose.ui:254
 msgid "Subject"
 msgstr ""
 
-#: ui/data/ui/compose.ui:323
+#: ui/data/ui/compose.ui:346
 msgid "Bold (Ctrl+B)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:330
+#: ui/data/ui/compose.ui:353
 msgid "Italic (Ctrl+I)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:337
+#: ui/data/ui/compose.ui:360
 msgid "Underline (Ctrl+U)"
 msgstr ""
 
-#: ui/data/ui/compose.ui:350
+#: ui/data/ui/compose.ui:373
 msgid "Paragraph Style"
 msgstr ""
 
-#: ui/data/ui/compose.ui:358
+#: ui/data/ui/compose.ui:381
 msgid "Alignment"
 msgstr ""
 
-#: ui/data/ui/compose.ui:370
+#: ui/data/ui/compose.ui:393
 msgid "Bulleted List"
 msgstr ""
 
-#: ui/data/ui/compose.ui:377
+#: ui/data/ui/compose.ui:400
 msgid "Numbered List"
 msgstr ""
 
-#: ui/data/ui/compose.ui:384
+#: ui/data/ui/compose.ui:407
 msgid "Quote"
 msgstr ""
 
-#: ui/data/ui/compose.ui:396
+#: ui/data/ui/compose.ui:419
 msgid "Insert Link"
 msgstr ""
 
-#: ui/data/ui/compose.ui:415
+#: ui/data/ui/compose.ui:438
 msgid "Insert"
 msgstr ""
 
-#: ui/data/ui/compose.ui:429
+#: ui/data/ui/compose.ui:452
 msgid "Text Colour"
 msgstr ""
 
-#: ui/data/ui/compose.ui:449
+#: ui/data/ui/compose.ui:472
 msgid "Clear Formatting"
 msgstr ""
 
-#: ui/data/ui/compose.ui:457
+#: ui/data/ui/compose.ui:480
 msgid "This message will be sent as plain text."
 msgstr ""
 
-#: ui/data/ui/compose.ui:525
+#: ui/data/ui/compose.ui:548
 msgid "Attach _Files…"
 msgstr ""
 
-#: ui/data/ui/compose.ui:530
+#: ui/data/ui/compose.ui:553
 msgid "Insert _Image…"
 msgstr ""
 
-#: ui/data/ui/compose.ui:549
+#: ui/data/ui/compose.ui:572
 msgid "Heading 1"
 msgstr ""
 
-#: ui/data/ui/compose.ui:554
+#: ui/data/ui/compose.ui:577
 msgid "Heading 2"
 msgstr ""
 
-#: ui/data/ui/compose.ui:559
+#: ui/data/ui/compose.ui:582
 msgid "Heading 3"
 msgstr ""
 
-#: ui/data/ui/compose.ui:566
+#: ui/data/ui/compose.ui:589
 msgid "Left"
 msgstr ""
 
-#: ui/data/ui/compose.ui:571
+#: ui/data/ui/compose.ui:594
 msgid "Center"
 msgstr ""
 
-#: ui/data/ui/compose.ui:576
+#: ui/data/ui/compose.ui:599
 msgid "Right"
 msgstr ""
 
