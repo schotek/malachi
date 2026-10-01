@@ -367,8 +367,11 @@ private final class Harness {
         #expect(await opened.script.deletes.isEmpty)
     }
 
+    /// The retry after a failed autosave comes one delay later, and the
+    /// waits below must see the state between the two: a delay of 30 ms
+    /// was missed on a busy CI runner, so the count went past 1 for good.
     @Test func repeatedAutosaveFailureToastsOnceExplicitSaveAlways() async throws {
-        let h = try await Harness(autosaveDelay: .milliseconds(30))
+        let h = try await Harness(autosaveDelay: .milliseconds(500))
         defer { Task { await h.stop() } }
         await h.script.set(saveError: serverError)
         h.draft.markDirty()
@@ -637,7 +640,8 @@ private final class Harness {
     }
 
     @Test func withoutADaemonTheSaveFailsAndTheAutosaveRetries() async throws {
-        let h = try await Harness(autosaveDelay: .milliseconds(30), connect: false)
+        // Long enough that the retry is still armed when the toast is seen.
+        let h = try await Harness(autosaveDelay: .milliseconds(500), connect: false)
         defer { Task { await h.stop() } }
         h.draft.markDirty()
         try await waitUntil { !h.form.toasts.isEmpty }
